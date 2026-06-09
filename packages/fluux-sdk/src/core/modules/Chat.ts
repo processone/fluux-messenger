@@ -584,22 +584,6 @@ export class Chat extends BaseModule {
             children.unshift(xml('body', {}, fallbackBody))
           }
         }
-        // Remove <fallback for="NS_CORRECTION">: its body indices referenced the
-        // plaintext "[Corrected] …" prefix which no longer exists in the E2EE
-        // fallback body.  Keeping it causes recipients to truncate the displayed
-        // fallback (e.g. "[OpenPGP-encrypted message]" → "rypted message]").
-        for (let i = children.length - 1; i >= 0; i--) {
-          const c = children[i]
-          if (typeof c === 'string') continue
-          const el = c as Element
-          if (
-            el.name === 'fallback' &&
-            el.attrs?.xmlns === NS_FALLBACK &&
-            el.attrs?.for === NS_CORRECTION
-          ) {
-            children.splice(i, 1)
-          }
-        }
         children.push(dataToElement(result.payload.stanzaElement))
         children.push(
           xml('encryption', {
@@ -1088,66 +1072,29 @@ export class Chat extends BaseModule {
     const referenceId = this.getMessageReferenceId(to, messageId, type)
 
     const reactionElements = emojis.map(emoji => xml('reaction', {}, emoji))
-    const children: Element[] = []
 
-    // Look up original message to build fallback body for legacy clients
-    const originalMsg = type === 'groupchat'
-      ? this.deps.stores?.room.getMessage(to, messageId)
-      : this.deps.stores?.chat.getMessage(to, messageId)
+    // XEP-0444: send a bodiless <reactions> stanza. We intentionally do NOT
+    // attach a reply-quote body, a <reply> element, or <fallback> markers —
+    // compliant clients render <reactions> natively, and the legacy reply-quote
+    // fallback surfaced reactions as quoted replies in other clients. Incoming
+    // reply-quoted reactions are still rendered on the receive side. For 1:1
+    // chats the reply-quote also leaked the decrypted original body in
+    // cleartext; dropping it removes that exposure too.
+    const children: Element[] = [
+      xml('reactions', { xmlns: NS_REACTIONS, id: referenceId }, ...reactionElements),
+    ]
 
-    // The reply-quote fallback embeds the *decrypted* original body in
-    // cleartext for legacy reactions-blind clients. For 1:1 chats with
-    // E2EE active that branch would publish the original plaintext to
-    // the server — far worse than the reaction itself leaking. Skip the
-    // entire fallback block whenever encryption is available; an E2EE-
-    // capable peer is by definition modern enough to handle <reactions>
-    // natively. In strict mode we additionally refuse to send the
-    // reply-quote fallback even when the peer is currently unreachable
-    // over E2EE — better to throw than silently downgrade.
     const manager = this.deps.getE2EEManager?.()
-    let suppressReplyFallback = false
     let peerCanEncrypt = false
     if (type === 'chat' && manager) {
       peerCanEncrypt = await manager
         .canEncryptTo({ kind: 'direct', peer: recipient })
         .catch(() => false)
-      if (peerCanEncrypt) {
-        suppressReplyFallback = true
-      } else if (manager.getSendPolicy() === 'strict') {
+      // Strict mode refuses to put even a bodiless reaction on the wire in
+      // cleartext when the peer should be reachable over E2EE.
+      if (!peerCanEncrypt && manager.getSendPolicy() === 'strict') {
         throw new E2EEEncryptionRequiredError({ kind: 'direct', peer: recipient })
       }
-    }
-
-    if (originalMsg?.body && emojis.length > 0 && !suppressReplyFallback) {
-      // Build full stanza with fallback for backward compatibility:
-      // - Reactions-capable clients: handle <reactions>, ignore body (reactions fallback)
-      // - Reply-capable clients (no reactions): show quoted reply with emoji body
-      // - Legacy clients: show full body as-is
-      const emojiStr = emojis.join('')
-      const senderJid = originalMsg.from
-      const quotedLines = originalMsg.body.split('\n').map((line: string) => `> ${line}`).join('\n')
-      const replyFallback = `> ${senderJid} wrote:\n${quotedLines}\n\n`
-      const fullBody = replyFallback + emojiStr
-
-      children.push(xml('body', {}, fullBody))
-      children.push(xml('reactions', { xmlns: NS_REACTIONS, id: referenceId }, ...reactionElements))
-      children.push(xml('reply', { xmlns: NS_REPLY, id: referenceId, to: senderJid }))
-      children.push(
-        xml('fallback', { xmlns: NS_FALLBACK, for: NS_REPLY },
-          xml('body', { start: '0', end: String(replyFallback.length) })
-        )
-      )
-      children.push(
-        xml('fallback', { xmlns: NS_FALLBACK, for: NS_REACTIONS },
-          xml('body', {})
-        )
-      )
-      children.push(xml('store', { xmlns: NS_HINTS }))
-    } else {
-      // No original message, removing reactions, or suppressing the
-      // cleartext reply-quote because the peer can be encrypted to —
-      // simple stanza without fallback body.
-      children.push(xml('reactions', { xmlns: NS_REACTIONS, id: referenceId }, ...reactionElements))
     }
 
     const reactionStanzaId = generateUUID()
@@ -1155,13 +1102,17 @@ export class Chat extends BaseModule {
 
     // Encrypt the reactions element (and the id it references) for 1:1 chats
     // whenever the peer is E2EE-reachable. A mid-flight plugin failure throws
-    // here, blocking a silent plaintext downgrade.
+    // here, blocking a silent plaintext downgrade. The E2EE path adds its own
+    // <store> hint; the plaintext path adds one below so the bodiless reaction
+    // is still archived in MAM.
     if (type === 'chat' && peerCanEncrypt) {
       await this.applyE2EEToOutboundChat(recipient, '', children, Chat.E2EE_REACTION_KEYS, {
         encryptBody: false,
         outerBody: 'remove',
         storeHint: 'store',
       })
+    } else {
+      children.push(xml('store', { xmlns: NS_HINTS }))
     }
 
     const message = xml('message', { to: recipient, type, id: reactionStanzaId }, ...children)
@@ -1219,9 +1170,6 @@ export class Chat extends BaseModule {
       : this.deps.stores?.chat.getMessage(to, originalMessageId)
     const referenceId = original?.originId ?? originalMessageId
 
-    const correctionPrefix = '[Corrected] '
-    const correctionFallbackEnd = correctionPrefix.length
-
     // Build the body text, preserving user text when there's an attachment
     let bodyText = newBody
     let oobFallbackStart = 0
@@ -1230,23 +1178,24 @@ export class Chat extends BaseModule {
       if (newBody.length === 0 || newBody === attachment.url) {
         // No user text, or user explicitly typed the URL - use URL as body
         bodyText = attachment.url
-        oobFallbackStart = correctionFallbackEnd
+        oobFallbackStart = 0
       } else {
         // User has text - append URL after a newline
-        oobFallbackStart = correctionFallbackEnd + newBody.length + 1 // +1 for newline
+        oobFallbackStart = newBody.length + 1 // +1 for newline
         bodyText = newBody + '\n' + attachment.url
       }
-      oobFallbackEnd = correctionFallbackEnd + bodyText.length
+      oobFallbackEnd = bodyText.length
     }
 
-    const fallbackBody = correctionPrefix + bodyText
-
+    // XEP-0308: send the corrected body verbatim alongside a <replace> marker.
+    // We intentionally do NOT add a "[Corrected] " body prefix or a
+    // <fallback for="urn:xmpp:message-correct:0"> indication — compliant
+    // clients replace the original from <replace> alone, and the prefix
+    // confused clients that don't strip the fallback. We still strip an
+    // incoming "[Corrected] " prefix on the receive side (see fallbackRegistry).
     const children = [
-      xml('body', {}, fallbackBody),
+      xml('body', {}, bodyText),
       xml('replace', { xmlns: NS_CORRECTION, id: referenceId }),
-      xml('fallback', { xmlns: NS_FALLBACK, for: NS_CORRECTION },
-        xml('body', { start: '0', end: String(correctionFallbackEnd) })
-      )
     ]
 
     if (attachment) {
@@ -1285,9 +1234,8 @@ export class Chat extends BaseModule {
 
     // Encrypt the corrected body for 1:1 chats. Without this an edit on
     // an encrypted conversation would push the plaintext correction to
-    // the server. The cleartext "[Corrected] " prefix only mattered to
-    // legacy clients that don't know <replace>; E2EE peers handle the
-    // edit natively. MUC encryption is a later phase.
+    // the server. E2EE peers handle <replace> natively. MUC encryption
+    // is a later phase.
     const correctionSecurityContext = type === 'chat'
       ? await this.applyE2EEToOutboundChat(
           recipient,

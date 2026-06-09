@@ -1344,10 +1344,9 @@ describe('Chat E2EE wiring', () => {
       expect(sent.getChild('encryption', 'urn:xmpp:eme:0')).toBeDefined()
       expect(sent.getChild('replace', 'urn:xmpp:message-correct:0')).toBeDefined()
 
-      // The <fallback for="NS_CORRECTION"> with body indices must be removed:
-      // its start/end positions referenced the plaintext body, not the E2EE
-      // fallback string, so keeping it causes recipients to truncate the
-      // displayed fallback (e.g. "[OpenPGP-encrypted message]" → "rypted message]").
+      // No XEP-0428 fallback is attached to a correction (neither the old
+      // "[Corrected] " prefix nor a <fallback for="NS_CORRECTION">), so the
+      // encrypted stanza carries no fallback elements.
       const fallbacks = sent.children.filter(
         (c): c is Element =>
           typeof c !== 'string' && c.name === 'fallback' && c.attrs?.xmlns === 'urn:xmpp:fallback:0',
@@ -1418,7 +1417,7 @@ describe('Chat E2EE wiring', () => {
       expect(captured).toHaveLength(0)
     })
 
-    it('strips both correction and OOB fallback when encrypting a correction with attachment', async () => {
+    it('strips the OOB fallback when encrypting a correction with attachment', async () => {
       await chat.sendCorrection('bob@example.com', 'orig-id', 'new caption', 'chat', {
         url: 'https://upload.example.com/photo.bin',
         name: 'photo.jpg',
@@ -1449,7 +1448,7 @@ describe('Chat E2EE wiring', () => {
       expect(captured).toHaveLength(1)
       const sent = captured[0]
       const body = sent.getChild('body')
-      expect(body?.text()).toBe('[Corrected] fixed text')
+      expect(body?.text()).toBe('fixed text')
       expect(sent.getChild('plain', 'urn:fluux:e2ee-dummy:0')).toBeUndefined()
     })
   })
@@ -1457,9 +1456,9 @@ describe('Chat E2EE wiring', () => {
   describe('outbound encryption — sendReaction', () => {
     /**
      * Build a deps object with a `chat.getMessage` stub that hands out a
-     * fixed "original" message — the reactions reply-fallback would quote
-     * its `body` in cleartext if it ran. We use this fixture to prove the
-     * suppression actually fires when E2EE is reachable.
+     * fixed "original" message. Reactions no longer quote that body, so the
+     * `originalBody` is only here to prove — via these tests — that no
+     * cleartext copy of it ever reaches the wire.
      */
     function makeDepsWithOriginal(options: {
       manager: E2EEManager
@@ -1541,7 +1540,7 @@ describe('Chat E2EE wiring', () => {
       expect(evt!.payload.emojis).toEqual(['👍'])
     })
 
-    it('strict mode throws when reacting to an E2EE-unreachable peer with a quoted original', async () => {
+    it('strict mode throws when reacting to an E2EE-unreachable peer', async () => {
       const strictManager = new E2EEManager({
         storage: new InMemoryStorageBackend(),
         xmpp: stubXmppPrimitives(async () => {}),
@@ -1560,11 +1559,11 @@ describe('Chat E2EE wiring', () => {
       expect(built.capturedStanzas).toHaveLength(0)
     })
 
-    it('keeps the legacy reply-quote fallback when no E2EE manager is wired', async () => {
-      // Regression guard: removing the leak for E2EE peers must not
-      // change behavior for accounts that never opted into E2EE, where
-      // the cleartext fallback is the actual interop story for legacy
-      // clients that don't speak <reactions/>.
+    it('sends a clean bodiless reaction even when no E2EE manager is wired', async () => {
+      // We no longer attach a reply-quote fallback to reactions — modern
+      // clients render <reactions/> natively, and the fallback surfaced
+      // reactions as quoted replies in other clients. This holds with or
+      // without E2EE; an unencrypted account simply sends the bare reaction.
       const emptyManager = new E2EEManager({
         storage: new InMemoryStorageBackend(),
         xmpp: stubXmppPrimitives(async () => {}),
@@ -1579,9 +1578,12 @@ describe('Chat E2EE wiring', () => {
       await plainChat.sendReaction('bob@example.com', 'orig-id', ['🎉'])
 
       const sent = built.capturedStanzas[0]
-      const body = sent.getChild('body')
-      expect(body?.text()).toContain('legacy chat — already plaintext anyway')
-      expect(sent.getChild('reply', 'urn:xmpp:reply:0')).toBeDefined()
+      expect(sent.getChild('reactions', 'urn:xmpp:reactions:0')).toBeDefined()
+      expect(sent.getChild('body')).toBeUndefined()
+      expect(sent.getChild('reply', 'urn:xmpp:reply:0')).toBeUndefined()
+      expect(sent.getChildren('fallback', 'urn:xmpp:fallback:0')).toHaveLength(0)
+      // Bodiless reaction still gets a store hint for MAM archival.
+      expect(sent.getChild('store', 'urn:xmpp:hints')).toBeDefined()
     })
   })
 

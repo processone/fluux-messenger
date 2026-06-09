@@ -1136,7 +1136,7 @@ describe('XMPPClient Message', () => {
   })
 
   describe('sendReaction (XEP-0444)', () => {
-    it('should send reaction with fallback body when original message found', async () => {
+    it('should send a clean bodiless reaction stanza (no reply-quote fallback)', async () => {
       await connectClient()
 
       mockStores.chat.getMessage = vi.fn().mockReturnValue({
@@ -1155,14 +1155,7 @@ describe('XMPPClient Message', () => {
       expect(sentStanza.attrs.to).toBe('alice@example.com')
       expect(sentStanza.attrs.type).toBe('chat')
 
-      // Should have body with quoted original + emojis
-      const bodyEl = sentStanza.children.find((c: any) => c.name === 'body')
-      expect(bodyEl).toBeDefined()
-      expect(bodyEl.children[0]).toContain('alice@example.com wrote:')
-      expect(bodyEl.children[0]).toContain('> Hello world')
-      expect(bodyEl.children[0]).toContain('👍❤️')
-
-      // Should have reactions element
+      // Reactions element with the emoji
       const reactionsEl = sentStanza.children.find((c: any) => c.name === 'reactions')
       expect(reactionsEl).toBeDefined()
       expect(reactionsEl.attrs.xmlns).toBe('urn:xmpp:reactions:0')
@@ -1172,34 +1165,13 @@ describe('XMPPClient Message', () => {
       expect(reactionEls[0].children[0]).toBe('👍')
       expect(reactionEls[1].children[0]).toBe('❤️')
 
-      // Should have reply element
-      const replyEl = sentStanza.children.find((c: any) => c.name === 'reply')
-      expect(replyEl).toBeDefined()
-      expect(replyEl.attrs.xmlns).toBe('urn:xmpp:reply:0')
-      expect(replyEl.attrs.id).toBe('msg-123')
-      expect(replyEl.attrs.to).toBe('alice@example.com')
+      // No body, no <reply>, no <fallback> — we don't surface reactions as
+      // quoted replies and don't force fallback processing on other clients.
+      expect(sentStanza.children.find((c: any) => c.name === 'body')).toBeUndefined()
+      expect(sentStanza.children.find((c: any) => c.name === 'reply')).toBeUndefined()
+      expect(sentStanza.children.filter((c: any) => c.name === 'fallback').length).toBe(0)
 
-      // Should have reply fallback (with range)
-      const fallbackEls = sentStanza.children.filter((c: any) => c.name === 'fallback')
-      expect(fallbackEls.length).toBe(2)
-      const replyFallback = fallbackEls.find((c: any) => c.attrs.for === 'urn:xmpp:reply:0')
-      expect(replyFallback).toBeDefined()
-      expect(replyFallback.attrs.xmlns).toBe('urn:xmpp:fallback:0')
-      const replyFallbackBody = replyFallback.children[0]
-      expect(replyFallbackBody.attrs.start).toBe('0')
-      expect(parseInt(replyFallbackBody.attrs.end, 10)).toBeGreaterThan(0)
-
-      // Should have reactions fallback (entire body, no range)
-      const reactionsFallback = fallbackEls.find((c: any) => c.attrs.for === 'urn:xmpp:reactions:0')
-      expect(reactionsFallback).toBeDefined()
-      expect(reactionsFallback.attrs.xmlns).toBe('urn:xmpp:fallback:0')
-      const reactionsFallbackBody = reactionsFallback.children[0]
-      expect(reactionsFallbackBody.name).toBe('body')
-      // No start/end means entire body
-      expect(reactionsFallbackBody.attrs.start).toBeUndefined()
-      expect(reactionsFallbackBody.attrs.end).toBeUndefined()
-
-      // Should have store hint
+      // Store hint so the bodiless reaction is still archived in MAM
       const storeEl = sentStanza.children.find((c: any) => c.name === 'store')
       expect(storeEl).toBeDefined()
       expect(storeEl.attrs.xmlns).toBe('urn:xmpp:hints')
@@ -1323,7 +1295,7 @@ describe('XMPPClient Message', () => {
       expect(reactionsEl.attrs.id).toBe('unknown-msg-id')
     })
 
-    it('should include fallback for groupchat reactions with original message', async () => {
+    it('should send a clean bodiless reaction stanza for groupchat (no reply-quote fallback)', async () => {
       await connectClient()
 
       mockStores.room.getRoom = vi.fn().mockReturnValue({ jid: 'room@conference.example.com', nickname: 'me' })
@@ -1339,20 +1311,19 @@ describe('XMPPClient Message', () => {
 
       const sentStanza = mockXmppClientInstance.send.mock.calls[0][0]
 
-      // Should have body, reactions, reply, both fallbacks, and store hint
-      const bodyEl = sentStanza.children.find((c: any) => c.name === 'body')
-      expect(bodyEl).toBeDefined()
+      // Reactions element references the server stanza-id for MUC
+      const reactionsEl = sentStanza.children.find((c: any) => c.name === 'reactions')
+      expect(reactionsEl).toBeDefined()
+      expect(reactionsEl.attrs.id).toBe('server-stanza-id')
 
-      const replyEl = sentStanza.children.find((c: any) => c.name === 'reply')
-      expect(replyEl).toBeDefined()
-      expect(replyEl.attrs.to).toBe('room@conference.example.com/alice')
+      // No body, no <reply>, no <fallback>
+      expect(sentStanza.children.find((c: any) => c.name === 'body')).toBeUndefined()
+      expect(sentStanza.children.find((c: any) => c.name === 'reply')).toBeUndefined()
+      expect(sentStanza.children.filter((c: any) => c.name === 'fallback').length).toBe(0)
 
-      const fallbackEls = sentStanza.children.filter((c: any) => c.name === 'fallback')
-      expect(fallbackEls.length).toBe(2)
-
-      // Reactions fallback should indicate entire body is fallback
-      const reactionsFallback = fallbackEls.find((c: any) => c.attrs.for === 'urn:xmpp:reactions:0')
-      expect(reactionsFallback).toBeDefined()
+      // Store hint so the bodiless reaction is still archived in MAM
+      const storeEl = sentStanza.children.find((c: any) => c.name === 'store')
+      expect(storeEl).toBeDefined()
     })
   })
 
@@ -1874,10 +1845,10 @@ describe('XMPPClient Message', () => {
       expect(sentStanza.attrs.type).toBe('chat')
       expect(sentStanza.attrs.to).toBe('contact@example.com') // bare JID for chat
 
-      // Check body with [Corrected] prefix
+      // Body is the corrected text verbatim — no "[Corrected] " prefix
       const bodyEl = sentStanza.children.find((c: any) => c.name === 'body')
       expect(bodyEl).toBeDefined()
-      expect(bodyEl.children[0]).toBe('[Corrected] Fixed message')
+      expect(bodyEl.children[0]).toBe('Fixed message')
 
       // Check replace element
       const replaceEl = sentStanza.children.find((c: any) => c.name === 'replace')
@@ -1885,11 +1856,12 @@ describe('XMPPClient Message', () => {
       expect(replaceEl.attrs.xmlns).toBe('urn:xmpp:message-correct:0')
       expect(replaceEl.attrs.id).toBe('original-msg-123')
 
-      // Check fallback for correction prefix
+      // No correction fallback indication is sent — compliant clients replace
+      // the original from <replace> alone.
       const fallbackEl = sentStanza.children.find(
         (c: any) => c.name === 'fallback' && c.attrs.for === 'urn:xmpp:message-correct:0'
       )
-      expect(fallbackEl).toBeDefined()
+      expect(fallbackEl).toBeUndefined()
     })
 
     it('should include OOB element when correction includes attachment', async () => {
@@ -2033,13 +2005,12 @@ describe('XMPPClient Message', () => {
       )
       const bodyRangeEl = oobFallbackEl?.children.find((c: any) => c.name === 'body')
 
-      // Body should be: "[Corrected] user text\nURL"
-      const correctionPrefix = '[Corrected] '
-      const expectedBody = correctionPrefix + userText + '\n' + url
+      // Body should be: "user text\nURL" — no "[Corrected] " prefix
+      const expectedBody = userText + '\n' + url
       expect(bodyEl.children[0]).toBe(expectedBody)
 
-      // OOB fallback should mark ONLY the URL portion (after correction prefix and user text)
-      const expectedStart = correctionPrefix.length + userText.length + 1 // +1 for newline
+      // OOB fallback should mark ONLY the URL portion (after the user text)
+      const expectedStart = userText.length + 1 // +1 for newline
       expect(bodyRangeEl.attrs.start).toBe(String(expectedStart))
       expect(bodyRangeEl.attrs.end).toBe(String(expectedBody.length))
 
