@@ -1,6 +1,7 @@
 import { useRef, useEffect, useCallback, useState, memo } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useSearch, chatStore, roomStore, rosterStore, getLocalPart } from '@fluux/sdk'
+import { useSearch, chatStore, roomStore, getLocalPart } from '@fluux/sdk'
+import { useRoomStore, useRosterStore } from '@fluux/sdk/react'
 import type { SearchResult, SearchResultContext, SearchFilterType } from '@fluux/sdk'
 import { Avatar } from '../Avatar'
 import { useNavigateToTarget } from '@/hooks/useNavigateToTarget'
@@ -343,6 +344,13 @@ const SearchResultItem = memo(function SearchResultItem({ result, context, isAct
 
   const highlighted = isActive || isSelected
 
+  // Resolve the avatar REACTIVELY (per-key store subscription) — a render-time
+  // roomStore/rosterStore getState() read freezes this memoized row on the
+  // letter-avatar fallback when the vCard / room-avatar fetch resolves AFTER the
+  // row first rendered (frozen-derived-value-in-a-memo class; cf. useReferencedMessage).
+  const roomAvatar = useRoomStore((s) => s.rooms.get(result.conversationId)?.avatar)
+  const contactAvatar = useRosterStore((s) => s.contacts.get(result.conversationId)?.avatar)
+
   return (
     // Keyboard activation (Arrow + Enter) lives on the list container via
     // useListKeyboardNav — see SearchView's getContainerProps / onSelect.
@@ -368,28 +376,25 @@ const SearchResultItem = memo(function SearchResultItem({ result, context, isAct
       {/* Avatar / icon */}
       <div className="flex-shrink-0 mt-0.5">
         {result.isRoom ? (
-          (() => {
-            const roomAvatar = roomStore.getState().rooms.get(result.conversationId)?.avatar
-            return roomAvatar ? (
-              <img
-                src={roomAvatar}
-                alt={result.conversationName}
-                className="size-6 rounded-full object-cover"
-                draggable={false}
-              />
-            ) : (
-              <Avatar
-                identifier={result.conversationId}
-                name={result.conversationName}
-                size="xs"
-              />
-            )
-          })()
+          roomAvatar ? (
+            <img
+              src={roomAvatar}
+              alt={result.conversationName}
+              className="size-6 rounded-full object-cover"
+              draggable={false}
+            />
+          ) : (
+            <Avatar
+              identifier={result.conversationId}
+              name={result.conversationName}
+              size="xs"
+            />
+          )
         ) : (
           <Avatar
             identifier={result.conversationId}
             name={result.conversationName}
-            avatarUrl={rosterStore.getState().contacts.get(result.conversationId)?.avatar}
+            avatarUrl={contactAvatar}
             size="xs"
           />
         )}
