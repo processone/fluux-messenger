@@ -27,6 +27,7 @@ import { useExternalLinkHandler } from './hooks/useExternalLinkHandler'
 import { usePlatformState } from './hooks/usePlatformState'
 import { useAccountScopeRehydration } from './hooks/useAccountScopeRehydration'
 import { clearLocalData } from './utils/clearLocalData'
+import { startMemoryProbe } from './utils/memoryProbe'
 import { markConnectActive } from './utils/reconnectIntent'
 
 // Tauri detection
@@ -75,6 +76,10 @@ function App() {
   usePlatformState()
   useAccountScopeRehydration()
   const update = useAutoUpdate({ autoCheck: true })
+
+  // Opt-in memory/blob-pool probe (no-op unless localStorage['fluux:mem-probe']='1').
+  // Diagnostic for the SM-resume avatar blob-URL leak class — see utils/memoryProbe.ts.
+  useEffect(() => startMemoryProbe(), [])
 
   // Listen for --clear-storage CLI flag (Tauri only)
   // This clears all local data on startup when the flag is passed

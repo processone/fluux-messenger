@@ -24,6 +24,13 @@ interface ComponentState {
   hasTriggered: boolean
   hasWarned: boolean
   renderHistory: RenderEntry[]  // Last N renders for debugging
+  // Sustained-rate (EWMA) tracking — orthogonal to the per-window counter, which
+  // resets every TIME_WINDOW_MS and is therefore blind to a sustained sub-threshold
+  // storm (e.g. 30-199 renders/sec held for many seconds).
+  emaRate: number          // exponentially-weighted moving average of renders/sec
+  lastRenderTs: number     // timestamp of the previous render (0 = none yet)
+  sustainedSince: number   // when emaRate first crossed the sustained threshold (0 = not sustained)
+  lastSustainedWarn: number // last sustained-rate warning timestamp (cooldown)
 }
 
 const componentStates = new Map<string, ComponentState>()
@@ -49,6 +56,11 @@ const WAKE_GRACE_PERIOD_MS = 3000   // Suppress warnings for this long after wak
 const SYNC_GRACE_PERIOD_MS = 15000  // Raise error threshold after fresh connection (covers full MAM + roster + room catch-up)
 const SYNC_GRACE_THRESHOLD = 500    // Error threshold during sync grace period
 const INTERACTION_GRACE_MS = 1500   // Suppress warnings for this long after a keystroke (covers inter-key gaps; rolling)
+// Sustained-rate (EWMA) detector — catches the storm class the per-window counter misses.
+const SUSTAINED_RATE_PER_SEC = 40   // Warn above this many renders/sec...
+const SUSTAINED_DURATION_MS = 3000  // ...when held for at least this long...
+const SUSTAINED_COOLDOWN_MS = 10000 // ...at most once per this cooldown (so it never spams).
+const EWMA_TAU_MS = 1500            // EWMA time constant (smooths instantaneous spikes)
 
 // Track if we're in a grace period (e.g., after wake from sleep)
 let wakeGraceUntil = 0
@@ -59,10 +71,23 @@ let syncGraceUntil = 0
 // or OS key-repeat pushes past the warning threshold without any actual loop).
 let interactionGraceUntil = 0
 
+// Injectable clock — defaults to Date.now. The sustained-rate detector needs
+// multi-second timing, which is impractical to exercise with real time, so tests
+// drive it via __setClock. Production always uses Date.now.
+let nowFn: () => number = Date.now
+
+/** Test seam: override the detector's clock. Reset by resetRenderLoopDetector(). @internal */
+export function __setClock(fn: () => number): void {
+  nowFn = fn
+}
+
 function getComponentState(componentName: string): ComponentState {
   let state = componentStates.get(componentName)
   if (!state) {
-    state = { renderCount: 0, windowStart: Date.now(), hasTriggered: false, hasWarned: false, renderHistory: [] }
+    state = {
+      renderCount: 0, windowStart: nowFn(), hasTriggered: false, hasWarned: false, renderHistory: [],
+      emaRate: 0, lastRenderTs: 0, sustainedSince: 0, lastSustainedWarn: 0,
+    }
     componentStates.set(componentName, state)
   }
   return state
@@ -110,7 +135,7 @@ export function detectRenderLoop(componentName: string): void {
   // Don't check during cooldown period
   if (state.hasTriggered) return
 
-  const now = Date.now()
+  const now = nowFn()
 
   // Reset window if enough time has passed
   if (now - state.windowStart > TIME_WINDOW_MS) {
@@ -136,6 +161,46 @@ export function detectRenderLoop(componentName: string): void {
   // Skip warning during a grace period (expected high render frequency): after
   // sleep/wake, or while the user is actively typing into a controlled input.
   const inGracePeriod = now < wakeGraceUntil || now < interactionGraceUntil
+
+  // Sustained-rate (EWMA) detection — orthogonal to the per-window counter above,
+  // which resets every TIME_WINDOW_MS and so cannot see a sustained sub-threshold
+  // storm (the class behind the "half-freeze"). Track a decaying renders/sec average
+  // and warn — once per cooldown, outside any grace period — when it holds above the
+  // threshold for SUSTAINED_DURATION_MS. WARN-only: never throws.
+  if (state.lastRenderTs !== 0) {
+    const dt = now - state.lastRenderTs
+    if (dt > 0) {
+      const inst = 1000 / dt
+      const alpha = 1 - Math.exp(-dt / EWMA_TAU_MS)
+      state.emaRate += alpha * (inst - state.emaRate)
+    }
+  }
+  state.lastRenderTs = now
+
+  if (state.emaRate >= SUSTAINED_RATE_PER_SEC) {
+    if (state.sustainedSince === 0) state.sustainedSince = now
+    const heldFor = now - state.sustainedSince
+    if (!inGracePeriod && heldFor >= SUSTAINED_DURATION_MS && now - state.lastSustainedWarn > SUSTAINED_COOLDOWN_MS) {
+      state.lastSustainedWarn = now
+      console.warn(
+        `[RenderLoopDetector] Sustained render rate: ${componentName} averaging ` +
+        `${state.emaRate.toFixed(0)}/sec for ${(heldFor / 1000).toFixed(1)}s ` +
+        `(sub-threshold storm — likely a broken memo or a churning store map).`
+      )
+      if (typeof window !== 'undefined') {
+        try {
+          window.dispatchEvent(new CustomEvent('fluux:render-loop-sustained', {
+            detail: { componentName, rate: Math.round(state.emaRate), heldMs: heldFor },
+          }))
+        } catch {
+          // CustomEvent not available — ignore
+        }
+      }
+    }
+  } else {
+    state.sustainedSince = 0
+  }
+
   if (state.renderCount === WARNING_THRESHOLD && !state.hasWarned && !inGracePeriod) {
     state.hasWarned = true
     console.warn(
@@ -202,7 +267,7 @@ export function detectRenderLoop(componentName: string): void {
     setTimeout(() => {
       state.hasTriggered = false
       state.renderCount = 0
-      state.windowStart = Date.now()
+      state.windowStart = nowFn()
       state.hasWarned = false
       state.renderHistory = []
     }, COOLDOWN_MS)
@@ -248,7 +313,7 @@ export function trackSelectorChange(componentName: string, selectorName: string,
     selectorName,
     value: describedValue,
     extra,
-    timestamp: Date.now(),
+    timestamp: nowFn(),
   })
 
   // Keep history bounded
@@ -277,7 +342,7 @@ export function clearSelectorHistory(): void {
  */
 export function logRenderSummary(): void {
   console.group('[RenderLoopDetector] Render Summary')
-  const now = Date.now()
+  const now = nowFn()
   for (const [name, state] of componentStates) {
     const age = now - state.windowStart
     if (state.renderCount > 0) {
@@ -296,6 +361,7 @@ export function resetRenderLoopDetector(): void {
   wakeGraceUntil = 0
   syncGraceUntil = 0
   interactionGraceUntil = 0
+  nowFn = Date.now
 }
 
 /**
@@ -306,7 +372,7 @@ export function resetRenderLoopDetector(): void {
  * typing still trips the hard break.
  */
 export function notifyUserInput(): void {
-  interactionGraceUntil = Date.now() + INTERACTION_GRACE_MS
+  interactionGraceUntil = nowFn() + INTERACTION_GRACE_MS
 }
 
 /**
@@ -315,7 +381,7 @@ export function notifyUserInput(): void {
  * The error threshold is NOT suppressed - only warnings.
  */
 export function startWakeGracePeriod(): void {
-  wakeGraceUntil = Date.now() + WAKE_GRACE_PERIOD_MS
+  wakeGraceUntil = nowFn() + WAKE_GRACE_PERIOD_MS
 }
 
 /**
@@ -325,7 +391,7 @@ export function startWakeGracePeriod(): void {
  * cause rapid component re-renders.
  */
 export function startSyncGracePeriod(): void {
-  syncGraceUntil = Date.now() + SYNC_GRACE_PERIOD_MS
+  syncGraceUntil = nowFn() + SYNC_GRACE_PERIOD_MS
   // Also suppress warnings during sync
   wakeGraceUntil = Math.max(wakeGraceUntil, syncGraceUntil)
 }
@@ -335,7 +401,7 @@ export function startSyncGracePeriod(): void {
  */
 export function getRenderStats(): Record<string, { count: number; windowMs: number; triggered: boolean }> {
   const stats: Record<string, { count: number; windowMs: number; triggered: boolean }> = {}
-  const now = Date.now()
+  const now = nowFn()
   for (const [name, state] of componentStates) {
     stats[name] = {
       count: state.renderCount,

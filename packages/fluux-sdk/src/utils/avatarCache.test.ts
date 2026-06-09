@@ -9,6 +9,9 @@ import {
   revokeAllBlobUrls,
   refreshAllBlobUrls,
   clearAllAvatarData,
+  getBlobUrlPoolSize,
+  bumpAvatarResumeCount,
+  getAvatarResumeCount,
   _resetBlobUrlPoolForTesting,
   _resetDBForTesting,
 } from './avatarCache'
@@ -209,6 +212,25 @@ describe('avatarCache blob URL pool', () => {
       // Pool is cleared, IndexedDB is cleared — should get null
       const url = await getCachedAvatar('hash-abc')
       expect(url).toBeNull()
+    })
+  })
+
+  describe('diagnostics', () => {
+    it('getBlobUrlPoolSize reflects the number of live pooled blob URLs', async () => {
+      expect(getBlobUrlPoolSize()).toBe(0)
+      await cacheAvatar('hash-1', btoa('a'), 'image/png')
+      await cacheAvatar('hash-2', btoa('b'), 'image/png')
+      expect(getBlobUrlPoolSize()).toBe(2)
+
+      revokeAllBlobUrls()
+      expect(getBlobUrlPoolSize()).toBe(0)
+    })
+
+    it('bumpAvatarResumeCount increments the resume counter monotonically', () => {
+      const before = getAvatarResumeCount()
+      bumpAvatarResumeCount()
+      bumpAvatarResumeCount()
+      expect(getAvatarResumeCount()).toBe(before + 2)
     })
   })
 })

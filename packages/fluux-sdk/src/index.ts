@@ -710,6 +710,9 @@ export type { GetMessagesOptions } from './utils/messageCache'
 export {
   clearAllAvatarData,
   revokeAllBlobUrls,
+  getBlobUrlPoolSize,
+  bumpAvatarResumeCount,
+  getAvatarResumeCount,
 } from './utils/avatarCache'
 
 // =============================================================================
