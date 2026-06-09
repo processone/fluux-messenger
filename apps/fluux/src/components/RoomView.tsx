@@ -9,6 +9,7 @@ import { MessageBubble, MessageList, shouldShowAvatar, whisperThreadPosition, wh
 import { FindOnPageBar } from './conversation/FindOnPageBar'
 import { useFindOnPage, type FindOnPageHandle } from '@/hooks/useFindOnPage'
 import { Avatar, getConsistentTextColor } from './Avatar'
+import { stableNickSet } from './conversation/roomSenderResolution'
 import { format } from 'date-fns'
 import { Shield, Crown, Upload, Loader2, LogIn, AlertCircle, Users, MessageCircle, EyeOff, User, Settings, Ear, X } from 'lucide-react'
 import { ChristmasAnimation } from './ChristmasAnimation'
@@ -913,14 +914,12 @@ export const RoomMessageList = memo(function RoomMessageList({
     return ids
   }, [messages])
 
-  // Set of known occupant nicknames for IRC-style mention highlighting
-  const knownNicks = useMemo(() => {
-    const nicks = new Set<string>()
-    for (const nick of room.occupants.keys()) {
-      nicks.add(nick)
-    }
-    return nicks
-  }, [room.occupants])
+  // Set of known occupant nicknames for IRC-style mention highlighting.
+  // Ref-stable across presence (show/status) churn — only changes when the nick
+  // SET changes — so it does not bust every memoized row on each presence stanza.
+  const knownNicksRef = useRef<ReadonlySet<string>>(new Set())
+  knownNicksRef.current = stableNickSet(room.occupants, knownNicksRef.current)
+  const knownNicks = knownNicksRef.current
 
   // Loading state: only show when joining room (SDK auto-loads cache in background)
   // No "loading messages" spinner - cache loads instantly, messages appear immediately
