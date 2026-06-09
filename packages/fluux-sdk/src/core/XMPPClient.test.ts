@@ -944,6 +944,78 @@ describe('XMPPClient', () => {
       expect(bookmarksSpy).toHaveBeenCalled()
     })
 
+    it('should NOT refresh avatar blob URLs on SM resumption for short disconnects', async () => {
+      const mockClientWithSM = createMockXmppClientWithSM('sm-id-short-avatar')
+      mockClientFactory._setInstance(mockClientWithSM)
+
+      const stores = createMockStores()
+      const newXmppClient = new XMPPClient({ debug: false })
+      newXmppClient.bindStores(stores)
+
+      vi.spyOn(newXmppClient.muc, 'fetchBookmarks').mockResolvedValue({ roomsToAutojoin: [], allRoomJids: [] })
+      const refreshAvatarsSpy = vi.spyOn(newXmppClient.profile, 'refreshAllAvatarBlobUrls').mockResolvedValue()
+
+      // Short disconnect (30s): WebKit keeps the blob URLs alive, so refreshing
+      // them would needlessly re-read every avatar from IndexedDB on each blip.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ;(newXmppClient.connection as any).disconnectedAtTimestamp = Date.now() - 30_000
+
+      const connectPromise = newXmppClient.connect({
+        jid: 'user@example.com',
+        password: 'secret',
+        server: 'example.com',
+        smState: { id: 'sm-id-short-avatar', inbound: 5, outbound: 0 },
+        skipDiscovery: true,
+      })
+
+      const resumedNonza = createMockElement('resumed', {
+        xmlns: 'urn:xmpp:sm:3',
+        previd: 'sm-id-short-avatar',
+        h: '5',
+      })
+      mockClientWithSM._emit('nonza', resumedNonza)
+
+      await connectPromise
+
+      expect(refreshAvatarsSpy).not.toHaveBeenCalled()
+    })
+
+    it('should refresh avatar blob URLs on SM resumption for long disconnects', async () => {
+      const mockClientWithSM = createMockXmppClientWithSM('sm-id-long-avatar')
+      mockClientFactory._setInstance(mockClientWithSM)
+
+      const stores = createMockStores()
+      const newXmppClient = new XMPPClient({ debug: false })
+      newXmppClient.bindStores(stores)
+
+      vi.spyOn(newXmppClient.muc, 'fetchBookmarks').mockResolvedValue({ roomsToAutojoin: [], allRoomJids: [] })
+      const refreshAvatarsSpy = vi.spyOn(newXmppClient.profile, 'refreshAllAvatarBlobUrls').mockResolvedValue()
+
+      // Long disconnect (5 min) covers the OS sleep-wake case where WebKit may
+      // have reclaimed the blob URLs — they must be re-created.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ;(newXmppClient.connection as any).disconnectedAtTimestamp = Date.now() - 300_000
+
+      const connectPromise = newXmppClient.connect({
+        jid: 'user@example.com',
+        password: 'secret',
+        server: 'example.com',
+        smState: { id: 'sm-id-long-avatar', inbound: 5, outbound: 0 },
+        skipDiscovery: true,
+      })
+
+      const resumedNonza = createMockElement('resumed', {
+        xmlns: 'urn:xmpp:sm:3',
+        previd: 'sm-id-long-avatar',
+        h: '5',
+      })
+      mockClientWithSM._emit('nonza', resumedNonza)
+
+      await connectPromise
+
+      expect(refreshAvatarsSpy).toHaveBeenCalled()
+    })
+
     it('should leave the live room store untouched on SM resumption', async () => {
       // Whether or not previouslyJoinedRooms is provided, the store already
       // reflects the session's room state (either from in-memory continuity on
