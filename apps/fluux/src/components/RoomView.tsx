@@ -981,6 +981,7 @@ export const RoomMessageList = memo(function RoomMessageList({
     if (msg.replyTo) {
       const original = getMessageById(msg.replyTo.id)
       const replyNick = original?.nick || (msg.replyTo.to ? msg.replyTo.to.split('/').pop() : undefined)
+      // replyNick may be undefined (unresolved reply target); resolveReplyAvatar handles that safely.
       const ra = resolveReplyAvatar(replyNick, room, contactsByJid, room.nickname, ownAvatar)
       replyAvatarUrl = ra.avatarUrl
       replyAvatarIdentifier = ra.avatarIdentifier

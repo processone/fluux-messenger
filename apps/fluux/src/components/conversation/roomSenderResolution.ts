@@ -4,7 +4,6 @@ import type { Room, RoomMessage, RoomRole, RoomAffiliation, ContactIdentity, Roo
 
 export interface ResolvedRoomSender {
   occupant: RoomOccupant | undefined
-  occupantIdMatchNick: string | undefined
   avatarPresence: 'online' | 'away' | 'dnd' | 'offline' | undefined
   senderAvatar: string | undefined
   resolvedSenderName: string
@@ -53,7 +52,7 @@ export function resolveRoomSender(
     || (contact?.name && !occupant ? contact.name : null)
     || message.nick
   return {
-    occupant, occupantIdMatchNick,
+    occupant,
     avatarPresence: room.joined ? (occupant ? getPresenceFromShow(occupant.show) : 'offline') : undefined,
     senderAvatar, resolvedSenderName,
     senderRole: occupant?.role,
