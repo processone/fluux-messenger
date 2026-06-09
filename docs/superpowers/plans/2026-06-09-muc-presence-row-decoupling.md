@@ -407,7 +407,9 @@ Resolve the sender per message and pass resolved props instead of `room`. Stabil
 **Files:**
 - Modify: `apps/fluux/src/components/RoomView.tsx` (RoomMessageList body around `:906-1001`)
 
-- [ ] **Step 1: Add `selfOccupant` + the replyContext cache above `renderMessage`**
+**Module prerequisite:** add `senderBareJid: string | undefined` to `ResolvedRoomSender` and return it (the superset JID already computed in `resolveRoomSender`). The wrapper needs it to compute `contact` for `senderColor` (`RoomView.tsx:1186`), which uses the occupant-id-fallback JID, NOT `senderBareJidForBan`.
+
+- [ ] **Step 1: Add `selfOccupant` above `renderMessage`**
 
 Insert after the `knownNicks` block (~`:923`):
 ```tsx
@@ -415,35 +417,29 @@ Insert after the `knownNicks` block (~`:923`):
     () => selectSelfOccupant(room.occupants, room.nickname),
     [room.occupants, room.nickname],
   )
-
-  // Per-message replyContext cache: keeps a STABLE object ref unless the inputs
-  // that affect the reply preview change (quoted id, reply-target occupant ref,
-  // reply avatar, dark mode). Prevents a fresh replyContext from busting every
-  // row's memo on unrelated presence churn.
-  const replyCtxCacheRef = useRef(new Map<string, { key: string; value: ReturnType<typeof buildReplyContext> }>())
 ```
 
-Import `selectSelfOccupant`, `resolveRoomSender`, `resolveReplyAvatar` from `./conversation/roomSenderResolution`.
+Import `selectSelfOccupant`, `resolveRoomSender`, `resolveReplyAvatar`, `stableNickSet` from `./conversation/roomSenderResolution`.
 
-- [ ] **Step 2: Rewrite `renderMessage` to resolve + pass slim props**
+- [ ] **Step 2: Rewrite `renderMessage` to resolve + pass slim props (primitives only)**
 
-Replace the `renderMessage` body (`:962-1002`). Resolve the sender, build a cached replyContext, and pass the resolved fields. (Reply-context key uses the reply-target occupant ref so it stays stable; `getMessageById` is already stable.)
+Replace the `renderMessage` body (`:962-1002`). `msg.replyTo` is a `ReplyInfo` `{ id, to, fallbackBody }` (NOT a string). Derive the reply target the way `buildReplyContext` does (`MessageBubble.tsx:660-661`): `originalMessage = getMessageById(replyTo.id)`, fallback JID = `replyTo.to`. Pass the reply avatar as two **primitives** so no object ever busts the memo — the wrapper builds `replyContext` itself from them.
 
 ```tsx
   const renderMessage = (msg: RoomMessage, idx: number, groupMessages: RoomMessage[]) => {
     const sender = resolveRoomSender(msg, room, contactsByJid, selfOccupant)
 
-    // Stable replyContext (see cache above).
-    const quoted = msg.replyTo ? getMessageById(msg.replyTo) : undefined
-    const replyNick = quoted?.nick ?? (msg.replyTo ? msg.replyTo.split('/').pop() : undefined)
-    const replyOcc = replyNick ? room.occupants.get(replyNick) : undefined
-    const replyAvatar = resolveReplyAvatar(replyNick, room, contactsByJid, room.nickname, ownAvatar)
-    const ctxKey = `${msg.replyTo ?? ''}|${replyOcc ? 'o' : '_'}|${replyAvatar.avatarUrl ?? ''}|${isDarkMode ? 'd' : 'l'}`
-    const cached = replyCtxCacheRef.current.get(msg.id)
-    let replyContext = cached?.value
-    if (!cached || cached.key !== ctxKey) {
-      replyContext = buildRoomReplyContext(msg, getMessageById, replyAvatar, room.nickname, isDarkMode)
-      replyCtxCacheRef.current.set(msg.id, { key: ctxKey, value: replyContext })
+    // Resolve the reply-preview avatar to primitives (the wrapper builds the
+    // replyContext object internally — see Task 6 — so nothing object-shaped
+    // is passed that could bust the row memo on presence churn).
+    let replyAvatarUrl: string | undefined
+    let replyAvatarIdentifier: string | undefined
+    if (msg.replyTo) {
+      const original = getMessageById(msg.replyTo.id)
+      const replyNick = original?.nick || (msg.replyTo.to ? msg.replyTo.to.split('/').pop() : undefined)
+      const ra = resolveReplyAvatar(replyNick, room, contactsByJid, room.nickname, ownAvatar)
+      replyAvatarUrl = ra.avatarUrl
+      replyAvatarIdentifier = ra.avatarIdentifier
     }
 
     return (
@@ -461,11 +457,13 @@ Replace the `renderMessage` body (`:962-1002`). Resolve the sender, build a cach
         resolvedSenderName={sender.resolvedSenderName}
         senderRole={sender.senderRole}
         senderAffiliation={sender.senderAffiliation}
+        senderBareJid={sender.senderBareJid}
         senderBareJidForBan={sender.senderBareJidForBan}
         canModerate={sender.canModerate}
         canBan={sender.canBan}
         counterpartPresent={sender.counterpartPresent}
-        replyContext={replyContext}
+        replyAvatarUrl={replyAvatarUrl}
+        replyAvatarIdentifier={replyAvatarIdentifier}
         knownNicks={knownNicks}
         contactsByJid={contactsByJid}
         ownAvatar={ownAvatar}
@@ -529,39 +527,34 @@ In `RoomMessageBubbleWrapperProps` remove `room: Room` and add:
   resolvedSenderName: string
   senderRole: RoomRole | undefined
   senderAffiliation: RoomAffiliation | undefined
+  senderBareJid: string | undefined          // superset JID, for senderColor's contact lookup
   senderBareJidForBan: string | undefined
   canModerate: boolean
   canBan: boolean
   counterpartPresent: boolean
-  replyContext: ReturnType<typeof buildReplyContext>
+  replyAvatarUrl: string | undefined          // primitives; wrapper builds replyContext from these
+  replyAvatarIdentifier: string | undefined
 ```
 
 - [ ] **Step 2: Delete the internal resolution; use props**
 
-In the wrapper body delete `:1131-1182` (sender/self/avatar/name/permission resolution) and the `replyContext` build (`:1219-1257`). Replace remaining `room.*` reads:
+In the wrapper body delete `:1131-1182` (sender/self/avatar/name/permission resolution). KEEP the `replyContext` build (`:1219-1257`) but rewrite its avatar callback to use the passed primitives instead of `room` (see Step 3). Replace remaining `room.*` reads:
 - `room.jid` → `roomJid` (handleReaction `:1201`, handlePollVote `:1216`, `senderOccupantJid` `:1362`, `closePoll` call).
 - `room.nickname`/`myNick` → `myNick` prop.
 - `room.supportsReactions !== false` (`:1365`) → `supportsReactions` prop.
 - `occupant`, `senderAvatar`, `resolvedSenderName`, `canModerateMsg`→`canModerate`, `senderRole`/`senderAffiliation`, `avatarPresence`, `counterpartPresent` → use the props.
-- `contact` (for `senderColor` `:1186`): derive locally from `senderBareJidForBan`/`contactsByJid` is NOT equivalent (color uses senderBareJid which may differ). Keep a minimal local lookup: `const contact = senderBareJidForBan ? contactsByJid.get(senderBareJidForBan) : undefined` — acceptable since `senderBareJidForBan` equals `senderBareJid` for color purposes here; verify against `:1164-1168` and if they diverge, also return `senderColorJid` from `resolveRoomSender`.
+- `contact` (for `senderColor` `:1186`): `const contact = senderBareJid ? contactsByJid.get(senderBareJid) : undefined` using the new `senderBareJid` prop (the superset JID, matching the original `:1164-1168`).
 - `avatarPresence={...}` (`:1357`) → `avatarPresence={avatarPresence}`.
 - `counterpartPresent={...}` (`:1384`) → `counterpartPresent={counterpartPresent}`.
 
 After this, the wrapper must contain **no** reference to `room` (grep to confirm — Step 4).
 
-- [ ] **Step 3: Add `buildRoomReplyContext` helper near `RoomMessageBubbleWrapper`**
+- [ ] **Step 3: Build `replyContext` inside the wrapper from the avatar primitives**
+
+Replace the existing `buildReplyContext(...)` call in the wrapper body (`:1220-1257`) so its avatar callback returns the passed `replyAvatarUrl`/`replyAvatarIdentifier` props instead of reading `room`. The name and color callbacks already take only `(originalMsg, fallbackId)` and need no `room` — keep them as-is:
 
 ```tsx
-// Builds reply context from a PRE-RESOLVED reply avatar (no `room` access), so
-// the row can be fed a stable replyContext from the list layer.
-function buildRoomReplyContext(
-  message: RoomMessage,
-  getMessageById: (id: string) => RoomMessage | undefined,
-  replyAvatar: { avatarUrl: string | undefined; avatarIdentifier: string },
-  myNick: string | undefined,
-  isDarkMode: boolean | undefined,
-) {
-  return buildReplyContext(
+  const replyContext = buildReplyContext(
     message,
     getMessageById,
     (originalMsg, fallbackId) =>
@@ -571,11 +564,12 @@ function buildRoomReplyContext(
       const nick = originalMsg?.nick || (fallbackId ? fallbackId.split('/').pop() : undefined)
       return nick ? getConsistentTextColor(nick, dark) : 'var(--fluux-brand)'
     },
-    () => replyAvatar,
+    () => ({ avatarUrl: replyAvatarUrl, avatarIdentifier: replyAvatarIdentifier ?? 'unknown' }),
     isDarkMode,
   )
-}
 ```
+
+This builds `replyContext` only when the row actually re-renders — it's a render output, not a prop, so it never affects the memo. `buildReplyContext` returns `undefined` early when `message.replyTo` is absent, so non-reply rows pay nothing.
 
 - [ ] **Step 4: Confirm the wrapper no longer references `room`, then typecheck + tests**
 
