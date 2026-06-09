@@ -170,6 +170,24 @@ describe('avatarCache blob URL pool', () => {
       expect(freshUrl).toBeTruthy()
       expect(freshUrl).not.toBe(originalUrl)
     })
+
+    it('revokes the previously-pooled blob URLs before recreating them (no leak across refreshes)', async () => {
+      // Real SM-resumption case: the pool is STILL populated because WebKit did
+      // not reclaim the URLs (an ordinary network blip, not an OS sleep). Clearing
+      // without revoking would orphan these URLs and leak decoded-image memory on
+      // every resumption.
+      const urlA = await cacheAvatar('hash-a', btoa('imgA'), 'image/png')
+      const urlB = await cacheAvatar('hash-b', btoa('imgB'), 'image/png')
+      revokeSpy.mockClear()
+
+      // Refresh WITHOUT first emptying the pool.
+      await refreshAllBlobUrls()
+
+      // The stale pooled URLs must be revoked, not orphaned.
+      expect(revokeSpy).toHaveBeenCalledWith(urlA)
+      expect(revokeSpy).toHaveBeenCalledWith(urlB)
+      expect(revokeSpy).toHaveBeenCalledTimes(2)
+    })
   })
 
   describe('clearAllAvatarData', () => {

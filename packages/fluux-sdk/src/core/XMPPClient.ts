@@ -2044,8 +2044,17 @@ export class XMPPClient {
       }
     } catch { /* ignore storage errors (e.g., SSR environments) */ }
 
-    // Refresh avatar blob URLs — WebKit may have revoked them during sleep
-    this.profile.refreshAllAvatarBlobUrls().catch(() => {})
+    const SM_SHORT_DISCONNECT_MS = 120_000
+    const isShortDisconnect = disconnectDurationMs != null
+      && disconnectDurationMs < SM_SHORT_DISCONNECT_MS
+
+    // Refresh avatar blob URLs — WebKit can reclaim them across an OS sleep, which
+    // surfaces as a long/unknown-duration resumption. Skip on short network blips:
+    // the URLs are still live there, so refreshing would re-read every avatar from
+    // IndexedDB and re-create its blob URL on every reconnection for no benefit.
+    if (!isShortDisconnect) {
+      this.profile.refreshAllAvatarBlobUrls().catch(() => {})
+    }
 
     await this.roster.sendInitialPresence()
     if (this.isSessionSuperseded(gen, 'SM resumption aborted after sendInitialPresence')) return
@@ -2063,10 +2072,6 @@ export class XMPPClient {
     // Bookmarks are PEP items, not SM-queued stanzas, so they may have
     // changed on another client while disconnected. For long/unknown-duration
     // disconnects, refresh them and pick up any newly-autojoined rooms.
-    const SM_SHORT_DISCONNECT_MS = 120_000
-    const isShortDisconnect = disconnectDurationMs != null
-      && disconnectDurationMs < SM_SHORT_DISCONNECT_MS
-
     if (isShortDisconnect) {
       const sec = Math.round(disconnectDurationMs / 1000)
       logInfo(`SM resumption: short disconnect (${sec}s) — skipping bookmark fetch`)

@@ -620,8 +620,11 @@ export function revokeAllBlobUrls(): void {
  * memory during sleep). Returns a map of hash → fresh blob URL.
  */
 export async function refreshAllBlobUrls(): Promise<Map<string, string>> {
-  // Clear stale blob URLs (already revoked by the browser)
-  blobUrlPool.clear()
+  // Revoke the existing blob URLs before recreating them. On a real OS
+  // sleep-wake WebKit may already have reclaimed them, but on an ordinary SM
+  // resumption (a network blip) they are still live — clearing without revoking
+  // would orphan them and leak decoded-image memory on every resumption.
+  revokeAllBlobUrls()
 
   const freshUrls = new Map<string, string>()
   try {
