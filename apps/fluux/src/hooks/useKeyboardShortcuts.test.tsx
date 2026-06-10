@@ -24,6 +24,8 @@ const mockState = {
   archivedConversations: new Set<string>(),
   setActiveConversation: vi.fn(),
   setActiveRoom: vi.fn(),
+  chatLoadMessagesFromCache: vi.fn(() => Promise.resolve([])),
+  roomLoadMessagesFromCache: vi.fn(() => Promise.resolve([])),
 }
 
 // Mock SDK - vanilla stores only
@@ -34,6 +36,8 @@ vi.mock('@fluux/sdk', () => ({
       conversations: new Map(mockState.conversations.map(c => [c.id, c])),
       activeConversationId: mockState.activeConversationId,
       archivedConversations: mockState.archivedConversations,
+      setActiveConversation: mockState.setActiveConversation,
+      loadMessagesFromCache: mockState.chatLoadMessagesFromCache,
     }),
   },
   roomStore: {
@@ -45,6 +49,8 @@ vi.mock('@fluux/sdk', () => ({
       // semantic the fixture represents.
       allRooms: () => mockState.joinedRooms.map(r => ({ ...r, joined: true })),
       activeRoomJid: mockState.activeRoomJid,
+      setActiveRoom: mockState.setActiveRoom,
+      loadMessagesFromCache: mockState.roomLoadMessagesFromCache,
     }),
   },
 }))
@@ -100,6 +106,8 @@ describe('useKeyboardShortcuts', () => {
     mockState.joinedRooms = []
     mockState.activeRoomJid = null
     mockState.setActiveRoom = vi.fn()
+    mockState.chatLoadMessagesFromCache = vi.fn(() => Promise.resolve([]))
+    mockState.roomLoadMessagesFromCache = vi.fn(() => Promise.resolve([]))
     mockState.archivedConversations = new Set()
     mockSettingsState.themeMode = 'system'
     mockSettingsState.setThemeMode = vi.fn((mode: string) => { mockSettingsState.themeMode = mode as 'light' | 'dark' | 'system' })
@@ -118,8 +126,12 @@ describe('useKeyboardShortcuts', () => {
     navigateToRooms: vi.fn(),
   })
 
+  // Activation is async: the cache hydration (loadMessagesFromCache) resolves
+  // before the store setter runs. Flush pending microtasks so assertions see it.
+  const flushActivation = () => new Promise<void>((resolve) => setTimeout(resolve, 0))
+
   describe('Next Unread (Cmd+U)', () => {
-    it('should navigate to conversation with unread messages', () => {
+    it('should navigate to conversation with unread messages', async () => {
       mockState.conversations = [
         { id: 'user1@example.com', unreadCount: 0 },
         { id: 'user2@example.com', unreadCount: 3 },
@@ -136,13 +148,14 @@ describe('useKeyboardShortcuts', () => {
       )
       expect(nextUnreadShortcut).toBeDefined()
       nextUnreadShortcut!.action()
+      await flushActivation()
 
       expect(mockState.setActiveConversation).toHaveBeenCalledWith('user2@example.com')
       expect(mockState.setActiveRoom).toHaveBeenCalledWith(null)
       expect(options.navigateToMessages).toHaveBeenCalledWith('user2@example.com')
     })
 
-    it('should navigate to room with mentions', () => {
+    it('should navigate to room with mentions', async () => {
       mockState.conversations = [] // No unread conversations
       mockState.joinedRooms = [
         { jid: 'room1@conference.example.com', mentionsCount: 0, unreadCount: 0 },
@@ -159,13 +172,14 @@ describe('useKeyboardShortcuts', () => {
         s => s.key === 'u' && s.modifiers?.includes('meta')
       )
       nextUnreadShortcut!.action()
+      await flushActivation()
 
       expect(mockState.setActiveRoom).toHaveBeenCalledWith('room2@conference.example.com')
       expect(mockState.setActiveConversation).toHaveBeenCalledWith(null)
       expect(options.navigateToRooms).toHaveBeenCalledWith('room2@conference.example.com')
     })
 
-    it('should navigate to room with unreadCount when notifyAll is enabled (regression test)', () => {
+    it('should navigate to room with unreadCount when notifyAll is enabled (regression test)', async () => {
       mockState.conversations = [] // No unread conversations
       mockState.joinedRooms = [
         { jid: 'room1@conference.example.com', mentionsCount: 0, unreadCount: 0 },
@@ -182,6 +196,7 @@ describe('useKeyboardShortcuts', () => {
         s => s.key === 'u' && s.modifiers?.includes('meta')
       )
       nextUnreadShortcut!.action()
+      await flushActivation()
 
       // Should navigate to room2 because it has unreadCount > 0
       expect(mockState.setActiveRoom).toHaveBeenCalledWith('room2@conference.example.com')
@@ -189,7 +204,7 @@ describe('useKeyboardShortcuts', () => {
       expect(options.navigateToRooms).toHaveBeenCalledWith('room2@conference.example.com')
     })
 
-    it('should prioritize conversations over rooms', () => {
+    it('should prioritize conversations over rooms', async () => {
       mockState.conversations = [
         { id: 'user1@example.com', unreadCount: 5 },
       ]
@@ -208,6 +223,7 @@ describe('useKeyboardShortcuts', () => {
         s => s.key === 'u' && s.modifiers?.includes('meta')
       )
       nextUnreadShortcut!.action()
+      await flushActivation()
 
       // Should navigate to conversation first, not room
       expect(mockState.setActiveConversation).toHaveBeenCalledWith('user1@example.com')
@@ -216,7 +232,7 @@ describe('useKeyboardShortcuts', () => {
       expect(options.navigateToRooms).not.toHaveBeenCalled()
     })
 
-    it('should skip current conversation when finding next unread', () => {
+    it('should skip current conversation when finding next unread', async () => {
       mockState.conversations = [
         { id: 'user1@example.com', unreadCount: 5 },
         { id: 'user2@example.com', unreadCount: 3 },
@@ -232,13 +248,14 @@ describe('useKeyboardShortcuts', () => {
         s => s.key === 'u' && s.modifiers?.includes('meta')
       )
       nextUnreadShortcut!.action()
+      await flushActivation()
 
       // Should navigate to user2, not stay on user1
       expect(mockState.setActiveConversation).toHaveBeenCalledWith('user2@example.com')
       expect(options.navigateToMessages).toHaveBeenCalledWith('user2@example.com')
     })
 
-    it('should skip current room when finding next unread', () => {
+    it('should skip current room when finding next unread', async () => {
       mockState.conversations = []
       mockState.joinedRooms = [
         { jid: 'room1@conference.example.com', mentionsCount: 5, unreadCount: 10 },
@@ -255,6 +272,7 @@ describe('useKeyboardShortcuts', () => {
         s => s.key === 'u' && s.modifiers?.includes('meta')
       )
       nextUnreadShortcut!.action()
+      await flushActivation()
 
       // Should navigate to room2, not stay on room1
       expect(mockState.setActiveRoom).toHaveBeenCalledWith('room2@conference.example.com')
@@ -585,7 +603,7 @@ describe('useKeyboardShortcuts', () => {
   })
 
   describe('Alt+Arrow Navigation (Previous/Next Item)', () => {
-    it('should navigate to previous conversation with Alt+Up', () => {
+    it('should navigate to previous conversation with Alt+Up', async () => {
       mockState.conversations = [
         { id: 'user1@example.com', unreadCount: 0 },
         { id: 'user2@example.com', unreadCount: 0 },
@@ -602,12 +620,13 @@ describe('useKeyboardShortcuts', () => {
       )
       expect(prevShortcut).toBeDefined()
       prevShortcut!.action()
+      await flushActivation()
 
       expect(mockState.setActiveConversation).toHaveBeenCalledWith('user1@example.com')
       expect(mockState.setActiveRoom).toHaveBeenCalledWith(null)
     })
 
-    it('should navigate to next conversation with Alt+Down', () => {
+    it('should navigate to next conversation with Alt+Down', async () => {
       mockState.conversations = [
         { id: 'user1@example.com', unreadCount: 0 },
         { id: 'user2@example.com', unreadCount: 0 },
@@ -624,6 +643,7 @@ describe('useKeyboardShortcuts', () => {
       )
       expect(nextShortcut).toBeDefined()
       nextShortcut!.action()
+      await flushActivation()
 
       expect(mockState.setActiveConversation).toHaveBeenCalledWith('user3@example.com')
       expect(mockState.setActiveRoom).toHaveBeenCalledWith(null)
@@ -671,7 +691,7 @@ describe('useKeyboardShortcuts', () => {
       expect(mockState.setActiveRoom).not.toHaveBeenCalled()
     })
 
-    it('should select first item when Alt+Down pressed with no selection', () => {
+    it('should select first item when Alt+Down pressed with no selection', async () => {
       mockState.conversations = [
         { id: 'user1@example.com', unreadCount: 0 },
         { id: 'user2@example.com', unreadCount: 0 },
@@ -686,6 +706,7 @@ describe('useKeyboardShortcuts', () => {
         s => s.key === 'ArrowDown' && s.modifiers?.includes('alt')
       )
       nextShortcut!.action()
+      await flushActivation()
 
       expect(mockState.setActiveConversation).toHaveBeenCalledWith('user1@example.com')
     })
@@ -728,6 +749,84 @@ describe('useKeyboardShortcuts', () => {
       // Should NOT navigate (stay at last, no wrap to first)
       expect(mockState.setActiveRoom).not.toHaveBeenCalled()
       expect(mockState.setActiveConversation).not.toHaveBeenCalled()
+    })
+  })
+
+  // Regression: switching with Cmd+Opt+Arrow used the raw store setters, which
+  // skip the IndexedDB cache hydration every other activation path performs.
+  // The newly active room/conversation rendered empty (only live messages are
+  // kept in memory) until a manual scroll triggered a history load.
+  describe('Cache hydration on keyboard activation', () => {
+    it('loads cached room history before activating the room (Alt+Down in rooms view)', async () => {
+      mockState.joinedRooms = [
+        { jid: 'room1@conference.example.com', mentionsCount: 0, unreadCount: 0 },
+        { jid: 'room2@conference.example.com', mentionsCount: 0, unreadCount: 0 },
+      ]
+      mockState.activeRoomJid = 'room1@conference.example.com'
+
+      const options = { ...createDefaultOptions(), sidebarView: 'rooms' as const }
+      const { result } = renderHook(() => useKeyboardShortcuts(options))
+
+      const nextShortcut = result.current.find(
+        s => s.key === 'ArrowDown' && s.modifiers?.includes('alt')
+      )
+      nextShortcut!.action()
+      await flushActivation()
+
+      expect(mockState.roomLoadMessagesFromCache).toHaveBeenCalledWith(
+        'room2@conference.example.com', { limit: 100 }
+      )
+      expect(mockState.setActiveRoom).toHaveBeenCalledWith('room2@conference.example.com')
+      // Hydration must complete BEFORE activation so the conversation-switch
+      // scroll effect sees the full message list and the unread marker is
+      // computed with historical context.
+      expect(mockState.roomLoadMessagesFromCache.mock.invocationCallOrder[0])
+        .toBeLessThan(mockState.setActiveRoom.mock.invocationCallOrder[0])
+    })
+
+    it('loads cached conversation history before activating it (Alt+Up in messages view)', async () => {
+      mockState.conversations = [
+        { id: 'user1@example.com', unreadCount: 0 },
+        { id: 'user2@example.com', unreadCount: 0 },
+      ]
+      mockState.activeConversationId = 'user2@example.com'
+
+      const { result } = renderHook(() => useKeyboardShortcuts(createDefaultOptions()))
+
+      const prevShortcut = result.current.find(
+        s => s.key === 'ArrowUp' && s.modifiers?.includes('alt')
+      )
+      prevShortcut!.action()
+      await flushActivation()
+
+      expect(mockState.chatLoadMessagesFromCache).toHaveBeenCalledWith(
+        'user1@example.com', { limit: 100 }
+      )
+      expect(mockState.setActiveConversation).toHaveBeenCalledWith('user1@example.com')
+      expect(mockState.chatLoadMessagesFromCache.mock.invocationCallOrder[0])
+        .toBeLessThan(mockState.setActiveConversation.mock.invocationCallOrder[0])
+    })
+
+    it('loads cached history before activating via Cmd+U (next unread)', async () => {
+      mockState.conversations = [
+        { id: 'user1@example.com', unreadCount: 0 },
+        { id: 'user2@example.com', unreadCount: 3 },
+      ]
+      mockState.activeConversationId = 'user1@example.com'
+
+      const { result } = renderHook(() => useKeyboardShortcuts(createDefaultOptions()))
+
+      const nextUnreadShortcut = result.current.find(
+        s => s.key === 'u' && s.modifiers?.includes('meta')
+      )
+      nextUnreadShortcut!.action()
+      await flushActivation()
+
+      expect(mockState.chatLoadMessagesFromCache).toHaveBeenCalledWith(
+        'user2@example.com', { limit: 100 }
+      )
+      expect(mockState.chatLoadMessagesFromCache.mock.invocationCallOrder[0])
+        .toBeLessThan(mockState.setActiveConversation.mock.invocationCallOrder[0])
     })
   })
 
