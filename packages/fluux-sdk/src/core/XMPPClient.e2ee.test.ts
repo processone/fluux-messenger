@@ -244,6 +244,118 @@ describe('XMPPClient.retryPendingDecrypts()', () => {
     })
   })
 
+  describe('XEP-0461 reply fallback stripping on retry', () => {
+    // Regression guard for the duplicated-quote rendering bug: an encrypted
+    // reply's body carries the XEP-0461 compatibility quote ("> Author
+    // wrote:\n> …\n") and the OUTER stanza carries the XEP-0428 <fallback>
+    // range pointing at it. The stash holds the full original stanza so the
+    // retry can re-run fallback stripping; the old bare-element stash lost
+    // the <reply>/<fallback> context and clobbered the store body with the
+    // raw quote-prefixed plaintext (reply chip + quote rendered twice).
+    const REPLY_FALLBACK = '> Bob wrote:\n> original message\n'
+    const REPLY_PLAINTEXT = `${REPLY_FALLBACK}actual reply`
+    const FULL_STANZA_PAYLOAD =
+      `<message from="bob@example.com/web" to="me@example.com" type="chat" id="reply-1">` +
+      `<reply xmlns="urn:xmpp:reply:0" id="orig-1" to="me@example.com"/>` +
+      `<fallback xmlns="urn:xmpp:fallback:0" for="urn:xmpp:reply:0"><body start="0" end="${REPLY_FALLBACK.length}"/></fallback>` +
+      `<body>[encrypted]</body>` +
+      `<plain xmlns="urn:fluux:e2ee-dummy:0">${Buffer.from(REPLY_PLAINTEXT).toString('base64')}</plain>` +
+      `<encryption xmlns="urn:xmpp:eme:0" namespace="urn:fluux:e2ee-dummy:0"/>` +
+      `</message>`
+
+    beforeEach(() => {
+      vi.spyOn(manager, 'decryptArchive').mockResolvedValue({
+        plaintext: new TextEncoder().encode(REPLY_PLAINTEXT),
+        senderDevice: { jid: 'bob@example.com', deviceId: 'test' },
+        securityContext: { protocolId: 'dummy-plaintext', trust: 'verified' },
+      })
+      chatStore.getState().addConversation({
+        id: 'bob@example.com',
+        name: 'Bob',
+        type: 'chat',
+        lastMessage: undefined,
+        unreadCount: 0,
+      })
+    })
+
+    it('strips the reply fallback quote from the decrypted body (deferred decrypt)', async () => {
+      chatStore.getState().addMessage({
+        type: 'chat',
+        id: 'msg-reply-deferred',
+        conversationId: 'bob@example.com',
+        from: 'bob@example.com',
+        body: '[Encrypted message: could not decrypt]',
+        timestamp: new Date(),
+        isOutgoing: false,
+        replyTo: { id: 'orig-1', to: 'me@example.com' },
+        encryptedPayload: FULL_STANZA_PAYLOAD,
+      })
+
+      const count = await xmppClient.retryPendingDecrypts()
+
+      expect(count).toBe(1)
+      const messages = chatStore.getState().messages.get('bob@example.com') ?? []
+      const msg = messages.find((m) => m.id === 'msg-reply-deferred')
+      expect(msg?.body).toBe('actual reply')
+      expect(msg?.encryptedPayload).toBeUndefined()
+    })
+
+    it('does not reintroduce the quote when re-verifying an already-decrypted reply', async () => {
+      // needsDeferredVerification case: the first pass decrypted and stripped
+      // the body correctly but could not verify the signature (peer key not
+      // cached). The retry must not clobber the body with the raw plaintext.
+      chatStore.getState().addMessage({
+        type: 'chat',
+        id: 'msg-reply-reverify',
+        conversationId: 'bob@example.com',
+        from: 'bob@example.com',
+        body: 'actual reply',
+        timestamp: new Date(),
+        isOutgoing: false,
+        replyTo: { id: 'orig-1', to: 'me@example.com' },
+        securityContext: {
+          protocolId: 'dummy-plaintext',
+          trust: 'untrusted',
+          notes: ['Sender key not cached'],
+        },
+        encryptedPayload: FULL_STANZA_PAYLOAD,
+      })
+
+      await xmppClient.retryPendingDecrypts()
+
+      const messages = chatStore.getState().messages.get('bob@example.com') ?? []
+      const msg = messages.find((m) => m.id === 'msg-reply-reverify')
+      expect(msg?.body).toBe('actual reply')
+      expect(msg?.securityContext?.trust).toBe('verified')
+      expect(msg?.encryptedPayload).toBeUndefined()
+    })
+
+    it('still decrypts legacy bare-element payloads (no outer context available)', async () => {
+      // Stashes persisted before the full-stanza format hold only the
+      // encrypted child. They must keep decrypting; fallback stripping is
+      // impossible without the outer <fallback> range, so the raw body is
+      // accepted as-is.
+      chatStore.getState().addMessage({
+        type: 'chat',
+        id: 'msg-reply-legacy',
+        conversationId: 'bob@example.com',
+        from: 'bob@example.com',
+        body: '[Encrypted message: could not decrypt]',
+        timestamp: new Date(),
+        isOutgoing: false,
+        encryptedPayload: `<plain xmlns="urn:fluux:e2ee-dummy:0">${Buffer.from(REPLY_PLAINTEXT).toString('base64')}</plain>`,
+      })
+
+      const count = await xmppClient.retryPendingDecrypts()
+
+      expect(count).toBe(1)
+      const messages = chatStore.getState().messages.get('bob@example.com') ?? []
+      const msg = messages.find((m) => m.id === 'msg-reply-legacy')
+      expect(msg?.body).toBe(REPLY_PLAINTEXT)
+      expect(msg?.encryptedPayload).toBeUndefined()
+    })
+  })
+
   describe('durable-cache deferred decryption', () => {
     // Regression guard for the web fresh-session reload bug: messages that
     // failed to decrypt while the key was locked are persisted to IndexedDB

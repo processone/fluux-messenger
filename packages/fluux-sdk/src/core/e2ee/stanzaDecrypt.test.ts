@@ -343,6 +343,81 @@ describe('stanzaDecrypt encrypted payload stash on failure', () => {
 })
 
 // ---------------------------------------------------------------------------
+// Full-stanza stash: outer cleartext context (XEP-0461 <reply> and XEP-0428
+// <fallback> ranges live OUTSIDE the encrypted element) must survive the
+// stash, otherwise retryPendingDecrypts cannot re-run fallback stripping and
+// overwrites the store body with the raw quote-prefixed plaintext.
+// ---------------------------------------------------------------------------
+
+function buildReplyStanza(): Element {
+  return xml(
+    'message',
+    { from: 'peer@example.com/resource', id: 'm-reply', type: 'chat' },
+    xml('reply', { xmlns: 'urn:xmpp:reply:0', id: 'orig-1', to: 'me@example.com' }),
+    xml(
+      'fallback',
+      { xmlns: 'urn:xmpp:fallback:0', for: 'urn:xmpp:reply:0' },
+      xml('body', { start: '0', end: '32' }),
+    ),
+    xml('body', {}, '[Encrypted message]'),
+    xml('enc', { xmlns: TEST_NAMESPACE }),
+  ) as Element
+}
+
+describe('stanzaDecrypt full-stanza stash (outer reply/fallback context)', () => {
+  it('stashes the whole message stanza when plugin decrypt fails', async () => {
+    const manager = await makeManager(new FailingE2EEPlugin())
+    const stanza = buildReplyStanza()
+
+    const result = await decryptStanzaInPlace(stanza, manager, 'peer@example.com')
+
+    expect(result.encryptedPayloadXml).toMatch(/^<message/)
+    expect(result.encryptedPayloadXml).toContain('urn:xmpp:reply:0')
+    expect(result.encryptedPayloadXml).toContain('urn:xmpp:fallback:0')
+    expect(result.encryptedPayloadXml).toContain(TEST_NAMESPACE)
+  })
+
+  it('stashes the whole message stanza when decrypt succeeds but trust is untrusted', async () => {
+    const manager = await makeManager(new UntrustedE2EEPlugin())
+    const stanza = buildReplyStanza()
+
+    const result = await decryptStanzaInPlace(stanza, manager, 'peer@example.com')
+
+    expect(result.encryptedPayloadXml).toMatch(/^<message/)
+    expect(result.encryptedPayloadXml).toContain('urn:xmpp:reply:0')
+    expect(result.encryptedPayloadXml).toContain('urn:xmpp:fallback:0')
+    // The stash must hold the ENCRYPTED original (re-decryptable), not the
+    // in-place-decrypted stanza.
+    expect(result.encryptedPayloadXml).toContain(TEST_NAMESPACE)
+    expect(result.encryptedPayloadXml).not.toContain('decrypted body')
+  })
+
+  it('stashes the whole message stanza for an unclaimed EME-hinted stanza', async () => {
+    const manager = makeEmptyManager()
+    const stanza = xml(
+      'message',
+      { from: 'peer@example.com/resource', id: 'm-eme', type: 'chat' },
+      xml('reply', { xmlns: 'urn:xmpp:reply:0', id: 'orig-1', to: 'me@example.com' }),
+      xml(
+        'fallback',
+        { xmlns: 'urn:xmpp:fallback:0', for: 'urn:xmpp:reply:0' },
+        xml('body', { start: '0', end: '32' }),
+      ),
+      xml('body', {}, 'This message is encrypted'),
+      xml('encryption', { xmlns: 'urn:xmpp:eme:0', namespace: 'urn:xmpp:openpgp:0' }),
+      xml('openpgp', { xmlns: 'urn:xmpp:openpgp:0' }, 'ciphertext'),
+    ) as Element
+
+    const result = await decryptStanzaInPlace(stanza, manager, 'peer@example.com')
+
+    expect(result.attempted).toBe(false)
+    expect(result.encryptedPayloadXml).toMatch(/^<message/)
+    expect(result.encryptedPayloadXml).toContain('urn:xmpp:reply:0')
+    expect(result.encryptedPayloadXml).toContain('urn:xmpp:fallback:0')
+  })
+})
+
+// ---------------------------------------------------------------------------
 // Untrusted plugin: decrypt succeeds but reports untrusted trust (e.g. peer
 // key not cached, so signature could not be verified)
 // ---------------------------------------------------------------------------

@@ -78,12 +78,18 @@ export interface DecryptInPlaceResult {
    */
   authoredAt?: Date
   /**
-   * Serialized XML of the encrypted child element, present when:
+   * Serialized XML of the full original `<message>` stanza (captured before
+   * any mutation), present when:
    * - a plugin claimed the stanza but decrypt failed (e.g. key locked), or
+   * - decrypt succeeded but the signature could not be verified yet
+   *   (deferred re-verification), or
    * - an EME hint was present but no plugin is registered yet (deferred retry).
-   * Mutually exclusive with `unsupportedEncryption`. Callers should store this
-   * on the resulting {@link Message} so that
-   * {@link XMPPClient.retryPendingDecrypts} can re-attempt later.
+   * The whole stanza — not just the encrypted child — is kept so that outer
+   * cleartext context (XEP-0461 `<reply>`, XEP-0428 `<fallback>` ranges,
+   * XEP-0066 OOB) survives until the retry, which re-runs the normal parse.
+   * Stashes persisted before this format hold just the encrypted child;
+   * {@link XMPPClient.retryPendingDecrypts} handles both shapes.
+   * Mutually exclusive with `unsupportedEncryption`.
    */
   encryptedPayloadXml?: string
   /**
@@ -168,9 +174,12 @@ export async function decryptStanzaInPlace(
     return { attempted: false }
   }
 
-  // Serialize the encrypted element BEFORE any mutation — the element
-  // will be stripped below regardless of success/failure.
-  const encryptedChildXml = encryptedChild.toString()
+  // Serialize BEFORE any mutation — the encrypted element will be stripped
+  // below regardless of success/failure. The full stanza is what gets
+  // stashed for deferred retry: the encrypted child alone would lose outer
+  // cleartext context (XEP-0461 <reply>, XEP-0428 <fallback> ranges) that
+  // the retry needs to re-run fallback stripping on the decrypted body.
+  const originalStanzaXml = stanza.toString()
 
   let plaintext: string | null = null
   let securityContext: SecurityContext | null = null
@@ -246,7 +255,7 @@ export async function decryptStanzaInPlace(
     } else {
       // Decrypt failure (key locked, plugin missing, etc.): stash for
       // deferred retry and keep the sender's fallback body hint.
-      stashPayload(stanza, encryptedChildXml)
+      stashPayload(stanza, originalStanzaXml)
       if (!stanza.getChild('body')) {
         stanza.children.push(
           xml('body', {}, '[Encrypted message: could not decrypt]'),
@@ -306,7 +315,7 @@ export async function decryptStanzaInPlace(
   const needsDeferredVerification =
     failureReason === null && securityContext?.trust === 'untrusted'
   if (needsDeferredVerification) {
-    stashPayload(stanza, encryptedChildXml)
+    stashPayload(stanza, originalStanzaXml)
   }
 
   if (securityContext) {
@@ -322,7 +331,7 @@ export async function decryptStanzaInPlace(
     ...(securityContext && { securityContext }),
     ...(authoredAt && { authoredAt }),
     ...((failureReason !== null && securityContext?.trust !== 'rejected' || needsDeferredVerification) && {
-      encryptedPayloadXml: encryptedChildXml,
+      encryptedPayloadXml: originalStanzaXml,
     }),
   }
 }
@@ -376,7 +385,11 @@ export function deriveConversationContext(
 // Stanza stash helpers
 // ---------------------------------------------------------------------------
 
-/** Stash a serialized encrypted element on a stanza for deferred decrypt. */
+/**
+ * Stash the serialized original `<message>` stanza on a (mutated) stanza for
+ * deferred decrypt. See {@link DecryptInPlaceResult.encryptedPayloadXml} for
+ * why the whole stanza is kept rather than just the encrypted child.
+ */
 function stashPayload(stanza: Element, payloadXml: string): void {
   ;(stanza as unknown as { [ENCRYPTED_PAYLOAD_STASH]?: string })[
     ENCRYPTED_PAYLOAD_STASH
@@ -510,9 +523,11 @@ export function recordUnclaimedEME(
     return { kind: 'unsupported', info }
   }
 
-  // Not ready yet — stash the encrypted child for retryPendingDecrypts().
-  const payloadXml = target.child?.toString()
-  if (!payloadXml) return { kind: 'none' }
+  // Not ready yet — stash for retryPendingDecrypts(). The full stanza is
+  // kept (not just the encrypted child) so outer cleartext context like
+  // XEP-0461 <reply> / XEP-0428 <fallback> ranges survives until the retry.
+  if (!target.child) return { kind: 'none' }
+  const payloadXml = stanza.toString()
   stashPayload(stanza, payloadXml)
   logInfo(`E2EE: stashed encrypted payload (ns=${target.namespace}) for deferred decrypt`)
   return { kind: 'retry', encryptedPayloadXml: payloadXml }
