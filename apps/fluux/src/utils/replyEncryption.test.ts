@@ -13,4 +13,8 @@ describe('isEncryptedSource', () => {
   it('is false for a plaintext message (neither field present)', () => {
     expect(isEncryptedSource({})).toBe(false)
   })
+
+  it('is true when the message used an unsupported encryption protocol', () => {
+    expect(isEncryptedSource({ unsupportedEncryption: { namespace: 'eu.siacs.conversations.axolotl', name: 'OMEMO' } })).toBe(true)
+  })
 })

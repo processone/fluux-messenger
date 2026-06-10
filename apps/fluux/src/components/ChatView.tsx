@@ -965,7 +965,7 @@ export const MessageInput = memo(function MessageInput({
   onCancelReply: () => void
   editingMessage: Message | null
   onCancelEdit: () => void
-  sendMessage: (to: string, body: string, type?: 'chat' | 'groupchat', replyTo?: { id: string; to?: string; fallback?: { author: string; body: string } }, attachment?: import('@fluux/sdk').FileAttachment) => Promise<string>
+  sendMessage: (to: string, body: string, type?: 'chat' | 'groupchat', replyTo?: { id: string; to?: string; fallback?: { author: string; body: string; fromEncrypted?: boolean } }, attachment?: import('@fluux/sdk').FileAttachment) => Promise<string>
   sendCorrection: (conversationId: string, messageId: string, newBody: string, attachment?: import('@fluux/sdk').FileAttachment) => Promise<void>
   retractMessage: (conversationId: string, messageId: string) => Promise<void>
   sendChatState: (to: string, state: import('@fluux/sdk').ChatStateNotification, type?: 'chat' | 'groupchat') => Promise<void>
