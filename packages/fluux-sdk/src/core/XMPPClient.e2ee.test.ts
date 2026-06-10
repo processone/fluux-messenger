@@ -511,5 +511,60 @@ describe('XMPPClient.retryPendingDecrypts()', () => {
       const ghost = messages.find((m) => m.id === 'reaction-ghost')
       expect(ghost).toBeUndefined()
     })
+
+    it('applies a deferred-decrypted retraction to its target and drops the placeholder', async () => {
+      // Retractions are the sibling of reactions: sendRetraction keeps an outer
+      // fallback body, but the <retract> element itself is bodiless inside the
+      // payload, so a deferred decrypt surfaces it with no <body> — the same
+      // code path that dropped reactions.
+      const retractEnvelope =
+        `<payload xmlns="jabber:client">` +
+        `<retract xmlns="urn:xmpp:message-retract:1" id="spam-msg"/>` +
+        `</payload>`
+      vi.spyOn(manager, 'decryptArchive').mockResolvedValue({
+        plaintext: new TextEncoder().encode(retractEnvelope),
+        senderDevice: { jid: 'bob@example.com', deviceId: 'test' },
+        securityContext: { protocolId: 'dummy-plaintext', trust: 'verified' },
+      })
+
+      chatStore.getState().addConversation({
+        id: 'bob@example.com',
+        name: 'Bob',
+        type: 'chat',
+        lastMessage: undefined,
+        unreadCount: 0,
+      })
+      // The message Bob later retracted — still visible until the retract applies.
+      chatStore.getState().addMessage({
+        type: 'chat',
+        id: 'spam-msg',
+        conversationId: 'bob@example.com',
+        from: 'bob@example.com',
+        body: 'oops wrong chat',
+        timestamp: new Date(),
+        isOutgoing: false,
+      })
+      // Bob's retraction, stashed as a placeholder while the key was locked.
+      chatStore.getState().addMessage({
+        type: 'chat',
+        id: 'retract-ghost',
+        conversationId: 'bob@example.com',
+        from: 'bob@example.com',
+        body: '[Encrypted message: could not decrypt]',
+        timestamp: new Date(),
+        isOutgoing: false,
+        encryptedPayload: DUMMY_PAYLOAD_XML,
+      })
+
+      await xmppClient.retryPendingDecrypts()
+
+      const messages = chatStore.getState().messages.get('bob@example.com') ?? []
+      // The target must now be marked retracted (only its author may retract it).
+      const target = messages.find((m) => m.id === 'spam-msg')
+      expect(target?.isRetracted).toBe(true)
+      // The placeholder must not linger.
+      const ghost = messages.find((m) => m.id === 'retract-ghost')
+      expect(ghost).toBeUndefined()
+    })
   })
 })

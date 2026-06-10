@@ -114,7 +114,8 @@ import { Poll } from './modules/Poll'
 import { E2EEManager, InMemoryStorageBackend, type StorageBackend, type XMPPPrimitives } from './e2ee'
 import { dataToElement } from './e2ee/stanzaAdapter'
 import { decryptStanzaInPlace } from './e2ee/stanzaDecrypt'
-import { NS_CARBONS, NS_MAM, NS_P1_PUSH_WEBPUSH, NS_REACTIONS } from './namespaces'
+import { NS_CARBONS, NS_MAM, NS_P1_PUSH_WEBPUSH, NS_REACTIONS, NS_RETRACT } from './namespaces'
+import { applyRetraction } from './modules/messagingUtils'
 import { createDefaultStoreBindings, type DefaultStoreBindingsOptions } from './defaultStoreBindings'
 import { logDebug, logInfo, logWarn } from './logger'
 import { SDK_VERSION } from '../version'
@@ -194,13 +195,15 @@ import { bumpAvatarResumeCount } from '../utils/avatarCache'
  * The placeholder "message" it was provisionally stored under must be replaced
  * by applying the signal to its target.
  */
-type RetryModification = { type: 'reactions'; targetId: string; emojis: string[] }
+type RetryModification =
+  | { type: 'reactions'; targetId: string; emojis: string[] }
+  | { type: 'retract'; targetId: string }
 
 /**
  * Result of a single deferred-decrypt attempt.
  * - `decrypted`: plaintext recovered — update body/security/attachment, clear `encryptedPayload`.
- * - `modification`: decrypt surfaced a bodiless signal (XEP-0444 reaction) — apply it to its
- *   target and remove the placeholder; there is no message body to update.
+ * - `modification`: decrypt surfaced a bodiless signal (XEP-0444 reaction or XEP-0424 retraction) —
+ *   apply it to its target and remove the placeholder; there is no message body to update.
  * - `unsupported`: protocol we have no plugin for — clear `encryptedPayload`, tag `unsupportedEncryption`, keep body.
  * - `pending`: still cannot decrypt (key locked / plugin not ready) — leave `encryptedPayload`.
  */
@@ -1723,16 +1726,12 @@ export class XMPPClient {
         } else if (outcome.kind === 'modification') {
           // Conversation isn't loaded in memory. Apply best-effort to the
           // in-memory target (no-op if absent) and drop the durable placeholder
-          // so it can't resurrect as a "[could not decrypt]" bubble. The
-          // store binding's removeMessage only touches in-memory state, so
-          // delete from the durable cache explicitly. For never-opened
-          // conversations the reaction is reconciled on the next MAM
-          // catch-up, when the now-unlocked key decrypts it inline.
-          if (outcome.modification.type === 'reactions') {
-            chatBindings.updateReactions(
-              conversationId, outcome.modification.targetId, getBareJid(msg.from), outcome.modification.emojis,
-            )
-          }
+          // so it can't resurrect as a "[could not decrypt]" bubble. The store
+          // binding's removeMessage only touches in-memory state, so delete
+          // from the durable cache explicitly. For never-opened conversations
+          // the signal is reconciled on the next MAM catch-up, when the
+          // now-unlocked key decrypts it inline.
+          this.applyDeferredChatModification(conversationId, msg, outcome.modification, chatBindings)
           await cacheDeleteMessage(msg.id)
           decryptedCount++
         } else if (outcome.kind === 'unsupported') {
@@ -1754,11 +1753,12 @@ export class XMPPClient {
   }
 
   /**
-   * Apply a bodiless signal (XEP-0444 reaction) recovered from a deferred
-   * decrypt to its target message, then remove the "[could not decrypt]"
-   * placeholder it was provisionally stored under. The reactor is the sender
-   * of the placeholder stanza — our own bare JID for a self-outgoing MAM
-   * replay, the peer's for an inbound one.
+   * Apply a bodiless signal (XEP-0444 reaction or XEP-0424 retraction)
+   * recovered from a deferred decrypt to its target message, then remove the
+   * "[could not decrypt]" placeholder it was provisionally stored under. The
+   * sender of the placeholder stanza is the actor — our own bare JID for a
+   * self-outgoing MAM replay, the peer's for an inbound one. A retraction is
+   * only honoured when that actor authored the target (mirrors the live path).
    */
   private applyDeferredChatModification(
     conversationId: string,
@@ -1766,10 +1766,13 @@ export class XMPPClient {
     modification: RetryModification,
     chatBindings: StoreBindings['chat'],
   ): void {
+    const actorJid = getBareJid(placeholder.from)
     if (modification.type === 'reactions') {
-      chatBindings.updateReactions(
-        conversationId, modification.targetId, getBareJid(placeholder.from), modification.emojis,
-      )
+      chatBindings.updateReactions(conversationId, modification.targetId, actorJid, modification.emojis)
+    } else {
+      const target = chatBindings.getMessage(conversationId, modification.targetId)
+      const updates = applyRetraction(!!target && target.from === actorJid)
+      if (updates) chatBindings.updateMessage(conversationId, modification.targetId, updates)
     }
     chatBindings.removeMessage(conversationId, placeholder.id)
   }
@@ -1827,13 +1830,13 @@ export class XMPPClient {
         return { kind: 'pending' }
       }
 
-      // Bodiless signal stanzas (XEP-0444 reactions) carry no <body> — the
-      // whole element rode inside the encrypted payload and now sits at the
-      // stanza root after decryptStanzaInPlace unwrapped it. These were stored
-      // under a "[could not decrypt]" placeholder while the key was locked;
-      // returning 'pending' here (the historical body-only behaviour) silently
-      // dropped them. Surface them as a modification so the caller applies the
-      // reaction to its target and removes the placeholder.
+      // Bodiless signal stanzas (XEP-0444 reactions, XEP-0424 retractions)
+      // carry no <body> — the whole element rode inside the encrypted payload
+      // and now sits at the stanza root after decryptStanzaInPlace unwrapped
+      // it. These were stored under a "[could not decrypt]" placeholder while
+      // the key was locked; returning 'pending' here (the historical body-only
+      // behaviour) silently dropped them. Surface them as a modification so the
+      // caller applies the signal to its target and removes the placeholder.
       const reactionsEl = stanza.getChild('reactions', NS_REACTIONS)
       if (reactionsEl?.attrs.id) {
         const emojis = reactionsEl
@@ -1844,6 +1847,10 @@ export class XMPPClient {
           kind: 'modification',
           modification: { type: 'reactions', targetId: reactionsEl.attrs.id, emojis },
         }
+      }
+      const retractEl = stanza.getChild('retract', NS_RETRACT)
+      if (retractEl?.attrs.id) {
+        return { kind: 'modification', modification: { type: 'retract', targetId: retractEl.attrs.id } }
       }
 
       // Extract the decrypted body
