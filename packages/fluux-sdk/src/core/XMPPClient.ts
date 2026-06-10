@@ -41,7 +41,7 @@ import {
 } from '../stores'
 import { detectPlatform, getCachedPlatform } from './platform'
 import { isDeadSocketError } from './modules/connectionUtils'
-import { parseMessageContent } from './modules/messagingUtils'
+import { parseMessageContent, applyRetraction } from './modules/messagingUtils'
 import {
   FRESH_SESSION_IQ_TIMEOUT_MS,
   FRESH_SESSION_SETUP_TIMEOUT_MS,
@@ -115,7 +115,6 @@ import { E2EEManager, InMemoryStorageBackend, type StorageBackend, type XMPPPrim
 import { dataToElement } from './e2ee/stanzaAdapter'
 import { decryptStanzaInPlace } from './e2ee/stanzaDecrypt'
 import { NS_CARBONS, NS_MAM, NS_P1_PUSH_WEBPUSH, NS_REACTIONS, NS_RETRACT } from './namespaces'
-import { applyRetraction } from './modules/messagingUtils'
 import { createDefaultStoreBindings, type DefaultStoreBindingsOptions } from './defaultStoreBindings'
 import { logDebug, logInfo, logWarn } from './logger'
 import { SDK_VERSION } from '../version'
