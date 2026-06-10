@@ -428,6 +428,7 @@
         "attachment": "مرفق",
         "removeAttachment": "إزالة المرفق",
         "reply": "رد",
+        "replyQuoteHiddenEncrypted": "تم إخفاء الاقتباس — كانت الرسالة الأصلية مُشفَّرة",
         "forwardMessage": "إعادة توجيه الرسالة (قريبًا)",
         "moreReactions": "المزيد من التفاعلات",
         "reactionOthers": "{{count}} آخرين",

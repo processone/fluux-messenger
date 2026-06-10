@@ -430,6 +430,7 @@
         "attachment": "Adjunto",
         "removeAttachment": "Eliminar adjunto",
         "reply": "Responder",
+        "replyQuoteHiddenEncrypted": "Cita oculta: el original estaba cifrado",
         "forwardMessage": "Reenviar mensaje (proximamente)",
         "moreReactions": "Mas reacciones",
         "reactionOthers": "{{count}} otros",

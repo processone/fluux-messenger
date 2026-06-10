@@ -428,6 +428,7 @@
         "attachment": "Vedlegg",
         "removeAttachment": "Fjern vedlegg",
         "reply": "Svar",
+        "replyQuoteHiddenEncrypted": "Sitat skjult — originalen var kryptert",
         "forwardMessage": "Videresend melding (kommer snart)",
         "moreReactions": "Flere reaksjoner",
         "reactionOthers": "{{count}} andre",

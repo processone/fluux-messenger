@@ -430,6 +430,7 @@
         "attachment": "Manus",
         "removeAttachment": "Eemalda manus",
         "reply": "Vasta",
+        "replyQuoteHiddenEncrypted": "Tsitaat peidetud — originaal oli krüpteeritud",
         "forwardMessage": "Edasta sõnum (tulemas)",
         "moreReactions": "Rohkem reaktsioone",
         "reactionOthers": "{{count}} muud",

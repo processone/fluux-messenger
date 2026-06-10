@@ -428,6 +428,7 @@
         "attachment": "Прикачен файл",
         "removeAttachment": "Премахни прикачен файл",
         "reply": "Отговор",
+        "replyQuoteHiddenEncrypted": "Цитатът е скрит — оригиналът беше шифрован",
         "forwardMessage": "Препрати съобщение (очаквайте скоро)",
         "moreReactions": "Още реакции",
         "reactionOthers": "{{count}} други",

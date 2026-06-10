@@ -428,6 +428,7 @@
         "attachment": "Melléklet",
         "removeAttachment": "Melléklet eltávolítása",
         "reply": "Válasz",
+        "replyQuoteHiddenEncrypted": "Idézet elrejtve — az eredeti titkosított volt",
         "forwardMessage": "Üzenet továbbítása (hamarosan)",
         "moreReactions": "További reakciók",
         "reactionOthers": "{{count}} másik",

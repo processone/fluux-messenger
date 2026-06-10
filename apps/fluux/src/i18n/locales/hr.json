@@ -428,6 +428,7 @@
         "attachment": "Privitak",
         "removeAttachment": "Ukloni privitak",
         "reply": "Odgovori",
+        "replyQuoteHiddenEncrypted": "Citat skriven — izvornik je bio šifriran",
         "forwardMessage": "Proslijedi poruku (uskoro dolazi)",
         "moreReactions": "Više reakcija",
         "reactionOthers": "{{count}} drugih",

@@ -429,6 +429,7 @@
         "attachment": "Príloha",
         "removeAttachment": "Odstrániť prílohu",
         "reply": "Odpovedať",
+        "replyQuoteHiddenEncrypted": "Citácia skrytá — originál bol šifrovaný",
         "forwardMessage": "Preposlať správu (už čoskoro)",
         "moreReactions": "Viac reakcií",
         "reactionOthers": "{{count}} ďalších",

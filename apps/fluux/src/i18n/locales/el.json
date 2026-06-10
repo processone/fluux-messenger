@@ -429,6 +429,7 @@
         "attachment": "Συνημμένο",
         "removeAttachment": "Αφαίρεση συνημμένου",
         "reply": "Απάντηση",
+        "replyQuoteHiddenEncrypted": "Το απόσπασμα αποκρύφθηκε — το αρχικό ήταν κρυπτογραφημένο",
         "forwardMessage": "Προώθηση μηνύματος (σύντομα διαθέσιμο)",
         "moreReactions": "Περισσότερες αντιδράσεις",
         "reactionOthers": "{{count}} ακόμη",

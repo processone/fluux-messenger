@@ -430,6 +430,7 @@
         "attachment": "Atașament",
         "removeAttachment": "Elimină atașamentul",
         "reply": "Răspunde",
+        "replyQuoteHiddenEncrypted": "Citat ascuns — originalul era criptat",
         "forwardMessage": "Redirecționează mesajul (în curând)",
         "moreReactions": "Mai multe reacții",
         "reactionOthers": "{{count}} alții",
