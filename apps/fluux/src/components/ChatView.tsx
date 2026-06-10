@@ -20,6 +20,7 @@ import { ChristmasAnimation } from './ChristmasAnimation'
 import { ChatHeader } from './ChatHeader'
 import { MessageComposer, type ReplyInfo, type EditInfo, type MessageComposerHandle, type PendingAttachment } from './MessageComposer'
 import { findLastEditableMessage, findLastEditableMessageId } from '@/utils/messageUtils'
+import { isEncryptedSource } from '@/utils/replyEncryption'
 import { useExpandedMessagesStore } from '@/stores/expandedMessagesStore'
 import { ConfirmDialog } from './ConfirmDialog'
 
@@ -1051,13 +1052,13 @@ export const MessageInput = memo(function MessageInput({
 
     // Include reply info if replying to a message (with XEP-0428 fallback for compatibility)
     // SDK resolves stanzaId vs id for the protocol reference (XEP-0461)
-    let replyTo: { id: string; to: string; fallback?: { author: string; body: string } } | undefined
+    let replyTo: { id: string; to: string; fallback?: { author: string; body: string; fromEncrypted?: boolean } } | undefined
     if (replyingTo) {
       const authorName = contactsByJid.get(replyingTo.from.split('/')[0])?.name || replyingTo.from.split('@')[0]
       replyTo = {
         id: replyingTo.id,
         to: replyingTo.from,
-        fallback: { author: authorName, body: replyingTo.body }
+        fallback: { author: authorName, body: replyingTo.body, fromEncrypted: isEncryptedSource(replyingTo) }
       }
     }
 
