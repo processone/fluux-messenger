@@ -20,6 +20,7 @@ import {
 } from './stanzaDecrypt'
 import { E2EEManager, InMemoryStorageBackend, type XMPPPrimitives } from './index'
 import { serialize as serializePayloadEnvelope } from './payloadEnvelope'
+import { E2EEPluginError } from './errors'
 import type {
   ConversationHandle,
   ConversationTarget,
@@ -225,6 +226,18 @@ class FailingE2EEPlugin extends FakeE2EEPlugin {
   }
 }
 
+// Claims the encrypted child but throws a caller-supplied E2EEPluginError —
+// lets us exercise the rejection-vs-retry routing per error code/kind.
+class ThrowingSignaturePlugin extends FakeE2EEPlugin {
+  constructor(private readonly error: E2EEPluginError) {
+    super(undefined)
+  }
+
+  override async decrypt(): Promise<DecryptResult> {
+    throw this.error
+  }
+}
+
 class NonClaimingOpenPgpPlugin extends FakeE2EEPlugin {
   readonly descriptor: E2EEProtocolDescriptor = {
     ...descriptor,
@@ -297,6 +310,35 @@ describe('stanzaDecrypt encrypted payload stash on failure', () => {
     expect(readStashedEncryptedPayload(stanza)).toBe(result.encryptedPayloadXml)
     // Security context should reflect untrusted
     expect(result.securityContext?.trust).toBe('untrusted')
+  })
+
+  it('routes a transient signature failure (clock skew) to retry, not rejection', async () => {
+    // Guard for the sticky-rejection recovery: a transient
+    // `signature-not-yet-valid` error must be stashed for retryPendingDecrypts,
+    // NOT rendered as a permanent rejection. Only `signature-failed` /
+    // `signature-missing` map to a rejection — anything else is retryable.
+    const manager = await makeManager(
+      new ThrowingSignaturePlugin(
+        new E2EEPluginError('transient', 'signature-not-yet-valid', 'clock skew'),
+      ),
+    )
+    const stanza = buildStanza()
+    const result = await decryptStanzaInPlace(stanza, manager, 'peer@example.com')
+    expect(result.securityContext?.trust).not.toBe('rejected')
+    expect(result.encryptedPayloadXml).toBeDefined()
+    expect(readStashedEncryptedPayload(stanza)).toBe(result.encryptedPayloadXml)
+  })
+
+  it('routes a permanent signature failure to a final rejection (no retry)', async () => {
+    const manager = await makeManager(
+      new ThrowingSignaturePlugin(
+        new E2EEPluginError('permanent', 'signature-failed', 'bad signature'),
+      ),
+    )
+    const stanza = buildStanza()
+    const result = await decryptStanzaInPlace(stanza, manager, 'peer@example.com')
+    expect(result.securityContext?.trust).toBe('rejected')
+    expect(result.encryptedPayloadXml).toBeUndefined()
   })
 })
 
