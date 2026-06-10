@@ -113,7 +113,7 @@ import { MAM } from './modules/MAM'
 import { Poll } from './modules/Poll'
 import { E2EEManager, InMemoryStorageBackend, type StorageBackend, type XMPPPrimitives } from './e2ee'
 import { dataToElement } from './e2ee/stanzaAdapter'
-import { decryptStanzaInPlace } from './e2ee/stanzaDecrypt'
+import { decryptStanzaInPlace, COULD_NOT_DECRYPT_BODY, MESSAGE_REJECTED_BODY } from './e2ee/stanzaDecrypt'
 import { NS_CARBONS, NS_MAM, NS_P1_PUSH_WEBPUSH, NS_REACTIONS, NS_RETRACT } from './namespaces'
 import { createDefaultStoreBindings, type DefaultStoreBindingsOptions } from './defaultStoreBindings'
 import { logDebug, logInfo, logWarn } from './logger'
@@ -204,12 +204,16 @@ type RetryModification =
  * - `modification`: decrypt surfaced a bodiless signal (XEP-0444 reaction or XEP-0424 retraction) —
  *   apply it to its target and remove the placeholder; there is no message body to update.
  * - `unsupported`: protocol we have no plugin for — clear `encryptedPayload`, tag `unsupportedEncryption`, keep body.
+ * - `rejected`: signature is invalid (final, never retryable) — a real message placeholder is
+ *   replaced with a "[Message rejected]" body; a bodiless-signal placeholder (forged reaction/
+ *   retraction) is removed entirely so it never surfaces as a ghost bubble.
  * - `pending`: still cannot decrypt (key locked / plugin not ready) — leave `encryptedPayload`.
  */
 type RetryOutcome =
   | { kind: 'decrypted'; body: string; securityContext?: MessageSecurityContext; attachment?: FileAttachment }
   | { kind: 'modification'; modification: RetryModification }
   | { kind: 'unsupported'; info: { namespace: string; name: string } }
+  | { kind: 'rejected'; securityContext?: MessageSecurityContext }
   | { kind: 'pending' }
 
 export class XMPPClient {
@@ -1670,6 +1674,8 @@ export class XMPPClient {
           } else if (outcome.kind === 'modification') {
             this.applyDeferredChatModification(conversationId, msg, outcome.modification, chatBindings)
             decryptedCount++
+          } else if (outcome.kind === 'rejected') {
+            this.resolveRejectedChatPlaceholder(conversationId, msg, outcome.securityContext, chatBindings)
           } else if (outcome.kind === 'unsupported') {
             chatBindings.updateMessage(conversationId, msg.id, {
               encryptedPayload: undefined,
@@ -1695,6 +1701,14 @@ export class XMPPClient {
               encryptedPayload: undefined,
             })
             decryptedCount++
+          } else if (outcome.kind === 'rejected') {
+            // MUC carries no encrypted bodiless signals, so a rejected room
+            // message always has real content — warn the user and clear the stash.
+            roomBindings.updateMessage(roomJid, msg.id, {
+              body: MESSAGE_REJECTED_BODY,
+              ...(outcome.securityContext && { securityContext: outcome.securityContext }),
+              encryptedPayload: undefined,
+            })
           } else if (outcome.kind === 'unsupported') {
             roomBindings.updateMessage(roomJid, msg.id, {
               encryptedPayload: undefined,
@@ -1737,6 +1751,17 @@ export class XMPPClient {
           this.applyDeferredChatModification(conversationId, msg, outcome.modification, chatBindings)
           await cacheDeleteMessage(msg.id)
           decryptedCount++
+        } else if (outcome.kind === 'rejected') {
+          if (msg.body === COULD_NOT_DECRYPT_BODY) {
+            // Bodiless-signal placeholder (forged reaction/retraction) — drop it.
+            await cacheDeleteMessage(msg.id)
+          } else {
+            await cacheUpdateMessage(msg.id, {
+              body: MESSAGE_REJECTED_BODY,
+              ...(outcome.securityContext && { securityContext: outcome.securityContext }),
+              encryptedPayload: undefined,
+            })
+          }
         } else if (outcome.kind === 'unsupported') {
           await cacheUpdateMessage(msg.id, {
             encryptedPayload: undefined,
@@ -1778,6 +1803,32 @@ export class XMPPClient {
       if (updates) chatBindings.updateMessage(conversationId, modification.targetId, updates)
     }
     chatBindings.removeMessage(conversationId, placeholder.id)
+  }
+
+  /**
+   * Resolve a chat placeholder whose deferred decrypt was finally rejected
+   * (invalid signature — final, never retried again). A bodiless-signal
+   * placeholder still carries the {@link COULD_NOT_DECRYPT_BODY} marker that
+   * stanzaDecrypt stamps onto reactions/retractions; it is removed entirely so
+   * a forged signal never surfaces as a ghost bubble. A real message
+   * placeholder (any other body) is replaced with a "[Message rejected]" body
+   * so the user is warned the message could not be trusted.
+   */
+  private resolveRejectedChatPlaceholder(
+    conversationId: string,
+    placeholder: { id: string; body: string },
+    securityContext: MessageSecurityContext | undefined,
+    chatBindings: StoreBindings['chat'],
+  ): void {
+    if (placeholder.body === COULD_NOT_DECRYPT_BODY) {
+      chatBindings.removeMessage(conversationId, placeholder.id)
+    } else {
+      chatBindings.updateMessage(conversationId, placeholder.id, {
+        body: MESSAGE_REJECTED_BODY,
+        ...(securityContext && { securityContext }),
+        encryptedPayload: undefined,
+      })
+    }
   }
 
   /**
@@ -1833,6 +1884,21 @@ export class XMPPClient {
         return { kind: 'pending' }
       }
 
+      // A rejected signature is final — never retryable. decryptStanzaInPlace
+      // threw before unwrapping the payload, so no <reactions>/<retract>/<body>
+      // was surfaced; the caller decides whether to show a "[Message rejected]"
+      // bubble (real message placeholder) or drop it (bodiless-signal placeholder).
+      if (result.securityContext?.trust === 'rejected') {
+        return {
+          kind: 'rejected',
+          securityContext: {
+            protocolId: result.securityContext.protocolId,
+            trust: result.securityContext.trust,
+            ...(result.securityContext.notes && { notes: result.securityContext.notes }),
+          },
+        }
+      }
+
       // Bodiless signal stanzas (XEP-0444 reactions, XEP-0424 retractions)
       // carry no <body> — the whole element rode inside the encrypted payload
       // and now sits at the stanza root after decryptStanzaInPlace unwrapped
@@ -1884,14 +1950,6 @@ export class XMPPClient {
           protocolId: result.securityContext.protocolId,
           trust: result.securityContext.trust,
           ...(result.securityContext.notes && { notes: result.securityContext.notes }),
-        }
-      }
-
-      if (securityContext?.trust === 'rejected') {
-        return {
-          kind: 'decrypted',
-          body: '[Message rejected: invalid signature]',
-          securityContext,
         }
       }
 
