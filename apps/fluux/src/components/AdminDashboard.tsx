@@ -6,7 +6,7 @@ import {
   BarChart3,
   Megaphone,
   Loader2,
-  Wrench,
+  Server,
   Hash,
   Settings,
   ShieldOff,
@@ -87,7 +87,7 @@ export function AdminDashboard({ activeCategory, onCategoryChange }: AdminDashbo
   if (commands.length === 0) {
     return (
       <div className="px-3 py-4 text-fluux-muted text-sm text-center">
-        <Wrench className="size-12 mx-auto mb-3 opacity-50" />
+        <Server className="size-12 mx-auto mb-3 opacity-50" />
         <p>{t('admin.noCommands')}</p>
       </div>
     )

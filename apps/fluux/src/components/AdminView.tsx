@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Wrench, Users, Hash, User, Plus, ArrowLeft } from 'lucide-react'
+import { Server, Users, Hash, User, Plus, ArrowLeft } from 'lucide-react'
 import { useAdmin, useXMPP, type AdminCategory, type AdminUser, type AdminRoom } from '@fluux/sdk'
 import { useWindowDrag, useModalInput } from '@/hooks'
 import { Tooltip } from './Tooltip'
@@ -263,7 +263,7 @@ export function AdminView({ activeCategory, onBack }: AdminViewProps) {
       case 'rooms':
         return <Hash className="size-5 text-fluux-brand" />
       default:
-        return <Wrench className="size-5 text-fluux-brand" />
+        return <Server className="size-5 text-fluux-brand" />
     }
   }
 
@@ -411,7 +411,7 @@ export function AdminView({ activeCategory, onBack }: AdminViewProps) {
     // Default placeholder
     return (
       <div className="flex-1 flex flex-col items-center justify-center text-fluux-muted">
-        <Wrench className="size-12 mb-2 opacity-50" />
+        <Server className="size-12 mb-2 opacity-50" />
         <p>{t('admin.selectCommand')}</p>
       </div>
     )

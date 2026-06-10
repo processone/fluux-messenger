@@ -39,7 +39,7 @@ import { useDeepLink } from '@/hooks/useDeepLink'
 import { saveViewState, getSavedViewState, type ViewStateData } from '@/hooks/useSessionPersistence'
 import { useWindowDrag } from '@/hooks'
 import { LayoutProvider, useModals } from '@/contexts'
-import { Wrench, ShieldOff } from 'lucide-react'
+import { Server, ShieldOff } from 'lucide-react'
 
 /**
  * ChatLayout wrapper that provides LayoutContext to all children.
@@ -1006,7 +1006,7 @@ function AdminEmptyState() {
       {/* Header - no close button on root admin screen */}
       <div className={`flex items-center px-4 py-3 ${titleBarClass} border-b border-fluux-bg`}>
         <div className="flex items-center gap-2">
-          <Wrench className="size-5 text-fluux-muted" />
+          <Server className="size-5 text-fluux-muted" />
           <h2 className="font-semibold text-fluux-text">{t('admin.title')}</h2>
         </div>
       </div>
@@ -1015,7 +1015,7 @@ function AdminEmptyState() {
       <div className="flex-1 flex flex-col items-center justify-center text-fluux-muted p-4">
         {isAdmin ? (
           <>
-            <Wrench className="size-12 mb-2 opacity-50" />
+            <Server className="size-12 mb-2 opacity-50" />
             <p>{t('admin.selectCommand')}</p>
           </>
         ) : (

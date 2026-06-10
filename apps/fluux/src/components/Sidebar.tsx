@@ -27,7 +27,7 @@ import {
   Users,
   Bell,
   Archive,
-  Wrench,
+  Server,
   Zap,
   Search,
   LogIn,
@@ -279,7 +279,7 @@ export function Sidebar({ onSelectContact, onStartChat, onManageUser, adminCateg
         {/* Admin - only visible for server administrators */}
         {isAdmin && (
           <IconRailNavLink
-            icon={Wrench}
+            icon={Server}
             label={t('sidebar.admin')}
             view="admin"
             pathPrefix="/admin"

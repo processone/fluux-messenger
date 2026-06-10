@@ -9,7 +9,7 @@ import { Tooltip } from '../Tooltip'
 import { useSidebarZone, ContactTooltipContent } from './types'
 import { getTranslatedStatusText } from '@/utils/statusText'
 import { detectRenderLoop } from '@/utils/renderLoopDetector'
-import { MessageCircle, Trash2, Pencil, Wrench } from 'lucide-react'
+import { MessageCircle, Trash2, Pencil, Server } from 'lucide-react'
 import { TextInput } from '../ui/TextInput'
 
 interface ContactListProps {
@@ -411,7 +411,7 @@ const ContactItem = memo(function ContactItem({
                 onClick={handleManage}
                 className="w-full px-3 py-2 flex items-center gap-3 text-start text-fluux-text hover:bg-fluux-brand hover:text-fluux-text-on-accent transition-colors"
               >
-                <Wrench className="size-4" />
+                <Server className="size-4" />
                 <span>{t('contacts.manage')}</span>
               </button>
             </>
