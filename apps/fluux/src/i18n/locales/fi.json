@@ -557,7 +557,8 @@
             "acceptWithoutVerifying": "Hyväksy vahvistamatta",
             "acceptedWithoutVerifying": "Uusi avain hyväksytty — vertaista ei ole vahvistettu",
             "acceptFailed": "Uuden avaimen hyväksyminen epäonnistui — yritä uudelleen"
-        }
+        },
+        "offlinePlaceholder": "Offline-tilassa — viestit lähetetään, kun yhteys palautuu"
     },
     "dates": {
         "today": "Tänään",
@@ -1175,5 +1176,10 @@
         "bannerMultiple": "📊 {{count}} vastaamatonta äänestystä — napauta nähdäksesi viimeisin",
         "dismissBanner": "Sulje",
         "scrollToOriginal": "Vieritä alkuperäiseen äänestykseen"
+    },
+    "connectionBanner": {
+        "reconnecting": "Yhteys katkesi — yhdistetään uudelleen…",
+        "connecting": "Yhdistetään…",
+        "connected": "Yhdistetty"
     }
 }

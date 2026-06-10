@@ -557,7 +557,8 @@
             "acceptWithoutVerifying": "Priimti nepatvirtinus",
             "acceptedWithoutVerifying": "Naujas raktas priimtas — kontaktas nepatvirtintas",
             "acceptFailed": "Nepavyko priimti naujo rakto — bandykite dar kartą"
-        }
+        },
+        "offlinePlaceholder": "Neprisijungus — žinutės bus išsiųstos prisijungus iš naujo"
     },
     "dates": {
         "today": "Šiandien",
@@ -1175,5 +1176,10 @@
         "bannerMultiple": "📊 {{count}} neatsakytų apklausų — palieskite, kad matytumėte naujausią",
         "dismissBanner": "Atmesti",
         "scrollToOriginal": "Slinkti iki originalios apklausos"
+    },
+    "connectionBanner": {
+        "reconnecting": "Ryšys nutrūko — jungiamasi iš naujo…",
+        "connecting": "Jungiamasi…",
+        "connected": "Prisijungta"
     }
 }

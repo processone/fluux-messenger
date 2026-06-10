@@ -557,7 +557,8 @@
             "acceptWithoutVerifying": "קבל ללא אימות",
             "acceptedWithoutVerifying": "המפתח החדש התקבל — העמית לא אומת",
             "acceptFailed": "לא ניתן לקבל את המפתח החדש — נסה שוב"
-        }
+        },
+        "offlinePlaceholder": "לא מקוון — הודעות יישלחו עם החיבור מחדש"
     },
     "dates": {
         "today": "היום",
@@ -1175,5 +1176,10 @@
         "bannerMultiple": "📊 {{count}} סקרים ללא מענה — לחץ לצפייה באחרון",
         "dismissBanner": "סגור",
         "scrollToOriginal": "גלול לסקר המקורי"
+    },
+    "connectionBanner": {
+        "reconnecting": "החיבור אבד — מתחבר מחדש…",
+        "connecting": "מתחבר…",
+        "connected": "מחובר"
     }
 }

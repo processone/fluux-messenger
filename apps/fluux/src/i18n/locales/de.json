@@ -559,7 +559,8 @@
             "acceptWithoutVerifying": "Ohne Verifizierung akzeptieren",
             "acceptedWithoutVerifying": "Neuer Schlüssel akzeptiert — Kontakt ist nicht verifiziert",
             "acceptFailed": "Der neue Schlüssel konnte nicht akzeptiert werden — versuche es erneut"
-        }
+        },
+        "offlinePlaceholder": "Offline — Nachrichten werden bei erneuter Verbindung gesendet"
     },
     "dates": {
         "today": "Heute",
@@ -1177,5 +1178,10 @@
         "bannerMultiple": "📊 {{count}} unbeantwortete Umfragen — tippen für die neueste",
         "dismissBanner": "Verwerfen",
         "scrollToOriginal": "Zur ursprünglichen Umfrage scrollen"
+    },
+    "connectionBanner": {
+        "reconnecting": "Verbindung verloren — Verbindung wird wiederhergestellt…",
+        "connecting": "Verbinden…",
+        "connected": "Verbunden"
     }
 }

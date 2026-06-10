@@ -557,7 +557,8 @@
             "acceptWithoutVerifying": "قبول بدون تحقق",
             "acceptedWithoutVerifying": "تم قبول المفتاح الجديد — الطرف الآخر غير موثّق",
             "acceptFailed": "تعذّر قبول المفتاح الجديد — حاول مرة أخرى"
-        }
+        },
+        "offlinePlaceholder": "غير متصل — سيتم إرسال الرسائل عند إعادة الاتصال"
     },
     "dates": {
         "today": "اليوم",
@@ -1175,5 +1176,10 @@
         "bannerMultiple": "📊 {{count}} استطلاعات بدون إجابة — انقر لرؤية الأحدث",
         "dismissBanner": "تجاهل",
         "scrollToOriginal": "الانتقال إلى الاستطلاع الأصلي"
+    },
+    "connectionBanner": {
+        "reconnecting": "انقطع الاتصال — جارٍ إعادة الاتصال…",
+        "connecting": "جارٍ الاتصال…",
+        "connected": "متصل"
     }
 }

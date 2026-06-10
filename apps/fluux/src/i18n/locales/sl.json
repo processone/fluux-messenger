@@ -559,7 +559,8 @@
             "acceptWithoutVerifying": "Sprejmi brez preverjanja",
             "acceptedWithoutVerifying": "Nov ključ sprejet — sogovornik ni preverjen",
             "acceptFailed": "Novega ključa ni bilo mogoče sprejeti — poskusite znova"
-        }
+        },
+        "offlinePlaceholder": "Brez povezave — sporočila bodo poslana ob ponovni povezavi"
     },
     "dates": {
         "today": "Danes",
@@ -1177,5 +1178,10 @@
         "bannerMultiple": "📊 {{count}} neodgovorjenih anket — tapni za ogled zadnje",
         "dismissBanner": "Opusti",
         "scrollToOriginal": "Pomakni se do izvorne ankete"
+    },
+    "connectionBanner": {
+        "reconnecting": "Povezava je prekinjena — ponovno povezovanje…",
+        "connecting": "Povezovanje…",
+        "connected": "Povezano"
     }
 }

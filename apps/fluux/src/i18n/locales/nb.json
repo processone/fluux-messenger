@@ -557,7 +557,8 @@
             "acceptWithoutVerifying": "Godta uten å verifisere",
             "acceptedWithoutVerifying": "Ny nøkkel godtatt — motparten er ikke verifisert",
             "acceptFailed": "Kunne ikke godta den nye nøkkelen — prøv igjen"
-        }
+        },
+        "offlinePlaceholder": "Frakoblet — meldinger sendes når tilkoblingen er gjenopprettet"
     },
     "dates": {
         "today": "I dag",
@@ -1175,5 +1176,10 @@
         "bannerMultiple": "📊 {{count}} ubesvarte avstemninger — trykk for å se siste",
         "dismissBanner": "Avvis",
         "scrollToOriginal": "Bla til den opprinnelige avstemningen"
+    },
+    "connectionBanner": {
+        "reconnecting": "Mistet tilkoblingen — kobler til på nytt…",
+        "connecting": "Kobler til…",
+        "connected": "Tilkoblet"
     }
 }

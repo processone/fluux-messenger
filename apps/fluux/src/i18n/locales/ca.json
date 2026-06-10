@@ -559,7 +559,8 @@
             "acceptWithoutVerifying": "Acceptar sense verificar",
             "acceptedWithoutVerifying": "Clau nova acceptada — el contacte no està verificat",
             "acceptFailed": "No s'ha pogut acceptar la clau nova — torna-ho a provar"
-        }
+        },
+        "offlinePlaceholder": "Fora de línia — els missatges s’enviaran en reconnectar"
     },
     "dates": {
         "today": "Avui",
@@ -1177,5 +1178,10 @@
         "bannerMultiple": "📊 {{count}} enquestes sense resposta — toca per veure l'última",
         "dismissBanner": "Descarta",
         "scrollToOriginal": "Desplaça fins a l'enquesta original"
+    },
+    "connectionBanner": {
+        "reconnecting": "S'ha perdut la connexió — s'està tornant a connectar…",
+        "connecting": "S'està connectant…",
+        "connected": "Connectat"
     }
 }

@@ -557,7 +557,8 @@
             "acceptWithoutVerifying": "Accepteren zonder te verifiëren",
             "acceptedWithoutVerifying": "Nieuwe sleutel geaccepteerd — contact is niet geverifieerd",
             "acceptFailed": "Kon de nieuwe sleutel niet accepteren — probeer opnieuw"
-        }
+        },
+        "offlinePlaceholder": "Offline — berichten worden verzonden zodra de verbinding is hersteld"
     },
     "dates": {
         "today": "Vandaag",
@@ -1175,5 +1176,10 @@
         "bannerMultiple": "📊 {{count}} onbeantwoorde peilingen — tik om de laatste te zien",
         "dismissBanner": "Sluiten",
         "scrollToOriginal": "Scroll naar de originele peiling"
+    },
+    "connectionBanner": {
+        "reconnecting": "Verbinding verbroken — opnieuw verbinden…",
+        "connecting": "Verbinden…",
+        "connected": "Verbonden"
     }
 }

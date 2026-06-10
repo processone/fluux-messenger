@@ -557,7 +557,8 @@
             "acceptWithoutVerifying": "Glac leis gan fíorú",
             "acceptedWithoutVerifying": "Glacadh leis an eochair nua — níl an piara fíoraithe",
             "acceptFailed": "Níorbh fhéidir glacadh leis an eochair nua — bain triail eile as"
-        }
+        },
+        "offlinePlaceholder": "As líne — seolfar teachtaireachtaí nuair a athnascfar"
     },
     "dates": {
         "today": "Inniu",
@@ -1175,5 +1176,10 @@
         "bannerMultiple": "📊 {{count}} vótálacha gan freagra — tapáil chun an ceann is déanaí a fheiceáil",
         "dismissBanner": "Díbir",
         "scrollToOriginal": "Scrollaigh go dtí an vótáil bhunaidh"
+    },
+    "connectionBanner": {
+        "reconnecting": "Cailleadh an nasc — ag athnascadh…",
+        "connecting": "Ag nascadh…",
+        "connected": "Nasctha"
     }
 }

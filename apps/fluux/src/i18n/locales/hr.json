@@ -557,7 +557,8 @@
             "acceptWithoutVerifying": "Prihvati bez provjere",
             "acceptedWithoutVerifying": "Novi ključ prihvaćen — sugovornik nije provjeren",
             "acceptFailed": "Nije moguće prihvatiti novi ključ — pokušajte ponovno"
-        }
+        },
+        "offlinePlaceholder": "Izvanmrežno — poruke će biti poslane nakon ponovnog povezivanja"
     },
     "dates": {
         "today": "Danas",
@@ -1175,5 +1176,10 @@
         "bannerMultiple": "📊 {{count}} neodgovorenih anketa — dodirni za najnoviju",
         "dismissBanner": "Odbaci",
         "scrollToOriginal": "Idi na izvornu anketu"
+    },
+    "connectionBanner": {
+        "reconnecting": "Veza je izgubljena — ponovno povezivanje…",
+        "connecting": "Povezivanje…",
+        "connected": "Povezano"
     }
 }

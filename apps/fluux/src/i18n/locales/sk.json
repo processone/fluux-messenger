@@ -558,7 +558,8 @@
             "acceptWithoutVerifying": "Prijať bez overenia",
             "acceptedWithoutVerifying": "Nový kľúč prijatý — kontakt nie je overený",
             "acceptFailed": "Nepodarilo sa prijať nový kľúč — skúste znova"
-        }
+        },
+        "offlinePlaceholder": "Offline — správy sa odošlú po opätovnom pripojení"
     },
     "dates": {
         "today": "Dnes",
@@ -1176,5 +1177,10 @@
         "bannerMultiple": "📊 {{count}} nezodpovedaných ankiet — ťuknite pre zobrazenie poslednej",
         "dismissBanner": "Zavrieť",
         "scrollToOriginal": "Prejsť na pôvodnú anketu"
+    },
+    "connectionBanner": {
+        "reconnecting": "Spojenie sa stratilo — prebieha opätovné pripojenie…",
+        "connecting": "Pripája sa…",
+        "connected": "Pripojené"
     }
 }

@@ -466,6 +466,7 @@ vi.mock('@/contexts', () => ({
       quickChat: false,
       addContact: false,
       presenceMenu: false,
+      joinRoom: false,
     },
     actions: {
       open: vi.fn(),

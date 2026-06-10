@@ -557,7 +557,8 @@
             "acceptWithoutVerifying": "不验证直接接受",
             "acceptedWithoutVerifying": "新密钥已接受 — 对方未经验证",
             "acceptFailed": "无法接受新密钥 — 请重试"
-        }
+        },
+        "offlinePlaceholder": "离线 — 消息将在重新连接后发送"
     },
     "dates": {
         "today": "今天",
@@ -1175,5 +1176,10 @@
         "bannerMultiple": "📊 {{count}} 个未回答的投票 — 点击即可查看最新投票",
         "dismissBanner": "忽略",
         "scrollToOriginal": "滚动到原始投票"
+    },
+    "connectionBanner": {
+        "reconnecting": "连接已断开 — 正在重新连接…",
+        "connecting": "正在连接…",
+        "connected": "已连接"
     }
 }

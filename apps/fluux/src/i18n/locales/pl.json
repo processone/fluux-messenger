@@ -559,7 +559,8 @@
             "acceptWithoutVerifying": "Zaakceptuj bez weryfikacji",
             "acceptedWithoutVerifying": "Nowy klucz zaakceptowany — rozmówca niezweryfikowany",
             "acceptFailed": "Nie udało się zaakceptować nowego klucza — spróbuj ponownie"
-        }
+        },
+        "offlinePlaceholder": "Offline — wiadomości zostaną wysłane po ponownym połączeniu"
     },
     "dates": {
         "today": "Dzisiaj",
@@ -1177,5 +1178,10 @@
         "bannerMultiple": "📊 {{count}} nieodpowiedzianych ankiet — dotknij, aby zobaczyć najnowszą",
         "dismissBanner": "Odrzuć",
         "scrollToOriginal": "Przewiń do oryginalnej ankiety"
+    },
+    "connectionBanner": {
+        "reconnecting": "Utracono połączenie — ponowne łączenie…",
+        "connecting": "Łączenie…",
+        "connected": "Połączono"
     }
 }

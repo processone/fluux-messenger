@@ -558,7 +558,8 @@
             "acceptWithoutVerifying": "Pieņemt bez verificēšanas",
             "acceptedWithoutVerifying": "Jaunā atslēga pieņemta — partneris nav verificēts",
             "acceptFailed": "Neizdevās pieņemt jauno atslēgu — mēģiniet vēlreiz"
-        }
+        },
+        "offlinePlaceholder": "Bezsaistē — ziņas tiks nosūtītas pēc atkārtotas savienošanas"
     },
     "dates": {
         "today": "Šodien",
@@ -1176,5 +1177,10 @@
         "bannerMultiple": "📊 {{count}} neatbildētas aptaujas — pieskarieties, lai redzētu jaunāko",
         "dismissBanner": "Noraidīt",
         "scrollToOriginal": "Ritināt uz sākotnējo aptauju"
+    },
+    "connectionBanner": {
+        "reconnecting": "Savienojums zaudēts — notiek atkārtota savienošana…",
+        "connecting": "Savienošana…",
+        "connected": "Savienots"
     }
 }

@@ -558,7 +558,8 @@
             "acceptWithoutVerifying": "Accepter sans vérifier",
             "acceptedWithoutVerifying": "Nouvelle clé acceptée — correspondant non vérifié",
             "acceptFailed": "Impossible d'accepter la nouvelle clé — réessayez"
-        }
+        },
+        "offlinePlaceholder": "Hors ligne — vos messages partiront à la reconnexion"
     },
     "dates": {
         "today": "Aujourd'hui",
@@ -1176,5 +1177,10 @@
         "bannerMultiple": "📊 {{count}} sondages sans réponse — appuyez pour voir le dernier",
         "dismissBanner": "Ignorer",
         "scrollToOriginal": "Aller au sondage original"
+    },
+    "connectionBanner": {
+        "reconnecting": "Connexion perdue — reconnexion…",
+        "connecting": "Connexion…",
+        "connected": "Connecté"
     }
 }
