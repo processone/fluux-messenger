@@ -293,8 +293,12 @@ export function MessageComposer({
     }
   }, [editingMessage, setText])
 
-  // Auto-resize textarea based on content (1-8 lines)
-  useEffect(() => {
+  // Auto-resize textarea based on content (1-8 lines).
+  // Kept identity-stable (refs for the callback prop) so the width observer
+  // below doesn't re-subscribe on parent re-renders.
+  const onInputResizeRef = useRef(onInputResize)
+  onInputResizeRef.current = onInputResize
+  const resizeToContent = useCallback(() => {
     const textarea = inputRef.current
     if (!textarea) return
 
@@ -317,8 +321,34 @@ export function MessageComposer({
       textarea.scrollTop = savedScrollTop
     }
 
-    onInputResize?.()
-  }, [text, onInputResize])
+    onInputResizeRef.current?.()
+  }, [])
+
+  useEffect(() => {
+    resizeToContent()
+  }, [text, resizeToContent])
+
+  // Re-measure when the textarea's WIDTH changes. The [text] effect alone is
+  // not enough: a measurement taken while the layout is transiently narrow
+  // (window size restored at startup, sidebar drag, viewport resize) wraps the
+  // content, clamps the height at the 8-line max, and the wrong height then
+  // sticks until the next keystroke. Width-guarded so our own style.height
+  // writes (which also fire the observer) don't re-measure; no React state is
+  // touched, so this never causes re-renders.
+  useEffect(() => {
+    const textarea = inputRef.current
+    if (!textarea || typeof ResizeObserver === 'undefined') return
+
+    let lastWidth = -1 // first callback (fires on observe) establishes the baseline and re-measures once layout settled
+    const observer = new ResizeObserver((entries) => {
+      const width = entries[0]?.contentRect.width
+      if (width === undefined || width === lastWidth) return
+      lastWidth = width
+      resizeToContent()
+    })
+    observer.observe(textarea)
+    return () => observer.disconnect()
+  }, [resizeToContent])
 
   // Control character filtering (Tauri macOS arrow-key bug) is handled by
   // the TextArea component — see ui/TextInput.tsx
