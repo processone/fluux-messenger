@@ -686,7 +686,7 @@ export function MessageComposer({
             </p>
             {replyQuoteHidden ? (
               <p className="text-xs text-fluux-muted italic truncate flex items-center gap-1">
-                <Lock className="size-3 flex-shrink-0" />
+                <Lock aria-hidden="true" className="size-3 flex-shrink-0" />
                 {t('chat.replyQuoteHiddenEncrypted')}
               </p>
             ) : (

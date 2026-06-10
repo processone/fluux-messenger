@@ -1013,11 +1013,15 @@ export const MessageInput = memo(function MessageInput({
 
   // Show a banner notice when the reply will be sent in cleartext but the
   // quoted message arrived encrypted — the SDK strips the quote in that case.
-  // `keyLocked` is excluded: the send is blocked until unlock, then encrypts.
+  // Excluded kinds are those where the reply will NOT go out as cleartext:
+  // `encrypted` encrypts; `keyLocked` blocks until unlock then encrypts;
+  // `blocked` throws on encrypt (never sent); `checking` is an in-flight probe.
   const replyQuoteHidden =
     !!replyingTo &&
     encryptionState.kind !== 'encrypted' &&
     encryptionState.kind !== 'keyLocked' &&
+    encryptionState.kind !== 'blocked' &&
+    encryptionState.kind !== 'checking' &&
     isEncryptedSource(replyingTo)
 
   // Convert Message to EditInfo for the composer
