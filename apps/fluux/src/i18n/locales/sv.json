@@ -557,7 +557,8 @@
             "acceptWithoutVerifying": "Acceptera utan verifiering",
             "acceptedWithoutVerifying": "Ny nyckel accepterad — motparten är overifierad",
             "acceptFailed": "Kunde inte acceptera den nya nyckeln — försök igen"
-        }
+        },
+        "offlinePlaceholder": "Offline — meddelanden skickas när anslutningen återupprättats"
     },
     "dates": {
         "today": "Idag",
@@ -1175,5 +1176,10 @@
         "bannerMultiple": "📊 {{count}} obesvarade omröstningar — tryck för att se senaste",
         "dismissBanner": "Avfärda",
         "scrollToOriginal": "Scrolla till den ursprungliga omröstningen"
+    },
+    "connectionBanner": {
+        "reconnecting": "Anslutningen förlorades — återansluter…",
+        "connecting": "Ansluter…",
+        "connected": "Ansluten"
     }
 }

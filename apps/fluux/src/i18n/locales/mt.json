@@ -559,7 +559,8 @@
             "acceptWithoutVerifying": "Aċċetta mingħajr verifika",
             "acceptedWithoutVerifying": "Iċ-ċavetta l-ġdida ġiet aċċettata — il-parti l-oħra mhix ivverifikata",
             "acceptFailed": "Ma stajtx taċċetta ċ-ċavetta l-ġdida — erġa' pprova"
-        }
+        },
+        "offlinePlaceholder": "Offline — il-messaġġi jintbagħtu meta terġa' tikkonnettja"
     },
     "dates": {
         "today": "Illum",
@@ -1177,5 +1178,10 @@
         "bannerMultiple": "📊 {{count}} stħarriġiet mhux imwieġba — tektek biex tara l-aħħar wieħed",
         "dismissBanner": "Warrab",
         "scrollToOriginal": "Mur għall-istħarriġ oriġinali"
+    },
+    "connectionBanner": {
+        "reconnecting": "Il-konnessjoni ntilfet — qed nerġgħu nikkonnettjaw…",
+        "connecting": "Qed nikkonnettjaw…",
+        "connected": "Konness"
     }
 }

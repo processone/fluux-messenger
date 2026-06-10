@@ -559,7 +559,8 @@
             "acceptWithoutVerifying": "Võta vastu ilma kinnitamata",
             "acceptedWithoutVerifying": "Uus võti vastu võetud — kontakt on kinnitamata",
             "acceptFailed": "Uue võtme vastuvõtmine ebaõnnestus — proovi uuesti"
-        }
+        },
+        "offlinePlaceholder": "Võrguühenduseta — sõnumid saadetakse pärast taasühendamist"
     },
     "dates": {
         "today": "Täna",
@@ -1177,5 +1178,10 @@
         "bannerMultiple": "📊 {{count}} vastamata küsitlust — puuduta viimase nägemiseks",
         "dismissBanner": "Sulge",
         "scrollToOriginal": "Keri algse küsitluseni"
+    },
+    "connectionBanner": {
+        "reconnecting": "Ühendus katkes — taasühendamine…",
+        "connecting": "Ühendamine…",
+        "connected": "Ühendatud"
     }
 }

@@ -559,7 +559,8 @@
             "acceptWithoutVerifying": "Přijmout bez ověření",
             "acceptedWithoutVerifying": "Nový klíč přijat — kontakt není ověřen",
             "acceptFailed": "Nepodařilo se přijmout nový klíč — zkuste to znovu"
-        }
+        },
+        "offlinePlaceholder": "Offline — zprávy budou odeslány po opětovném připojení"
     },
     "dates": {
         "today": "Dnes",
@@ -1177,5 +1178,10 @@
         "bannerMultiple": "📊 {{count}} nezodpovězených anket — klepněte pro zobrazení poslední",
         "dismissBanner": "Zavřít",
         "scrollToOriginal": "Přejít na původní anketu"
+    },
+    "connectionBanner": {
+        "reconnecting": "Spojení ztraceno — probíhá opětovné připojení…",
+        "connecting": "Připojování…",
+        "connected": "Připojeno"
     }
 }

@@ -557,7 +557,8 @@
             "acceptWithoutVerifying": "Samþykkja án staðfestingar",
             "acceptedWithoutVerifying": "Nýr lykill samþykktur — jafningi er óstaðfestur",
             "acceptFailed": "Ekki tókst að samþykkja nýja lykilinn — reyndu aftur"
-        }
+        },
+        "offlinePlaceholder": "Ónettengt — skilaboð verða send þegar tengingin kemst á aftur"
     },
     "dates": {
         "today": "Í dag",
@@ -1175,5 +1176,10 @@
         "bannerMultiple": "📊 {{count}} ósvaraðar kannanir — ýttu til að sjá nýjustu",
         "dismissBanner": "Hunsa",
         "scrollToOriginal": "Fletta að upprunalegri könnun"
+    },
+    "connectionBanner": {
+        "reconnecting": "Tenging rofnaði — endurtengist…",
+        "connecting": "Tengist…",
+        "connected": "Tengt"
     }
 }

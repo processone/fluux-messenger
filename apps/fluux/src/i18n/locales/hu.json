@@ -557,7 +557,8 @@
             "acceptWithoutVerifying": "Elfogadás ellenőrzés nélkül",
             "acceptedWithoutVerifying": "Új kulcs elfogadva — a partner nincs ellenőrizve",
             "acceptFailed": "Nem sikerült elfogadni az új kulcsot — próbálja újra"
-        }
+        },
+        "offlinePlaceholder": "Offline — az üzenetek újracsatlakozáskor lesznek elküldve"
     },
     "dates": {
         "today": "Ma",
@@ -1175,5 +1176,10 @@
         "bannerMultiple": "📊 {{count}} megválaszolatlan szavazás — koppints a legutóbbi megtekintéséhez",
         "dismissBanner": "Elvetés",
         "scrollToOriginal": "Ugrás az eredeti szavazáshoz"
+    },
+    "connectionBanner": {
+        "reconnecting": "A kapcsolat megszakadt — újracsatlakozás…",
+        "connecting": "Csatlakozás…",
+        "connected": "Csatlakozva"
     }
 }

@@ -559,7 +559,8 @@
             "acceptWithoutVerifying": "Aceptar sin verificar",
             "acceptedWithoutVerifying": "Clave nueva aceptada — el contacto no está verificado",
             "acceptFailed": "No se pudo aceptar la clave nueva — inténtalo de nuevo"
-        }
+        },
+        "offlinePlaceholder": "Sin conexión — los mensajes se enviarán al reconectar"
     },
     "dates": {
         "today": "Hoy",
@@ -1177,5 +1178,10 @@
         "bannerMultiple": "📊 {{count}} encuestas sin responder — toca para ver la última",
         "dismissBanner": "Descartar",
         "scrollToOriginal": "Ir a la encuesta original"
+    },
+    "connectionBanner": {
+        "reconnecting": "Conexión perdida — reconectando…",
+        "connecting": "Conectando…",
+        "connected": "Conectado"
     }
 }

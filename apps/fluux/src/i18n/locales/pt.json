@@ -559,7 +559,8 @@
             "acceptWithoutVerifying": "Aceitar sem verificar",
             "acceptedWithoutVerifying": "Nova chave aceite — contacto não verificado",
             "acceptFailed": "Não foi possível aceitar a nova chave — tenta novamente"
-        }
+        },
+        "offlinePlaceholder": "Sem conexão — as mensagens serão enviadas ao reconectar"
     },
     "dates": {
         "today": "Hoje",
@@ -1177,5 +1178,10 @@
         "bannerMultiple": "📊 {{count}} sondagens por responder — toque para ver a mais recente",
         "dismissBanner": "Fechar",
         "scrollToOriginal": "Ir para a sondagem original"
+    },
+    "connectionBanner": {
+        "reconnecting": "Conexão perdida — reconectando…",
+        "connecting": "Conectando…",
+        "connected": "Conectado"
     }
 }

@@ -10,6 +10,7 @@ import { TextArea } from './ui/TextInput'
 const emojiPickerImport = () => import('./EmojiPicker').then(m => ({ default: m.EmojiPicker }))
 const EmojiPicker = lazy(emojiPickerImport)
 import type { FileAttachment } from '@fluux/sdk'
+import { useConnectionStore } from '@fluux/sdk/react'
 import { encryptionSendErrorKey } from '@/e2ee/encryptionSendError'
 import type { ConversationEncryptionState } from '@/hooks/useConversationEncryptionState'
 import { useToastStore } from '@/stores/toastStore'
@@ -190,6 +191,15 @@ export function MessageComposer({
   detectRenderLoop('MessageComposer')
   const { t } = useTranslation()
   const addToast = useToastStore((s) => s.addToast)
+  // Degraded mid-session states only (UX_REVIEW §4.2): sends are queued by the
+  // SDK, so the composer stays enabled but the placeholder says so.
+  // 'disconnected'/'error' route to LoginScreen, unmounting the composer.
+  const connectionStatus = useConnectionStore((s) => s.status)
+  const isConnectionDegraded =
+    connectionStatus === 'reconnecting' ||
+    connectionStatus === 'connecting' ||
+    connectionStatus === 'verifying'
+  const effectivePlaceholder = isConnectionDegraded ? t('chat.offlinePlaceholder') : placeholder
   // Internal state for uncontrolled mode
   const [internalText, setInternalText] = useState('')
   const text = controlledValue !== undefined ? controlledValue : internalText
@@ -564,7 +574,7 @@ export function MessageComposer({
       onKeyDown={handleKeyDown}
       onSelect={handleSelect}
       onPaste={handlePaste}
-      placeholder={placeholder}
+      placeholder={effectivePlaceholder}
       rows={1}
       spellCheck={true}
       autoCorrect="on"
@@ -801,7 +811,7 @@ export function MessageComposer({
               onKeyDown: handleKeyDown,
               onSelect: handleSelect,
               onPaste: handlePaste,
-              placeholder,
+              placeholder: effectivePlaceholder,
             })}
           </div>
         ) : (

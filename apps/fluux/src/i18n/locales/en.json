@@ -557,7 +557,8 @@
             "acceptWithoutVerifying": "Accept without verifying",
             "acceptedWithoutVerifying": "New key accepted — peer is unverified",
             "acceptFailed": "Couldn't accept the new key — try again"
-        }
+        },
+        "offlinePlaceholder": "Offline — messages will be sent when you reconnect"
     },
     "dates": {
         "today": "Today",
@@ -1175,5 +1176,10 @@
         "bannerMultiple": "📊 {{count}} unanswered polls — tap to see latest",
         "dismissBanner": "Dismiss",
         "scrollToOriginal": "Scroll to original poll"
+    },
+    "connectionBanner": {
+        "reconnecting": "Connection lost — reconnecting…",
+        "connecting": "Connecting…",
+        "connected": "Connected"
     }
 }
