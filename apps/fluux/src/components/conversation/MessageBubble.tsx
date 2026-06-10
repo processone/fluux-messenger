@@ -7,7 +7,8 @@
 import { useState, useMemo, memo, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { CornerUpRight, AlertCircle, RefreshCw, Lock, ShieldAlert, Ear, UserX } from 'lucide-react'
-import { formatMessagePreview, formatXMPPError, type BaseMessage, type MentionReference, type Contact, type ContactIdentity, type RoomRole, type RoomAffiliation } from '@fluux/sdk'
+import { formatMessagePreview, formatXMPPError, getBareJid, type BaseMessage, type MentionReference, type Contact, type ContactIdentity, type RoomRole, type RoomAffiliation } from '@fluux/sdk'
+import { useVerifiedPeerKeysStore } from '@/stores/verifiedPeerKeysStore'
 import { Avatar } from '../Avatar'
 import { AvatarLightbox } from '../AvatarLightbox'
 import { MessageToolbar } from './MessageToolbar'
@@ -298,6 +299,23 @@ export const MessageBubble = memo(function MessageBubble({
   const [showAvatarLightbox, setShowAvatarLightbox] = useState(false)
   const [showErrorDetails, setShowErrorDetails] = useState(false)
 
+  // Trust color must track verification LIVE, not freeze at decrypt time.
+  // The plugin bakes `verified`/`tofu` onto the message when it's decrypted;
+  // if the user verifies the peer later, the stored value never updates. So
+  // derive the displayed trust here from the live verification store, keyed on
+  // the conversation peer. The store only changes on explicit verify/un-verify
+  // (never during sync/typing), so this per-peer subscription is cheap.
+  const peerVerified = useVerifiedPeerKeysStore(
+    (s) => !!s.verifiedFingerprintByJid[getBareJid(message.from)],
+  )
+  const displayTrust =
+    message.securityContext &&
+    (message.securityContext.trust === 'tofu' || message.securityContext.trust === 'verified')
+      ? peerVerified
+        ? 'verified'
+        : 'tofu'
+      : message.securityContext?.trust
+
   // Whether reactions are enabled for this message (room has stable occupant identity)
   const reactionsEnabled = onReaction !== undefined
 
@@ -446,20 +464,20 @@ export const MessageBubble = memo(function MessageBubble({
               {formatTime(message.timestamp)}
             </span>
             {message.securityContext && (
-              <Tooltip content={formatSecurityTooltip(t, message.securityContext)} position="top" triggerMode="click">
+              <Tooltip content={formatSecurityTooltip(t, { ...message.securityContext, trust: displayTrust ?? message.securityContext.trust })} position="top" triggerMode="click">
                 <span
                   className={`flex items-center ${
-                    message.securityContext.trust === 'verified'
+                    displayTrust === 'verified'
                       ? 'text-green-500'
-                      : message.securityContext.trust === 'rejected'
+                      : displayTrust === 'rejected'
                       ? 'text-red-500'
-                      : message.securityContext.trust === 'untrusted'
+                      : displayTrust === 'untrusted'
                       ? 'text-yellow-500'
                       : 'text-fluux-muted'
                   }`}
-                  aria-label={`Encrypted with ${message.securityContext.protocolId}, trust ${message.securityContext.trust}`}
+                  aria-label={`Encrypted with ${message.securityContext.protocolId}, trust ${displayTrust}`}
                 >
-                  {message.securityContext.trust === 'rejected'
+                  {displayTrust === 'rejected'
                     ? <ShieldAlert className="size-3" />
                     : <Lock className="size-3" />}
                 </span>

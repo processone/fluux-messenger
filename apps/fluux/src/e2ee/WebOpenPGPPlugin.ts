@@ -39,6 +39,24 @@ import { detectArmorKind } from './armorDetect'
 const PRIVATE_KEY_STORAGE_KEY = 'private-key'
 
 /**
+ * Clock-skew tolerance applied when verifying a signature's *creation time*.
+ *
+ * openpgp.js rejects any signature whose creation time is after the
+ * verification date ("Signature creation time is in the future") with zero
+ * tolerance. When a sender's machine clock runs even slightly ahead of the
+ * verifier's, a freshly-signed message is rejected as "invalid signature" —
+ * intermittently, depending on the instantaneous skew. We verify against
+ * `now + this window` so modest clock skew doesn't cause spurious rejections.
+ *
+ * This only widens the *future* bound of the signature timestamp; message
+ * freshness/replay is enforced separately by the signcrypt `<time>` envelope
+ * check ({@link SIGNCRYPT_CLOCK_SKEW_MS}). Accepting a slightly-future
+ * signature carries no authenticity risk — forging one still requires the
+ * signing key.
+ */
+const SIGNATURE_CLOCK_SKEW_TOLERANCE_MS = 60 * 60 * 1000 // 1 hour
+
+/**
  * A local-key failure that the server backup might fix: the stored blob
  * won't decrypt with this passphrase, or there's no local blob but the
  * server advertises an identity. Both are worth a backup-recovery attempt.
@@ -204,6 +222,10 @@ export class WebOpenPGPPlugin extends OpenPGPPluginBase {
     const { data: plaintext, signatures } = await decrypt({
       message,
       decryptionKeys: this.ownPrivateKey!,
+      // Verify against now + skew tolerance so a sender whose clock runs
+      // slightly ahead doesn't trip openpgp.js's zero-tolerance "creation
+      // time is in the future" rejection. See SIGNATURE_CLOCK_SKEW_TOLERANCE_MS.
+      date: new Date(Date.now() + SIGNATURE_CLOCK_SKEW_TOLERANCE_MS),
       ...(verificationKeys.length > 0 && { verificationKeys }),
     })
 
@@ -219,8 +241,26 @@ export class WebOpenPGPPlugin extends OpenPGPPluginBase {
         // match Sequoia's behavior. keyID.toHex() only gives the 8-byte
         // key ID (16 chars), which would never match the cached peer FP.
         signerFingerprint = verificationKeys[0].getFingerprint()
-      } catch {
+      } catch (err) {
         signatureVerified = false
+        // DIAGNOSTIC: surface why openpgp.js rejected the signature — the
+        // message names the cause (time-window vs EdDSA/MPI vs key lookup).
+        // The signature creation time is pulled separately so this log can
+        // never throw out of the catch even if `.signature` rejected too.
+        let sigCreated = '?'
+        try {
+          const sig = await signatures[0].signature
+          sigCreated = sig?.packets?.[0]?.created?.toISOString() ?? '?'
+        } catch {
+          /* signature packet unavailable — leave as '?' */
+        }
+        this.requireCtx().logger.warn(
+          `WebOpenPGPPlugin: signature verify failed (signer ${
+            verificationKeys[0]?.getFingerprint?.() ?? '?'
+          }, sigCreated ${sigCreated}, now ${new Date().toISOString()}): ${
+            err instanceof Error ? err.message : String(err)
+          }`,
+        )
       }
     }
 

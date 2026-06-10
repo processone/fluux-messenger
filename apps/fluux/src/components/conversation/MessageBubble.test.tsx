@@ -1,7 +1,8 @@
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, act } from '@testing-library/react'
 import { MessageBubble, buildReplyContext, type MessageBubbleProps } from './MessageBubble'
 import type { BaseMessage } from '@fluux/sdk'
+import { setPeerVerified, clearPeerVerified } from '@/stores/verifiedPeerKeysStore'
 
 // Mock i18next
 vi.mock('react-i18next', () => ({
@@ -307,6 +308,62 @@ describe('MessageBubble', () => {
       expect(
         container.querySelector('[aria-label="Encrypted with openpgp, trust untrusted"]'),
       ).toBeNull()
+    })
+
+    it('upgrades a tofu lock to verified once the peer is verified out-of-band', () => {
+      // Frozen-color regression: verifying a peer must recolor their already-
+      // decrypted `tofu` messages to `verified` live — the stored
+      // securityContext.trust does NOT change, so the bubble must derive the
+      // displayed trust from the live verification store.
+      const peer = 'verifytest@example.com'
+      clearPeerVerified(peer)
+      const props = createDefaultProps({
+        message: createTestMessage({
+          from: peer,
+          securityContext: { protocolId: 'openpgp', trust: 'tofu' },
+        }),
+      })
+      const { container } = render(<MessageBubble {...props} />)
+      expect(
+        container.querySelector('[aria-label="Encrypted with openpgp, trust tofu"]'),
+      ).not.toBeNull()
+
+      // User confirms the peer's fingerprint out-of-band — a store update only,
+      // no prop/securityContext change on the message.
+      act(() => {
+        setPeerVerified(peer, 'AAAA1111BBBB2222CCCC3333DDDD4444EEEE5555')
+      })
+
+      expect(
+        container.querySelector('[aria-label="Encrypted with openpgp, trust verified"]'),
+      ).not.toBeNull()
+      expect(
+        container.querySelector('[aria-label="Encrypted with openpgp, trust tofu"]'),
+      ).toBeNull()
+      clearPeerVerified(peer)
+    })
+
+    it('downgrades a verified lock back to tofu when verification is cleared', () => {
+      const peer = 'verifytest2@example.com'
+      setPeerVerified(peer, 'FFFF0000FFFF0000FFFF0000FFFF0000FFFF0000')
+      const props = createDefaultProps({
+        message: createTestMessage({
+          from: peer,
+          securityContext: { protocolId: 'openpgp', trust: 'verified' },
+        }),
+      })
+      const { container } = render(<MessageBubble {...props} />)
+      expect(
+        container.querySelector('[aria-label="Encrypted with openpgp, trust verified"]'),
+      ).not.toBeNull()
+
+      act(() => {
+        clearPeerVerified(peer)
+      })
+
+      expect(
+        container.querySelector('[aria-label="Encrypted with openpgp, trust tofu"]'),
+      ).not.toBeNull()
     })
 
     it('re-renders the tooltip when only the security notes change', () => {

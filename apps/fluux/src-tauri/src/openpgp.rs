@@ -1559,6 +1559,91 @@ mod tests {
         );
     }
 
+    /// Test-only: encrypt to `recipient_public_armored` and sign with
+    /// `sender_secret_armored`, stamping the signature creation time at
+    /// `signed_at`. Lets us simulate a sender whose machine clock is ahead of
+    /// the verifier's. Mirrors `encrypt_and_sign` but for a single recipient
+    /// and with an explicit signature time.
+    fn sign_encrypt_at(
+        recipient_public_armored: &str,
+        sender_secret_armored: &str,
+        plaintext: &str,
+        signed_at: SystemTime,
+    ) -> Result<String> {
+        let policy = StandardPolicy::new();
+        let recipient = Cert::from_bytes(recipient_public_armored.as_bytes())?;
+        let sender = Cert::from_bytes(sender_secret_armored.as_bytes())?;
+        let recipients: Vec<Recipient> = recipient
+            .keys()
+            .with_policy(&policy, None)
+            .supported()
+            .alive()
+            .revoked(false)
+            .for_transport_encryption()
+            .map(Recipient::from)
+            .collect();
+        let signer_keypair = sender
+            .keys()
+            .with_policy(&policy, None)
+            .supported()
+            .alive()
+            .revoked(false)
+            .for_signing()
+            .secret()
+            .next()
+            .expect("sender has a signing key")
+            .key()
+            .clone()
+            .into_keypair()?;
+        let mut sink: Vec<u8> = Vec::new();
+        {
+            let message = Message::new(&mut sink);
+            let message = Armorer::new(message).build()?;
+            let message = Encryptor::for_recipients(message, recipients).build()?;
+            let message = Signer::new(message, signer_keypair)?
+                .creation_time(signed_at)
+                .build()?;
+            let mut message = LiteralWriter::new(message).build()?;
+            message.write_all(plaintext.as_bytes())?;
+            message.finalize()?;
+        }
+        String::from_utf8(sink).context("armored ciphertext is not UTF-8")
+    }
+
+    #[test]
+    fn verifies_signature_from_a_clock_slightly_ahead() {
+        // Regression for "[Message rejected: invalid signature]": a sender whose
+        // machine clock runs a few minutes ahead stamps the signature in the
+        // verifier's future. The verifier must tolerate a small clock-skew
+        // window, otherwise a freshly-signed message is rejected.
+        let (_state, alice, bob) = setup_two_accounts();
+        let ten_min_ahead = SystemTime::now() + Duration::from_secs(600);
+        let ct =
+            sign_encrypt_at(&bob.public_armored, &alice.secret_armored, "hello", ten_min_ahead)
+                .unwrap();
+        let out = decrypt_and_verify(&bob.secret_armored, &ct, Some(&alice.public_armored)).unwrap();
+        assert_eq!(out.plaintext, "hello");
+        assert!(
+            out.signature_verified,
+            "a signature within the clock-skew tolerance must verify"
+        );
+    }
+
+    #[test]
+    fn rejects_signature_dated_far_beyond_skew_tolerance() {
+        // Guard: the tolerance stays bounded — a grossly future-dated signature
+        // is still not trusted.
+        let (_state, alice, bob) = setup_two_accounts();
+        let far_future = SystemTime::now() + Duration::from_secs(30 * 24 * 3600);
+        let ct = sign_encrypt_at(&bob.public_armored, &alice.secret_armored, "x", far_future)
+            .unwrap();
+        let out = decrypt_and_verify(&bob.secret_armored, &ct, Some(&alice.public_armored)).unwrap();
+        assert!(
+            !out.signature_verified,
+            "a grossly future-dated signature must still be rejected"
+        );
+    }
+
     #[test]
     fn decrypt_verified_reports_signature_present() {
         // Positive-path companion to the key-not-cached case: a verified
