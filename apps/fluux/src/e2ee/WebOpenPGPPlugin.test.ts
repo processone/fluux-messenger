@@ -539,6 +539,87 @@ describe('WebOpenPGPPlugin', () => {
     })
   })
 
+  describe('clock skew tolerance', () => {
+    it('verifies a signature created slightly in the future (signer clock ahead)', async () => {
+      // Regression for the "[Message rejected: invalid signature]" reports:
+      // openpgp.js rejects a signature whose creation time is after the
+      // verifier's clock ("Signature creation time is in the future") with
+      // zero tolerance. When the sender's machine clock is a little ahead,
+      // a freshly-signed message fails to verify. The verifier must allow a
+      // small clock-skew window.
+      const plugin = new TestableWebOpenPGPPlugin()
+      const { ctx } = makeCtx('alice@example.com')
+      setSessionPassphrase('hunter2-strong-passphrase')
+      await plugin.init(ctx)
+      const ownBundle = await plugin.callEnsureKeyMaterial('alice@example.com')
+
+      // A peer signs a message addressed to us, but their clock is 2 minutes
+      // ahead of ours.
+      const { generateKey, createMessage, encrypt, readKey } = await import('openpgp')
+      const { privateKey: senderPriv } = await generateKey({
+        type: 'ecc',
+        curve: 'curve25519Legacy',
+        userIDs: [{ name: 'xmpp:bob@example.com' }],
+        format: 'object',
+      })
+      const twoMinutesAhead = new Date(Date.now() + 2 * 60 * 1000)
+      const ciphertext = await encrypt({
+        message: await createMessage({ text: 'hello from a fast clock' }),
+        encryptionKeys: await readKey({ armoredKey: ownBundle.publicArmored }),
+        signingKeys: senderPriv,
+        date: twoMinutesAhead,
+        format: 'armored',
+      })
+
+      const decrypted = await plugin.callDecryptWithOwnKey(
+        'bob@example.com',
+        ciphertext,
+        senderPriv.toPublic().armor(),
+      )
+
+      expect(decrypted.plaintext).toBe('hello from a fast clock')
+      expect(decrypted.signaturePresent).toBe(true)
+      expect(decrypted.signatureVerified).toBe(true)
+    })
+
+    it('still rejects a signature dated far beyond the skew tolerance', async () => {
+      // Guard: the skew tolerance must stay bounded — a signature created
+      // grossly in the future (well past the tolerance window) is still not
+      // trusted. This distinguishes "allow modest skew" from "disable the
+      // creation-time check entirely".
+      const plugin = new TestableWebOpenPGPPlugin()
+      const { ctx } = makeCtx('alice@example.com')
+      setSessionPassphrase('hunter2-strong-passphrase')
+      await plugin.init(ctx)
+      const ownBundle = await plugin.callEnsureKeyMaterial('alice@example.com')
+
+      const { generateKey, createMessage, encrypt, readKey } = await import('openpgp')
+      const { privateKey: senderPriv } = await generateKey({
+        type: 'ecc',
+        curve: 'curve25519Legacy',
+        userIDs: [{ name: 'xmpp:bob@example.com' }],
+        format: 'object',
+      })
+      const thirtyDaysAhead = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+      const ciphertext = await encrypt({
+        message: await createMessage({ text: 'far-future forgery attempt' }),
+        encryptionKeys: await readKey({ armoredKey: ownBundle.publicArmored }),
+        signingKeys: senderPriv,
+        date: thirtyDaysAhead,
+        format: 'armored',
+      })
+
+      const decrypted = await plugin.callDecryptWithOwnKey(
+        'bob@example.com',
+        ciphertext,
+        senderPriv.toPublic().armor(),
+      )
+
+      expect(decrypted.signaturePresent).toBe(true)
+      expect(decrypted.signatureVerified).toBe(false)
+    })
+  })
+
   describe('validateCert', () => {
     it('returns the fingerprint and a positive subkey count for a generated key', async () => {
       const plugin = new TestableWebOpenPGPPlugin()
