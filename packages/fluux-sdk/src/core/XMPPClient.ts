@@ -41,7 +41,7 @@ import {
 } from '../stores'
 import { detectPlatform, getCachedPlatform } from './platform'
 import { isDeadSocketError } from './modules/connectionUtils'
-import { parseOobData } from './modules/messagingUtils'
+import { parseMessageContent } from './modules/messagingUtils'
 import {
   FRESH_SESSION_IQ_TIMEOUT_MS,
   FRESH_SESSION_SETUP_TIMEOUT_MS,
@@ -1604,8 +1604,8 @@ export class XMPPClient {
    * because decryption failed at receive time (no plugin registered, key
    * locked, etc.).
    *
-   * Iterates both chat and room stores, reconstructs a minimal stanza from
-   * the serialized XML, and re-runs {@link decryptStanzaInPlace}. On success
+   * Iterates both chat and room stores, reconstructs the stanza from the
+   * serialized XML, and re-runs {@link decryptStanzaInPlace}. On success
    * the message body + securityContext are updated in-place via
    * `store.updateMessage()`, and the `encryptedPayload` is cleared.
    *
@@ -1664,7 +1664,7 @@ export class XMPPClient {
         for (const msg of runtime.messages) {
           if (!msg.encryptedPayload) continue
           const outcome = await this.retryDecryptSingle(
-            manager, msg.encryptedPayload, msg.from, roomJid,
+            manager, msg.encryptedPayload, msg.from, roomJid, 'room',
           )
           if (outcome.kind === 'decrypted') {
             roomBindings.updateMessage(roomJid, msg.id, {
@@ -1724,7 +1724,9 @@ export class XMPPClient {
   }
 
   /**
-   * Attempt to decrypt a single serialized encrypted payload.
+   * Attempt to decrypt a single stashed payload — either a full original
+   * `<message>` stanza (current format, keeps outer reply/fallback context)
+   * or a bare encrypted element (legacy persisted stashes).
    * @returns `RetryOutcome` describing whether decryption succeeded, the
    *   protocol is unsupported, or the message should remain pending.
    * @internal
@@ -1734,20 +1736,28 @@ export class XMPPClient {
     encryptedPayloadXml: string,
     senderJid: string,
     peer: string,
+    messageContext: 'chat' | 'room' = 'chat',
   ): Promise<RetryOutcome> {
     try {
-      // Parse the serialized encrypted element back into an Element
       const ltx = await import('ltx')
-      const encryptedEl = ltx.parse(encryptedPayloadXml) as unknown as Element
+      const parsedPayload = ltx.parse(encryptedPayloadXml) as unknown as Element
 
-      // Build a minimal stanza wrapper for decryptStanzaInPlace.
+      // Current stashes hold the full original <message> stanza so outer
+      // cleartext context (XEP-0461 <reply>, XEP-0428 <fallback> ranges)
+      // survives until this retry. Stashes persisted before that format
+      // hold just the encrypted child and need a minimal wrapper.
+      const stanza =
+        parsedPayload.name === 'message'
+          ? parsedPayload
+          : (xml('message', { from: senderJid }, parsedPayload) as Element)
+      if (!stanza.attrs.from) stanza.attrs.from = senderJid
+
       // Detect self-outgoing (sent carbon or MAM self-replay): when the
       // sender's bare JID equals our own, the signcrypt envelope's <to/>
       // addresses the conversation peer — not us — so the plugin's
       // reflection check must be inverted via isSelfOutgoing.
       const ownBareJid = this.currentJid ? getBareJid(this.currentJid) : ''
       const isSelfOutgoing = ownBareJid !== '' && getBareJid(senderJid) === ownBareJid
-      const stanza = xml('message', { from: senderJid }, encryptedEl)
 
       const result = await decryptStanzaInPlace(
         stanza, manager, peer, 'archive',
@@ -1770,10 +1780,15 @@ export class XMPPClient {
       const body = stanza.getChildText('body')
       if (!body) return { kind: 'pending' }
 
-      // Extract attachment if present — parseOobData handles aesgcm:// URI
-      // parsing (XEP-0454 key/IV extraction), XEP-0446 file metadata, and
-      // XEP-0264 thumbnails, which the previous inline parser was missing.
-      const attachment = parseOobData(stanza)
+      // Re-run the shared content parse on the decrypted stanza: strips
+      // XEP-0428 fallback ranges (e.g. the XEP-0461 reply quote that the
+      // sender prefixed to the encrypted body) and extracts the attachment
+      // (aesgcm:// URI, XEP-0446 file metadata, XEP-0264 thumbnails).
+      // Legacy bare-element stashes carry no outer <fallback>, so their
+      // body passes through unchanged.
+      const parsed = parseMessageContent({ messageEl: stanza, body, messageContext })
+      const processedBody = parsed.processedBody
+      const attachment = parsed.attachment
       if (attachment) {
         logDebug(
           `E2EE deferred decrypt: attachment from ${getDomain(senderJid)} — ` +
@@ -1802,7 +1817,7 @@ export class XMPPClient {
 
       return {
         kind: 'decrypted',
-        body,
+        body: processedBody,
         ...(securityContext && { securityContext }),
         ...(attachment && { attachment }),
       }
