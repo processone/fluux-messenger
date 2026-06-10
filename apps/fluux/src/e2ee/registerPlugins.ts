@@ -10,10 +10,12 @@
  * Called on the `online` event (fresh session) so plugins see a valid JID.
  */
 
+import { E2EEPluginError } from '@fluux/sdk'
 import type { XMPPClient } from '@fluux/sdk/core'
 import { isTauri } from '../utils/tauri'
 import { isOpenpgpEnabled, useEncryptionSettingsStore } from '../stores/encryptionSettingsStore'
 import { useConversationPlaintextOverrideStore } from '../stores/conversationPlaintextOverrideStore'
+import { classifyBoundaryError } from './OpenPGPPluginBase'
 import { SequoiaPgpPlugin } from './SequoiaPgpPlugin'
 
 export async function registerE2EEPlugins(client: XMPPClient): Promise<void> {
@@ -52,6 +54,11 @@ export async function registerE2EEPlugins(client: XMPPClient): Promise<void> {
   } catch (err) {
     // Log but don't throw — E2EE plugin failure must never take down the chat path.
     console.error('[Fluux] E2EE plugin registration failed:', err)
+    // Surface the typed cause so the settings UI can explain the failure
+    // immediately (e.g. `pep-unsupported` on servers without XEP-0163)
+    // instead of spinning until the key-generation poll times out.
+    const { kind, code } = err instanceof E2EEPluginError ? err : classifyBoundaryError(err)
+    useEncryptionSettingsStore.getState().notifyPluginRegistrationFailed({ kind, code })
   }
 }
 

@@ -1,5 +1,16 @@
 import { create } from 'zustand'
-import { buildScopedStorageKey } from '@fluux/sdk'
+import { buildScopedStorageKey, type E2EEErrorKind } from '@fluux/sdk'
+
+/**
+ * Typed snapshot of why E2EE plugin registration failed — mirrors
+ * `E2EEPluginError`'s `kind`/`code` pair so the settings UI can react to
+ * specific causes (e.g. `pep-unsupported`) without string-matching
+ * error messages.
+ */
+export interface E2EERegistrationFailure {
+  kind: E2EEErrorKind
+  code: string
+}
 
 /**
  * User preference for end-to-end encryption, scoped per account.
@@ -28,6 +39,15 @@ interface EncryptionSettingsState {
    */
   pluginRegisteredAt: number
   notifyPluginRegistered: () => void
+  /**
+   * Why the last `registerE2EEPlugins` attempt failed, or `null` when
+   * registration never failed (or succeeded since). Lets the settings UI
+   * surface a specific explanation immediately instead of waiting for the
+   * key-generation poll to time out. Cleared on successful registration
+   * and whenever the user flips the toggle (a new attempt starts fresh).
+   */
+  registrationError: E2EERegistrationFailure | null
+  notifyPluginRegistrationFailed: (failure: E2EERegistrationFailure) => void
   rehydrate: () => void
 }
 
@@ -65,10 +85,13 @@ export const useEncryptionSettingsStore = create<EncryptionSettingsState>((set) 
       // localStorage unavailable — still update in-memory state so the
       // rest of the session behaves consistently.
     }
-    set({ openpgpEnabled: enabled })
+    set({ openpgpEnabled: enabled, registrationError: null })
   },
   pluginRegisteredAt: 0,
-  notifyPluginRegistered: () => set((s) => ({ pluginRegisteredAt: s.pluginRegisteredAt + 1 })),
+  notifyPluginRegistered: () =>
+    set((s) => ({ pluginRegisteredAt: s.pluginRegisteredAt + 1, registrationError: null })),
+  registrationError: null,
+  notifyPluginRegistrationFailed: (failure) => set({ registrationError: failure }),
   rehydrate: () => set({ openpgpEnabled: loadOpenpgpEnabled() }),
 }))
 

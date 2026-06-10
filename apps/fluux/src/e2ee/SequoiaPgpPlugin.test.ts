@@ -683,6 +683,27 @@ describe('SequoiaPgpPlugin', () => {
       expect(published).toHaveLength(0)
     })
 
+    it('does not generate key material when the server lacks PEP support', async () => {
+      // Ordering guard for the no-PEP path (issue #414): the probe must
+      // run BEFORE ensureKeyMaterial. Generating first would leave an
+      // orphan key in the OS keychain that can never be published.
+      const commands: string[] = []
+      const tracked = new SequoiaPgpPlugin({
+        invoke: async <T,>(cmd: string, args?: Record<string, unknown>): Promise<T> => {
+          commands.push(cmd)
+          return fake.invoke<T>(cmd, args)
+        },
+      })
+      const { ctx, published } = makeContext('me@example.com')
+      ctx.xmpp.queryDisco = async () => ({ features: [], identities: [] })
+
+      await expect(tracked.init(ctx)).rejects.toThrow(/does not advertise PEP/)
+
+      expect(commands).not.toContain('openpgp_ensure_key')
+      expect(published).toHaveLength(0)
+      expect(tracked.getOwnFingerprint()).toBeNull()
+    })
+
     it('proceeds with a warning when PEP is present but publish-options is not advertised', async () => {
       // Some PEP servers honor `<publish-options/>` without listing the
       // feature in disco. We can't tell from disco alone whether the

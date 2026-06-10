@@ -35,4 +35,39 @@ describe('encryptionSettingsStore', () => {
     useEncryptionSettingsStore.getState().setOpenpgpEnabled(false)
     expect(isOpenpgpEnabled()).toBe(false)
   })
+
+  describe('plugin registration failures', () => {
+    it('starts with no registration error', () => {
+      expect(useEncryptionSettingsStore.getState().registrationError).toBeNull()
+    })
+
+    it('records the typed failure (kind + code)', () => {
+      useEncryptionSettingsStore
+        .getState()
+        .notifyPluginRegistrationFailed({ kind: 'permanent', code: 'pep-unsupported' })
+      expect(useEncryptionSettingsStore.getState().registrationError).toEqual({
+        kind: 'permanent',
+        code: 'pep-unsupported',
+      })
+    })
+
+    it('notifyPluginRegistered clears the failure and still bumps the nonce', () => {
+      const before = useEncryptionSettingsStore.getState().pluginRegisteredAt
+      useEncryptionSettingsStore
+        .getState()
+        .notifyPluginRegistrationFailed({ kind: 'transient', code: 'timeout' })
+      useEncryptionSettingsStore.getState().notifyPluginRegistered()
+      const state = useEncryptionSettingsStore.getState()
+      expect(state.registrationError).toBeNull()
+      expect(state.pluginRegisteredAt).toBe(before + 1)
+    })
+
+    it('toggling the preference clears a stale failure', () => {
+      useEncryptionSettingsStore
+        .getState()
+        .notifyPluginRegistrationFailed({ kind: 'permanent', code: 'pep-unsupported' })
+      useEncryptionSettingsStore.getState().setOpenpgpEnabled(false)
+      expect(useEncryptionSettingsStore.getState().registrationError).toBeNull()
+    })
+  })
 })
