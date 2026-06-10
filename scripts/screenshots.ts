@@ -639,3 +639,212 @@ test('27 — Whisper in Room (dark)', async ({ page }) => {
   }
   await capture(page, '27-whisper-dark')
 })
+
+// ── Blog Hero Illustration (v0.16.0) ─────────────────────────────
+// 0.16.0 story: OpenPGP end-to-end encryption (primary) with mediated
+// private "whispers" (secondary). Three light-mode panels — a private
+// whisper thread, key backup/management settings, and an encrypted 1:1
+// chat as the focal (front-right) card. Mirrors the v0.15.2 hero layout.
+test('28 — Blog Hero v0.16.0', async ({ page }) => {
+  const whisperBuf = await captureViewBuffer(page, async (p) => {
+    await p.emulateMedia({ colorScheme: 'light' })
+    await navigateTo(p, 'rooms')
+    await selectItem(p, 'Team Chat')
+    const whisper = p.getByText('Private with Emma').first()
+    if (await whisper.isVisible()) {
+      await whisper.scrollIntoViewIfNeeded()
+      await p.waitForTimeout(500)
+    }
+  })
+
+  const settingsBuf = await captureViewBuffer(page, async (p) => {
+    await p.emulateMedia({ colorScheme: 'light' })
+    await navigateTo(p, 'settings')
+    await p.getByText('Encryption', { exact: true }).first().click()
+    // Wait for the fingerprint so we capture the "ready" panel, not "generating…".
+    await p.locator('code').filter({ hasText: 'BAF0' }).first().waitFor({ timeout: 5_000 })
+    await p.waitForTimeout(300)
+  })
+
+  const encChatBuf = await captureViewBuffer(page, async (p) => {
+    await p.emulateMedia({ colorScheme: 'light' })
+    await navigateTo(p, 'messages')
+    // Ava's thread carries OpenPGP security context — verified / TOFU / untrusted locks.
+    await selectItem(p, 'Ava Martinez')
+  })
+
+  const buffers = {
+    whisper: whisperBuf.toString('base64'),
+    settings: settingsBuf.toString('base64'),
+    encChat: encChatBuf.toString('base64'),
+  }
+
+  const compositeB64 = await page.evaluate(async (bufs) => {
+    const loadImg = (b64: string): Promise<HTMLImageElement> =>
+      new Promise((resolve, reject) => {
+        const img = new Image()
+        img.onload = () => resolve(img)
+        img.onerror = reject
+        img.src = `data:image/png;base64,${b64}`
+      })
+
+    const loadUrl = (url: string): Promise<HTMLImageElement> =>
+      new Promise((resolve, reject) => {
+        const img = new Image()
+        img.onload = () => resolve(img)
+        img.onerror = reject
+        img.src = url
+      })
+
+    const [whisperImg, settingsImg, encChatImg, logoImg] = await Promise.all([
+      loadImg(bufs.whisper),
+      loadImg(bufs.settings),
+      loadImg(bufs.encChat),
+      loadUrl('/logo.png'),
+    ])
+
+    const W = 1920
+    const H = 1080
+    const canvas = document.createElement('canvas')
+    canvas.width = W
+    canvas.height = H
+    const ctx = canvas.getContext('2d')!
+
+    // ── Background: soft gradient with brand color tint ──
+    const grad = ctx.createLinearGradient(0, 0, W, H)
+    grad.addColorStop(0, '#eef1ff')   // light blue-violet tint
+    grad.addColorStop(0.5, '#f5f3ff') // lavender white
+    grad.addColorStop(1, '#e8ecff')   // slightly deeper blue tint
+    ctx.fillStyle = grad
+    ctx.fillRect(0, 0, W, H)
+
+    // ── Header: logo + text ──
+    const headerY = 30
+    const logoSize = 64
+    const centerX = W / 2
+
+    const logoX = centerX - logoSize / 2
+    ctx.drawImage(logoImg, logoX, headerY, logoSize, logoSize)
+
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'top'
+    ctx.fillStyle = '#1a1b1e'
+    ctx.font = 'bold 52px Inter, system-ui, sans-serif'
+    ctx.fillText('Fluux Messenger', centerX, headerY + logoSize + 14)
+
+    ctx.fillStyle = '#5865f2'
+    ctx.font = '600 38px Inter, system-ui, sans-serif'
+    ctx.fillText('v0.16.0', centerX, headerY + logoSize + 76)
+
+    ctx.fillStyle = '#6d6f78'
+    ctx.font = '500 26px Inter, system-ui, sans-serif'
+    ctx.fillText(
+      'OpenPGP  ·  End-to-End Encryption  ·  Private Whispers  ·  Key Backup',
+      centerX,
+      headerY + logoSize + 126
+    )
+
+    // ── Helper: draw a rounded-rect screenshot card ──
+    const radius = 16
+
+    function drawCard(
+      img: HTMLImageElement,
+      cx: number,
+      cy: number,
+      w: number,
+      h: number,
+      angle: number,
+    ) {
+      ctx.save()
+      ctx.translate(cx, cy)
+      ctx.rotate((angle * Math.PI) / 180)
+
+      // Shadow
+      ctx.save()
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.25)'
+      ctx.shadowBlur = 40
+      ctx.shadowOffsetX = 0
+      ctx.shadowOffsetY = 12
+      ctx.beginPath()
+      ctx.roundRect(-w / 2, -h / 2, w, h, radius)
+      ctx.fillStyle = '#ffffff'
+      ctx.fill()
+      ctx.restore()
+
+      // Clip and draw screenshot
+      ctx.save()
+      ctx.beginPath()
+      ctx.roundRect(-w / 2, -h / 2, w, h, radius)
+      ctx.clip()
+
+      // Cover-fit the image into the card
+      const imgAspect = img.width / img.height
+      const cardAspect = w / h
+      let sx: number, sy: number, sw: number, sh: number
+      if (imgAspect > cardAspect) {
+        sh = img.height
+        sw = img.height * cardAspect
+        sx = (img.width - sw) / 2
+        sy = 0
+      } else {
+        sw = img.width
+        sh = img.width / cardAspect
+        sx = 0
+        sy = 0
+      }
+      ctx.drawImage(img, sx, sy, sw, sh, -w / 2, -h / 2, w, h)
+      ctx.restore()
+
+      // Border for definition
+      ctx.beginPath()
+      ctx.roundRect(-w / 2, -h / 2, w, h, radius)
+      ctx.strokeStyle = 'rgba(0, 0, 0, 0.08)'
+      ctx.lineWidth = 1
+      ctx.stroke()
+
+      ctx.restore()
+    }
+
+    // ── Layout: 3 cards growing left → right, each overlapping the previous ──
+    const cardsTop = 280
+    const cardsCenterY = cardsTop + 300
+
+    // Small (back-left): Private whisper thread
+    drawCard(whisperImg, centerX - 420, cardsCenterY + 10, 560, 440, -4)
+
+    // Medium (middle): Key backup / encryption settings
+    drawCard(settingsImg, centerX, cardsCenterY, 760, 540, 0)
+
+    // Large (front-right): Encrypted chat — the headline
+    const largeH = 580
+    drawCard(encChatImg, centerX + 400, cardsCenterY - 10, 820, largeH, 3)
+
+    // ── Labels below the cards ──
+    const labelY = cardsCenterY + largeH / 2 + 16
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'top'
+    ctx.font = '600 24px Inter, system-ui, sans-serif'
+    ctx.fillStyle = '#1a1b1e'
+    ctx.fillText('Private Whispers', centerX - 420, labelY)
+    ctx.fillStyle = '#5865f2'
+    ctx.font = '600 24px Inter, system-ui, sans-serif'
+    ctx.fillText('Key Backup & Restore', centerX, labelY)
+    ctx.fillStyle = '#5865f2'
+    ctx.font = 'bold 26px Inter, system-ui, sans-serif'
+    ctx.fillText('End-to-End Encrypted', centerX + 400, labelY)
+
+    // ── Tagline at bottom ──
+    ctx.fillStyle = '#4e5058'
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'top'
+    ctx.font = '600 30px Inter, system-ui, sans-serif'
+    ctx.fillText('OpenPGP end-to-end encryption  ·  Private group whispers', centerX, H - 110)
+
+    return canvas.toDataURL('image/png').replace('data:image/png;base64,', '')
+  }, buffers)
+
+  writeFileSync(
+    `${OUTPUT_DIR}/blog-hero-0.16.0.png`,
+    Buffer.from(compositeB64, 'base64')
+  )
+})
