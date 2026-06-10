@@ -335,6 +335,22 @@ describe('WebOpenPGPPlugin', () => {
       expect(bundle.keychainBacked).toBe(false)
     })
 
+    it('does not generate or store a key when the server lacks PEP support', async () => {
+      // Ordering guard for the no-PEP path (issue #414): the probe in
+      // ensureIdentity must run BEFORE ensureKeyMaterial, so a server
+      // that can never host the published key doesn't end up with an
+      // orphan private key parked in IndexedDB.
+      const plugin = new WebOpenPGPPlugin()
+      const { ctx } = makeCtx('alice@example.com')
+      setSessionPassphrase('hunter2-strong-passphrase')
+      ctx.xmpp.queryDisco = async () => ({ features: [], identities: [] })
+
+      await expect(plugin.init(ctx)).rejects.toThrow(/does not advertise PEP/)
+
+      expect(await plugin.hasNoLocalKey()).toBe(true)
+      expect(plugin.getOwnFingerprint()).toBeNull()
+    })
+
     it('loads the same key on re-init with the same passphrase', async () => {
       const backend = new InMemoryStorageBackend()
       const passphrase = 'hunter2-strong-passphrase'

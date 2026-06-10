@@ -192,6 +192,14 @@ export class DemoClient extends XMPPClient {
       return this.buildDiscoInfoResponse(to)
     }
 
+    // disco#info to our own bare JID → account entity capabilities.
+    // The demo simulates a full-featured server, so advertise PEP
+    // (XEP-0163) — the encryption settings probe (checkPepSupport)
+    // targets this JID and would otherwise warn about a missing PEP.
+    if (xmlns === NS_DISCO_INFO && to && to === this.selfJid) {
+      return this.buildAccountDiscoInfoResponse()
+    }
+
     // disco#items to the conference service → return room list for fetchRoomList()
     if (xmlns === NS_DISCO_ITEMS && to === this.conferenceService) {
       return this.buildDiscoItemsResponse()
@@ -690,6 +698,23 @@ export class DemoClient extends XMPPClient {
 
     return this.mockElement('iq', { type: 'result' }, [
       this.mockElement('query', { xmlns: NS_DISCO_INFO }, queryChildren),
+    ])
+  }
+
+  /**
+   * Build a disco#info response for the demo account bare JID.
+   * Advertises PEP (XEP-0163) so account-capability probes — notably
+   * the encryption settings' `checkPepSupport` — see the same answer a
+   * full-featured server (ejabberd, Prosody) would give.
+   */
+  private buildAccountDiscoInfoResponse(): MockElement {
+    return this.mockElement('iq', { type: 'result' }, [
+      this.mockElement('query', { xmlns: NS_DISCO_INFO }, [
+        this.mockElement('identity', { category: 'account', type: 'registered' }),
+        this.mockElement('identity', { category: 'pubsub', type: 'pep' }),
+        this.mockElement('feature', { var: NS_PUBSUB }),
+        this.mockElement('feature', { var: `${NS_PUBSUB}#publish-options` }),
+      ]),
     ])
   }
 

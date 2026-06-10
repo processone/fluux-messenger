@@ -1552,6 +1552,10 @@ export class XMPPClient {
     // this counter again, causing the stale run to bail out at its next checkpoint.
     const generation = ++this.sessionGeneration
 
+    // Session-scoped discovery caches (e.g. the account PEP probe) must not
+    // leak across sessions — server capabilities can change between logins.
+    this.discovery.resetSessionCache()
+
     const platform = getCachedPlatform() ?? 'unknown'
     logInfo(`SDK v${SDK_VERSION}, platform: ${platform}, session #${generation}`)
 

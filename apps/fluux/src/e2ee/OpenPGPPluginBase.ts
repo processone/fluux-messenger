@@ -64,7 +64,7 @@ import {
   wrapForSigncrypt,
   type E2EEErrorKind,
 } from '@fluux/sdk'
-import { getBareJid } from '@fluux/sdk'
+import { discoSupportsPep, getBareJid } from '@fluux/sdk'
 import type { XMPPClient } from '@fluux/sdk/core'
 import {
   clearBackedUpFingerprint,
@@ -124,10 +124,7 @@ import { setTrustStateStatus } from '@/stores/trustStateStatusStore'
 // ---------------------------------------------------------------------------
 
 const OX_NAMESPACE = 'urn:xmpp:openpgp:0'
-const PUBSUB_NAMESPACE = 'http://jabber.org/protocol/pubsub'
 const PUBSUB_PUBLISH_OPTIONS_FEATURE = 'http://jabber.org/protocol/pubsub#publish-options'
-const PEP_IDENTITY_CATEGORY = 'pubsub'
-const PEP_IDENTITY_TYPE = 'pep'
 const PUBLIC_KEYS_METADATA_NODE = 'urn:xmpp:openpgp:0:public-keys'
 const SECRET_KEY_NODE = 'urn:xmpp:openpgp:0:secret-key'
 const CURRENT_ITEM_ID = 'current'
@@ -648,6 +645,13 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
 
   async ensureIdentity(): Promise<IdentityInfo> {
     const ctx = this.requireCtx()
+
+    // Probe PEP BEFORE touching key material: a server without PEP
+    // (XEP-0163) can never host the published key, and generating first
+    // would leave an orphan private key parked in the OS keychain /
+    // IndexedDB (issue #414).
+    await this.probePepSupport()
+
     let bundle: KeyBundle
     try {
       bundle = await this.ensureKeyMaterial(ctx.account.jid)
@@ -656,7 +660,6 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     }
     this.ownBundle = bundle
 
-    await this.probePepSupport()
     await this.checkOwnPublishedKeyConsistency(bundle)
     if (getOwnKeyConflict()) {
       ctx.logger.warn(
@@ -1207,11 +1210,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     } catch (err) {
       throw this.toPluginError('pep-support-probe', err)
     }
-    const hasPepIdentity = disco.identities.some(
-      (id) => id.category === PEP_IDENTITY_CATEGORY && id.type === PEP_IDENTITY_TYPE,
-    )
-    const hasPubsubFeature = disco.features.some((f) => f.var === PUBSUB_NAMESPACE)
-    if (!hasPepIdentity && !hasPubsubFeature) {
+    if (!discoSupportsPep(disco)) {
       throw new E2EEPluginError(
         'permanent',
         'pep-unsupported',

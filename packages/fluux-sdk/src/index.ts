@@ -484,6 +484,9 @@ export {
 } from './core/jid'
 export type { ParsedJid } from './core/jid'
 
+// Service discovery utilities (XEP-0030 / XEP-0163)
+export { discoSupportsPep } from './core/modules/Discovery'
+
 // XMPP URI utilities (RFC 5122)
 export { parseXmppUri, isMucJid } from './utils/xmppUri'
 export type { XmppUri } from './utils/xmppUri'

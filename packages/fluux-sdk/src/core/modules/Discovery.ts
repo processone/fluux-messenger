@@ -1,6 +1,6 @@
 import { xml, Element } from '@xmpp/client'
 import { BaseModule } from './BaseModule'
-import { getDomain } from '../jid'
+import { getBareJid, getDomain } from '../jid'
 import { generateUUID } from '../../utils/uuid'
 import {
   NS_DISCO_INFO,
@@ -14,6 +14,24 @@ import {
 } from '../namespaces'
 import type { UploadSlot, HttpUploadService } from '../types'
 import { logInfo, logWarn } from '../logger'
+
+/**
+ * Evaluate a disco#info result for PEP support (XEP-0163).
+ *
+ * An account hosted on a PEP-capable server advertises either the
+ * `pubsub`/`pep` identity or the base pubsub feature namespace on its
+ * bare JID. Used by {@link Discovery.checkPepSupport} and by E2EE plugins
+ * probing before publishing key material (XEP-0373 requires PEP).
+ */
+export function discoSupportsPep(disco: {
+  features: Array<{ var: string }>
+  identities: Array<{ category: string; type: string }>
+}): boolean {
+  return (
+    disco.identities.some((id) => id.category === 'pubsub' && id.type === 'pep') ||
+    disco.features.some((f) => f.var === NS_PUBSUB)
+  )
+}
 
 /**
  * Service discovery and HTTP file upload module.
@@ -40,9 +58,52 @@ import { logInfo, logWarn } from '../logger'
  * @category Modules
  */
 export class Discovery extends BaseModule {
+  /**
+   * Per-session cache for {@link checkPepSupport}. Holds the in-flight or
+   * settled probe promise so concurrent callers share one IQ. Cleared by
+   * {@link resetSessionCache} when a new session is established, and on
+   * rejection so a failed probe can be retried.
+   */
+  private pepSupportProbe: Promise<boolean> | null = null
+
   handle(_stanza: Element): boolean | void {
     // Discovery doesn't handle incoming stanzas (responses handled via IQ caller)
     return false
+  }
+
+  /**
+   * Whether the logged-in account supports PEP (XEP-0163).
+   *
+   * Runs disco#info on the account **bare JID** — the domain disco
+   * (`fetchServerInfo`) does not reflect PEP availability, which is an
+   * account-entity capability. Required by features that publish to
+   * personal eventing nodes, e.g. OpenPGP key distribution (XEP-0373).
+   *
+   * The result is cached for the lifetime of the session; failures are
+   * not cached, so callers may retry after transient errors.
+   */
+  async checkPepSupport(): Promise<boolean> {
+    if (this.pepSupportProbe) return this.pepSupportProbe
+
+    const currentJid = this.deps.getCurrentJid()
+    if (!currentJid) {
+      throw new Error('Not connected — cannot probe PEP support')
+    }
+    const probe = this.queryInfo(getBareJid(currentJid)).then(discoSupportsPep)
+    this.pepSupportProbe = probe
+    probe.catch(() => {
+      if (this.pepSupportProbe === probe) this.pepSupportProbe = null
+    })
+    return probe
+  }
+
+  /**
+   * Drop session-scoped probe caches. Called by XMPPClient whenever a
+   * session is (re-)established so a server-side configuration change is
+   * picked up on the next probe.
+   */
+  resetSessionCache(): void {
+    this.pepSupportProbe = null
   }
 
   /**

@@ -30,6 +30,7 @@ type PluginStatus =
   | 'ready'
   | 'waiting-online'
   | 'generation-failed'
+  | 'registration-failed'
 
 /**
  * If the Rust-side key generation doesn't produce a fingerprint within this
@@ -54,6 +55,7 @@ export function EncryptionSettings() {
   const { client } = useXMPPContext()
   const openpgpEnabled = useEncryptionSettingsStore((s) => s.openpgpEnabled)
   const setOpenpgpEnabled = useEncryptionSettingsStore((s) => s.setOpenpgpEnabled)
+  const registrationError = useEncryptionSettingsStore((s) => s.registrationError)
   const addToast = useToastStore((s) => s.addToast)
 
   const [fingerprint, setFingerprint] = useState<string | null>(null)
@@ -116,18 +118,56 @@ export function EncryptionSettings() {
   }
 
   const online = status === 'online'
-  const webLocked = !isTauri() && openpgpEnabled && isKeyLocked()
+  // A typed registration failure means no plugin got registered at all —
+  // it outranks the web "locked" state, whose unlock flow needs a
+  // registered plugin to act on.
+  const webLocked = !isTauri() && openpgpEnabled && isKeyLocked() && !registrationError
   const pluginStatus: PluginStatus = !openpgpEnabled
     ? 'disabled'
     : !online
       ? 'waiting-online'
       : fingerprint
         ? 'ready'
-        : webLocked
-          ? 'locked'
-          : generationFailed
-            ? 'generation-failed'
-            : 'generating'
+        : registrationError
+          ? 'registration-failed'
+          : webLocked
+            ? 'locked'
+            : generationFailed
+              ? 'generation-failed'
+              : 'generating'
+
+  // Proactive PEP probe (XEP-0163): OpenPGP (XEP-0373) publishes keys to
+  // PEP nodes on the account bare JID, so a server without PEP can never
+  // support it. Probe as soon as we're online and warn BEFORE the user
+  // flips the toggle — otherwise the failure only surfaces after key
+  // generation has already run (issue #414). `null` means "unknown"
+  // (offline, probe pending, or probe failed) and fails open.
+  const [pepSupported, setPepSupported] = useState<boolean | null>(null)
+  useEffect(() => {
+    if (!online) {
+      setPepSupported(null)
+      return
+    }
+    let cancelled = false
+    client.discovery
+      .checkPepSupport()
+      .then((supported) => {
+        if (!cancelled) setPepSupported(supported)
+      })
+      .catch(() => {
+        // Transient probe failure (timeout, reconnect race) — don't block
+        // the toggle on an unknown; the plugin re-probes on registration.
+        if (!cancelled) setPepSupported(null)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [online, client])
+
+  // Block ENABLING on a server known to lack PEP, but never block turning
+  // the feature off — the preference may have been set while offline or
+  // before a server config change.
+  const toggleDisabled = isToggling || (!openpgpEnabled && pepSupported === false)
 
   // Track fingerprint — poll briefly after enable so the "Generating…"
   // state resolves without needing a manual reload. The plugin exposes
@@ -138,6 +178,9 @@ export function EncryptionSettings() {
       setGenerationFailed(false)
       return
     }
+    // Registration already failed with a typed error — the status line
+    // explains it; polling for a fingerprint would just spin for 60s.
+    if (registrationError) return
 
     let cancelled = false
     const startedAt = Date.now()
@@ -171,7 +214,7 @@ export function EncryptionSettings() {
     return () => {
       cancelled = true
     }
-  }, [openpgpEnabled, online, client])
+  }, [openpgpEnabled, online, client, registrationError])
 
   const handleToggle = useCallback(async () => {
     const next = !openpgpEnabled
@@ -786,12 +829,18 @@ export function EncryptionSettings() {
             </div>
             <button
               onClick={handleToggle}
-              disabled={isToggling}
+              disabled={toggleDisabled}
               aria-pressed={openpgpEnabled}
               aria-label={t('settings.encryption.openpgpLabel')}
               className={`relative w-9 h-5 rounded-full transition-colors flex-shrink-0 ${
                 openpgpEnabled ? 'bg-fluux-brand' : 'bg-fluux-hover'
-              } ${isToggling ? 'opacity-50 cursor-wait' : 'cursor-pointer'}`}
+              } ${
+                isToggling
+                  ? 'opacity-50 cursor-wait'
+                  : toggleDisabled
+                    ? 'opacity-50 cursor-not-allowed'
+                    : 'cursor-pointer'
+              }`}
             >
               <span
                 className={`absolute top-0.5 start-0.5 size-4 rounded-full bg-white transition-transform ${
@@ -801,6 +850,18 @@ export function EncryptionSettings() {
             </button>
           </div>
         </div>
+
+        {/* PEP-unsupported banner — the server can't host the published key,
+            so OpenPGP (XEP-0373) can never work on this account. Shown from
+            the proactive probe, before the user even tries the toggle. */}
+        {pepSupported === false && (
+          <div className="flex gap-2 p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/20 text-xs leading-snug">
+            <AlertTriangle className="size-4 text-yellow-600 dark:text-yellow-400 flex-shrink-0 mt-0.5" />
+            <p className="flex-1 text-fluux-text">
+              {t('settings.encryption.pepUnsupportedBanner')}
+            </p>
+          </div>
+        )}
 
         {/* Own-key conflict banner — shown above status when init detects a
             mismatch between the local key and what the server advertises */}
@@ -830,14 +891,14 @@ export function EncryptionSettings() {
             </label>
             <div
               className={`rounded-lg border-2 p-3 space-y-2 ${
-                pluginStatus === 'generation-failed'
+                pluginStatus === 'generation-failed' || pluginStatus === 'registration-failed'
                   ? 'border-red-500/40 bg-red-500/5'
                   : 'border-fluux-hover bg-fluux-bg'
               }`}
             >
               <div
                 className={`text-xs ${
-                  pluginStatus === 'generation-failed'
+                  pluginStatus === 'generation-failed' || pluginStatus === 'registration-failed'
                     ? 'text-red-500 dark:text-red-400'
                     : 'text-fluux-muted'
                 }`}
@@ -851,6 +912,12 @@ export function EncryptionSettings() {
                 {pluginStatus === 'ready' && t('settings.encryption.statusReady')}
                 {pluginStatus === 'generation-failed' &&
                   t('settings.encryption.statusGenerationFailed')}
+                {pluginStatus === 'registration-failed' &&
+                  (registrationError?.code === 'pep-unsupported'
+                    ? t('settings.encryption.statusPepUnsupported')
+                    : t('settings.encryption.statusRegistrationFailed', {
+                        code: registrationError?.code,
+                      }))}
               </div>
               {fingerprint && (
                 <div className="flex items-start gap-2">
