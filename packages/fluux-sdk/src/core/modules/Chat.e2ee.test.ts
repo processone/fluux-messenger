@@ -1754,6 +1754,101 @@ describe('Chat E2EE wiring', () => {
     })
   })
 
+  describe('reply-quote leak protection (cleartext reply to an encrypted message)', () => {
+    const encryptedReply = {
+      id: 'orig',
+      to: 'bob@example.com',
+      fallback: { author: 'Bob', body: 'the code is 4471', fromEncrypted: true },
+    }
+
+    it('strips the quote from the outer body when the reply is sent in CLEARTEXT', async () => {
+      // Fresh manager with no plugins → the send goes out unencrypted.
+      const emptyManager = new E2EEManager({
+        storage: new InMemoryStorageBackend(),
+        xmpp: stubXmppPrimitives(async () => {}),
+        account: { jid: 'me@example.com' },
+      })
+      const { deps } = makeDeps({
+        jid: 'me@example.com',
+        manager: emptyManager,
+        captureStanza: (el) => captured.push(el),
+      })
+      const plainChat = new Chat(deps, stubMAM())
+
+      await plainChat.sendMessage('bob@example.com', 'sure thing', 'chat', encryptedReply)
+
+      const sent = captured[0]
+      const body = sent.getChild('body')?.text() ?? ''
+      // The decrypted quote must NOT appear in the cleartext body.
+      expect(body).not.toContain('4471')
+      expect(body).not.toContain('> Bob wrote:')
+      expect(body).toBe('sure thing')
+
+      // The reply fallback marker is dropped (its [0, end) region no longer exists)…
+      const replyFallback = sent
+        .getChildren('fallback', 'urn:xmpp:fallback:0')
+        .find((el) => el.attrs?.for === 'urn:xmpp:reply:0')
+      expect(replyFallback).toBeUndefined()
+
+      // …but the reply reference itself survives so threading / jump-to still works.
+      const reply = sent.getChild('reply', 'urn:xmpp:reply:0')
+      expect(reply).toBeDefined()
+      expect(reply?.attrs.id).toBe('orig')
+    })
+
+    it('keeps the quote INSIDE the encrypted payload when the reply is encrypted', async () => {
+      // `chat` uses the DummyPlaintextPlugin (registered in beforeEach) → encrypts.
+      await chat.sendMessage('bob@example.com', 'sure thing', 'chat', encryptedReply)
+
+      const sent = captured[0]
+      // Outer body is the generic fallback, never the quote.
+      expect(sent.getChild('body')?.text()).toBe('[dummy-plaintext payload]')
+      expect(sent.getChild('body')?.text()).not.toContain('4471')
+
+      // The reply fallback marker is preserved on the encrypted path.
+      const replyFallback = sent
+        .getChildren('fallback', 'urn:xmpp:fallback:0')
+        .find((el) => el.attrs?.for === 'urn:xmpp:reply:0')
+      expect(replyFallback).toBeDefined()
+
+      // The quote still reaches the recipient — it is inside the encrypted payload.
+      const enc = sent.getChild('plain', 'urn:fluux:e2ee-dummy:0')
+      expect(enc).toBeDefined()
+      const decoded = Buffer.from(enc!.text(), 'base64').toString('utf8')
+      expect(decoded).toContain('4471')
+    })
+
+    it('does NOT strip a cleartext reply to a cleartext message (no regression)', async () => {
+      const emptyManager = new E2EEManager({
+        storage: new InMemoryStorageBackend(),
+        xmpp: stubXmppPrimitives(async () => {}),
+        account: { jid: 'me@example.com' },
+      })
+      const { deps } = makeDeps({
+        jid: 'me@example.com',
+        manager: emptyManager,
+        captureStanza: (el) => captured.push(el),
+      })
+      const plainChat = new Chat(deps, stubMAM())
+
+      await plainChat.sendMessage('bob@example.com', 'sure thing', 'chat', {
+        id: 'orig',
+        to: 'bob@example.com',
+        fallback: { author: 'Bob', body: 'hello there' }, // fromEncrypted omitted → false
+      })
+
+      const sent = captured[0]
+      const body = sent.getChild('body')?.text() ?? ''
+      // The quote is preserved exactly as today.
+      expect(body).toContain('> Bob wrote:')
+      expect(body).toContain('hello there')
+      const replyFallback = sent
+        .getChildren('fallback', 'urn:xmpp:fallback:0')
+        .find((el) => el.attrs?.for === 'urn:xmpp:reply:0')
+      expect(replyFallback).toBeDefined()
+    })
+  })
+
   describe('outbound encryption — sendEasterEgg', () => {
     it('moves the easter-egg element inside the encrypted payload and keeps no-store', async () => {
       await chat.sendEasterEgg('bob@example.com', 'chat', 'confetti')
