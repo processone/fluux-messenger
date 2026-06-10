@@ -311,31 +311,41 @@ export const ConversationItem = memo(function ConversationItem({
                           ? 'text-fluux-muted border-transparent'
                           : 'text-fluux-muted border-transparent hover:bg-fluux-hover hover:text-fluux-text'}`}
       >
-        {isGroupChat ? (
-          room?.avatar ? (
-            <img
-              src={room.avatar}
-              alt={conversation.name}
-              className="size-8 rounded-full object-cover flex-shrink-0"
-              draggable={false}
-            />
+        {/* Avatar wrapper — the unread badge overlays the avatar (UX_REVIEW §3.1)
+            instead of taking its own flex column, so the name/preview column
+            keeps its full width and stops truncating short names. */}
+        <div className="relative flex-shrink-0">
+          {isGroupChat ? (
+            room?.avatar ? (
+              <img
+                src={room.avatar}
+                alt={conversation.name}
+                className="size-8 rounded-full object-cover"
+                draggable={false}
+              />
+            ) : (
+              <Hash
+                className="size-8 p-1.5 rounded-full text-white"
+                style={{ backgroundColor: generateConsistentColorHexSync(conversation.id, { saturation: 60, lightness: 45 }) }}
+              />
+            )
           ) : (
-            <Hash
-              className="size-8 flex-shrink-0 p-1.5 rounded-full text-white"
-              style={{ backgroundColor: generateConsistentColorHexSync(conversation.id, { saturation: 60, lightness: 45 }) }}
+            <Avatar
+              identifier={conversation.id}
+              name={conversation.name}
+              avatarUrl={contact?.avatar}
+              size="sm"
+              presence={contact?.presence ?? 'offline'}
+              forceOffline={forceOffline}
+              overlay={isTyping ? <TypingIndicator /> : undefined}
             />
-          )
-        ) : (
-          <Avatar
-            identifier={conversation.id}
-            name={conversation.name}
-            avatarUrl={contact?.avatar}
-            size="sm"
-            presence={contact?.presence ?? 'offline'}
-            forceOffline={forceOffline}
-            overlay={isTyping ? <TypingIndicator /> : undefined}
-          />
-        )}
+          )}
+          {conversation.unreadCount > 0 && (
+            <span className="absolute -top-1 -end-1 z-10 min-w-4 h-4 px-1 bg-fluux-red text-white text-[10px] font-bold rounded-full flex items-center justify-center">
+              {conversation.unreadCount}
+            </span>
+          )}
+        </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between gap-2">
             <p dir="auto" className="truncate font-medium">{conversation.name}</p>
@@ -356,11 +366,6 @@ export const ConversationItem = memo(function ConversationItem({
             </p>
           )}
         </div>
-        {conversation.unreadCount > 0 && (
-          <span className="min-w-5 h-5 px-1.5 bg-fluux-red text-white text-xs font-bold rounded-full flex-shrink-0 flex items-center justify-center">
-            {conversation.unreadCount}
-          </span>
-        )}
       </div>
     </Tooltip>
   )
