@@ -6,8 +6,8 @@ import { useNavigateToTarget } from './useNavigateToTarget'
 
 // Shared mock state that tests can modify
 const mockState = {
-  setActiveConversation: vi.fn(),
-  setActiveRoom: vi.fn(),
+  activateConversation: vi.fn(),
+  activateRoom: vi.fn(),
   setChatTargetMessageId: vi.fn(),
   setRoomTargetMessageId: vi.fn(),
 }
@@ -19,14 +19,14 @@ vi.mock('@fluux/sdk', () => ({}))
 vi.mock('@fluux/sdk/react', () => ({
   useChatStore: (selector: (s: unknown) => unknown) => {
     const state = {
-      setActiveConversation: mockState.setActiveConversation,
+      activateConversation: mockState.activateConversation,
       setTargetMessageId: mockState.setChatTargetMessageId,
     }
     return selector(state)
   },
   useRoomStore: (selector: (s: unknown) => unknown) => {
     const state = {
-      setActiveRoom: mockState.setActiveRoom,
+      activateRoom: mockState.activateRoom,
       setTargetMessageId: mockState.setRoomTargetMessageId,
     }
     return selector(state)
@@ -68,8 +68,8 @@ describe('useNavigateToTarget', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     currentLocation.current = { pathname: '/', search: '' }
-    mockState.setActiveConversation = vi.fn()
-    mockState.setActiveRoom = vi.fn()
+    mockState.activateConversation = vi.fn()
+    mockState.activateRoom = vi.fn()
     mockState.setChatTargetMessageId = vi.fn()
     mockState.setRoomTargetMessageId = vi.fn()
   })
@@ -85,7 +85,7 @@ describe('useNavigateToTarget', () => {
       })
 
       expect(currentLocation.current.pathname).toBe('/messages/alice%40example.com')
-      expect(mockState.setActiveConversation).toHaveBeenCalledWith('alice@example.com')
+      expect(mockState.activateConversation).toHaveBeenCalledWith('alice@example.com')
     })
 
     it('should navigate from any view to messages', () => {
@@ -98,7 +98,7 @@ describe('useNavigateToTarget', () => {
       })
 
       expect(currentLocation.current.pathname).toBe('/messages/bob%40example.com')
-      expect(mockState.setActiveConversation).toHaveBeenCalledWith('bob@example.com')
+      expect(mockState.activateConversation).toHaveBeenCalledWith('bob@example.com')
     })
 
     it('should handle JIDs with special characters', () => {
@@ -112,7 +112,7 @@ describe('useNavigateToTarget', () => {
 
       // URL should be properly encoded
       expect(currentLocation.current.pathname).toContain('/messages/')
-      expect(mockState.setActiveConversation).toHaveBeenCalledWith('user+tag@example.com/resource')
+      expect(mockState.activateConversation).toHaveBeenCalledWith('user+tag@example.com/resource')
     })
   })
 
@@ -127,7 +127,7 @@ describe('useNavigateToTarget', () => {
       })
 
       expect(currentLocation.current.pathname).toBe('/rooms/general%40conference.example.com')
-      expect(mockState.setActiveRoom).toHaveBeenCalledWith('general@conference.example.com')
+      expect(mockState.activateRoom).toHaveBeenCalledWith('general@conference.example.com')
     })
 
     it('should navigate from any view to rooms', () => {
@@ -140,7 +140,7 @@ describe('useNavigateToTarget', () => {
       })
 
       expect(currentLocation.current.pathname).toBe('/rooms/dev%40conference.example.com')
-      expect(mockState.setActiveRoom).toHaveBeenCalledWith('dev@conference.example.com')
+      expect(mockState.activateRoom).toHaveBeenCalledWith('dev@conference.example.com')
     })
 
     it('should set targetMessageId in room store when messageId is provided', () => {
@@ -153,7 +153,7 @@ describe('useNavigateToTarget', () => {
       })
 
       expect(mockState.setRoomTargetMessageId).toHaveBeenCalledWith('msg-456')
-      expect(mockState.setActiveRoom).toHaveBeenCalledWith('general@conference.example.com')
+      expect(mockState.activateRoom).toHaveBeenCalledWith('general@conference.example.com')
     })
 
     it('should not set targetMessageId when messageId is omitted', () => {
@@ -191,8 +191,8 @@ describe('useNavigateToTarget', () => {
         result.current.navigateToContact('bob@example.com')
       })
 
-      expect(mockState.setActiveConversation).toHaveBeenCalledWith(null)
-      expect(mockState.setActiveRoom).toHaveBeenCalledWith(null)
+      expect(mockState.activateConversation).toHaveBeenCalledWith(null)
+      expect(mockState.activateRoom).toHaveBeenCalledWith(null)
       expect(currentLocation.current.pathname).toBe('/contacts/bob%40example.com')
     })
   })
@@ -208,7 +208,7 @@ describe('useNavigateToTarget', () => {
       })
 
       expect(mockState.setChatTargetMessageId).toHaveBeenCalledWith('msg-123')
-      expect(mockState.setActiveConversation).toHaveBeenCalledWith('alice@example.com')
+      expect(mockState.activateConversation).toHaveBeenCalledWith('alice@example.com')
       expect(currentLocation.current.pathname).toBe('/messages/alice%40example.com')
     })
 

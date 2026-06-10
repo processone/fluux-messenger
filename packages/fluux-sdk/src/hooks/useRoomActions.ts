@@ -69,11 +69,9 @@ export function useRoomActions() {
     []
   )
 
+  // Hydrates the message cache before marking active (see roomStore.activateRoom)
   const setActiveRoom = useCallback(async (roomJid: string | null) => {
-    if (roomJid) {
-      await roomStore.getState().loadMessagesFromCache(roomJid, { limit: 100 })
-    }
-    roomStore.getState().setActiveRoom(roomJid)
+    await roomStore.getState().activateRoom(roomJid)
   }, [])
 
   const markAsRead = useCallback((roomJid: string) => {

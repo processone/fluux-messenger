@@ -104,20 +104,10 @@ export function useRoom() {
   // Don't use useShallow for messages - when messages are prepended, we need React to re-render
   // useShallow's element-by-element comparison can miss updates in large arrays
   const activeMessages = useRoomStore((s) => s.activeMessages())
-  const setActiveRoomRaw = useRoomStore((s) => s.setActiveRoom)
-
-  // Wrapper that loads messages from IndexedDB cache when switching rooms.
-  // Cache is loaded BEFORE setting active room so that setActiveRoom() in the store
-  // calculates firstNewMessageId with the full message history (cached + live messages).
-  // Without this, rooms that only have live messages (received while viewing another room)
-  // would show only new messages without historical context above the marker.
+  // Hydrates the message cache before marking active (see roomStore.activateRoom)
   const setActiveRoom = useCallback(async (roomJid: string | null) => {
-    if (roomJid) {
-      // Always load from cache first - deduplication is handled by loadMessagesFromCache
-      await roomStore.getState().loadMessagesFromCache(roomJid, { limit: 100 })
-    }
-    setActiveRoomRaw(roomJid)
-  }, [setActiveRoomRaw])
+    await roomStore.getState().activateRoom(roomJid)
+  }, [])
   const markAsRead = useRoomStore((s) => s.markAsRead)
   const clearFirstNewMessageId = useRoomStore((s) => s.clearFirstNewMessageId)
   const updateLastSeenMessageId = useRoomStore((s) => s.updateLastSeenMessageId)

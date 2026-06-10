@@ -28,6 +28,10 @@ const STORAGE_KEY_BASE = 'xmpp-chat-storage'
  */
 const EMPTY_MESSAGE_ARRAY: Message[] = []
 
+// Monotonic token so a slow cache read from a superseded activateConversation
+// call can't overwrite a newer activation when it finally resolves
+let activationToken = 0
+
 function getScopedStorageKey(jid?: string | null): string {
   return buildScopedStorageKey(STORAGE_KEY_BASE, jid)
 }
@@ -114,6 +118,16 @@ interface ChatState {
 
   // Actions
   setActiveConversation: (id: string | null) => void
+  /**
+   * Hydrate the conversation's recent history from the IndexedDB cache, then mark it active.
+   *
+   * Prefer this over `setActiveConversation` for user-facing activation: only live messages
+   * are kept in memory, so activating without hydration renders an empty view (until a manual
+   * scroll loads history) and computes the unread marker without historical context.
+   * If a newer activation starts while the cache read is in flight, the stale one is dropped.
+   * Passing `null` deactivates immediately without touching the cache.
+   */
+  activateConversation: (id: string | null) => Promise<void>
   addConversation: (conv: Conversation) => void
   updateConversationName: (id: string, name: string) => void
   deleteConversation: (id: string) => void
@@ -524,6 +538,16 @@ export const chatStore = createStore<ChatState>()(
         }
         // Default case: conversation not found, just set active
         set({ activeConversationId: id })
+      },
+
+      activateConversation: async (id) => {
+        const token = ++activationToken
+        if (id) {
+          await get().loadMessagesFromCache(id, { limit: 100 })
+          // A newer activation started while the cache read was in flight
+          if (token !== activationToken) return
+        }
+        get().setActiveConversation(id)
       },
 
       addConversation: (conv) => {

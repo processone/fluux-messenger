@@ -226,6 +226,69 @@ describe('chatStore', () => {
     })
   })
 
+  describe('activateConversation', () => {
+    afterEach(() => {
+      // Restore the factory default so later tests get a clean resolved-[] mock
+      vi.mocked(messageCache.getMessages).mockReset()
+      vi.mocked(messageCache.getMessages).mockResolvedValue([])
+    })
+
+    it('should hydrate messages from cache before marking the conversation active', async () => {
+      chatStore.getState().addConversation(createConversation('alice@example.com'))
+      const cached = createMessage('alice@example.com', 'Cached history')
+      vi.mocked(messageCache.getMessages).mockResolvedValue([cached])
+
+      // Snapshot the in-memory messages at the exact moment activation happens —
+      // the unread marker is computed from them, so they must be loaded first
+      let messagesAtActivation: Message[] | undefined
+      const unsubscribe = chatStore.subscribe(
+        (state) => state.activeConversationId,
+        (activeId) => {
+          if (activeId === 'alice@example.com') {
+            messagesAtActivation = chatStore.getState().messages.get('alice@example.com')
+          }
+        }
+      )
+
+      await chatStore.getState().activateConversation('alice@example.com')
+      unsubscribe()
+
+      expect(chatStore.getState().activeConversationId).toBe('alice@example.com')
+      expect(messagesAtActivation?.map((m) => m.id)).toEqual([cached.id])
+    })
+
+    it('should deactivate immediately without touching the cache when passed null', async () => {
+      chatStore.getState().addConversation(createConversation('alice@example.com'))
+      chatStore.getState().setActiveConversation('alice@example.com')
+      vi.clearAllMocks()
+
+      await chatStore.getState().activateConversation(null)
+
+      expect(chatStore.getState().activeConversationId).toBeNull()
+      expect(messageCache.getMessages).not.toHaveBeenCalled()
+    })
+
+    it('should drop a stale activation that resolves after a newer one', async () => {
+      chatStore.getState().addConversation(createConversation('alice@example.com'))
+      chatStore.getState().addConversation(createConversation('bob@example.com'))
+
+      let resolveAlice: (value: Message[]) => void = () => {}
+      vi.mocked(messageCache.getMessages).mockImplementation((conversationId) =>
+        conversationId === 'alice@example.com'
+          ? new Promise((resolve) => { resolveAlice = resolve })
+          : Promise.resolve([])
+      )
+
+      const stale = chatStore.getState().activateConversation('alice@example.com')
+      const fresh = chatStore.getState().activateConversation('bob@example.com')
+      await fresh
+      resolveAlice([])
+      await stale
+
+      expect(chatStore.getState().activeConversationId).toBe('bob@example.com')
+    })
+  })
+
   describe('addMessage', () => {
     it('should add message to conversation', () => {
       chatStore.getState().addConversation(createConversation('alice@example.com'))

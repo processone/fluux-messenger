@@ -144,6 +144,10 @@ function saveDismissedPollsToStorage(dismissedPolls: Map<string, Set<string>>, j
 const EMPTY_ROOM_ARRAY: Room[] = []
 const EMPTY_SIDEBAR_JIDS: string[] = []
 
+// Monotonic token so a slow cache read from a superseded activateRoom call
+// can't overwrite a newer activation when it finally resolves
+let activationToken = 0
+
 // Selector memoization caches.
 // Store selectors (joinedRooms, allRooms, etc.) are called on every Zustand subscription check.
 // Without caching, each call runs O(n) filter + O(n log n) sort even when the rooms Map hasn't changed.
@@ -255,6 +259,16 @@ export interface RoomState {
   getMessage: (roomJid: string, messageId: string) => RoomMessage | undefined
   markAsRead: (roomJid: string) => void
   setActiveRoom: (roomJid: string | null) => void
+  /**
+   * Hydrate the room's recent history from the IndexedDB cache, then mark it active.
+   *
+   * Prefer this over `setActiveRoom` for user-facing activation: only live messages are
+   * kept in memory, so activating without hydration renders an empty view (until a manual
+   * scroll loads history) and computes the unread marker without historical context.
+   * If a newer activation starts while the cache read is in flight, the stale one is dropped.
+   * Passing `null` deactivates immediately without touching the cache.
+   */
+  activateRoom: (roomJid: string | null) => Promise<void>
   getActiveRoomJid: () => string | null
   clearFirstNewMessageId: (roomJid: string) => void
   updateLastSeenMessageId: (roomJid: string, messageId: string) => void
@@ -1202,6 +1216,16 @@ export const roomStore = createStore<RoomState>()(
     }
     // Clearing active room or room not found
     set({ activeRoomJid: roomJid })
+  },
+
+  activateRoom: async (roomJid) => {
+    const token = ++activationToken
+    if (roomJid) {
+      await get().loadMessagesFromCache(roomJid, { limit: 100 })
+      // A newer activation started while the cache read was in flight
+      if (token !== activationToken) return
+    }
+    get().setActiveRoom(roomJid)
   },
 
   getActiveRoomJid: () => get().activeRoomJid,

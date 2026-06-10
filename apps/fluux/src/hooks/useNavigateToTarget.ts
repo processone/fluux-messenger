@@ -41,26 +41,28 @@ export function useNavigateToTarget() {
   const navigate = useNavigate()
   // NOTE: Use direct store subscriptions instead of useChat()/useRoom() hooks.
   // Those hooks subscribe to conversations/rooms which change during MAM loading,
-  // causing unnecessary re-renders. We only need the setters here.
-  const setActiveConversation = useChatStore((s) => s.setActiveConversation)
+  // causing unnecessary re-renders. We only need the activation actions here.
+  // activateConversation/activateRoom hydrate the message cache before setting
+  // active, so the navigated-to view never renders empty.
+  const activateConversation = useChatStore((s) => s.activateConversation)
   const setChatTargetMessageId = useChatStore((s) => s.setTargetMessageId)
-  const setActiveRoom = useRoomStore((s) => s.setActiveRoom)
+  const activateRoom = useRoomStore((s) => s.activateRoom)
   const setRoomTargetMessageId = useRoomStore((s) => s.setTargetMessageId)
 
   // Use refs to avoid stale closures in async callbacks
   const navigateRef = useRef(navigate)
-  const setActiveConversationRef = useRef(setActiveConversation)
+  const activateConversationRef = useRef(activateConversation)
   const setChatTargetMessageIdRef = useRef(setChatTargetMessageId)
-  const setActiveRoomRef = useRef(setActiveRoom)
+  const activateRoomRef = useRef(activateRoom)
   const setRoomTargetMessageIdRef = useRef(setRoomTargetMessageId)
 
   useEffect(() => {
     navigateRef.current = navigate
-    setActiveConversationRef.current = setActiveConversation
+    activateConversationRef.current = activateConversation
     setChatTargetMessageIdRef.current = setChatTargetMessageId
-    setActiveRoomRef.current = setActiveRoom
+    activateRoomRef.current = activateRoom
     setRoomTargetMessageIdRef.current = setRoomTargetMessageId
-  }, [navigate, setActiveConversation, setChatTargetMessageId, setActiveRoom, setRoomTargetMessageId])
+  }, [navigate, activateConversation, setChatTargetMessageId, activateRoom, setRoomTargetMessageId])
 
   /**
    * Navigate to a 1:1 conversation.
@@ -75,7 +77,7 @@ export function useNavigateToTarget() {
     // Navigate via URL (this updates sidebarView via useRouteSync)
     void navigateRef.current(`/messages/${encodeURIComponent(conversationId)}`)
     // Also set active conversation in state
-    void setActiveConversationRef.current(conversationId)
+    void activateConversationRef.current(conversationId)
     void clearAllNotifications()
   }
 
@@ -85,8 +87,8 @@ export function useNavigateToTarget() {
    * Clears all active notifications.
    */
   const navigateToContact = (jid: string) => {
-    void setActiveConversationRef.current(null)
-    void setActiveRoomRef.current(null)
+    void activateConversationRef.current(null)
+    void activateRoomRef.current(null)
     void navigateRef.current(`/contacts/${encodeURIComponent(jid)}`)
     void clearAllNotifications()
   }
@@ -104,7 +106,7 @@ export function useNavigateToTarget() {
     // Navigate via URL (this updates sidebarView via useRouteSync)
     void navigateRef.current(`/rooms/${encodeURIComponent(roomJid)}`)
     // Also set active room in state
-    void setActiveRoomRef.current(roomJid)
+    void activateRoomRef.current(roomJid)
     void clearAllNotifications()
   }
 

@@ -4,9 +4,10 @@ import { MemoryRouter, useLocation } from 'react-router-dom'
 import { useEffect, type ReactNode } from 'react'
 
 // Mock the SDK hooks
-const mockSetActiveConversation = vi.fn()
+// Activation goes through the hydrating store actions (activateConversation/activateRoom)
+const mockActivateConversation = vi.fn()
 const mockAddConversation = vi.fn()
-const mockSetActiveRoom = vi.fn()
+const mockActivateRoom = vi.fn()
 const mockJoinRoom = vi.fn()
 const mockHasConversation = vi.fn()
 
@@ -18,11 +19,9 @@ vi.mock('@fluux/sdk', () => ({
     }),
   },
   useChat: () => ({
-    setActiveConversation: mockSetActiveConversation,
     addConversation: mockAddConversation,
   }),
   useRoom: () => ({
-    setActiveRoom: mockSetActiveRoom,
     joinRoom: mockJoinRoom,
   }),
   useRoster: () => ({
@@ -73,14 +72,14 @@ vi.mock('@fluux/sdk', () => ({
 vi.mock('@fluux/sdk/react', () => ({
   useChatStore: (selector: (state: unknown) => unknown) => {
     const state = {
-      setActiveConversation: mockSetActiveConversation,
+      activateConversation: mockActivateConversation,
       hasConversation: mockHasConversation,
     }
     return selector(state)
   },
   useRoomStore: (selector: (state: unknown) => unknown) => {
     const state = {
-      setActiveRoom: mockSetActiveRoom,
+      activateRoom: mockActivateRoom,
     }
     return selector(state)
   },
@@ -219,7 +218,7 @@ describe('useDeepLink', () => {
       await waitFor(() => {
         // Should navigate to messages URL
         expect(currentLocation.current.pathname).toBe('/messages/alice%40example.org')
-        expect(mockSetActiveConversation).toHaveBeenCalledWith('alice@example.org')
+        expect(mockActivateConversation).toHaveBeenCalledWith('alice@example.org')
       })
     })
 
@@ -243,7 +242,7 @@ describe('useDeepLink', () => {
       })
 
       expect(currentLocation.current.pathname).toBe('/messages/bob%40example.org')
-      expect(mockSetActiveConversation).toHaveBeenCalledWith('bob@example.org')
+      expect(mockActivateConversation).toHaveBeenCalledWith('bob@example.org')
     })
 
     test('creates new conversation if it does not exist', async () => {
@@ -326,7 +325,7 @@ describe('useDeepLink', () => {
       })
 
       expect(mockAddConversation).not.toHaveBeenCalled()
-      expect(mockSetActiveConversation).toHaveBeenCalledWith('alice@example.org')
+      expect(mockActivateConversation).toHaveBeenCalledWith('alice@example.org')
     })
 
     test('joins MUC room for join action', async () => {
@@ -355,7 +354,7 @@ describe('useDeepLink', () => {
       )
       // Should navigate to rooms URL
       expect(currentLocation.current.pathname).toBe('/rooms/room%40conference.example.org')
-      expect(mockSetActiveRoom).toHaveBeenCalledWith('room@conference.example.org')
+      expect(mockActivateRoom).toHaveBeenCalledWith('room@conference.example.org')
     })
 
     test('joins MUC room with custom nickname', async () => {
@@ -454,7 +453,7 @@ describe('useDeepLink', () => {
         urlCallback!(['http://example.com', 'invalid'])
       })
 
-      expect(mockSetActiveConversation).not.toHaveBeenCalled()
+      expect(mockActivateConversation).not.toHaveBeenCalled()
       expect(mockJoinRoom).not.toHaveBeenCalled()
     })
 
@@ -478,9 +477,9 @@ describe('useDeepLink', () => {
       })
 
       // Both should be processed
-      expect(mockSetActiveConversation).toHaveBeenCalledTimes(2)
-      expect(mockSetActiveConversation).toHaveBeenNthCalledWith(1, 'alice@example.org')
-      expect(mockSetActiveConversation).toHaveBeenNthCalledWith(2, 'bob@example.org')
+      expect(mockActivateConversation).toHaveBeenCalledTimes(2)
+      expect(mockActivateConversation).toHaveBeenNthCalledWith(1, 'alice@example.org')
+      expect(mockActivateConversation).toHaveBeenNthCalledWith(2, 'bob@example.org')
     })
 
     test('strips resource from JID', async () => {
@@ -502,7 +501,7 @@ describe('useDeepLink', () => {
         urlCallback!(['xmpp:alice@example.org/resource'])
       })
 
-      expect(mockSetActiveConversation).toHaveBeenCalledWith('alice@example.org')
+      expect(mockActivateConversation).toHaveBeenCalledWith('alice@example.org')
     })
   })
 })

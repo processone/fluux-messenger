@@ -24,8 +24,8 @@ const mockState = {
   archivedConversations: new Set<string>(),
   setActiveConversation: vi.fn(),
   setActiveRoom: vi.fn(),
-  chatLoadMessagesFromCache: vi.fn(() => Promise.resolve([])),
-  roomLoadMessagesFromCache: vi.fn(() => Promise.resolve([])),
+  chatLoadMessagesFromCache: vi.fn((_id?: string, _opts?: { limit?: number }) => Promise.resolve([])),
+  roomLoadMessagesFromCache: vi.fn((_jid?: string, _opts?: { limit?: number }) => Promise.resolve([])),
 }
 
 // Mock SDK - vanilla stores only
@@ -38,6 +38,11 @@ vi.mock('@fluux/sdk', () => ({
       archivedConversations: mockState.archivedConversations,
       setActiveConversation: mockState.setActiveConversation,
       loadMessagesFromCache: mockState.chatLoadMessagesFromCache,
+      // Mirrors the real store action: hydrate from cache, then set active
+      activateConversation: async (id: string | null) => {
+        if (id) await mockState.chatLoadMessagesFromCache(id, { limit: 100 })
+        mockState.setActiveConversation(id)
+      },
     }),
   },
   roomStore: {
@@ -51,6 +56,11 @@ vi.mock('@fluux/sdk', () => ({
       activeRoomJid: mockState.activeRoomJid,
       setActiveRoom: mockState.setActiveRoom,
       loadMessagesFromCache: mockState.roomLoadMessagesFromCache,
+      // Mirrors the real store action: hydrate from cache, then set active
+      activateRoom: async (roomJid: string | null) => {
+        if (roomJid) await mockState.roomLoadMessagesFromCache(roomJid, { limit: 100 })
+        mockState.setActiveRoom(roomJid)
+      },
     }),
   },
 }))
