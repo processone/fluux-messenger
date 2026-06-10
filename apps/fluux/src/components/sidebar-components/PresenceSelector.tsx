@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useClickOutside } from '@/hooks'
 import { usePresence, type PresenceStatus } from '@fluux/sdk'
-import { ChevronDown, Check, RefreshCw } from 'lucide-react'
+import { ChevronDown, Check } from 'lucide-react'
 import { TextInput } from '../ui/TextInput'
 import { Tooltip } from '../Tooltip'
 
@@ -203,67 +203,22 @@ export function PresenceSelector({ isOpen: isOpenProp, onOpenChange }: PresenceS
 
 interface StatusDisplayProps {
   status: string
-  reconnectTargetTime: number | null
-  reconnectAttempt: number
 }
 
-export function StatusDisplay({
-  status,
-  reconnectTargetTime,
-  reconnectAttempt
-}: StatusDisplayProps) {
+export function StatusDisplay({ status }: StatusDisplayProps) {
   const { t } = useTranslation()
-
-  // Local countdown state — only this component re-renders every second,
-  // not the entire Sidebar tree.
-  const [secondsLeft, setSecondsLeft] = useState<number | null>(null)
-
-  useEffect(() => {
-    if (!reconnectTargetTime) {
-      setSecondsLeft(null)
-      return
-    }
-    const update = () => {
-      const remaining = Math.max(0, Math.ceil((reconnectTargetTime - Date.now()) / 1000))
-      setSecondsLeft(remaining)
-    }
-    update()
-    const interval = setInterval(update, 1000)
-    return () => clearInterval(interval)
-  }, [reconnectTargetTime])
-
-  if (status === 'verifying') {
-    return (
-      <p className="text-xs text-fluux-yellow truncate flex items-center gap-1">
-        <RefreshCw className="size-3 animate-spin" />
-        {t('status.verifying')}
-      </p>
-    )
-  }
-
-  if (status === 'reconnecting') {
-    return (
-      <p className="text-xs text-fluux-yellow truncate flex items-center gap-1">
-        <RefreshCw className="size-3 animate-spin" />
-        {secondsLeft !== null
-          ? t('status.reconnectingIn', { seconds: secondsLeft, attempt: reconnectAttempt })
-          : t('status.reconnecting')}
-      </p>
-    )
-  }
-
-  if (status === 'connecting') {
-    return (
-      <p className="text-xs text-fluux-yellow truncate flex items-center gap-1">
-        <RefreshCw className="size-3 animate-spin" />
-        {t('status.connecting')}
-      </p>
-    )
-  }
 
   if (status === 'error') {
     return <p className="text-xs text-fluux-red truncate">{t('status.connectionError')}</p>
   }
 
-  return <p className="text-xs text-fluux-muted truncate">{t('status.disconnected')}</p>
+  if (status === 'disconnected') {
+    return <p className="text-xs text-fluux-muted truncate">{t('status.disconnected')}</p>
+  }
+
+  // Transient degraded states (reconnecting / connecting / verifying): the
+  // ConnectionBanner owns the animated details (spinner, retry countdown,
+  // attempt number, cancel action) — the chip just states the effective
+  // presence, statically, so the two surfaces never duplicate each other.
+  return <p className="text-xs text-fluux-muted truncate">{t('presence.offline')}</p>
 }

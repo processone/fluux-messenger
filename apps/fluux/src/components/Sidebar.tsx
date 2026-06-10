@@ -21,7 +21,6 @@ import { SettingsSidebar, type SettingsCategory, DEFAULT_SETTINGS_CATEGORY } fro
 import {
   MessageCircle,
   Hash,
-  X,
   ChevronDown,
   Settings,
   Plus,
@@ -85,26 +84,12 @@ export function Sidebar({ onSelectContact, onStartChat, onManageUser, adminCateg
   // (e.g., ownResources updates shouldn't re-render the entire sidebar)
   const jid = useConnectionStore((s) => s.jid)
   const status = useConnectionStore((s) => s.status)
-  const isVerifying = useConnectionStore((s) => s.isVerifying)
-
-  // Suppress brief 'verifying' flashes: only show verifying after a 2s delay.
-  const [showVerifying, setShowVerifying] = useState(false)
-  useEffect(() => {
-    if (isVerifying) {
-      const timer = setTimeout(() => setShowVerifying(true), 2000)
-      return () => clearTimeout(timer)
-    }
-    setShowVerifying(false)
-  }, [isVerifying])
-  const reconnectAttempt = useConnectionStore((s) => s.reconnectAttempt)
-  const reconnectTargetTime = useConnectionStore((s) => s.reconnectTargetTime)
   const ownAvatar = useConnectionStore((s) => s.ownAvatar)
   const ownNickname = useConnectionStore((s) => s.ownNickname)
   // Get methods from client (not from store)
   const { client } = useXMPP()
   const disconnect = (options?: { invalidateFastToken?: boolean }) =>
     client.disconnect(options)
-  const cancelReconnect = () => client.cancelReconnect()
   const isAdmin = useAdminStore((s) => s.isAdmin)
   // Use targeted store selectors instead of useChat()/useRoom() to avoid render loops.
   // Those hooks subscribe to many store properties (conversations array, messages, etc.)
@@ -127,9 +112,6 @@ export function Sidebar({ onSelectContact, onStartChat, onManageUser, adminCateg
   // trackSelectorChange). Helps pinpoint unstable selectors causing render loops.
   trackSelectorChange('Sidebar', 'jid', jid)
   trackSelectorChange('Sidebar', 'status', status)
-  trackSelectorChange('Sidebar', 'isVerifying', isVerifying)
-  trackSelectorChange('Sidebar', 'reconnectAttempt', reconnectAttempt)
-  trackSelectorChange('Sidebar', 'reconnectTargetTime', reconnectTargetTime)
   trackSelectorChange('Sidebar', 'ownAvatar', ownAvatar)
   trackSelectorChange('Sidebar', 'ownNickname', ownNickname)
   trackSelectorChange('Sidebar', 'isAdmin', isAdmin)
@@ -496,27 +478,17 @@ export function Sidebar({ onSelectContact, onStartChat, onManageUser, adminCateg
                   {ownNickname || jid?.split('@')[0]}
                 </button>
               </Tooltip>
-              {status === 'online' && !showVerifying ? (
+              {status === 'online' ? (
                 <PresenceSelector isOpen={showPresenceMenu} onOpenChange={(open) => open ? modalActions.open('presenceMenu') : modalActions.close('presenceMenu')} />
               ) : (
-                <StatusDisplay status={showVerifying ? 'verifying' : status} reconnectTargetTime={reconnectTargetTime} reconnectAttempt={reconnectAttempt} />
+                <StatusDisplay status={status} />
               )}
             </div>
-            {/* Menu button */}
-            {status === 'reconnecting' ? (
-              <Tooltip content={t('status.cancelReconnection')} position="top">
-                <button
-                  onClick={cancelReconnect}
-                  className="p-2 text-fluux-muted hover:text-fluux-red rounded hover:bg-fluux-hover flex-shrink-0"
-                >
-                  <X className="size-4" />
-                </button>
-              </Tooltip>
-            ) : (
-              <UserMenu onLogout={(shouldCleanLocalData) =>
-                performLogout({ disconnect, jid, shouldCleanLocalData })
-              } />
-            )}
+            {/* Menu button — always available, including while reconnecting.
+                Cancelling the reconnection lives in the ConnectionBanner. */}
+            <UserMenu onLogout={(shouldCleanLocalData) =>
+              performLogout({ disconnect, jid, shouldCleanLocalData })
+            } />
           </div>
         </div>
       </div>
