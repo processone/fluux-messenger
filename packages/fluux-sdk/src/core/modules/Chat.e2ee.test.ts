@@ -1847,6 +1847,54 @@ describe('Chat E2EE wiring', () => {
         .find((el) => el.attrs?.for === 'urn:xmpp:reply:0')
       expect(replyFallback).toBeDefined()
     })
+
+    it('shifts OOB fallback offsets when a cleartext reply to an encrypted message carries an attachment', async () => {
+      const emptyManager = new E2EEManager({
+        storage: new InMemoryStorageBackend(),
+        xmpp: stubXmppPrimitives(async () => {}),
+        account: { jid: 'me@example.com' },
+      })
+      const { deps } = makeDeps({
+        jid: 'me@example.com',
+        manager: emptyManager,
+        captureStanza: (el) => captured.push(el),
+      })
+      const plainChat = new Chat(deps, stubMAM())
+
+      const attachmentUrl = 'https://upload.example.com/file.bin'
+      await plainChat.sendMessage(
+        'bob@example.com',
+        'sure thing',
+        'chat',
+        { id: 'orig', to: 'bob@example.com', fallback: { author: 'Bob', body: 'the code is 4471', fromEncrypted: true } },
+        undefined,
+        { url: attachmentUrl, name: 'file.bin', mediaType: 'application/octet-stream' }, // unencrypted attachment → cleartext send
+      )
+
+      const sent = captured[0]
+      const body = sent.getChild('body')?.text() ?? ''
+      // Quote stripped, but caption and URL preserved.
+      expect(body).not.toContain('4471')
+      expect(body).not.toContain('> Bob wrote:')
+      expect(body).toContain('sure thing')
+      expect(body).toContain(attachmentUrl)
+
+      // Reply fallback dropped, reply reference kept.
+      expect(
+        sent.getChildren('fallback', 'urn:xmpp:fallback:0').find((el) => el.attrs?.for === 'urn:xmpp:reply:0'),
+      ).toBeUndefined()
+      expect(sent.getChild('reply', 'urn:xmpp:reply:0')).toBeDefined()
+
+      // OOB fallback offsets must still point exactly at the URL region of the
+      // (now quote-stripped) body — proves the offset shift is correct.
+      const oobFallback = sent
+        .getChildren('fallback', 'urn:xmpp:fallback:0')
+        .find((el) => el.attrs?.for === 'jabber:x:oob')
+      expect(oobFallback).toBeDefined()
+      const start = Number(oobFallback!.getChild('body')?.attrs.start)
+      const end = Number(oobFallback!.getChild('body')?.attrs.end)
+      expect(body.slice(start, end)).toBe(attachmentUrl)
+    })
   })
 
   describe('outbound encryption — sendEasterEgg', () => {
