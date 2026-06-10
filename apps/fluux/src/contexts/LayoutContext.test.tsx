@@ -51,6 +51,7 @@ describe('LayoutContext', () => {
         presenceMenu: false,
         quickChat: false,
         addContact: false,
+        joinRoom: false,
       })
     })
 

@@ -13,6 +13,7 @@ describe('useModalManager', () => {
         presenceMenu: false,
         quickChat: false,
         addContact: false,
+        joinRoom: false,
       })
     })
 
@@ -136,6 +137,7 @@ describe('useModalManager', () => {
         presenceMenu: false,
         quickChat: false,
         addContact: false,
+        joinRoom: false,
       })
       expect(result.current.isAnyOpen).toBe(false)
     })
@@ -293,6 +295,38 @@ describe('useModalManager', () => {
         result.current.actions.close('quickChat')
       })
       expect(result.current.isAnyOpen).toBe(false)
+    })
+  })
+
+  describe('joinRoom modal', () => {
+    it('should open and close the joinRoom modal', () => {
+      const { result } = renderHook(() => useModalManager())
+
+      act(() => {
+        result.current.actions.open('joinRoom')
+      })
+      expect(result.current.state.joinRoom).toBe(true)
+
+      act(() => {
+        result.current.actions.close('joinRoom')
+      })
+      expect(result.current.state.joinRoom).toBe(false)
+    })
+
+    it('should close joinRoom via closeTopmost', () => {
+      const { result } = renderHook(() => useModalManager())
+
+      act(() => {
+        result.current.actions.open('joinRoom')
+      })
+
+      let closed: boolean | undefined
+      act(() => {
+        closed = result.current.actions.closeTopmost()
+      })
+
+      expect(closed).toBe(true)
+      expect(result.current.state.joinRoom).toBe(false)
     })
   })
 })

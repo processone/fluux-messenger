@@ -19,6 +19,7 @@ export type ModalName =
   | 'presenceMenu'
   | 'quickChat'
   | 'addContact'
+  | 'joinRoom'
 
 /**
  * State for all managed modals
@@ -29,6 +30,7 @@ export interface ModalState {
   presenceMenu: boolean
   quickChat: boolean
   addContact: boolean
+  joinRoom: boolean
 }
 
 /**
@@ -65,6 +67,7 @@ const initialState: ModalState = {
   presenceMenu: false,
   quickChat: false,
   addContact: false,
+  joinRoom: false,
 }
 
 /** Escape priority order - first open modal in this list gets closed on Escape */
@@ -74,6 +77,7 @@ const ESCAPE_PRIORITY: ModalName[] = [
   'presenceMenu',
   'quickChat',
   'addContact',
+  'joinRoom',
 ]
 
 export function useModalManager(): UseModalManagerReturn {
