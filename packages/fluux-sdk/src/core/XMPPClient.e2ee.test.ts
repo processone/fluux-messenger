@@ -567,4 +567,61 @@ describe('XMPPClient.retryPendingDecrypts()', () => {
       expect(ghost).toBeUndefined()
     })
   })
+
+  describe('deferred-decrypt of an encrypted correction', () => {
+    // End-to-end counterpart to the MAM-side fix: a message corrected while
+    // the key was locked is stored with the sender's hint body, isEdited=true,
+    // and — crucially — the CORRECTION stanza's ciphertext as encryptedPayload
+    // (stamped by applyModifications / emitUnresolved*). retryPendingDecrypts
+    // must surface the corrected plaintext, not leave it frozen on the hint,
+    // while preserving the edit markers it must not own.
+    const CORRECTED_TEXT = 'corrected after unlock'
+    const CORRECTION_STANZA =
+      `<message from="bob@example.com/web" to="me@example.com" type="chat" id="corr-1">` +
+      `<replace xmlns="urn:xmpp:message-correct:0" id="orig-1"/>` +
+      `<body>[OpenPGP-encrypted message]</body>` +
+      `<plain xmlns="urn:fluux:e2ee-dummy:0">${Buffer.from(CORRECTED_TEXT).toString('base64')}</plain>` +
+      `<encryption xmlns="urn:xmpp:eme:0" namespace="urn:fluux:e2ee-dummy:0"/>` +
+      `</message>`
+
+    it('recovers the corrected text and keeps the edit markers', async () => {
+      // Decrypt now succeeds with a verified signature (key unlocked / peer
+      // key cached), so the retry is not deferred again for re-verification.
+      vi.spyOn(manager, 'decryptArchive').mockResolvedValue({
+        plaintext: new TextEncoder().encode(CORRECTED_TEXT),
+        senderDevice: { jid: 'bob@example.com', deviceId: 'test' },
+        securityContext: { protocolId: 'dummy-plaintext', trust: 'verified' },
+      })
+      chatStore.getState().addConversation({
+        id: 'bob@example.com',
+        name: 'Bob',
+        type: 'chat',
+        lastMessage: undefined,
+        unreadCount: 0,
+      })
+      // The target message as it sits after a deferred correction was applied:
+      // edited, hint body, carrying the correction's ciphertext for retry.
+      chatStore.getState().addMessage({
+        type: 'chat',
+        id: 'orig-1',
+        conversationId: 'bob@example.com',
+        from: 'bob@example.com',
+        body: '[OpenPGP-encrypted message]',
+        timestamp: new Date(),
+        isOutgoing: false,
+        isEdited: true,
+        originalBody: 'the original text',
+        encryptedPayload: CORRECTION_STANZA,
+      })
+
+      await xmppClient.retryPendingDecrypts()
+
+      const msg = (chatStore.getState().messages.get('bob@example.com') ?? []).find((m) => m.id === 'orig-1')
+      expect(msg?.body).toBe(CORRECTED_TEXT)
+      // The retry owns the body, not the edit state: those must survive.
+      expect(msg?.isEdited).toBe(true)
+      expect(msg?.originalBody).toBe('the original text')
+      expect(msg?.encryptedPayload).toBeUndefined()
+    })
+  })
 })
