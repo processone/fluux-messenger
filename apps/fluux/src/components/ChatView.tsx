@@ -1011,6 +1011,15 @@ export const MessageInput = memo(function MessageInput({
       }
     : null
 
+  // Show a banner notice when the reply will be sent in cleartext but the
+  // quoted message arrived encrypted — the SDK strips the quote in that case.
+  // `keyLocked` is excluded: the send is blocked until unlock, then encrypts.
+  const replyQuoteHidden =
+    !!replyingTo &&
+    encryptionState.kind !== 'encrypted' &&
+    encryptionState.kind !== 'keyLocked' &&
+    isEncryptedSource(replyingTo)
+
   // Convert Message to EditInfo for the composer
   const editInfo: EditInfo | null = editingMessage
     ? {
@@ -1119,6 +1128,7 @@ export const MessageInput = memo(function MessageInput({
         placeholder={t('chat.messageTo', { name: conversationName })}
         replyingTo={replyInfo}
         onCancelReply={onCancelReply}
+        replyQuoteHidden={replyQuoteHidden}
         editingMessage={editInfo}
         onCancelEdit={onCancelEdit}
         onSendCorrection={handleCorrection}
