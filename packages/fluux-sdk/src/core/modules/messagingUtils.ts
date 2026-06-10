@@ -11,6 +11,7 @@
 
 import { Element, xml } from '@xmpp/client'
 import { getBareJid } from '../jid'
+import { readStashedEncryptedPayload } from '../e2ee/stanzaDecrypt'
 import {
   NS_DELAY,
   NS_REPLY,
@@ -426,6 +427,17 @@ export interface CorrectionResult {
   attachment?: FileAttachment
   /** Accumulated stanza-IDs from correction stanzas (for reply lookup) */
   correctionStanzaIds?: string[]
+  /**
+   * Serialized encrypted payload of the CORRECTION stanza when its new body
+   * could not be decrypted at apply time (plugin not yet registered / key
+   * locked). Callers must stamp this onto the target message — overwriting any
+   * payload left by the original — so {@link XMPPClient.retryPendingDecrypts}
+   * recovers the corrected text, not the stale original. `undefined` when the
+   * correction was decrypted inline (or is cleartext): callers should then
+   * clear the target's `encryptedPayload`, so a previously-stashed original
+   * isn't re-decrypted on top of the applied correction.
+   */
+  encryptedPayload?: string
 }
 
 /**
@@ -448,5 +460,9 @@ export function applyCorrection(
     isEdited: true,
     originalBody,
     ...(parsed.attachment && { attachment: parsed.attachment }),
+    // Always present (string when the correction is still encrypted, undefined
+    // otherwise) so callers can unconditionally stamp/clear the target's
+    // encryptedPayload — see CorrectionResult.encryptedPayload.
+    encryptedPayload: readStashedEncryptedPayload(messageEl),
   }
 }

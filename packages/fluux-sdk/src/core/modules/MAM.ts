@@ -1458,6 +1458,10 @@ export class MAM extends BaseModule {
         if (correctionData.attachment) {
           target.attachment = correctionData.attachment
         }
+        // Carry the correction's ciphertext onto the target (or clear a stale
+        // original one) so a deferred retry recovers the corrected text, not
+        // the original. See CorrectionResult.encryptedPayload.
+        target.encryptedPayload = correctionData.encryptedPayload
         // Track the correction's stanza-id so replies referencing it can resolve
         if (correction.correctionStanzaId) {
           target.correctionStanzaIds = [...(target.correctionStanzaIds ?? []), correction.correctionStanzaId]
@@ -1558,6 +1562,9 @@ export class MAM extends BaseModule {
           originalBody: correctionData.originalBody,
           ...(correctionData.attachment ? { attachment: correctionData.attachment } : {}),
           ...(correctionStanzaIds ? { correctionStanzaIds } : {}),
+          // Stamp/clear the correction's ciphertext so a deferred retry
+          // recovers the corrected text, not the stale original.
+          encryptedPayload: correctionData.encryptedPayload,
         },
       })
     }
@@ -1619,6 +1626,9 @@ export class MAM extends BaseModule {
           originalBody: correctionData.originalBody,
           ...(correctionData.attachment ? { attachment: correctionData.attachment } : {}),
           ...(correctionStanzaIds ? { correctionStanzaIds } : {}),
+          // Stamp/clear the correction's ciphertext so a deferred retry
+          // recovers the corrected text, not the stale original.
+          encryptedPayload: correctionData.encryptedPayload,
         },
       })
     }

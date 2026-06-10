@@ -79,6 +79,9 @@ interface TestHarness {
    *  feed archive entries through the collector before the query returns. */
   resolveNextIQ: (fin: Element) => void
   iqPending: () => Promise<void>
+  /** Every emitSDK(event, payload) call, in order — lets tests assert on
+   *  modifications emitted against messages not present in the queried page. */
+  emitted: { event: string; payload: Record<string, unknown> }[]
 }
 
 function makeHarness(options: {
@@ -86,6 +89,7 @@ function makeHarness(options: {
   manager: E2EEManager
 }): TestHarness {
   const collectors = new Map<string, (stanza: Element) => void>()
+  const emitted: { event: string; payload: Record<string, unknown> }[] = []
   let pendingResolve: ((value: Element) => void) | null = null
   let pendingReady: (() => void) | null = null
   const readyPromise = new Promise<void>((r) => {
@@ -102,7 +106,9 @@ function makeHarness(options: {
       }),
     getCurrentJid: () => options.jid,
     emit: () => {},
-    emitSDK: () => {},
+    emitSDK: ((event: string, payload: Record<string, unknown>) => {
+      emitted.push({ event, payload })
+    }) as ModuleDependencies['emitSDK'],
     getXmpp: () => null,
     getE2EEManager: () => options.manager,
     registerMAMCollector: (queryId, collector) => {
@@ -115,6 +121,7 @@ function makeHarness(options: {
   return {
     mam,
     collectors,
+    emitted,
     iqPending: () => readyPromise,
     resolveNextIQ: (fin: Element) => {
       if (!pendingResolve) throw new Error('No pending sendIQ')
@@ -131,6 +138,7 @@ function makeHarness(options: {
  */
 function makeHarnessNoManager(jid: string): TestHarness {
   const collectors = new Map<string, (stanza: Element) => void>()
+  const emitted: { event: string; payload: Record<string, unknown> }[] = []
   let pendingResolve: ((value: Element) => void) | null = null
   let pendingReady: (() => void) | null = null
   const readyPromise = new Promise<void>((r) => {
@@ -147,7 +155,9 @@ function makeHarnessNoManager(jid: string): TestHarness {
       }),
     getCurrentJid: () => jid,
     emit: () => {},
-    emitSDK: () => {},
+    emitSDK: ((event: string, payload: Record<string, unknown>) => {
+      emitted.push({ event, payload })
+    }) as ModuleDependencies['emitSDK'],
     getXmpp: () => null,
     getE2EEManager: () => null,
     registerMAMCollector: (queryId, collector) => {
@@ -160,6 +170,7 @@ function makeHarnessNoManager(jid: string): TestHarness {
   return {
     mam,
     collectors,
+    emitted,
     iqPending: () => readyPromise,
     resolveNextIQ: (fin: Element) => {
       if (!pendingResolve) throw new Error('No pending sendIQ')
@@ -493,6 +504,150 @@ describe('MAM E2EE wiring', () => {
       expect(msg.body).toBe('just a plain message')
       expect(msg.encryptedPayload).toBeUndefined()
       expect(msg.unsupportedEncryption).toBeUndefined()
+    })
+  })
+
+  describe('deferred-decrypt of encrypted corrections (XEP-0308)', () => {
+    // Regression guard for the production bug (lost encrypted correction):
+    //
+    // A correction whose <replace> rides in CLEARTEXT but whose new body is
+    // encrypted arrives via MAM before the OpenPGP plugin is registered (or
+    // while the key is locked). decrypt is deferred, so collectModification
+    // captures the sender's hint body and applyModifications stamps it onto
+    // the target. Historically the correction stanza's stashed ciphertext was
+    // dropped, so retryPendingDecrypts — which only re-decrypts a stored
+    // message's OWN encryptedPayload — had nothing to recover: the corrected
+    // bubble stayed frozen on "[OpenPGP-encrypted message]" forever.
+    //
+    // The fix: the applied correction must carry the CORRECTION stanza's
+    // encryptedPayload onto the target (overwriting the original's), so the
+    // deferred retry decrypts the corrected text — not the stale original.
+    it("propagates the correction's encrypted payload onto the target so retry recovers the corrected text", async () => {
+      // Decrypt is unavailable at archive time (key locked / plugin late).
+      vi.spyOn(manager, 'decryptArchive').mockRejectedValue(new Error('key locked'))
+
+      const ORIGINAL_CT = Buffer.from('the original secret').toString('base64')
+      const CORRECTED_CT = Buffer.from('the corrected secret').toString('base64')
+
+      // Original encrypted message, archived first.
+      const original = xml(
+        'message',
+        { from: PEER + '/res', to: ME, type: 'chat', id: 'orig-1' },
+        xml('origin-id', { xmlns: 'urn:xmpp:sid:0', id: 'orig-1' }),
+        xml('body', {}, '[OpenPGP-encrypted message]'),
+        xml('plain', { xmlns: 'urn:fluux:e2ee-dummy:0' }, ORIGINAL_CT),
+      )
+      // XEP-0308 correction of orig-1 — cleartext <replace>, encrypted body.
+      const correction = xml(
+        'message',
+        { from: PEER + '/res', to: ME, type: 'chat', id: 'corr-1' },
+        xml('replace', { xmlns: 'urn:xmpp:message-correct:0', id: 'orig-1' }),
+        xml('origin-id', { xmlns: 'urn:xmpp:sid:0', id: 'corr-1' }),
+        xml('body', {}, '[OpenPGP-encrypted message]'),
+        xml('plain', { xmlns: 'urn:fluux:e2ee-dummy:0' }, CORRECTED_CT),
+      )
+
+      const resultPromise = harness.mam.queryArchive({ with: PEER, max: 10 })
+      await harness.iqPending()
+      const [queryId, collector] = [...harness.collectors.entries()][0]
+      for (const [archiveId, forwardedMessage] of [
+        ['arch-orig', original],
+        ['arch-corr', correction],
+      ] as const) {
+        const entry = buildMAMResult({ archiveId, forwardedMessage })
+        entry.getChild('result', 'urn:xmpp:mam:2')!.attrs.queryid = queryId
+        collector(entry)
+      }
+      harness.resolveNextIQ(
+        xml('iq', {}, xml('fin', { xmlns: 'urn:xmpp:mam:2', complete: 'true' })),
+      )
+      const result = await resultPromise
+
+      // The correction is consumed (not its own message); only the target remains.
+      expect(result.messages).toHaveLength(1)
+      const target = result.messages[0]
+      expect(target.id).toBe('orig-1')
+      // Correction was applied: hint body + edited marker.
+      expect(target.isEdited).toBe(true)
+      expect(target.body).toBe('[OpenPGP-encrypted message]')
+      // The retained ciphertext must be the CORRECTION's, so the deferred
+      // retry decrypts the corrected text — never the stale original.
+      expect(target.encryptedPayload).toBeDefined()
+      expect(target.encryptedPayload).toContain(CORRECTED_CT)
+      expect(target.encryptedPayload).not.toContain(ORIGINAL_CT)
+    })
+
+    it('carries the correction payload on the emitted 1:1 update when the target is not in the page', async () => {
+      // The exact production scenario: the corrected message was synced in an
+      // earlier page (or lives only in the durable cache), so the correction
+      // resolves to nothing in this batch and rides out on the
+      // emitUnresolvedChatModifications update instead of applyModifications.
+      vi.spyOn(manager, 'decryptArchive').mockRejectedValue(new Error('key locked'))
+      const ORPHAN_CT = Buffer.from('the corrected secret').toString('base64')
+
+      const correction = xml(
+        'message',
+        { from: PEER + '/res', to: ME, type: 'chat', id: 'orphan-corr-1' },
+        xml('replace', { xmlns: 'urn:xmpp:message-correct:0', id: 'cached-orig-1' }),
+        xml('body', {}, '[OpenPGP-encrypted message]'),
+        xml('plain', { xmlns: 'urn:fluux:e2ee-dummy:0' }, ORPHAN_CT),
+      )
+
+      const resultPromise = harness.mam.queryArchive({ with: PEER, max: 10 })
+      await harness.iqPending()
+      const [queryId, collector] = [...harness.collectors.entries()][0]
+      const entry = buildMAMResult({ archiveId: 'arch-orphan', forwardedMessage: correction })
+      entry.getChild('result', 'urn:xmpp:mam:2')!.attrs.queryid = queryId
+      collector(entry)
+      harness.resolveNextIQ(
+        xml('iq', {}, xml('fin', { xmlns: 'urn:xmpp:mam:2', complete: 'true' })),
+      )
+      await resultPromise
+
+      const update = harness.emitted.find(
+        (e) => e.event === 'chat:message-updated' && e.payload.messageId === 'cached-orig-1',
+      )
+      expect(update).toBeDefined()
+      const updates = update!.payload.updates as Record<string, unknown>
+      expect(updates.isEdited).toBe(true)
+      expect(updates.encryptedPayload).toContain(ORPHAN_CT)
+    })
+
+    it('carries the correction payload on the emitted MUC update when the target is not in the page', async () => {
+      // Room counterpart, unresolved path: the correction's target was synced
+      // in an earlier page, so applyModifications can't find it and the fix
+      // must ride out on the emitUnresolvedRoomModifications update instead.
+      vi.spyOn(manager, 'decryptArchive').mockRejectedValue(new Error('key locked'))
+      const ROOM = 'room@conference.example.com'
+      const ROOM_CT = Buffer.from('room corrected secret').toString('base64')
+
+      const correction = xml(
+        'message',
+        { from: ROOM + '/Bob', type: 'groupchat', id: 'rcorr-1' },
+        xml('replace', { xmlns: 'urn:xmpp:message-correct:0', id: 'room-orig-1' }),
+        xml('occupant-id', { xmlns: 'urn:xmpp:occupant-id:0', id: 'occ-bob' }),
+        xml('body', {}, '[OpenPGP-encrypted message]'),
+        xml('plain', { xmlns: 'urn:fluux:e2ee-dummy:0' }, ROOM_CT),
+      )
+
+      const resultPromise = harness.mam.queryRoomArchive({ roomJid: ROOM, max: 10 })
+      await harness.iqPending()
+      const [queryId, collector] = [...harness.collectors.entries()][0]
+      const entry = buildMAMResult({ archiveId: 'rarch-corr', forwardedMessage: correction })
+      entry.getChild('result', 'urn:xmpp:mam:2')!.attrs.queryid = queryId
+      collector(entry)
+      harness.resolveNextIQ(
+        xml('iq', {}, xml('fin', { xmlns: 'urn:xmpp:mam:2', complete: 'true' })),
+      )
+      await resultPromise
+
+      const update = harness.emitted.find(
+        (e) => e.event === 'room:message-updated' && e.payload.messageId === 'room-orig-1',
+      )
+      expect(update).toBeDefined()
+      const updates = update!.payload.updates as Record<string, unknown>
+      expect(updates.isEdited).toBe(true)
+      expect(updates.encryptedPayload).toContain(ROOM_CT)
     })
   })
 
