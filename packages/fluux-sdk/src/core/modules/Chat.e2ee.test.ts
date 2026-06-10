@@ -94,6 +94,20 @@ class FakeOpenPGPPlugin implements E2EEPlugin {
   async getDeviceTrust(_peer: BareJID, _deviceId: string): Promise<TrustState> { return 'verified' }
 }
 
+/**
+ * Dummy plugin variant whose decrypt always rejects the signature. Used to
+ * exercise the rejected-signature inbound path: decryptStanzaInPlace maps a
+ * thrown `signature-failed` error to `trust: 'rejected'`.
+ */
+class RejectingDummyPlugin extends DummyPlaintextPlugin {
+  override async decrypt(
+    _handle: ConversationHandle,
+    _payload: EncryptedPayload,
+  ): Promise<DecryptResult> {
+    throw new E2EEPluginError('permanent', 'signature-failed', 'forged signature')
+  }
+}
+
 function stubXmppPrimitives(sendStanza: (el: Element) => Promise<void>): XMPPPrimitives {
   return {
     sendStanza: async (data) => {
@@ -1584,6 +1598,63 @@ describe('Chat E2EE wiring', () => {
       expect(sent.getChildren('fallback', 'urn:xmpp:fallback:0')).toHaveLength(0)
       // Bodiless reaction still gets a store hint for MAM archival.
       expect(sent.getChild('store', 'urn:xmpp:hints')).toBeDefined()
+    })
+  })
+
+  describe('inbound encrypted reaction — rejected signature', () => {
+    /** Replay an outgoing encrypted stanza as if it arrived from Bob. */
+    function asInbound(outgoing: Element, id: string): Element {
+      return xml(
+        'message',
+        { from: 'bob@example.com/r', to: 'me@example.com', type: 'chat', id },
+        ...outgoing.children.filter((c) => typeof c === 'string' || c.name !== 'active'),
+      )
+    }
+
+    async function rejectingChat(): Promise<{ chat: Chat; sdkEmitted: unknown[] }> {
+      const rejectingManager = new E2EEManager({
+        storage: new InMemoryStorageBackend(),
+        xmpp: stubXmppPrimitives(async () => {}),
+        account: { jid: 'me@example.com' },
+      })
+      await rejectingManager.register(new RejectingDummyPlugin())
+      const built = makeDeps({
+        jid: 'me@example.com',
+        manager: rejectingManager,
+        captureStanza: () => {},
+      })
+      return { chat: new Chat(built.deps, stubMAM()), sdkEmitted: built.sdkEmitted }
+    }
+
+    it('drops a forged (rejected-signature) bodiless reaction instead of showing a ghost message', async () => {
+      // Build the on-wire encrypted reaction with the working dummy plugin.
+      await chat.sendReaction('bob@example.com', 'orig-id', ['👍'])
+      const inbound = asInbound(captured[0], 'm-react-rejected')
+
+      const { chat: rxChat, sdkEmitted: rxEmitted } = await rejectingChat()
+      rxChat.handle(inbound)
+      await new Promise((r) => setTimeout(r, 0))
+
+      // A forged reaction must NOT be applied and must NOT surface as a bubble.
+      expect(rxEmitted.find((e) => (e as { event: string }).event === 'chat:reactions')).toBeUndefined()
+      expect(rxEmitted.find((e) => (e as { event: string }).event === 'chat:message')).toBeUndefined()
+    })
+
+    it('still surfaces a rejected-signature *message* (which has a body) as [Message rejected]', async () => {
+      // Regression guard: a real message carries a fallback <body>, so a rejected
+      // signature must still warn the user — only bodiless signals are dropped.
+      await chat.sendMessage('bob@example.com', 'hello bob')
+      const inbound = asInbound(captured[0], 'm-msg-rejected')
+
+      const { chat: rxChat, sdkEmitted: rxEmitted } = await rejectingChat()
+      rxChat.handle(inbound)
+      await new Promise((r) => setTimeout(r, 0))
+
+      const msgEvt = rxEmitted.find((e) => (e as { event: string }).event === 'chat:message') as
+        | { payload: { message: { body: string } } }
+        | undefined
+      expect(msgEvt).toBeDefined()
+      expect(msgEvt!.payload.message.body).toBe('[Message rejected: invalid signature]')
     })
   })
 

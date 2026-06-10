@@ -36,6 +36,18 @@ import {
   NS_EASTER_EGG,
 } from '../namespaces'
 
+/**
+ * Client-side placeholder body stamped onto a stanza whose decrypt was
+ * deferred (key locked / plugin not ready). It doubles as the carrier that
+ * keeps the stanza persisted so {@link retryPendingDecrypts} can re-attempt
+ * later — `retryPendingDecrypts` matches on this exact string to tell a
+ * deferred bodiless-signal placeholder apart from a real message.
+ */
+export const COULD_NOT_DECRYPT_BODY = '[Encrypted message: could not decrypt]'
+
+/** Client-side placeholder body for a message whose signature was rejected. */
+export const MESSAGE_REJECTED_BODY = '[Message rejected: invalid signature]'
+
 // Elements permitted inside a decrypted payload envelope. Anything not
 // in this set is dropped to prevent a malicious sender from injecting
 // stanza children (e.g. <delay/>, <origin-id/>) that downstream parsers
@@ -235,30 +247,40 @@ export async function decryptStanzaInPlace(
 
   if (failureReason !== null) {
     const isRejection = securityContext?.trust === 'rejected'
+    const existingBody = stanza.getChild('body')
+    const isBodilessSignal = isRejection && !existingBody
     manager
       .getDiagnosticLogger()
       .warn(
-        `decrypt failed from ${getDomain(senderPeer)} (${isRejection ? 'rejected: invalid signature' : 'retryable'}): ${failureReason}`,
+        `decrypt failed from ${getDomain(senderPeer)} (${
+          isBodilessSignal
+            ? 'rejected: invalid signature — bodiless signal dropped'
+            : isRejection
+              ? 'rejected: invalid signature'
+              : 'retryable'
+        }): ${failureReason}`,
       )
     if (isRejection) {
-      // Signature rejection: suppress any sender-supplied body hint and
-      // replace with a client-side placeholder. Do NOT stash for deferred
-      // retry — the rejection is final.
-      const existingBody = stanza.getChild('body')
+      // Signature rejection: the rejection is final, so do NOT stash for
+      // deferred retry.
       if (existingBody) {
-        existingBody.children = ['[Message rejected: invalid signature]']
-      } else {
-        stanza.children.push(
-          xml('body', {}, '[Message rejected: invalid signature]'),
-        )
+        // A real message carries a fallback <body> — replace it with a
+        // client-side placeholder so the user is warned the message could
+        // not be trusted.
+        existingBody.children = [MESSAGE_REJECTED_BODY]
       }
+      // Otherwise this is a bodiless signal stanza (XEP-0444 reaction,
+      // XEP-0424 retraction, fastening): there is no content to show and a
+      // forged signature can't be trusted, so drop it entirely. Synthesizing
+      // a placeholder body would surface a forged reaction as a ghost text
+      // message. The warn above records the drop in the E2EE events log.
     } else {
       // Decrypt failure (key locked, plugin missing, etc.): stash for
       // deferred retry and keep the sender's fallback body hint.
       stashPayload(stanza, originalStanzaXml)
       if (!stanza.getChild('body')) {
         stanza.children.push(
-          xml('body', {}, '[Encrypted message: could not decrypt]'),
+          xml('body', {}, COULD_NOT_DECRYPT_BODY),
         )
       }
       securityContext = {

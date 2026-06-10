@@ -48,6 +48,7 @@ import { XMPPClient } from './XMPPClient'
 import { chatStore } from '../stores/chatStore'
 import {
   E2EEManager,
+  E2EEPluginError,
   InMemoryStorageBackend,
   type XMPPPrimitives,
 } from './e2ee'
@@ -565,6 +566,73 @@ describe('XMPPClient.retryPendingDecrypts()', () => {
       // The placeholder must not linger.
       const ghost = messages.find((m) => m.id === 'retract-ghost')
       expect(ghost).toBeUndefined()
+    })
+
+    it('drops the placeholder for a deferred reaction whose signature is rejected on retry', async () => {
+      // A bodiless reaction stashed while the key was locked. On unlock the
+      // signature turns out to be invalid (forged) — we must not surface a
+      // ghost "[Message rejected]" bubble for a reaction the user can't see.
+      vi.spyOn(manager, 'decryptArchive').mockRejectedValue(
+        new E2EEPluginError('permanent', 'signature-failed', 'forged signature'),
+      )
+
+      chatStore.getState().addConversation({
+        id: 'bob@example.com',
+        name: 'Bob',
+        type: 'chat',
+        lastMessage: undefined,
+        unreadCount: 0,
+      })
+      chatStore.getState().addMessage({
+        type: 'chat',
+        id: 'reaction-ghost',
+        conversationId: 'bob@example.com',
+        from: 'bob@example.com',
+        body: '[Encrypted message: could not decrypt]',
+        timestamp: new Date(),
+        isOutgoing: false,
+        encryptedPayload: DUMMY_PAYLOAD_XML,
+      })
+
+      await xmppClient.retryPendingDecrypts()
+
+      const messages = chatStore.getState().messages.get('bob@example.com') ?? []
+      const ghost = messages.find((m) => m.id === 'reaction-ghost')
+      expect(ghost).toBeUndefined()
+    })
+
+    it('marks a deferred *message* whose signature is rejected on retry as [Message rejected]', async () => {
+      // Regression guard: a real message placeholder (fallback body, not the
+      // "could not decrypt" marker) must still warn the user, not vanish.
+      vi.spyOn(manager, 'decryptArchive').mockRejectedValue(
+        new E2EEPluginError('permanent', 'signature-failed', 'forged signature'),
+      )
+
+      chatStore.getState().addConversation({
+        id: 'bob@example.com',
+        name: 'Bob',
+        type: 'chat',
+        lastMessage: undefined,
+        unreadCount: 0,
+      })
+      chatStore.getState().addMessage({
+        type: 'chat',
+        id: 'msg-pending',
+        conversationId: 'bob@example.com',
+        from: 'bob@example.com',
+        body: '[encrypted message]',
+        timestamp: new Date(),
+        isOutgoing: false,
+        encryptedPayload: DUMMY_PAYLOAD_XML,
+      })
+
+      await xmppClient.retryPendingDecrypts()
+
+      const messages = chatStore.getState().messages.get('bob@example.com') ?? []
+      const msg = messages.find((m) => m.id === 'msg-pending')
+      expect(msg).toBeDefined()
+      expect(msg?.body).toBe('[Message rejected: invalid signature]')
+      expect(msg?.encryptedPayload).toBeUndefined()
     })
   })
 
