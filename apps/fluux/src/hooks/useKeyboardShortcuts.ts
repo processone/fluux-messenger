@@ -1,6 +1,5 @@
 import { useEffect, useRef } from 'react'
 import { chatStore, roomStore } from '@fluux/sdk'
-import { useChatStore, useRoomStore } from '@fluux/sdk/react'
 import { useSettingsStore } from '../stores/settingsStore'
 
 export interface ShortcutDefinition {
@@ -144,11 +143,28 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions): Shor
     }
     : null
 
-  // NOTE: Use direct store subscriptions instead of useChat()/useRoom() hooks.
+  // NOTE: Use the vanilla stores instead of useChat()/useRoom() hooks.
   // Those hooks subscribe to conversations/rooms which change during MAM loading,
-  // causing unnecessary re-renders. We only need the setters as stable references.
-  const setActiveConversation = useChatStore((s) => s.setActiveConversation)
-  const setActiveRoom = useRoomStore((s) => s.setActiveRoom)
+  // causing unnecessary re-renders. getState() reads create no subscriptions.
+  //
+  // Activation must hydrate the entity's message history from the IndexedDB
+  // cache BEFORE the raw store setter runs — only live messages are kept in
+  // memory, so activating without hydration renders an empty view until a
+  // manual scroll triggers a history load, and the unread marker is computed
+  // without historical context. This mirrors the sidebar click path
+  // (ConversationList) and the SDK's useChatActions()/useRoomActions().
+  const setActiveConversation = async (id: string | null) => {
+    if (id) {
+      await chatStore.getState().loadMessagesFromCache(id, { limit: 100 })
+    }
+    chatStore.getState().setActiveConversation(id)
+  }
+  const setActiveRoom = async (roomJid: string | null) => {
+    if (roomJid) {
+      await roomStore.getState().loadMessagesFromCache(roomJid, { limit: 100 })
+    }
+    roomStore.getState().setActiveRoom(roomJid)
+  }
 
   // Navigate to next conversation/room with unread messages
   // Conversations are checked first (priority for direct messages), then rooms sorted by recent activity
@@ -171,8 +187,8 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions): Shor
       c.unreadCount > 0 && c.id !== activeConversationId
     )
     if (unreadConv) {
-      setActiveRoom(null)
-      setActiveConversation(unreadConv.id)
+      void setActiveRoom(null)
+      void setActiveConversation(unreadConv.id)
       navigateToMessages(unreadConv.id)
       return
     }
@@ -192,8 +208,8 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions): Shor
       .sort((a, b) => b.timestamp - a.timestamp) // Most recent first
 
     if (unreadRooms.length > 0) {
-      setActiveConversation(null)
-      setActiveRoom(unreadRooms[0].room.jid)
+      void setActiveConversation(null)
+      void setActiveRoom(unreadRooms[0].room.jid)
       navigateToRooms(unreadRooms[0].room.jid)
     }
   }
@@ -216,8 +232,8 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions): Shor
       if (conversations.length === 0) return
       const currentIndex = conversations.findIndex(c => c.id === activeConversationId)
       if (currentIndex <= 0) return // Already at top or not found
-      setActiveRoom(null)
-      setActiveConversation(conversations[currentIndex - 1].id)
+      void setActiveRoom(null)
+      void setActiveConversation(conversations[currentIndex - 1].id)
     } else if (sidebarView === 'rooms') {
       // Read current state without subscribing
       // Use allRooms() (sorted by lastInteractedAt) filtered to joined — matches sidebar visual order
@@ -228,8 +244,8 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions): Shor
       if (joinedRooms.length === 0) return
       const currentIndex = joinedRooms.findIndex(r => r.jid === activeRoomJid)
       if (currentIndex <= 0) return // Already at top or not found
-      setActiveConversation(null)
-      setActiveRoom(joinedRooms[currentIndex - 1].jid)
+      void setActiveConversation(null)
+      void setActiveRoom(joinedRooms[currentIndex - 1].jid)
     }
   }
 
@@ -252,11 +268,11 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions): Shor
       const currentIndex = conversations.findIndex(c => c.id === activeConversationId)
       // If not found (-1), select first; if at end, stay there
       if (currentIndex < 0) {
-        setActiveRoom(null)
-        setActiveConversation(conversations[0].id)
+        void setActiveRoom(null)
+        void setActiveConversation(conversations[0].id)
       } else if (currentIndex < conversations.length - 1) {
-        setActiveRoom(null)
-        setActiveConversation(conversations[currentIndex + 1].id)
+        void setActiveRoom(null)
+        void setActiveConversation(conversations[currentIndex + 1].id)
       }
       // At bottom: do nothing
     } else if (sidebarView === 'rooms') {
@@ -270,11 +286,11 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions): Shor
       const currentIndex = joinedRooms.findIndex(r => r.jid === activeRoomJid)
       // If not found (-1), select first; if at end, stay there
       if (currentIndex < 0) {
-        setActiveConversation(null)
-        setActiveRoom(joinedRooms[0].jid)
+        void setActiveConversation(null)
+        void setActiveRoom(joinedRooms[0].jid)
       } else if (currentIndex < joinedRooms.length - 1) {
-        setActiveConversation(null)
-        setActiveRoom(joinedRooms[currentIndex + 1].jid)
+        void setActiveConversation(null)
+        void setActiveRoom(joinedRooms[currentIndex + 1].jid)
       }
       // At bottom: do nothing
     }
