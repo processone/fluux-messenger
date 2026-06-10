@@ -428,6 +428,7 @@
         "attachment": "Bijlage",
         "removeAttachment": "Bijlage verwijderen",
         "reply": "Beantwoorden",
+        "replyQuoteHiddenEncrypted": "Citaat verborgen — origineel was versleuteld",
         "forwardMessage": "Bericht doorsturen (binnenkort)",
         "moreReactions": "Meer reacties",
         "reactionOthers": "{{count}} anderen",

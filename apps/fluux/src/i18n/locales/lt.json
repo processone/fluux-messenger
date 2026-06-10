@@ -428,6 +428,7 @@
         "attachment": "Priedas",
         "removeAttachment": "Pašalinti priedą",
         "reply": "Atsakyti",
+        "replyQuoteHiddenEncrypted": "Citata paslėpta — originalas buvo užšifruotas",
         "forwardMessage": "Persiųsti žinutę (greitai)",
         "moreReactions": "Daugiau reakcijų",
         "reactionOthers": "{{count}} kitų",

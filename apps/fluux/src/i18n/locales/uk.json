@@ -428,6 +428,7 @@
         "attachment": "Вкладення",
         "removeAttachment": "Видалити вкладення",
         "reply": "Відповісти",
+        "replyQuoteHiddenEncrypted": "Цитату приховано — оригінал був зашифрований",
         "forwardMessage": "Переслати повідомлення (незабаром)",
         "moreReactions": "Більше реакцій",
         "reactionOthers": "{{count}} інших",

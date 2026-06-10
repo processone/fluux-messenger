@@ -428,6 +428,7 @@
         "attachment": "Ceangaltán",
         "removeAttachment": "Bain ceangaltán",
         "reply": "Freagair",
+        "replyQuoteHiddenEncrypted": "Athfhriotal i bhfolach — bhí an bunteachtaireacht criptithe",
         "forwardMessage": "Seol ar aghaidh (ag teacht go luath)",
         "moreReactions": "Níos mó frithghníomhartha",
         "reactionOthers": "{{count}} eile",

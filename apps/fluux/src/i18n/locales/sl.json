@@ -430,6 +430,7 @@
         "attachment": "Priloga",
         "removeAttachment": "Odstrani prilogo",
         "reply": "Odgovori",
+        "replyQuoteHiddenEncrypted": "Citat skrit — izvirnik je bil šifriran",
         "forwardMessage": "Posreduj sporočilo (kmalu)",
         "moreReactions": "Več odzivov",
         "reactionOthers": "{{count}} drugih",

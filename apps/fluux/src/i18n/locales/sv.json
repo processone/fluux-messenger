@@ -428,6 +428,7 @@
         "attachment": "Bilaga",
         "removeAttachment": "Ta bort bilaga",
         "reply": "Svara",
+        "replyQuoteHiddenEncrypted": "Citat dolt — originalet var krypterat",
         "forwardMessage": "Vidarebefordra meddelande (kommer snart)",
         "moreReactions": "Fler reaktioner",
         "reactionOthers": "{{count}} andra",

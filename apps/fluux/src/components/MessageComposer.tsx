@@ -83,6 +83,8 @@ interface MessageComposerProps {
   replyingTo?: ReplyInfo | null
   /** Callback when reply is cancelled */
   onCancelReply?: () => void
+  /** When true, the reply quote is hidden because the source message was encrypted and this reply is plaintext */
+  replyQuoteHidden?: boolean
   /** Edit info if editing a message */
   editingMessage?: EditInfo | null
   /** Callback when edit is cancelled */
@@ -160,6 +162,7 @@ export function MessageComposer({
   placeholder,
   replyingTo,
   onCancelReply,
+  replyQuoteHidden,
   editingMessage,
   onCancelEdit,
   onSendCorrection,
@@ -681,9 +684,16 @@ export function MessageComposer({
             <p className="text-xs font-medium text-fluux-brand">
               Replying to {replyingTo.senderName}
             </p>
-            <p className="text-xs text-fluux-muted truncate">
-              {replyingTo.body}
-            </p>
+            {replyQuoteHidden ? (
+              <p className="text-xs text-fluux-muted italic truncate flex items-center gap-1">
+                <Lock aria-hidden="true" className="size-3 flex-shrink-0" />
+                {t('chat.replyQuoteHiddenEncrypted')}
+              </p>
+            ) : (
+              <p className="text-xs text-fluux-muted truncate">
+                {replyingTo.body}
+              </p>
+            )}
           </div>
           <button
             type="button"

@@ -625,6 +625,70 @@ export class Chat extends BaseModule {
   }
 
   /**
+   * Privacy guard (E2EE): a XEP-0461 reply quote is built from the *displayed*
+   * body of the message being replied to. If that source message arrived
+   * encrypted, its body is decrypted plaintext, and the outgoing `<body/>`
+   * now carries that plaintext as a `> … wrote:` quote.
+   *
+   * On the ENCRYPTED send path the quote rode safely inside the `<payload/>`
+   * (the outer body was replaced with a generic fallback by
+   * {@link applyE2EEToOutboundChat}). On the CLEARTEXT path it would leak the
+   * original message on the wire, in server MAM, and via carbons. This strips
+   * the quote block out of the outer body and removes the reply fallback
+   * marker, while keeping the `<reply/>` reference so threading still works.
+   *
+   * `fallbackEnd` is the length of the leading quote block in `fullBody`
+   * (`[0, fallbackEnd)`). OOB fallback offsets, if present, shift left by the
+   * same amount so a supporting client still hides the correct URL region.
+   */
+  private stripEncryptedReplyQuoteFromCleartext(
+    children: Element[],
+    ctx: {
+      fullBody: string
+      fallbackEnd: number
+      hasAttachment: boolean
+      oobFallbackStart: number
+      oobFallbackEnd: number
+    },
+  ): void {
+    const { fullBody, fallbackEnd, hasAttachment, oobFallbackStart, oobFallbackEnd } = ctx
+    if (fallbackEnd <= 0) return
+
+    const strippedBody = fullBody.slice(fallbackEnd)
+    const bodyIdx = children.findIndex(
+      (c): c is Element => typeof c !== 'string' && (c as Element).name === 'body',
+    )
+    if (bodyIdx >= 0) children[bodyIdx] = xml('body', {}, strippedBody)
+
+    const replyFallbackIdx = children.findIndex(
+      (c) =>
+        typeof c !== 'string' &&
+        (c as Element).name === 'fallback' &&
+        (c as Element).attrs?.for === NS_REPLY,
+    )
+    if (replyFallbackIdx >= 0) children.splice(replyFallbackIdx, 1)
+
+    if (hasAttachment) {
+      const oobFallbackIdx = children.findIndex(
+        (c) =>
+          typeof c !== 'string' &&
+          (c as Element).name === 'fallback' &&
+          (c as Element).attrs?.for === NS_OOB,
+      )
+      if (oobFallbackIdx >= 0) {
+        children[oobFallbackIdx] = xml(
+          'fallback',
+          { xmlns: NS_FALLBACK, for: NS_OOB },
+          xml('body', {
+            start: String(oobFallbackStart - fallbackEnd),
+            end: String(oobFallbackEnd - fallbackEnd),
+          }),
+        )
+      }
+    }
+  }
+
+  /**
    * Keys of stanza extension children that should ride inside the OpenPGP
    * `<payload/>` when E2EE is on, per the XEP-0420 §9-aligned policy
    * documented in docs/ENCRYPTION.md. Each key is `"<name>|<xmlns>"` so
@@ -697,7 +761,7 @@ export class Chat extends BaseModule {
     to: string,
     body: string,
     type: 'chat' | 'groupchat' = 'chat',
-    replyTo?: { id: string; to?: string; fallback?: { author: string; body: string } },
+    replyTo?: { id: string; to?: string; fallback?: { author: string; body: string; fromEncrypted?: boolean } },
     references?: MentionReference[],
     attachment?: FileAttachment
   ): Promise<string> {
@@ -828,6 +892,19 @@ export class Chat extends BaseModule {
             Chat.E2EE_PROTECTED_CHILD_KEYS,
           )
         : undefined
+
+    // Never let a quote decrypted from an encrypted message ride in a
+    // cleartext body. Only relevant for 1:1 chat (MUC has no E2EE) and only
+    // when the send actually went out unencrypted (no security context).
+    if (type === 'chat' && !outgoingSecurityContext && replyTo?.fallback?.fromEncrypted) {
+      this.stripEncryptedReplyQuoteFromCleartext(children, {
+        fullBody,
+        fallbackEnd,
+        hasAttachment: !!attachment,
+        oobFallbackStart,
+        oobFallbackEnd,
+      })
+    }
 
     // Guard: an encrypted attachment's aesgcm:// OOB URL carries the AES
     // key. If stanza-level E2EE didn't move that element into the payload,

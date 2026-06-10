@@ -428,6 +428,7 @@
         "attachment": "Vedhæftning",
         "removeAttachment": "Fjern vedhæftning",
         "reply": "Svar",
+        "replyQuoteHiddenEncrypted": "Citat skjult — originalen var krypteret",
         "forwardMessage": "Videresend besked (kommer snart)",
         "moreReactions": "Flere reaktioner",
         "reactionOthers": "{{count}} andre",

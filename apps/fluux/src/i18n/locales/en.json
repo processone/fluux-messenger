@@ -428,6 +428,7 @@
         "attachment": "Attachment",
         "removeAttachment": "Remove attachment",
         "reply": "Reply",
+        "replyQuoteHiddenEncrypted": "Quote hidden — original was encrypted",
         "forwardMessage": "Forward message (coming soon)",
         "moreReactions": "More reactions",
         "reactionOthers": "{{count}} others",

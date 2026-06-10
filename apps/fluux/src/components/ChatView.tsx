@@ -20,6 +20,7 @@ import { ChristmasAnimation } from './ChristmasAnimation'
 import { ChatHeader } from './ChatHeader'
 import { MessageComposer, type ReplyInfo, type EditInfo, type MessageComposerHandle, type PendingAttachment } from './MessageComposer'
 import { findLastEditableMessage, findLastEditableMessageId } from '@/utils/messageUtils'
+import { isEncryptedSource } from '@/utils/replyEncryption'
 import { useExpandedMessagesStore } from '@/stores/expandedMessagesStore'
 import { ConfirmDialog } from './ConfirmDialog'
 
@@ -964,7 +965,7 @@ export const MessageInput = memo(function MessageInput({
   onCancelReply: () => void
   editingMessage: Message | null
   onCancelEdit: () => void
-  sendMessage: (to: string, body: string, type?: 'chat' | 'groupchat', replyTo?: { id: string; to?: string; fallback?: { author: string; body: string } }, attachment?: import('@fluux/sdk').FileAttachment) => Promise<string>
+  sendMessage: (to: string, body: string, type?: 'chat' | 'groupchat', replyTo?: { id: string; to?: string; fallback?: { author: string; body: string; fromEncrypted?: boolean } }, attachment?: import('@fluux/sdk').FileAttachment) => Promise<string>
   sendCorrection: (conversationId: string, messageId: string, newBody: string, attachment?: import('@fluux/sdk').FileAttachment) => Promise<void>
   retractMessage: (conversationId: string, messageId: string) => Promise<void>
   sendChatState: (to: string, state: import('@fluux/sdk').ChatStateNotification, type?: 'chat' | 'groupchat') => Promise<void>
@@ -1010,6 +1011,19 @@ export const MessageInput = memo(function MessageInput({
       }
     : null
 
+  // Show a banner notice when the reply will be sent in cleartext but the
+  // quoted message arrived encrypted — the SDK strips the quote in that case.
+  // Excluded kinds are those where the reply will NOT go out as cleartext:
+  // `encrypted` encrypts; `keyLocked` blocks until unlock then encrypts;
+  // `blocked` throws on encrypt (never sent); `checking` is an in-flight probe.
+  const replyQuoteHidden =
+    !!replyingTo &&
+    encryptionState.kind !== 'encrypted' &&
+    encryptionState.kind !== 'keyLocked' &&
+    encryptionState.kind !== 'blocked' &&
+    encryptionState.kind !== 'checking' &&
+    isEncryptedSource(replyingTo)
+
   // Convert Message to EditInfo for the composer
   const editInfo: EditInfo | null = editingMessage
     ? {
@@ -1051,13 +1065,13 @@ export const MessageInput = memo(function MessageInput({
 
     // Include reply info if replying to a message (with XEP-0428 fallback for compatibility)
     // SDK resolves stanzaId vs id for the protocol reference (XEP-0461)
-    let replyTo: { id: string; to: string; fallback?: { author: string; body: string } } | undefined
+    let replyTo: { id: string; to: string; fallback?: { author: string; body: string; fromEncrypted?: boolean } } | undefined
     if (replyingTo) {
       const authorName = contactsByJid.get(replyingTo.from.split('/')[0])?.name || replyingTo.from.split('@')[0]
       replyTo = {
         id: replyingTo.id,
         to: replyingTo.from,
-        fallback: { author: authorName, body: replyingTo.body }
+        fallback: { author: authorName, body: replyingTo.body, fromEncrypted: isEncryptedSource(replyingTo) }
       }
     }
 
@@ -1118,6 +1132,7 @@ export const MessageInput = memo(function MessageInput({
         placeholder={t('chat.messageTo', { name: conversationName })}
         replyingTo={replyInfo}
         onCancelReply={onCancelReply}
+        replyQuoteHidden={replyQuoteHidden}
         editingMessage={editInfo}
         onCancelEdit={onCancelEdit}
         onSendCorrection={handleCorrection}
