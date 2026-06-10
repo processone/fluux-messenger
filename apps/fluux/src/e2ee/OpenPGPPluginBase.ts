@@ -210,6 +210,14 @@ export interface DecryptOutput {
   signatureVerified: boolean
   signerFingerprint: string | null
   signaturePresent: boolean
+  /**
+   * Set when signature verification failed specifically because the
+   * signature's creation time is ahead of the verifier's clock (beyond the
+   * skew tolerance) — i.e. a *transient* clock-skew failure that may verify
+   * once clocks converge, NOT a genuine bad signature. Lets the decrypt path
+   * mark the message retryable rather than permanently rejected.
+   */
+  signatureNotYetValid?: boolean
 }
 
 export interface CertValidation {
@@ -1706,6 +1714,17 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     }
     // Case A: sender key available but signature did not verify.
     if (senderPublicArmored && !output.signatureVerified) {
+      // A clock-skew "not yet valid" failure is transient — the signature may
+      // verify once clocks converge. Throw a distinct transient code so the
+      // decrypt pipeline stashes it for retry (retryPendingDecrypts) instead
+      // of issuing a permanent, sticky rejection. Any other failure is genuine.
+      if (output.signatureNotYetValid) {
+        throw new E2EEPluginError(
+          'transient',
+          'signature-not-yet-valid',
+          `${this.pluginName()}: signcrypt signature creation time is ahead of our clock beyond tolerance — will retry`,
+        )
+      }
       throw new E2EEPluginError(
         'permanent',
         'signature-failed',

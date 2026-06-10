@@ -618,6 +618,81 @@ describe('WebOpenPGPPlugin', () => {
       expect(decrypted.signaturePresent).toBe(true)
       expect(decrypted.signatureVerified).toBe(false)
     })
+
+    it('flags a beyond-tolerance future signature as not-yet-valid (transient, retryable)', async () => {
+      // A signature dated past the skew window fails to verify, but the cause
+      // is a clock difference, not a bad key — so it must be marked transient
+      // so the upper layer can retry it rather than reject it permanently.
+      const plugin = new TestableWebOpenPGPPlugin()
+      const { ctx } = makeCtx('alice@example.com')
+      setSessionPassphrase('hunter2-strong-passphrase')
+      await plugin.init(ctx)
+      const ownBundle = await plugin.callEnsureKeyMaterial('alice@example.com')
+
+      const { generateKey, createMessage, encrypt, readKey } = await import('openpgp')
+      const { privateKey: senderPriv } = await generateKey({
+        type: 'ecc',
+        curve: 'curve25519Legacy',
+        userIDs: [{ name: 'xmpp:bob@example.com' }],
+        format: 'object',
+      })
+      const twoHoursAhead = new Date(Date.now() + 2 * 60 * 60 * 1000)
+      const ciphertext = await encrypt({
+        message: await createMessage({ text: 'too far in the future' }),
+        encryptionKeys: await readKey({ armoredKey: ownBundle.publicArmored }),
+        signingKeys: senderPriv,
+        date: twoHoursAhead,
+        format: 'armored',
+      })
+
+      const decrypted = await plugin.callDecryptWithOwnKey(
+        'bob@example.com',
+        ciphertext,
+        senderPriv.toPublic().armor(),
+      )
+
+      expect(decrypted.signatureVerified).toBe(false)
+      expect(decrypted.signatureNotYetValid).toBe(true)
+    })
+
+    it('does NOT flag a genuine key mismatch as not-yet-valid (permanent)', async () => {
+      // Signature made by one key, verified against a different key → a real
+      // failure that must stay permanent (not retried, not self-healing).
+      const plugin = new TestableWebOpenPGPPlugin()
+      const { ctx } = makeCtx('alice@example.com')
+      setSessionPassphrase('hunter2-strong-passphrase')
+      await plugin.init(ctx)
+      const ownBundle = await plugin.callEnsureKeyMaterial('alice@example.com')
+
+      const { generateKey, createMessage, encrypt, readKey } = await import('openpgp')
+      const { privateKey: actualSigner } = await generateKey({
+        type: 'ecc',
+        curve: 'curve25519Legacy',
+        userIDs: [{ name: 'xmpp:bob@example.com' }],
+        format: 'object',
+      })
+      const { privateKey: wrongKey } = await generateKey({
+        type: 'ecc',
+        curve: 'curve25519Legacy',
+        userIDs: [{ name: 'xmpp:mallory@example.com' }],
+        format: 'object',
+      })
+      const ciphertext = await encrypt({
+        message: await createMessage({ text: 'signed by the wrong key' }),
+        encryptionKeys: await readKey({ armoredKey: ownBundle.publicArmored }),
+        signingKeys: actualSigner,
+        format: 'armored',
+      })
+
+      const decrypted = await plugin.callDecryptWithOwnKey(
+        'bob@example.com',
+        ciphertext,
+        wrongKey.toPublic().armor(), // verify against a different key
+      )
+
+      expect(decrypted.signatureVerified).toBe(false)
+      expect(decrypted.signatureNotYetValid).toBeFalsy()
+    })
   })
 
   describe('validateCert', () => {
@@ -1862,6 +1937,44 @@ describe('WebOpenPGPPlugin', () => {
       await expect(bob.plugin.decrypt(bobHandle, claim)).rejects.toMatchObject({
         code: 'envelope-stale',
       })
+    })
+
+    it('throws a transient (retryable) error for a clock-skew signature failure, not a permanent rejection', async () => {
+      // When the sender key is present but the signature fails *because its
+      // creation time is ahead of our clock* (beyond tolerance), the failure
+      // is transient — decrypt() must throw `signature-not-yet-valid`
+      // (transient) so the pipeline stashes it for retry, NOT
+      // `signature-failed` (permanent) which renders a sticky red rejection.
+      const { alice, bob } = await buildCrossPublishedPair()
+      await alice.plugin.probePeer('bob@example.com')
+      const handle = await alice.plugin.openConversation({ kind: 'direct', peer: 'bob@example.com' })
+      const payload = await alice.plugin.encrypt(handle, encodeBody('clock skew message'))
+
+      clearSessionPassphrase()
+      setSessionPassphrase('bob-strong-pp')
+      await bob.plugin.probePeer('alice@example.com') // alice's key cached → Case A path
+      const bobHandle = await bob.plugin.openConversation({ kind: 'direct', peer: 'alice@example.com' })
+      const claim = bob.plugin.tryClaimInbound(payload.stanzaElement)!
+
+      // Keep the real decryption (valid envelope) but report a not-yet-valid
+      // signature, exactly as the crypto layer would under clock skew.
+      const target = bob.testable as unknown as {
+        decryptWithOwnKey: (...a: unknown[]) => Promise<Record<string, unknown>>
+      }
+      const real = target.decryptWithOwnKey.bind(target)
+      const spy = vi
+        .spyOn(target, 'decryptWithOwnKey')
+        .mockImplementation(async (...args) => ({
+          ...(await real(...args)),
+          signatureVerified: false,
+          signatureNotYetValid: true,
+          signerFingerprint: null,
+        }))
+
+      await expect(
+        bob.plugin.decrypt(bobHandle, claim, { messageId: 'm-skew' }),
+      ).rejects.toMatchObject({ kind: 'transient', code: 'signature-not-yet-valid' })
+      spy.mockRestore()
     })
 
     describe('pending signature verification buffer', () => {

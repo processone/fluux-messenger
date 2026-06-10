@@ -231,6 +231,7 @@ export class WebOpenPGPPlugin extends OpenPGPPluginBase {
 
     let signatureVerified = false
     let signerFingerprint: string | null = null
+    let signatureNotYetValid = false
     const signaturePresent = signatures.length > 0
 
     if (signaturePresent && senderPublicArmored) {
@@ -243,6 +244,12 @@ export class WebOpenPGPPlugin extends OpenPGPPluginBase {
         signerFingerprint = verificationKeys[0].getFingerprint()
       } catch (err) {
         signatureVerified = false
+        const reason = err instanceof Error ? err.message : String(err)
+        // A failure caused purely by the signature being dated ahead of our
+        // clock (beyond the skew tolerance) is transient — clocks may
+        // converge. Flag it so the decrypt path retries instead of issuing a
+        // permanent rejection. Any other reason (bad key, tamper) is genuine.
+        signatureNotYetValid = /creation time is in the future|not yet valid/i.test(reason)
         // DIAGNOSTIC: surface why openpgp.js rejected the signature — the
         // message names the cause (time-window vs EdDSA/MPI vs key lookup).
         // The signature creation time is pulled separately so this log can
@@ -257,9 +264,7 @@ export class WebOpenPGPPlugin extends OpenPGPPluginBase {
         this.requireCtx().logger.warn(
           `WebOpenPGPPlugin: signature verify failed (signer ${
             verificationKeys[0]?.getFingerprint?.() ?? '?'
-          }, sigCreated ${sigCreated}, now ${new Date().toISOString()}): ${
-            err instanceof Error ? err.message : String(err)
-          }`,
+          }, sigCreated ${sigCreated}, now ${new Date().toISOString()}): ${reason}`,
         )
       }
     }
@@ -269,6 +274,7 @@ export class WebOpenPGPPlugin extends OpenPGPPluginBase {
       signatureVerified,
       signerFingerprint,
       signaturePresent,
+      ...(signatureNotYetValid && { signatureNotYetValid }),
     }
   }
 
