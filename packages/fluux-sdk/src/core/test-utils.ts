@@ -646,6 +646,7 @@ export const createMockStores = (): MockStoreBindings => ({
     setTyping: vi.fn(),
     updateReactions: vi.fn(),
     updateMessage: vi.fn(),
+    removeMessage: vi.fn(),
     getMessage: vi.fn().mockReturnValue(undefined),
     triggerAnimation: vi.fn(),
     // XEP-0313: MAM support

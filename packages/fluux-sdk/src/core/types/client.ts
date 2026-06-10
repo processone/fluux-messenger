@@ -83,6 +83,7 @@ export interface StoreBindings {
     setTyping: (conversationId: string, jid: string, isTyping: boolean) => void
     updateReactions: (conversationId: string, messageId: string, reactorJid: string, emojis: string[]) => void
     updateMessage: (conversationId: string, messageId: string, updates: Partial<Message>) => void
+    removeMessage: (conversationId: string, messageId: string) => void
     getMessage: (conversationId: string, messageId: string) => Message | undefined
     triggerAnimation?: (conversationId: string, animation: string) => void
     // XEP-0313: MAM support
