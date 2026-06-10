@@ -152,11 +152,9 @@ export function useChatActive() {
     [client]
   )
 
+  // Hydrates the message cache before marking active (see chatStore.activateConversation)
   const setActiveConversation = useCallback(async (id: string | null) => {
-    if (id) {
-      await chatStore.getState().loadMessagesFromCache(id, { limit: 100 })
-    }
-    chatStore.getState().setActiveConversation(id)
+    await chatStore.getState().activateConversation(id)
   }, [])
 
   const addConversation = useCallback((conv: Conversation) => {

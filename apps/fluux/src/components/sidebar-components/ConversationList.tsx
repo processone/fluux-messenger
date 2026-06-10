@@ -50,10 +50,7 @@ export function ConversationList() {
   // allRooms, roomsWithUnreadCount, etc.) that useRoom() would pull in. During sync,
   // rapid room updates would cause 500+ renders/second through useRoom().
   const setActiveRoom = useCallback(async (roomJid: string | null) => {
-    if (roomJid) {
-      await roomStore.getState().loadMessagesFromCache(roomJid, { limit: 100 })
-    }
-    roomStore.getState().setActiveRoom(roomJid)
+    await roomStore.getState().activateRoom(roomJid)
   }, [])
   const getRoom = useCallback(
     (roomJid: string) => roomStore.getState().rooms.get(roomJid),
@@ -156,10 +153,7 @@ export function ArchiveList() {
     unarchiveConversation,
   } = useChat()
   const setActiveRoom = useCallback(async (roomJid: string | null) => {
-    if (roomJid) {
-      await roomStore.getState().loadMessagesFromCache(roomJid, { limit: 100 })
-    }
-    roomStore.getState().setActiveRoom(roomJid)
+    await roomStore.getState().activateRoom(roomJid)
   }, [])
   const getRoom = useCallback(
     (roomJid: string) => roomStore.getState().rooms.get(roomJid),

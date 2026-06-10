@@ -204,16 +204,9 @@ export function useChat() {
     [client]
   )
 
-  // Load cache BEFORE setting active conversation so that setActiveConversation() in the
-  // store calculates firstNewMessageId with the full message history (cached + live messages).
-  // Without this, conversations that only have live messages (received while viewing another
-  // conversation) would show only new messages without historical context above the marker.
+  // Hydrates the message cache before marking active (see chatStore.activateConversation)
   const setActiveConversation = useCallback(async (id: string | null) => {
-    if (id) {
-      // Always load from cache first - deduplication is handled by loadMessagesFromCache
-      await chatStore.getState().loadMessagesFromCache(id, { limit: 100 })
-    }
-    chatStore.getState().setActiveConversation(id)
+    await chatStore.getState().activateConversation(id)
   }, [])
 
   const addConversation = useCallback((conv: Conversation) => {

@@ -146,25 +146,12 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions): Shor
   // NOTE: Use the vanilla stores instead of useChat()/useRoom() hooks.
   // Those hooks subscribe to conversations/rooms which change during MAM loading,
   // causing unnecessary re-renders. getState() reads create no subscriptions.
-  //
-  // Activation must hydrate the entity's message history from the IndexedDB
-  // cache BEFORE the raw store setter runs — only live messages are kept in
-  // memory, so activating without hydration renders an empty view until a
-  // manual scroll triggers a history load, and the unread marker is computed
-  // without historical context. This mirrors the sidebar click path
-  // (ConversationList) and the SDK's useChatActions()/useRoomActions().
-  const setActiveConversation = async (id: string | null) => {
-    if (id) {
-      await chatStore.getState().loadMessagesFromCache(id, { limit: 100 })
-    }
-    chatStore.getState().setActiveConversation(id)
-  }
-  const setActiveRoom = async (roomJid: string | null) => {
-    if (roomJid) {
-      await roomStore.getState().loadMessagesFromCache(roomJid, { limit: 100 })
-    }
-    roomStore.getState().setActiveRoom(roomJid)
-  }
+  // activateConversation/activateRoom hydrate the message cache before setting
+  // active, so the switched-to view never renders empty.
+  const setActiveConversation = (id: string | null) =>
+    chatStore.getState().activateConversation(id)
+  const setActiveRoom = (roomJid: string | null) =>
+    roomStore.getState().activateRoom(roomJid)
 
   // Navigate to next conversation/room with unread messages
   // Conversations are checked first (priority for direct messages), then rooms sorted by recent activity

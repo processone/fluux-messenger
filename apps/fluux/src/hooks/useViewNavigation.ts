@@ -62,6 +62,10 @@ export function useViewNavigation(selectedContact: Contact | null): ViewNavigati
   // causing unnecessary re-renders of components using this hook (e.g., ChatLayout).
   const setActiveConversation = useChatStore((s) => s.setActiveConversation)
   const setActiveRoom = useRoomStore((s) => s.setActiveRoom)
+  // Hydrating activation for non-null restores: loads the message cache before
+  // setting active so the restored view doesn't render empty (see SDK stores)
+  const activateConversation = useChatStore((s) => s.activateConversation)
+  const activateRoom = useRoomStore((s) => s.activateRoom)
 
   // Get routing functions from useRouteSync
   const {
@@ -188,7 +192,7 @@ export function useViewNavigation(selectedContact: Contact | null): ViewNavigati
         })())
         // Set store state AND navigate to URL
         // Always set conversation (even null) to clear any leftover archived conversation
-        setActiveConversation(targetConversation ?? null)
+        void activateConversation(targetConversation ?? null)
         navigateToMessages(targetConversation ?? undefined, { replace: true })
         break
       }
@@ -204,7 +208,7 @@ export function useViewNavigation(selectedContact: Contact | null): ViewNavigati
         })())
         // Set store state AND navigate to URL
         // Always set room (even null) to ensure clean state
-        setActiveRoom(targetRoom ?? null)
+        void activateRoom(targetRoom ?? null)
         navigateToRooms(targetRoom ?? undefined, { replace: true })
         break
       }
@@ -236,7 +240,7 @@ export function useViewNavigation(selectedContact: Contact | null): ViewNavigati
         })()
         // Set store state AND navigate to URL
         // Always set conversation (even null) to clear any leftover non-archived conversation
-        setActiveConversation(targetArchive ?? null)
+        void activateConversation(targetArchive ?? null)
         navigateToArchive(targetArchive, { replace: true })
         break
       }
@@ -264,7 +268,7 @@ export function useViewNavigation(selectedContact: Contact | null): ViewNavigati
         break
     }
   }, [sidebarView, selectedContact, lastMessagesConversation, lastRoomsRoom, lastDirectoryContact,
-      setActiveConversation, setActiveRoom,
+      setActiveConversation, setActiveRoom, activateConversation, activateRoom,
       navigateToMessages, navigateToRooms, navigateToContacts, navigateToArchive,
       navigateToEvents, navigateToAdmin, navigateToSettings, navigateToSearch])
 

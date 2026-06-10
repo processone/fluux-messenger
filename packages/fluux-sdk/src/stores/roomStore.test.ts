@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { roomStore } from './roomStore'
 import type { Room, RoomMessage } from '../core/types'
 import { getLocalPart } from '../core/jid'
@@ -1597,6 +1597,78 @@ describe('roomStore', () => {
       roomStore.getState().setActiveRoom(null)
 
       expect(roomStore.getState().activeRoomJid).toBeNull()
+    })
+  })
+
+  describe('activateRoom', () => {
+    afterEach(() => {
+      // Restore the factory default so later tests get a clean resolved-[] mock
+      vi.mocked(messageCache.getRoomMessages).mockReset()
+      vi.mocked(messageCache.getRoomMessages).mockResolvedValue([])
+    })
+
+    it('should hydrate messages from cache before marking the room active', async () => {
+      const roomJid = 'test@conference.example.com'
+      roomStore.getState().addRoom(createRoom(roomJid))
+      const cached: RoomMessage = {
+        type: 'groupchat',
+        id: 'cached-1',
+        roomJid,
+        from: `${roomJid}/alice`,
+        nick: 'alice',
+        body: 'Cached history',
+        timestamp: new Date(),
+        isOutgoing: false,
+      }
+      vi.mocked(messageCache.getRoomMessages).mockResolvedValue([cached])
+
+      // Snapshot the in-memory messages at the exact moment activation happens —
+      // the unread marker is computed from them, so they must be loaded first
+      let messagesAtActivation: RoomMessage[] | undefined
+      const unsubscribe = roomStore.subscribe(
+        (state) => state.activeRoomJid,
+        (activeJid) => {
+          if (activeJid === roomJid) {
+            messagesAtActivation = roomStore.getState().rooms.get(roomJid)?.messages
+          }
+        }
+      )
+
+      await roomStore.getState().activateRoom(roomJid)
+      unsubscribe()
+
+      expect(roomStore.getState().activeRoomJid).toBe(roomJid)
+      expect(messagesAtActivation?.map((m) => m.id)).toEqual(['cached-1'])
+    })
+
+    it('should deactivate immediately without touching the cache when passed null', async () => {
+      roomStore.setState({ activeRoomJid: 'test@conference.example.com' })
+      vi.clearAllMocks()
+
+      await roomStore.getState().activateRoom(null)
+
+      expect(roomStore.getState().activeRoomJid).toBeNull()
+      expect(messageCache.getRoomMessages).not.toHaveBeenCalled()
+    })
+
+    it('should drop a stale activation that resolves after a newer one', async () => {
+      roomStore.getState().addRoom(createRoom('slow@conference.example.com'))
+      roomStore.getState().addRoom(createRoom('fast@conference.example.com'))
+
+      let resolveSlow: (value: RoomMessage[]) => void = () => {}
+      vi.mocked(messageCache.getRoomMessages).mockImplementation((roomJid) =>
+        roomJid === 'slow@conference.example.com'
+          ? new Promise((resolve) => { resolveSlow = resolve })
+          : Promise.resolve([])
+      )
+
+      const stale = roomStore.getState().activateRoom('slow@conference.example.com')
+      const fresh = roomStore.getState().activateRoom('fast@conference.example.com')
+      await fresh
+      resolveSlow([])
+      await stale
+
+      expect(roomStore.getState().activeRoomJid).toBe('fast@conference.example.com')
     })
   })
 

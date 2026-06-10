@@ -10,6 +10,8 @@ const {
   mockContact,
   mockSetActiveConversation,
   mockSetActiveRoom,
+  mockActivateConversation,
+  mockActivateRoom,
   getMockState,
   setMockState,
 } = vi.hoisted(() => {
@@ -34,10 +36,21 @@ const {
     state.activeRoomJid = jid
   })
 
+  // Hydrating activation actions (load message cache, then set active)
+  const mockActivateConversation = vi.fn(async (id: string | null) => {
+    state.activeConversationId = id
+  })
+
+  const mockActivateRoom = vi.fn(async (jid: string | null) => {
+    state.activeRoomJid = jid
+  })
+
   return {
     mockContact,
     mockSetActiveConversation,
     mockSetActiveRoom,
+    mockActivateConversation,
+    mockActivateRoom,
     getMockState: () => state,
     setMockState: (newState: Partial<typeof state>) => Object.assign(state, newState),
   }
@@ -161,6 +174,7 @@ vi.mock('@fluux/sdk', () => ({
       markAsRead: vi.fn(),
       clearFirstNewMessageId: vi.fn(),
       setActiveConversation: mockSetActiveConversation,
+      activateConversation: mockActivateConversation,
     }),
   },
   roomStore: {
@@ -169,6 +183,7 @@ vi.mock('@fluux/sdk', () => ({
       markAsRead: vi.fn(),
       clearFirstNewMessageId: vi.fn(),
       setActiveRoom: mockSetActiveRoom,
+      activateRoom: mockActivateRoom,
     }),
   },
   connectionStore: {
@@ -209,6 +224,7 @@ vi.mock('@fluux/sdk/react', () => ({
     (selector: (state: {
       activeConversationId: string | null;
       setActiveConversation: typeof mockSetActiveConversation;
+      activateConversation: typeof mockActivateConversation;
       addConversation: ReturnType<typeof vi.fn>;
       hasConversation: ReturnType<typeof vi.fn>;
       isArchived: ReturnType<typeof vi.fn>;
@@ -218,6 +234,7 @@ vi.mock('@fluux/sdk/react', () => ({
       const state = {
         activeConversationId: getMockState().activeConversationId,
         setActiveConversation: mockSetActiveConversation,
+        activateConversation: mockActivateConversation,
         addConversation: vi.fn(),
         hasConversation: vi.fn(() => false),
         isArchived: vi.fn(() => getMockState().isArchivedResult),
@@ -237,10 +254,11 @@ vi.mock('@fluux/sdk/react', () => ({
     }
   ),
   useRoomStore: Object.assign(
-    (selector: (state: { activeRoomJid: string | null; setActiveRoom: typeof mockSetActiveRoom; rooms: Map<string, unknown> }) => unknown) => {
+    (selector: (state: { activeRoomJid: string | null; setActiveRoom: typeof mockSetActiveRoom; activateRoom: typeof mockActivateRoom; rooms: Map<string, unknown> }) => unknown) => {
       const state = {
         activeRoomJid: getMockState().activeRoomJid,
         setActiveRoom: mockSetActiveRoom,
+        activateRoom: mockActivateRoom,
         rooms: new Map(),
       }
       return selector(state)
@@ -395,6 +413,10 @@ vi.mock('./Sidebar', () => ({
         <NavLink to="/contacts" data-testid="directory-tab">Connections</NavLink>
         <NavLink to="/archive" data-testid="archive-tab">Archive</NavLink>
         <NavLink to="/events" data-testid="events-tab">Events</NavLink>
+        {/* Deep links simulate a URL-only change (browser back/forward, edge-swipe popstate):
+            the URL moves to a detail route without any click handler updating the store */}
+        <NavLink to="/messages/bob@example.com" data-testid="deep-conversation-link">Deep Conversation</NavLink>
+        <NavLink to="/rooms/lobby@conference.example.com" data-testid="deep-room-link">Deep Room</NavLink>
         <button data-testid="select-contact" onClick={() => onSelectContact(mockContact)}>Select Contact</button>
         <button data-testid="start-chat" onClick={() => onStartChat(mockContact)}>Start Chat</button>
       </div>
@@ -757,11 +779,17 @@ describe('ChatLayout - Tab Memory', () => {
         expect(mockSetActiveRoom).toHaveBeenCalledWith(null)
       })
 
-      // Switch to Rooms - should clear conversation
+      // The URL (now /messages with no JID) is the source of truth: the stale
+      // active conversation is cleared through the URL→store sync
+      await waitFor(() => {
+        expect(mockActivateConversation).toHaveBeenCalledWith(null)
+      })
+
+      // Switch to Rooms - conversation must remain cleared (no conflicting state)
       fireEvent.click(screen.getByTestId('rooms-tab'))
 
       await waitFor(() => {
-        expect(mockSetActiveConversation).toHaveBeenCalledWith(null)
+        expect(getMockState().activeConversationId).toBeNull()
       })
     })
   })
@@ -814,8 +842,8 @@ describe('ChatLayout - Tab Memory', () => {
         expect(screen.getByTestId('active-view')).toHaveTextContent('messages')
       })
 
-      // Should set the active conversation
-      expect(mockSetActiveConversation).toHaveBeenCalledWith('alice@example.com')
+      // Should activate the conversation (hydrating action)
+      expect(mockActivateConversation).toHaveBeenCalledWith('alice@example.com')
     })
 
     it('should set active conversation after navigating to messages view', async () => {
@@ -826,9 +854,9 @@ describe('ChatLayout - Tab Memory', () => {
       const callOrder: string[] = []
 
       // Track the order of calls
-      mockSetActiveConversation.mockImplementation((id: string | null) => {
+      mockActivateConversation.mockImplementation(async (id: string | null) => {
         if (id !== null) {
-          callOrder.push(`setActiveConversation:${id}`)
+          callOrder.push(`activateConversation:${id}`)
         }
         setMockState({ activeConversationId: id })
       })
@@ -852,8 +880,8 @@ describe('ChatLayout - Tab Memory', () => {
       fireEvent.click(screen.getByTestId('start-chat'))
 
       await waitFor(() => {
-        // The conversation should be set after navigation
-        expect(mockSetActiveConversation).toHaveBeenCalledWith('alice@example.com')
+        // The conversation should be activated after navigation
+        expect(mockActivateConversation).toHaveBeenCalledWith('alice@example.com')
         // And we should be in messages view
         expect(screen.getByTestId('active-view')).toHaveTextContent('messages')
       })
@@ -884,8 +912,8 @@ describe('ChatLayout - Tab Memory', () => {
         expect(screen.getByTestId('active-view')).toHaveTextContent('archive')
       })
 
-      // Should set the active conversation
-      expect(mockSetActiveConversation).toHaveBeenCalledWith('alice@example.com')
+      // Should activate the conversation (hydrating action)
+      expect(mockActivateConversation).toHaveBeenCalledWith('alice@example.com')
     })
   })
 })
@@ -921,8 +949,8 @@ describe('ChatLayout - Session Storage Restore (Dual-Persistence Bug Prevention)
     render(<ChatLayoutWithRouter />)
 
     await waitFor(() => {
-      // setActiveConversation MUST be called with null
-      expect(mockSetActiveConversation).toHaveBeenCalledWith(null)
+      // Activation MUST be called with null (clears any stale persisted value)
+      expect(mockActivateConversation).toHaveBeenCalledWith(null)
     })
   })
 
@@ -939,8 +967,8 @@ describe('ChatLayout - Session Storage Restore (Dual-Persistence Bug Prevention)
     render(<ChatLayoutWithRouter />)
 
     await waitFor(() => {
-      // setActiveRoom MUST be called with null
-      expect(mockSetActiveRoom).toHaveBeenCalledWith(null)
+      // Room activation MUST be called with null (clears any stale persisted value)
+      expect(mockActivateRoom).toHaveBeenCalledWith(null)
     })
   })
 
@@ -956,8 +984,8 @@ describe('ChatLayout - Session Storage Restore (Dual-Persistence Bug Prevention)
     render(<ChatLayoutWithRouter />)
 
     await waitFor(() => {
-      expect(mockSetActiveConversation).toHaveBeenCalledWith('bob@example.com')
-      expect(mockSetActiveRoom).toHaveBeenCalledWith(null)
+      expect(mockActivateConversation).toHaveBeenCalledWith('bob@example.com')
+      expect(mockActivateRoom).toHaveBeenCalledWith(null)
     })
   })
 
@@ -974,8 +1002,43 @@ describe('ChatLayout - Session Storage Restore (Dual-Persistence Bug Prevention)
 
     await waitFor(() => {
       // Both should be called with null to ensure clean state
-      expect(mockSetActiveConversation).toHaveBeenCalledWith(null)
-      expect(mockSetActiveRoom).toHaveBeenCalledWith(null)
+      expect(mockActivateConversation).toHaveBeenCalledWith(null)
+      expect(mockActivateRoom).toHaveBeenCalledWith(null)
     })
+  })
+})
+
+describe('ChatLayout - URL→store sync hydration (popstate)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    setMockState({
+      activeConversationId: null,
+      activeRoomJid: null,
+      isArchivedResult: false,
+    })
+  })
+
+  it('should activate a conversation from a URL-only change through the hydrating store action', async () => {
+    render(<ChatLayoutWithRouter initialRoute="/messages" />)
+
+    fireEvent.click(screen.getByTestId('deep-conversation-link'))
+
+    await waitFor(() => {
+      expect(mockActivateConversation).toHaveBeenCalledWith('bob@example.com')
+    })
+    // The raw setter skips IndexedDB hydration — the view would render empty until
+    // a manual scroll triggers a history load (same bug as PR #486)
+    expect(mockSetActiveConversation).not.toHaveBeenCalledWith('bob@example.com')
+  })
+
+  it('should activate a room from a URL-only change through the hydrating store action', async () => {
+    render(<ChatLayoutWithRouter initialRoute="/rooms" />)
+
+    fireEvent.click(screen.getByTestId('deep-room-link'))
+
+    await waitFor(() => {
+      expect(mockActivateRoom).toHaveBeenCalledWith('lobby@conference.example.com')
+    })
+    expect(mockSetActiveRoom).not.toHaveBeenCalledWith('lobby@conference.example.com')
   })
 })

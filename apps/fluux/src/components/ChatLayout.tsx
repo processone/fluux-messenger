@@ -127,9 +127,14 @@ function ChatLayoutContent() {
   // causing unnecessary re-renders of ChatLayout (which only needs IDs and setters).
   const activeConversationId = useChatStore((s) => s.activeConversationId)
   const setActiveConversation = useChatStore((s) => s.setActiveConversation)
+  // Hydrating activation: loads the message cache before setting active, so the
+  // view never renders empty and the unread marker sees historical context.
+  // Use these (not the raw setters) whenever activating with a non-null id.
+  const activateConversation = useChatStore((s) => s.activateConversation)
   const addConversation = useChatStore((s) => s.addConversation)
   const activeRoomJid = useRoomStore((s) => s.activeRoomJid)
   const setActiveRoom = useRoomStore((s) => s.setActiveRoom)
+  const activateRoom = useRoomStore((s) => s.activateRoom)
   const searchPreviewResult = useSearchStore((s) => s.previewResult)
   const activityPreviewEvent = useActivityLogStore((s) => s.previewEvent)
 
@@ -250,8 +255,8 @@ function ChatLayoutContent() {
       // Restore active conversation/room
       // IMPORTANT: Always set both values (even if null) to override any stale
       // zustand-persisted values. Session storage represents the actual UI state.
-      setActiveConversation(savedViewState.activeConversationId)
-      setActiveRoom(savedViewState.activeRoomJid)
+      void activateConversation(savedViewState.activeConversationId)
+      void activateRoom(savedViewState.activeRoomJid)
 
       // Restore selected contact JID directly (no need for pending resolution)
       if (savedViewState.selectedContactJid) {
@@ -288,7 +293,7 @@ function ChatLayoutContent() {
           break
       }
     }
-  }, [setActiveConversation, setActiveRoom, navigateToMessages, navigateToRooms, navigateToContacts, navigateToArchive, navigateToEvents, navigateToAdmin, navigateToSettings])
+  }, [activateConversation, activateRoom, navigateToMessages, navigateToRooms, navigateToContacts, navigateToArchive, navigateToEvents, navigateToAdmin, navigateToSettings])
 
   // Save view state when it changes (only when online)
   useEffect(() => {
@@ -325,12 +330,12 @@ function ChatLayoutContent() {
     if (sidebarView === 'messages') {
       const currentStoreId = chatStore.getState().activeConversationId
       if (activeJid !== currentStoreId) {
-        setActiveConversation(activeJid)
+        void activateConversation(activeJid)
       }
     } else if (sidebarView === 'rooms') {
       const currentStoreJid = roomStore.getState().activeRoomJid
       if (activeJid !== currentStoreJid) {
-        setActiveRoom(activeJid)
+        void activateRoom(activeJid)
       }
     } else if (sidebarView === 'directory') {
       if (activeJid !== selectedContactJid) {
@@ -339,10 +344,10 @@ function ChatLayoutContent() {
     } else if (sidebarView === 'archive') {
       const currentStoreId = chatStore.getState().activeConversationId
       if (activeJid !== currentStoreId) {
-        setActiveConversation(activeJid)
+        void activateConversation(activeJid)
       }
     }
-  }, [activeJid, sidebarView, setActiveConversation, setActiveRoom, selectedContactJid])
+  }, [activeJid, sidebarView, activateConversation, activateRoom, selectedContactJid])
 
   // Auto-select first conversation on initial connection if none selected
   // This handles the case when app launches fresh (no session restore)
@@ -389,10 +394,10 @@ function ChatLayoutContent() {
     const firstConversation = sorted[0]
     if (firstConversation) {
       hasAutoSelectedRef.current = true
-      setActiveConversation(firstConversation.id)
+      void activateConversation(firstConversation.id)
       navigateToMessages(firstConversation.id)
     }
-  }, [status, sidebarView, activeConversationId, conversationCount, setActiveConversation, navigateToMessages])
+  }, [status, sidebarView, activeConversationId, conversationCount, activateConversation, navigateToMessages])
 
   // Auto-select first joined room on initial connection if none selected.
   // Mirrors the messages auto-select above. Required because navigateToView('rooms')
@@ -419,10 +424,10 @@ function ChatLayoutContent() {
     const firstRoom = joined[0]
     if (firstRoom) {
       hasAutoSelectedRoomRef.current = true
-      setActiveRoom(firstRoom.jid)
+      void activateRoom(firstRoom.jid)
       navigateToRooms(firstRoom.jid)
     }
-  }, [status, sidebarView, activeRoomJid, roomCount, setActiveRoom, navigateToRooms])
+  }, [status, sidebarView, activeRoomJid, roomCount, activateRoom, navigateToRooms])
 
   // Ensure container has focus for keyboard shortcuts on mount and when window becomes visible
   useEffect(() => {
@@ -611,7 +616,7 @@ function ChatLayoutContent() {
     if (chatState.isArchived(contact.jid)) {
       // Navigate to archive view to show the archived conversation
       handleSidebarViewChange('archive')
-      setActiveConversation(contact.jid)
+      void activateConversation(contact.jid)
       setActiveRoom(null)
       navigateToArchive(contact.jid, { replace: true })
       return
@@ -633,7 +638,7 @@ function ChatLayoutContent() {
     // Navigate first, THEN set conversation - otherwise handleSidebarViewChange
     // will overwrite our selection with the "last conversation" restore logic
     handleSidebarViewChange('messages')
-    setActiveConversation(contact.jid)
+    void activateConversation(contact.jid)
     setActiveRoom(null)
     // Update URL to reflect the selected conversation (replace since tab switch already pushed/replaced)
     navigateToMessages(contact.jid, { replace: true })
@@ -645,7 +650,7 @@ function ChatLayoutContent() {
     const chatState = chatStore.getState()
     if (chatState.isArchived(jid)) {
       handleSidebarViewChange('archive')
-      setActiveConversation(jid)
+      void activateConversation(jid)
       setActiveRoom(null)
       navigateToArchive(jid, { replace: true })
       return
@@ -660,7 +665,7 @@ function ChatLayoutContent() {
       addConversation(conversation)
     }
     handleSidebarViewChange('messages')
-    setActiveConversation(jid)
+    void activateConversation(jid)
     setActiveRoom(null)
     navigateToMessages(jid, { replace: true })
   }

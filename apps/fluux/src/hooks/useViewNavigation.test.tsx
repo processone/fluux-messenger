@@ -8,6 +8,8 @@ import { useViewNavigation } from './useViewNavigation'
 const {
   mockSetActiveConversation,
   mockSetActiveRoom,
+  mockActivateConversation,
+  mockActivateRoom,
   mockMarkChatAsRead,
   mockMarkRoomAsRead,
   mockClearChatFirstNewMessageId,
@@ -28,6 +30,9 @@ const {
   const mocks = {
     mockSetActiveConversation: vi.fn(),
     mockSetActiveRoom: vi.fn(),
+    // Hydrating activation actions (used for non-null restores)
+    mockActivateConversation: vi.fn(),
+    mockActivateRoom: vi.fn(),
     mockMarkChatAsRead: vi.fn(),
     mockMarkRoomAsRead: vi.fn(),
     mockClearChatFirstNewMessageId: vi.fn(),
@@ -38,6 +43,7 @@ const {
     mockChatStoreState: () => ({
       activeConversationId: state.activeConversationId,
       setActiveConversation: mocks.mockSetActiveConversation,
+      activateConversation: mocks.mockActivateConversation,
       markAsRead: mocks.mockMarkChatAsRead,
       clearFirstNewMessageId: mocks.mockClearChatFirstNewMessageId,
       conversations: state.conversations,
@@ -46,6 +52,7 @@ const {
     mockRoomStoreState: () => ({
       activeRoomJid: state.activeRoomJid,
       setActiveRoom: mocks.mockSetActiveRoom,
+      activateRoom: mocks.mockActivateRoom,
       markAsRead: mocks.mockMarkRoomAsRead,
       clearFirstNewMessageId: mocks.mockClearRoomFirstNewMessageId,
       joinedRooms: () => state.joinedRooms,
@@ -270,8 +277,8 @@ describe('useViewNavigation', () => {
 
       // Should navigate to URL with first conversation (URL-encoded)
       expect(getDecodedPath()).toBe('/messages/user1@example.com')
-      // Should also set store state
-      expect(mockSetActiveConversation).toHaveBeenCalledWith('user1@example.com')
+      // Should also set store state (via the hydrating activation action)
+      expect(mockActivateConversation).toHaveBeenCalledWith('user1@example.com')
     })
 
     it('should skip archived conversations when auto-selecting', () => {
@@ -293,7 +300,7 @@ describe('useViewNavigation', () => {
 
       // Should skip archived and select the active one
       expect(getDecodedPath()).toBe('/messages/active@example.com')
-      expect(mockSetActiveConversation).toHaveBeenCalledWith('active@example.com')
+      expect(mockActivateConversation).toHaveBeenCalledWith('active@example.com')
     })
 
     it('should auto-select first joined room when navigating to rooms with no previous selection', () => {
@@ -314,8 +321,8 @@ describe('useViewNavigation', () => {
 
       // Should navigate to URL with first room
       expect(getDecodedPath()).toBe('/rooms/room1@conference.example.com')
-      // Should also set store state
-      expect(mockSetActiveRoom).toHaveBeenCalledWith('room1@conference.example.com')
+      // Should also set store state (via the hydrating activation action)
+      expect(mockActivateRoom).toHaveBeenCalledWith('room1@conference.example.com')
     })
 
     it('should auto-select first archived conversation when navigating to archive', () => {
@@ -337,7 +344,7 @@ describe('useViewNavigation', () => {
 
       // Should select the archived conversation
       expect(getDecodedPath()).toBe('/archive/archived@example.com')
-      expect(mockSetActiveConversation).toHaveBeenCalledWith('archived@example.com')
+      expect(mockActivateConversation).toHaveBeenCalledWith('archived@example.com')
     })
 
     it('should navigate without selection when no conversations exist', () => {
@@ -353,8 +360,8 @@ describe('useViewNavigation', () => {
 
       // Should navigate to messages without a specific conversation
       expect(currentLocation.current.pathname).toBe('/messages')
-      // setActiveConversation should not be called with a value (only called with null for clearing)
-      expect(mockSetActiveConversation).not.toHaveBeenCalledWith(expect.stringContaining('@'))
+      // Activation should not happen with a value (only called with null for clearing)
+      expect(mockActivateConversation).not.toHaveBeenCalledWith(expect.stringContaining('@'))
     })
 
     it('should navigate without selection when no rooms exist', () => {
@@ -369,8 +376,8 @@ describe('useViewNavigation', () => {
       })
 
       expect(currentLocation.current.pathname).toBe('/rooms')
-      // setActiveRoom should not be called with a value
-      expect(mockSetActiveRoom).not.toHaveBeenCalledWith(expect.stringContaining('@'))
+      // Room activation should not happen with a value
+      expect(mockActivateRoom).not.toHaveBeenCalledWith(expect.stringContaining('@'))
     })
   })
 
@@ -671,8 +678,8 @@ describe('useViewNavigation', () => {
 
       // Should navigate to /messages without auto-selecting a conversation
       expect(currentLocation.current.pathname).toBe('/messages')
-      // setActiveConversation should NOT be called with a JID
-      expect(mockSetActiveConversation).not.toHaveBeenCalledWith('user1@example.com')
+      // Activation should NOT happen with a JID
+      expect(mockActivateConversation).not.toHaveBeenCalledWith('user1@example.com')
     })
 
     it('should skip auto-selection when navigating to rooms on small screen', () => {
@@ -693,8 +700,8 @@ describe('useViewNavigation', () => {
 
       // Should navigate to /rooms without auto-selecting a room
       expect(currentLocation.current.pathname).toBe('/rooms')
-      // setActiveRoom should NOT be called with a JID
-      expect(mockSetActiveRoom).not.toHaveBeenCalledWith('room1@conference.example.com')
+      // Room activation should NOT happen with a JID
+      expect(mockActivateRoom).not.toHaveBeenCalledWith('room1@conference.example.com')
     })
 
     it('should skip auto-selection when navigating to archive on small screen', () => {
@@ -716,8 +723,8 @@ describe('useViewNavigation', () => {
 
       // Should navigate to /archive without auto-selecting
       expect(currentLocation.current.pathname).toBe('/archive')
-      // setActiveConversation should NOT be called with archived JID
-      expect(mockSetActiveConversation).not.toHaveBeenCalledWith('archived@example.com')
+      // Activation should NOT happen with the archived JID
+      expect(mockActivateConversation).not.toHaveBeenCalledWith('archived@example.com')
     })
 
     it('should skip auto-restoring last contact when navigating to directory on small screen', () => {
