@@ -442,4 +442,74 @@ describe('XMPPClient.retryPendingDecrypts()', () => {
       expect(count).toBe(1)
     })
   })
+
+  describe('deferred-decrypt of bodiless modifications', () => {
+    // Regression guard for the production bug (lost encrypted reaction):
+    //
+    // An encrypted XEP-0444 reaction has NO <body> — the whole <reactions>
+    // element rides inside the OpenPGP payload. When such a stanza is replayed
+    // from MAM (or received live) while the key is still locked, the decrypt is
+    // deferred: stanzaDecrypt injects an "[Encrypted message: could not decrypt]"
+    // placeholder body so the bodiless stanza survives parseArchiveMessage's
+    // `if (!body) return null` gate, and the encrypted payload is stashed for
+    // retry. The stanza is therefore persisted as a placeholder "message".
+    //
+    // On unlock, retryPendingDecrypts re-decrypts it. The decrypt SUCCEEDS, but
+    // the deferred-retry path was body-only: a decrypted payload that surfaces
+    // a <reactions> (no <body>) was reported as `pending`, so the reaction was
+    // never applied to its target and the placeholder lingered. The user saw no
+    // reaction and re-did it by hand.
+    it('applies a deferred-decrypted reaction to its target and drops the placeholder', async () => {
+      // Decrypt yields a payload envelope carrying <reactions>, not a <body>.
+      const reactionEnvelope =
+        `<payload xmlns="jabber:client">` +
+        `<reactions xmlns="urn:xmpp:reactions:0" id="xcom-msg"><reaction>👍</reaction></reactions>` +
+        `</payload>`
+      vi.spyOn(manager, 'decryptArchive').mockResolvedValue({
+        plaintext: new TextEncoder().encode(reactionEnvelope),
+        senderDevice: { jid: 'me@example.com', deviceId: 'test' },
+        securityContext: { protocolId: 'dummy-plaintext', trust: 'verified' },
+      })
+
+      chatStore.getState().addConversation({
+        id: 'bob@example.com',
+        name: 'Bob',
+        type: 'chat',
+        lastMessage: undefined,
+        unreadCount: 0,
+      })
+      // The message the reaction targets — a normal text message already stored.
+      chatStore.getState().addMessage({
+        type: 'chat',
+        id: 'xcom-msg',
+        conversationId: 'bob@example.com',
+        from: 'bob@example.com',
+        body: 'https://x.com/claudeai/status/2064394146916229443',
+        timestamp: new Date(),
+        isOutgoing: false,
+      })
+      // Our own reaction, stashed as a placeholder while the key was locked
+      // (self-outgoing MAM replay: from === own bare JID).
+      chatStore.getState().addMessage({
+        type: 'chat',
+        id: 'reaction-ghost',
+        conversationId: 'bob@example.com',
+        from: 'me@example.com',
+        body: '[Encrypted message: could not decrypt]',
+        timestamp: new Date(),
+        isOutgoing: true,
+        encryptedPayload: DUMMY_PAYLOAD_XML,
+      })
+
+      await xmppClient.retryPendingDecrypts()
+
+      const messages = chatStore.getState().messages.get('bob@example.com') ?? []
+      // The 👍 must land on the target message.
+      const target = messages.find((m) => m.id === 'xcom-msg')
+      expect(target?.reactions).toEqual({ '👍': ['me@example.com'] })
+      // The placeholder must not linger as a ghost "could not decrypt" bubble.
+      const ghost = messages.find((m) => m.id === 'reaction-ghost')
+      expect(ghost).toBeUndefined()
+    })
+  })
 })

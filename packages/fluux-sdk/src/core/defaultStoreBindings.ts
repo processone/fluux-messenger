@@ -114,6 +114,7 @@ export function createDefaultStoreBindings(options: DefaultStoreBindingsOptions 
       setTyping: chatStore.getState().setTyping,
       updateReactions: chatStore.getState().updateReactions,
       updateMessage: chatStore.getState().updateMessage,
+      removeMessage: chatStore.getState().removeMessage,
       getMessage: chatStore.getState().getMessage,
       triggerAnimation: chatStore.getState().triggerAnimation,
       // XEP-0313: MAM support

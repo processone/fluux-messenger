@@ -130,6 +130,14 @@ interface ChatState {
   clearAllTyping: () => void
   updateReactions: (conversationId: string, messageId: string, reactorJid: string, emojis: string[]) => void
   updateMessage: (conversationId: string, messageId: string, updates: Partial<Message>) => void
+  /**
+   * Hard-remove a message from the conversation, the search index, and the
+   * durable cache. Used when a stanza that was provisionally stored as a
+   * message turns out not to be one — e.g. a deferred-decrypted bodiless
+   * signal (XEP-0444 reaction) whose "[could not decrypt]" placeholder must
+   * disappear once the real reaction is applied to its target.
+   */
+  removeMessage: (conversationId: string, messageId: string) => void
   getMessage: (conversationId: string, messageId: string) => Message | undefined
   triggerAnimation: (conversationId: string, animation: string) => void
   clearAnimation: () => void
@@ -1018,6 +1026,28 @@ export const chatStore = createStore<ChatState>()(
         const convMessages = get().messages.get(conversationId)
         if (!convMessages) return undefined
         return findMessageById(convMessages, messageId)
+      },
+
+      removeMessage: (conversationId, messageId) => {
+        set((state) => {
+          const convMessages = state.messages.get(conversationId)
+          if (!convMessages) return state
+
+          const messageIndex = findMessageIndexById(convMessages, messageId)
+          if (messageIndex === -1) return state
+
+          const removed = convMessages[messageIndex]
+          const updatedConvMessages = convMessages.filter((_, i) => i !== messageIndex)
+          const newMessages = new Map(state.messages)
+          newMessages.set(conversationId, updatedConvMessages)
+
+          // Mirror updateMessage: keep the search index and durable cache in
+          // sync, using the message's real id (not the lookup id).
+          void searchIndex.removeMessage(removed)
+          void messageCache.deleteMessage(removed.id)
+
+          return { messages: newMessages }
+        })
       },
 
       triggerAnimation: (conversationId, animation) => {

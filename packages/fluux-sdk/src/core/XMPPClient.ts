@@ -114,12 +114,12 @@ import { Poll } from './modules/Poll'
 import { E2EEManager, InMemoryStorageBackend, type StorageBackend, type XMPPPrimitives } from './e2ee'
 import { dataToElement } from './e2ee/stanzaAdapter'
 import { decryptStanzaInPlace } from './e2ee/stanzaDecrypt'
-import { NS_CARBONS, NS_MAM, NS_P1_PUSH_WEBPUSH } from './namespaces'
+import { NS_CARBONS, NS_MAM, NS_P1_PUSH_WEBPUSH, NS_REACTIONS } from './namespaces'
 import { createDefaultStoreBindings, type DefaultStoreBindingsOptions } from './defaultStoreBindings'
 import { logDebug, logInfo, logWarn } from './logger'
 import { SDK_VERSION } from '../version'
 import { initSearchIndex, backfillFromMessageCache } from '../utils/searchIndex'
-import { getMessagesWithEncryptedPayload, updateMessage as cacheUpdateMessage } from '../utils/messageCache'
+import { getMessagesWithEncryptedPayload, updateMessage as cacheUpdateMessage, deleteMessage as cacheDeleteMessage } from '../utils/messageCache'
 import { bumpAvatarResumeCount } from '../utils/avatarCache'
 
 /**
@@ -188,13 +188,25 @@ import { bumpAvatarResumeCount } from '../utils/avatarCache'
  */
 
 /**
+ * A bodiless signal stanza recovered from a deferred decrypt. The whole
+ * element rode inside the encrypted payload (so the server never saw it), and
+ * it has no `<body>` — it targets ANOTHER message rather than carrying content.
+ * The placeholder "message" it was provisionally stored under must be replaced
+ * by applying the signal to its target.
+ */
+type RetryModification = { type: 'reactions'; targetId: string; emojis: string[] }
+
+/**
  * Result of a single deferred-decrypt attempt.
  * - `decrypted`: plaintext recovered — update body/security/attachment, clear `encryptedPayload`.
+ * - `modification`: decrypt surfaced a bodiless signal (XEP-0444 reaction) — apply it to its
+ *   target and remove the placeholder; there is no message body to update.
  * - `unsupported`: protocol we have no plugin for — clear `encryptedPayload`, tag `unsupportedEncryption`, keep body.
  * - `pending`: still cannot decrypt (key locked / plugin not ready) — leave `encryptedPayload`.
  */
 type RetryOutcome =
   | { kind: 'decrypted'; body: string; securityContext?: MessageSecurityContext; attachment?: FileAttachment }
+  | { kind: 'modification'; modification: RetryModification }
   | { kind: 'unsupported'; info: { namespace: string; name: string } }
   | { kind: 'pending' }
 
@@ -1649,6 +1661,9 @@ export class XMPPClient {
               encryptedPayload: undefined,
             })
             decryptedCount++
+          } else if (outcome.kind === 'modification') {
+            this.applyDeferredChatModification(conversationId, msg, outcome.modification, chatBindings)
+            decryptedCount++
           } else if (outcome.kind === 'unsupported') {
             chatBindings.updateMessage(conversationId, msg.id, {
               encryptedPayload: undefined,
@@ -1705,6 +1720,21 @@ export class XMPPClient {
             encryptedPayload: undefined,
           })
           decryptedCount++
+        } else if (outcome.kind === 'modification') {
+          // Conversation isn't loaded in memory. Apply best-effort to the
+          // in-memory target (no-op if absent) and drop the durable placeholder
+          // so it can't resurrect as a "[could not decrypt]" bubble. The
+          // store binding's removeMessage only touches in-memory state, so
+          // delete from the durable cache explicitly. For never-opened
+          // conversations the reaction is reconciled on the next MAM
+          // catch-up, when the now-unlocked key decrypts it inline.
+          if (outcome.modification.type === 'reactions') {
+            chatBindings.updateReactions(
+              conversationId, outcome.modification.targetId, getBareJid(msg.from), outcome.modification.emojis,
+            )
+          }
+          await cacheDeleteMessage(msg.id)
+          decryptedCount++
         } else if (outcome.kind === 'unsupported') {
           await cacheUpdateMessage(msg.id, {
             encryptedPayload: undefined,
@@ -1721,6 +1751,27 @@ export class XMPPClient {
     }
 
     return decryptedCount
+  }
+
+  /**
+   * Apply a bodiless signal (XEP-0444 reaction) recovered from a deferred
+   * decrypt to its target message, then remove the "[could not decrypt]"
+   * placeholder it was provisionally stored under. The reactor is the sender
+   * of the placeholder stanza — our own bare JID for a self-outgoing MAM
+   * replay, the peer's for an inbound one.
+   */
+  private applyDeferredChatModification(
+    conversationId: string,
+    placeholder: { id: string; from: string },
+    modification: RetryModification,
+    chatBindings: StoreBindings['chat'],
+  ): void {
+    if (modification.type === 'reactions') {
+      chatBindings.updateReactions(
+        conversationId, modification.targetId, getBareJid(placeholder.from), modification.emojis,
+      )
+    }
+    chatBindings.removeMessage(conversationId, placeholder.id)
   }
 
   /**
@@ -1774,6 +1825,25 @@ export class XMPPClient {
       if (!result.attempted || result.encryptedPayloadXml) {
         // Still can't decrypt
         return { kind: 'pending' }
+      }
+
+      // Bodiless signal stanzas (XEP-0444 reactions) carry no <body> — the
+      // whole element rode inside the encrypted payload and now sits at the
+      // stanza root after decryptStanzaInPlace unwrapped it. These were stored
+      // under a "[could not decrypt]" placeholder while the key was locked;
+      // returning 'pending' here (the historical body-only behaviour) silently
+      // dropped them. Surface them as a modification so the caller applies the
+      // reaction to its target and removes the placeholder.
+      const reactionsEl = stanza.getChild('reactions', NS_REACTIONS)
+      if (reactionsEl?.attrs.id) {
+        const emojis = reactionsEl
+          .getChildren('reaction')
+          .map((r) => r.getText())
+          .filter(Boolean)
+        return {
+          kind: 'modification',
+          modification: { type: 'reactions', targetId: reactionsEl.attrs.id, emojis },
+        }
       }
 
       // Extract the decrypted body
