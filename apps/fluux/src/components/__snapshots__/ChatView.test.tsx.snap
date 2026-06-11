@@ -82,6 +82,7 @@ exports[`ChatView > Snapshots > should match snapshot with messages 1`] = `
                 </div>
               </div>
               <div
+                class="message-row"
                 data-message-id="msg-1"
               >
                 <div
@@ -240,6 +241,7 @@ exports[`ChatView > Snapshots > should match snapshot with messages 1`] = `
                 </div>
               </div>
               <div
+                class="message-row"
                 data-message-id="msg-2"
               >
                 <div
