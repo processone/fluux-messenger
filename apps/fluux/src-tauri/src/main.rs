@@ -1324,6 +1324,15 @@ fn main() {
                         console.error = function() { origError.apply(console, arguments); forward('error', arguments); };
                         console.debug = function() { origDebug.apply(console, arguments); forward('debug', arguments); };
                         window.addEventListener('error', function(e) {
+                            // Benign, self-correcting browser notice — NOT an app error. WebKitGTK
+                            // emits 'ResizeObserver loop completed with undelivered notifications'
+                            // routinely with content-visibility rows plus a scroll-correction
+                            // ResizeObserver. Forwarding it as 'Uncaught error' is alarming log
+                            // noise; a genuine runaway loop is surfaced separately by the
+                            // rate-limited '[ScrollResizeLoop]' diagnostic. Swallow it here.
+                            if (e.message && e.message.indexOf('ResizeObserver loop') !== -1) {
+                                return;
+                            }
                             // Resource load failures (img/video/script/link): e.target is the element.
                             if (e.target && e.target !== window && e.target.tagName) {
                                 var src = e.target.src || e.target.href || '(unknown)';

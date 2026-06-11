@@ -282,6 +282,66 @@ describe('MessageList scroll behavior', () => {
   })
 
   describe('container resize scroll', () => {
+    it('defers the scroll correction to rAF instead of writing scrollTop inside the ResizeObserver callback', () => {
+      // Regression guard: writing scrollTop synchronously inside a ResizeObserver
+      // callback is the literal trigger for WebKitGTK's "ResizeObserver loop
+      // completed with undelivered notifications". The correction must be
+      // coalesced into a requestAnimationFrame so it runs OUTSIDE the observer's
+      // delivery cycle (parity with the content observer hardened in #439).
+      const messages = createTestMessages(5)
+      const scrollSpy = vi.fn()
+
+      // Queue rAF callbacks rather than running them immediately, so we can
+      // observe whether the scroll write happens synchronously or is deferred.
+      const rafQueue: FrameRequestCallback[] = []
+      window.requestAnimationFrame = (cb: FrameRequestCallback) => {
+        rafQueue.push(cb)
+        return rafQueue.length
+      }
+      const flushRaf = () => act(() => { rafQueue.splice(0).forEach((cb) => cb(0)) })
+
+      render(
+        <MessageList
+          messages={messages}
+          conversationId="conv-1"
+          clearFirstNewMessageId={vi.fn()}
+          renderMessage={(msg) => <div key={msg.id}>{msg.body}</div>}
+        />
+      )
+
+      const container = document.querySelector('.overflow-y-auto') as HTMLDivElement
+      expect(container).toBeTruthy()
+
+      let scrollTopValue = 500 // at bottom (scrollHeight 1000 - clientHeight 500)
+      Object.defineProperty(container, 'scrollHeight', { value: 1000, configurable: true })
+      Object.defineProperty(container, 'clientHeight', { value: 500, configurable: true })
+      Object.defineProperty(container, 'scrollTop', {
+        get: () => scrollTopValue,
+        set: (v) => { scrollTopValue = v; scrollSpy(v) },
+        configurable: true,
+      })
+
+      // Drain any rAF scheduled during mount, then establish the baseline height.
+      // Select the container observer by its observed target — the content
+      // observer (created on the same commit since #508) also exists, so
+      // instances[0] is no longer reliably the container one.
+      flushRaf()
+      const observer = MockResizeObserver.observing(container)!
+      expect(observer).toBeTruthy()
+      act(() => { observer.triggerResize(500) })
+      flushRaf()
+      scrollSpy.mockClear()
+
+      // Container shrinks while at bottom: the correction must NOT be applied
+      // synchronously inside the observer callback...
+      act(() => { observer.triggerResize(400) })
+      expect(scrollSpy).not.toHaveBeenCalled()
+
+      // ...only after the rAF flushes.
+      flushRaf()
+      expect(scrollSpy).toHaveBeenCalledWith(1000)
+    })
+
     it('should scroll to bottom when container height decreases and user is at bottom', async () => {
       const messages = createTestMessages(5)
       const scrollSpy = vi.fn()

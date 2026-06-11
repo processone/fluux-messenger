@@ -1224,9 +1224,23 @@ export function useMessageListScroll({
     if (!scroller) return
 
     let lastHeight: number | null = null
+    let pendingHeight: number | null = null
+    let scheduled = false
+    let rafId: number | null = null
+    let monitor: ReturnType<typeof createResizeLoopMonitor> | null = null
 
-    const observer = new ResizeObserver((entries) => {
-      const newHeight = entries[0].contentRect.height
+    // The measure + scroll-correction. Runs inside a rAF so the scrollTop write
+    // never happens synchronously inside the ResizeObserver delivery cycle —
+    // that synchronous write is the literal trigger for WebKitGTK's
+    // "ResizeObserver loop completed with undelivered notifications". Parity with
+    // the content observer's rAF coalescing (see setContentRef above).
+    const runCorrection = () => {
+      scheduled = false
+      rafId = null
+      const newHeight = pendingHeight
+      pendingHeight = null
+      if (newHeight === null) return
+
       if (lastHeight === null) { lastHeight = newHeight; return }
 
       const shrunk = lastHeight - newHeight
@@ -1236,10 +1250,33 @@ export function useMessageListScroll({
       }
 
       lastHeight = newHeight
+    }
+
+    const observer = new ResizeObserver((entries) => {
+      // Diagnostic only: surface a runaway fire rate (the composer-resize
+      // observer is a second candidate for the WebKitGTK feedback loop).
+      // Log-rate-limited; never disconnects.
+      if (!monitor) monitor = createResizeLoopMonitor()
+      const warning = monitor.record(performance.now())
+      if (warning) console.warn(warning)
+
+      // Track the latest height and coalesce the correction into one rAF per
+      // frame, no matter how many times the observer fires this frame. The
+      // `scheduled` flag (rather than `rafId === null`) is what guards against
+      // double-scheduling: it stays correct even when rAF runs the callback
+      // synchronously and reentrantly.
+      pendingHeight = entries[0].contentRect.height
+      if (!scheduled) {
+        scheduled = true
+        rafId = requestAnimationFrame(runCorrection)
+      }
     })
 
     observer.observe(scroller)
-    return () => observer.disconnect()
+    return () => {
+      observer.disconnect()
+      if (rafId !== null) cancelAnimationFrame(rafId)
+    }
   }, [conversationId])
 
   // ==========================================================================
