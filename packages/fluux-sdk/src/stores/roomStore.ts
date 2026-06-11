@@ -35,6 +35,27 @@ import { buildScopedStorageKey } from '../utils/storageScope'
 const MAX_MESSAGES_PER_ROOM = 1000
 
 /**
+ * Carry a previously-resolved avatar across a presence update.
+ *
+ * Presence stanzas only carry the XEP-0153 avatar *hash*; the resolved blob URL
+ * arrives asynchronously and is written via `updateOccupantAvatar`. Without this,
+ * every plain presence refresh (status/role change) would overwrite the occupant
+ * with the freshly-parsed, blob-less object — silently dropping the avatar. Message
+ * rows survive via `nickToAvatarCache`, but the members panel reads `occupant.avatar`
+ * directly, so the avatar would vanish there until the hash next changes.
+ *
+ * Keep the existing blob when the incoming presence has no blob and its hash is
+ * unchanged or absent. Drop it only when the hash actually changed, so the async
+ * XEP-0398 fetch repopulates a fresh one.
+ */
+function preserveOccupantAvatar(existing: RoomOccupant | undefined, incoming: RoomOccupant): RoomOccupant {
+  if (!existing?.avatar || incoming.avatar) return incoming
+  const hashUnchanged = !incoming.avatarHash || incoming.avatarHash === existing.avatarHash
+  if (!hashUnchanged) return incoming
+  return { ...incoming, avatar: existing.avatar, avatarHash: incoming.avatarHash ?? existing.avatarHash }
+}
+
+/**
  * localStorage key for persisting room drafts.
  * Room drafts are stored separately from the main room state because
  * room data is restored from server bookmarks on reconnect, but drafts
@@ -621,20 +642,22 @@ export const roomStore = createStore<RoomState>()(
       if (!existing) return state
 
       const newOccupants = new Map(existing.occupants)
-      newOccupants.set(occupant.nick, occupant)
+      // Presence carries only the avatar hash — keep an already-fetched blob alive.
+      const merged = preserveOccupantAvatar(existing.occupants.get(occupant.nick), occupant)
+      newOccupants.set(merged.nick, merged)
 
       // Update nick→jid cache for non-anonymous rooms (when real JID is visible)
       let nickToJidCache = existing.nickToJidCache
-      if (occupant.jid) {
+      if (merged.jid) {
         nickToJidCache = new Map(nickToJidCache || [])
-        nickToJidCache.set(occupant.nick, getBareJid(occupant.jid))
+        nickToJidCache.set(merged.nick, getBareJid(merged.jid))
       }
 
       // Update nick→avatar cache if occupant has avatar
       let nickToAvatarCache = existing.nickToAvatarCache
-      if (occupant.avatar) {
+      if (merged.avatar) {
         nickToAvatarCache = new Map(nickToAvatarCache || [])
-        nickToAvatarCache.set(occupant.nick, occupant.avatar)
+        nickToAvatarCache.set(merged.nick, merged.avatar)
       }
 
       newRooms.set(roomJid, { ...existing, occupants: newOccupants, nickToJidCache, nickToAvatarCache })
@@ -664,22 +687,24 @@ export const roomStore = createStore<RoomState>()(
 
       // Add all occupants in a single update
       for (const occupant of occupants) {
-        newOccupants.set(occupant.nick, occupant)
+        // Presence carries only the avatar hash — keep an already-fetched blob alive.
+        const merged = preserveOccupantAvatar(newOccupants.get(occupant.nick), occupant)
+        newOccupants.set(merged.nick, merged)
 
         // Update nick→jid cache for non-anonymous rooms
-        if (occupant.jid) {
+        if (merged.jid) {
           if (!nickToJidCache || nickToJidCache === existing.nickToJidCache) {
             nickToJidCache = new Map(nickToJidCache || [])
           }
-          nickToJidCache.set(occupant.nick, getBareJid(occupant.jid))
+          nickToJidCache.set(merged.nick, getBareJid(merged.jid))
         }
 
         // Update nick→avatar cache
-        if (occupant.avatar) {
+        if (merged.avatar) {
           if (!nickToAvatarCache || nickToAvatarCache === existing.nickToAvatarCache) {
             nickToAvatarCache = new Map(nickToAvatarCache || [])
           }
-          nickToAvatarCache.set(occupant.nick, occupant.avatar)
+          nickToAvatarCache.set(merged.nick, merged.avatar)
         }
       }
 
