@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { selectSelfOccupant, stableNickSet, resolveRoomSender, resolveReplyAvatar } from './roomSenderResolution'
+import { selectSelfOccupant, stableNickSet, resolveRoomSender, resolveReplyAvatar, resolveSenderColor } from './roomSenderResolution'
+import { getConsistentTextColor } from '../Avatar'
 import type { RoomOccupant, Room, RoomMessage } from '@fluux/sdk'
 
 const occ = (nick: string, extra: Partial<RoomOccupant> = {}): RoomOccupant =>
@@ -133,5 +134,35 @@ describe('resolveReplyAvatar', () => {
     // getBareJid strips resource; 'alice@x' has no slash so getBareJid returns 'alice@x' unchanged
     const contacts = new Map([['alice@x', { jid: 'alice@x', name: 'Alice', avatar: 'blob:contact' } as any]])
     expect(resolveReplyAvatar('alice', r, contacts, 'me', undefined).avatarUrl).toBe('blob:contact')
+  })
+  // The reply sender's bare JID is needed by the row to look up the contact's
+  // pre-calculated XEP-0392 color, so the quote matches the main message color.
+  it('returns the reply sender bare JID from the occupant full JID', () => {
+    const r = room({
+      occupants: new Map([['alice', { nick: 'alice', jid: 'alice@x/res' } as any]]),
+    })
+    expect(resolveReplyAvatar('alice', r, new Map(), 'me', undefined).senderBareJid).toBe('alice@x')
+  })
+  it('falls back to nickToJidCache for the bare JID when the occupant left', () => {
+    const r = room({ nickToJidCache: new Map([['alice', 'alice@x']]) })
+    expect(resolveReplyAvatar('alice', r, new Map(), 'me', undefined).senderBareJid).toBe('alice@x')
+  })
+})
+
+describe('resolveSenderColor', () => {
+  // Regression: the reply quote colored stepforward green (nick hash) while the
+  // main message was purple (contact color hashed from the bare JID). Both paths
+  // must prefer the contact's pre-calculated color and share this helper.
+  const contact = { jid: 'alice@x', colorLight: '#7b4500', colorDark: '#ffa54c' } as any
+  it('prefers the contact pre-calculated color for the active theme', () => {
+    expect(resolveSenderColor('alice', contact, true)).toBe('#ffa54c')
+    expect(resolveSenderColor('alice', contact, false)).toBe('#7b4500')
+  })
+  it('falls back to the nick-hash color when there is no contact', () => {
+    expect(resolveSenderColor('alice', undefined, true)).toBe(getConsistentTextColor('alice', true))
+    expect(resolveSenderColor('alice', undefined, false)).toBe(getConsistentTextColor('alice', false))
+  })
+  it('falls back to the nick-hash color when the contact has no pre-calculated colors', () => {
+    expect(resolveSenderColor('alice', { jid: 'alice@x' } as any, false)).toBe(getConsistentTextColor('alice', false))
   })
 })

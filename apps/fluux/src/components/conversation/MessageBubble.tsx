@@ -212,6 +212,7 @@ function arePropsEqual(prev: MessageBubbleProps, next: MessageBubbleProps): bool
     if (prev.replyContext.messageId !== next.replyContext.messageId) return false
     if (prev.replyContext.body !== next.replyContext.body) return false
     if (prev.replyContext.senderName !== next.replyContext.senderName) return false
+    if (prev.replyContext.senderColor !== next.replyContext.senderColor) return false
     if (prev.replyContext.avatarUrl !== next.replyContext.avatarUrl) return false
     if (prev.replyContext.avatarIdentifier !== next.replyContext.avatarIdentifier) return false
   }
@@ -510,6 +511,7 @@ export const MessageBubble = memo(function MessageBubble({
                 identifier={replyContext.avatarIdentifier}
                 name={replyContext.senderName}
                 avatarUrl={replyContext.avatarUrl}
+                fallbackColor={replyContext.senderColor}
                 size="xs"
               />
               <CornerUpRight className="rtl-mirror size-3 text-fluux-muted" />

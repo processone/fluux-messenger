@@ -1,5 +1,6 @@
 import { getBareJid, getPresenceFromShow, canModerate, canBan } from '@fluux/sdk'
 import { whisperCounterpartPresent } from './'
+import { getConsistentTextColor } from '../Avatar'
 import type { Room, RoomMessage, RoomRole, RoomAffiliation, ContactIdentity, RoomOccupant } from '@fluux/sdk'
 
 export interface ResolvedRoomSender {
@@ -71,9 +72,9 @@ export function resolveReplyAvatar(
   contactsByJid: ReadonlyMap<string, ContactIdentity>,
   myNick: string | undefined,
   ownAvatar: string | null | undefined,
-): { avatarUrl: string | undefined; avatarIdentifier: string } {
+): { avatarUrl: string | undefined; avatarIdentifier: string; senderBareJid: string | undefined } {
   if (nick === myNick && nick) {
-    return { avatarUrl: ownAvatar || undefined, avatarIdentifier: nick }
+    return { avatarUrl: ownAvatar || undefined, avatarIdentifier: nick, senderBareJid: undefined }
   }
   const occupantForReply = nick ? room.occupants.get(nick) : undefined
   const senderBareJid = occupantForReply?.jid
@@ -84,7 +85,23 @@ export function resolveReplyAvatar(
   return {
     avatarUrl: occupantForReply?.avatar || cachedReplyAvatar || contactAvatar,
     avatarIdentifier: nick || 'unknown',
+    senderBareJid,
   }
+}
+
+/**
+ * Sender color for a room message: the roster contact's pre-calculated
+ * XEP-0392 color (hashed from the bare JID) when known, otherwise the
+ * nick-hash color. Shared by the main message and the reply quote so the
+ * same sender always gets the same color in both places.
+ */
+export function resolveSenderColor(
+  identifier: string,
+  contact: Pick<ContactIdentity, 'colorLight' | 'colorDark'> | undefined,
+  isDarkMode: boolean,
+): string {
+  const contactColor = contact ? (isDarkMode ? contact.colorDark : contact.colorLight) : undefined
+  return contactColor || getConsistentTextColor(identifier, isDarkMode)
 }
 
 export function selectSelfOccupant(
