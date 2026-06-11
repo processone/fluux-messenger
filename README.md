@@ -79,7 +79,7 @@
 
 ### Privacy & Security
 - **Self-hostable** - Connect to any XMPP server, no vendor lock-in, no third-party dependency
-- **End-to-End Encryption** - OpenPGP (OX-IM) for 1:1 and group chats; automatic key discovery, peer verification, and cross-device verification sync
+- **End-to-End Encryption** - OpenPGP (OX-IM, XEP-0373/0374) for 1:1 and group chats; messages are encrypted and signed; automatic key discovery, peer verification with cross-device sync, secret key backup, and encrypted MAM history decryption
 - **FAST Authentication** - Modern SASL2 with token-based reconnection for instant, password-less session resumption
 - **Contact Blocking** - Full block/unblock support with a dedicated management screen
 - **In-Band Password Change** - Change your account password without leaving the app
