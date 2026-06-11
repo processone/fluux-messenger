@@ -47,13 +47,28 @@ function createTestMessages(count: number, withReactions = false): BaseMessage[]
 class MockResizeObserver {
   callback: ResizeObserverCallback
   static instances: MockResizeObserver[] = []
+  // Total constructions (never decremented) — `instances` only tracks live
+  // observers, so it cannot detect a disconnect+recreate churn cycle.
+  static constructed = 0
 
   constructor(callback: ResizeObserverCallback) {
     this.callback = callback
     MockResizeObserver.instances.push(this)
+    MockResizeObserver.constructed++
   }
 
-  observe() {}
+  targets: Element[] = []
+
+  observe(target: Element) {
+    this.targets.push(target)
+  }
+
+  // Find the live observer watching a given element (don't rely on creation
+  // order — the content observer now exists alongside the container one).
+  static observing(target: Element | null): MockResizeObserver | undefined {
+    if (!target) return undefined
+    return MockResizeObserver.instances.find((inst) => inst.targets.includes(target))
+  }
   unobserve() {}
   disconnect() {
     const index = MockResizeObserver.instances.indexOf(this)
@@ -76,6 +91,7 @@ describe('MessageList scroll behavior', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     MockResizeObserver.instances = []
+    MockResizeObserver.constructed = 0
 
     // Reset scrollStateManager to prevent state leakage between tests
     scrollStateManager.reset()
@@ -295,7 +311,7 @@ describe('MessageList scroll behavior', () => {
         })
 
         // First trigger an initial resize to establish baseline height
-        const observer = MockResizeObserver.instances[0]
+        const observer = MockResizeObserver.observing(container)
         if (observer) {
           act(() => {
             observer.triggerResize(500) // Establish baseline
@@ -350,7 +366,7 @@ describe('MessageList scroll behavior', () => {
         })
 
         // First trigger an initial resize to establish baseline height
-        const observer = MockResizeObserver.instances[0]
+        const observer = MockResizeObserver.observing(container)
         if (observer) {
           act(() => {
             observer.triggerResize(500) // Establish baseline
@@ -399,7 +415,7 @@ describe('MessageList scroll behavior', () => {
           configurable: true,
         })
 
-        const observer = MockResizeObserver.instances[0]
+        const observer = MockResizeObserver.observing(container)
         if (observer) {
           // First establish baseline height
           act(() => {
@@ -465,7 +481,7 @@ describe('MessageList scroll behavior', () => {
 
         scrollSpy.mockClear()
 
-        const observer = MockResizeObserver.instances[0]
+        const observer = MockResizeObserver.observing(container)
         if (observer) {
           // Rapid resize events (composer expanding as user types)
           act(() => {
@@ -1908,6 +1924,55 @@ describe('MessageList scroll behavior', () => {
         const scrollCalls = scrollSpy.mock.calls.flat()
         expect(scrollCalls).toContain(200)
       }
+    })
+  })
+
+  describe('content ResizeObserver lifecycle', () => {
+    const renderList = (messages: BaseMessage[]) => (
+      <MessageList
+        messages={messages}
+        conversationId="conv-1"
+        clearFirstNewMessageId={vi.fn()}
+        typingUsers={[]}
+        renderMessage={(msg) => <div key={msg.id}>{msg.body}</div>}
+      />
+    )
+
+    // Is some LIVE observer watching the content wrapper (the direct child of
+    // the scroll container)?
+    const contentWrapperIsObserved = () => {
+      const scroller = document.querySelector('[data-message-list]')
+      return MockResizeObserver.instances.some((inst) =>
+        inst.targets.some((t) => t.parentElement === scroller)
+      )
+    }
+
+    // React attaches refs child-first within a commit. When MessageList mounts
+    // WITH messages already present (same-commit mount of scroller + content
+    // wrapper), the content ref callback runs before the scroller ref is set —
+    // it must not silently skip observer setup (lost scroll correction).
+    it('creates the content observer when mounted with messages already present', () => {
+      render(renderList(createTestMessages(5)))
+      expect(contentWrapperIsObserved()).toBe(true)
+    })
+
+    // Regression guard: the wrapper ref must be identity-stable so React does
+    // not detach/reattach it per render — that would tear down and recreate
+    // the observer on EVERY render (a full-reflow amplifier in busy rooms on
+    // a large non-virtualized backlog).
+    it('does not recreate observers when a new message re-renders the list', () => {
+      const { rerender } = render(renderList(createTestMessages(5)))
+      const constructedAfterMount = MockResizeObserver.constructed
+      const liveAfterMount = MockResizeObserver.instances.length
+      expect(contentWrapperIsObserved()).toBe(true)
+
+      // Simulate two incoming messages (the busy-MUC case: one render each)
+      rerender(renderList(createTestMessages(6)))
+      rerender(renderList(createTestMessages(7)))
+
+      expect(MockResizeObserver.constructed).toBe(constructedAfterMount)
+      expect(MockResizeObserver.instances.length).toBe(liveAfterMount)
+      expect(contentWrapperIsObserved()).toBe(true)
     })
   })
 })
