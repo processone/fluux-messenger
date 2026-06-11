@@ -2011,9 +2011,12 @@ describe('WebOpenPGPPlugin', () => {
         // Now bob learns alice's real key → drain should upgrade
         publishKeyToSharedPep(shared, 'alice@example.com', alice.bundle)
         bob.plugin.onPeerKeysChanged('alice@example.com')
-        await flushAsync()
 
-        expect(bob.securityUpdates).toHaveLength(1)
+        // The drain runs real openpgp.js verify off a fire-and-forget call, so
+        // poll for the resulting update rather than guessing a fixed number of
+        // event-loop turns — `flushAsync`'s fixed tick budget flakes under the
+        // CPU contention of a full parallel test run.
+        await vi.waitFor(() => expect(bob.securityUpdates).toHaveLength(1), { timeout: 5000 })
         expect(bob.securityUpdates[0].securityContext.trust).toBe('tofu')
         expect(bob.securityUpdates[0].messageId).toBe('m-drain')
       })
@@ -2067,9 +2070,8 @@ describe('WebOpenPGPPlugin', () => {
         clearSessionPassphrase()
         setSessionPassphrase('bob-strong-pp')
         bob.plugin.onPeerKeysChanged('alice@example.com')
-        await flushAsync()
 
-        expect(bob.securityUpdates).toHaveLength(1)
+        await vi.waitFor(() => expect(bob.securityUpdates).toHaveLength(1), { timeout: 5000 })
         expect(bob.securityUpdates[0].securityContext.trust).toBe('rejected')
         expect(bob.securityUpdates[0].body).toBe('[Message rejected: invalid signature]')
       })
@@ -2099,6 +2101,10 @@ describe('WebOpenPGPPlugin', () => {
           )
           .mockRejectedValueOnce(new Error('ipc request timed out'))
         bob.plugin.onPeerKeysChanged('alice@example.com')
+        // Wait until the re-verify decrypt was actually attempted (and rejected)
+        // before restoring the mock — that ordering is the real dependency, not a
+        // fixed number of ticks. Then let the rejection's catch handler settle.
+        await vi.waitFor(() => expect(spy).toHaveBeenCalled(), { timeout: 5000 })
         await flushAsync()
         spy.mockRestore()
 
@@ -2109,9 +2115,11 @@ describe('WebOpenPGPPlugin', () => {
 
         // The entry survived: a subsequent drain (decrypt now works) upgrades it.
         bob.plugin.onPeerKeysChanged('alice@example.com')
-        await flushAsync()
+        await vi.waitFor(
+          () => expect(bob.securityUpdates.filter((u) => u.securityContext.trust === 'tofu')).toHaveLength(1),
+          { timeout: 5000 },
+        )
         const upgrades = bob.securityUpdates.filter((u) => u.securityContext.trust === 'tofu')
-        expect(upgrades).toHaveLength(1)
         expect(upgrades[0].messageId).toBe('m-transient')
       })
 
