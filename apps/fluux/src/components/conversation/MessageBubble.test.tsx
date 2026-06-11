@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen, fireEvent, act } from '@testing-library/react'
+import { render, screen, fireEvent, act, within } from '@testing-library/react'
 import { MessageBubble, buildReplyContext, type MessageBubbleProps } from './MessageBubble'
 import type { BaseMessage } from '@fluux/sdk'
 import { setPeerVerified, clearPeerVerified } from '@/stores/verifiedPeerKeysStore'
@@ -203,6 +203,48 @@ describe('MessageBubble', () => {
       // When avatarUrl is not provided, no avatar img should be rendered in reply context
       const avatarImg = screen.queryByRole('img', { name: 'Bob' })
       expect(avatarImg).not.toBeInTheDocument()
+    })
+
+    // Regression: the quote's letter avatar auto-generated its color from the
+    // identifier (nick hash) while the main message avatar followed senderColor
+    // (contact color) — same sender, two different hues. The quote avatar must
+    // follow replyContext.senderColor like the quote's border and nick text do.
+    it('uses replyContext.senderColor as the quote letter avatar background', () => {
+      const props = createDefaultProps({
+        replyContext: {
+          senderName: 'Bob',
+          senderColor: 'rgb(0, 255, 0)',
+          body: 'Original message',
+          messageId: 'original-msg-1',
+          avatarIdentifier: 'bob@example.com',
+        },
+      })
+      render(<MessageBubble {...props} />)
+
+      const quote = screen.getByText('Original message').closest('button')!
+      const letter = within(quote).getByText('B')
+      expect(letter.parentElement).toHaveStyle({ backgroundColor: 'rgb(0, 255, 0)' })
+    })
+
+    it('re-renders the quote when only replyContext.senderColor changes', () => {
+      // Contact colors can arrive after the first render (roster load) — a
+      // senderColor-only change must invalidate the memo or the quote keeps
+      // the stale nick-hash color forever.
+      const base = {
+        senderName: 'Bob',
+        senderColor: 'rgb(0, 255, 0)',
+        body: 'Original message',
+        messageId: 'original-msg-1',
+        avatarIdentifier: 'bob@example.com',
+      }
+      const props = createDefaultProps({ replyContext: base })
+      const { rerender } = render(<MessageBubble {...props} />)
+
+      rerender(<MessageBubble {...props} replyContext={{ ...base, senderColor: 'rgb(255, 0, 255)' }} />)
+
+      const quote = screen.getByText('Original message').closest('button')!
+      expect(within(quote).getByText('B').parentElement).toHaveStyle({ backgroundColor: 'rgb(255, 0, 255)' })
+      expect(within(quote).getByText('Bob')).toHaveStyle({ color: 'rgb(255, 0, 255)' })
     })
 
     it('does not render reply context for retracted messages', () => {

@@ -8,8 +8,8 @@ import { useMentionAutocomplete, useFileUpload, useLinkPreview, useTypeToFocus, 
 import { MessageBubble, MessageList, shouldShowAvatar, whisperThreadPosition, whisperCounterpartPresent, resolveWhisperTarget, decideWhisperSend, buildReplyContext, canClosePoll, PollBanner, type WhisperThreadPosition, type WhisperTarget } from './conversation'
 import { FindOnPageBar } from './conversation/FindOnPageBar'
 import { useFindOnPage, type FindOnPageHandle } from '@/hooks/useFindOnPage'
-import { Avatar, getConsistentTextColor } from './Avatar'
-import { selectSelfOccupant, stableNickSet, resolveRoomSender, resolveReplyAvatar } from './conversation/roomSenderResolution'
+import { Avatar } from './Avatar'
+import { selectSelfOccupant, stableNickSet, resolveRoomSender, resolveReplyAvatar, resolveSenderColor } from './conversation/roomSenderResolution'
 import { format } from 'date-fns'
 import { Shield, Crown, Upload, Loader2, LogIn, AlertCircle, Users, MessageCircle, EyeOff, User, Settings, Ear, X } from 'lucide-react'
 import { ChristmasAnimation } from './ChristmasAnimation'
@@ -962,6 +962,7 @@ export const RoomMessageList = memo(function RoomMessageList({
     // nothing object-shaped is passed that could bust the row memo on presence churn).
     let replyAvatarUrl: string | undefined
     let replyAvatarIdentifier: string | undefined
+    let replyBareJid: string | undefined
     if (msg.replyTo) {
       // Reply-target nick from the XEP-0461 `to` JID (room@server/nick). The reply BODY
       // is resolved reactively in the row via useReferencedMessage; only the preview
@@ -971,6 +972,7 @@ export const RoomMessageList = memo(function RoomMessageList({
       const ra = resolveReplyAvatar(replyNick, room, contactsByJid, room.nickname, ownAvatar)
       replyAvatarUrl = ra.avatarUrl
       replyAvatarIdentifier = ra.avatarIdentifier
+      replyBareJid = ra.senderBareJid
     }
 
     return (
@@ -994,6 +996,7 @@ export const RoomMessageList = memo(function RoomMessageList({
         counterpartPresent={sender.counterpartPresent}
         replyAvatarUrl={replyAvatarUrl}
         replyAvatarIdentifier={replyAvatarIdentifier}
+        replyBareJid={replyBareJid}
         knownNicks={knownNicks}
         contactsByJid={contactsByJid}
         ownAvatar={ownAvatar}
@@ -1083,6 +1086,9 @@ interface RoomMessageBubbleWrapperProps {
   // Reply-preview avatar as primitives; the wrapper builds replyContext from these.
   replyAvatarUrl: string | undefined
   replyAvatarIdentifier: string | undefined
+  // Reply sender's bare JID, for the contact-color lookup (keeps the quote's
+  // color identical to the sender's main-message color).
+  replyBareJid: string | undefined
   knownNicks: ReadonlySet<string>
   contactsByJid: Map<string, ContactIdentity>
   ownAvatar?: string | null
@@ -1148,6 +1154,7 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
   counterpartPresent,
   replyAvatarUrl,
   replyAvatarIdentifier,
+  replyBareJid,
   knownNicks,
   contactsByJid,
   ownAvatar,
@@ -1209,9 +1216,7 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
   // Get sender color: accent for own messages, contact's pre-calculated color, or fallback to nick-based generation
   const senderColor = message.isOutgoing
     ? 'var(--fluux-text-accent)'
-    : contact
-      ? (isDarkMode ? contact.colorDark : contact.colorLight) || getConsistentTextColor(resolvedSenderName, isDarkMode)
-      : getConsistentTextColor(resolvedSenderName, isDarkMode)
+    : resolveSenderColor(resolvedSenderName, contact, isDarkMode ?? true)
 
   // Get my current reactions to this message (room — uses nick)
   const myReactions = getMyReactions(message.reactions, myNick, undefined, true)
@@ -1255,7 +1260,11 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
       // Own messages: use accent color
       if (originalMsg?.isOutgoing) return 'var(--fluux-text-accent)'
       const nick = originalMsg?.nick || (fallbackId ? fallbackId.split('/').pop() : undefined)
-      return nick ? getConsistentTextColor(nick, dark) : 'var(--fluux-brand)'
+      if (!nick) return 'var(--fluux-brand)'
+      // Same contact-color preference as the main senderColor above, so the
+      // quote never disagrees with the sender's main-message color.
+      const replyContact = replyBareJid ? contactsByJid.get(replyBareJid) : undefined
+      return resolveSenderColor(nick, replyContact, dark ?? true)
     },
     // Reply-target avatar resolved to primitives in the list layer (resolveReplyAvatar)
     // and passed in — so this callback reads no `room` and the row memo stays bail-able.
