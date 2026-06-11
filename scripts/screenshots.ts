@@ -812,12 +812,12 @@ test('28 — Blog Hero v0.16.0', async ({ page }) => {
     // Small (back-left): Private whisper thread
     drawCard(whisperImg, centerX - 420, cardsCenterY + 10, 560, 440, -4)
 
-    // Medium (middle): Key backup / encryption settings
-    drawCard(settingsImg, centerX, cardsCenterY, 760, 540, 0)
+    // Medium (middle): Encrypted chat
+    drawCard(encChatImg, centerX, cardsCenterY, 760, 540, 0)
 
-    // Large (front-right): Encrypted chat — the headline
+    // Large (front-right): Key backup / encryption settings — the headline
     const largeH = 580
-    drawCard(encChatImg, centerX + 400, cardsCenterY - 10, 820, largeH, 3)
+    drawCard(settingsImg, centerX + 400, cardsCenterY - 10, 820, largeH, 3)
 
     // ── Labels below the cards ──
     const labelY = cardsCenterY + largeH / 2 + 16
@@ -827,11 +827,11 @@ test('28 — Blog Hero v0.16.0', async ({ page }) => {
     ctx.fillStyle = '#1a1b1e'
     ctx.fillText('Private Whispers', centerX - 420, labelY)
     ctx.fillStyle = '#5865f2'
-    ctx.font = '600 24px Inter, system-ui, sans-serif'
-    ctx.fillText('Key Backup & Restore', centerX, labelY)
-    ctx.fillStyle = '#5865f2'
     ctx.font = 'bold 26px Inter, system-ui, sans-serif'
-    ctx.fillText('End-to-End Encrypted', centerX + 400, labelY)
+    ctx.fillText('End-to-End Encrypted', centerX, labelY)
+    ctx.fillStyle = '#1a1b1e'
+    ctx.font = '600 24px Inter, system-ui, sans-serif'
+    ctx.fillText('Key Backup & Restore', centerX + 400, labelY)
 
     // ── Tagline at bottom ──
     ctx.fillStyle = '#4e5058'
