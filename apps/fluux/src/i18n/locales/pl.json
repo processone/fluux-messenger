@@ -315,7 +315,7 @@
         "sendInvitations": "Wyślij {{count}} zaproszeń",
         "outcast": "Zbanowany",
         "sendPrivateMessage": "Wyślij prywatną wiadomość",
-        "whisper": "Szept",
+        "whisper": "Szepnij",
         "whisperingTo": "Szepczesz prywatnie do {{nick}}",
         "whisperThread": "Prywatnie z {{nick}}",
         "whisperCounterpartGone": "{{nick}} nie jest już w pokoju — nie możesz odpowiedzieć",

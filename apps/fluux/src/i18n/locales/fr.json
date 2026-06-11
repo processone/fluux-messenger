@@ -314,7 +314,7 @@
         "sendInvitations": "Envoyer {{count}} invitation(s)",
         "outcast": "Banni",
         "sendPrivateMessage": "Envoyer un message privé",
-        "whisper": "Chuchotement",
+        "whisper": "Chuchoter",
         "whisperingTo": "Vous chuchotez en privé à {{nick}}",
         "whisperThread": "Privé avec {{nick}}",
         "whisperCounterpartGone": "{{nick}} n'est plus dans le salon — vous ne pouvez pas répondre",

@@ -313,7 +313,7 @@
         "inviteRejected": "ההזמנה נדחתה: {{error}}",
         "sendInvitations": "שלח {{count}} הזמנות",
         "sendPrivateMessage": "שלח הודעה פרטית",
-        "whisper": "לחישה",
+        "whisper": "לחש",
         "whisperingTo": "לוחש בפרטיות ל-{{nick}}",
         "whisperThread": "פרטי עם {{nick}}",
         "whisperCounterpartGone": "{{nick}} כבר לא נמצא בחדר — אי אפשר להשיב",

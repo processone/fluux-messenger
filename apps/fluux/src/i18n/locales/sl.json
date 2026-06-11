@@ -315,7 +315,7 @@
         "inviteRejected": "Povabilo zavrnjeno: {{error}}",
         "sendInvitations": "Pošlji {{count}} povabilo(a)",
         "sendPrivateMessage": "Pošlji zasebno sporočilo",
-        "whisper": "Šepetanje",
+        "whisper": "Šepni",
         "whisperingTo": "Šepetate zasebno {{nick}}",
         "whisperThread": "Zasebno z {{nick}}",
         "whisperCounterpartGone": "{{nick}} ni več v sobi — ne morete odgovoriti",

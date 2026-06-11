@@ -315,7 +315,7 @@
         "inviteRejected": "Invitació rebutjada: {{error}}",
         "sendInvitations": "Envia {{count}} invitació/invitacions",
         "sendPrivateMessage": "Enviar missatge privat",
-        "whisper": "Xiuxiueig",
+        "whisper": "Xiuxiuejar",
         "whisperingTo": "Xiuxiuejant en privat a {{nick}}",
         "whisperThread": "Privat amb {{nick}}",
         "whisperCounterpartGone": "{{nick}} ja no és a la sala — no pots respondre",

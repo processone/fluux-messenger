@@ -315,7 +315,7 @@
         "inviteRejected": "Stedina rrifjutata: {{error}}",
         "sendInvitations": "Ibgħat {{count}} stedina/i",
         "sendPrivateMessage": "Ibgħat messaġġ privat",
-        "whisper": "Sussurru",
+        "whisper": "Fesfes",
         "whisperingTo": "Qiegħed tsussurra b'mod privat lil {{nick}}",
         "whisperThread": "Privat ma' {{nick}}",
         "whisperCounterpartGone": "{{nick}} m'għadux fil-kamra — ma tistax twieġeb",

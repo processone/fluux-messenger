@@ -313,7 +313,7 @@
         "inviteRejected": "Приглашение отклонено: {{error}}",
         "sendInvitations": "Отправить {{count}} приглашение(я/ий)",
         "sendPrivateMessage": "Отправить личное сообщение",
-        "whisper": "Шёпот",
+        "whisper": "Шепнуть",
         "whisperingTo": "Шепчете лично {{nick}}",
         "whisperThread": "Лично с {{nick}}",
         "whisperCounterpartGone": "{{nick}} больше не в комнате — вы не можете ответить",

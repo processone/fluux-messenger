@@ -313,7 +313,7 @@
         "inviteRejected": "Покана отхвърлена: {{error}}",
         "sendInvitations": "Изпрати {{count}} покана(и)",
         "sendPrivateMessage": "Изпращане на лично съобщение",
-        "whisper": "Шепот",
+        "whisper": "Шепнене",
         "whisperingTo": "Шепнете лично на {{nick}}",
         "whisperThread": "Лично с {{nick}}",
         "whisperCounterpartGone": "{{nick}} вече не е в стаята — не можете да отговорите",

@@ -313,7 +313,7 @@
         "inviteRejected": "Pakvietimas atmestas: {{error}}",
         "sendInvitations": "Siųsti {{count}} pakvietimą(us)",
         "sendPrivateMessage": "Siųsti privačią žinutę",
-        "whisper": "Šnabždesys",
+        "whisper": "Šnabždėti",
         "whisperingTo": "Šnabždate privačiai {{nick}}",
         "whisperThread": "Privačiai su {{nick}}",
         "whisperCounterpartGone": "{{nick}} nebėra kambaryje — negalite atsakyti",

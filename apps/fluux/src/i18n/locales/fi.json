@@ -313,7 +313,7 @@
         "inviteRejected": "Kutsu hylätty: {{error}}",
         "sendInvitations": "Lähetä {{count}} kutsu(a)",
         "sendPrivateMessage": "Lähetä yksityisviesti",
-        "whisper": "Kuiskaus",
+        "whisper": "Kuiskaa",
         "whisperingTo": "Kuiskaat yksityisesti {{nick}}:lle",
         "whisperThread": "Yksityinen {{nick}}:n kanssa",
         "whisperCounterpartGone": "{{nick}} ei ole enää huoneessa — et voi vastata",
