@@ -315,7 +315,7 @@
         "inviteRejected": "Uzaicinājums noraidīts: {{error}}",
         "sendInvitations": "Nosūtīt {{count}} uzaicinājumu(-s)",
         "sendPrivateMessage": "Sūtīt privātu ziņojumu",
-        "whisper": "Čuksts",
+        "whisper": "Čukstēt",
         "whisperingTo": "Čukstat privāti {{nick}}",
         "whisperThread": "Privāti ar {{nick}}",
         "whisperCounterpartGone": "{{nick}} vairs nav istabā — jūs nevarat atbildēt",

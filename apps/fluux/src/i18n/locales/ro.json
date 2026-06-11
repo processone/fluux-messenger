@@ -316,7 +316,7 @@
         "inviteRejected": "Invitație respinsă: {{error}}",
         "sendInvitations": "Trimite {{count}} invitație(i)",
         "sendPrivateMessage": "Trimite mesaj privat",
-        "whisper": "Șoaptă",
+        "whisper": "Șoptește",
         "whisperingTo": "Îi șoptești în privat lui {{nick}}",
         "whisperThread": "Privat cu {{nick}}",
         "whisperCounterpartGone": "{{nick}} nu mai este în cameră — nu poți răspunde",

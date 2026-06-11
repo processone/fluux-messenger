@@ -316,7 +316,7 @@
             "visitor": "Visitante"
         },
         "sendPrivateMessage": "Enviar mensaje privado",
-        "whisper": "Susurro",
+        "whisper": "Susurrar",
         "whisperingTo": "Susurrando en privado a {{nick}}",
         "whisperThread": "Privado con {{nick}}",
         "whisperCounterpartGone": "{{nick}} ya no está en la sala — no puedes responder",

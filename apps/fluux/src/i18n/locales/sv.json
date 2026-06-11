@@ -314,7 +314,7 @@
         "inviteRejected": "Inbjudan avvisad: {{error}}",
         "sendInvitations": "Skicka {{count}} inbjudan(ar)",
         "sendPrivateMessage": "Skicka privat meddelande",
-        "whisper": "Viskning",
+        "whisper": "Viska",
         "whisperingTo": "Viskar privat till {{nick}}",
         "whisperThread": "Privat med {{nick}}",
         "whisperCounterpartGone": "{{nick}} är inte längre i rummet — du kan inte svara",

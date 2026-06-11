@@ -314,7 +314,7 @@
         "inviteRejected": "Pozivnica odbijena: {{error}}",
         "sendInvitations": "Pošalji {{count}} pozivnica(e)",
         "sendPrivateMessage": "Pošalji privatnu poruku",
-        "whisper": "Šaputanje",
+        "whisper": "Šapni",
         "whisperingTo": "Šaputate privatno {{nick}}-u",
         "whisperThread": "Privatno s {{nick}}",
         "whisperCounterpartGone": "{{nick}} više nije u sobi — ne možete odgovoriti",

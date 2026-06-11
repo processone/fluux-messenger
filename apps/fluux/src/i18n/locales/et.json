@@ -316,7 +316,7 @@
         "inviteRejected": "Kutse tagasi lükatud: {{error}}",
         "sendInvitations": "Saada {{count}} kutset",
         "sendPrivateMessage": "Saada privaatsõnum",
-        "whisper": "Sosistamine",
+        "whisper": "Sosista",
         "whisperingTo": "Sosistate privaatselt {{nick}}-le",
         "whisperThread": "Privaatne {{nick}}-ga",
         "whisperCounterpartGone": "{{nick}} pole enam toas — sa ei saa vastata",

@@ -314,7 +314,7 @@
         "inviteRejected": "Запрашэнне адхілена: {{error}}",
         "sendInvitations": "Адправіць {{count}} запрашэнне(няў)",
         "sendPrivateMessage": "Адправіць прыватнае паведамленне",
-        "whisper": "Шэпт",
+        "whisper": "Шапнуць",
         "whisperingTo": "Шэпчаце прыватна да {{nick}}",
         "whisperThread": "Прыватна з {{nick}}",
         "whisperCounterpartGone": "{{nick}} больш не ў пакоі — вы не можаце адказаць",

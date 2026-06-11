@@ -315,7 +315,7 @@
         "inviteRejected": "Η πρόσκληση απορρίφθηκε: {{error}}",
         "sendInvitations": "Αποστολή {{count}} πρόσκλησης(-εων)",
         "sendPrivateMessage": "Αποστολή ιδιωτικού μηνύματος",
-        "whisper": "Ψίθυρος",
+        "whisper": "Ψιθύρισμα",
         "whisperingTo": "Ψιθυρίζετε ιδιωτικά στον {{nick}}",
         "whisperThread": "Ιδιωτικά με {{nick}}",
         "whisperCounterpartGone": "{{nick}} δεν είναι πλέον στο δωμάτιο — δεν μπορείτε να απαντήσετε",

@@ -315,7 +315,7 @@
         "inviteRejected": "Pozvánka odmietnutá: {{error}}",
         "sendInvitations": "Odoslať {{count}} pozvánku(y)",
         "sendPrivateMessage": "Odoslať súkromnú správu",
-        "whisper": "Šepot",
+        "whisper": "Šepkať",
         "whisperingTo": "Šepkáte súkromne {{nick}}",
         "whisperThread": "Súkromne s {{nick}}",
         "whisperCounterpartGone": "{{nick}} už nie je v miestnosti — nemôžete odpovedať",

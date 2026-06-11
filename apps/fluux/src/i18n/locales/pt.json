@@ -316,7 +316,7 @@
         "sendInvitations": "Enviar {{count}} convite(s)",
         "outcast": "Banido",
         "sendPrivateMessage": "Enviar mensagem privada",
-        "whisper": "Sussurro",
+        "whisper": "Sussurrar",
         "whisperingTo": "Sussurrando em privado para {{nick}}",
         "whisperThread": "Privado com {{nick}}",
         "whisperCounterpartGone": "{{nick}} já não está na sala — não podes responder",
