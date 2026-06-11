@@ -177,40 +177,57 @@ export function useMessageListScroll({
     el.scrollHeight - el.scrollTop - el.clientHeight
 
   // ==========================================================================
-  // REF SETTER (connects external ref if provided)
-  // ==========================================================================
-
-  const setScrollContainerRef = (el: HTMLDivElement | null) => {
-    scrollerRef.current = el
-    if (externalScrollerRef) {
-      (externalScrollerRef as React.MutableRefObject<HTMLElement | null>).current = el
-    }
-  }
-
-  // ==========================================================================
-  // CALLBACK REF: Content wrapper (replaces useEffect + useRef pattern)
+  // CALLBACK REFS: scroll container + content wrapper
   // ==========================================================================
   //
-  // Using a callback ref ensures the ResizeObserver is connected as soon as
-  // the content wrapper mounts, even if it mounts after initial render
-  // (e.g., MUC rooms that show a loading state before revealing messages).
+  // Using a callback ref for the content wrapper ensures the ResizeObserver is
+  // connected as soon as the wrapper mounts, even if it mounts after initial
+  // render (e.g., MUC rooms that show a loading state before revealing
+  // messages).
+  //
+  // Two constraints shape the implementation:
+  //
+  // 1. ATTACH ORDER: React attaches refs child-first within a commit. When the
+  //    list mounts WITH messages already present, the content-wrapper ref runs
+  //    before the scroller ref is set. Observer setup is therefore late-bound:
+  //    both setters call trySetupContentObserver(), and whichever attaches
+  //    last completes the setup.
+  //
+  // 2. IDENTITY STABILITY: both setters are created once (lazy useRef), NOT
+  //    re-created per render. An unstable callback ref makes React detach
+  //    (null) + reattach it on EVERY render, tearing down and recreating the
+  //    observer each time — a forced-reflow amplifier in busy rooms. Per-render
+  //    values they need are read through latestRef (updated each render via
+  //    effect), never closed over.
 
-  const setContentRef = (element: HTMLDivElement | null) => {
-    // Cleanup previous observer
-    if (contentObserverRef.current) {
-      contentObserverRef.current.disconnect()
-      contentObserverRef.current = null
+  const latestRef = useRef({ staticMode, externalScrollerRef, isAtBottomRef })
+  useEffect(() => {
+    latestRef.current = { staticMode, externalScrollerRef, isAtBottomRef }
+  })
+
+  const stableSettersRef = useRef<{
+    setScrollContainerRef: (el: HTMLDivElement | null) => void
+    setContentRef: (el: HTMLDivElement | null) => void
+  } | null>(null)
+
+  if (stableSettersRef.current === null) {
+    const teardownContentObserver = () => {
+      if (contentObserverRef.current) {
+        contentObserverRef.current.disconnect()
+        contentObserverRef.current = null
+      }
+      if (correctionRafRef.current !== null) {
+        cancelAnimationFrame(correctionRafRef.current)
+        correctionRafRef.current = null
+      }
     }
-    if (correctionRafRef.current !== null) {
-      cancelAnimationFrame(correctionRafRef.current)
-      correctionRafRef.current = null
-    }
 
-    contentRef.current = element
-
-    if (element) {
+    const trySetupContentObserver = () => {
       const scroller = scrollerRef.current
-      if (!scroller) return
+      const element = contentRef.current
+      if (!scroller || !element || contentObserverRef.current) return
+
+      const { staticMode, isAtBottomRef } = latestRef.current
 
       // On mount: if we should be at bottom, scroll there immediately
       if (isAtBottomRef.current && !staticMode) {
@@ -258,6 +275,8 @@ export function useMessageListScroll({
           return
         }
 
+        const { staticMode, isAtBottomRef } = latestRef.current
+
         // Content grew and we were at bottom -> stay at bottom
         if (newHeight > lastHeight && isAtBottomRef.current && !staticMode) {
           debugLog('RESIZE SCROLL TO BOTTOM', {
@@ -300,7 +319,26 @@ export function useMessageListScroll({
       observer.observe(element)
       contentObserverRef.current = observer
     }
+
+    stableSettersRef.current = {
+      setScrollContainerRef: (el: HTMLDivElement | null) => {
+        scrollerRef.current = el
+        const externalScrollerRef = latestRef.current.externalScrollerRef
+        if (externalScrollerRef) {
+          (externalScrollerRef as React.MutableRefObject<HTMLElement | null>).current = el
+        }
+        if (el) trySetupContentObserver()
+      },
+      setContentRef: (element: HTMLDivElement | null) => {
+        if (element === contentRef.current) return
+        teardownContentObserver()
+        contentRef.current = element
+        if (element) trySetupContentObserver()
+      },
+    }
   }
+
+  const { setScrollContainerRef, setContentRef } = stableSettersRef.current
 
   // ==========================================================================
   // SCROLL ACTIONS
@@ -1149,7 +1187,6 @@ export function useMessageListScroll({
 
   // ==========================================================================
   // EFFECT: Container resize (composer grows/shrinks)
-  // NOTE: This effect MUST come before content resize so tests can find it at instances[0]
   // ==========================================================================
 
   useEffect(() => {
