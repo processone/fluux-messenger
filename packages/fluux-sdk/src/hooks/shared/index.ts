@@ -6,3 +6,4 @@
  */
 
 export { createFetchOlderHistory, type FetchOlderHistoryDeps } from './createFetchOlderHistory'
+export { pickOldestArchiveId, isItemNotFoundError } from './mamCursor'

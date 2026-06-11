@@ -190,6 +190,53 @@ describe('createFetchOlderHistory', () => {
     })
   })
 
+  describe('graceful recovery (item-not-found)', () => {
+    const oldestTs = new Date('2026-06-01T10:00:00.000Z')
+
+    it('retries with a timestamp window when the backward query fails with item-not-found', async () => {
+      vi.mocked(deps.loadFromCache).mockResolvedValue([])
+      vi.mocked(deps.queryMAM).mockRejectedValue({ condition: 'item-not-found' })
+      deps.getOldestTimestamp = vi.fn(() => oldestTs)
+      deps.queryMAMByEndTime = vi.fn(() => Promise.resolve())
+      fetchOlderHistory = createFetchOlderHistory(deps)
+
+      await fetchOlderHistory('conv-1')
+
+      expect(deps.queryMAMByEndTime).toHaveBeenCalledWith('conv-1', oldestTs.toISOString())
+    })
+
+    it('does not retry when the query fails with a different condition', async () => {
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+      vi.mocked(deps.loadFromCache).mockResolvedValue([])
+      vi.mocked(deps.queryMAM).mockRejectedValue({ condition: 'forbidden' })
+      deps.getOldestTimestamp = vi.fn(() => oldestTs)
+      deps.queryMAMByEndTime = vi.fn(() => Promise.resolve())
+      fetchOlderHistory = createFetchOlderHistory(deps)
+
+      await fetchOlderHistory('conv-1')
+
+      expect(deps.queryMAMByEndTime).not.toHaveBeenCalled()
+      expect(consoleSpy).toHaveBeenCalled()
+      consoleSpy.mockRestore()
+    })
+
+    it('queries by timestamp window when there is no archive cursor (chat)', async () => {
+      // Oldest in-memory message has no stanzaId, so no valid `before` cursor —
+      // recover by fetching the page before the oldest message's timestamp.
+      deps.errorLogPrefix = 'Failed to fetch older chat history'
+      vi.mocked(deps.getOldestMessageId).mockReturnValue(undefined)
+      vi.mocked(deps.loadFromCache).mockResolvedValue([])
+      deps.getOldestTimestamp = vi.fn(() => oldestTs)
+      deps.queryMAMByEndTime = vi.fn(() => Promise.resolve())
+      fetchOlderHistory = createFetchOlderHistory(deps)
+
+      await fetchOlderHistory('conv-1')
+
+      expect(deps.queryMAM).not.toHaveBeenCalled()
+      expect(deps.queryMAMByEndTime).toHaveBeenCalledWith('conv-1', oldestTs.toISOString())
+    })
+  })
+
   describe('error handling', () => {
     it('logs error when cache loading fails', async () => {
       const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
