@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { render } from '@testing-library/react'
-import { renderStyledMessage } from './messageStyles'
+import { renderStyledMessage, renderQuotePreview } from './messageStyles'
 
 describe('renderStyledMessage', () => {
   // Helper to render and get text content
@@ -245,6 +245,27 @@ describe('renderStyledMessage', () => {
       const container = renderText('> Simple quote')
       const quote = container.querySelector('blockquote')
       expect(quote?.classList.contains('blockquote-decorated')).toBe(true)
+    })
+
+    it('treats spaced "> >" markers as nested depth (no raw > leaks)', () => {
+      const container = renderText('> Top level\n> > Spaced nested')
+      const outer = container.querySelector('blockquote.blockquote-decorated')
+      expect(outer).toBeTruthy()
+      const nested = outer?.querySelector('blockquote.blockquote-nested')
+      expect(nested).toBeTruthy()
+      expect(nested?.textContent).toBe('Spaced nested')
+      // The inner "> " must be consumed as a quote level, not left as literal text
+      expect(container.textContent).not.toContain('>')
+    })
+
+    it('treats spaced "> > >" markers as three levels deep', () => {
+      const container = renderText('> > > deep')
+      const outer = container.querySelector('blockquote.blockquote-decorated')
+      const mid = outer?.querySelector('blockquote.blockquote-nested')
+      const inner = mid?.querySelector('blockquote.blockquote-nested')
+      expect(inner).toBeTruthy()
+      expect(inner?.textContent).toBe('deep')
+      expect(container.textContent).not.toContain('>')
     })
   })
 
@@ -973,5 +994,42 @@ describe('CRLF handling', () => {
     expect(container.textContent).toContain('Line 1')
     expect(container.textContent).toContain('Line 2')
     expect(container.querySelectorAll('br')).toHaveLength(1)
+  })
+})
+
+describe('renderQuotePreview', () => {
+  const renderPreview = (text: string) => {
+    const { container } = render(<div>{renderQuotePreview(text)}</div>)
+    return container
+  }
+
+  it('renders a quote as a vertical-bar blockquote (never decorated)', () => {
+    const container = renderPreview('> quoted text')
+    expect(container.querySelector('blockquote.blockquote-nested')).toBeTruthy()
+    expect(container.querySelector('blockquote.blockquote-decorated')).toBeFalsy()
+    expect(container.querySelector('blockquote')?.textContent).toBe('quoted text')
+  })
+
+  it('nests deeper levels as nested bars', () => {
+    const container = renderPreview('> a\n> > b')
+    const outer = container.querySelector('blockquote.blockquote-nested')
+    expect(outer).toBeTruthy()
+    const inner = outer?.querySelector('blockquote.blockquote-nested')
+    expect(inner).toBeTruthy()
+    expect(inner?.textContent).toBe('b')
+    expect(container.textContent).not.toContain('>')
+  })
+
+  it('renders mixed plain and quoted content without leaking markers', () => {
+    const container = renderPreview('An explosion occurred.\n> > 7 people are dead.')
+    expect(container.textContent).toContain('An explosion occurred.')
+    expect(container.querySelector('blockquote')?.textContent).toContain('7 people are dead.')
+    expect(container.textContent).not.toContain('>')
+  })
+
+  it('returns plain text unchanged when there is no quote', () => {
+    const container = renderPreview('just a normal reply')
+    expect(container.querySelector('blockquote')).toBeFalsy()
+    expect(container.textContent).toBe('just a normal reply')
   })
 })

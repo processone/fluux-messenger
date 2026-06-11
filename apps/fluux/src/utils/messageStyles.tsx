@@ -452,11 +452,113 @@ function CodeBlock({ code, language, keyProp }: { code: string; language?: strin
  * Check if a line is a blockquote (starts with > )
  */
 function isBlockquote(line: string): { isQuote: boolean; depth: number; content: string } {
-  const match = line.match(/^(>+)\s?(.*)$/)
+  // Quote depth is the number of leading ">" markers, whether written
+  // contiguously (">>") or spaced ("> >"). The trailing space before the
+  // content is optional. This keeps deeper levels from leaking a literal ">"
+  // into the rendered text.
+  const match = line.match(/^((?:>[ \t]?)+)(.*)$/)
   if (match) {
-    return { isQuote: true, depth: match[1].length, content: match[2] }
+    const depth = (match[1].match(/>/g) || []).length
+    return { isQuote: true, depth, content: match[2] }
   }
   return { isQuote: false, depth: 0, content: line }
+}
+
+interface QuoteEntry { depth: number; content: string; offset: number }
+
+/**
+ * Recursively render a group of consecutive quote lines into nested
+ * <blockquote> elements, one level of nesting per quote depth.
+ *
+ * @param entries - Consecutive quote lines with their depth and content
+ * @param currentDepth - The depth this blockquote represents (1 = outermost)
+ * @param baseIdx - Base key index for stable React keys
+ * @param renderLine - Renders the inline content of a single quote line
+ * @param decorateOutermost - When true the outermost level uses the decorative
+ *   quotation-mark style; when false (compact previews) every level uses the
+ *   lighter vertical-bar style.
+ */
+function renderQuoteTree(
+  entries: QuoteEntry[],
+  currentDepth: number,
+  baseIdx: number,
+  renderLine: (content: string, idx: number, offset: number) => React.ReactNode,
+  decorateOutermost: boolean
+): React.ReactNode {
+  const children: React.ReactNode[] = []
+  let i = 0
+
+  while (i < entries.length) {
+    const entry = entries[i]
+    if (entry.depth <= currentDepth) {
+      // Render this line at the current depth.
+      // Add <br/> between consecutive same-depth lines.
+      if (children.length > 0 && i > 0 && entries[i - 1].depth <= currentDepth) {
+        children.push(<br key={`br-${baseIdx + i}`} />)
+      }
+      children.push(
+        <React.Fragment key={`line-${baseIdx + i}`}>
+          {renderLine(entry.content, baseIdx + i, entry.offset)}
+        </React.Fragment>
+      )
+      i++
+    } else {
+      // Collect consecutive deeper lines and render as a nested blockquote.
+      const nestedStart = i
+      while (i < entries.length && entries[i].depth > currentDepth) {
+        i++
+      }
+      children.push(renderQuoteTree(entries.slice(nestedStart, i), currentDepth + 1, baseIdx + nestedStart, renderLine, decorateOutermost))
+    }
+  }
+
+  const isDecorated = decorateOutermost && currentDepth === 1
+  return (
+    <blockquote
+      key={`quote-${baseIdx}`}
+      className={isDecorated ? 'blockquote-decorated text-fluux-muted italic' : 'blockquote-nested text-fluux-muted italic'}
+    >
+      {children}
+    </blockquote>
+  )
+}
+
+/**
+ * Render a compact preview of a (possibly quoted) message body for the reply
+ * chip. Quote markers ("> ", ">>", "> >") become nested vertical bars at any
+ * depth; everything else is rendered as plain text. Links and inline styling
+ * are intentionally not rendered here — the chip is a button, so nested
+ * interactive/markup elements are avoided.
+ */
+export function renderQuotePreview(text: string): React.ReactNode {
+  if (!text) return null
+  const normalized = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
+  const lines = normalized.split('\n')
+  const result: React.ReactNode[] = []
+  let quoteBuffer: QuoteEntry[] = []
+  let key = 0
+
+  const flush = () => {
+    if (quoteBuffer.length > 0) {
+      result.push(renderQuoteTree(quoteBuffer, 1, key, (content) => content, false))
+      key += quoteBuffer.length + 1
+      quoteBuffer = []
+    }
+  }
+
+  for (const line of lines) {
+    const quote = isBlockquote(line)
+    if (quote.isQuote) {
+      quoteBuffer.push({ depth: quote.depth, content: quote.content, offset: 0 })
+    } else {
+      flush()
+      if (result.length > 0) result.push(<br key={`pbr-${key}`} />)
+      result.push(<React.Fragment key={`pt-${key++}`}>{line}</React.Fragment>)
+    }
+  }
+  flush()
+
+  return result
 }
 
 /**
@@ -642,52 +744,17 @@ function renderTextBlock(
   let index = startIndex
   let currentOffset = textOffset
 
-  const renderQuoteBlock = (
-    entries: { depth: number; content: string; offset: number }[],
-    currentDepth: number,
-    baseIdx: number
-  ): React.ReactNode => {
-    const children: React.ReactNode[] = []
-    let i = 0
-
-    while (i < entries.length) {
-      const entry = entries[i]
-      if (entry.depth <= currentDepth) {
-        // Render this line at the current depth
-        // Add <br/> between consecutive same-depth lines
-        if (children.length > 0 && i > 0 && entries[i - 1].depth <= currentDepth) {
-          children.push(<br key={`br-${baseIdx + i}`} />)
-        }
-        children.push(
-          <React.Fragment key={`line-${baseIdx + i}`}>
-            {renderInline(entry.content, baseIdx + i, mentionRanges, entry.offset, isDarkMode, disableMentionFallback)}
-          </React.Fragment>
-        )
-        i++
-      } else {
-        // Collect consecutive deeper lines and render as nested blockquote
-        const nestedStart = i
-        while (i < entries.length && entries[i].depth > currentDepth) {
-          i++
-        }
-        children.push(renderQuoteBlock(entries.slice(nestedStart, i), currentDepth + 1, baseIdx + nestedStart))
-      }
-    }
-
-    const isOutermost = currentDepth === 1
-    return (
-      <blockquote
-        key={`quote-${baseIdx}`}
-        className={isOutermost ? 'blockquote-decorated text-fluux-muted italic' : 'blockquote-nested text-fluux-muted italic'}
-      >
-        {children}
-      </blockquote>
-    )
-  }
-
   const flushQuote = () => {
     if (quoteBuffer && quoteBuffer.length > 0) {
-      result.push(renderQuoteBlock(quoteBuffer, 1, index))
+      result.push(
+        renderQuoteTree(
+          quoteBuffer,
+          1,
+          index,
+          (content, idx, offset) => renderInline(content, idx, mentionRanges, offset, isDarkMode, disableMentionFallback),
+          true
+        )
+      )
       index += quoteBuffer.length
       quoteBuffer = null
     }

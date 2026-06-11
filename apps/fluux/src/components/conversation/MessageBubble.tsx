@@ -13,6 +13,7 @@ import { Avatar } from '../Avatar'
 import { AvatarLightbox } from '../AvatarLightbox'
 import { MessageToolbar } from './MessageToolbar'
 import { MessageBody } from './MessageBody'
+import { renderQuotePreview } from '@/utils/messageStyles'
 import { EncryptedPlaceholder } from './EncryptedPlaceholder'
 import { UnsupportedEncryptionNotice } from './UnsupportedEncryptionNotice'
 import { MessageReactions } from './MessageReactions'
@@ -521,7 +522,7 @@ export const MessageBubble = memo(function MessageBubble({
                 className="font-medium"
                 style={{ color: replyContext.senderColor }}
               >{replyContext.senderName}</span>
-              <p className="line-clamp-2 opacity-75">{replyContext.body}</p>
+              <div className="reply-quote-preview opacity-75 max-h-16 overflow-hidden">{renderQuotePreview(replyContext.body)}</div>
             </div>
           </button>
         )}
