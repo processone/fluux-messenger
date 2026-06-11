@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { applyRetraction, applyCorrection, parseOobData, parseMessageContent, parseOriginId, createOriginIdElement } from './messagingUtils'
+import { applyRetraction, applyCorrection, parseOobData, parseMessageContent, parseOriginId, parseStanzaId, createOriginIdElement } from './messagingUtils'
 import { createMockElement } from '../test-utils'
 
 describe('messagingUtils', () => {
@@ -514,6 +514,128 @@ describe('messagingUtils', () => {
       ])
 
       expect(parseOriginId(stanza)).toBeUndefined()
+    })
+  })
+
+  describe('parseStanzaId (XEP-0359 by-aware)', () => {
+    it('returns the first stanza-id id when no expected by is given', () => {
+      const stanza = createMockElement('message', { id: 'msg-1' }, [
+        { name: 'body', text: 'Hello' },
+        { name: 'stanza-id', attrs: { xmlns: 'urn:xmpp:sid:0', id: 'first-id', by: 'muc.example.com' } },
+        { name: 'stanza-id', attrs: { xmlns: 'urn:xmpp:sid:0', id: 'second-id', by: 'user@example.com' } },
+      ])
+
+      expect(parseStanzaId(stanza)).toBe('first-id')
+    })
+
+    it('prefers the stanza-id whose by matches the expected archive (foreign first, own second)', () => {
+      // Per XEP-0359/0313 a message can carry multiple <stanza-id by="..."/>.
+      // Only the id stamped by the queried archive is a valid MAM cursor.
+      const stanza = createMockElement('message', { id: 'msg-1' }, [
+        { name: 'body', text: 'Hello' },
+        { name: 'stanza-id', attrs: { xmlns: 'urn:xmpp:sid:0', id: 'foreign-id', by: 'muc.example.com' } },
+        { name: 'stanza-id', attrs: { xmlns: 'urn:xmpp:sid:0', id: 'own-id', by: 'user@example.com' } },
+      ])
+
+      expect(parseStanzaId(stanza, 'user@example.com')).toBe('own-id')
+    })
+
+    it('compares by-attribute on a bare-JID basis', () => {
+      const stanza = createMockElement('message', { id: 'msg-1' }, [
+        { name: 'stanza-id', attrs: { xmlns: 'urn:xmpp:sid:0', id: 'foreign-id', by: 'muc.example.com' } },
+        { name: 'stanza-id', attrs: { xmlns: 'urn:xmpp:sid:0', id: 'own-id', by: 'user@example.com' } },
+      ])
+
+      // Caller may pass a full JID; matching is on the bare form.
+      expect(parseStanzaId(stanza, 'user@example.com/resource')).toBe('own-id')
+    })
+
+    it('falls back to the first stanza-id when no by matches the expected archive', () => {
+      const stanza = createMockElement('message', { id: 'msg-1' }, [
+        { name: 'stanza-id', attrs: { xmlns: 'urn:xmpp:sid:0', id: 'foreign-id', by: 'muc.example.com' } },
+        { name: 'stanza-id', attrs: { xmlns: 'urn:xmpp:sid:0', id: 'other-id', by: 'other.example.com' } },
+      ])
+
+      expect(parseStanzaId(stanza, 'user@example.com')).toBe('foreign-id')
+    })
+
+    it('returns undefined when there is no stanza-id element', () => {
+      const stanza = createMockElement('message', { id: 'msg-1' }, [
+        { name: 'body', text: 'Hello' },
+      ])
+
+      expect(parseStanzaId(stanza, 'user@example.com')).toBeUndefined()
+    })
+
+    it('matches the expected archive even when it is the first stanza-id (order-independent)', () => {
+      // The matching id comes FIRST here — guards against a regression that
+      // simply returns the last stanza-id instead of the by-matched one.
+      const stanza = createMockElement('message', { id: 'msg-1' }, [
+        { name: 'stanza-id', attrs: { xmlns: 'urn:xmpp:sid:0', id: 'own-id', by: 'user@example.com' } },
+        { name: 'stanza-id', attrs: { xmlns: 'urn:xmpp:sid:0', id: 'foreign-id', by: 'muc.example.com' } },
+      ])
+
+      expect(parseStanzaId(stanza, 'user@example.com')).toBe('own-id')
+    })
+
+    it('skips a by-matching stanza-id that has no id attribute and falls back to a usable id', () => {
+      // A malformed <stanza-id by="me"/> with no id must not shadow a real id.
+      const stanza = createMockElement('message', { id: 'msg-1' }, [
+        { name: 'stanza-id', attrs: { xmlns: 'urn:xmpp:sid:0', by: 'user@example.com' } },
+        { name: 'stanza-id', attrs: { xmlns: 'urn:xmpp:sid:0', id: 'foreign-id', by: 'muc.example.com' } },
+      ])
+
+      expect(parseStanzaId(stanza, 'user@example.com')).toBe('foreign-id')
+    })
+
+    it('treats an empty-string expectedBy like no expected archive (call-site safety)', () => {
+      // Call sites pass getBareJid(getCurrentJid() ?? '') which is '' before the
+      // JID is known — must not throw and must fall back to first-match.
+      const stanza = createMockElement('message', { id: 'msg-1' }, [
+        { name: 'stanza-id', attrs: { xmlns: 'urn:xmpp:sid:0', id: 'first-id', by: 'muc.example.com' } },
+        { name: 'stanza-id', attrs: { xmlns: 'urn:xmpp:sid:0', id: 'second-id', by: 'user@example.com' } },
+      ])
+
+      expect(parseStanzaId(stanza, '')).toBe('first-id')
+    })
+
+    it('never matches a stanza-id that has no by attribute against an expected archive', () => {
+      // A <stanza-id> without a by is ambiguous; it can only serve as fallback,
+      // never as a by-match.
+      const stanza = createMockElement('message', { id: 'msg-1' }, [
+        { name: 'stanza-id', attrs: { xmlns: 'urn:xmpp:sid:0', id: 'no-by-id' } },
+        { name: 'stanza-id', attrs: { xmlns: 'urn:xmpp:sid:0', id: 'own-id', by: 'user@example.com' } },
+      ])
+
+      expect(parseStanzaId(stanza, 'user@example.com')).toBe('own-id')
+      // With no expected archive, the first (by-less) id is returned.
+      expect(parseStanzaId(stanza)).toBe('no-by-id')
+    })
+  })
+
+  describe('parseMessageContent - by-aware stanza-id selection', () => {
+    it('selects the stanza-id matching expectedStanzaIdBy', () => {
+      const messageEl = createMockElement('message', { id: 'msg-1' }, [
+        { name: 'body', text: 'Hello' },
+        { name: 'stanza-id', attrs: { xmlns: 'urn:xmpp:sid:0', id: 'foreign-id', by: 'muc.example.com' } },
+        { name: 'stanza-id', attrs: { xmlns: 'urn:xmpp:sid:0', id: 'own-id', by: 'user@example.com' } },
+      ])
+
+      const result = parseMessageContent({ messageEl, body: 'Hello', expectedStanzaIdBy: 'user@example.com' })
+
+      expect(result.stanzaId).toBe('own-id')
+    })
+
+    it('falls back to the first stanza-id when expectedStanzaIdBy is omitted', () => {
+      const messageEl = createMockElement('message', { id: 'msg-1' }, [
+        { name: 'body', text: 'Hello' },
+        { name: 'stanza-id', attrs: { xmlns: 'urn:xmpp:sid:0', id: 'foreign-id', by: 'muc.example.com' } },
+        { name: 'stanza-id', attrs: { xmlns: 'urn:xmpp:sid:0', id: 'own-id', by: 'user@example.com' } },
+      ])
+
+      const result = parseMessageContent({ messageEl, body: 'Hello' })
+
+      expect(result.stanzaId).toBe('foreign-id')
     })
   })
 
