@@ -1974,5 +1974,43 @@ describe('MessageList scroll behavior', () => {
       expect(MockResizeObserver.instances.length).toBe(liveAfterMount)
       expect(contentWrapperIsObserved()).toBe(true)
     })
+
+    // Field diagnostic for the WebKitGTK freeze class: a SLOW correction (the
+    // scrollHeight read reflows the whole backlog) must produce a rate-limited
+    // contextual warning so fluux.log shows duration + backlog size.
+    it('warns with context when a scroll correction is slow', () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+      // Every performance.now() call advances 50ms -> any measured correction
+      // "takes" 50ms, above the 32ms threshold.
+      let fakeNow = 0
+      const nowSpy = vi.spyOn(performance, 'now').mockImplementation(() => {
+        fakeNow += 50
+        return fakeNow
+      })
+
+      try {
+        render(renderList(createTestMessages(5)))
+        const scroller = document.querySelector('[data-message-list]')!
+        const wrapper = Array.from(scroller.children).find(
+          (c) => c instanceof HTMLDivElement
+        ) as Element
+        const observer = MockResizeObserver.observing(wrapper)
+        expect(observer).toBeDefined()
+
+        act(() => {
+          observer!.triggerResize(800)
+        })
+
+        const slowWarnings = warnSpy.mock.calls
+          .map((c) => String(c[0]))
+          .filter((m) => m.includes('[SlowScrollCorrection]'))
+        expect(slowWarnings.length).toBe(1)
+        expect(slowWarnings[0]).toContain('conversation=conv-1')
+        expect(slowWarnings[0]).toContain('rows=')
+      } finally {
+        nowSpy.mockRestore()
+        warnSpy.mockRestore()
+      }
+    })
   })
 })

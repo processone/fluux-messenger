@@ -18,6 +18,7 @@
 import { useRef, useEffect, useLayoutEffect, useState, useCallback } from 'react'
 import { scrollStateManager } from '@/utils/scrollStateManager'
 import { createResizeLoopMonitor } from './resizeLoopMonitor'
+import { createSlowCorrectionMonitor } from './slowCorrectionMonitor'
 
 // ============================================================================
 // DEBUG
@@ -113,6 +114,8 @@ export function useMessageListScroll({
   const correctionRafRef = useRef<number | null>(null)
   // Diagnostic-only monitor for runaway ResizeObserver fire rates (WebKitGTK).
   const resizeMonitorRef = useRef<ReturnType<typeof createResizeLoopMonitor> | null>(null)
+  // Diagnostic-only monitor for SLOW corrections (reflow cost, not fire rate).
+  const slowCorrectionMonitorRef = useRef<ReturnType<typeof createSlowCorrectionMonitor> | null>(null)
 
   // Track scroll position - always create internal ref to follow rules of hooks
   const internalIsAtBottomRef = useRef(true)
@@ -200,9 +203,9 @@ export function useMessageListScroll({
   //    values they need are read through latestRef (updated each render via
   //    effect), never closed over.
 
-  const latestRef = useRef({ staticMode, externalScrollerRef, isAtBottomRef })
+  const latestRef = useRef({ staticMode, externalScrollerRef, isAtBottomRef, conversationId })
   useEffect(() => {
-    latestRef.current = { staticMode, externalScrollerRef, isAtBottomRef }
+    latestRef.current = { staticMode, externalScrollerRef, isAtBottomRef, conversationId }
   })
 
   const stableSettersRef = useRef<{
@@ -250,6 +253,33 @@ export function useMessageListScroll({
         const currentScroller = scrollerRef.current
         if (!currentScroller) return
 
+        // Time the whole correction (including the skip paths — the
+        // scrollHeight read below is the reflow that costs, whatever branch
+        // follows). The frequency monitor in the observer callback cannot see
+        // this failure mode: slow corrections fire only a few times a second.
+        const correctionStart = performance.now()
+        try {
+          runCorrectionBody(currentScroller)
+        } finally {
+          const correctionEnd = performance.now()
+          if (!slowCorrectionMonitorRef.current) {
+            slowCorrectionMonitorRef.current = createSlowCorrectionMonitor()
+          }
+          if (slowCorrectionMonitorRef.current.record(correctionEnd - correctionStart, correctionEnd)) {
+            // Context reads are warn-path only (rate-limited): querySelectorAll
+            // over the backlog is not free.
+            const rows = currentScroller.querySelectorAll('.message-row').length
+            console.warn(
+              `[SlowScrollCorrection] scroll correction took ${Math.round(correctionEnd - correctionStart)}ms ` +
+              `(rows=${rows}, scrollHeight=${currentScroller.scrollHeight}, ` +
+              `conversation=${latestRef.current.conversationId}) — ` +
+              `reflow cost scales with the rendered backlog.`
+            )
+          }
+        }
+      }
+
+      const runCorrectionBody = (currentScroller: HTMLDivElement) => {
         const newHeight = currentScroller.scrollHeight
         const currentScrollTop = currentScroller.scrollTop
 

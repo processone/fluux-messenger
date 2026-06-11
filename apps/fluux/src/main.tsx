@@ -12,6 +12,8 @@ import './index.css'
 import './utils/tauriFileDrop'
 import { tauriProxyAdapter } from './utils/tauriProxyAdapter'
 import { installBeforeInputGuard } from './utils/tauriInputFix'
+import { logStartupCapabilities } from './utils/startupDiagnostics'
+import { startStallSentinel } from './utils/stallSentinel'
 
 // Check if running in Tauri
 const isTauri = '__TAURI_INTERNALS__' in window
@@ -57,6 +59,11 @@ document.addEventListener('keydown', (e) => {
 
 // Block control characters Tauri's macOS webview inserts on arrow-key boundary hits
 installBeforeInputGuard()
+
+// Freeze-triage diagnostics (log-only, forwarded to fluux.log in Tauri):
+// engine capability line + main-thread stall sentinel.
+logStartupCapabilities()
+startStallSentinel()
 
 // Auto-recover from dynamic import failures. Two failure modes share the
 // same recovery path:
