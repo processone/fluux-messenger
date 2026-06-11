@@ -414,12 +414,24 @@ export const MessageBubble = memo(function MessageBubble({
 
       {/* Content */}
       <div className={`relative flex-1 min-w-0 ${isSelected ? 'bg-fluux-selection -my-0.5 py-0.5 -ms-2 ps-2 -me-4 pe-4 rounded-s' : ''}${inThread ? ` bg-fluux-private-soft border-x border-fluux-private-border px-2.5 py-1 ${threadStart ? 'border-t rounded-t-lg' : ''} ${threadEnd ? 'border-b rounded-b-lg' : ''}` : ''}`}>
-        {threadStart && (
+        {threadStart && (counterpartGone ? (
           <div className="flex items-center gap-1.5 pb-1 text-xs font-medium text-fluux-private">
             <Ear className="size-3.5 shrink-0" />
             <span className="truncate">{t('rooms.whisperThread', { nick: whisperWith })}</span>
           </div>
-        )}
+        ) : (
+          // Clicking the header re-enters whisper mode (same flow as the
+          // toolbar reply button); read-only threads keep the plain label.
+          <button
+            type="button"
+            onClick={onReply}
+            title={t('rooms.sendPrivateMessage')}
+            className="flex max-w-full cursor-pointer items-center gap-1.5 -ms-1 mb-0.5 rounded px-1 py-0.5 text-xs font-medium text-fluux-private transition-colors hover:bg-fluux-private-hover"
+          >
+            <Ear className="size-3.5 shrink-0" />
+            <span className="truncate">{t('rooms.whisperThread', { nick: whisperWith })}</span>
+          </button>
+        ))}
         {/* Floating hover toolbar - hidden when user is composing or message is retracted */}
         {!message.isRetracted && (
           <MessageToolbar
@@ -428,7 +440,7 @@ export const MessageBubble = memo(function MessageBubble({
             onEdit={onEdit}
             onDelete={onDelete}
             myReactions={reactionsEnabled ? myReactions : []}
-            canReply={!isLastMessage && !counterpartGone}
+            canReply={(!isLastMessage || inThread) && !counterpartGone}
             canEdit={message.isOutgoing && isLastOutgoing}
             canDelete={message.isOutgoing || canModerate === true}
             isHidden={hideToolbar || false}
