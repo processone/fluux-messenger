@@ -3,6 +3,7 @@ import { Link, ExternalLink, Download } from 'lucide-react'
 import { MenuButton } from './sidebar-components/SidebarListMenu'
 import { copyToClipboard } from '@/utils/clipboard'
 import { isTauri } from '@/utils/tauri'
+import { downloadFile } from '@/utils/download'
 import type { ContextMenuState } from '@/hooks/useContextMenu'
 
 interface ImageContextMenuProps {
@@ -38,12 +39,7 @@ export function ImageContextMenu({ originalUrl, proxiedUrl, filename, menu }: Im
 
   const handleSave = () => {
     menu.close()
-    const link = document.createElement('a')
-    link.href = proxiedUrl ?? originalUrl
-    link.download = filename || 'image'
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
+    void downloadFile(proxiedUrl ?? originalUrl, filename || 'image')
   }
 
   return (

@@ -9,6 +9,7 @@ import { useTranslation } from 'react-i18next'
 import type { FileEncryption } from '@fluux/sdk'
 import { useAttachmentUrl } from '@/hooks'
 import { useContextMenu } from '@/hooks/useContextMenu'
+import { downloadFile } from '@/utils/download'
 import { ImageContextMenu } from './ImageContextMenu'
 
 interface ImageLightboxProps {
@@ -57,14 +58,14 @@ export function ImageLightbox({ src, alt, downloadUrl, filename, encryption, pla
       />
       {/* Top-right controls */}
       <div className="absolute top-4 end-4 z-10 flex items-center gap-2">
-        <a
-          href={proxiedSrc ?? downloadUrl}
-          download={filename || 'image'}
+        <button
+          type="button"
+          onClick={() => void downloadFile(proxiedSrc ?? downloadUrl, filename || 'image')}
           className="p-2 text-white/70 hover:text-white rounded-full hover:bg-white/10 transition-colors"
           title={t('common.download')}
         >
           <Download className="size-6" />
-        </a>
+        </button>
         <button
           onClick={onClose}
           className="p-2 text-white/70 hover:text-white rounded-full hover:bg-white/10 transition-colors"
