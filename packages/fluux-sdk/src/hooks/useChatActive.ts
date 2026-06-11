@@ -5,7 +5,7 @@ import { useChatStore, useConnectionStore } from '../react/storeHooks'
 import { useXMPPContext } from '../provider'
 import type { Conversation, ChatStateNotification, FileAttachment, MAMQueryState, Message } from '../core'
 import { NS_MAM } from '../core/namespaces'
-import { createFetchOlderHistory } from './shared'
+import { createFetchOlderHistory, pickOldestArchiveId } from './shared'
 
 /**
  * Stable empty array references to prevent infinite re-renders.
@@ -309,15 +309,18 @@ export function useChatActive() {
         getMAMState: (id) => chatStore.getState().getMAMQueryState(id),
         setMAMLoading: (id, loading) => chatStore.getState().setMAMLoading(id, loading),
         loadFromCache: (id, limit) => chatStore.getState().loadOlderMessagesFromCache(id, limit),
-        getOldestMessageId: (id) => {
-          const messages = chatStore.getState().messages.get(id)
-          if (!messages || messages.length === 0) return undefined
-          return messages[0].stanzaId || messages[0].id
-        },
+        getOldestMessageId: (id) => pickOldestArchiveId(chatStore.getState().messages.get(id) ?? []),
+        getOldestTimestamp: (id) => chatStore.getState().messages.get(id)?.[0]?.timestamp,
         queryMAM: async (id, beforeId) => {
           const conversation = chatStore.getState().conversations.get(id)
           if (conversation) {
             await client.chat.queryMAM({ with: conversation.id, before: beforeId })
+          }
+        },
+        queryMAMByEndTime: async (id, endIso) => {
+          const conversation = chatStore.getState().conversations.get(id)
+          if (conversation) {
+            await client.chat.queryMAM({ with: conversation.id, end: endIso, before: '' })
           }
         },
         errorLogPrefix: 'Failed to fetch older chat history',

@@ -8,7 +8,7 @@ import * as searchIndex from '../utils/searchIndex'
 import * as mamState from './shared/mamState'
 import type { MAMQueryDirection } from './shared/mamState'
 import * as draftState from './shared/draftState'
-import { buildMessageKeySet, isMessageDuplicate, sortMessagesByTimestamp, trimMessages, prependOlderMessages, mergeAndProcessMessages } from './shared/messageArrayUtils'
+import { buildMessageKeySet, isMessageDuplicate, sortMessagesByTimestamp, trimMessages, prependOlderMessages, mergeAndProcessMessages, backfillArchiveIds } from './shared/messageArrayUtils'
 import { shouldUpdateLastMessage } from './shared/lastMessageUtils'
 import * as notifState from './shared/notificationState'
 import { connectionStore } from './connectionStore'
@@ -654,7 +654,18 @@ export const chatStore = createStore<ChatState>()(
           const isDuplicate = isMessageDuplicate(msg, existingKeys, getChatMessageKeys)
 
           if (isDuplicate) {
-            return state // Don't add duplicate message
+            // The duplicate may be the archived/carbon copy of an outgoing
+            // message that has no stanzaId yet. Backfill the server archive id
+            // onto the in-memory copy (matched by originId) so backward MAM
+            // pagination has a valid cursor — then still skip adding the dup.
+            const { messages: backfilled, patched } = backfillArchiveIds(convMessages, [msg], getChatMessageKeys)
+            if (patched.length === 0) return state
+            for (const p of patched) {
+              void messageCache.updateMessage(p.id, { stanzaId: p.stanzaId!, ...(p.originId ? { originId: p.originId } : {}) })
+            }
+            const patchedMap = new Map(state.messages)
+            patchedMap.set(msg.conversationId, backfilled)
+            return { messages: patchedMap }
           }
 
           // Save to IndexedDB + search index only if the message is locally persistable
@@ -1118,7 +1129,16 @@ export const chatStore = createStore<ChatState>()(
       mergeMAMMessages: (conversationId, mamMessages, rsm, complete, direction) => {
         set((state) => {
           // Get existing messages for this conversation
-          const existingMessages = state.messages.get(conversationId) || []
+          const rawExisting = state.messages.get(conversationId) || []
+
+          // Backfill server stanzaIds from archived copies onto stanzaId-less
+          // in-memory messages (e.g. outgoing messages) before merging, so the
+          // live copy gains a valid backward-pagination cursor. The archived
+          // copy itself still dedups away below.
+          const { messages: existingMessages, patched } = backfillArchiveIds(rawExisting, mamMessages, getChatMessageKeys)
+          for (const p of patched) {
+            void messageCache.updateMessage(p.id, { stanzaId: p.stanzaId!, ...(p.originId ? { originId: p.originId } : {}) })
+          }
 
           // Choose merge strategy based on direction:
           // - Backward (scroll up for older): optimized prepend avoids full re-sort
@@ -1149,9 +1169,16 @@ export const chatStore = createStore<ChatState>()(
           )
 
           // If no new messages (all duplicates), only update MAM state - skip messages/conversations
-          // This prevents unnecessary re-renders when merging duplicates
+          // This prevents unnecessary re-renders when merging duplicates.
+          // Exception: if we backfilled stanzaIds onto existing messages, persist
+          // that patched array (trimmed === existingMessages here) to the store.
           if (newMessages.length === 0) {
-            return { mamQueryStates: newStates }
+            if (patched.length === 0) {
+              return { mamQueryStates: newStates }
+            }
+            const backfilledMap = new Map(state.messages)
+            backfilledMap.set(conversationId, trimmed)
+            return { messages: backfilledMap, mamQueryStates: newStates }
           }
 
           // Persist only locally-persistable messages to IndexedDB

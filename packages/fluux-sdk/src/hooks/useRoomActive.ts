@@ -3,7 +3,7 @@ import { roomStore, connectionStore } from '../stores'
 import { useRoomStore } from '../react/storeHooks'
 import { useXMPPContext } from '../provider'
 import type { Room, RoomMessage, MentionReference, ChatStateNotification, FileAttachment, MAMQueryState, RoomAffiliation, RoomRole, PollData, PollSettings } from '../core/types'
-import { createFetchOlderHistory } from './shared'
+import { createFetchOlderHistory, pickOldestArchiveId } from './shared'
 import {
   findNewestMessage,
   buildCatchUpStartTime,
@@ -340,12 +340,7 @@ export function useRoomActive() {
         getMAMState: (id) => roomStore.getState().getRoomMAMQueryState(id),
         setMAMLoading: (id, loading) => roomStore.getState().setRoomMAMLoading(id, loading),
         loadFromCache: (id, limit) => roomStore.getState().loadOlderMessagesFromCache(id, limit),
-        getOldestMessageId: (id) => {
-          const room = roomStore.getState().rooms.get(id)
-          const messages = room?.messages
-          if (!messages || messages.length === 0) return undefined
-          return messages[0].stanzaId || messages[0].id
-        },
+        getOldestMessageId: (id) => pickOldestArchiveId(roomStore.getState().rooms.get(id)?.messages ?? []),
         queryMAM: async (id, beforeId) => {
           await client.chat.queryRoomMAM({ roomJid: id, before: beforeId })
         },

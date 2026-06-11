@@ -291,6 +291,68 @@ describe('XMPPClient MAM', () => {
       expect(result.messages[1].isOutgoing).toBe(true)
     })
 
+    it('should select the stanza-id stamped by the own archive when several are present (XEP-0359 by-aware)', async () => {
+      // A MAM entry in the user's 1:1 archive can carry multiple
+      // <stanza-id by="..."/>. Only the one stamped by the queried archive
+      // (the user's own bare JID) is a valid RSM cursor — parseArchiveMessage
+      // must keep that one, not a foreign id that came in on the original stanza.
+      let stanzaListener: ((stanza: any) => void) | null = null
+      const originalOn = mockXmppClientInstance.on
+      mockXmppClientInstance.on = vi.fn().mockImplementation((event: string, listener: Function) => {
+        if (event === 'stanza') {
+          stanzaListener = listener as (stanza: any) => void
+        }
+        return originalOn.call(mockXmppClientInstance, event, listener)
+      }) as typeof mockXmppClientInstance.on
+
+      await connectClient()
+      vi.mocked(mockStores.connection.getJid).mockReturnValue('me@example.com/myresource')
+
+      mockXmppClientInstance.iqCaller.request = vi.fn().mockImplementation(async (iq) => {
+        const queryChild = iq.children?.find((c: any) => c.name === 'query')
+        const actualQueryId = queryChild?.attrs?.queryid || 'mam_query_byaware'
+
+        if (stanzaListener) {
+          const msg = createMockElement('message', { from: 'example.com' }, [
+            {
+              name: 'result',
+              attrs: { xmlns: 'urn:xmpp:mam:2', queryid: actualQueryId, id: 'archive-rsm-id' },
+              children: [
+                {
+                  name: 'forwarded',
+                  attrs: { xmlns: 'urn:xmpp:forward:0' },
+                  children: [
+                    { name: 'delay', attrs: { xmlns: 'urn:xmpp:delay', stamp: '2024-01-15T10:00:00Z' } },
+                    {
+                      name: 'message',
+                      attrs: { from: 'alice@example.com/resource', to: 'me@example.com', type: 'chat', id: 'msg-byaware' },
+                      children: [
+                        { name: 'body', text: 'Multi-archive entry' },
+                        // Foreign first (e.g. carried over from the sender's server), own second.
+                        { name: 'stanza-id', attrs: { xmlns: 'urn:xmpp:sid:0', id: 'foreign-id', by: 'alice-server.example.org' } },
+                        { name: 'stanza-id', attrs: { xmlns: 'urn:xmpp:sid:0', id: 'own-archive-id', by: 'me@example.com' } },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          ])
+          stanzaListener(msg)
+        }
+
+        return createMockElement('iq', { type: 'result' }, [
+          { name: 'fin', attrs: { xmlns: 'urn:xmpp:mam:2', complete: 'true' }, children: [] },
+        ])
+      })
+
+      const result = await xmppClient.chat.queryMAM({ with: 'alice@example.com' })
+
+      expect(result.messages.length).toBe(1)
+      expect(result.messages[0].body).toBe('Multi-archive entry')
+      expect(result.messages[0].stanzaId).toBe('own-archive-id')
+    })
+
     it('should set MAM loading state during query', async () => {
       await connectClient()
       const mamResponse = createMockElement('iq', { type: 'result' }, [

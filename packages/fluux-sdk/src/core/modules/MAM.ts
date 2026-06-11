@@ -242,7 +242,7 @@ export class MAM extends BaseModule {
           for (const { forwarded, messageEl, archiveId } of rawEntries) {
             const forwardedTimestamp = this.extractForwardedTimestamp(forwarded)
             await this.decryptArchiveEntryIfNeeded(messageEl, conversationId, forwardedTimestamp)
-            if (this.collectModification(messageEl, modifications, (from) => getBareJid(from), forwardedTimestamp)) {
+            if (this.collectModification(messageEl, modifications, (from) => getBareJid(from), forwardedTimestamp, getBareJid(this.deps.getCurrentJid() ?? ''))) {
               continue
             }
             const msg = this.parseArchiveMessage(forwarded, conversationId, archiveId)
@@ -385,7 +385,7 @@ export class MAM extends BaseModule {
           for (const { forwarded, messageEl, archiveId } of rawEntries) {
             const forwardedTimestamp = this.extractForwardedTimestamp(forwarded)
             await this.decryptArchiveEntryIfNeeded(messageEl, roomJid, forwardedTimestamp)
-            if (this.collectModification(messageEl, modifications, (from) => from, forwardedTimestamp)) {
+            if (this.collectModification(messageEl, modifications, (from) => from, forwardedTimestamp, roomJid)) {
               continue
             }
             const msg = this.parseRoomArchiveMessage(forwarded, roomJid, myNickname, archiveId)
@@ -512,7 +512,7 @@ export class MAM extends BaseModule {
         const to = getBareJid(messageEl.attrs.to || '')
         const conversationId = from === ownBareJid ? to : from
         await this.decryptArchiveEntryIfNeeded(messageEl, conversationId, forwardedTimestamp)
-        if (this.collectModification(messageEl, modifications, (from) => getBareJid(from), forwardedTimestamp)) {
+        if (this.collectModification(messageEl, modifications, (from) => getBareJid(from), forwardedTimestamp, ownBareJid)) {
           continue
         }
         const msg = this.parseArchiveMessage(forwarded, conversationId, archiveId)
@@ -574,7 +574,7 @@ export class MAM extends BaseModule {
       for (const { forwarded, messageEl, archiveId } of rawEntries) {
         const forwardedTimestamp = this.extractForwardedTimestamp(forwarded)
         await this.decryptArchiveEntryIfNeeded(messageEl, roomJid, forwardedTimestamp)
-        if (this.collectModification(messageEl, modifications, (from) => from, forwardedTimestamp)) {
+        if (this.collectModification(messageEl, modifications, (from) => from, forwardedTimestamp, roomJid)) {
           continue
         }
         const msg = this.parseRoomArchiveMessage(forwarded, roomJid, myNickname, archiveId)
@@ -1359,7 +1359,8 @@ export class MAM extends BaseModule {
     messageEl: Element,
     modifications: MAMModifications,
     normalizeFrom: (from: string) => string,
-    timestamp?: Date
+    timestamp?: Date,
+    expectedStanzaIdBy?: string
   ): boolean {
     const from = messageEl.attrs.from
     if (!from) return false
@@ -1377,8 +1378,10 @@ export class MAM extends BaseModule {
       const bodyText = messageEl.getChildText('body')
       if (bodyText) {
         // Capture the correction stanza's own stanza-id so replies referencing
-        // the corrected version's archive entry can resolve to the original message
-        const correctionStanzaId = parseStanzaId(messageEl)
+        // the corrected version's archive entry can resolve to the original message.
+        // XEP-0359: prefer the id stamped by the queried archive (own bare JID
+        // for 1:1, room JID for MUC) so it is a valid cross-client reference.
+        const correctionStanzaId = parseStanzaId(messageEl, expectedStanzaIdBy)
         modifications.corrections.push({
           targetId: replaceEl.attrs.id,
           from: normalizeFrom(from),
@@ -1758,13 +1761,16 @@ export class MAM extends BaseModule {
     if (!body && !messageEl.getChild('x', NS_OOB) && !hasEncryptedContent) return null
 
     const bareFrom = getBareJid(from)
-    const isOutgoing = bareFrom === getBareJid(this.deps.getCurrentJid() ?? '')
+    const ownBareJid = getBareJid(this.deps.getCurrentJid() ?? '')
+    const isOutgoing = bareFrom === ownBareJid
     const authoredAt = readStashedAuthoredAt(messageEl)
     const parsed = parseMessageContent({
       messageEl,
       body: body || '',
       delayEl,
       forceDelayed: true,
+      // XEP-0359: 1:1 archive — prefer the stanza-id stamped by our own archive.
+      expectedStanzaIdBy: ownBareJid,
       ...(authoredAt && { authoredAt }),
     })
 
@@ -1840,6 +1846,8 @@ export class MAM extends BaseModule {
       forceDelayed: true,
       preserveFullReplyToJid: true,
       messageContext: 'room',
+      // XEP-0359: MUC archive — prefer the stanza-id stamped by the room itself.
+      expectedStanzaIdBy: roomJid,
       ...(roomAuthoredAt && { authoredAt: roomAuthoredAt }),
     })
 

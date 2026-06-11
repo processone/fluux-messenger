@@ -1653,6 +1653,93 @@ describe('chatStore', () => {
       })
     })
 
+    describe('stanzaId backfill (closes the MAM cursor data gap)', () => {
+      it('backfills stanzaId onto an outgoing message when its archived copy arrives via MAM', () => {
+        chatStore.getState().addConversation(createConversation('alice@example.com'))
+
+        // Outgoing message as created by sendMessage: client originId, no stanzaId.
+        const sent: Message = {
+          type: 'chat',
+          id: 'uuid-sent',
+          originId: 'uuid-sent',
+          conversationId: 'alice@example.com',
+          from: 'me@example.com/desktop',
+          body: 'hello',
+          timestamp: new Date('2024-01-15T12:00:00Z'),
+          isOutgoing: true,
+        }
+        chatStore.getState().addMessage(sent)
+
+        // Archived copy from MAM: same origin-id, now carries the server stanzaId,
+        // bare `from`. It is a duplicate (matched by originId) and would otherwise
+        // be dropped without ever giving the live message a stanzaId.
+        const archived: Message = {
+          type: 'chat',
+          id: 'uuid-sent',
+          originId: 'uuid-sent',
+          conversationId: 'alice@example.com',
+          from: 'me@example.com',
+          body: 'hello',
+          timestamp: new Date('2024-01-15T12:00:00Z'),
+          isOutgoing: true,
+          stanzaId: 'archive-99',
+        }
+
+        chatStore.getState().mergeMAMMessages(
+          'alice@example.com',
+          [archived],
+          { count: 1, first: 'archive-99', last: 'archive-99' },
+          true,
+          'forward'
+        )
+
+        const messages = chatStore.getState().messages.get('alice@example.com')
+        expect(messages?.length).toBe(1) // still deduplicated
+        expect(messages?.[0].stanzaId).toBe('archive-99') // but now backfilled
+        expect(messageCache.updateMessage).toHaveBeenCalledWith(
+          'uuid-sent',
+          expect.objectContaining({ stanzaId: 'archive-99' })
+        )
+      })
+
+      it('backfills stanzaId onto an outgoing message when a duplicate carbon arrives via addMessage', () => {
+        chatStore.getState().addConversation(createConversation('alice@example.com'))
+
+        const sent: Message = {
+          type: 'chat',
+          id: 'uuid-2',
+          originId: 'uuid-2',
+          conversationId: 'alice@example.com',
+          from: 'me@example.com/desktop',
+          body: 'hi there',
+          timestamp: new Date('2024-01-15T12:00:00Z'),
+          isOutgoing: true,
+        }
+        chatStore.getState().addMessage(sent)
+
+        const carbon: Message = {
+          type: 'chat',
+          id: 'uuid-2',
+          originId: 'uuid-2',
+          conversationId: 'alice@example.com',
+          from: 'me@example.com',
+          body: 'hi there',
+          timestamp: new Date('2024-01-15T12:00:00Z'),
+          isOutgoing: true,
+          stanzaId: 'archive-carbon',
+        }
+        chatStore.getState().addMessage(carbon)
+
+        const messages = chatStore.getState().messages.get('alice@example.com')
+        expect(messages?.length).toBe(1)
+        expect(messages?.[0].stanzaId).toBe('archive-carbon')
+        expect(messageCache.updateMessage).toHaveBeenCalledWith(
+          'uuid-2',
+          expect.objectContaining({ stanzaId: 'archive-carbon' })
+        )
+      })
+    })
+
     describe('mergeMAMMessages', () => {
       it('should merge MAM messages with existing messages', () => {
         chatStore.getState().addConversation(createConversation('alice@example.com'))

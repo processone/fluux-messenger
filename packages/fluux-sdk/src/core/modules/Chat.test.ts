@@ -198,6 +198,95 @@ describe('XMPPClient Message', () => {
     })
   })
 
+  describe('XEP-0359 by-aware stanza-id selection', () => {
+    // Connected JID is user@example.com, so the user's own archive `by` is the
+    // bare JID. A message can carry several <stanza-id by="..."/> — only the one
+    // stamped by the queried archive is a valid MAM cursor / cross-client ref.
+    it('1:1: stores the stanza-id stamped by the user\'s own archive, not a foreign one', async () => {
+      await connectClient()
+
+      const messageStanza = createMockElement('message', {
+        from: 'contact@example.com/resource',
+        to: 'user@example.com',
+        type: 'chat',
+        id: 'msg-1',
+      }, [
+        { name: 'body', text: 'Hello!' },
+        // Foreign id first (e.g. stamped by the sender's server), own id second.
+        { name: 'stanza-id', attrs: { xmlns: 'urn:xmpp:sid:0', id: 'foreign-id', by: 'contact-server.example.org' } },
+        { name: 'stanza-id', attrs: { xmlns: 'urn:xmpp:sid:0', id: 'own-archive-id', by: 'user@example.com' } },
+      ])
+
+      mockXmppClientInstance._emit('stanza', messageStanza)
+
+      expect(emitSDKSpy).toHaveBeenCalledWith('chat:message', {
+        message: expect.objectContaining({
+          id: 'msg-1',
+          stanzaId: 'own-archive-id',
+        })
+      })
+    })
+
+    it('MUC: stores the stanza-id stamped by the room archive, not a foreign one', async () => {
+      await connectClient()
+
+      mockStores.room.getRoom.mockReturnValue({
+        jid: 'room@conference.example.com',
+        name: 'room',
+        nickname: 'TestUser',
+        joined: true,
+        isBookmarked: false,
+        unreadCount: 0,
+        mentionsCount: 0,
+        typingUsers: new Set<string>(),
+        occupants: new Map(),
+        messages: [],
+      })
+
+      const messageStanza = createMockElement('message', {
+        from: 'room@conference.example.com/Alice',
+        to: 'user@example.com',
+        type: 'groupchat',
+        id: 'msg-2',
+      }, [
+        { name: 'body', text: 'Hi room!' },
+        // The user's own server may also stamp a stanza-id (carbon-style); the
+        // MUC archive id (by = room JID) is the one we must keep.
+        { name: 'stanza-id', attrs: { xmlns: 'urn:xmpp:sid:0', id: 'user-server-id', by: 'user@example.com' } },
+        { name: 'stanza-id', attrs: { xmlns: 'urn:xmpp:sid:0', id: 'room-archive-id', by: 'room@conference.example.com' } },
+      ])
+
+      mockXmppClientInstance._emit('stanza', messageStanza)
+
+      expect(emitSDKSpy).toHaveBeenCalledWith('room:message', expect.objectContaining({
+        message: expect.objectContaining({
+          id: 'msg-2',
+          stanzaId: 'room-archive-id',
+        })
+      }))
+    })
+
+    it('1:1: falls back to the only stanza-id when none matches the own archive', async () => {
+      await connectClient()
+
+      const messageStanza = createMockElement('message', {
+        from: 'contact@example.com/resource',
+        to: 'user@example.com',
+        type: 'chat',
+        id: 'msg-3',
+      }, [
+        { name: 'body', text: 'Single archive' },
+        { name: 'stanza-id', attrs: { xmlns: 'urn:xmpp:sid:0', id: 'only-id', by: 'user@example.com' } },
+      ])
+
+      mockXmppClientInstance._emit('stanza', messageStanza)
+
+      expect(emitSDKSpy).toHaveBeenCalledWith('chat:message', {
+        message: expect.objectContaining({ id: 'msg-3', stanzaId: 'only-id' })
+      })
+    })
+  })
+
   describe('message carbons (XEP-0280)', () => {
     it('should process received carbon and extract forwarded message', async () => {
       await connectClient()

@@ -232,10 +232,35 @@ export function parseOobData(stanza: Element): FileAttachment | undefined {
 
 /**
  * Parse XEP-0359 stanza-id from a message element.
- * Returns the first stanza-id found (typically assigned by server or MUC service).
+ *
+ * Per XEP-0359/XEP-0313 a message can carry multiple `<stanza-id by="..."/>`
+ * elements stamped by different archiving entities (e.g. the user's own server
+ * AND a MUC service). Only the id stamped by the *queried* archive is valid as
+ * a MAM RSM pagination cursor (`<before>`) or a stable cross-client reference —
+ * using a foreign one makes mod_mam reject backward queries with
+ * `item-not-found`.
+ *
+ * When `expectedBy` is provided, prefers the `<stanza-id>` whose `by` matches it
+ * (compared on a bare-JID basis): the user's own bare JID for 1:1 chats, the
+ * room bare JID for MUC. Falls back to the first stanza-id when no `by` matches
+ * or when `expectedBy` is omitted (preserving legacy single-archive behaviour).
+ *
+ * @param messageEl - The message element to read the stanza-id from.
+ * @param expectedBy - Bare (or full) JID of the archive whose stanza-id is wanted.
  */
-export function parseStanzaId(messageEl: Element): string | undefined {
+export function parseStanzaId(messageEl: Element, expectedBy?: string): string | undefined {
   const stanzaIdEls = messageEl.getChildren('stanza-id', NS_STANZA_ID)
+
+  if (expectedBy) {
+    const expectedBare = getBareJid(expectedBy)
+    for (const el of stanzaIdEls) {
+      if (el.attrs.id && el.attrs.by && getBareJid(el.attrs.by) === expectedBare) {
+        return el.attrs.id
+      }
+    }
+  }
+
+  // Fallback: first stanza-id carrying an id (legacy single-archive behaviour).
   for (const el of stanzaIdEls) {
     if (el.attrs.id) {
       return el.attrs.id
@@ -286,6 +311,13 @@ export interface ParseMessageContentOptions {
    * that have no authenticated timestamp omit this field.
    */
   authoredAt?: Date
+  /**
+   * Bare (or full) JID of the archive whose XEP-0359 `<stanza-id>` should be
+   * selected when the message carries several from different archiving entities
+   * (see {@link parseStanzaId}). Pass the user's own bare JID for 1:1 chats and
+   * the room bare JID for MUC. Omit to keep first-match behaviour.
+   */
+  expectedStanzaIdBy?: string
 }
 
 /**
@@ -315,6 +347,7 @@ export function parseMessageContent(options: ParseMessageContentOptions): Parsed
     messageContext = 'chat',
     preserveFullReplyToJid = false,
     authoredAt,
+    expectedStanzaIdBy,
   } = options
 
   const fallbackTargets = messageContext === 'room' ? ROOM_FALLBACK_TARGETS : CHAT_FALLBACK_TARGETS
@@ -340,8 +373,10 @@ export function parseMessageContent(options: ParseMessageContentOptions): Parsed
     timestamp = authoredAt
   }
 
-  // XEP-0359: Unique stanza ID (server-assigned) and origin ID (sender-assigned)
-  const stanzaId = parseStanzaId(messageEl)
+  // XEP-0359: Unique stanza ID (server-assigned) and origin ID (sender-assigned).
+  // Prefer the stanza-id stamped by the queried archive (expectedStanzaIdBy) so
+  // it is valid as a MAM pagination cursor and cross-client reference.
+  const stanzaId = parseStanzaId(messageEl, expectedStanzaIdBy)
   const originId = parseOriginId(messageEl)
 
   // XEP-0393: Message styling hints

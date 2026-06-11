@@ -1774,8 +1774,11 @@ export class Chat extends BaseModule {
     if (!conversationId) return false
 
     // Capture the correction stanza's own stanza-id so replies referencing
-    // the corrected version's archive entry can resolve to the original message
-    const correctionStanzaId = parseStanzaId(stanza)
+    // the corrected version's archive entry can resolve to the original message.
+    // XEP-0359: pick the id stamped by the relevant archive — the room itself
+    // for MUC, our own archive (bare JID) for 1:1.
+    const correctionExpectedBy = type === 'groupchat' ? conversationId : myBareJid
+    const correctionStanzaId = parseStanzaId(stanza, correctionExpectedBy)
 
     // SDK events only - bindings call store methods
     if (type === 'groupchat') {
@@ -1936,6 +1939,9 @@ export class Chat extends BaseModule {
     const parsed = parseMessageContent({
       messageEl: stanza,
       body,
+      // XEP-0359: the valid stanza-id for a 1:1 message is the one stamped by
+      // the user's own archive (bare JID), so it works as a MAM cursor.
+      expectedStanzaIdBy: myBareJid,
       ...(authoredAt && { authoredAt }),
     })
     const isCorrection = !!stanza.getChild('replace', NS_CORRECTION)
@@ -2004,6 +2010,9 @@ export class Chat extends BaseModule {
       body,
       preserveFullReplyToJid: true,
       messageContext: 'room',
+      // XEP-0359: in a MUC the archive that matters is the room itself, so the
+      // valid stanza-id is the one stamped by the room bare JID.
+      expectedStanzaIdBy: roomJid,
       ...(roomAuthoredAt && { authoredAt: roomAuthoredAt }),
     })
     const isCorrection = !!stanza.getChild('replace', NS_CORRECTION)

@@ -103,6 +103,78 @@ export function isMessageDuplicate<T>(
 }
 
 /**
+ * Identity fields an archived/echoed copy of a message can carry.
+ */
+export interface ArchiveIdentifiableMessage {
+  stanzaId?: string
+  originId?: string
+}
+
+/**
+ * Backfill the server `stanzaId` (and `originId`) onto existing in-memory
+ * messages from their archived/echoed duplicates.
+ *
+ * Outgoing messages are created with only a client `originId` and no server
+ * `stanzaId` (the server assigns it on archiving). When their archived copy
+ * later arrives via MAM (or a carbon) it carries the `stanzaId` but is dropped
+ * as a duplicate, so the live copy never receives one — which breaks backward
+ * MAM pagination, whose RSM cursor must be a server archive id. This patches
+ * the missing fields, matching an incoming "donor" to an existing message by
+ * any shared identity key (e.g. `originId`).
+ *
+ * Pure: never mutates inputs. Returns the SAME `existing` array reference when
+ * nothing changed, so callers can cheaply skip a store update; otherwise a
+ * copy-on-write array with the patched messages plus the list of patches (for
+ * persistence).
+ */
+export function backfillArchiveIds<T extends ArchiveIdentifiableMessage>(
+  existing: T[],
+  incoming: T[],
+  getKeys: (message: T) => string[]
+): { messages: T[]; patched: T[] } {
+  // Only incoming messages that carry a stanzaId can donate one.
+  const donors = incoming.filter((m) => m.stanzaId)
+  if (donors.length === 0) return { messages: existing, patched: [] }
+
+  // Index every identity key of each donor so an existing message can find its
+  // matching archived copy by any shared key.
+  const donorByKey = new Map<string, T>()
+  for (const donor of donors) {
+    for (const key of getKeys(donor)) {
+      if (!donorByKey.has(key)) donorByKey.set(key, donor)
+    }
+  }
+
+  let messages = existing
+  const patched: T[] = []
+  for (let i = 0; i < existing.length; i++) {
+    const current = existing[i]
+    if (current.stanzaId) continue // already has a server archive id
+
+    let donor: T | undefined
+    for (const key of getKeys(current)) {
+      const match = donorByKey.get(key)
+      if (match) {
+        donor = match
+        break
+      }
+    }
+    if (!donor?.stanzaId) continue
+
+    const updated: T = {
+      ...current,
+      stanzaId: donor.stanzaId,
+      ...(!current.originId && donor.originId ? { originId: donor.originId } : {}),
+    }
+    if (messages === existing) messages = [...existing] // copy-on-write
+    messages[i] = updated
+    patched.push(updated)
+  }
+
+  return { messages, patched }
+}
+
+/**
  * Sort messages by timestamp in ascending order (oldest first).
  *
  * @param messages - Array of messages to sort

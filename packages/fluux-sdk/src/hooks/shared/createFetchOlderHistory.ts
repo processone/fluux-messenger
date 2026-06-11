@@ -8,6 +8,7 @@
 
 import type { MAMQueryState } from '../../core/types'
 import { connectionStore } from '../../stores'
+import { isItemNotFoundError } from './mamCursor'
 
 /**
  * Dependencies required to create the fetchOlderHistory callback.
@@ -41,9 +42,13 @@ export interface FetchOlderHistoryDeps {
   loadFromCache: (id: string, limit: number) => Promise<unknown[]>
 
   /**
-   * Get the stanza ID of the oldest message currently in memory.
-   * Used as the pagination cursor when querying MAM for older messages.
-   * Returns undefined if no messages exist or oldest message has no stanza ID.
+   * Get the server archive ID (XEP-0359 stanza-id) of the oldest in-memory
+   * message that has one. Used as the MAM `before` pagination cursor.
+   *
+   * Returns undefined when no in-memory message carries a server-assigned
+   * archive ID. Callers MUST NOT substitute a client-generated id: a client id
+   * is not a valid archive entry and the server rejects it with
+   * `item-not-found`, dead-ending "load older history".
    */
   getOldestMessageId: (id: string) => string | undefined
 
@@ -52,6 +57,21 @@ export interface FetchOlderHistoryDeps {
    * Called when cache is exhausted and MAM is not complete.
    */
   queryMAM: (id: string, beforeId: string) => Promise<void>
+
+  /**
+   * Optional: timestamp of the oldest in-memory message. Used for the
+   * id-independent recovery query when no valid archive cursor is available or
+   * the server rejects the cursor with `item-not-found`.
+   */
+  getOldestTimestamp?: (id: string) => Date | undefined
+
+  /**
+   * Optional: query MAM for messages archived before a timestamp (XEP-0313
+   * `end` filter). This recovery path does not depend on an opaque archive id,
+   * so it works even when the oldest in-memory message has no stanzaId or the
+   * cursor is stale. Only the 1:1 chat archive supports the `end` filter.
+   */
+  queryMAMByEndTime?: (id: string, endIso: string) => Promise<void>
 
   /**
    * Error message prefix for logging.
@@ -83,8 +103,23 @@ export function createFetchOlderHistory(
     loadFromCache,
     getOldestMessageId,
     queryMAM,
+    getOldestTimestamp,
+    queryMAMByEndTime,
     errorLogPrefix,
   } = deps
+
+  /**
+   * Recover by fetching the page of messages archived before the oldest
+   * in-memory message's timestamp. Id-independent, so it works when no valid
+   * archive cursor is available. No-op when the dependency or timestamp is
+   * missing (e.g. room MAM, which has no `end` filter).
+   */
+  const recoverByTimestamp = async (id: string): Promise<boolean> => {
+    const oldestTimestamp = getOldestTimestamp?.(id)
+    if (!queryMAMByEndTime || !oldestTimestamp) return false
+    await queryMAMByEndTime(id, oldestTimestamp.toISOString())
+    return true
+  }
 
   return async (targetId?: string): Promise<void> => {
     // Guard: Don't attempt MAM query if not connected
@@ -117,17 +152,37 @@ export function createFetchOlderHistory(
       // Cache exhausted - fall back to MAM if not complete
       if (mamState.isHistoryComplete) return
 
-      // Use the oldest in-memory message's stanza ID as the pagination cursor.
-      // This is more reliable than mamState.oldestFetchedId because:
+      // Use the oldest in-memory message's archive id (XEP-0359 stanza-id) as
+      // the pagination cursor. This is more reliable than mamState.oldestFetchedId
+      // because:
       // 1. The initial MAM query may have used 'start' filter to only fetch NEW messages
       // 2. We need to paginate from the actual oldest message we have, not what MAM returned
-      const beforeId = getOldestMessageId(id) || ''
+      // getOldestMessageId never returns a client-generated id — that would be
+      // rejected by the server with item-not-found.
+      const beforeId = getOldestMessageId(id)
+      const isChat = errorLogPrefix.includes('chat')
 
-      // For chat MAM, we need a valid cursor to paginate backwards
-      // For room MAM, empty string means "get latest" which is valid for first query
-      if (!beforeId && errorLogPrefix.includes('chat')) return
+      // No valid archive cursor available.
+      if (!beforeId) {
+        // Chat: recover via a timestamp window if possible; otherwise there is
+        // nothing safe to send (a client id would be rejected), so skip.
+        if (isChat) {
+          await recoverByTimestamp(id)
+          return
+        }
+        // Room MAM: empty string means "get latest", valid for the first query.
+        await queryMAM(id, '')
+        return
+      }
 
-      await queryMAM(id, beforeId)
+      try {
+        await queryMAM(id, beforeId)
+      } catch (error) {
+        // A stale or non-archive cursor makes the server return item-not-found.
+        // Recover with an id-independent timestamp window before giving up.
+        if (isItemNotFoundError(error) && (await recoverByTimestamp(id))) return
+        throw error
+      }
     } catch (error) {
       console.error(`${errorLogPrefix}:`, error)
     } finally {
