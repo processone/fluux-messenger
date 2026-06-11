@@ -502,6 +502,38 @@ describe('MessageBubble', () => {
       expect(messageDiv.getAttribute('data-message-body')).toBe('Test message content')
     })
   })
+
+  describe('Whisper threads (MUC private messages)', () => {
+    // A whisper can only be continued via "reply" (it re-enters whisper mode
+    // upstream), so unlike public messages the reply button must also be
+    // available on the LAST message of the conversation.
+    function whisperProps(overrides: Partial<MessageBubbleProps> = {}): MessageBubbleProps {
+      return createDefaultProps({
+        whisperThread: 'solo',
+        whisperWith: 'Adrien',
+        counterpartPresent: true,
+        ...overrides,
+      })
+    }
+
+    it('shows the reply button on the last message when it is a whisper', () => {
+      render(<MessageBubble {...whisperProps({ isLastMessage: true })} />)
+
+      expect(screen.getByRole('button', { name: 'chat.reply' })).toBeInTheDocument()
+    })
+
+    it('keeps the reply button hidden on the last message when it is public', () => {
+      render(<MessageBubble {...createDefaultProps({ isLastMessage: true })} />)
+
+      expect(screen.queryByRole('button', { name: 'chat.reply' })).not.toBeInTheDocument()
+    })
+
+    it('hides the reply button on a whisper when the counterpart left the room', () => {
+      render(<MessageBubble {...whisperProps({ isLastMessage: true, counterpartPresent: false })} />)
+
+      expect(screen.queryByRole('button', { name: 'chat.reply' })).not.toBeInTheDocument()
+    })
+  })
 })
 
 describe('buildReplyContext', () => {

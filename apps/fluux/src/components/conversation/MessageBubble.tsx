@@ -428,7 +428,7 @@ export const MessageBubble = memo(function MessageBubble({
             onEdit={onEdit}
             onDelete={onDelete}
             myReactions={reactionsEnabled ? myReactions : []}
-            canReply={!isLastMessage && !counterpartGone}
+            canReply={(!isLastMessage || inThread) && !counterpartGone}
             canEdit={message.isOutgoing && isLastOutgoing}
             canDelete={message.isOutgoing || canModerate === true}
             isHidden={hideToolbar || false}
