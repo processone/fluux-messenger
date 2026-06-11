@@ -302,6 +302,7 @@ export function MessageList<T extends BaseMessage>({
                 return (
                   <div
                     key={msg.id}
+                    className="message-row"
                     data-message-id={msg.id}
                     data-stanza-id={msg.stanzaId}
                     data-origin-id={msg.originId}

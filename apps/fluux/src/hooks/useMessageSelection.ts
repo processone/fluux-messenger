@@ -86,12 +86,26 @@ export function useMessageSelection<T extends MessageLike>(
     }
   }, [selectedMessageId])
 
-  // Scroll selected message into view when keyboard navigating
+  // Scroll selected message into view when keyboard navigating.
+  //
+  // Also lift `content-visibility` containment on the selected row. Message rows
+  // use `content-visibility: auto` (see `.message-row` in index.css) to skip
+  // off-screen layout/paint, but that applies paint containment to ON-screen
+  // rows too, which would clip the selection toolbar that paints above the row.
+  // Pointer interaction is covered by the `:hover` / `:focus-within` rules, but
+  // keyboard selection scrolls the row into view WITHOUT moving DOM focus to it,
+  // so neither rule fires — mark it explicitly. At most one row carries the
+  // marker, so the cleanup query is O(1).
   useEffect(() => {
+    document
+      .querySelectorAll('.message-row-decontain')
+      .forEach((el) => el.classList.remove('message-row-decontain'))
+
     if (selectedMessageId) {
       const element = document.querySelector(`[data-message-id="${selectedMessageId}"]`) as HTMLElement
       if (element) {
         element.scrollIntoView({ block: 'nearest' })
+        element.classList.add('message-row-decontain')
       }
     }
   }, [selectedMessageId])
