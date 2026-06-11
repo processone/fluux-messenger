@@ -37,6 +37,14 @@ fn set_linux_webkit_env() {
 /// and connecting fails outright. Merging the loopback hosts into `no_proxy`/
 /// `NO_PROXY` keeps the local hop direct while leaving the user's proxy in place
 /// for real hosts. Existing entries are preserved; we only append what's missing.
+///
+/// NOTE: `no_proxy`/`NO_PROXY` is *not* a documented contract of GIO's
+/// `GProxyResolver` — it is only honored by libproxy's env-var module, and only
+/// when that resolver wins. A desktop that configures a proxy via KDE/gsettings
+/// (e.g. a SOCKS5 proxy on KDE) hands WebKitGTK a different resolver, so this
+/// env-var write is a no-op there. This function therefore stays as a cheap
+/// belt-and-suspenders layer; the authoritative loopback bypass is applied via
+/// the documented WebKit API in [`apply_loopback_proxy_bypass`].
 fn ensure_loopback_no_proxy() {
     const LOOPBACK: [&str; 3] = ["localhost", "127.0.0.1", "::1"];
 
@@ -68,6 +76,100 @@ fn merge_no_proxy(existing: &str, hosts: &[&str]) -> Option<String> {
     }
 
     appended.then(|| entries.join(","))
+}
+
+/// Pick the first usable proxy URI from an ordered list of candidate values
+/// (typically the SOCKS/HTTPS/HTTP proxy environment variables). Empty or
+/// whitespace-only candidates are skipped. The result is handed to WebKit as
+/// the *default* proxy for non-loopback traffic so the user's declared proxy
+/// keeps working for real hosts (avatars, media) while loopback stays direct.
+///
+/// Compiled in test builds on every platform so the ordering logic is unit
+/// tested even on the macOS dev machine, where the Linux WebKit wiring below
+/// is `#[cfg]`-ed out.
+#[cfg(any(target_os = "linux", test))]
+fn pick_proxy_uri(candidates: &[Option<String>]) -> Option<String> {
+    candidates
+        .iter()
+        .flatten()
+        .map(|s| s.trim())
+        .find(|s| !s.is_empty())
+        .map(|s| s.to_string())
+}
+
+/// Read the system proxy URI from the conventional environment variables, most
+/// specific first. Returns `None` when none are set (so non-loopback traffic
+/// goes direct — consistent with the XMPP bridge, which always connects
+/// directly and never proxies its upstream TCP socket).
+#[cfg(target_os = "linux")]
+fn system_proxy_uri_from_env() -> Option<String> {
+    let candidates: Vec<Option<String>> = [
+        "all_proxy",
+        "ALL_PROXY",
+        "https_proxy",
+        "HTTPS_PROXY",
+        "http_proxy",
+        "HTTP_PROXY",
+    ]
+    .iter()
+    .map(|k| std::env::var(k).ok())
+    .collect();
+    pick_proxy_uri(&candidates)
+}
+
+/// Force the WebView to connect *directly* to Fluux's loopback XMPP bridge,
+/// regardless of any system-wide proxy.
+///
+/// This is the authoritative companion to [`ensure_loopback_no_proxy`]. Where
+/// the env-var approach depends on libproxy winning the resolver lottery, this
+/// uses WebKit's documented `WebKitNetworkProxySettings.ignore_hosts` API: we
+/// switch the context's website data manager to CUSTOM proxy mode, list the
+/// loopback addresses as direct-connect hosts, and preserve any env-declared
+/// proxy as the default for real hosts. The loopback URL is advertised as the
+/// IPv4 literal `ws://127.0.0.1:PORT` (see `LOOPBACK_BIND_ORDER`), so the
+/// `127.0.0.1` entry matches per WebKit's IP-vs-hostname exclusion rules;
+/// `localhost` and `::1` cover the fallback bind.
+///
+/// Best-effort: failures are logged, not fatal — the env-var layer and the
+/// platform's own loopback bypass still apply.
+#[cfg(target_os = "linux")]
+fn apply_loopback_proxy_bypass(window: &tauri::WebviewWindow) {
+    use webkit2gtk::{
+        NetworkProxyMode, NetworkProxySettings, WebContextExt, WebViewExt, WebsiteDataManagerExt,
+    };
+
+    let default_proxy = system_proxy_uri_from_env();
+    let result = window.with_webview(move |webview| {
+        // On the webkit2gtk-4.1 (GTK3/libsoup3) stack wry targets, proxy
+        // settings live on the WebsiteDataManager, not the deprecated
+        // WebContext setter.
+        let manager = webview
+            .inner()
+            .web_context()
+            .and_then(|ctx| ctx.website_data_manager());
+        match manager {
+            Some(manager) => {
+                let mut settings = NetworkProxySettings::new(
+                    default_proxy.as_deref(),
+                    &["localhost", "127.0.0.1", "::1"],
+                );
+                manager
+                    .set_network_proxy_settings(NetworkProxyMode::Custom, Some(&mut settings));
+                tracing::info!(
+                    default_proxy = default_proxy.as_deref().unwrap_or("(direct)"),
+                    "Applied loopback proxy bypass to WebView website data manager"
+                );
+            }
+            None => {
+                tracing::warn!(
+                    "WebView has no website data manager; loopback proxy bypass not applied"
+                );
+            }
+        }
+    });
+    if let Err(e) = result {
+        tracing::warn!(error = %e, "with_webview failed; loopback proxy bypass not applied");
+    }
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))]
@@ -1405,6 +1507,10 @@ fn main() {
                 ensure_window_visible(&window);
                 // Ensure window has keyboard focus on launch
                 let _ = window.set_focus();
+                // Linux/WebKitGTK: force the loopback hop to the XMPP bridge
+                // direct, even when a system-wide (e.g. KDE SOCKS5) proxy is set.
+                #[cfg(target_os = "linux")]
+                apply_loopback_proxy_bypass(&window);
             }
 
             // macOS: Hide window instead of quitting when close button is clicked
@@ -1809,5 +1915,45 @@ mod tests {
     fn test_merge_no_proxy_appends_only_missing() {
         let merged = merge_no_proxy("127.0.0.1", &LOOPBACK).expect("should append the rest");
         assert_eq!(merged, "127.0.0.1,localhost,::1");
+    }
+
+    #[test]
+    fn test_pick_proxy_uri_none_when_all_unset() {
+        assert_eq!(pick_proxy_uri(&[None, None]), None);
+    }
+
+    #[test]
+    fn test_pick_proxy_uri_skips_empty_and_whitespace() {
+        let candidates = [
+            Some(String::new()),
+            Some("   ".to_string()),
+            Some("socks5://127.0.0.1:1080".to_string()),
+        ];
+        assert_eq!(
+            pick_proxy_uri(&candidates).as_deref(),
+            Some("socks5://127.0.0.1:1080")
+        );
+    }
+
+    #[test]
+    fn test_pick_proxy_uri_prefers_first_non_empty() {
+        // Order encodes precedence (all_proxy before http_proxy); first wins.
+        let candidates = [
+            Some("socks5://proxy:1080".to_string()),
+            Some("http://proxy:3128".to_string()),
+        ];
+        assert_eq!(
+            pick_proxy_uri(&candidates).as_deref(),
+            Some("socks5://proxy:1080")
+        );
+    }
+
+    #[test]
+    fn test_pick_proxy_uri_trims_surrounding_whitespace() {
+        let candidates = [Some("  http://proxy:3128  ".to_string())];
+        assert_eq!(
+            pick_proxy_uri(&candidates).as_deref(),
+            Some("http://proxy:3128")
+        );
     }
 }

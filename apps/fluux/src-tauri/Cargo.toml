@@ -81,6 +81,12 @@ user-idle = "0.6"
 [target.'cfg(target_os = "linux")'.dependencies]
 ctor = "1.0"
 x11 = { version = "2", features = ["xlib", "xss"] }
+# Pinned to the exact version wry resolves so the `PlatformWebview::inner()`
+# type unifies (no second copy of the crate). `v2_32` enables
+# `WebsiteDataManagerExt::set_network_proxy_settings`, used to force the
+# loopback XMPP-bridge hop direct regardless of a system-wide proxy (see
+# apply_loopback_proxy_bypass in main.rs).
+webkit2gtk = { version = "=2.0.2", features = ["v2_32"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"
