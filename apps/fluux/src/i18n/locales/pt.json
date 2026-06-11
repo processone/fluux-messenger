@@ -22,6 +22,7 @@
         "subtitle": "Ligar ao seu servidor XMPP",
         "jidLabel": "JID (Jabber ID)",
         "jidPlaceholder": "utilizador@exemplo.com",
+        "jidInvalid": "Insira um JID como nome@exemplo.com",
         "passwordLabel": "Palavra-passe",
         "serverLabel": "Servidor (Opcional)",
         "serverPlaceholder": "wss://chat.exemplo.com/ws",

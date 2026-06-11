@@ -12,6 +12,7 @@ import { getDomainFromJid, getWebsocketUrlForDomain } from '@/config/wellKnownSe
 import { useWindowDrag } from '@/hooks'
 import { isOpenpgpEnabled } from '@/stores/encryptionSettingsStore'
 import { getReconnectIntent } from '@/utils/reconnectIntent'
+import { validateBareJid } from '@/utils/jidValidation'
 
 const STORAGE_KEY_JID = 'xmpp-last-jid'
 const STORAGE_KEY_SERVER = 'xmpp-last-server'
@@ -100,6 +101,9 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
   }, [])
 
   const [jid, setJid] = useState('')
+  // Whether the JID field has been blurred at least once — only then do we show
+  // the malformed-shape hint, so the user isn't nagged mid-typing.
+  const [jidTouched, setJidTouched] = useState(false)
   const [password, setPassword] = useState('')
   const [server, setServer] = useState('')
   const [rememberMe, setRememberMe] = useState(false)
@@ -289,6 +293,11 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
   const isConnecting = status === 'connecting'
   const isLoading = isLoadingCredentials || isConnecting
 
+  // Local JID shape validation (UX_REVIEW §1.4) — gates Connect and shows
+  // inline help on a malformed shape, before any network round-trip.
+  const jidValidation = validateBareJid(jid)
+  const showJidError = jidTouched && !jidValidation.valid && jidValidation.reason === 'malformed'
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
@@ -379,14 +388,23 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
               autoComplete="username"
               value={jid}
               onChange={(e) => { setJid(e.target.value); setCredentialsModified(true) }}
+              onBlur={() => setJidTouched(true)}
               placeholder={t('login.jidPlaceholder')}
               required
               disabled={isLoading}
-              className="w-full px-3 py-2 bg-fluux-bg text-fluux-text rounded
-                         border border-fluux-border focus:border-fluux-brand
+              aria-invalid={showJidError}
+              aria-describedby={showJidError ? 'jid-error' : undefined}
+              className={`w-full px-3 py-2 bg-fluux-bg text-fluux-text rounded
+                         border focus:border-fluux-brand
                          focus-visible:ring-2 focus-visible:ring-fluux-brand/50
-                         placeholder:text-fluux-muted disabled:opacity-50"
+                         placeholder:text-fluux-muted disabled:opacity-50
+                         ${showJidError ? 'border-fluux-red' : 'border-fluux-border'}`}
             />
+            {showJidError && (
+              <p id="jid-error" className="text-xs text-fluux-red mt-1">
+                {t('login.jidInvalid')}
+              </p>
+            )}
           </div>
 
           {/* Password Field */}
@@ -513,7 +531,7 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
           {/* Submit Button */}
           <button
             type="submit"
-            disabled={isLoading || !jid || !password}
+            disabled={isLoading || !jidValidation.valid || !password}
             className="w-full py-2.5 bg-fluux-brand hover:bg-fluux-brand-hover
                        text-fluux-text-on-accent font-medium rounded transition-colors
                        disabled:opacity-50 disabled:cursor-not-allowed

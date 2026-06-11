@@ -22,6 +22,7 @@
         "subtitle": "Падключэнне да вашага XMPP сервера",
         "jidLabel": "JID (Jabber ID)",
         "jidPlaceholder": "user@domain.tld",
+        "jidInvalid": "Увядзіце JID у фармаце імя@example.com",
         "passwordLabel": "Пароль",
         "serverLabel": "Сервер (неабавязкова)",
         "serverPlaceholder": "wss://domain.tld/ws",

@@ -22,6 +22,7 @@
         "subtitle": "Conectează-te la serverul tău XMPP",
         "jidLabel": "JID (Jabber ID)",
         "jidPlaceholder": "utilizator@exemplu.com",
+        "jidInvalid": "Introduceți un JID precum nume@example.com",
         "passwordLabel": "Parolă",
         "serverLabel": "Server (Opțional)",
         "serverPlaceholder": "wss://chat.exemplu.com/ws",

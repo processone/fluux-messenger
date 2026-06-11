@@ -22,6 +22,7 @@
         "subtitle": "התחברות לשרת XMPP",
         "jidLabel": "JID (מזהה Jabber)",
         "jidPlaceholder": "user@example.com",
+        "jidInvalid": "הזינו JID בתבנית name@example.com",
         "passwordLabel": "סיסמה",
         "serverLabel": "שרת (אופציונלי)",
         "serverPlaceholder": "wss://chat.example.com/ws",

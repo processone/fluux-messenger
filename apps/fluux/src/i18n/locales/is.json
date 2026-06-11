@@ -22,6 +22,7 @@
         "subtitle": "Tengstu við XMPP þjóninn þinn",
         "jidLabel": "JID (Jabber auðkenni)",
         "jidPlaceholder": "notandi@dæmi.is",
+        "jidInvalid": "Sláðu inn JID á borð við nafn@example.com",
         "passwordLabel": "Lykilorð",
         "serverLabel": "Þjónn (valfrjálst)",
         "serverPlaceholder": "wss://chat.dæmi.is/ws",

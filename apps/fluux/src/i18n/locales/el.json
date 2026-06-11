@@ -22,6 +22,7 @@
         "subtitle": "Συνδεθείτε στον XMPP διακομιστή σας",
         "jidLabel": "JID (Jabber ID)",
         "jidPlaceholder": "user@example.com",
+        "jidInvalid": "Εισαγάγετε ένα JID όπως name@example.com",
         "passwordLabel": "Κωδικός πρόσβασης",
         "serverLabel": "Διακομιστής (Προαιρετικό)",
         "serverPlaceholder": "wss://chat.example.com/ws",

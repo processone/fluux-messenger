@@ -22,6 +22,7 @@
         "subtitle": "اتصل بخادم XMPP الخاص بك",
         "jidLabel": "JID (معرّف Jabber)",
         "jidPlaceholder": "user@example.com",
+        "jidInvalid": "أدخل معرّف JID بالصيغة name@example.com",
         "passwordLabel": "كلمة المرور",
         "serverLabel": "الخادم (اختياري)",
         "serverPlaceholder": "wss://chat.example.com/ws",

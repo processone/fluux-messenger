@@ -22,6 +22,7 @@
         "subtitle": "Свържете се с вашия XMPP сървър",
         "jidLabel": "JID (Jabber ID)",
         "jidPlaceholder": "потребител@example.com",
+        "jidInvalid": "Въведете JID във формат име@example.com",
         "passwordLabel": "Парола",
         "serverLabel": "Сървър (незадължително)",
         "serverPlaceholder": "wss://chat.example.com/ws",

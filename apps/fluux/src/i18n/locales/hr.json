@@ -22,6 +22,7 @@
         "subtitle": "Povežite se s vašim XMPP poslužiteljem",
         "jidLabel": "JID (Jabber ID)",
         "jidPlaceholder": "korisnik@primjer.hr",
+        "jidInvalid": "Unesite JID u obliku ime@example.com",
         "passwordLabel": "Lozinka",
         "serverLabel": "Poslužitelj (opcionalno)",
         "serverPlaceholder": "wss://chat.primjer.hr/ws",

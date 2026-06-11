@@ -22,6 +22,7 @@
         "subtitle": "Ikkonnettja mas-server XMPP tiegħek",
         "jidLabel": "JID (Jabber ID)",
         "jidPlaceholder": "utent@eżempju.com",
+        "jidInvalid": "Daħħal JID bħal isem@example.com",
         "passwordLabel": "Password",
         "serverLabel": "Server (Mhux obbligatorju)",
         "serverPlaceholder": "wss://chat.eżempju.com/ws",

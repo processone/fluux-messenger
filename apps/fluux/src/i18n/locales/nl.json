@@ -22,6 +22,7 @@
         "subtitle": "Verbind met je XMPP-server",
         "jidLabel": "JID (Jabber ID)",
         "jidPlaceholder": "gebruiker@voorbeeld.nl",
+        "jidInvalid": "Voer een JID in zoals naam@example.com",
         "passwordLabel": "Wachtwoord",
         "serverLabel": "Server (Optioneel)",
         "serverPlaceholder": "wss://chat.voorbeeld.nl/ws",
