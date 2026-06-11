@@ -2,13 +2,13 @@
 
 This guide explains how end-to-end encryption (E2EE) works in Fluux Messenger and walks you through enabling it, sharing your identity with contacts, backing up your key, and moving to a new device.
 
-If you just want the short version: turn it on in **Settings → Encryption**, write down the backup passphrase the app shows you, and keep it somewhere safe. That's the one thing that — if lost — cannot be recovered.
+If you just want the short version: turn it on in **Settings → Encryption**, write down the backup code the app shows you, and keep it somewhere safe. That's the one thing that — if lost — cannot be recovered.
 
 ## What end-to-end encryption means
 
 When E2EE is on, the messages you send and receive are scrambled on your device before they leave it, and only the people in the conversation can read them. Your XMPP server relays the ciphertext but cannot decrypt it. Neither can anyone who intercepts the traffic between servers, nor an administrator with access to server logs.
 
-Fluux uses **OpenPGP for XMPP**, standardised as [XEP-0373](https://xmpp.org/extensions/xep-0373.html) (often called *"OX"*). It is built on the same OpenPGP cryptography used by email tools like GnuPG, adapted to fit instant messaging.
+Fluux uses **OpenPGP for XMPP**, standardised as [XEP-0373](https://xmpp.org/extensions/xep-0373.html) (often called *"OX"*) — the modern redesign of OpenPGP encryption for XMPP. If you have come across [XEP-0027](https://xmpp.org/extensions/xep-0027.html) (the older "Current Jabber OpenPGP Usage"), that is a different, now-deprecated approach with known security weaknesses: no authenticated message envelope, signed-plaintext exposure, and no multi-device story. Fluux implements XEP-0373 only. XEP-0373 uses a proper content-encryption layer ([XEP-0420](https://xmpp.org/extensions/xep-0420.html)) that authenticates the full message context and hides metadata from the server. It is built on the same OpenPGP cryptography used by email tools like GnuPG, adapted correctly to fit instant messaging.
 
 ## How it works, in plain terms
 
@@ -60,28 +60,28 @@ Fluux solves this with an **encrypted server backup** of your secret key, define
 ### Backing up your key
 
 1. In **Settings → Encryption**, click **Back up**.
-2. Fluux generates a **backup passphrase** — eight random words drawn from a [diceware](https://en.wikipedia.org/wiki/Diceware) list (88 bits of entropy, very strong).
+2. Fluux generates a **backup code** — 24 upper-case characters drawn from an unambiguous alphabet (no `O` or `0`), grouped into 4-character chunks with dashes (e.g. `TWNK-KD5Y-MT3T-E1GS-DRDB-KVTW`). This format follows XEP-0373 §5.4 and is accepted by other compliant clients such as Gajim. The code carries ~121 bits of entropy.
 3. **Write it down** or save it in a password manager. Confirm with the checkbox that you have stored it.
-4. Fluux encrypts your secret key with this passphrase and publishes the encrypted blob to your XMPP server under a private PEP node that only you can read.
+4. Fluux encrypts your secret key with this code and publishes the encrypted blob to your XMPP server under a private PEP node that only you can read.
 
-The passphrase never leaves your device and is never sent to the server. Only the encrypted blob is.
+The backup code never leaves your device and is never sent to the server. Only the encrypted blob is.
 
 ### Restoring on a new device
 
 1. Log into Fluux on the new device with the same XMPP account.
-2. Open **Settings → Encryption**. Fluux detects the backup on the server and prompts for the passphrase.
-3. Enter the eight words. Fluux downloads the encrypted blob, decrypts it locally, and installs your secret key.
+2. Open **Settings → Encryption**. Fluux detects the backup on the server and prompts for the backup code.
+3. Enter the backup code. Fluux downloads the encrypted blob, decrypts it locally, and installs your secret key.
 
 From that point on, the new device can read your encrypted history and send encrypted messages under the same identity.
 
-### What happens if you lose the passphrase
+### What happens if you lose the backup code
 
-**It cannot be recovered.** Not by Fluux, not by your server administrator, not by anyone. If you lose the passphrase and you don't have a device that still holds the secret key, the only option is to generate a new key pair. You will keep your account, but:
+**It cannot be recovered.** Not by Fluux, not by your server administrator, not by anyone. If you lose the backup code and you don't have a device that still holds the secret key, the only option is to generate a new key pair. You will keep your account, but:
 
 - Messages encrypted to your old key will no longer be readable.
 - Contacts will see that your fingerprint changed and will need to re-verify.
 
-Treat the backup passphrase like the recovery phrase of a cryptocurrency wallet: write it down, store it somewhere durable, and do not rely on memory alone.
+Treat the backup code like the recovery phrase of a cryptocurrency wallet: write it down, store it somewhere durable, and do not rely on memory alone.
 
 ## Media and file sharing
 
@@ -107,8 +107,8 @@ When you send an encrypted message, Fluux also encrypts a copy to **your own key
 | Where                        | What is stored                                                                           |
 |------------------------------|------------------------------------------------------------------------------------------|
 | Your device (desktop)        | Secret key, encrypted with a random per-device passphrase held in the OS keychain        |
-| Your device (web)            | Secret key in memory only, loaded after you type the backup passphrase — never persisted |
-| Your XMPP server (optional)  | Secret key encrypted with your backup passphrase; public key published for contacts      |
+| Your device (web)            | Secret key in memory only, loaded after you type the backup code — never persisted |
+| Your XMPP server (optional)  | Secret key encrypted with your backup code; public key published for contacts      |
 | Your contacts' devices       | Your public key, so they can encrypt messages to you                                     |
 
 On Linux and Windows the secret key falls back to a file with restricted permissions if the OS keychain is unavailable.
@@ -129,7 +129,7 @@ On Linux and Windows the secret key falls back to a file with restricted permiss
 - **Group chats** (multi-user rooms): the current OX implementation covers one-to-one conversations only.
 - **Compromised devices**: if someone can read your device's storage and the OS keychain, they can decrypt your messages. Use full-disk encryption.
 - **Local message cache**: for responsiveness, Fluux stores decrypted messages and attachment metadata in the browser/webview's local database. They are not re-encrypted at rest today. The OS file-system permissions and (for Tauri builds) the OS keychain protecting the secret key are the security boundary. Use full-disk encryption for best protection. Encrypting this cache is planned as a follow-up.
-- **Lost backup passphrase**: see above. There is no recovery side channel.
+- **Lost backup code**: see above. There is no recovery side channel.
 
 ## Frequently asked questions
 
@@ -143,7 +143,7 @@ It's just a label so the fingerprint's purpose is clear. The number below it is 
 Not currently. Encryption is enabled per account. If your contact's client supports OX, messages to them are encrypted.
 
 **I reinstalled Fluux and lost my key. What now?**
-If you had published a backup, restore it: open Settings → Encryption and enter the backup passphrase. If you had not, generate a new key — your old encrypted messages will no longer be readable.
+If you had published a backup, restore it: open Settings → Encryption and enter the backup code. If you had not, generate a new key — your old encrypted messages will no longer be readable.
 
 **Will this work with OMEMO?**
 Not yet. Fluux's encryption engine is built as a plugin layer so OMEMO can be added alongside OpenPGP in the future, but at the moment the only supported protocol is XEP-0373.
