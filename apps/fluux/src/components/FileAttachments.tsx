@@ -97,32 +97,37 @@ export const ImageAttachment = memo(function ImageAttachment({ attachment, onLoa
     )
   }
 
-  // Show error state if fetch failed or image failed to load (404, etc.)
+  // Show error state if fetch failed or image failed to load (404, etc.).
+  // Reserve the SAME aspect-ratio box the loading/loaded image uses: an image
+  // whose blob URL is invalidated after it was displayed (sleep/wake, WebKit
+  // blob reclaim) must not collapse to a compact card, or every row below it
+  // shifts — and a burst of such invalidations feeds the message-list
+  // ResizeObserver scroll-correction loop on WebKitGTK.
   if (error || !proxiedImageSrc || loadError) {
     return (
-      <div className="pt-2 max-w-sm">
-        <a
-          href={attachment.url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex items-center gap-3 p-3 rounded-lg bg-fluux-bg/60 border border-fluux-border hover:bg-fluux-hover/60 transition-colors group/file"
-          tabIndex={-1}
+      <a
+        href={attachment.url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="block pt-2 group/file"
+        style={{ maxWidth: `${maxWidthPx}px` }}
+        tabIndex={-1}
+      >
+        <div
+          className="flex flex-col items-center justify-center gap-2 px-3 rounded-lg bg-fluux-bg/60 border border-fluux-border hover:bg-fluux-hover/60 transition-colors text-fluux-muted"
+          style={{ aspectRatio, maxHeight: '300px', minHeight: '100px' }}
         >
-          <div className="size-10 rounded-lg flex items-center justify-center flex-shrink-0 bg-fluux-muted/20 text-fluux-muted">
-            <ImageOff className="size-5" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-fluux-muted truncate">
-              {attachment.name || t('chat.imageUnavailable')}
-            </p>
-            <p className="text-xs text-fluux-muted">
-              {t('chat.imageUnavailable')}
-              {attachment.size ? ` • ${formatBytes(attachment.size)}` : ''}
-            </p>
-          </div>
-          <Download className="size-4 text-fluux-muted opacity-0 group-hover/file:opacity-100 transition-opacity flex-shrink-0" />
-        </a>
-      </div>
+          <ImageOff className="size-6 flex-shrink-0" />
+          <p className="text-sm font-medium truncate max-w-full">
+            {attachment.name || t('chat.imageUnavailable')}
+          </p>
+          <p className="text-xs">
+            {t('chat.imageUnavailable')}
+            {attachment.size ? ` • ${formatBytes(attachment.size)}` : ''}
+          </p>
+          <Download className="size-4 opacity-0 group-hover/file:opacity-100 transition-opacity flex-shrink-0" />
+        </div>
+      </a>
     )
   }
 
