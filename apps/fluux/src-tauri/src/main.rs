@@ -123,41 +123,47 @@ fn system_proxy_uri_from_env() -> Option<String> {
 /// This is the authoritative companion to [`ensure_loopback_no_proxy`]. Where
 /// the env-var approach depends on libproxy winning the resolver lottery, this
 /// uses WebKit's documented `WebKitNetworkProxySettings.ignore_hosts` API: we
-/// switch the web context to CUSTOM proxy mode, list the loopback addresses as
-/// direct-connect hosts, and preserve any env-declared proxy as the default for
-/// real hosts. The loopback URL is advertised as the IPv4 literal
-/// `ws://127.0.0.1:PORT` (see `LOOPBACK_BIND_ORDER`), so the `127.0.0.1` entry
-/// matches per WebKit's IP-vs-hostname exclusion rules; `localhost` and `::1`
-/// cover the fallback bind.
+/// switch the context's website data manager to CUSTOM proxy mode, list the
+/// loopback addresses as direct-connect hosts, and preserve any env-declared
+/// proxy as the default for real hosts. The loopback URL is advertised as the
+/// IPv4 literal `ws://127.0.0.1:PORT` (see `LOOPBACK_BIND_ORDER`), so the
+/// `127.0.0.1` entry matches per WebKit's IP-vs-hostname exclusion rules;
+/// `localhost` and `::1` cover the fallback bind.
 ///
 /// Best-effort: failures are logged, not fatal — the env-var layer and the
 /// platform's own loopback bypass still apply.
 #[cfg(target_os = "linux")]
 fn apply_loopback_proxy_bypass(window: &tauri::WebviewWindow) {
-    use webkit2gtk::{NetworkProxyMode, NetworkProxySettings, WebContextExt, WebViewExt};
+    use webkit2gtk::{
+        NetworkProxyMode, NetworkProxySettings, WebContextExt, WebViewExt, WebsiteDataManagerExt,
+    };
 
     let default_proxy = system_proxy_uri_from_env();
     let result = window.with_webview(move |webview| {
-        let wv = webview.inner();
-        match wv.web_context() {
-            Some(context) => {
-                let settings = NetworkProxySettings::new(
+        // On the webkit2gtk-4.1 (GTK3/libsoup3) stack wry targets, proxy
+        // settings live on the WebsiteDataManager, not the deprecated
+        // WebContext setter.
+        let manager = webview
+            .inner()
+            .web_context()
+            .and_then(|ctx| ctx.website_data_manager());
+        match manager {
+            Some(manager) => {
+                let mut settings = NetworkProxySettings::new(
                     default_proxy.as_deref(),
                     &["localhost", "127.0.0.1", "::1"],
                 );
-                // `set_network_proxy_settings` is marked deprecated in WebKitGTK
-                // 2.32+ (proxy config moved to WebKitNetworkSession in the GTK4
-                // port), but it is the correct and functional API for the
-                // webkit2gtk-4.1 (GTK3/libsoup3) stack wry targets here.
-                #[allow(deprecated)]
-                context.set_network_proxy_settings(NetworkProxyMode::Custom, Some(&settings));
+                manager
+                    .set_network_proxy_settings(NetworkProxyMode::Custom, Some(&mut settings));
                 tracing::info!(
                     default_proxy = default_proxy.as_deref().unwrap_or("(direct)"),
-                    "Applied loopback proxy bypass to WebView context"
+                    "Applied loopback proxy bypass to WebView website data manager"
                 );
             }
             None => {
-                tracing::warn!("WebView has no web context; loopback proxy bypass not applied");
+                tracing::warn!(
+                    "WebView has no website data manager; loopback proxy bypass not applied"
+                );
             }
         }
     });
