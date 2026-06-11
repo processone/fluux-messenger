@@ -533,6 +533,24 @@ describe('MessageBubble', () => {
 
       expect(screen.queryByRole('button', { name: 'chat.reply' })).not.toBeInTheDocument()
     })
+
+    it('re-enters whisper mode when the thread header is clicked', () => {
+      const onReply = vi.fn()
+      render(<MessageBubble {...whisperProps({ onReply })} />)
+
+      const header = screen.getByText('rooms.whisperThread').closest('button')
+      expect(header).not.toBeNull()
+      fireEvent.click(header!)
+
+      expect(onReply).toHaveBeenCalledTimes(1)
+    })
+
+    it('renders the thread header as plain text when the counterpart left the room', () => {
+      render(<MessageBubble {...whisperProps({ counterpartPresent: false })} />)
+
+      expect(screen.getByText('rooms.whisperThread')).toBeInTheDocument()
+      expect(screen.getByText('rooms.whisperThread').closest('button')).toBeNull()
+    })
   })
 })
 
