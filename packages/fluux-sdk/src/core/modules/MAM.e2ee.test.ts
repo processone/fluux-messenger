@@ -426,6 +426,99 @@ describe('MAM E2EE wiring', () => {
     expect((msg as { encryptedPayload?: unknown }).encryptedPayload).toBeUndefined()
   })
 
+  it('surfaces a self-outgoing OMEMO archive entry that has NO fallback body (issue #135)', async () => {
+    // Regression for issue #135: "messages sent while Fluux was closed are not
+    // shown". The reporter sends from Gajim, which (unlike Conversations) omits
+    // the optional XEP-0380 fallback <body> on OMEMO messages. The own-sent copy
+    // is replayed from MAM (self-outgoing, from === ownBareJid). Fluux has no
+    // OMEMO plugin, so it cannot decrypt and there is NO fallback body to show.
+    //
+    // parseArchiveMessage's "no body, no attachment → drop" gate then silently
+    // discards the entry — so the user never sees their own sent message. The
+    // incoming direction survives only because the *peer's* client included a
+    // fallback body. This makes the drop look direction-specific when it is
+    // really "any encrypted entry that arrives without a fallback body".
+    //
+    // The entry MUST surface as an outgoing, unsupported-encryption placeholder.
+    const forwardedMessage = xml(
+      'message',
+      { from: ME + '/gajim', to: PEER, type: 'chat', id: 'mam-omemo-self-nobody' },
+      // No <body> — Gajim omitted the OMEMO fallback.
+      xml('encrypted', { xmlns: 'eu.siacs.conversations.axolotl' },
+        xml('header', { sid: '654321' }),
+        xml('payload', {}, 'BBBB'),
+      ),
+    )
+    const archiveEntry = buildMAMResult({
+      archiveId: 'arch-omemo-self-nobody',
+      forwardedMessage,
+    })
+
+    const resultPromise = harness.mam.queryArchive({ with: PEER, max: 10 })
+    await harness.iqPending()
+    const entries = [...harness.collectors.entries()]
+    if (entries.length === 0) throw new Error('No collector registered')
+    const [queryId, collector] = entries[0]
+    archiveEntry.getChild('result', 'urn:xmpp:mam:2')!.attrs.queryid = queryId
+    collector(archiveEntry)
+    harness.resolveNextIQ(
+      xml('iq', {}, xml('fin', { xmlns: 'urn:xmpp:mam:2', complete: 'true' })),
+    )
+    const result = await resultPromise
+
+    // BUG (#135): the entry is currently dropped at the "no body" gate, so
+    // result.messages is empty. It must instead surface so the user sees it.
+    expect(result.messages).toHaveLength(1)
+    const msg = result.messages[0]
+    expect(msg.isOutgoing).toBe(true)
+    expect(msg.unsupportedEncryption).toBeDefined()
+    expect(msg.unsupportedEncryption!.namespace).toBe('eu.siacs.conversations.axolotl')
+    // No fallback body: the entry surfaces with an empty body and the UI
+    // renders a placeholder from `unsupportedEncryption` (MessageBubble's
+    // render precedence), so the user still sees that an encrypted message
+    // exists rather than the entry being silently dropped.
+    expect(msg.body).toBe('')
+  })
+
+  it('surfaces a bodiless OMEMO MUC archive entry instead of dropping it (issue #135, rooms)', async () => {
+    // parseRoomArchiveMessage has the same "no body, no attachment → drop" gate
+    // as the 1:1 path. An OMEMO room message whose sender omitted the optional
+    // XEP-0380 fallback <body> must still surface as an unsupported-encryption
+    // placeholder, not be silently discarded.
+    const ROOM = 'room@conference.example.com'
+    const forwardedMessage = xml(
+      'message',
+      { from: ROOM + '/alice', to: ME, type: 'groupchat', id: 'mam-room-omemo-nobody' },
+      // No <body> — sender omitted the OMEMO fallback.
+      xml('encrypted', { xmlns: 'eu.siacs.conversations.axolotl' },
+        xml('header', { sid: '777' }),
+        xml('payload', {}, 'CCCC'),
+      ),
+    )
+    const archiveEntry = buildMAMResult({
+      archiveId: 'arch-room-omemo-nobody',
+      forwardedMessage,
+    })
+
+    const resultPromise = harness.mam.queryRoomArchive({ roomJid: ROOM, max: 10 })
+    await harness.iqPending()
+    const entries = [...harness.collectors.entries()]
+    if (entries.length === 0) throw new Error('No collector registered')
+    const [queryId, collector] = entries[0]
+    archiveEntry.getChild('result', 'urn:xmpp:mam:2')!.attrs.queryid = queryId
+    collector(archiveEntry)
+    harness.resolveNextIQ(
+      xml('iq', {}, xml('fin', { xmlns: 'urn:xmpp:mam:2', complete: 'true' })),
+    )
+    const result = await resultPromise
+
+    expect(result.messages).toHaveLength(1)
+    const msg = result.messages[0]
+    expect(msg.unsupportedEncryption).toBeDefined()
+    expect(msg.unsupportedEncryption!.namespace).toBe('eu.siacs.conversations.axolotl')
+    expect(msg.body).toBe('')
+  })
+
   describe('no E2EE manager (archive replayed before E2EE init)', () => {
     let noMgrHarness: TestHarness
 
