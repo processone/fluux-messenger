@@ -34,6 +34,7 @@ import type { Room, RoomMessage, RoomOccupant } from '../core/types/room'
 import type { DemoData, DemoAnimationStep } from './types'
 import { buildStressEvents, type StressScenario } from './stress'
 import { parsePollElement, parsePollClosedElement } from '../core/poll'
+import { generateUUID } from '../utils/uuid'
 import type { PollData, PollClosedData } from '../core/types/message-base'
 
 type AnimationState = 'idle' | 'playing' | 'paused' | 'stopped'
@@ -508,7 +509,9 @@ export class DemoClient extends XMPPClient {
 
     const nick = room.nickname
     const body = stanza.getChildText('body') ?? ''
-    const id = stanza.attrs.id as string
+    // A stanza without an id attribute must not echo an id-less message —
+    // `RoomMessage.id` is a string invariant the UI relies on (row keys, dedup).
+    const id = (stanza.attrs.id as string | undefined) || generateUUID()
 
     // Parse reply info from the stanza (XEP-0461)
     const replyEl = stanza.getChild('reply')

@@ -126,10 +126,15 @@ export function MessageList<T extends BaseMessage>({
   // MESSAGE PROCESSING
   // --------------------------------------------------------------------------
 
-  // Deduplicate messages by ID (safety net for any race conditions in store)
+  // Deduplicate messages by ID (safety net for any race conditions in store).
+  // Only real ids participate: `id` is typed string but demo echoes / persisted
+  // state can miss it, and two distinct id-less messages are not duplicates.
   const deduplicatedMessages = (() => {
     const seen = new Set<string>()
     return messages.filter((msg) => {
+      if (!msg.id) {
+        return true
+      }
       if (seen.has(msg.id)) {
         return false
       }
@@ -299,9 +304,14 @@ export function MessageList<T extends BaseMessage>({
                     : group.messages[idx - 1].timestamp.getTime() <= forwardGapTimestamp)
                 )
 
+                // `key={undefined}` counts as a MISSING key for React (it warns
+                // and falls back to positional reconciliation), so an id-less
+                // message needs another stable identifier.
+                const rowKey = msg.id || msg.stanzaId || msg.originId || `${group.date}-pos-${idx}`
+
                 return (
                   <div
-                    key={msg.id}
+                    key={rowKey}
                     className="message-row"
                     data-message-id={msg.id}
                     data-stanza-id={msg.stanzaId}
