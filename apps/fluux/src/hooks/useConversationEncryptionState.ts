@@ -6,6 +6,7 @@ import { useKeyChangeAlertsStore } from '@/stores/keyChangeAlertsStore'
 import { useConversationPlaintextOverrideStore } from '@/stores/conversationPlaintextOverrideStore'
 import { usePinnedPrimaryFingerprintsStore, isTofuNew } from '@/stores/pinnedPrimaryFingerprintsStore'
 import { useCertRejectionStore, type CertRejection } from '@/stores/certRejectionStore'
+import { fingerprintsEqual } from '@/e2ee/fingerprintCompare'
 import { useWebKeyLocked } from './useWebKeyLocked'
 
 /**
@@ -286,7 +287,10 @@ export function useConversationEncryptionState(
     if (webKeyLocked) {
       return { kind: 'keyLocked', fingerprint: base.fingerprint }
     }
-    const trust = verifiedFingerprint === base.fingerprint
+    // Normalized compare: the verified fingerprint may have been synced from
+    // another OpenPGP backend (Sequoia UPPERCASE ↔ openpgp.js lowercase), so
+    // raw `===` would spuriously read as unverified. See fingerprintCompare.ts.
+    const trust = verifiedFingerprint && fingerprintsEqual(verifiedFingerprint, base.fingerprint)
       ? 'verified'
       : (peerJid && isTofuNew(peerJid) ? 'tofu-new' : 'unverified')
     return { kind: 'encrypted', fingerprint: base.fingerprint, trust }

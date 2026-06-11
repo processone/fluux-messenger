@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { buildScopedStorageKey } from '@fluux/sdk'
+import { fingerprintsEqual } from '@/e2ee/fingerprintCompare'
 
 /**
  * Per-peer fingerprint verifications the user has explicitly confirmed
@@ -118,9 +119,11 @@ export const useVerifiedPeerKeysStore = create<VerifiedPeerKeysState>((set) => (
  * `buildInboundSecurityContext`) to lift `tofu` → `verified`.
  */
 export function isPeerVerified(jid: string, fingerprint: string): boolean {
-  return (
-    useVerifiedPeerKeysStore.getState().verifiedFingerprintByJid[jid] === fingerprint
-  )
+  const stored = useVerifiedPeerKeysStore.getState().verifiedFingerprintByJid[jid]
+  // Normalized compare: a fingerprint verified on one OpenPGP backend
+  // (e.g. Sequoia, UPPERCASE) and synced to another (openpgp.js, lowercase)
+  // must still count as verified. See e2ee/fingerprintCompare.ts.
+  return stored !== undefined && fingerprintsEqual(stored, fingerprint)
 }
 
 /**

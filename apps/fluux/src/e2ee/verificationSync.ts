@@ -35,6 +35,7 @@
 
 import type { PluginContext, XMLElementData } from '@fluux/sdk'
 import { buildScopedStorageKey } from '@fluux/sdk'
+import { fingerprintsEqual } from './fingerprintCompare'
 
 /** Encrypt `plaintext` to `recipientPublicArmored`. Returns armored ciphertext. */
 export type EncryptFn = (
@@ -59,11 +60,6 @@ export type DecryptFn = (
   signerFingerprint: string | null
   signaturePresent: boolean
 }>
-
-/** Case- and whitespace-insensitive fingerprint comparison. */
-function fingerprintsEqual(a: string, b: string): boolean {
-  return a.replace(/\s+/g, '').toLowerCase() === b.replace(/\s+/g, '').toLowerCase()
-}
 
 export const VERIFICATIONS_NODE = 'urn:xmpp:fluux:verifications:0'
 const VERIFICATIONS_XMLNS = VERIFICATIONS_NODE
