@@ -27,6 +27,23 @@ describe('verifiedPeerKeysStore', () => {
     expect(isPeerVerified('bob@example.com', 'FP1')).toBe(false)
   })
 
+  it('isPeerVerified is case- and whitespace-insensitive (cross-backend sync: Sequoia UPPERCASE ↔ openpgp.js lowercase)', () => {
+    // The native (Sequoia/Rust) client formats fingerprints UPPERCASE and
+    // publishes them verbatim to the cross-device verification-sync node; the
+    // web (openpgp.js) client probes the same key and reports it lowercase.
+    // A trust decision must treat the two as the same key — otherwise a
+    // verification made on desktop reads as unverified on the web client.
+    const upper = 'AABBCCDDEEFF00112233445566778899AABBCCDD'
+    const lower = 'aabbccddeeff00112233445566778899aabbccdd'
+    useVerifiedPeerKeysStore.getState().setVerified('adrien@example.com', upper)
+    expect(isPeerVerified('adrien@example.com', lower)).toBe(true)
+    // Reverse direction too (verified lowercase, queried uppercase).
+    useVerifiedPeerKeysStore.getState().setVerified('bob@example.com', lower)
+    expect(isPeerVerified('bob@example.com', upper)).toBe(true)
+    // A genuinely different fingerprint still does NOT match.
+    expect(isPeerVerified('adrien@example.com', 'FFEE' + lower.slice(4))).toBe(false)
+  })
+
   it('clearVerified removes the entry', () => {
     useVerifiedPeerKeysStore.getState().setVerified('alice@example.com', 'FP1')
     expect(isPeerVerified('alice@example.com', 'FP1')).toBe(true)

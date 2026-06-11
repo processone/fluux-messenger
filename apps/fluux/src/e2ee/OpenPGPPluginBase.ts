@@ -90,6 +90,7 @@ import {
   publishVerificationsToServer,
   saveAppliedVerificationsVersion,
 } from './verificationSync'
+import { fingerprintsEqual } from './fingerprintCompare'
 import {
   clearKeyChangeAlert,
   getKeyChangeAlert,
@@ -2100,10 +2101,6 @@ function parseSecretKeyBackupItem(payload: XMLElementData): string | null {
   if (payload.name !== 'secretkey' || payload.attrs?.xmlns !== OX_NAMESPACE) return null
   const encoded = firstText(payload)
   return encoded ? base64DecodeOpenPgpBlock(encoded, 'PGP MESSAGE') : null
-}
-
-function fingerprintsEqual(a: string, b: string): boolean {
-  return a.toLowerCase() === b.toLowerCase()
 }
 
 function firstAttr(

@@ -274,6 +274,29 @@ describe('useConversationEncryptionState', () => {
       })
     })
 
+    it("returns trust='verified' when the verified fingerprint differs only in case from the cached one (cross-backend sync)", () => {
+      // A native (Sequoia) device verified the peer and synced the
+      // fingerprint in UPPERCASE; this web (openpgp.js) device's plugin cache
+      // reports the same key lowercase. The lock must still be green.
+      store.useVerifiedPeerKeysStore
+        .getState()
+        .setVerified('adrien@example.com', 'AABBCCDDEEFF00112233445566778899AABBCCDD')
+      const plugin = makePlugin({
+        getPeerFingerprint: vi
+          .fn()
+          .mockReturnValue('aabbccddeeff00112233445566778899aabbccdd'),
+      })
+      wireMocks({ plugin })
+      const { result } = renderHook(() =>
+        useConversationEncryptionState('adrien@example.com', 'chat'),
+      )
+      expect(result.current).toEqual({
+        kind: 'encrypted',
+        fingerprint: 'aabbccddeeff00112233445566778899aabbccdd',
+        trust: 'verified',
+      })
+    })
+
     it("auto-demotes to 'unverified' when the cached fingerprint differs from the verified one", () => {
       // Pin to the OLD fingerprint, but the cache returns a NEW one —
       // simulates a key rotation that hasn't been re-confirmed. The
