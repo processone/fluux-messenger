@@ -7,6 +7,7 @@ import {
   trimMessages,
   mergeAndProcessMessages,
   prependOlderMessages,
+  backfillArchiveIds,
 } from './messageArrayUtils'
 
 // Test message type
@@ -750,6 +751,91 @@ describe('messageArrayUtils', () => {
       // The last message in the array should be the newest — this is used for
       // lastMessage sidebar preview in mergeMAMMessages
       expect(merged[merged.length - 1].id).toBe('msg-4')
+    })
+  })
+
+  describe('backfillArchiveIds', () => {
+    // Mirrors chatStore's getChatMessageKeys (stanzaId / originId / from+id).
+    const getKeys = (m: TestMessage): string[] => {
+      const keys: string[] = []
+      if (m.stanzaId) keys.push(`stanzaId:${m.stanzaId}`)
+      if (m.originId) keys.push(`originId:${m.originId}`)
+      keys.push(`from:${m.from}:id:${m.id}`)
+      return keys
+    }
+
+    const msg = (over: Partial<TestMessage>): TestMessage => ({
+      id: 'x',
+      from: 'me@example.com',
+      body: 'hi',
+      timestamp: new Date('2026-06-01T10:00:00Z'),
+      ...over,
+    })
+
+    it('backfills stanzaId onto an outgoing message from its archived copy (matched by originId)', () => {
+      // Outgoing message in memory: only a client originId, no server archive id.
+      const existing = [msg({ id: 'uuid-1', originId: 'uuid-1' })]
+      // Archived copy from MAM: carries the server stanzaId and the same origin-id,
+      // but its bare `from` differs from the live message's full JID.
+      const incoming = [msg({ id: 'uuid-1', originId: 'uuid-1', stanzaId: 'archive-1', from: 'me@example.com/phone' })]
+
+      const { messages, patched } = backfillArchiveIds(existing, incoming, getKeys)
+
+      expect(messages[0].stanzaId).toBe('archive-1')
+      expect(patched).toHaveLength(1)
+      expect(patched[0].id).toBe('uuid-1')
+    })
+
+    it('returns the same array reference when there is nothing to backfill', () => {
+      const existing = [msg({ id: 'uuid-1', originId: 'uuid-1', stanzaId: 'archive-1' })]
+      const incoming = [msg({ id: 'uuid-1', originId: 'uuid-1', stanzaId: 'archive-1' })]
+
+      const { messages, patched } = backfillArchiveIds(existing, incoming, getKeys)
+
+      expect(messages).toBe(existing)
+      expect(patched).toHaveLength(0)
+    })
+
+    it('does not overwrite an existing stanzaId', () => {
+      const existing = [msg({ id: 'uuid-1', originId: 'uuid-1', stanzaId: 'original' })]
+      const incoming = [msg({ id: 'uuid-1', originId: 'uuid-1', stanzaId: 'different' })]
+
+      const { messages, patched } = backfillArchiveIds(existing, incoming, getKeys)
+
+      expect(messages[0].stanzaId).toBe('original')
+      expect(patched).toHaveLength(0)
+    })
+
+    it('ignores incoming messages that carry no stanzaId', () => {
+      const existing = [msg({ id: 'uuid-1', originId: 'uuid-1' })]
+      const incoming = [msg({ id: 'uuid-1', originId: 'uuid-1' })]
+
+      const { messages, patched } = backfillArchiveIds(existing, incoming, getKeys)
+
+      expect(messages).toBe(existing)
+      expect(patched).toHaveLength(0)
+    })
+
+    it('does not patch unrelated messages', () => {
+      const existing = [msg({ id: 'uuid-1', originId: 'uuid-1' })]
+      const incoming = [msg({ id: 'uuid-2', originId: 'uuid-2', stanzaId: 'archive-2' })]
+
+      const { messages, patched } = backfillArchiveIds(existing, incoming, getKeys)
+
+      expect(messages).toBe(existing)
+      expect(patched).toHaveLength(0)
+    })
+
+    it('backfills originId too when the existing message lacks it', () => {
+      // Existing matched only by from+id (no originId yet); donor supplies both.
+      const existing = [msg({ id: 'uuid-1' })]
+      const incoming = [msg({ id: 'uuid-1', originId: 'uuid-1', stanzaId: 'archive-1' })]
+
+      const { messages, patched } = backfillArchiveIds(existing, incoming, getKeys)
+
+      expect(messages[0].stanzaId).toBe('archive-1')
+      expect(messages[0].originId).toBe('uuid-1')
+      expect(patched).toHaveLength(1)
     })
   })
 })
