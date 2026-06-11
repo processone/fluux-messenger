@@ -22,6 +22,7 @@
         "subtitle": "Csatlakozás az XMPP szerverhez",
         "jidLabel": "JID (Jabber ID)",
         "jidPlaceholder": "felhasználó@példa.hu",
+        "jidInvalid": "Adjon meg egy JID-t, például nev@example.com",
         "passwordLabel": "Jelszó",
         "serverLabel": "Szerver (nem kötelező)",
         "serverPlaceholder": "wss://chat.example.com/ws",

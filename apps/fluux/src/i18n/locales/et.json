@@ -22,6 +22,7 @@
         "subtitle": "Ühenda oma XMPP serveriga",
         "jidLabel": "JID (Jabber ID)",
         "jidPlaceholder": "kasutaja@naide.ee",
+        "jidInvalid": "Sisestage JID kujul nimi@example.com",
         "passwordLabel": "Parool",
         "serverLabel": "Server (valikuline)",
         "serverPlaceholder": "wss://chat.naide.ee/ws",

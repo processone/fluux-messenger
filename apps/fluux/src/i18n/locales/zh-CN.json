@@ -22,6 +22,7 @@
         "subtitle": "连接到您的 XMPP 服务器",
         "jidLabel": "JID (Jabber ID)",
         "jidPlaceholder": "user@example.com",
+        "jidInvalid": "请输入 JID，格式如 name@example.com",
         "passwordLabel": "密码",
         "serverLabel": "服务器（可选）",
         "serverPlaceholder": "wss://chat.example.com/ws",

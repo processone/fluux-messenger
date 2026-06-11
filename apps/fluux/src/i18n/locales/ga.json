@@ -22,6 +22,7 @@
         "subtitle": "Ceangail le do fhreastalaí XMPP",
         "jidLabel": "JID (Aitheantas Jabber)",
         "jidPlaceholder": "úsáideoir@sampla.ie",
+        "jidInvalid": "Cuir isteach JID ar nós ainm@example.com",
         "passwordLabel": "Pasfhocal",
         "serverLabel": "Freastalaí (Roghnach)",
         "serverPlaceholder": "wss://chat.sampla.ie/ws",

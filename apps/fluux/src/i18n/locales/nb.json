@@ -22,6 +22,7 @@
         "subtitle": "Koble til XMPP-serveren din",
         "jidLabel": "JID (Jabber-ID)",
         "jidPlaceholder": "bruker@eksempel.no",
+        "jidInvalid": "Skriv inn en JID som navn@example.com",
         "passwordLabel": "Passord",
         "serverLabel": "Server (valgfritt)",
         "serverPlaceholder": "wss://chat.eksempel.no/ws",

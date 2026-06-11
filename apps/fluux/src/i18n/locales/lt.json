@@ -22,6 +22,7 @@
         "subtitle": "Prisijunkite prie savo XMPP serverio",
         "jidLabel": "JID (Jabber ID)",
         "jidPlaceholder": "vartotojas@pavyzdys.lt",
+        "jidInvalid": "Įveskite JID formatu vardas@example.com",
         "passwordLabel": "Slaptažodis",
         "serverLabel": "Serveris (neprivaloma)",
         "serverPlaceholder": "wss://chat.pavyzdys.lt/ws",

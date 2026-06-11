@@ -22,6 +22,7 @@
         "subtitle": "Savienojieties ar savu XMPP serveri",
         "jidLabel": "JID (Jabber ID)",
         "jidPlaceholder": "lietotajs@piemers.com",
+        "jidInvalid": "Ievadiet JID formātā vards@example.com",
         "passwordLabel": "Parole",
         "serverLabel": "Serveris (Neobligāts)",
         "serverPlaceholder": "wss://chat.piemers.com/ws",

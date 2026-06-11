@@ -22,6 +22,7 @@
         "subtitle": "Yhdistä XMPP-palvelimeen",
         "jidLabel": "JID (Jabber-tunnus)",
         "jidPlaceholder": "käyttäjä@esimerkki.fi",
+        "jidInvalid": "Anna JID muodossa nimi@example.com",
         "passwordLabel": "Salasana",
         "serverLabel": "Palvelin (valinnainen)",
         "serverPlaceholder": "wss://chat.esimerkki.fi/ws",

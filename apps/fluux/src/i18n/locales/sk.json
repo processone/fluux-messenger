@@ -22,6 +22,7 @@
         "subtitle": "Pripojte sa k vášmu XMPP serveru",
         "jidLabel": "JID (Jabber ID)",
         "jidPlaceholder": "používateľ@príklad.sk",
+        "jidInvalid": "Zadajte JID v tvare meno@example.com",
         "passwordLabel": "Heslo",
         "serverLabel": "Server (voliteľné)",
         "serverPlaceholder": "wss://chat.príklad.sk/ws",
