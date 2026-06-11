@@ -1737,6 +1737,68 @@ describe('roomStore', () => {
       expect(room?.occupants.size).toBe(1)
       expect(room?.occupants.get('alice')?.nick).toBe('alice')
     })
+
+    it('preserves a fetched avatar across a presence update (unchanged hash)', () => {
+      roomStore.getState().addRoom(createRoom('test@conference.example.com'))
+
+      // Occupant joins, carrying only the XEP-0153 avatar hash from presence.
+      roomStore.getState().addOccupant('test@conference.example.com', {
+        nick: 'zoidberg',
+        affiliation: 'member',
+        role: 'participant',
+        avatarHash: 'hash123',
+      })
+
+      // Async XEP-0398 fetch resolves the blob URL onto the occupant + cache.
+      roomStore.getState().updateOccupantAvatar('test@conference.example.com', 'zoidberg', 'blob:zoidberg', 'hash123')
+      expect(roomStore.getState().rooms.get('test@conference.example.com')?.occupants.get('zoidberg')?.avatar).toBe('blob:zoidberg')
+
+      // A later presence update (e.g. status change) carries only the hash, never the blob.
+      roomStore.getState().addOccupant('test@conference.example.com', {
+        nick: 'zoidberg',
+        affiliation: 'member',
+        role: 'participant',
+        show: 'away',
+        avatarHash: 'hash123',
+      })
+
+      // The occupant must keep its resolved avatar — otherwise the members list drops to a letter.
+      const occ = roomStore.getState().rooms.get('test@conference.example.com')?.occupants.get('zoidberg')
+      expect(occ?.avatar).toBe('blob:zoidberg')
+      expect(occ?.show).toBe('away')
+    })
+
+    it('preserves a fetched avatar across a presence update with no hash', () => {
+      roomStore.getState().addRoom(createRoom('test@conference.example.com'))
+      roomStore.getState().addOccupant('test@conference.example.com', {
+        nick: 'zoidberg', affiliation: 'member', role: 'participant', avatarHash: 'hash123',
+      })
+      roomStore.getState().updateOccupantAvatar('test@conference.example.com', 'zoidberg', 'blob:zoidberg', 'hash123')
+
+      // Presence update with no vcard-temp:x:update at all (avatarHash undefined).
+      roomStore.getState().addOccupant('test@conference.example.com', {
+        nick: 'zoidberg', affiliation: 'member', role: 'participant', show: 'dnd',
+      })
+
+      expect(roomStore.getState().rooms.get('test@conference.example.com')?.occupants.get('zoidberg')?.avatar).toBe('blob:zoidberg')
+    })
+
+    it('drops the avatar when the presence hash changes (a fresh one will be fetched)', () => {
+      roomStore.getState().addRoom(createRoom('test@conference.example.com'))
+      roomStore.getState().addOccupant('test@conference.example.com', {
+        nick: 'zoidberg', affiliation: 'member', role: 'participant', avatarHash: 'hash123',
+      })
+      roomStore.getState().updateOccupantAvatar('test@conference.example.com', 'zoidberg', 'blob:zoidberg', 'hash123')
+
+      // Presence carries a NEW hash → the old blob is stale and must not be kept.
+      roomStore.getState().addOccupant('test@conference.example.com', {
+        nick: 'zoidberg', affiliation: 'member', role: 'participant', avatarHash: 'hash999',
+      })
+
+      const occ = roomStore.getState().rooms.get('test@conference.example.com')?.occupants.get('zoidberg')
+      expect(occ?.avatar).toBeUndefined()
+      expect(occ?.avatarHash).toBe('hash999')
+    })
   })
 
   describe('removeOccupant', () => {
