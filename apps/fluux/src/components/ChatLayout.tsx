@@ -39,7 +39,7 @@ import { useDeepLink } from '@/hooks/useDeepLink'
 import { saveViewState, getSavedViewState, type ViewStateData } from '@/hooks/useSessionPersistence'
 import { useWindowDrag } from '@/hooks'
 import { LayoutProvider, useModals } from '@/contexts'
-import { Server, ShieldOff } from 'lucide-react'
+import { Server, ShieldOff, MessageCircle, Hash, Users, Archive, Bell, Search, Settings, type LucideIcon } from 'lucide-react'
 
 /**
  * ChatLayout wrapper that provides LayoutContext to all children.
@@ -879,114 +879,79 @@ function FullScreenOccupantPanel({ onClose, onStartChat, onShowProfile }: {
 function EmptyState({ sidebarView }: { sidebarView: SidebarView }) {
   const { t } = useTranslation()
 
-  // Get icon and content based on current tab
-  const getEmptyStateContent = () => {
+  // Icon matches the icon-rail glyph for each view, using the same lucide set
+  // as the rest of the app (no hand-rolled Material SVG paths).
+  const getEmptyStateContent = (): { Icon: LucideIcon; title: string; description: string; hint?: string } => {
     switch (sidebarView) {
       case 'messages':
         return {
-          icon: (
-            <svg className="size-12" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H6l-2 2V4h16v12z"/>
-            </svg>
-          ),
+          Icon: MessageCircle,
           title: t('emptyState.messages.title'),
           description: t('emptyState.messages.description'),
         }
       case 'rooms':
         return {
-          icon: (
-            <svg className="size-12" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M4 9h16M4 15h16M10 3l-2 18M16 3l-2 18"/>
-            </svg>
-          ),
+          Icon: Hash,
           title: t('emptyState.rooms.title'),
           description: t('emptyState.rooms.description'),
         }
       case 'directory':
         return {
-          icon: (
-            <svg className="size-12" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
-            </svg>
-          ),
+          Icon: Users,
           title: t('emptyState.directory.title'),
           description: t('emptyState.directory.description'),
           hint: t('emptyState.directory.hint'),
         }
       case 'archive':
         return {
-          icon: (
-            <svg className="size-12" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M20.54 5.23l-1.39-1.68C18.88 3.21 18.47 3 18 3H6c-.47 0-.88.21-1.16.55L3.46 5.23C3.17 5.57 3 6.02 3 6.5V19c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V6.5c0-.48-.17-.93-.46-1.27zM12 17.5L6.5 12H10v-2h4v2h3.5L12 17.5zM5.12 5l.81-1h12l.94 1H5.12z"/>
-            </svg>
-          ),
+          Icon: Archive,
           title: t('emptyState.archive.title'),
           description: t('emptyState.archive.description'),
         }
       case 'events':
         return {
-          icon: (
-            <svg className="size-12" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.89 2 2 2zm6-6v-5c0-3.07-1.64-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.63 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z"/>
-            </svg>
-          ),
+          Icon: Bell,
           title: t('emptyState.events.title'),
           description: t('emptyState.events.description'),
         }
       case 'admin':
         return {
-          icon: (
-            <svg className="size-12" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M19.14 12.94c.04-.31.06-.63.06-.94 0-.31-.02-.63-.06-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.04.31-.06.63-.06.94s.02.63.06.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/>
-            </svg>
-          ),
+          Icon: Server,
           title: t('emptyState.admin.title'),
           description: t('emptyState.admin.description'),
         }
       case 'search':
         return {
-          icon: (
-            <svg className="size-12" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
-            </svg>
-          ),
+          Icon: Search,
           title: t('emptyState.search.title'),
           description: t('emptyState.search.description'),
         }
       case 'settings':
         // Settings view always has content, this shouldn't be reached
         return {
-          icon: (
-            <svg className="size-12" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M19.14 12.94c.04-.31.06-.63.06-.94 0-.31-.02-.63-.06-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.04.31-.06.63-.06.94s.02.63.06.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/>
-            </svg>
-          ),
+          Icon: Settings,
           title: t('settings.title'),
           description: '',
         }
       default:
         return {
-          icon: (
-            <svg className="size-12" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H6l-2 2V4h16v12z"/>
-            </svg>
-          ),
+          Icon: MessageCircle,
           title: t('emptyState.messages.title'),
           description: t('emptyState.messages.description'),
         }
     }
   }
 
-  const content = getEmptyStateContent()
+  const { Icon, title, description, hint } = getEmptyStateContent()
 
   return (
     <div className="flex-1 flex flex-col items-center justify-center text-fluux-muted px-6 text-center">
       <div className="size-24 bg-fluux-sidebar rounded-full flex items-center justify-center mb-4">
-        {content.icon}
+        <Icon className="size-12" />
       </div>
-      <h2 className="text-xl font-semibold text-fluux-text mb-2">{content.title}</h2>
-      <p className="max-w-sm">{content.description}</p>
-      {content.hint && <p className="max-w-sm mt-2">{content.hint}</p>}
+      <h2 className="text-xl font-semibold text-fluux-text mb-2">{title}</h2>
+      <p className="max-w-sm">{description}</p>
+      {hint && <p className="max-w-sm mt-2">{hint}</p>}
     </div>
   )
 }
