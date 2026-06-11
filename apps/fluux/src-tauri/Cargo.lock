@@ -1792,6 +1792,7 @@ dependencies = [
  "tracing-subscriber",
  "unicode-normalization",
  "user-idle",
+ "webkit2gtk",
  "x11",
 ]
 
