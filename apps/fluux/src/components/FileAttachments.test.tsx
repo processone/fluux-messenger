@@ -91,6 +91,24 @@ describe('FileAttachments', () => {
       const { container } = render(<ImageAttachment attachment={pdfAttachment} />)
       expect(container.firstChild).toBeNull()
     })
+
+    it('reserves the aspect-ratio box in the error state to avoid a layout shift', () => {
+      // When an image fails to load — or its blob URL is invalidated AFTER it was
+      // displayed (sleep/wake, WebKit blob reclaim) — the error fallback must keep
+      // the same reserved box the loading/loaded image used. Collapsing to a
+      // compact card shifts every row below it; a burst of such invalidations
+      // feeds the message-list ResizeObserver scroll-correction loop on WebKitGTK.
+      mockUseProxiedUrl.mockReturnValue({
+        url: null,
+        isLoading: false,
+        error: new Error('Failed to fetch'),
+      })
+
+      const { container } = render(<ImageAttachment attachment={imageAttachment} />)
+
+      const reserved = container.querySelector('[style*="aspect-ratio"]')
+      expect(reserved).toBeTruthy()
+    })
   })
 
   describe('VideoAttachment', () => {
