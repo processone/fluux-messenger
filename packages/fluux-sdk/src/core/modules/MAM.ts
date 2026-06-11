@@ -1741,9 +1741,21 @@ export class MAM extends BaseModule {
     if (messageEl.getChild('replace', NS_CORRECTION)) return null
     if (messageEl.getChild('reactions', NS_REACTIONS)) return null
 
-    // Accept messages with body OR OOB attachment (file-only messages have no body)
     if (!from) return null
-    if (!body && !messageEl.getChild('x', NS_OOB)) return null
+
+    // E2EE markers stashed by the preceding decrypt pass. An encrypted entry we
+    // could not decrypt (unsupported protocol like OMEMO, or stashed for retry)
+    // may carry NO usable <body> — e.g. a client that omits the optional
+    // XEP-0380 fallback (notably on its own sent copy). Such an entry must still
+    // surface: the UI renders a placeholder from these fields. Dropping it on
+    // the "no body" gate silently loses the message — see issue #135.
+    const encryptedPayload = readStashedEncryptedPayload(messageEl)
+    const unsupportedEncryption = readStashedUnsupportedEncryption(messageEl)
+    const hasEncryptedContent = encryptedPayload !== undefined || unsupportedEncryption !== undefined
+
+    // Accept messages with body OR OOB attachment OR encrypted content
+    // (file-only messages have no body; encrypted-but-bodiless render a placeholder)
+    if (!body && !messageEl.getChild('x', NS_OOB) && !hasEncryptedContent) return null
 
     const bareFrom = getBareJid(from)
     const isOutgoing = bareFrom === getBareJid(this.deps.getCurrentJid() ?? '')
@@ -1763,8 +1775,6 @@ export class MAM extends BaseModule {
     const messageId = messageEl.attrs.id || generateStableMessageId(from, parsed.timestamp, body || '')
 
     const securityContext = this.archiveSecurityContext(messageEl)
-    const encryptedPayload = readStashedEncryptedPayload(messageEl)
-    const unsupportedEncryption = readStashedUnsupportedEncryption(messageEl)
 
     return {
       type: 'chat',
@@ -1803,11 +1813,21 @@ export class MAM extends BaseModule {
     if (messageEl.getChild('replace', NS_CORRECTION)) return null
     if (messageEl.getChild('reactions', NS_REACTIONS)) return null
 
-    // Accept messages with body, OOB attachment, or poll elements
     if (!from) return null
+
+    // E2EE markers stashed by the preceding decrypt pass. An encrypted entry we
+    // could not decrypt (unsupported protocol like OMEMO, or stashed for retry)
+    // may carry NO usable <body> when the sender omits the optional XEP-0380
+    // fallback. It must still surface — the UI renders a placeholder from these
+    // fields — rather than being dropped on the "no body" gate. See issue #135.
+    const roomEncryptedPayload = readStashedEncryptedPayload(messageEl)
+    const roomUnsupportedEncryption = readStashedUnsupportedEncryption(messageEl)
+    const hasEncryptedContent = roomEncryptedPayload !== undefined || roomUnsupportedEncryption !== undefined
+
+    // Accept messages with body, OOB attachment, poll elements, or encrypted content
     const hasPoll = !!messageEl.getChild('poll', NS_POLL)
     const hasPollClosed = !!messageEl.getChild('poll-closed', NS_POLL)
-    if (!body && !messageEl.getChild('x', NS_OOB) && !hasPoll && !hasPollClosed) return null
+    if (!body && !messageEl.getChild('x', NS_OOB) && !hasPoll && !hasPollClosed && !hasEncryptedContent) return null
 
     const nick = getResource(from) || ''
     // Case-insensitive nickname comparison - some servers may change case
@@ -1833,8 +1853,6 @@ export class MAM extends BaseModule {
     const occupantId = messageEl.getChild('occupant-id', NS_OCCUPANT_ID)?.attrs.id
 
     const roomSecurityContext = this.archiveSecurityContext(messageEl)
-    const roomEncryptedPayload = readStashedEncryptedPayload(messageEl)
-    const roomUnsupportedEncryption = readStashedUnsupportedEncryption(messageEl)
 
     const message: RoomMessage = {
       type: 'groupchat',
