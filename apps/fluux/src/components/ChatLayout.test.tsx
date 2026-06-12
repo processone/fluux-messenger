@@ -1020,6 +1020,9 @@ describe('ChatLayout - Session Storage Restore (Dual-Persistence Bug Prevention)
 describe('ChatLayout - URL→store sync hydration (popstate)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    // clearAllMocks doesn't remove mockReturnValue stubs left by the
+    // session-storage describe above — restore the default (no saved state)
+    vi.mocked(sessionPersistence.getSavedViewState).mockReturnValue(null)
     setMockState({
       activeConversationId: null,
       activeRoomJid: null,
@@ -1049,6 +1052,26 @@ describe('ChatLayout - URL→store sync hydration (popstate)', () => {
       expect(mockActivateRoom).toHaveBeenCalledWith('lobby@conference.example.com')
     })
     expect(mockSetActiveRoom).not.toHaveBeenCalledWith('lobby@conference.example.com')
+  })
+
+  it('should clear the contact profile when the URL moves back to a non-directory view', async () => {
+    // Open the profile from a 1:1 conversation header: sets selectedContactJid
+    // and navigates to /contacts/:jid
+    setMockState({ activeConversationId: 'alice@example.com' })
+    render(<ChatLayoutWithRouter initialRoute="/messages/alice%40example.com" />)
+    fireEvent.click(screen.getByTestId('chat-show-profile'))
+    await waitFor(() => {
+      expect(screen.getByTestId('contact-profile-view')).toBeInTheDocument()
+    })
+
+    // Browser back to /messages (no jid) is a URL-only change: no click handler
+    // clears selectedContactJid, so the URL→store sync effect must do it
+    fireEvent.click(screen.getByTestId('messages-tab'))
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('contact-profile-view')).not.toBeInTheDocument()
+    })
+    expect(screen.getByTestId('active-view')).toHaveTextContent('messages')
   })
 })
 

@@ -333,6 +333,12 @@ function ChatLayoutContent() {
     // entity the handler just cleared (e.g. profile click bouncing back to the
     // conversation).
     if (prev.activeJid === activeJid && prev.sidebarView === sidebarView) return
+    // Leaving the directory view clears the contact profile — without this,
+    // browser back from /contacts/:jid keeps showing ContactProfileView while
+    // the URL and sidebar already say otherwise (mirror of the directory branch)
+    if (sidebarView !== 'directory' && selectedContactJid !== null) {
+      setSelectedContactJid(null)
+    }
     if (sidebarView === 'messages') {
       const currentStoreId = chatStore.getState().activeConversationId
       if (activeJid !== currentStoreId) {
