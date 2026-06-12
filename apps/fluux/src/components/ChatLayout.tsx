@@ -320,12 +320,19 @@ function ChatLayoutContent() {
   // but Zustand store state is stale. This effect closes the loop.
   // Skip the initial render — on mount, the store is the source of truth (e.g., session restore
   // sets store state before the URL catches up). Only react to subsequent URL changes.
-  const urlSyncInitializedRef = useRef(false)
+  const prevUrlStateRef = useRef<{ activeJid: string | null; sidebarView: SidebarView } | null>(null)
   useEffect(() => {
-    if (!urlSyncInitializedRef.current) {
-      urlSyncInitializedRef.current = true
-      return
-    }
+    const prev = prevUrlStateRef.current
+    prevUrlStateRef.current = { activeJid, sidebarView }
+    if (prev === null) return
+    // Only sync when the URL actually changed. The effect also re-runs when
+    // store-side deps (selectedContactJid) change, but navigate() is
+    // transition-deferred in React Router v7: a handler that updates stores and
+    // navigates commits the store changes first, while the URL still points at
+    // the previous route. Syncing against that stale URL re-activates the
+    // entity the handler just cleared (e.g. profile click bouncing back to the
+    // conversation).
+    if (prev.activeJid === activeJid && prev.sidebarView === sidebarView) return
     if (sidebarView === 'messages') {
       const currentStoreId = chatStore.getState().activeConversationId
       if (activeJid !== currentStoreId) {
