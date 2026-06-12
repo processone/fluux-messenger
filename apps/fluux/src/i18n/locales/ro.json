@@ -500,6 +500,7 @@
             "keyLockedTooltip": "Criptare blocată — apasă pentru a debloca",
             "encryptedClickToUnlock": "Mesaj criptat — apasă pentru a debloca",
             "encryptedCouldNotDecrypt": "Nu s-a putut decripta acest mesaj",
+            "encryptedDecrypting": "Mesaj criptat — decriptare…",
             "encryptedDisabled": "Criptarea este dezactivată — activați-o din setări",
             "couldNotDecryptTooltip": "Mesaj criptat pentru o cheie care nu este disponibilă pe acest dispozitiv",
             "unsupportedMethodTooltip": "Criptat cu {{method}} — o metodă pe care acest dispozitiv nu o acceptă încă",

@@ -500,6 +500,7 @@
             "keyLockedTooltip": "Szyfrowanie zablokowane — kliknij, aby odblokować",
             "encryptedClickToUnlock": "Wiadomość zaszyfrowana — kliknij, aby odblokować",
             "encryptedCouldNotDecrypt": "Nie udało się odszyfrować tej wiadomości",
+            "encryptedDecrypting": "Wiadomość zaszyfrowana — odszyfrowywanie…",
             "encryptedDisabled": "Szyfrowanie wyłączone — włącz je w ustawieniach",
             "couldNotDecryptTooltip": "Wiadomość zaszyfrowana kluczem niedostępnym na tym urządzeniu",
             "unsupportedMethodTooltip": "Zaszyfrowano metodą {{method}} — ta metoda nie jest jeszcze obsługiwana na tym urządzeniu",

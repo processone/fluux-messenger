@@ -499,6 +499,7 @@
             "keyLockedTooltip": "Šifrovanie uzamknuté — kliknutím odomknite",
             "encryptedClickToUnlock": "Šifrovaná správa — kliknutím odomknite",
             "encryptedCouldNotDecrypt": "Túto správu sa nepodarilo dešifrovať",
+            "encryptedDecrypting": "Šifrovaná správa — dešifrovanie…",
             "encryptedDisabled": "Šifrovanie je vypnuté — zapnite ho v nastaveniach",
             "couldNotDecryptTooltip": "Správa je zašifrovaná pre kľúč, ktorý nie je v tomto zariadení k dispozícii",
             "unsupportedMethodTooltip": "Šifrované pomocou {{method}} — metóda, ktorú toto zariadenie zatiaľ nepodporuje",

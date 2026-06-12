@@ -500,6 +500,7 @@
             "keyLockedTooltip": "Xifratge bloquejat — feu clic per desbloquejar",
             "encryptedClickToUnlock": "Missatge xifrat — feu clic per desbloquejar",
             "encryptedCouldNotDecrypt": "No s'ha pogut desxifrar aquest missatge",
+            "encryptedDecrypting": "Missatge xifrat — desxifrant…",
             "encryptedDisabled": "Xifratge desactivat — activeu-lo a la configuració",
             "couldNotDecryptTooltip": "Missatge xifrat per a una clau no disponible en aquest dispositiu",
             "unsupportedMethodTooltip": "Xifrat amb {{method}} — un mètode que aquest dispositiu encara no admet",

@@ -494,6 +494,7 @@
             "keyLockedTooltip": "Chiffrement verrouillé — cliquez pour déverrouiller",
             "encryptedClickToUnlock": "Message chiffré — cliquez pour déverrouiller",
             "encryptedCouldNotDecrypt": "Ce message n'a pas pu être déchiffré",
+            "encryptedDecrypting": "Message chiffré — déchiffrement…",
             "encryptedDisabled": "Chiffrement désactivé — activez-le dans les paramètres",
             "couldNotDecryptTooltip": "Message chiffré pour une clé qui n'est pas disponible sur cet appareil",
             "unsupportedMethodTooltip": "Chiffré avec {{method}} — méthode non prise en charge sur cet appareil",

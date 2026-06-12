@@ -498,6 +498,7 @@
             "keyLockedTooltip": "Dulkóðun læst — smelltu til að aflæsa",
             "encryptedClickToUnlock": "Dulkóðuð skilaboð — smelltu til að aflæsa",
             "encryptedCouldNotDecrypt": "Tókst ekki að afkóða þessi skilaboð",
+            "encryptedDecrypting": "Dulkóðuð skilaboð — afkóðun…",
             "encryptedDisabled": "Dulkóðun er óvirk — virkjaðu hana í stillingunum",
             "couldNotDecryptTooltip": "Skilaboð dulkóðuð fyrir lykil sem er ekki tiltækur á þessu tæki",
             "unsupportedMethodTooltip": "Dulkóðað með {{method}} — aðferð sem þetta tæki styður ekki enn",
