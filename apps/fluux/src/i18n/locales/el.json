@@ -1182,10 +1182,5 @@
         "bannerMultiple": "📊 {{count}} αναπάντητες ψηφοφορίες — πατήστε για να δείτε την τελευταία",
         "dismissBanner": "Απόρριψη",
         "scrollToOriginal": "Μετακίνηση στην αρχική ψηφοφορία"
-    },
-    "connectionBanner": {
-        "reconnecting": "Η σύνδεση χάθηκε — επανασύνδεση…",
-        "connecting": "Σύνδεση…",
-        "connected": "Συνδέθηκε"
     }
 }

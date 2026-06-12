@@ -1181,10 +1181,5 @@
         "bannerMultiple": "📊 {{count}} استطلاعات بدون إجابة — انقر لرؤية الأحدث",
         "dismissBanner": "تجاهل",
         "scrollToOriginal": "الانتقال إلى الاستطلاع الأصلي"
-    },
-    "connectionBanner": {
-        "reconnecting": "انقطع الاتصال — جارٍ إعادة الاتصال…",
-        "connecting": "جارٍ الاتصال…",
-        "connected": "متصل"
     }
 }

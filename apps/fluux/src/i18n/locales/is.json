@@ -1181,10 +1181,5 @@
         "bannerMultiple": "📊 {{count}} ósvaraðar kannanir — ýttu til að sjá nýjustu",
         "dismissBanner": "Hunsa",
         "scrollToOriginal": "Fletta að upprunalegri könnun"
-    },
-    "connectionBanner": {
-        "reconnecting": "Tenging rofnaði — endurtengist…",
-        "connecting": "Tengist…",
-        "connected": "Tengt"
     }
 }

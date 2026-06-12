@@ -1,8 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useClickOutside } from '@/hooks'
-import { usePresence, type PresenceStatus } from '@fluux/sdk'
-import { ChevronDown, Check } from 'lucide-react'
+import { usePresence, useXMPP, type PresenceStatus } from '@fluux/sdk'
+import { useConnectionStore } from '@fluux/sdk/react'
+import { ChevronDown, Check, RefreshCw, X } from 'lucide-react'
 import { TextInput } from '../ui/TextInput'
 import { Tooltip } from '../Tooltip'
 
@@ -201,24 +202,143 @@ export function PresenceSelector({ isOpen: isOpenProp, onOpenChange }: PresenceS
   )
 }
 
+/** Grace before the chip surfaces a degraded connection state — fast
+ * reconnects and post-wake verifications (e.g. silent SM resumptions)
+ * come and go without flashing anything. */
+export const DEGRADED_STATUS_GRACE_MS = 2000
+
 interface StatusDisplayProps {
   status: string
 }
 
+/**
+ * Connection-state line of the user-menu chip — the single connection-incident
+ * surface (issue #515 reverted the top-of-layout ConnectionBanner: it lived in
+ * normal flow, so every appearance reflowed the whole UI).
+ *
+ * Subscribes to the reconnect metadata itself so the Sidebar tree never
+ * re-renders on retry-cycle churn; the per-second countdown is local state.
+ * The cancel action sits inline next to the countdown — the UserMenu stays
+ * available during reconnection (logout must remain reachable).
+ */
 export function StatusDisplay({ status }: StatusDisplayProps) {
   const { t } = useTranslation()
+  const reconnectTargetTime = useConnectionStore((s) => s.reconnectTargetTime)
+  const reconnectAttempt = useConnectionStore((s) => s.reconnectAttempt)
+  const { client } = useXMPP()
+
+  // Local countdown state — only this component re-renders every second,
+  // not the entire Sidebar tree.
+  const [secondsLeft, setSecondsLeft] = useState<number | null>(null)
+
+  useEffect(() => {
+    if (status !== 'reconnecting' || !reconnectTargetTime) {
+      setSecondsLeft(null)
+      return
+    }
+    const update = () => {
+      setSecondsLeft(Math.max(0, Math.ceil((reconnectTargetTime - Date.now()) / 1000)))
+    }
+    update()
+    const interval = setInterval(update, 1000)
+    return () => clearInterval(interval)
+  }, [status, reconnectTargetTime])
+
+  if (status === 'reconnecting') {
+    return (
+      <div className="flex items-center gap-1 min-w-0">
+        <p className="text-xs text-fluux-yellow truncate flex items-center gap-1 min-w-0">
+          <RefreshCw className="size-3 animate-spin flex-shrink-0" />
+          <span className="truncate">
+            {secondsLeft !== null
+              ? t('status.reconnectingIn', { seconds: secondsLeft, attempt: reconnectAttempt })
+              : t('status.reconnecting')}
+          </span>
+        </p>
+        <Tooltip content={t('status.cancelReconnection')} position="top">
+          <button
+            type="button"
+            onClick={() => client.cancelReconnect()}
+            aria-label={t('status.cancelReconnection')}
+            className="p-0.5 text-fluux-muted hover:text-fluux-red rounded hover:bg-fluux-hover flex-shrink-0"
+          >
+            <X className="size-3" />
+          </button>
+        </Tooltip>
+      </div>
+    )
+  }
+
+  if (status === 'verifying') {
+    return (
+      <p className="text-xs text-fluux-yellow truncate flex items-center gap-1">
+        <RefreshCw className="size-3 animate-spin flex-shrink-0" />
+        <span className="truncate">{t('status.verifying')}</span>
+      </p>
+    )
+  }
+
+  if (status === 'connecting') {
+    return (
+      <p className="text-xs text-fluux-yellow truncate flex items-center gap-1">
+        <RefreshCw className="size-3 animate-spin flex-shrink-0" />
+        <span className="truncate">{t('status.connecting')}</span>
+      </p>
+    )
+  }
 
   if (status === 'error') {
     return <p className="text-xs text-fluux-red truncate">{t('status.connectionError')}</p>
   }
 
-  if (status === 'disconnected') {
-    return <p className="text-xs text-fluux-muted truncate">{t('status.disconnected')}</p>
+  return <p className="text-xs text-fluux-muted truncate">{t('status.disconnected')}</p>
+}
+
+interface StatusOrPresenceProps {
+  isOpen?: boolean
+  onOpenChange?: (open: boolean) => void
+}
+
+/**
+ * Chip line of the sidebar user panel: presence selector while healthy,
+ * connection status while degraded.
+ *
+ * Owns the connection-state subscriptions (status, isVerifying) so the
+ * Sidebar itself never re-renders on connection churn. Transient degraded
+ * states ('reconnecting'/'connecting'/'verifying', or the post-wake
+ * `online + isVerifying` machine sub-state) only surface after a grace
+ * delay — until then the presence selector stays, swapping one fixed-height
+ * line for another, so nothing in the layout ever moves.
+ */
+export function StatusOrPresence({ isOpen, onOpenChange }: StatusOrPresenceProps) {
+  const status = useConnectionStore((s) => s.status)
+  const isVerifying = useConnectionStore((s) => s.isVerifying)
+
+  const isDegraded =
+    status === 'reconnecting' ||
+    status === 'connecting' ||
+    status === 'verifying' ||
+    (status === 'online' && isVerifying)
+
+  const [showDegraded, setShowDegraded] = useState(false)
+  useEffect(() => {
+    if (!isDegraded) {
+      setShowDegraded(false)
+      return
+    }
+    const timer = setTimeout(() => setShowDegraded(true), DEGRADED_STATUS_GRACE_MS)
+    return () => clearTimeout(timer)
+  }, [isDegraded])
+
+  // Terminal states surface immediately (App usually routes them to the
+  // login screen anyway, unmounting this chip).
+  if (status === 'error' || status === 'disconnected') {
+    return <StatusDisplay status={status} />
   }
 
-  // Transient degraded states (reconnecting / connecting / verifying): the
-  // ConnectionBanner owns the animated details (spinner, retry countdown,
-  // attempt number, cancel action) — the chip just states the effective
-  // presence, statically, so the two surfaces never duplicate each other.
-  return <p className="text-xs text-fluux-muted truncate">{t('presence.offline')}</p>
+  if (isDegraded && showDegraded) {
+    return <StatusDisplay status={status === 'online' ? 'verifying' : status} />
+  }
+
+  return <PresenceSelector isOpen={isOpen} onOpenChange={onOpenChange} />
 }

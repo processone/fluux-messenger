@@ -1183,10 +1183,5 @@
         "bannerMultiple": "📊 {{count}} sondaje fără răspuns — apasă pentru a vedea ultimul",
         "dismissBanner": "Respinge",
         "scrollToOriginal": "Derulează la sondajul original"
-    },
-    "connectionBanner": {
-        "reconnecting": "Conexiune pierdută — se reconectează…",
-        "connecting": "Se conectează…",
-        "connected": "Conectat"
     }
 }

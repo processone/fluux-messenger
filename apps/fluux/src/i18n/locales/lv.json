@@ -1182,10 +1182,5 @@
         "bannerMultiple": "📊 {{count}} neatbildētas aptaujas — pieskarieties, lai redzētu jaunāko",
         "dismissBanner": "Noraidīt",
         "scrollToOriginal": "Ritināt uz sākotnējo aptauju"
-    },
-    "connectionBanner": {
-        "reconnecting": "Savienojums zaudēts — notiek atkārtota savienošana…",
-        "connecting": "Savienošana…",
-        "connected": "Savienots"
     }
 }

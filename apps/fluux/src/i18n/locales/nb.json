@@ -1181,10 +1181,5 @@
         "bannerMultiple": "📊 {{count}} ubesvarte avstemninger — trykk for å se siste",
         "dismissBanner": "Avvis",
         "scrollToOriginal": "Bla til den opprinnelige avstemningen"
-    },
-    "connectionBanner": {
-        "reconnecting": "Mistet tilkoblingen — kobler til på nytt…",
-        "connecting": "Kobler til…",
-        "connected": "Tilkoblet"
     }
 }

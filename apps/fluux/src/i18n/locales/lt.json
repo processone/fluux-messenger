@@ -1181,10 +1181,5 @@
         "bannerMultiple": "📊 {{count}} neatsakytų apklausų — palieskite, kad matytumėte naujausią",
         "dismissBanner": "Atmesti",
         "scrollToOriginal": "Slinkti iki originalios apklausos"
-    },
-    "connectionBanner": {
-        "reconnecting": "Ryšys nutrūko — jungiamasi iš naujo…",
-        "connecting": "Jungiamasi…",
-        "connected": "Prisijungta"
     }
 }

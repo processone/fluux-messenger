@@ -1181,10 +1181,5 @@
         "bannerMultiple": "📊 {{count}} vastaamatonta äänestystä — napauta nähdäksesi viimeisin",
         "dismissBanner": "Sulje",
         "scrollToOriginal": "Vieritä alkuperäiseen äänestykseen"
-    },
-    "connectionBanner": {
-        "reconnecting": "Yhteys katkesi — yhdistetään uudelleen…",
-        "connecting": "Yhdistetään…",
-        "connected": "Yhdistetty"
     }
 }

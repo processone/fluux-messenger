@@ -1181,10 +1181,5 @@
         "bannerMultiple": "📊 {{count}} неотвеченных опросов — нажмите, чтобы увидеть последний",
         "dismissBanner": "Скрыть",
         "scrollToOriginal": "Перейти к исходному опросу"
-    },
-    "connectionBanner": {
-        "reconnecting": "Соединение потеряно — переподключение…",
-        "connecting": "Подключение…",
-        "connected": "Подключено"
     }
 }

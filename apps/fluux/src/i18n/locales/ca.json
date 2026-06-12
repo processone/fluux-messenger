@@ -1183,10 +1183,5 @@
         "bannerMultiple": "📊 {{count}} enquestes sense resposta — toca per veure l'última",
         "dismissBanner": "Descarta",
         "scrollToOriginal": "Desplaça fins a l'enquesta original"
-    },
-    "connectionBanner": {
-        "reconnecting": "S'ha perdut la connexió — s'està tornant a connectar…",
-        "connecting": "S'està connectant…",
-        "connected": "Connectat"
     }
 }

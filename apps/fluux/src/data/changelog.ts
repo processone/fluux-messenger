@@ -14,6 +14,18 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: '0.16.1',
+    date: '2026-06-12',
+    sections: [
+      {
+        type: 'fixed',
+        items: [
+          'Reconnection details (spinner, retry countdown, cancel) moved back to the sidebar status area — the top connection banner made the UI jump on unstable connections',
+        ],
+      },
+    ],
+  },
+  {
     version: '0.16.0',
     date: '2026-06-10',
     sections: [

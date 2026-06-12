@@ -1183,10 +1183,5 @@
         "bannerMultiple": "📊 {{count}} nezodpovězených anket — klepněte pro zobrazení poslední",
         "dismissBanner": "Zavřít",
         "scrollToOriginal": "Přejít na původní anketu"
-    },
-    "connectionBanner": {
-        "reconnecting": "Spojení ztraceno — probíhá opětovné připojení…",
-        "connecting": "Připojování…",
-        "connected": "Připojeno"
     }
 }

@@ -1181,10 +1181,5 @@
         "bannerMultiple": "📊 {{count}} ubesvarede afstemninger — tryk for at se seneste",
         "dismissBanner": "Luk",
         "scrollToOriginal": "Rul til den oprindelige afstemning"
-    },
-    "connectionBanner": {
-        "reconnecting": "Forbindelsen er afbrudt — genopretter forbindelse…",
-        "connecting": "Opretter forbindelse…",
-        "connected": "Forbundet"
     }
 }

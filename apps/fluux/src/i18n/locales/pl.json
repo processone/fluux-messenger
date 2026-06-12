@@ -1183,10 +1183,5 @@
         "bannerMultiple": "📊 {{count}} nieodpowiedzianych ankiet — dotknij, aby zobaczyć najnowszą",
         "dismissBanner": "Odrzuć",
         "scrollToOriginal": "Przewiń do oryginalnej ankiety"
-    },
-    "connectionBanner": {
-        "reconnecting": "Utracono połączenie — ponowne łączenie…",
-        "connecting": "Łączenie…",
-        "connected": "Połączono"
     }
 }

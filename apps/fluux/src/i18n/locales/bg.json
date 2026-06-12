@@ -1181,10 +1181,5 @@
         "bannerMultiple": "📊 {{count}} неотговорени анкети — докоснете, за да видите последната",
         "dismissBanner": "Отхвърли",
         "scrollToOriginal": "Превъртете до оригиналната анкета"
-    },
-    "connectionBanner": {
-        "reconnecting": "Връзката е изгубена — повторно свързване…",
-        "connecting": "Свързване…",
-        "connected": "Свързано"
     }
 }
