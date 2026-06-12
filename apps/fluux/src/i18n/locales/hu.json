@@ -1181,10 +1181,5 @@
         "bannerMultiple": "📊 {{count}} megválaszolatlan szavazás — koppints a legutóbbi megtekintéséhez",
         "dismissBanner": "Elvetés",
         "scrollToOriginal": "Ugrás az eredeti szavazáshoz"
-    },
-    "connectionBanner": {
-        "reconnecting": "A kapcsolat megszakadt — újracsatlakozás…",
-        "connecting": "Csatlakozás…",
-        "connected": "Csatlakozva"
     }
 }

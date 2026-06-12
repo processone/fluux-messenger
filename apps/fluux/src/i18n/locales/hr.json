@@ -1181,10 +1181,5 @@
         "bannerMultiple": "📊 {{count}} neodgovorenih anketa — dodirni za najnoviju",
         "dismissBanner": "Odbaci",
         "scrollToOriginal": "Idi na izvornu anketu"
-    },
-    "connectionBanner": {
-        "reconnecting": "Veza je izgubljena — ponovno povezivanje…",
-        "connecting": "Povezivanje…",
-        "connected": "Povezano"
     }
 }

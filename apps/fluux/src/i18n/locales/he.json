@@ -1181,10 +1181,5 @@
         "bannerMultiple": "📊 {{count}} סקרים ללא מענה — לחץ לצפייה באחרון",
         "dismissBanner": "סגור",
         "scrollToOriginal": "גלול לסקר המקורי"
-    },
-    "connectionBanner": {
-        "reconnecting": "החיבור אבד — מתחבר מחדש…",
-        "connecting": "מתחבר…",
-        "connected": "מחובר"
     }
 }

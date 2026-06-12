@@ -1181,10 +1181,5 @@
         "bannerMultiple": "📊 {{count}} vótálacha gan freagra — tapáil chun an ceann is déanaí a fheiceáil",
         "dismissBanner": "Díbir",
         "scrollToOriginal": "Scrollaigh go dtí an vótáil bhunaidh"
-    },
-    "connectionBanner": {
-        "reconnecting": "Cailleadh an nasc — ag athnascadh…",
-        "connecting": "Ag nascadh…",
-        "connected": "Nasctha"
     }
 }

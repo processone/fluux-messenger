@@ -34,6 +34,7 @@ export const changelog: ChangelogEntry[] = [
       {
         type: 'fixed',
         items: [
+          'Reconnection details (spinner, retry countdown, cancel) moved back to the sidebar status area — the top connection banner made the UI jump on unstable connections',
           'OpenPGP: fingerprint case normalized in peer-verification trust checks (green lock now reliable across clients)',
           'MUC occupant avatar preserved across presence updates',
           'Desktop: system proxy bypassed for loopback XMPP bridge hop to prevent connection failures',

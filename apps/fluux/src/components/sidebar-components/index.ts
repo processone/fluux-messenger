@@ -1,7 +1,7 @@
 // Sidebar subcomponents
 export { IconRailButton } from './IconRailButton'
 export { IconRailNavLink } from './IconRailNavLink'
-export { PresenceSelector, StatusDisplay } from './PresenceSelector'
+export { PresenceSelector, StatusDisplay, StatusOrPresence } from './PresenceSelector'
 export { ConversationList, ArchiveList, ConversationItem } from './ConversationList'
 export { ContactList } from './ContactList'
 export { RoomsList } from './RoomsList'

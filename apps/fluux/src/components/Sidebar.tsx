@@ -46,8 +46,7 @@ import {
   SIDEBAR_DEFAULT_WIDTH,
   SIDEBAR_WIDTH_KEY,
   IconRailNavLink,
-  PresenceSelector,
-  StatusDisplay,
+  StatusOrPresence,
   ConversationList,
   ArchiveList,
   ContactList,
@@ -83,7 +82,6 @@ export function Sidebar({ onSelectContact, onStartChat, onManageUser, adminCateg
   // Use focused selectors instead of useConnection() to avoid re-renders when unrelated values change
   // (e.g., ownResources updates shouldn't re-render the entire sidebar)
   const jid = useConnectionStore((s) => s.jid)
-  const status = useConnectionStore((s) => s.status)
   const ownAvatar = useConnectionStore((s) => s.ownAvatar)
   const ownNickname = useConnectionStore((s) => s.ownNickname)
   // Get methods from client (not from store)
@@ -111,7 +109,6 @@ export function Sidebar({ onSelectContact, onStartChat, onManageUser, adminCateg
   // Diagnostic: track every selector value per render. Dev-only (guarded inside
   // trackSelectorChange). Helps pinpoint unstable selectors causing render loops.
   trackSelectorChange('Sidebar', 'jid', jid)
-  trackSelectorChange('Sidebar', 'status', status)
   trackSelectorChange('Sidebar', 'ownAvatar', ownAvatar)
   trackSelectorChange('Sidebar', 'ownNickname', ownNickname)
   trackSelectorChange('Sidebar', 'isAdmin', isAdmin)
@@ -478,14 +475,11 @@ export function Sidebar({ onSelectContact, onStartChat, onManageUser, adminCateg
                   {ownNickname || jid?.split('@')[0]}
                 </button>
               </Tooltip>
-              {status === 'online' ? (
-                <PresenceSelector isOpen={showPresenceMenu} onOpenChange={(open) => open ? modalActions.open('presenceMenu') : modalActions.close('presenceMenu')} />
-              ) : (
-                <StatusDisplay status={status} />
-              )}
+              <StatusOrPresence isOpen={showPresenceMenu} onOpenChange={(open) => open ? modalActions.open('presenceMenu') : modalActions.close('presenceMenu')} />
             </div>
-            {/* Menu button — always available, including while reconnecting.
-                Cancelling the reconnection lives in the ConnectionBanner. */}
+            {/* Menu button — always available, including while reconnecting,
+                so logout stays reachable. Cancelling the reconnection lives
+                inline in the status line (StatusDisplay). */}
             <UserMenu onLogout={(shouldCleanLocalData) =>
               performLogout({ disconnect, jid, shouldCleanLocalData })
             } />

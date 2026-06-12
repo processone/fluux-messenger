@@ -6,7 +6,6 @@ import { ChatView } from './ChatView'
 import { RoomView } from './RoomView'
 import { OccupantPanel } from './OccupantPanel'
 import { MemberList } from './MemberList'
-import { ConnectionBanner } from './ConnectionBanner'
 
 // Lazy-loaded views (not on critical path — preloaded after initial render)
 const ContactProfileView = lazy(() => import('./ContactProfileView').then(m => ({ default: m.ContactProfileView })))
@@ -736,9 +735,6 @@ function ChatLayoutContent() {
     >
       {/* Global side-effect hooks isolated from ChatLayout re-renders */}
       <GlobalEffects />
-
-      {/* Connection-state strip — subscribes to status itself (UX_REVIEW §4.1) */}
-      <ConnectionBanner />
 
       {/* Main content area */}
       <div className="flex flex-1 min-h-0">

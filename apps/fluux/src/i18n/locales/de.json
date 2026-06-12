@@ -1183,10 +1183,5 @@
         "bannerMultiple": "📊 {{count}} unbeantwortete Umfragen — tippen für die neueste",
         "dismissBanner": "Verwerfen",
         "scrollToOriginal": "Zur ursprünglichen Umfrage scrollen"
-    },
-    "connectionBanner": {
-        "reconnecting": "Verbindung verloren — Verbindung wird wiederhergestellt…",
-        "connecting": "Verbinden…",
-        "connected": "Verbunden"
     }
 }

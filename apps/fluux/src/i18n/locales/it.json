@@ -1183,10 +1183,5 @@
         "bannerMultiple": "📊 {{count}} sondaggi senza risposta — tocca per vedere l'ultimo",
         "dismissBanner": "Ignora",
         "scrollToOriginal": "Vai al sondaggio originale"
-    },
-    "connectionBanner": {
-        "reconnecting": "Connessione persa — riconnessione…",
-        "connecting": "Connessione…",
-        "connected": "Connesso"
     }
 }

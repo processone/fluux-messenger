@@ -1183,10 +1183,5 @@
         "bannerMultiple": "📊 {{count}} vastamata küsitlust — puuduta viimase nägemiseks",
         "dismissBanner": "Sulge",
         "scrollToOriginal": "Keri algse küsitluseni"
-    },
-    "connectionBanner": {
-        "reconnecting": "Ühendus katkes — taasühendamine…",
-        "connecting": "Ühendamine…",
-        "connected": "Ühendatud"
     }
 }

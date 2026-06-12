@@ -1181,10 +1181,5 @@
         "bannerMultiple": "📊 {{count}} 个未回答的投票 — 点击即可查看最新投票",
         "dismissBanner": "忽略",
         "scrollToOriginal": "滚动到原始投票"
-    },
-    "connectionBanner": {
-        "reconnecting": "连接已断开 — 正在重新连接…",
-        "connecting": "正在连接…",
-        "connected": "已连接"
     }
 }
