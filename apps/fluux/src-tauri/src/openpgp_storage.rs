@@ -5,7 +5,7 @@
 //! 1. A **per-account random passphrase** (32 bytes of CSPRNG output,
 //!    base64-encoded) lives in the OS keychain. Small payload — keychains
 //!    don't love blobs — and leverages the same credential store we already
-//!    use for XMPP passwords (`com.processone.fluux`). Different service
+//!    use for XMPP passwords (`net.processone.fluux`). Different service
 //!    account to avoid collisions: `openpgp_passphrase:<jid>`.
 //! 2. The **passphrase-encrypted TSK** (Transferable Secret Key) lives on
 //!    disk at `<app_data>/openpgp/<sanitized_jid>.tsk.asc`. Sequoia-PGP
@@ -69,7 +69,7 @@ use base64::{engine::general_purpose::STANDARD as B64, Engine as _};
 
 /// Keychain service name. Shared with XMPP credentials so a user who
 /// grants keychain access once gets access for both.
-const KEYRING_SERVICE: &str = "com.processone.fluux";
+const KEYRING_SERVICE: &str = "net.processone.fluux";
 /// Keychain account prefix to namespace PGP passphrases away from XMPP
 /// credentials and the `last_user` marker.
 const KEYRING_ACCOUNT_PREFIX: &str = "openpgp_passphrase:";

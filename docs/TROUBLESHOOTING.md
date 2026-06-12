@@ -12,9 +12,9 @@ Fluux writes daily-rotating log files (`fluux.log`) automatically. These are use
 
 | OS      | Path                                                  |
 |---------|-------------------------------------------------------|
-| macOS   | `~/Library/Logs/com.processone.fluux/`                |
-| Linux   | `~/.local/share/com.processone.fluux/logs/`           |
-| Windows | `%APPDATA%\com.processone.fluux\logs\`                |
+| macOS   | `~/Library/Logs/net.processone.fluux/`                |
+| Linux   | `~/.local/share/net.processone.fluux/logs/`           |
+| Windows | `%APPDATA%\net.processone.fluux\logs\`                |
 
 You can also open the log directory from the app menu: **Reveal Logs in Finder** (macOS) or **Open Logs Folder** (Windows).
 
