@@ -264,6 +264,8 @@ export interface RoomState {
   batchAddOccupants: (roomJid: string, occupants: RoomOccupant[]) => void
   removeOccupant: (roomJid: string, nick: string) => void
   updateOccupantAvatar: (roomJid: string, nick: string, avatar: string | null, avatarHash: string | null) => void
+  /** Batch variant of updateOccupantAvatar — one state update for N resolved avatars (e.g. after joining a large room) */
+  updateOccupantAvatars: (roomJid: string, updates: Array<{ nick: string; avatar: string | null; avatarHash: string | null }>) => void
   setSelfOccupant: (roomJid: string, occupant: RoomOccupant) => void
   mergeRoomMembers: (roomJid: string, members: Array<{ jid: string; nick?: string; affiliation: RoomAffiliation }>, contactAvatarLookup?: (jid: string) => string | null) => void
   getRoom: (roomJid: string) => Room | undefined
@@ -753,28 +755,40 @@ export const roomStore = createStore<RoomState>()(
   },
 
   updateOccupantAvatar: (roomJid, nick, avatar, avatarHash) => {
+    get().updateOccupantAvatars(roomJid, [{ nick, avatar, avatarHash }])
+  },
+
+  updateOccupantAvatars: (roomJid, updates) => {
     set((state) => {
-      const newRooms = new Map(state.rooms)
-      const existing = newRooms.get(roomJid)
+      const existing = state.rooms.get(roomJid)
       if (!existing) return state
 
-      const existingOccupant = existing.occupants.get(nick)
-      if (!existingOccupant) return state
-
-      const newOccupants = new Map(existing.occupants)
-      newOccupants.set(nick, {
-        ...existingOccupant,
-        avatar: avatar ?? undefined,
-        avatarHash: avatarHash ?? undefined,
-      })
-
-      // Update nick→avatar cache so avatar persists after occupant leaves
+      let newOccupants: Map<string, RoomOccupant> | null = null
+      // Update nick→avatar cache so avatars persist after occupants leave
       let nickToAvatarCache = existing.nickToAvatarCache
-      if (avatar) {
-        nickToAvatarCache = new Map(nickToAvatarCache || [])
-        nickToAvatarCache.set(nick, avatar)
+
+      for (const { nick, avatar, avatarHash } of updates) {
+        const occupant = (newOccupants ?? existing.occupants).get(nick)
+        if (!occupant) continue
+
+        if (!newOccupants) newOccupants = new Map(existing.occupants)
+        newOccupants.set(nick, {
+          ...occupant,
+          avatar: avatar ?? undefined,
+          avatarHash: avatarHash ?? undefined,
+        })
+
+        if (avatar) {
+          if (!nickToAvatarCache || nickToAvatarCache === existing.nickToAvatarCache) {
+            nickToAvatarCache = new Map(nickToAvatarCache || [])
+          }
+          nickToAvatarCache.set(nick, avatar)
+        }
       }
 
+      if (!newOccupants) return state
+
+      const newRooms = new Map(state.rooms)
       newRooms.set(roomJid, { ...existing, occupants: newOccupants, nickToAvatarCache })
 
       // Update runtime (occupants + avatar cache)

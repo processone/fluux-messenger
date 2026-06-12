@@ -154,6 +154,7 @@ export interface StoreBindings {
     batchAddOccupants: (roomJid: string, occupants: RoomOccupant[]) => void
     removeOccupant: (roomJid: string, nick: string) => void
     setSelfOccupant: (roomJid: string, occupant: RoomOccupant) => void
+    updateOccupantAvatars: (roomJid: string, updates: Array<{ nick: string; avatar: string | null; avatarHash: string | null }>) => void
     getRoom: (roomJid: string) => Room | undefined
     addMessage: (roomJid: string, message: RoomMessage, options?: {
       incrementUnread?: boolean
