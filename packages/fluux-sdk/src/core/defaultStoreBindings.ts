@@ -192,6 +192,7 @@ export function createDefaultStoreBindings(options: DefaultStoreBindingsOptions 
       batchAddOccupants: roomStore.getState().batchAddOccupants,
       removeOccupant: roomStore.getState().removeOccupant,
       setSelfOccupant: roomStore.getState().setSelfOccupant,
+      updateOccupantAvatars: roomStore.getState().updateOccupantAvatars,
       getRoom: roomStore.getState().getRoom,
       addMessage: roomStore.getState().addMessage,
       updateReactions: roomStore.getState().updateReactions,

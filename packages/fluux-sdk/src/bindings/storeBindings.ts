@@ -275,9 +275,41 @@ export function createStoreBindings(
     stores.room.removeOccupant(roomJid, nick)
   })
 
-  on('room:occupant-avatar', ({ roomJid, nick, avatar, avatarHash }) => {
+  // Coalesce per-occupant avatar resolutions into one store write per room.
+  // Joining a large room fires one async avatar fetch per occupant; writing each
+  // resolution individually replaces the occupants Map N times in a burst and
+  // re-renders every room subscriber once per avatar (render storm on join).
+  const AVATAR_FLUSH_DELAY_MS = 200
+  const pendingOccupantAvatars = new Map<string, Map<string, { nick: string; avatar: string | null; avatarHash: string | null }>>()
+  let avatarFlushTimer: ReturnType<typeof setTimeout> | null = null
+
+  const flushOccupantAvatars = () => {
+    avatarFlushTimer = null
     const stores = getStores()
-    stores.room.updateOccupantAvatar(roomJid, nick, avatar, avatarHash)
+    for (const [roomJid, byNick] of pendingOccupantAvatars) {
+      stores.room.updateOccupantAvatars(roomJid, [...byNick.values()])
+    }
+    pendingOccupantAvatars.clear()
+  }
+
+  on('room:occupant-avatar', ({ roomJid, nick, avatar, avatarHash }) => {
+    let byNick = pendingOccupantAvatars.get(roomJid)
+    if (!byNick) {
+      byNick = new Map()
+      pendingOccupantAvatars.set(roomJid, byNick)
+    }
+    byNick.set(nick, { nick, avatar, avatarHash })
+    if (avatarFlushTimer === null) {
+      avatarFlushTimer = setTimeout(flushOccupantAvatars, AVATAR_FLUSH_DELAY_MS)
+    }
+  })
+
+  unsubscribers.push(() => {
+    if (avatarFlushTimer !== null) {
+      clearTimeout(avatarFlushTimer)
+      avatarFlushTimer = null
+    }
+    pendingOccupantAvatars.clear()
   })
 
   on('room:self-occupant', ({ roomJid, occupant }) => {

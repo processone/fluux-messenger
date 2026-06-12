@@ -1801,6 +1801,58 @@ describe('roomStore', () => {
     })
   })
 
+  describe('updateOccupantAvatars (batch)', () => {
+    it('applies multiple avatar updates in a single state notification', () => {
+      roomStore.getState().addRoom(createRoom('test@conference.example.com'))
+      roomStore.getState().batchAddOccupants('test@conference.example.com', [
+        { nick: 'alice', affiliation: 'member', role: 'participant', avatarHash: 'ha' },
+        { nick: 'bob', affiliation: 'member', role: 'participant', avatarHash: 'hb' },
+      ])
+
+      let notifications = 0
+      const unsub = roomStore.subscribe(() => { notifications++ })
+      roomStore.getState().updateOccupantAvatars('test@conference.example.com', [
+        { nick: 'alice', avatar: 'blob:alice', avatarHash: 'ha' },
+        { nick: 'bob', avatar: 'blob:bob', avatarHash: 'hb' },
+      ])
+      unsub()
+
+      expect(notifications).toBe(1)
+      const room = roomStore.getState().rooms.get('test@conference.example.com')
+      expect(room?.occupants.get('alice')?.avatar).toBe('blob:alice')
+      expect(room?.occupants.get('bob')?.avatar).toBe('blob:bob')
+      // nick→avatar cache must be updated so message rows keep avatars after occupants leave
+      expect(room?.nickToAvatarCache?.get('alice')).toBe('blob:alice')
+      expect(room?.nickToAvatarCache?.get('bob')).toBe('blob:bob')
+    })
+
+    it('skips unknown occupants while applying known ones', () => {
+      roomStore.getState().addRoom(createRoom('test@conference.example.com'))
+      roomStore.getState().batchAddOccupants('test@conference.example.com', [
+        { nick: 'alice', affiliation: 'member', role: 'participant' },
+      ])
+
+      roomStore.getState().updateOccupantAvatars('test@conference.example.com', [
+        { nick: 'ghost', avatar: 'blob:ghost', avatarHash: 'hg' },
+        { nick: 'alice', avatar: 'blob:alice', avatarHash: 'ha' },
+      ])
+
+      const room = roomStore.getState().rooms.get('test@conference.example.com')
+      expect(room?.occupants.get('alice')?.avatar).toBe('blob:alice')
+      expect(room?.occupants.has('ghost')).toBe(false)
+    })
+
+    it('does nothing for an unknown room', () => {
+      let notifications = 0
+      const unsub = roomStore.subscribe(() => { notifications++ })
+      roomStore.getState().updateOccupantAvatars('missing@conference.example.com', [
+        { nick: 'alice', avatar: 'blob:alice', avatarHash: 'ha' },
+      ])
+      unsub()
+      expect(notifications).toBe(0)
+    })
+  })
+
   describe('removeOccupant', () => {
     it('should remove an occupant from a room', () => {
       const occupants = new Map([['alice', { nick: 'alice', affiliation: 'member' as const, role: 'participant' as const }]])

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { createStoreBindings, StoreRefs } from './storeBindings'
 import { XMPPClient } from '../core/XMPPClient'
 import {
@@ -213,6 +213,68 @@ describe('createStoreBindings', () => {
     it('should handle room:occupant-left', () => {
       mockClient.emit('room:occupant-left', { roomJid: 'room@conference.example.com', nick: 'Alice' })
       expect(mockStores.room.removeOccupant).toHaveBeenCalledWith('room@conference.example.com', 'Alice')
+    })
+
+    describe('room:occupant-avatar coalescing', () => {
+      beforeEach(() => {
+        vi.useFakeTimers()
+      })
+
+      afterEach(() => {
+        vi.useRealTimers()
+      })
+
+      it('coalesces a burst of avatar events into one batch store write', () => {
+        mockClient.emit('room:occupant-avatar', { roomJid: 'room@conference.example.com', nick: 'Alice', avatar: 'blob:alice', avatarHash: 'ha' })
+        mockClient.emit('room:occupant-avatar', { roomJid: 'room@conference.example.com', nick: 'Bob', avatar: 'blob:bob', avatarHash: 'hb' })
+
+        // No store write until the coalescing window elapses
+        expect(mockStores.room.updateOccupantAvatars).not.toHaveBeenCalled()
+
+        vi.runAllTimers()
+
+        expect(mockStores.room.updateOccupantAvatars).toHaveBeenCalledTimes(1)
+        expect(mockStores.room.updateOccupantAvatars).toHaveBeenCalledWith('room@conference.example.com', [
+          { nick: 'Alice', avatar: 'blob:alice', avatarHash: 'ha' },
+          { nick: 'Bob', avatar: 'blob:bob', avatarHash: 'hb' },
+        ])
+      })
+
+      it('groups buffered avatar events by room', () => {
+        mockClient.emit('room:occupant-avatar', { roomJid: 'room1@conference.example.com', nick: 'Alice', avatar: 'blob:alice', avatarHash: 'ha' })
+        mockClient.emit('room:occupant-avatar', { roomJid: 'room2@conference.example.com', nick: 'Bob', avatar: 'blob:bob', avatarHash: 'hb' })
+
+        vi.runAllTimers()
+
+        expect(mockStores.room.updateOccupantAvatars).toHaveBeenCalledTimes(2)
+        expect(mockStores.room.updateOccupantAvatars).toHaveBeenCalledWith('room1@conference.example.com', [
+          { nick: 'Alice', avatar: 'blob:alice', avatarHash: 'ha' },
+        ])
+        expect(mockStores.room.updateOccupantAvatars).toHaveBeenCalledWith('room2@conference.example.com', [
+          { nick: 'Bob', avatar: 'blob:bob', avatarHash: 'hb' },
+        ])
+      })
+
+      it('keeps only the latest avatar per nick within a window', () => {
+        mockClient.emit('room:occupant-avatar', { roomJid: 'room@conference.example.com', nick: 'Alice', avatar: 'blob:old', avatarHash: 'old' })
+        mockClient.emit('room:occupant-avatar', { roomJid: 'room@conference.example.com', nick: 'Alice', avatar: 'blob:new', avatarHash: 'new' })
+
+        vi.runAllTimers()
+
+        expect(mockStores.room.updateOccupantAvatars).toHaveBeenCalledTimes(1)
+        expect(mockStores.room.updateOccupantAvatars).toHaveBeenCalledWith('room@conference.example.com', [
+          { nick: 'Alice', avatar: 'blob:new', avatarHash: 'new' },
+        ])
+      })
+
+      it('drops a pending flush when bindings are unsubscribed', () => {
+        mockClient.emit('room:occupant-avatar', { roomJid: 'room@conference.example.com', nick: 'Alice', avatar: 'blob:alice', avatarHash: 'ha' })
+
+        unsubscribe()
+        vi.runAllTimers()
+
+        expect(mockStores.room.updateOccupantAvatars).not.toHaveBeenCalled()
+      })
     })
 
     it('should handle room:self-occupant', () => {
