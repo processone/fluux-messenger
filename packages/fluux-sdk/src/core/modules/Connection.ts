@@ -1586,25 +1586,49 @@ export class Connection extends BaseModule {
       patchSmAckQueue(sm)
     }
 
-    // Intercept <stream:features> before middleware to strip <sm> when SM is
-    // ALREADY enabled — i.e. it was negotiated inline via SASL2 (bind2 <enabled>
-    // or inline <resumed>, both set sm.enabled synchronously before the post-auth
-    // features arrive). ejabberd's post-auth <stream:features> still contains
-    // <sm>, and without stripping it setupStreamFeature sends a duplicate
-    // <enable> the server rejects, which clears sm.enabled.
+    // Intercept <stream:features> before middleware to strip <sm> when SM was
+    // negotiated INLINE via SASL2 (bind2 <enabled> or inline <resumed> inside
+    // <success>). ejabberd's post-auth <stream:features> still contains <sm>,
+    // and xmpp.js's setupStreamFeature has no sm.enabled guard: left in place,
+    // it negotiates again, the server rejects the duplicate, and the catch
+    // clears sm.enabled.
     //
-    // The decision MUST be made at features-arrival time from sm.enabled, not
-    // pre-armed when SASL2 is detected: servers that advertise SASL2 without
-    // inline SM negotiation (e.g. Openfire — SASL2 but no bind2 SM) rely on
-    // this features element for their ONLY chance to enable SM. Pre-arming
-    // stripped it, silently disabling SM and breaking the keepalive (#515).
+    // The decision must be made from what was ACTUALLY negotiated, not pre-armed
+    // when SASL2 is detected: servers that advertise SASL2 without inline SM
+    // negotiation (e.g. Openfire — SASL2 but no bind2 SM) rely on this features
+    // element for their ONLY chance to enable SM. Pre-arming stripped it,
+    // silently disabling SM and breaking the keepalive (#515).
+    //
+    // Detection is two-fold, both checked at features-arrival time:
+    // - sm.enabled — set by xmpp.js's inline enabled()/resumed() handlers;
+    // - a synchronous peek at the SASL2 <success> element for an inline SM
+    //   child (directly or inside bind2 <bound>). This closes a race: the
+    //   inline handlers run after `await mech.final()` (SCRAM verification),
+    //   so sm.enabled may not be set yet if <features> is processed right
+    //   behind <success>. Element events fire in stanza order, so the peek
+    //   is always ahead of the features element.
     const NS_JABBER_STREAM = 'http://etherx.jabber.org/streams'
     const NS_SM = 'urn:xmpp:sm:3'
+    const NS_SASL2 = 'urn:xmpp:sasl:2'
+    const NS_BIND2 = 'urn:xmpp:bind:0'
+    let inlineSmNegotiated = false
     if (typeof (xmppClient as any).prependListener === 'function') {
       ;(xmppClient as any).prependListener('element', (element: Element) => {
+        if (element.is('success', NS_SASL2)) {
+          const bound = element.getChild('bound', NS_BIND2)
+          inlineSmNegotiated = !!(
+            element.getChild('enabled', NS_SM) ||
+            element.getChild('resumed', NS_SM) ||
+            bound?.getChild('enabled', NS_SM) ||
+            bound?.getChild('resumed', NS_SM)
+          )
+          return
+        }
         if (!element.is('features', NS_JABBER_STREAM)) return
         const sm = (xmppClient as any).streamManagement
-        if (!sm?.enabled) return
+        const smNegotiated = inlineSmNegotiated || !!sm?.enabled
+        inlineSmNegotiated = false // one-shot: consumed by the first features element
+        if (!smNegotiated) return
         const smFeature = element.getChild('sm', NS_SM)
         if (smFeature) {
           ;(element as any).children = (element as any).children.filter((c: unknown) => c !== smFeature)

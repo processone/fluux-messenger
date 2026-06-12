@@ -3728,6 +3728,44 @@ describe('XMPPClient Connection', () => {
       const smAfter = (featuresEl as any).children.find((c: any) => c.name === 'sm')
       expect(smAfter).toBeDefined()
     })
+
+    it('strips <sm> when <success> carried inline SM even if sm.enabled is not set yet', async () => {
+      // Race guard: xmpp.js's inline enabled()/resumed() handlers run after
+      // `await mech.final()` (SCRAM server-signature verification), so
+      // sm.enabled can still be false when the post-auth features element is
+      // processed right behind <success>. The synchronous peek at the
+      // <success> children must cover that window.
+      const elementHandler = await getElementHandler()
+      ;(mockXmppClientInstance as any).streamManagement = { enabled: false, on: vi.fn() }
+
+      // bind2 fresh enable: <success><bound xmlns="urn:xmpp:bind:0"><enabled xmlns="urn:xmpp:sm:3"/></bound></success>
+      const successBind2 = createMockElement('success', { xmlns: 'urn:xmpp:sasl:2' }, [
+        {
+          name: 'bound',
+          attrs: { xmlns: 'urn:xmpp:bind:0' },
+          children: [{ name: 'enabled', attrs: { xmlns: 'urn:xmpp:sm:3' } }],
+        },
+      ])
+      elementHandler(successBind2)
+      const featuresEl = makeFeaturesWithSm()
+      elementHandler(featuresEl)
+      expect((featuresEl as any).children.find((c: any) => c.name === 'sm')).toBeUndefined()
+
+      // The peek is one-shot: consumed by the first features element, so a
+      // later features (e.g. after a future stream restart) passes untouched.
+      const featuresEl2 = makeFeaturesWithSm()
+      elementHandler(featuresEl2)
+      expect((featuresEl2 as any).children.find((c: any) => c.name === 'sm')).toBeDefined()
+
+      // Inline resumption: <success><resumed xmlns="urn:xmpp:sm:3"/></success>
+      const successResumed = createMockElement('success', { xmlns: 'urn:xmpp:sasl:2' }, [
+        { name: 'resumed', attrs: { xmlns: 'urn:xmpp:sm:3' } },
+      ])
+      elementHandler(successResumed)
+      const featuresEl3 = makeFeaturesWithSm()
+      elementHandler(featuresEl3)
+      expect((featuresEl3 as any).children.find((c: any) => c.name === 'sm')).toBeUndefined()
+    })
   })
 
   describe('FAST token authentication (XEP-0484)', () => {
