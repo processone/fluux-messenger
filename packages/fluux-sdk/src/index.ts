@@ -514,6 +514,7 @@ export type { ConsistentColorOptions } from './core/consistentColor'
 // Message preview utilities
 export { getAttachmentEmoji, formatMessagePreview, stripReplyQuote } from './utils/messagePreview'
 export type { AttachmentDisplay } from './utils/messagePreview'
+export { isPreviewableMessage } from './stores/shared/lastMessageUtils'
 
 // Configuration constants
 export { WELL_KNOWN_MUC_SERVERS } from './core/config'

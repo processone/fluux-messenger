@@ -572,6 +572,65 @@ describe('chatStore', () => {
     })
   })
 
+  describe('lastMessage preview — bodiless signal placeholders', () => {
+    // Regression: an encrypted reaction replayed from MAM before its key was
+    // available is stored as an empty-body message (its <reactions> element is
+    // sealed in the ciphertext). It must never become the conversation preview.
+    function bodilessPlaceholder(conversationId: string): Message {
+      return {
+        ...createMessage(conversationId, '', true),
+        encryptedPayload: '<message><openpgp>…</openpgp></message>',
+      }
+    }
+
+    it('does not let a bodiless placeholder become lastMessage', () => {
+      chatStore.getState().addConversation(createConversation('alice@example.com'))
+      const real = createMessage('alice@example.com', 'Yep, traité hier soir.', false)
+      chatStore.getState().addMessage(real)
+      chatStore.getState().addMessage(bodilessPlaceholder('alice@example.com'))
+
+      const meta = chatStore.getState().conversationMeta.get('alice@example.com')
+      expect(meta?.lastMessage?.id).toBe(real.id)
+      expect(meta?.lastMessage?.body).toBe('Yep, traité hier soir.')
+    })
+
+    it('recomputes lastMessage to the prior real message when the placeholder is removed', () => {
+      chatStore.getState().addConversation(createConversation('alice@example.com'))
+      const real = createMessage('alice@example.com', 'Real message', false)
+      chatStore.getState().addMessage(real)
+      const placeholder = bodilessPlaceholder('alice@example.com')
+      chatStore.getState().addMessage(placeholder)
+
+      // Force the placeholder to be the stored preview (the stuck-data shape),
+      // then remove it as the deferred-decrypt cleanup path would.
+      const meta = chatStore.getState().conversationMeta.get('alice@example.com')!
+      const conv = chatStore.getState().conversations.get('alice@example.com')!
+      chatStore.setState({
+        conversationMeta: new Map(chatStore.getState().conversationMeta).set('alice@example.com', { ...meta, lastMessage: placeholder }),
+        conversations: new Map(chatStore.getState().conversations).set('alice@example.com', { ...conv, lastMessage: placeholder }),
+      })
+
+      chatStore.getState().removeMessage('alice@example.com', placeholder.id)
+
+      const after = chatStore.getState().conversationMeta.get('alice@example.com')
+      expect(after?.lastMessage?.id).toBe(real.id)
+      expect(after?.lastMessage?.body).toBe('Real message')
+    })
+
+    it('leaves lastMessage untouched when removing a non-preview message', () => {
+      chatStore.getState().addConversation(createConversation('alice@example.com'))
+      const first = createMessage('alice@example.com', 'First', false)
+      const last = createMessage('alice@example.com', 'Last', false)
+      chatStore.getState().addMessage(first)
+      chatStore.getState().addMessage(last)
+
+      chatStore.getState().removeMessage('alice@example.com', first.id)
+
+      const after = chatStore.getState().conversationMeta.get('alice@example.com')
+      expect(after?.lastMessage?.id).toBe(last.id)
+    })
+  })
+
   describe('markAsRead', () => {
     it('should reset unreadCount to 0', () => {
       const conv = { ...createConversation('alice@example.com'), unreadCount: 10 }

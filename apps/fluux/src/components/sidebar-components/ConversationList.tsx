@@ -8,6 +8,7 @@ import {
   chatStore,
   roomStore,
   generateConsistentColorHexSync,
+  isPreviewableMessage,
   type Conversation,
   type Contact,
   type Room,
@@ -353,7 +354,11 @@ export const ConversationItem = memo(function ConversationItem({
             <p className="truncate text-xs opacity-75 italic">
               {t('conversations.draft')}: {draft}
             </p>
-          ) : conversation.lastMessage && (
+          ) : conversation.lastMessage && isPreviewableMessage(conversation.lastMessage) && (
+            // Guard against a non-previewable placeholder (e.g. a stuck bodiless
+            // encrypted reaction) rendering as a blank "Me:" line. It still
+            // carries a timestamp for ordering; it just shows no preview text
+            // until a real message supersedes it.
             <p dir="auto" className={`truncate text-xs opacity-75 ${conversation.lastMessage.isRetracted ? 'italic' : ''}`}>
               {conversation.lastMessage.isOutgoing ? `${t('chat.me')}: ` : ''}
               {conversation.lastMessage.isRetracted ? t('chat.messageDeleted') : formatLocalizedPreview(conversation.lastMessage, t)}
