@@ -36,7 +36,7 @@ import type {
   RSMResponse,
   AdminRoom,
 } from '../types'
-import { parseXMPPError, formatXMPPError } from '../../utils/xmppError'
+import { parseXMPPError, formatXMPPError, hasErrorCondition } from '../../utils/xmppError'
 import { buildDataFormSubmit, parseDataForm } from '../../utils/dataForm'
 import { logInfo, logWarn, logError as logErr } from '../logger'
 
@@ -116,6 +116,14 @@ export class MUC extends BaseModule {
    * This reduces store updates from ~50 to ~1 for large rooms.
    */
   private pendingOccupants = new Map<string, RoomOccupant[]>()
+
+  /**
+   * Rooms whose affiliation lists the server refused to share (forbidden).
+   * Remembered for the client's lifetime so member discovery isn't retried
+   * (3 IQs + warnings) on every reconnect. A restart — or a permission change
+   * followed by a restart — clears it.
+   */
+  private membersForbiddenRooms = new Set<string>()
 
   handle(stanza: Element): boolean | void {
     if (stanza.is('presence')) {
@@ -1692,14 +1700,19 @@ export class MUC extends BaseModule {
    * @remarks
    * - Requires at least member affiliation to query in most room configurations
    * - Nick attribute is optional in the response; some items may only have JID
-   * - Each affiliation is queried separately; failures on one don't block others
+   * - `member` is queried first: servers gate all three lists the same way for
+   *   unprivileged users, so a `forbidden` answer skips the remaining queries and
+   *   is remembered for the client's lifetime (no re-query on every reconnect).
+   *   Other failures (e.g. timeouts) don't block the remaining affiliations.
    */
   async queryRoomMembers(
     roomJid: string
   ): Promise<Array<{ jid: string; nick?: string; affiliation: RoomAffiliation }>> {
+    if (this.membersForbiddenRooms.has(roomJid)) return []
+
     const allMembers: Array<{ jid: string; nick?: string; affiliation: RoomAffiliation }> = []
 
-    const affiliations: RoomAffiliation[] = ['owner', 'admin', 'member']
+    const affiliations: RoomAffiliation[] = ['member', 'admin', 'owner']
 
     for (const affiliation of affiliations) {
       try {
@@ -1726,8 +1739,14 @@ export class MUC extends BaseModule {
           })
         }
       } catch (err) {
-        // Some affiliations may not be queryable depending on room config
-        // and our own affiliation level. Log but continue with others.
+        if (hasErrorCondition(err, 'forbidden')) {
+          // The room config doesn't let us retrieve affiliation lists; the other
+          // queries would be forbidden too. Skip them and don't retry this session.
+          this.membersForbiddenRooms.add(roomJid)
+          logWarn(`Member discovery forbidden for ${roomJid} — skipping for this session`)
+          break
+        }
+        // Transient failure (timeout, server hiccup): continue with the others.
         logWarn(`Member query failed for ${roomJid} (${affiliation}): ${err instanceof Error ? err.message : String(err)}`)
       }
     }

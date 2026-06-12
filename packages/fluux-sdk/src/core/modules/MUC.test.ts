@@ -1599,29 +1599,29 @@ describe('MUC Module', () => {
       ])
     }
 
-    it('queries all three affiliations and returns combined results', async () => {
+    it('queries all three affiliations (member first) and returns combined results', async () => {
       mockSendIQ
-        .mockResolvedValueOnce(createAffiliationResponse('owner', [{ jid: 'alice@example.org', nick: 'Alice' }]))
-        .mockResolvedValueOnce(createAffiliationResponse('admin', [{ jid: 'bob@example.org', nick: 'Bob' }]))
         .mockResolvedValueOnce(createAffiliationResponse('member', [
           { jid: 'carol@example.org', nick: 'Carol' },
           { jid: 'dave@example.org' },
         ]))
+        .mockResolvedValueOnce(createAffiliationResponse('admin', [{ jid: 'bob@example.org', nick: 'Bob' }]))
+        .mockResolvedValueOnce(createAffiliationResponse('owner', [{ jid: 'alice@example.org', nick: 'Alice' }]))
 
       const result = await muc.queryRoomMembers(roomJid)
 
       expect(result).toHaveLength(4)
-      expect(result[0]).toEqual({ jid: 'alice@example.org', nick: 'Alice', affiliation: 'owner' })
-      expect(result[1]).toEqual({ jid: 'bob@example.org', nick: 'Bob', affiliation: 'admin' })
-      expect(result[2]).toEqual({ jid: 'carol@example.org', nick: 'Carol', affiliation: 'member' })
-      expect(result[3]).toEqual({ jid: 'dave@example.org', nick: undefined, affiliation: 'member' })
+      expect(result[0]).toEqual({ jid: 'carol@example.org', nick: 'Carol', affiliation: 'member' })
+      expect(result[1]).toEqual({ jid: 'dave@example.org', nick: undefined, affiliation: 'member' })
+      expect(result[2]).toEqual({ jid: 'bob@example.org', nick: 'Bob', affiliation: 'admin' })
+      expect(result[3]).toEqual({ jid: 'alice@example.org', nick: 'Alice', affiliation: 'owner' })
     })
 
     it('emits room:members SDK event when members found', async () => {
       mockSendIQ
-        .mockResolvedValueOnce(createAffiliationResponse('owner', [{ jid: 'alice@example.org', nick: 'Alice' }]))
-        .mockResolvedValueOnce(createAffiliationResponse('admin', []))
         .mockResolvedValueOnce(createAffiliationResponse('member', []))
+        .mockResolvedValueOnce(createAffiliationResponse('admin', []))
+        .mockResolvedValueOnce(createAffiliationResponse('owner', [{ jid: 'alice@example.org', nick: 'Alice' }]))
 
       await muc.queryRoomMembers(roomJid)
 
@@ -1654,23 +1654,63 @@ describe('MUC Module', () => {
       expect(result[0].jid).toBe('alice@example.org')
     })
 
-    it('continues with other affiliations when one fails', async () => {
+    it('continues with other affiliations when one fails with a non-forbidden error', async () => {
       mockSendIQ
-        .mockRejectedValueOnce(new Error('forbidden'))
-        .mockResolvedValueOnce(createAffiliationResponse('admin', []))
-        .mockResolvedValueOnce(createAffiliationResponse('member', [{ jid: 'carol@example.org', nick: 'Carol' }]))
+        .mockRejectedValueOnce(new Error('IQ timeout after 10000ms'))
+        .mockResolvedValueOnce(createAffiliationResponse('admin', [{ jid: 'bob@example.org', nick: 'Bob' }]))
+        .mockResolvedValueOnce(createAffiliationResponse('owner', []))
 
       const result = await muc.queryRoomMembers(roomJid)
 
       expect(result).toHaveLength(1)
-      expect(result[0]).toEqual({ jid: 'carol@example.org', nick: 'Carol', affiliation: 'member' })
+      expect(result[0]).toEqual({ jid: 'bob@example.org', nick: 'Bob', affiliation: 'admin' })
+      expect(mockSendIQ).toHaveBeenCalledTimes(3)
     })
 
-    it('returns empty array when all affiliations fail', async () => {
+    it('short-circuits on forbidden: skips the remaining affiliation queries', async () => {
+      const forbidden = Object.assign(new Error('forbidden - Access denied'), { condition: 'forbidden' })
+      mockSendIQ.mockRejectedValueOnce(forbidden)
+
+      const result = await muc.queryRoomMembers(roomJid)
+
+      expect(result).toEqual([])
+      expect(mockSendIQ).toHaveBeenCalledTimes(1)
+    })
+
+    it('does not re-query a room whose member list was forbidden (session cache)', async () => {
+      const forbidden = Object.assign(new Error('forbidden'), { condition: 'forbidden' })
+      mockSendIQ.mockRejectedValueOnce(forbidden)
+      await muc.queryRoomMembers(roomJid)
+      mockSendIQ.mockClear()
+
+      const result = await muc.queryRoomMembers(roomJid)
+
+      expect(result).toEqual([])
+      expect(mockSendIQ).not.toHaveBeenCalled()
+    })
+
+    it('still queries other rooms after one room was forbidden', async () => {
+      const forbidden = Object.assign(new Error('forbidden'), { condition: 'forbidden' })
+      mockSendIQ.mockRejectedValueOnce(forbidden)
+      await muc.queryRoomMembers(roomJid)
+      mockSendIQ.mockClear()
+
       mockSendIQ
-        .mockRejectedValueOnce(new Error('forbidden'))
-        .mockRejectedValueOnce(new Error('not-allowed'))
-        .mockRejectedValueOnce(new Error('forbidden'))
+        .mockResolvedValueOnce(createAffiliationResponse('member', [{ jid: 'carol@example.org', nick: 'Carol' }]))
+        .mockResolvedValueOnce(createAffiliationResponse('admin', []))
+        .mockResolvedValueOnce(createAffiliationResponse('owner', []))
+
+      const result = await muc.queryRoomMembers('other@conference.example.org')
+
+      expect(result).toHaveLength(1)
+      expect(mockSendIQ).toHaveBeenCalledTimes(3)
+    })
+
+    it('returns empty array when all affiliations fail with non-forbidden errors', async () => {
+      mockSendIQ
+        .mockRejectedValueOnce(new Error('remote-server-timeout'))
+        .mockRejectedValueOnce(new Error('remote-server-timeout'))
+        .mockRejectedValueOnce(new Error('remote-server-timeout'))
 
       const result = await muc.queryRoomMembers(roomJid)
 
@@ -1705,9 +1745,9 @@ describe('MUC Module', () => {
       const emptyResponse = createMockElement('iq', { type: 'result' }, [])
 
       mockSendIQ
-        .mockResolvedValueOnce(emptyResponse)
-        .mockResolvedValueOnce(emptyResponse)
         .mockResolvedValueOnce(createAffiliationResponse('member', [{ jid: 'carol@example.org' }]))
+        .mockResolvedValueOnce(emptyResponse)
+        .mockResolvedValueOnce(emptyResponse)
 
       const result = await muc.queryRoomMembers(roomJid)
 
@@ -1734,8 +1774,8 @@ describe('MUC Module', () => {
         expect(query).toBeDefined()
       }
 
-      // Check affiliations in order: owner, admin, member
-      const affiliations = ['owner', 'admin', 'member']
+      // Check affiliations in order: member first (cheapest forbidden probe), then admin, owner
+      const affiliations = ['member', 'admin', 'owner']
       for (let i = 0; i < 3; i++) {
         const iq = mockSendIQ.mock.calls[i][0]
         const query = iq.getChild('query', 'http://jabber.org/protocol/muc#admin')
