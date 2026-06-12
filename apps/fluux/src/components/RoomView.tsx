@@ -4,7 +4,7 @@ import { detectRenderLoop } from '@/utils/renderLoopDetector'
 import { useRoomActive, useRoomEntity, useRoomOccupantCount, useContactIdentities, getBareJid, generateConsistentColorHexSync, useReferencedMessage, isMessageFromIgnoredUser, isReplyToIgnoredUser, canKick, canBan, getAvailableAffiliations, getAvailableRoles, getMyReactions, type RoomMessage, type Room, type RoomOccupant, type MentionReference, type ChatStateNotification, type ContactIdentity, type FileAttachment, type RoomAffiliation, type RoomRole, type PollData } from '@fluux/sdk'
 import { useConnectionStore, useIgnoreStore, useRoomStore } from '@fluux/sdk/react'
 import { ignoreStore, roomStore, type IgnoredUser } from '@fluux/sdk/stores'
-import { useMentionAutocomplete, useFileUpload, useLinkPreview, useTypeToFocus, useMessageCopy, useMode, useMessageSelection, useDragAndDrop, useConversationDraft, useTimeFormat, useContextMenu, useWhisperCounterpartPresent, isSmallScreen } from '@/hooks'
+import { useMentionAutocomplete, useFileUpload, useLinkPreview, useTypeToFocus, useMessageCopy, useMode, useMessageSelection, useMessageHoverState, useDragAndDrop, useConversationDraft, useTimeFormat, useContextMenu, useWhisperCounterpartPresent, isSmallScreen } from '@/hooks'
 import { MessageBubble, MessageList, shouldShowAvatar, whisperThreadPosition, whisperCounterpartPresent, resolveWhisperTarget, decideWhisperSend, buildReplyContext, canClosePoll, PollBanner, type WhisperThreadPosition, type WhisperTarget } from './conversation'
 import { FindOnPageBar } from './conversation/FindOnPageBar'
 import { useFindOnPage, type FindOnPageHandle } from '@/hooks/useFindOnPage'
@@ -838,48 +838,9 @@ export const RoomMessageList = memo(function RoomMessageList({
   const { t } = useTranslation()
   const { formatTime, effectiveTimeFormat } = useTimeFormat()
 
-  // Track which message is hovered for stable toolbar interaction
-  // This prevents the toolbar from switching when moving mouse to it
-  const [hoveredMessageId, setHoveredMessageId] = useState<string | null>(null)
-  const hoverTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  // Handle mouse enter on a message - set it as hovered immediately.
-  // Stable identity (refs/stable setter) so it does not break row memo bailout.
-  const handleMessageHover = useCallback((messageId: string) => {
-    // Clear any pending timeout to clear hover
-    if (hoverTimeoutRef.current) {
-      clearTimeout(hoverTimeoutRef.current)
-      hoverTimeoutRef.current = null
-    }
-    setHoveredMessageId(messageId)
-  }, [])
-
-  // Handle mouse leave from a message - delay clearing to allow moving to toolbar.
-  const handleMessageLeave = useCallback(() => {
-    // Clear any existing timeout
-    if (hoverTimeoutRef.current) {
-      clearTimeout(hoverTimeoutRef.current)
-    }
-    // Delay clearing hover to allow mouse to reach toolbar
-    hoverTimeoutRef.current = setTimeout(() => {
-      setHoveredMessageId(null)
-      hoverTimeoutRef.current = null
-    }, 100) // Small delay to allow mouse to reach toolbar
-  }, [])
-
-  // Clear hover when room changes
-  useEffect(() => {
-    setHoveredMessageId(null)
-  }, [room.jid])
-
-  // Cleanup timeout on unmount
-  useEffect(() => {
-    return () => {
-      if (hoverTimeoutRef.current) {
-        clearTimeout(hoverTimeoutRef.current)
-      }
-    }
-  }, [])
+  // Selection-aware, hover-intent toolbar hover state (stable handler identities)
+  const { hoveredMessageId, handleMessageHover, handleMessageLeave } =
+    useMessageHoverState({ scrollRef: scrollerRef, resetKey: room.jid })
 
   // Set of original poll message IDs that have been closed (a poll-closed message references them).
   // Used to disable the "Close poll" button on already-closed polls. Each row receives a

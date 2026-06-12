@@ -210,6 +210,11 @@ vi.mock('@/hooks', () => ({
     lastMousePosRef: { current: null },
     keyboardCooldownRef: { current: 0 },
   }),
+  useMessageHoverState: () => ({
+    hoveredMessageId: null,
+    handleMessageHover: vi.fn(),
+    handleMessageLeave: vi.fn(),
+  }),
   useTauriFileDrop: () => ({
     isDragging: false,
     isTauri: false,

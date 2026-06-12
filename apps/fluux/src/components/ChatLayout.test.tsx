@@ -425,10 +425,19 @@ vi.mock('./Sidebar', () => ({
 }))
 
 vi.mock('./ChatView', () => ({
-  ChatView: ({ onBack }: { onBack: () => void }) => (
+  ChatView: ({ onBack, onShowProfile }: { onBack: () => void; onShowProfile?: (jid: string) => void }) => (
     <div data-testid="chat-view">
       <span>Conversation: {getMockState().activeConversationId}</span>
       <button data-testid="chat-back" onClick={onBack}>Back</button>
+      <button
+        data-testid="chat-show-profile"
+        onClick={() => {
+          const id = getMockState().activeConversationId
+          if (id) onShowProfile?.(id)
+        }}
+      >
+        Show Profile
+      </button>
     </div>
   ),
 }))
@@ -1011,6 +1020,9 @@ describe('ChatLayout - Session Storage Restore (Dual-Persistence Bug Prevention)
 describe('ChatLayout - URL→store sync hydration (popstate)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    // clearAllMocks doesn't remove mockReturnValue stubs left by the
+    // session-storage describe above — restore the default (no saved state)
+    vi.mocked(sessionPersistence.getSavedViewState).mockReturnValue(null)
     setMockState({
       activeConversationId: null,
       activeRoomJid: null,
@@ -1040,5 +1052,57 @@ describe('ChatLayout - URL→store sync hydration (popstate)', () => {
       expect(mockActivateRoom).toHaveBeenCalledWith('lobby@conference.example.com')
     })
     expect(mockSetActiveRoom).not.toHaveBeenCalledWith('lobby@conference.example.com')
+  })
+
+  it('should clear the contact profile when the URL moves back to a non-directory view', async () => {
+    // Open the profile from a 1:1 conversation header: sets selectedContactJid
+    // and navigates to /contacts/:jid
+    setMockState({ activeConversationId: 'alice@example.com' })
+    render(<ChatLayoutWithRouter initialRoute="/messages/alice%40example.com" />)
+    fireEvent.click(screen.getByTestId('chat-show-profile'))
+    await waitFor(() => {
+      expect(screen.getByTestId('contact-profile-view')).toBeInTheDocument()
+    })
+
+    // Browser back to /messages (no jid) is a URL-only change: no click handler
+    // clears selectedContactJid, so the URL→store sync effect must do it
+    fireEvent.click(screen.getByTestId('messages-tab'))
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('contact-profile-view')).not.toBeInTheDocument()
+    })
+    expect(screen.getByTestId('active-view')).toHaveTextContent('messages')
+  })
+})
+
+describe('ChatLayout - Show profile from conversation header', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    // clearAllMocks doesn't remove mockReturnValue stubs left by the
+    // session-storage describe above — restore the default (no saved state)
+    vi.mocked(sessionPersistence.getSavedViewState).mockReturnValue(null)
+    setMockState({
+      activeConversationId: null,
+      activeRoomJid: null,
+      isArchivedResult: false,
+    })
+  })
+
+  it('should open the contact profile on first click without bouncing back to the conversation', async () => {
+    // Start inside a 1:1 conversation with Alice
+    setMockState({ activeConversationId: 'alice@example.com' })
+    render(<ChatLayoutWithRouter initialRoute="/messages/alice%40example.com" />)
+    expect(screen.getByTestId('chat-view')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByTestId('chat-show-profile'))
+
+    // The URL→store sync effect must not re-activate the conversation we just
+    // left: navigate() is transition-deferred in React Router v7, so the effect
+    // re-runs while the URL still points at /messages/:jid
+    await waitFor(() => {
+      expect(screen.getByTestId('contact-profile-view')).toBeInTheDocument()
+    })
+    expect(screen.queryByTestId('chat-view')).not.toBeInTheDocument()
+    expect(mockActivateConversation).not.toHaveBeenCalledWith('alice@example.com')
   })
 })

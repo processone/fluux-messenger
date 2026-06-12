@@ -111,34 +111,47 @@ export const MessageToolbar = memo(function MessageToolbar({
     setShowMoreMenu(false)
   }
 
-  // Calculate visibility class
+  // Calculate visibility state
   // When isHovered is provided (controlled mode), use it instead of CSS hover
   // Uses translate + opacity for a slide-in-from-right effect
   const useControlledHover = isHovered !== undefined
-  const visibleClass = 'opacity-100 translate-x-0'
-  const hiddenClass = 'opacity-0 translate-x-2 pointer-events-none'
-  const visibilityClass = isHidden
-    ? hiddenClass
+  const visibility: 'visible' | 'hidden' | 'css' = isHidden
+    ? 'hidden'
     : showReactionPicker || showMoreMenu || (isSelected && showToolbarForSelection)
-      ? visibleClass
+      ? 'visible'
       : hasKeyboardSelection
-        ? 'opacity-0 translate-x-2'
+        ? 'hidden'
         : useControlledHover
-          ? (isHovered ? visibleClass : hiddenClass)
-          : 'opacity-0 translate-x-2 group-hover:opacity-100 group-hover:translate-x-0'
+          ? (isHovered ? 'visible' : 'hidden')
+          : 'css'
+  const visibilityClass =
+    visibility === 'visible'
+      ? 'opacity-100 translate-x-0'
+      : visibility === 'hidden'
+        ? 'opacity-0 translate-x-2'
+        : 'opacity-0 translate-x-2 group-hover:opacity-100 group-hover:translate-x-0'
+  // The wrapper is permanently pointer-events-none so its padding halo never
+  // steals mousedowns from the text underneath; only the visible button bar
+  // (and its dropdowns, via inheritance) is interactive.
+  const interactivityClass =
+    visibility === 'visible'
+      ? 'pointer-events-auto'
+      : visibility === 'hidden'
+        ? ''
+        : 'group-hover:pointer-events-auto'
 
   return (
     // Outer wrapper provides an extended hover zone (padding) around the visible toolbar
-    // This makes it easier to move the mouse to the toolbar without losing hover state
     // select-none prevents toolbar from being included in text selection
     <div
-      className={`absolute ${showAvatar ? '-top-7' : '-top-12'} -end-2 p-4 z-20 select-none transition-all duration-200 ease-out ${visibilityClass}`}
-      onMouseEnter={onToolbarMouseEnter}
+      data-message-toolbar
+      className={`absolute ${showAvatar ? '-top-7' : '-top-12'} -end-2 p-4 z-20 select-none pointer-events-none transition-all duration-200 ease-out ${visibilityClass}`}
     >
       {/* Visible toolbar */}
       <div
         ref={toolbarRef}
-        className="flex items-center bg-fluux-bg rounded-md shadow-lg border border-fluux-hover"
+        className={`flex items-center bg-fluux-bg rounded-md shadow-lg border border-fluux-hover ${interactivityClass}`}
+        onMouseEnter={onToolbarMouseEnter}
       >
       {/* Quick reaction emojis (hidden when reactions are disabled) */}
       {handleReaction && TOOLBAR_REACTIONS.map(emoji => (

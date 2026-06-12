@@ -315,6 +315,15 @@ vi.mock('@/hooks', () => ({
     }
     return () => stable
   })(),
+  // Same stable-reference requirement as useMessageSelection above.
+  useMessageHoverState: (() => {
+    const stable = {
+      hoveredMessageId: null,
+      handleMessageHover: vi.fn(),
+      handleMessageLeave: vi.fn(),
+    }
+    return () => stable
+  })(),
   useTauriFileDrop: () => ({
     isDragging: false,
     isTauri: false,

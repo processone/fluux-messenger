@@ -290,8 +290,9 @@ describe('MessageToolbar', () => {
       const { container } = render(<MessageToolbar {...defaultProps} isHidden={true} />)
 
       const toolbar = container.firstChild as HTMLElement
+      const innerBar = toolbar.firstChild as HTMLElement
       expect(toolbar).toHaveClass('opacity-0')
-      expect(toolbar).toHaveClass('pointer-events-none')
+      expect(innerBar).not.toHaveClass('pointer-events-auto')
     })
 
     it('should be visible when picker or menu is open', () => {
@@ -300,7 +301,9 @@ describe('MessageToolbar', () => {
       )
 
       const toolbar = container.firstChild as HTMLElement
+      const innerBar = toolbar.firstChild as HTMLElement
       expect(toolbar).toHaveClass('opacity-100')
+      expect(innerBar).toHaveClass('pointer-events-auto')
     })
 
     it('should be visible when selected and showToolbarForSelection', () => {
@@ -313,7 +316,9 @@ describe('MessageToolbar', () => {
       )
 
       const toolbar = container.firstChild as HTMLElement
+      const innerBar = toolbar.firstChild as HTMLElement
       expect(toolbar).toHaveClass('opacity-100')
+      expect(innerBar).toHaveClass('pointer-events-auto')
     })
 
     it('should be hidden when hasKeyboardSelection but not selected', () => {
@@ -326,8 +331,9 @@ describe('MessageToolbar', () => {
       )
 
       const toolbar = container.firstChild as HTMLElement
+      const innerBar = toolbar.firstChild as HTMLElement
       expect(toolbar).toHaveClass('opacity-0')
-      expect(toolbar).not.toHaveClass('pointer-events-none')
+      expect(innerBar).not.toHaveClass('pointer-events-auto')
     })
 
     it('should show on hover when no keyboard selection', () => {
@@ -336,7 +342,37 @@ describe('MessageToolbar', () => {
       )
 
       const toolbar = container.firstChild as HTMLElement
+      const innerBar = toolbar.firstChild as HTMLElement
       expect(toolbar).toHaveClass('group-hover:opacity-100')
+      expect(innerBar).toHaveClass('group-hover:pointer-events-auto')
+    })
+
+    it('should never intercept pointer events on the padding halo', () => {
+      const { container } = render(
+        <MessageToolbar {...defaultProps} isHovered={true} />
+      )
+
+      // The wrapper (padding halo) is permanently inert; only the inner bar
+      // becomes interactive when the toolbar is visible.
+      const toolbar = container.firstChild as HTMLElement
+      expect(toolbar).toHaveClass('pointer-events-none')
+      expect(toolbar).toHaveAttribute('data-message-toolbar')
+      expect(toolbar.firstChild as HTMLElement).toHaveClass('pointer-events-auto')
+    })
+
+    it('should call onToolbarMouseEnter when mouse enters the inner bar', () => {
+      const onToolbarMouseEnter = vi.fn()
+      const { container } = render(
+        <MessageToolbar
+          {...defaultProps}
+          isHovered={true}
+          onToolbarMouseEnter={onToolbarMouseEnter}
+        />
+      )
+
+      const innerBar = (container.firstChild as HTMLElement).firstChild as HTMLElement
+      fireEvent.mouseEnter(innerBar)
+      expect(onToolbarMouseEnter).toHaveBeenCalled()
     })
   })
 
