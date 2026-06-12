@@ -91,3 +91,15 @@ export function formatXMPPError(error: XMPPStanzaError): string {
   words[0] = words[0].charAt(0).toUpperCase() + words[0].slice(1)
   return words.join(' ')
 }
+
+/**
+ * Check whether a caught error carries the given RFC 6120 defined condition.
+ *
+ * xmpp.js iqCaller rejections are StanzaErrors exposing `.condition`
+ * (e.g. 'forbidden'); the error message is checked as a fallback for
+ * errors that only carry the condition in their text.
+ */
+export function hasErrorCondition(err: unknown, condition: string): boolean {
+  if ((err as { condition?: string } | null)?.condition === condition) return true
+  return err instanceof Error && err.message.includes(condition)
+}
