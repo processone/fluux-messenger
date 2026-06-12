@@ -24,7 +24,7 @@ export function AboutModal({ onClose }: AboutModalProps) {
   }
 
   return (
-    <ModalShell title={t('about.title')} onClose={onClose} width="w-80">
+    <ModalShell title={t('about.title')} onClose={onClose} width="max-w-xs">
       <div className="p-6 text-center">
         <img
           src="/logo.png"
