@@ -69,7 +69,7 @@ use base64::{engine::general_purpose::STANDARD as B64, Engine as _};
 
 /// Keychain service name. Shared with XMPP credentials so a user who
 /// grants keychain access once gets access for both.
-const KEYRING_SERVICE: &str = "net.processone.fluux";
+const KEYRING_SERVICE: &str = "com.processone.fluux";
 /// Keychain account prefix to namespace PGP passphrases away from XMPP
 /// credentials and the `last_user` marker.
 const KEYRING_ACCOUNT_PREFIX: &str = "openpgp_passphrase:";

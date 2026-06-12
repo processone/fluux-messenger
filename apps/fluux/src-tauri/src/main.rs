@@ -363,7 +363,7 @@ fn get_idle_time() -> Result<u64, String> {
 }
 
 // Keyring service name for storing credentials
-const KEYRING_SERVICE: &str = "net.processone.fluux";
+const KEYRING_SERVICE: &str = "com.processone.fluux";
 
 /// Credentials stored in the OS keychain
 #[derive(Serialize, Deserialize)]
