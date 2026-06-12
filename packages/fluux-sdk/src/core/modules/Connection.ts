@@ -1046,9 +1046,14 @@ export class Connection extends BaseModule {
       return 'healthy'
     } catch (err) {
       if (this.xmpp && this.xmpp !== clientAtStart) return 'stale'
-      const errorMessage = err instanceof Error ? err.message : String(err)
-      if (isDeadSocketError(errorMessage) || errorMessage.includes('timeout')) {
-        return 'dead'
+      // An IQ error RESPONSE proves the stream is alive: the ping reached the
+      // server and an answer came back. Misconfigured servers may reject the
+      // domain ping (e.g. <remote-server-not-found/>) on every keepalive tick —
+      // treating that as a dead socket caused a 30s reconnect loop (#515).
+      // Only timeouts and transport errors mean the connection is gone.
+      if (err instanceof Error && err.name === 'StanzaError') {
+        logInfo(`${label}: ping answered with stanza error (${err.message || 'no condition'}), connection alive`)
+        return 'healthy'
       }
       return 'dead'
     }
@@ -1437,13 +1442,6 @@ export class Connection extends BaseModule {
     const domain = getDomain(jid)
     const username = getLocalPart(jid)
 
-    // When SASL2+bind2 is used, SM is enabled inline inside <authenticate>/<success>.
-    // ejabberd then sends a post-auth <stream:features> that still contains <sm>,
-    // causing xmpp.js's setupStreamFeature to send a duplicate <enable> (server rejects
-    // it with <failed> and the catch block disables sm.enabled). We suppress this by
-    // removing <sm> from the features stanza before the middleware sees it.
-    let bind2SmEnabling = false
-
     const xmppClient = client({
       service: wsUrl,
       domain,
@@ -1513,11 +1511,6 @@ export class Connection extends BaseModule {
         const userAgent = buildUserAgentElement()
         const saslStart = Date.now()
         let saslTimeoutId: ReturnType<typeof setTimeout> | undefined
-        // SASL2 path: bind2 will negotiate SM inline. Mark that the post-auth
-        // <stream:features> with <sm> should be suppressed.
-        if (fast !== undefined) {
-          bind2SmEnabling = true
-        }
         await Promise.race([
           Promise.resolve(authenticate(creds, mechanism, userAgent)).then(() => {
             clearTimeout(saslTimeoutId)
@@ -1578,19 +1571,28 @@ export class Connection extends BaseModule {
       patchSmAckQueue(sm)
     }
 
-    // Intercept <stream:features> before middleware to strip <sm> when bind2 inline
-    // SM negotiation is in flight. Without this, setupStreamFeature sends a duplicate
-    // <enable>, the server rejects it, and the catch block clears sm.enabled.
+    // Intercept <stream:features> before middleware to strip <sm> when SM is
+    // ALREADY enabled — i.e. it was negotiated inline via SASL2 (bind2 <enabled>
+    // or inline <resumed>, both set sm.enabled synchronously before the post-auth
+    // features arrive). ejabberd's post-auth <stream:features> still contains
+    // <sm>, and without stripping it setupStreamFeature sends a duplicate
+    // <enable> the server rejects, which clears sm.enabled.
+    //
+    // The decision MUST be made at features-arrival time from sm.enabled, not
+    // pre-armed when SASL2 is detected: servers that advertise SASL2 without
+    // inline SM negotiation (e.g. Openfire — SASL2 but no bind2 SM) rely on
+    // this features element for their ONLY chance to enable SM. Pre-arming
+    // stripped it, silently disabling SM and breaking the keepalive (#515).
     const NS_JABBER_STREAM = 'http://etherx.jabber.org/streams'
     const NS_SM = 'urn:xmpp:sm:3'
     if (typeof (xmppClient as any).prependListener === 'function') {
       ;(xmppClient as any).prependListener('element', (element: Element) => {
-        if (bind2SmEnabling && element.is('features', NS_JABBER_STREAM)) {
-          bind2SmEnabling = false
-          const smFeature = element.getChild('sm', NS_SM)
-          if (smFeature) {
-            ;(element as any).children = (element as any).children.filter((c: unknown) => c !== smFeature)
-          }
+        if (!element.is('features', NS_JABBER_STREAM)) return
+        const sm = (xmppClient as any).streamManagement
+        if (!sm?.enabled) return
+        const smFeature = element.getChild('sm', NS_SM)
+        if (smFeature) {
+          ;(element as any).children = (element as any).children.filter((c: unknown) => c !== smFeature)
         }
       })
     }
