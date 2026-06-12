@@ -3660,10 +3660,15 @@ describe('XMPPClient Connection', () => {
   // sends a duplicate <enable>, which the server rejects with <failed>. The catch
   // block then clears sm.enabled, silently disabling SM for the session.
   // The fix: a prependListener on 'element' strips <sm> from the features element
-  // before the middleware sees it, gated on a bind2SmEnabling flag that is set
-  // when the credentials callback detects the SASL2 path (fast !== undefined).
+  // before the middleware sees it, gated on sm.enabled at ARRIVAL time (inline
+  // bind2 <enabled> / SASL2 <resumed> set it synchronously beforehand).
+  //
+  // #515 regression guard: the gate must NOT be pre-armed off SASL2 detection.
+  // A server that advertises SASL2 without inline SM negotiation (Openfire)
+  // relies on this features element for its only chance to enable SM — stripping
+  // it silently disabled SM and broke the keepalive into a 30s reconnect loop.
   describe('bind2 SM duplicate-enable suppression (XEP-0386 + XEP-0198)', () => {
-    it('should strip <sm> from post-auth <stream:features> when SASL2 bind2 is active', async () => {
+    async function getElementHandler(): Promise<(el: unknown) => void> {
       const connectPromise = xmppClient.connect({
         jid: 'user@example.com',
         password: 'secret',
@@ -3679,35 +3684,95 @@ describe('XMPPClient Connection', () => {
       const elementHandler = prependCall?.[1] as ((el: unknown) => void)
       expect(elementHandler).toBeDefined()
 
-      // Invoke the credentials callback with fast !== undefined to set bind2SmEnabling=true
+      // Run the credentials callback as on a SASL2 server without a usable FAST
+      // token (fast = null): the strip decision must not depend on it.
       const credentialsFn = (mockClientFactory.mock.calls[mockClientFactory.mock.calls.length - 1] as any)[0].credentials
       const mockAuthenticate = vi.fn().mockResolvedValue(undefined)
-      const mockFast = { fetch: vi.fn().mockResolvedValue(null) }
-      await credentialsFn(mockAuthenticate, ['SCRAM-SHA-256'], mockFast, { isSecure: () => true })
+      await credentialsFn(mockAuthenticate, ['SCRAM-SHA-256'], null, { isSecure: () => true })
 
-      // Build a <stream:features> element with an <sm> child — what ejabberd sends post-auth
-      const featuresEl = createMockElement('features', { xmlns: 'http://etherx.jabber.org/streams' }, [
+      // Finish the connection so the test ends in a settled state
+      mockXmppClientInstance._emit('online')
+      await connectPromise
+
+      return elementHandler
+    }
+
+    function makeFeaturesWithSm() {
+      return createMockElement('features', { xmlns: 'http://etherx.jabber.org/streams' }, [
         { name: 'sm', attrs: { xmlns: 'urn:xmpp:sm:3' } },
       ])
-      const smBefore = (featuresEl as any).children.find((c: any) => c.name === 'sm')
-      expect(smBefore).toBeDefined()
+    }
 
-      // Call the interceptor — <sm> must be removed since bind2SmEnabling=true
+    it('strips <sm> from post-auth <stream:features> when SM was negotiated inline', async () => {
+      const elementHandler = await getElementHandler()
+
+      // Inline negotiation completed: bind2 <enabled> set sm.enabled before the
+      // post-auth features arrive.
+      mockXmppClientInstance.streamManagement = { id: 'sm-inline', enabled: true, inbound: 0, outbound: 0, on: vi.fn() }
+
+      const featuresEl = makeFeaturesWithSm()
       elementHandler(featuresEl)
       const smAfter = (featuresEl as any).children.find((c: any) => c.name === 'sm')
       expect(smAfter).toBeUndefined()
+    })
 
-      // bind2SmEnabling is now reset to false — a second <stream:features> must not be modified
-      const featuresEl2 = createMockElement('features', { xmlns: 'http://etherx.jabber.org/streams' }, [
-        { name: 'sm', attrs: { xmlns: 'urn:xmpp:sm:3' } },
+    it('leaves <sm> intact when SM was NOT negotiated inline (Openfire: SASL2 without bind2 SM)', async () => {
+      const elementHandler = await getElementHandler()
+
+      // No inline SM negotiation happened — this features element is the only
+      // chance for xmpp.js to send <enable/>. It must pass through untouched.
+      mockXmppClientInstance.streamManagement = { id: null, enabled: false, inbound: 0, outbound: 0, on: vi.fn() }
+
+      // Faithful Openfire wire order: a bare SASL2 <success> (no inline SM
+      // child) precedes the post-auth features. The success peek must not
+      // false-positive on it.
+      const bareSuccess = createMockElement('success', { xmlns: 'urn:xmpp:sasl:2' }, [
+        { name: 'authorization-identifier', attrs: {}, text: 'user@example.com' },
       ])
-      elementHandler(featuresEl2)
-      const smAfter2 = (featuresEl2 as any).children.find((c: any) => c.name === 'sm')
-      expect(smAfter2).toBeDefined()
+      elementHandler(bareSuccess)
 
-      // Finish the connection
-      mockXmppClientInstance._emit('online')
-      await connectPromise
+      const featuresEl = makeFeaturesWithSm()
+      elementHandler(featuresEl)
+      const smAfter = (featuresEl as any).children.find((c: any) => c.name === 'sm')
+      expect(smAfter).toBeDefined()
+    })
+
+    it('strips <sm> when <success> carried inline SM even if sm.enabled is not set yet', async () => {
+      // Race guard: xmpp.js's inline enabled()/resumed() handlers run after
+      // `await mech.final()` (SCRAM server-signature verification), so
+      // sm.enabled can still be false when the post-auth features element is
+      // processed right behind <success>. The synchronous peek at the
+      // <success> children must cover that window.
+      const elementHandler = await getElementHandler()
+      mockXmppClientInstance.streamManagement = { id: null, enabled: false, inbound: 0, outbound: 0, on: vi.fn() }
+
+      // bind2 fresh enable: <success><bound xmlns="urn:xmpp:bind:0"><enabled xmlns="urn:xmpp:sm:3"/></bound></success>
+      const successBind2 = createMockElement('success', { xmlns: 'urn:xmpp:sasl:2' }, [
+        {
+          name: 'bound',
+          attrs: { xmlns: 'urn:xmpp:bind:0' },
+          children: [{ name: 'enabled', attrs: { xmlns: 'urn:xmpp:sm:3' } }],
+        },
+      ])
+      elementHandler(successBind2)
+      const featuresEl = makeFeaturesWithSm()
+      elementHandler(featuresEl)
+      expect((featuresEl as any).children.find((c: any) => c.name === 'sm')).toBeUndefined()
+
+      // The peek is one-shot: consumed by the first features element, so a
+      // later features (e.g. after a future stream restart) passes untouched.
+      const featuresEl2 = makeFeaturesWithSm()
+      elementHandler(featuresEl2)
+      expect((featuresEl2 as any).children.find((c: any) => c.name === 'sm')).toBeDefined()
+
+      // Inline resumption: <success><resumed xmlns="urn:xmpp:sm:3"/></success>
+      const successResumed = createMockElement('success', { xmlns: 'urn:xmpp:sasl:2' }, [
+        { name: 'resumed', attrs: { xmlns: 'urn:xmpp:sm:3' } },
+      ])
+      elementHandler(successResumed)
+      const featuresEl3 = makeFeaturesWithSm()
+      elementHandler(featuresEl3)
+      expect((featuresEl3 as any).children.find((c: any) => c.name === 'sm')).toBeUndefined()
     })
   })
 
@@ -3991,6 +4056,36 @@ describe('XMPPClient Connection', () => {
 
       // New connection should remain healthy (no reconnect triggered by stale timeout)
       expect(mockStores.connection.setStatus).not.toHaveBeenCalledWith('reconnecting')
+    })
+
+    // #515: with SM disabled, the keepalive probe falls back to an IQ ping to
+    // the account domain. A misconfigured server (Openfire answering bare-domain
+    // IQs with <remote-server-not-found/>) rejects that ping with an IQ ERROR on
+    // every tick. An error response is an ANSWER — the stream is alive. Treating
+    // it as a dead socket reconnected the session every 30 seconds.
+    it('treats an IQ error response to the keepalive ping as a live connection', async () => {
+      // SM not enabled → probe takes the iqCaller ping fallback
+      mockXmppClientInstance.streamManagement = { id: null, enabled: false, inbound: 0, outbound: 0, on: vi.fn() }
+      const stanzaError = Object.assign(new Error('remote-server-not-found'), {
+        name: 'StanzaError',
+        condition: 'remote-server-not-found',
+      })
+      mockXmppClientInstance.iqCaller.request.mockRejectedValue(stanzaError)
+
+      const healthy = await xmppClient.verifyConnectionHealth()
+
+      expect(healthy).toBe(true)
+      expect(mockStores.connection.setStatus).not.toHaveBeenCalledWith('reconnecting')
+    })
+
+    it('still treats a transport error on the keepalive ping as a dead connection', async () => {
+      mockXmppClientInstance.streamManagement = { id: null, enabled: false, inbound: 0, outbound: 0, on: vi.fn() }
+      mockXmppClientInstance.iqCaller.request.mockRejectedValue(new Error('WebSocket ECONNERROR'))
+
+      const healthy = await xmppClient.verifyConnectionHealth()
+
+      expect(healthy).toBe(false)
+      expect(mockStores.connection.setStatus).toHaveBeenCalledWith('reconnecting')
     })
 
     it('should not trigger reconnect when concurrent verifyConnection and verifyConnectionHealth race', async () => {

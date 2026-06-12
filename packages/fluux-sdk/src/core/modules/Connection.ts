@@ -1006,6 +1006,11 @@ export class Connection extends BaseModule {
     const clientAtStart = this.xmpp
     if (!clientAtStart) return 'dead'
 
+    // Which probe ran, for failure logs: triaging #515 from fluux.log was
+    // delayed because the file never said the keepalive was failing, let
+    // alone how (the console event is in-app only).
+    let probeMode = 'sm-ack'
+
     try {
       const sm = clientAtStart.streamManagement as any
       if (sm?.enabled) {
@@ -1014,14 +1019,22 @@ export class Connection extends BaseModule {
           logInfo(`${label}: client replaced during await, ignoring stale result`)
           return 'stale'
         }
-        if (!ackReceived) return 'dead'
+        if (!ackReceived) {
+          logWarn(`${label} probe failed (sm-ack): no <a/> within ${timeoutMs}ms`)
+          return 'dead'
+        }
       } else {
-        // Fallback: send a ping IQ and wait for response
+        // Fallback: send a ping IQ and wait for response. Sent with no 'to' —
+        // RFC 6120 §8.1.1.1: the server handles it on behalf of the account.
+        // Pinging the domain instead relies on the server routing bare-domain
+        // IQs correctly, which misconfigured deployments answer with errors
+        // (#515: Openfire returning <remote-server-not-found/>).
+        probeMode = 'ping'
         const iqCaller = (clientAtStart as any).iqCaller
         if (iqCaller) {
           const ping = xml(
             'iq',
-            { type: 'get', id: `${label}_${Date.now()}`, to: getDomain(this.credentials?.jid || '') },
+            { type: 'get', id: `${label}_${Date.now()}` },
             xml('ping', { xmlns: NS_PING })
           )
           await Promise.race([
@@ -1047,9 +1060,16 @@ export class Connection extends BaseModule {
     } catch (err) {
       if (this.xmpp && this.xmpp !== clientAtStart) return 'stale'
       const errorMessage = err instanceof Error ? err.message : String(err)
-      if (isDeadSocketError(errorMessage) || errorMessage.includes('timeout')) {
-        return 'dead'
+      // An IQ error RESPONSE proves the stream is alive: the ping reached the
+      // server and an answer came back. Misconfigured servers may reject the
+      // ping (e.g. <remote-server-not-found/>) on every keepalive tick —
+      // treating that as a dead socket caused a 30s reconnect loop (#515).
+      // Only timeouts and transport errors mean the connection is gone.
+      if (err instanceof Error && err.name === 'StanzaError') {
+        logInfo(`${label}: ping answered with stanza error (${errorMessage || 'no condition'}), connection alive`)
+        return 'healthy'
       }
+      logWarn(`${label} probe failed (${probeMode}): ${errorMessage}`)
       return 'dead'
     }
   }
@@ -1437,13 +1457,6 @@ export class Connection extends BaseModule {
     const domain = getDomain(jid)
     const username = getLocalPart(jid)
 
-    // When SASL2+bind2 is used, SM is enabled inline inside <authenticate>/<success>.
-    // ejabberd then sends a post-auth <stream:features> that still contains <sm>,
-    // causing xmpp.js's setupStreamFeature to send a duplicate <enable> (server rejects
-    // it with <failed> and the catch block disables sm.enabled). We suppress this by
-    // removing <sm> from the features stanza before the middleware sees it.
-    let bind2SmEnabling = false
-
     const xmppClient = client({
       service: wsUrl,
       domain,
@@ -1513,11 +1526,6 @@ export class Connection extends BaseModule {
         const userAgent = buildUserAgentElement()
         const saslStart = Date.now()
         let saslTimeoutId: ReturnType<typeof setTimeout> | undefined
-        // SASL2 path: bind2 will negotiate SM inline. Mark that the post-auth
-        // <stream:features> with <sm> should be suppressed.
-        if (fast !== undefined) {
-          bind2SmEnabling = true
-        }
         await Promise.race([
           Promise.resolve(authenticate(creds, mechanism, userAgent)).then(() => {
             clearTimeout(saslTimeoutId)
@@ -1578,19 +1586,52 @@ export class Connection extends BaseModule {
       patchSmAckQueue(sm)
     }
 
-    // Intercept <stream:features> before middleware to strip <sm> when bind2 inline
-    // SM negotiation is in flight. Without this, setupStreamFeature sends a duplicate
-    // <enable>, the server rejects it, and the catch block clears sm.enabled.
+    // Intercept <stream:features> before middleware to strip <sm> when SM was
+    // negotiated INLINE via SASL2 (bind2 <enabled> or inline <resumed> inside
+    // <success>). ejabberd's post-auth <stream:features> still contains <sm>,
+    // and xmpp.js's setupStreamFeature has no sm.enabled guard: left in place,
+    // it negotiates again, the server rejects the duplicate, and the catch
+    // clears sm.enabled.
+    //
+    // The decision must be made from what was ACTUALLY negotiated, not pre-armed
+    // when SASL2 is detected: servers that advertise SASL2 without inline SM
+    // negotiation (e.g. Openfire — SASL2 but no bind2 SM) rely on this features
+    // element for their ONLY chance to enable SM. Pre-arming stripped it,
+    // silently disabling SM and breaking the keepalive (#515).
+    //
+    // Detection is two-fold, both checked at features-arrival time:
+    // - sm.enabled — set by xmpp.js's inline enabled()/resumed() handlers;
+    // - a synchronous peek at the SASL2 <success> element for an inline SM
+    //   child (directly or inside bind2 <bound>). This closes a race: the
+    //   inline handlers run after `await mech.final()` (SCRAM verification),
+    //   so sm.enabled may not be set yet if <features> is processed right
+    //   behind <success>. Element events fire in stanza order, so the peek
+    //   is always ahead of the features element.
     const NS_JABBER_STREAM = 'http://etherx.jabber.org/streams'
     const NS_SM = 'urn:xmpp:sm:3'
+    const NS_SASL2 = 'urn:xmpp:sasl:2'
+    const NS_BIND2 = 'urn:xmpp:bind:0'
+    let inlineSmNegotiated = false
     if (typeof (xmppClient as any).prependListener === 'function') {
       ;(xmppClient as any).prependListener('element', (element: Element) => {
-        if (bind2SmEnabling && element.is('features', NS_JABBER_STREAM)) {
-          bind2SmEnabling = false
-          const smFeature = element.getChild('sm', NS_SM)
-          if (smFeature) {
-            ;(element as any).children = (element as any).children.filter((c: unknown) => c !== smFeature)
-          }
+        if (element.is('success', NS_SASL2)) {
+          const bound = element.getChild('bound', NS_BIND2)
+          inlineSmNegotiated = !!(
+            element.getChild('enabled', NS_SM) ||
+            element.getChild('resumed', NS_SM) ||
+            bound?.getChild('enabled', NS_SM) ||
+            bound?.getChild('resumed', NS_SM)
+          )
+          return
+        }
+        if (!element.is('features', NS_JABBER_STREAM)) return
+        const sm = (xmppClient as any).streamManagement
+        const smNegotiated = inlineSmNegotiated || !!sm?.enabled
+        inlineSmNegotiated = false // one-shot: consumed by the first features element
+        if (!smNegotiated) return
+        const smFeature = element.getChild('sm', NS_SM)
+        if (smFeature) {
+          ;(element as any).children = (element as any).children.filter((c: unknown) => c !== smFeature)
         }
       })
     }
