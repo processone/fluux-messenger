@@ -1,36 +1,32 @@
-## What's New in v0.16.0
+## What's New in v0.16.1
 
 ### Added
 
-- OpenPGP end-to-end encryption (XEP-0373 / XEP-0374) — encrypted 1:1 messaging with passphrase-protected key storage and secret-key backup/restore
-- OpenPGP end-to-end encryption support in the web version
-- Multi-TSK (Transferable Secret Key) handling in the XEP-0373 backup restore flow for accounts with multiple OpenPGP keys
-- Mediated private messages in group chats ("whispers", XEP-0045 §7.5) — reply privately to a single occupant, shown as a distinct private thread
-- Unread message count badge on conversation avatars
-- Connection status banner shown while the app is reconnecting
-- Compose messages while offline — they queue and send once you reconnect
+- Login screen validates JID format locally before attempting to connect
+- Enhanced freeze-triage diagnostic probes in fluux.log for troubleshooting
 
 ### Changed
 
-- XMPP Console hides Stream Management packets by default for less noise (toggle remains available)
-- Major render-performance pass: cut store over-subscription across the conversation list, command palette, room config and modals, contact picker, MUC message lists, occupant panel, roster, search, and message rows — eliminating re-render storms during background sync and group-chat presence churn
-- Message corrections and reactions no longer attach a duplicate plain-text fallback to outgoing messages (incoming fallbacks are still rendered)
-- Simplified Chinese translation updated
-- Updated dependencies
+- Message list performance: off-screen rows skipped with content-visibility for reduced CPU on long histories
+- Empty state screens use consistent icons from the icon rail
 
 ### Fixed
 
-- Composer textarea resizes correctly when the window or panel width changes
-- Group chat: message corrections (XEP-0308) are attributed via origin-id and limited to the original author
-- Fixed UI freezes when search results, reply quotes, or poll results loaded after their row first rendered
-- SASL2 inline Stream Management resumption handled correctly; duplicate <enable/> suppressed
-- Proxy/auth: forward <open/> from= attribute so SASL2/FAST works through the desktop proxy, plus keychain fallback
-- SDK: client-side FAST token cleared on logout to prevent silent re-authentication
-- Wake and reconnect resilience: stale-timer detection, DarkWake handling, reload cooldown, and settle-time scaling
-- Activity log: subscription events now navigate to the contact profile
-- Sidebar user panel: prevent status label truncation
-- RTL sidebar lists: truncate Latin names at the end instead of the start
-- Blockquote decorative quote marks no longer clipped at the edge
+- Reconnection details (spinner, retry countdown, cancel) moved back to the sidebar status area — the top connection banner made the UI jump on unstable connections
+- OpenPGP: fingerprint case normalized in peer-verification trust checks (green lock now reliable across clients)
+- MUC occupant avatar preserved across presence updates
+- Desktop: system proxy bypassed for loopback XMPP bridge hop to prevent connection failures
+- Whisper: allow continuing a whispered conversation from its conversation frame
+- Whisper menu action uses correct verb form across all locales
+- Reply-quote bubble uses the same sender color as the original message
+- Message list: fixed undefined React key on certain message rows
+- Reply-quote previews render as nested vertical bars instead of raw quote markers
+- Composer resize scroll correction coalesced into animation frame for smoother behavior
+- Content ResizeObserver correctly created on same-commit mounts
+- Image attachment placeholder reserved in error state to prevent layout shift
+- MAM: bodiless encrypted messages from archive surfaced instead of dropped
+- MAM: backward-pagination cursor corrected for scroll-up history loading
+- Bundle ID uses correct domain identifier (net.processone.fluux)
 
 ---
 [Full Changelog](https://github.com/processone/fluux-messenger/blob/main/CHANGELOG.md)
