@@ -2,9 +2,18 @@
  * LinkPreviewCard - Displays a link preview with OGP metadata
  */
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { ExternalLink } from 'lucide-react'
 import type { LinkPreview } from '@fluux/sdk'
+
+/**
+ * Preview images are often served with `cache-control: max-age=0` (e.g. GitHub's
+ * OG card service), so every mount revalidates against the host — which may answer
+ * 429 when rate-limited even though the cached copy is fine. One delayed retry
+ * recovers those transient failures without hammering a rate-limited host.
+ */
+export const IMAGE_RETRY_DELAY_MS = 3000
+const MAX_IMAGE_ATTEMPTS = 2
 
 interface LinkPreviewCardProps {
   preview: LinkPreview
@@ -12,7 +21,25 @@ interface LinkPreviewCardProps {
 }
 
 export function LinkPreviewCard({ preview, onLoad }: LinkPreviewCardProps) {
-  const [imageError, setImageError] = useState(false)
+  const [attempt, setAttempt] = useState(0)
+  const [imagePhase, setImagePhase] = useState<'showing' | 'waiting' | 'gone'>('showing')
+  const retryTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => () => {
+    if (retryTimer.current) clearTimeout(retryTimer.current)
+  }, [])
+
+  const handleImageError = () => {
+    if (attempt + 1 >= MAX_IMAGE_ATTEMPTS) {
+      setImagePhase('gone')
+      return
+    }
+    setImagePhase('waiting')
+    retryTimer.current = setTimeout(() => {
+      setAttempt((a) => a + 1)
+      setImagePhase('showing')
+    }, IMAGE_RETRY_DELAY_MS)
+  }
 
   // Extract domain from URL for display
   let domain: string
@@ -30,17 +57,21 @@ export function LinkPreviewCard({ preview, onLoad }: LinkPreviewCardProps) {
       rel="noopener noreferrer"
       className="block mt-2 max-w-md border border-fluux-border rounded-lg overflow-hidden bg-fluux-bg/60 hover:bg-fluux-hover/60 transition-colors"
     >
-      {/* Image preview - hidden entirely on error */}
-      {preview.image && !imageError && (
+      {/* Image preview - retried once on error, hidden entirely when it keeps failing */}
+      {preview.image && imagePhase !== 'gone' && (
         <div className="aspect-video bg-fluux-bg/80 overflow-hidden">
-          <img
-            src={preview.image}
-            alt=""
-            className="w-full h-full object-cover"
-            loading="lazy"
-            onLoad={onLoad}
-            onError={() => setImageError(true)}
-          />
+          {imagePhase === 'showing' && (
+            <img
+              // A fresh element per attempt makes the browser re-request the same URL
+              key={attempt}
+              src={preview.image}
+              alt=""
+              className="w-full h-full object-cover"
+              loading="lazy"
+              onLoad={onLoad}
+              onError={handleImageError}
+            />
+          )}
         </div>
       )}
 
