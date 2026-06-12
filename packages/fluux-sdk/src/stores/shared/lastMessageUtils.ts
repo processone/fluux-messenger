@@ -5,7 +5,7 @@
  * for conversations and rooms, used by both chatStore and roomStore.
  */
 
-import type { RoomMessage } from '../../core/types'
+import type { BaseMessage, RoomMessage } from '../../core/types'
 import { ignoreStore, isMessageFromIgnoredUser } from '../ignoreStore'
 
 /**
@@ -14,6 +14,92 @@ import { ignoreStore, isMessageFromIgnoredUser } from '../ignoreStore'
  */
 export interface MessageWithTimestamp {
   timestamp?: Date
+}
+
+/**
+ * Fields that determine whether a message has anything to show in a
+ * conversation/room preview. A structural subset of {@link BaseMessage} so
+ * both Message and RoomMessage (and lightweight test fixtures) satisfy it.
+ */
+export type PreviewableMessage = Pick<
+  BaseMessage,
+  'body' | 'attachment' | 'poll' | 'pollClosed' | 'isRetracted' | 'unsupportedEncryption'
+>
+
+/**
+ * Whether a message can be rendered as a conversation/room preview.
+ *
+ * Returns false for "bodiless signal" placeholders that carry no displayable
+ * content — most importantly an **encrypted reaction** replayed from MAM before
+ * its key was available. Such a stanza is stored as an empty-body message (its
+ * `<reactions>` element is sealed inside the ciphertext, so the reaction
+ * skip-guards in the live/MAM parsers can't see it) and would otherwise surface
+ * as a blank "Me:" preview. It is not a real message and must never become the
+ * `lastMessage`.
+ *
+ * A message is previewable when it would produce visible preview text:
+ * - retracted (renders a localized "message deleted")
+ * - unsupported encryption (renders a localized notice)
+ * - a poll or a closed poll
+ * - a file attachment
+ * - non-whitespace body text
+ *
+ * @param msg - Any message-like object
+ * @returns true if the message has displayable preview content
+ */
+export function isPreviewableMessage(msg: PreviewableMessage): boolean {
+  if (msg.isRetracted) return true
+  if (msg.unsupportedEncryption) return true
+  if (msg.poll || msg.pollClosed) return true
+  if (msg.attachment) return true
+  return !!(msg.body && msg.body.trim().length > 0)
+}
+
+/**
+ * Decide whether a previewable `candidate` should replace the current
+ * `existing` lastMessage.
+ *
+ * Replaces when:
+ * - there is no existing preview, OR
+ * - the existing preview is a non-previewable placeholder (e.g. a stuck
+ *   bodiless encrypted reaction) — a real message always supersedes it, even
+ *   if the placeholder's timestamp is newer, OR
+ * - the candidate is strictly newer than the existing preview.
+ *
+ * The caller is expected to pass a previewable candidate (e.g. the result of
+ * {@link findLastPreviewableMessage}).
+ *
+ * @param existing - The current lastMessage (may be undefined)
+ * @param candidate - The previewable candidate message
+ * @returns true if candidate should become the new lastMessage
+ */
+export function shouldReplaceLastMessage<T extends PreviewableMessage & MessageWithTimestamp>(
+  existing: T | undefined,
+  candidate: T
+): boolean {
+  if (!existing) return true
+  if (!isPreviewableMessage(existing)) return true
+  return shouldUpdateLastMessage(existing, candidate)
+}
+
+/**
+ * Find the newest {@link isPreviewableMessage | previewable} message in a
+ * timestamp-sorted array, scanning from the end.
+ *
+ * Use this instead of `messages[messages.length - 1]` when deriving a
+ * `lastMessage` preview: the raw last element may be a bodiless signal
+ * placeholder (e.g. an undecrypted encrypted reaction) that must be skipped.
+ *
+ * @param messages - Array of messages assumed sorted ascending by timestamp
+ * @returns The newest previewable message, or undefined if none qualify
+ */
+export function findLastPreviewableMessage<T extends PreviewableMessage>(
+  messages: T[]
+): T | undefined {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (isPreviewableMessage(messages[i])) return messages[i]
+  }
+  return undefined
 }
 
 /**
@@ -50,15 +136,17 @@ export function shouldUpdateLastMessage<T extends MessageWithTimestamp>(
 }
 
 /**
- * Find the last message in an array that is not from an ignored user.
+ * Find the last message in an array that is both
+ * {@link isPreviewableMessage | previewable} and not from an ignored user.
  *
- * Fast path: if the ignore list for the room is empty, returns the last
- * message immediately with zero filtering overhead.
+ * Scans backward from the newest message and returns the first that qualifies,
+ * so bodiless signal placeholders (e.g. undecrypted encrypted reactions) and
+ * messages from ignored users are skipped when deriving a room preview.
  *
  * @param messages - Array of room messages (assumed sorted by timestamp)
  * @param roomJid - The room JID to look up ignored users for
  * @param nickToJidCache - Optional nick-to-JID cache for JID-based matching
- * @returns The last non-ignored message, or undefined if all are ignored
+ * @returns The last previewable, non-ignored message, or undefined if none qualify
  */
 export function findLastNonIgnoredMessage(
   messages: RoomMessage[],
@@ -68,14 +156,14 @@ export function findLastNonIgnoredMessage(
   if (messages.length === 0) return undefined
 
   const ignoredUsers = ignoreStore.getState().getIgnoredForRoom(roomJid)
-  // Fast path: no ignored users, return last message directly
-  if (ignoredUsers.length === 0) return messages[messages.length - 1]
+  const hasIgnored = ignoredUsers.length > 0
 
-  // Iterate backward to find the last non-ignored message
+  // Iterate backward to find the last previewable, non-ignored message
   for (let i = messages.length - 1; i >= 0; i--) {
-    if (!isMessageFromIgnoredUser(ignoredUsers, messages[i], nickToJidCache)) {
-      return messages[i]
-    }
+    const message = messages[i]
+    if (!isPreviewableMessage(message)) continue
+    if (hasIgnored && isMessageFromIgnoredUser(ignoredUsers, message, nickToJidCache)) continue
+    return message
   }
   return undefined
 }

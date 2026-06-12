@@ -17,7 +17,7 @@ vi.mock('zustand/middleware', () => ({
   persist: (fn: unknown) => fn,
 }))
 
-import { shouldUpdateLastMessage, findLastNonIgnoredMessage } from './lastMessageUtils'
+import { shouldUpdateLastMessage, shouldReplaceLastMessage, findLastNonIgnoredMessage, isPreviewableMessage, findLastPreviewableMessage } from './lastMessageUtils'
 import { ignoreStore } from '../ignoreStore'
 import type { RoomMessage } from '../../core/types'
 
@@ -70,6 +70,102 @@ describe('shouldUpdateLastMessage', () => {
       timestamp: new Date('2024-01-15T10:00:00Z'),
     }
     expect(shouldUpdateLastMessage(existing, newMessage)).toBe(true)
+  })
+})
+
+describe('shouldReplaceLastMessage', () => {
+  const older = { body: 'old', timestamp: new Date('2024-01-15T09:00:00Z') }
+  const newer = { body: 'new', timestamp: new Date('2024-01-15T10:00:00Z') }
+  const placeholder = { body: '', timestamp: new Date('2024-01-15T11:00:00Z') }
+
+  it('replaces when there is no existing preview', () => {
+    expect(shouldReplaceLastMessage(undefined, newer)).toBe(true)
+  })
+
+  it('replaces when the candidate is newer', () => {
+    expect(shouldReplaceLastMessage(older, newer)).toBe(true)
+  })
+
+  it('does not replace when the candidate is older', () => {
+    expect(shouldReplaceLastMessage(newer, older)).toBe(false)
+  })
+
+  it('replaces a stuck non-previewable placeholder even with an older candidate', () => {
+    // The heal case: a real (older) message supersedes a newer bodiless placeholder.
+    expect(shouldReplaceLastMessage(placeholder, older)).toBe(true)
+  })
+})
+
+describe('isPreviewableMessage', () => {
+  it('is true for a message with body text', () => {
+    expect(isPreviewableMessage({ body: 'Hello' })).toBe(true)
+  })
+
+  it('is false for an empty body', () => {
+    expect(isPreviewableMessage({ body: '' })).toBe(false)
+  })
+
+  it('is false for a whitespace-only body', () => {
+    expect(isPreviewableMessage({ body: '   \n\t' })).toBe(false)
+  })
+
+  it('is false for a bodiless encrypted reaction placeholder', () => {
+    // The shape that leaked in as a blank "Me:" preview: empty body, no
+    // attachment/poll — the <reactions> element is sealed in the ciphertext.
+    expect(isPreviewableMessage({ body: '' })).toBe(false)
+  })
+
+  it('is true for a file attachment with no body', () => {
+    expect(
+      isPreviewableMessage({ body: '', attachment: { url: 'https://x/y.png', name: 'y.png' } })
+    ).toBe(true)
+  })
+
+  it('is true for a poll', () => {
+    expect(
+      isPreviewableMessage({ body: '', poll: { title: 'Q?', options: [], settings: { allowMultiple: false, hideResultsBeforeVote: false } } })
+    ).toBe(true)
+  })
+
+  it('is true for a closed poll', () => {
+    expect(
+      isPreviewableMessage({ body: '', pollClosed: { title: 'Q?', pollMessageId: 'p1', results: [] } })
+    ).toBe(true)
+  })
+
+  it('is true for a retracted message (renders "deleted")', () => {
+    expect(isPreviewableMessage({ body: '', isRetracted: true })).toBe(true)
+  })
+
+  it('is true for an unsupported-encryption message (renders a notice)', () => {
+    expect(
+      isPreviewableMessage({ body: '', unsupportedEncryption: { namespace: 'eu.siacs.conversations.axolotl', name: 'OMEMO' } })
+    ).toBe(true)
+  })
+})
+
+describe('findLastPreviewableMessage', () => {
+  it('returns undefined for an empty array', () => {
+    expect(findLastPreviewableMessage([])).toBeUndefined()
+  })
+
+  it('returns the last element when it is previewable', () => {
+    const messages = [{ body: 'a' }, { body: 'b' }]
+    expect(findLastPreviewableMessage(messages)).toBe(messages[1])
+  })
+
+  it('skips a trailing bodiless placeholder and returns the prior real message', () => {
+    const messages = [{ body: 'real' }, { body: '' }]
+    expect(findLastPreviewableMessage(messages)).toBe(messages[0])
+  })
+
+  it('skips multiple trailing placeholders', () => {
+    const messages = [{ body: 'real' }, { body: '' }, { body: '  ' }]
+    expect(findLastPreviewableMessage(messages)).toBe(messages[0])
+  })
+
+  it('returns undefined when nothing is previewable', () => {
+    expect(findLastPreviewableMessage([{ body: '' }, { body: '' }])).toBeUndefined()
   })
 })
 
@@ -150,6 +246,14 @@ describe('findLastNonIgnoredMessage', () => {
       makeRoomMessage({ nick: 'alice', id: 'msg-1' }),
       makeRoomMessage({ nick: 'spam1', id: 'msg-2' }),
       makeRoomMessage({ nick: 'spam2', id: 'msg-3' }),
+    ]
+    expect(findLastNonIgnoredMessage(messages, roomJid)).toBe(messages[0])
+  })
+
+  it('should skip a trailing bodiless placeholder and return the prior real message', () => {
+    const messages = [
+      makeRoomMessage({ nick: 'alice', id: 'msg-1' }),
+      makeRoomMessage({ nick: 'alice', id: 'msg-2', body: '' }),
     ]
     expect(findLastNonIgnoredMessage(messages, roomJid)).toBe(messages[0])
   })

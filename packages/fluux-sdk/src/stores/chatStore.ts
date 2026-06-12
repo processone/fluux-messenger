@@ -9,7 +9,7 @@ import * as mamState from './shared/mamState'
 import type { MAMQueryDirection } from './shared/mamState'
 import * as draftState from './shared/draftState'
 import { buildMessageKeySet, isMessageDuplicate, sortMessagesByTimestamp, trimMessages, prependOlderMessages, mergeAndProcessMessages, backfillArchiveIds } from './shared/messageArrayUtils'
-import { shouldUpdateLastMessage } from './shared/lastMessageUtils'
+import { isPreviewableMessage, findLastPreviewableMessage, shouldReplaceLastMessage } from './shared/lastMessageUtils'
 import * as notifState from './shared/notificationState'
 import { connectionStore } from './connectionStore'
 import { buildScopedStorageKey } from '../utils/storageScope'
@@ -699,13 +699,18 @@ export const chatStore = createStore<ChatState>()(
               { treatDelayedAsNew: true }
             )
 
+            // Keep a bodiless signal placeholder (e.g. an undecrypted encrypted
+            // reaction) from becoming the preview — fall back to the existing
+            // lastMessage when the incoming message has nothing to show.
+            const previewMessage = isPreviewableMessage(msg) ? msg : meta.lastMessage
+
             // Update metadata map
             const newMeta = new Map(state.conversationMeta)
             newMeta.set(msg.conversationId, {
               ...meta,
               unreadCount: notif.unreadCount,
               lastReadAt: notif.lastReadAt,
-              lastMessage: msg,
+              lastMessage: previewMessage,
               lastSeenMessageId: notif.lastSeenMessageId,
               firstNewMessageId: notif.firstNewMessageId,
             })
@@ -716,7 +721,7 @@ export const chatStore = createStore<ChatState>()(
               ...conv,
               unreadCount: notif.unreadCount,
               lastReadAt: notif.lastReadAt,
-              lastMessage: msg,
+              lastMessage: previewMessage,
               lastSeenMessageId: notif.lastSeenMessageId,
               firstNewMessageId: notif.firstNewMessageId,
             })
@@ -1081,6 +1086,28 @@ export const chatStore = createStore<ChatState>()(
           void searchIndex.removeMessage(removed)
           void messageCache.deleteMessage(removed.id)
 
+          // If the removed message was the conversation preview, recompute it.
+          // This is the cleanup path for a deferred-decrypt that resolved an
+          // encrypted reaction/retraction placeholder: removeMessage drops the
+          // bodiless placeholder, and the preview falls back to the newest
+          // remaining previewable message instead of keeping a stale pointer.
+          const meta = state.conversationMeta.get(conversationId)
+          const wasLastMessage =
+            !!meta?.lastMessage &&
+            (meta.lastMessage.id === removed.id ||
+              (!!removed.stanzaId && meta.lastMessage.stanzaId === removed.stanzaId) ||
+              (!!removed.originId && meta.lastMessage.originId === removed.originId))
+
+          if (wasLastMessage) {
+            const conv = state.conversations.get(conversationId)
+            const lastMessage = findLastPreviewableMessage(updatedConvMessages)
+            const newMeta = new Map(state.conversationMeta)
+            newMeta.set(conversationId, { ...meta!, lastMessage })
+            const newConversations = new Map(state.conversations)
+            if (conv) newConversations.set(conversationId, { ...conv, lastMessage })
+            return { messages: newMessages, conversationMeta: newMeta, conversations: newConversations }
+          }
+
           return { messages: newMessages }
         })
       },
@@ -1192,25 +1219,23 @@ export const chatStore = createStore<ChatState>()(
           const newMessagesMap = new Map(state.messages)
           newMessagesMap.set(conversationId, trimmed)
 
-          // Update lastMessage if we have messages (use the last one after merge/sort)
-          const lastMessage = trimmed.length > 0 ? trimmed[trimmed.length - 1] : undefined
+          // Update lastMessage with the newest previewable message after
+          // merge/sort, skipping bodiless signal placeholders (e.g. undecrypted
+          // encrypted reactions). A real message also supersedes an existing
+          // stuck placeholder even when older.
+          const lastMessage = findLastPreviewableMessage(trimmed)
           const meta = state.conversationMeta.get(conversationId)
           const conv = state.conversations.get(conversationId)
-          if (meta && conv && lastMessage) {
-            // Only update if this message is newer than existing lastMessage
-            const existingTime = meta.lastMessage?.timestamp?.getTime() ?? 0
-            const newTime = lastMessage.timestamp?.getTime() ?? 0
-            if (newTime > existingTime) {
-              // Update metadata map
-              const newMeta = new Map(state.conversationMeta)
-              newMeta.set(conversationId, { ...meta, lastMessage })
+          if (meta && conv && lastMessage && shouldReplaceLastMessage(meta.lastMessage, lastMessage)) {
+            // Update metadata map
+            const newMeta = new Map(state.conversationMeta)
+            newMeta.set(conversationId, { ...meta, lastMessage })
 
-              // Update combined map
-              const newConversations = new Map(state.conversations)
-              newConversations.set(conversationId, { ...conv, lastMessage })
+            // Update combined map
+            const newConversations = new Map(state.conversations)
+            newConversations.set(conversationId, { ...conv, lastMessage })
 
-              return { messages: newMessagesMap, mamQueryStates: newStates, conversationMeta: newMeta, conversations: newConversations }
-            }
+            return { messages: newMessagesMap, mamQueryStates: newStates, conversationMeta: newMeta, conversations: newConversations }
           }
 
           return { messages: newMessagesMap, mamQueryStates: newStates }
@@ -1243,8 +1268,11 @@ export const chatStore = createStore<ChatState>()(
           const conv = state.conversations.get(conversationId)
           if (!meta || !conv) return state
 
-          // Only update if this message is newer than existing lastMessage
-          if (!shouldUpdateLastMessage(meta.lastMessage, lastMessage)) return state
+          // Never let a bodiless signal placeholder become the preview
+          if (!isPreviewableMessage(lastMessage)) return state
+
+          // Update if newer, or if the existing preview is a stuck placeholder
+          if (!shouldReplaceLastMessage(meta.lastMessage, lastMessage)) return state
 
           // Update metadata map
           const newMeta = new Map(state.conversationMeta)
@@ -1292,25 +1320,24 @@ export const chatStore = createStore<ChatState>()(
               const newMessagesMap = new Map(state.messages)
               newMessagesMap.set(conversationId, trimmed)
 
-              // Update lastMessage if we have messages (use the last one after merge/sort)
-              const lastMessage = trimmed.length > 0 ? trimmed[trimmed.length - 1] : undefined
+              // Update lastMessage with the newest previewable message after
+              // merge/sort, skipping bodiless signal placeholders. Opening a
+              // conversation whose stored preview is a stuck placeholder heals
+              // it here: a real cached message supersedes the placeholder even
+              // though the placeholder's timestamp is newer.
+              const lastMessage = findLastPreviewableMessage(trimmed)
               const meta = state.conversationMeta.get(conversationId)
               const conv = state.conversations.get(conversationId)
-              if (meta && conv && lastMessage) {
-                // Only update if this message is newer than existing lastMessage
-                const existingTime = meta.lastMessage?.timestamp?.getTime() ?? 0
-                const newTime = lastMessage.timestamp?.getTime() ?? 0
-                if (newTime > existingTime) {
-                  // Update metadata map
-                  const newMeta = new Map(state.conversationMeta)
-                  newMeta.set(conversationId, { ...meta, lastMessage })
+              if (meta && conv && lastMessage && shouldReplaceLastMessage(meta.lastMessage, lastMessage)) {
+                // Update metadata map
+                const newMeta = new Map(state.conversationMeta)
+                newMeta.set(conversationId, { ...meta, lastMessage })
 
-                  // Update combined map
-                  const newConversations = new Map(state.conversations)
-                  newConversations.set(conversationId, { ...conv, lastMessage })
+                // Update combined map
+                const newConversations = new Map(state.conversations)
+                newConversations.set(conversationId, { ...conv, lastMessage })
 
-                  return { messages: newMessagesMap, conversationMeta: newMeta, conversations: newConversations }
-                }
+                return { messages: newMessagesMap, conversationMeta: newMeta, conversations: newConversations }
               }
 
               return { messages: newMessagesMap }
