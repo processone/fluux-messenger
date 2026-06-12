@@ -500,6 +500,7 @@
             "keyLockedTooltip": "Šifriranje zaklenjeno — kliknite za odklepanje",
             "encryptedClickToUnlock": "Šifrirano sporočilo — kliknite za odklepanje",
             "encryptedCouldNotDecrypt": "Tega sporočila ni bilo mogoče dešifrirati",
+            "encryptedDecrypting": "Šifrirano sporočilo — dešifriranje…",
             "encryptedDisabled": "Šifriranje je izklopljeno — vklopite ga v nastavitvah",
             "couldNotDecryptTooltip": "Sporočilo je šifrirano za ključ, ki v tej napravi ni na voljo",
             "unsupportedMethodTooltip": "Šifrirano z {{method}} — metoda, ki je ta naprava še ne podpira",

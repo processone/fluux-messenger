@@ -500,6 +500,7 @@
             "keyLockedTooltip": "L-encryption huwa msakkar — ikklikkja biex tiftaħ",
             "encryptedClickToUnlock": "Messaġġ kriptat — ikklikkja biex tiftaħ",
             "encryptedCouldNotDecrypt": "Ma setax jiġi deċifrat dan il-messaġġ",
+            "encryptedDecrypting": "Messaġġ ċifrat — qed jiddeċifra…",
             "encryptedDisabled": "L-encryption huwa diżattivat — attivah fis-settings",
             "couldNotDecryptTooltip": "Messaġġ ikkriptat għal ċavetta li mhix disponibbli fuq dan it-tagħmir",
             "unsupportedMethodTooltip": "Ikkriptat bi {{method}} — metodu li dan l-apparat għadu ma jappoġġjax",

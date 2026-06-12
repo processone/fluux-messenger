@@ -498,6 +498,7 @@
             "keyLockedTooltip": "加密已锁定 — 点击解锁",
             "encryptedClickToUnlock": "加密消息 — 点击解锁",
             "encryptedCouldNotDecrypt": "无法解密此消息",
+            "encryptedDecrypting": "加密消息 — 正在解密…",
             "encryptedDisabled": "加密已禁用 — 请在设置中启用",
             "couldNotDecryptTooltip": "消息已加密给本设备不可用的密钥",
             "unsupportedMethodTooltip": "已使用 {{method}} 加密 — 此设备尚不支持该方式",

@@ -498,6 +498,7 @@
             "keyLockedTooltip": "التشفير مقفل — انقر للفتح",
             "encryptedClickToUnlock": "رسالة مشفرة — انقر للفتح",
             "encryptedCouldNotDecrypt": "تعذر فك تشفير هذه الرسالة",
+            "encryptedDecrypting": "رسالة مشفرة — جارٍ فك التشفير…",
             "encryptedDisabled": "التشفير معطّل — قم بتفعيله من الإعدادات",
             "couldNotDecryptTooltip": "رسالة مشفّرة بمفتاح غير متوفّر على هذا الجهاز",
             "unsupportedMethodTooltip": "مُشفّر باستخدام {{method}} — طريقة لا يدعمها هذا الجهاز بعد",

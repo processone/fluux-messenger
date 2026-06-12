@@ -1,6 +1,6 @@
 import { memo } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Lock, LockOpen } from 'lucide-react'
+import { Lock, LockOpen, Loader2 } from 'lucide-react'
 import { useWebKeyLocked } from '@/hooks/useWebKeyLocked'
 import { useWebUnlockDialogStore } from '@/stores/webUnlockDialogStore'
 import { useEncryptionSettingsStore } from '@/stores/encryptionSettingsStore'
@@ -46,6 +46,8 @@ export const EncryptedPlaceholder = memo(function EncryptedPlaceholder(
   const { t } = useTranslation()
   const locked = useWebKeyLocked()
   const openpgpEnabled = useEncryptionSettingsStore((s) => s.openpgpEnabled)
+  const pluginRegisteredAt = useEncryptionSettingsStore((s) => s.pluginRegisteredAt)
+  const registrationError = useEncryptionSettingsStore((s) => s.registrationError)
   const openWebUnlockDialog = useWebUnlockDialogStore((s) => s.openWebUnlockDialog)
   const { navigateToSettings } = useRouteSync()
 
@@ -78,6 +80,15 @@ export const EncryptedPlaceholder = memo(function EncryptedPlaceholder(
           {t('chat.encryption.encryptedClickToUnlock')}
         </span>
       </button>
+    )
+  }
+
+  if (pluginRegisteredAt === 0 && !registrationError) {
+    return (
+      <span className="flex items-center gap-2 text-fluux-muted italic">
+        <Loader2 className="size-3.5 flex-shrink-0 animate-spin" aria-hidden="true" />
+        <span>{t('chat.encryption.encryptedDecrypting')}</span>
+      </span>
     )
   }
 

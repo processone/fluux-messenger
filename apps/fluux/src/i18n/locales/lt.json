@@ -498,6 +498,7 @@
             "keyLockedTooltip": "Šifravimas užrakintas — spustelėkite, kad atrakintumėte",
             "encryptedClickToUnlock": "Šifruotas pranešimas — spustelėkite, kad atrakintumėte",
             "encryptedCouldNotDecrypt": "Nepavyko iššifruoti šio pranešimo",
+            "encryptedDecrypting": "Užšifruota žinutė — iššifruojama…",
             "encryptedDisabled": "Šifravimas išjungtas — įjunkite jį nustatymuose",
             "couldNotDecryptTooltip": "Pranešimas užšifruotas raktu, kuris šiame įrenginyje nepasiekiamas",
             "unsupportedMethodTooltip": "Užšifruota naudojant {{method}} — šis metodas dar nepalaikomas šiame įrenginyje",

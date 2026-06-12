@@ -499,6 +499,7 @@
             "keyLockedTooltip": "Šifrēšana ir bloķēta — noklikšķiniet, lai atbloķētu",
             "encryptedClickToUnlock": "Šifrēts ziņojums — noklikšķiniet, lai atbloķētu",
             "encryptedCouldNotDecrypt": "Šo ziņojumu nevarēja atšifrēt",
+            "encryptedDecrypting": "Šifrēta ziņa — atšifrēšana…",
             "encryptedDisabled": "Šifrēšana ir izslēgta — ieslēdziet to iestatījumos",
             "couldNotDecryptTooltip": "Ziņojums šifrēts ar atslēgu, kas šajā ierīcē nav pieejama",
             "unsupportedMethodTooltip": "Šifrēts ar {{method}} — šī metode šajā ierīcē vēl netiek atbalstīta",

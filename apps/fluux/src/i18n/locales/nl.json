@@ -498,6 +498,7 @@
             "keyLockedTooltip": "Versleuteling vergrendeld — klik om te ontgrendelen",
             "encryptedClickToUnlock": "Versleuteld bericht — klik om te ontgrendelen",
             "encryptedCouldNotDecrypt": "Dit bericht kon niet worden ontsleuteld",
+            "encryptedDecrypting": "Versleuteld bericht — ontsleutelen…",
             "encryptedDisabled": "Versleuteling uitgeschakeld — schakel deze in de instellingen in",
             "couldNotDecryptTooltip": "Bericht versleuteld met een sleutel die niet beschikbaar is op dit apparaat",
             "unsupportedMethodTooltip": "Versleuteld met {{method}} — een methode die dit apparaat nog niet ondersteunt",

@@ -500,6 +500,7 @@
             "keyLockedTooltip": "Cifratura bloccata — fai clic per sbloccare",
             "encryptedClickToUnlock": "Messaggio cifrato — fai clic per sbloccare",
             "encryptedCouldNotDecrypt": "Impossibile decifrare questo messaggio",
+            "encryptedDecrypting": "Messaggio crittografato — decrittazione…",
             "encryptedDisabled": "Crittografia disattivata — attivala nelle impostazioni",
             "couldNotDecryptTooltip": "Messaggio cifrato per una chiave non disponibile su questo dispositivo",
             "unsupportedMethodTooltip": "Crittografato con {{method}} — un metodo non ancora supportato da questo dispositivo",

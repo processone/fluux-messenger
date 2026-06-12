@@ -500,6 +500,7 @@
             "keyLockedTooltip": "Krüpteerimine on lukus — vajuta avamiseks",
             "encryptedClickToUnlock": "Krüpteeritud sõnum — vajuta avamiseks",
             "encryptedCouldNotDecrypt": "Selle sõnumi dekrüpteerimine ebaõnnestus",
+            "encryptedDecrypting": "Krüpteeritud sõnum — dekrüpteerimine…",
             "encryptedDisabled": "Krüpteerimine on välja lülitatud — lülitage see seadetes sisse",
             "couldNotDecryptTooltip": "Sõnum on krüpteeritud võtmega, mis ei ole selles seadmes saadaval",
             "unsupportedMethodTooltip": "Krüptitud meetodiga {{method}} — seda meetodit see seade veel ei toeta",

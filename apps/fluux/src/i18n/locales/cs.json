@@ -500,6 +500,7 @@
             "keyLockedTooltip": "Šifrování uzamčeno — odemkněte kliknutím",
             "encryptedClickToUnlock": "Šifrovaná zpráva — odemkněte kliknutím",
             "encryptedCouldNotDecrypt": "Tuto zprávu se nepodařilo dešifrovat",
+            "encryptedDecrypting": "Šifrovaná zpráva — dešifrování…",
             "encryptedDisabled": "Šifrování je vypnuto — zapněte jej v nastavení",
             "couldNotDecryptTooltip": "Zpráva zašifrovaná pro klíč, který není na tomto zařízení k dispozici",
             "unsupportedMethodTooltip": "Šifrováno pomocí {{method}} — metoda, kterou toto zařízení zatím nepodporuje",

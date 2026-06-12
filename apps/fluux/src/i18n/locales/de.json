@@ -500,6 +500,7 @@
             "keyLockedTooltip": "Verschlüsselung gesperrt — zum Entsperren klicken",
             "encryptedClickToUnlock": "Verschlüsselte Nachricht — zum Entsperren klicken",
             "encryptedCouldNotDecrypt": "Diese Nachricht konnte nicht entschlüsselt werden",
+            "encryptedDecrypting": "Verschlüsselte Nachricht — Entschlüsselung…",
             "encryptedDisabled": "Verschlüsselung deaktiviert — in den Einstellungen aktivieren",
             "couldNotDecryptTooltip": "Nachricht für einen auf diesem Gerät nicht verfügbaren Schlüssel verschlüsselt",
             "unsupportedMethodTooltip": "Mit {{method}} verschlüsselt – eine Methode, die dieses Gerät noch nicht unterstützt",

@@ -498,6 +498,7 @@
             "keyLockedTooltip": "Šifriranje zaključano — kliknite za otključavanje",
             "encryptedClickToUnlock": "Šifrirana poruka — kliknite za otključavanje",
             "encryptedCouldNotDecrypt": "Ovu poruku nije bilo moguće dešifrirati",
+            "encryptedDecrypting": "Šifrirana poruka — dešifriranje…",
             "encryptedDisabled": "Šifriranje je isključeno — uključite ga u postavkama",
             "couldNotDecryptTooltip": "Poruka je šifrirana za ključ koji nije dostupan na ovom uređaju",
             "unsupportedMethodTooltip": "Šifrirano pomoću {{method}} — metoda koju ovaj uređaj još ne podržava",

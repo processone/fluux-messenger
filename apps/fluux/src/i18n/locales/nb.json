@@ -498,6 +498,7 @@
             "keyLockedTooltip": "Kryptering låst — klikk for å låse opp",
             "encryptedClickToUnlock": "Kryptert melding — klikk for å låse opp",
             "encryptedCouldNotDecrypt": "Kunne ikke dekryptere denne meldingen",
+            "encryptedDecrypting": "Kryptert melding — dekrypterer…",
             "encryptedDisabled": "Kryptering er slått av — slå den på i innstillingene",
             "couldNotDecryptTooltip": "Meldingen er kryptert til en nøkkel som ikke er tilgjengelig på denne enheten",
             "unsupportedMethodTooltip": "Kryptert med {{method}} — en metode denne enheten ennå ikke støtter",
