@@ -26,7 +26,6 @@
 - Image attachment placeholder reserved in error state to prevent layout shift
 - MAM: bodiless encrypted messages from archive surfaced instead of dropped
 - MAM: backward-pagination cursor corrected for scroll-up history loading
-- Bundle ID uses correct domain identifier (net.processone.fluux)
 
 ---
 [Full Changelog](https://github.com/processone/fluux-messenger/blob/main/CHANGELOG.md)

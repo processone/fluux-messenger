@@ -33,7 +33,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Image attachment placeholder reserved in error state to prevent layout shift
 - MAM: bodiless encrypted messages from archive surfaced instead of dropped
 - MAM: backward-pagination cursor corrected for scroll-up history loading
-- Bundle ID uses correct domain identifier (net.processone.fluux)
 
 ## [0.16.0] - 2026-06-10
 

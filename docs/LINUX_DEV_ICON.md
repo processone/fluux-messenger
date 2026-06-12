@@ -52,4 +52,4 @@ Restart `npm run tauri:dev` — the Fluux icon should now appear in the dock.
 
 - This file is local to your machine and not tracked in git.
 - If you switch between debug and release builds, the `Exec` path doesn't matter for icon matching — only `StartupWMClass` needs to match.
-- On Wayland, the app ID may come from the GTK application ID (`net.processone.fluux`) instead of `WM_CLASS`. If the icon still doesn't appear, try setting `StartupWMClass=net.processone.fluux`.
+- On Wayland, the app ID may come from the GTK application ID (`com.processone.fluux`) instead of `WM_CLASS`. If the icon still doesn't appear, try setting `StartupWMClass=com.processone.fluux`.

@@ -50,7 +50,7 @@ describe('mediaCache', () => {
     resetMediaUrlCache()
 
     mockIsTauri.mockReturnValue(true)
-    mockAppCacheDir.mockResolvedValue('/Users/test/Library/Caches/net.processone.fluux')
+    mockAppCacheDir.mockResolvedValue('/Users/test/Library/Caches/com.processone.fluux')
     mockJoin.mockImplementation((...args: string[]) => Promise.resolve(args.join('/')))
     mockExists.mockResolvedValue(false)
     mockMkdir.mockResolvedValue(undefined)

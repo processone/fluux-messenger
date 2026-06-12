@@ -1115,9 +1115,9 @@ fn main() {
         eprintln!("  -h, --help            Show this help message");
         eprintln!();
         eprintln!("Logs are always written to a daily-rotating file in:");
-        eprintln!("  macOS:   ~/Library/Logs/net.processone.fluux/");
-        eprintln!("  Linux:   ~/.local/share/net.processone.fluux/logs/");
-        eprintln!("  Windows: %APPDATA%\\net.processone.fluux\\logs\\");
+        eprintln!("  macOS:   ~/Library/Logs/com.processone.fluux/");
+        eprintln!("  Linux:   ~/.local/share/com.processone.fluux/logs/");
+        eprintln!("  Windows: %APPDATA%\\com.processone.fluux\\logs\\");
         eprintln!();
         eprintln!("Environment variables:");
         eprintln!("  RUST_LOG              Override log filter (e.g. RUST_LOG=debug)");
@@ -1133,15 +1133,15 @@ fn main() {
             .unwrap_or_else(|| std::path::PathBuf::from("."))
     } else {
         // Platform log directory:
-        //   macOS:   ~/Library/Logs/net.processone.fluux/
-        //   Linux:   ~/.local/share/net.processone.fluux/logs/  (or $XDG_DATA_HOME)
-        //   Windows: %APPDATA%\net.processone.fluux\logs\
+        //   macOS:   ~/Library/Logs/com.processone.fluux/
+        //   Linux:   ~/.local/share/com.processone.fluux/logs/  (or $XDG_DATA_HOME)
+        //   Windows: %APPDATA%\com.processone.fluux\logs\
         let base = dirs::data_local_dir().unwrap_or_else(|| std::path::PathBuf::from("."));
-        let dir = base.join("net.processone.fluux").join("logs");
+        let dir = base.join("com.processone.fluux").join("logs");
 
         #[cfg(target_os = "macos")]
         let dir = dirs::home_dir()
-            .map(|h| h.join("Library").join("Logs").join("net.processone.fluux"))
+            .map(|h| h.join("Library").join("Logs").join("com.processone.fluux"))
             .unwrap_or(dir);
 
         dir

@@ -175,23 +175,23 @@ Logs are written to a daily-rotating file. Paths:
 
 | OS      | Path                                                  |
 |---------|-------------------------------------------------------|
-| macOS   | `~/Library/Logs/net.processone.fluux/`                |
-| Linux   | `~/.local/share/net.processone.fluux/logs/`           |
-| Windows | `%APPDATA%\net.processone.fluux\logs\`                |
+| macOS   | `~/Library/Logs/com.processone.fluux/`                |
+| Linux   | `~/.local/share/com.processone.fluux/logs/`           |
+| Windows | `%APPDATA%\com.processone.fluux\logs\`                |
 
 Package them:
 
 ```bash
 # macOS
-tar czf ~/fluux-logs.tar.gz ~/Library/Logs/net.processone.fluux/
+tar czf ~/fluux-logs.tar.gz ~/Library/Logs/com.processone.fluux/
 
 # Linux
-tar czf ~/fluux-logs.tar.gz ~/.local/share/net.processone.fluux/logs/
+tar czf ~/fluux-logs.tar.gz ~/.local/share/com.processone.fluux/logs/
 ```
 
 ```powershell
 # Windows
-Compress-Archive -Path "$env:APPDATA\net.processone.fluux\logs\*" -DestinationPath "$env:USERPROFILE\fluux-logs.zip"
+Compress-Archive -Path "$env:APPDATA\com.processone.fluux\logs\*" -DestinationPath "$env:USERPROFILE\fluux-logs.zip"
 ```
 
 Look in the log for `[renderLoopDetector]` warnings — if they fire during startup or after specific actions, the leak is very likely linked to a render storm.
