@@ -111,10 +111,11 @@ exports[`ChatView > Snapshots > should match snapshot with messages 1`] = `
                     class="relative flex-1 min-w-0 "
                   >
                     <div
-                      class="absolute -top-7 -end-2 p-4 z-20 select-none transition-all duration-200 ease-out opacity-0 translate-x-2 pointer-events-none"
+                      class="absolute -top-7 -end-2 p-4 z-20 select-none pointer-events-none transition-all duration-200 ease-out opacity-0 translate-x-2"
+                      data-message-toolbar="true"
                     >
                       <div
-                        class="flex items-center bg-fluux-bg rounded-md shadow-lg border border-fluux-hover"
+                        class="flex items-center bg-fluux-bg rounded-md shadow-lg border border-fluux-hover "
                       >
                         <button
                           aria-label="chat.reactWith"
@@ -270,10 +271,11 @@ exports[`ChatView > Snapshots > should match snapshot with messages 1`] = `
                     class="relative flex-1 min-w-0 "
                   >
                     <div
-                      class="absolute -top-7 -end-2 p-4 z-20 select-none transition-all duration-200 ease-out opacity-0 translate-x-2 pointer-events-none"
+                      class="absolute -top-7 -end-2 p-4 z-20 select-none pointer-events-none transition-all duration-200 ease-out opacity-0 translate-x-2"
+                      data-message-toolbar="true"
                     >
                       <div
-                        class="flex items-center bg-fluux-bg rounded-md shadow-lg border border-fluux-hover"
+                        class="flex items-center bg-fluux-bg rounded-md shadow-lg border border-fluux-hover "
                       >
                         <button
                           aria-label="chat.reactWith"

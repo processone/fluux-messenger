@@ -9,7 +9,7 @@ import { VerifyPeerDialog } from './VerifyPeerDialog'
 import { KeyChangeBanner } from './KeyChangeBanner'
 import { useConnectionStore } from '@fluux/sdk/react'
 import { getConsistentTextColor } from './Avatar'
-import { useFileUpload, useLinkPreview, useTypeToFocus, useMessageCopy, useMode, useMessageSelection, useDragAndDrop, useConversationDraft, useTimeFormat } from '@/hooks'
+import { useFileUpload, useLinkPreview, useTypeToFocus, useMessageCopy, useMode, useMessageSelection, useMessageHoverState, useDragAndDrop, useConversationDraft, useTimeFormat } from '@/hooks'
 import { Upload, Loader2 } from 'lucide-react'
 import { MessageBubble, MessageList as MessageListComponent, shouldShowAvatar, buildReplyContext } from './conversation'
 import { FindOnPageBar } from './conversation/FindOnPageBar'
@@ -584,48 +584,9 @@ export const ChatMessageList = memo(function ChatMessageList({
   const { t } = useTranslation()
   const { formatTime, effectiveTimeFormat } = useTimeFormat()
 
-  // Track which message is hovered for stable toolbar interaction
-  // This prevents the toolbar from switching when moving mouse to it
-  const [hoveredMessageId, setHoveredMessageId] = useState<string | null>(null)
-  const hoverTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  // Handle mouse enter on a message - set it as hovered immediately.
-  // Stable identity (refs/stable setter) so it does not break row memo bailout.
-  const handleMessageHover = useCallback((messageId: string) => {
-    // Clear any pending timeout to clear hover
-    if (hoverTimeoutRef.current) {
-      clearTimeout(hoverTimeoutRef.current)
-      hoverTimeoutRef.current = null
-    }
-    setHoveredMessageId(messageId)
-  }, [])
-
-  // Handle mouse leave from a message - delay clearing to allow moving to toolbar.
-  const handleMessageLeave = useCallback(() => {
-    // Clear any existing timeout
-    if (hoverTimeoutRef.current) {
-      clearTimeout(hoverTimeoutRef.current)
-    }
-    // Delay clearing hover to allow mouse to reach toolbar
-    hoverTimeoutRef.current = setTimeout(() => {
-      setHoveredMessageId(null)
-      hoverTimeoutRef.current = null
-    }, 100) // Small delay to allow mouse to reach toolbar
-  }, [])
-
-  // Clear hover when conversation changes
-  useEffect(() => {
-    setHoveredMessageId(null)
-  }, [conversationId])
-
-  // Cleanup timeout on unmount
-  useEffect(() => {
-    return () => {
-      if (hoverTimeoutRef.current) {
-        clearTimeout(hoverTimeoutRef.current)
-      }
-    }
-  }, [])
+  // Selection-aware, hover-intent toolbar hover state (stable handler identities)
+  const { hoveredMessageId, handleMessageHover, handleMessageLeave } =
+    useMessageHoverState({ scrollRef: scrollerRef, resetKey: conversationId })
 
   const formatTypingUser = (jid: string) => {
     const bareJid = jid.split('/')[0]
