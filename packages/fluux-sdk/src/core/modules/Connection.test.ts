@@ -3708,7 +3708,7 @@ describe('XMPPClient Connection', () => {
 
       // Inline negotiation completed: bind2 <enabled> set sm.enabled before the
       // post-auth features arrive.
-      ;(mockXmppClientInstance as any).streamManagement = { enabled: true, on: vi.fn() }
+      mockXmppClientInstance.streamManagement = { id: 'sm-inline', enabled: true, inbound: 0, outbound: 0, on: vi.fn() }
 
       const featuresEl = makeFeaturesWithSm()
       elementHandler(featuresEl)
@@ -3721,7 +3721,15 @@ describe('XMPPClient Connection', () => {
 
       // No inline SM negotiation happened — this features element is the only
       // chance for xmpp.js to send <enable/>. It must pass through untouched.
-      ;(mockXmppClientInstance as any).streamManagement = { enabled: false, on: vi.fn() }
+      mockXmppClientInstance.streamManagement = { id: null, enabled: false, inbound: 0, outbound: 0, on: vi.fn() }
+
+      // Faithful Openfire wire order: a bare SASL2 <success> (no inline SM
+      // child) precedes the post-auth features. The success peek must not
+      // false-positive on it.
+      const bareSuccess = createMockElement('success', { xmlns: 'urn:xmpp:sasl:2' }, [
+        { name: 'authorization-identifier', attrs: {}, text: 'user@example.com' },
+      ])
+      elementHandler(bareSuccess)
 
       const featuresEl = makeFeaturesWithSm()
       elementHandler(featuresEl)
@@ -3736,7 +3744,7 @@ describe('XMPPClient Connection', () => {
       // processed right behind <success>. The synchronous peek at the
       // <success> children must cover that window.
       const elementHandler = await getElementHandler()
-      ;(mockXmppClientInstance as any).streamManagement = { enabled: false, on: vi.fn() }
+      mockXmppClientInstance.streamManagement = { id: null, enabled: false, inbound: 0, outbound: 0, on: vi.fn() }
 
       // bind2 fresh enable: <success><bound xmlns="urn:xmpp:bind:0"><enabled xmlns="urn:xmpp:sm:3"/></bound></success>
       const successBind2 = createMockElement('success', { xmlns: 'urn:xmpp:sasl:2' }, [
@@ -4057,7 +4065,7 @@ describe('XMPPClient Connection', () => {
     // it as a dead socket reconnected the session every 30 seconds.
     it('treats an IQ error response to the keepalive ping as a live connection', async () => {
       // SM not enabled → probe takes the iqCaller ping fallback
-      mockXmppClientInstance.streamManagement = { enabled: false, on: vi.fn() }
+      mockXmppClientInstance.streamManagement = { id: null, enabled: false, inbound: 0, outbound: 0, on: vi.fn() }
       const stanzaError = Object.assign(new Error('remote-server-not-found'), {
         name: 'StanzaError',
         condition: 'remote-server-not-found',
@@ -4071,7 +4079,7 @@ describe('XMPPClient Connection', () => {
     })
 
     it('still treats a transport error on the keepalive ping as a dead connection', async () => {
-      mockXmppClientInstance.streamManagement = { enabled: false, on: vi.fn() }
+      mockXmppClientInstance.streamManagement = { id: null, enabled: false, inbound: 0, outbound: 0, on: vi.fn() }
       mockXmppClientInstance.iqCaller.request.mockRejectedValue(new Error('WebSocket ECONNERROR'))
 
       const healthy = await xmppClient.verifyConnectionHealth()
