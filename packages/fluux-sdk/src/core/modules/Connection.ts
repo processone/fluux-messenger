@@ -1006,6 +1006,11 @@ export class Connection extends BaseModule {
     const clientAtStart = this.xmpp
     if (!clientAtStart) return 'dead'
 
+    // Which probe ran, for failure logs: triaging #515 from fluux.log was
+    // delayed because the file never said the keepalive was failing, let
+    // alone how (the console event is in-app only).
+    let probeMode = 'sm-ack'
+
     try {
       const sm = clientAtStart.streamManagement as any
       if (sm?.enabled) {
@@ -1014,14 +1019,22 @@ export class Connection extends BaseModule {
           logInfo(`${label}: client replaced during await, ignoring stale result`)
           return 'stale'
         }
-        if (!ackReceived) return 'dead'
+        if (!ackReceived) {
+          logWarn(`${label} probe failed (sm-ack): no <a/> within ${timeoutMs}ms`)
+          return 'dead'
+        }
       } else {
-        // Fallback: send a ping IQ and wait for response
+        // Fallback: send a ping IQ and wait for response. Sent with no 'to' —
+        // RFC 6120 §8.1.1.1: the server handles it on behalf of the account.
+        // Pinging the domain instead relies on the server routing bare-domain
+        // IQs correctly, which misconfigured deployments answer with errors
+        // (#515: Openfire returning <remote-server-not-found/>).
+        probeMode = 'ping'
         const iqCaller = (clientAtStart as any).iqCaller
         if (iqCaller) {
           const ping = xml(
             'iq',
-            { type: 'get', id: `${label}_${Date.now()}`, to: getDomain(this.credentials?.jid || '') },
+            { type: 'get', id: `${label}_${Date.now()}` },
             xml('ping', { xmlns: NS_PING })
           )
           await Promise.race([
@@ -1046,15 +1059,17 @@ export class Connection extends BaseModule {
       return 'healthy'
     } catch (err) {
       if (this.xmpp && this.xmpp !== clientAtStart) return 'stale'
+      const errorMessage = err instanceof Error ? err.message : String(err)
       // An IQ error RESPONSE proves the stream is alive: the ping reached the
       // server and an answer came back. Misconfigured servers may reject the
-      // domain ping (e.g. <remote-server-not-found/>) on every keepalive tick —
+      // ping (e.g. <remote-server-not-found/>) on every keepalive tick —
       // treating that as a dead socket caused a 30s reconnect loop (#515).
       // Only timeouts and transport errors mean the connection is gone.
       if (err instanceof Error && err.name === 'StanzaError') {
-        logInfo(`${label}: ping answered with stanza error (${err.message || 'no condition'}), connection alive`)
+        logInfo(`${label}: ping answered with stanza error (${errorMessage || 'no condition'}), connection alive`)
         return 'healthy'
       }
+      logWarn(`${label} probe failed (${probeMode}): ${errorMessage}`)
       return 'dead'
     }
   }
