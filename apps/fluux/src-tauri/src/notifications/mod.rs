@@ -4,10 +4,14 @@
 //! message it already received). Server-initiated push is out of scope — see
 //! the design spec. Web Push lives entirely on the JS side behind `!isTauri`.
 
+// The backend types are consumed only by the macOS commands and `macos.rs`;
+// gate the module so non-macOS builds don't see them as dead code (`-D warnings`).
+#[cfg(target_os = "macos")]
 pub mod backend;
 #[cfg(target_os = "macos")]
 mod macos;
 
+#[cfg(target_os = "macos")]
 use backend::{AuthState, NativeNotification, NavTarget};
 use tauri::AppHandle;
 
