@@ -2,8 +2,10 @@ import { useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { rosterStore, usePresence } from '@fluux/sdk'
 import type { Conversation, Message, Room, RoomMessage } from '@fluux/sdk'
+import { invoke } from '@tauri-apps/api/core'
 import { sendNotification, onAction } from '@tauri-apps/plugin-notification'
 import type { Options as NotificationOptions } from '@tauri-apps/plugin-notification'
+import { isMacOSDesktop } from '@/utils/tauriPlatform'
 import { useNotificationEvents } from './useNotificationEvents'
 import { useNavigateToTarget } from './useNavigateToTarget'
 import { useNotificationPermission, isTauri } from './useNotificationPermission'
@@ -93,12 +95,22 @@ export function useDesktopNotifications(): void {
     const avatarUrl = await getNotificationAvatarUrl(contact?.avatar, contact?.avatarHash)
 
     if (isTauri) {
-      sendNotification({
-        title,
-        body,
-        attachments: avatarUrl ? [{ id: 'avatar', url: avatarUrl }] : undefined,
-        extra: { navType: 'conversation', navTarget: conv.id },
-      })
+      if (await isMacOSDesktop()) {
+        await invoke('post_notification', {
+          title,
+          body,
+          navType: 'conversation',
+          navTarget: conv.id,
+          avatarPath: null, // avatar attachment added in a later task
+        })
+      } else {
+        sendNotification({
+          title,
+          body,
+          attachments: avatarUrl ? [{ id: 'avatar', url: avatarUrl }] : undefined,
+          extra: { navType: 'conversation', navTarget: conv.id },
+        })
+      }
     } else {
       await showWebNotification(
         title,
@@ -139,12 +151,22 @@ export function useDesktopNotifications(): void {
     const avatarUrl = await getNotificationAvatarUrl(room.avatar, room.avatarHash)
 
     if (isTauri) {
-      sendNotification({
-        title,
-        body,
-        attachments: avatarUrl ? [{ id: 'avatar', url: avatarUrl }] : undefined,
-        extra: { navType: 'room', navTarget: room.jid },
-      })
+      if (await isMacOSDesktop()) {
+        await invoke('post_notification', {
+          title,
+          body,
+          navType: 'room',
+          navTarget: room.jid,
+          avatarPath: null, // avatar attachment added in a later task
+        })
+      } else {
+        sendNotification({
+          title,
+          body,
+          attachments: avatarUrl ? [{ id: 'avatar', url: avatarUrl }] : undefined,
+          extra: { navType: 'room', navTarget: room.jid },
+        })
+      }
     } else {
       await showWebNotification(
         title,
