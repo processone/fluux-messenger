@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { rosterStore, usePresence } from '@fluux/sdk'
 import type { Conversation, Message, Room, RoomMessage } from '@fluux/sdk'
 import { invoke } from '@tauri-apps/api/core'
+import { listen } from '@tauri-apps/api/event'
 import { sendNotification, onAction } from '@tauri-apps/plugin-notification'
 import type { Options as NotificationOptions } from '@tauri-apps/plugin-notification'
 import { isMacOSDesktop } from '@/utils/tauriPlatform'
@@ -13,6 +14,7 @@ import { getNotificationAvatarUrl } from '@/utils/notificationAvatar'
 import { formatLocalizedPreview } from '@/utils/messagePreviewText'
 import { notificationDebug } from '@/utils/notificationDebug'
 import { showWebNotification } from '@/utils/webNotification'
+import { routeNotificationTarget } from '@/utils/notificationRouting'
 
 /**
  * Hook to show desktop notifications for new messages and room mentions.
@@ -43,28 +45,60 @@ export function useDesktopNotifications(): void {
     presenceStatusRef.current = presenceStatus
   }, [presenceStatus])
 
-  // Handle notification clicks via Tauri onAction listener
+  // Handle notification clicks.
+  //
+  // Desktop (macOS native): the Rust delegate emits "notification-activated"
+  // and stashes a target for cold starts (drained on mount). Mobile: the
+  // plugin's onAction() is the click source — but registerListener only exists
+  // on iOS/Android, so guard it there (on desktop it rejects with
+  // "not allowed by ACL"). Web routes clicks in sw.ts and is untouched here.
   useEffect(() => {
     if (!isTauri) return
 
-    let unlisten: (() => void) | undefined
+    const route = (payload: unknown) => {
+      const p = (payload ?? {}) as { navType?: string; navTarget?: string }
+      routeNotificationTarget(p.navType, p.navTarget, {
+        navigateToConversation: navigateToConversationRef.current,
+        navigateToRoom: navigateToRoomRef.current,
+      })
+    }
 
-    void onAction((notification: NotificationOptions) => {
-      const navType = notification.extra?.navType as string | undefined
-      const navTarget = notification.extra?.navTarget as string | undefined
-      if (!navTarget) return
+    let cancelled = false
+    let unlistenEvent: (() => void) | undefined
+    let unlistenMobile: (() => void) | undefined
 
-      if (navType === 'room') {
-        navigateToRoomRef.current(navTarget)
-      } else {
-        navigateToConversationRef.current(navTarget)
-      }
-    }).then((listener) => {
-      unlisten = listener.unregister
+    // Desktop: Tauri event + cold-start drain.
+    void listen('notification-activated', (e) => route(e.payload)).then((un) => {
+      if (cancelled) un()
+      else unlistenEvent = un
     })
+    void invoke('take_pending_notification_target')
+      .then((target) => {
+        if (!cancelled && target) route(target)
+      })
+      .catch(() => {
+        // Command is macOS-only; absent elsewhere — ignore.
+      })
+
+    // Mobile: onAction (iOS/Android only).
+    void (async () => {
+      const { platform } = await import('@tauri-apps/plugin-os')
+      const os = await platform()
+      if (cancelled || (os !== 'ios' && os !== 'android')) return
+      const listener = await onAction((notification: NotificationOptions) => {
+        route({
+          navType: notification.extra?.navType,
+          navTarget: notification.extra?.navTarget,
+        })
+      })
+      if (cancelled) listener.unregister()
+      else unlistenMobile = listener.unregister
+    })()
 
     return () => {
-      unlisten?.()
+      cancelled = true
+      unlistenEvent?.()
+      unlistenMobile?.()
     }
   }, [])
 
