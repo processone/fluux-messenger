@@ -201,6 +201,7 @@ mod openpgp;
 mod openpgp_backup;
 mod openpgp_export;
 mod openpgp_storage;
+mod notifications;
 
 #[cfg(target_os = "macos")]
 mod idle {
