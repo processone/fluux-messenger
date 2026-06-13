@@ -38,6 +38,25 @@ fn current_center() -> Retained<UNUserNotificationCenter> {
     UNUserNotificationCenter::currentNotificationCenter()
 }
 
+/// Encode a nav target into a notification identifier. The identifier survives
+/// cold start (the OS persists it), so the click handler can recover the target
+/// without any in-memory state. Format: "<navType>:<navTarget>" — navType never
+/// contains ':'; navTarget is a bare JID.
+fn encode_identifier(target: &NavTarget) -> String {
+    format!("{}:{}", target.nav_type, target.nav_target)
+}
+
+/// Parse an identifier produced by `encode_identifier`. Splits on the FIRST ':'
+/// only, so a navTarget that itself contains ':' is preserved intact. Returns
+/// `None` if there is no delimiter.
+fn parse_identifier(identifier: &str) -> Option<NavTarget> {
+    let (nav_type, nav_target) = identifier.split_once(':')?;
+    Some(NavTarget {
+        nav_type: nav_type.to_string(),
+        nav_target: nav_target.to_string(),
+    })
+}
+
 define_class!(
     #[unsafe(super(NSObject))]
     #[name = "FluuxNotificationDelegate"]
@@ -102,12 +121,8 @@ pub fn set_listener_ready(ready: bool) {
 /// Parse "<navType>:<navTarget>" and route it. Emits to the webview if the JS
 /// listener is attached, otherwise stashes for the startup drain (cold start).
 fn handle_activation(identifier: &str) {
-    let Some((nav_type, nav_target)) = identifier.split_once(':') else {
+    let Some(target) = parse_identifier(identifier) else {
         return;
-    };
-    let target = NavTarget {
-        nav_type: nav_type.to_string(),
-        nav_target: nav_target.to_string(),
     };
 
     let app = APP_HANDLE.get();
@@ -164,7 +179,7 @@ pub fn post(n: NativeNotification) -> Result<(), String> {
     // Identifier carries the nav target and survives cold start.
     // Format: "<navType>:<navTarget>" — navType has no ':'; navTarget is a
     // bare JID. Parsed on the FIRST ':' so JIDs are safe.
-    let identifier = NSString::from_str(&format!("{}:{}", n.target.nav_type, n.target.nav_target));
+    let identifier = NSString::from_str(&encode_identifier(&n.target));
 
     let request = UNNotificationRequest::requestWithIdentifier_content_trigger(
         &identifier,
@@ -201,4 +216,45 @@ pub fn request_authorization() -> AuthState {
 
 pub fn take_pending_target() -> Option<NavTarget> {
     PENDING_TARGET.lock().unwrap().take()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn round_trips_conversation() {
+        let t = NavTarget {
+            nav_type: "conversation".to_string(),
+            nav_target: "alice@example.com".to_string(),
+        };
+        let parsed = parse_identifier(&encode_identifier(&t)).expect("parses");
+        assert_eq!(parsed.nav_type, "conversation");
+        assert_eq!(parsed.nav_target, "alice@example.com");
+    }
+
+    #[test]
+    fn round_trips_room_bare_jid() {
+        let t = NavTarget {
+            nav_type: "room".to_string(),
+            nav_target: "team@conference.example.com".to_string(),
+        };
+        let parsed = parse_identifier(&encode_identifier(&t)).expect("parses");
+        assert_eq!(parsed.nav_type, "room");
+        assert_eq!(parsed.nav_target, "team@conference.example.com");
+    }
+
+    #[test]
+    fn parse_splits_on_first_colon_only() {
+        // A navTarget containing ':' must be preserved intact (only the first
+        // colon delimits navType).
+        let parsed = parse_identifier("room:team@host/weird:resource").expect("parses");
+        assert_eq!(parsed.nav_type, "room");
+        assert_eq!(parsed.nav_target, "team@host/weird:resource");
+    }
+
+    #[test]
+    fn parse_rejects_missing_delimiter() {
+        assert!(parse_identifier("no-delimiter-here").is_none());
+    }
 }
