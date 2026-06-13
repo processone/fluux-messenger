@@ -22,7 +22,8 @@ Net effect today: clicking a macOS notification raises the window (via the exist
 
 ## Non-goals / invariants
 
-- **Windows/Linux click routing** is out of scope for now (different native mechanisms: WinRT toast activation, libnotify actions). They keep today's `sendNotification` (notifications still show; clicks just don't route yet).
+- **Windows/Linux click routing** is out of scope for now (different native mechanisms: WinRT toast activation, libnotify actions). They keep today's `sendNotification` (notifications still show; clicks just don't route yet). The module is structured so their native backends slot in later behind one interface.
+- **Server-initiated push** (APNs / FCM / a push gateway / XEP-0357 client) is explicitly **out of scope**. This module owns *local notification presentation* — showing an OS notification for a message the running app already received over its live connection, and routing the click. "Push" (waking/informing the app when it isn't connected) is a separate, larger subsystem and keeps that name; this module is named `notifications` to stay accurate and avoid colliding with the existing Web Push stack.
 - **The Web Push + service-worker stack is untouched.** `apps/fluux/src/sw.ts` (push + notification-click handling), `apps/fluux/src/hooks/useWebPush.ts` (PushManager + VAPID), `apps/fluux/src/utils/webNotification.ts`, and the `./sw.js` registration in `main.tsx` are all gated on `!isTauri`. This feature lives entirely behind `isTauri === true && platform() === 'macos'`. The two stacks are mutually exclusive across the `isTauri` fork and cannot collide. Web notification clicks continue to route through `sw.ts`.
 - **All native code stays behind the `isTauri` guard.** The `notification-activated` listener and the cold-start drain must sit inside `if (!isTauri) return`, so the web bundle never calls Tauri event/`invoke` APIs.
 - Avatars are preserved as a sequenced follow-up (build step 4), not a regression we accept permanently.
@@ -60,14 +61,46 @@ The JS routing side is platform-agnostic: it listens for `notification-activated
 
 ## Components
 
-### Rust — new `apps/fluux/src-tauri/src/notifications.rs` (macOS-gated)
+### Rust — new `apps/fluux/src-tauri/src/notifications/` module
 
-- **Command `post_notification(title, body, nav_type, nav_target, avatar_path: Option<String>)`** — builds a `UNMutableNotificationContent`, sets `userInfo = {navType, navTarget}`, adds a `UNNotificationRequest` (immediate trigger). Registered in the `invoke_handler` under `#[cfg(target_os = "macos")]`.
-- **Delegate** — an objc2 `define_class!` `NSObject` conforming to `UNUserNotificationCenterDelegate`, assigned as `UNUserNotificationCenter.current().delegate` in the Tauri `setup` hook (Apple requires the delegate be set before launch completes):
-  - `userNotificationCenter:didReceiveNotificationResponse:withCompletionHandler:` → read `userInfo`, `set_focus()` the main window, `emit("notification-activated", {navType, navTarget})`, call the completion handler.
+Rather than a one-off file, isolate a self-contained module that owns native notification presentation + click routing, with a per-platform backend behind one interface. This serves the committed "extensible to Windows/Linux" goal — the seam is warranted, not speculative — and lets us retire `tauri-plugin-notification` for posting as backends land.
+
+```
+src-tauri/src/notifications/
+  mod.rs       — public surface: Tauri commands, setup() (selects + wires the active
+                 backend, sets it up to emit "notification-activated"), shared types
+                 (NativeNotification, NavTarget, AuthorizationState), and re-exports.
+  backend.rs   — the NotificationBackend trait + shared types (platform-agnostic).
+  macos.rs     — #[cfg(target_os = "macos")] UNUserNotificationCenter backend + delegate.
+  (future) windows.rs, linux.rs
+```
+
+**`NotificationBackend` trait** (the interface every platform implements):
+
+- `post(&self, n: NativeNotification) -> Result<()>`
+- `authorization_state(&self) -> Result<AuthorizationState>`
+- `request_authorization(&self) -> Result<AuthorizationState>`
+- `take_pending_target(&self) -> Option<NavTarget>`
+
+The active backend is selected at compile time in `mod.rs`. macOS is the only concrete backend now; on other platforms the commands are absent (`#[cfg(target_os = "macos")]`) and JS keeps calling `sendNotification` there. A backend is constructed with the `AppHandle` (or an emit closure) so it can emit `notification-activated` and `set_focus()` on click.
+
+**Tauri commands** (thin; dispatch to the active backend), registered under `#[cfg(target_os = "macos")]`:
+
+- `post_notification(title, body, nav_type, nav_target, avatar_path: Option<String>)`
+- `notification_permission_state()`
+- `request_notification_permission()`
+- `take_pending_notification_target()`
+
+**macOS backend (`macos.rs`)** — the concrete `UNUserNotificationCenter` implementation:
+
+- `post` builds a `UNMutableNotificationContent`, sets `userInfo = {navType, navTarget}`, adds a `UNNotificationRequest` (immediate trigger).
+- **Delegate** — an objc2 `define_class!` `NSObject` conforming to `UNUserNotificationCenterDelegate`, assigned as `UNUserNotificationCenter.current().delegate` in the module's `setup()` (called from the Tauri `setup` hook; Apple requires the delegate be set before launch completes):
+  - `userNotificationCenter:didReceiveNotificationResponse:withCompletionHandler:` → read `userInfo`, `set_focus()` the main window, `emit("notification-activated", {navType, navTarget})` (or stash as pending if no webview yet), call the completion handler.
   - `userNotificationCenter:willPresentNotification:withCompletionHandler:` → return `.banner | .list | .sound` so notifications for **background** chats still display while the app is frontmost (the JS layer already decides whether to notify, so the OS should not suppress them).
-- **Authorization** — request UN authorization (alert + sound + badge) once at setup. Expose `notification_permission_state()` and `request_notification_permission()` so the macOS permission UI reflects UN status rather than the legacy plugin's.
-- **Cold-start drain** — if the app was quit and is relaunched by a notification click, the delegate can fire before the webview mounts. Store the pending target in Rust state (e.g. a `Mutex<Option<NavTarget>>`); expose `take_pending_notification_target()` that JS drains on startup. Live events cover the common tray/background-running case; the drain covers cold start. This mirrors the existing deep-link cold-start handling.
+- **Authorization** — request UN authorization (alert + sound + badge) once at setup; `authorization_state`/`request_authorization` back the macOS permission UI so it reflects UN status rather than the legacy plugin's.
+- **Cold-start** — if the app was quit and is relaunched by a notification click, the delegate can fire before the webview mounts. The backend holds the pending target in a `Mutex<Option<NavTarget>>`; `take_pending_target()` drains it. Live events cover the common tray/background-running case; the drain covers cold start, mirroring the existing deep-link handling.
+
+**Promotion path (not now):** if we later want to reuse this outside Fluux, the module can graduate to a standalone `tauri-plugin-*` crate. YAGNI for now — an in-app module is the pragmatic home.
 
 ### JS
 
@@ -82,7 +115,7 @@ The JS routing side is platform-agnostic: it listens for `notification-activated
 
 ## Build order (incremental, de-risks signing early)
 
-1. **Minimal native notification + click event end-to-end** — post a hard-coded notification via UN, delegate emits `notification-activated`, a temporary JS log confirms it. Validates the dev-build signing identity and UN authorization before any real wiring. (App is already signed/notarized for release; this confirms the `tauri dev` identity, which may sign ad-hoc.)
+1. **Module skeleton + minimal native notification + click event end-to-end** — scaffold `notifications/` (`backend.rs` trait, `macos.rs`, `mod.rs` with `setup()`), then post a hard-coded notification via UN, have the delegate emit `notification-activated`, and confirm with a temporary JS log. Validates the dev-build signing identity and UN authorization before any real wiring. (App is already signed/notarized for release; this confirms the `tauri dev` identity, which may sign ad-hoc.)
 2. **Wire real posting + JS routing + cold-start drain** — macOS posting branch, shared `navigateToTarget`, event listener, startup drain.
 3. **Permission-state alignment** — UN-backed `useNotificationPermission` macOS branch + settings UI.
 4. **Avatar attachments** — feature parity.
