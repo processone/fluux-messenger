@@ -129,10 +129,28 @@ pub fn post(n: NativeNotification) -> Result<(), String> {
     content.setTitle(&NSString::from_str(&n.title));
     content.setBody(&NSString::from_str(&n.body));
 
+    // Attach the contact/room avatar as a thumbnail when a local file path is
+    // provided (the JS layer wrote the blob to a temp file).
+    if let Some(path) = n.avatar_path.as_deref() {
+        use objc2_foundation::{NSArray, NSURL};
+        use objc2_user_notifications::UNNotificationAttachment;
+        let url = NSURL::fileURLWithPath(&NSString::from_str(path));
+        // SAFETY: `identifier`, `url` are valid for the call; `options` is nil.
+        let attachment = unsafe {
+            UNNotificationAttachment::attachmentWithIdentifier_URL_options_error(
+                &NSString::from_str("avatar"),
+                &url,
+                None,
+            )
+        };
+        if let Ok(att) = attachment {
+            content.setAttachments(&NSArray::from_slice(&[&*att]));
+        }
+    }
+
     // Identifier carries the nav target and survives cold start.
     // Format: "<navType>:<navTarget>" — navType has no ':'; navTarget is a
-    // bare JID. Parsed on the FIRST ':' (later task) so JIDs are safe.
-    // (A later task attaches n.avatar_path here.)
+    // bare JID. Parsed on the FIRST ':' so JIDs are safe.
     let identifier = NSString::from_str(&format!("{}:{}", n.target.nav_type, n.target.nav_target));
 
     let request = UNNotificationRequest::requestWithIdentifier_content_trigger(

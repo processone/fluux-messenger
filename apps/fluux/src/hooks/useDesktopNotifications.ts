@@ -22,7 +22,7 @@ import { routeNotificationTarget } from '@/utils/notificationRouting'
  * - Shows notification for messages in non-active conversations
  * - Shows notification for mentions in MUC rooms
  * - Clicking notification focuses the conversation/room and switches view
- * - Uses Tauri notification API with onAction() for click handling
+ * - macOS: posts natively (UNUserNotificationCenter), routes clicks via the 'notification-activated' event; mobile uses onAction()
  * - Falls back to web Notification API for non-Tauri environments
  */
 export function useDesktopNotifications(): void {
@@ -135,7 +135,7 @@ export function useDesktopNotifications(): void {
           body,
           navType: 'conversation',
           navTarget: conv.id,
-          avatarPath: null, // avatar attachment added in a later task
+          avatarPath: avatarUrl?.startsWith('file://') ? avatarUrl.replace(/^file:\/\//, '') : null,
         })
       } else {
         sendNotification({
@@ -191,7 +191,7 @@ export function useDesktopNotifications(): void {
           body,
           navType: 'room',
           navTarget: room.jid,
-          avatarPath: null, // avatar attachment added in a later task
+          avatarPath: avatarUrl?.startsWith('file://') ? avatarUrl.replace(/^file:\/\//, '') : null,
         })
       } else {
         sendNotification({
