@@ -1277,7 +1277,9 @@ fn main() {
             #[cfg(target_os = "macos")]
             notifications::request_notification_permission,
             #[cfg(target_os = "macos")]
-            notifications::take_pending_notification_target
+            notifications::take_pending_notification_target,
+            #[cfg(target_os = "macos")]
+            notifications::set_notification_listener_ready
         ])
         .on_page_load(move |webview, payload| {
             // Always inject console-forwarding script so SDK diagnostic logs

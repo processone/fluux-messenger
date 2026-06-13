@@ -10,7 +10,7 @@ use objc2_user_notifications::{
     UNNotificationPresentationOptions, UNNotificationRequest, UNNotificationResponse,
     UNNotificationTrigger, UNUserNotificationCenter, UNUserNotificationCenterDelegate,
 };
-use std::sync::atomic::{AtomicU8, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::sync::Mutex;
 use std::sync::OnceLock;
 use tauri::{AppHandle, Emitter, Manager};
@@ -20,6 +20,10 @@ static APP_HANDLE: OnceLock<AppHandle> = OnceLock::new();
 
 /// Target stashed when a click fires before the webview is ready (cold start).
 static PENDING_TARGET: Mutex<Option<NavTarget>> = Mutex::new(None);
+
+/// Whether the JS `notification-activated` listener is attached. Set by the JS
+/// layer via `set_notification_listener_ready` once its `listen()` resolves.
+static LISTENER_READY: AtomicBool = AtomicBool::new(false);
 
 /// Cached authorization state. 0 = NotDetermined, 1 = Granted, 2 = Denied.
 /// Set by the async authorization callback.
@@ -89,8 +93,14 @@ fn set_delegate() {
     let _ = DELEGATE.set(delegate);
 }
 
-/// Parse "<navType>:<navTarget>" and route it. Emits to the webview if one is
-/// ready, otherwise stashes for the startup drain (cold start).
+/// Mark whether the JS `notification-activated` listener is attached. Called by
+/// the JS layer once its `listen()` has resolved, and reset to false on unmount.
+pub fn set_listener_ready(ready: bool) {
+    LISTENER_READY.store(ready, Ordering::SeqCst);
+}
+
+/// Parse "<navType>:<navTarget>" and route it. Emits to the webview if the JS
+/// listener is attached, otherwise stashes for the startup drain (cold start).
 fn handle_activation(identifier: &str) {
     let Some((nav_type, nav_target)) = identifier.split_once(':') else {
         return;
@@ -101,21 +111,24 @@ fn handle_activation(identifier: &str) {
     };
 
     let app = APP_HANDLE.get();
-    let window = app.and_then(|a| a.get_webview_window("main"));
 
-    if let Some(win) = &window {
+    // Always bring the window forward on a click.
+    if let Some(win) = app.and_then(|a| a.get_webview_window("main")) {
         let _ = win.show();
         let _ = win.set_focus();
     }
 
-    match app {
-        Some(a) if window.is_some() => {
+    // Emit only if the JS listener is attached; otherwise stash for the
+    // startup drain. On a cold start the delegate fires before the React
+    // bundle has registered its listener, so the "main" window existing is
+    // NOT a reliable readiness signal — the explicit flag is.
+    if LISTENER_READY.load(Ordering::SeqCst) {
+        if let Some(a) = app {
             let _ = a.emit("notification-activated", target);
-        }
-        _ => {
-            *PENDING_TARGET.lock().unwrap() = Some(target);
+            return;
         }
     }
+    *PENDING_TARGET.lock().unwrap() = Some(target);
 }
 
 pub fn setup(app: &AppHandle) {

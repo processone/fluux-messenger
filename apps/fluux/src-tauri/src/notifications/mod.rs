@@ -53,3 +53,9 @@ pub fn request_notification_permission() -> AuthState {
 pub fn take_pending_notification_target() -> Option<NavTarget> {
     macos::take_pending_target()
 }
+
+#[cfg(target_os = "macos")]
+#[tauri::command]
+pub fn set_notification_listener_ready(ready: bool) {
+    macos::set_listener_ready(ready);
+}

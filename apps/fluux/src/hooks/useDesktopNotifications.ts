@@ -67,18 +67,24 @@ export function useDesktopNotifications(): void {
     let unlistenEvent: (() => void) | undefined
     let unlistenMobile: (() => void) | undefined
 
-    // Desktop: Tauri event + cold-start drain.
+    // Desktop: Tauri event + cold-start drain. Register the listener, tell the
+    // native side it's ready, THEN drain any target stashed before readiness
+    // (cold start: the delegate fires before this effect mounts).
     void listen('notification-activated', (e) => route(e.payload)).then((un) => {
-      if (cancelled) un()
-      else unlistenEvent = un
+      if (cancelled) {
+        un()
+        return
+      }
+      unlistenEvent = un
+      void invoke('set_notification_listener_ready', { ready: true })
+        .then(() => invoke('take_pending_notification_target'))
+        .then((target) => {
+          if (!cancelled && target) route(target)
+        })
+        .catch(() => {
+          // Commands are macOS-only; absent elsewhere — ignore.
+        })
     })
-    void invoke('take_pending_notification_target')
-      .then((target) => {
-        if (!cancelled && target) route(target)
-      })
-      .catch(() => {
-        // Command is macOS-only; absent elsewhere — ignore.
-      })
 
     // Mobile: onAction (iOS/Android only).
     void (async () => {
@@ -91,12 +97,13 @@ export function useDesktopNotifications(): void {
           navTarget: notification.extra?.navTarget,
         })
       })
-      if (cancelled) listener.unregister()
+      if (cancelled) void listener.unregister()
       else unlistenMobile = listener.unregister
     })()
 
     return () => {
       cancelled = true
+      void invoke('set_notification_listener_ready', { ready: false }).catch(() => {})
       unlistenEvent?.()
       unlistenMobile?.()
     }
