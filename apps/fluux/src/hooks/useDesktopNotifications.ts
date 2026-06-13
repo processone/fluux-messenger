@@ -41,27 +41,46 @@ export function useDesktopNotifications(): void {
     presenceStatusRef.current = presenceStatus
   }, [presenceStatus])
 
-  // Handle notification clicks via Tauri onAction listener
+  // Handle notification clicks via Tauri onAction listener.
+  //
+  // onAction() subscribes through the plugin's `register_listener` command,
+  // which tauri-plugin-notification only implements on mobile (iOS/Android).
+  // On desktop that command is not registered, so calling it rejects with
+  // "Command plugin:notification|registerListener not allowed by ACL". Guard
+  // on the platform so we only subscribe where the command actually exists.
   useEffect(() => {
     if (!isTauri) return
 
     let unlisten: (() => void) | undefined
+    let cancelled = false
 
-    void onAction((notification: NotificationOptions) => {
-      const navType = notification.extra?.navType as string | undefined
-      const navTarget = notification.extra?.navTarget as string | undefined
-      if (!navTarget) return
+    void (async () => {
+      const { platform } = await import('@tauri-apps/plugin-os')
+      const os = await platform()
+      if (os !== 'ios' && os !== 'android') return
 
-      if (navType === 'room') {
-        navigateToRoomRef.current(navTarget)
+      const listener = await onAction((notification: NotificationOptions) => {
+        const navType = notification.extra?.navType as string | undefined
+        const navTarget = notification.extra?.navTarget as string | undefined
+        if (!navTarget) return
+
+        if (navType === 'room') {
+          navigateToRoomRef.current(navTarget)
+        } else {
+          navigateToConversationRef.current(navTarget)
+        }
+      })
+
+      // The component may have unmounted while we awaited the import/listener.
+      if (cancelled) {
+        void listener.unregister()
       } else {
-        navigateToConversationRef.current(navTarget)
+        unlisten = listener.unregister
       }
-    }).then((listener) => {
-      unlisten = listener.unregister
-    })
+    })()
 
     return () => {
+      cancelled = true
       unlisten?.()
     }
   }, [])
