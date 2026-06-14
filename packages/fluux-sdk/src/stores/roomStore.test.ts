@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { roomStore } from './roomStore'
 import type { Room, RoomMessage } from '../core/types'
 import { getLocalPart } from '../core/jid'
-import { _resetStorageScopeForTesting } from '../utils/storageScope'
+import { _resetStorageScopeForTesting, setStorageScopeJid } from '../utils/storageScope'
 
 // Mock localStorage
 const localStorageMock = (() => {
@@ -1765,6 +1765,30 @@ describe('roomStore', () => {
       roomStore.getState().mergeRoomMAMMessages(jid, [], {}, true, 'forward', true)
 
       expect(roomStore.getState().roomGaps.get(jid)).toEqual({ start: 1000, end: 5000 })
+    })
+
+    it('scopes persisted gaps to the user JID (no cross-account leak)', () => {
+      localStorageMock.clear() // isolate from other tests' unscoped writes
+      setStorageScopeJid('alice@example.com')
+      try {
+        const recent: RoomMessage = {
+          type: 'groupchat', id: 'recent', roomJid: jid, from: `${jid}/b`, nick: 'b',
+          body: 'recent', timestamp: new Date('2026-06-10T00:00:00Z'), isOutgoing: false,
+        }
+        roomStore.getState().addRoom(createRoom(jid, { messages: [recent] }))
+        const fetched: RoomMessage = {
+          type: 'groupchat', id: 'edge', roomJid: jid, from: `${jid}/a`, nick: 'a',
+          body: 'edge', timestamp: new Date('2026-05-14T09:00:00Z'), isOutgoing: false,
+        }
+        roomStore.getState().mergeRoomMAMMessages(jid, [fetched], {}, false, 'forward')
+
+        // Stored under the per-account key — NOT the bare key, NOT another account's key.
+        expect(localStorageMock._store['fluux-room-gaps:alice@example.com']).toBeDefined()
+        expect(localStorageMock._store['fluux-room-gaps']).toBeUndefined()
+        expect(localStorageMock._store['fluux-room-gaps:bob@example.com']).toBeUndefined()
+      } finally {
+        _resetStorageScopeForTesting()
+      }
     })
 
     it('persists roomGaps to localStorage so the marker survives a reload', () => {
