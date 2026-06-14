@@ -65,6 +65,12 @@ base64 = "0.22"
 # regardless of how the text reached us.
 unicode-normalization = "0.1"
 
+[dev-dependencies]
+# test-util enables tokio's paused-time test runtime (`#[tokio::test(start_paused = true)]`),
+# used to make the Happy Eyeballs connection-racing tests deterministic without real waits.
+# Test-only: not pulled into release builds.
+tokio = { version = "1", features = ["test-util"] }
+
 # Updater plugin for auto-updates (desktop only)
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-updater = "2"

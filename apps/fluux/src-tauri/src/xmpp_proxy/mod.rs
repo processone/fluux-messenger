@@ -1,5 +1,6 @@
 mod dns;
 mod framing;
+mod happy_eyeballs;
 
 use dns::{parse_server_input, resolve_xmpp_server, ConnectionMode, ParsedServer, XmppEndpoint};
 use framing::{
@@ -697,58 +698,32 @@ async fn wait_for_initial_client_stanza(
 }
 
 /// Attempt to connect to a single XMPP endpoint (TCP + TLS or TCP + STARTTLS).
+///
+/// The TCP connection is established with Happy Eyeballs (RFC 8305): every
+/// resolved address is raced rather than tried strictly sequentially, so a
+/// black-holed IPv6 address (common on networks that advertise IPv6 without a
+/// working route) no longer consumes the whole `TCP_CONNECT_TIMEOUT` before the
+/// reachable IPv4 address is attempted. See [`happy_eyeballs`].
 async fn try_connect_endpoint(
     endpoint: &XmppEndpoint,
 ) -> Result<tokio_rustls::client::TlsStream<TcpStream>, String> {
+    let tcp_stream = happy_eyeballs::connect_tcp(
+        &endpoint.host,
+        endpoint.port,
+        happy_eyeballs::CONNECTION_ATTEMPT_DELAY,
+        TCP_CONNECT_TIMEOUT,
+    )
+    .await?;
+
     match endpoint.mode {
         ConnectionMode::Tcp => {
-            let tcp_stream = tokio::time::timeout(
-                TCP_CONNECT_TIMEOUT,
-                TcpStream::connect(format!("{}:{}", endpoint.host, endpoint.port)),
-            )
-            .await
-            .map_err(|_| {
-                format!(
-                    "TCP connect timed out after {}s to {}:{}",
-                    TCP_CONNECT_TIMEOUT.as_secs(),
-                    endpoint.host,
-                    endpoint.port
-                )
-            })?
-            .map_err(|e| {
-                format!(
-                    "TCP connect failed to {}:{} (STARTTLS): {}",
-                    endpoint.host, endpoint.port, e
-                )
-            })?;
             info!(host = %endpoint.host, port = endpoint.port, "Connected (TCP), performing STARTTLS");
-
             let tls_stream =
                 perform_starttls(tcp_stream, endpoint.tls_name(), &endpoint.host).await?;
             info!(host = %endpoint.host, port = endpoint.port, "STARTTLS upgrade complete");
             Ok(tls_stream)
         }
         ConnectionMode::DirectTls => {
-            let tcp_stream = tokio::time::timeout(
-                TCP_CONNECT_TIMEOUT,
-                TcpStream::connect(format!("{}:{}", endpoint.host, endpoint.port)),
-            )
-            .await
-            .map_err(|_| {
-                format!(
-                    "TCP connect timed out after {}s to {}:{}",
-                    TCP_CONNECT_TIMEOUT.as_secs(),
-                    endpoint.host,
-                    endpoint.port
-                )
-            })?
-            .map_err(|e| {
-                format!(
-                    "TCP connect failed to {}:{} (direct TLS): {}",
-                    endpoint.host, endpoint.port, e
-                )
-            })?;
-
             let tls_stream = upgrade_to_tls(tcp_stream, endpoint.tls_name()).await?;
             info!(host = %endpoint.host, port = endpoint.port,
                 tls_name = endpoint.tls_name(), "Connected (direct TLS)");
