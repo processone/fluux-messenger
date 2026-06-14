@@ -175,16 +175,24 @@ export class MAM extends BaseModule {
    * @returns Query result with messages, completion status, and pagination info
    */
   async queryArchive(options: MAMQueryOptions): Promise<MAMResult> {
-    const { with: withJid, max = 50, before = '', start, end } = options
+    const { with: withJid, max = 50, before = '', start, end, maxAutoPages: maxAutoPagesOpt } = options
     const conversationId = getBareJid(withJid)
     const mamStart = Date.now()
 
+    // Opt-in forward catch-up: paginate OLDEST-first via the `after` cursor to
+    // completion (parity with rooms). Only when a caller explicitly passes
+    // maxAutoPages alongside `start`; every other caller keeps the default
+    // single-page, newest-first, skip-non-displayable behavior.
+    const isForwardPaginate = !!start && maxAutoPagesOpt !== undefined && maxAutoPagesOpt > 0
+
     // Track total messages across automatic pagination
     const allMessages: Message[] = []
-    let currentBefore = before
+    // Forward pagination ignores `before` (oldest-first from `start`); backward keeps it.
+    let currentBefore = isForwardPaginate ? undefined : before
+    let currentAfter: string | undefined
     let isComplete = false
     let lastRsm: RSMResponse = {}
-    const maxAutoPages = 5 // Limit automatic pagination to avoid infinite loops
+    const maxAutoPages = isForwardPaginate ? maxAutoPagesOpt : 5 // cap to avoid infinite loops
 
     this.deps.emitSDK('chat:mam-loading', { conversationId, isLoading: true })
 
@@ -206,7 +214,7 @@ export class MAM extends BaseModule {
           formFields.push(xml('field', { var: 'end' }, xml('value', {}, end)))
         }
 
-        const iq = this.buildMAMQuery(queryId, formFields, max, currentBefore)
+        const iq = this.buildMAMQuery(queryId, formFields, max, currentBefore, undefined, currentAfter)
 
         const collectedMessages: Message[] = []
         const modifications: MAMModifications = { retractions: [], corrections: [], fastenings: [], reactions: [] }
@@ -259,22 +267,31 @@ export class MAM extends BaseModule {
           isComplete = complete
           lastRsm = rsm
 
-          // If we got displayable messages or archive is complete, stop paginating
-          if (collectedMessages.length > 0 || complete) {
-            break
-          }
-
-          // No displayable messages but archive has more - continue with next page
-          // Use the 'first' ID as the 'before' cursor for backward pagination
-          if (rsm.first) {
-            currentBefore = rsm.first
-            this.deps.emitSDK('console:event', {
-              message: `Page ${page + 1} had no displayable messages, fetching older...`,
-              category: 'sm',
-            })
+          if (isForwardPaginate) {
+            // Forward catch-up: accumulate every page, advance via `after` until complete.
+            if (complete) break
+            if (rsm.last) {
+              currentAfter = rsm.last
+            } else {
+              break
+            }
           } else {
-            // No pagination cursor available, stop
-            break
+            // If we got displayable messages or archive is complete, stop paginating
+            if (collectedMessages.length > 0 || complete) {
+              break
+            }
+            // No displayable messages but archive has more - continue with next page
+            // Use the 'first' ID as the 'before' cursor for backward pagination
+            if (rsm.first) {
+              currentBefore = rsm.first
+              this.deps.emitSDK('console:event', {
+                message: `Page ${page + 1} had no displayable messages, fetching older...`,
+                category: 'sm',
+              })
+            } else {
+              // No pagination cursor available, stop
+              break
+            }
           }
         } finally {
           unregister()
@@ -295,6 +312,16 @@ export class MAM extends BaseModule {
         complete: isComplete,
         direction,
       })
+
+      // Surface unresolved gaps for diagnosis (parity with rooms): a forward
+      // catch-up that ends without reaching live means a hole remains.
+      if (isForwardPaginate && !isComplete) {
+        this.deps.emitSDK('console:event', {
+          message: `Conversation catch-up incomplete for ${conversationId} — gap remains after ${allMessages.length} msg(s)`,
+          category: 'sm',
+        })
+      }
+
       return { messages: allMessages, complete: isComplete, rsm: lastRsm }
     } catch (error) {
       const msg = error instanceof Error ? error.message : 'Unknown error'
@@ -893,12 +920,14 @@ export class MAM extends BaseModule {
           const messages = updatedConv?.messages || conv.messages || []
 
           // Shared cursor policy (same as rooms) — forward from the newest
-          // pre-session message, else fetch latest.
+          // pre-session message, else fetch latest. Forward catch-up paginates
+          // oldest-first to completion (maxAutoPages), matching rooms.
           const q = selectCatchUpQuery(messages, sessionStartTime)
           await this.queryArchive({
             with: conv.id,
             ...q,
             max: q.start ? MAM_CATCHUP_FORWARD_MAX : MAM_CATCHUP_BACKWARD_MAX,
+            ...(q.start ? { maxAutoPages: MAM_ROOM_FORWARD_MAX_PAGES } : {}),
           })
         } catch (_error) {
           // Silently ignore — individual failures shouldn't affect others

@@ -1,11 +1,11 @@
 import { describe, it, expect } from 'vitest'
 import {
   computeGapEnd,
-  syncRoomGap,
-  serializeRoomGaps,
-  deserializeRoomGaps,
+  syncGap,
+  serializeGaps,
+  deserializeGaps,
   type GapInterval,
-} from './roomGap'
+} from './mamGap'
 
 describe('computeGapEnd', () => {
   const start = new Date('2026-05-14T09:00:00Z').getTime()
@@ -34,46 +34,46 @@ describe('computeGapEnd', () => {
   })
 })
 
-describe('syncRoomGap', () => {
+describe('syncGap', () => {
   it('records a gap interval when start is defined', () => {
-    const result = syncRoomGap(new Map(), 'room@x', 1000, 5000)
+    const result = syncGap(new Map(), 'room@x', 1000, 5000)
     expect(result.get('room@x')).toEqual({ start: 1000, end: 5000 })
   })
 
   it('omits end when undefined (gap extends to live)', () => {
-    const result = syncRoomGap(new Map(), 'room@x', 1000, undefined)
+    const result = syncGap(new Map(), 'room@x', 1000, undefined)
     expect(result.get('room@x')).toEqual({ start: 1000 })
   })
 
   it('clears the gap when start is undefined', () => {
     const gaps = new Map<string, GapInterval>([['room@x', { start: 1000, end: 5000 }]])
-    const result = syncRoomGap(gaps, 'room@x', undefined, undefined)
+    const result = syncGap(gaps, 'room@x', undefined, undefined)
     expect(result.has('room@x')).toBe(false)
   })
 
   it('returns the same map reference when nothing changes (no spurious writes)', () => {
     const gaps = new Map<string, GapInterval>([['room@x', { start: 1000, end: 5000 }]])
-    expect(syncRoomGap(gaps, 'room@x', 1000, 5000)).toBe(gaps)
+    expect(syncGap(gaps, 'room@x', 1000, 5000)).toBe(gaps)
   })
 
   it('returns the same map reference when clearing an already-absent gap', () => {
     const gaps = new Map<string, GapInterval>()
-    expect(syncRoomGap(gaps, 'room@x', undefined, undefined)).toBe(gaps)
+    expect(syncGap(gaps, 'room@x', undefined, undefined)).toBe(gaps)
   })
 })
 
-describe('serializeRoomGaps / deserializeRoomGaps', () => {
+describe('serializeGaps / deserializeGaps', () => {
   it('round-trips a gap map', () => {
     const gaps = new Map<string, GapInterval>([
       ['a@x', { start: 1000, end: 5000 }],
       ['b@x', { start: 2000 }],
     ])
-    const restored = deserializeRoomGaps(serializeRoomGaps(gaps))
+    const restored = deserializeGaps(serializeGaps(gaps))
     expect(restored.get('a@x')).toEqual({ start: 1000, end: 5000 })
     expect(restored.get('b@x')).toEqual({ start: 2000 })
   })
 
   it('returns an empty map for malformed JSON', () => {
-    expect(deserializeRoomGaps('not json').size).toBe(0)
+    expect(deserializeGaps('not json').size).toBe(0)
   })
 })

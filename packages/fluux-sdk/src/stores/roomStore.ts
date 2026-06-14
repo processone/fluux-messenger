@@ -20,7 +20,7 @@ import * as searchIndex from '../utils/searchIndex'
 import type { GetMessagesOptions } from '../utils/messageCache'
 import * as mamState from './shared/mamState'
 import type { MAMQueryDirection } from './shared/mamState'
-import { computeGapEnd, syncRoomGap, serializeRoomGaps, deserializeRoomGaps, type GapInterval } from './shared/roomGap'
+import { computeGapEnd, syncGap, serializeGaps, deserializeGaps, type GapInterval } from './shared/mamGap'
 import * as draftState from './shared/draftState'
 import { buildMessageKeySet, isMessageDuplicate, sortMessagesByTimestamp, trimMessages, prependOlderMessages, mergeAndProcessMessages } from './shared/messageArrayUtils'
 import { shouldUpdateLastMessage, findLastNonIgnoredMessage } from './shared/lastMessageUtils'
@@ -173,7 +173,7 @@ function getRoomGapsStorageKey(jid?: string | null): string {
 function loadGapsFromStorage(jid?: string | null): Map<string, GapInterval> {
   try {
     const stored = localStorage.getItem(getRoomGapsStorageKey(jid))
-    if (stored) return deserializeRoomGaps(stored)
+    if (stored) return deserializeGaps(stored)
   } catch {
     // Ignore parse/storage errors
   }
@@ -182,7 +182,7 @@ function loadGapsFromStorage(jid?: string | null): Map<string, GapInterval> {
 
 function saveGapsToStorage(gaps: Map<string, GapInterval>, jid?: string | null): void {
   try {
-    localStorage.setItem(getRoomGapsStorageKey(jid), serializeRoomGaps(gaps))
+    localStorage.setItem(getRoomGapsStorageKey(jid), serializeGaps(gaps))
   } catch {
     // Ignore storage errors (quota exceeded, etc.)
   }
@@ -1888,7 +1888,7 @@ export const roomStore = createStore<RoomState>()(
       if (direction === 'forward' && !preserveGapMarker) {
         const gapStart = newStates.get(roomJid)?.forwardGapTimestamp
         const gapEnd = gapStart !== undefined ? computeGapEnd(merged, gapStart) : undefined
-        newGaps = syncRoomGap(state.roomGaps, roomJid, gapStart, gapEnd)
+        newGaps = syncGap(state.roomGaps, roomJid, gapStart, gapEnd)
         if (newGaps !== state.roomGaps) saveGapsToStorage(newGaps)
       }
 

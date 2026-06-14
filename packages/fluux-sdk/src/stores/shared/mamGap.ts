@@ -15,7 +15,7 @@
  * a real gap are indistinguishable by timestamp, and ejabberd archive ids are
  * non-sequential.
  *
- * @module Stores/Shared/RoomGap
+ * @module Stores/Shared/MamGap
  */
 
 /** A known hole in a room's archived history. */
@@ -52,7 +52,7 @@ export function computeGapEnd(messages: Array<{ timestamp?: Date }>, start: numb
  * Copy-on-write: returns the SAME map reference when nothing changes, so callers
  * can skip persistence and re-renders.
  */
-export function syncRoomGap(
+export function syncGap(
   gaps: Map<string, GapInterval>,
   jid: string,
   start: number | undefined,
@@ -75,12 +75,12 @@ export function syncRoomGap(
 }
 
 /** Serialize the gap map for localStorage (`[jid, GapInterval][]`). */
-export function serializeRoomGaps(gaps: Map<string, GapInterval>): string {
+export function serializeGaps(gaps: Map<string, GapInterval>): string {
   return JSON.stringify(Array.from(gaps.entries()))
 }
 
 /** Parse the gap map from localStorage; returns an empty map on any error. */
-export function deserializeRoomGaps(json: string): Map<string, GapInterval> {
+export function deserializeGaps(json: string): Map<string, GapInterval> {
   try {
     const entries = JSON.parse(json) as [string, GapInterval][]
     return new Map(entries)

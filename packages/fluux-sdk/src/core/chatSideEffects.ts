@@ -20,6 +20,7 @@ import {
   selectCatchUpQuery,
   isConnectionError,
   MAM_CACHE_LOAD_LIMIT,
+  MAM_ROOM_FORWARD_MAX_PAGES,
 } from '../utils/mamCatchUpUtils'
 
 /**
@@ -103,9 +104,14 @@ export function setupChatSideEffects(
       const cachedMessages = chatStore.getState().messages.get(conversationId) || []
 
       // Shared cursor policy (same as rooms): forward from the newest pre-session
-      // message, else fetch latest.
+      // message, else fetch latest. Forward catch-up paginates oldest-first to
+      // completion (maxAutoPages), matching rooms.
       const q = selectCatchUpQuery(cachedMessages, sessionStartTime)
-      await client.chat.queryMAM({ with: conversation.id, ...q })
+      await client.chat.queryMAM({
+        with: conversation.id,
+        ...q,
+        ...(q.start ? { maxAutoPages: MAM_ROOM_FORWARD_MAX_PAGES } : {}),
+      })
       logInfo('Chat: MAM sync complete')
     } catch (error) {
       // Allow retry on next conversation switch or reconnect

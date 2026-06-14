@@ -426,6 +426,26 @@ describe('MAM Background Catch-Up', () => {
     })
   })
 
+    it('opts into forward auto-pagination (oldest-first to completion) for the catch-up — parity with rooms', async () => {
+      await connectClient()
+
+      const messages = [
+        { type: 'chat' as const, id: 'm1', conversationId: 'alice@example.com', from: 'alice@example.com', body: 'hi', timestamp: new Date('2026-05-14T09:00:00.000Z'), isOutgoing: false, isDelayed: false },
+      ]
+      vi.mocked(mockStores.chat.getAllConversations).mockReturnValue([{ id: 'alice@example.com', messages }] as any)
+
+      const querySpy = vi.spyOn(xmppClient.mam, 'queryArchive').mockResolvedValue({ messages: [], complete: true, rsm: {} })
+
+      const catchUpPromise = xmppClient.mam.catchUpAllConversations({ sessionStartTime: new Date('2026-06-14T12:00:00Z').getTime() })
+      await waitForAsyncOps(20, 100)
+      await catchUpPromise
+
+      expect(querySpy).toHaveBeenCalledWith(expect.objectContaining({
+        with: 'alice@example.com',
+        maxAutoPages: expect.any(Number),
+      }))
+    })
+
     it('uses the newest PRE-session message as the forward cursor, ignoring a live message (1:1 parity)', async () => {
       await connectClient()
 
