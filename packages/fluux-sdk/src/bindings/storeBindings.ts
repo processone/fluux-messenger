@@ -386,9 +386,9 @@ export function createStoreBindings(
     stores.room.setRoomMAMError(roomJid, error)
   })
 
-  on('room:mam-messages', ({ roomJid, messages, rsm, complete, direction }) => {
+  on('room:mam-messages', ({ roomJid, messages, rsm, complete, direction, preserveGapMarker }) => {
     const stores = getStores()
-    stores.room.mergeRoomMAMMessages(roomJid, messages, rsm, complete, direction)
+    stores.room.mergeRoomMAMMessages(roomJid, messages, rsm, complete, direction, preserveGapMarker)
   })
 
   on('room:members', ({ roomJid, members }) => {

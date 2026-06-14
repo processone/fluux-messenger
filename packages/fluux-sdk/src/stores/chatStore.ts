@@ -7,6 +7,7 @@ import * as messageCache from '../utils/messageCache'
 import * as searchIndex from '../utils/searchIndex'
 import * as mamState from './shared/mamState'
 import type { MAMQueryDirection } from './shared/mamState'
+import { computeGapEnd, syncGap, type GapInterval } from './shared/mamGap'
 import * as draftState from './shared/draftState'
 import { buildMessageKeySet, isMessageDuplicate, sortMessagesByTimestamp, trimMessages, prependOlderMessages, mergeAndProcessMessages, backfillArchiveIds } from './shared/messageArrayUtils'
 import { isPreviewableMessage, findLastPreviewableMessage, shouldReplaceLastMessage } from './shared/lastMessageUtils'
@@ -106,6 +107,9 @@ interface ChatState {
   drafts: Map<string, string>
   // XEP-0313: MAM query state per conversation (ephemeral, not persisted)
   mamQueryStates: Map<string, MAMQueryState>
+  // Persisted history-gap intervals per conversation (in the account-scoped chat
+  // blob; drives the gap marker). Parity with roomStore.roomGaps.
+  conversationGaps: Map<string, GapInterval>
   // Target message to scroll to after navigation (ephemeral, not persisted)
   targetMessageId: string | null
 
@@ -203,13 +207,14 @@ interface PersistedState {
   conversations: [string, Conversation][]
   archivedConversations?: string[] // Optional for backwards compatibility
   drafts?: [string, string][] // Optional for backwards compatibility
+  conversationGaps?: [string, GapInterval][] // Optional for backwards compatibility
   // Legacy fields, kept for backwards compatibility when reading old storage
   messages?: [string, Message[]][] // May exist in old storage, will be migrated
   activeConversationId?: string | null
 }
 
 // Serialize Maps to arrays for JSON storage
-function serializeState(state: Pick<ChatState, 'conversationEntities' | 'conversationMeta' | 'conversations' | 'messages' | 'archivedConversations' | 'drafts'>): PersistedState {
+function serializeState(state: Pick<ChatState, 'conversationEntities' | 'conversationMeta' | 'conversations' | 'messages' | 'archivedConversations' | 'drafts'> & { conversationGaps?: Map<string, GapInterval> }): PersistedState {
   return {
     // Serialize separated maps (Phase 6)
     conversationEntities: Array.from(state.conversationEntities.entries()),
@@ -219,12 +224,14 @@ function serializeState(state: Pick<ChatState, 'conversationEntities' | 'convers
     // Messages are NOT stored in localStorage - they're in IndexedDB
     archivedConversations: Array.from(state.archivedConversations),
     drafts: Array.from(state.drafts.entries()),
+    // Persisted history gaps (account-scoped via the chat storage key)
+    conversationGaps: Array.from((state.conversationGaps ?? new Map<string, GapInterval>()).entries()),
   }
 }
 
 // Deserialize arrays back to Maps, reset unread counts, restore Date objects
 // Also handles migration of old localStorage messages to IndexedDB
-function deserializeState(persisted: PersistedState): Pick<ChatState, 'conversationEntities' | 'conversationMeta' | 'conversations' | 'messages' | 'activeConversationId' | 'archivedConversations' | 'drafts'> {
+function deserializeState(persisted: PersistedState): Pick<ChatState, 'conversationEntities' | 'conversationMeta' | 'conversations' | 'messages' | 'activeConversationId' | 'archivedConversations' | 'drafts' | 'conversationGaps'> {
   // Helper to restore Date objects in lastMessage
   const restoreLastMessage = (lastMessage?: Message): Message | undefined => {
     if (!lastMessage) return undefined
@@ -328,6 +335,9 @@ function deserializeState(persisted: PersistedState): Pick<ChatState, 'conversat
   // Restore drafts (backwards compatible - default to empty map)
   const drafts = new Map(persisted.drafts || [])
 
+  // Restore history gaps (backwards compatible - default to empty map)
+  const conversationGaps = new Map<string, GapInterval>(persisted.conversationGaps || [])
+
   return {
     conversationEntities,
     conversationMeta,
@@ -338,10 +348,11 @@ function deserializeState(persisted: PersistedState): Pick<ChatState, 'conversat
     activeConversationId: null,
     archivedConversations,
     drafts,
+    conversationGaps,
   }
 }
 
-function createEmptyChatState(): Pick<ChatState, 'conversationEntities' | 'conversationMeta' | 'conversations' | 'messages' | 'activeConversationId' | 'archivedConversations' | 'typingStates' | 'activeAnimation' | 'drafts' | 'mamQueryStates' | 'targetMessageId'> {
+function createEmptyChatState(): Pick<ChatState, 'conversationEntities' | 'conversationMeta' | 'conversations' | 'messages' | 'activeConversationId' | 'archivedConversations' | 'typingStates' | 'activeAnimation' | 'drafts' | 'mamQueryStates' | 'conversationGaps' | 'targetMessageId'> {
   return {
     conversationEntities: new Map(),
     conversationMeta: new Map(),
@@ -353,6 +364,7 @@ function createEmptyChatState(): Pick<ChatState, 'conversationEntities' | 'conve
     activeAnimation: null,
     drafts: new Map(),
     mamQueryStates: new Map(),
+    conversationGaps: new Map(),
     targetMessageId: null,
   }
 }
@@ -363,7 +375,7 @@ function createEmptyChatState(): Pick<ChatState, 'conversationEntities' | 'conve
  * Legacy versions stored chat data under a single unscoped key. For safety, we only migrate
  * conversation lists (active + archived classification) and intentionally skip drafts/messages.
  */
-function migrateLegacyConversationListsToScoped(jid: string | null): Pick<ChatState, 'conversationEntities' | 'conversationMeta' | 'conversations' | 'messages' | 'activeConversationId' | 'archivedConversations' | 'typingStates' | 'activeAnimation' | 'drafts' | 'mamQueryStates' | 'targetMessageId'> | null {
+function migrateLegacyConversationListsToScoped(jid: string | null): Pick<ChatState, 'conversationEntities' | 'conversationMeta' | 'conversations' | 'messages' | 'activeConversationId' | 'archivedConversations' | 'typingStates' | 'activeAnimation' | 'drafts' | 'mamQueryStates' | 'conversationGaps' | 'targetMessageId'> | null {
   if (!jid) return null
 
   const legacyKey = getLegacyStorageKey()
@@ -402,7 +414,7 @@ function migrateLegacyConversationListsToScoped(jid: string | null): Pick<ChatSt
   }
 }
 
-function loadScopedChatState(jid: string | null): Pick<ChatState, 'conversationEntities' | 'conversationMeta' | 'conversations' | 'messages' | 'activeConversationId' | 'archivedConversations' | 'typingStates' | 'activeAnimation' | 'drafts' | 'mamQueryStates' | 'targetMessageId'> {
+function loadScopedChatState(jid: string | null): Pick<ChatState, 'conversationEntities' | 'conversationMeta' | 'conversations' | 'messages' | 'activeConversationId' | 'archivedConversations' | 'typingStates' | 'activeAnimation' | 'drafts' | 'mamQueryStates' | 'conversationGaps' | 'targetMessageId'> {
   const baseState = createEmptyChatState()
   const scopedStorageKey = getScopedStorageKey(jid)
 
@@ -423,6 +435,7 @@ function loadScopedChatState(jid: string | null): Pick<ChatState, 'conversationE
       activeConversationId: restored.activeConversationId,
       archivedConversations: restored.archivedConversations,
       drafts: restored.drafts,
+      conversationGaps: restored.conversationGaps,
     }
   } catch {
     try {
@@ -1185,6 +1198,12 @@ export const chatStore = createStore<ChatState>()(
                   MAX_MESSAGES_PER_CONVERSATION
                 )
 
+          // Newest fetched message timestamp marks the gap edge for an incomplete
+          // forward catch-up (parity with rooms).
+          const newestFetchedTimestamp = direction === 'forward' && mamMessages.length > 0
+            ? Math.max(...mamMessages.map(m => m.timestamp?.getTime() ?? 0))
+            : undefined
+
           // Update MAM query state with pagination cursor using the two-marker approach
           // This must always be updated to track query completion and cursors
           const newStates = mamState.setMAMQueryCompleted(
@@ -1192,8 +1211,20 @@ export const chatStore = createStore<ChatState>()(
             conversationId,
             complete,
             direction,
-            rsm.first // Pagination cursor for fetching older messages
+            rsm.first, // Pagination cursor for fetching older messages
+            newestFetchedTimestamp
           )
+
+          // Mirror the forward gap into the PERSISTED conversationGaps (account-scoped
+          // via the chat storage blob) so the marker survives a reload. Forward
+          // complete=false sets it, complete=true clears it; backward leaves it.
+          // `end` = oldest message held above the gap.
+          let newGaps = state.conversationGaps
+          if (direction === 'forward') {
+            const gapStart = newStates.get(conversationId)?.forwardGapTimestamp
+            const gapEnd = gapStart !== undefined ? computeGapEnd(trimmed, gapStart) : undefined
+            newGaps = syncGap(state.conversationGaps, conversationId, gapStart, gapEnd)
+          }
 
           // If no new messages (all duplicates), only update MAM state - skip messages/conversations
           // This prevents unnecessary re-renders when merging duplicates.
@@ -1201,11 +1232,11 @@ export const chatStore = createStore<ChatState>()(
           // that patched array (trimmed === existingMessages here) to the store.
           if (newMessages.length === 0) {
             if (patched.length === 0) {
-              return { mamQueryStates: newStates }
+              return { mamQueryStates: newStates, conversationGaps: newGaps }
             }
             const backfilledMap = new Map(state.messages)
             backfilledMap.set(conversationId, trimmed)
-            return { messages: backfilledMap, mamQueryStates: newStates }
+            return { messages: backfilledMap, mamQueryStates: newStates, conversationGaps: newGaps }
           }
 
           // Persist only locally-persistable messages to IndexedDB
@@ -1235,10 +1266,10 @@ export const chatStore = createStore<ChatState>()(
             const newConversations = new Map(state.conversations)
             newConversations.set(conversationId, { ...conv, lastMessage })
 
-            return { messages: newMessagesMap, mamQueryStates: newStates, conversationMeta: newMeta, conversations: newConversations }
+            return { messages: newMessagesMap, mamQueryStates: newStates, conversationMeta: newMeta, conversations: newConversations, conversationGaps: newGaps }
           }
 
-          return { messages: newMessagesMap, mamQueryStates: newStates }
+          return { messages: newMessagesMap, mamQueryStates: newStates, conversationGaps: newGaps }
         })
       },
 
@@ -1457,6 +1488,8 @@ export const chatStore = createStore<ChatState>()(
         archivedConversations: state.archivedConversations,
         // Persist drafts so they survive page reloads
         drafts: state.drafts,
+        // Persist history gaps so the "Load missing messages" marker survives reload
+        conversationGaps: state.conversationGaps,
       }),
     }
     )

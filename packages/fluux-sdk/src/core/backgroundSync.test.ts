@@ -84,6 +84,11 @@ describe('setupBackgroundSyncSideEffects', () => {
       await vi.waitFor(() => {
         expect(mockClient.mam.catchUpAllConversations).toHaveBeenCalledTimes(1)
       })
+      // Must pass sessionStartTime so the 1:1 forward cursor excludes live messages
+      // that arrive during catch-up (parity with rooms / Bug A).
+      expect(mockClient.mam.catchUpAllConversations).toHaveBeenCalledWith(
+        expect.objectContaining({ sessionStartTime: expect.any(Number) })
+      )
     })
 
     it('should defer catch-up to serverInfo discovery when MAM not immediately available', async () => {
@@ -391,8 +396,10 @@ describe('setupBackgroundSyncSideEffects', () => {
       await vi.advanceTimersByTimeAsync(10_000)
 
       expect(mockClient.mam.catchUpAllRooms).toHaveBeenCalledTimes(1)
+      // Must pass the session-start time so the forward cursor excludes live
+      // messages that arrive during the 10s catch-up window (silent-gap fix).
       expect(mockClient.mam.catchUpAllRooms).toHaveBeenCalledWith(
-        expect.objectContaining({ concurrency: 2 })
+        expect.objectContaining({ concurrency: 2, sessionStartTime: expect.any(Number) })
       )
     })
 
@@ -476,6 +483,73 @@ describe('setupBackgroundSyncSideEffects', () => {
 
       // Clean up
       roomStore.getState().setActiveRoom(null)
+    })
+  })
+
+  describe('late MAM-ready room retry (issue D)', () => {
+    beforeEach(() => {
+      vi.useFakeTimers()
+    })
+
+    afterEach(() => {
+      vi.useRealTimers()
+      roomStore.getState().setActiveRoom(null)
+      roomStore.getState().reset()
+    })
+
+    const addRoom = (jid: string, supportsMAM: boolean) =>
+      roomStore.getState().addRoom({
+        jid, name: jid, nickname: 'me', joined: true, isBookmarked: true, supportsMAM,
+        occupants: new Map(), messages: [], unreadCount: 0, mentionsCount: 0, typingUsers: new Set(),
+      })
+
+    it('catches up a non-active room whose MAM support resolves AFTER the initial 10s pass', async () => {
+      addRoom('late@conference.example.com', false) // disco not resolved at pass time
+      connectionStore.getState().setServerInfo({ identities: [], domain: 'example.com', features: [NS_MAM] })
+      connectionStore.getState().setStatus('disconnected')
+      cleanup = setupBackgroundSyncSideEffects(mockClient)
+      simulateFreshSession(mockClient)
+
+      // Initial 10s pass — room is not MAM-ready, so it's not covered and not retried yet.
+      await vi.advanceTimersByTimeAsync(10_000)
+      expect(mockClient.mam.catchUpRoom).not.toHaveBeenCalled()
+
+      // Disco resolves AFTER the pass → late retry fires for this room.
+      roomStore.getState().updateRoom('late@conference.example.com', { supportsMAM: true })
+
+      await vi.waitFor(() => {
+        expect(mockClient.mam.catchUpRoom).toHaveBeenCalledWith('late@conference.example.com', expect.any(Number))
+      })
+    })
+
+    it('does not retry the ACTIVE room (handled by roomSideEffects) when its MAM resolves late', async () => {
+      addRoom('active@conference.example.com', false)
+      roomStore.getState().setActiveRoom('active@conference.example.com')
+      connectionStore.getState().setServerInfo({ identities: [], domain: 'example.com', features: [NS_MAM] })
+      connectionStore.getState().setStatus('disconnected')
+      cleanup = setupBackgroundSyncSideEffects(mockClient)
+      simulateFreshSession(mockClient)
+
+      await vi.advanceTimersByTimeAsync(10_000)
+      roomStore.getState().updateRoom('active@conference.example.com', { supportsMAM: true })
+      await vi.advanceTimersByTimeAsync(100)
+
+      expect(mockClient.mam.catchUpRoom).not.toHaveBeenCalledWith('active@conference.example.com', expect.anything())
+    })
+
+    it('does not retry before the initial pass (the pass will cover it)', async () => {
+      addRoom('early@conference.example.com', false)
+      connectionStore.getState().setServerInfo({ identities: [], domain: 'example.com', features: [NS_MAM] })
+      connectionStore.getState().setStatus('disconnected')
+      cleanup = setupBackgroundSyncSideEffects(mockClient)
+      simulateFreshSession(mockClient)
+
+      // MAM resolves BEFORE the 10s pass — covered by catchUpAllRooms, not the watcher.
+      await vi.advanceTimersByTimeAsync(2_000)
+      roomStore.getState().updateRoom('early@conference.example.com', { supportsMAM: true })
+      await vi.advanceTimersByTimeAsync(100)
+
+      expect(mockClient.mam.catchUpRoom).not.toHaveBeenCalled()
     })
   })
 

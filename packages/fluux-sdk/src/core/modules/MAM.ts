@@ -34,13 +34,13 @@ import { generateUUID, generateStableMessageId } from '../../utils/uuid'
 import { executeWithConcurrency } from '../../utils/concurrencyUtils'
 import { parseRSMResponse } from '../../utils/rsm'
 import {
-  findNewestMessage,
-  buildCatchUpStartTime,
+  selectCatchUpQuery,
   isConnectionError,
   MAM_CATCHUP_FORWARD_MAX,
   MAM_CATCHUP_BACKWARD_MAX,
   MAM_CACHE_LOAD_LIMIT,
   MAM_ROOM_FORWARD_MAX_PAGES,
+  MAM_ROOM_FORWARD_MAX_PAGES_MANUAL,
 } from '../../utils/mamCatchUpUtils'
 import {
   NS_MAM,
@@ -175,16 +175,24 @@ export class MAM extends BaseModule {
    * @returns Query result with messages, completion status, and pagination info
    */
   async queryArchive(options: MAMQueryOptions): Promise<MAMResult> {
-    const { with: withJid, max = 50, before = '', start, end } = options
+    const { with: withJid, max = 50, before = '', start, end, maxAutoPages: maxAutoPagesOpt } = options
     const conversationId = getBareJid(withJid)
     const mamStart = Date.now()
 
+    // Opt-in forward catch-up: paginate OLDEST-first via the `after` cursor to
+    // completion (parity with rooms). Only when a caller explicitly passes
+    // maxAutoPages alongside `start`; every other caller keeps the default
+    // single-page, newest-first, skip-non-displayable behavior.
+    const isForwardPaginate = !!start && maxAutoPagesOpt !== undefined && maxAutoPagesOpt > 0
+
     // Track total messages across automatic pagination
     const allMessages: Message[] = []
-    let currentBefore = before
+    // Forward pagination ignores `before` (oldest-first from `start`); backward keeps it.
+    let currentBefore = isForwardPaginate ? undefined : before
+    let currentAfter: string | undefined
     let isComplete = false
     let lastRsm: RSMResponse = {}
-    const maxAutoPages = 5 // Limit automatic pagination to avoid infinite loops
+    const maxAutoPages = isForwardPaginate ? maxAutoPagesOpt : 5 // cap to avoid infinite loops
 
     this.deps.emitSDK('chat:mam-loading', { conversationId, isLoading: true })
 
@@ -206,7 +214,7 @@ export class MAM extends BaseModule {
           formFields.push(xml('field', { var: 'end' }, xml('value', {}, end)))
         }
 
-        const iq = this.buildMAMQuery(queryId, formFields, max, currentBefore)
+        const iq = this.buildMAMQuery(queryId, formFields, max, currentBefore, undefined, currentAfter)
 
         const collectedMessages: Message[] = []
         const modifications: MAMModifications = { retractions: [], corrections: [], fastenings: [], reactions: [] }
@@ -259,22 +267,31 @@ export class MAM extends BaseModule {
           isComplete = complete
           lastRsm = rsm
 
-          // If we got displayable messages or archive is complete, stop paginating
-          if (collectedMessages.length > 0 || complete) {
-            break
-          }
-
-          // No displayable messages but archive has more - continue with next page
-          // Use the 'first' ID as the 'before' cursor for backward pagination
-          if (rsm.first) {
-            currentBefore = rsm.first
-            this.deps.emitSDK('console:event', {
-              message: `Page ${page + 1} had no displayable messages, fetching older...`,
-              category: 'sm',
-            })
+          if (isForwardPaginate) {
+            // Forward catch-up: accumulate every page, advance via `after` until complete.
+            if (complete) break
+            if (rsm.last) {
+              currentAfter = rsm.last
+            } else {
+              break
+            }
           } else {
-            // No pagination cursor available, stop
-            break
+            // If we got displayable messages or archive is complete, stop paginating
+            if (collectedMessages.length > 0 || complete) {
+              break
+            }
+            // No displayable messages but archive has more - continue with next page
+            // Use the 'first' ID as the 'before' cursor for backward pagination
+            if (rsm.first) {
+              currentBefore = rsm.first
+              this.deps.emitSDK('console:event', {
+                message: `Page ${page + 1} had no displayable messages, fetching older...`,
+                category: 'sm',
+              })
+            } else {
+              // No pagination cursor available, stop
+              break
+            }
           }
         } finally {
           unregister()
@@ -295,6 +312,16 @@ export class MAM extends BaseModule {
         complete: isComplete,
         direction,
       })
+
+      // Surface unresolved gaps for diagnosis (parity with rooms): a forward
+      // catch-up that ends without reaching live means a hole remains.
+      if (isForwardPaginate && !isComplete) {
+        this.deps.emitSDK('console:event', {
+          message: `Conversation catch-up incomplete for ${conversationId} — gap remains after ${allMessages.length} msg(s)`,
+          category: 'sm',
+        })
+      }
+
       return { messages: allMessages, complete: isComplete, rsm: lastRsm }
     } catch (error) {
       const msg = error instanceof Error ? error.message : 'Unknown error'
@@ -320,14 +347,16 @@ export class MAM extends BaseModule {
    * @returns Query result with messages, completion status, and pagination info
    */
   async queryRoomArchive(options: RoomMAMQueryOptions): Promise<RoomMAMResult> {
-    const { roomJid, max = 50, before, after, start } = options
+    const { roomJid, max = 50, before, after, start, preserveGapMarker, maxAutoPages: maxAutoPagesOpt } = options
     const roomMamStart = Date.now()
     const isForward = !!start
     const roomDirection = isForward ? 'forward' : 'backward'
 
     // For forward catch-up queries, auto-paginate to retrieve all missed messages.
     // Backward queries (scroll-up) remain single-page — the caller controls pagination.
-    const maxAutoPages = isForward ? MAM_ROOM_FORWARD_MAX_PAGES : 1
+    // User-initiated repair passes a higher cap (maxAutoPagesOpt) so it fills large
+    // gaps to completion instead of stopping at the background limit.
+    const maxAutoPages = isForward ? (maxAutoPagesOpt ?? MAM_ROOM_FORWARD_MAX_PAGES) : 1
     const allMessages: RoomMessage[] = []
     let isComplete = false
     let lastRsm: RSMResponse = {}
@@ -411,6 +440,7 @@ export class MAM extends BaseModule {
             rsm,
             complete,
             direction,
+            preserveGapMarker,
           })
 
           allMessages.push(...collectedMessages)
@@ -435,6 +465,16 @@ export class MAM extends BaseModule {
       }
 
       logInfo(`Room MAM result: ${roomJid} → ${allMessages.length} msg(s), complete=${isComplete}, ${Date.now() - roomMamStart}ms`)
+
+      // Surface unresolved gaps for diagnosis: a forward catch-up that ends without
+      // reaching live (complete=false) means a hole remains. Visible in the in-app
+      // console so we can measure gap prevalence before investing in range tracking.
+      if (isForward && !isComplete) {
+        this.deps.emitSDK('console:event', {
+          message: `Room catch-up incomplete for ${roomJid} — gap remains after ${allMessages.length} msg(s)`,
+          category: 'sm',
+        })
+      }
 
       return { messages: allMessages, complete: isComplete, rsm: lastRsm }
     } catch (error) {
@@ -844,9 +884,11 @@ export class MAM extends BaseModule {
    * @param options - Optional configuration
    * @param options.concurrency - Maximum parallel requests (default: 2)
    * @param options.exclude - Conversation ID to skip (e.g., the active conversation already handled by side effects)
+   * @param options.sessionStartTime - Epoch ms of the current fresh session; forward cursor
+   *   excludes messages received this session so a live message can't poison it (see Bug A).
    */
-  async catchUpAllConversations(options: { concurrency?: number; exclude?: string | null } = {}): Promise<void> {
-    const { concurrency = 2, exclude } = options
+  async catchUpAllConversations(options: { concurrency?: number; exclude?: string | null; sessionStartTime?: number } = {}): Promise<void> {
+    const { concurrency = 2, exclude, sessionStartTime } = options
     let conversations = this.deps.stores?.chat.getAllConversations() || []
     if (exclude) {
       conversations = conversations.filter((c) => c.id !== exclude)
@@ -876,23 +918,17 @@ export class MAM extends BaseModule {
           // Re-read messages after cache load (store was mutated)
           const updatedConv = this.deps.stores?.chat.getAllConversations()?.find(c => c.id === conv.id)
           const messages = updatedConv?.messages || conv.messages || []
-          const newestMessage = findNewestMessage(messages)
 
-          if (newestMessage?.timestamp) {
-            // Forward query from the last known message
-            await this.queryArchive({
-              with: conv.id,
-              start: buildCatchUpStartTime(newestMessage.timestamp),
-              max: MAM_CATCHUP_FORWARD_MAX,
-            })
-          } else {
-            // No messages (empty) — fetch latest from MAM
-            await this.queryArchive({
-              with: conv.id,
-              before: '',
-              max: MAM_CATCHUP_BACKWARD_MAX,
-            })
-          }
+          // Shared cursor policy (same as rooms) — forward from the newest
+          // pre-session message, else fetch latest. Forward catch-up paginates
+          // oldest-first to completion (maxAutoPages), matching rooms.
+          const q = selectCatchUpQuery(messages, sessionStartTime)
+          await this.queryArchive({
+            with: conv.id,
+            ...q,
+            max: q.start ? MAM_CATCHUP_FORWARD_MAX : MAM_CATCHUP_BACKWARD_MAX,
+            ...(q.start ? { maxAutoPages: MAM_ROOM_FORWARD_MAX_PAGES } : {}),
+          })
         } catch (_error) {
           // Silently ignore — individual failures shouldn't affect others
         }
@@ -985,9 +1021,13 @@ export class MAM extends BaseModule {
    * @param options - Optional configuration
    * @param options.concurrency - Maximum parallel requests (default: 2)
    * @param options.exclude - Room JID to skip (e.g., the active room already handled by side effects)
+   * @param options.sessionStartTime - Epoch ms when the current session connected. When
+   *   provided, the forward cursor is the newest message *before* this time, so a live
+   *   message arriving during the catch-up window can't poison the cursor and silently
+   *   skip the offline gap. Omit to fall back to the global newest message.
    */
-  async catchUpAllRooms(options: { concurrency?: number; exclude?: string | null } = {}): Promise<void> {
-    const { concurrency = 2, exclude } = options
+  async catchUpAllRooms(options: { concurrency?: number; exclude?: string | null; sessionStartTime?: number } = {}): Promise<void> {
+    const { concurrency = 2, exclude, sessionStartTime } = options
     const joinedRooms = this.deps.stores?.room.joinedRooms() || []
 
     // Filter for MAM-enabled, non-Quick Chat rooms (and exclude active room if specified)
@@ -1005,34 +1045,7 @@ export class MAM extends BaseModule {
       mamRooms,
       async (room) => {
         try {
-          if (this.deps.stores?.connection.getStatus() !== 'online') return
-
-          // Load IndexedDB cache first so we know the newest cached message
-          // and can do a proper forward catch-up instead of fetching only latest.
-          // Without this, room.messages is empty after app restart (runtime-only),
-          // causing a backward "before:''" query that creates gaps with old cache.
-          await this.deps.stores?.room.loadMessagesFromCache(room.jid, { limit: MAM_CACHE_LOAD_LIMIT })
-
-          // Re-read room after cache load (store was mutated)
-          const updatedRoom = this.deps.stores?.room.getRoom(room.jid)
-          const messages = updatedRoom?.messages || []
-          const newestMessage = findNewestMessage(messages)
-
-          if (newestMessage?.timestamp) {
-            // Forward query from the last known message
-            await this.queryRoomArchive({
-              roomJid: room.jid,
-              start: buildCatchUpStartTime(newestMessage.timestamp),
-              max: MAM_CATCHUP_FORWARD_MAX,
-            })
-          } else {
-            // No messages (empty) — fetch latest from MAM
-            await this.queryRoomArchive({
-              roomJid: room.jid,
-              before: '',
-              max: MAM_CATCHUP_BACKWARD_MAX,
-            })
-          }
+          await this.catchUpRoom(room.jid, sessionStartTime)
         } catch (_error) {
           // Silently ignore — individual failures shouldn't affect others
         }
@@ -1044,20 +1057,59 @@ export class MAM extends BaseModule {
   }
 
   /**
+   * Forward catch-up for a single joined room (cache-aware, shared cursor policy).
+   *
+   * Extracted so both the bulk `catchUpAllRooms()` pass and the late-MAM retry
+   * (a room whose disco resolves `supportsMAM` AFTER the initial background pass)
+   * use identical logic. The caller is responsible for filtering (joined, MAM,
+   * non-Quick-Chat, not the active room).
+   *
+   * @param roomJid - Room JID to catch up
+   * @param sessionStartTime - Epoch ms of the current session; forward cursor
+   *   excludes messages received this session (see `selectCatchUpQuery`).
+   */
+  async catchUpRoom(roomJid: string, sessionStartTime?: number): Promise<void> {
+    if (this.deps.stores?.connection.getStatus() !== 'online') return
+
+    // Load IndexedDB cache first so we know the newest cached message and can do a
+    // proper forward catch-up instead of fetching only latest. Without this,
+    // room.messages is empty after app restart (runtime-only), causing a backward
+    // "before:''" query that creates gaps with old cache.
+    await this.deps.stores?.room.loadMessagesFromCache(roomJid, { limit: MAM_CACHE_LOAD_LIMIT })
+
+    // Re-read room after cache load (store was mutated)
+    const updatedRoom = this.deps.stores?.room.getRoom(roomJid)
+    const messages = updatedRoom?.messages || []
+    // Shared cursor policy: forward from the newest pre-session message (so a live
+    // message in the catch-up window can't poison the cursor), else fetch latest.
+    const q = selectCatchUpQuery(messages, sessionStartTime)
+    await this.queryRoomArchive({
+      roomJid,
+      ...q,
+      max: q.start ? MAM_CATCHUP_FORWARD_MAX : MAM_CATCHUP_BACKWARD_MAX,
+    })
+  }
+
+  /**
    * Force a full MAM catch-up for all joined rooms over a given time window.
    *
    * Unlike `catchUpAllRooms()` which starts from the newest cached message,
-   * this method queries from a fixed start date (default: 7 days ago) to
+   * this method queries from a fixed start date (default: 45 days ago) to
    * fill any gaps left by previous incomplete catch-ups. The store's merge
    * logic deduplicates messages that already exist.
    *
-   * Intended for manual use via a UI action (e.g., sidebar menu item).
+   * Manual recovery tool for repairing a local archive (sidebar "Catch up all
+   * rooms"); expected to be removed once catch-up is proven reliable. Because it
+   * is a *bounded* repair (a fixed window, not the contiguous edge), it sets
+   * `preserveGapMarker` so a windowed completion can't hide a real gap older than
+   * the window or plant a spurious one inside it. The 45-day default covers a
+   * realistic "app closed for ~a month" absence.
    *
-   * @param options.days - Number of days to catch up (default: 7)
+   * @param options.days - Number of days to catch up (default: 45)
    * @param options.concurrency - Max concurrent MAM queries (default: 2)
    */
   async forceCatchUpAllRooms(options: { days?: number; concurrency?: number } = {}): Promise<void> {
-    const { days = 7, concurrency = 2 } = options
+    const { days = 45, concurrency = 2 } = options
     const joinedRooms = this.deps.stores?.room.joinedRooms() || []
     const mamRooms = joinedRooms.filter((r) => r.supportsMAM && !r.isQuickChat)
     if (mamRooms.length === 0) return
@@ -1080,6 +1132,8 @@ export class MAM extends BaseModule {
             roomJid: room.jid,
             start,
             max: MAM_CATCHUP_FORWARD_MAX,
+            maxAutoPages: MAM_ROOM_FORWARD_MAX_PAGES_MANUAL,
+            preserveGapMarker: true,
           })
         } catch (_error) {
           // Silently ignore — individual failures shouldn't affect others

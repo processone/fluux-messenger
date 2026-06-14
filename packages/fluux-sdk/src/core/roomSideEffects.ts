@@ -19,8 +19,7 @@ import type { SideEffectsOptions } from './chatSideEffects'
 import { roomStore, connectionStore } from '../stores'
 import { logInfo } from './logger'
 import {
-  findNewestMessage,
-  buildCatchUpStartTime,
+  selectCatchUpQuery,
   isConnectionError,
   MAM_CATCHUP_FORWARD_MAX,
   MAM_CATCHUP_BACKWARD_MAX,
@@ -46,6 +45,11 @@ export function setupRoomSideEffects(
 
   // Track whether we've initiated a fetch for each room
   const fetchInitiated = new Set<string>()
+
+  // Epoch ms of the current fresh session's connection (set on 'online'). Used as
+  // the forward catch-up cursor boundary so a live message arriving during catch-up
+  // can't poison the cursor and silently skip the offline gap.
+  let sessionStartTime: number | undefined
 
   /**
    * Triggers MAM fetch for the active room if needed (catchup).
@@ -110,23 +114,14 @@ export function setupRoomSideEffects(
       // Re-read room after cache load (store was mutated)
       const roomAfterCache = roomStore.getState().rooms.get(roomJid)
       const messages = roomAfterCache?.messages || []
-      const newestMessage = findNewestMessage(messages)
-
-      if (newestMessage?.timestamp) {
-        // Query for messages AFTER the newest known message (catchup)
-        await client.chat.queryRoomMAM({
-          roomJid,
-          start: buildCatchUpStartTime(newestMessage.timestamp),
-          max: MAM_CATCHUP_FORWARD_MAX,
-        })
-      } else {
-        // No cached messages - fetch latest
-        await client.chat.queryRoomMAM({
-          roomJid,
-          before: '', // Empty = get latest
-          max: MAM_CATCHUP_BACKWARD_MAX,
-        })
-      }
+      // Shared cursor policy: forward from the newest pre-session message (so a
+      // live message in the catch-up window can't poison the cursor), else latest.
+      const q = selectCatchUpQuery(messages, sessionStartTime)
+      await client.chat.queryRoomMAM({
+        roomJid,
+        ...q,
+        max: q.start ? MAM_CATCHUP_FORWARD_MAX : MAM_CATCHUP_BACKWARD_MAX,
+      })
       logInfo('Room: MAM catch-up complete')
     } catch (error) {
       // Allow backup handlers (room:joined, supportsMAM watcher) to retry
@@ -191,6 +186,10 @@ export function setupRoomSideEffects(
   // Fresh session: catch up MAM for the active room.
   // 'online' fires only on fresh sessions (not SM resumption).
   const unsubscribeOnline = client.on('online', () => {
+    // Record the session start before any catch-up so the forward cursor excludes
+    // live messages that arrive after reconnect (silent-gap fix).
+    sessionStartTime = Date.now()
+
     const activeRoomJid = roomStore.getState().activeRoomJid
     if (activeRoomJid) {
       if (debug) console.log('[SideEffects] Room: Fresh session, catching up active room', activeRoomJid)

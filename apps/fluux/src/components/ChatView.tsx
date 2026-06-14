@@ -42,7 +42,7 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
   const { t } = useTranslation()
   // Use useChatActive instead of useChat to avoid subscribing to the conversation list.
   // This prevents re-renders during background MAM sync of other conversations.
-  const { activeConversation, activeMessages, activeTypingUsers, sendMessage, sendReaction, sendCorrection, retractMessage, retryMessage, sendChatState, isArchived, unarchiveConversation, setDraft, getDraft, clearDraft, activeAnimation, sendEasterEgg, clearAnimation, clearFirstNewMessageId, updateLastSeenMessageId, activeMAMState, fetchOlderHistory, targetMessageId, clearTargetMessageId } = useChatActive()
+  const { activeConversation, activeMessages, activeTypingUsers, sendMessage, sendReaction, sendCorrection, retractMessage, retryMessage, sendChatState, isArchived, unarchiveConversation, setDraft, getDraft, clearDraft, activeAnimation, sendEasterEgg, clearAnimation, clearFirstNewMessageId, updateLastSeenMessageId, activeMAMState, fetchOlderHistory, continueChatCatchUp, targetMessageId, clearTargetMessageId } = useChatActive()
   // Use useContactIdentities instead of useRoster() to avoid re-renders on
   // presence changes. ChatView only needs contact names and avatars for display.
   const contactsByJid = useContactIdentities()
@@ -450,6 +450,9 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
           onScrollToTop={fetchOlderHistory}
           isLoadingOlder={activeMAMState?.isLoading ?? false}
           isHistoryComplete={activeMAMState?.isHistoryComplete ?? false}
+          forwardGapTimestamp={activeMAMState?.forwardGapTimestamp}
+          onCatchUpHistory={continueChatCatchUp}
+          isCatchingUp={activeMAMState?.isLoading ?? false}
           // SDK auto-fetches cache + MAM in background, no blocking spinner needed
           isInitialLoading={false}
           highlightTerms={find.highlightTerms}
@@ -543,6 +546,9 @@ export const ChatMessageList = memo(function ChatMessageList({
   highlightTerms,
   currentMatchId,
   lastSentMessageId,
+  forwardGapTimestamp,
+  onCatchUpHistory,
+  isCatchingUp,
 }: {
   messages: Message[]
   contactsByJid: Map<string, ContactIdentity>
@@ -580,6 +586,9 @@ export const ChatMessageList = memo(function ChatMessageList({
   highlightTerms?: string[]
   currentMatchId?: string
   lastSentMessageId?: string | null
+  forwardGapTimestamp?: number
+  onCatchUpHistory?: () => void
+  isCatchingUp?: boolean
 }) {
   const { t } = useTranslation()
   const { formatTime, effectiveTimeFormat } = useTimeFormat()
@@ -648,6 +657,9 @@ export const ChatMessageList = memo(function ChatMessageList({
       onScrollToTop={onScrollToTop}
       isLoadingOlder={isLoadingOlder}
       isHistoryComplete={isHistoryComplete}
+      forwardGapTimestamp={forwardGapTimestamp}
+      onCatchUpHistory={onCatchUpHistory}
+      isCatchingUp={isCatchingUp}
       isLoading={isInitialLoading}
       loadingState={
         <div className="flex-1 flex items-center justify-center text-fluux-muted">

@@ -56,6 +56,14 @@ export interface MAMQueryOptions {
   start?: string
   /** End timestamp - only fetch messages before this time (ISO 8601 format) */
   end?: string
+  /**
+   * Opt-in forward auto-pagination for catch-up (parity with rooms). When set
+   * (with `start`), the query paginates OLDEST-first via the `after` cursor up to
+   * this many pages until `complete`, instead of the default single newest-first
+   * page. Omit for all other callers (targeted range / context fetch) to keep the
+   * existing single-page behavior.
+   */
+  maxAutoPages?: number
 }
 
 /**
@@ -88,6 +96,18 @@ export interface RoomMAMQueryOptions {
   after?: string
   /** Filter messages after this timestamp (ISO 8601 format) */
   start?: string
+  /**
+   * When true, the resulting merge leaves the forward gap marker untouched.
+   * Used by bounded "force repair" queries so a windowed completion can't hide
+   * a real gap older than the window (nor plant a spurious one inside it).
+   */
+  preserveGapMarker?: boolean
+  /**
+   * Max auto-pagination pages for a forward catch-up. Defaults to the background
+   * cap; user-initiated repair passes a higher value to paginate large gaps to
+   * completion. Ignored for backward (single-page) queries.
+   */
+  maxAutoPages?: number
 }
 
 /**

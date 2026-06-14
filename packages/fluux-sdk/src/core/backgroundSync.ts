@@ -55,6 +55,24 @@ export function setupBackgroundSyncSideEffects(
   let isFreshSession = false
   // Timer for delayed room catch-up (cleared on cleanup or disconnect)
   let roomCatchUpTimer: ReturnType<typeof setTimeout> | undefined
+  // Epoch ms of the current fresh session's connection. Used as the forward
+  // catch-up cursor boundary so live messages arriving during the 10s room
+  // catch-up window can't poison the cursor and silently skip the offline gap.
+  let sessionStartTime: number | undefined
+
+  // --- Late-MAM room retry (issue D) ---
+  // A room whose disco resolves supportsMAM AFTER the single 10s catch-up pass
+  // was previously dropped with no retry (only the ACTIVE room has a supportsMAM
+  // watcher in roomSideEffects). We track rooms already handled this session and,
+  // once the initial pass has run, catch up any non-active room that becomes
+  // MAM-ready afterwards.
+  const mamHandledRooms = new Set<string>()
+  let initialRoomPassDone = false
+
+  function resetRoomRetryState(): void {
+    mamHandledRooms.clear()
+    initialRoomPassDone = false
+  }
 
   // --- E2EE capability warm-up ---
 
@@ -167,7 +185,7 @@ export function setupBackgroundSyncSideEffects(
       try {
         // Stage 1: Conversation catch-up (skip active — handled by chatSideEffects)
         logInfo('Background sync: conversation catch-up')
-        await client.mam.catchUpAllConversations({ concurrency: 2, exclude: activeConversationId })
+        await client.mam.catchUpAllConversations({ concurrency: 2, exclude: activeConversationId, sessionStartTime })
 
         // Stage 2: Roster discovery (hourly cooldown)
         if (shouldDiscoverRoster()) {
@@ -193,10 +211,17 @@ export function setupBackgroundSyncSideEffects(
       void (async () => {
         try {
           logInfo('Background sync: room catch-up (delayed 10s)')
-          await client.mam.catchUpAllRooms({ concurrency: 2, exclude: activeRoomJid })
+          await client.mam.catchUpAllRooms({ concurrency: 2, exclude: activeRoomJid, sessionStartTime })
         } catch {
           // Silently ignore MAM catch-up errors
         }
+        // Record every room covered by this pass (MAM-ready now, plus the active
+        // room handled by roomSideEffects) so the late-MAM watcher only retries
+        // rooms whose support resolves AFTER this point (issue D).
+        for (const room of roomStore.getState().joinedRooms()) {
+          if (room.supportsMAM || room.jid === activeRoomJid) mamHandledRooms.add(room.jid)
+        }
+        initialRoomPassDone = true
         // Stage 5: Room member discovery (sequential, gentle on server)
         try {
           const joinedRooms = roomStore.getState().joinedRooms()
@@ -223,6 +248,8 @@ export function setupBackgroundSyncSideEffects(
   const unsubscribeOnline = client.on('online', () => {
     backgroundSyncDone = false
     isFreshSession = true
+    sessionStartTime = Date.now()
+    resetRoomRetryState()
 
     logInfo('Background sync: fresh session — checking MAM support')
 
@@ -256,12 +283,41 @@ export function setupBackgroundSyncSideEffects(
     (status) => {
       if (status !== 'online' && previousStatus === 'online') {
         isFreshSession = false
+        resetRoomRetryState()
         if (roomCatchUpTimer) {
           clearTimeout(roomCatchUpTimer)
           roomCatchUpTimer = undefined
         }
       }
       previousStatus = status
+    }
+  )
+
+  // Late-MAM room retry (issue D): catch up a non-active room whose disco resolves
+  // supportsMAM AFTER the initial 10s pass. Keyed on the set of MAM-ready, joined,
+  // non-Quick-Chat room JIDs so it only fires when that set actually changes.
+  const unsubscribeRoomMAM = roomStore.subscribe(
+    (state) =>
+      [...state.rooms.values()]
+        .filter((r) => r.supportsMAM && r.joined && !r.isQuickChat)
+        .map((r) => r.jid)
+        .sort()
+        .join(','),
+    () => {
+      // Only retry after the initial pass; before it, the pass will cover them.
+      if (!initialRoomPassDone || !isFreshSession) return
+      if (!client.isConnected()) return
+
+      const activeRoomJid = roomStore.getState().activeRoomJid
+      for (const room of roomStore.getState().joinedRooms()) {
+        if (!room.supportsMAM || room.isQuickChat) continue
+        if (mamHandledRooms.has(room.jid)) continue
+        mamHandledRooms.add(room.jid)
+        // The active room is handled by roomSideEffects' own supportsMAM watcher.
+        if (room.jid === activeRoomJid) continue
+        logInfo(`Background sync: late MAM-ready room — catching up ${room.jid}`)
+        void client.mam.catchUpRoom(room.jid, sessionStartTime)
+      }
     }
   )
 
@@ -309,6 +365,7 @@ export function setupBackgroundSyncSideEffects(
     unsubscribeResumed()
     unsubscribeConnection()
     unsubscribeServerInfo()
+    unsubscribeRoomMAM()
     unsubscribePluginRegistered()
     unsubscribeKeyUnlocked()
     if (roomCatchUpTimer) {

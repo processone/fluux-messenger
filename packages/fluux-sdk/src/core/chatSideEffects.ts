@@ -17,10 +17,10 @@ import { NS_MAM } from './namespaces'
 import { logInfo } from './logger'
 import { getDomain } from './jid'
 import {
-  findNewestMessage,
-  buildCatchUpStartTime,
+  selectCatchUpQuery,
   isConnectionError,
   MAM_CACHE_LOAD_LIMIT,
+  MAM_ROOM_FORWARD_MAX_PAGES,
 } from '../utils/mamCatchUpUtils'
 
 /**
@@ -50,6 +50,11 @@ export function setupChatSideEffects(
 
   // Track whether we've initiated a fetch for each conversation
   const fetchInitiated = new Set<string>()
+
+  // Epoch ms of the current fresh session's connection (set on 'online'). Forward
+  // catch-up cursor excludes messages received this session so a live message
+  // can't poison it and silently skip the offline gap (parity with rooms / Bug A).
+  let sessionStartTime: number | undefined
 
   /**
    * Triggers MAM fetch for the active conversation if needed.
@@ -97,14 +102,16 @@ export function setupChatSideEffects(
 
       // Re-read messages after cache load (store was mutated)
       const cachedMessages = chatStore.getState().messages.get(conversationId) || []
-      const newestMessage = findNewestMessage(cachedMessages)
 
-      const queryOptions: { with: string; start?: string } = { with: conversation.id }
-      if (newestMessage?.timestamp) {
-        queryOptions.start = buildCatchUpStartTime(newestMessage.timestamp)
-      }
-
-      await client.chat.queryMAM(queryOptions)
+      // Shared cursor policy (same as rooms): forward from the newest pre-session
+      // message, else fetch latest. Forward catch-up paginates oldest-first to
+      // completion (maxAutoPages), matching rooms.
+      const q = selectCatchUpQuery(cachedMessages, sessionStartTime)
+      await client.chat.queryMAM({
+        with: conversation.id,
+        ...q,
+        ...(q.start ? { maxAutoPages: MAM_ROOM_FORWARD_MAX_PAGES } : {}),
+      })
       logInfo('Chat: MAM sync complete')
     } catch (error) {
       // Allow retry on next conversation switch or reconnect
@@ -168,6 +175,7 @@ export function setupChatSideEffects(
   // 'online' fires only on fresh sessions (not SM resumption).
   const unsubscribeOnline = client.on('online', () => {
     isFreshSession = true
+    sessionStartTime = Date.now()
 
     const activeConversationId = chatStore.getState().activeConversationId
     if (activeConversationId) {

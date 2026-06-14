@@ -6,6 +6,7 @@ import { useXMPPContext } from '../provider'
 import type { Conversation, ChatStateNotification, FileAttachment, MAMQueryState, Message } from '../core'
 import { NS_MAM } from '../core/namespaces'
 import { createFetchOlderHistory, pickOldestArchiveId } from './shared'
+import { findContinueCatchUpCursor, buildCatchUpStartTime, MAM_CACHE_LOAD_LIMIT, MAM_ROOM_FORWARD_MAX_PAGES_MANUAL } from '../utils/mamCatchUpUtils'
 
 /**
  * Stable empty array references to prevent infinite re-renders.
@@ -124,6 +125,11 @@ export function useChatActive() {
     if (!s.activeConversationId) return undefined
     return s.mamQueryStates.get(s.activeConversationId)?.oldestFetchedId
   })
+  // Gap marker sourced from the PERSISTED conversationGaps (survives reload), parity with rooms.
+  const mamForwardGapTimestamp = useChatStore((s) => {
+    if (!s.activeConversationId) return undefined
+    return s.conversationGaps.get(s.activeConversationId)?.start
+  })
 
   const activeMAMState = useMemo((): MAMQueryState | null => {
     if (!activeConversationId) return null
@@ -133,9 +139,10 @@ export function useChatActive() {
       isHistoryComplete: mamIsHistoryComplete,
       isCaughtUpToLive: mamIsCaughtUpToLive,
       oldestFetchedId: mamOldestFetchedId,
+      forwardGapTimestamp: mamForwardGapTimestamp,
       error: null,
     }
-  }, [activeConversationId, mamIsLoading, mamHasQueried, mamIsHistoryComplete, mamIsCaughtUpToLive, mamOldestFetchedId])
+  }, [activeConversationId, mamIsLoading, mamHasQueried, mamIsHistoryComplete, mamIsCaughtUpToLive, mamOldestFetchedId, mamForwardGapTimestamp])
 
   // --- Actions (all stable callbacks) ---
 
@@ -328,6 +335,36 @@ export function useChatActive() {
     [client]
   )
 
+  // "Load missing messages": continue a forward catch-up from the recorded gap
+  // boundary (parity with rooms' continueRoomCatchUp). Paginates oldest-first to
+  // completion via the manual cap.
+  const continueChatCatchUp = useCallback(async () => {
+    const conversationId = chatStore.getState().activeConversationId
+    if (!conversationId) return
+    if (connectionStore.getState().status !== 'online') return
+
+    const mamState = chatStore.getState().getMAMQueryState(conversationId)
+    if (mamState.isLoading) return
+
+    chatStore.getState().setMAMLoading(conversationId, true)
+
+    try {
+      await chatStore.getState().loadMessagesFromCache(conversationId, { limit: MAM_CACHE_LOAD_LIMIT })
+      const messages = chatStore.getState().messages.get(conversationId) || []
+      const gapStart = chatStore.getState().conversationGaps.get(conversationId)?.start
+      const cursor = findContinueCatchUpCursor(messages, gapStart)
+      if (cursor?.timestamp) {
+        await client.chat.queryMAM({
+          with: conversationId,
+          start: buildCatchUpStartTime(cursor.timestamp),
+          maxAutoPages: MAM_ROOM_FORWARD_MAX_PAGES_MANUAL,
+        })
+      }
+    } catch {
+      chatStore.getState().setMAMLoading(conversationId, false)
+    }
+  }, [client])
+
   // --- Return ---
 
   const actions = useMemo(
@@ -355,6 +392,7 @@ export function useChatActive() {
       updateLastSeenMessageId,
       fetchHistory,
       fetchOlderHistory,
+      continueChatCatchUp,
     }),
     [
       sendMessage, setActiveConversation, addConversation, deleteConversation,
@@ -362,6 +400,7 @@ export function useChatActive() {
       sendChatState, sendReaction, sendCorrection, retractMessage, retryMessage,
       sendEasterEgg, clearAnimation, clearTargetMessageId, setDraft, getDraft, clearDraft,
       clearFirstNewMessageId, updateLastSeenMessageId, fetchHistory, fetchOlderHistory,
+      continueChatCatchUp,
     ]
   )
 
