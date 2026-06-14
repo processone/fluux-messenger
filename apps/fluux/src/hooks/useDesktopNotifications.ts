@@ -2,8 +2,11 @@ import { useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { rosterStore, usePresence } from '@fluux/sdk'
 import type { Conversation, Message, Room, RoomMessage } from '@fluux/sdk'
+import { invoke } from '@tauri-apps/api/core'
+import { listen } from '@tauri-apps/api/event'
 import { sendNotification, onAction } from '@tauri-apps/plugin-notification'
 import type { Options as NotificationOptions } from '@tauri-apps/plugin-notification'
+import { isMacOSDesktop } from '@/utils/tauriPlatform'
 import { useNotificationEvents } from './useNotificationEvents'
 import { useNavigateToTarget } from './useNavigateToTarget'
 import { useNotificationPermission, isTauri } from './useNotificationPermission'
@@ -11,6 +14,7 @@ import { getNotificationAvatarUrl } from '@/utils/notificationAvatar'
 import { formatLocalizedPreview } from '@/utils/messagePreviewText'
 import { notificationDebug } from '@/utils/notificationDebug'
 import { showWebNotification } from '@/utils/webNotification'
+import { routeNotificationTarget } from '@/utils/notificationRouting'
 
 /**
  * Hook to show desktop notifications for new messages and room mentions.
@@ -18,7 +22,7 @@ import { showWebNotification } from '@/utils/webNotification'
  * - Shows notification for messages in non-active conversations
  * - Shows notification for mentions in MUC rooms
  * - Clicking notification focuses the conversation/room and switches view
- * - Uses Tauri notification API with onAction() for click handling
+ * - macOS: posts natively (UNUserNotificationCenter), routes clicks via the 'notification-activated' event; mobile uses onAction()
  * - Falls back to web Notification API for non-Tauri environments
  */
 export function useDesktopNotifications(): void {
@@ -41,47 +45,67 @@ export function useDesktopNotifications(): void {
     presenceStatusRef.current = presenceStatus
   }, [presenceStatus])
 
-  // Handle notification clicks via Tauri onAction listener.
+  // Handle notification clicks.
   //
-  // onAction() subscribes through the plugin's `register_listener` command,
-  // which tauri-plugin-notification only implements on mobile (iOS/Android).
-  // On desktop that command is not registered, so calling it rejects with
-  // "Command plugin:notification|registerListener not allowed by ACL". Guard
-  // on the platform so we only subscribe where the command actually exists.
+  // Desktop (macOS native): the Rust delegate emits "notification-activated"
+  // and stashes a target for cold starts (drained on mount). Mobile: the
+  // plugin's onAction() is the click source — but registerListener only exists
+  // on iOS/Android, so guard it there (on desktop it rejects with
+  // "not allowed by ACL"). Web routes clicks in sw.ts and is untouched here.
   useEffect(() => {
     if (!isTauri) return
 
-    let unlisten: (() => void) | undefined
-    let cancelled = false
+    const route = (payload: unknown) => {
+      const p = (payload ?? {}) as { navType?: string; navTarget?: string }
+      routeNotificationTarget(p.navType, p.navTarget, {
+        navigateToConversation: navigateToConversationRef.current,
+        navigateToRoom: navigateToRoomRef.current,
+      })
+    }
 
+    let cancelled = false
+    let unlistenEvent: (() => void) | undefined
+    let unlistenMobile: (() => void) | undefined
+
+    // Desktop: Tauri event + cold-start drain. Register the listener, tell the
+    // native side it's ready, THEN drain any target stashed before readiness
+    // (cold start: the delegate fires before this effect mounts).
+    void listen('notification-activated', (e) => route(e.payload)).then((un) => {
+      if (cancelled) {
+        un()
+        return
+      }
+      unlistenEvent = un
+      void invoke('set_notification_listener_ready', { ready: true })
+        .then(() => invoke('take_pending_notification_target'))
+        .then((target) => {
+          if (!cancelled && target) route(target)
+        })
+        .catch(() => {
+          // Commands are macOS-only; absent elsewhere — ignore.
+        })
+    })
+
+    // Mobile: onAction (iOS/Android only).
     void (async () => {
       const { platform } = await import('@tauri-apps/plugin-os')
       const os = await platform()
-      if (os !== 'ios' && os !== 'android') return
-
+      if (cancelled || (os !== 'ios' && os !== 'android')) return
       const listener = await onAction((notification: NotificationOptions) => {
-        const navType = notification.extra?.navType as string | undefined
-        const navTarget = notification.extra?.navTarget as string | undefined
-        if (!navTarget) return
-
-        if (navType === 'room') {
-          navigateToRoomRef.current(navTarget)
-        } else {
-          navigateToConversationRef.current(navTarget)
-        }
+        route({
+          navType: notification.extra?.navType,
+          navTarget: notification.extra?.navTarget,
+        })
       })
-
-      // The component may have unmounted while we awaited the import/listener.
-      if (cancelled) {
-        void listener.unregister()
-      } else {
-        unlisten = listener.unregister
-      }
+      if (cancelled) void listener.unregister()
+      else unlistenMobile = listener.unregister
     })()
 
     return () => {
       cancelled = true
-      unlisten?.()
+      void invoke('set_notification_listener_ready', { ready: false }).catch(() => {})
+      unlistenEvent?.()
+      unlistenMobile?.()
     }
   }, [])
 
@@ -112,12 +136,22 @@ export function useDesktopNotifications(): void {
     const avatarUrl = await getNotificationAvatarUrl(contact?.avatar, contact?.avatarHash)
 
     if (isTauri) {
-      sendNotification({
-        title,
-        body,
-        attachments: avatarUrl ? [{ id: 'avatar', url: avatarUrl }] : undefined,
-        extra: { navType: 'conversation', navTarget: conv.id },
-      })
+      if (await isMacOSDesktop()) {
+        await invoke('post_notification', {
+          title,
+          body,
+          navType: 'conversation',
+          navTarget: conv.id,
+          avatarPath: avatarUrl?.startsWith('file://') ? avatarUrl.replace(/^file:\/\//, '') : null,
+        })
+      } else {
+        sendNotification({
+          title,
+          body,
+          attachments: avatarUrl ? [{ id: 'avatar', url: avatarUrl }] : undefined,
+          extra: { navType: 'conversation', navTarget: conv.id },
+        })
+      }
     } else {
       await showWebNotification(
         title,
@@ -158,12 +192,22 @@ export function useDesktopNotifications(): void {
     const avatarUrl = await getNotificationAvatarUrl(room.avatar, room.avatarHash)
 
     if (isTauri) {
-      sendNotification({
-        title,
-        body,
-        attachments: avatarUrl ? [{ id: 'avatar', url: avatarUrl }] : undefined,
-        extra: { navType: 'room', navTarget: room.jid },
-      })
+      if (await isMacOSDesktop()) {
+        await invoke('post_notification', {
+          title,
+          body,
+          navType: 'room',
+          navTarget: room.jid,
+          avatarPath: avatarUrl?.startsWith('file://') ? avatarUrl.replace(/^file:\/\//, '') : null,
+        })
+      } else {
+        sendNotification({
+          title,
+          body,
+          attachments: avatarUrl ? [{ id: 'avatar', url: avatarUrl }] : undefined,
+          extra: { navType: 'room', navTarget: room.jid },
+        })
+      }
     } else {
       await showWebNotification(
         title,

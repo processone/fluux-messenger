@@ -201,6 +201,7 @@ mod openpgp;
 mod openpgp_backup;
 mod openpgp_export;
 mod openpgp_storage;
+mod notifications;
 
 #[cfg(target_os = "macos")]
 mod idle {
@@ -1268,7 +1269,17 @@ fn main() {
             openpgp::openpgp_backup_import,
             openpgp::openpgp_backup_import_all,
             openpgp::openpgp_backup_import_selected,
-            openpgp::openpgp_rotate_encryption_subkey
+            openpgp::openpgp_rotate_encryption_subkey,
+            #[cfg(target_os = "macos")]
+            notifications::post_notification,
+            #[cfg(target_os = "macos")]
+            notifications::notification_permission_state,
+            #[cfg(target_os = "macos")]
+            notifications::request_notification_permission,
+            #[cfg(target_os = "macos")]
+            notifications::take_pending_notification_target,
+            #[cfg(target_os = "macos")]
+            notifications::set_notification_listener_ready
         ])
         .on_page_load(move |webview, payload| {
             // Always inject console-forwarding script so SDK diagnostic logs
@@ -1357,6 +1368,10 @@ fn main() {
             }
         })
         .setup(move |app| {
+            // Wire up native notification backends (macOS: request auth now;
+            // the delegate / click routing lands in a later task).
+            notifications::setup(app.handle());
+
             // OpenPGP key storage needs the per-user app data dir. Resolve
             // it here (inside setup, where `app.path()` is available) and
             // hand the state to the Tauri managed-state system. Falling

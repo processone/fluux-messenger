@@ -33,16 +33,31 @@ export function useNotificationPermission(): React.RefObject<boolean> {
     const check = async () => {
       try {
         if (isTauri) {
-          let granted = await isPermissionGranted()
-          if (!granted) {
-            const permission = await requestPermission()
-            granted = permission === 'granted'
-          }
-          permissionGranted.current = granted
-          if (!granted) {
-            console.log(
-              '[Notifications] Permission not granted. On macOS, go to System Settings → Notifications to enable.',
-            )
+          const { isMacOSDesktop } = await import('@/utils/tauriPlatform')
+          if (await isMacOSDesktop()) {
+            const { invoke } = await import('@tauri-apps/api/core')
+            let state = await invoke<string>('notification_permission_state')
+            if (state === 'notdetermined') {
+              state = await invoke<string>('request_notification_permission')
+            }
+            permissionGranted.current = state === 'granted'
+            if (!permissionGranted.current) {
+              console.log(
+                '[Notifications] Permission not granted. On macOS, go to System Settings → Notifications to enable.',
+              )
+            }
+          } else {
+            let granted = await isPermissionGranted()
+            if (!granted) {
+              const permission = await requestPermission()
+              granted = permission === 'granted'
+            }
+            permissionGranted.current = granted
+            if (!granted) {
+              console.log(
+                '[Notifications] Permission not granted. On macOS, go to System Settings → Notifications to enable.',
+              )
+            }
           }
         } else {
           if (typeof Notification === 'undefined') return
