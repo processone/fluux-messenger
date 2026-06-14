@@ -101,6 +101,29 @@ describe('Avatar', () => {
       const presenceIndicator = container.querySelector('.rounded-full.border-2.absolute')
       expect(presenceIndicator).not.toBeInTheDocument()
     })
+
+    it('shows a grey (not transparent) pill when forceOffline is true', () => {
+      // While the app is reconnecting, ConversationList passes forceOffline.
+      // The pill must show the offline grey, never a transparent (border-only) pill.
+      const { container } = render(
+        <Avatar identifier="alice" name="Alice" presence="online" forceOffline />
+      )
+      const pill = container.querySelector('.rounded-full.border-2.absolute') as HTMLElement
+      expect(pill).toBeInTheDocument()
+      // Grey comes from the APP_OFFLINE_PRESENCE_COLOR class, not an inline color.
+      expect(pill).toHaveClass('bg-slate-500')
+      // A leftover inline backgroundColor: undefined rendered the pill transparent.
+      expect(pill.style.backgroundColor).toBe('')
+    })
+
+    it('does not grey out the pill when online (not forced offline)', () => {
+      const { container } = render(
+        <Avatar identifier="alice" name="Alice" presence="online" />
+      )
+      const pill = container.querySelector('.rounded-full.border-2.absolute') as HTMLElement
+      expect(pill).toBeInTheDocument()
+      expect(pill).not.toHaveClass('bg-slate-500')
+    })
   })
 
   describe('Sizes', () => {
