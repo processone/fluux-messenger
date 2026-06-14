@@ -1278,11 +1278,11 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
 
     let dataItems: PEPItem[]
     try {
-      dataItems = await ctx.xmpp.queryPEP(
+      // We publish the upper-case node (XEP-0373 §4.1); query that first, but
+      // stay case-tolerant for a pre-#528 lower-case node not yet re-published.
+      dataItems = await this.queryPublicKeyDataNodeTolerant(
         ctx.account.jid,
-        // Query the same upper-case node we publish (XEP-0373 §4.1).
-        publicKeyDataNodeFor(toXep0373Fingerprint(bundle.fingerprint)),
-        1,
+        toXep0373Fingerprint(bundle.fingerprint),
       )
     } catch {
       clearOwnKeyConflict()
@@ -1457,6 +1457,34 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     }
   }
 
+  /**
+   * Query a public-key data node tolerantly across fingerprint case.
+   *
+   * XEP-0373 §4.1 mandates upper-case, but a peer (or our own pre-#528 nodes)
+   * may have published a data node under a different case than it advertises.
+   * Per Postel's law we accept either: try the fingerprint verbatim first
+   * (the spec-compliant peer hits immediately, no extra round-trip), then the
+   * canonical upper- and lower-case variants. Returns the first non-empty
+   * result, or `[]` if none of the variants resolve.
+   */
+  private async queryPublicKeyDataNodeTolerant(
+    jid: BareJID,
+    fingerprint: string,
+  ): Promise<PEPItem[]> {
+    const ctx = this.requireCtx()
+    const canonical = toXep0373Fingerprint(fingerprint)
+    const variants = [fingerprint, canonical, canonical.toLowerCase()]
+    const tried = new Set<string>()
+    for (const variant of variants) {
+      const node = publicKeyDataNodeFor(variant)
+      if (tried.has(node)) continue
+      tried.add(node)
+      const items = await ctx.xmpp.queryPEP(jid, node, 1)
+      if (items.length > 0) return items
+    }
+    return []
+  }
+
   private async fetchAdvertisedKey(
     peer: BareJID,
     fingerprint: string,
@@ -1465,7 +1493,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     const ctx = this.requireCtx()
     const now = new Date().toISOString()
     try {
-      const items = await ctx.xmpp.queryPEP(peer, publicKeyDataNodeFor(fingerprint), 1)
+      const items = await this.queryPublicKeyDataNodeTolerant(peer, fingerprint)
       for (const item of items) {
         const armored = parsePublicKeyDataItem(item.payload)
         if (!armored) continue

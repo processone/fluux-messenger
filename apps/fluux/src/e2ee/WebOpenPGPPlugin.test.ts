@@ -1919,6 +1919,46 @@ describe('WebOpenPGPPlugin', () => {
       expect(decrypted.securityContext.notes).toBeUndefined()
     })
 
+    it('resolves a peer that advertises upper-case but published its data node lower-case (#528 tolerance)', async () => {
+      // Postel's law: even though XEP-0373 §4.1 mandates upper-case, a peer may
+      // advertise one case while having published its data node under the
+      // other. We must still find and cache the key.
+      const { shared, alice, bob } = await buildCrossPublishedPair()
+
+      // Re-advertise Bob's fingerprint in UPPER-case while his data node stays
+      // at the lower-case id seeded by publishKeyToSharedPep (the mismatch).
+      const upperFp = bob.bundle.fingerprint.toUpperCase()
+      expect(upperFp).not.toBe(bob.bundle.fingerprint) // sanity: there IS a case difference
+      shared.set(pepKey('bob@example.com', 'urn:xmpp:openpgp:0:public-keys'), [
+        {
+          id: 'current',
+          payload: {
+            name: 'public-keys-list',
+            attrs: { xmlns: 'urn:xmpp:openpgp:0' },
+            children: [
+              {
+                name: 'pubkey-metadata',
+                attrs: { 'v4-fingerprint': upperFp, date: '2024-01-01T00:00:00Z' },
+                children: [],
+              },
+            ],
+          },
+        },
+      ])
+      // Confirm the data node really only exists under the lower-case id.
+      expect(
+        shared.has(pepKey('bob@example.com', `urn:xmpp:openpgp:0:public-keys:${upperFp}`)),
+      ).toBe(false)
+      expect(
+        shared.has(pepKey('bob@example.com', `urn:xmpp:openpgp:0:public-keys:${bob.bundle.fingerprint}`)),
+      ).toBe(true)
+
+      const support = await alice.plugin.probePeer('bob@example.com')
+
+      expect(support.supported).toBe(true)
+      expect(support.fingerprint?.toLowerCase()).toBe(bob.bundle.fingerprint.toLowerCase())
+    })
+
     it('marks trust untrusted when the sender key is not cached at decrypt time', async () => {
       const { alice, bob } = await buildCrossPublishedPair()
 
