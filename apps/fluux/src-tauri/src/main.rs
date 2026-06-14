@@ -203,6 +203,10 @@ mod openpgp_export;
 mod openpgp_storage;
 mod notifications;
 
+// Linux tray-functionality detection (pure combiner compiled everywhere; the
+// DBus probe inside is Linux-only).
+mod linux_tray;
+
 #[cfg(target_os = "macos")]
 mod idle {
     use std::process::Command;
@@ -1587,6 +1591,10 @@ fn main() {
             // tray click events are not emitted, so left-click restore does not
             // reliably fire. Users should restore via the tray menu ("Show Fluux").
             // We keep the click handler below for parity/future backend support.
+            //
+            // When NO functional tray host is present at all (e.g. GNOME with no
+            // AppIndicator extension), hiding would strand the window — so the
+            // close handler below quits gracefully instead. See linux_tray.rs.
             #[cfg(target_os = "linux")]
             {
                 let show_item = MenuItem::with_id(app, "show", "Show Fluux", true, None::<&str>)?;
@@ -1600,7 +1608,7 @@ fn main() {
                 // Linux visibility reporting can be inconsistent across WMs.
                 let window_hidden_to_tray = Arc::new(AtomicBool::new(false));
 
-                let _tray = TrayIconBuilder::new()
+                let tray = TrayIconBuilder::new()
                     .icon(app.default_window_icon().unwrap().clone())
                     .menu(&menu)
                     .tooltip("Fluux Messenger")
@@ -1739,15 +1747,49 @@ fn main() {
                             }
                         }
                     })
-                    .build(app)?;
+                    .build(app);
+
+                // A tray-build failure must no longer abort startup — it flips
+                // us into quit-on-close mode (no tray means X must close the app).
+                let tray_built = tray.is_ok();
+                if let Err(error) = &tray {
+                    tracing::warn!(error = %error, "Linux: system tray failed to build; X-close will quit");
+                }
+                // Keep the icon alive for the app's lifetime when it built.
+                let _tray = tray.ok();
 
                 let main_window = app.get_webview_window("main").unwrap();
                 let window = main_window.clone();
                 let last_window_state_for_close = last_window_state.clone();
                 let window_hidden_to_tray_for_close = window_hidden_to_tray.clone();
+                let keepalive_flag_for_close = keepalive_flag_for_setup.clone();
+                let app_handle_for_close = app.handle().clone();
                 main_window.on_window_event(move |event| {
                     if let WindowEvent::CloseRequested { api, .. } = event {
                         api.prevent_close();
+
+                        // Only hide to tray when an icon will actually be shown
+                        // (and can restore the window). Otherwise quit, so the
+                        // window can never be stranded with no way back.
+                        let host_registered = linux_tray::status_notifier_host_registered();
+                        if !linux_tray::should_hide_to_tray(tray_built, host_registered) {
+                            tracing::info!(
+                                tray_built,
+                                host_registered,
+                                "Linux: no functional system tray — X-close quitting"
+                            );
+                            // Mirror the tray "Quit" menu item: stop keepalive,
+                            // let the frontend disconnect XMPP, then force-exit.
+                            keepalive_flag_for_close.store(false, Ordering::Relaxed);
+                            let _ = app_handle_for_close.emit("graceful-shutdown", ());
+                            let handle = app_handle_for_close.clone();
+                            std::thread::spawn(move || {
+                                std::thread::sleep(std::time::Duration::from_secs(2));
+                                handle.exit(0);
+                            });
+                            return;
+                        }
+
                         if let Ok(position) = window.outer_position() {
                             let maximized = window.is_maximized().unwrap_or(false);
                             let fullscreen = window.is_fullscreen().unwrap_or(false);
