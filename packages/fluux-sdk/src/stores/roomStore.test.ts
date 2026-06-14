@@ -108,6 +108,7 @@ describe('roomStore', () => {
       activeRoomJid: null,
       drafts: new Map(),
       mamQueryStates: new Map(),
+      roomGaps: new Map(),
     })
     vi.clearAllMocks()
   })
@@ -1722,6 +1723,68 @@ describe('roomStore', () => {
   })
 
   // ==================== Occupant Tests ====================
+
+  describe('mergeRoomMAMMessages gap tracking (persisted roomGaps)', () => {
+    const jid = 'room@conference.example.com'
+
+    it('records a persisted GapInterval when a forward catch-up ends incomplete', () => {
+      const recent: RoomMessage = {
+        type: 'groupchat', id: 'recent', roomJid: jid, from: `${jid}/b`, nick: 'b',
+        body: 'recent', timestamp: new Date('2026-06-10T00:00:00Z'), isOutgoing: false,
+      }
+      roomStore.getState().addRoom(createRoom(jid, { messages: [recent] }))
+
+      const fetched: RoomMessage = {
+        type: 'groupchat', id: 'edge', roomJid: jid, from: `${jid}/a`, nick: 'a',
+        body: 'edge', timestamp: new Date('2026-05-14T09:00:00Z'), isOutgoing: false,
+      }
+      // Forward catch-up truncated (complete=false) at the edge message.
+      roomStore.getState().mergeRoomMAMMessages(jid, [fetched], {}, false, 'forward')
+
+      const gap = roomStore.getState().roomGaps.get(jid)
+      expect(gap).toEqual({
+        start: new Date('2026-05-14T09:00:00Z').getTime(), // newest fetched
+        end: new Date('2026-06-10T00:00:00Z').getTime(),   // oldest held above the gap
+      })
+    })
+
+    it('clears the persisted gap when a forward catch-up completes', () => {
+      roomStore.getState().addRoom(createRoom(jid))
+      roomStore.setState({ roomGaps: new Map([[jid, { start: 1000, end: 5000 }]]) })
+
+      roomStore.getState().mergeRoomMAMMessages(jid, [], {}, true, 'forward')
+
+      expect(roomStore.getState().roomGaps.has(jid)).toBe(false)
+    })
+
+    it('leaves the persisted gap untouched when preserveGapMarker is set (bounded repair)', () => {
+      roomStore.getState().addRoom(createRoom(jid))
+      roomStore.setState({ roomGaps: new Map([[jid, { start: 1000, end: 5000 }]]) })
+
+      // A bounded force repair completes within its window — must not clear an older gap.
+      roomStore.getState().mergeRoomMAMMessages(jid, [], {}, true, 'forward', true)
+
+      expect(roomStore.getState().roomGaps.get(jid)).toEqual({ start: 1000, end: 5000 })
+    })
+
+    it('persists roomGaps to localStorage so the marker survives a reload', () => {
+      const recent: RoomMessage = {
+        type: 'groupchat', id: 'recent', roomJid: jid, from: `${jid}/b`, nick: 'b',
+        body: 'recent', timestamp: new Date('2026-06-10T00:00:00Z'), isOutgoing: false,
+      }
+      roomStore.getState().addRoom(createRoom(jid, { messages: [recent] }))
+      const fetched: RoomMessage = {
+        type: 'groupchat', id: 'edge', roomJid: jid, from: `${jid}/a`, nick: 'a',
+        body: 'edge', timestamp: new Date('2026-05-14T09:00:00Z'), isOutgoing: false,
+      }
+      roomStore.getState().mergeRoomMAMMessages(jid, [fetched], {}, false, 'forward')
+
+      const persisted = Object.values(localStorageMock._store).some(
+        (v) => typeof v === 'string' && v.includes('2026-05-14') === false && v.includes(String(new Date('2026-05-14T09:00:00Z').getTime())),
+      )
+      expect(persisted).toBe(true)
+    })
+  })
 
   describe('addOccupant', () => {
     it('should add an occupant to a room', () => {

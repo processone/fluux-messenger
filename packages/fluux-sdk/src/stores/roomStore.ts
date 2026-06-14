@@ -20,6 +20,7 @@ import * as searchIndex from '../utils/searchIndex'
 import type { GetMessagesOptions } from '../utils/messageCache'
 import * as mamState from './shared/mamState'
 import type { MAMQueryDirection } from './shared/mamState'
+import { computeGapEnd, syncRoomGap, serializeRoomGaps, deserializeRoomGaps, type GapInterval } from './shared/roomGap'
 import * as draftState from './shared/draftState'
 import { buildMessageKeySet, isMessageDuplicate, sortMessagesByTimestamp, trimMessages, prependOlderMessages, mergeAndProcessMessages } from './shared/messageArrayUtils'
 import { shouldUpdateLastMessage, findLastNonIgnoredMessage } from './shared/lastMessageUtils'
@@ -158,6 +159,36 @@ function saveDismissedPollsToStorage(dismissedPolls: Map<string, Set<string>>, j
 }
 
 /**
+ * localStorage persistence for room history gaps (`GapInterval` per room).
+ * Persisted separately (like drafts) so the "Load missing messages" marker
+ * survives a reload — the next session's catch-up cursor sits above the gap and
+ * would not re-detect it.
+ */
+const ROOM_GAPS_STORAGE_KEY_BASE = 'fluux-room-gaps'
+
+function getRoomGapsStorageKey(jid?: string | null): string {
+  return buildScopedStorageKey(ROOM_GAPS_STORAGE_KEY_BASE, jid)
+}
+
+function loadGapsFromStorage(jid?: string | null): Map<string, GapInterval> {
+  try {
+    const stored = localStorage.getItem(getRoomGapsStorageKey(jid))
+    if (stored) return deserializeRoomGaps(stored)
+  } catch {
+    // Ignore parse/storage errors
+  }
+  return new Map()
+}
+
+function saveGapsToStorage(gaps: Map<string, GapInterval>, jid?: string | null): void {
+  try {
+    localStorage.setItem(getRoomGapsStorageKey(jid), serializeRoomGaps(gaps))
+  } catch {
+    // Ignore storage errors (quota exceeded, etc.)
+  }
+}
+
+/**
  * Stable empty array references to prevent infinite re-renders.
  * When computed selectors return empty results, they should return these
  * constants instead of creating new [] instances each time.
@@ -250,6 +281,8 @@ export interface RoomState {
   dismissedPollIds: Map<string, Set<string>>
   // MAM query states per room (for rooms with MAM enabled)
   mamQueryStates: Map<string, MAMQueryState>
+  // Persisted history-gap intervals per room (survives reload; drives the gap marker)
+  roomGaps: Map<string, GapInterval>
   // Target message to scroll to after navigation (ephemeral)
   targetMessageId: string | null
 
@@ -372,7 +405,8 @@ function createEmptyRoomState(
   drafts: Map<string, string> = new Map(),
   votedPollIds: Map<string, Set<string>> = new Map(),
   dismissedPollIds: Map<string, Set<string>> = new Map(),
-): Pick<RoomState, 'rooms' | 'roomEntities' | 'roomMeta' | 'roomRuntime' | 'activeRoomJid' | 'activeAnimation' | 'drafts' | 'votedPollIds' | 'dismissedPollIds' | 'mamQueryStates' | 'targetMessageId'> {
+  roomGaps: Map<string, GapInterval> = new Map(),
+): Pick<RoomState, 'rooms' | 'roomEntities' | 'roomMeta' | 'roomRuntime' | 'activeRoomJid' | 'activeAnimation' | 'drafts' | 'votedPollIds' | 'dismissedPollIds' | 'mamQueryStates' | 'roomGaps' | 'targetMessageId'> {
   return {
     rooms: new Map(),
     roomEntities: new Map(),
@@ -384,13 +418,14 @@ function createEmptyRoomState(
     votedPollIds,
     dismissedPollIds,
     mamQueryStates: new Map(),
+    roomGaps,
     targetMessageId: null,
   }
 }
 
 export const roomStore = createStore<RoomState>()(
   subscribeWithSelector((set, get) => ({
-  ...createEmptyRoomState(loadDraftsFromStorage(), loadVotedPollsFromStorage(), loadDismissedPollsFromStorage()), // Restore drafts and poll state from localStorage
+  ...createEmptyRoomState(loadDraftsFromStorage(), loadVotedPollsFromStorage(), loadDismissedPollsFromStorage(), loadGapsFromStorage()), // Restore drafts, poll state, and history gaps from localStorage
 
   addRoom: (room) => {
     set((state) => {
@@ -890,7 +925,7 @@ export const roomStore = createStore<RoomState>()(
   getRoom: (roomJid) => get().rooms.get(roomJid),
 
   switchAccount: (jid) => {
-    set(createEmptyRoomState(loadDraftsFromStorage(jid), loadVotedPollsFromStorage(jid), loadDismissedPollsFromStorage(jid)))
+    set(createEmptyRoomState(loadDraftsFromStorage(jid), loadVotedPollsFromStorage(jid), loadDismissedPollsFromStorage(jid), loadGapsFromStorage(jid)))
   },
 
   reset: () => {
@@ -901,6 +936,7 @@ export const roomStore = createStore<RoomState>()(
     localStorage.removeItem(getRoomDraftsStorageKey())
     localStorage.removeItem(getRoomVotedPollsStorageKey())
     localStorage.removeItem(getRoomDismissedPollsStorageKey())
+    localStorage.removeItem(getRoomGapsStorageKey())
     set(createEmptyRoomState())
   },
 
@@ -1845,10 +1881,21 @@ export const roomStore = createStore<RoomState>()(
         preserveGapMarker
       )
 
+      // Mirror the (reliable, complete=false-driven) forward gap into the PERSISTED
+      // roomGaps map so the marker survives a reload. `end` = oldest message held
+      // above the gap. preserveGapMarker (bounded force repair) leaves it untouched.
+      let newGaps = state.roomGaps
+      if (direction === 'forward' && !preserveGapMarker) {
+        const gapStart = newStates.get(roomJid)?.forwardGapTimestamp
+        const gapEnd = gapStart !== undefined ? computeGapEnd(merged, gapStart) : undefined
+        newGaps = syncRoomGap(state.roomGaps, roomJid, gapStart, gapEnd)
+        if (newGaps !== state.roomGaps) saveGapsToStorage(newGaps)
+      }
+
       // If no new messages (all duplicates), only update MAM state - skip room messages
       // This prevents unnecessary re-renders when merging duplicates
       if (newFromMAM.length === 0) {
-        return { mamQueryStates: newStates }
+        return { mamQueryStates: newStates, roomGaps: newGaps }
       }
 
       // Persist only locally-persistable messages to IndexedDB
@@ -1879,7 +1926,7 @@ export const roomStore = createStore<RoomState>()(
         newMeta.set(roomJid, { ...existingMeta, lastMessage })
       }
 
-      return { rooms: newRooms, roomRuntime: newRuntime, roomMeta: newMeta, mamQueryStates: newStates }
+      return { rooms: newRooms, roomRuntime: newRuntime, roomMeta: newMeta, mamQueryStates: newStates, roomGaps: newGaps }
     })
   },
 

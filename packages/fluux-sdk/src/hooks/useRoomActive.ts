@@ -107,9 +107,11 @@ export function useRoomActive() {
     if (!s.activeRoomJid) return undefined
     return s.mamQueryStates.get(s.activeRoomJid)?.oldestFetchedId
   })
+  // Source the gap marker from the PERSISTED roomGaps (survives reload), not the
+  // ephemeral mamQueryStates.forwardGapTimestamp which is lost on reload.
   const mamForwardGapTimestamp = useRoomStore((s) => {
     if (!s.activeRoomJid) return undefined
-    return s.mamQueryStates.get(s.activeRoomJid)?.forwardGapTimestamp
+    return s.roomGaps.get(s.activeRoomJid)?.start
   })
 
   // Memoize the MAM state object to maintain stable reference
@@ -371,10 +373,11 @@ export function useRoomActive() {
       await roomStore.getState().loadMessagesFromCache(roomJid, { limit: MAM_CACHE_LOAD_LIMIT })
       const room = roomStore.getState().rooms.get(roomJid)
       const messages = room?.messages || []
-      // Continue from the recorded gap boundary so the forward query fills the HOLE.
-      // The global newest message sits AFTER the hole, so resuming from it would skip
-      // the gap entirely. Paginate with the manual cap to fill large gaps to completion.
-      const cursor = findContinueCatchUpCursor(messages, mamState.forwardGapTimestamp)
+      // Continue from the recorded (persisted) gap boundary so the forward query
+      // fills the HOLE. The global newest message sits AFTER the hole, so resuming
+      // from it would skip the gap. Paginate with the manual cap to fill it fully.
+      const gapStart = roomStore.getState().roomGaps.get(roomJid)?.start
+      const cursor = findContinueCatchUpCursor(messages, gapStart)
 
       if (cursor?.timestamp) {
         await client.chat.queryRoomMAM({
