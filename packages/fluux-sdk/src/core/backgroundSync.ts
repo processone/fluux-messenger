@@ -55,6 +55,10 @@ export function setupBackgroundSyncSideEffects(
   let isFreshSession = false
   // Timer for delayed room catch-up (cleared on cleanup or disconnect)
   let roomCatchUpTimer: ReturnType<typeof setTimeout> | undefined
+  // Epoch ms of the current fresh session's connection. Used as the forward
+  // catch-up cursor boundary so live messages arriving during the 10s room
+  // catch-up window can't poison the cursor and silently skip the offline gap.
+  let sessionStartTime: number | undefined
 
   // --- E2EE capability warm-up ---
 
@@ -193,7 +197,7 @@ export function setupBackgroundSyncSideEffects(
       void (async () => {
         try {
           logInfo('Background sync: room catch-up (delayed 10s)')
-          await client.mam.catchUpAllRooms({ concurrency: 2, exclude: activeRoomJid })
+          await client.mam.catchUpAllRooms({ concurrency: 2, exclude: activeRoomJid, sessionStartTime })
         } catch {
           // Silently ignore MAM catch-up errors
         }
@@ -223,6 +227,7 @@ export function setupBackgroundSyncSideEffects(
   const unsubscribeOnline = client.on('online', () => {
     backgroundSyncDone = false
     isFreshSession = true
+    sessionStartTime = Date.now()
 
     logInfo('Background sync: fresh session — checking MAM support')
 

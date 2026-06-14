@@ -54,6 +54,45 @@ export function findNewestMessage(messages: Array<{ timestamp?: Date }>): { time
 }
 
 /**
+ * Pick the forward catch-up cursor message: the newest message that predates
+ * the current session.
+ *
+ * Forward catch-up fetches everything *after* a cursor, so the cursor must be
+ * the end of the history we already hold contiguously — NOT the global newest
+ * message. After a long offline period the cache ends at the last pre-offline
+ * message, but a live message arriving in the catch-up window (or any message
+ * received this session) is newer. Using `findNewestMessage` there would start
+ * the forward query from "now", return zero results, complete immediately, and
+ * **silently skip the entire offline gap** (no gap marker, because a completed
+ * forward query clears `forwardGapTimestamp`).
+ *
+ * By excluding messages with `timestamp >= sessionStartTime`, the cursor stays
+ * on the pre-session edge, so the forward query fills the gap up to live.
+ *
+ * Robust to unsorted input: scans for the maximum timestamp strictly before
+ * `sessionStartTime`.
+ *
+ * @param messages - Candidate messages (cache + live), any order
+ * @param sessionStartTime - Epoch ms when the current session connected; messages
+ *   at or after this are treated as this-session traffic and excluded
+ * @returns The newest pre-session message, or undefined if none predate the session
+ */
+export function findCatchUpCursorMessage(
+  messages: Array<{ timestamp?: Date }>,
+  sessionStartTime: number
+): { timestamp: Date } | undefined {
+  let cursor: { timestamp: Date } | undefined
+  for (const message of messages) {
+    const ts = message.timestamp?.getTime()
+    if (ts === undefined || ts >= sessionStartTime) continue
+    if (!cursor || ts > cursor.timestamp.getTime()) {
+      cursor = message as { timestamp: Date }
+    }
+  }
+  return cursor
+}
+
+/**
  * Build a MAM `start` filter value from the newest cached message.
  *
  * Adds 1 ms to avoid re-fetching the cursor message itself. This

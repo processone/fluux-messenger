@@ -35,6 +35,7 @@ import { executeWithConcurrency } from '../../utils/concurrencyUtils'
 import { parseRSMResponse } from '../../utils/rsm'
 import {
   findNewestMessage,
+  findCatchUpCursorMessage,
   buildCatchUpStartTime,
   isConnectionError,
   MAM_CATCHUP_FORWARD_MAX,
@@ -985,9 +986,13 @@ export class MAM extends BaseModule {
    * @param options - Optional configuration
    * @param options.concurrency - Maximum parallel requests (default: 2)
    * @param options.exclude - Room JID to skip (e.g., the active room already handled by side effects)
+   * @param options.sessionStartTime - Epoch ms when the current session connected. When
+   *   provided, the forward cursor is the newest message *before* this time, so a live
+   *   message arriving during the catch-up window can't poison the cursor and silently
+   *   skip the offline gap. Omit to fall back to the global newest message.
    */
-  async catchUpAllRooms(options: { concurrency?: number; exclude?: string | null } = {}): Promise<void> {
-    const { concurrency = 2, exclude } = options
+  async catchUpAllRooms(options: { concurrency?: number; exclude?: string | null; sessionStartTime?: number } = {}): Promise<void> {
+    const { concurrency = 2, exclude, sessionStartTime } = options
     const joinedRooms = this.deps.stores?.room.joinedRooms() || []
 
     // Filter for MAM-enabled, non-Quick Chat rooms (and exclude active room if specified)
@@ -1016,17 +1021,23 @@ export class MAM extends BaseModule {
           // Re-read room after cache load (store was mutated)
           const updatedRoom = this.deps.stores?.room.getRoom(room.jid)
           const messages = updatedRoom?.messages || []
-          const newestMessage = findNewestMessage(messages)
+          // Use the newest PRE-session message as the forward cursor so a live
+          // message arriving during the catch-up window can't push the cursor to
+          // "now" and silently skip the offline gap. Falls back to the global
+          // newest when the session start is unknown.
+          const cursorMessage = sessionStartTime !== undefined
+            ? findCatchUpCursorMessage(messages, sessionStartTime)
+            : findNewestMessage(messages)
 
-          if (newestMessage?.timestamp) {
-            // Forward query from the last known message
+          if (cursorMessage?.timestamp) {
+            // Forward query from the last known contiguous message
             await this.queryRoomArchive({
               roomJid: room.jid,
-              start: buildCatchUpStartTime(newestMessage.timestamp),
+              start: buildCatchUpStartTime(cursorMessage.timestamp),
               max: MAM_CATCHUP_FORWARD_MAX,
             })
           } else {
-            // No messages (empty) — fetch latest from MAM
+            // No pre-session messages — fetch latest from MAM
             await this.queryRoomArchive({
               roomJid: room.jid,
               before: '',

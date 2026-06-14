@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   findNewestMessage,
+  findCatchUpCursorMessage,
   buildCatchUpStartTime,
   isConnectionError,
   MAM_CATCHUP_FORWARD_MAX,
@@ -57,6 +58,66 @@ describe('findNewestMessage', () => {
       { timestamp: t3 },
     ])
     expect(result?.timestamp).toBe(t3)
+  })
+})
+
+// ============================================================================
+// findCatchUpCursorMessage
+// ============================================================================
+
+describe('findCatchUpCursorMessage', () => {
+  const sessionStart = new Date('2026-06-14T12:00:00Z').getTime()
+
+  it('returns undefined for an empty array', () => {
+    expect(findCatchUpCursorMessage([], sessionStart)).toBeUndefined()
+  })
+
+  it('returns undefined when every message has no timestamp', () => {
+    expect(findCatchUpCursorMessage([{}, {}], sessionStart)).toBeUndefined()
+  })
+
+  it('returns undefined when every message is from the current session (>= sessionStart)', () => {
+    // Room first joined this session — only live messages, no prior history.
+    const messages = [
+      { timestamp: new Date('2026-06-14T12:00:05Z') },
+      { timestamp: new Date('2026-06-14T12:00:10Z') },
+    ]
+    expect(findCatchUpCursorMessage(messages, sessionStart)).toBeUndefined()
+  })
+
+  it('returns the global newest when all messages predate the session (clean cold-start)', () => {
+    const t1 = new Date('2026-05-01T00:00:00Z')
+    const t2 = new Date('2026-05-14T09:00:00Z') // newest, still a month before sessionStart
+    const messages = [{ timestamp: t1 }, { timestamp: t2 }]
+    expect(findCatchUpCursorMessage(messages, sessionStart)?.timestamp).toBe(t2)
+  })
+
+  it('ignores live messages received this session and returns the newest PRE-session message', () => {
+    // THE regression case: a live message lands in the catch-up window. The cursor
+    // must be the month-old pre-session message, NOT the live one — otherwise the
+    // forward query starts from "now" and silently skips the offline gap.
+    const monthOld = new Date('2026-05-14T09:00:00Z')
+    const liveDuringWindow = new Date('2026-06-14T12:00:05Z')
+    const messages = [
+      { timestamp: monthOld },
+      { timestamp: liveDuringWindow }, // arrived after reconnect — must be excluded
+    ]
+    expect(findCatchUpCursorMessage(messages, sessionStart)?.timestamp).toBe(monthOld)
+  })
+
+  it('excludes a message exactly at sessionStart (strictly before)', () => {
+    const atStart = new Date(sessionStart)
+    const before = new Date(sessionStart - 1000)
+    expect(findCatchUpCursorMessage([{ timestamp: before }, { timestamp: atStart }], sessionStart)?.timestamp).toBe(before)
+  })
+
+  it('returns the newest pre-session message regardless of array order', () => {
+    const older = new Date('2026-04-01T00:00:00Z')
+    const newerPre = new Date('2026-05-14T09:00:00Z')
+    const live = new Date('2026-06-14T12:30:00Z')
+    // Deliberately unsorted.
+    const messages = [{ timestamp: live }, { timestamp: older }, {}, { timestamp: newerPre }]
+    expect(findCatchUpCursorMessage(messages, sessionStart)?.timestamp).toBe(newerPre)
   })
 })
 

@@ -376,6 +376,58 @@ describe('setupRoomSideEffects', () => {
       loadSpy.mockRestore()
     })
 
+    it('uses the newest PRE-session message as the catch-up cursor, ignoring a live message from this session', async () => {
+      // Regression for the silent month-long gap: after a long offline period the
+      // active room's cache ends a month ago; a live message lands during catch-up.
+      // The forward cursor must be the month-old message, not the live one.
+      const monthOld = new Date(Date.now() - 30 * 86_400_000)
+      const liveThisSession = new Date(Date.now() + 60_000) // clearly after sessionStart
+
+      roomStore.getState().addRoom({
+        jid: 'room@conference.example.com',
+        name: 'Test Room',
+        nickname: 'testuser',
+        joined: true,
+        supportsMAM: true,
+        occupants: new Map(),
+        messages: [],
+        unreadCount: 0,
+        mentionsCount: 0,
+        typingUsers: new Set(),
+        isBookmarked: true,
+      })
+
+      roomStore.getState().setActiveRoom('room@conference.example.com')
+
+      const messages = [
+        { type: 'groupchat' as const, id: 'old', roomJid: 'room@conference.example.com', from: 'room@conference.example.com/alice', nick: 'alice', body: 'month-old', timestamp: monthOld, isOutgoing: false },
+        { type: 'groupchat' as const, id: 'live', roomJid: 'room@conference.example.com', from: 'room@conference.example.com/bob', nick: 'bob', body: 'live', timestamp: liveThisSession, isOutgoing: false },
+      ]
+      const loadSpy = vi.spyOn(roomStore.getState(), 'loadMessagesFromCache')
+        .mockImplementation(async (roomJid: string) => {
+          const room = roomStore.getState().rooms.get(roomJid)
+          if (room) roomStore.getState().updateRoom(roomJid, { messages })
+          return messages
+        })
+
+      connectionStore.getState().setStatus('disconnected')
+      cleanup = setupRoomSideEffects(mockClient)
+
+      simulateFreshSession(mockClient)
+
+      await vi.waitFor(() => {
+        expect(mockClient.chat.queryRoomMAM).toHaveBeenCalledWith(
+          expect.objectContaining({ roomJid: 'room@conference.example.com', start: expect.any(String) })
+        )
+      })
+
+      const call = (mockClient.chat.queryRoomMAM as ReturnType<typeof vi.fn>).mock.calls[0][0]
+      expect(call).not.toHaveProperty('before')
+      expect(new Date(call.start).getTime()).toBe(monthOld.getTime() + 1)
+
+      loadSpy.mockRestore()
+    })
+
     it('should use backward query (before) when cache is empty after reconnection', async () => {
       roomStore.getState().addRoom({
         jid: 'room@conference.example.com',

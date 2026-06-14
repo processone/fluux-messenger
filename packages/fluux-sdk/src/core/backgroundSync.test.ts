@@ -391,8 +391,10 @@ describe('setupBackgroundSyncSideEffects', () => {
       await vi.advanceTimersByTimeAsync(10_000)
 
       expect(mockClient.mam.catchUpAllRooms).toHaveBeenCalledTimes(1)
+      // Must pass the session-start time so the forward cursor excludes live
+      // messages that arrive during the 10s catch-up window (silent-gap fix).
       expect(mockClient.mam.catchUpAllRooms).toHaveBeenCalledWith(
-        expect.objectContaining({ concurrency: 2 })
+        expect.objectContaining({ concurrency: 2, sessionStartTime: expect.any(Number) })
       )
     })
 

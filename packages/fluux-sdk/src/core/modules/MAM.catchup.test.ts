@@ -651,6 +651,67 @@ describe('MAM Background Catch-Up', () => {
       })
     })
 
+    it('uses the newest PRE-session message as the forward cursor, ignoring a live message from this session', async () => {
+      // Regression for the silent month-long gap: a MUC-only user opens the app
+      // after a month. The cache ends a month ago; a live message lands in the
+      // catch-up window. The forward cursor must be the month-old message, NOT
+      // the live one — otherwise the query starts from "now", returns nothing,
+      // completes, and silently skips the entire offline gap.
+      await connectClient()
+
+      const monthOld = new Date('2026-05-14T09:00:00.000Z')
+      const liveThisSession = new Date('2026-06-14T12:00:05.000Z')
+      const sessionStartTime = new Date('2026-06-14T12:00:00.000Z').getTime()
+
+      const roomMessages = [
+        { type: 'groupchat', id: 'old', roomJid: 'room1@conference.example.com', from: 'room1@conference.example.com/a', body: 'old', timestamp: monthOld, isOutgoing: false, isDelayed: false },
+        { type: 'groupchat', id: 'live', roomJid: 'room1@conference.example.com', from: 'room1@conference.example.com/b', body: 'live', timestamp: liveThisSession, isOutgoing: false, isDelayed: false },
+      ]
+      vi.mocked(mockStores.room.joinedRooms).mockReturnValue([
+        { jid: 'room1@conference.example.com', supportsMAM: true, isQuickChat: false, joined: true, nickname: 'me', messages: roomMessages },
+      ] as any)
+      vi.mocked(mockStores.room.getRoom).mockReturnValue({
+        jid: 'room1@conference.example.com', nickname: 'me', messages: roomMessages,
+      } as any)
+
+      const querySpy = vi.spyOn(xmppClient.mam, 'queryRoomArchive').mockResolvedValue({ messages: [], complete: true, rsm: {} })
+
+      const catchUpPromise = xmppClient.mam.catchUpAllRooms({ sessionStartTime })
+      await waitForAsyncOps(20, 100)
+      await catchUpPromise
+
+      expect(querySpy).toHaveBeenCalledWith(expect.objectContaining({
+        roomJid: 'room1@conference.example.com',
+        start: '2026-05-14T09:00:00.001Z', // monthOld + 1ms — NOT liveThisSession + 1ms
+      }))
+    })
+
+    it('falls back to the global newest message when no sessionStartTime is given (backward compat)', async () => {
+      await connectClient()
+
+      const newest = new Date('2026-01-20T10:00:00.000Z')
+      const roomMessages = [
+        { type: 'groupchat', id: 'm1', roomJid: 'room1@conference.example.com', from: 'room1@conference.example.com/a', body: 'hi', timestamp: newest, isOutgoing: false, isDelayed: false },
+      ]
+      vi.mocked(mockStores.room.joinedRooms).mockReturnValue([
+        { jid: 'room1@conference.example.com', supportsMAM: true, isQuickChat: false, joined: true, nickname: 'me', messages: roomMessages },
+      ] as any)
+      vi.mocked(mockStores.room.getRoom).mockReturnValue({
+        jid: 'room1@conference.example.com', nickname: 'me', messages: roomMessages,
+      } as any)
+
+      const querySpy = vi.spyOn(xmppClient.mam, 'queryRoomArchive').mockResolvedValue({ messages: [], complete: true, rsm: {} })
+
+      const catchUpPromise = xmppClient.mam.catchUpAllRooms()
+      await waitForAsyncOps(20, 100)
+      await catchUpPromise
+
+      expect(querySpy).toHaveBeenCalledWith(expect.objectContaining({
+        roomJid: 'room1@conference.example.com',
+        start: '2026-01-20T10:00:00.001Z',
+      }))
+    })
+
     it('should skip excluded room', async () => {
       await connectClient()
 

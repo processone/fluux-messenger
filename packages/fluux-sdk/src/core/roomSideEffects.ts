@@ -20,6 +20,7 @@ import { roomStore, connectionStore } from '../stores'
 import { logInfo } from './logger'
 import {
   findNewestMessage,
+  findCatchUpCursorMessage,
   buildCatchUpStartTime,
   isConnectionError,
   MAM_CATCHUP_FORWARD_MAX,
@@ -46,6 +47,11 @@ export function setupRoomSideEffects(
 
   // Track whether we've initiated a fetch for each room
   const fetchInitiated = new Set<string>()
+
+  // Epoch ms of the current fresh session's connection (set on 'online'). Used as
+  // the forward catch-up cursor boundary so a live message arriving during catch-up
+  // can't poison the cursor and silently skip the offline gap.
+  let sessionStartTime: number | undefined
 
   /**
    * Triggers MAM fetch for the active room if needed (catchup).
@@ -110,17 +116,22 @@ export function setupRoomSideEffects(
       // Re-read room after cache load (store was mutated)
       const roomAfterCache = roomStore.getState().rooms.get(roomJid)
       const messages = roomAfterCache?.messages || []
-      const newestMessage = findNewestMessage(messages)
+      // Use the newest PRE-session message as the forward cursor so a live message
+      // arriving during catch-up can't push the cursor to "now" and silently skip
+      // the offline gap. Falls back to the global newest when session start is unknown.
+      const cursorMessage = sessionStartTime !== undefined
+        ? findCatchUpCursorMessage(messages, sessionStartTime)
+        : findNewestMessage(messages)
 
-      if (newestMessage?.timestamp) {
-        // Query for messages AFTER the newest known message (catchup)
+      if (cursorMessage?.timestamp) {
+        // Query for messages AFTER the newest known contiguous message (catchup)
         await client.chat.queryRoomMAM({
           roomJid,
-          start: buildCatchUpStartTime(newestMessage.timestamp),
+          start: buildCatchUpStartTime(cursorMessage.timestamp),
           max: MAM_CATCHUP_FORWARD_MAX,
         })
       } else {
-        // No cached messages - fetch latest
+        // No pre-session messages - fetch latest
         await client.chat.queryRoomMAM({
           roomJid,
           before: '', // Empty = get latest
@@ -191,6 +202,10 @@ export function setupRoomSideEffects(
   // Fresh session: catch up MAM for the active room.
   // 'online' fires only on fresh sessions (not SM resumption).
   const unsubscribeOnline = client.on('online', () => {
+    // Record the session start before any catch-up so the forward cursor excludes
+    // live messages that arrive after reconnect (silent-gap fix).
+    sessionStartTime = Date.now()
+
     const activeRoomJid = roomStore.getState().activeRoomJid
     if (activeRoomJid) {
       if (debug) console.log('[SideEffects] Room: Fresh session, catching up active room', activeRoomJid)
