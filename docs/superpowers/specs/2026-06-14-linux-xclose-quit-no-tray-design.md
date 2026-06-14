@@ -132,6 +132,25 @@ the probe must read property `IsStatusNotifierHostRegistered` on
 interface `org.kde.StatusNotifierWatcher`, object path
 `/StatusNotifierWatcher`, bus name `org.kde.StatusNotifierWatcher`.
 
+### No packaging-dependency changes
+
+zbus is **pure Rust** — it speaks the DBus wire protocol directly over the
+session-bus socket and does **not** link `libdbus-1` (unlike the `dbus` crate).
+Therefore:
+
+- No new build-time `-dev` system package is required (the `libdbus-1-dev`
+  already in CI's apt list is unrelated to zbus and is left untouched).
+- The binary gains no new shared-library linkage, so neither Tauri's
+  auto-detected deb/rpm depends nor the **manual** lists in
+  `tauri.conf.json` (`bundle.linux.deb.depends` /
+  `bundle.linux.rpm.depends`, currently `libayatana-appindicator3-1` /
+  `libappindicator-gtk3`) need a new entry. They stay as-is.
+
+We also deliberately do **not** add a hard dependency on a tray host: the
+feature exists precisely to degrade gracefully when no host is present, and if
+no session bus is running the probe returns `false` (→ quit), so there is no new
+runtime requirement.
+
 ## Testing
 
 - **Rust unit test** (`#[cfg(test)]` in `linux_tray.rs`) for
