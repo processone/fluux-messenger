@@ -20,6 +20,7 @@ import {
   xml,
   type PEPItem,
   type PluginContext,
+  type XMLElementData,
   type XMPPPrimitives,
 } from '@fluux/sdk'
 import { WebOpenPGPPlugin } from './WebOpenPGPPlugin'
@@ -333,6 +334,40 @@ describe('WebOpenPGPPlugin', () => {
       expect(bundle.fingerprint).toMatch(/^[a-f0-9]{40}$/)
       expect(bundle.publicArmored).toContain('BEGIN PGP PUBLIC KEY BLOCK')
       expect(bundle.keychainBacked).toBe(false)
+    })
+
+    it('publishes the own public-key node id and v4/v6-fingerprint in upper-case (XEP-0373 §4.1, issue #528)', async () => {
+      const shared: SharedPep = new Map()
+      setSessionPassphrase('hunter2-strong-passphrase')
+      const plugin = new TestableWebOpenPGPPlugin()
+      // init() → ensureIdentity() generates the key and publishes both PEP nodes.
+      await plugin.init(makeCtxWithWritablePep('alice@example.com', shared).ctx)
+      const bundle = await plugin.callEnsureKeyMaterial('alice@example.com')
+
+      // The internal bundle representation stays lower-case (openpgp.js form);
+      // only the wire form is upper-cased.
+      expect(bundle.fingerprint).toMatch(/^[a-f0-9]{40}$/)
+      const upper = bundle.fingerprint.toUpperCase()
+
+      // Metadata node: v4-fingerprint and v6-fingerprint must be upper-case hex.
+      const metaItems = shared.get(pepKey('alice@example.com', 'urn:xmpp:openpgp:0:public-keys'))
+      expect(metaItems).toBeDefined()
+      const pubkeyMeta = (metaItems![0].payload as XMLElementData).children.find(
+        (c): c is XMLElementData => typeof c !== 'string' && c.name === 'pubkey-metadata',
+      )
+      expect(pubkeyMeta?.attrs['v4-fingerprint']).toBe(upper)
+      expect(pubkeyMeta?.attrs['v6-fingerprint']).toBe(upper)
+      expect(pubkeyMeta?.attrs['v4-fingerprint']).toMatch(/^[A-F0-9]{40}$/)
+
+      // Data node id must use the same upper-case fingerprint, never the lower-case one.
+      expect(
+        shared.has(pepKey('alice@example.com', `urn:xmpp:openpgp:0:public-keys:${upper}`)),
+      ).toBe(true)
+      expect(
+        shared.has(
+          pepKey('alice@example.com', `urn:xmpp:openpgp:0:public-keys:${bundle.fingerprint}`),
+        ),
+      ).toBe(false)
     })
 
     it('does not generate or store a key when the server lacks PEP support', async () => {
@@ -1695,8 +1730,11 @@ describe('WebOpenPGPPlugin', () => {
       expect(result.fingerprint).not.toBe(oldFp2)
 
       // Step 5: the new public key was published — both data and metadata nodes.
+      // The data node id uses the XEP-0373 §4.1 upper-case fingerprint (issue #528).
       const publishedNodes = publishCalls.map((c) => c.node)
-      expect(publishedNodes).toContain(`urn:xmpp:openpgp:0:public-keys:${result.fingerprint}`)
+      expect(publishedNodes).toContain(
+        `urn:xmpp:openpgp:0:public-keys:${result.fingerprint.toUpperCase()}`,
+      )
       expect(publishedNodes).toContain('urn:xmpp:openpgp:0:public-keys')
     })
 

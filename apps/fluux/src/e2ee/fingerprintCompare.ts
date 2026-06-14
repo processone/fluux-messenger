@@ -23,3 +23,17 @@ export function normalizeFingerprint(fingerprint: string): string {
 export function fingerprintsEqual(a: string, b: string): boolean {
   return normalizeFingerprint(a) === normalizeFingerprint(b)
 }
+
+/**
+ * Canonical XEP-0373 wire form: strip whitespace and UPPER-case the hex.
+ *
+ * XEP-0373 §4.1 mandates that the OpenPGP v4 fingerprint string — used both as
+ * the `urn:xmpp:openpgp:0:public-keys:<FINGERPRINT>` data node id and as the
+ * `v4-fingerprint` metadata attribute — is "encoded as a hexadecimal string
+ * using upper case characters". openpgp.js (the web backend) emits lower-case,
+ * so own-key PEP publishing must canonicalise through this helper. Idempotent
+ * for the native Sequoia backend, which already emits upper-case.
+ */
+export function toXep0373Fingerprint(fingerprint: string): string {
+  return fingerprint.replace(/\s+/g, '').toUpperCase()
+}
