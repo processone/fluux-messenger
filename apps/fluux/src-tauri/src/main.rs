@@ -203,6 +203,10 @@ mod openpgp_export;
 mod openpgp_storage;
 mod notifications;
 
+// Linux tray-functionality detection (pure combiner compiled everywhere; the
+// DBus probe inside is Linux-only).
+mod linux_tray;
+
 #[cfg(target_os = "macos")]
 mod idle {
     use std::process::Command;

@@ -1795,6 +1795,7 @@ dependencies = [
  "user-idle",
  "webkit2gtk",
  "x11",
+ "zbus 5.15.0",
 ]
 
 [[package]]

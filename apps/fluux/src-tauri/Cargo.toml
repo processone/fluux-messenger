@@ -81,6 +81,10 @@ user-idle = "0.6"
 [target.'cfg(target_os = "linux")'.dependencies]
 ctor = "1.0"
 x11 = { version = "2", features = ["xlib", "xss"] }
+# Read the StatusNotifierWatcher DBus property that tells us whether a system
+# tray host will actually display our icon (see src/linux_tray.rs). Pure-Rust
+# DBus client — no system lib, no coupling to the pinned GTK/glib versions.
+zbus = "5"
 # Pinned to the exact version wry resolves so the `PlatformWebview::inner()`
 # type unifies (no second copy of the crate). `v2_32` enables
 # `WebsiteDataManagerExt::set_network_proxy_settings`, used to force the
