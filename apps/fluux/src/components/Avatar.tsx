@@ -261,8 +261,12 @@ export function Avatar({
     dnd: 'var(--fluux-presence-dnd)',
     offline: 'var(--fluux-presence-offline)',
   }
-  const presenceBgStyle = resolvedPresence
-    ? { backgroundColor: isOffline ? undefined : PRESENCE_CSS_VARS[resolvedPresence] }
+  // When offline (app reconnecting), let the className path apply the grey
+  // APP_OFFLINE_PRESENCE_COLOR instead of an inline color. A truthy style object
+  // with backgroundColor: undefined would suppress that class and leave the pill
+  // transparent (border-only).
+  const presenceBgStyle = resolvedPresence && !isOffline
+    ? { backgroundColor: PRESENCE_CSS_VARS[resolvedPresence] }
     : undefined
 
   // Track image load errors to fall back to letter display
