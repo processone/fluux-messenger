@@ -14,6 +14,7 @@ import {
   type MockXmppClient,
   type MockStoreBindings,
 } from '../test-utils'
+import { MAM_ROOM_FORWARD_MAX_PAGES_MANUAL } from '../../utils/mamCatchUpUtils'
 
 let mockXmppClientInstance: MockXmppClient
 
@@ -855,6 +856,25 @@ describe('MAM Background Catch-Up', () => {
       })
     })
 
+    it('paginates with the manual cap so the repair can fill large gaps to completion', async () => {
+      await connectClient()
+
+      vi.mocked(mockStores.room.joinedRooms).mockReturnValue([
+        { jid: 'room1@conference.example.com', supportsMAM: true, isQuickChat: false, joined: true, messages: [] },
+      ] as any)
+      vi.mocked(mockStores.room.getRoom).mockReturnValue({ nickname: 'me' } as any)
+
+      const querySpy = vi.spyOn(xmppClient.mam, 'queryRoomArchive').mockResolvedValue({ messages: [], complete: true, rsm: {} })
+
+      const catchUpPromise = xmppClient.mam.forceCatchUpAllRooms()
+      await waitForAsyncOps(20, 100)
+      await catchUpPromise
+
+      expect(querySpy).toHaveBeenCalledWith(expect.objectContaining({
+        maxAutoPages: MAM_ROOM_FORWARD_MAX_PAGES_MANUAL,
+      }))
+    })
+
     it('sets preserveGapMarker so the bounded repair never hides a real gap marker', async () => {
       await connectClient()
 
@@ -891,6 +911,48 @@ describe('MAM Background Catch-Up', () => {
         message: 'Force catch-up for 1 room(s) from last 3 days',
         category: 'sm',
       })
+    })
+  })
+
+  describe('forward catch-up gap logging', () => {
+    it('emits a console event when a forward catch-up ends incomplete (a gap remains)', async () => {
+      await connectClient()
+
+      vi.mocked(mockStores.room.getRoom).mockReturnValue({ nickname: 'me' } as any)
+      // complete=false, no rsm cursor → forward pagination stops with isComplete=false
+      mockXmppClientInstance.iqCaller.request.mockResolvedValue(createFinResponse(false))
+
+      const queryPromise = xmppClient.mam.queryRoomArchive({
+        roomJid: 'room1@conference.example.com',
+        start: '2026-05-01T00:00:00.000Z',
+        max: 100,
+      })
+      await waitForAsyncOps(20, 100)
+      await queryPromise
+
+      expect(emitSDKSpy).toHaveBeenCalledWith('console:event', expect.objectContaining({
+        message: expect.stringContaining('incomplete'),
+        category: 'sm',
+      }))
+    })
+
+    it('does NOT emit the incomplete-gap event when the forward catch-up completes', async () => {
+      await connectClient()
+
+      vi.mocked(mockStores.room.getRoom).mockReturnValue({ nickname: 'me' } as any)
+      mockXmppClientInstance.iqCaller.request.mockResolvedValue(createFinResponse(true))
+
+      const queryPromise = xmppClient.mam.queryRoomArchive({
+        roomJid: 'room1@conference.example.com',
+        start: '2026-05-01T00:00:00.000Z',
+        max: 100,
+      })
+      await waitForAsyncOps(20, 100)
+      await queryPromise
+
+      expect(emitSDKSpy).not.toHaveBeenCalledWith('console:event', expect.objectContaining({
+        message: expect.stringContaining('incomplete'),
+      }))
     })
   })
 

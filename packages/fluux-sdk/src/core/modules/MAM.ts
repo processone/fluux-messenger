@@ -42,6 +42,7 @@ import {
   MAM_CATCHUP_BACKWARD_MAX,
   MAM_CACHE_LOAD_LIMIT,
   MAM_ROOM_FORWARD_MAX_PAGES,
+  MAM_ROOM_FORWARD_MAX_PAGES_MANUAL,
 } from '../../utils/mamCatchUpUtils'
 import {
   NS_MAM,
@@ -321,14 +322,16 @@ export class MAM extends BaseModule {
    * @returns Query result with messages, completion status, and pagination info
    */
   async queryRoomArchive(options: RoomMAMQueryOptions): Promise<RoomMAMResult> {
-    const { roomJid, max = 50, before, after, start, preserveGapMarker } = options
+    const { roomJid, max = 50, before, after, start, preserveGapMarker, maxAutoPages: maxAutoPagesOpt } = options
     const roomMamStart = Date.now()
     const isForward = !!start
     const roomDirection = isForward ? 'forward' : 'backward'
 
     // For forward catch-up queries, auto-paginate to retrieve all missed messages.
     // Backward queries (scroll-up) remain single-page — the caller controls pagination.
-    const maxAutoPages = isForward ? MAM_ROOM_FORWARD_MAX_PAGES : 1
+    // User-initiated repair passes a higher cap (maxAutoPagesOpt) so it fills large
+    // gaps to completion instead of stopping at the background limit.
+    const maxAutoPages = isForward ? (maxAutoPagesOpt ?? MAM_ROOM_FORWARD_MAX_PAGES) : 1
     const allMessages: RoomMessage[] = []
     let isComplete = false
     let lastRsm: RSMResponse = {}
@@ -437,6 +440,16 @@ export class MAM extends BaseModule {
       }
 
       logInfo(`Room MAM result: ${roomJid} → ${allMessages.length} msg(s), complete=${isComplete}, ${Date.now() - roomMamStart}ms`)
+
+      // Surface unresolved gaps for diagnosis: a forward catch-up that ends without
+      // reaching live (complete=false) means a hole remains. Visible in the in-app
+      // console so we can measure gap prevalence before investing in range tracking.
+      if (isForward && !isComplete) {
+        this.deps.emitSDK('console:event', {
+          message: `Room catch-up incomplete for ${roomJid} — gap remains after ${allMessages.length} msg(s)`,
+          category: 'sm',
+        })
+      }
 
       return { messages: allMessages, complete: isComplete, rsm: lastRsm }
     } catch (error) {
@@ -1097,6 +1110,7 @@ export class MAM extends BaseModule {
             roomJid: room.jid,
             start,
             max: MAM_CATCHUP_FORWARD_MAX,
+            maxAutoPages: MAM_ROOM_FORWARD_MAX_PAGES_MANUAL,
             preserveGapMarker: true,
           })
         } catch (_error) {

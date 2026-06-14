@@ -5,10 +5,11 @@ import { useXMPPContext } from '../provider'
 import type { Room, RoomMessage, MentionReference, ChatStateNotification, FileAttachment, MAMQueryState, RoomAffiliation, RoomRole, PollData, PollSettings } from '../core/types'
 import { createFetchOlderHistory, pickOldestArchiveId } from './shared'
 import {
-  findNewestMessage,
+  findContinueCatchUpCursor,
   buildCatchUpStartTime,
   MAM_CATCHUP_FORWARD_MAX,
   MAM_CACHE_LOAD_LIMIT,
+  MAM_ROOM_FORWARD_MAX_PAGES_MANUAL,
 } from '../utils/mamCatchUpUtils'
 
 /**
@@ -370,13 +371,17 @@ export function useRoomActive() {
       await roomStore.getState().loadMessagesFromCache(roomJid, { limit: MAM_CACHE_LOAD_LIMIT })
       const room = roomStore.getState().rooms.get(roomJid)
       const messages = room?.messages || []
-      const newestMessage = findNewestMessage(messages)
+      // Continue from the recorded gap boundary so the forward query fills the HOLE.
+      // The global newest message sits AFTER the hole, so resuming from it would skip
+      // the gap entirely. Paginate with the manual cap to fill large gaps to completion.
+      const cursor = findContinueCatchUpCursor(messages, mamState.forwardGapTimestamp)
 
-      if (newestMessage?.timestamp) {
+      if (cursor?.timestamp) {
         await client.chat.queryRoomMAM({
           roomJid,
-          start: buildCatchUpStartTime(newestMessage.timestamp),
+          start: buildCatchUpStartTime(cursor.timestamp),
           max: MAM_CATCHUP_FORWARD_MAX,
+          maxAutoPages: MAM_ROOM_FORWARD_MAX_PAGES_MANUAL,
         })
       }
     } catch {

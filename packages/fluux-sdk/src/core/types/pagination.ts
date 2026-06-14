@@ -94,6 +94,12 @@ export interface RoomMAMQueryOptions {
    * a real gap older than the window (nor plant a spurious one inside it).
    */
   preserveGapMarker?: boolean
+  /**
+   * Max auto-pagination pages for a forward catch-up. Defaults to the background
+   * cap; user-initiated repair passes a higher value to paginate large gaps to
+   * completion. Ignored for backward (single-page) queries.
+   */
+  maxAutoPages?: number
 }
 
 /**
