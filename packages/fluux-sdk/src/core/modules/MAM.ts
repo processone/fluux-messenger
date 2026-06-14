@@ -1045,26 +1045,7 @@ export class MAM extends BaseModule {
       mamRooms,
       async (room) => {
         try {
-          if (this.deps.stores?.connection.getStatus() !== 'online') return
-
-          // Load IndexedDB cache first so we know the newest cached message
-          // and can do a proper forward catch-up instead of fetching only latest.
-          // Without this, room.messages is empty after app restart (runtime-only),
-          // causing a backward "before:''" query that creates gaps with old cache.
-          await this.deps.stores?.room.loadMessagesFromCache(room.jid, { limit: MAM_CACHE_LOAD_LIMIT })
-
-          // Re-read room after cache load (store was mutated)
-          const updatedRoom = this.deps.stores?.room.getRoom(room.jid)
-          const messages = updatedRoom?.messages || []
-          // Shared cursor policy: forward from the newest pre-session message
-          // (so a live message in the catch-up window can't poison the cursor),
-          // else fetch latest.
-          const q = selectCatchUpQuery(messages, sessionStartTime)
-          await this.queryRoomArchive({
-            roomJid: room.jid,
-            ...q,
-            max: q.start ? MAM_CATCHUP_FORWARD_MAX : MAM_CATCHUP_BACKWARD_MAX,
-          })
+          await this.catchUpRoom(room.jid, sessionStartTime)
         } catch (_error) {
           // Silently ignore — individual failures shouldn't affect others
         }
@@ -1073,6 +1054,40 @@ export class MAM extends BaseModule {
     )
 
     logInfo(`Background catch-up for ${mamRooms.length} room(s) — complete`)
+  }
+
+  /**
+   * Forward catch-up for a single joined room (cache-aware, shared cursor policy).
+   *
+   * Extracted so both the bulk `catchUpAllRooms()` pass and the late-MAM retry
+   * (a room whose disco resolves `supportsMAM` AFTER the initial background pass)
+   * use identical logic. The caller is responsible for filtering (joined, MAM,
+   * non-Quick-Chat, not the active room).
+   *
+   * @param roomJid - Room JID to catch up
+   * @param sessionStartTime - Epoch ms of the current session; forward cursor
+   *   excludes messages received this session (see `selectCatchUpQuery`).
+   */
+  async catchUpRoom(roomJid: string, sessionStartTime?: number): Promise<void> {
+    if (this.deps.stores?.connection.getStatus() !== 'online') return
+
+    // Load IndexedDB cache first so we know the newest cached message and can do a
+    // proper forward catch-up instead of fetching only latest. Without this,
+    // room.messages is empty after app restart (runtime-only), causing a backward
+    // "before:''" query that creates gaps with old cache.
+    await this.deps.stores?.room.loadMessagesFromCache(roomJid, { limit: MAM_CACHE_LOAD_LIMIT })
+
+    // Re-read room after cache load (store was mutated)
+    const updatedRoom = this.deps.stores?.room.getRoom(roomJid)
+    const messages = updatedRoom?.messages || []
+    // Shared cursor policy: forward from the newest pre-session message (so a live
+    // message in the catch-up window can't poison the cursor), else fetch latest.
+    const q = selectCatchUpQuery(messages, sessionStartTime)
+    await this.queryRoomArchive({
+      roomJid,
+      ...q,
+      max: q.start ? MAM_CATCHUP_FORWARD_MAX : MAM_CATCHUP_BACKWARD_MAX,
+    })
   }
 
   /**
