@@ -959,6 +959,29 @@ describe('MAM Background Catch-Up', () => {
     })
   })
 
+  describe('forward catch-up gap logging (1:1)', () => {
+    it('emits a console event when a 1:1 forward catch-up ends incomplete (a gap remains)', async () => {
+      await connectClient()
+
+      // complete=false, no rsm cursor → forward pagination stops with isComplete=false
+      mockXmppClientInstance.iqCaller.request.mockResolvedValue(createFinResponse(false))
+
+      const queryPromise = xmppClient.mam.queryArchive({
+        with: 'alice@example.com',
+        start: '2026-05-01T00:00:00.000Z',
+        max: 100,
+        maxAutoPages: 50, // opt into forward pagination
+      })
+      await waitForAsyncOps(20, 100)
+      await queryPromise
+
+      expect(emitSDKSpy).toHaveBeenCalledWith('console:event', expect.objectContaining({
+        message: expect.stringContaining('incomplete'),
+        category: 'sm',
+      }))
+    })
+  })
+
   describe('forward catch-up gap logging', () => {
     it('emits a console event when a forward catch-up ends incomplete (a gap remains)', async () => {
       await connectClient()

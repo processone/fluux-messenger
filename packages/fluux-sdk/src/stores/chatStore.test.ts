@@ -83,6 +83,7 @@ describe('chatStore', () => {
       activeConversationId: null,
       archivedConversations: new Set(),
       mamQueryStates: new Map(),
+      conversationGaps: new Map(),
       // Reset other ephemeral state
       typingStates: new Map(),
       drafts: new Map(),
@@ -110,6 +111,50 @@ describe('chatStore', () => {
     it('should return empty array for activeMessages when none selected', () => {
       const state = chatStore.getState()
       expect(state.activeMessages()).toEqual([])
+    })
+  })
+
+  describe('mergeMAMMessages gap tracking (persisted conversationGaps)', () => {
+    const cid = 'alice@example.com'
+
+    it('records a GapInterval when a forward catch-up ends incomplete (parity with rooms)', () => {
+      chatStore.getState().addConversation(createConversation(cid))
+      const recent = { ...createMessage(cid, 'recent'), id: 'recent', timestamp: new Date('2026-06-10T00:00:00Z') }
+      chatStore.getState().addMessage(recent)
+
+      const fetched = { ...createMessage(cid, 'edge'), id: 'edge', timestamp: new Date('2026-05-14T09:00:00Z') }
+      chatStore.getState().mergeMAMMessages(cid, [fetched], {}, false, 'forward')
+
+      expect(chatStore.getState().conversationGaps.get(cid)).toEqual({
+        start: new Date('2026-05-14T09:00:00Z').getTime(), // newest fetched
+        end: new Date('2026-06-10T00:00:00Z').getTime(),   // oldest held above the gap
+      })
+    })
+
+    it('clears the gap when a forward catch-up completes', () => {
+      chatStore.getState().addConversation(createConversation(cid))
+      chatStore.setState({ conversationGaps: new Map([[cid, { start: 1000, end: 5000 }]]) })
+
+      chatStore.getState().mergeMAMMessages(cid, [], {}, true, 'forward')
+
+      expect(chatStore.getState().conversationGaps.has(cid)).toBe(false)
+    })
+
+    it('persists conversationGaps to the account-scoped chat storage (survives reload, no cross-account leak)', () => {
+      localStorageMock.clear() // drop the empty bare-key write from beforeEach's scope-null setState
+      setStorageScopeJid('alice@example.com')
+      chatStore.getState().addConversation(createConversation(cid))
+      const recent = { ...createMessage(cid, 'recent'), id: 'recent', timestamp: new Date('2026-06-10T00:00:00Z') }
+      chatStore.getState().addMessage(recent)
+      const fetched = { ...createMessage(cid, 'edge'), id: 'edge', timestamp: new Date('2026-05-14T09:00:00Z') }
+      chatStore.getState().mergeMAMMessages(cid, [fetched], {}, false, 'forward')
+
+      const scoped = localStorageMock._store['xmpp-chat-storage:alice@example.com']
+      expect(scoped).toBeDefined()
+      expect(scoped).toContain('conversationGaps')
+      expect(scoped).toContain(String(new Date('2026-05-14T09:00:00Z').getTime()))
+      // Never the bare (unscoped) key.
+      expect(localStorageMock._store['xmpp-chat-storage']).toBeUndefined()
     })
   })
 
