@@ -84,6 +84,11 @@ describe('setupBackgroundSyncSideEffects', () => {
       await vi.waitFor(() => {
         expect(mockClient.mam.catchUpAllConversations).toHaveBeenCalledTimes(1)
       })
+      // Must pass sessionStartTime so the 1:1 forward cursor excludes live messages
+      // that arrive during catch-up (parity with rooms / Bug A).
+      expect(mockClient.mam.catchUpAllConversations).toHaveBeenCalledWith(
+        expect.objectContaining({ sessionStartTime: expect.any(Number) })
+      )
     })
 
     it('should defer catch-up to serverInfo discovery when MAM not immediately available', async () => {

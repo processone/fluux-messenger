@@ -3,6 +3,7 @@ import {
   findNewestMessage,
   findCatchUpCursorMessage,
   findContinueCatchUpCursor,
+  selectCatchUpQuery,
   buildCatchUpStartTime,
   isConnectionError,
   MAM_ROOM_FORWARD_MAX_PAGES_MANUAL,
@@ -152,6 +153,40 @@ describe('findContinueCatchUpCursor', () => {
 
   it('returns undefined with no gap marker and no messages', () => {
     expect(findContinueCatchUpCursor([], undefined)).toBeUndefined()
+  })
+})
+
+// ============================================================================
+// selectCatchUpQuery (shared cursor policy for chat + room)
+// ============================================================================
+
+describe('selectCatchUpQuery', () => {
+  const sessionStart = new Date('2026-06-14T12:00:00Z').getTime()
+
+  it('returns a forward start from the newest PRE-session message', () => {
+    const monthOld = new Date('2026-05-14T09:00:00Z')
+    const live = new Date('2026-06-14T12:00:05Z')
+    expect(selectCatchUpQuery([{ timestamp: monthOld }, { timestamp: live }], sessionStart)).toEqual({
+      start: '2026-05-14T09:00:00.001Z',
+    })
+  })
+
+  it('returns backward (before:"") when only this-session messages exist', () => {
+    expect(selectCatchUpQuery([{ timestamp: new Date('2026-06-14T12:00:05Z') }], sessionStart)).toEqual({
+      before: '',
+    })
+  })
+
+  it('returns backward (before:"") for an empty message list', () => {
+    expect(selectCatchUpQuery([], sessionStart)).toEqual({ before: '' })
+  })
+
+  it('uses the global newest when no sessionStartTime is given (legacy behavior)', () => {
+    const a = new Date('2026-01-01T00:00:00Z')
+    const b = new Date('2026-02-01T00:00:00Z')
+    expect(selectCatchUpQuery([{ timestamp: a }, { timestamp: b }], undefined)).toEqual({
+      start: '2026-02-01T00:00:00.001Z',
+    })
   })
 })
 

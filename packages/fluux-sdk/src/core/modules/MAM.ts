@@ -34,9 +34,7 @@ import { generateUUID, generateStableMessageId } from '../../utils/uuid'
 import { executeWithConcurrency } from '../../utils/concurrencyUtils'
 import { parseRSMResponse } from '../../utils/rsm'
 import {
-  findNewestMessage,
-  findCatchUpCursorMessage,
-  buildCatchUpStartTime,
+  selectCatchUpQuery,
   isConnectionError,
   MAM_CATCHUP_FORWARD_MAX,
   MAM_CATCHUP_BACKWARD_MAX,
@@ -859,9 +857,11 @@ export class MAM extends BaseModule {
    * @param options - Optional configuration
    * @param options.concurrency - Maximum parallel requests (default: 2)
    * @param options.exclude - Conversation ID to skip (e.g., the active conversation already handled by side effects)
+   * @param options.sessionStartTime - Epoch ms of the current fresh session; forward cursor
+   *   excludes messages received this session so a live message can't poison it (see Bug A).
    */
-  async catchUpAllConversations(options: { concurrency?: number; exclude?: string | null } = {}): Promise<void> {
-    const { concurrency = 2, exclude } = options
+  async catchUpAllConversations(options: { concurrency?: number; exclude?: string | null; sessionStartTime?: number } = {}): Promise<void> {
+    const { concurrency = 2, exclude, sessionStartTime } = options
     let conversations = this.deps.stores?.chat.getAllConversations() || []
     if (exclude) {
       conversations = conversations.filter((c) => c.id !== exclude)
@@ -891,23 +891,15 @@ export class MAM extends BaseModule {
           // Re-read messages after cache load (store was mutated)
           const updatedConv = this.deps.stores?.chat.getAllConversations()?.find(c => c.id === conv.id)
           const messages = updatedConv?.messages || conv.messages || []
-          const newestMessage = findNewestMessage(messages)
 
-          if (newestMessage?.timestamp) {
-            // Forward query from the last known message
-            await this.queryArchive({
-              with: conv.id,
-              start: buildCatchUpStartTime(newestMessage.timestamp),
-              max: MAM_CATCHUP_FORWARD_MAX,
-            })
-          } else {
-            // No messages (empty) — fetch latest from MAM
-            await this.queryArchive({
-              with: conv.id,
-              before: '',
-              max: MAM_CATCHUP_BACKWARD_MAX,
-            })
-          }
+          // Shared cursor policy (same as rooms) — forward from the newest
+          // pre-session message, else fetch latest.
+          const q = selectCatchUpQuery(messages, sessionStartTime)
+          await this.queryArchive({
+            with: conv.id,
+            ...q,
+            max: q.start ? MAM_CATCHUP_FORWARD_MAX : MAM_CATCHUP_BACKWARD_MAX,
+          })
         } catch (_error) {
           // Silently ignore — individual failures shouldn't affect others
         }
@@ -1035,29 +1027,15 @@ export class MAM extends BaseModule {
           // Re-read room after cache load (store was mutated)
           const updatedRoom = this.deps.stores?.room.getRoom(room.jid)
           const messages = updatedRoom?.messages || []
-          // Use the newest PRE-session message as the forward cursor so a live
-          // message arriving during the catch-up window can't push the cursor to
-          // "now" and silently skip the offline gap. Falls back to the global
-          // newest when the session start is unknown.
-          const cursorMessage = sessionStartTime !== undefined
-            ? findCatchUpCursorMessage(messages, sessionStartTime)
-            : findNewestMessage(messages)
-
-          if (cursorMessage?.timestamp) {
-            // Forward query from the last known contiguous message
-            await this.queryRoomArchive({
-              roomJid: room.jid,
-              start: buildCatchUpStartTime(cursorMessage.timestamp),
-              max: MAM_CATCHUP_FORWARD_MAX,
-            })
-          } else {
-            // No pre-session messages — fetch latest from MAM
-            await this.queryRoomArchive({
-              roomJid: room.jid,
-              before: '',
-              max: MAM_CATCHUP_BACKWARD_MAX,
-            })
-          }
+          // Shared cursor policy: forward from the newest pre-session message
+          // (so a live message in the catch-up window can't poison the cursor),
+          // else fetch latest.
+          const q = selectCatchUpQuery(messages, sessionStartTime)
+          await this.queryRoomArchive({
+            roomJid: room.jid,
+            ...q,
+            max: q.start ? MAM_CATCHUP_FORWARD_MAX : MAM_CATCHUP_BACKWARD_MAX,
+          })
         } catch (_error) {
           // Silently ignore — individual failures shouldn't affect others
         }

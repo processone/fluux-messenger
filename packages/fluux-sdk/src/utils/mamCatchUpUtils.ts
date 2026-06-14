@@ -99,6 +99,34 @@ export function findCatchUpCursorMessage(
   return cursor
 }
 
+/** Result of {@link selectCatchUpQuery}: a forward `start` filter, or a backward
+ *  `before: ''` (fetch latest) when there is no usable pre-session cursor. */
+export interface CatchUpQuery {
+  start?: string
+  before?: string
+}
+
+/**
+ * The single, shared catch-up cursor policy for BOTH 1:1 and MUC forward
+ * catch-up (background sync + active-entity side effects). Centralized so the
+ * cursor logic can't drift between the chat and room paths — which is exactly
+ * how the session-start fix once landed in rooms but not 1:1.
+ *
+ * Returns a forward `{ start }` from the newest message that predates the
+ * session (so a live message in the catch-up window can't poison the cursor),
+ * or `{ before: '' }` to fetch the latest when nothing pre-session is held.
+ * When `sessionStartTime` is omitted, falls back to the global newest message.
+ */
+export function selectCatchUpQuery(
+  messages: Array<{ timestamp?: Date }>,
+  sessionStartTime?: number,
+): CatchUpQuery {
+  const cursor = sessionStartTime !== undefined
+    ? findCatchUpCursorMessage(messages, sessionStartTime)
+    : findNewestMessage(messages)
+  return cursor?.timestamp ? { start: buildCatchUpStartTime(cursor.timestamp) } : { before: '' }
+}
+
 /**
  * Pick the cursor for a user-initiated "continue catch-up" (the "Load missing
  * messages" button).

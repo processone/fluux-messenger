@@ -171,7 +171,7 @@ export function setupBackgroundSyncSideEffects(
       try {
         // Stage 1: Conversation catch-up (skip active — handled by chatSideEffects)
         logInfo('Background sync: conversation catch-up')
-        await client.mam.catchUpAllConversations({ concurrency: 2, exclude: activeConversationId })
+        await client.mam.catchUpAllConversations({ concurrency: 2, exclude: activeConversationId, sessionStartTime })
 
         // Stage 2: Roster discovery (hourly cooldown)
         if (shouldDiscoverRoster()) {

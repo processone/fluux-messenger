@@ -19,9 +19,7 @@ import type { SideEffectsOptions } from './chatSideEffects'
 import { roomStore, connectionStore } from '../stores'
 import { logInfo } from './logger'
 import {
-  findNewestMessage,
-  findCatchUpCursorMessage,
-  buildCatchUpStartTime,
+  selectCatchUpQuery,
   isConnectionError,
   MAM_CATCHUP_FORWARD_MAX,
   MAM_CATCHUP_BACKWARD_MAX,
@@ -116,28 +114,14 @@ export function setupRoomSideEffects(
       // Re-read room after cache load (store was mutated)
       const roomAfterCache = roomStore.getState().rooms.get(roomJid)
       const messages = roomAfterCache?.messages || []
-      // Use the newest PRE-session message as the forward cursor so a live message
-      // arriving during catch-up can't push the cursor to "now" and silently skip
-      // the offline gap. Falls back to the global newest when session start is unknown.
-      const cursorMessage = sessionStartTime !== undefined
-        ? findCatchUpCursorMessage(messages, sessionStartTime)
-        : findNewestMessage(messages)
-
-      if (cursorMessage?.timestamp) {
-        // Query for messages AFTER the newest known contiguous message (catchup)
-        await client.chat.queryRoomMAM({
-          roomJid,
-          start: buildCatchUpStartTime(cursorMessage.timestamp),
-          max: MAM_CATCHUP_FORWARD_MAX,
-        })
-      } else {
-        // No pre-session messages - fetch latest
-        await client.chat.queryRoomMAM({
-          roomJid,
-          before: '', // Empty = get latest
-          max: MAM_CATCHUP_BACKWARD_MAX,
-        })
-      }
+      // Shared cursor policy: forward from the newest pre-session message (so a
+      // live message in the catch-up window can't poison the cursor), else latest.
+      const q = selectCatchUpQuery(messages, sessionStartTime)
+      await client.chat.queryRoomMAM({
+        roomJid,
+        ...q,
+        max: q.start ? MAM_CATCHUP_FORWARD_MAX : MAM_CATCHUP_BACKWARD_MAX,
+      })
       logInfo('Room: MAM catch-up complete')
     } catch (error) {
       // Allow backup handlers (room:joined, supportsMAM watcher) to retry
