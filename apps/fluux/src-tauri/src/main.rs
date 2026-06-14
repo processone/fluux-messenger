@@ -1234,6 +1234,20 @@ fn main() {
     let graceful_shutdown_flag_for_run = graceful_shutdown_started.clone();
 
     let app = tauri::Builder::default()
+        // Single-instance guard MUST be the first plugin registered (Tauri
+        // requirement). When a second copy of Fluux is launched, the OS lock is
+        // already held, so the new process hands its argv to this callback and
+        // exits instead of opening a duplicate window. We restore the live
+        // window: unminimize, then show (Linux closes to the system tray, so the
+        // window may be hidden), re-clamp it on-screen, and focus it.
+        .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.unminimize();
+                let _ = window.show();
+                ensure_window_visible(&window);
+                let _ = window.set_focus();
+            }
+        }))
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_os::init())

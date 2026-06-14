@@ -68,6 +68,14 @@ unicode-normalization = "0.1"
 # Updater plugin for auto-updates (desktop only)
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-updater = "2"
+# Single-instance guard (desktop only). On Linux a second launch must focus the
+# already-running window instead of spawning a duplicate; the plugin acquires a
+# per-app lock (D-Bus name on Linux, named mutex on Windows) and forwards the new
+# process's argv to the live instance's callback. The `deep-link` feature routes
+# an `xmpp:` URL opened while Fluux is running into the existing window rather
+# than starting a second copy. macOS already enforces single-instance for the
+# app bundle natively, so the plugin is effectively a no-op there.
+tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
 serde_json = "1"
 keyring = { version = "3", features = ["apple-native", "windows-native", "sync-secret-service", "crypto-rust"] }
 reqwest = { version = "0.13", features = ["blocking"] }
