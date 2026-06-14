@@ -185,6 +185,34 @@ describe('mamState utilities', () => {
       })
     })
 
+    it('clears an existing forwardGapTimestamp on a completing forward query (default)', () => {
+      const states = new Map<string, MAMQueryState>([
+        ['room-1', { ...DEFAULT_MAM_STATE, forwardGapTimestamp: 1000 }],
+      ])
+      const result = setMAMQueryCompleted(states, 'room-1', true, 'forward')
+      expect(result.get('room-1')?.forwardGapTimestamp).toBeUndefined()
+    })
+
+    it('preserveGapMarker keeps an existing forwardGapTimestamp on a completing forward query', () => {
+      // A bounded force repair must NOT hide a real gap marker just because its
+      // own (windowed) forward query happened to complete.
+      const states = new Map<string, MAMQueryState>([
+        ['room-1', { ...DEFAULT_MAM_STATE, forwardGapTimestamp: 1000 }],
+      ])
+      const result = setMAMQueryCompleted(states, 'room-1', true, 'forward', undefined, undefined, true)
+      expect(result.get('room-1')?.forwardGapTimestamp).toBe(1000)
+      expect(result.get('room-1')?.isCaughtUpToLive).toBe(true) // other markers still update
+    })
+
+    it('preserveGapMarker does not overwrite forwardGapTimestamp on an incomplete forward query', () => {
+      const states = new Map<string, MAMQueryState>([
+        ['room-1', { ...DEFAULT_MAM_STATE, forwardGapTimestamp: 1000 }],
+      ])
+      // Without preserve this would set forwardGapTimestamp = 5000 (this page's newest).
+      const result = setMAMQueryCompleted(states, 'room-1', false, 'forward', undefined, 5000, true)
+      expect(result.get('room-1')?.forwardGapTimestamp).toBe(1000)
+    })
+
     it('sets isHistoryComplete=false for incomplete backward query', () => {
       const states = new Map<string, MAMQueryState>()
       const result = setMAMQueryCompleted(states, 'conv-1', false, 'backward', 'msg-123')

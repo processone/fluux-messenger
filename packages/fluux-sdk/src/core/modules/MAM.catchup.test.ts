@@ -836,6 +836,43 @@ describe('MAM Background Catch-Up', () => {
       expect(callCount).toBeGreaterThanOrEqual(2)
     })
 
+    it('defaults to a 45-day repair window', async () => {
+      await connectClient()
+
+      vi.mocked(mockStores.room.joinedRooms).mockReturnValue([
+        { jid: 'room1@conference.example.com', supportsMAM: true, isQuickChat: false, joined: true, messages: [] },
+      ] as any)
+      vi.mocked(mockStores.room.getRoom).mockReturnValue({ nickname: 'me' } as any)
+      mockXmppClientInstance.iqCaller.request.mockResolvedValue(createFinResponse())
+
+      const catchUpPromise = xmppClient.mam.forceCatchUpAllRooms()
+      await waitForAsyncOps(20, 100)
+      await catchUpPromise
+
+      expect(emitSDKSpy).toHaveBeenCalledWith('console:event', {
+        message: 'Force catch-up for 1 room(s) from last 45 days',
+        category: 'sm',
+      })
+    })
+
+    it('sets preserveGapMarker so the bounded repair never hides a real gap marker', async () => {
+      await connectClient()
+
+      vi.mocked(mockStores.room.joinedRooms).mockReturnValue([
+        { jid: 'room1@conference.example.com', supportsMAM: true, isQuickChat: false, joined: true, messages: [] },
+      ] as any)
+      vi.mocked(mockStores.room.getRoom).mockReturnValue({ nickname: 'me' } as any)
+      mockXmppClientInstance.iqCaller.request.mockResolvedValue(createFinResponse())
+
+      const catchUpPromise = xmppClient.mam.forceCatchUpAllRooms()
+      await waitForAsyncOps(20, 100)
+      await catchUpPromise
+
+      expect(emitSDKSpy).toHaveBeenCalledWith('room:mam-messages', expect.objectContaining({
+        preserveGapMarker: true,
+      }))
+    })
+
     it('should emit console event with room count and days', async () => {
       await connectClient()
 

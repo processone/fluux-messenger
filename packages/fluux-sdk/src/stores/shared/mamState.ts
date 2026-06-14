@@ -85,7 +85,8 @@ export function setMAMQueryCompleted(
   complete: boolean,
   direction: MAMQueryDirection,
   oldestFetchedId?: string,
-  newestFetchedTimestamp?: number
+  newestFetchedTimestamp?: number,
+  preserveGapMarker = false
 ): Map<string, MAMQueryState> {
   const newStates = new Map(states)
   const current = newStates.get(id) || DEFAULT_MAM_STATE
@@ -101,9 +102,18 @@ export function setMAMQueryCompleted(
 
   // Track gap position for incomplete forward catch-ups.
   // Set when forward catch-up ends without complete=true, cleared when caught up.
-  const forwardGapTimestamp = direction === 'forward'
-    ? (complete ? undefined : newestFetchedTimestamp)
-    : current.forwardGapTimestamp
+  //
+  // `preserveGapMarker` leaves the existing marker untouched (neither set nor
+  // cleared). Used by bounded "force repair" queries (forceCatchUpAllRooms),
+  // which start from a fixed window — not the contiguous edge — so their
+  // completion says nothing about whether older history is contiguous. Letting
+  // such a query clear the marker would hide a real gap older than the window;
+  // letting it set one would plant a spurious marker inside the window.
+  const forwardGapTimestamp = preserveGapMarker
+    ? current.forwardGapTimestamp
+    : direction === 'forward'
+      ? (complete ? undefined : newestFetchedTimestamp)
+      : current.forwardGapTimestamp
 
   newStates.set(id, {
     isLoading: false,

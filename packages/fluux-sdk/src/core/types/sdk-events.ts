@@ -370,6 +370,8 @@ export interface RoomEvents {
     rsm: RSMResponse
     complete: boolean
     direction: MAMQueryDirection
+    /** When true, leave the gap marker untouched (bounded force-repair queries). */
+    preserveGapMarker?: boolean
   }
 
   /** Room member affiliations discovered (XEP-0045 admin query) */

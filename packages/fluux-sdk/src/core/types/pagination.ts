@@ -88,6 +88,12 @@ export interface RoomMAMQueryOptions {
   after?: string
   /** Filter messages after this timestamp (ISO 8601 format) */
   start?: string
+  /**
+   * When true, the resulting merge leaves the forward gap marker untouched.
+   * Used by bounded "force repair" queries so a windowed completion can't hide
+   * a real gap older than the window (nor plant a spurious one inside it).
+   */
+  preserveGapMarker?: boolean
 }
 
 /**

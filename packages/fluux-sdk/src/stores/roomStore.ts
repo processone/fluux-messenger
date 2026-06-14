@@ -337,7 +337,7 @@ export interface RoomState {
    * @param complete - Whether server indicated query is complete
    * @param direction - Query direction: 'backward' for older history, 'forward' for catching up
    */
-  mergeRoomMAMMessages: (roomJid: string, messages: RoomMessage[], rsm: RSMResponse, complete: boolean, direction: MAMQueryDirection) => void
+  mergeRoomMAMMessages: (roomJid: string, messages: RoomMessage[], rsm: RSMResponse, complete: boolean, direction: MAMQueryDirection, preserveGapMarker?: boolean) => void
   getRoomMAMQueryState: (roomJid: string) => MAMQueryState
   resetRoomMAMStates: () => void
   /** Mark all rooms as needing a catch-up MAM query (called on reconnect) */
@@ -1801,7 +1801,7 @@ export const roomStore = createStore<RoomState>()(
     }))
   },
 
-  mergeRoomMAMMessages: (roomJid, mamMessages, rsm, complete, direction) => {
+  mergeRoomMAMMessages: (roomJid, mamMessages, rsm, complete, direction, preserveGapMarker = false) => {
     set((state) => {
       const room = state.rooms.get(roomJid)
       if (!room) return state
@@ -1841,7 +1841,8 @@ export const roomStore = createStore<RoomState>()(
         complete,
         direction,
         rsm.first, // Pagination cursor for fetching older messages
-        newestFetchedTimestamp
+        newestFetchedTimestamp,
+        preserveGapMarker
       )
 
       // If no new messages (all duplicates), only update MAM state - skip room messages

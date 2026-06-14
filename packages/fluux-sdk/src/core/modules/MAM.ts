@@ -321,7 +321,7 @@ export class MAM extends BaseModule {
    * @returns Query result with messages, completion status, and pagination info
    */
   async queryRoomArchive(options: RoomMAMQueryOptions): Promise<RoomMAMResult> {
-    const { roomJid, max = 50, before, after, start } = options
+    const { roomJid, max = 50, before, after, start, preserveGapMarker } = options
     const roomMamStart = Date.now()
     const isForward = !!start
     const roomDirection = isForward ? 'forward' : 'backward'
@@ -412,6 +412,7 @@ export class MAM extends BaseModule {
             rsm,
             complete,
             direction,
+            preserveGapMarker,
           })
 
           allMessages.push(...collectedMessages)
@@ -1058,17 +1059,22 @@ export class MAM extends BaseModule {
    * Force a full MAM catch-up for all joined rooms over a given time window.
    *
    * Unlike `catchUpAllRooms()` which starts from the newest cached message,
-   * this method queries from a fixed start date (default: 7 days ago) to
+   * this method queries from a fixed start date (default: 45 days ago) to
    * fill any gaps left by previous incomplete catch-ups. The store's merge
    * logic deduplicates messages that already exist.
    *
-   * Intended for manual use via a UI action (e.g., sidebar menu item).
+   * Manual recovery tool for repairing a local archive (sidebar "Catch up all
+   * rooms"); expected to be removed once catch-up is proven reliable. Because it
+   * is a *bounded* repair (a fixed window, not the contiguous edge), it sets
+   * `preserveGapMarker` so a windowed completion can't hide a real gap older than
+   * the window or plant a spurious one inside it. The 45-day default covers a
+   * realistic "app closed for ~a month" absence.
    *
-   * @param options.days - Number of days to catch up (default: 7)
+   * @param options.days - Number of days to catch up (default: 45)
    * @param options.concurrency - Max concurrent MAM queries (default: 2)
    */
   async forceCatchUpAllRooms(options: { days?: number; concurrency?: number } = {}): Promise<void> {
-    const { days = 7, concurrency = 2 } = options
+    const { days = 45, concurrency = 2 } = options
     const joinedRooms = this.deps.stores?.room.joinedRooms() || []
     const mamRooms = joinedRooms.filter((r) => r.supportsMAM && !r.isQuickChat)
     if (mamRooms.length === 0) return
@@ -1091,6 +1097,7 @@ export class MAM extends BaseModule {
             roomJid: room.jid,
             start,
             max: MAM_CATCHUP_FORWARD_MAX,
+            preserveGapMarker: true,
           })
         } catch (_error) {
           // Silently ignore — individual failures shouldn't affect others
