@@ -1747,12 +1747,17 @@ export class XMPPClient {
           manager, msg.encryptedPayload, msg.from, conversationId,
         )
         if (outcome.kind === 'decrypted') {
-          await cacheUpdateMessage(msg.id, {
+          const updates = {
             body: outcome.body,
             ...(outcome.securityContext && { securityContext: outcome.securityContext }),
             ...(outcome.attachment && { attachment: outcome.attachment }),
             encryptedPayload: undefined,
-          })
+          }
+          await cacheUpdateMessage(msg.id, updates)
+          // The conversation's messages aren't loaded (durable path), so the
+          // in-memory sidebar preview would keep the "[OpenPGP-encrypted
+          // message]" fallback. Heal it when this message IS the preview.
+          chatBindings.refreshLastMessageContent?.(conversationId, msg.id, updates)
           decryptedCount++
         } else if (outcome.kind === 'modification') {
           // Conversation isn't loaded in memory. Apply best-effort to the
@@ -1770,17 +1775,21 @@ export class XMPPClient {
             // Bodiless-signal placeholder (forged reaction/retraction) — drop it.
             await cacheDeleteMessage(msg.id)
           } else {
-            await cacheUpdateMessage(msg.id, {
+            const updates = {
               body: MESSAGE_REJECTED_BODY,
               ...(outcome.securityContext && { securityContext: outcome.securityContext }),
               encryptedPayload: undefined,
-            })
+            }
+            await cacheUpdateMessage(msg.id, updates)
+            chatBindings.refreshLastMessageContent?.(conversationId, msg.id, updates)
           }
         } else if (outcome.kind === 'unsupported') {
-          await cacheUpdateMessage(msg.id, {
+          const updates = {
             encryptedPayload: undefined,
             unsupportedEncryption: outcome.info,
-          })
+          }
+          await cacheUpdateMessage(msg.id, updates)
+          chatBindings.refreshLastMessageContent?.(conversationId, msg.id, updates)
         }
       }
 

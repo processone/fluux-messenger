@@ -7,6 +7,7 @@
 
 import type { BaseMessage, RoomMessage } from '../../core/types'
 import { ignoreStore, isMessageFromIgnoredUser } from '../ignoreStore'
+import { findMessageIndexById } from '../../utils/messageLookup'
 
 /**
  * Generic interface for messages with an optional timestamp.
@@ -80,6 +81,40 @@ export function shouldReplaceLastMessage<T extends PreviewableMessage & MessageW
   if (!existing) return true
   if (!isPreviewableMessage(existing)) return true
   return shouldUpdateLastMessage(existing, candidate)
+}
+
+/** Identity + encryption-state fields needed to recognise a resolved preview. */
+interface ResolvablePreview {
+  id: string
+  stanzaId?: string
+  originId?: string
+  correctionStanzaIds?: string[]
+  encryptedPayload?: string
+}
+
+/**
+ * Whether `candidate` is the SAME underlying message as the current `existing`
+ * preview but now *resolved* — its encrypted stash cleared (a deferred decrypt,
+ * rejection, or unsupported-encryption resolution) while `existing` still holds
+ * the encrypted fallback.
+ *
+ * A bulk reload (durable cache or MAM merge) uses this to heal a preview stuck on
+ * "[OpenPGP-encrypted message]": {@link shouldReplaceLastMessage} gates on a
+ * strictly-newer timestamp and refuses a same-id, same-timestamp content change,
+ * so without this the sidebar would never update after decryption. It only ever
+ * promotes encrypted → resolved (never the reverse), so it cannot clobber a
+ * fresher cleartext preview with a stale ciphertext copy.
+ *
+ * @param existing - The current preview message (may be undefined)
+ * @param candidate - The freshly (re)loaded copy of a previewable message
+ */
+export function isResolvedSamePreview(
+  existing: ResolvablePreview | undefined,
+  candidate: ResolvablePreview,
+): boolean {
+  if (!existing?.encryptedPayload) return false
+  if (candidate.encryptedPayload) return false
+  return findMessageIndexById([existing], candidate.id) !== -1
 }
 
 /**

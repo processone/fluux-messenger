@@ -17,7 +17,7 @@ vi.mock('zustand/middleware', () => ({
   persist: (fn: unknown) => fn,
 }))
 
-import { shouldUpdateLastMessage, shouldReplaceLastMessage, findLastNonIgnoredMessage, isPreviewableMessage, findLastPreviewableMessage } from './lastMessageUtils'
+import { shouldUpdateLastMessage, shouldReplaceLastMessage, findLastNonIgnoredMessage, isPreviewableMessage, findLastPreviewableMessage, isResolvedSamePreview } from './lastMessageUtils'
 import { ignoreStore } from '../ignoreStore'
 import type { RoomMessage } from '../../core/types'
 
@@ -93,6 +93,38 @@ describe('shouldReplaceLastMessage', () => {
   it('replaces a stuck non-previewable placeholder even with an older candidate', () => {
     // The heal case: a real (older) message supersedes a newer bodiless placeholder.
     expect(shouldReplaceLastMessage(placeholder, older)).toBe(true)
+  })
+})
+
+describe('isResolvedSamePreview', () => {
+  // The helper inspects identity + encryption state only; `encryptedPayload`
+  // presence stands in for "encrypted fallback" vs "resolved cleartext".
+  it('is true when the same message lost its encrypted stash (deferred decrypt)', () => {
+    const encrypted = { id: 'm1', encryptedPayload: '<x/>' }
+    const resolved = { id: 'm1' }
+    expect(isResolvedSamePreview(encrypted, resolved)).toBe(true)
+  })
+
+  it('is false when the existing preview was never encrypted', () => {
+    expect(isResolvedSamePreview({ id: 'm1' }, { id: 'm1' })).toBe(false)
+  })
+
+  it('is false when the candidate is still encrypted (key still locked)', () => {
+    const encrypted = { id: 'm1', encryptedPayload: '<x/>' }
+    expect(isResolvedSamePreview(encrypted, { id: 'm1', encryptedPayload: '<x/>' })).toBe(false)
+  })
+
+  it('is false for a genuinely different message', () => {
+    expect(isResolvedSamePreview({ id: 'm1', encryptedPayload: '<x/>' }, { id: 'm2' })).toBe(false)
+  })
+
+  it('is false when there is no existing preview', () => {
+    expect(isResolvedSamePreview(undefined, { id: 'm1' })).toBe(false)
+  })
+
+  it('matches across id tiers (existing stanzaId === candidate id)', () => {
+    const encrypted = { id: 'local-1', stanzaId: 's1', encryptedPayload: '<x/>' }
+    expect(isResolvedSamePreview(encrypted, { id: 's1' })).toBe(true)
   })
 })
 

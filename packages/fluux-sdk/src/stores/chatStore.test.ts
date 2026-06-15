@@ -2728,6 +2728,144 @@ describe('chatStore', () => {
     })
   })
 
+  describe('refreshLastMessageContent', () => {
+    const conversationId = 'alice@example.com'
+    const fixedTs = new Date('2024-01-15T12:00:00Z')
+
+    function makeMsg(id: string, body: string, extra: Partial<Message> = {}): Message {
+      return {
+        type: 'chat',
+        id,
+        conversationId,
+        from: conversationId,
+        body,
+        timestamp: new Date(fixedTs.getTime()),
+        isOutgoing: false,
+        ...extra,
+      }
+    }
+
+    it('heals the preview in place when it is the referenced message (same id and timestamp)', () => {
+      chatStore.getState().addConversation(createConversation(conversationId))
+      chatStore.getState().addMessage(makeMsg('m1', '[OpenPGP-encrypted message]', { encryptedPayload: '<x/>' }))
+      expect(chatStore.getState().conversationMeta.get(conversationId)?.lastMessage?.body)
+        .toBe('[OpenPGP-encrypted message]')
+
+      // Deferred decrypt: same message, same timestamp, new body. The strict-newer
+      // updateLastMessagePreview would refuse this — refreshLastMessageContent must not.
+      chatStore.getState().refreshLastMessageContent(conversationId, 'm1', {
+        body: 'decrypted hello',
+        encryptedPayload: undefined,
+      })
+
+      const meta = chatStore.getState().conversationMeta.get(conversationId)
+      expect(meta?.lastMessage?.body).toBe('decrypted hello')
+      expect(meta?.lastMessage?.encryptedPayload).toBeUndefined()
+      // Combined map (backward-compat) is healed too.
+      expect(chatStore.getState().conversations.get(conversationId)?.lastMessage?.body)
+        .toBe('decrypted hello')
+    })
+
+    it('does NOT touch the preview when the referenced message is not the current preview', () => {
+      // Safety contract: a different (e.g. older) message decrypted in the durable
+      // pass must never hijack the preview. This is what prevents a stale overwrite.
+      chatStore.getState().addConversation(createConversation(conversationId))
+      chatStore.getState().addMessage(makeMsg('current', 'current preview'))
+
+      chatStore.getState().refreshLastMessageContent(conversationId, 'some-other-id', {
+        body: 'should not appear',
+      })
+
+      expect(chatStore.getState().conversationMeta.get(conversationId)?.lastMessage?.body)
+        .toBe('current preview')
+    })
+
+    it('matches the preview across id tiers (stanzaId)', () => {
+      chatStore.getState().addConversation(createConversation(conversationId))
+      chatStore.getState().addMessage(makeMsg('m1', '[OpenPGP-encrypted message]', { stanzaId: 'stanza-9' }))
+
+      chatStore.getState().refreshLastMessageContent(conversationId, 'stanza-9', { body: 'cleartext' })
+
+      expect(chatStore.getState().conversationMeta.get(conversationId)?.lastMessage?.body).toBe('cleartext')
+    })
+
+    it('does nothing (and does not throw) for a non-existent conversation', () => {
+      expect(() => {
+        chatStore.getState().refreshLastMessageContent('nobody@example.com', 'm1', { body: 'x' })
+      }).not.toThrow()
+      expect(chatStore.getState().conversations.has('nobody@example.com')).toBe(false)
+    })
+  })
+
+  describe('loadMessagesFromCache — deferred-decrypt preview heal on open', () => {
+    const conversationId = 'alice@example.com'
+    const ts = new Date('2026-06-13T18:48:00Z')
+
+    function encryptedPreview(): Message {
+      return {
+        type: 'chat',
+        id: 'm1',
+        conversationId,
+        from: conversationId,
+        body: '[OpenPGP-encrypted message]',
+        timestamp: new Date(ts.getTime()),
+        isOutgoing: false,
+        encryptedPayload: '<x/>',
+      }
+    }
+
+    afterEach(() => {
+      vi.mocked(messageCache.getMessages).mockReset()
+      vi.mocked(messageCache.getMessages).mockResolvedValue([])
+    })
+
+    it('heals a stale encrypted preview when the cache copy of the same message is now decrypted', async () => {
+      // The user's reported state: the message was decrypted in the durable cache
+      // while the conversation was closed, but the persisted sidebar preview still
+      // points at the encrypted copy (same id and timestamp — strict-newer refuses).
+      chatStore.getState().addConversation({ ...createConversation(conversationId), lastMessage: encryptedPreview() })
+
+      const decrypted: Message = { ...encryptedPreview(), body: 'now decrypted', encryptedPayload: undefined }
+      vi.mocked(messageCache.getMessages).mockResolvedValue([decrypted])
+
+      await chatStore.getState().loadMessagesFromCache(conversationId)
+
+      expect(chatStore.getState().conversationMeta.get(conversationId)?.lastMessage?.body).toBe('now decrypted')
+      expect(chatStore.getState().conversations.get(conversationId)?.lastMessage?.body).toBe('now decrypted')
+    })
+
+    it('does NOT churn the preview when the same-id cache copy is still encrypted (key locked)', async () => {
+      chatStore.getState().addConversation({ ...createConversation(conversationId), lastMessage: encryptedPreview() })
+      vi.mocked(messageCache.getMessages).mockResolvedValue([encryptedPreview()])
+
+      await chatStore.getState().loadMessagesFromCache(conversationId)
+
+      expect(chatStore.getState().conversationMeta.get(conversationId)?.lastMessage?.body)
+        .toBe('[OpenPGP-encrypted message]')
+    })
+  })
+
+  describe('mergeMAMMessages — deferred-decrypt preview heal', () => {
+    const conversationId = 'alice@example.com'
+    const ts = new Date('2026-06-13T18:48:00Z')
+
+    it('heals a stale encrypted preview when MAM brings in the decrypted copy of that message', () => {
+      const encryptedPreview: Message = {
+        type: 'chat', id: 'm1', conversationId, from: conversationId,
+        body: '[OpenPGP-encrypted message]', timestamp: new Date(ts.getTime()),
+        isOutgoing: false, encryptedPayload: '<x/>',
+      }
+      chatStore.getState().addConversation({ ...createConversation(conversationId), lastMessage: encryptedPreview })
+
+      // MAM catch-up of the unopened conversation re-delivers the same message,
+      // now decrypted (same id and timestamp, encrypted stash cleared).
+      const decrypted: Message = { ...encryptedPreview, body: 'now decrypted', encryptedPayload: undefined }
+      chatStore.getState().mergeMAMMessages(conversationId, [decrypted], {}, true, 'forward')
+
+      expect(chatStore.getState().conversationMeta.get(conversationId)?.lastMessage?.body).toBe('now decrypted')
+    })
+  })
+
   describe('activeConversations', () => {
     it('should return only non-archived conversations', () => {
       // Create multiple conversations
