@@ -340,6 +340,24 @@ describe('stanzaDecrypt encrypted payload stash on failure', () => {
     expect(result.securityContext?.trust).toBe('rejected')
     expect(result.encryptedPayloadXml).toBeUndefined()
   })
+
+  it('does not stash a structurally malformed payload (permanent, never retried)', async () => {
+    // A 'malformed-data' failure means the ciphertext is not valid OpenPGP and
+    // will never decrypt regardless of keys (e.g. legacy/corrupt test-era
+    // messages). It must NOT be stashed for retry — otherwise it re-fails on
+    // every reconnect. It is also not a security rejection.
+    const manager = await makeManager(
+      new ThrowingSignaturePlugin(
+        new E2EEPluginError('permanent', 'malformed-data', 'not a valid OpenPGP message'),
+      ),
+    )
+    const stanza = buildStanza()
+    const result = await decryptStanzaInPlace(stanza, manager, 'peer@example.com')
+    expect(result.attempted).toBe(true)
+    expect(result.securityContext?.trust).not.toBe('rejected')
+    expect(result.encryptedPayloadXml).toBeUndefined()
+    expect(readStashedEncryptedPayload(stanza)).toBeUndefined()
+  })
 })
 
 // ---------------------------------------------------------------------------

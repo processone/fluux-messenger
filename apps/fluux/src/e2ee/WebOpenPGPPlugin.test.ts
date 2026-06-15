@@ -567,6 +567,32 @@ describe('WebOpenPGPPlugin', () => {
       expect(decrypted.signerFingerprint).not.toBeNull()
     })
 
+    it('decrypt rejects a structurally malformed ciphertext as permanent malformed-data (never retried)', async () => {
+      // A payload whose bytes are not valid OpenPGP (e.g. legacy/corrupt
+      // test-era ciphertext) makes openpgp.js readMessage throw "Error during
+      // parsing … does not conform to a valid OpenPGP format". That is
+      // terminal, so the plugin must surface a permanent 'malformed-data'
+      // E2EEPluginError — the SDK uses that to stop re-stashing it for retry.
+      const plugin = new TestableWebOpenPGPPlugin()
+      const { ctx } = makeCtx('alice@example.com')
+      setSessionPassphrase('hunter2-strong-passphrase')
+      await plugin.init(ctx)
+      await plugin.callEnsureKeyMaterial('alice@example.com')
+
+      const garbageB64 = Buffer.from('this is not an OpenPGP message at all').toString('base64')
+      const claim = plugin.tryClaimInbound({
+        name: 'openpgp',
+        attrs: { xmlns: 'urn:xmpp:openpgp:0' },
+        children: [garbageB64],
+      })!
+      const handle = await plugin.openConversation({ kind: 'direct', peer: 'bob@example.com' })
+
+      await expect(plugin.decrypt(handle, claim)).rejects.toMatchObject({
+        kind: 'permanent',
+        code: 'malformed-data',
+      })
+    })
+
     it('decrypts without a sender public key (no verification possible)', async () => {
       const plugin = new TestableWebOpenPGPPlugin()
       const { ctx } = makeCtx('alice@example.com')

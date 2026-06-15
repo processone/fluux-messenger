@@ -278,7 +278,15 @@ export function classifyBoundaryError(err: unknown): { kind: E2EEErrorKind; code
   if (msg.includes('backup input is a public key')) {
     return { kind: 'permanent', code: 'malformed-backup' }
   }
-  if (msg.includes('parse ') || msg.includes('not valid')) {
+  if (
+    msg.includes('parse ') ||
+    msg.includes('not valid') ||
+    // openpgp.js readMessage/readKey on bytes that are not valid OpenPGP:
+    // "Error during parsing. This message / key probably does not conform to
+    // a valid OpenPGP format." Structurally malformed → never decrypts.
+    msg.includes('during parsing') ||
+    msg.includes('conform to a valid openpgp')
+  ) {
     return { kind: 'permanent', code: 'malformed-data' }
   }
   if (msg.includes('item-not-found')) return { kind: 'permanent', code: 'not-found' }
@@ -1694,7 +1702,16 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
       ? this.ownBundle?.publicArmored ?? null
       : this.peerKeys.get(peer)?.publicArmored ?? null
 
-    const output = await this.decryptWithOwnKey(ctx.account.jid, ciphertext, senderPublicArmored)
+    let output: DecryptOutput
+    try {
+      output = await this.decryptWithOwnKey(ctx.account.jid, ciphertext, senderPublicArmored)
+    } catch (err) {
+      // Classify raw backend errors (e.g. openpgp.js "Error during parsing …"
+      // on a structurally malformed payload) into a typed E2EEPluginError so
+      // the SDK can tell a terminal 'malformed-data' failure from a retryable
+      // one. Already-typed errors (key-locked, …) pass through unchanged.
+      throw this.toPluginError('decrypt', err)
+    }
 
     const envelope = this.unwrapOrRethrow(output.plaintext)
     // XEP-0373 §3.1 reflection defence. Received messages: the envelope
