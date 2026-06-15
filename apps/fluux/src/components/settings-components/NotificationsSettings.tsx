@@ -3,6 +3,11 @@ import { useTranslation } from 'react-i18next'
 import { Bell, BellOff, ExternalLink, Send } from 'lucide-react'
 import { useConnection, useXMPPContext, connectionStore } from '@fluux/sdk'
 import { isTauri } from './types'
+import { isMacOSDesktop } from '@/utils/tauriPlatform'
+import {
+  refreshNotificationPermission,
+  requestNotificationPermission,
+} from '@/hooks/useNotificationPermission'
 import { isWebPushSupported, requestWebPushRegistration } from '@/hooks/useWebPush'
 
 type NotificationStatus = 'checking' | 'granted' | 'denied' | 'default' | 'unavailable'
@@ -10,6 +15,15 @@ type NotificationStatus = 'checking' | 'granted' | 'denied' | 'default' | 'unava
 async function checkNotificationPermission(): Promise<NotificationStatus> {
   try {
     if (isTauri()) {
+      // macOS uses the native UNUserNotificationCenter command — the same
+      // source of truth as the posting gate — so Settings can't disagree with
+      // whether notifications actually fire. It also distinguishes "not yet
+      // asked" (notdetermined) from "denied", which the plugin can't.
+      if (await isMacOSDesktop()) {
+        const { invoke } = await import('@tauri-apps/api/core')
+        const state = await invoke<string>('notification_permission_state')
+        return state === 'granted' ? 'granted' : state === 'denied' ? 'denied' : 'default'
+      }
       const { isPermissionGranted } = await import('@tauri-apps/plugin-notification')
       const granted = await isPermissionGranted()
       return granted ? 'granted' : 'denied'
@@ -95,7 +109,12 @@ export function NotificationsSettings() {
   const { client } = useXMPPContext()
   const { webPushStatus, webPushEnabled, isConnected } = useConnection()
   const [notificationStatus, setNotificationStatus] = useState<NotificationStatus>('checking')
+  const [isMac, setIsMac] = useState(false)
   const [disabling, setDisabling] = useState(false)
+
+  useEffect(() => {
+    void isMacOSDesktop().then(setIsMac)
+  }, [])
 
   useEffect(() => {
     void checkNotificationPermission()
@@ -103,9 +122,33 @@ export function NotificationsSettings() {
       .catch(() => setNotificationStatus('unavailable'))
   }, [])
 
+  // Re-check when the window regains focus so the status (and the runtime gate)
+  // updates after the user flips the permission in System Settings and returns.
+  useEffect(() => {
+    const refresh = () => {
+      void checkNotificationPermission()
+        .then(setNotificationStatus)
+        .catch(() => setNotificationStatus('unavailable'))
+      void refreshNotificationPermission()
+    }
+    window.addEventListener('focus', refresh)
+    document.addEventListener('visibilitychange', refresh)
+    return () => {
+      window.removeEventListener('focus', refresh)
+      document.removeEventListener('visibilitychange', refresh)
+    }
+  }, [])
+
   const handleRequestPermission = async () => {
     const status = await requestWebNotificationPermission()
     setNotificationStatus(status)
+  }
+
+  // macOS: show the native permission prompt, then refresh the display and the
+  // runtime gate so notifications start working immediately (no restart).
+  const handleEnableMac = async () => {
+    await requestNotificationPermission()
+    setNotificationStatus(await checkNotificationPermission())
   }
 
   const handleDisableWebPush = async () => {
@@ -149,8 +192,8 @@ export function NotificationsSettings() {
             </div>
           </div>
 
-          {/* Web: Request permission button */}
-          {!isTauri && notificationStatus === 'default' && (
+          {/* Web: request permission in-page */}
+          {!isTauri() && notificationStatus === 'default' && (
             <button
               onClick={handleRequestPermission}
               className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-fluux-brand hover:text-fluux-text
@@ -161,8 +204,24 @@ export function NotificationsSettings() {
             </button>
           )}
 
-          {/* Tauri: Open system settings button */}
-          {isTauri() && (notificationStatus === 'denied' || notificationStatus === 'default') && (
+          {/* macOS: trigger the native OS prompt when permission was never asked */}
+          {isMac && notificationStatus === 'default' && (
+            <button
+              onClick={handleEnableMac}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-fluux-brand hover:text-fluux-text
+                         bg-fluux-brand/10 hover:bg-fluux-brand/20 rounded-md transition-colors"
+            >
+              <Bell className="size-4" />
+              {t('settings.requestPermission')}
+            </button>
+          )}
+
+          {/* Open OS settings: macOS once denied (the prompt won't reappear), or
+              other Tauri platforms which have no in-app prompt */}
+          {((isMac && notificationStatus === 'denied') ||
+            (isTauri() &&
+              !isMac &&
+              (notificationStatus === 'denied' || notificationStatus === 'default'))) && (
             <button
               onClick={openNotificationSettings}
               className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-fluux-brand hover:text-fluux-text

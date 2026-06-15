@@ -110,7 +110,7 @@ webkit2gtk = { version = "=2.0.2", features = ["v2_32"] }
 objc2 = "0.6"
 objc2-foundation = { version = "0.3", features = ["NSNotification", "NSString", "NSThread", "NSProcessInfo", "NSDictionary", "NSArray", "NSError", "NSURL"] }
 objc2-app-kit = { version = "0.3", features = ["NSWorkspace", "NSRunningApplication"] }
-objc2-user-notifications = { version = "0.3", features = ["UNUserNotificationCenter", "UNNotificationContent", "UNNotificationRequest", "UNNotificationResponse", "UNNotification", "UNNotificationTrigger", "UNNotificationAttachment", "UNError", "block2"] }
+objc2-user-notifications = { version = "0.3", features = ["UNUserNotificationCenter", "UNNotificationContent", "UNNotificationRequest", "UNNotificationResponse", "UNNotification", "UNNotificationTrigger", "UNNotificationAttachment", "UNNotificationSettings", "UNError", "block2"] }
 block2 = "0.6"
 
 [profile.release]

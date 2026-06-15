@@ -43,7 +43,8 @@ vi.mock('./useNavigateToTarget', () => ({
 }))
 vi.mock('./useNotificationPermission', () => ({
   isTauri: true,
-  useNotificationPermission: () => ({ current: true }),
+  useNotificationPermission: () => {},
+  getNotificationPermissionGranted: () => true,
 }))
 vi.mock('./useNotificationEvents', () => ({
   useNotificationEvents: (h: typeof handlers) => { handlers = h },

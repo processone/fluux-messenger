@@ -28,7 +28,8 @@ vi.mock('./useNavigateToTarget', () => ({
 }))
 vi.mock('./useNotificationPermission', () => ({
   isTauri: true,
-  useNotificationPermission: () => ({ current: true }),
+  useNotificationPermission: () => {},
+  getNotificationPermissionGranted: () => true,
 }))
 vi.mock('./useNotificationEvents', () => ({ useNotificationEvents: vi.fn() }))
 vi.mock('@fluux/sdk', () => ({ rosterStore: { getState: () => ({ getContact: () => undefined }) }, usePresence: () => ({ presenceStatus: 'online' }) }))
