@@ -1492,8 +1492,18 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
       const node = publicKeyDataNodeFor(variant)
       if (tried.has(node)) continue
       tried.add(node)
-      const items = await ctx.xmpp.queryPEP(jid, node, 1)
-      if (items.length > 0) return items
+      try {
+        const items = await ctx.xmpp.queryPEP(jid, node, 1)
+        if (items.length > 0) return items
+      } catch (err) {
+        // Servers disagree on how to answer a query for a node that does not
+        // exist: some return an empty result, others an item-not-found IQ
+        // error. A missing node means "try the next casing variant", not "give
+        // up" — so swallow not-found and continue. Re-throw anything else
+        // (timeout, server error) so the caller treats it as a real failure
+        // rather than silently masking it as "peer has no key".
+        if (classifyBoundaryError(err).code !== 'not-found') throw err
+      }
     }
     return []
   }

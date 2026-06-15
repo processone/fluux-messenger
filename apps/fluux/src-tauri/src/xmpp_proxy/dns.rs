@@ -54,6 +54,16 @@ pub enum ParsedServer {
     Domain(String),
 }
 
+/// Strip the surrounding brackets from an IPv6 host literal (`[::1]` → `::1`).
+/// Hosts are stored unbracketed because `lookup_host` and the TLS server-name
+/// expect the bare address; brackets are only syntax for the combined
+/// `[host]:port` form. Non-bracketed hosts pass through unchanged.
+fn debracket(host: &str) -> &str {
+    host.strip_prefix('[')
+        .and_then(|h| h.strip_suffix(']'))
+        .unwrap_or(host)
+}
+
 /// Extract optional `?domain=` parameter from a URI path.
 /// Returns (host_port_part, optional_domain).
 fn split_domain_param(input: &str) -> (&str, Option<String>) {
@@ -85,7 +95,7 @@ pub fn parse_server_input(server: &str) -> ParsedServer {
         if let Some((host, port_str)) = host_port.rsplit_once(':') {
             if let Ok(port) = port_str.parse::<u16>() {
                 return ParsedServer::Direct(
-                    host.to_string(),
+                    debracket(host).to_string(),
                     port,
                     ConnectionMode::DirectTls,
                     domain,
@@ -94,7 +104,7 @@ pub fn parse_server_input(server: &str) -> ParsedServer {
         }
         // No port specified — default to 5223
         return ParsedServer::Direct(
-            host_port.to_string(),
+            debracket(host_port).to_string(),
             5223,
             ConnectionMode::DirectTls,
             domain,
@@ -106,11 +116,21 @@ pub fn parse_server_input(server: &str) -> ParsedServer {
         let (host_port, domain) = split_domain_param(rest);
         if let Some((host, port_str)) = host_port.rsplit_once(':') {
             if let Ok(port) = port_str.parse::<u16>() {
-                return ParsedServer::Direct(host.to_string(), port, ConnectionMode::Tcp, domain);
+                return ParsedServer::Direct(
+                    debracket(host).to_string(),
+                    port,
+                    ConnectionMode::Tcp,
+                    domain,
+                );
             }
         }
         // No port specified — default to 5222
-        return ParsedServer::Direct(host_port.to_string(), 5222, ConnectionMode::Tcp, domain);
+        return ParsedServer::Direct(
+            debracket(host_port).to_string(),
+            5222,
+            ConnectionMode::Tcp,
+            domain,
+        );
     }
 
     // host:port (no scheme) — use rsplit_once to handle IPv6 addresses
@@ -121,7 +141,7 @@ pub fn parse_server_input(server: &str) -> ParsedServer {
             } else {
                 ConnectionMode::Tcp
             };
-            return ParsedServer::Direct(host.to_string(), port, mode, None);
+            return ParsedServer::Direct(debracket(host).to_string(), port, mode, None);
         }
     }
 
@@ -366,6 +386,49 @@ mod tests {
                 ConnectionMode::Tcp,
                 None
             )
+        );
+    }
+
+    // --- IPv6 literal tests ---
+    // A bracketed IPv6 host must be stored WITHOUT brackets: lookup_host and the
+    // TLS server-name expect the bare address; brackets are only syntax for the
+    // combined `[host]:port` form.
+
+    #[test]
+    fn test_parse_bracketed_ipv6_host_port() {
+        assert_eq!(
+            parse_server_input("[::1]:5222"),
+            ParsedServer::Direct("::1".to_string(), 5222, ConnectionMode::Tcp, None)
+        );
+    }
+
+    #[test]
+    fn test_parse_bracketed_ipv6_tls_uri() {
+        assert_eq!(
+            parse_server_input("tls://[2001:db8::1]:5223"),
+            ParsedServer::Direct(
+                "2001:db8::1".to_string(),
+                5223,
+                ConnectionMode::DirectTls,
+                None
+            )
+        );
+    }
+
+    #[test]
+    fn test_parse_bracketed_ipv6_tcp_uri() {
+        assert_eq!(
+            parse_server_input("tcp://[fe80::1]:5222"),
+            ParsedServer::Direct("fe80::1".to_string(), 5222, ConnectionMode::Tcp, None)
+        );
+    }
+
+    #[test]
+    fn test_parse_bracketed_ipv6_no_port_defaults() {
+        // No explicit port → tls:// defaults to 5223, still debracketed.
+        assert_eq!(
+            parse_server_input("tls://[::1]"),
+            ParsedServer::Direct("::1".to_string(), 5223, ConnectionMode::DirectTls, None)
         );
     }
 
