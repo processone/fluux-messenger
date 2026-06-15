@@ -2036,6 +2036,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
       protocolId: OPENPGP_DESCRIPTOR.id,
       trust,
       ...(notes.length > 0 && { notes }),
+      ...(output.signerFingerprint && { fingerprint: output.signerFingerprint }),
     }
   }
 
@@ -2065,6 +2066,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
       protocolId: OPENPGP_DESCRIPTOR.id,
       trust,
       ...(notes.length > 0 && { notes }),
+      ...(output.signerFingerprint && { fingerprint: output.signerFingerprint }),
     }
   }
 

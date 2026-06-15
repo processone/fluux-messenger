@@ -3128,6 +3128,11 @@ describe('SequoiaPgpPlugin', () => {
       const decrypted = await bob.plugin.decrypt(bobHandle, claim)
 
       expect(decrypted.securityContext.trust).toBe('verified')
+      // The signer fingerprint is surfaced so the UI can confirm the verified
+      // lock against the ACTUAL signing key (consumed by resolveDisplayTrust).
+      expect(decrypted.securityContext.fingerprint?.toLowerCase()).toBe(
+        alice.plugin.getOwnFingerprint()?.toLowerCase(),
+      )
       // No notes — verified is the cleanest possible state, no warnings
       // surfaced. (BTBV `trusted` likewise had no notes; this just
       // confirms the upgrade doesn't accidentally introduce a note.)

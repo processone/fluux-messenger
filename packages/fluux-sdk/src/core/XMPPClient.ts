@@ -1971,6 +1971,7 @@ export class XMPPClient {
           protocolId: result.securityContext.protocolId,
           trust: result.securityContext.trust,
           ...(result.securityContext.notes && { notes: result.securityContext.notes }),
+          ...(result.securityContext.fingerprint && { fingerprint: result.securityContext.fingerprint }),
         }
       }
 

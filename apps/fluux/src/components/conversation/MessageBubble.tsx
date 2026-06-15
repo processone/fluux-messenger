@@ -18,6 +18,7 @@ import { EncryptedPlaceholder } from './EncryptedPlaceholder'
 import { UnsupportedEncryptionNotice } from './UnsupportedEncryptionNotice'
 import { MessageReactions } from './MessageReactions'
 import { scrollToMessage, isActionMessage, type WhisperThreadPosition } from './messageGrouping'
+import { resolveDisplayTrust } from './messageTrust'
 import { MessageAttachments } from '../MessageAttachments'
 import { LinkPreviewCard } from '../LinkPreviewCard'
 import { UserInfoPopover } from './UserInfoPopover'
@@ -302,21 +303,17 @@ export const MessageBubble = memo(function MessageBubble({
   const [showErrorDetails, setShowErrorDetails] = useState(false)
 
   // Trust color must track verification LIVE, not freeze at decrypt time.
-  // The plugin bakes `verified`/`tofu` onto the message when it's decrypted;
-  // if the user verifies the peer later, the stored value never updates. So
-  // derive the displayed trust here from the live verification store, keyed on
-  // the conversation peer. The store only changes on explicit verify/un-verify
-  // (never during sync/typing), so this per-peer subscription is cheap.
-  const peerVerified = useVerifiedPeerKeysStore(
-    (s) => !!s.verifiedFingerprintByJid[getBareJid(message.from)],
+  // The plugin bakes `verified`/`tofu` onto the message when it's decrypted; if
+  // the user verifies the peer later, that baked value never updates. So derive
+  // the displayed trust from the live verification store — but confirm the
+  // verified fingerprint against THIS message's signing key (resolveDisplayTrust),
+  // so a rotated or server-substituted key can't inherit a stale verified lock.
+  // The store only changes on explicit verify/un-verify (never during
+  // sync/typing), so this per-peer subscription is cheap.
+  const verifiedFingerprint = useVerifiedPeerKeysStore(
+    (s) => s.verifiedFingerprintByJid[getBareJid(message.from)],
   )
-  const displayTrust =
-    message.securityContext &&
-    (message.securityContext.trust === 'tofu' || message.securityContext.trust === 'verified')
-      ? peerVerified
-        ? 'verified'
-        : 'tofu'
-      : message.securityContext?.trust
+  const displayTrust = resolveDisplayTrust(message.securityContext, verifiedFingerprint)
 
   // Whether reactions are enabled for this message (room has stable occupant identity)
   const reactionsEnabled = onReaction !== undefined

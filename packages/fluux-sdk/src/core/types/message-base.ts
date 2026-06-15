@@ -238,4 +238,11 @@ export interface MessageSecurityContext {
   trust: 'verified' | 'introduced' | 'tofu' | 'untrusted' | 'rejected'
   /** Optional display notes (e.g. "subkey 3 days old"). */
   notes?: string[]
+  /**
+   * Fingerprint of the key that signed this message, when the protocol exposes
+   * one (OpenPGP). Lets the UI confirm the verified lock against the ACTUAL
+   * signing key rather than "some key for this JID was verified once" — a
+   * rotated or server-substituted key must not inherit a stale verification.
+   */
+  fingerprint?: string
 }
