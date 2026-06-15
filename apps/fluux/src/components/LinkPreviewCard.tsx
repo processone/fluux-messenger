@@ -29,6 +29,19 @@ export function LinkPreviewCard({ preview, onLoad }: LinkPreviewCardProps) {
     if (retryTimer.current) clearTimeout(retryTimer.current)
   }, [])
 
+  // Reset the retry state when the image URL changes: this component instance
+  // can be reused (React reconciliation) for a message whose preview image
+  // differs, so a stale 'gone' / spent-attempt from the previous URL would
+  // otherwise suppress a new, valid image.
+  useEffect(() => {
+    if (retryTimer.current) {
+      clearTimeout(retryTimer.current)
+      retryTimer.current = null
+    }
+    setAttempt(0)
+    setImagePhase('showing')
+  }, [preview.image])
+
   const handleImageError = () => {
     if (attempt + 1 >= MAX_IMAGE_ATTEMPTS) {
       setImagePhase('gone')
