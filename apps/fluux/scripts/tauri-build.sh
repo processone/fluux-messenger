@@ -16,6 +16,11 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 TAURI_CONF="$SCRIPT_DIR/../src-tauri/tauri.conf.json"
+# Local builds use a separate dev identity (com.processone.fluux.dev / "Fluux
+# Messenger Dev") so macOS notification grants never collide with an installed
+# production "Fluux Messenger". CI/release builds use tauri-action with the base
+# config and are unaffected. See src-tauri/tauri.dev.conf.json.
+DEV_CONF="$SCRIPT_DIR/../src-tauri/tauri.dev.conf.json"
 
 # Cross-platform sed in-place edit using temp file (avoids macOS sed -i '' issues)
 sed_inplace() {
@@ -63,6 +68,27 @@ for arg in "$@"; do
             ;;
     esac
 done
+
+# Apply the dev identity override to every `tauri build` invocation below.
+EXTRA_ARGS+=(--config "$DEV_CONF")
+
+# Sign local builds with a stable identity when one is available, so the macOS
+# notification grant survives Rust rebuilds. Ad-hoc signing (the default when no
+# identity is set) re-pins the grant to the binary's CDHash, so every Rust
+# rebuild resets the permission. Create the identity once via Keychain Access ->
+# Certificate Assistant -> Create a Certificate (name "Fluux Dev", Self-Signed
+# Root, Code Signing). Export APPLE_SIGNING_IDENTITY yourself to override. CI is
+# unaffected — it builds via tauri-action, not this script.
+DEV_SIGNING_IDENTITY="Fluux Dev"
+if [[ "$OSTYPE" == "darwin"* ]] && [ -z "$APPLE_SIGNING_IDENTITY" ]; then
+    if security find-identity -v -p codesigning 2>/dev/null | grep -qF "$DEV_SIGNING_IDENTITY"; then
+        export APPLE_SIGNING_IDENTITY="$DEV_SIGNING_IDENTITY"
+        echo "Signing local build with '$DEV_SIGNING_IDENTITY' (durable notification grant)."
+    else
+        echo "No '$DEV_SIGNING_IDENTITY' code-signing identity found — building ad-hoc."
+        echo "  (Notification permission resets on each Rust rebuild; see this script's header to fix.)"
+    fi
+fi
 
 # macOS multi-arch builds
 if [[ "$OSTYPE" == "darwin"* ]]; then

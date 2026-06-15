@@ -14,7 +14,11 @@ if [[ "$OSTYPE" != "darwin"* ]]; then
 fi
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-APP_NAME="Fluux Messenger"
+# Local installs use the dev identity/name (see scripts/tauri-build.sh and
+# src-tauri/tauri.dev.conf.json), so they live alongside the production
+# "Fluux Messenger" instead of overwriting it — keeping each app's macOS
+# notification grant intact.
+APP_NAME="Fluux Messenger Dev"
 DEST="/Applications/${APP_NAME}.app"
 
 # Forward all arguments to tauri-build.sh
