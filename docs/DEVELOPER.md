@@ -72,7 +72,12 @@ Local builds are **ad-hoc signed** by default, which pins the grant to the binar
    - **Certificate Type:** Code Signing
 2. Rebuild and install: `npm run tauri:install`
 
-`scripts/tauri-build.sh` auto-detects a `Fluux Dev` code-signing identity and signs the build with it (logging `Signing local build with 'Fluux Dev'…`); without it, the build falls back to ad-hoc. Export `APPLE_SIGNING_IDENTITY="<name>"` to use a different identity. Create the certificate **before** your first grant on the Dev app, otherwise you will just need to click *Allow* once more after switching from ad-hoc to signed.
+`scripts/tauri-build.sh` auto-detects a `Fluux Dev` code-signing identity and signs the build with it (logging `Signing local build with 'Fluux Dev'…`); without it, the build falls back to ad-hoc. Two things to know:
+
+- **The certificate does not need to be trusted.** A self-signed cert is reported as `CSSMERR_TP_NOT_TRUSTED`, but `codesign` signs with it regardless — trust only affects Gatekeeper, not local signing or the notification binding. (The script detects it with `security find-identity -p codesigning`, *without* the `-v`/valid-only filter that would otherwise hide an untrusted cert.)
+- **First use prompts for keychain access.** The first time `codesign` uses the key, macOS shows *"codesign wants to use a key…"* — click **Always Allow** so later rebuilds do not prompt again.
+
+Export `APPLE_SIGNING_IDENTITY="<name>"` to use a different identity. Set up the certificate **before** your first grant on the Dev app, or you will just re-click *Allow* once after switching from ad-hoc to signed.
 
 > Local dev only. The distributed release is signed with a real **Developer ID** certificate and **notarized** in CI — see [RELEASE.md](RELEASE.md). Nothing here changes the release path.
 

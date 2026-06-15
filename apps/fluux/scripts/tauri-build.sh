@@ -77,11 +77,15 @@ EXTRA_ARGS+=(--config "$DEV_CONF")
 # identity is set) re-pins the grant to the binary's CDHash, so every Rust
 # rebuild resets the permission. Create the identity once via Keychain Access ->
 # Certificate Assistant -> Create a Certificate (name "Fluux Dev", Self-Signed
-# Root, Code Signing). Export APPLE_SIGNING_IDENTITY yourself to override. CI is
-# unaffected — it builds via tauri-action, not this script.
+# Root, Code Signing); it need NOT be trusted — codesign signs with an untrusted
+# self-signed cert fine (trust only affects Gatekeeper). Export
+# APPLE_SIGNING_IDENTITY yourself to override. CI is unaffected — it builds via
+# tauri-action, not this script.
 DEV_SIGNING_IDENTITY="Fluux Dev"
 if [[ "$OSTYPE" == "darwin"* ]] && [ -z "$APPLE_SIGNING_IDENTITY" ]; then
-    if security find-identity -v -p codesigning 2>/dev/null | grep -qF "$DEV_SIGNING_IDENTITY"; then
+    # No -v: a self-signed cert is untrusted (CSSMERR_TP_NOT_TRUSTED) and -v would
+    # filter it out, but it signs fine. Match the quoted name for precision.
+    if security find-identity -p codesigning 2>/dev/null | grep -qF "\"$DEV_SIGNING_IDENTITY\""; then
         export APPLE_SIGNING_IDENTITY="$DEV_SIGNING_IDENTITY"
         echo "Signing local build with '$DEV_SIGNING_IDENTITY' (durable notification grant)."
     else
