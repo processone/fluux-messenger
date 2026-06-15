@@ -5,20 +5,36 @@ All notable changes to Fluux Messenger are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.16.1] - 2026-06-12
+## [0.16.1] - 2026-06-15 
 
 ### Added
 
+- macOS: clicking a notification now opens the exact conversation it belongs to (native notification routing)
+- Desktop: relaunching the app focuses the already-running window instead of opening a second instance
+- Linux: quit when the window is closed if the system tray is unavailable, so the app can always be reopened
 - Login screen validates JID format locally before attempting to connect
 - Enhanced freeze-triage diagnostic probes in fluux.log for troubleshooting
 
 ### Changed
 
 - Message list performance: off-screen rows skipped with content-visibility for reduced CPU on long histories
+- Group chats: skip member-list discovery for rooms that forbid affiliation lists, reducing traffic and avoiding errors
+- Group chats: occupant avatar updates coalesced on room join to reduce re-renders
 - Empty state screens use consistent icons from the icon rail
 
 ### Fixed
 
+- Group chat history: closed catch-up gaps that could silently drop a stretch of messages after long offline periods, with a "load missing messages" marker to recover them (also applied to 1:1 history)
+- Connections: race IPv4 and IPv6 addresses (Happy Eyeballs) so a broken IPv6 route no longer stalls connecting
+- OpenPGP: publish your public-key fingerprint in upper-case as required by XEP-0373, improving cross-client key discovery
+- Presence pills shown in grey while reconnecting instead of disappearing
+- Encrypted reactions no longer surface as a blank conversation preview
+- Show a "decrypting…" placeholder while the encryption plugin is still loading instead of a blank message
+- Opening a contact profile no longer bounces back to the conversation
+- Link-preview images retried once before being hidden
+- Stream Management: keep sm in stream features unless it was negotiated inline, fixing some reconnection cases
+- Desktop: downloading an image now uses the native save dialog
+- About dialog width reduced
 - Reconnection details (spinner, retry countdown, cancel) moved back to the sidebar status area — the top connection banner made the UI jump on unstable connections
 - OpenPGP: fingerprint case normalized in peer-verification trust checks (green lock now reliable across clients)
 - MUC occupant avatar preserved across presence updates
