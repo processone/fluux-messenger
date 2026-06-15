@@ -10,6 +10,7 @@
         "ignore": "Αγνόηση",
         "options": "Επιλογές",
         "download": "Λήψη",
+        "downloadFailed": "Η λήψη απέτυχε",
         "optional": "προαιρετικό",
         "create": "Δημιουργία",
         "back": "Πίσω",

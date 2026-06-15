@@ -10,6 +10,7 @@
         "ignore": "Déan neamhaird",
         "options": "Roghanna",
         "download": "Íoslódáil",
+        "downloadFailed": "Theip ar an íoslódáil",
         "optional": "roghnach",
         "create": "Cruthaigh",
         "back": "Ar ais",

@@ -10,6 +10,7 @@
         "ignore": "Ignorovať",
         "options": "Možnosti",
         "download": "Stiahnuť",
+        "downloadFailed": "Sťahovanie zlyhalo",
         "optional": "voliteľné",
         "create": "Vytvoriť",
         "back": "Späť",

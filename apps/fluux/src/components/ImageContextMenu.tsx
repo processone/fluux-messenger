@@ -39,7 +39,9 @@ export function ImageContextMenu({ originalUrl, proxiedUrl, filename, menu }: Im
 
   const handleSave = () => {
     menu.close()
-    void downloadFile(proxiedUrl ?? originalUrl, filename || 'image')
+    void downloadFile(proxiedUrl ?? originalUrl, filename || 'image', {
+      errorMessage: t('common.downloadFailed'),
+    })
   }
 
   return (

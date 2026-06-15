@@ -10,6 +10,7 @@
         "ignore": "Hunsa",
         "options": "Valkostir",
         "download": "Hlaða niður",
+        "downloadFailed": "Niðurhal mistókst",
         "optional": "valfrjálst",
         "create": "Búa til",
         "back": "Til baka",

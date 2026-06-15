@@ -10,6 +10,7 @@
         "ignore": "Ignoreeri",
         "options": "Valikud",
         "download": "Laadi alla",
+        "downloadFailed": "Allalaadimine ebaõnnestus",
         "optional": "valikuline",
         "create": "Loo",
         "back": "Tagasi",

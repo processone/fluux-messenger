@@ -10,6 +10,7 @@
         "ignore": "Mellőzés",
         "options": "Beállítások",
         "download": "Letöltés",
+        "downloadFailed": "A letöltés sikertelen",
         "optional": "nem kötelező",
         "create": "Létrehozás",
         "back": "Vissza",

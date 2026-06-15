@@ -10,6 +10,7 @@
         "ignore": "Игнорирай",
         "options": "Опции",
         "download": "Изтегли",
+        "downloadFailed": "Неуспешно изтегляне",
         "optional": "незадължително",
         "create": "Създай",
         "back": "Назад",

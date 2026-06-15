@@ -60,7 +60,11 @@ export function ImageLightbox({ src, alt, downloadUrl, filename, encryption, pla
       <div className="absolute top-4 end-4 z-10 flex items-center gap-2">
         <button
           type="button"
-          onClick={() => void downloadFile(proxiedSrc ?? downloadUrl, filename || 'image')}
+          onClick={() =>
+            void downloadFile(proxiedSrc ?? downloadUrl, filename || 'image', {
+              errorMessage: t('common.downloadFailed'),
+            })
+          }
           className="p-2 text-white/70 hover:text-white rounded-full hover:bg-white/10 transition-colors"
           title={t('common.download')}
         >

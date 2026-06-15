@@ -10,6 +10,7 @@
         "ignore": "Ohita",
         "options": "Asetukset",
         "download": "Lataa",
+        "downloadFailed": "Lataus epäonnistui",
         "optional": "valinnainen",
         "create": "Luo",
         "back": "Takaisin",

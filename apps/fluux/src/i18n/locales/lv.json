@@ -10,6 +10,7 @@
         "ignore": "Ignorēt",
         "options": "Opcijas",
         "download": "Lejupielādēt",
+        "downloadFailed": "Lejupielāde neizdevās",
         "optional": "neobligāts",
         "create": "Izveidot",
         "back": "Atpakaļ",

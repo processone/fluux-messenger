@@ -10,6 +10,7 @@
         "ignore": "Ignorera",
         "options": "Alternativ",
         "download": "Hämta",
+        "downloadFailed": "Hämtningen misslyckades",
         "optional": "valfritt",
         "create": "Skapa",
         "back": "Tillbaka",

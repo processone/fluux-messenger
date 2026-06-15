@@ -10,6 +10,7 @@
         "ignore": "Injora",
         "options": "Għażliet",
         "download": "Niżżel",
+        "downloadFailed": "It-tniżżil falla",
         "optional": "mhux obbligatorju",
         "create": "Oħloq",
         "back": "Lura",

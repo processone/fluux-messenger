@@ -10,6 +10,7 @@
         "ignore": "Ignorer",
         "options": "Indstillinger",
         "download": "Hent",
+        "downloadFailed": "Download mislykkedes",
         "optional": "valgfrit",
         "create": "Opret",
         "back": "Tilbage",
