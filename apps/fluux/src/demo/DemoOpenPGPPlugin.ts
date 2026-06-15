@@ -65,6 +65,7 @@ export class DemoOpenPGPPlugin implements E2EEPlugin {
   readonly descriptor = OPENPGP_DESCRIPTOR
 
   private state: DemoE2EEState
+  private ctx: PluginContext | null = null
 
   constructor(opts?: { forceConflict?: boolean }) {
     this.state = {
@@ -78,7 +79,9 @@ export class DemoOpenPGPPlugin implements E2EEPlugin {
 
   // --- E2EEPlugin interface ---
 
-  async init(_ctx: PluginContext) {}
+  async init(ctx: PluginContext) {
+    this.ctx = ctx
+  }
   async shutdown() {}
 
   async ensureIdentity(): Promise<IdentityInfo> {
@@ -193,6 +196,7 @@ export class DemoOpenPGPPlugin implements E2EEPlugin {
     const fp = this.state.backupFingerprint ?? DEMO_FINGERPRINT
     this.state.fingerprint = fp
     this.state.forceNoLocalKey = false
+    this.ctx?.notifyKeyUnlocked?.()
     return { fingerprint: fp }
   }
 
@@ -204,6 +208,7 @@ export class DemoOpenPGPPlugin implements E2EEPlugin {
     await delay(500)
     this.state.fingerprint = selectedFingerprint
     this.state.forceNoLocalKey = false
+    this.ctx?.notifyKeyUnlocked?.()
     return { fingerprint: selectedFingerprint }
   }
 
@@ -239,6 +244,7 @@ export class DemoOpenPGPPlugin implements E2EEPlugin {
     const fp = randomFingerprint()
     this.state.fingerprint = fp
     this.state.forceNoLocalKey = false
+    this.ctx?.notifyKeyUnlocked?.()
     return { fingerprint: fp }
   }
 

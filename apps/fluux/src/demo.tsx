@@ -69,6 +69,10 @@ const forceConflict = params.get('e2ee') === 'conflict'
 const demoOpenpgpPlugin = new DemoOpenPGPPlugin({ forceConflict })
 const noopXmpp = { sendStanza: async () => {}, queryDisco: async () => ({ features: [], identities: [] }), publishPEP: async () => {}, retractPEP: async () => {}, deletePEP: async () => {}, queryPEP: async () => [] as any[], subscribePEP: () => ({ unsubscribe: () => {} }) }
 demoClient.e2ee = new E2EEManager({ storage: new InMemoryStorageBackend(), xmpp: noopXmpp, account: { jid: 'you@fluux.chat' } })
+// The demo builds its manager directly, so it misses XMPPClient's callback
+// wiring. Mirror the one that drives deferred-decrypt retries after a key
+// restore (see XMPPClient.setupE2EEManagerCallbacks).
+demoClient.e2ee.onKeyUnlocked(() => demoClient.notifyE2EEKeyUnlocked())
 void demoClient.e2ee.register(demoOpenpgpPlugin).then(() => {
   useEncryptionSettingsStore.getState().setOpenpgpEnabled(true)
   useEncryptionSettingsStore.getState().notifyPluginRegistered()

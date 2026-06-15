@@ -277,7 +277,8 @@ function App() {
       }
       await plugin.restoreSecretKey(passphrase)
       setPendingIdentityChoice(null)
-      client.notifyE2EEKeyUnlocked?.()
+      // The plugin signals key-unlocked itself now (it re-runs deferred
+      // decrypts via the SDK), so no notifyE2EEKeyUnlocked() call is needed.
       addToast('success', t('settings.encryption.restoreSuccess'))
     },
     [client, t, addToast],
@@ -310,7 +311,6 @@ function App() {
       }
       await plugin.importKeyFromFile(pendingImportFile, passphrase)
       setPendingImportFile(null)
-      client.notifyE2EEKeyUnlocked?.()
       addToast('success', t('settings.encryption.restoreSuccess'))
     },
     [client, pendingImportFile, t, addToast],
@@ -326,7 +326,6 @@ function App() {
     }
     await plugin.retireAndGenerateIdentity()
     setPendingIdentityChoice(null)
-    client.notifyE2EEKeyUnlocked?.()
     addToast('success', t('settings.encryption.restoreSuccess'))
   }, [client, t, addToast])
 

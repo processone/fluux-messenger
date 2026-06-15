@@ -831,6 +831,11 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
 
     clearOwnKeyConflict()
 
+    // The replacement identity is usable now; the retired [E] subkey is kept
+    // locally so history stays decryptable. Re-run deferred decrypts so any
+    // still-stashed messages are recovered immediately.
+    ctx.notifyKeyUnlocked?.()
+
     return { fingerprint: bundle.fingerprint }
   }
 
@@ -1116,6 +1121,12 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
         `${this.pluginName()}: public key publish after install failed: ${formatError(err)}`,
       )
     }
+
+    // The key just became usable (restore / file import / picker). Tell the
+    // host so it re-runs deferred decrypts immediately — otherwise messages
+    // stashed while the key was absent stay "could not be decrypted" until an
+    // unrelated trigger (reconnect, app restart) re-registers the plugin.
+    ctx.notifyKeyUnlocked?.()
 
     return { fingerprint: bundle.fingerprint }
   }

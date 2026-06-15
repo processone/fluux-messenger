@@ -89,6 +89,7 @@ export class E2EEManager {
   private readonly forcedPlaintextConversations = new Set<string>()
   private pluginRegisteredCallback: ((pluginId: string) => void) | null = null
   private peerKeysChangedCallback: ((peer: BareJID) => void) | null = null
+  private keyUnlockedCallback: (() => void) | null = null
   // PEP key-change notifications can race plugin registration: the server
   // bursts headline pushes immediately on stream open, but plugins finish
   // their async init (IndexedDB hydration, key unwrap) seconds later. We
@@ -155,6 +156,7 @@ export class E2EEManager {
       logger: this.logger,
       account: this.account,
       reportSecurityContextUpdate: (update) => this.dispatchSecurityContextUpdate(update),
+      notifyKeyUnlocked: () => this.keyUnlockedCallback?.(),
     }
     await plugin.init(ctx)
     this.plugins.set(id, plugin)
@@ -218,6 +220,17 @@ export class E2EEManager {
   /** Set a callback invoked whenever a peer's key material changes via PEP. */
   onPeerKeysChanged(cb: (peer: BareJID) => void): void {
     this.peerKeysChangedCallback = cb
+  }
+
+  /**
+   * Set a callback invoked whenever a plugin reports (via
+   * {@link PluginContext.notifyKeyUnlocked}) that the local private key just
+   * became usable through a user action — restore, import, unlock, or
+   * identity replacement. The host re-runs deferred decrypts so messages
+   * stashed while the key was absent are recovered immediately.
+   */
+  onKeyUnlocked(cb: () => void): void {
+    this.keyUnlockedCallback = cb
   }
 
   /** Force all outbound sends to this target to skip encryption entirely. Inbound decryption is unaffected. */

@@ -105,7 +105,9 @@ export function UnlockEncryptionDialog({ client, onClose }: UnlockEncryptionDial
         throw new Error(t('settings.encryption.backupPluginUnavailable'))
       }
       const result = await plugin.unlock(passphrase)
-      client.notifyE2EEKeyUnlocked()
+      // unlock() signals key-unlocked itself now — happy path directly, or via
+      // restoreSecretKey → doInstallKey on recovery — so the SDK re-runs
+      // deferred decrypts without an explicit notifyE2EEKeyUnlocked() here.
       if (result?.recovered) {
         setRecovered(true)
         setTimeout(() => onClose(true), 1500)
@@ -149,7 +151,6 @@ export function UnlockEncryptionDialog({ client, onClose }: UnlockEncryptionDial
         setNoRecovery(null)
         return
       }
-      client.notifyE2EEKeyUnlocked()
       onClose(true)
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
@@ -314,7 +315,6 @@ export function UnlockEncryptionDialog({ client, onClose }: UnlockEncryptionDial
               selectedFingerprint,
             )
             setPicker(null)
-            client.notifyE2EEKeyUnlocked()
             onClose(true)
           }}
           onCancel={() => setPicker(null)}

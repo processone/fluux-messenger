@@ -634,6 +634,11 @@ export class WebOpenPGPPlugin extends OpenPGPPluginBase {
       // Happy path: decrypt the local key and publish/subscribe.
       await this.ensureIdentity()
       this.activateSubscriptions()
+      // The local key is now decrypted into memory — re-run deferred decrypts
+      // so messages stashed while locked are recovered. (The recovery branch
+      // below routes through restoreSecretKey → doInstallKey, which already
+      // notifies, so only this happy path needs an explicit call.)
+      this.requireCtx().notifyKeyUnlocked?.()
       return { recovered: false }
     } catch (err) {
       if (!isRecoverableLocalFailure(err)) {
