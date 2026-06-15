@@ -6,7 +6,7 @@ import { useXMPPContext } from '../provider'
 import type { Conversation, ChatStateNotification, FileAttachment, MAMQueryState, Message } from '../core'
 import { NS_MAM } from '../core/namespaces'
 import { createFetchOlderHistory, pickOldestArchiveId } from './shared'
-import { findContinueCatchUpCursor, buildCatchUpStartTime, MAM_CACHE_LOAD_LIMIT, MAM_ROOM_FORWARD_MAX_PAGES_MANUAL } from '../utils/mamCatchUpUtils'
+import { findContinueCatchUpCursor, buildCatchUpStartTime, MAM_CACHE_LOAD_LIMIT, MAM_CATCHUP_FORWARD_MAX, MAM_ROOM_FORWARD_MAX_PAGES_MANUAL } from '../utils/mamCatchUpUtils'
 
 /**
  * Stable empty array references to prevent infinite re-renders.
@@ -357,6 +357,7 @@ export function useChatActive() {
         await client.chat.queryMAM({
           with: conversationId,
           start: buildCatchUpStartTime(cursor.timestamp),
+          max: MAM_CATCHUP_FORWARD_MAX,
           maxAutoPages: MAM_ROOM_FORWARD_MAX_PAGES_MANUAL,
         })
       }
