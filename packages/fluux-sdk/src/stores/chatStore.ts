@@ -10,7 +10,7 @@ import type { MAMQueryDirection } from './shared/mamState'
 import { computeGapEnd, syncGap, type GapInterval } from './shared/mamGap'
 import * as draftState from './shared/draftState'
 import { buildMessageKeySet, isMessageDuplicate, sortMessagesByTimestamp, trimMessages, prependOlderMessages, mergeAndProcessMessages, backfillArchiveIds } from './shared/messageArrayUtils'
-import { isPreviewableMessage, findLastPreviewableMessage, shouldReplaceLastMessage } from './shared/lastMessageUtils'
+import { isPreviewableMessage, findLastPreviewableMessage, shouldReplaceLastMessage, isResolvedSamePreview } from './shared/lastMessageUtils'
 import * as notifState from './shared/notificationState'
 import { connectionStore } from './connectionStore'
 import { buildScopedStorageKey } from '../utils/storageScope'
@@ -188,6 +188,21 @@ interface ChatState {
    * @param lastMessage - The most recent message from MAM
    */
   updateLastMessagePreview: (conversationId: string, lastMessage: Message) => void
+  /**
+   * Apply an in-place content update to a conversation's lastMessage preview,
+   * but only when the preview IS the referenced message (matched across the
+   * XEP-0359 id tiers). Used by the durable-cache deferred-decrypt pass: when a
+   * conversation's preview message is decrypted while its messages aren't loaded
+   * in memory, {@link updateMessage} can't reach it and the timestamp-gated
+   * {@link updateLastMessagePreview} won't replace a same-timestamp message — so
+   * the sidebar would keep showing "[OpenPGP-encrypted message]". This refreshes
+   * the preview's content (body/securityContext/attachment/encryptedPayload)
+   * without touching the messages array.
+   * @param conversationId - Conversation JID
+   * @param messageId - id / stanzaId / originId of the decrypted message
+   * @param updates - Partial content to merge into the preview message
+   */
+  refreshLastMessageContent: (conversationId: string, messageId: string, updates: Partial<Message>) => void
   // IndexedDB message loading
   loadMessagesFromCache: (conversationId: string, options?: { limit?: number; before?: Date }) => Promise<Message[]>
   loadOlderMessagesFromCache: (conversationId: string, limit?: number) => Promise<Message[]>
@@ -1253,11 +1268,17 @@ export const chatStore = createStore<ChatState>()(
           // Update lastMessage with the newest previewable message after
           // merge/sort, skipping bodiless signal placeholders (e.g. undecrypted
           // encrypted reactions). A real message also supersedes an existing
-          // stuck placeholder even when older.
+          // stuck placeholder even when older. isResolvedSamePreview additionally
+          // heals a preview stuck on the encrypted fallback when MAM brings in the
+          // now-decrypted copy of that same message (same id/timestamp).
           const lastMessage = findLastPreviewableMessage(trimmed)
           const meta = state.conversationMeta.get(conversationId)
           const conv = state.conversations.get(conversationId)
-          if (meta && conv && lastMessage && shouldReplaceLastMessage(meta.lastMessage, lastMessage)) {
+          if (
+            meta && conv && lastMessage &&
+            (shouldReplaceLastMessage(meta.lastMessage, lastMessage) ||
+              isResolvedSamePreview(meta.lastMessage, lastMessage))
+          ) {
             // Update metadata map
             const newMeta = new Map(state.conversationMeta)
             newMeta.set(conversationId, { ...meta, lastMessage })
@@ -1317,6 +1338,30 @@ export const chatStore = createStore<ChatState>()(
         })
       },
 
+      refreshLastMessageContent: (conversationId, messageId, updates) => {
+        set((state) => {
+          const meta = state.conversationMeta.get(conversationId)
+          const conv = state.conversations.get(conversationId)
+          // Fall back to the combined map for persist/test states that lack meta.
+          const existing = meta?.lastMessage ?? conv?.lastMessage
+          if (!existing) return state
+
+          // Only touch the preview when it IS this message — matched across the
+          // id/stanzaId/originId tiers so a MAM-id copy still resolves.
+          if (findMessageIndexById([existing], messageId) === -1) return state
+
+          const updated = { ...existing, ...updates }
+
+          const newMeta = new Map(state.conversationMeta)
+          if (meta) newMeta.set(conversationId, { ...meta, lastMessage: updated })
+
+          const newConversations = new Map(state.conversations)
+          if (conv) newConversations.set(conversationId, { ...conv, lastMessage: updated })
+
+          return { conversationMeta: newMeta, conversations: newConversations }
+        })
+      },
+
       // Load messages from IndexedDB cache for a conversation
       // For initial load (no 'before'), loads the LATEST 100 messages to show most recent first
       loadMessagesFromCache: async (conversationId, options = {}) => {
@@ -1359,7 +1404,16 @@ export const chatStore = createStore<ChatState>()(
               const lastMessage = findLastPreviewableMessage(trimmed)
               const meta = state.conversationMeta.get(conversationId)
               const conv = state.conversations.get(conversationId)
-              if (meta && conv && lastMessage && shouldReplaceLastMessage(meta.lastMessage, lastMessage)) {
+              // Replace when newer/a stuck placeholder, OR when this is the same
+              // message resolved in the cache (deferred decrypt) while the preview
+              // kept the encrypted fallback — shouldReplaceLastMessage's
+              // strictly-newer gate would otherwise leave the sidebar stuck on
+              // "[OpenPGP-encrypted message]".
+              if (
+                meta && conv && lastMessage &&
+                (shouldReplaceLastMessage(meta.lastMessage, lastMessage) ||
+                  isResolvedSamePreview(meta.lastMessage, lastMessage))
+              ) {
                 // Update metadata map
                 const newMeta = new Map(state.conversationMeta)
                 newMeta.set(conversationId, { ...meta, lastMessage })

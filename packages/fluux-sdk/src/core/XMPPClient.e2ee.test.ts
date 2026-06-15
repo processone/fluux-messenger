@@ -442,6 +442,48 @@ describe('XMPPClient.retryPendingDecrypts()', () => {
       expect(decryptSpy).toHaveBeenCalledTimes(1)
       expect(count).toBe(1)
     })
+
+    it('refreshes the sidebar preview when the durable-decrypted message is the conversation lastMessage', async () => {
+      // Reported bug: the key is unlocked while a conversation is NOT open, so its
+      // last message is decrypted via the durable cache only. The bubble shows the
+      // cleartext on open, but the sidebar preview stayed "[OpenPGP-encrypted
+      // message]" because nothing refreshed the in-memory lastMessage.
+      vi.spyOn(manager, 'decryptArchive').mockResolvedValue({
+        plaintext: new TextEncoder().encode('hello'),
+        senderDevice: { jid: 'carol@example.com', deviceId: 'test' },
+        securityContext: { protocolId: 'dummy-plaintext', trust: 'verified' },
+      })
+
+      const encryptedPreview = {
+        type: 'chat' as const,
+        id: 'durable-preview-1',
+        conversationId: 'carol@example.com',
+        from: 'carol@example.com',
+        body: '[OpenPGP-encrypted message]',
+        timestamp: new Date('2026-06-13T18:48:00Z'),
+        isOutgoing: false,
+        encryptedPayload: DUMMY_PAYLOAD_XML,
+      }
+
+      // Conversation is in the sidebar (preview = the encrypted message) but its
+      // messages are NOT loaded — the ciphertext lives only in the durable cache.
+      chatStore.getState().addConversation({
+        id: 'carol@example.com',
+        name: 'Carol',
+        type: 'chat',
+        lastMessage: encryptedPreview,
+        unreadCount: 1,
+      })
+      vi.mocked(messageCache.getMessagesWithEncryptedPayload).mockResolvedValue([encryptedPreview])
+
+      await xmppClient.retryPendingDecrypts()
+
+      const conv = chatStore.getState().conversations.get('carol@example.com')
+      expect(conv?.lastMessage?.body).toBe('hello')
+      expect(conv?.lastMessage?.encryptedPayload).toBeUndefined()
+      // The metadata map (what the sidebar subscribes to) is healed too.
+      expect(chatStore.getState().conversationMeta.get('carol@example.com')?.lastMessage?.body).toBe('hello')
+    })
   })
 
   describe('deferred-decrypt of bodiless modifications', () => {

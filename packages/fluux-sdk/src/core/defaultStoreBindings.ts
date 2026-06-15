@@ -126,6 +126,7 @@ export function createDefaultStoreBindings(options: DefaultStoreBindingsOptions 
       markAllNeedsCatchUp: chatStore.getState().markAllNeedsCatchUp,
       clearNeedsCatchUp: chatStore.getState().clearNeedsCatchUp,
       updateLastMessagePreview: chatStore.getState().updateLastMessagePreview,
+      refreshLastMessageContent: chatStore.getState().refreshLastMessageContent,
       loadMessagesFromCache: chatStore.getState().loadMessagesFromCache,
       getAllConversations: () => {
         const state = chatStore.getState()

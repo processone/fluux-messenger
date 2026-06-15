@@ -97,6 +97,9 @@ export interface StoreBindings {
     clearNeedsCatchUp: (conversationId: string) => void
     // Update sidebar preview without affecting message history
     updateLastMessagePreview: (conversationId: string, lastMessage: Message) => void
+    // Refresh the preview's content in place, but only when it is the referenced
+    // message — heals a deferred-decrypted lastMessage for an unopened conversation.
+    refreshLastMessageContent?: (conversationId: string, messageId: string, updates: Partial<Message>) => void
     // Load messages from IndexedDB cache into the conversation's in-memory message array
     loadMessagesFromCache?: (conversationId: string, options?: { limit?: number }) => Promise<unknown>
     // Get all conversations for MAM catch-up
