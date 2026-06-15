@@ -13,7 +13,10 @@ export const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in
 // rather than holding a ref, so a mid-session grant (e.g. from the Settings
 // screen, or after the user flips the OS toggle) takes effect everywhere without
 // an app restart.
-let permissionChecked = false
+// The account (bare JID) we've already run the once-per-session auto-prompt for.
+// Keying the latch on the JID re-arms it when the account changes (login of a
+// different account, or logout→login) without re-prompting on a plain reconnect.
+let promptedForJid: string | null = null
 let granted = false
 
 /** Current notification permission, as last read. Read by the notification hooks. */
@@ -70,24 +73,35 @@ export async function refreshNotificationPermission(): Promise<boolean> {
  */
 export async function requestNotificationPermission(): Promise<boolean> {
   granted = await promptPermission()
-  permissionChecked = true
   return granted
 }
 
 /**
- * Request notification permission once per session, after the user comes online.
- * The module-level latch means the prompt fires only once regardless of how many
- * consumers mount. Components read the result via getNotificationPermissionGranted().
+ * Request notification permission once per account, after the user comes online,
+ * and keep the shared gate in sync with the live OS permission across account
+ * changes. The module-level latch means the prompt fires once per account
+ * regardless of how many consumers mount. Components read the result via
+ * getNotificationPermissionGranted().
  */
 export function useNotificationPermission(): void {
   const status = useConnectionStore((s) => s.status)
+  const jid = useConnectionStore((s) => s.jid)
 
+  // Re-sync the gate to the live OS permission whenever the account changes, so a
+  // grant/deny that changed while signed out (or under another account) is
+  // reflected immediately instead of staying stale until a Settings focus.
   useEffect(() => {
-    if (status !== 'online') return
-    if (permissionChecked) return
-    permissionChecked = true
+    void refreshNotificationPermission().catch(() => {})
+  }, [jid])
+
+  // Auto-prompt once per account after it comes online. The JID-keyed latch
+  // re-arms on account switch / re-login but is a no-op on a plain reconnect.
+  useEffect(() => {
+    if (status !== 'online' || !jid) return
+    if (promptedForJid === jid) return
+    promptedForJid = jid
     void requestNotificationPermission().catch((error) => {
       console.error('[Notifications] Error requesting permission:', error)
     })
-  }, [status])
+  }, [status, jid])
 }
