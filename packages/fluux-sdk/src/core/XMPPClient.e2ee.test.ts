@@ -758,4 +758,65 @@ describe('XMPPClient.retryPendingDecrypts()', () => {
       expect(passes).toBe(2)
     })
   })
+
+  describe('key-unlocked wiring (ensureE2EEManager)', () => {
+    it('decrypts a stashed message when the plugin signals notifyKeyUnlocked()', async () => {
+      // End-to-end guard for the centralized restore→retry trigger. Build the
+      // manager through the REAL XMPPClient path (ensureE2EEManager, which
+      // wires onKeyUnlocked) rather than the hand-attached manager used by the
+      // other tests, then have the plugin fire ctx.notifyKeyUnlocked() — the
+      // signal a key restore/unlock emits — and assert the stashed message
+      // actually decrypts. Covers the links the per-unit tests leave un-joined:
+      // manager.onKeyUnlocked → notifyE2EEKeyUnlocked → retryPendingDecrypts.
+      const client = new XMPPClient({ debug: false })
+      ;(client as unknown as { currentJid: string }).currentJid = 'me@example.com/web'
+      ;(client as unknown as { ensureE2EEManager: () => void }).ensureE2EEManager()
+      const plugin = new DummyPlaintextPlugin()
+      await client.e2ee!.register(plugin)
+      const ctx = (plugin as unknown as { ctx: { notifyKeyUnlocked?: () => void } }).ctx
+
+      // DummyPlaintextPlugin decrypts to trust:'untrusted', which re-stashes
+      // for deferred verification instead of committing. Mock decryptArchive to
+      // return 'verified' so the retry commits the body — the wiring is what
+      // this test exercises, not the crypto (covered by stanzaDecrypt tests).
+      vi.spyOn(client.e2ee!, 'decryptArchive').mockResolvedValue({
+        plaintext: new TextEncoder().encode('hello'),
+        senderDevice: { jid: 'carol@example.com', deviceId: 'test' },
+        securityContext: { protocolId: 'dummy-plaintext', trust: 'verified' },
+      })
+
+      chatStore.getState().addConversation({
+        id: 'carol@example.com',
+        name: 'Carol',
+        type: 'chat',
+        lastMessage: undefined,
+        unreadCount: 0,
+      })
+      chatStore.getState().addMessage({
+        type: 'chat',
+        id: 'msg-stashed-until-unlock',
+        conversationId: 'carol@example.com',
+        from: 'carol@example.com',
+        body: '[Encrypted message: could not decrypt]',
+        timestamp: new Date(),
+        isOutgoing: false,
+        encryptedPayload: DUMMY_PAYLOAD_XML,
+      })
+
+      // notifyE2EEKeyUnlocked fires retryPendingDecrypts fire-and-forget (and is
+      // double-triggered via the e2ee:key-unlocked event — the coalescing guard
+      // dedupes it). Spy to prove the unlock kicked off the retry, then await
+      // every pass it started so the decrypt settles before asserting.
+      const retrySpy = vi.spyOn(client, 'retryPendingDecrypts')
+      ctx.notifyKeyUnlocked?.()
+      expect(retrySpy).toHaveBeenCalled() // the wiring fired
+      await Promise.all(retrySpy.mock.results.map((r) => Promise.resolve(r.value)))
+
+      const msg = (chatStore.getState().messages.get('carol@example.com') ?? []).find(
+        (m) => m.id === 'msg-stashed-until-unlock',
+      )
+      expect(msg?.body).toBe('hello')
+      expect(msg?.encryptedPayload).toBeUndefined()
+    })
+  })
 })

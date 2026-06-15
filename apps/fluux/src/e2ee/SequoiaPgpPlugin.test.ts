@@ -480,6 +480,12 @@ function makeContext(accountJid: string): {
    * an upgrade for the right messageId.
    */
   securityUpdates: SecurityContextUpdate[]
+  /**
+   * Number of `notifyKeyUnlocked()` calls. Tests assert that a user-driven
+   * key install (restore / import / picker / replace) fires it so the host
+   * re-runs deferred decrypts.
+   */
+  keyUnlocks: { count: number }
 } {
   const peerNodes = new Map<string, PEPItem[]>() // keyed "jid\0node"
   const published: Array<{
@@ -490,6 +496,7 @@ function makeContext(accountJid: string): {
   const retracted: Array<{ node: string; itemId: string }> = []
   const deletedNodes: string[] = []
   const securityUpdates: SecurityContextUpdate[] = []
+  const keyUnlocks = { count: 0 }
 
   const xmpp: XMPPPrimitives = {
     sendStanza: async () => {},
@@ -538,6 +545,9 @@ function makeContext(accountJid: string): {
     reportSecurityContextUpdate: (update) => {
       securityUpdates.push(update)
     },
+    notifyKeyUnlocked: () => {
+      keyUnlocks.count++
+    },
   }
   const peerPublish = (peer: string, node: string, item: PEPItem) => {
     const key = `${peer}\u0000${node}`
@@ -545,7 +555,7 @@ function makeContext(accountJid: string): {
     existing.push(item)
     peerNodes.set(key, existing)
   }
-  return { ctx, published, retracted, deletedNodes, peerPublish, securityUpdates }
+  return { ctx, published, retracted, deletedNodes, peerPublish, securityUpdates, keyUnlocks }
 }
 
 describe('SequoiaPgpPlugin', () => {
@@ -2595,6 +2605,48 @@ describe('SequoiaPgpPlugin', () => {
       // Unused to silence "published is declared but never read" from the
       // device A context.
       void publishedA
+    })
+
+    it('fires ctx.notifyKeyUnlocked() after restoreSecretKey, but NOT on init', async () => {
+      // Regression: a restored key must tell the host to re-run deferred
+      // decrypts, otherwise messages stashed while the key was absent stay
+      // "could not be decrypted" until the next reconnect. The passive key
+      // load in init() must NOT fire it (plugin registration already
+      // triggers a retry — a second one would be redundant).
+      const { ctx: ctxA } = makeContext('me@example.com')
+      await plugin.init(ctxA)
+      await plugin.backupSecretKey('shared-pp')
+      const backup = await plugin.fetchSecretKeyBackup()
+
+      fake.accounts.clear()
+      const pluginB = new SequoiaPgpPlugin({ invoke: fake.invoke })
+      const { ctx: ctxB, keyUnlocks } = makeContext('me@example.com')
+      await pluginB.init(ctxB)
+      // init's passive load is covered by the plugin-registered retry.
+      expect(keyUnlocks.count).toBe(0)
+
+      ctxB.xmpp.publishPEP(SECRET_KEY_NODE, {
+        id: 'current',
+        payload: {
+          name: 'secretkey',
+          attrs: { xmlns: 'urn:xmpp:openpgp:0' },
+          children: [encodeOpenPgpArmorForXep0373(backup!)],
+        },
+      })
+
+      await pluginB.restoreSecretKey('shared-pp')
+      expect(keyUnlocks.count).toBe(1)
+    })
+
+    it('fires ctx.notifyKeyUnlocked() after retireAndGenerateIdentity', async () => {
+      // The retained [E] subkey keeps history decryptable, so re-running
+      // deferred decrypts after a replacement is worthwhile.
+      const { ctx, keyUnlocks } = makeContext('me@example.com')
+      await plugin.init(ctx)
+      expect(keyUnlocks.count).toBe(0)
+
+      await plugin.retireAndGenerateIdentity()
+      expect(keyUnlocks.count).toBe(1)
     })
 
     it('restoreSecretKey deletes the stale per-fingerprint data node when the primary FP changes', async () => {

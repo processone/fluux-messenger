@@ -2323,6 +2323,26 @@ describe('WebOpenPGPPlugin', () => {
       expect(fresh.getOwnFingerprint()).toBe(fp)
     })
 
+    it('fires ctx.notifyKeyUnlocked() on a normal local unlock, but NOT on init', async () => {
+      // Web parity with the Sequoia restore path: a successful unlock must tell
+      // the host so deferred decrypts re-run. init()'s locked load must NOT.
+      const backend = new InMemoryStorageBackend()
+      const setup = new WebOpenPGPPlugin()
+      setSessionPassphrase(PP)
+      await setup.init(makeCtx('alice@example.com', backend).ctx)
+
+      clearSessionPassphrase()
+      const fresh = new WebOpenPGPPlugin()
+      const ctx = makeCtx('alice@example.com', backend).ctx
+      const notifyKeyUnlocked = vi.fn()
+      ctx.notifyKeyUnlocked = notifyKeyUnlocked
+      await fresh.init(ctx) // key is locked → init returns early, no unlock signal
+      expect(notifyKeyUnlocked).not.toHaveBeenCalled()
+
+      await fresh.unlock(PP)
+      expect(notifyKeyUnlocked).toHaveBeenCalledTimes(1)
+    })
+
     it('recovers a stale local key from the server backup (rotated passphrase)', async () => {
       const shared: SharedPep = new Map()
       const sourceBackend = new InMemoryStorageBackend()

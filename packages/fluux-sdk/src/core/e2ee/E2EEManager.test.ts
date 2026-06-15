@@ -300,6 +300,35 @@ describe('E2EEManager — registration', () => {
   })
 })
 
+describe('E2EEManager — key-unlocked channel', () => {
+  it('routes ctx.notifyKeyUnlocked() to the onKeyUnlocked callback', async () => {
+    const mgr = makeManager()
+    const onUnlocked = vi.fn()
+    mgr.onKeyUnlocked(onUnlocked)
+
+    const plugin = new FakePlugin(weakDescriptor, 'urn:test:weak')
+    const initSpy = vi.spyOn(plugin, 'init')
+    await mgr.register(plugin)
+
+    const ctx = initSpy.mock.calls[0][0]
+    // The host wires the channel; the plugin fires it on a user-driven
+    // key-availability change (restore / import / unlock / replace).
+    expect(onUnlocked).not.toHaveBeenCalled()
+    ctx.notifyKeyUnlocked?.()
+    expect(onUnlocked).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not throw when no onKeyUnlocked callback is registered', async () => {
+    const mgr = makeManager()
+    const plugin = new FakePlugin(weakDescriptor, 'urn:test:weak')
+    const initSpy = vi.spyOn(plugin, 'init')
+    await mgr.register(plugin)
+
+    const ctx = initSpy.mock.calls[0][0]
+    expect(() => ctx.notifyKeyUnlocked?.()).not.toThrow()
+  })
+})
+
 describe('E2EEManager — strategy selection', () => {
   it('picks highest securityLevel among mutually-supported plugins', async () => {
     const mgr = makeManager()

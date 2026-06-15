@@ -388,6 +388,25 @@ export interface PluginContext {
    * {@link SecurityContext} via {@link DecryptResult} instead).
    */
   reportSecurityContextUpdate(update: SecurityContextUpdate): void
+
+  /**
+   * Plugin-driven channel for telling the host that the local private key
+   * has just become usable through a user action — passphrase entered,
+   * server backup restored, key file imported, or identity replaced. The
+   * host re-runs every pending deferred decrypt (see
+   * {@link XMPPClient.retryPendingDecrypts}) so messages that arrived while
+   * the key was locked or absent are decrypted immediately, without each UI
+   * restore site having to remember to call
+   * {@link XMPPClient.notifyE2EEKeyUnlocked} (one such site being missed is
+   * exactly how restored messages stayed "could not be decrypted").
+   *
+   * Wired by {@link E2EEManager} at {@link E2EEManager.register} time;
+   * optional so hand-rolled hosts and tests may omit it — plugins invoke it
+   * defensively as `ctx.notifyKeyUnlocked?.()`. Plugins MUST NOT call it from
+   * `init`'s passive key load: registration already triggers a retry via the
+   * plugin-registered event, so firing here too would be redundant.
+   */
+  notifyKeyUnlocked?(): void
 }
 
 /**
