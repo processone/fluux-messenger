@@ -9,7 +9,11 @@ import type { Options as NotificationOptions } from '@tauri-apps/plugin-notifica
 import { isMacOSDesktop } from '@/utils/tauriPlatform'
 import { useNotificationEvents } from './useNotificationEvents'
 import { useNavigateToTarget } from './useNavigateToTarget'
-import { useNotificationPermission, isTauri } from './useNotificationPermission'
+import {
+  useNotificationPermission,
+  getNotificationPermissionGranted,
+  isTauri,
+} from './useNotificationPermission'
 import { getNotificationAvatarUrl } from '@/utils/notificationAvatar'
 import { formatLocalizedPreview } from '@/utils/messagePreviewText'
 import { notificationDebug } from '@/utils/notificationDebug'
@@ -27,7 +31,7 @@ import { routeNotificationTarget } from '@/utils/notificationRouting'
  */
 export function useDesktopNotifications(): void {
   const { navigateToConversation, navigateToRoom } = useNavigateToTarget()
-  const permissionGranted = useNotificationPermission()
+  useNotificationPermission()
   const { presenceStatus } = usePresence()
   const { t } = useTranslation()
 
@@ -112,7 +116,7 @@ export function useDesktopNotifications(): void {
   // Show conversation notification
   const showConversationNotification = async (conv: Conversation, message: Message) => {
     if (presenceStatusRef.current === 'dnd') return
-    if (!permissionGranted.current) {
+    if (!getNotificationPermissionGranted()) {
       notificationDebug.desktopNotification({
         title: conv.name || message.from.split('@')[0],
         body: '(permission not granted)',
@@ -169,7 +173,7 @@ export function useDesktopNotifications(): void {
   // Show room notification
   const showRoomNotification = async (room: Room, message: RoomMessage) => {
     if (presenceStatusRef.current === 'dnd') return
-    if (!permissionGranted.current) {
+    if (!getNotificationPermissionGranted()) {
       notificationDebug.desktopNotification({
         title: `${message.nick} @ ${room.name}`,
         body: '(permission not granted)',

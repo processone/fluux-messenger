@@ -66,7 +66,8 @@ vi.mock('./useNavigateToTarget', () => ({
 
 const mockPermissionGranted = { current: true }
 vi.mock('./useNotificationPermission', () => ({
-  useNotificationPermission: () => mockPermissionGranted,
+  useNotificationPermission: () => {},
+  getNotificationPermissionGranted: () => mockPermissionGranted.current,
   isTauri: false,
 }))
 
