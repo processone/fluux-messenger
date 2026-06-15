@@ -62,6 +62,14 @@ fn is_insecure_tls() -> bool {
 /// own separate 10-second timeout (see `perform_starttls`).
 const TCP_CONNECT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(15);
 
+/// Total budget for establishing the upstream TLS connection across ALL
+/// resolved endpoints. Happy Eyeballs only bounds the race WITHIN one host, so
+/// without an overall cap a domain whose SRV records all black-hole would stall
+/// ~N × TCP_CONNECT_TIMEOUT (e.g. 4 records → ~60s). Each endpoint still gets up
+/// to TCP_CONNECT_TIMEOUT, but the sum is capped here. 30s leaves room for a
+/// full first attempt plus a fallback while bounding the pathological case.
+const OVERALL_CONNECT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
+
 /// Timeout waiting for the first client stanza after WebSocket handshake.
 ///
 /// The proxy now waits for the initial `<open/>` from the client before starting
@@ -732,11 +740,118 @@ async fn try_connect_endpoint(
     }
 }
 
+/// Try each resolved endpoint in priority order until one connects, bounded by
+/// an OVERALL deadline so a domain with several black-holed SRV records can't
+/// stall ~N × `per_attempt_timeout`.
+///
+/// Each attempt gets `per_attempt_timeout`, but never more than the time left in
+/// `overall_timeout` — and once the budget is spent the remaining endpoints are
+/// skipped. The per-attempt cap wraps the WHOLE attempt (TCP race + TLS
+/// handshake), so a hung TLS handshake can't escape the budget either.
+///
+/// Generic over the connect step purely so it can be unit-tested with a fake
+/// connector under paused time; production passes [`try_connect_endpoint`].
+async fn connect_first_endpoint<T, F, Fut>(
+    endpoints: &[XmppEndpoint],
+    overall_timeout: std::time::Duration,
+    per_attempt_timeout: std::time::Duration,
+    mut connect: F,
+) -> Result<T, String>
+where
+    // Owned (cloned) endpoint, not a reference: a closure returning a future that
+    // borrows its argument can't be expressed without HRTB gymnastics. Cloning a
+    // resolved endpoint (a few small strings) per attempt is negligible.
+    F: FnMut(XmppEndpoint) -> Fut,
+    Fut: std::future::Future<Output = Result<T, String>>,
+{
+    // tokio::time::Instant (not std) so the deadline honours paused time in tests
+    // and the runtime clock in production.
+    let overall_deadline = tokio::time::Instant::now() + overall_timeout;
+    let endpoint_count = endpoints.len();
+    let mut errors: Vec<String> = Vec::new();
+
+    for (i, endpoint) in endpoints.iter().enumerate() {
+        let attempt = i + 1;
+        let remaining = overall_deadline.saturating_duration_since(tokio::time::Instant::now());
+        if remaining.is_zero() {
+            warn!(
+                attempted = i, total = endpoint_count,
+                "Overall connect budget exhausted; skipping remaining endpoint(s)"
+            );
+            errors.push(format!(
+                "overall connect timeout ({}s) reached after {} of {} endpoint(s)",
+                overall_timeout.as_secs(), i, endpoint_count
+            ));
+            break;
+        }
+        let attempt_timeout = remaining.min(per_attempt_timeout);
+        info!(
+            attempt, total = endpoint_count,
+            host = %endpoint.host, port = endpoint.port,
+            mode = ?endpoint.mode, tls_name = endpoint.tls_name(),
+            "Trying endpoint"
+        );
+
+        match tokio::time::timeout(attempt_timeout, connect(endpoint.clone())).await {
+            Ok(Ok(stream)) => {
+                if attempt > 1 {
+                    info!(
+                        attempt, total = endpoint_count,
+                        host = %endpoint.host, port = endpoint.port,
+                        "Connected after {} failed attempt(s)", attempt - 1
+                    );
+                }
+                return Ok(stream);
+            }
+            Ok(Err(e)) => {
+                if attempt < endpoint_count {
+                    warn!(
+                        attempt, total = endpoint_count,
+                        host = %endpoint.host, port = endpoint.port,
+                        mode = ?endpoint.mode, error = %e,
+                        "Endpoint failed, trying next"
+                    );
+                } else {
+                    error!(
+                        attempt, total = endpoint_count,
+                        host = %endpoint.host, port = endpoint.port,
+                        mode = ?endpoint.mode, error = %e,
+                        "Endpoint failed, no more endpoints"
+                    );
+                }
+                errors.push(format!(
+                    "{}:{} ({:?}): {}",
+                    endpoint.host, endpoint.port, endpoint.mode, e
+                ));
+            }
+            Err(_elapsed) => {
+                warn!(
+                    attempt, total = endpoint_count,
+                    host = %endpoint.host, port = endpoint.port,
+                    timeout_s = attempt_timeout.as_secs(),
+                    "Endpoint attempt timed out"
+                );
+                errors.push(format!(
+                    "{}:{} ({:?}): timed out after {}s",
+                    endpoint.host, endpoint.port, endpoint.mode, attempt_timeout.as_secs()
+                ));
+            }
+        }
+    }
+
+    Err(format!(
+        "All {} endpoint(s) failed:\n  - {}",
+        errors.len(),
+        errors.join("\n  - ")
+    ))
+}
+
 /// Resolve upstream endpoint(s) and establish a TLS stream (direct TLS or STARTTLS).
 ///
 /// For explicit endpoints (`tls://`, `tcp://`, `host:port`), tries a single connection.
 /// For bare domains, resolves all SRV records and tries each in priority order,
-/// falling through to the next endpoint on TCP or TLS failure.
+/// falling through to the next endpoint on TCP or TLS failure (bounded by an
+/// overall connect budget — see [`connect_first_endpoint`]).
 async fn connect_upstream_tls(
     server_input: &str,
     client_domain: Option<&str>,
@@ -765,58 +880,15 @@ async fn connect_upstream_tls(
     let endpoint_count = endpoints.len();
     info!(endpoint_count, dns_resolve_ms, "Resolved endpoints, attempting connections");
 
-    let mut errors: Vec<String> = Vec::new();
-
-    for (i, endpoint) in endpoints.iter().enumerate() {
-        let attempt = i + 1;
-        info!(
-            attempt, total = endpoint_count,
-            host = %endpoint.host, port = endpoint.port,
-            mode = ?endpoint.mode, tls_name = endpoint.tls_name(),
-            "Trying endpoint"
-        );
-
-        match try_connect_endpoint(endpoint).await {
-            Ok(tls_stream) => {
-                if attempt > 1 {
-                    info!(
-                        attempt, total = endpoint_count,
-                        host = %endpoint.host, port = endpoint.port,
-                        "Connected after {} failed attempt(s)", attempt - 1
-                    );
-                }
-                return Ok(tls_stream);
-            }
-            Err(e) => {
-                let has_more = attempt < endpoint_count;
-                if has_more {
-                    warn!(
-                        attempt, total = endpoint_count,
-                        host = %endpoint.host, port = endpoint.port,
-                        mode = ?endpoint.mode, error = %e,
-                        "Endpoint failed, trying next"
-                    );
-                } else {
-                    error!(
-                        attempt, total = endpoint_count,
-                        host = %endpoint.host, port = endpoint.port,
-                        mode = ?endpoint.mode, error = %e,
-                        "Endpoint failed, no more endpoints"
-                    );
-                }
-                errors.push(format!(
-                    "{}:{} ({:?}): {}",
-                    endpoint.host, endpoint.port, endpoint.mode, e
-                ));
-            }
-        }
-    }
-
-    Err(format!(
-        "All {} endpoint(s) failed:\n  - {}",
-        errors.len(),
-        errors.join("\n  - ")
-    ))
+    // Try each endpoint in priority order, capped by an overall budget so a
+    // multi-record domain that black-holes can't stall ~N × TCP_CONNECT_TIMEOUT.
+    connect_first_endpoint(
+        &endpoints,
+        OVERALL_CONNECT_TIMEOUT,
+        TCP_CONNECT_TIMEOUT,
+        |endpoint| async move { try_connect_endpoint(&endpoint).await },
+    )
+    .await
 }
 
 /// Perform XMPP STARTTLS negotiation on a plain TCP connection.
@@ -1819,5 +1891,78 @@ mod tests {
             stream_error_condition_from_error("TCP connect timed out after 15s to host:5222"),
             None
         );
+    }
+
+    // --- connect_first_endpoint: overall budget across SRV endpoints ---
+
+    fn test_endpoint(host: &str) -> XmppEndpoint {
+        XmppEndpoint {
+            host: host.to_string(),
+            port: 5222,
+            mode: ConnectionMode::DirectTls,
+            domain: None,
+        }
+    }
+
+    /// A domain whose SRV records all black-hole must NOT cost ~N × the
+    /// per-endpoint timeout: the overall budget caps the total. With a 30s
+    /// budget and a 15s per-attempt cap, only two of three black-holed
+    /// endpoints are attempted before the budget is exhausted.
+    #[tokio::test(start_paused = true)]
+    async fn connect_first_endpoint_caps_total_time_across_endpoints() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        use std::sync::Arc;
+
+        let endpoints = vec![test_endpoint("a"), test_endpoint("b"), test_endpoint("c")];
+        let attempts = Arc::new(AtomicUsize::new(0));
+        let attempts_c = attempts.clone();
+
+        let result: Result<(), String> = connect_first_endpoint(
+            &endpoints,
+            std::time::Duration::from_secs(30),
+            std::time::Duration::from_secs(15),
+            move |_ep| {
+                let attempts_c = attempts_c.clone();
+                async move {
+                    attempts_c.fetch_add(1, Ordering::SeqCst);
+                    // Black-hole: never resolves before the per-attempt cap.
+                    tokio::time::sleep(std::time::Duration::from_secs(60)).await;
+                    Err::<(), String>("blackhole".to_string())
+                }
+            },
+        )
+        .await;
+
+        assert!(result.is_err());
+        assert_eq!(
+            attempts.load(Ordering::SeqCst),
+            2,
+            "overall budget must stop after 2 endpoints, not try all 3"
+        );
+    }
+
+    /// The first endpoint that connects wins, and earlier failures fall through.
+    #[tokio::test(start_paused = true)]
+    async fn connect_first_endpoint_returns_first_success() {
+        let endpoints = vec![test_endpoint("fail"), test_endpoint("ok")];
+
+        let result: Result<u32, String> = connect_first_endpoint(
+            &endpoints,
+            std::time::Duration::from_secs(30),
+            std::time::Duration::from_secs(15),
+            |ep| {
+                let host = ep.host.clone();
+                async move {
+                    if host == "ok" {
+                        Ok(42u32)
+                    } else {
+                        Err("refused".to_string())
+                    }
+                }
+            },
+        )
+        .await;
+
+        assert_eq!(result, Ok(42u32));
     }
 }
