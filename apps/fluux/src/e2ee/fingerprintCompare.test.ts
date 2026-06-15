@@ -3,6 +3,7 @@ import {
   fingerprintsEqual,
   normalizeFingerprint,
   toXep0373Fingerprint,
+  pubkeyMetadataFingerprintAttrs,
 } from './fingerprintCompare'
 
 describe('fingerprintCompare', () => {
@@ -39,6 +40,26 @@ describe('fingerprintCompare', () => {
     it('is idempotent on already upper-case input (Sequoia)', () => {
       const upper = 'AABBCCDDEEFF00112233445566778899AABBCCDD'
       expect(toXep0373Fingerprint(upper)).toBe(upper)
+    })
+  })
+
+  describe('pubkeyMetadataFingerprintAttrs', () => {
+    // A v4 fingerprint is 40 hex chars (SHA-1); a v6 fingerprint is 64 hex
+    // chars (SHA-256). Advertising a 40-hex value under `v6-fingerprint` is a
+    // malformed v6 advertisement — emit only the attribute that matches the
+    // key version.
+    it('advertises a 40-hex (v4) fingerprint as v4-fingerprint only', () => {
+      const fp = 'aabbccddeeff00112233445566778899aabbccdd' // 40 hex, lower
+      const attrs = pubkeyMetadataFingerprintAttrs(fp)
+      expect(attrs['v4-fingerprint']).toBe(fp.toUpperCase())
+      expect(attrs['v6-fingerprint']).toBeUndefined()
+    })
+
+    it('advertises a 64-hex (v6) fingerprint as v6-fingerprint only', () => {
+      const fp = 'a'.repeat(64) // 64 hex, v6
+      const attrs = pubkeyMetadataFingerprintAttrs(fp)
+      expect(attrs['v6-fingerprint']).toBe('A'.repeat(64))
+      expect(attrs['v4-fingerprint']).toBeUndefined()
     })
   })
 })

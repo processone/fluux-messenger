@@ -692,4 +692,70 @@ describe('XMPPClient.retryPendingDecrypts()', () => {
       expect(msg?.encryptedPayload).toBeUndefined()
     })
   })
+
+  describe('concurrent-retry coalescing', () => {
+    // Regression guard: on a fresh web session two triggers fire close
+    // together — plugin-registration (key still locked) and key-unlocked
+    // (passphrase entered). The unlock retry used to hit the re-entrancy
+    // guard while the registration pass was still in flight and return 0,
+    // silently dropping the work. The user saw "entered passphrase, nothing
+    // decrypted" and had to re-enter the passphrase to get a non-colliding
+    // retry. A retry requested mid-pass must instead run a second full pass
+    // after the first completes.
+    const flush = () => new Promise((r) => setTimeout(r, 0))
+
+    it('runs a second pass when a retry is requested while one is in flight', async () => {
+      // Sibling durable-cache tests override this mock and afterEach only
+      // clearAllMocks() (which keeps mockResolvedValue implementations), so
+      // pin the durable pass to empty here for isolation.
+      vi.mocked(messageCache.getMessagesWithEncryptedPayload).mockResolvedValue([])
+
+      chatStore.getState().addConversation({
+        id: 'alice@example.com',
+        name: 'Alice',
+        type: 'chat',
+        lastMessage: undefined,
+        unreadCount: 0,
+      })
+      // Message stays pending across passes, so it remains eligible and we
+      // can count how many full passes touched it.
+      chatStore.getState().addMessage({
+        type: 'chat',
+        id: 'pending-1',
+        conversationId: 'alice@example.com',
+        from: 'alice@example.com',
+        body: '[could not decrypt]',
+        timestamp: new Date(),
+        isOutgoing: false,
+        encryptedPayload: DUMMY_PAYLOAD_XML,
+      })
+
+      // Gate the first pass inside its decrypt collaborator so a second
+      // retry is requested while pass #1 is still running.
+      let releaseGate!: () => void
+      const gate = new Promise<void>((resolve) => {
+        releaseGate = resolve
+      })
+      let passes = 0
+      ;(xmppClient as unknown as { retryDecryptSingle: () => Promise<unknown> }).retryDecryptSingle =
+        vi.fn(async () => {
+          passes++
+          if (passes === 1) await gate
+          return { kind: 'pending' as const }
+        })
+
+      const inFlight = xmppClient.retryPendingDecrypts()
+      await flush() // let pass #1 park on the gate
+
+      // Second trigger arrives while pass #1 is still running.
+      await xmppClient.retryPendingDecrypts()
+
+      releaseGate()
+      await inFlight
+      await flush() // let the coalesced re-run execute
+      await flush()
+
+      expect(passes).toBe(2)
+    })
+  })
 })

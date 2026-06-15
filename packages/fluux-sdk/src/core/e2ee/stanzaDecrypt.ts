@@ -197,6 +197,10 @@ export async function decryptStanzaInPlace(
   let securityContext: SecurityContext | null = null
   let authoredAt: Date | null = null
   let failureReason: string | null = null
+  // Set when the failure is a structurally malformed payload (not valid
+  // OpenPGP): it will never decrypt regardless of keys, so it is terminal —
+  // do NOT stash for retry. Distinct from a signature rejection.
+  let terminalFailure = false
 
   try {
     const messageId = stanza.attrs.id
@@ -235,6 +239,9 @@ export async function decryptStanzaInPlace(
         trust: 'rejected',
         notes: [failureReason],
       }
+    } else if (isE2EEPluginError(err) && err.kind === 'permanent' && err.code === 'malformed-data') {
+      // Ciphertext is not valid OpenPGP — terminal, never retried.
+      terminalFailure = true
     }
   }
 
@@ -257,7 +264,9 @@ export async function decryptStanzaInPlace(
             ? 'rejected: invalid signature — bodiless signal dropped'
             : isRejection
               ? 'rejected: invalid signature'
-              : 'retryable'
+              : terminalFailure
+                ? 'permanent: malformed payload — not retried'
+                : 'retryable'
         }): ${failureReason}`,
       )
     if (isRejection) {
@@ -275,9 +284,10 @@ export async function decryptStanzaInPlace(
       // a placeholder body would surface a forged reaction as a ghost text
       // message. The warn above records the drop in the E2EE events log.
     } else {
-      // Decrypt failure (key locked, plugin missing, etc.): stash for
-      // deferred retry and keep the sender's fallback body hint.
-      stashPayload(stanza, originalStanzaXml)
+      // Decrypt failure. A structurally malformed payload is terminal — never
+      // stash it (it would re-fail every reconnect). Everything else (key
+      // locked, plugin missing, etc.) is retryable: stash for deferred retry.
+      if (!terminalFailure) stashPayload(stanza, originalStanzaXml)
       if (!stanza.getChild('body')) {
         stanza.children.push(
           xml('body', {}, COULD_NOT_DECRYPT_BODY),
@@ -286,7 +296,7 @@ export async function decryptStanzaInPlace(
       securityContext = {
         protocolId: claim.plugin.descriptor.id,
         trust: 'untrusted',
-        notes: ['Could not decrypt'],
+        notes: [terminalFailure ? 'Could not decrypt (malformed)' : 'Could not decrypt'],
       }
     }
   } else if (plaintext !== null) {
@@ -352,7 +362,7 @@ export async function decryptStanzaInPlace(
     attempted: true,
     ...(securityContext && { securityContext }),
     ...(authoredAt && { authoredAt }),
-    ...((failureReason !== null && securityContext?.trust !== 'rejected' || needsDeferredVerification) && {
+    ...((failureReason !== null && !terminalFailure && securityContext?.trust !== 'rejected' || needsDeferredVerification) && {
       encryptedPayloadXml: originalStanzaXml,
     }),
   }

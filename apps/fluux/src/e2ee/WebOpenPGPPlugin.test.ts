@@ -349,14 +349,16 @@ describe('WebOpenPGPPlugin', () => {
       expect(bundle.fingerprint).toMatch(/^[a-f0-9]{40}$/)
       const upper = bundle.fingerprint.toUpperCase()
 
-      // Metadata node: v4-fingerprint and v6-fingerprint must be upper-case hex.
+      // Metadata node: a v4 (40-hex) key advertises v4-fingerprint in
+      // upper-case hex and must NOT advertise a (malformed 40-hex)
+      // v6-fingerprint.
       const metaItems = shared.get(pepKey('alice@example.com', 'urn:xmpp:openpgp:0:public-keys'))
       expect(metaItems).toBeDefined()
       const pubkeyMeta = (metaItems![0].payload as XMLElementData).children.find(
         (c): c is XMLElementData => typeof c !== 'string' && c.name === 'pubkey-metadata',
       )
       expect(pubkeyMeta?.attrs['v4-fingerprint']).toBe(upper)
-      expect(pubkeyMeta?.attrs['v6-fingerprint']).toBe(upper)
+      expect(pubkeyMeta?.attrs['v6-fingerprint']).toBeUndefined()
       expect(pubkeyMeta?.attrs['v4-fingerprint']).toMatch(/^[A-F0-9]{40}$/)
 
       // Data node id must use the same upper-case fingerprint, never the lower-case one.
@@ -563,6 +565,32 @@ describe('WebOpenPGPPlugin', () => {
       expect(decrypted.signaturePresent).toBe(true)
       expect(decrypted.signatureVerified).toBe(true)
       expect(decrypted.signerFingerprint).not.toBeNull()
+    })
+
+    it('decrypt rejects a structurally malformed ciphertext as permanent malformed-data (never retried)', async () => {
+      // A payload whose bytes are not valid OpenPGP (e.g. legacy/corrupt
+      // test-era ciphertext) makes openpgp.js readMessage throw "Error during
+      // parsing … does not conform to a valid OpenPGP format". That is
+      // terminal, so the plugin must surface a permanent 'malformed-data'
+      // E2EEPluginError — the SDK uses that to stop re-stashing it for retry.
+      const plugin = new TestableWebOpenPGPPlugin()
+      const { ctx } = makeCtx('alice@example.com')
+      setSessionPassphrase('hunter2-strong-passphrase')
+      await plugin.init(ctx)
+      await plugin.callEnsureKeyMaterial('alice@example.com')
+
+      const garbageB64 = Buffer.from('this is not an OpenPGP message at all').toString('base64')
+      const claim = plugin.tryClaimInbound({
+        name: 'openpgp',
+        attrs: { xmlns: 'urn:xmpp:openpgp:0' },
+        children: [garbageB64],
+      })!
+      const handle = await plugin.openConversation({ kind: 'direct', peer: 'bob@example.com' })
+
+      await expect(plugin.decrypt(handle, claim)).rejects.toMatchObject({
+        kind: 'permanent',
+        code: 'malformed-data',
+      })
     })
 
     it('decrypts without a sender public key (no verification possible)', async () => {

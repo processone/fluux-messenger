@@ -37,3 +37,19 @@ export function fingerprintsEqual(a: string, b: string): boolean {
 export function toXep0373Fingerprint(fingerprint: string): string {
   return fingerprint.replace(/\s+/g, '').toUpperCase()
 }
+
+/**
+ * Build the `<pubkey-metadata>` fingerprint attribute(s) for an own-key
+ * publish, choosing the attribute that matches the key version.
+ *
+ * An OpenPGP v4 fingerprint is 40 hex chars (SHA-1); a v6 fingerprint is 64
+ * hex chars (SHA-256). Earlier code emitted BOTH `v4-fingerprint` and
+ * `v6-fingerprint` set to the same value, which advertises a malformed
+ * 40-hex `v6-fingerprint` for the v4 keys openpgp.js produces. Emit only the
+ * version-appropriate attribute so peers never read a bogus v6 fingerprint
+ * (parsers prefer `v6-fingerprint` over `v4-fingerprint`).
+ */
+export function pubkeyMetadataFingerprintAttrs(fingerprint: string): Record<string, string> {
+  const fp = toXep0373Fingerprint(fingerprint)
+  return fp.length === 64 ? { 'v6-fingerprint': fp } : { 'v4-fingerprint': fp }
+}
