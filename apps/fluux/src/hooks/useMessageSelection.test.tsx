@@ -70,19 +70,13 @@ describe('useMessageSelection', () => {
     })
   })
 
-  // Message rows use `content-visibility: auto` (.message-row in index.css) to
-  // skip off-screen layout/paint. That also paint-clips on-screen rows, which
-  // would cut the selection toolbar. Pointer cases are handled by :hover /
-  // :focus-within, but keyboard selection scrolls the row in WITHOUT moving DOM
-  // focus to it, so the hook tags the selected row with `message-row-decontain`
-  // (the CSS rule lifts containment for it). Guard that tagging here.
-  describe('content-visibility decontain marker', () => {
-    beforeEach(() => {
-      // jsdom does not implement scrollIntoView, which the selection effect calls
-      Element.prototype.scrollIntoView = vi.fn()
-    })
+  // Keyboard selection moves the highlight without moving DOM focus, so the
+  // hook scrolls the selected row into view explicitly.
+  describe('scroll-into-view on selection', () => {
+    it('scrolls the selected row into view', () => {
+      const scrollIntoView = vi.fn()
+      Element.prototype.scrollIntoView = scrollIntoView
 
-    it('marks only the selected row and clears the previous one', () => {
       const ids = ['msg-0', 'msg-1', 'msg-2']
       const els = ids.map((id) => {
         const el = document.createElement('div')
@@ -100,21 +94,7 @@ describe('useMessageSelection', () => {
       act(() => {
         result.current.setSelectedMessageId('msg-1')
       })
-      expect(els[1].classList.contains('message-row-decontain')).toBe(true)
-      expect(els[0].classList.contains('message-row-decontain')).toBe(false)
-
-      // Moving the selection re-tags and clears the previous marker
-      act(() => {
-        result.current.setSelectedMessageId('msg-2')
-      })
-      expect(els[1].classList.contains('message-row-decontain')).toBe(false)
-      expect(els[2].classList.contains('message-row-decontain')).toBe(true)
-
-      // Clearing selection removes the marker entirely
-      act(() => {
-        result.current.clearSelection()
-      })
-      expect(document.querySelectorAll('.message-row-decontain').length).toBe(0)
+      expect(scrollIntoView).toHaveBeenCalled()
 
       els.forEach((el) => el.remove())
     })

@@ -238,39 +238,6 @@ describe('useMessageHoverState', () => {
     outside.remove()
   })
 
-  it('toggles the text-selecting class on the container while a selection is live', () => {
-    setup()
-    expect(container.classList.contains('text-selecting')).toBe(false)
-
-    selectTextInContainer()
-    expect(container.classList.contains('text-selecting')).toBe(true)
-
-    clearSelection()
-    expect(container.classList.contains('text-selecting')).toBe(false)
-  })
-
-  it('removes the text-selecting class after a plain click (mouseup with no selection)', () => {
-    setup()
-    selectTextInContainer()
-    expect(container.classList.contains('text-selecting')).toBe(true)
-
-    // Plain click collapses the selection: mousedown then mouseup with nothing selected
-    window.getSelection()!.removeAllRanges()
-    mouseDown(messageEl)
-    mouseUp()
-    act(() => vi.advanceTimersByTime(0))
-    expect(container.classList.contains('text-selecting')).toBe(false)
-  })
-
-  it('clears the text-selecting class when the conversation changes mid-selection', () => {
-    const { rerender } = setup('conv-1')
-    selectTextInContainer()
-    expect(container.classList.contains('text-selecting')).toBe(true)
-
-    rerender({ key: 'conv-2' })
-    expect(container.classList.contains('text-selecting')).toBe(false)
-  })
-
   it('resets hover when resetKey changes', () => {
     const { result, rerender } = setup('conv-1')
 

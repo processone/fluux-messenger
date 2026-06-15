@@ -11,13 +11,6 @@ export interface UseMessageHoverStateOptions {
   leaveDelayMs?: number
 }
 
-/**
- * Class set on the scroll container while a text selection is live. CSS uses it
- * to disable the `content-visibility` row-skipping optimization for the
- * duration of the selection.
- */
-const TEXT_SELECTING_CLASS = 'text-selecting'
-
 export interface MessageHoverState {
   hoveredMessageId: string | null
   handleMessageHover: (messageId: string) => void
@@ -63,20 +56,6 @@ export function useMessageHoverState({
     hoveredIdRef.current = id
     setHoveredMessageId(id)
   }, [])
-
-  // Mirror the selection-active state onto a class on the scroll container.
-  // While a text selection is live, that class lifts `content-visibility`
-  // containment on every message row (see `.text-selecting .message-row` in
-  // index.css). Rows participating in a selection — however many the user has
-  // dragged across — must keep painting normally; on WebKit a row whose
-  // containment toggles mid-selection can be skipped and visually vanish.
-  const setSelectionActive = useCallback(
-    (active: boolean) => {
-      selectionActiveRef.current = active
-      scrollRef.current?.classList.toggle(TEXT_SELECTING_CLASS, active)
-    },
-    [scrollRef]
-  )
 
   const clearTimer = (ref: RefObject<ReturnType<typeof setTimeout> | null>) => {
     if (ref.current !== null) {
@@ -154,7 +133,7 @@ export function useMessageHoverState({
       // Selection collapse from a plain click settles after mouseup
       setTimeout(() => {
         if (!hasSelectionInContainer()) {
-          setSelectionActive(false)
+          selectionActiveRef.current = false
           reArmForPointerRow()
         }
       }, 0)
@@ -163,7 +142,7 @@ export function useMessageHoverState({
     const onSelectionChange = () => {
       const active = hasSelectionInContainer()
       if (active === selectionActiveRef.current) return
-      setSelectionActive(active)
+      selectionActiveRef.current = active
       if (active) {
         clearTimer(intentTimerRef)
         clearTimer(leaveTimerRef)
@@ -189,46 +168,15 @@ export function useMessageHoverState({
       document.removeEventListener('selectionchange', onSelectionChange)
       window.removeEventListener('blur', onWindowBlur)
     }
-  }, [scrollRef, armIntentTimer, setHovered, setSelectionActive])
+  }, [scrollRef, armIntentTimer, setHovered])
 
   // Reset when switching conversation/room
   useEffect(() => {
     clearTimer(intentTimerRef)
     clearTimer(leaveTimerRef)
     lastEnteredRowRef.current = null
-    mouseDownRef.current = false
-    setSelectionActive(false)
     setHovered(null)
-  }, [resetKey, setHovered, setSelectionActive])
-
-  // Drop the hover once the hovered row scrolls out of the viewport.
-  //
-  // The toolbar paints into the row's `content-visibility` subtree. If the row
-  // is skipped (scrolled off-screen) while its toolbar is still shown, WebKit
-  // keeps the last painted frame and never repaints it when React later hides
-  // the toolbar — so scrolling back reveals a stale toolbar. Hiding the hover
-  // while the row is still on-screen forces a clean repaint before it's
-  // skipped. (No-op where IntersectionObserver is unavailable, e.g. jsdom.)
-  useEffect(() => {
-    if (hoveredMessageId === null) return
-    const container = scrollRef.current
-    if (!container || typeof IntersectionObserver === 'undefined') return
-    const row = container.querySelector(`[data-message-id="${CSS.escape(hoveredMessageId)}"]`)
-    if (!row) return
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries.some((entry) => !entry.isIntersecting)) {
-          clearTimer(intentTimerRef)
-          clearTimer(leaveTimerRef)
-          setHovered(null)
-        }
-      },
-      { root: container, threshold: 0 }
-    )
-    observer.observe(row)
-    return () => observer.disconnect()
-  }, [hoveredMessageId, scrollRef, setHovered])
+  }, [resetKey, setHovered])
 
   // Clear pending timers on unmount
   useEffect(() => {
