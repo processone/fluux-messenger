@@ -10,6 +10,7 @@
         "ignore": "Ignoruoti",
         "options": "Parinktys",
         "download": "Atsisiųsti",
+        "downloadFailed": "Nepavyko atsisiųsti",
         "optional": "neprivaloma",
         "create": "Sukurti",
         "back": "Atgal",

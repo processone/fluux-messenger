@@ -10,6 +10,7 @@
         "ignore": "Ignore",
         "options": "Options",
         "download": "Download",
+        "downloadFailed": "Download failed",
         "optional": "optional",
         "create": "Create",
         "back": "Back",

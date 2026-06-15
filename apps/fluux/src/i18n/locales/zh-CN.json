@@ -10,6 +10,7 @@
         "ignore": "忽略",
         "options": "选项",
         "download": "下载",
+        "downloadFailed": "下载失败",
         "optional": "可选",
         "create": "创建",
         "back": "返回",

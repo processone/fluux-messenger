@@ -10,6 +10,7 @@
         "ignore": "Ignorer",
         "options": "Alternativer",
         "download": "Last ned",
+        "downloadFailed": "Nedlastingen mislyktes",
         "optional": "valgfritt",
         "create": "Opprett",
         "back": "Tilbake",

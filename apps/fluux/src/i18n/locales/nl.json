@@ -10,6 +10,7 @@
         "ignore": "Negeren",
         "options": "Opties",
         "download": "Downloaden",
+        "downloadFailed": "Downloaden mislukt",
         "optional": "optioneel",
         "create": "Aanmaken",
         "block": "Blokkeren",

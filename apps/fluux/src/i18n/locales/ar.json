@@ -10,6 +10,7 @@
         "ignore": "تجاهل",
         "options": "خيارات",
         "download": "تنزيل",
+        "downloadFailed": "فشل التنزيل",
         "optional": "اختياري",
         "create": "إنشاء",
         "back": "رجوع",

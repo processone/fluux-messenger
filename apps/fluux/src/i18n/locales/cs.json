@@ -10,6 +10,7 @@
         "ignore": "Ignorovat",
         "options": "Možnosti",
         "download": "Stáhnout",
+        "downloadFailed": "Stažení se nezdařilo",
         "optional": "volitelné",
         "create": "Vytvořit",
         "back": "Zpět",

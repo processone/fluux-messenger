@@ -10,6 +10,7 @@
         "ignore": "Ignora",
         "options": "Opcions",
         "download": "Descarrega",
+        "downloadFailed": "La baixada ha fallat",
         "optional": "opcional",
         "create": "Crea",
         "back": "Enrere",

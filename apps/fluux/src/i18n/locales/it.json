@@ -10,6 +10,7 @@
         "ignore": "Ignora",
         "options": "Opzioni",
         "download": "Scarica",
+        "downloadFailed": "Download non riuscito",
         "optional": "opzionale",
         "create": "Crea",
         "block": "Blocca",

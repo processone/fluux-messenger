@@ -11,6 +11,7 @@
         "block": "Bloquear",
         "options": "Opções",
         "download": "Transferir",
+        "downloadFailed": "Falha no download",
         "optional": "opcional",
         "create": "Criar",
         "comingSoon": "Em breve",

@@ -10,6 +10,7 @@
         "ignore": "התעלם",
         "options": "אפשרויות",
         "download": "הורד",
+        "downloadFailed": "ההורדה נכשלה",
         "optional": "אופציונלי",
         "create": "צור",
         "back": "חזרה",

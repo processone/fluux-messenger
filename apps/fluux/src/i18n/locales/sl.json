@@ -10,6 +10,7 @@
         "ignore": "Prezri",
         "options": "Možnosti",
         "download": "Prenesi",
+        "downloadFailed": "Prenos ni uspel",
         "optional": "neobvezno",
         "create": "Ustvari",
         "back": "Nazaj",
