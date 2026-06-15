@@ -349,14 +349,16 @@ describe('WebOpenPGPPlugin', () => {
       expect(bundle.fingerprint).toMatch(/^[a-f0-9]{40}$/)
       const upper = bundle.fingerprint.toUpperCase()
 
-      // Metadata node: v4-fingerprint and v6-fingerprint must be upper-case hex.
+      // Metadata node: a v4 (40-hex) key advertises v4-fingerprint in
+      // upper-case hex and must NOT advertise a (malformed 40-hex)
+      // v6-fingerprint.
       const metaItems = shared.get(pepKey('alice@example.com', 'urn:xmpp:openpgp:0:public-keys'))
       expect(metaItems).toBeDefined()
       const pubkeyMeta = (metaItems![0].payload as XMLElementData).children.find(
         (c): c is XMLElementData => typeof c !== 'string' && c.name === 'pubkey-metadata',
       )
       expect(pubkeyMeta?.attrs['v4-fingerprint']).toBe(upper)
-      expect(pubkeyMeta?.attrs['v6-fingerprint']).toBe(upper)
+      expect(pubkeyMeta?.attrs['v6-fingerprint']).toBeUndefined()
       expect(pubkeyMeta?.attrs['v4-fingerprint']).toMatch(/^[A-F0-9]{40}$/)
 
       // Data node id must use the same upper-case fingerprint, never the lower-case one.

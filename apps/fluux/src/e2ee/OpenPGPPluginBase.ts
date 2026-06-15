@@ -90,7 +90,11 @@ import {
   publishVerificationsToServer,
   saveAppliedVerificationsVersion,
 } from './verificationSync'
-import { fingerprintsEqual, toXep0373Fingerprint } from './fingerprintCompare'
+import {
+  fingerprintsEqual,
+  toXep0373Fingerprint,
+  pubkeyMetadataFingerprintAttrs,
+} from './fingerprintCompare'
 import {
   clearKeyChangeAlert,
   getKeyChangeAlert,
@@ -1335,9 +1339,10 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
         {
           name: 'pubkey-metadata',
           attrs: {
-            // XEP-0373 §4.1: the v4 fingerprint string is upper-case hex.
-            'v4-fingerprint': toXep0373Fingerprint(bundle.fingerprint),
-            'v6-fingerprint': toXep0373Fingerprint(bundle.fingerprint),
+            // XEP-0373 §4.1: fingerprint string is upper-case hex. Emit only
+            // the version-appropriate attribute (v4 = 40 hex, v6 = 64 hex) so
+            // we never advertise a malformed v6 fingerprint for a v4 key.
+            ...pubkeyMetadataFingerprintAttrs(bundle.fingerprint),
             date: new Date().toISOString(),
           },
           children: [],
