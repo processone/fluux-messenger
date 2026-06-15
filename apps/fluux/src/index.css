@@ -591,6 +591,18 @@ input[type="range"]::-moz-range-thumb {
   content-visibility: visible;
 }
 
+/*
+ * While a text selection is live (class toggled by useMessageHoverState), lift
+ * row-skipping for the whole list. A selection can span an unbounded number of
+ * rows across a long scroll, and on WebKit a row whose `content-visibility`
+ * toggles mid-selection can be skipped and visually vanish. Containment is
+ * restored as soon as the selection clears, so idle scrolling keeps the
+ * optimization.
+ */
+.text-selecting .message-row {
+  content-visibility: visible;
+}
+
 /* Persistent highlight for search context view */
 .message-highlight-persistent {
   background-color: hsla(var(--fluux-accent-h), var(--fluux-accent-s), var(--fluux-accent-l), 0.25);
