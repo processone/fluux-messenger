@@ -641,7 +641,7 @@
         "notificationChecking": "Qed jiċċekkja l-permess...",
         "notificationDescription": "Notifiki desktop jallertak għal messaġġi ġodda meta l-app tkun fil-background.",
         "requestPermission": "Ixgħel",
-        "openSettings": "Iftaħ Settings",
+        "openSystemNotificationSettings": "Iftaħ is-settings tan-notifiki tas-sistema",
         "webPushStatus": "Notifiki Web Push",
         "webPush_unavailable": "Mhux appoġġjat mis-server",
         "webPush_available": "Disponibbli — miss biex tixgħel",

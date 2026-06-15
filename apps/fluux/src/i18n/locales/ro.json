@@ -641,7 +641,7 @@
         "notificationChecking": "Se verifică permisiunea...",
         "notificationDescription": "Notificările desktop te alertează despre mesaje noi când aplicația este în fundal.",
         "requestPermission": "Activează",
-        "openSettings": "Deschide setările",
+        "openSystemNotificationSettings": "Deschide setările de notificări ale sistemului",
         "webPushStatus": "Notificări push web",
         "webPush_unavailable": "Nu este suportat de server",
         "webPush_available": "Disponibil — atinge pentru activare",

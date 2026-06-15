@@ -639,7 +639,7 @@
         "notificationChecking": "Toestemming controleren...",
         "notificationDescription": "Desktopmeldingen waarschuwen je voor nieuwe berichten wanneer de app op de achtergrond staat.",
         "requestPermission": "Inschakelen",
-        "openSettings": "Instellingen openen",
+        "openSystemNotificationSettings": "Systeeminstellingen voor meldingen openen",
         "webPushStatus": "Web-pushmeldingen",
         "webPush_unavailable": "Niet ondersteund door server",
         "webPush_available": "Beschikbaar — tik om in te schakelen",

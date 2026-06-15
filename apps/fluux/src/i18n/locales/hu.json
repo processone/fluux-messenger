@@ -639,7 +639,7 @@
         "notificationChecking": "Engedély ellenőrzése...",
         "notificationDescription": "Az asztali értesítések figyelmeztetik az új üzenetekre, amikor az alkalmazás a háttérben fut.",
         "requestPermission": "Engedélyezés",
-        "openSettings": "Beállítások megnyitása",
+        "openSystemNotificationSettings": "Rendszerértesítési beállítások megnyitása",
         "webPushStatus": "Webes push értesítések",
         "webPush_unavailable": "A szerver nem támogatja",
         "webPush_available": "Elérhető — érintse meg az aktiváláshoz",

@@ -639,7 +639,7 @@
         "notificationChecking": "Athuga heimild...",
         "notificationDescription": "Skjáborðstilkynningar láta þig vita af nýjum skilaboðum þegar forritið er í bakgrunni.",
         "requestPermission": "Virkja",
-        "openSettings": "Opna stillingar",
+        "openSystemNotificationSettings": "Opna tilkynningastillingar kerfisins",
         "webPushStatus": "Vef push-tilkynningar",
         "webPush_unavailable": "Ekki stutt af þjóni",
         "webPush_available": "Tiltækt — ýttu til að virkja",

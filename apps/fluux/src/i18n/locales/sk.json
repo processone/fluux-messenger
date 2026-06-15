@@ -640,7 +640,7 @@
         "notificationChecking": "Kontroluje sa povolenie...",
         "notificationDescription": "Oznámenia na ploche vás upozornia na nové správy, keď je aplikácia na pozadí.",
         "requestPermission": "Povoliť",
-        "openSettings": "Otvoriť nastavenia",
+        "openSystemNotificationSettings": "Otvoriť systémové nastavenia oznámení",
         "webPushStatus": "Webové push notifikácie",
         "webPush_unavailable": "Server nepodporuje",
         "webPush_available": "K dispozícii — ťuknite pre aktiváciu",

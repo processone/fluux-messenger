@@ -639,7 +639,7 @@
         "notificationChecking": "Ag seiceáil ceada...",
         "notificationDescription": "Cuireann fógraí deisce ar an eolas thú faoi theachtaireachtaí nua nuair atá an aip sa chúlra.",
         "requestPermission": "Cumasaigh",
-        "openSettings": "Oscail Socruithe",
+        "openSystemNotificationSettings": "Oscail socruithe fógraí an chórais",
         "webPushStatus": "Fógraí brú gréasáin",
         "webPush_unavailable": "Ní thacaíonn an freastalaí leis",
         "webPush_available": "Ar fáil — tapáil le cumasú",

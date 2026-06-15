@@ -639,7 +639,7 @@
         "notificationChecking": "Provjera dopuštenja...",
         "notificationDescription": "Obavijesti na radnoj površini upozoravaju vas na nove poruke kada je aplikacija u pozadini.",
         "requestPermission": "Omogući",
-        "openSettings": "Otvori postavke",
+        "openSystemNotificationSettings": "Otvori postavke obavijesti sustava",
         "webPushStatus": "Web push obavijesti",
         "webPush_unavailable": "Poslužitelj ne podržava",
         "webPush_available": "Dostupno — dodirnite za omogućavanje",

@@ -639,7 +639,7 @@
         "notificationChecking": "جارٍ التحقق من الإذن...",
         "notificationDescription": "تنبهك إشعارات سطح المكتب بالرسائل الجديدة عندما يكون التطبيق في الخلفية.",
         "requestPermission": "تفعيل",
-        "openSettings": "فتح الإعدادات",
+        "openSystemNotificationSettings": "فتح إعدادات إشعارات النظام",
         "webPushStatus": "إشعارات الويب الفورية",
         "webPush_unavailable": "غير مدعوم من الخادم",
         "webPush_available": "متاح — انقر للتفعيل",

@@ -641,7 +641,7 @@
         "notificationChecking": "A verificar permissão...",
         "notificationDescription": "As notificações de ambiente de trabalho alertam-no para novas mensagens quando a aplicação está em segundo plano.",
         "requestPermission": "Ativar",
-        "openSettings": "Abrir definições",
+        "openSystemNotificationSettings": "Abrir as definições de notificações do sistema",
         "webPushStatus": "Notificações push web",
         "webPush_unavailable": "Não suportado pelo servidor",
         "webPush_available": "Disponível — toque para ativar",

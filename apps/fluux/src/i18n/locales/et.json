@@ -641,7 +641,7 @@
         "notificationChecking": "Õiguste kontrollimine...",
         "notificationDescription": "Töölaua teavitused hoiatavad sind uute sõnumite eest, kui rakendus on taustal.",
         "requestPermission": "Luba",
-        "openSettings": "Ava seaded",
+        "openSystemNotificationSettings": "Ava süsteemi teavituste seaded",
         "webPushStatus": "Veebi push-teavitused",
         "webPush_unavailable": "Server ei toeta",
         "webPush_available": "Saadaval — puuduta lubamiseks",

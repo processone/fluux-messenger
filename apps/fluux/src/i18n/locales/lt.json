@@ -639,7 +639,7 @@
         "notificationChecking": "Tikrinamas leidimas...",
         "notificationDescription": "Darbalaukio pranešimai įspėja apie naujas žinutes, kai programa veikia fone.",
         "requestPermission": "Įjungti",
-        "openSettings": "Atidaryti nustatymus",
+        "openSystemNotificationSettings": "Atidaryti sistemos pranešimų nustatymus",
         "webPushStatus": "Žiniatinklio push pranešimai",
         "webPush_unavailable": "Serveris nepalaiko",
         "webPush_available": "Galima — bakstelėkite, kad įjungtumėte",

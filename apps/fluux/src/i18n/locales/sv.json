@@ -639,7 +639,7 @@
         "notificationChecking": "Kontrollerar behörighet...",
         "notificationDescription": "Skrivbordsaviseringar meddelar dig om nya meddelanden när appen är i bakgrunden.",
         "requestPermission": "Aktivera",
-        "openSettings": "Öppna inställningar",
+        "openSystemNotificationSettings": "Öppna systemets aviseringsinställningar",
         "webPushStatus": "Webb-pushnotiser",
         "webPush_unavailable": "Stöds inte av servern",
         "webPush_available": "Tillgängligt — tryck för att aktivera",
