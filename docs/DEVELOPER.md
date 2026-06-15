@@ -30,9 +30,51 @@ Open http://localhost:5173 and connect with your XMPP credentials.
 | `npm run test`        | Run all tests                       |
 | `npm run typecheck`   | Type-check all packages             |
 | `npm run lint`        | Run ESLint on all packages          |
-| `npm run tauri:dev`   | Run desktop app in development mode |
-| `npm run tauri:build` | Build desktop app for distribution  |
-| `npm run screenshots` | Generate demo screenshots (see below)|
+| `npm run tauri:dev`     | Run desktop app in development mode                          |
+| `npm run tauri:build`   | Build the desktop app locally                                |
+| `npm run tauri:install` | Build + install the desktop app into `/Applications` (macOS) |
+| `npm run screenshots`   | Generate demo screenshots (see below)                        |
+
+## macOS Notifications in Local Development
+
+Local desktop builds run under a **separate dev identity** so they never collide with an installed production Fluux:
+
+| Build | Bundle identifier | App name |
+|-------|-------------------|----------|
+| Production (release, built in CI) | `com.processone.fluux` | Fluux Messenger |
+| Local (`tauri:dev` / `tauri:build` / `tauri:install`) | `com.processone.fluux.dev` | Fluux Messenger Dev |
+
+The override lives in `apps/fluux/src-tauri/tauri.dev.conf.json` and is merged in by the local scripts via `--config`. CI/release builds use the base config and are **never** affected — Tauri only auto-merges `tauri.<platform>.conf.json` files, so `tauri.dev.conf.json` applies only when a script passes it explicitly. (To build locally with the *production* identity — e.g. to test the release artifact — use the raw `npm run tauri build`, which uses the base config.)
+
+### Why a separate identity
+
+macOS binds notification authorization (`UNUserNotificationCenter`) to the app's **code signature *and* bundle id**, not the bundle id alone. A locally-built app that shares the production identifier inherits — but cannot match — the grant given to the signed production build, so notifications silently read as *"permission not granted"* even though **System Settings → Notifications** still lists the app as allowed. (The dock badge keeps working, because it needs no authorization.) A distinct `.dev` identity gets its own authorization and never disturbs the production grant.
+
+### Test notifications with `tauri:install`, not `tauri:dev`
+
+`tauri dev` runs the **unbundled** debug binary (it never produces a `.app`), which macOS will not reliably authorize for notifications — so it is not the tool for testing native notifications, and there is nothing to code-sign there. Build and install a real bundle instead:
+
+```bash
+npm run tauri:install   # → "Fluux Messenger Dev.app" in /Applications, alongside prod
+```
+
+Launch **Fluux Messenger Dev**, accept the macOS prompt, and notifications fire. Use `tauri:dev` for everything else (UI, hot-reload).
+
+### Durable grants across rebuilds (optional)
+
+Local builds are **ad-hoc signed** by default, which pins the grant to the binary's exact CDHash — so it resets on every **Rust** rebuild (frontend-only rebuilds keep it). To make the grant survive every rebuild, sign with a stable **self-signed** identity. No Apple Developer account is needed: these are *local* notifications (`UNUserNotificationCenter`), not APNs push — there is no App ID, provisioning profile, or Apple Developer console involved.
+
+**Create the certificate (once, ~1 min):**
+
+1. Open **Keychain Access** → menu **Certificate Assistant → Create a Certificate…**
+   - **Name:** `Fluux Dev`
+   - **Identity Type:** Self-Signed Root
+   - **Certificate Type:** Code Signing
+2. Rebuild and install: `npm run tauri:install`
+
+`scripts/tauri-build.sh` auto-detects a `Fluux Dev` code-signing identity and signs the build with it (logging `Signing local build with 'Fluux Dev'…`); without it, the build falls back to ad-hoc. Export `APPLE_SIGNING_IDENTITY="<name>"` to use a different identity. Create the certificate **before** your first grant on the Dev app, otherwise you will just need to click *Allow* once more after switching from ad-hoc to signed.
+
+> Local dev only. The distributed release is signed with a real **Developer ID** certificate and **notarized** in CI — see [RELEASE.md](RELEASE.md). Nothing here changes the release path.
 
 ## Screenshots
 
