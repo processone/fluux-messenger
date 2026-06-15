@@ -362,6 +362,13 @@ export function useChatActive() {
         })
       }
     } catch {
+      // Swallow — the gap marker stays so the user can retry.
+    } finally {
+      // Always clear the loading flag, even when no cursor was found and no
+      // query ran (otherwise the "load missing messages" button spins forever).
+      // On the success path queryMAM's own finally already emitted
+      // isLoading:false; this idempotent backstop covers the no-query and error
+      // paths.
       chatStore.getState().setMAMLoading(conversationId, false)
     }
   }, [client])

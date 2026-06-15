@@ -143,7 +143,11 @@ fn handle_activation(identifier: &str) {
             return;
         }
     }
-    *PENDING_TARGET.lock().unwrap() = Some(target);
+    // Never unwrap here: this runs inside the ObjC delegate on the main thread,
+    // and a panic unwinding across the FFI boundary is undefined behavior /
+    // abort. A poisoned mutex still holds a usable Option slot, so recover the
+    // guard instead of panicking.
+    *PENDING_TARGET.lock().unwrap_or_else(|e| e.into_inner()) = Some(target);
 }
 
 pub fn setup(app: &AppHandle) {
@@ -263,7 +267,8 @@ pub fn request_authorization() -> AuthState {
 }
 
 pub fn take_pending_target() -> Option<NavTarget> {
-    PENDING_TARGET.lock().unwrap().take()
+    // Poison-tolerant: the drain must never panic across the IPC boundary.
+    PENDING_TARGET.lock().unwrap_or_else(|e| e.into_inner()).take()
 }
 
 #[cfg(test)]

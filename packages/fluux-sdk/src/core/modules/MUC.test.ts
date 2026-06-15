@@ -1689,6 +1689,33 @@ describe('MUC Module', () => {
       expect(mockSendIQ).not.toHaveBeenCalled()
     })
 
+    it('does NOT poison the cache when a higher tier is forbidden but member succeeded (#519 admin)', async () => {
+      // An ADMIN (not owner) can read the member list but is forbidden the
+      // admin/owner lists. The member list must keep loading on every session —
+      // a forbidden on a higher tier must not be remembered as "room forbidden".
+      const forbidden = Object.assign(new Error('forbidden'), { condition: 'forbidden' })
+      mockSendIQ
+        .mockResolvedValueOnce(createAffiliationResponse('member', [{ jid: 'carol@example.org', nick: 'Carol' }]))
+        .mockRejectedValueOnce(forbidden)
+
+      const result = await muc.queryRoomMembers(roomJid)
+
+      expect(result).toEqual([{ jid: 'carol@example.org', nick: 'Carol', affiliation: 'member' }])
+      // owner query is skipped once admin is forbidden (member + admin = 2 IQs)
+      expect(mockSendIQ).toHaveBeenCalledTimes(2)
+
+      // A later session must re-query — the room was NOT cached as forbidden.
+      mockSendIQ.mockClear()
+      mockSendIQ
+        .mockResolvedValueOnce(createAffiliationResponse('member', [{ jid: 'carol@example.org', nick: 'Carol' }]))
+        .mockRejectedValueOnce(forbidden)
+
+      const result2 = await muc.queryRoomMembers(roomJid)
+
+      expect(result2).toHaveLength(1)
+      expect(mockSendIQ).toHaveBeenCalledTimes(2)
+    })
+
     it('still queries other rooms after one room was forbidden', async () => {
       const forbidden = Object.assign(new Error('forbidden'), { condition: 'forbidden' })
       mockSendIQ.mockRejectedValueOnce(forbidden)
