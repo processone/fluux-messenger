@@ -17,6 +17,7 @@ import {
   stanzaHasEMEHint,
   recordUnclaimedEME,
   readStashedUnsupportedEncryption,
+  COULD_NOT_DECRYPT_BODY,
 } from './stanzaDecrypt'
 import { E2EEManager, InMemoryStorageBackend, type XMPPPrimitives } from './index'
 import { serialize as serializePayloadEnvelope } from './payloadEnvelope'
@@ -357,6 +358,38 @@ describe('stanzaDecrypt encrypted payload stash on failure', () => {
     expect(result.securityContext?.trust).not.toBe('rejected')
     expect(result.encryptedPayloadXml).toBeUndefined()
     expect(readStashedEncryptedPayload(stanza)).toBeUndefined()
+  })
+
+  it('replaces the sender fallback body with the placeholder on a terminal malformed payload', async () => {
+    // A malformed payload will never decrypt, so the sender's XEP-0373 fallback
+    // <body> (cleartext the sender controls) must NOT stand in as the message —
+    // it would be shown verbatim forever and even counted as a successful
+    // decrypt on retry. Replace it with the could-not-decrypt placeholder,
+    // mirroring the signature-rejection path.
+    const manager = await makeManager(
+      new ThrowingSignaturePlugin(
+        new E2EEPluginError('permanent', 'malformed-data', 'not a valid OpenPGP message'),
+      ),
+    )
+    const stanza = buildStanza() // carries <body>[Encrypted message]</body>
+    const result = await decryptStanzaInPlace(stanza, manager, 'peer@example.com')
+
+    expect(stanza.getChild('body')?.children[0]).toBe(COULD_NOT_DECRYPT_BODY)
+    expect(stanza.getChild('body')?.children[0]).not.toBe('[Encrypted message]')
+    expect(result.securityContext?.trust).toBe('untrusted')
+    expect(result.encryptedPayloadXml).toBeUndefined()
+  })
+
+  it('keeps the sender fallback body on a retryable (non-terminal) decrypt failure', async () => {
+    // Key-locked / plugin-not-ready failures are retryable: the message is
+    // stashed and the sender's fallback hint is shown until a successful retry
+    // replaces it. The terminal-only overwrite must NOT touch this path.
+    const manager = await makeManager(new FailingE2EEPlugin())
+    const stanza = buildStanza()
+    const result = await decryptStanzaInPlace(stanza, manager, 'peer@example.com')
+
+    expect(stanza.getChild('body')?.children[0]).toBe('[Encrypted message]')
+    expect(result.encryptedPayloadXml).toBeDefined()
   })
 })
 

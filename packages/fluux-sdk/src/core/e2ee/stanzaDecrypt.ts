@@ -288,10 +288,18 @@ export async function decryptStanzaInPlace(
       // stash it (it would re-fail every reconnect). Everything else (key
       // locked, plugin missing, etc.) is retryable: stash for deferred retry.
       if (!terminalFailure) stashPayload(stanza, originalStanzaXml)
-      if (!stanza.getChild('body')) {
-        stanza.children.push(
-          xml('body', {}, COULD_NOT_DECRYPT_BODY),
-        )
+      const existingBody = stanza.getChild('body')
+      if (terminalFailure && existingBody) {
+        // The payload will NEVER decrypt, so the sender's XEP-0373 fallback
+        // <body> (cleartext the sender controls) must not stand in as the
+        // message — it would otherwise be shown verbatim forever and counted as
+        // a successful decrypt when retryPendingDecrypts re-runs. Replace it
+        // with the placeholder, mirroring the signature-rejection path above. A
+        // RETRYABLE failure instead keeps the hint: a later successful retry
+        // replaces it with the real plaintext.
+        existingBody.children = [COULD_NOT_DECRYPT_BODY]
+      } else if (!existingBody) {
+        stanza.children.push(xml('body', {}, COULD_NOT_DECRYPT_BODY))
       }
       securityContext = {
         protocolId: claim.plugin.descriptor.id,
