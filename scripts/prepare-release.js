@@ -72,6 +72,16 @@ for (const file of VERSION_FILES) {
   console.log(`  ${file}: ${oldVersion} -> ${baseVersion}`)
 }
 
+// 1b. Regenerate package-lock.json so workspace versions match package.json
+// (--package-lock-only avoids reinstalling node_modules; it only re-syncs the lock)
+console.log('\nRegenerating package-lock.json...')
+try {
+  execSync('npm install --package-lock-only', { cwd: ROOT, stdio: 'inherit' })
+  console.log('  package-lock.json synced to ' + baseVersion)
+} catch (e) {
+  console.error('  Warning: npm install --package-lock-only failed — package-lock.json may be out of date')
+}
+
 // 2. Update SDK_VERSION constant
 console.log('\nUpdating SDK version constant...')
 const SDK_VERSION_FILE = 'packages/fluux-sdk/src/version.ts'
@@ -159,15 +169,16 @@ const aurSrcinfo = path.join(ROOT, 'packaging/aur/.SRCINFO')
 if (fs.existsSync(aurSrcinfo)) {
   let srcinfo = fs.readFileSync(aurSrcinfo, 'utf-8')
   srcinfo = srcinfo.replace(/pkgver = .*/g, `pkgver = ${baseVersion}`)
-  // Update source URLs with new version
-  srcinfo = srcinfo.replace(
-    /fluux-messenger-bin-[\d._]+-/g,
-    `fluux-messenger-bin-${baseVersion}-`
-  )
-  srcinfo = srcinfo.replace(
-    /download\/v[\d._-]+\/Fluux-Messenger_[\d._-]+/g,
-    `download/v${baseVersion}/Fluux-Messenger_${baseVersion}`
-  )
+  // Rebuild the source lines from scratch to mirror the PKGBUILD template
+  // exactly. Patching the old value by regex is fragile: it breaks on
+  // prerelease suffixes (e.g. "0.14.0-beta.2" contains letters) and on any
+  // URL-format drift between .SRCINFO and PKGBUILD.
+  const srcLine = (arch, urlArch) =>
+    `\tsource_${arch} = fluux-messenger-bin-${baseVersion}-${arch}.tar.gz` +
+    `::https://github.com/processone/fluux-messenger/releases/download/` +
+    `v${baseVersion}/Fluux-Messenger_${baseVersion}_Linux_${urlArch}.tar.gz`
+  srcinfo = srcinfo.replace(/^\tsource_x86_64 = .*/m, srcLine('x86_64', 'x64'))
+  srcinfo = srcinfo.replace(/^\tsource_aarch64 = .*/m, srcLine('aarch64', 'arm64'))
   fs.writeFileSync(aurSrcinfo, srcinfo)
   console.log(`  aur/.SRCINFO: ${baseVersion}`)
 }
