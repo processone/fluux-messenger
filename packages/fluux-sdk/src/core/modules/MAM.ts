@@ -1778,6 +1778,7 @@ export class MAM extends BaseModule {
       protocolId: stash.protocolId,
       trust: stash.trust,
       ...(stash.notes && { notes: stash.notes }),
+      ...(stash.fingerprint && { fingerprint: stash.fingerprint }),
     }
   }
 

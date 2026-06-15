@@ -129,6 +129,14 @@ export interface SecurityContext {
   trust: 'verified' | 'introduced' | 'tofu' | 'untrusted' | 'rejected'
   /** Optional free-form notes (e.g. "subkey 3 days old"). */
   notes?: string[]
+  /**
+   * Fingerprint of the key that signed this message, when the protocol exposes
+   * one (OpenPGP). The host stashes it onto the message's
+   * {@link MessageSecurityContext} so the UI can confirm the verified lock
+   * against the ACTUAL signing key — a rotated/substituted key must not inherit
+   * a stale out-of-band verification.
+   */
+  fingerprint?: string
 }
 
 export interface DecryptResult {

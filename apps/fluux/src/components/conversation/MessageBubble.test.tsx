@@ -358,11 +358,14 @@ describe('MessageBubble', () => {
       // securityContext.trust does NOT change, so the bubble must derive the
       // displayed trust from the live verification store.
       const peer = 'verifytest@example.com'
+      const fingerprint = 'AAAA1111BBBB2222CCCC3333DDDD4444EEEE5555'
       clearPeerVerified(peer)
       const props = createDefaultProps({
         message: createTestMessage({
           from: peer,
-          securityContext: { protocolId: 'openpgp', trust: 'tofu' },
+          // The message carries its signing fingerprint; the live upgrade keys
+          // on a MATCH against the verified one, not mere JID existence.
+          securityContext: { protocolId: 'openpgp', trust: 'tofu', fingerprint },
         }),
       })
       const { container } = render(<MessageBubble {...props} />)
@@ -373,7 +376,7 @@ describe('MessageBubble', () => {
       // User confirms the peer's fingerprint out-of-band — a store update only,
       // no prop/securityContext change on the message.
       act(() => {
-        setPeerVerified(peer, 'AAAA1111BBBB2222CCCC3333DDDD4444EEEE5555')
+        setPeerVerified(peer, fingerprint)
       })
 
       expect(
@@ -387,11 +390,12 @@ describe('MessageBubble', () => {
 
     it('downgrades a verified lock back to tofu when verification is cleared', () => {
       const peer = 'verifytest2@example.com'
-      setPeerVerified(peer, 'FFFF0000FFFF0000FFFF0000FFFF0000FFFF0000')
+      const fingerprint = 'FFFF0000FFFF0000FFFF0000FFFF0000FFFF0000'
+      setPeerVerified(peer, fingerprint)
       const props = createDefaultProps({
         message: createTestMessage({
           from: peer,
-          securityContext: { protocolId: 'openpgp', trust: 'verified' },
+          securityContext: { protocolId: 'openpgp', trust: 'verified', fingerprint },
         }),
       })
       const { container } = render(<MessageBubble {...props} />)
