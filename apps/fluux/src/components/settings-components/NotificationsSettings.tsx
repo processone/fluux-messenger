@@ -38,17 +38,11 @@ async function checkNotificationPermission(): Promise<NotificationStatus> {
 
 async function openNotificationSettings(): Promise<void> {
   try {
-    const { open } = await import('@tauri-apps/plugin-shell')
-    const { platform } = await import('@tauri-apps/plugin-os')
-    const os = await platform()
-
-    if (os === 'macos') {
-      await open('x-apple.systempreferences:com.apple.Notifications-Settings.extension')
-    } else if (os === 'windows') {
-      await open('ms-settings:notifications')
-    } else if (os === 'linux') {
-      await open('gnome-control-center notifications')
-    }
+    // Go through a native command rather than the shell/opener plugins: their
+    // default scopes reject custom URL schemes (x-apple.systempreferences:,
+    // ms-settings:), and Linux needs a control-center invocation, not a URL.
+    const { invoke } = await import('@tauri-apps/api/core')
+    await invoke('open_notification_settings')
   } catch (error) {
     console.error('[Settings] Failed to open notification settings:', error)
   }

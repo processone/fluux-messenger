@@ -10,7 +10,7 @@
  * in System Settings yet — and on the web build, which has no OS pane to open.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 
 // Mutable mock state — `mock`-prefixed so vitest permits referencing them
 // inside the hoisted vi.mock factories.
@@ -87,6 +87,21 @@ describe('NotificationsSettings — system notification settings link', () => {
     render(<NotificationsSettings />)
 
     expect(await screen.findByText(LINK)).toBeInTheDocument()
+  })
+
+  it('opens the OS pane via the native command when the link is clicked', async () => {
+    // Regression: the link previously went through the shell `open` plugin,
+    // whose scope rejects the x-apple.systempreferences: scheme, so the click
+    // silently failed. It must now invoke the native open_notification_settings.
+    render(<NotificationsSettings />)
+    const link = await screen.findByRole('button', { name: LINK })
+    mockInvoke.mockClear() // drop the initial permission-state probe
+
+    fireEvent.click(link)
+
+    await waitFor(() =>
+      expect(mockInvoke).toHaveBeenCalledWith('open_notification_settings'),
+    )
   })
 
   it('hides the link while permission was never requested (macOS default), offering Enable instead', async () => {
