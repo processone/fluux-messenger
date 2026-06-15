@@ -48,6 +48,7 @@
     "serialize-javascript": "7.0.5",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
-    "zod-validation-error": "4.0.2"
+    "zod-validation-error": "4.0.2",
+    "esbuild": "^0.28.1"
   }
 }
