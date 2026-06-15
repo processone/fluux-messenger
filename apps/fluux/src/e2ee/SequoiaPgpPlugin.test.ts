@@ -607,12 +607,11 @@ describe('SequoiaPgpPlugin', () => {
       expect(metaPub.item.payload.attrs.xmlns).toBe('urn:xmpp:openpgp:0')
       const metadataChild = findChild(metaPub.item.payload, 'pubkey-metadata')
       expect(metadataChild).toBeDefined()
-      // We emit BOTH attribute names with the same value (our v6 fp):
-      // `v4-fingerprint` keeps legacy XEP parsers happy; `v6-fingerprint`
-      // is the semantically accurate one and what we ourselves prefer on
-      // read.
+      // Advertise only the attribute matching the key version. This mock fp
+      // (like the v4 keys both backends produce today) is not 64 hex chars,
+      // so it is published as v4-fingerprint with no (malformed) v6 attribute.
       expect(metadataChild!.attrs['v4-fingerprint']).toBe(fp)
-      expect(metadataChild!.attrs['v6-fingerprint']).toBe(fp)
+      expect(metadataChild!.attrs['v6-fingerprint']).toBeUndefined()
       // `date` is an ISO 8601 timestamp; we don't pin the exact value
       // but it must be parseable.
       expect(Date.parse(metadataChild!.attrs.date)).not.toBeNaN()
@@ -2824,10 +2823,12 @@ describe('SequoiaPgpPlugin', () => {
       expect(postRotation[0].node).toBe(`${METADATA_NODE}:${fp}`)
       expect(postRotation[1].node).toBe(METADATA_NODE)
 
-      // Metadata re-advertises the SAME fingerprint (unchanged identity).
+      // Metadata re-advertises the SAME fingerprint (unchanged identity),
+      // under the version-matched attribute (v4 for this non-64-char fp).
       const meta = findChild(postRotation[1].item.payload, 'pubkey-metadata')
       expect(meta).toBeDefined()
-      expect(meta!.attrs['v6-fingerprint']).toBe(fp)
+      expect(meta!.attrs['v4-fingerprint']).toBe(fp)
+      expect(meta!.attrs['v6-fingerprint']).toBeUndefined()
     })
 
     it('passes the rotated public armor to the PEP data node', async () => {
