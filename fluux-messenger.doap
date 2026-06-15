@@ -598,6 +598,20 @@
     <!-- Releases -->
     <release>
       <Version>
+        <revision>0.16.1</revision>
+        <created>2026-06-15</created>
+        <file-release rdf:resource="https://github.com/processone/fluux-messenger/releases/tag/v0.16.1"/>
+      </Version>
+    </release>
+    <release>
+      <Version>
+        <revision>0.16.0</revision>
+        <created>2026-06-10</created>
+        <file-release rdf:resource="https://github.com/processone/fluux-messenger/releases/tag/v0.16.0"/>
+      </Version>
+    </release>
+    <release>
+      <Version>
         <revision>0.15.2</revision>
         <created>2026-04-21</created>
         <file-release rdf:resource="https://github.com/processone/fluux-messenger/releases/tag/v0.15.2"/>

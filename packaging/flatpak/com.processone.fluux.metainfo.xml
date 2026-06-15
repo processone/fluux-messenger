@@ -90,32 +90,32 @@
   </content_rating>
 
   <releases>
-    <release version="0.16.1" date="2026-06-12">
+    <release version="0.16.1" date="2026-06-15">
       <description>
         <p>See release notes for details.</p>
       </description>
     </release>
-        <release version="0.16.0" date="2026-05-18">
+    <release version="0.16.0" date="2026-06-10">
       <description>
         <p>See release notes for details.</p>
       </description>
     </release>
-        <release version="0.15.2" date="2026-04-21">
+    <release version="0.15.2" date="2026-04-21">
       <description>
         <p>See release notes for details.</p>
       </description>
     </release>
-        <release version="0.15.1" date="2026-04-06">
+    <release version="0.15.1" date="2026-04-06">
       <description>
         <p>See release notes for details.</p>
       </description>
     </release>
-        <release version="0.15.0" date="2026-03-26">
+    <release version="0.15.0" date="2026-03-26">
       <description>
         <p>See release notes for details.</p>
       </description>
     </release>
-        <release version="0.14.0" date="2026-03-16">
+    <release version="0.14.0" date="2026-03-16">
       <description>
         <p>MUC room management, message moderation, vCard support, and dependency fixes for older Linux distros.</p>
       </description>

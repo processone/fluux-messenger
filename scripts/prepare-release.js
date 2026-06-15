@@ -61,6 +61,19 @@ const baseVersion = version.replace(/-.*$/, '')
 
 console.log(`\nPreparing release v${version}${baseVersion !== version ? ` (base version: ${baseVersion})` : ''}\n`)
 
+// Parse changelog.ts up front — it is the single source of truth for the
+// release date and per-section items that the packaging metadata (debian,
+// flatpak, doap) and CHANGELOG.md / RELEASE_NOTES.md all derive from. Parsing
+// here (rather than only at the CHANGELOG.md step) lets the packaging steps
+// reuse the same entry instead of carrying stale dates/items.
+const changelogEntries = parseChangelogTs(
+  fs.readFileSync(path.join(ROOT, CHANGELOG_TS), 'utf-8'),
+)
+const currentChangelogEntry = changelogEntries.find((e) => e.version === baseVersion)
+// Canonical release date (already trimmed by the parser); fall back to today
+// only when the entry hasn't been added to changelog.ts yet.
+const releaseDate = currentChangelogEntry?.date || new Date().toISOString().split('T')[0]
+
 // 1. Update version in package.json files
 console.log('Updating package.json files...')
 for (const file of VERSION_FILES) {
@@ -137,13 +150,31 @@ try {
 // 5. Update packaging version numbers
 console.log('\nUpdating packaging files...')
 
-// Debian changelog — update first entry version
+// Debian changelog — regenerate the top stanza from changelog.ts so the items
+// and date track the release instead of staying frozen at an older version.
+// Older stanzas (below the first ` -- maintainer` signature line) are preserved.
 const debChangelog = path.join(ROOT, 'packaging/debian/changelog')
 if (fs.existsSync(debChangelog)) {
   const debContent = fs.readFileSync(debChangelog, 'utf-8')
-  const updated = debContent.replace(/\([^)]*\)/, `(${baseVersion}-1)`)
-  fs.writeFileSync(debChangelog, updated)
-  console.log(`  debian/changelog: ${baseVersion}-1`)
+  const items = (currentChangelogEntry?.sections || []).flatMap((s) => s.items)
+  const body = items.length > 0
+    ? items.map((item) => `  * ${item}`).join('\n')
+    : `  * See release notes for v${baseVersion}`
+  // Debian wants an RFC 5322 date with offset (e.g. "Sun, 15 Jun 2026 ...").
+  const debDate = new Date(`${releaseDate}T12:00:00Z`).toUTCString().replace('GMT', '+0000')
+  const topStanza =
+    `fluux-messenger (${baseVersion}-1) unstable; urgency=medium\n\n` +
+    `${body}\n\n` +
+    ` -- ProcessOne <contact@process-one.net>  ${debDate}\n`
+  // Replace everything up to and including the first signature line; keep the rest.
+  const sigEnd = debContent.search(/^ -- .*\n/m)
+  let rest = ''
+  if (sigEnd !== -1) {
+    const afterSig = debContent.indexOf('\n', sigEnd) + 1
+    rest = debContent.slice(afterSig)
+  }
+  fs.writeFileSync(debChangelog, topStanza + rest)
+  console.log(`  debian/changelog: ${baseVersion}-1 (${items.length} items, ${debDate})`)
 }
 
 // RPM spec — update Version field
@@ -183,25 +214,54 @@ if (fs.existsSync(aurSrcinfo)) {
   console.log(`  aur/.SRCINFO: ${baseVersion}`)
 }
 
-// Flatpak metainfo — add new release entry (if not already present)
+// Flatpak metainfo — add a new release entry, or correct the date of an
+// existing one, using the canonical changelog.ts date (not "today", which
+// drifts when the release is tagged on a different day than it is dated).
 const flatpakMetainfo = path.join(ROOT, 'packaging/flatpak/com.processone.fluux.metainfo.xml')
 if (fs.existsSync(flatpakMetainfo)) {
   let metainfo = fs.readFileSync(flatpakMetainfo, 'utf-8')
-  if (!metainfo.includes(`version="${baseVersion}"`)) {
-    const today = new Date().toISOString().split('T')[0]
-    const newRelease = `    <release version="${baseVersion}" date="${today}">\n      <description>\n        <p>See release notes for details.</p>\n      </description>\n    </release>\n    `
-    metainfo = metainfo.replace(/(\s*<releases>\n)/, `$1${newRelease}`)
-    fs.writeFileSync(flatpakMetainfo, metainfo)
-    console.log(`  flatpak/metainfo: ${baseVersion}`)
+  const escaped = baseVersion.replace(/\./g, '\\.')
+  if (metainfo.includes(`version="${baseVersion}"`)) {
+    metainfo = metainfo.replace(
+      new RegExp(`(<release version="${escaped}" date=")[^"]*(")`),
+      `$1${releaseDate}$2`,
+    )
+    console.log(`  flatpak/metainfo: updated ${baseVersion} date → ${releaseDate}`)
   } else {
-    console.log(`  flatpak/metainfo: already has ${baseVersion}`)
+    const newRelease =
+      `    <release version="${baseVersion}" date="${releaseDate}">\n` +
+      `      <description>\n        <p>See release notes for details.</p>\n      </description>\n` +
+      `    </release>\n`
+    metainfo = metainfo.replace(/(<releases>\n)/, `$1${newRelease}`)
+    console.log(`  flatpak/metainfo: added ${baseVersion} (${releaseDate})`)
+  }
+  fs.writeFileSync(flatpakMetainfo, metainfo)
+}
+
+// DOAP — prepend a <release> entry for this version (newest on top). Mirrors
+// the existing <Version>/<revision>/<created>/<file-release> structure.
+const doapFile = path.join(ROOT, 'fluux-messenger.doap')
+if (fs.existsSync(doapFile)) {
+  let doap = fs.readFileSync(doapFile, 'utf-8')
+  if (doap.includes(`<revision>${baseVersion}</revision>`)) {
+    console.log(`  fluux-messenger.doap: already has ${baseVersion}`)
+  } else {
+    const entry =
+      `    <release>\n` +
+      `      <Version>\n` +
+      `        <revision>${baseVersion}</revision>\n` +
+      `        <created>${releaseDate}</created>\n` +
+      `        <file-release rdf:resource="https://github.com/processone/fluux-messenger/releases/tag/v${baseVersion}"/>\n` +
+      `      </Version>\n` +
+      `    </release>\n`
+    doap = doap.replace(/(<!-- Releases -->\n)/, `$1${entry}`)
+    fs.writeFileSync(doapFile, doap)
+    console.log(`  fluux-messenger.doap: added ${baseVersion} (${releaseDate})`)
   }
 }
 
-// 6. Generate CHANGELOG.md from changelog.ts
+// 6. Generate CHANGELOG.md from changelog.ts (entries already parsed up front)
 console.log('\nGenerating CHANGELOG.md from changelog.ts...')
-const changelogTsPath = path.join(ROOT, CHANGELOG_TS)
-const changelogTsContent = fs.readFileSync(changelogTsPath, 'utf-8')
 
 // Parse the changelog.ts file to extract entries
 // Uses a state-machine approach to handle complex strings
@@ -232,9 +292,10 @@ function parseChangelogTs(content) {
 
     const entryContent = content.slice(versionIndex, nextVersionIndex)
 
-    // Extract date
+    // Extract date (trim defensively so a stray trailing space in changelog.ts
+    // never propagates into CHANGELOG.md / packaging metadata)
     const dateMatch = entryContent.match(/date:\s*'([^']+)'/)
-    const date = dateMatch ? dateMatch[1] : ''
+    const date = dateMatch ? dateMatch[1].trim() : ''
 
     // Extract sections
     const sections = []
@@ -307,7 +368,7 @@ function parseChangelogTs(content) {
   return entries
 }
 
-const entries = parseChangelogTs(changelogTsContent)
+const entries = changelogEntries
 
 if (entries.length === 0) {
   console.error('  Error: Could not parse changelog.ts')
