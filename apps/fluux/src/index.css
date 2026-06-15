@@ -560,49 +560,6 @@ input[type="range"]::-moz-range-thumb {
   border-radius: 0.5rem;
 }
 
-/*
- * Per-message render-cost containment.
- *
- * Busy rooms render their whole in-memory backlog (hundreds–thousands of
- * messages) into the DOM with no virtualization. On WebKitGTK (Linux/Tauri)
- * the message-list scroll-correction ResizeObserver then reflows that entire
- * tree every frame, pinning ~50% of a core at idle (the per-room "constant CPU"
- * report). `content-visibility: auto` lets the browser skip layout AND paint
- * for off-screen rows, so a reflow only touches the visible handful regardless
- * of backlog size. `contain-intrinsic-size: auto <h>` reserves an estimated
- * height for skipped rows (the `auto` keyword makes the browser remember each
- * row's real size once seen, so the scrollbar stays stable).
- *
- * CAVEAT: content-visibility:auto applies paint containment even to ON-screen
- * rows, which would clip the floating hover toolbar (`-top-7 -end-2`) and the
- * reaction-picker / more-menu dropdowns (`top-full` / `bottom-full`) that paint
- * OUTSIDE the row box. Only one row is ever interacted with at a time, so we
- * lift containment on the hovered/focused row, letting its overflow paint
- * normally while every other row stays contained.
- */
-.message-row {
-  content-visibility: auto;
-  contain-intrinsic-size: auto 72px;
-}
-
-.message-row:hover,
-.message-row:focus-within,
-.message-row.message-row-decontain {
-  content-visibility: visible;
-}
-
-/*
- * While a text selection is live (class toggled by useMessageHoverState), lift
- * row-skipping for the whole list. A selection can span an unbounded number of
- * rows across a long scroll, and on WebKit a row whose `content-visibility`
- * toggles mid-selection can be skipped and visually vanish. Containment is
- * restored as soon as the selection clears, so idle scrolling keeps the
- * optimization.
- */
-.text-selecting .message-row {
-  content-visibility: visible;
-}
-
 /* Persistent highlight for search context view */
 .message-highlight-persistent {
   background-color: hsla(var(--fluux-accent-h), var(--fluux-accent-s), var(--fluux-accent-l), 0.25);
