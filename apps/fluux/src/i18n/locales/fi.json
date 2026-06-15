@@ -639,7 +639,7 @@
         "notificationChecking": "Tarkistetaan käyttöoikeutta...",
         "notificationDescription": "Työpöytäilmoitukset hälyttävät uusista viesteistä, kun sovellus on taustalla.",
         "requestPermission": "Ota käyttöön",
-        "openSettings": "Avaa asetukset",
+        "openSystemNotificationSettings": "Avaa järjestelmän ilmoitusasetukset",
         "webPushStatus": "Web-push-ilmoitukset",
         "webPush_unavailable": "Palvelin ei tue tätä",
         "webPush_available": "Käytettävissä — ota käyttöön napauttamalla",

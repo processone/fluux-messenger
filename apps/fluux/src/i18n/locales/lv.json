@@ -640,7 +640,7 @@
         "notificationChecking": "Pārbauda atļauju...",
         "notificationDescription": "Darbvirsmas paziņojumi brīdina par jauniem ziņojumiem, kad lietotne ir fonā.",
         "requestPermission": "Iespējot",
-        "openSettings": "Atvērt iestatījumus",
+        "openSystemNotificationSettings": "Atvērt sistēmas paziņojumu iestatījumus",
         "webPushStatus": "Tīmekļa push paziņojumi",
         "webPush_unavailable": "Serveris neatbalsta",
         "webPush_available": "Pieejams — pieskarieties, lai iespējotu",

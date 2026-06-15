@@ -641,7 +641,7 @@
         "notificationChecking": "Kontrola oprávnění...",
         "notificationDescription": "Oznámení na ploše vás upozorní na nové zprávy, když je aplikace na pozadí.",
         "requestPermission": "Povolit",
-        "openSettings": "Otevřít nastavení",
+        "openSystemNotificationSettings": "Otevřít systémové nastavení oznámení",
         "webPushStatus": "Webová push oznámení",
         "webPush_unavailable": "Server nepodporuje",
         "webPush_available": "K dispozici — klepněte pro aktivaci",

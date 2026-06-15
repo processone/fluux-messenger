@@ -640,7 +640,7 @@
         "notificationChecking": "Vérification de la permission...",
         "notificationDescription": "Les notifications bureau vous alertent des nouveaux messages lorsque l'application est en arrière-plan.",
         "requestPermission": "Activer",
-        "openSettings": "Ouvrir les paramètres",
+        "openSystemNotificationSettings": "Ouvrir les réglages de notification du système",
         "webPushStatus": "Notifications Web Push",
         "webPush_unavailable": "Non supporté par le serveur",
         "webPush_available": "Disponible — appuyez pour activer",

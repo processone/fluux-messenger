@@ -641,7 +641,7 @@
         "notificationChecking": "Preverjanje dovoljenja...",
         "notificationDescription": "Obvestila na namizju vas opozorijo na nova sporočila, ko je aplikacija v ozadju.",
         "requestPermission": "Omogoči",
-        "openSettings": "Odpri nastavitve",
+        "openSystemNotificationSettings": "Odpri sistemske nastavitve obvestil",
         "webPushStatus": "Spletna push obvestila",
         "webPush_unavailable": "Strežnik ne podpira",
         "webPush_available": "Na voljo — tapnite za vklop",

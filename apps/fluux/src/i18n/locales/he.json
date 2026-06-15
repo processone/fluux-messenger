@@ -639,7 +639,7 @@
         "notificationChecking": "בודק הרשאות...",
         "notificationDescription": "התראות שולחן עבודה מתריעות על הודעות חדשות כשהאפליקציה ברקע.",
         "requestPermission": "אפשר",
-        "openSettings": "פתח הגדרות",
+        "openSystemNotificationSettings": "פתח את הגדרות ההתראות של המערכת",
         "webPushStatus": "התראות Web Push",
         "webPush_unavailable": "לא נתמך על ידי השרת",
         "webPush_available": "זמין - לחץ להפעלה",

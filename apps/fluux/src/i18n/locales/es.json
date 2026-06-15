@@ -641,7 +641,7 @@
         "notificationChecking": "Verificando permisos...",
         "notificationDescription": "Las notificaciones de escritorio te alertan de nuevos mensajes cuando la aplicacion esta en segundo plano.",
         "requestPermission": "Activar",
-        "openSettings": "Abrir Ajustes",
+        "openSystemNotificationSettings": "Abrir los ajustes de notificaciones del sistema",
         "webPushStatus": "Notificaciones push web",
         "webPush_unavailable": "No compatible con el servidor",
         "webPush_available": "Disponible — toca para activar",

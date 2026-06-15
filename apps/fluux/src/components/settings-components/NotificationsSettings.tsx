@@ -216,26 +216,29 @@ export function NotificationsSettings() {
             </button>
           )}
 
-          {/* Open OS settings: macOS once denied (the prompt won't reappear), or
-              other Tauri platforms which have no in-app prompt */}
-          {((isMac && notificationStatus === 'denied') ||
-            (isTauri() &&
-              !isMac &&
-              (notificationStatus === 'denied' || notificationStatus === 'default'))) && (
-            <button
-              onClick={openNotificationSettings}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-fluux-brand hover:text-fluux-text
-                         bg-fluux-brand/10 hover:bg-fluux-brand/20 rounded-md transition-colors"
-            >
-              <ExternalLink className="size-4" />
-              {t('settings.openSettings')}
-            </button>
-          )}
         </div>
 
-        <p className="text-xs text-fluux-muted">
-          {t('settings.notificationDescription')}
-        </p>
+        <div className="space-y-1.5">
+          <p className="text-xs text-fluux-muted">
+            {t('settings.notificationDescription')}
+          </p>
+
+          {/* Permanent shortcut to the OS notification settings. Shown once the
+              app is registered with the system notification center
+              (granted/denied) so the target pane actually lists the app; hidden
+              while still 'default' (never asked), where the in-card Enable button
+              is the correct first action. */}
+          {isTauri() &&
+            (notificationStatus === 'granted' || notificationStatus === 'denied') && (
+              <button
+                onClick={openNotificationSettings}
+                className="flex items-center gap-1.5 text-xs text-fluux-brand hover:text-fluux-text transition-colors"
+              >
+                <ExternalLink className="size-3.5" />
+                {t('settings.openSystemNotificationSettings')}
+              </button>
+            )}
+        </div>
 
         {/* Web Push registration (browser only, when connected) */}
         {isWebPushSupported && isConnected && (

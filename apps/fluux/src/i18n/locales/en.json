@@ -799,7 +799,7 @@
         "notificationChecking": "Checking permission...",
         "notificationDescription": "Desktop notifications alert you to new messages when the app is in the background.",
         "requestPermission": "Enable",
-        "openSettings": "Open Settings",
+        "openSystemNotificationSettings": "Open system notification settings",
         "webPushStatus": "Web Push Notifications",
         "webPush_unavailable": "Not supported by server",
         "webPush_available": "Available — tap to enable",

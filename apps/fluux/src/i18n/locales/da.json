@@ -639,7 +639,7 @@
         "notificationChecking": "Tjekker tilladelse...",
         "notificationDescription": "Skrivebordsnotifikationer advarer dig om nye beskeder, når appen er i baggrunden.",
         "requestPermission": "Aktiver",
-        "openSettings": "Åbn indstillinger",
+        "openSystemNotificationSettings": "Åbn systemets notifikationsindstillinger",
         "webPushStatus": "Web-pushnotifikationer",
         "webPush_unavailable": "Ikke understøttet af serveren",
         "webPush_available": "Tilgængelig — tryk for at aktivere",
