@@ -421,6 +421,15 @@ export class XMPPClient {
   private isRetryingDecrypts = false
 
   /**
+   * Set when a retry is requested while {@link retryPendingDecrypts} is
+   * already running. The in-flight pass re-runs once on completion so a
+   * trigger that arrives mid-pass (e.g. key-unlocked landing while the
+   * plugin-registered pass is still in flight) is coalesced, never dropped.
+   * @internal
+   */
+  private retryDecryptsRequested = false
+
+  /**
    * Monotonically increasing session generation counter.
    * Incremented each time handleConnectionSuccess runs.
    * Used by handleFreshSession/handleSmResumption to detect stale runs and abort early
@@ -1637,7 +1646,12 @@ export class XMPPClient {
    * @returns the number of messages successfully decrypted
    */
   async retryPendingDecrypts(): Promise<number> {
-    if (this.isRetryingDecrypts) return 0
+    if (this.isRetryingDecrypts) {
+      // A pass is already running. Remember the request so the in-flight
+      // pass re-runs on completion rather than dropping this trigger.
+      this.retryDecryptsRequested = true
+      return 0
+    }
     const manager = this.e2ee
     if (!manager || !manager.hasPlugins()) return 0
     if (!this.stores) return 0
@@ -1775,6 +1789,13 @@ export class XMPPClient {
       }
     } finally {
       this.isRetryingDecrypts = false
+    }
+
+    // A trigger that arrived mid-pass was coalesced — run once more so its
+    // newly-available state (e.g. a just-unlocked key) is applied.
+    if (this.retryDecryptsRequested) {
+      this.retryDecryptsRequested = false
+      decryptedCount += await this.retryPendingDecrypts()
     }
 
     return decryptedCount
