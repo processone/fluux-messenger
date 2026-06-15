@@ -1987,6 +1987,59 @@ describe('WebOpenPGPPlugin', () => {
       expect(support.fingerprint?.toLowerCase()).toBe(bob.bundle.fingerprint.toLowerCase())
     })
 
+    it('resolves the lower-case data node even when the upper-case node returns item-not-found IQ error (#528 interop)', async () => {
+      // Same case-mismatch as the test above, but here the transport reflects
+      // how real servers (ejabberd, Prosody) answer a query for a node that
+      // does not exist: an item-not-found IQ error rather than an empty result.
+      // The tolerant query must SWALLOW that error and fall through to the next
+      // casing variant — otherwise the first variant aborts the whole lookup.
+      const { shared, alice, bob } = await buildCrossPublishedPair()
+
+      const upperFp = bob.bundle.fingerprint.toUpperCase()
+      expect(upperFp).not.toBe(bob.bundle.fingerprint)
+      shared.set(pepKey('bob@example.com', 'urn:xmpp:openpgp:0:public-keys'), [
+        {
+          id: 'current',
+          payload: {
+            name: 'public-keys-list',
+            attrs: { xmlns: 'urn:xmpp:openpgp:0' },
+            children: [
+              {
+                name: 'pubkey-metadata',
+                attrs: { 'v4-fingerprint': upperFp, date: '2024-01-01T00:00:00Z' },
+                children: [],
+              },
+            ],
+          },
+        },
+      ])
+
+      // A missing *data* node throws item-not-found (real-server behavior);
+      // every other absent node keeps the empty-result contract so unrelated
+      // lookups are undisturbed.
+      alice.ctx.xmpp.queryPEP = async (jid, node): Promise<PEPItem[]> => {
+        const items = shared.get(pepKey(jid, node))
+        if (items !== undefined) return items
+        if (node.startsWith('urn:xmpp:openpgp:0:public-keys:')) {
+          throw new Error('stanza error: item-not-found (node does not exist)')
+        }
+        return []
+      }
+
+      // The upper-case data node (variant tried first) genuinely does not exist.
+      expect(
+        shared.has(pepKey('bob@example.com', `urn:xmpp:openpgp:0:public-keys:${upperFp}`)),
+      ).toBe(false)
+      expect(
+        shared.has(pepKey('bob@example.com', `urn:xmpp:openpgp:0:public-keys:${bob.bundle.fingerprint}`)),
+      ).toBe(true)
+
+      const support = await alice.plugin.probePeer('bob@example.com')
+
+      expect(support.supported).toBe(true)
+      expect(support.fingerprint?.toLowerCase()).toBe(bob.bundle.fingerprint.toLowerCase())
+    })
+
     it('marks trust untrusted when the sender key is not cached at decrypt time', async () => {
       const { alice, bob } = await buildCrossPublishedPair()
 
