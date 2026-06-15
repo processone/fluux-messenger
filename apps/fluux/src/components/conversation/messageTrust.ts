@@ -15,8 +15,11 @@ import { fingerprintsEqual } from '@/e2ee/fingerprintCompare'
  * downgrade (verified→tofu once cleared). Crucially the check is a fingerprint
  * MATCH, not the mere existence of a verified entry for the JID: otherwise a
  * rotated or server-substituted key would inherit a green lock the user never
- * granted it. A message whose signature did not verify (`untrusted` /
- * `rejected`), or a web-of-trust `introduced`, passes through untouched.
+ * granted it. The one exception is a legacy message that predates signing-
+ * fingerprint capture (no `fingerprint` baked): there's nothing to match, so
+ * it falls back to JID-level verification rather than going grey. A message
+ * whose signature did not verify (`untrusted` / `rejected`), or a web-of-trust
+ * `introduced`, passes through untouched.
  *
  * @param securityContext - the message's baked security context, if encrypted
  * @param verifiedFingerprint - the fingerprint the user verified for this peer
@@ -29,8 +32,16 @@ export function resolveDisplayTrust(
   if (!securityContext) return undefined
   const baked = securityContext.trust
   if (baked === 'tofu' || baked === 'verified') {
+    // Legacy fallback: messages decrypted before the signing fingerprint was
+    // captured carry no `fingerprint`. Force-downgrading them to tofu would
+    // grey out a verified peer's entire pre-capture history, so fall back to
+    // live JID-level verification — the same signal the conversation header
+    // chip uses. Messages decrypted with capture always carry a fingerprint
+    // and take the strict MATCH path below.
+    if (!securityContext.fingerprint) {
+      return verifiedFingerprint ? 'verified' : 'tofu'
+    }
     const fingerprintVerified =
-      !!securityContext.fingerprint &&
       !!verifiedFingerprint &&
       fingerprintsEqual(verifiedFingerprint, securityContext.fingerprint)
     return fingerprintVerified ? 'verified' : 'tofu'

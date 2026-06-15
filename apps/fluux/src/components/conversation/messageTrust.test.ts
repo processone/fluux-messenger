@@ -33,8 +33,21 @@ describe('resolveDisplayTrust', () => {
     expect(resolveDisplayTrust(ctx({ trust: 'tofu', fingerprint: FP_A }), undefined)).toBe('tofu')
   })
 
-  it('does NOT upgrade when the message carries no fingerprint', () => {
-    expect(resolveDisplayTrust(ctx({ trust: 'tofu' }), FP_A)).toBe('tofu')
+  // Legacy fallback: messages decrypted before #544 (which began baking the
+  // signing fingerprint) carry no `fingerprint` to match. Rather than force a
+  // peer's entire pre-#544 history grey, fall back to live JID-level
+  // verification — the same signal the conversation header chip uses.
+  it('upgrades a fingerprint-less message to verified when the peer is verified (legacy fallback)', () => {
+    expect(resolveDisplayTrust(ctx({ trust: 'tofu' }), FP_A)).toBe('verified')
+  })
+
+  it('keeps a fingerprint-less baked-verified message verified when the peer is verified (legacy fallback)', () => {
+    expect(resolveDisplayTrust(ctx({ trust: 'verified' }), FP_A)).toBe('verified')
+  })
+
+  it('leaves a fingerprint-less message at tofu when the peer is not verified', () => {
+    expect(resolveDisplayTrust(ctx({ trust: 'tofu' }), undefined)).toBe('tofu')
+    expect(resolveDisplayTrust(ctx({ trust: 'verified' }), undefined)).toBe('tofu')
   })
 
   it('never upgrades an untrusted (signature-failed) message, even on a fingerprint match', () => {
