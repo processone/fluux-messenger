@@ -1700,9 +1700,12 @@ export class MUC extends BaseModule {
    * @remarks
    * - Requires at least member affiliation to query in most room configurations
    * - Nick attribute is optional in the response; some items may only have JID
-   * - `member` is queried first: servers gate all three lists the same way for
-   *   unprivileged users, so a `forbidden` answer skips the remaining queries and
-   *   is remembered for the client's lifetime (no re-query on every reconnect).
+   * - `member` is queried first (lowest privilege): a `forbidden` on it means
+   *   this client cannot read affiliation lists at all, so the remaining queries
+   *   are skipped and the room is remembered for the client's lifetime (no
+   *   re-query on every reconnect). A `forbidden` on a HIGHER tier (admin/owner)
+   *   after `member` succeeded only means we are not an owner — querying stops
+   *   but the room is NOT cached, so an admin keeps its member list each session.
    *   Other failures (e.g. timeouts) don't block the remaining affiliations.
    */
   async queryRoomMembers(
@@ -1740,10 +1743,19 @@ export class MUC extends BaseModule {
         }
       } catch (err) {
         if (hasErrorCondition(err, 'forbidden')) {
-          // The room config doesn't let us retrieve affiliation lists; the other
-          // queries would be forbidden too. Skip them and don't retry this session.
-          this.membersForbiddenRooms.add(roomJid)
-          logWarn(`Member discovery forbidden for ${roomJid} — skipping for this session`)
+          // A `forbidden` on the lowest-privilege `member` query means this
+          // client may not retrieve affiliation lists at all — remember it so we
+          // don't re-query on every reconnect. But a `forbidden` on a HIGHER
+          // tier (admin/owner) after `member` succeeded just means we're not an
+          // owner: stop querying, yet do NOT poison the cache, or an admin/member
+          // would lose the member list they ARE entitled to see on every later
+          // session (#519).
+          if (affiliation === 'member') {
+            this.membersForbiddenRooms.add(roomJid)
+            logWarn(`Member discovery forbidden for ${roomJid} — skipping for this session`)
+          } else {
+            logWarn(`Affiliation '${affiliation}' list forbidden for ${roomJid} — stopping at the accessible tiers`)
+          }
           break
         }
         // Transient failure (timeout, server hiccup): continue with the others.

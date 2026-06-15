@@ -23,7 +23,7 @@ import type { MAMQueryDirection } from './shared/mamState'
 import { computeGapEnd, syncGap, serializeGaps, deserializeGaps, type GapInterval } from './shared/mamGap'
 import * as draftState from './shared/draftState'
 import { buildMessageKeySet, isMessageDuplicate, sortMessagesByTimestamp, trimMessages, prependOlderMessages, mergeAndProcessMessages } from './shared/messageArrayUtils'
-import { shouldUpdateLastMessage, findLastNonIgnoredMessage } from './shared/lastMessageUtils'
+import { shouldUpdateLastMessage, shouldReplaceLastMessage, isPreviewableMessage, findLastNonIgnoredMessage } from './shared/lastMessageUtils'
 import { ignoreStore, isMessageFromIgnoredUser } from './ignoreStore'
 import * as notifState from './shared/notificationState'
 import { connectionStore } from './connectionStore'
@@ -1964,8 +1964,14 @@ export const roomStore = createStore<RoomState>()(
       const ignoredUsers = ignoreStore.getState().getIgnoredForRoom(roomJid)
       if (isMessageFromIgnoredUser(ignoredUsers, lastMessage, room.nickToJidCache)) return state
 
-      // Only update if this message is newer than existing lastMessage
-      if (!shouldUpdateLastMessage(meta.lastMessage, lastMessage)) return state
+      // Never let a bodiless signal placeholder (e.g. an encrypted reaction
+      // replayed from MAM before its key was available) become the sidebar
+      // preview — parity with chatStore.updateLastMessagePreview (#524).
+      if (!isPreviewableMessage(lastMessage)) return state
+
+      // Update if newer, OR if the existing preview is itself a stuck
+      // non-previewable placeholder that a real message should heal.
+      if (!shouldReplaceLastMessage(meta.lastMessage, lastMessage)) return state
 
       // Update metadata map
       const newMeta = new Map(state.roomMeta)

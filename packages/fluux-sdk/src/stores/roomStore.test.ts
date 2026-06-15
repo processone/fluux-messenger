@@ -3648,4 +3648,79 @@ describe('roomStore', () => {
       })
     })
   })
+
+  describe('updateLastMessagePreview (#524 MUC preview parity)', () => {
+    const ROOM = 'room1@conference.example.com'
+
+    it('never lets a bodiless (non-previewable) message become the room preview', () => {
+      const realMessage: RoomMessage = {
+        type: 'groupchat',
+        id: 'real-1',
+        roomJid: ROOM,
+        from: `${ROOM}/alice`,
+        nick: 'alice',
+        body: 'a real message',
+        timestamp: new Date('2026-06-14T10:00:00.000Z'),
+        isOutgoing: false,
+      }
+      roomStore.getState().addRoom(createRoom(ROOM, { joined: true, messages: [realMessage] }))
+
+      // An encrypted reaction replayed from MAM before the key was available is
+      // stored as an empty-body message. It is NEWER than the real message, so a
+      // timestamp-only gate would wrongly promote it to a blank sidebar preview.
+      const bodilessReaction: RoomMessage = {
+        type: 'groupchat',
+        id: 'react-1',
+        roomJid: ROOM,
+        from: `${ROOM}/bob`,
+        nick: 'bob',
+        body: '',
+        timestamp: new Date('2026-06-14T11:00:00.000Z'),
+        isOutgoing: false,
+      }
+
+      roomStore.getState().updateLastMessagePreview(ROOM, bodilessReaction)
+
+      // The real message stays the preview; the bodiless reaction is rejected.
+      expect(roomStore.getState().roomMeta.get(ROOM)?.lastMessage?.body).toBe('a real message')
+      expect(roomStore.getState().roomMeta.get(ROOM)?.lastMessage?.id).toBe('real-1')
+    })
+
+    it('heals a stuck bodiless placeholder when a real (even older) message arrives', () => {
+      roomStore.getState().addRoom(createRoom(ROOM, { joined: true }))
+      // Seed a stuck, non-previewable placeholder as the current preview.
+      const bodilessPlaceholder: RoomMessage = {
+        type: 'groupchat',
+        id: 'stuck-1',
+        roomJid: ROOM,
+        from: `${ROOM}/bob`,
+        nick: 'bob',
+        body: '',
+        timestamp: new Date('2026-06-14T12:00:00.000Z'),
+        isOutgoing: false,
+      }
+      roomStore.setState((state) => {
+        const meta = state.roomMeta.get(ROOM)!
+        const roomMeta = new Map(state.roomMeta)
+        roomMeta.set(ROOM, { ...meta, lastMessage: bodilessPlaceholder })
+        return { roomMeta }
+      })
+
+      // A real message OLDER than the stuck placeholder must still replace it.
+      const realMessage: RoomMessage = {
+        type: 'groupchat',
+        id: 'real-2',
+        roomJid: ROOM,
+        from: `${ROOM}/alice`,
+        nick: 'alice',
+        body: 'real content',
+        timestamp: new Date('2026-06-14T11:00:00.000Z'),
+        isOutgoing: false,
+      }
+
+      roomStore.getState().updateLastMessagePreview(ROOM, realMessage)
+
+      expect(roomStore.getState().roomMeta.get(ROOM)?.lastMessage?.body).toBe('real content')
+    })
+  })
 })

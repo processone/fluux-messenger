@@ -36,15 +36,6 @@ async function checkNotificationPermission(): Promise<NotificationStatus> {
   }
 }
 
-async function requestWebNotificationPermission(): Promise<NotificationStatus> {
-  try {
-    const permission = await Notification.requestPermission()
-    return permission as NotificationStatus
-  } catch {
-    return 'denied'
-  }
-}
-
 async function openNotificationSettings(): Promise<void> {
   try {
     const { open } = await import('@tauri-apps/plugin-shell')
@@ -139,14 +130,12 @@ export function NotificationsSettings() {
     }
   }, [])
 
+  // Request OS notification permission (the web prompt or the native dialog —
+  // requestNotificationPermission branches per platform) and refresh the
+  // displayed status. Crucially this goes through the SHARED module so the
+  // runtime posting gate (getNotificationPermissionGranted) updates immediately;
+  // a web-only local prompt left it stale until the next window focus.
   const handleRequestPermission = async () => {
-    const status = await requestWebNotificationPermission()
-    setNotificationStatus(status)
-  }
-
-  // macOS: show the native permission prompt, then refresh the display and the
-  // runtime gate so notifications start working immediately (no restart).
-  const handleEnableMac = async () => {
     await requestNotificationPermission()
     setNotificationStatus(await checkNotificationPermission())
   }
@@ -207,7 +196,7 @@ export function NotificationsSettings() {
           {/* macOS: trigger the native OS prompt when permission was never asked */}
           {isMac && notificationStatus === 'default' && (
             <button
-              onClick={handleEnableMac}
+              onClick={handleRequestPermission}
               className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-fluux-brand hover:text-fluux-text
                          bg-fluux-brand/10 hover:bg-fluux-brand/20 rounded-md transition-colors"
             >

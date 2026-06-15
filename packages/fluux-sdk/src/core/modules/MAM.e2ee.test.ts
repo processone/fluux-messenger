@@ -816,3 +816,140 @@ describe('MAM E2EE wiring', () => {
     expect(lastCall[2]!.archiveTimestamp).toBeInstanceOf(Date)
   })
 })
+
+describe('MAM forward catch-up — cross-page modification resolution (1:1)', () => {
+  const ME = 'me@example.com'
+  const PEER = 'bob@example.com'
+
+  // Multi-page harness: sendIQ resolves one page at a time so the test can feed
+  // a different archive entry into each page's collector. Reproduces a reaction
+  // in page 2 that targets a message delivered in page 1 — the cross-page case
+  // the room path already handles by emitting per page.
+  function makeMultiPageHarness(jid: string) {
+    const collectors = new Map<string, (stanza: Element) => void>()
+    const emitted: { event: string; payload: Record<string, unknown> }[] = []
+    let pendingResolve: ((value: Element) => void) | null = null
+    const waiters: (() => void)[] = []
+    const signals: true[] = []
+    const signalPage = () => {
+      const w = waiters.shift()
+      if (w) w()
+      else signals.push(true)
+    }
+    const deps: ModuleDependencies = {
+      stores: null,
+      sendStanza: async () => {},
+      sendIQ: () =>
+        new Promise<Element>((resolve) => {
+          pendingResolve = resolve
+          signalPage()
+        }),
+      getCurrentJid: () => jid,
+      emit: () => {},
+      emitSDK: ((event: string, payload: Record<string, unknown>) => {
+        emitted.push({ event, payload })
+      }) as ModuleDependencies['emitSDK'],
+      getXmpp: () => null,
+      getE2EEManager: () => null,
+      registerMAMCollector: (queryId, collector) => {
+        collectors.set(queryId, collector)
+        return () => collectors.delete(queryId)
+      },
+    }
+    return {
+      mam: new MAM(deps),
+      emitted,
+      // Resolves once the next sendIQ (the next page) has been issued.
+      waitForPage: () =>
+        new Promise<void>((r) => {
+          if (signals.length) {
+            signals.shift()
+            r()
+          } else {
+            waiters.push(r)
+          }
+        }),
+      // Inject an archive entry into the currently-registered page collector.
+      feedEntry: (entry: Element) => {
+        const all = [...collectors.entries()]
+        if (all.length === 0) throw new Error('No collector registered')
+        const [queryId, collector] = all[all.length - 1]
+        entry.getChild('result', 'urn:xmpp:mam:2')!.attrs.queryid = queryId
+        collector(entry)
+      },
+      resolveIQ: (finEl: Element) => {
+        if (!pendingResolve) throw new Error('No pending sendIQ')
+        const r = pendingResolve
+        pendingResolve = null
+        r(finEl)
+      },
+    }
+  }
+
+  const fin = (opts: { complete: boolean; last?: string }): Element =>
+    xml(
+      'iq',
+      {},
+      xml(
+        'fin',
+        { xmlns: 'urn:xmpp:mam:2', complete: opts.complete ? 'true' : 'false' },
+        ...(opts.last
+          ? [xml('set', { xmlns: 'http://jabber.org/protocol/rsm' }, xml('last', {}, opts.last))]
+          : []),
+      ),
+    )
+
+  it('applies a page-2 reaction to a message delivered in page 1', async () => {
+    const h = makeMultiPageHarness(ME)
+
+    const queryPromise = h.mam.queryArchive({
+      with: PEER,
+      start: '2026-05-01T00:00:00.000Z',
+      max: 10,
+      maxAutoPages: 3, // opt into forward auto-pagination
+    })
+
+    // Page 1: the reaction target message.
+    await h.waitForPage()
+    h.feedEntry(
+      buildMAMResult({
+        archiveId: 'arch-1',
+        forwardedMessage: xml(
+          'message',
+          { from: PEER + '/res', to: ME, type: 'chat', id: 'm1' },
+          xml('body', {}, 'hello'),
+        ),
+      }),
+    )
+    h.resolveIQ(fin({ complete: false, last: 'm1' }))
+
+    // Page 2: a reaction targeting the page-1 message.
+    await h.waitForPage()
+    h.feedEntry(
+      buildMAMResult({
+        archiveId: 'arch-2',
+        forwardedMessage: xml(
+          'message',
+          { from: PEER + '/res', to: ME, type: 'chat', id: 'r1' },
+          xml('reactions', { xmlns: 'urn:xmpp:reactions:0', id: 'm1' }, xml('reaction', {}, '👍')),
+        ),
+      }),
+    )
+    h.resolveIQ(fin({ complete: true }))
+
+    await queryPromise
+
+    const mamEvent = h.emitted.find((e) => e.event === 'chat:mam-messages')
+    expect(mamEvent).toBeDefined()
+    const messages = mamEvent!.payload.messages as Array<{
+      id: string
+      reactions?: Record<string, string[]>
+    }>
+    const target = messages.find((m) => m.id === 'm1')
+    expect(target).toBeDefined()
+    // The page-2 reaction must be applied to the page-1 message in the single
+    // emitted batch — not dropped because the target wasn't in the store yet.
+    expect(target!.reactions).toBeDefined()
+    expect(target!.reactions!['👍']).toContain(PEER)
+  })
+})

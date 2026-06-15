@@ -187,6 +187,15 @@ export class MAM extends BaseModule {
 
     // Track total messages across automatic pagination
     const allMessages: Message[] = []
+    // Accumulate modifications (corrections/reactions/retractions/fastenings)
+    // across ALL pages, then resolve them once against the full message set
+    // after the loop. A modification in a later page can target a message from
+    // an earlier page; resolving per page — and emitting before the earlier
+    // pages reached the store — silently dropped those cross-page edits. The
+    // room path emits messages per page, so its earlier pages are already in
+    // the store; the 1:1 path emits once, so it must defer modification
+    // resolution until the whole catch-up has been collected.
+    const modifications: MAMModifications = { retractions: [], corrections: [], fastenings: [], reactions: [] }
     // Forward pagination ignores `before` (oldest-first from `start`); backward keeps it.
     let currentBefore = isForwardPaginate ? undefined : before
     let currentAfter: string | undefined
@@ -217,7 +226,6 @@ export class MAM extends BaseModule {
         const iq = this.buildMAMQuery(queryId, formFields, max, currentBefore, undefined, currentAfter)
 
         const collectedMessages: Message[] = []
-        const modifications: MAMModifications = { retractions: [], corrections: [], fastenings: [], reactions: [] }
         const rawEntries: RawArchiveEntry[] = []
 
         // Collector runs synchronously as stanzas arrive; it just buffers raw
@@ -257,12 +265,9 @@ export class MAM extends BaseModule {
             if (msg) collectedMessages.push(msg)
           }
 
-          // Apply modifications to collected messages
-          const unresolved = this.applyModifications(collectedMessages, modifications, (msg, from) => msg.from === from)
-
-          // Emit modifications targeting messages already in the store (from prior queries/cache)
-          this.emitUnresolvedChatModifications(conversationId, unresolved)
-
+          // Modifications are accumulated across pages and resolved once after
+          // the loop (see the `modifications` declaration above) so a later
+          // page's correction/reaction can still land on an earlier page's message.
           allMessages.push(...collectedMessages)
           isComplete = complete
           lastRsm = rsm
@@ -305,6 +310,10 @@ export class MAM extends BaseModule {
 
       logInfo(`MAM result: ...@${getDomain(conversationId) || '*'} → ${allMessages.length} msg(s), complete=${isComplete}, ${Date.now() - mamStart}ms`)
 
+      // Resolve every collected modification against the full message set in a
+      // single pass (so cross-page corrections/reactions land), then emit.
+      const unresolved = this.applyModifications(allMessages, modifications, (msg, from) => msg.from === from)
+
       this.deps.emitSDK('chat:mam-messages', {
         conversationId,
         messages: allMessages,
@@ -312,6 +321,11 @@ export class MAM extends BaseModule {
         complete: isComplete,
         direction,
       })
+
+      // Modifications whose target is not in this batch belong to a message
+      // already in the store (prior query or cache) — emit them now that the
+      // batch has been merged.
+      this.emitUnresolvedChatModifications(conversationId, unresolved)
 
       // Surface unresolved gaps for diagnosis (parity with rooms): a forward
       // catch-up that ends without reaching live means a hole remains.
