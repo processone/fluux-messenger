@@ -40,16 +40,23 @@ pub fn post_notification(
     })
 }
 
+// Async so Tauri runs them off the main thread: the macOS helpers block on an
+// async OS callback, which would otherwise freeze the UI (sync commands run on
+// the main thread).
 #[cfg(target_os = "macos")]
 #[tauri::command]
-pub fn notification_permission_state() -> AuthState {
-    macos::authorization_state()
+pub async fn notification_permission_state() -> AuthState {
+    tauri::async_runtime::spawn_blocking(macos::authorization_state)
+        .await
+        .unwrap_or(AuthState::NotDetermined)
 }
 
 #[cfg(target_os = "macos")]
 #[tauri::command]
-pub fn request_notification_permission() -> AuthState {
-    macos::request_authorization()
+pub async fn request_notification_permission() -> AuthState {
+    tauri::async_runtime::spawn_blocking(macos::request_authorization)
+        .await
+        .unwrap_or(AuthState::NotDetermined)
 }
 
 #[cfg(target_os = "macos")]

@@ -1,18 +1,22 @@
 //! macOS native notifications via `UNUserNotificationCenter`.
 
 use crate::notifications::backend::{AuthState, NativeNotification, NavTarget};
+use core::ptr::NonNull;
 use objc2::rc::Retained;
 use objc2::runtime::{Bool, NSObject, NSObjectProtocol, ProtocolObject};
 use objc2::{define_class, msg_send, AnyThread};
 use objc2_foundation::{NSError, NSString};
 use objc2_user_notifications::{
-    UNAuthorizationOptions, UNMutableNotificationContent, UNNotification,
+    UNAuthorizationOptions, UNAuthorizationStatus, UNMutableNotificationContent, UNNotification,
     UNNotificationPresentationOptions, UNNotificationRequest, UNNotificationResponse,
-    UNNotificationTrigger, UNUserNotificationCenter, UNUserNotificationCenterDelegate,
+    UNNotificationSettings, UNNotificationTrigger, UNUserNotificationCenter,
+    UNUserNotificationCenterDelegate,
 };
-use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::mpsc;
 use std::sync::Mutex;
 use std::sync::OnceLock;
+use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager};
 
 /// App handle for emitting `notification-activated` from the delegate.
@@ -24,10 +28,6 @@ static PENDING_TARGET: Mutex<Option<NavTarget>> = Mutex::new(None);
 /// Whether the JS `notification-activated` listener is attached. Set by the JS
 /// layer via `set_notification_listener_ready` once its `listen()` resolves.
 static LISTENER_READY: AtomicBool = AtomicBool::new(false);
-
-/// Cached authorization state. 0 = NotDetermined, 1 = Granted, 2 = Denied.
-/// Set by the async authorization callback.
-static AUTH: AtomicU8 = AtomicU8::new(0);
 
 /// Keeps the notification-center delegate alive for the app's lifetime.
 /// `setDelegate:` stores it as a weak reference, so we must own it here.
@@ -149,7 +149,10 @@ fn handle_activation(identifier: &str) {
 pub fn setup(app: &AppHandle) {
     let _ = APP_HANDLE.set(app.clone());
     set_delegate();
-    request_authorization();
+    // Surface the OS prompt early without blocking the main thread. The live
+    // status is read later via `authorization_state()`, so the async result of
+    // this request is intentionally ignored.
+    prime_authorization();
 }
 
 pub fn post(n: NativeNotification) -> Result<(), String> {
@@ -190,28 +193,73 @@ pub fn post(n: NativeNotification) -> Result<(), String> {
     Ok(())
 }
 
-pub fn authorization_state() -> AuthState {
-    match AUTH.load(Ordering::SeqCst) {
-        1 => AuthState::Granted,
-        2 => AuthState::Denied,
-        _ => AuthState::NotDetermined,
+fn map_status(status: UNAuthorizationStatus) -> AuthState {
+    // Provisional/Ephemeral both permit delivery, so treat them as granted.
+    if status == UNAuthorizationStatus::Authorized
+        || status == UNAuthorizationStatus::Provisional
+        || status == UNAuthorizationStatus::Ephemeral
+    {
+        AuthState::Granted
+    } else if status == UNAuthorizationStatus::Denied {
+        AuthState::Denied
+    } else {
+        AuthState::NotDetermined
     }
 }
 
+/// Read the live authorization status from the OS. Unlike a cached flag this
+/// survives restarts and avoids the startup race where the app connected (and
+/// the permission check ran) before any async auth callback had populated
+/// in-memory state. The completion handler runs on a background queue, so this
+/// blocks briefly for the answer — it MUST run off the main thread (the command
+/// wraps it in `spawn_blocking`).
+pub fn authorization_state() -> AuthState {
+    use block2::RcBlock;
+    let (tx, rx) = mpsc::channel::<AuthState>();
+    let handler = RcBlock::new(move |settings: NonNull<UNNotificationSettings>| {
+        // SAFETY: the system passes a valid, non-null settings object that is
+        // alive for the duration of this callback.
+        let status = unsafe { settings.as_ref().authorizationStatus() };
+        let _ = tx.send(map_status(status));
+    });
+    current_center().getNotificationSettingsWithCompletionHandler(&handler);
+    rx.recv_timeout(Duration::from_secs(2))
+        .unwrap_or(AuthState::NotDetermined)
+}
+
+/// Fire an authorization request without waiting. Used at startup to surface the
+/// OS prompt early; the result is read later via `authorization_state()`.
+fn prime_authorization() {
+    use block2::RcBlock;
+    let options = UNAuthorizationOptions::Alert
+        | UNAuthorizationOptions::Sound
+        | UNAuthorizationOptions::Badge;
+    let handler = RcBlock::new(|_granted: Bool, _err: *mut NSError| {});
+    current_center().requestAuthorizationWithOptions_completionHandler(options, &handler);
+}
+
+/// Request authorization and wait for the user's decision, returning the real
+/// result rather than a pre-callback placeholder. First run shows a system
+/// prompt; the completion handler fires on a background queue, so this blocks
+/// until the user answers — it MUST run off the main thread (the command wraps
+/// it in `spawn_blocking`).
 pub fn request_authorization() -> AuthState {
     use block2::RcBlock;
     let options = UNAuthorizationOptions::Alert
         | UNAuthorizationOptions::Sound
         | UNAuthorizationOptions::Badge;
-    // The completion handler is a heap-allocated `RcBlock` whose closure only
-    // touches a `'static` atomic; the center copies the block.
-    let handler = RcBlock::new(|granted: Bool, _err: *mut NSError| {
-        AUTH.store(if granted.as_bool() { 1 } else { 2 }, Ordering::SeqCst);
+    let (tx, rx) = mpsc::channel::<AuthState>();
+    let handler = RcBlock::new(move |granted: Bool, _err: *mut NSError| {
+        let _ = tx.send(if granted.as_bool() {
+            AuthState::Granted
+        } else {
+            AuthState::Denied
+        });
     });
     current_center().requestAuthorizationWithOptions_completionHandler(options, &handler);
-    // The callback is async; return the currently-known state. Callers re-poll
-    // `authorization_state()` after the OS prompt resolves.
-    authorization_state()
+    // The prompt is user-driven; allow ample time before falling back.
+    rx.recv_timeout(Duration::from_secs(300))
+        .unwrap_or(AuthState::NotDetermined)
 }
 
 pub fn take_pending_target() -> Option<NavTarget> {
