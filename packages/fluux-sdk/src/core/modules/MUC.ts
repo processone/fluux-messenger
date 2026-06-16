@@ -37,6 +37,7 @@ import type {
   AdminRoom,
 } from '../types'
 import { parseXMPPError, formatXMPPError, hasErrorCondition } from '../../utils/xmppError'
+import { RoomJoinError } from '../errors'
 import { buildDataFormSubmit, parseDataForm } from '../../utils/dataForm'
 import { logInfo, logWarn, logError as logErr } from '../logger'
 
@@ -105,9 +106,24 @@ interface PendingJoin {
   options?: { maxHistory?: number; password?: string; isQuickChat?: boolean }
 }
 
+/**
+ * Awaitable outcome of an in-flight join, returned by {@link MUC.joinResult}.
+ * Settled exactly once: resolved on self-presence (110), rejected on a terminal
+ * error or after the retry budget is exhausted. Reused across timeout retries.
+ */
+interface JoinDeferred {
+  promise: Promise<void>
+  resolve: () => void
+  reject: (err: RoomJoinError) => void
+  settled: boolean
+}
+
 export class MUC extends BaseModule {
   /** Track pending room joins for timeout handling */
   private pendingJoins = new Map<string, PendingJoin>()
+
+  /** Track the awaitable outcome of in-flight joins (see joinResult). */
+  private joinDeferreds = new Map<string, JoinDeferred>()
 
   /**
    * Buffer for occupant presences during room join.
@@ -153,6 +169,13 @@ export class MUC extends BaseModule {
         this.pendingOccupants.delete(roomJid) // Clear buffered occupants on error
         // SDK event only - binding calls store.updateRoom
         this.deps.emitSDK('room:updated', { roomJid, updates: { joined: false, isJoining: false } })
+        // Settle the join outcome so joinResult() callers don't hang: clearing
+        // the timeout above removes the timeout-reject path. (Task 3 routes
+        // richer error conditions here via failJoin.)
+        this.settleJoinError(
+          roomJid,
+          new RoomJoinError(roomJid, error?.condition ?? 'undefined-condition', error?.type, error?.text)
+        )
       }
       return
     }
@@ -224,6 +247,7 @@ export class MUC extends BaseModule {
     if (isSelf) {
       // Clear the join timeout - we successfully joined
       this.clearPendingJoin(roomJid)
+      this.settleJoinSuccess(roomJid)
 
       // Capture occupant count before flushing (flush deletes the buffer)
       const pendingCount = this.pendingOccupants.get(roomJid)?.length ?? 0
@@ -318,6 +342,60 @@ export class MUC extends BaseModule {
   }
 
   /**
+   * Get the in-flight join's outcome deferred, creating one if none is pending.
+   * A retry (handleJoinTimeout re-invoking joinRoom) sees a still-pending
+   * deferred and reuses it; a fresh join after a settled one replaces it.
+   */
+  private getOrCreateJoinDeferred(roomJid: string): JoinDeferred {
+    const existing = this.joinDeferreds.get(roomJid)
+    if (existing && !existing.settled) return existing
+
+    let resolve!: () => void
+    let reject!: (err: RoomJoinError) => void
+    const promise = new Promise<void>((res, rej) => {
+      resolve = res
+      reject = rej
+    })
+    // Swallow rejection when nobody awaits joinResult (e.g. SDK-internal joins);
+    // independent consumers still observe it via the returned promise.
+    promise.catch(() => {})
+
+    const deferred: JoinDeferred = { promise, resolve, reject, settled: false }
+    this.joinDeferreds.set(roomJid, deferred)
+    return deferred
+  }
+
+  private settleJoinSuccess(roomJid: string): void {
+    const deferred = this.joinDeferreds.get(roomJid)
+    if (deferred && !deferred.settled) {
+      deferred.settled = true
+      deferred.resolve()
+    }
+  }
+
+  private settleJoinError(roomJid: string, error: RoomJoinError): void {
+    const deferred = this.joinDeferreds.get(roomJid)
+    if (deferred && !deferred.settled) {
+      deferred.settled = true
+      deferred.reject(error)
+    }
+  }
+
+  /**
+   * Await the outcome of an in-flight {@link joinRoom}.
+   *
+   * Resolves when the room confirms the join (self-presence, status 110) and
+   * rejects with a {@link RoomJoinError} on a terminal error (password required,
+   * nickname conflict, members-only, banned, …) or after the join times out.
+   * Resolves immediately when there is no registered deferred for the room.
+   *
+   * @param roomJid - The room JID passed to joinRoom.
+   */
+  joinResult(roomJid: string): Promise<void> {
+    return this.joinDeferreds.get(roomJid)?.promise ?? Promise.resolve()
+  }
+
+  /**
    * Clean up all pending operations.
    * Called when the client is destroyed or connection is lost to prevent
    * memory leaks from orphaned timeouts.
@@ -329,6 +407,14 @@ export class MUC extends BaseModule {
     }
     this.pendingJoins.clear()
     this.pendingOccupants.clear()
+    // Reject any unresolved join outcomes so joinResult() awaiters don't hang.
+    for (const [roomJid, deferred] of Array.from(this.joinDeferreds.entries())) {
+      if (!deferred.settled) {
+        deferred.settled = true
+        deferred.reject(new RoomJoinError(roomJid, 'timeout'))
+      }
+    }
+    this.joinDeferreds.clear()
   }
 
   /**
@@ -381,6 +467,7 @@ export class MUC extends BaseModule {
       this.pendingOccupants.delete(roomJid) // Clear buffered occupants on timeout
       // SDK event only - binding calls store.updateRoom
       this.deps.emitSDK('room:updated', { roomJid, updates: { isJoining: false, joined: false } })
+      this.settleJoinError(roomJid, new RoomJoinError(roomJid, 'timeout'))
     }
   }
 
@@ -450,6 +537,9 @@ export class MUC extends BaseModule {
       console.log('[MUC] Already in room, skipping join:', roomJid)
       return
     }
+
+    // Register (or reuse, on retry) the awaitable outcome for joinResult().
+    this.getOrCreateJoinDeferred(roomJid)
 
     const isQuickChat = options?.isQuickChat ?? existingRoom?.isQuickChat
 
