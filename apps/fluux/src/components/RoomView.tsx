@@ -301,6 +301,7 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
       prev.nickname !== activeRoom.nickname ||
       prev.joined !== activeRoom.joined ||
       prev.supportsReactions !== activeRoom.supportsReactions ||
+      prev.isIrcGateway !== activeRoom.isIrcGateway ||
       prev.occupants !== activeRoom.occupants ||
       prev.nickToJidCache !== activeRoom.nickToJidCache ||
       prev.nickToAvatarCache !== activeRoom.nickToAvatarCache
@@ -944,6 +945,7 @@ export const RoomMessageList = memo(function RoomMessageList({
         roomJid={room.jid}
         myNick={room.nickname}
         supportsReactions={room.supportsReactions !== false}
+        isIrcGateway={room.isIrcGateway === true}
         occupant={sender.occupant}
         avatarPresence={sender.avatarPresence}
         senderAvatar={sender.senderAvatar}
@@ -1032,6 +1034,7 @@ interface RoomMessageBubbleWrapperProps {
   roomJid: string
   myNick: string | undefined
   supportsReactions: boolean
+  isIrcGateway: boolean
   occupant: RoomOccupant | undefined
   avatarPresence: 'online' | 'away' | 'dnd' | 'offline' | undefined
   senderAvatar: string | undefined
@@ -1102,6 +1105,7 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
   roomJid,
   myNick,
   supportsReactions,
+  isIrcGateway,
   occupant,
   avatarPresence,
   senderAvatar,
@@ -1342,6 +1346,7 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
         onReaction={supportsReactions ? handleReaction : undefined}
         getReactorName={getReactorName}
         canModerate={canModerateMsg}
+        isIrcGateway={isIrcGateway}
         onReply={() => onReply(message)}
         onEdit={() => onEdit(message)}
         onDelete={async () => {

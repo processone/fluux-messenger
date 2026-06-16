@@ -263,6 +263,7 @@ export class MUC extends BaseModule {
             if (features.supportsReactions === true) updates.supportsReactions = true
             if (features.supportsMAM === true && !room.supportsMAM) updates.supportsMAM = true
             if (features.supportsHats === true && !room.supportsHats) updates.supportsHats = true
+            if (features.isIrcGateway === true && !room.isIrcGateway) updates.isIrcGateway = true
             if (Object.keys(updates).length > 0) {
               this.deps.emitSDK('room:updated', { roomJid, updates })
             }
@@ -459,6 +460,7 @@ export class MUC extends BaseModule {
     const supportsMAM = isQuickChat ? false : (roomFeatures?.supportsMAM ?? false)
     const supportsReactions = roomFeatures?.supportsReactions ?? false
     const supportsHats = roomFeatures?.supportsHats ?? false
+    const isIrcGateway = roomFeatures?.isIrcGateway ?? false
     const roomName = roomFeatures?.name || existingRoom?.name || getLocalPart(roomJid)
 
     if (!existingRoom) {
@@ -473,6 +475,7 @@ export class MUC extends BaseModule {
         supportsMAM,
         supportsReactions,
         supportsHats,
+        isIrcGateway,
         occupants: new Map(),
         messages: [],
         unreadCount: 0,
@@ -488,6 +491,7 @@ export class MUC extends BaseModule {
         supportsMAM,
         supportsReactions,
         supportsHats,
+        isIrcGateway,
         occupants: new Map() as Map<string, RoomOccupant>,
         selfOccupant: undefined,
         typingUsers: new Set() as Set<string>,
@@ -818,7 +822,7 @@ export class MUC extends BaseModule {
    *   since MAM provides a more reliable and complete archive
    * - Has a 10-second timeout to prevent hanging if remote server doesn't respond
    */
-  async queryRoomFeatures(roomJid: string): Promise<{ supportsMAM: boolean; supportsReactions: boolean; supportsHats: boolean; name?: string } | null> {
+  async queryRoomFeatures(roomJid: string): Promise<{ supportsMAM: boolean; supportsReactions: boolean; supportsHats: boolean; isIrcGateway: boolean; name?: string } | null> {
     try {
       const iq = xml(
         'iq',
@@ -844,19 +848,24 @@ export class MUC extends BaseModule {
         .map((f: Element) => f.attrs.var as string)
         .filter(Boolean)
 
-      const supportsMAM = features.includes(NS_MAM)
-      const supportsReactions = hasStableOccupantIdentity(features)
-      const supportsHats = features.includes(NS_HATS)
-
-      // Parse room name from identity element
+      // Parse the room identity (XEP-0030):
       // <identity category="conference" type="text" name="Room Name"/>
+      // IRC gateways (Biboumi et al.) advertise type="irc" instead of "text".
       const identity = query.getChildren('identity')
         .find((i: Element) => i.attrs.category === 'conference')
       const name = identity?.attrs.name as string | undefined
+      const isIrcGateway = identity?.attrs.type === 'irc'
 
-      logInfo(`Room features: ${roomJid} MAM=${supportsMAM} reactions=${supportsReactions} hats=${supportsHats}`)
+      const supportsMAM = features.includes(NS_MAM)
+      // IRC has no reactions concept (XEP-0444); on a gateway a reaction would
+      // degrade to a junk fallback line, so disable it even when the channel
+      // otherwise has stable occupant identity (muc_nonanonymous). See #228.
+      const supportsReactions = hasStableOccupantIdentity(features) && !isIrcGateway
+      const supportsHats = features.includes(NS_HATS)
 
-      return { supportsMAM, supportsReactions, supportsHats, name }
+      logInfo(`Room features: ${roomJid} MAM=${supportsMAM} reactions=${supportsReactions} hats=${supportsHats} irc=${isIrcGateway}`)
+
+      return { supportsMAM, supportsReactions, supportsHats, isIrcGateway, name }
     } catch (err) {
       // Room disco#info not available - that's fine, room may not exist yet
       // or may not support disco queries, or the query timed out
