@@ -1355,7 +1355,7 @@ passwordRequired             "This room is password-protected. Enter the passwor
 incorrectPassword            "Incorrect password."
 nicknameInUse                "That nickname is already in use in this room."
 membersOnly                  "This room is members-only — you need to be a member to join."
-banned                       "You've been banned from this room."
+bannedFromRoom               "You've been banned from this room."
 roomFull                     "This room is full."
 registeredNicknameRequired   "This room requires your registered nickname."
 roomNotFound                 "Room not found."
@@ -1371,7 +1371,7 @@ French (`fr.json`):
         "incorrectPassword": "Mot de passe incorrect.",
         "nicknameInUse": "Ce surnom est déjà utilisé dans ce salon.",
         "membersOnly": "Ce salon est réservé aux membres — vous devez en être membre pour le rejoindre.",
-        "banned": "Vous avez été banni de ce salon.",
+        "bannedFromRoom": "Vous avez été banni de ce salon.",
         "roomFull": "Ce salon est complet.",
         "registeredNicknameRequired": "Ce salon exige votre surnom enregistré.",
         "roomNotFound": "Salon introuvable.",
@@ -1385,7 +1385,7 @@ German (`de.json`):
         "incorrectPassword": "Falsches Passwort.",
         "nicknameInUse": "Dieser Spitzname wird in diesem Raum bereits verwendet.",
         "membersOnly": "Dieser Raum ist nur für Mitglieder — du musst Mitglied sein, um beizutreten.",
-        "banned": "Du wurdest aus diesem Raum verbannt.",
+        "bannedFromRoom": "Du wurdest aus diesem Raum verbannt.",
         "roomFull": "Dieser Raum ist voll.",
         "registeredNicknameRequired": "Dieser Raum erfordert deinen registrierten Spitznamen.",
         "roomNotFound": "Raum nicht gefunden.",
@@ -1399,7 +1399,7 @@ Spanish (`es.json`):
         "incorrectPassword": "Contraseña incorrecta.",
         "nicknameInUse": "Ese apodo ya está en uso en esta sala.",
         "membersOnly": "Esta sala es solo para miembros: debes ser miembro para unirte.",
-        "banned": "Has sido expulsado de esta sala.",
+        "bannedFromRoom": "Has sido expulsado de esta sala.",
         "roomFull": "Esta sala está llena.",
         "registeredNicknameRequired": "Esta sala requiere tu apodo registrado.",
         "roomNotFound": "Sala no encontrada.",
@@ -1415,7 +1415,7 @@ let bad=0;
 for (const f of fs.readdirSync(d).filter(f=>f.endsWith('.json'))) {
   try {
     const j=JSON.parse(fs.readFileSync(d+'/'+f,'utf8'));
-    const miss=['passwordProtected','roomPassword','passwordRequired','incorrectPassword','nicknameInUse','membersOnly','banned','roomFull','registeredNicknameRequired','roomNotFound'].filter(k=>!(k in (j.rooms||{})));
+    const miss=['passwordProtected','roomPassword','passwordRequired','incorrectPassword','nicknameInUse','membersOnly','bannedFromRoom','roomFull','registeredNicknameRequired','roomNotFound'].filter(k=>!(k in (j.rooms||{})));
     if (miss.length) { console.log(f,'MISSING',miss.join(',')); bad++; }
   } catch(e) { console.log(f,'PARSE ERROR',e.message); bad++; }
 }
