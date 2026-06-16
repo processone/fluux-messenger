@@ -942,7 +942,7 @@ export class MAM extends BaseModule {
           // from the persisted preview timestamp instead of a before:'' fetch-latest
           // that would skip a large offline gap (issue #135).
           const lastTimestamp = this.deps.stores?.chat.getConversationLastTimestamp?.(conv.id)
-          const q = selectCatchUpQuery(messages, sessionStartTime, gapStart, lastTimestamp)
+          const q = selectCatchUpQuery(messages, { sessionStartTime, forwardGapTimestamp: gapStart, fallbackNewestTimestamp: lastTimestamp })
           await this.queryArchive({
             with: conv.id,
             ...q,
@@ -1107,7 +1107,7 @@ export class MAM extends BaseModule {
     // Last-resort anchor: forward-fill from the persisted preview timestamp when the
     // cache is empty, instead of a before:'' fetch-latest that skips a large gap.
     const lastTimestamp = this.deps.stores?.room.getRoomLastTimestamp?.(roomJid)
-    const q = selectCatchUpQuery(messages, sessionStartTime, gapStart, lastTimestamp)
+    const q = selectCatchUpQuery(messages, { sessionStartTime, forwardGapTimestamp: gapStart, fallbackNewestTimestamp: lastTimestamp })
     await this.queryRoomArchive({
       roomJid,
       ...q,

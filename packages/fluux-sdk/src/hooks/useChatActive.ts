@@ -289,7 +289,7 @@ export function useChatActive() {
 
         const gapStart = chatStore.getState().conversationGaps.get(targetId)?.start
         const lastTimestamp = chatStore.getState().getConversationLastTimestamp(targetId)
-        const q = selectCatchUpQuery(cachedMessages ?? [], undefined, gapStart, lastTimestamp)
+        const q = selectCatchUpQuery(cachedMessages ?? [], { forwardGapTimestamp: gapStart, fallbackNewestTimestamp: lastTimestamp })
 
         await client.chat.queryMAM({
           with: conversation.id,

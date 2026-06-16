@@ -111,7 +111,7 @@ export function setupChatSideEffects(
       // Last-resort anchor: forward-fill from the persisted preview timestamp when
       // the cache is empty, instead of a before:'' fetch-latest that skips a gap.
       const lastTimestamp = chatStore.getState().getConversationLastTimestamp(conversationId)
-      const q = selectCatchUpQuery(cachedMessages, sessionStartTime, gapStart, lastTimestamp)
+      const q = selectCatchUpQuery(cachedMessages, { sessionStartTime, forwardGapTimestamp: gapStart, fallbackNewestTimestamp: lastTimestamp })
       await client.chat.queryMAM({
         with: conversation.id,
         ...q,

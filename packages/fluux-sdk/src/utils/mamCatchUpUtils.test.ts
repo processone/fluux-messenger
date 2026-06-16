@@ -166,25 +166,25 @@ describe('selectCatchUpQuery', () => {
   it('returns a forward start from the newest PRE-session message', () => {
     const monthOld = new Date('2026-05-14T09:00:00Z')
     const live = new Date('2026-06-14T12:00:05Z')
-    expect(selectCatchUpQuery([{ timestamp: monthOld }, { timestamp: live }], sessionStart)).toEqual({
+    expect(selectCatchUpQuery([{ timestamp: monthOld }, { timestamp: live }], { sessionStartTime: sessionStart })).toEqual({
       start: '2026-05-14T09:00:00.001Z',
     })
   })
 
   it('returns backward (before:"") when only this-session messages exist', () => {
-    expect(selectCatchUpQuery([{ timestamp: new Date('2026-06-14T12:00:05Z') }], sessionStart)).toEqual({
+    expect(selectCatchUpQuery([{ timestamp: new Date('2026-06-14T12:00:05Z') }], { sessionStartTime: sessionStart })).toEqual({
       before: '',
     })
   })
 
   it('returns backward (before:"") for an empty message list', () => {
-    expect(selectCatchUpQuery([], sessionStart)).toEqual({ before: '' })
+    expect(selectCatchUpQuery([], { sessionStartTime: sessionStart })).toEqual({ before: '' })
   })
 
   it('uses the global newest when no sessionStartTime is given (legacy behavior)', () => {
     const a = new Date('2026-01-01T00:00:00Z')
     const b = new Date('2026-02-01T00:00:00Z')
-    expect(selectCatchUpQuery([{ timestamp: a }, { timestamp: b }], undefined)).toEqual({
+    expect(selectCatchUpQuery([{ timestamp: a }, { timestamp: b }])).toEqual({
       start: '2026-02-01T00:00:00.001Z',
     })
   })
@@ -192,7 +192,7 @@ describe('selectCatchUpQuery', () => {
   it('prefers a persisted forward gap boundary over newer cached messages', () => {
     const gapStart = new Date('2026-05-14T09:00:00Z').getTime()
     const newerAboveGap = new Date('2026-06-01T12:00:00Z')
-    expect(selectCatchUpQuery([{ timestamp: newerAboveGap }], sessionStart, gapStart)).toEqual({
+    expect(selectCatchUpQuery([{ timestamp: newerAboveGap }], { sessionStartTime: sessionStart, forwardGapTimestamp: gapStart })).toEqual({
       start: '2026-05-14T09:00:00.001Z',
     })
   })
@@ -202,27 +202,27 @@ describe('selectCatchUpQuery', () => {
     // fall back to the last-known preview timestamp and FORWARD-fill the gap,
     // instead of a before:"" fetch-latest that would skip a large offline gap.
     const lastKnown = new Date('2026-05-14T09:00:00Z').getTime()
-    expect(selectCatchUpQuery([], sessionStart, undefined, lastKnown)).toEqual({
+    expect(selectCatchUpQuery([], { sessionStartTime: sessionStart, fallbackNewestTimestamp: lastKnown })).toEqual({
       start: '2026-05-14T09:00:00.001Z',
     })
   })
 
   it('ignores a fallback at/after session start so a live preview update cannot poison the cursor', () => {
     const live = new Date('2026-06-14T12:00:05Z').getTime() // >= sessionStart
-    expect(selectCatchUpQuery([], sessionStart, undefined, live)).toEqual({ before: '' })
+    expect(selectCatchUpQuery([], { sessionStartTime: sessionStart, fallbackNewestTimestamp: live })).toEqual({ before: '' })
   })
 
   it('prefers a real pre-session cached message over the fallback timestamp', () => {
     const cached = new Date('2026-06-10T09:00:00Z') // pre-session, newer than fallback
     const fallback = new Date('2026-01-01T00:00:00Z').getTime()
-    expect(selectCatchUpQuery([{ timestamp: cached }], sessionStart, undefined, fallback)).toEqual({
+    expect(selectCatchUpQuery([{ timestamp: cached }], { sessionStartTime: sessionStart, fallbackNewestTimestamp: fallback })).toEqual({
       start: '2026-06-10T09:00:00.001Z',
     })
   })
 
   it('uses the fallback when sessionStartTime is omitted (hook fetch-history path)', () => {
     const lastKnown = new Date('2026-05-14T09:00:00Z').getTime()
-    expect(selectCatchUpQuery([], undefined, undefined, lastKnown)).toEqual({
+    expect(selectCatchUpQuery([], { fallbackNewestTimestamp: lastKnown })).toEqual({
       start: '2026-05-14T09:00:00.001Z',
     })
   })
@@ -230,7 +230,7 @@ describe('selectCatchUpQuery', () => {
   it('lets a persisted gap boundary win over the fallback timestamp', () => {
     const gapStart = new Date('2026-04-01T00:00:00Z').getTime()
     const fallback = new Date('2026-05-14T09:00:00Z').getTime()
-    expect(selectCatchUpQuery([], sessionStart, gapStart, fallback)).toEqual({
+    expect(selectCatchUpQuery([], { sessionStartTime: sessionStart, forwardGapTimestamp: gapStart, fallbackNewestTimestamp: fallback })).toEqual({
       start: '2026-04-01T00:00:00.001Z',
     })
   })

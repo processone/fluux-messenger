@@ -121,7 +121,7 @@ export function setupRoomSideEffects(
       // Last-resort anchor: forward-fill from the persisted preview timestamp when
       // the cache is empty, instead of a before:'' fetch-latest that skips a gap.
       const lastTimestamp = roomStore.getState().getRoomLastTimestamp(roomJid)
-      const q = selectCatchUpQuery(messages, sessionStartTime, gapStart, lastTimestamp)
+      const q = selectCatchUpQuery(messages, { sessionStartTime, forwardGapTimestamp: gapStart, fallbackNewestTimestamp: lastTimestamp })
       await client.chat.queryRoomMAM({
         roomJid,
         ...q,
