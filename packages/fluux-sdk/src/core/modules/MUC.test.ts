@@ -797,6 +797,26 @@ describe('MUC Module', () => {
       })
     })
 
+    it('preserves a known supportsModeration value when a re-join disco fails (F3: no clobber to unknown)', async () => {
+      // Existing, not-yet-joined room a prior disco resolved as moderation-unsupported.
+      mockStores.room.getRoom.mockReturnValue({
+        jid: 'room@conference.example.org', name: 'room', joined: false, isJoining: false,
+        nickname: 'mynick', isBookmarked: true, supportsModeration: false,
+        occupants: new Map(), messages: [], unreadCount: 0, mentionsCount: 0,
+        typingUsers: new Set<string>(),
+      })
+      // The re-join disco#info fails → queryRoomFeatures resolves null.
+      mockSendIQ.mockRejectedValue(new Error('disco timeout'))
+
+      await muc.joinRoom('room@conference.example.org', 'mynick').catch(() => {})
+
+      // The known `false` must survive — NOT be clobbered to undefined (optimistic).
+      expect(mockEmitSDK).toHaveBeenCalledWith('room:updated', expect.objectContaining({
+        roomJid: 'room@conference.example.org',
+        updates: expect.objectContaining({ supportsModeration: false }),
+      }))
+    })
+
     it('skips join if already joined (avoids presence issues)', async () => {
       // Simulate already being in the room
       mockStores.room.getRoom.mockReturnValue({
@@ -1071,7 +1091,7 @@ describe('MUC Module', () => {
 
       const result = await muc.queryRoomFeatures('room@conference.example.org')
 
-      expect(result).toEqual({ supportsMAM: true, supportsReactions: true, supportsHats: false, isNonAnonymous: false, isPrivate: false, isIrcGateway: false, name: 'Test Room' })
+      expect(result).toEqual({ supportsMAM: true, supportsReactions: true, supportsHats: false, isNonAnonymous: false, isPrivate: false, isIrcGateway: false, supportsModeration: false, name: 'Test Room' })
       expect(mockSendIQ).toHaveBeenCalledWith(
         expect.objectContaining({
           attrs: expect.objectContaining({
@@ -1099,7 +1119,7 @@ describe('MUC Module', () => {
 
       const result = await muc.queryRoomFeatures('room@conference.example.org')
 
-      expect(result).toEqual({ supportsMAM: false, supportsReactions: true, supportsHats: false, isNonAnonymous: false, isPrivate: false, isIrcGateway: false, name: 'Test Room' })
+      expect(result).toEqual({ supportsMAM: false, supportsReactions: true, supportsHats: false, isNonAnonymous: false, isPrivate: false, isIrcGateway: false, supportsModeration: false, name: 'Test Room' })
     })
 
     it('returns supportsReactions: false for open semi-anonymous rooms without occupant-id', async () => {
@@ -1120,7 +1140,7 @@ describe('MUC Module', () => {
 
       const result = await muc.queryRoomFeatures('room@conference.example.org')
 
-      expect(result).toEqual({ supportsMAM: false, supportsReactions: false, supportsHats: false, isNonAnonymous: false, isPrivate: false, isIrcGateway: false, name: 'Open Room' })
+      expect(result).toEqual({ supportsMAM: false, supportsReactions: false, supportsHats: false, isNonAnonymous: false, isPrivate: false, isIrcGateway: false, supportsModeration: false, name: 'Open Room' })
     })
 
     it('flags an IRC gateway (Biboumi: conference/irc + muc_nonanonymous) and disables reactions (issue #228)', async () => {
@@ -1143,7 +1163,46 @@ describe('MUC Module', () => {
 
       const result = await muc.queryRoomFeatures('#chan%irc.example.org@biboumi.example.org')
 
-      expect(result).toEqual({ supportsMAM: false, supportsReactions: false, supportsHats: false, isNonAnonymous: true, isPrivate: false, isIrcGateway: true, name: '#chan on irc.example.org' })
+      expect(result).toEqual({ supportsMAM: false, supportsReactions: false, supportsHats: false, isNonAnonymous: true, isPrivate: false, isIrcGateway: true, supportsModeration: false, name: '#chan on irc.example.org' })
+    })
+
+    it('returns supportsModeration: true when the room advertises message-moderate:1 (XEP-0425)', async () => {
+      const response = createMockElement('iq', { type: 'result', from: 'room@conference.example.org' }, [
+        {
+          name: 'query',
+          attrs: { xmlns: 'http://jabber.org/protocol/disco#info' },
+          children: [
+            { name: 'identity', attrs: { category: 'conference', type: 'text', name: 'Moderated Room' } },
+            { name: 'feature', attrs: { var: 'http://jabber.org/protocol/muc' } },
+            { name: 'feature', attrs: { var: 'urn:xmpp:message-moderate:1' } },
+          ],
+        },
+      ])
+
+      mockSendIQ.mockResolvedValue(response)
+
+      const result = await muc.queryRoomFeatures('room@conference.example.org')
+
+      expect(result?.supportsModeration).toBe(true)
+    })
+
+    it('returns supportsModeration: false when the room does not advertise message-moderate:1', async () => {
+      const response = createMockElement('iq', { type: 'result', from: 'room@conference.example.org' }, [
+        {
+          name: 'query',
+          attrs: { xmlns: 'http://jabber.org/protocol/disco#info' },
+          children: [
+            { name: 'identity', attrs: { category: 'conference', type: 'text', name: 'Plain Room' } },
+            { name: 'feature', attrs: { var: 'http://jabber.org/protocol/muc' } },
+          ],
+        },
+      ])
+
+      mockSendIQ.mockResolvedValue(response)
+
+      const result = await muc.queryRoomFeatures('room@conference.example.org')
+
+      expect(result?.supportsModeration).toBe(false)
     })
 
     it('returns supportsReactions: true for open semi-anonymous rooms with occupant-id', async () => {
@@ -1165,7 +1224,7 @@ describe('MUC Module', () => {
 
       const result = await muc.queryRoomFeatures('room@conference.example.org')
 
-      expect(result).toEqual({ supportsMAM: false, supportsReactions: true, supportsHats: false, isNonAnonymous: false, isPrivate: false, isIrcGateway: false, name: 'Modern Room' })
+      expect(result).toEqual({ supportsMAM: false, supportsReactions: true, supportsHats: false, isNonAnonymous: false, isPrivate: false, isIrcGateway: false, supportsModeration: false, name: 'Modern Room' })
     })
 
     it('reports isNonAnonymous + non-private for a non-anonymous public room', async () => {
@@ -1256,89 +1315,16 @@ describe('MUC Module', () => {
       const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
       mockSendIQ.mockRejectedValue(new Error('Room disco timeout'))
 
-      // Even if MUC service supports MAM globally, we don't fallback
-      // because the room may have MAM explicitly disabled
-      mockStores.admin.getMucServiceSupportsMAM.mockReturnValue(true)
-
       const result = await muc.queryRoomFeatures('room@conference.example.org')
 
-      // Should return null, not fallback to service MAM
+      // Room-level MAM can be disabled even when the MUC service supports it,
+      // so a failed room disco must return null, never fall back to service MAM.
       expect(result).toBeNull()
       warnSpy.mockRestore()
     })
   })
 
-  describe('discoverMucService MAM detection', () => {
-    it('emits admin:muc-service-mam event when MUC service supports MAM', async () => {
-      // Mock disco#items response
-      const itemsResponse = createMockElement('iq', { type: 'result' }, [
-        {
-          name: 'query',
-          attrs: { xmlns: 'http://jabber.org/protocol/disco#items' },
-          children: [
-            { name: 'item', attrs: { jid: 'conference.example.com' } },
-          ],
-        },
-      ])
-
-      // Mock disco#info response for conference service with MAM support
-      const infoResponse = createMockElement('iq', { type: 'result' }, [
-        {
-          name: 'query',
-          attrs: { xmlns: 'http://jabber.org/protocol/disco#info' },
-          children: [
-            { name: 'identity', attrs: { category: 'conference', type: 'text', name: 'MUC' } },
-            { name: 'feature', attrs: { var: 'http://jabber.org/protocol/muc' } },
-            { name: 'feature', attrs: { var: 'urn:xmpp:mam:2' } },
-          ],
-        },
-      ])
-
-      mockSendIQ
-        .mockResolvedValueOnce(itemsResponse)
-        .mockResolvedValueOnce(infoResponse)
-
-      const result = await muc.discoverMucService()
-
-      expect(result).toBe('conference.example.com')
-      expect(mockEmitSDK).toHaveBeenCalledWith('admin:muc-service-mam', { supportsMAM: true })
-    })
-
-    it('emits admin:muc-service-mam with false when MUC service does not support MAM', async () => {
-      // Mock disco#items response
-      const itemsResponse = createMockElement('iq', { type: 'result' }, [
-        {
-          name: 'query',
-          attrs: { xmlns: 'http://jabber.org/protocol/disco#items' },
-          children: [
-            { name: 'item', attrs: { jid: 'conference.example.com' } },
-          ],
-        },
-      ])
-
-      // Mock disco#info response for conference service WITHOUT MAM
-      const infoResponse = createMockElement('iq', { type: 'result' }, [
-        {
-          name: 'query',
-          attrs: { xmlns: 'http://jabber.org/protocol/disco#info' },
-          children: [
-            { name: 'identity', attrs: { category: 'conference', type: 'text', name: 'MUC' } },
-            { name: 'feature', attrs: { var: 'http://jabber.org/protocol/muc' } },
-            // No MAM feature
-          ],
-        },
-      ])
-
-      mockSendIQ
-        .mockResolvedValueOnce(itemsResponse)
-        .mockResolvedValueOnce(infoResponse)
-
-      const result = await muc.discoverMucService()
-
-      expect(result).toBe('conference.example.com')
-      expect(mockEmitSDK).toHaveBeenCalledWith('admin:muc-service-mam', { supportsMAM: false })
-    })
-
+  describe('discoverMucService', () => {
     it('emits admin:muc-service event with discovered JID', async () => {
       const itemsResponse = createMockElement('iq', { type: 'result' }, [
         {

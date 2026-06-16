@@ -131,6 +131,36 @@ describe('roomStore', () => {
     })
   })
 
+  describe('supportsModeration entity propagation (F3 / XEP-0425)', () => {
+    it('propagates supportsModeration to the room entity on addRoom', () => {
+      roomStore.getState().addRoom({ ...createRoom('mod@conference.example.com'), supportsModeration: true })
+      expect(roomStore.getState().roomEntities.get('mod@conference.example.com')?.supportsModeration).toBe(true)
+    })
+
+    it('updates supportsModeration on the entity via updateRoom', () => {
+      roomStore.getState().addRoom({ ...createRoom('mod@conference.example.com'), supportsModeration: undefined })
+      roomStore.getState().updateRoom('mod@conference.example.com', { supportsModeration: false })
+      expect(roomStore.getState().roomEntities.get('mod@conference.example.com')?.supportsModeration).toBe(false)
+    })
+  })
+
+  describe('anonymity flag entity propagation (F6)', () => {
+    it('propagates isNonAnonymous/isPrivate to the room entity on addRoom', () => {
+      roomStore.getState().addRoom({ ...createRoom('r@conference.example.com'), isNonAnonymous: true, isPrivate: false })
+      const entity = roomStore.getState().roomEntities.get('r@conference.example.com')
+      expect(entity?.isNonAnonymous).toBe(true)
+      expect(entity?.isPrivate).toBe(false)
+    })
+
+    it('updates isNonAnonymous/isPrivate on the entity via updateRoom', () => {
+      roomStore.getState().addRoom(createRoom('r@conference.example.com'))
+      roomStore.getState().updateRoom('r@conference.example.com', { isNonAnonymous: true, isPrivate: true })
+      const entity = roomStore.getState().roomEntities.get('r@conference.example.com')
+      expect(entity?.isNonAnonymous).toBe(true)
+      expect(entity?.isPrivate).toBe(true)
+    })
+  })
+
   describe('updateRoom', () => {
     it('should update an existing room', () => {
       roomStore.getState().addRoom(createRoom('test@conference.example.com', { name: 'Test' }))

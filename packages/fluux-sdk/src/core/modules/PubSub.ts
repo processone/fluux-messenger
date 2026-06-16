@@ -9,6 +9,7 @@
  * Native PEP nodes handled in-place:
  * - XEP-0084: User Avatar (avatar metadata notifications)
  * - XEP-0172: User Nickname
+ * - XEP-0402: PEP Native Bookmarks (live multi-device room-bookmark sync)
  *
  * Additional nodes (crypto, MLS KeyPackages, etc.) are served through the
  * generic {@link PubSub.subscribe} mechanism — callers register a callback
@@ -20,10 +21,11 @@ import { xml } from '@xmpp/client'
 import type { Element } from '@xmpp/client'
 import { BaseModule } from './BaseModule'
 import { getBareJid } from '../jid'
-import { NS_PUBSUB, NS_NICK, NS_OPENPGP_PUBLIC_KEYS } from '../namespaces'
+import { NS_PUBSUB, NS_NICK, NS_OPENPGP_PUBLIC_KEYS, NS_BOOKMARKS } from '../namespaces'
 import { generateUUID } from '../../utils/uuid'
 import { dataToElement, elementToData } from '../e2ee/stanzaAdapter'
 import type { PEPItem, Subscription, XMLElementData } from '../e2ee'
+import { parseBookmarkItem } from '../bookmarkItem'
 
 /**
  * Options accepted by {@link PubSub.publish}. These map to XEP-0060
@@ -129,6 +131,13 @@ export class PubSub extends BaseModule {
     // fingerprint doesn't get masked by a stale positive entry either.
     if (node === NS_OPENPGP_PUBLIC_KEYS) {
       this.invalidateOpenPgpKeys(bareFrom)
+    }
+
+    // XEP-0402: PEP Native Bookmarks. A headline here means another of our own
+    // clients added/changed/removed a room bookmark — keep the room list in
+    // sync live instead of only on the next reconnect's fetchBookmarks.
+    if (node === NS_BOOKMARKS) {
+      this.handleBookmarksUpdate(bareFrom, items)
     }
 
     // Dispatch to any user-registered subscribers for (bareFrom, node).
@@ -304,6 +313,42 @@ export class PubSub extends BaseModule {
     if (nick) {
       // SDK event only - binding calls store.updateContact
       this.deps.emitSDK('roster:contact-updated', { jid: bareFrom, updates: { name: nick } })
+    }
+  }
+
+  /**
+   * Handle an XEP-0402 PEP bookmark notification (live multi-device sync).
+   *
+   * Only our OWN account publishes to our bookmarks node, so we ignore events
+   * whose `from` is not our bare JID — this prevents a contact from injecting
+   * rooms into our list. `<item>` children add/update a bookmark (the store's
+   * setBookmark creates the room if we don't have it yet); `<retract>` removes
+   * one.
+   */
+  private handleBookmarksUpdate(bareFrom: string, items: Element): void {
+    const ownBareJid = getBareJid(this.deps.getCurrentJid() ?? '')
+    if (!ownBareJid || bareFrom !== ownBareJid) return
+
+    for (const item of items.getChildren('item')) {
+      const parsed = parseBookmarkItem(item)
+      if (!parsed) continue
+      this.deps.emitSDK('room:bookmark', {
+        roomJid: parsed.jid,
+        bookmark: {
+          name: parsed.name,
+          nick: parsed.nick || 'user',
+          autojoin: parsed.autojoin,
+          password: parsed.password,
+          notifyAll: parsed.notifyAll,
+        },
+      })
+    }
+
+    for (const retract of items.getChildren('retract')) {
+      const roomJid = retract.attrs.id
+      if (roomJid) {
+        this.deps.emitSDK('room:bookmark-removed', { roomJid })
+      }
     }
   }
 

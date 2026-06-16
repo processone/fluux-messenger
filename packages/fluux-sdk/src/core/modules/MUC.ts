@@ -4,6 +4,7 @@ import { getBareJid, getLocalPart, getResource, getDomain } from '../jid'
 import { generateUUID } from '../../utils/uuid'
 import { generateQuickChatSlug } from '../wordlist'
 import { hasStableOccupantIdentity, isNonAnonymousRoom, isPrivateRoom } from '../roomCapabilities'
+import { parseBookmarkItem } from '../bookmarkItem'
 import {
   NS_MUC,
   NS_MUC_USER,
@@ -597,6 +598,11 @@ export class MUC extends BaseModule {
     const isNonAnonymous = roomFeatures?.isNonAnonymous ?? false
     const isPrivate = roomFeatures?.isPrivate ?? false
     const isIrcGateway = roomFeatures?.isIrcGateway ?? false
+    // Tri-state (F3): deliberately NOT `?? false` like the flags above. Keep
+    // `undefined` when disco didn't resolve so the moderation affordance stays
+    // optimistic, and preserve a previously-resolved value rather than clobbering
+    // it to unknown on a failed re-disco.
+    const supportsModeration = roomFeatures ? roomFeatures.supportsModeration : existingRoom?.supportsModeration
     const roomName = roomFeatures?.name || existingRoom?.name || getLocalPart(roomJid)
 
     if (!existingRoom) {
@@ -614,6 +620,7 @@ export class MUC extends BaseModule {
         isNonAnonymous,
         isPrivate,
         isIrcGateway,
+        supportsModeration,
         occupants: new Map(),
         messages: [],
         unreadCount: 0,
@@ -632,6 +639,7 @@ export class MUC extends BaseModule {
         isNonAnonymous,
         isPrivate,
         isIrcGateway,
+        supportsModeration,
         occupants: new Map() as Map<string, RoomOccupant>,
         selfOccupant: undefined,
         typingUsers: new Set() as Set<string>,
@@ -913,20 +921,10 @@ export class MUC extends BaseModule {
         )
 
         if (identity) {
-          // Check if the MUC service supports MAM globally (XEP-0313)
-          // This is useful as a fallback when individual room disco fails
-          const features = infoQuery?.getChildren('feature')
-            .map((f: Element) => f.attrs.var as string)
-            .filter(Boolean) ?? []
-          const serviceSupportsMAM = features.includes(NS_MAM)
-
-          logInfo(`MUC service: ${jid} (MAM=${serviceSupportsMAM})`)
+          logInfo(`MUC service: ${jid}`)
 
           // Emit MUC service JID so the admin store can populate it
           this.deps.emitSDK('admin:muc-service', { mucServiceJid: jid })
-
-          // Emit service-level MAM support for use as fallback
-          this.deps.emitSDK('admin:muc-service-mam', { supportsMAM: serviceSupportsMAM })
 
           return jid
         }
@@ -1007,10 +1005,14 @@ export class MUC extends BaseModule {
       // real-JID-exposure warning (issue #37) can stay fail-safe.
       const isNonAnonymous = isNonAnonymousRoom(features)
       const isPrivate = isPrivateRoom(features)
+      // XEP-0425 §2: a MUC that supports moderated retraction MUST advertise this
+      // on its own disco#info. Gate the moderation affordance on it (F3) so we
+      // never offer a moderator an action the room will reject.
+      const supportsModeration = features.includes(NS_MESSAGE_MODERATE)
 
-      logInfo(`Room features: ${roomJid} MAM=${supportsMAM} reactions=${supportsReactions} hats=${supportsHats} nonAnon=${isNonAnonymous} private=${isPrivate} irc=${isIrcGateway}`)
+      logInfo(`Room features: ${roomJid} MAM=${supportsMAM} reactions=${supportsReactions} hats=${supportsHats} nonAnon=${isNonAnonymous} private=${isPrivate} moderation=${supportsModeration} irc=${isIrcGateway}`)
 
-      return { supportsMAM, supportsReactions, supportsHats, isNonAnonymous, isPrivate, isIrcGateway, name }
+      return { supportsMAM, supportsReactions, supportsHats, isNonAnonymous, isPrivate, isIrcGateway, supportsModeration, name }
     } catch (err) {
       // Room disco#info not available - that's fine, room may not exist yet
       // or may not support disco queries, or the query timed out
@@ -1515,20 +1517,9 @@ export class MUC extends BaseModule {
       if (!items) return { roomsToAutojoin, allRoomJids }
 
       for (const item of items.getChildren('item')) {
-        // XEP-0402: conference element is directly under item with xmlns="urn:xmpp:bookmarks:1"
-        const conference = item.getChild('conference', NS_BOOKMARKS)
-        if (!conference) continue
-
-        const jid = item.attrs.id // In XEP-0402, the room JID is the item id
-        const name = conference.attrs.name || getLocalPart(jid)
-        const autojoin = conference.attrs.autojoin === '1' || conference.attrs.autojoin === 'true'
-        const nick = conference.getChildText('nick')
-        const password = conference.getChildText('password') || undefined
-
-        // Check for notify extension
-        const extensions = conference.getChild('extensions')
-        const notifyEl = extensions?.getChild('notify', NS_FLUUX)
-        const notifyAll = notifyEl?.getText() === 'all'
+        const parsed = parseBookmarkItem(item)
+        if (!parsed) continue
+        const { jid, name, autojoin, nick, password, notifyAll } = parsed
 
         allRoomJids.push(jid)
 
