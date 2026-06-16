@@ -22,6 +22,8 @@ import {
   type KeyBundle,
   classifyBoundaryError,
 } from './OpenPGPPluginBase'
+import { accountUserId } from './openpgpUserId'
+import { keyExportFilename } from './keyExportNaming'
 
 /**
  * Typed wrapper over Tauri's `invoke`. Abstracted so tests can inject a
@@ -70,7 +72,7 @@ export class SequoiaPgpPlugin extends OpenPGPPluginBase {
     try {
       return await this.invoke<KeyBundle>('openpgp_ensure_key', {
         accountJid,
-        userId: `xmpp:${accountJid}`,
+        userId: accountUserId(accountJid),
       })
     } catch (err) {
       throw this.toPluginError('ensureKeyMaterial', err)
@@ -197,7 +199,7 @@ export class SequoiaPgpPlugin extends OpenPGPPluginBase {
     }
     const { save } = await import('@tauri-apps/plugin-dialog')
     const filePath = await save({
-      defaultPath: 'openpgp-backup.asc',
+      defaultPath: keyExportFilename('openpgp-backup', ctx.account.jid),
       filters: [{ name: 'OpenPGP Armor', extensions: ['asc', 'pgp', 'gpg'] }],
     })
     if (!filePath) return false
@@ -226,7 +228,7 @@ export class SequoiaPgpPlugin extends OpenPGPPluginBase {
     }
     const { save } = await import('@tauri-apps/plugin-dialog')
     const filePath = await save({
-      defaultPath: 'openpgp-private-key.asc',
+      defaultPath: keyExportFilename('openpgp-private-key', ctx.account.jid),
       filters: [{ name: 'OpenPGP Private Key', extensions: ['asc', 'pgp', 'gpg'] }],
     })
     if (!filePath) return false
