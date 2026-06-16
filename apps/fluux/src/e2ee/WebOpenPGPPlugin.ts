@@ -31,6 +31,8 @@ import {
   type KeyBundle,
   type RestoreResult,
 } from './OpenPGPPluginBase'
+import { accountUserId } from './openpgpUserId'
+import { keyExportFilename } from './keyExportNaming'
 import { KeyPickerRequiredError, NoRecoveryAvailableError } from './recoveryErrors'
 import { clearSessionPassphrase, getSessionPassphrase, setSessionPassphrase } from './webPassphraseStore'
 import { USE_V6_KEYS } from './passphraseGenerator'
@@ -547,11 +549,12 @@ export class WebOpenPGPPlugin extends OpenPGPPluginBase {
       )
     }
     const armoredMessage = await this.backupEncrypt(ctx.account.jid, passphrase)
-    triggerBrowserDownload(armoredMessage, 'openpgp-backup.asc')
+    triggerBrowserDownload(armoredMessage, keyExportFilename('openpgp-backup', ctx.account.jid))
     return true
   }
 
   async exportPrivateKeyToFile(passphrase: string | null): Promise<boolean> {
+    const ctx = this.requireCtx()
     await this.requireUnlocked()
     if (!this.ownBundle || !this.ownPrivateKey) {
       throw new E2EEPluginError(
@@ -573,7 +576,7 @@ export class WebOpenPGPPlugin extends OpenPGPPluginBase {
     } else {
       armoredKey = this.ownPrivateKey.armor()
     }
-    triggerBrowserDownload(armoredKey, 'openpgp-private-key.asc')
+    triggerBrowserDownload(armoredKey, keyExportFilename('openpgp-private-key', ctx.account.jid))
     return true
   }
 
@@ -686,7 +689,7 @@ export class WebOpenPGPPlugin extends OpenPGPPluginBase {
     const { privateKey } = await generateKey({
       type: 'ecc',
       curve: (USE_V6_KEYS ? 'curve25519' : 'curve25519Legacy') as 'curve25519Legacy',
-      userIDs: [{ name: `xmpp:${accountJid}` }],
+      userIDs: [{ name: accountUserId(accountJid) }],
       format: 'object',
     })
     const encrypted = await encryptKey({ privateKey, passphrase })

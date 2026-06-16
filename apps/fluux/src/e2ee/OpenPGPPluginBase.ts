@@ -95,6 +95,7 @@ import {
   toXep0373Fingerprint,
   pubkeyMetadataFingerprintAttrs,
 } from './fingerprintCompare'
+import { accountUserId } from './openpgpUserId'
 import {
   clearKeyChangeAlert,
   getKeyChangeAlert,
@@ -1550,7 +1551,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
           rejections.push({ fingerprint, code: 'fingerprint_mismatch', detail, observedAt: now })
           continue
         }
-        const expectedUid = `xmpp:${peer}`
+        const expectedUid = accountUserId(peer)
         const uidMatch = validation.userIds.some(
           (uid) => uid.toLowerCase() === expectedUid.toLowerCase(),
         )
