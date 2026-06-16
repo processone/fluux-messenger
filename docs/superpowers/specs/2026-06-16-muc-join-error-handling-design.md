@@ -89,7 +89,7 @@ On submit, pass `{ password }` to `joinRoom` when present. Keep the entered JID/
 | `not-authorized` (401), password was sent | Keep field, show error | `rooms.incorrectPassword` |
 | `conflict` (409) | Focus + mark nickname field | `rooms.nicknameInUse` |
 | `registration-required` (407) | Inline message, no retry field | `rooms.membersOnly` |
-| `forbidden` (403) | Inline message (terminal) | `rooms.banned` |
+| `forbidden` (403) | Inline message (terminal) | `rooms.bannedFromRoom` |
 | `service-unavailable` (503) | Inline message | `rooms.roomFull` |
 | `not-acceptable` (406) | Inline message | `rooms.registeredNicknameRequired` |
 | `item-not-found` (404) | Inline message | `rooms.roomNotFound` |
@@ -107,7 +107,7 @@ New keys under `rooms` in `apps/fluux/src/i18n/locales/en.json`, translated into
 | `rooms.incorrectPassword` | "Incorrect password." |
 | `rooms.nicknameInUse` | "That nickname is already in use in this room." |
 | `rooms.membersOnly` | "This room is members-only — you need to be a member to join." |
-| `rooms.banned` | "You've been banned from this room." |
+| `rooms.bannedFromRoom` | "You've been banned from this room." |
 | `rooms.roomFull` | "This room is full." |
 | `rooms.registeredNicknameRequired` | "This room requires your registered nickname." |
 | `rooms.roomNotFound` | "Room not found." |

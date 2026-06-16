@@ -89,7 +89,6 @@ export function JoinRoomModal({ onClose }: JoinRoomModalProps) {
 
     const trimmedRoomJid = roomJid.trim()
     const trimmedNickname = nickname.trim()
-    const trimmedPassword = password.trim()
 
     if (!trimmedRoomJid) {
       setError(t('rooms.pleaseEnterRoomAddress'))
@@ -107,10 +106,12 @@ export function JoinRoomModal({ onClose }: JoinRoomModalProps) {
       return
     }
 
-    const passwordWasSent = trimmedPassword.length > 0
+    // Room passwords are opaque XMPP strings — do not trim (preserve any
+    // intentional surrounding whitespace).
+    const passwordWasSent = password.length > 0
     setJoining(true)
     try {
-      await joinRoom(trimmedRoomJid, trimmedNickname, passwordWasSent ? { password: trimmedPassword } : undefined)
+      await joinRoom(trimmedRoomJid, trimmedNickname, passwordWasSent ? { password } : undefined)
       await joinResult(trimmedRoomJid)
       void setActiveConversation(null)
       void setActiveRoom(trimmedRoomJid)

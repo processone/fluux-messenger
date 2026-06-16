@@ -416,6 +416,19 @@ export class MUC extends BaseModule {
   }
 
   /**
+   * Settle an in-flight join as succeeded without a real self-presence.
+   *
+   * @internal Used by DemoClient, which simulates the server by emitting join
+   * events directly instead of routing a status-110 self-presence through
+   * {@link handle}; without this the joinResult() deferred would never settle
+   * and awaiting callers (e.g. the Join Room modal) would hang. Production code
+   * must not call this — real joins settle via the self-presence path.
+   */
+  confirmSimulatedJoin(roomJid: string): void {
+    this.settleJoinSuccess(roomJid)
+  }
+
+  /**
    * Clean up all pending operations.
    * Called when the client is destroyed or connection is lost to prevent
    * memory leaks from orphaned timeouts.
