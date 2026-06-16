@@ -198,6 +198,66 @@ describe('PubSub Module', () => {
     })
   })
 
+  describe('bookmarks (XEP-0402 live sync)', () => {
+    const bookmarkEvent = (from: string, itemsChildren: Array<Record<string, unknown>>) =>
+      createMockElement('message', { from, to: 'user@example.com' }, [
+        {
+          name: 'event',
+          attrs: { xmlns: 'http://jabber.org/protocol/pubsub#event' },
+          children: [
+            { name: 'items', attrs: { node: 'urn:xmpp:bookmarks:1' }, children: itemsChildren },
+          ],
+        },
+      ])
+
+    it('emits room:bookmark when our own account pushes a bookmark notification', async () => {
+      await connectClient()
+
+      mockXmppClientInstance._emit('stanza', bookmarkEvent('user@example.com', [
+        {
+          name: 'item',
+          attrs: { id: 'room@conference.example.com' },
+          children: [
+            {
+              name: 'conference',
+              attrs: { xmlns: 'urn:xmpp:bookmarks:1', name: 'My Room', autojoin: 'true' },
+              children: [{ name: 'nick', text: 'mynick' }],
+            },
+          ],
+        },
+      ]))
+
+      expect(emitSDKSpy).toHaveBeenCalledWith('room:bookmark', {
+        roomJid: 'room@conference.example.com',
+        bookmark: { name: 'My Room', nick: 'mynick', autojoin: true, password: undefined, notifyAll: false },
+      })
+    })
+
+    it('emits room:bookmark-removed on an incoming bookmark retraction', async () => {
+      await connectClient()
+
+      mockXmppClientInstance._emit('stanza', bookmarkEvent('user@example.com', [
+        { name: 'retract', attrs: { id: 'room@conference.example.com' } },
+      ]))
+
+      expect(emitSDKSpy).toHaveBeenCalledWith('room:bookmark-removed', { roomJid: 'room@conference.example.com' })
+    })
+
+    it('ignores a bookmark notification spoofed from another account', async () => {
+      await connectClient()
+
+      mockXmppClientInstance._emit('stanza', bookmarkEvent('attacker@evil.com', [
+        {
+          name: 'item',
+          attrs: { id: 'evil@conference.example.com' },
+          children: [{ name: 'conference', attrs: { xmlns: 'urn:xmpp:bookmarks:1', name: 'Evil' } }],
+        },
+      ]))
+
+      expect(emitSDKSpy).not.toHaveBeenCalledWith('room:bookmark', expect.anything())
+    })
+  })
+
   describe('stanza handling', () => {
     it('should return true (handled) for PubSub event messages', async () => {
       await connectClient()

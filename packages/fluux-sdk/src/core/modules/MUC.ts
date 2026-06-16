@@ -4,6 +4,7 @@ import { getBareJid, getLocalPart, getResource, getDomain } from '../jid'
 import { generateUUID } from '../../utils/uuid'
 import { generateQuickChatSlug } from '../wordlist'
 import { hasStableOccupantIdentity, isNonAnonymousRoom, isPrivateRoom } from '../roomCapabilities'
+import { parseBookmarkItem } from '../bookmarkItem'
 import {
   NS_MUC,
   NS_MUC_USER,
@@ -1389,20 +1390,9 @@ export class MUC extends BaseModule {
       if (!items) return { roomsToAutojoin, allRoomJids }
 
       for (const item of items.getChildren('item')) {
-        // XEP-0402: conference element is directly under item with xmlns="urn:xmpp:bookmarks:1"
-        const conference = item.getChild('conference', NS_BOOKMARKS)
-        if (!conference) continue
-
-        const jid = item.attrs.id // In XEP-0402, the room JID is the item id
-        const name = conference.attrs.name || getLocalPart(jid)
-        const autojoin = conference.attrs.autojoin === '1' || conference.attrs.autojoin === 'true'
-        const nick = conference.getChildText('nick')
-        const password = conference.getChildText('password') || undefined
-
-        // Check for notify extension
-        const extensions = conference.getChild('extensions')
-        const notifyEl = extensions?.getChild('notify', NS_FLUUX)
-        const notifyAll = notifyEl?.getText() === 'all'
+        const parsed = parseBookmarkItem(item)
+        if (!parsed) continue
+        const { jid, name, autojoin, nick, password, notifyAll } = parsed
 
         allRoomJids.push(jid)
 
