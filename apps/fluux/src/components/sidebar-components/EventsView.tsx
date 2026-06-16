@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next'
 import { useRouteSync } from '@/hooks'
+import { useRoomJoinWarning } from '@/hooks/useRoomJoinWarning'
 import {
   useEvents,
   useBlocking,
@@ -26,6 +27,7 @@ export function EventsView() {
   const setActiveConversation = useChatStore((s) => s.setActiveConversation)
   const setActiveRoom = useRoomStore((s) => s.setActiveRoom)
   const { blockJid } = useBlocking()
+  const { confirmJoin, warningDialog } = useRoomJoinWarning()
   const {
     subscriptionRequests,
     strangerConversations,
@@ -60,8 +62,12 @@ export function EventsView() {
     navigateToMessages(bareJid)
   }
 
-  // Accept invitation and navigate to the room
+  // Accept invitation and navigate to the room.
+  // Issue #37: the join happens inside acceptInvitation (client.muc.joinRoom), so
+  // the app-level join guard doesn't otherwise cover it — warn here before joining
+  // a room that would expose the user's real JID.
   const handleAcceptInvitation = async (roomJid: string, password?: string) => {
+    if (!(await confirmJoin(roomJid))) return
     await acceptInvitation(roomJid, password)
     void setActiveRoom(roomJid)
     navigateToRooms(roomJid)
@@ -138,6 +144,7 @@ export function EventsView() {
           ))}
         </>
       )}
+      {warningDialog}
     </div>
   )
 }
