@@ -4,6 +4,21 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { RoomView } from './RoomView'
 import type { RoomMessage, Room, RoomOccupant, Contact } from '@fluux/sdk'
 
+const { RoomJoinError } = vi.hoisted(() => {
+  class RoomJoinError extends Error {
+    constructor(
+      public roomJid: string,
+      public condition: string,
+      public errorType?: string,
+      public text?: string,
+    ) {
+      super(text || `Room join failed: ${condition}`)
+      this.name = 'RoomJoinError'
+    }
+  }
+  return { RoomJoinError }
+})
+
 // Helper to create test room messages
 const createRoomMessage = (overrides: Partial<RoomMessage> = {}): RoomMessage => ({
   type: 'groupchat',
@@ -64,6 +79,7 @@ const mockRetractMessage = vi.fn()
 const mockSendChatState = vi.fn()
 const mockSetRoomNotifyAll = vi.fn()
 const mockJoinRoom = vi.fn()
+const mockJoinResult = vi.fn()
 const mockSetRoomAvatar = vi.fn()
 const mockClearRoomAvatar = vi.fn()
 const mockClearFirstNewMessageId = vi.fn()
@@ -103,6 +119,7 @@ function _isReplyToIgnoredUser(
 // Mock SDK hooks and pure functions
 vi.mock('@fluux/sdk', () => ({
   useReferencedMessage: () => undefined,
+  RoomJoinError,
   useRoomActive: () => ({
     activeRoom: mockActiveRoom,
     activeMessages: mockActiveMessages,
@@ -118,6 +135,7 @@ vi.mock('@fluux/sdk', () => ({
     clearAnimation: mockClearAnimation,
     clearFirstNewMessageId: mockClearFirstNewMessageId,
     joinRoom: mockJoinRoom,
+    joinResult: mockJoinResult,
     setRoomAvatar: mockSetRoomAvatar,
     clearRoomAvatar: mockClearRoomAvatar,
   }),
@@ -364,6 +382,10 @@ vi.mock('@/hooks', () => ({
     !!target && !!mockActiveRoom?.occupants?.has(target.nick),
 }))
 
+vi.mock('@/hooks/useRoomJoinWarning', () => ({
+  useRoomJoinWarning: () => ({ confirmJoin: () => Promise.resolve(true), warningDialog: null }),
+}))
+
 // Mock utils
 vi.mock('@/utils/presence', () => ({
   getTranslatedShowText: () => 'Online',
@@ -529,6 +551,7 @@ describe('RoomView', () => {
 
     // Reset mock functions
     vi.clearAllMocks()
+    mockJoinResult.mockResolvedValue(undefined)
   })
 
   describe('Empty state', () => {
@@ -550,6 +573,24 @@ describe('RoomView', () => {
 
       // Should show join button
       expect(screen.getByText(/rooms.joinToParticipate/)).toBeInTheDocument()
+    })
+
+    it('toasts a localized message when the join fails', async () => {
+      const { useToastStore } = await import('@/stores/toastStore')
+      useToastStore.setState({ toasts: [] })
+      mockActiveRoom = createRoom({ joined: false })
+      mockJoinRoom.mockResolvedValue(undefined)
+      mockJoinResult.mockRejectedValue(
+        new RoomJoinError('room@conference.example.com', 'registration-required'),
+      )
+
+      render(<RoomView />)
+      fireEvent.click(screen.getByText(/rooms.joinToParticipate/))
+
+      await waitFor(() => {
+        const toasts = useToastStore.getState().toasts
+        expect(toasts.some((t) => t.type === 'error' && t.message === 'rooms.membersOnly')).toBe(true)
+      })
     })
   })
 

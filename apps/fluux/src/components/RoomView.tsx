@@ -26,6 +26,7 @@ import { findLastEditableMessage, findLastEditableMessageId } from '@/utils/mess
 import { useExpandedMessagesStore } from '@/stores/expandedMessagesStore'
 import { ConfirmDialog } from './ConfirmDialog'
 import { useRoomJoinWarning } from '@/hooks/useRoomJoinWarning'
+import { getRoomJoinErrorMessage } from '@/utils/roomJoinError'
 
 // Generate hat colors from URI using XEP-0392 consistent color
 function getHatColors(hat: { uri: string; hue?: number }) {
@@ -74,7 +75,7 @@ const EMPTY_OCCUPANTS: Map<string, RoomOccupant> = new Map()
 export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = false, onShowOccupantsChange, onStartChat, onShowProfile, findOnPageRef, onSearchInConversation }: RoomViewProps) {
   detectRenderLoop('RoomView')
   const { t } = useTranslation()
-  const { activeRoom, activeMessages, activeTypingUsers, sendMessage, sendWhisper, sendReaction, sendPoll, votePoll, closePoll, sendCorrection, retractMessage, moderateMessage, sendChatState, setRoomNotifyAll, activeAnimation, sendEasterEgg, clearAnimation, clearFirstNewMessageId, updateLastSeenMessageId, joinRoom, setRoomAvatar, clearRoomAvatar, fetchOlderHistory, continueRoomCatchUp, activeMAMState, submitRoomConfig, setSubject, destroyRoom, setAffiliation, setRole, targetMessageId, clearTargetMessageId } = useRoomActive()
+  const { activeRoom, activeMessages, activeTypingUsers, sendMessage, sendWhisper, sendReaction, sendPoll, votePoll, closePoll, sendCorrection, retractMessage, moderateMessage, sendChatState, setRoomNotifyAll, activeAnimation, sendEasterEgg, clearAnimation, clearFirstNewMessageId, updateLastSeenMessageId, joinRoom, joinResult, setRoomAvatar, clearRoomAvatar, fetchOlderHistory, continueRoomCatchUp, activeMAMState, submitRoomConfig, setSubject, destroyRoom, setAffiliation, setRole, targetMessageId, clearTargetMessageId } = useRoomActive()
   // NOTE: Use focused selectors instead of useConnection() hook to avoid
   // re-renders when unrelated connection state changes (error, reconnectAttempt, etc.)
   const ownAvatar = useConnectionStore((s) => s.ownAvatar)
@@ -585,7 +586,12 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
             onJoin={async () => {
               // Issue #37: warn before joining a room that would expose the user's real JID.
               if (await confirmJoin(activeRoom.jid)) {
-                await joinRoom(activeRoom.jid, activeRoom.nickname)
+                try {
+                  await joinRoom(activeRoom.jid, activeRoom.nickname)
+                  await joinResult(activeRoom.jid)
+                } catch (err) {
+                  addToast('error', getRoomJoinErrorMessage(t, err))
+                }
               }
             }}
           />
