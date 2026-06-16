@@ -248,6 +248,7 @@ export type {
   RoomMember,
   RoomAffiliation,
   RoomRole,
+  RoomFeatures,
   MentionReference,
   Hat,
 

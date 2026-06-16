@@ -2455,9 +2455,24 @@ export class XMPPClient {
     // Always join autojoin bookmarks (both fresh connect and reconnect)
     if (roomsToAutojoin.length > 0) {
       for (const room of roomsToAutojoin) {
-        this.muc.joinRoom(room.jid, room.nick, { password: room.password }).catch((err) => {
-          console.error(`[XMPPClient] Failed to autojoin room ${room.jid}:`, err)
-        })
+        // Issue #37: don't silently autojoin a room that exposes the user's real JID
+        // (non-anonymous, non-private) unless they've already acknowledged it. Inspect
+        // via disco#info first; if it exposes the JID and isn't acknowledged, leave it
+        // bookmarked-but-not-joined so the user joins it deliberately from the UI (where
+        // the exposure warning is shown). Otherwise pass the features straight to
+        // joinRoom() so it doesn't re-run disco.
+        void (async () => {
+          const features = await this.muc.queryRoomFeatures(room.jid).catch(() => null)
+          if (this.isSessionSuperseded(gen, 'Fresh session aborted before autojoin')) return
+          const exposesRealJid = features ? (features.isNonAnonymous && !features.isPrivate) : false
+          if (exposesRealJid && !this.stores?.room.isNonAnonymousRoomAcknowledged(room.jid)) {
+            logInfo(`Skipping autojoin of non-anonymous room ${room.jid} (real-JID exposure not acknowledged)`)
+            return
+          }
+          this.muc.joinRoom(room.jid, room.nick, { password: room.password, knownFeatures: features }).catch((err) => {
+            console.error(`[XMPPClient] Failed to autojoin room ${room.jid}:`, err)
+          })
+        })()
       }
     }
 

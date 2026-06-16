@@ -12,6 +12,7 @@ import type {
   RoomRole,
   PollData,
   PollSettings,
+  RoomFeatures,
 } from '../core/types'
 import { createFetchOlderHistory, pickOldestArchiveId } from './shared'
 
@@ -44,11 +45,34 @@ export function useRoomActions() {
   const { client } = useXMPPContext()
 
   const joinRoom = useCallback(
-    async (roomJid: string, nickname: string, options?: { maxHistory?: number; password?: string }) => {
+    async (roomJid: string, nickname: string, options?: { maxHistory?: number; password?: string; knownFeatures?: RoomFeatures | null }) => {
       await client.muc.joinRoom(roomJid, nickname, options)
     },
     [client]
   )
+
+  /**
+   * Inspect a room via disco#info WITHOUT joining (no side effects). Use before
+   * joining to decide whether to warn about real-JID exposure (issue #37). The
+   * returned object can be passed back to `joinRoom` as `knownFeatures` to avoid
+   * a second disco query. Returns null if the room cannot be reached.
+   */
+  const getRoomInfo = useCallback(
+    async (roomJid: string): Promise<RoomFeatures | null> => {
+      return await client.muc.queryRoomFeatures(roomJid)
+    },
+    [client]
+  )
+
+  /** Record that the user accepted joining a room that exposes their real JID. */
+  const acknowledgeNonAnonymousRoom = useCallback((roomJid: string) => {
+    roomStore.getState().acknowledgeNonAnonymousRoom(roomJid)
+  }, [])
+
+  /** Whether the user has already acknowledged this room's real-JID exposure. */
+  const isNonAnonymousRoomAcknowledged = useCallback((roomJid: string) => {
+    return roomStore.getState().isNonAnonymousRoomAcknowledged(roomJid)
+  }, [])
 
   const createQuickChat = useCallback(
     async (nickname: string, topic?: string, invitees?: string[]): Promise<string> => {
@@ -378,6 +402,9 @@ export function useRoomActions() {
   return useMemo(
     () => ({
       joinRoom,
+      getRoomInfo,
+      acknowledgeNonAnonymousRoom,
+      isNonAnonymousRoomAcknowledged,
       createQuickChat,
       leaveRoom,
       getRoom,
@@ -426,6 +453,9 @@ export function useRoomActions() {
     }),
     [
       joinRoom,
+      getRoomInfo,
+      acknowledgeNonAnonymousRoom,
+      isNonAnonymousRoomAcknowledged,
       createQuickChat,
       leaveRoom,
       getRoom,

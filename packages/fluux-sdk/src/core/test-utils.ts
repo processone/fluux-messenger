@@ -714,6 +714,7 @@ export const createMockStores = (): MockStoreBindings => ({
     setTyping: vi.fn(),
     setBookmark: vi.fn(),
     removeBookmark: vi.fn(),
+    isNonAnonymousRoomAcknowledged: vi.fn(() => false),
     setNotifyAll: vi.fn(),
     joinedRooms: vi.fn().mockReturnValue([]),
     triggerAnimation: vi.fn(),

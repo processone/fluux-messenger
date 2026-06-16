@@ -172,6 +172,8 @@ export interface StoreBindings {
     // Bookmark methods
     setBookmark: (roomJid: string, bookmark: { name: string; nick: string; autojoin?: boolean; password?: string; notifyAll?: boolean }) => void
     removeBookmark: (roomJid: string) => void
+    // Non-anonymous room acknowledgement (issue #37)
+    isNonAnonymousRoomAcknowledged: (roomJid: string) => boolean
     // Notification settings
     setNotifyAll: (roomJid: string, notifyAll: boolean, persistent?: boolean) => void
     // Query methods

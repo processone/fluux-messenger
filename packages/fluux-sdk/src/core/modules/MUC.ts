@@ -3,7 +3,7 @@ import { BaseModule } from './BaseModule'
 import { getBareJid, getLocalPart, getResource, getDomain } from '../jid'
 import { generateUUID } from '../../utils/uuid'
 import { generateQuickChatSlug } from '../wordlist'
-import { hasStableOccupantIdentity } from '../roomCapabilities'
+import { hasStableOccupantIdentity, isNonAnonymousRoom, isPrivateRoom } from '../roomCapabilities'
 import {
   NS_MUC,
   NS_MUC_USER,
@@ -35,6 +35,7 @@ import type {
   RSMRequest,
   RSMResponse,
   AdminRoom,
+  RoomFeatures,
 } from '../types'
 import { parseXMPPError, formatXMPPError, hasErrorCondition } from '../../utils/xmppError'
 import { buildDataFormSubmit, parseDataForm } from '../../utils/dataForm'
@@ -263,6 +264,10 @@ export class MUC extends BaseModule {
             if (features.supportsReactions === true) updates.supportsReactions = true
             if (features.supportsMAM === true && !room.supportsMAM) updates.supportsMAM = true
             if (features.supportsHats === true && !room.supportsHats) updates.supportsHats = true
+            // Recover anonymity flags too: if the pre-join disco failed we defaulted
+            // these to false; the post-join re-query is authoritative.
+            if (features.isNonAnonymous !== room.isNonAnonymous) updates.isNonAnonymous = features.isNonAnonymous
+            if (features.isPrivate !== room.isPrivate) updates.isPrivate = features.isPrivate
             if (Object.keys(updates).length > 0) {
               this.deps.emitSDK('room:updated', { roomJid, updates })
             }
@@ -440,7 +445,7 @@ export class MUC extends BaseModule {
   async joinRoom(
     roomJid: string,
     nickname: string,
-    options?: { maxHistory?: number; password?: string; isQuickChat?: boolean }
+    options?: { maxHistory?: number; password?: string; isQuickChat?: boolean; knownFeatures?: RoomFeatures | null }
   ): Promise<void> {
     const existingRoom = this.deps.stores?.room.getRoom(roomJid)
 
@@ -452,13 +457,17 @@ export class MUC extends BaseModule {
 
     const isQuickChat = options?.isQuickChat ?? existingRoom?.isQuickChat
 
-    // Query room features to get room name and detect MAM support
+    // Query room features to get room name and detect MAM support.
+    // Callers that already inspected the room before joining (e.g. the pre-join
+    // exposure check) can pass knownFeatures to skip a redundant disco#info query.
     // For quickchats, we still query to get the room name (set by creator)
     // but skip MAM since quickchats are transient
-    const roomFeatures = await this.queryRoomFeatures(roomJid)
+    const roomFeatures = options?.knownFeatures ?? await this.queryRoomFeatures(roomJid)
     const supportsMAM = isQuickChat ? false : (roomFeatures?.supportsMAM ?? false)
     const supportsReactions = roomFeatures?.supportsReactions ?? false
     const supportsHats = roomFeatures?.supportsHats ?? false
+    const isNonAnonymous = roomFeatures?.isNonAnonymous ?? false
+    const isPrivate = roomFeatures?.isPrivate ?? false
     const roomName = roomFeatures?.name || existingRoom?.name || getLocalPart(roomJid)
 
     if (!existingRoom) {
@@ -473,6 +482,8 @@ export class MUC extends BaseModule {
         supportsMAM,
         supportsReactions,
         supportsHats,
+        isNonAnonymous,
+        isPrivate,
         occupants: new Map(),
         messages: [],
         unreadCount: 0,
@@ -488,6 +499,8 @@ export class MUC extends BaseModule {
         supportsMAM,
         supportsReactions,
         supportsHats,
+        isNonAnonymous,
+        isPrivate,
         occupants: new Map() as Map<string, RoomOccupant>,
         selfOccupant: undefined,
         typingUsers: new Set() as Set<string>,
@@ -818,7 +831,7 @@ export class MUC extends BaseModule {
    *   since MAM provides a more reliable and complete archive
    * - Has a 10-second timeout to prevent hanging if remote server doesn't respond
    */
-  async queryRoomFeatures(roomJid: string): Promise<{ supportsMAM: boolean; supportsReactions: boolean; supportsHats: boolean; name?: string } | null> {
+  async queryRoomFeatures(roomJid: string): Promise<RoomFeatures | null> {
     try {
       const iq = xml(
         'iq',
@@ -847,6 +860,11 @@ export class MUC extends BaseModule {
       const supportsMAM = features.includes(NS_MAM)
       const supportsReactions = hasStableOccupantIdentity(features)
       const supportsHats = features.includes(NS_HATS)
+      // Anonymity (XEP-0045 §6.4): muc_nonanonymous exposes every occupant's real
+      // JID. isPrivate (members-only/hidden) marks deliberately-private rooms so the
+      // real-JID-exposure warning (issue #37) can stay fail-safe.
+      const isNonAnonymous = isNonAnonymousRoom(features)
+      const isPrivate = isPrivateRoom(features)
 
       // Parse room name from identity element
       // <identity category="conference" type="text" name="Room Name"/>
@@ -854,9 +872,9 @@ export class MUC extends BaseModule {
         .find((i: Element) => i.attrs.category === 'conference')
       const name = identity?.attrs.name as string | undefined
 
-      logInfo(`Room features: ${roomJid} MAM=${supportsMAM} reactions=${supportsReactions} hats=${supportsHats}`)
+      logInfo(`Room features: ${roomJid} MAM=${supportsMAM} reactions=${supportsReactions} hats=${supportsHats} nonAnon=${isNonAnonymous} private=${isPrivate}`)
 
-      return { supportsMAM, supportsReactions, supportsHats, name }
+      return { supportsMAM, supportsReactions, supportsHats, isNonAnonymous, isPrivate, name }
     } catch (err) {
       // Room disco#info not available - that's fine, room may not exist yet
       // or may not support disco queries, or the query timed out

@@ -201,6 +201,12 @@ export interface RoomEntity {
   supportsReactions?: boolean
   /** True if room supports XEP-0317 Hats management */
   supportsHats?: boolean
+  /** True if the room is non-anonymous (`muc_nonanonymous`): every occupant can
+   *  see every other occupant's real JID. Drives the real-JID-exposure warning. */
+  isNonAnonymous?: boolean
+  /** True if the room is deliberately private — members-only or hidden
+   *  (`muc_membersonly`/`muc_hidden`). Used to suppress the exposure warning. */
+  isPrivate?: boolean
 
   // Mute control
   /** When true, the room won't bubble up in the sidebar on new messages.
@@ -281,3 +287,26 @@ export interface RoomRuntime {
  * @category MUC
  */
 export interface Room extends RoomEntity, RoomMetadata, RoomRuntime {}
+
+/**
+ * Room capabilities discovered via disco#info (XEP-0030/XEP-0045 §6.4).
+ *
+ * Returned by a pre-join room inspection (no side effects) and reused when
+ * joining to avoid a second disco query.
+ *
+ * @category MUC
+ */
+export interface RoomFeatures {
+  /** Room supports MAM (XEP-0313) message archiving */
+  supportsMAM: boolean
+  /** Room provides stable occupant identity for reliable reactions */
+  supportsReactions: boolean
+  /** Room supports XEP-0317 Hats management */
+  supportsHats: boolean
+  /** Room is non-anonymous (`muc_nonanonymous`): real JIDs visible to all occupants */
+  isNonAnonymous: boolean
+  /** Room is deliberately private — members-only or hidden (`muc_membersonly`/`muc_hidden`) */
+  isPrivate: boolean
+  /** Display name from the conference identity, if advertised */
+  name?: string
+}

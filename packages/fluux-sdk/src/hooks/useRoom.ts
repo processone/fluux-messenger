@@ -3,7 +3,7 @@ import { useShallow } from 'zustand/react/shallow'
 import { roomStore } from '../stores'
 import { useRoomStore, useAdminStore } from '../react/storeHooks'
 import { useXMPPContext } from '../provider'
-import type { MentionReference, ChatStateNotification, FileAttachment, RSMRequest, AdminRoom, RSMResponse, MAMQueryState, RoomAffiliation, RoomRole, PollData, PollSettings } from '../core/types'
+import type { MentionReference, ChatStateNotification, FileAttachment, RSMRequest, AdminRoom, RSMResponse, MAMQueryState, RoomAffiliation, RoomRole, PollData, PollSettings, RoomFeatures } from '../core/types'
 import { createFetchOlderHistory, pickOldestArchiveId } from './shared'
 
 /**
@@ -163,10 +163,23 @@ export function useRoom() {
   }, [activeRoom?.typingUsers])
 
   const joinRoom = useCallback(
-    async (roomJid: string, nickname: string, options?: { maxHistory?: number; password?: string }) => {
+    async (roomJid: string, nickname: string, options?: { maxHistory?: number; password?: string; knownFeatures?: RoomFeatures | null }) => {
       await client.muc.joinRoom(roomJid, nickname, options)
     },
     [client]
+  )
+
+  // Pre-join room inspection + real-JID-exposure acknowledgement (issue #37)
+  const getRoomInfo = useCallback(
+    async (roomJid: string): Promise<RoomFeatures | null> => client.muc.queryRoomFeatures(roomJid),
+    [client]
+  )
+  const acknowledgeNonAnonymousRoom = useCallback((roomJid: string) => {
+    roomStore.getState().acknowledgeNonAnonymousRoom(roomJid)
+  }, [])
+  const isNonAnonymousRoomAcknowledged = useCallback(
+    (roomJid: string) => roomStore.getState().isNonAnonymousRoomAcknowledged(roomJid),
+    []
   )
 
   const createQuickChat = useCallback(
@@ -564,6 +577,9 @@ export function useRoom() {
   const actions = useMemo(
     () => ({
       joinRoom,
+      getRoomInfo,
+      acknowledgeNonAnonymousRoom,
+      isNonAnonymousRoomAcknowledged,
       createQuickChat,
       leaveRoom,
       getRoom,
@@ -612,6 +628,9 @@ export function useRoom() {
     }),
     [
       joinRoom,
+      getRoomInfo,
+      acknowledgeNonAnonymousRoom,
+      isNonAnonymousRoomAcknowledged,
       createQuickChat,
       leaveRoom,
       getRoom,

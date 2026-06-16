@@ -1071,7 +1071,7 @@ describe('MUC Module', () => {
 
       const result = await muc.queryRoomFeatures('room@conference.example.org')
 
-      expect(result).toEqual({ supportsMAM: true, supportsReactions: true, supportsHats: false, name: 'Test Room' })
+      expect(result).toEqual({ supportsMAM: true, supportsReactions: true, supportsHats: false, isNonAnonymous: false, isPrivate: false, name: 'Test Room' })
       expect(mockSendIQ).toHaveBeenCalledWith(
         expect.objectContaining({
           attrs: expect.objectContaining({
@@ -1099,7 +1099,7 @@ describe('MUC Module', () => {
 
       const result = await muc.queryRoomFeatures('room@conference.example.org')
 
-      expect(result).toEqual({ supportsMAM: false, supportsReactions: true, supportsHats: false, name: 'Test Room' })
+      expect(result).toEqual({ supportsMAM: false, supportsReactions: true, supportsHats: false, isNonAnonymous: false, isPrivate: false, name: 'Test Room' })
     })
 
     it('returns supportsReactions: false for open semi-anonymous rooms without occupant-id', async () => {
@@ -1120,7 +1120,7 @@ describe('MUC Module', () => {
 
       const result = await muc.queryRoomFeatures('room@conference.example.org')
 
-      expect(result).toEqual({ supportsMAM: false, supportsReactions: false, supportsHats: false, name: 'IRC Bridge' })
+      expect(result).toEqual({ supportsMAM: false, supportsReactions: false, supportsHats: false, isNonAnonymous: false, isPrivate: false, name: 'IRC Bridge' })
     })
 
     it('returns supportsReactions: true for open semi-anonymous rooms with occupant-id', async () => {
@@ -1142,7 +1142,71 @@ describe('MUC Module', () => {
 
       const result = await muc.queryRoomFeatures('room@conference.example.org')
 
-      expect(result).toEqual({ supportsMAM: false, supportsReactions: true, supportsHats: false, name: 'Modern Room' })
+      expect(result).toEqual({ supportsMAM: false, supportsReactions: true, supportsHats: false, isNonAnonymous: false, isPrivate: false, name: 'Modern Room' })
+    })
+
+    it('reports isNonAnonymous + non-private for a non-anonymous public room', async () => {
+      const response = createMockElement('iq', { type: 'result', from: 'room@conference.example.org' }, [
+        {
+          name: 'query',
+          attrs: { xmlns: 'http://jabber.org/protocol/disco#info' },
+          children: [
+            { name: 'identity', attrs: { category: 'conference', type: 'text', name: 'Public Room' } },
+            { name: 'feature', attrs: { var: 'http://jabber.org/protocol/muc' } },
+            { name: 'feature', attrs: { var: 'muc_nonanonymous' } },
+            { name: 'feature', attrs: { var: 'muc_open' } },
+            { name: 'feature', attrs: { var: 'muc_public' } },
+          ],
+        },
+      ])
+
+      mockSendIQ.mockResolvedValue(response)
+
+      const result = await muc.queryRoomFeatures('room@conference.example.org')
+
+      expect(result).toMatchObject({ isNonAnonymous: true, isPrivate: false })
+    })
+
+    it('reports isPrivate for a non-anonymous members-only room', async () => {
+      const response = createMockElement('iq', { type: 'result', from: 'room@conference.example.org' }, [
+        {
+          name: 'query',
+          attrs: { xmlns: 'http://jabber.org/protocol/disco#info' },
+          children: [
+            { name: 'identity', attrs: { category: 'conference', type: 'text', name: 'Private Room' } },
+            { name: 'feature', attrs: { var: 'http://jabber.org/protocol/muc' } },
+            { name: 'feature', attrs: { var: 'muc_nonanonymous' } },
+            { name: 'feature', attrs: { var: 'muc_membersonly' } },
+          ],
+        },
+      ])
+
+      mockSendIQ.mockResolvedValue(response)
+
+      const result = await muc.queryRoomFeatures('room@conference.example.org')
+
+      expect(result).toMatchObject({ isNonAnonymous: true, isPrivate: true })
+    })
+
+    it('reports isNonAnonymous: false for a semi-anonymous room', async () => {
+      const response = createMockElement('iq', { type: 'result', from: 'room@conference.example.org' }, [
+        {
+          name: 'query',
+          attrs: { xmlns: 'http://jabber.org/protocol/disco#info' },
+          children: [
+            { name: 'identity', attrs: { category: 'conference', type: 'text', name: 'Semi Room' } },
+            { name: 'feature', attrs: { var: 'http://jabber.org/protocol/muc' } },
+            { name: 'feature', attrs: { var: 'muc_semianonymous' } },
+            { name: 'feature', attrs: { var: 'muc_open' } },
+          ],
+        },
+      ])
+
+      mockSendIQ.mockResolvedValue(response)
+
+      const result = await muc.queryRoomFeatures('room@conference.example.org')
+
+      expect(result).toMatchObject({ isNonAnonymous: false, isPrivate: false })
     })
 
     it('returns null when disco#info query fails', async () => {
