@@ -535,5 +535,132 @@ describe('XMPPClient Disco', () => {
         category: 'connection'
       })
     })
+
+    // --- MAM advertised on the bare JID only (Prosody) ---
+    // XEP-0313 §3 requires MAM support to be advertised on the *archiving* JID
+    // (the user's bare JID). ejabberd additionally mirrors it onto the server
+    // domain; Prosody does not. fetchServerInfo must fall back to the bare-JID
+    // archive disco so 1:1 history sync isn't disabled on Prosody-style servers.
+    it('includes MAM in server features when only the bare JID advertises it (Prosody)', async () => {
+      const domainResponse = createMockElement('iq', { type: 'result', from: 'example.com' }, [
+        {
+          name: 'query',
+          attrs: { xmlns: 'http://jabber.org/protocol/disco#info' },
+          children: [
+            { name: 'identity', attrs: { category: 'server', type: 'im', name: 'Prosody' } },
+            { name: 'feature', attrs: { var: 'http://jabber.org/protocol/disco#info' } },
+            { name: 'feature', attrs: { var: 'urn:xmpp:carbons:2' } },
+          ],
+        },
+      ])
+      const bareJidResponse = createMockElement('iq', { type: 'result', from: 'user@example.com' }, [
+        {
+          name: 'query',
+          attrs: { xmlns: 'http://jabber.org/protocol/disco#info' },
+          children: [
+            { name: 'identity', attrs: { category: 'account', type: 'registered' } },
+            { name: 'feature', attrs: { var: 'urn:xmpp:mam:2' } },
+            { name: 'feature', attrs: { var: 'urn:xmpp:mam:2#extended' } },
+          ],
+        },
+      ])
+
+      mockXmppClientInstance.iqCaller.request.mockImplementation((iq: any) => {
+        const to = iq?.attrs?.to
+        if (to === 'example.com') return Promise.resolve(domainResponse)
+        if (to === 'user@example.com') return Promise.resolve(bareJidResponse)
+        return Promise.resolve(getDefaultIQResponse(iq))
+      })
+
+      const connectPromise = xmppClient.connect({
+        jid: 'user@example.com',
+        password: 'password',
+        server: 'example.com',
+        skipDiscovery: true,
+      })
+      mockXmppClientInstance._emit('online')
+      await connectPromise
+      await waitForAsyncOps()
+
+      const serverInfoCall = emitSDKSpy.mock.calls.find((call: unknown[]) => call[0] === 'connection:server-info')
+      expect(serverInfoCall).toBeDefined()
+      const serverInfo = (serverInfoCall![1] as { info: { features: string[] } }).info
+      expect(serverInfo.features).toContain('urn:xmpp:mam:2')
+    })
+
+    it('does not send a bare-JID fallback query when the domain already advertises MAM (ejabberd)', async () => {
+      // ejabberd shape: the server domain advertises MAM directly.
+      const domainResponse = createMockElement('iq', { type: 'result', from: 'example.com' }, [
+        {
+          name: 'query',
+          attrs: { xmlns: 'http://jabber.org/protocol/disco#info' },
+          children: [
+            { name: 'identity', attrs: { category: 'server', type: 'im', name: 'ejabberd' } },
+            { name: 'feature', attrs: { var: 'urn:xmpp:carbons:2' } },
+            { name: 'feature', attrs: { var: 'urn:xmpp:mam:2' } },
+          ],
+        },
+      ])
+
+      mockXmppClientInstance.iqCaller.request.mockImplementation((iq: any) => {
+        const to = iq?.attrs?.to
+        if (to === 'example.com') return Promise.resolve(domainResponse)
+        return Promise.resolve(getDefaultIQResponse(iq))
+      })
+
+      const connectPromise = xmppClient.connect({
+        jid: 'user@example.com',
+        password: 'password',
+        server: 'example.com',
+        skipDiscovery: true,
+      })
+      mockXmppClientInstance._emit('online')
+      await connectPromise
+      await waitForAsyncOps()
+
+      // Server features still report MAM (no regression for ejabberd)...
+      const serverInfoCall = emitSDKSpy.mock.calls.find((call: unknown[]) => call[0] === 'connection:server-info')
+      const serverInfo = (serverInfoCall![1] as { info: { features: string[] } }).info
+      expect(serverInfo.features).toContain('urn:xmpp:mam:2')
+
+      // ...and no extra bare-JID round-trip was made.
+      const sentFallback = (mockXmppClientInstance.iqCaller.request as ReturnType<typeof vi.fn>).mock.calls.some(
+        (call: any[]) => typeof call[0]?.attrs?.id === 'string' && call[0].attrs.id.startsWith('mam_support_')
+      )
+      expect(sentFallback).toBe(false)
+    })
+
+    it('does not report MAM when neither the domain nor the bare JID advertise it', async () => {
+      const noMamResponse = createMockElement('iq', { type: 'result' }, [
+        {
+          name: 'query',
+          attrs: { xmlns: 'http://jabber.org/protocol/disco#info' },
+          children: [
+            { name: 'identity', attrs: { category: 'server', type: 'im', name: 'Prosody' } },
+            { name: 'feature', attrs: { var: 'urn:xmpp:carbons:2' } },
+          ],
+        },
+      ])
+
+      mockXmppClientInstance.iqCaller.request.mockImplementation((iq: any) => {
+        const xmlns = iq?.children?.[0]?.attrs?.xmlns
+        if (xmlns === 'http://jabber.org/protocol/disco#info') return Promise.resolve(noMamResponse)
+        return Promise.resolve(getDefaultIQResponse(iq))
+      })
+
+      const connectPromise = xmppClient.connect({
+        jid: 'user@example.com',
+        password: 'password',
+        server: 'example.com',
+        skipDiscovery: true,
+      })
+      mockXmppClientInstance._emit('online')
+      await connectPromise
+      await waitForAsyncOps()
+
+      const serverInfoCall = emitSDKSpy.mock.calls.find((call: unknown[]) => call[0] === 'connection:server-info')
+      const serverInfo = (serverInfoCall![1] as { info: { features: string[] } }).info
+      expect(serverInfo.features).not.toContain('urn:xmpp:mam:2')
+    })
   })
 })
