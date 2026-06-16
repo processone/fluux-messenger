@@ -501,6 +501,8 @@ export const roomStore = createStore<RoomState>()(
         supportsHats: room.supportsHats,
         supportsModeration: room.supportsModeration,
         isIrcGateway: room.isIrcGateway,
+        isNonAnonymous: room.isNonAnonymous,
+        isPrivate: room.isPrivate,
         muted: room.muted,
       }
       const meta: RoomMetadata = {
@@ -555,7 +557,7 @@ export const roomStore = createStore<RoomState>()(
       // Update entity fields if any changed
       const entityFields = ['name', 'nickname', 'joined', 'isJoining', 'subject', 'avatar',
         'avatarHash', 'avatarFromPresence', 'isBookmarked', 'autojoin', 'password', 'isQuickChat',
-        'supportsMAM', 'supportsReactions', 'supportsHats', 'supportsModeration', 'isIrcGateway', 'muted'] as const
+        'supportsMAM', 'supportsReactions', 'supportsHats', 'supportsModeration', 'isIrcGateway', 'isNonAnonymous', 'isPrivate', 'muted'] as const
       const hasEntityUpdate = entityFields.some((f) => f in update)
 
       // Update metadata fields if any changed
@@ -592,6 +594,8 @@ export const roomStore = createStore<RoomState>()(
             supportsHats: updatedRoom.supportsHats,
             supportsModeration: updatedRoom.supportsModeration,
             isIrcGateway: updatedRoom.isIrcGateway,
+            isNonAnonymous: updatedRoom.isNonAnonymous,
+            isPrivate: updatedRoom.isPrivate,
             muted: updatedRoom.muted,
           })
         }
