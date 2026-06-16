@@ -17,7 +17,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- Message list performance: off-screen rows skipped with content-visibility for reduced CPU on long histories
 - Group chats: skip member-list discovery for rooms that forbid affiliation lists, reducing traffic and avoiding errors
 - Group chats: occupant avatar updates coalesced on room join to reduce re-renders
 - Empty state screens use consistent icons from the icon rail

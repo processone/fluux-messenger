@@ -10,7 +10,6 @@
 
 ### Changed
 
-- Message list performance: off-screen rows skipped with content-visibility for reduced CPU on long histories
 - Group chats: skip member-list discovery for rooms that forbid affiliation lists, reducing traffic and avoiding errors
 - Group chats: occupant avatar updates coalesced on room join to reduce re-renders
 - Empty state screens use consistent icons from the icon rail
