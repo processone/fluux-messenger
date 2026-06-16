@@ -169,6 +169,13 @@ export function useRoom() {
     [client]
   )
 
+  const joinResult = useCallback(
+    async (roomJid: string): Promise<void> => {
+      await client.muc.joinResult(roomJid)
+    },
+    [client],
+  )
+
   // Pre-join room inspection + real-JID-exposure acknowledgement (issue #37)
   const getRoomInfo = useCallback(
     async (roomJid: string): Promise<RoomFeatures | null> => client.muc.queryRoomFeatures(roomJid),
@@ -578,6 +585,7 @@ export function useRoom() {
   const actions = useMemo(
     () => ({
       joinRoom,
+      joinResult,
       getRoomInfo,
       acknowledgeNonAnonymousRoom,
       isNonAnonymousRoomAcknowledged,
@@ -629,6 +637,7 @@ export function useRoom() {
     }),
     [
       joinRoom,
+      joinResult,
       getRoomInfo,
       acknowledgeNonAnonymousRoom,
       isNonAnonymousRoomAcknowledged,
