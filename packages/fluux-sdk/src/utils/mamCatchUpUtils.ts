@@ -107,24 +107,64 @@ export interface CatchUpQuery {
 }
 
 /**
+ * Optional inputs for {@link selectCatchUpQuery}. All are epoch-ms timestamps;
+ * grouped into an options object (rather than positional args) so the three
+ * `number | undefined` values can't be transposed at a call site.
+ */
+export interface CatchUpQueryOptions {
+  /** Epoch ms the session connected. The cached cursor excludes this-session
+   *  messages so a live message can't poison it. Omitted → use the global newest. */
+  sessionStartTime?: number
+  /** Epoch ms of a recorded forward gap. When set it WINS: resume from the hole
+   *  boundary instead of from newer cached messages above it. */
+  forwardGapTimestamp?: number
+  /** Epoch ms of the entity's persisted preview (`lastMessage`). Last resort —
+   *  used only when no cached message and no gap give a cursor — so a persisted
+   *  conversation whose message cache is empty this run still FORWARD-fills its
+   *  offline gap instead of a `{ before: '' }` fetch-latest that grabs only the
+   *  newest page and silently skips a large gap (issue #135). */
+  fallbackNewestTimestamp?: number
+}
+
+/**
  * The single, shared catch-up cursor policy for BOTH 1:1 and MUC forward
  * catch-up (background sync + active-entity side effects). Centralized so the
  * cursor logic can't drift between the chat and room paths — which is exactly
  * how the session-start fix once landed in rooms but not 1:1.
  *
- * Returns a forward `{ start }` from the newest message that predates the
- * session (so a live message in the catch-up window can't poison the cursor),
- * or `{ before: '' }` to fetch the latest when nothing pre-session is held.
- * When `sessionStartTime` is omitted, falls back to the global newest message.
+ * Picks a forward `{ start }` from the highest-priority available anchor —
+ * recorded gap boundary, else newest pre-session cached message, else the
+ * persisted preview timestamp — or `{ before: '' }` to fetch the latest when
+ * none is held. A fallback at/after `sessionStartTime` is ignored so a live
+ * preview update arriving post-connect can't poison the cursor.
  */
 export function selectCatchUpQuery(
   messages: Array<{ timestamp?: Date }>,
-  sessionStartTime?: number,
+  options: CatchUpQueryOptions = {},
 ): CatchUpQuery {
+  const { sessionStartTime, forwardGapTimestamp, fallbackNewestTimestamp } = options
+
+  // A recorded forward gap wins: resume from the hole boundary.
+  if (forwardGapTimestamp !== undefined) {
+    return { start: buildCatchUpStartTime(new Date(forwardGapTimestamp)) }
+  }
+
+  // Normal case: forward from the newest message that predates the session.
   const cursor = sessionStartTime !== undefined
     ? findCatchUpCursorMessage(messages, sessionStartTime)
     : findNewestMessage(messages)
-  return cursor?.timestamp ? { start: buildCatchUpStartTime(cursor.timestamp) } : { before: '' }
+  if (cursor?.timestamp) return { start: buildCatchUpStartTime(cursor.timestamp) }
+
+  // Last resort: the persisted preview timestamp (cache empty this run), guarded
+  // so a live preview update can't poison the cursor.
+  if (
+    fallbackNewestTimestamp !== undefined &&
+    (sessionStartTime === undefined || fallbackNewestTimestamp < sessionStartTime)
+  ) {
+    return { start: buildCatchUpStartTime(new Date(fallbackNewestTimestamp)) }
+  }
+
+  return { before: '' }
 }
 
 /**

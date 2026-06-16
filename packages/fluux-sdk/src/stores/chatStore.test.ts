@@ -676,6 +676,72 @@ describe('chatStore', () => {
     })
   })
 
+  describe('clearMessageStanzaId', () => {
+    it('strips a stale stanzaId from the in-memory message and IndexedDB', () => {
+      chatStore.getState().addConversation(createConversation('alice@example.com'))
+      const msg = { ...createMessage('alice@example.com', 'sent', true), stanzaId: 'uuid-sent', originId: 'uuid-sent' }
+      chatStore.getState().addMessage(msg)
+
+      chatStore.getState().clearMessageStanzaId('alice@example.com', 'uuid-sent')
+
+      expect(chatStore.getState().getMessage('alice@example.com', msg.id)?.stanzaId).toBeUndefined()
+      expect(messageCache.updateMessage).toHaveBeenCalledWith(msg.id, { stanzaId: undefined })
+    })
+
+    it('heals the lastMessage preview when the cleared message was the preview', () => {
+      chatStore.getState().addConversation(createConversation('alice@example.com'))
+      const msg = { ...createMessage('alice@example.com', 'sent', true), stanzaId: 'uuid-sent', originId: 'uuid-sent' }
+      chatStore.getState().addMessage(msg)
+      expect(chatStore.getState().conversationMeta.get('alice@example.com')?.lastMessage?.stanzaId).toBe('uuid-sent')
+
+      chatStore.getState().clearMessageStanzaId('alice@example.com', 'uuid-sent')
+
+      const preview = chatStore.getState().conversationMeta.get('alice@example.com')?.lastMessage
+      expect(preview?.id).toBe(msg.id)
+      expect(preview?.stanzaId).toBeUndefined()
+    })
+
+    it('is a no-op when no message carries the given stanzaId', () => {
+      chatStore.getState().addConversation(createConversation('alice@example.com'))
+      const msg = { ...createMessage('alice@example.com', 'real', false), stanzaId: 'archive-1' }
+      chatStore.getState().addMessage(msg)
+      vi.mocked(messageCache.updateMessage).mockClear()
+
+      chatStore.getState().clearMessageStanzaId('alice@example.com', 'not-present')
+
+      expect(chatStore.getState().getMessage('alice@example.com', msg.id)?.stanzaId).toBe('archive-1')
+      expect(messageCache.updateMessage).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('getConversationLastTimestamp', () => {
+    it('returns the meta lastMessage timestamp in epoch ms', () => {
+      chatStore.getState().addConversation(createConversation('alice@example.com'))
+      const ts = new Date('2026-05-14T09:00:00.000Z')
+      chatStore.getState().addMessage({ ...createMessage('alice@example.com', 'hi', false), timestamp: ts })
+
+      expect(chatStore.getState().getConversationLastTimestamp('alice@example.com')).toBe(ts.getTime())
+    })
+
+    it('falls back to the combined conversations map when no meta entry exists', () => {
+      const ts = new Date('2026-05-14T09:00:00.000Z')
+      const lastMessage = { ...createMessage('bob@example.com', 'hi', false), timestamp: ts }
+      // Persist-rehydration / legacy shape: combined map populated, meta absent.
+      chatStore.setState({
+        conversationMeta: new Map(),
+        conversations: new Map([['bob@example.com', { ...createConversation('bob@example.com'), lastMessage }]]),
+      })
+
+      expect(chatStore.getState().getConversationLastTimestamp('bob@example.com')).toBe(ts.getTime())
+    })
+
+    it('returns undefined when the conversation has no last message', () => {
+      chatStore.getState().addConversation(createConversation('carol@example.com'))
+      expect(chatStore.getState().getConversationLastTimestamp('carol@example.com')).toBeUndefined()
+      expect(chatStore.getState().getConversationLastTimestamp('unknown@example.com')).toBeUndefined()
+    })
+  })
+
   describe('markAsRead', () => {
     it('should reset unreadCount to 0', () => {
       const conv = { ...createConversation('alice@example.com'), unreadCount: 10 }

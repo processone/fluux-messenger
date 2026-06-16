@@ -312,7 +312,15 @@ export interface RoomState {
   }) => void
   updateReactions: (roomJid: string, messageId: string, reactorNick: string, emojis: string[]) => void
   updateMessage: (roomJid: string, messageId: string, updates: Partial<RoomMessage>) => void
+  clearMessageStanzaId: (roomJid: string, stanzaId: string) => void
   getMessage: (roomJid: string, messageId: string) => RoomMessage | undefined
+  /**
+   * Epoch ms of the room's persisted last-known message (the entity preview),
+   * or undefined. Used as a last-resort forward catch-up cursor so a persisted
+   * room whose message cache is empty this run still forward-fills its offline
+   * gap instead of a `before:''` fetch-latest.
+   */
+  getRoomLastTimestamp: (roomJid: string) => number | undefined
   markAsRead: (roomJid: string) => void
   setActiveRoom: (roomJid: string | null) => void
   /**
@@ -1166,10 +1174,59 @@ export const roomStore = createStore<RoomState>()(
     })
   },
 
+  clearMessageStanzaId: (roomJid, stanzaId) => {
+    set((state) => {
+      const existing = state.rooms.get(roomJid)
+      if (!existing) return state
+
+      const targetIdx = existing.messages.findIndex((message) => message.stanzaId === stanzaId)
+      if (targetIdx === -1) return state
+
+      const newMessages = [...existing.messages]
+      const { stanzaId: _staleStanzaId, ...updatedMessage } = existing.messages[targetIdx]
+      newMessages[targetIdx] = updatedMessage
+
+      void messageCache.updateRoomMessage(existing.messages[targetIdx].id, { stanzaId: undefined })
+
+      const newRooms = new Map(state.rooms)
+      newRooms.set(roomJid, { ...existing, messages: newMessages })
+
+      const newRuntime = new Map(state.roomRuntime)
+      const existingRuntime = newRuntime.get(roomJid)
+      if (existingRuntime) {
+        newRuntime.set(roomJid, { ...existingRuntime, messages: newMessages })
+      }
+
+      const result: Partial<RoomState> = { rooms: newRooms, roomRuntime: newRuntime }
+      const meta = state.roomMeta.get(roomJid)
+      const wasLastMessage =
+        !!meta?.lastMessage &&
+        (meta.lastMessage.id === updatedMessage.id || meta.lastMessage.stanzaId === stanzaId)
+
+      if (meta && wasLastMessage) {
+        const newMeta = new Map(state.roomMeta)
+        newMeta.set(roomJid, { ...meta, lastMessage: updatedMessage })
+        result.roomMeta = newMeta
+      }
+
+      return result
+    })
+  },
+
   getMessage: (roomJid, messageId) => {
     const room = get().rooms.get(roomJid)
     if (!room) return undefined
     return findMessageById(room.messages, messageId)
+  },
+
+  getRoomLastTimestamp: (roomJid) => {
+    const state = get()
+    // Prefer roomMeta (frequently-updated); fall back to the combined rooms map
+    // for backward compat with persist/tests.
+    const lastMessage =
+      state.roomMeta.get(roomJid)?.lastMessage ??
+      state.rooms.get(roomJid)?.lastMessage
+    return lastMessage?.timestamp?.getTime()
   },
 
   markAsRead: (roomJid) => {

@@ -148,6 +148,7 @@ interface ChatState {
   clearAllTyping: () => void
   updateReactions: (conversationId: string, messageId: string, reactorJid: string, emojis: string[]) => void
   updateMessage: (conversationId: string, messageId: string, updates: Partial<Message>) => void
+  clearMessageStanzaId: (conversationId: string, stanzaId: string) => void
   /**
    * Hard-remove a message from the conversation, the search index, and the
    * durable cache. Used when a stanza that was provisionally stored as a
@@ -157,6 +158,13 @@ interface ChatState {
    */
   removeMessage: (conversationId: string, messageId: string) => void
   getMessage: (conversationId: string, messageId: string) => Message | undefined
+  /**
+   * Epoch ms of the conversation's persisted last-known message (the entity
+   * preview), or undefined. Used as a last-resort forward catch-up cursor so a
+   * persisted conversation whose message cache is empty this run still
+   * forward-fills its offline gap instead of a `before:''` fetch-latest.
+   */
+  getConversationLastTimestamp: (conversationId: string) => number | undefined
   triggerAnimation: (conversationId: string, animation: string) => void
   clearAnimation: () => void
   // Draft management
@@ -1090,10 +1098,56 @@ export const chatStore = createStore<ChatState>()(
         })
       },
 
+      clearMessageStanzaId: (conversationId, stanzaId) => {
+        set((state) => {
+          const convMessages = state.messages.get(conversationId)
+          if (!convMessages) return state
+
+          const messageIndex = convMessages.findIndex((message) => message.stanzaId === stanzaId)
+          if (messageIndex === -1) return state
+
+          const newMessages = new Map(state.messages)
+          const updatedConvMessages = [...convMessages]
+          const { stanzaId: _staleStanzaId, ...updatedMessage } = convMessages[messageIndex]
+          updatedConvMessages[messageIndex] = updatedMessage
+          newMessages.set(conversationId, updatedConvMessages)
+
+          void messageCache.updateMessage(convMessages[messageIndex].id, { stanzaId: undefined })
+
+          const meta = state.conversationMeta.get(conversationId)
+          const conv = state.conversations.get(conversationId)
+          const wasLastMessage =
+            !!meta?.lastMessage &&
+            (meta.lastMessage.id === updatedMessage.id || meta.lastMessage.stanzaId === stanzaId)
+
+          if (meta && conv && wasLastMessage) {
+            const newMeta = new Map(state.conversationMeta)
+            newMeta.set(conversationId, { ...meta, lastMessage: updatedMessage })
+
+            const newConversations = new Map(state.conversations)
+            newConversations.set(conversationId, { ...conv, lastMessage: updatedMessage })
+
+            return { messages: newMessages, conversationMeta: newMeta, conversations: newConversations }
+          }
+
+          return { messages: newMessages }
+        })
+      },
+
       getMessage: (conversationId, messageId) => {
         const convMessages = get().messages.get(conversationId)
         if (!convMessages) return undefined
         return findMessageById(convMessages, messageId)
+      },
+
+      getConversationLastTimestamp: (conversationId) => {
+        const state = get()
+        // Prefer conversationMeta (frequently-updated); fall back to the combined
+        // conversations map for backward compat with persist/tests.
+        const lastMessage =
+          state.conversationMeta.get(conversationId)?.lastMessage ??
+          state.conversations.get(conversationId)?.lastMessage
+        return lastMessage?.timestamp?.getTime()
       },
 
       removeMessage: (conversationId, messageId) => {

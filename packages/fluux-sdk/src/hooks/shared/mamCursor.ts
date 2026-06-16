@@ -12,6 +12,10 @@
 
 /** Minimal shape needed to pick a pagination cursor. */
 interface ArchivableMessage {
+  /** Client-generated stanza id. Useful only to recognize stale self-copied ids. */
+  id?: string
+  /** XEP-0359 sender-assigned id. Not a valid archive pagination cursor. */
+  originId?: string
   /** XEP-0359 server-assigned archive id. Absent on outgoing / unarchived messages. */
   stanzaId?: string
 }
@@ -29,7 +33,7 @@ interface ArchivableMessage {
  */
 export function pickOldestArchiveId(messages: ArchivableMessage[]): string | undefined {
   for (const message of messages) {
-    if (message.stanzaId) return message.stanzaId
+    if (message.stanzaId && message.stanzaId !== message.originId) return message.stanzaId
   }
   return undefined
 }
@@ -42,6 +46,9 @@ export function pickOldestArchiveId(messages: ArchivableMessage[]): string | und
 export function isItemNotFoundError(error: unknown): boolean {
   if (!error || typeof error !== 'object') return false
   if ((error as { condition?: string }).condition === 'item-not-found') return true
-  if (error instanceof Error && error.message.includes('item-not-found')) return true
+  if (error instanceof Error) {
+    const message = error.message.toLowerCase()
+    return message.includes('item-not-found') || message.includes('item not found')
+  }
   return false
 }
