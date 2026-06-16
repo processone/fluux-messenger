@@ -268,6 +268,7 @@ export class MUC extends BaseModule {
             // these to false; the post-join re-query is authoritative.
             if (features.isNonAnonymous !== room.isNonAnonymous) updates.isNonAnonymous = features.isNonAnonymous
             if (features.isPrivate !== room.isPrivate) updates.isPrivate = features.isPrivate
+            if (features.isIrcGateway === true && !room.isIrcGateway) updates.isIrcGateway = true
             if (Object.keys(updates).length > 0) {
               this.deps.emitSDK('room:updated', { roomJid, updates })
             }
@@ -468,6 +469,7 @@ export class MUC extends BaseModule {
     const supportsHats = roomFeatures?.supportsHats ?? false
     const isNonAnonymous = roomFeatures?.isNonAnonymous ?? false
     const isPrivate = roomFeatures?.isPrivate ?? false
+    const isIrcGateway = roomFeatures?.isIrcGateway ?? false
     const roomName = roomFeatures?.name || existingRoom?.name || getLocalPart(roomJid)
 
     if (!existingRoom) {
@@ -484,6 +486,7 @@ export class MUC extends BaseModule {
         supportsHats,
         isNonAnonymous,
         isPrivate,
+        isIrcGateway,
         occupants: new Map(),
         messages: [],
         unreadCount: 0,
@@ -501,6 +504,7 @@ export class MUC extends BaseModule {
         supportsHats,
         isNonAnonymous,
         isPrivate,
+        isIrcGateway,
         occupants: new Map() as Map<string, RoomOccupant>,
         selfOccupant: undefined,
         typingUsers: new Set() as Set<string>,
@@ -857,8 +861,19 @@ export class MUC extends BaseModule {
         .map((f: Element) => f.attrs.var as string)
         .filter(Boolean)
 
+      // Parse the room identity (XEP-0030):
+      // <identity category="conference" type="text" name="Room Name"/>
+      // IRC gateways (Biboumi et al.) advertise type="irc" instead of "text".
+      const identity = query.getChildren('identity')
+        .find((i: Element) => i.attrs.category === 'conference')
+      const name = identity?.attrs.name as string | undefined
+      const isIrcGateway = identity?.attrs.type === 'irc'
+
       const supportsMAM = features.includes(NS_MAM)
-      const supportsReactions = hasStableOccupantIdentity(features)
+      // IRC has no reactions concept (XEP-0444); on a gateway a reaction would
+      // degrade to a junk fallback line, so disable it even when the channel
+      // otherwise has stable occupant identity (muc_nonanonymous). See #228.
+      const supportsReactions = hasStableOccupantIdentity(features) && !isIrcGateway
       const supportsHats = features.includes(NS_HATS)
       // Anonymity (XEP-0045 §6.4): muc_nonanonymous exposes every occupant's real
       // JID. isPrivate (members-only/hidden) marks deliberately-private rooms so the
@@ -866,15 +881,9 @@ export class MUC extends BaseModule {
       const isNonAnonymous = isNonAnonymousRoom(features)
       const isPrivate = isPrivateRoom(features)
 
-      // Parse room name from identity element
-      // <identity category="conference" type="text" name="Room Name"/>
-      const identity = query.getChildren('identity')
-        .find((i: Element) => i.attrs.category === 'conference')
-      const name = identity?.attrs.name as string | undefined
+      logInfo(`Room features: ${roomJid} MAM=${supportsMAM} reactions=${supportsReactions} hats=${supportsHats} nonAnon=${isNonAnonymous} private=${isPrivate} irc=${isIrcGateway}`)
 
-      logInfo(`Room features: ${roomJid} MAM=${supportsMAM} reactions=${supportsReactions} hats=${supportsHats} nonAnon=${isNonAnonymous} private=${isPrivate}`)
-
-      return { supportsMAM, supportsReactions, supportsHats, isNonAnonymous, isPrivate, name }
+      return { supportsMAM, supportsReactions, supportsHats, isNonAnonymous, isPrivate, isIrcGateway, name }
     } catch (err) {
       // Room disco#info not available - that's fine, room may not exist yet
       // or may not support disco queries, or the query timed out

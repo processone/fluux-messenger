@@ -357,6 +357,7 @@ export function useRoomActive() {
         setMAMLoading: (id, loading) => roomStore.getState().setRoomMAMLoading(id, loading),
         loadFromCache: (id, limit) => roomStore.getState().loadOlderMessagesFromCache(id, limit),
         getOldestMessageId: (id) => pickOldestArchiveId(roomStore.getState().rooms.get(id)?.messages ?? []),
+        clearInvalidArchiveCursor: (id, cursor) => roomStore.getState().clearMessageStanzaId(id, cursor),
         queryMAM: async (id, beforeId) => {
           await client.chat.queryRoomMAM({ roomJid: id, before: beforeId })
         },

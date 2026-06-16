@@ -2096,7 +2096,7 @@ describe('XMPPClient', () => {
       if (convSync) vi.spyOn(convSync, 'fetchConversations').mockResolvedValue([])
       vi.spyOn(xmppClient.muc, 'queryRoomFeatures').mockResolvedValue({
         supportsMAM: false, supportsReactions: true, supportsHats: false,
-        isNonAnonymous: true, isPrivate: false, name: 'Public',
+        isNonAnonymous: true, isPrivate: false, isIrcGateway: false, name: 'Public',
       })
       return vi.spyOn(xmppClient.muc, 'joinRoom').mockResolvedValue()
     }

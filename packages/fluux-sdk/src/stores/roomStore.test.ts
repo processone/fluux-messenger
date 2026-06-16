@@ -1322,6 +1322,63 @@ describe('roomStore', () => {
     })
   })
 
+  describe('clearMessageStanzaId', () => {
+    const ROOM = 'test@conference.example.com'
+
+    it('strips a stale stanzaId from the in-memory message, the preview, and IndexedDB', () => {
+      roomStore.getState().addRoom(createRoom(ROOM, { joined: true }))
+      const msg = { ...createMessage('m1', ROOM, 'me', 'sent', true), stanzaId: 'uuid-sent', originId: 'uuid-sent' }
+      roomStore.getState().addMessage(ROOM, msg)
+
+      roomStore.getState().clearMessageStanzaId(ROOM, 'uuid-sent')
+
+      expect(roomStore.getState().rooms.get(ROOM)?.messages[0].stanzaId).toBeUndefined()
+      expect(roomStore.getState().roomMeta.get(ROOM)?.lastMessage?.stanzaId).toBeUndefined()
+      expect(messageCache.updateRoomMessage).toHaveBeenCalledWith('m1', { stanzaId: undefined })
+    })
+
+    it('is a no-op when no message carries the given stanzaId', () => {
+      roomStore.getState().addRoom(createRoom(ROOM, { joined: true }))
+      const msg = { ...createMessage('m1', ROOM, 'alice', 'real'), stanzaId: 'archive-1' }
+      roomStore.getState().addMessage(ROOM, msg)
+      vi.mocked(messageCache.updateRoomMessage).mockClear()
+
+      roomStore.getState().clearMessageStanzaId(ROOM, 'not-present')
+
+      expect(roomStore.getState().rooms.get(ROOM)?.messages[0].stanzaId).toBe('archive-1')
+      expect(messageCache.updateRoomMessage).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('getRoomLastTimestamp', () => {
+    const ROOM = 'test@conference.example.com'
+
+    it('returns the meta lastMessage timestamp in epoch ms', () => {
+      roomStore.getState().addRoom(createRoom(ROOM, { joined: true }))
+      const ts = new Date('2026-05-14T09:00:00.000Z')
+      roomStore.getState().addMessage(ROOM, { ...createMessage('m1', ROOM, 'alice', 'hi'), timestamp: ts })
+
+      expect(roomStore.getState().getRoomLastTimestamp(ROOM)).toBe(ts.getTime())
+    })
+
+    it('falls back to the combined rooms map when no meta entry exists', () => {
+      const ts = new Date('2026-05-14T09:00:00.000Z')
+      const lastMessage = { ...createMessage('m1', ROOM, 'alice', 'hi'), timestamp: ts }
+      roomStore.setState({
+        roomMeta: new Map(),
+        rooms: new Map([[ROOM, createRoom(ROOM, { lastMessage })]]),
+      })
+
+      expect(roomStore.getState().getRoomLastTimestamp(ROOM)).toBe(ts.getTime())
+    })
+
+    it('returns undefined when the room has no last message', () => {
+      roomStore.getState().addRoom(createRoom(ROOM, { joined: true }))
+      expect(roomStore.getState().getRoomLastTimestamp(ROOM)).toBeUndefined()
+      expect(roomStore.getState().getRoomLastTimestamp('unknown@conference.example.com')).toBeUndefined()
+    })
+  })
+
   describe('markAsRead', () => {
     it('should reset unread count to zero', () => {
       roomStore.getState().addRoom(createRoom('test@conference.example.com', { unreadCount: 5 }))

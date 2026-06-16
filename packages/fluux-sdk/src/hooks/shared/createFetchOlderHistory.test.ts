@@ -196,13 +196,34 @@ describe('createFetchOlderHistory', () => {
     it('retries with a timestamp window when the backward query fails with item-not-found', async () => {
       vi.mocked(deps.loadFromCache).mockResolvedValue([])
       vi.mocked(deps.queryMAM).mockRejectedValue({ condition: 'item-not-found' })
+      deps.clearInvalidArchiveCursor = vi.fn()
       deps.getOldestTimestamp = vi.fn(() => oldestTs)
       deps.queryMAMByEndTime = vi.fn(() => Promise.resolve())
       fetchOlderHistory = createFetchOlderHistory(deps)
 
       await fetchOlderHistory('conv-1')
 
+      expect(deps.clearInvalidArchiveCursor).toHaveBeenCalledWith('conv-1', 'msg-oldest-stanza-id')
       expect(deps.queryMAMByEndTime).toHaveBeenCalledWith('conv-1', oldestTs.toISOString())
+    })
+
+    it('clears a stale room cursor and retries with the next archive cursor', async () => {
+      deps.errorLogPrefix = 'Failed to fetch older room history'
+      vi.mocked(deps.loadFromCache).mockResolvedValue([])
+      vi.mocked(deps.queryMAM)
+        .mockRejectedValueOnce({ condition: 'item-not-found' })
+        .mockResolvedValueOnce(undefined)
+      deps.clearInvalidArchiveCursor = vi.fn()
+      vi.mocked(deps.getOldestMessageId)
+        .mockReturnValueOnce('stale-origin-id')
+        .mockReturnValueOnce('archive-next')
+      fetchOlderHistory = createFetchOlderHistory(deps)
+
+      await fetchOlderHistory('room-1')
+
+      expect(deps.clearInvalidArchiveCursor).toHaveBeenCalledWith('room-1', 'stale-origin-id')
+      expect(deps.queryMAM).toHaveBeenNthCalledWith(1, 'room-1', 'stale-origin-id')
+      expect(deps.queryMAM).toHaveBeenNthCalledWith(2, 'room-1', 'archive-next')
     })
 
     it('does not retry when the query fails with a different condition', async () => {

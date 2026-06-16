@@ -1071,7 +1071,7 @@ describe('MUC Module', () => {
 
       const result = await muc.queryRoomFeatures('room@conference.example.org')
 
-      expect(result).toEqual({ supportsMAM: true, supportsReactions: true, supportsHats: false, isNonAnonymous: false, isPrivate: false, name: 'Test Room' })
+      expect(result).toEqual({ supportsMAM: true, supportsReactions: true, supportsHats: false, isNonAnonymous: false, isPrivate: false, isIrcGateway: false, name: 'Test Room' })
       expect(mockSendIQ).toHaveBeenCalledWith(
         expect.objectContaining({
           attrs: expect.objectContaining({
@@ -1099,7 +1099,7 @@ describe('MUC Module', () => {
 
       const result = await muc.queryRoomFeatures('room@conference.example.org')
 
-      expect(result).toEqual({ supportsMAM: false, supportsReactions: true, supportsHats: false, isNonAnonymous: false, isPrivate: false, name: 'Test Room' })
+      expect(result).toEqual({ supportsMAM: false, supportsReactions: true, supportsHats: false, isNonAnonymous: false, isPrivate: false, isIrcGateway: false, name: 'Test Room' })
     })
 
     it('returns supportsReactions: false for open semi-anonymous rooms without occupant-id', async () => {
@@ -1108,7 +1108,7 @@ describe('MUC Module', () => {
           name: 'query',
           attrs: { xmlns: 'http://jabber.org/protocol/disco#info' },
           children: [
-            { name: 'identity', attrs: { category: 'conference', type: 'text', name: 'IRC Bridge' } },
+            { name: 'identity', attrs: { category: 'conference', type: 'text', name: 'Open Room' } },
             { name: 'feature', attrs: { var: 'http://jabber.org/protocol/muc' } },
             { name: 'feature', attrs: { var: 'muc_semianonymous' } },
             { name: 'feature', attrs: { var: 'muc_open' } },
@@ -1120,7 +1120,30 @@ describe('MUC Module', () => {
 
       const result = await muc.queryRoomFeatures('room@conference.example.org')
 
-      expect(result).toEqual({ supportsMAM: false, supportsReactions: false, supportsHats: false, isNonAnonymous: false, isPrivate: false, name: 'IRC Bridge' })
+      expect(result).toEqual({ supportsMAM: false, supportsReactions: false, supportsHats: false, isNonAnonymous: false, isPrivate: false, isIrcGateway: false, name: 'Open Room' })
+    })
+
+    it('flags an IRC gateway (Biboumi: conference/irc + muc_nonanonymous) and disables reactions (issue #228)', async () => {
+      // Real Biboumi advertises a non-anonymous channel with a conference/irc
+      // identity. The stable-identity heuristic alone would (wrongly) keep
+      // reactions on, because muc_nonanonymous looks like stable identity.
+      const response = createMockElement('iq', { type: 'result', from: '#chan%irc.example.org@biboumi.example.org' }, [
+        {
+          name: 'query',
+          attrs: { xmlns: 'http://jabber.org/protocol/disco#info' },
+          children: [
+            { name: 'identity', attrs: { category: 'conference', type: 'irc', name: '#chan on irc.example.org' } },
+            { name: 'feature', attrs: { var: 'http://jabber.org/protocol/muc' } },
+            { name: 'feature', attrs: { var: 'muc_nonanonymous' } },
+          ],
+        },
+      ])
+
+      mockSendIQ.mockResolvedValue(response)
+
+      const result = await muc.queryRoomFeatures('#chan%irc.example.org@biboumi.example.org')
+
+      expect(result).toEqual({ supportsMAM: false, supportsReactions: false, supportsHats: false, isNonAnonymous: true, isPrivate: false, isIrcGateway: true, name: '#chan on irc.example.org' })
     })
 
     it('returns supportsReactions: true for open semi-anonymous rooms with occupant-id', async () => {
@@ -1142,7 +1165,7 @@ describe('MUC Module', () => {
 
       const result = await muc.queryRoomFeatures('room@conference.example.org')
 
-      expect(result).toEqual({ supportsMAM: false, supportsReactions: true, supportsHats: false, isNonAnonymous: false, isPrivate: false, name: 'Modern Room' })
+      expect(result).toEqual({ supportsMAM: false, supportsReactions: true, supportsHats: false, isNonAnonymous: false, isPrivate: false, isIrcGateway: false, name: 'Modern Room' })
     })
 
     it('reports isNonAnonymous + non-private for a non-anonymous public room', async () => {

@@ -3,7 +3,7 @@ import { pickOldestArchiveId, isItemNotFoundError } from './mamCursor'
 
 // Minimal message shape the helper operates on; `id` mirrors the real
 // client-generated id that must never be used as a cursor.
-type TestMessage = { stanzaId?: string; id?: string }
+type TestMessage = { stanzaId?: string; originId?: string; id?: string }
 
 describe('pickOldestArchiveId', () => {
   it('returns undefined for an empty list', () => {
@@ -33,6 +33,22 @@ describe('pickOldestArchiveId', () => {
     expect(pickOldestArchiveId(messages)).toBeUndefined()
   })
 
+  it('skips stale origin ids that were persisted in the stanzaId slot', () => {
+    const messages: TestMessage[] = [
+      { id: 'uuid-sent', originId: 'uuid-sent', stanzaId: 'uuid-sent' },
+      { id: 'received', stanzaId: 'archive-2' },
+    ]
+    expect(pickOldestArchiveId(messages)).toBe('archive-2')
+  })
+
+  it('returns undefined when every stanzaId is actually an origin id', () => {
+    const messages: TestMessage[] = [
+      { id: 'uuid-1', originId: 'uuid-1', stanzaId: 'uuid-1' },
+      { id: 'uuid-2', originId: 'uuid-2', stanzaId: 'uuid-2' },
+    ]
+    expect(pickOldestArchiveId(messages)).toBeUndefined()
+  })
+
   it('treats an empty-string stanzaId as absent', () => {
     const messages: TestMessage[] = [
       { stanzaId: '', id: 'uuid-1' },
@@ -49,6 +65,10 @@ describe('isItemNotFoundError', () => {
 
   it('detects item-not-found from the error message', () => {
     expect(isItemNotFoundError(new Error('item-not-found'))).toBe(true)
+  })
+
+  it('detects item not found from spaced/cased error messages', () => {
+    expect(isItemNotFoundError(new Error('Item not found'))).toBe(true)
   })
 
   it('returns false for other conditions', () => {

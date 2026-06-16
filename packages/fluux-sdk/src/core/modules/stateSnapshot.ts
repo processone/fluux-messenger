@@ -77,6 +77,7 @@ interface SerializedRoom {
   supportsMAM?: boolean
   supportsReactions?: boolean
   supportsHats?: boolean
+  isIrcGateway?: boolean
   messages: SerializedRoomMessage[]
 }
 
@@ -171,6 +172,7 @@ function serializeRoom(r: Room): SerializedRoom {
     supportsMAM: r.supportsMAM,
     supportsReactions: r.supportsReactions,
     supportsHats: r.supportsHats,
+    isIrcGateway: r.isIrcGateway,
     messages: r.messages.slice(-MAX_MESSAGES_PER_ROOM).map(serializeRoomMessage),
   }
 }

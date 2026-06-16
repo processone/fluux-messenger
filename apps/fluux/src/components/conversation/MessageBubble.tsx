@@ -113,6 +113,10 @@ export interface MessageBubbleProps {
   // XEP-0425: Whether the current user can moderate (retract) this message
   canModerate?: boolean
 
+  // Room-specific: true for IRC gateway channels (Biboumi). IRC has no concept of
+  // retractions/corrections, so the edit + delete affordances are hidden. See #228.
+  isIrcGateway?: boolean
+
   // Right-click / long-press context menu on nick/avatar (for room occupant actions)
   onNickContextMenu?: (e: React.MouseEvent) => void
   onNickTouchStart?: (e: React.TouchEvent) => void
@@ -225,6 +229,9 @@ function arePropsEqual(prev: MessageBubbleProps, next: MessageBubbleProps): bool
   // Moderation permission
   if (prev.canModerate !== next.canModerate) return false
 
+  // IRC-gateway flag gates edit/delete affordances
+  if (prev.isIrcGateway !== next.isIrcGateway) return false
+
   // Mentions - compare by reference (parent should memoize)
   if (prev.mentions !== next.mentions) return false
   if (prev.nickname !== next.nickname) return false
@@ -285,6 +292,7 @@ export const MessageBubble = memo(function MessageBubble({
   nickname,
   knownNicks,
   canModerate,
+  isIrcGateway,
   onPollVote,
   onClosePoll,
   onNickContextMenu,
@@ -440,8 +448,8 @@ export const MessageBubble = memo(function MessageBubble({
             onDelete={onDelete}
             myReactions={reactionsEnabled ? myReactions : []}
             canReply={(!isLastMessage || inThread) && !counterpartGone}
-            canEdit={message.isOutgoing && isLastOutgoing}
-            canDelete={message.isOutgoing || canModerate === true}
+            canEdit={message.isOutgoing && isLastOutgoing && !isIrcGateway}
+            canDelete={(message.isOutgoing || canModerate === true) && !isIrcGateway}
             isHidden={hideToolbar || false}
             isSelected={isSelected || false}
             hasKeyboardSelection={hasKeyboardSelection || false}

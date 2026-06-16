@@ -207,6 +207,11 @@ export interface RoomEntity {
   /** True if the room is deliberately private — members-only or hidden
    *  (`muc_membersonly`/`muc_hidden`). Used to suppress the exposure warning. */
   isPrivate?: boolean
+  /** True if the room is an IRC gateway channel (Biboumi et al.), detected via a
+   *  conference/irc disco#info identity. IRC has no concept of reactions
+   *  (XEP-0444), retractions (XEP-0424) or corrections (XEP-0308), so the UI
+   *  hides those affordances for these rooms. See issue #228. */
+  isIrcGateway?: boolean
 
   // Mute control
   /** When true, the room won't bubble up in the sidebar on new messages.
@@ -307,6 +312,9 @@ export interface RoomFeatures {
   isNonAnonymous: boolean
   /** Room is deliberately private — members-only or hidden (`muc_membersonly`/`muc_hidden`) */
   isPrivate: boolean
+  /** Room is an IRC gateway channel (Biboumi et al.), detected via a conference/irc
+   *  disco#info identity. IRC has no reactions/retractions/corrections concept (see #228) */
+  isIrcGateway: boolean
   /** Display name from the conference identity, if advertised */
   name?: string
 }
