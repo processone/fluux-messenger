@@ -170,11 +170,16 @@ export function useMessageHoverState({
     }
   }, [scrollRef, armIntentTimer, setHovered])
 
-  // Reset when switching conversation/room
+  // Reset when switching conversation/room. Also clear the drag/selection
+  // latches: switching mid-drag (e.g. via the keyboard or a notification click)
+  // means no mouseup ever reaches the list, so a stuck `mouseDownRef` /
+  // `selectionActiveRef` would suppress the toolbar in the new conversation.
   useEffect(() => {
     clearTimer(intentTimerRef)
     clearTimer(leaveTimerRef)
     lastEnteredRowRef.current = null
+    mouseDownRef.current = false
+    selectionActiveRef.current = false
     setHovered(null)
   }, [resetKey, setHovered])
 

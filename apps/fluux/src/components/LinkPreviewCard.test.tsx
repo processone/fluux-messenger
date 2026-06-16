@@ -66,4 +66,29 @@ describe('LinkPreviewCard', () => {
 
     expect(getByText('Some pull request')).toBeInTheDocument()
   })
+
+  it('shows the image again when the preview image URL changes after one was hidden', () => {
+    const previewA: LinkPreview = { ...preview, image: 'https://host/a.png' }
+    const previewB: LinkPreview = { ...preview, image: 'https://host/b.png' }
+    const { container, rerender } = render(<LinkPreviewCard preview={previewA} />)
+
+    // Exhaust retries for image A → hidden ('gone').
+    fireEvent.error(container.querySelector('img')!)
+    act(() => {
+      vi.advanceTimersByTime(IMAGE_RETRY_DELAY_MS)
+    })
+    fireEvent.error(container.querySelector('img')!)
+    act(() => {
+      vi.advanceTimersByTime(IMAGE_RETRY_DELAY_MS * 10)
+    })
+    expect(container.querySelector('img')).toBeNull()
+
+    // The instance is reused (React reconciliation) for a preview with a new
+    // image — the stale 'gone'/spent-attempt state must reset so the new, valid
+    // image shows.
+    rerender(<LinkPreviewCard preview={previewB} />)
+    const img = container.querySelector('img')
+    expect(img).not.toBeNull()
+    expect(img).toHaveAttribute('src', previewB.image)
+  })
 })

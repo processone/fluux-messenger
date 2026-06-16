@@ -193,7 +193,17 @@ pub fn post(n: NativeNotification) -> Result<(), String> {
         &content,
         None::<&UNNotificationTrigger>, // nil trigger = deliver immediately
     );
-    current_center().addNotificationRequest_withCompletionHandler(&request, None);
+    // Log a rejected enqueue instead of dropping it silently: the OS can refuse
+    // a request (bad attachment, authorization revoked mid-session, …) and a
+    // silent failure makes the next "no banner" report undiagnosable. The
+    // handler runs on a background queue.
+    use block2::RcBlock;
+    let handler = RcBlock::new(|err: *mut NSError| {
+        if let Some(err) = unsafe { err.as_ref() } {
+            tracing::warn!(error = ?err, "native notification could not be scheduled");
+        }
+    });
+    current_center().addNotificationRequest_withCompletionHandler(&request, Some(&handler));
     Ok(())
 }
 

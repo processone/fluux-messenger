@@ -249,6 +249,22 @@ describe('useMessageHoverState', () => {
     expect(result.current.hoveredMessageId).toBeNull()
   })
 
+  it('resets the mousedown latch when resetKey changes (switch mid-drag without a mouseup)', () => {
+    const { result, rerender } = setup('conv-1')
+
+    // Drag starts in conversation 1, but no mouseup reaches the list — the user
+    // switches conversation via the keyboard / a notification click.
+    mouseDown(messageEl)
+
+    rerender({ key: 'conv-2' })
+
+    // The toolbar must work again in the new conversation: a stuck mousedown
+    // latch would suppress hover indefinitely.
+    act(() => result.current.handleMessageHover('a'))
+    act(() => vi.advanceTimersByTime(200))
+    expect(result.current.hoveredMessageId).toBe('a')
+  })
+
   it('resets the mousedown latch on window blur', () => {
     const { result } = setup()
 
