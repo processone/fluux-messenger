@@ -22,7 +22,7 @@ const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
  */
 export function useDeepLink() {
   const { addConversation } = useChat()
-  const { joinRoom } = useRoom()
+  const { joinRoom, getRoomInfo, isNonAnonymousRoomAcknowledged } = useRoom()
   const { navigateToConversation, navigateToRoom } = useNavigateToTarget()
   const { contacts } = useRoster()
   // Use focused selector to only subscribe to jid
@@ -65,8 +65,22 @@ export function useDeepLink() {
 
       console.log('[DeepLink] Joining room:', roomJid, { nickname, password: password ? '***' : undefined })
 
-      // Join the room
-      await joinRoom(roomJid, nickname, password ? { password } : undefined)
+      // Issue #37: a deep link must not silently auto-join a room that would expose
+      // the user's real JID (non-anonymous, non-private) unless already acknowledged.
+      // Inspect first; if it exposes the JID and isn't acknowledged, navigate to the
+      // room without joining so the user joins it deliberately (and sees the warning)
+      // from the room view's Join button.
+      const features = await getRoomInfo(roomJid).catch(() => null)
+      const exposesRealJid = features ? features.isNonAnonymous && !features.isPrivate : false
+      if (exposesRealJid && !isNonAnonymousRoomAcknowledged(roomJid)) {
+        console.warn('[DeepLink] Not auto-joining non-anonymous room (real-JID exposure not acknowledged):', roomJid)
+        navigateToRoom(roomJid)
+        return
+      }
+
+      // Join the room (reuse the inspection to avoid a second disco query)
+      const joinOptions = { ...(password ? { password } : {}), ...(features ? { knownFeatures: features } : {}) }
+      await joinRoom(roomJid, nickname, Object.keys(joinOptions).length > 0 ? joinOptions : undefined)
 
       // Navigate to rooms view and activate the room
       navigateToRoom(roomJid)

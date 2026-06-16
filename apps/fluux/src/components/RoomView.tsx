@@ -25,6 +25,7 @@ import { useToastStore } from '@/stores/toastStore'
 import { findLastEditableMessage, findLastEditableMessageId } from '@/utils/messageUtils'
 import { useExpandedMessagesStore } from '@/stores/expandedMessagesStore'
 import { ConfirmDialog } from './ConfirmDialog'
+import { useRoomJoinWarning } from '@/hooks/useRoomJoinWarning'
 
 // Generate hat colors from URI using XEP-0392 consistent color
 function getHatColors(hat: { uri: string; hue?: number }) {
@@ -82,6 +83,7 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
   const { uploadFile, isUploading, progress, isSupported, error: uploadError, clearError: clearUploadError } = useFileUpload()
   const { processMessageForLinkPreview } = useLinkPreview()
   const { resolvedMode } = useMode()
+  const { confirmJoin, warningDialog } = useRoomJoinWarning()
 
   // Handler to open search scoped to this room
   const handleSearchInConversation = activeRoom && onSearchInConversation
@@ -580,9 +582,15 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
           />
         ) : (
           <RoomJoinPrompt
-            onJoin={() => joinRoom(activeRoom.jid, activeRoom.nickname)}
+            onJoin={async () => {
+              // Issue #37: warn before joining a room that would expose the user's real JID.
+              if (await confirmJoin(activeRoom.jid)) {
+                await joinRoom(activeRoom.jid, activeRoom.nickname)
+              }
+            }}
           />
         )}
+        {warningDialog}
       </div>
 
       {/* Occupant panel (inline sidebar, desktop only — mobile uses full-screen in ChatLayout) */}

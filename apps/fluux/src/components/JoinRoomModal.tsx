@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { useConnection, useRoomActions } from '@fluux/sdk'
 import { useChatStore } from '@fluux/sdk/react'
 import { useModalInput } from '@/hooks'
+import { useRoomJoinWarning } from '@/hooks/useRoomJoinWarning'
 import { ModalShell } from './ModalShell'
 
 interface JoinRoomModalProps {
@@ -14,6 +15,7 @@ export function JoinRoomModal({ onClose }: JoinRoomModalProps) {
   const { t } = useTranslation()
   const { jid: userJid, ownNickname } = useConnection()
   const { joinRoom, setActiveRoom } = useRoomActions()
+  const { confirmJoin, warningDialog } = useRoomJoinWarning()
   const setActiveConversation = useChatStore((s) => s.setActiveConversation)
   const [roomJid, setRoomJid] = useState('')
   const [nickname, setNickname] = useState('')
@@ -60,6 +62,8 @@ export function JoinRoomModal({ onClose }: JoinRoomModalProps) {
 
     setJoining(true)
     try {
+      // Issue #37: warn before joining a room that would expose the user's real JID.
+      if (!(await confirmJoin(trimmedRoomJid))) return
       await joinRoom(trimmedRoomJid, trimmedNickname)
       void setActiveConversation(null)
       void setActiveRoom(trimmedRoomJid)
@@ -72,6 +76,7 @@ export function JoinRoomModal({ onClose }: JoinRoomModalProps) {
   }
 
   return (
+    <>
     <ModalShell title={t('rooms.joinRoomTitle')} onClose={onClose}>
       <form onSubmit={handleSubmit} className="p-4 space-y-4">
         <div>
@@ -135,5 +140,7 @@ export function JoinRoomModal({ onClose }: JoinRoomModalProps) {
         </div>
       </form>
     </ModalShell>
+    {warningDialog}
+    </>
   )
 }

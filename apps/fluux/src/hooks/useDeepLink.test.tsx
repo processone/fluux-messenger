@@ -23,6 +23,8 @@ vi.mock('@fluux/sdk', () => ({
   }),
   useRoom: () => ({
     joinRoom: mockJoinRoom,
+    getRoomInfo: () => Promise.resolve(null),
+    isNonAnonymousRoomAcknowledged: () => false,
   }),
   useRoster: () => ({
     contacts: [

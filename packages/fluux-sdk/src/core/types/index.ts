@@ -46,6 +46,7 @@ export type {
   RoomMetadata,
   RoomRuntime,
   Room,
+  RoomFeatures,
 } from './room'
 
 // Event types

@@ -146,6 +146,11 @@ vi.mock('@fluux/sdk', () => ({
     setAffiliation: vi.fn(),
     setRole: vi.fn(),
   }),
+  useRoomActions: () => ({
+    getRoomInfo: vi.fn().mockResolvedValue(null),
+    acknowledgeNonAnonymousRoom: vi.fn(),
+    isNonAnonymousRoomAcknowledged: () => false,
+  }),
   useXMPP: () => ({
     client: { profile: { fetchVCard: vi.fn().mockResolvedValue(null) } },
     sendRawXml: vi.fn(),

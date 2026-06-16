@@ -189,6 +189,39 @@ function saveGapsToStorage(gaps: Map<string, GapInterval>, jid?: string | null):
 }
 
 /**
+ * localStorage persistence for rooms the user has acknowledged as non-anonymous
+ * (issue #37). Once a user accepts joining a room that exposes their real JID, we
+ * record it here so the warning is shown once per room, not on every reconnect.
+ * Persisted separately (like drafts) and scoped per account.
+ */
+const ROOM_NONANON_ACK_STORAGE_KEY_BASE = 'fluux-room-nonanon-ack'
+
+function getRoomNonAnonAckStorageKey(jid?: string | null): string {
+  return buildScopedStorageKey(ROOM_NONANON_ACK_STORAGE_KEY_BASE, jid)
+}
+
+function loadNonAnonAckFromStorage(jid?: string | null): Set<string> {
+  try {
+    const stored = localStorage.getItem(getRoomNonAnonAckStorageKey(jid))
+    if (stored) {
+      const entries = JSON.parse(stored) as string[]
+      return new Set(entries)
+    }
+  } catch {
+    // Ignore parse errors
+  }
+  return new Set()
+}
+
+function saveNonAnonAckToStorage(acked: Set<string>, jid?: string | null): void {
+  try {
+    localStorage.setItem(getRoomNonAnonAckStorageKey(jid), JSON.stringify(Array.from(acked)))
+  } catch {
+    // Ignore storage errors (quota exceeded, etc.)
+  }
+}
+
+/**
  * Stable empty array references to prevent infinite re-renders.
  * When computed selectors return empty results, they should return these
  * constants instead of creating new [] instances each time.
@@ -283,6 +316,9 @@ export interface RoomState {
   mamQueryStates: Map<string, MAMQueryState>
   // Persisted history-gap intervals per room (survives reload; drives the gap marker)
   roomGaps: Map<string, GapInterval>
+  // Rooms the user has acknowledged as non-anonymous (issue #37) — warn once, not
+  // on every reconnect. Persisted to localStorage separately and scoped per account.
+  acknowledgedNonAnonymousRooms: Set<string>
   // Target message to scroll to after navigation (ephemeral)
   targetMessageId: string | null
 
@@ -341,6 +377,12 @@ export interface RoomState {
   // Bookmark actions
   setBookmark: (roomJid: string, bookmark: { name: string; nick: string; autojoin?: boolean; password?: string; notifyAll?: boolean }) => void
   removeBookmark: (roomJid: string) => void
+
+  // Non-anonymous room acknowledgement (issue #37)
+  /** Record that the user accepted joining a room that exposes their real JID (persisted, scoped per account). */
+  acknowledgeNonAnonymousRoom: (roomJid: string) => void
+  /** Whether the user has already acknowledged this room's real-JID exposure. */
+  isNonAnonymousRoomAcknowledged: (roomJid: string) => boolean
 
   // Notification settings
   setNotifyAll: (roomJid: string, notifyAll: boolean, persistent?: boolean) => void
@@ -414,7 +456,8 @@ function createEmptyRoomState(
   votedPollIds: Map<string, Set<string>> = new Map(),
   dismissedPollIds: Map<string, Set<string>> = new Map(),
   roomGaps: Map<string, GapInterval> = new Map(),
-): Pick<RoomState, 'rooms' | 'roomEntities' | 'roomMeta' | 'roomRuntime' | 'activeRoomJid' | 'activeAnimation' | 'drafts' | 'votedPollIds' | 'dismissedPollIds' | 'mamQueryStates' | 'roomGaps' | 'targetMessageId'> {
+  acknowledgedNonAnonymousRooms: Set<string> = new Set(),
+): Pick<RoomState, 'rooms' | 'roomEntities' | 'roomMeta' | 'roomRuntime' | 'activeRoomJid' | 'activeAnimation' | 'drafts' | 'votedPollIds' | 'dismissedPollIds' | 'mamQueryStates' | 'roomGaps' | 'acknowledgedNonAnonymousRooms' | 'targetMessageId'> {
   return {
     rooms: new Map(),
     roomEntities: new Map(),
@@ -427,13 +470,14 @@ function createEmptyRoomState(
     dismissedPollIds,
     mamQueryStates: new Map(),
     roomGaps,
+    acknowledgedNonAnonymousRooms,
     targetMessageId: null,
   }
 }
 
 export const roomStore = createStore<RoomState>()(
   subscribeWithSelector((set, get) => ({
-  ...createEmptyRoomState(loadDraftsFromStorage(), loadVotedPollsFromStorage(), loadDismissedPollsFromStorage(), loadGapsFromStorage()), // Restore drafts, poll state, and history gaps from localStorage
+  ...createEmptyRoomState(loadDraftsFromStorage(), loadVotedPollsFromStorage(), loadDismissedPollsFromStorage(), loadGapsFromStorage(), loadNonAnonAckFromStorage()), // Restore drafts, poll state, history gaps, and non-anon acks from localStorage
 
   addRoom: (room) => {
     set((state) => {
@@ -935,7 +979,7 @@ export const roomStore = createStore<RoomState>()(
   getRoom: (roomJid) => get().rooms.get(roomJid),
 
   switchAccount: (jid) => {
-    set(createEmptyRoomState(loadDraftsFromStorage(jid), loadVotedPollsFromStorage(jid), loadDismissedPollsFromStorage(jid), loadGapsFromStorage(jid)))
+    set(createEmptyRoomState(loadDraftsFromStorage(jid), loadVotedPollsFromStorage(jid), loadDismissedPollsFromStorage(jid), loadGapsFromStorage(jid), loadNonAnonAckFromStorage(jid)))
   },
 
   reset: () => {
@@ -947,6 +991,7 @@ export const roomStore = createStore<RoomState>()(
     localStorage.removeItem(getRoomVotedPollsStorageKey())
     localStorage.removeItem(getRoomDismissedPollsStorageKey())
     localStorage.removeItem(getRoomGapsStorageKey())
+    localStorage.removeItem(getRoomNonAnonAckStorageKey())
     set(createEmptyRoomState())
   },
 
@@ -1593,6 +1638,19 @@ export const roomStore = createStore<RoomState>()(
       return { rooms: newRooms, roomEntities: newEntities, roomMeta: newMeta, roomRuntime: newRuntime }
     })
   },
+
+  // Non-anonymous room acknowledgement (issue #37)
+  acknowledgeNonAnonymousRoom: (roomJid) => {
+    set((state) => {
+      if (state.acknowledgedNonAnonymousRooms.has(roomJid)) return {}
+      const acked = new Set(state.acknowledgedNonAnonymousRooms)
+      acked.add(roomJid)
+      saveNonAnonAckToStorage(acked)
+      return { acknowledgedNonAnonymousRooms: acked }
+    })
+  },
+
+  isNonAnonymousRoomAcknowledged: (roomJid) => get().acknowledgedNonAnonymousRooms?.has(roomJid) ?? false,
 
   // Notification settings
   setNotifyAll: (roomJid, notifyAll, persistent = false) => {

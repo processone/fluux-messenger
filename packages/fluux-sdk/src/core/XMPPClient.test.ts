@@ -2077,5 +2077,56 @@ describe('XMPPClient', () => {
       expect(rosterIdx).not.toBe(-1)
       expect(discoverIdx).toBeLessThan(rosterIdx)
     })
+
+    // Issue #37: autojoin safety net — don't silently auto-join a room that exposes
+    // the user's real JID unless they've acknowledged it.
+    function setupAutojoinFreshSession() {
+      ;(xmppClient as any).currentJid = 'user@example.com'
+      ;(xmppClient as any).sessionGeneration = 1
+      vi.spyOn(xmppClient.discovery, 'fetchServerInfo').mockResolvedValue()
+      vi.spyOn(xmppClient.discovery, 'discoverHttpUploadService').mockResolvedValue()
+      vi.spyOn(xmppClient.profile, 'fetchOwnProfile').mockResolvedValue()
+      vi.spyOn(xmppClient.roster, 'fetchRoster').mockResolvedValue()
+      vi.spyOn(xmppClient.roster, 'sendInitialPresence').mockResolvedValue()
+      vi.spyOn(xmppClient.muc, 'fetchBookmarks').mockResolvedValue({
+        roomsToAutojoin: [{ jid: 'public@conf.example.com', nick: 'me' }],
+        allRoomJids: ['public@conf.example.com'],
+      })
+      const convSync = (xmppClient as any).conversationSync
+      if (convSync) vi.spyOn(convSync, 'fetchConversations').mockResolvedValue([])
+      vi.spyOn(xmppClient.muc, 'queryRoomFeatures').mockResolvedValue({
+        supportsMAM: false, supportsReactions: true, supportsHats: false,
+        isNonAnonymous: true, isPrivate: false, isIrcGateway: false, name: 'Public',
+      })
+      return vi.spyOn(xmppClient.muc, 'joinRoom').mockResolvedValue()
+    }
+
+    it('does not autojoin a non-anonymous public bookmark that is not acknowledged', async () => {
+      const joinSpy = setupAutojoinFreshSession()
+      const stores = (xmppClient as any).stores
+      ;(stores.room.isNonAnonymousRoomAcknowledged as ReturnType<typeof vi.fn>).mockReturnValue(false)
+
+      await (xmppClient as any).runFreshSessionSetup(undefined, 1, 15000)
+      // The autojoin gate runs in a fire-and-forget async IIFE — flush its awaited
+      // microtasks (fake timers are active, so advance them to drain the queue).
+      await vi.advanceTimersByTimeAsync(1)
+
+      expect(joinSpy).not.toHaveBeenCalled()
+    })
+
+    it('autojoins a non-anonymous public bookmark once it has been acknowledged', async () => {
+      const joinSpy = setupAutojoinFreshSession()
+      const stores = (xmppClient as any).stores
+      ;(stores.room.isNonAnonymousRoomAcknowledged as ReturnType<typeof vi.fn>).mockReturnValue(true)
+
+      await (xmppClient as any).runFreshSessionSetup(undefined, 1, 15000)
+      await vi.advanceTimersByTimeAsync(1)
+
+      expect(joinSpy).toHaveBeenCalledWith(
+        'public@conf.example.com',
+        'me',
+        expect.objectContaining({ knownFeatures: expect.objectContaining({ isNonAnonymous: true }) }),
+      )
+    })
   })
 })

@@ -206,6 +206,7 @@ export function createDefaultStoreBindings(options: DefaultStoreBindingsOptions 
       setTyping: roomStore.getState().setTyping,
       setBookmark: roomStore.getState().setBookmark,
       removeBookmark: roomStore.getState().removeBookmark,
+      isNonAnonymousRoomAcknowledged: roomStore.getState().isNonAnonymousRoomAcknowledged,
       setNotifyAll: roomStore.getState().setNotifyAll,
       joinedRooms: roomStore.getState().joinedRooms,
       getRoomGapStart: (roomJid: string) => roomStore.getState().roomGaps.get(roomJid)?.start,
