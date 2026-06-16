@@ -938,7 +938,11 @@ export class MAM extends BaseModule {
           // exists, else fetch latest. Forward catch-up paginates oldest-first
           // to completion (maxAutoPages), matching rooms.
           const gapStart = this.deps.stores?.chat.getConversationGapStart?.(conv.id)
-          const q = selectCatchUpQuery(messages, sessionStartTime, gapStart)
+          // Last-resort anchor: if the message cache is empty this run, forward-fill
+          // from the persisted preview timestamp instead of a before:'' fetch-latest
+          // that would skip a large offline gap (issue #135).
+          const lastTimestamp = this.deps.stores?.chat.getConversationLastTimestamp?.(conv.id)
+          const q = selectCatchUpQuery(messages, sessionStartTime, gapStart, lastTimestamp)
           await this.queryArchive({
             with: conv.id,
             ...q,
@@ -1100,7 +1104,10 @@ export class MAM extends BaseModule {
     // message in the catch-up window can't poison the cursor), or from a
     // persisted gap boundary when one exists, else fetch latest.
     const gapStart = this.deps.stores?.room.getRoomGapStart?.(roomJid)
-    const q = selectCatchUpQuery(messages, sessionStartTime, gapStart)
+    // Last-resort anchor: forward-fill from the persisted preview timestamp when the
+    // cache is empty, instead of a before:'' fetch-latest that skips a large gap.
+    const lastTimestamp = this.deps.stores?.room.getRoomLastTimestamp?.(roomJid)
+    const q = selectCatchUpQuery(messages, sessionStartTime, gapStart, lastTimestamp)
     await this.queryRoomArchive({
       roomJid,
       ...q,

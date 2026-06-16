@@ -106,6 +106,8 @@ export interface StoreBindings {
     getAllConversations: () => Array<{ id: string; messages: Message[] }>
     // Persisted forward-gap boundary for automatic catch-up recovery
     getConversationGapStart?: (conversationId: string) => number | undefined
+    // Persisted last-known message timestamp (entity preview) — last-resort forward catch-up cursor
+    getConversationLastTimestamp?: (conversationId: string) => number | undefined
     // Smart MAM: archived conversation preview refresh
     getArchivedConversations?: () => Array<{ id: string; messages: Message[] }>
     archiveConversation?: (id: string) => void
@@ -180,6 +182,8 @@ export interface StoreBindings {
     joinedRooms: () => Room[]
     // Persisted forward-gap boundary for automatic catch-up recovery
     getRoomGapStart?: (roomJid: string) => number | undefined
+    // Persisted last-known message timestamp (entity preview) — last-resort forward catch-up cursor
+    getRoomLastTimestamp?: (roomJid: string) => number | undefined
     // Easter egg animations
     triggerAnimation?: (roomJid: string, animation: string) => void
     // XEP-0313: MAM support for MUC rooms

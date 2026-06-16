@@ -196,6 +196,44 @@ describe('selectCatchUpQuery', () => {
       start: '2026-05-14T09:00:00.001Z',
     })
   })
+
+  it('forward-fills from the persisted last-known timestamp when no cached message anchors the cursor', () => {
+    // Empty message cache (e.g. a persisted conversation never opened this run):
+    // fall back to the last-known preview timestamp and FORWARD-fill the gap,
+    // instead of a before:"" fetch-latest that would skip a large offline gap.
+    const lastKnown = new Date('2026-05-14T09:00:00Z').getTime()
+    expect(selectCatchUpQuery([], sessionStart, undefined, lastKnown)).toEqual({
+      start: '2026-05-14T09:00:00.001Z',
+    })
+  })
+
+  it('ignores a fallback at/after session start so a live preview update cannot poison the cursor', () => {
+    const live = new Date('2026-06-14T12:00:05Z').getTime() // >= sessionStart
+    expect(selectCatchUpQuery([], sessionStart, undefined, live)).toEqual({ before: '' })
+  })
+
+  it('prefers a real pre-session cached message over the fallback timestamp', () => {
+    const cached = new Date('2026-06-10T09:00:00Z') // pre-session, newer than fallback
+    const fallback = new Date('2026-01-01T00:00:00Z').getTime()
+    expect(selectCatchUpQuery([{ timestamp: cached }], sessionStart, undefined, fallback)).toEqual({
+      start: '2026-06-10T09:00:00.001Z',
+    })
+  })
+
+  it('uses the fallback when sessionStartTime is omitted (hook fetch-history path)', () => {
+    const lastKnown = new Date('2026-05-14T09:00:00Z').getTime()
+    expect(selectCatchUpQuery([], undefined, undefined, lastKnown)).toEqual({
+      start: '2026-05-14T09:00:00.001Z',
+    })
+  })
+
+  it('lets a persisted gap boundary win over the fallback timestamp', () => {
+    const gapStart = new Date('2026-04-01T00:00:00Z').getTime()
+    const fallback = new Date('2026-05-14T09:00:00Z').getTime()
+    expect(selectCatchUpQuery([], sessionStart, gapStart, fallback)).toEqual({
+      start: '2026-04-01T00:00:00.001Z',
+    })
+  })
 })
 
 // ============================================================================

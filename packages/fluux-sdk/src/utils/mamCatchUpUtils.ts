@@ -118,11 +118,21 @@ export interface CatchUpQuery {
  * When `sessionStartTime` is omitted, falls back to the global newest message.
  * If a persisted forward gap exists, it wins: the query resumes from that
  * recorded gap boundary instead of from newer cached messages above the hole.
+ *
+ * `fallbackNewestTimestamp` is the conversation's persisted last-known message
+ * timestamp (from the entity preview). It is used as a last resort — only when
+ * no cached message and no gap give a cursor — so a persisted conversation whose
+ * message cache is empty this run still FORWARD-fills its offline gap to
+ * completion, instead of a backward `{ before: '' }` fetch-latest that grabs
+ * only the newest page and silently skips a large gap (issue #135). A fallback
+ * at/after `sessionStartTime` is ignored so a live preview update arriving
+ * post-connect can't poison the cursor (same guard as the cached-message path).
  */
 export function selectCatchUpQuery(
   messages: Array<{ timestamp?: Date }>,
   sessionStartTime?: number,
   forwardGapTimestamp?: number,
+  fallbackNewestTimestamp?: number,
 ): CatchUpQuery {
   if (forwardGapTimestamp !== undefined) {
     return { start: buildCatchUpStartTime(new Date(forwardGapTimestamp)) }
@@ -130,7 +140,14 @@ export function selectCatchUpQuery(
   const cursor = sessionStartTime !== undefined
     ? findCatchUpCursorMessage(messages, sessionStartTime)
     : findNewestMessage(messages)
-  return cursor?.timestamp ? { start: buildCatchUpStartTime(cursor.timestamp) } : { before: '' }
+  if (cursor?.timestamp) return { start: buildCatchUpStartTime(cursor.timestamp) }
+  if (
+    fallbackNewestTimestamp !== undefined &&
+    (sessionStartTime === undefined || fallbackNewestTimestamp < sessionStartTime)
+  ) {
+    return { start: buildCatchUpStartTime(new Date(fallbackNewestTimestamp)) }
+  }
+  return { before: '' }
 }
 
 /**

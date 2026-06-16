@@ -661,6 +661,7 @@ export const createMockStores = (): MockStoreBindings => ({
     loadMessagesFromCache: vi.fn().mockResolvedValue([]),
     getAllConversations: vi.fn().mockReturnValue([]),
     getConversationGapStart: vi.fn().mockReturnValue(undefined),
+    getConversationLastTimestamp: vi.fn().mockReturnValue(undefined),
     getArchivedConversations: vi.fn().mockReturnValue([]),
     archiveConversation: vi.fn(),
     unarchiveConversation: vi.fn(),
@@ -718,6 +719,7 @@ export const createMockStores = (): MockStoreBindings => ({
     setNotifyAll: vi.fn(),
     joinedRooms: vi.fn().mockReturnValue([]),
     getRoomGapStart: vi.fn().mockReturnValue(undefined),
+    getRoomLastTimestamp: vi.fn().mockReturnValue(undefined),
     triggerAnimation: vi.fn(),
     // XEP-0313: MAM support for MUC rooms
     setRoomMAMLoading: vi.fn(),

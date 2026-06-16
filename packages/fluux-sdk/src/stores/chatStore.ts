@@ -158,6 +158,13 @@ interface ChatState {
    */
   removeMessage: (conversationId: string, messageId: string) => void
   getMessage: (conversationId: string, messageId: string) => Message | undefined
+  /**
+   * Epoch ms of the conversation's persisted last-known message (the entity
+   * preview), or undefined. Used as a last-resort forward catch-up cursor so a
+   * persisted conversation whose message cache is empty this run still
+   * forward-fills its offline gap instead of a `before:''` fetch-latest.
+   */
+  getConversationLastTimestamp: (conversationId: string) => number | undefined
   triggerAnimation: (conversationId: string, animation: string) => void
   clearAnimation: () => void
   // Draft management
@@ -1131,6 +1138,16 @@ export const chatStore = createStore<ChatState>()(
         const convMessages = get().messages.get(conversationId)
         if (!convMessages) return undefined
         return findMessageById(convMessages, messageId)
+      },
+
+      getConversationLastTimestamp: (conversationId) => {
+        const state = get()
+        // Prefer conversationMeta (frequently-updated); fall back to the combined
+        // conversations map for backward compat with persist/tests.
+        const lastMessage =
+          state.conversationMeta.get(conversationId)?.lastMessage ??
+          state.conversations.get(conversationId)?.lastMessage
+        return lastMessage?.timestamp?.getTime()
       },
 
       removeMessage: (conversationId, messageId) => {

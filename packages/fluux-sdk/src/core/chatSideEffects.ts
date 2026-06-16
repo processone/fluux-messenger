@@ -108,7 +108,10 @@ export function setupChatSideEffects(
       // latest. Forward catch-up paginates oldest-first to completion
       // (maxAutoPages), matching rooms.
       const gapStart = chatStore.getState().conversationGaps.get(conversationId)?.start
-      const q = selectCatchUpQuery(cachedMessages, sessionStartTime, gapStart)
+      // Last-resort anchor: forward-fill from the persisted preview timestamp when
+      // the cache is empty, instead of a before:'' fetch-latest that skips a gap.
+      const lastTimestamp = chatStore.getState().getConversationLastTimestamp(conversationId)
+      const q = selectCatchUpQuery(cachedMessages, sessionStartTime, gapStart, lastTimestamp)
       await client.chat.queryMAM({
         with: conversation.id,
         ...q,
