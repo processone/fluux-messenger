@@ -639,6 +639,9 @@ export type { FallbackProcessingResult, FallbackProcessingOptions } from './util
 export { parseXMPPError, formatXMPPError } from './utils/xmppError'
 export type { XMPPStanzaError, XMPPErrorType } from './utils/xmppError'
 
+// MUC join failure error (rejected by client.muc.joinResult)
+export { RoomJoinError } from './core/errors'
+
 // XEP-0045: MUC Permission Utilities
 export { canSetAffiliation, canSetRole, canKick, canBan, canModerate, getAvailableAffiliations, getAvailableRoles } from './utils/mucPermissions'
 
