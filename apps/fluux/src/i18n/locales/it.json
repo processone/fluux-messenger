@@ -208,7 +208,7 @@
         "passwordRequired": "Questa stanza è protetta da password. Inserisci la password per accedere.",
         "incorrectPassword": "Password errata.",
         "nicknameInUse": "Quel soprannome è già in uso in questa stanza.",
-        "membersOnly": "Questa stanza è riservata ai membri — devi essere membro per accedere.",
+        "membersOnly": "Questa stanza è riservata ai membri. Devi essere membro per accedere.",
         "bannedFromRoom": "Sei stato bandito da questa stanza.",
         "roomFull": "Questa stanza è piena.",
         "registeredNicknameRequired": "Questa stanza richiede il tuo soprannome registrato.",

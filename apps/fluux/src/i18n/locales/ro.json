@@ -208,7 +208,7 @@
         "passwordRequired": "Această cameră este protejată cu parolă. Introduceți parola pentru a vă alătura.",
         "incorrectPassword": "Parolă incorectă.",
         "nicknameInUse": "Acel pseudonim este deja folosit în această cameră.",
-        "membersOnly": "Această cameră este doar pentru membri — trebuie să fii membru pentru a te alătura.",
+        "membersOnly": "Această cameră este doar pentru membri. Trebuie să fii membru pentru a te alătura.",
         "bannedFromRoom": "Ai fost banat din această cameră.",
         "roomFull": "Această cameră este plină.",
         "registeredNicknameRequired": "Această cameră necesită pseudonimul tău înregistrat.",

@@ -208,7 +208,7 @@
         "passwordRequired": "Aquesta sala està protegida per contrasenya. Introduïu-la per unir-vos.",
         "incorrectPassword": "Contrasenya incorrecta.",
         "nicknameInUse": "Aquest àlies ja s'utilitza en aquesta sala.",
-        "membersOnly": "Aquesta sala és només per a membres — heu de ser membre per unir-vos.",
+        "membersOnly": "Aquesta sala és només per a membres. Heu de ser membre per unir-vos.",
         "bannedFromRoom": "Heu estat expulsat d'aquesta sala.",
         "roomFull": "Aquesta sala és plena.",
         "registeredNicknameRequired": "Aquesta sala requereix el vostre àlies registrat.",

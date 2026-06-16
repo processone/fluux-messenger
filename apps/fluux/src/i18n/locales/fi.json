@@ -206,7 +206,7 @@
         "passwordRequired": "Tämä huone on salasanasuojattu. Anna salasana liittyäksesi.",
         "incorrectPassword": "Väärä salasana.",
         "nicknameInUse": "Tämä nimimerkki on jo käytössä tässä huoneessa.",
-        "membersOnly": "Tämä huone on vain jäsenille — sinun täytyy olla jäsen liittyäksesi.",
+        "membersOnly": "Tämä huone on vain jäsenille. Sinun täytyy olla jäsen liittyäksesi.",
         "bannedFromRoom": "Sinut on estetty tästä huoneesta.",
         "roomFull": "Tämä huone on täynnä.",
         "registeredNicknameRequired": "Tämä huone vaatii rekisteröidyn nimimerkkisi.",

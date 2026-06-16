@@ -206,7 +206,7 @@
         "passwordRequired": "Þetta herbergi er lykilorðsvarið. Sláðu inn lykilorðið til að ganga í.",
         "incorrectPassword": "Rangt lykilorð.",
         "nicknameInUse": "Þetta gælunafn er þegar í notkun í þessu herbergi.",
-        "membersOnly": "Þetta herbergi er eingöngu fyrir meðlimi — þú verður að vera meðlimur til að ganga í.",
+        "membersOnly": "Þetta herbergi er eingöngu fyrir meðlimi. Þú verður að vera meðlimur til að ganga í.",
         "bannedFromRoom": "Þér hefur verið bannað úr þessu herbergi.",
         "roomFull": "Þetta herbergi er fullt.",
         "registeredNicknameRequired": "Þetta herbergi krefst skráðs gælunafns þíns.",

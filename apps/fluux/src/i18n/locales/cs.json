@@ -208,7 +208,7 @@
         "passwordRequired": "Tato místnost je chráněna heslem. Zadejte heslo pro vstup.",
         "incorrectPassword": "Nesprávné heslo.",
         "nicknameInUse": "Tato přezdívka se v této místnosti již používá.",
-        "membersOnly": "Tato místnost je jen pro členy — musíte být členem, abyste mohli vstoupit.",
+        "membersOnly": "Tato místnost je jen pro členy. Musíte být členem, abyste mohli vstoupit.",
         "bannedFromRoom": "Byl jste z této místnosti zablokován.",
         "roomFull": "Tato místnost je plná.",
         "registeredNicknameRequired": "Tato místnost vyžaduje vaši registrovanou přezdívku.",

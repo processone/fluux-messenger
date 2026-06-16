@@ -206,7 +206,7 @@
         "passwordRequired": "Det här rummet är lösenordsskyddat. Ange lösenordet för att gå med.",
         "incorrectPassword": "Fel lösenord.",
         "nicknameInUse": "Det smeknamnet används redan i det här rummet.",
-        "membersOnly": "Det här rummet är endast för medlemmar — du måste vara medlem för att gå med.",
+        "membersOnly": "Det här rummet är endast för medlemmar. Du måste vara medlem för att gå med.",
         "bannedFromRoom": "Du har blivit utestängd från det här rummet.",
         "roomFull": "Det här rummet är fullt.",
         "registeredNicknameRequired": "Det här rummet kräver ditt registrerade smeknamn.",

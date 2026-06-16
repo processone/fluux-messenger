@@ -207,7 +207,7 @@
         "passwordRequired": "Ce salon est protégé par un mot de passe. Saisissez-le pour rejoindre.",
         "incorrectPassword": "Mot de passe incorrect.",
         "nicknameInUse": "Ce surnom est déjà utilisé dans ce salon.",
-        "membersOnly": "Ce salon est réservé aux membres — vous devez en être membre pour le rejoindre.",
+        "membersOnly": "Ce salon est réservé aux membres. Vous devez en être membre pour le rejoindre.",
         "bannedFromRoom": "Vous avez été banni de ce salon.",
         "roomFull": "Ce salon est complet.",
         "registeredNicknameRequired": "Ce salon exige votre surnom enregistré.",

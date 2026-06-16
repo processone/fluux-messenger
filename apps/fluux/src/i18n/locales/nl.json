@@ -206,7 +206,7 @@
         "passwordRequired": "Deze ruimte is beveiligd met een wachtwoord. Voer het wachtwoord in om deel te nemen.",
         "incorrectPassword": "Onjuist wachtwoord.",
         "nicknameInUse": "Die bijnaam is al in gebruik in deze ruimte.",
-        "membersOnly": "Deze ruimte is alleen voor leden — je moet lid zijn om deel te nemen.",
+        "membersOnly": "Deze ruimte is alleen voor leden. Je moet lid zijn om deel te nemen.",
         "bannedFromRoom": "Je bent verbannen uit deze ruimte.",
         "roomFull": "Deze ruimte is vol.",
         "registeredNicknameRequired": "Deze ruimte vereist je geregistreerde bijnaam.",

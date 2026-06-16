@@ -208,7 +208,7 @@
         "passwordRequired": "Ten pokój jest chroniony hasłem. Wpisz hasło, aby dołączyć.",
         "incorrectPassword": "Nieprawidłowe hasło.",
         "nicknameInUse": "Ten pseudonim jest już używany w tym pokoju.",
-        "membersOnly": "Ten pokój jest tylko dla członków — musisz być członkiem, aby dołączyć.",
+        "membersOnly": "Ten pokój jest tylko dla członków. Musisz być członkiem, aby dołączyć.",
         "bannedFromRoom": "Zostałeś zbanowany z tego pokoju.",
         "roomFull": "Ten pokój jest pełny.",
         "registeredNicknameRequired": "Ten pokój wymaga twojego zarejestrowanego pseudonimu.",

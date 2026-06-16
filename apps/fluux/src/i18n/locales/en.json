@@ -206,7 +206,7 @@
         "passwordRequired": "This room is password-protected. Enter the password to join.",
         "incorrectPassword": "Incorrect password.",
         "nicknameInUse": "That nickname is already in use in this room.",
-        "membersOnly": "This room is members-only — you need to be a member to join.",
+        "membersOnly": "This room is members-only. You need to be a member to join.",
         "bannedFromRoom": "You've been banned from this room.",
         "roomFull": "This room is full.",
         "registeredNicknameRequired": "This room requires your registered nickname.",

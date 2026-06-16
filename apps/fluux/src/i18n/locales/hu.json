@@ -206,7 +206,7 @@
         "passwordRequired": "Ez a szoba jelszóval védett. A csatlakozáshoz add meg a jelszót.",
         "incorrectPassword": "Hibás jelszó.",
         "nicknameInUse": "Ez a becenév már használatban van ebben a szobában.",
-        "membersOnly": "Ez a szoba csak tagok számára nyitott — csatlakozáshoz tagnak kell lenned.",
+        "membersOnly": "Ez a szoba csak tagok számára nyitott. Csatlakozáshoz tagnak kell lenned.",
         "bannedFromRoom": "Kitiltottak ebből a szobából.",
         "roomFull": "Ez a szoba megtelt.",
         "registeredNicknameRequired": "Ez a szoba a regisztrált becenevedet igényli.",

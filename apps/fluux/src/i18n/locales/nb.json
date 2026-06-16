@@ -206,7 +206,7 @@
         "passwordRequired": "Dette rommet er passordbeskyttet. Skriv inn passordet for å bli med.",
         "incorrectPassword": "Feil passord.",
         "nicknameInUse": "Det kallenavnet er allerede i bruk i dette rommet.",
-        "membersOnly": "Dette rommet er kun for medlemmer — du må være medlem for å bli med.",
+        "membersOnly": "Dette rommet er kun for medlemmer. Du må være medlem for å bli med.",
         "bannedFromRoom": "Du er utestengt fra dette rommet.",
         "roomFull": "Dette rommet er fullt.",
         "registeredNicknameRequired": "Dette rommet krever ditt registrerte kallenavn.",

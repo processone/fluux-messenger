@@ -208,7 +208,7 @@
         "passwordRequired": "Din il-kamra hija protetta b'password. Daħħal il-password biex tingħaqad.",
         "incorrectPassword": "Password żbaljata.",
         "nicknameInUse": "Dak il-laqam diġà jintuża f'din il-kamra.",
-        "membersOnly": "Din il-kamra hija biss għall-membri — trid tkun membru biex tingħaqad.",
+        "membersOnly": "Din il-kamra hija biss għall-membri. Trid tkun membru biex tingħaqad.",
         "bannedFromRoom": "Ġejt imbarrat minn din il-kamra.",
         "roomFull": "Din il-kamra hija mimlija.",
         "registeredNicknameRequired": "Din il-kamra teħtieġ il-laqam irreġistrat tiegħek.",

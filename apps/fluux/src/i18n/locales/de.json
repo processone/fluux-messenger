@@ -208,7 +208,7 @@
         "passwordRequired": "Dieser Raum ist passwortgeschützt. Gib das Passwort ein, um beizutreten.",
         "incorrectPassword": "Falsches Passwort.",
         "nicknameInUse": "Dieser Spitzname wird in diesem Raum bereits verwendet.",
-        "membersOnly": "Dieser Raum ist nur für Mitglieder — du musst Mitglied sein, um beizutreten.",
+        "membersOnly": "Dieser Raum ist nur für Mitglieder. Du musst Mitglied sein, um beizutreten.",
         "bannedFromRoom": "Du wurdest aus diesem Raum verbannt.",
         "roomFull": "Dieser Raum ist voll.",
         "registeredNicknameRequired": "Dieser Raum erfordert deinen registrierten Spitznamen.",

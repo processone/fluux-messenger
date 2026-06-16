@@ -207,7 +207,7 @@
         "passwordRequired": "Šī istaba ir aizsargāta ar paroli. Ievadiet paroli, lai pievienotos.",
         "incorrectPassword": "Nepareiza parole.",
         "nicknameInUse": "Šis segvārds šajā istabā jau tiek lietots.",
-        "membersOnly": "Šī istaba ir tikai locekļiem — lai pievienotos, jums jābūt loceklim.",
+        "membersOnly": "Šī istaba ir tikai locekļiem. Lai pievienotos, jums jābūt loceklim.",
         "bannedFromRoom": "Jums ir liegta piekļuve šai istabai.",
         "roomFull": "Šī istaba ir pilna.",
         "registeredNicknameRequired": "Šī istaba pieprasa jūsu reģistrēto segvārdu.",

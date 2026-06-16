@@ -208,7 +208,7 @@
         "passwordRequired": "See tuba on parooliga kaitstud. Liitumiseks sisestage parool.",
         "incorrectPassword": "Vale parool.",
         "nicknameInUse": "See hüüdnimi on selles toas juba kasutusel.",
-        "membersOnly": "See tuba on ainult liikmetele — liitumiseks peate olema liige.",
+        "membersOnly": "See tuba on ainult liikmetele. Liitumiseks peate olema liige.",
         "bannedFromRoom": "Teid on sellest toast keelustatud.",
         "roomFull": "See tuba on täis.",
         "registeredNicknameRequired": "See tuba nõuab teie registreeritud hüüdnime.",

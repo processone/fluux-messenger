@@ -206,7 +206,7 @@
         "passwordRequired": "Ova soba je zaštićena lozinkom. Unesite lozinku za pridruživanje.",
         "incorrectPassword": "Pogrešna lozinka.",
         "nicknameInUse": "Taj nadimak je već u upotrebi u ovoj sobi.",
-        "membersOnly": "Ova soba je samo za članove — morate biti član da biste se pridružili.",
+        "membersOnly": "Ova soba je samo za članove. Morate biti član da biste se pridružili.",
         "bannedFromRoom": "Zabranjeno vam je pristup ovoj sobi.",
         "roomFull": "Ova soba je puna.",
         "registeredNicknameRequired": "Ova soba zahtijeva vaš registrirani nadimak.",

@@ -208,7 +208,7 @@
         "passwordRequired": "Ta soba je zaščitena z geslom. Vnesite geslo za pridružitev.",
         "incorrectPassword": "Napačno geslo.",
         "nicknameInUse": "Ta vzdevek je že v uporabi v tej sobi.",
-        "membersOnly": "Ta soba je samo za člane — da se pridružite, morate biti član.",
+        "membersOnly": "Ta soba je samo za člane. Da se pridružite, morate biti član.",
         "bannedFromRoom": "Prepovedali so vam vstop v to sobo.",
         "roomFull": "Ta soba je polna.",
         "registeredNicknameRequired": "Ta soba zahteva vaš registrirani vzdevek.",

@@ -206,7 +206,7 @@
         "passwordRequired": "Tá an seomra seo cosanta le pasfhocal. Cuir isteach an pasfhocal chun dul isteach.",
         "incorrectPassword": "Pasfhocal mícheart.",
         "nicknameInUse": "Tá an leasainm sin in úsáid cheana sa seomra seo.",
-        "membersOnly": "Is do chomhaltaí amháin an seomra seo — ní mór duit bheith i do chomhalta chun dul isteach.",
+        "membersOnly": "Is do chomhaltaí amháin an seomra seo. Ní mór duit bheith i do chomhalta chun dul isteach.",
         "bannedFromRoom": "Cuireadh cosc ort sa seomra seo.",
         "roomFull": "Tá an seomra seo lán.",
         "registeredNicknameRequired": "Éilíonn an seomra seo do leasainm cláraithe.",

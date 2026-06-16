@@ -208,7 +208,7 @@
         "passwordRequired": "Esta sala está protegida por senha. Introduza a senha para entrar.",
         "incorrectPassword": "Senha incorreta.",
         "nicknameInUse": "Esse apelido já está em uso nesta sala.",
-        "membersOnly": "Esta sala é apenas para membros — tem de ser membro para entrar.",
+        "membersOnly": "Esta sala é apenas para membros. Tem de ser membro para entrar.",
         "bannedFromRoom": "Foi banido desta sala.",
         "roomFull": "Esta sala está cheia.",
         "registeredNicknameRequired": "Esta sala requer o seu apelido registado.",

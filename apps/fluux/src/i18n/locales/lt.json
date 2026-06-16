@@ -206,7 +206,7 @@
         "passwordRequired": "Šis kambarys yra apsaugotas slaptažodžiu. Įveskite slaptažodį, norėdami prisijungti.",
         "incorrectPassword": "Neteisingas slaptažodis.",
         "nicknameInUse": "Šis slapyvardis jau naudojamas šiame kambaryje.",
-        "membersOnly": "Šis kambarys skirtas tik nariams — norint prisijungti, turite būti narys.",
+        "membersOnly": "Šis kambarys skirtas tik nariams. Norint prisijungti, turite būti narys.",
         "bannedFromRoom": "Jums uždrausta patekti į šį kambarį.",
         "roomFull": "Šis kambarys pilnas.",
         "registeredNicknameRequired": "Šis kambarys reikalauja jūsų registruoto slapyvardžio.",
