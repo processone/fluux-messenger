@@ -6,6 +6,7 @@ import { useChatStore } from '@fluux/sdk/react'
 import { useModalInput } from '@/hooks'
 import { useRoomJoinWarning } from '@/hooks/useRoomJoinWarning'
 import { ModalShell } from './ModalShell'
+import { getRoomJoinErrorMessage } from '@/utils/roomJoinError'
 
 interface JoinRoomModalProps {
   onClose: () => void
@@ -51,38 +52,16 @@ export function JoinRoomModal({ onClose }: JoinRoomModalProps) {
   }, [focusTarget])
 
   const showJoinError = (err: unknown, passwordWasSent: boolean) => {
+    // Field side-effects stay here; the message text comes from the shared helper.
     if (err instanceof RoomJoinError) {
-      switch (err.condition) {
-        case 'not-authorized':
-          setShowPassword(true)
-          setFocusTarget('password')
-          setError(t(passwordWasSent ? 'rooms.incorrectPassword' : 'rooms.passwordRequired'))
-          return
-        case 'conflict':
-          setFocusTarget('nickname')
-          setError(t('rooms.nicknameInUse'))
-          return
-        case 'registration-required':
-          setError(t('rooms.membersOnly'))
-          return
-        case 'forbidden':
-          setError(t('rooms.bannedFromRoom'))
-          return
-        case 'service-unavailable':
-          setError(t('rooms.roomFull'))
-          return
-        case 'not-acceptable':
-          setError(t('rooms.registeredNicknameRequired'))
-          return
-        case 'item-not-found':
-          setError(t('rooms.roomNotFound'))
-          return
-        default:
-          setError(err.text || t('rooms.failedToJoinRoom'))
-          return
+      if (err.condition === 'not-authorized') {
+        setShowPassword(true)
+        setFocusTarget('password')
+      } else if (err.condition === 'conflict') {
+        setFocusTarget('nickname')
       }
     }
-    setError(err instanceof Error ? err.message : t('rooms.failedToJoinRoom'))
+    setError(getRoomJoinErrorMessage(t, err, { passwordWasSent }))
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
