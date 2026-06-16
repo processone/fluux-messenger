@@ -6,7 +6,7 @@ import { useXMPPContext } from '../provider'
 import type { Conversation, ChatStateNotification, FileAttachment, MAMQueryState, Message } from '../core'
 import { NS_MAM } from '../core/namespaces'
 import { createFetchOlderHistory, pickOldestArchiveId } from './shared'
-import { findContinueCatchUpCursor, buildCatchUpStartTime, MAM_CACHE_LOAD_LIMIT, MAM_CATCHUP_FORWARD_MAX, MAM_ROOM_FORWARD_MAX_PAGES_MANUAL } from '../utils/mamCatchUpUtils'
+import { findContinueCatchUpCursor, buildCatchUpStartTime, selectCatchUpQuery, MAM_CACHE_LOAD_LIMIT, MAM_CATCHUP_FORWARD_MAX, MAM_ROOM_FORWARD_MAX_PAGES, MAM_ROOM_FORWARD_MAX_PAGES_MANUAL } from '../utils/mamCatchUpUtils'
 
 /**
  * Stable empty array references to prevent infinite re-renders.
@@ -287,15 +287,14 @@ export function useChatActive() {
           cachedMessages = chatStore.getState().messages.get(targetId)
         }
 
-        const newestCachedMessage = cachedMessages?.[cachedMessages.length - 1]
-        const queryOptions: { with: string; start?: string } = { with: conversation.id }
+        const gapStart = chatStore.getState().conversationGaps.get(targetId)?.start
+        const q = selectCatchUpQuery(cachedMessages ?? [], undefined, gapStart)
 
-        if (newestCachedMessage?.timestamp) {
-          const startTime = new Date(newestCachedMessage.timestamp.getTime() + 1)
-          queryOptions.start = startTime.toISOString()
-        }
-
-        await client.chat.queryMAM(queryOptions)
+        await client.chat.queryMAM({
+          with: conversation.id,
+          ...q,
+          ...(q.start ? { max: MAM_CATCHUP_FORWARD_MAX, maxAutoPages: MAM_ROOM_FORWARD_MAX_PAGES } : {}),
+        })
       } catch (error) {
         console.error('Failed to fetch history:', error)
       } finally {
@@ -317,6 +316,7 @@ export function useChatActive() {
         setMAMLoading: (id, loading) => chatStore.getState().setMAMLoading(id, loading),
         loadFromCache: (id, limit) => chatStore.getState().loadOlderMessagesFromCache(id, limit),
         getOldestMessageId: (id) => pickOldestArchiveId(chatStore.getState().messages.get(id) ?? []),
+        clearInvalidArchiveCursor: (id, cursor) => chatStore.getState().clearMessageStanzaId(id, cursor),
         getOldestTimestamp: (id) => chatStore.getState().messages.get(id)?.[0]?.timestamp,
         queryMAM: async (id, beforeId) => {
           const conversation = chatStore.getState().conversations.get(id)

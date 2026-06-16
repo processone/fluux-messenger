@@ -934,9 +934,11 @@ export class MAM extends BaseModule {
           const messages = updatedConv?.messages || conv.messages || []
 
           // Shared cursor policy (same as rooms) — forward from the newest
-          // pre-session message, else fetch latest. Forward catch-up paginates
-          // oldest-first to completion (maxAutoPages), matching rooms.
-          const q = selectCatchUpQuery(messages, sessionStartTime)
+          // pre-session message, or from a persisted gap boundary when one
+          // exists, else fetch latest. Forward catch-up paginates oldest-first
+          // to completion (maxAutoPages), matching rooms.
+          const gapStart = this.deps.stores?.chat.getConversationGapStart?.(conv.id)
+          const q = selectCatchUpQuery(messages, sessionStartTime, gapStart)
           await this.queryArchive({
             with: conv.id,
             ...q,
@@ -1095,8 +1097,10 @@ export class MAM extends BaseModule {
     const updatedRoom = this.deps.stores?.room.getRoom(roomJid)
     const messages = updatedRoom?.messages || []
     // Shared cursor policy: forward from the newest pre-session message (so a live
-    // message in the catch-up window can't poison the cursor), else fetch latest.
-    const q = selectCatchUpQuery(messages, sessionStartTime)
+    // message in the catch-up window can't poison the cursor), or from a
+    // persisted gap boundary when one exists, else fetch latest.
+    const gapStart = this.deps.stores?.room.getRoomGapStart?.(roomJid)
+    const q = selectCatchUpQuery(messages, sessionStartTime, gapStart)
     await this.queryRoomArchive({
       roomJid,
       ...q,

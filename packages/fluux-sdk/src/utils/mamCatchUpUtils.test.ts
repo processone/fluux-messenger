@@ -188,6 +188,14 @@ describe('selectCatchUpQuery', () => {
       start: '2026-02-01T00:00:00.001Z',
     })
   })
+
+  it('prefers a persisted forward gap boundary over newer cached messages', () => {
+    const gapStart = new Date('2026-05-14T09:00:00Z').getTime()
+    const newerAboveGap = new Date('2026-06-01T12:00:00Z')
+    expect(selectCatchUpQuery([{ timestamp: newerAboveGap }], sessionStart, gapStart)).toEqual({
+      start: '2026-05-14T09:00:00.001Z',
+    })
+  })
 })
 
 // ============================================================================

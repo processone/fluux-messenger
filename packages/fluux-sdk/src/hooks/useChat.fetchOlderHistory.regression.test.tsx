@@ -91,6 +91,25 @@ describe('useChat fetchOlderHistory — MAM cursor regression', () => {
     expect(before).not.toBe('uuid-sent')
   })
 
+  it('skips an old origin-id accidentally persisted as stanzaId', async () => {
+    const stale = outgoing('uuid-sent', '2026-06-01T10:00:00Z')
+    stale.stanzaId = 'uuid-sent'
+    seedMessages([
+      stale,
+      incoming('r1', '2026-06-01T10:05:00Z', 'archive-1'),
+    ])
+    const { result } = renderHook(() => useChat(), { wrapper })
+
+    await act(async () => {
+      await result.current.fetchOlderHistory()
+    })
+
+    expect(mockClient.chat.queryMAM).toHaveBeenCalledTimes(1)
+    expect(mockClient.chat.queryMAM).toHaveBeenCalledWith({ with: CONV, before: 'archive-1' })
+    const before = vi.mocked(mockClient.chat.queryMAM).mock.calls[0][0].before
+    expect(before).not.toBe('uuid-sent')
+  })
+
   it('recovers via a timestamp window — never the client id — when no in-memory message has a stanzaId', async () => {
     seedMessages([
       outgoing('uuid-1', '2026-06-01T10:00:00Z'),

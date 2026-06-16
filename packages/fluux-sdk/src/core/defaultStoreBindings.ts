@@ -136,6 +136,7 @@ export function createDefaultStoreBindings(options: DefaultStoreBindingsOptions 
           messages: state.messages.get(conv.id) || [],
         }))
       },
+      getConversationGapStart: (conversationId: string) => chatStore.getState().conversationGaps.get(conversationId)?.start,
       getArchivedConversations: () => {
         const state = chatStore.getState()
         const result = []
@@ -206,6 +207,7 @@ export function createDefaultStoreBindings(options: DefaultStoreBindingsOptions 
       removeBookmark: roomStore.getState().removeBookmark,
       setNotifyAll: roomStore.getState().setNotifyAll,
       joinedRooms: roomStore.getState().joinedRooms,
+      getRoomGapStart: (roomJid: string) => roomStore.getState().roomGaps.get(roomJid)?.start,
       triggerAnimation: roomStore.getState().triggerAnimation,
       // XEP-0313: MAM support for MUC rooms
       setRoomMAMLoading: roomStore.getState().setRoomMAMLoading,

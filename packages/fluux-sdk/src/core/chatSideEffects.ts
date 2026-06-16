@@ -104,9 +104,11 @@ export function setupChatSideEffects(
       const cachedMessages = chatStore.getState().messages.get(conversationId) || []
 
       // Shared cursor policy (same as rooms): forward from the newest pre-session
-      // message, else fetch latest. Forward catch-up paginates oldest-first to
-      // completion (maxAutoPages), matching rooms.
-      const q = selectCatchUpQuery(cachedMessages, sessionStartTime)
+      // message, or from a persisted gap boundary when one exists, else fetch
+      // latest. Forward catch-up paginates oldest-first to completion
+      // (maxAutoPages), matching rooms.
+      const gapStart = chatStore.getState().conversationGaps.get(conversationId)?.start
+      const q = selectCatchUpQuery(cachedMessages, sessionStartTime, gapStart)
       await client.chat.queryMAM({
         with: conversation.id,
         ...q,

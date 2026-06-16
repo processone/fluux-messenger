@@ -471,6 +471,30 @@ describe('MAM Background Catch-Up', () => {
       }))
     })
 
+    it('uses a persisted conversation gap boundary before newer cached messages', async () => {
+      await connectClient()
+
+      const gapStart = new Date('2026-05-14T09:00:00.000Z')
+      const newerAboveGap = new Date('2026-06-01T12:00:00.000Z')
+
+      const messages = [
+        { type: 'chat' as const, id: 'newer', conversationId: 'alice@example.com', from: 'alice@example.com', body: 'newer', timestamp: newerAboveGap, isOutgoing: false, isDelayed: false },
+      ]
+      vi.mocked(mockStores.chat.getAllConversations).mockReturnValue([{ id: 'alice@example.com', messages }] as any)
+      vi.mocked(mockStores.chat.getConversationGapStart!).mockReturnValue(gapStart.getTime())
+
+      const querySpy = vi.spyOn(xmppClient.mam, 'queryArchive').mockResolvedValue({ messages: [], complete: true, rsm: {} })
+
+      const catchUpPromise = xmppClient.mam.catchUpAllConversations({ sessionStartTime: new Date('2026-06-14T12:00:00Z').getTime() })
+      await waitForAsyncOps(20, 100)
+      await catchUpPromise
+
+      expect(querySpy).toHaveBeenCalledWith(expect.objectContaining({
+        with: 'alice@example.com',
+        start: '2026-05-14T09:00:00.001Z',
+      }))
+    })
+
   describe('catchUpAllRooms', () => {
     it('should do nothing when there are no joined rooms', async () => {
       await connectClient()

@@ -3,6 +3,7 @@ import { chatStore, connectionStore } from '../stores'
 import { useXMPPContext } from '../provider'
 import type { Conversation, ChatStateNotification, FileAttachment } from '../core'
 import { createFetchOlderHistory, pickOldestArchiveId } from './shared'
+import { selectCatchUpQuery, MAM_CATCHUP_FORWARD_MAX, MAM_ROOM_FORWARD_MAX_PAGES } from '../utils/mamCatchUpUtils'
 
 /**
  * Action-only counterpart to `useChat()`.
@@ -147,16 +148,14 @@ export function useChatActions() {
           cachedMessages = chatStore.getState().messages.get(targetId)
         }
 
-        const newestCachedMessage = cachedMessages?.[cachedMessages.length - 1]
+        const gapStart = chatStore.getState().conversationGaps.get(targetId)?.start
+        const q = selectCatchUpQuery(cachedMessages ?? [], undefined, gapStart)
 
-        const queryOptions: { with: string; start?: string } = { with: conversation.id }
-
-        if (newestCachedMessage?.timestamp) {
-          const startTime = new Date(newestCachedMessage.timestamp.getTime() + 1)
-          queryOptions.start = startTime.toISOString()
-        }
-
-        await client.chat.queryMAM(queryOptions)
+        await client.chat.queryMAM({
+          with: conversation.id,
+          ...q,
+          ...(q.start ? { max: MAM_CATCHUP_FORWARD_MAX, maxAutoPages: MAM_ROOM_FORWARD_MAX_PAGES } : {}),
+        })
       } catch (error) {
         console.error('Failed to fetch history:', error)
       } finally {
@@ -178,6 +177,7 @@ export function useChatActions() {
         setMAMLoading: (id, loading) => chatStore.getState().setMAMLoading(id, loading),
         loadFromCache: (id, limit) => chatStore.getState().loadOlderMessagesFromCache(id, limit),
         getOldestMessageId: (id) => pickOldestArchiveId(chatStore.getState().messages.get(id) ?? []),
+        clearInvalidArchiveCursor: (id, cursor) => chatStore.getState().clearMessageStanzaId(id, cursor),
         getOldestTimestamp: (id) => chatStore.getState().messages.get(id)?.[0]?.timestamp,
         queryMAM: async (id, beforeId) => {
           const conversation = chatStore.getState().conversations.get(id)

@@ -116,11 +116,17 @@ export interface CatchUpQuery {
  * session (so a live message in the catch-up window can't poison the cursor),
  * or `{ before: '' }` to fetch the latest when nothing pre-session is held.
  * When `sessionStartTime` is omitted, falls back to the global newest message.
+ * If a persisted forward gap exists, it wins: the query resumes from that
+ * recorded gap boundary instead of from newer cached messages above the hole.
  */
 export function selectCatchUpQuery(
   messages: Array<{ timestamp?: Date }>,
   sessionStartTime?: number,
+  forwardGapTimestamp?: number,
 ): CatchUpQuery {
+  if (forwardGapTimestamp !== undefined) {
+    return { start: buildCatchUpStartTime(new Date(forwardGapTimestamp)) }
+  }
   const cursor = sessionStartTime !== undefined
     ? findCatchUpCursorMessage(messages, sessionStartTime)
     : findNewestMessage(messages)

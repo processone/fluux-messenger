@@ -59,6 +59,14 @@ export interface FetchOlderHistoryDeps {
   queryMAM: (id: string, beforeId: string) => Promise<void>
 
   /**
+   * Optional: clear a stale local stanzaId after the server proves it is not an
+   * archive cursor. This repairs old caches where a sender/origin id was stored
+   * in the stanzaId slot, preventing every future retry from choosing the same
+   * bad cursor again.
+   */
+  clearInvalidArchiveCursor?: (id: string, cursor: string) => void | Promise<void>
+
+  /**
    * Optional: timestamp of the oldest in-memory message. Used for the
    * id-independent recovery query when no valid archive cursor is available or
    * the server rejects the cursor with `item-not-found`.
@@ -103,6 +111,7 @@ export function createFetchOlderHistory(
     loadFromCache,
     getOldestMessageId,
     queryMAM,
+    clearInvalidArchiveCursor,
     getOldestTimestamp,
     queryMAMByEndTime,
     errorLogPrefix,
@@ -179,8 +188,24 @@ export function createFetchOlderHistory(
         await queryMAM(id, beforeId)
       } catch (error) {
         // A stale or non-archive cursor makes the server return item-not-found.
-        // Recover with an id-independent timestamp window before giving up.
-        if (isItemNotFoundError(error) && (await recoverByTimestamp(id))) return
+        // First scrub that cursor from the loaded cache so future attempts do
+        // not keep selecting the same poisoned stanzaId, then recover with an
+        // id-independent timestamp window (1:1) or the next available cursor.
+        if (isItemNotFoundError(error)) {
+          await clearInvalidArchiveCursor?.(id, beforeId)
+          if (await recoverByTimestamp(id)) return
+
+          const replacementBeforeId = getOldestMessageId(id)
+          if (replacementBeforeId && replacementBeforeId !== beforeId) {
+            await queryMAM(id, replacementBeforeId)
+            return
+          }
+
+          if (!isChat) {
+            await queryMAM(id, '')
+            return
+          }
+        }
         throw error
       }
     } catch (error) {

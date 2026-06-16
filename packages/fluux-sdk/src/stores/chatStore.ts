@@ -148,6 +148,7 @@ interface ChatState {
   clearAllTyping: () => void
   updateReactions: (conversationId: string, messageId: string, reactorJid: string, emojis: string[]) => void
   updateMessage: (conversationId: string, messageId: string, updates: Partial<Message>) => void
+  clearMessageStanzaId: (conversationId: string, stanzaId: string) => void
   /**
    * Hard-remove a message from the conversation, the search index, and the
    * durable cache. Used when a stanza that was provisionally stored as a
@@ -1084,6 +1085,42 @@ export const chatStore = createStore<ChatState>()(
 
               return { messages: newMessages, conversationMeta: newMeta, conversations: newConversations }
             }
+          }
+
+          return { messages: newMessages }
+        })
+      },
+
+      clearMessageStanzaId: (conversationId, stanzaId) => {
+        set((state) => {
+          const convMessages = state.messages.get(conversationId)
+          if (!convMessages) return state
+
+          const messageIndex = convMessages.findIndex((message) => message.stanzaId === stanzaId)
+          if (messageIndex === -1) return state
+
+          const newMessages = new Map(state.messages)
+          const updatedConvMessages = [...convMessages]
+          const { stanzaId: _staleStanzaId, ...updatedMessage } = convMessages[messageIndex]
+          updatedConvMessages[messageIndex] = updatedMessage
+          newMessages.set(conversationId, updatedConvMessages)
+
+          void messageCache.updateMessage(convMessages[messageIndex].id, { stanzaId: undefined })
+
+          const meta = state.conversationMeta.get(conversationId)
+          const conv = state.conversations.get(conversationId)
+          const wasLastMessage =
+            !!meta?.lastMessage &&
+            (meta.lastMessage.id === updatedMessage.id || meta.lastMessage.stanzaId === stanzaId)
+
+          if (meta && conv && wasLastMessage) {
+            const newMeta = new Map(state.conversationMeta)
+            newMeta.set(conversationId, { ...meta, lastMessage: updatedMessage })
+
+            const newConversations = new Map(state.conversations)
+            newConversations.set(conversationId, { ...conv, lastMessage: updatedMessage })
+
+            return { messages: newMessages, conversationMeta: newMeta, conversations: newConversations }
           }
 
           return { messages: newMessages }
