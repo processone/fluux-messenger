@@ -2047,6 +2047,206 @@ describe('MUC Module', () => {
     })
   })
 
+  describe('joinResult - outcome surfacing', () => {
+    let consoleErrorSpy: ReturnType<typeof vi.spyOn>
+
+    beforeEach(() => {
+      vi.useFakeTimers()
+      consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+      // Make queryRoomFeatures resolve deterministically inside joinRoom.
+      mockSendIQ.mockResolvedValue(createMockElement('iq', { type: 'result' }))
+    })
+
+    afterEach(() => {
+      vi.useRealTimers()
+      consoleErrorSpy.mockRestore()
+    })
+
+    it('resolves joinResult() on self-presence (status 110)', async () => {
+      await muc.joinRoom('room@conference.example.org', 'mynick')
+      const result = muc.joinResult('room@conference.example.org')
+
+      const selfPresence = createMockElement('presence', { from: 'room@conference.example.org/mynick' }, [
+        {
+          name: 'x',
+          attrs: { xmlns: 'http://jabber.org/protocol/muc#user' },
+          children: [
+            { name: 'item', attrs: { affiliation: 'member', role: 'participant' } },
+            { name: 'status', attrs: { code: '110' } },
+          ],
+        },
+      ])
+      muc.handle(selfPresence)
+
+      await expect(result).resolves.toBeUndefined()
+    })
+
+    it('resolves immediately when there is no in-flight join', async () => {
+      await expect(muc.joinResult('never@conference.example.org')).resolves.toBeUndefined()
+    })
+
+    it('rejects joinResult() with condition "timeout" after retries are exhausted', async () => {
+      mockStores.room.getRoom.mockReturnValue({
+        jid: 'room@conference.example.org',
+        name: 'room',
+        joined: false,
+        isJoining: true,
+        nickname: 'mynick',
+        isBookmarked: false,
+        occupants: new Map(),
+        messages: [],
+        unreadCount: 0,
+        mentionsCount: 0,
+        typingUsers: new Set<string>(),
+      })
+
+      await muc.joinRoom('room@conference.example.org', 'mynick')
+      const result = muc.joinResult('room@conference.example.org')
+      result.catch(() => {}) // avoid unhandled-rejection noise before we assert
+
+      // First timeout retries, second gives up (MAX_JOIN_RETRIES = 1).
+      await vi.advanceTimersByTimeAsync(30000)
+      await vi.advanceTimersByTimeAsync(30000)
+
+      await expect(result).rejects.toMatchObject({ condition: 'timeout' })
+    })
+
+    it('rejects joinResult() (does not hang) when a room-level error clears the join', async () => {
+      await muc.joinRoom('room@conference.example.org', 'mynick')
+      const result = muc.joinResult('room@conference.example.org')
+
+      // Room-level (nick-less) error presence: it clears the join timeout, so
+      // without settling the deferred a joinResult() caller would hang forever.
+      const errorPresence = createMockElement('presence', {
+        from: 'room@conference.example.org',
+        type: 'error',
+      }, [
+        { name: 'x', attrs: { xmlns: 'http://jabber.org/protocol/muc#user' } },
+        {
+          name: 'error',
+          attrs: { type: 'auth' },
+          children: [
+            { name: 'registration-required', attrs: { xmlns: 'urn:ietf:params:xml:ns:xmpp-stanzas' } },
+          ],
+        },
+      ])
+      muc.handle(errorPresence)
+
+      await expect(result).rejects.toMatchObject({ condition: 'registration-required' })
+    })
+
+    it('rejects joinResult() with not-authorized for an <x muc> error presence', async () => {
+      await muc.joinRoom('room@conference.example.org', 'mynick')
+      const result = muc.joinResult('room@conference.example.org')
+
+      // Realistic join error: echoes the muc (request) namespace, NOT muc#user.
+      const errorPresence = createMockElement('presence', {
+        from: 'room@conference.example.org/mynick',
+        type: 'error',
+      }, [
+        { name: 'x', attrs: { xmlns: 'http://jabber.org/protocol/muc' } },
+        {
+          name: 'error',
+          attrs: { type: 'auth' },
+          children: [
+            { name: 'not-authorized', attrs: { xmlns: 'urn:ietf:params:xml:ns:xmpp-stanzas' } },
+          ],
+        },
+      ])
+      const handled = muc.handle(errorPresence)
+
+      expect(handled).toBe(true)
+      await expect(result).rejects.toMatchObject({ condition: 'not-authorized', errorType: 'auth' })
+    })
+
+    it('rejects joinResult() with conflict for an error presence carrying no <x>', async () => {
+      await muc.joinRoom('room@conference.example.org', 'mynick')
+      const result = muc.joinResult('room@conference.example.org')
+
+      const errorPresence = createMockElement('presence', {
+        from: 'room@conference.example.org/mynick',
+        type: 'error',
+      }, [
+        {
+          name: 'error',
+          attrs: { type: 'cancel' },
+          children: [
+            { name: 'conflict', attrs: { xmlns: 'urn:ietf:params:xml:ns:xmpp-stanzas' } },
+          ],
+        },
+      ])
+      expect(muc.handle(errorPresence)).toBe(true)
+
+      await expect(result).rejects.toMatchObject({ condition: 'conflict' })
+    })
+
+    it('does NOT retry after a terminal join error (clears the timeout)', async () => {
+      await muc.joinRoom('room@conference.example.org', 'mynick')
+      const result = muc.joinResult('room@conference.example.org')
+      mockSendStanza.mockClear()
+
+      const errorPresence = createMockElement('presence', {
+        from: 'room@conference.example.org/mynick',
+        type: 'error',
+      }, [
+        {
+          name: 'error',
+          attrs: { type: 'auth' },
+          children: [
+            { name: 'not-authorized', attrs: { xmlns: 'urn:ietf:params:xml:ns:xmpp-stanzas' } },
+          ],
+        },
+      ])
+      muc.handle(errorPresence)
+      await expect(result).rejects.toMatchObject({ condition: 'not-authorized' })
+
+      // Advancing well past the 30s timeout must NOT re-send a join presence.
+      await vi.advanceTimersByTimeAsync(60000)
+      expect(mockSendStanza).not.toHaveBeenCalled()
+    })
+
+    it('ignores an error presence for a room with no in-flight join', async () => {
+      const errorPresence = createMockElement('presence', {
+        from: 'stale@conference.example.org/mynick',
+        type: 'error',
+      }, [
+        {
+          name: 'error',
+          attrs: { type: 'auth' },
+          children: [
+            { name: 'forbidden', attrs: { xmlns: 'urn:ietf:params:xml:ns:xmpp-stanzas' } },
+          ],
+        },
+      ])
+      const handled = muc.handle(errorPresence)
+      expect(handled).toBe(false)
+    })
+
+    it('does not reset an already-joined room on a stray room-level error (no in-flight join)', async () => {
+      // No joinRoom() → no pending join. A room-level (nick-less) error must NOT
+      // emit room:updated {joined:false} and knock an active room out of joined.
+      const errorPresence = createMockElement('presence', {
+        from: 'room@conference.example.org',
+        type: 'error',
+      }, [
+        { name: 'x', attrs: { xmlns: 'http://jabber.org/protocol/muc#user' } },
+        {
+          name: 'error',
+          attrs: { type: 'wait' },
+          children: [
+            { name: 'service-unavailable', attrs: { xmlns: 'urn:ietf:params:xml:ns:xmpp-stanzas' } },
+          ],
+        },
+      ])
+      muc.handle(errorPresence)
+
+      expect(mockEmitSDK).not.toHaveBeenCalledWith(
+        'room:updated',
+        expect.objectContaining({ updates: expect.objectContaining({ joined: false }) })
+      )
+    })
+  })
+
   describe('moderateMessage (XEP-0425)', () => {
     it('should send moderation IQ with correct structure', async () => {
       mockSendIQ.mockResolvedValueOnce(createMockElement('iq', { type: 'result' }))

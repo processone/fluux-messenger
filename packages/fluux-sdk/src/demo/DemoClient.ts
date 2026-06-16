@@ -630,6 +630,13 @@ export class DemoClient extends XMPPClient {
       this.emitSDK('room:joined', { roomJid, joined: true })
       this.emitSDK('room:self-occupant', { roomJid, occupant: selfOccupant })
 
+      // Settle the joinResult() deferred created by the real MUC.joinRoom():
+      // we emit join events directly rather than routing a status-110
+      // self-presence through muc.handle(), so the success path that normally
+      // settles it never runs. Without this, awaiting joinResult() (e.g. in
+      // JoinRoomModal) would hang forever in demo mode.
+      this.muc.confirmSimulatedJoin(roomJid)
+
       // Populate occupants: restore seeded occupants or create minimal list
       const occupants = seededOccupants ?? [selfOccupant]
       this.emitSDK('room:occupants-batch', { roomJid, occupants })

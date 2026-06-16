@@ -2,10 +2,31 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import { JoinRoomModal } from './JoinRoomModal'
 
-// Mock the SDK hooks
-const mockJoinRoom = vi.fn()
-const mockSetActiveRoom = vi.fn()
-const mockSetActiveConversation = vi.fn()
+// Hoisted so these are available inside vi.mock factories (which are hoisted to
+// the top of the file before any other variable declarations).
+const { mockJoinRoom, mockJoinResult, mockSetActiveRoom, mockSetActiveConversation, RoomJoinError } = vi.hoisted(() => {
+  const mockJoinRoom = vi.fn()
+  const mockJoinResult = vi.fn()
+  const mockSetActiveRoom = vi.fn()
+  const mockSetActiveConversation = vi.fn()
+
+  // Minimal stand-in for the SDK's RoomJoinError so `instanceof` works in the
+  // component (which imports it from the mocked '@fluux/sdk').
+  class RoomJoinError extends Error {
+    constructor(
+      public roomJid: string,
+      public condition: string,
+      public errorType?: string,
+      public text?: string,
+    ) {
+      super(text || `Room join failed: ${condition}`)
+      this.name = 'RoomJoinError'
+    }
+  }
+
+  return { mockJoinRoom, mockJoinResult, mockSetActiveRoom, mockSetActiveConversation, RoomJoinError }
+})
+
 let mockUserJid = 'testuser@example.com'
 let mockOwnNickname: string | null = null
 
@@ -16,11 +37,13 @@ vi.mock('@fluux/sdk', () => ({
   }),
   useRoomActions: () => ({
     joinRoom: mockJoinRoom,
+    joinResult: mockJoinResult,
     setActiveRoom: mockSetActiveRoom,
     getRoomInfo: vi.fn().mockResolvedValue(null),
     acknowledgeNonAnonymousRoom: vi.fn(),
     isNonAnonymousRoomAcknowledged: () => false,
   }),
+  RoomJoinError,
 }))
 
 vi.mock('@fluux/sdk/react', () => ({
@@ -49,6 +72,8 @@ describe('JoinRoomModal', () => {
     vi.clearAllMocks()
     mockUserJid = 'testuser@example.com'
     mockOwnNickname = null
+    mockJoinRoom.mockResolvedValue(undefined)
+    mockJoinResult.mockResolvedValue(undefined)
   })
 
   describe('rendering', () => {
@@ -175,7 +200,7 @@ describe('JoinRoomModal', () => {
       fireEvent.click(screen.getByRole('button', { name: 'rooms.joinRoom' }))
 
       await waitFor(() => {
-        expect(mockJoinRoom).toHaveBeenCalledWith('myroom@conference.example.com', 'testuser')
+        expect(mockJoinRoom).toHaveBeenCalledWith('myroom@conference.example.com', 'testuser', undefined)
       })
     })
 
@@ -188,7 +213,7 @@ describe('JoinRoomModal', () => {
       fireEvent.click(screen.getByRole('button', { name: 'rooms.joinRoom' }))
 
       await waitFor(() => {
-        expect(mockJoinRoom).toHaveBeenCalledWith('room@conference.example.com', 'MyNick')
+        expect(mockJoinRoom).toHaveBeenCalledWith('room@conference.example.com', 'MyNick', undefined)
       })
     })
   })
@@ -203,7 +228,7 @@ describe('JoinRoomModal', () => {
       fireEvent.click(screen.getByRole('button', { name: 'rooms.joinRoom' }))
 
       await waitFor(() => {
-        expect(mockJoinRoom).toHaveBeenCalledWith('chatroom@muc.example.com', 'Alice')
+        expect(mockJoinRoom).toHaveBeenCalledWith('chatroom@muc.example.com', 'Alice', undefined)
       })
     })
 
@@ -276,6 +301,100 @@ describe('JoinRoomModal', () => {
 
       await waitFor(() => {
         expect(screen.getByText('rooms.failedToJoinRoom')).toBeInTheDocument()
+      })
+    })
+  })
+
+  describe('join error handling', () => {
+    const fillRoom = () => {
+      fireEvent.change(screen.getByLabelText('rooms.roomAddress'), {
+        target: { value: 'room@conference.example.com' },
+      })
+    }
+
+    it('reveals and focuses the password field on not-authorized (password required)', async () => {
+      mockJoinResult.mockRejectedValue(new RoomJoinError('room@conference.example.com', 'not-authorized', 'auth'))
+      render(<JoinRoomModal onClose={mockOnClose} />)
+      fillRoom()
+      fireEvent.click(screen.getByRole('button', { name: 'rooms.joinRoom' }))
+
+      await waitFor(() => {
+        expect(screen.getByText('rooms.passwordRequired')).toBeInTheDocument()
+      })
+      const passwordInput = screen.getByLabelText('rooms.roomPassword')
+      expect(passwordInput).toBeInTheDocument()
+      await waitFor(() => expect(passwordInput).toHaveFocus())
+      expect(mockOnClose).not.toHaveBeenCalled()
+    })
+
+    it('shows "incorrect password" when a password was already supplied', async () => {
+      mockJoinResult.mockRejectedValue(new RoomJoinError('room@conference.example.com', 'not-authorized', 'auth'))
+      render(<JoinRoomModal onClose={mockOnClose} />)
+      fillRoom()
+
+      // Reveal the password field via the toggle, type a password, submit.
+      fireEvent.click(screen.getByText('rooms.passwordProtected'))
+      fireEvent.change(screen.getByLabelText('rooms.roomPassword'), { target: { value: 'wrongpass' } })
+      fireEvent.click(screen.getByRole('button', { name: 'rooms.joinRoom' }))
+
+      await waitFor(() => {
+        expect(screen.getByText('rooms.incorrectPassword')).toBeInTheDocument()
+      })
+    })
+
+    it('passes the password to joinRoom when supplied', async () => {
+      mockJoinRoom.mockResolvedValue(undefined)
+      render(<JoinRoomModal onClose={mockOnClose} />)
+      fillRoom()
+      fireEvent.click(screen.getByText('rooms.passwordProtected'))
+      fireEvent.change(screen.getByLabelText('rooms.roomPassword'), { target: { value: 's3cret' } })
+      fireEvent.click(screen.getByRole('button', { name: 'rooms.joinRoom' }))
+
+      await waitFor(() => {
+        expect(mockJoinRoom).toHaveBeenCalledWith('room@conference.example.com', 'testuser', { password: 's3cret' })
+      })
+    })
+
+    it('shows a nickname-conflict message and focuses the nickname field on conflict', async () => {
+      mockJoinResult.mockRejectedValue(new RoomJoinError('room@conference.example.com', 'conflict', 'cancel'))
+      render(<JoinRoomModal onClose={mockOnClose} />)
+      fillRoom()
+      fireEvent.click(screen.getByRole('button', { name: 'rooms.joinRoom' }))
+
+      await waitFor(() => {
+        expect(screen.getByText('rooms.nicknameInUse')).toBeInTheDocument()
+      })
+      await waitFor(() => expect(screen.getByLabelText('rooms.nickname')).toHaveFocus())
+    })
+
+    it.each([
+      ['registration-required', 'rooms.membersOnly'],
+      ['forbidden', 'rooms.bannedFromRoom'],
+      ['service-unavailable', 'rooms.roomFull'],
+      ['not-acceptable', 'rooms.registeredNicknameRequired'],
+      ['item-not-found', 'rooms.roomNotFound'],
+    ])('maps condition %s to message %s', async (condition, messageKey) => {
+      mockJoinResult.mockRejectedValue(new RoomJoinError('room@conference.example.com', condition))
+      render(<JoinRoomModal onClose={mockOnClose} />)
+      fillRoom()
+      fireEvent.click(screen.getByRole('button', { name: 'rooms.joinRoom' }))
+
+      await waitFor(() => {
+        expect(screen.getByText(messageKey)).toBeInTheDocument()
+      })
+      expect(mockOnClose).not.toHaveBeenCalled()
+    })
+
+    it('falls back to the server text for an unmapped condition', async () => {
+      mockJoinResult.mockRejectedValue(
+        new RoomJoinError('room@conference.example.com', 'resource-constraint', 'wait', 'Try later'),
+      )
+      render(<JoinRoomModal onClose={mockOnClose} />)
+      fillRoom()
+      fireEvent.click(screen.getByRole('button', { name: 'rooms.joinRoom' }))
+
+      await waitFor(() => {
+        expect(screen.getByText('Try later')).toBeInTheDocument()
       })
     })
   })
