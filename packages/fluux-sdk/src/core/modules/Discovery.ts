@@ -167,10 +167,24 @@ export class Discovery extends BaseModule {
       }))
 
       // Parse features
-      const features = query.getChildren('feature')
+      let features = query.getChildren('feature')
         .map((feature: Element) => feature.attrs.var as string)
         .filter(Boolean)
         .sort()
+
+      // XEP-0313 §3: MAM support is advertised on the *archiving* JID — the
+      // user's own bare JID — not necessarily the server domain. ejabberd
+      // mirrors it onto the domain too, but Prosody advertises `urn:xmpp:mam:2`
+      // only on the account JID. Without this fallback the domain-only disco
+      // reports MAM unsupported on Prosody and all 1:1 history sync is silently
+      // disabled. Only pay the extra round-trip when the domain didn't already
+      // advertise MAM.
+      if (!features.includes(NS_MAM)) {
+        const accountMamFeatures = await this.fetchAccountMamFeatures(currentJid)
+        if (accountMamFeatures.length > 0) {
+          features = [...new Set([...features, ...accountMamFeatures])].sort()
+        }
+      }
 
       // Emit SDK event for server info
       const serverInfo = { domain, identities, features }
@@ -202,6 +216,40 @@ export class Discovery extends BaseModule {
     } catch (err) {
       // Server disco#info not available - that's fine, not all servers support it
       logWarn(`Server disco#info failed: ${err instanceof Error ? err.message : String(err)}`)
+    }
+  }
+
+  /**
+   * Query the user's own bare JID — the archiving JID per XEP-0313 §3 — for MAM
+   * support. Used as a fallback when the server-domain disco doesn't advertise
+   * MAM: Prosody advertises `urn:xmpp:mam:2` only on the account JID, whereas
+   * ejabberd mirrors it onto the domain as well.
+   *
+   * @param currentJid - The connected full JID
+   * @returns The MAM-family feature namespaces advertised by the bare JID
+   *   (e.g. `urn:xmpp:mam:2`, `urn:xmpp:mam:2#extended`), or an empty array.
+   */
+  private async fetchAccountMamFeatures(currentJid: string): Promise<string[]> {
+    const bareJid = getBareJid(currentJid)
+    if (!bareJid) return []
+
+    try {
+      const iq = xml(
+        'iq',
+        { type: 'get', to: bareJid, id: `mam_support_${generateUUID()}` },
+        xml('query', { xmlns: NS_DISCO_INFO })
+      )
+      const result = await this.deps.sendIQ(iq)
+      const query = result.getChild('query', NS_DISCO_INFO)
+      if (!query) return []
+
+      return query.getChildren('feature')
+        .map((feature: Element) => feature.attrs.var as string)
+        .filter((v: string) => typeof v === 'string' && v.startsWith(NS_MAM))
+    } catch (err) {
+      // Bare-JID disco failed — treat as no MAM support, don't block connection.
+      logWarn(`Account MAM disco failed: ${err instanceof Error ? err.message : String(err)}`)
+      return []
     }
   }
 
