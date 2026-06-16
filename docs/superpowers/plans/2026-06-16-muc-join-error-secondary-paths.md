@@ -864,3 +864,13 @@ Confirm the branch contains the 7 feature/refactor commits. Open a PR with a con
 **Placeholder scan:** none — every code step contains complete code.
 
 **Known nuance flagged for the implementer:** in Tasks 4 and 5, the component tests mock `@fluux/sdk` wholesale, so they must export a `RoomJoinError` stand-in **and** a `joinResult` mock, or the helper's `err instanceof RoomJoinError` and the component's `await joinResult(...)` break **even the existing tests**. Both steps are included.
+
+---
+
+## Post-implementation corrections
+
+Two adjustments were made during execution (folded into the Task 7 commit):
+
+1. **`useDeepLink` DOES have a test file** — `apps/fluux/src/hooks/useDeepLink.test.tsx` (note the `.tsx` extension; the plan's file-discovery checked only `.ts` and wrongly concluded "no existing test file"). Adding `await joinResult(...)` regressed 2 of its tests, because — exactly like Tasks 4/5 — its wholesale `@fluux/sdk` mock lacked a `joinResult` mock and a `RoomJoinError` stand-in, so the new code threw in the catch and `navigateToRoom` never ran. Fix: added `mockJoinResult` (+ `mockResolvedValue(undefined)` in `beforeEach`), a `vi.hoisted` `RoomJoinError` stand-in exported from the mock, and a new failure-path test asserting an error toast is surfaced **and** navigation still happens. The full app suite (3214 tests) then passed. Lesson: when auditing for an existing test harness, glob both `.ts` **and** `.tsx`.
+
+2. **Deep-link password accuracy** — deep links can carry `?password=…` (already threaded into `joinOptions`), so the deeplink catch passes `{ passwordWasSent: !!password }` to `getRoomJoinErrorMessage`, yielding "incorrect password" rather than the generic "password required" when the server rejects a supplied password with `not-authorized`. (The other secondary paths genuinely never send a password, so they omit the option.)
