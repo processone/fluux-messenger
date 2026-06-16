@@ -32,7 +32,11 @@ export function resolveRoomSender(
       if (occ.occupantId === message.occupantId) { occupant = occ; occupantIdMatchNick = occ.nick; break }
     }
   }
-  const canModerateMsg = !message.isOutgoing && selfOccupant
+  // XEP-0425 §2: only offer moderation when the room advertises message-moderate:1
+  // on its own disco#info. `room.supportsModeration` is tri-state — `false` means
+  // disco confirmed it's unsupported (hide); `undefined` (disco unresolved) stays
+  // optimistic so the affordance doesn't flicker on join. See F3.
+  const canModerateMsg = !message.isOutgoing && selfOccupant && room.supportsModeration !== false
     ? canModerate(selfOccupant.role, selfOccupant.affiliation, occupant?.affiliation ?? 'none')
     : false
   // senderBareJidForBan intentionally has NO occupant-id fallback — matches pre-refactor ban-permission behavior

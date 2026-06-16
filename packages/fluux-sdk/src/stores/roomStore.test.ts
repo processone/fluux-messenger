@@ -131,6 +131,19 @@ describe('roomStore', () => {
     })
   })
 
+  describe('supportsModeration entity propagation (F3 / XEP-0425)', () => {
+    it('propagates supportsModeration to the room entity on addRoom', () => {
+      roomStore.getState().addRoom({ ...createRoom('mod@conference.example.com'), supportsModeration: true })
+      expect(roomStore.getState().roomEntities.get('mod@conference.example.com')?.supportsModeration).toBe(true)
+    })
+
+    it('updates supportsModeration on the entity via updateRoom', () => {
+      roomStore.getState().addRoom({ ...createRoom('mod@conference.example.com'), supportsModeration: undefined })
+      roomStore.getState().updateRoom('mod@conference.example.com', { supportsModeration: false })
+      expect(roomStore.getState().roomEntities.get('mod@conference.example.com')?.supportsModeration).toBe(false)
+    })
+  })
+
   describe('updateRoom', () => {
     it('should update an existing room', () => {
       roomStore.getState().addRoom(createRoom('test@conference.example.com', { name: 'Test' }))

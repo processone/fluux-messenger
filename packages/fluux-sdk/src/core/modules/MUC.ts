@@ -470,6 +470,11 @@ export class MUC extends BaseModule {
     const isNonAnonymous = roomFeatures?.isNonAnonymous ?? false
     const isPrivate = roomFeatures?.isPrivate ?? false
     const isIrcGateway = roomFeatures?.isIrcGateway ?? false
+    // Tri-state (F3): deliberately NOT `?? false` like the flags above. Keep
+    // `undefined` when disco didn't resolve so the moderation affordance stays
+    // optimistic, and preserve a previously-resolved value rather than clobbering
+    // it to unknown on a failed re-disco.
+    const supportsModeration = roomFeatures ? roomFeatures.supportsModeration : existingRoom?.supportsModeration
     const roomName = roomFeatures?.name || existingRoom?.name || getLocalPart(roomJid)
 
     if (!existingRoom) {
@@ -487,6 +492,7 @@ export class MUC extends BaseModule {
         isNonAnonymous,
         isPrivate,
         isIrcGateway,
+        supportsModeration,
         occupants: new Map(),
         messages: [],
         unreadCount: 0,
@@ -505,6 +511,7 @@ export class MUC extends BaseModule {
         isNonAnonymous,
         isPrivate,
         isIrcGateway,
+        supportsModeration,
         occupants: new Map() as Map<string, RoomOccupant>,
         selfOccupant: undefined,
         typingUsers: new Set() as Set<string>,
@@ -880,10 +887,14 @@ export class MUC extends BaseModule {
       // real-JID-exposure warning (issue #37) can stay fail-safe.
       const isNonAnonymous = isNonAnonymousRoom(features)
       const isPrivate = isPrivateRoom(features)
+      // XEP-0425 §2: a MUC that supports moderated retraction MUST advertise this
+      // on its own disco#info. Gate the moderation affordance on it (F3) so we
+      // never offer a moderator an action the room will reject.
+      const supportsModeration = features.includes(NS_MESSAGE_MODERATE)
 
-      logInfo(`Room features: ${roomJid} MAM=${supportsMAM} reactions=${supportsReactions} hats=${supportsHats} nonAnon=${isNonAnonymous} private=${isPrivate} irc=${isIrcGateway}`)
+      logInfo(`Room features: ${roomJid} MAM=${supportsMAM} reactions=${supportsReactions} hats=${supportsHats} nonAnon=${isNonAnonymous} private=${isPrivate} moderation=${supportsModeration} irc=${isIrcGateway}`)
 
-      return { supportsMAM, supportsReactions, supportsHats, isNonAnonymous, isPrivate, isIrcGateway, name }
+      return { supportsMAM, supportsReactions, supportsHats, isNonAnonymous, isPrivate, isIrcGateway, supportsModeration, name }
     } catch (err) {
       // Room disco#info not available - that's fine, room may not exist yet
       // or may not support disco queries, or the query timed out
