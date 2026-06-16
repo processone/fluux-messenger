@@ -2070,6 +2070,117 @@ describe('MUC Module', () => {
 
       await expect(result).rejects.toMatchObject({ condition: 'registration-required' })
     })
+
+    it('rejects joinResult() with not-authorized for an <x muc> error presence', async () => {
+      await muc.joinRoom('room@conference.example.org', 'mynick')
+      const result = muc.joinResult('room@conference.example.org')
+
+      // Realistic join error: echoes the muc (request) namespace, NOT muc#user.
+      const errorPresence = createMockElement('presence', {
+        from: 'room@conference.example.org/mynick',
+        type: 'error',
+      }, [
+        { name: 'x', attrs: { xmlns: 'http://jabber.org/protocol/muc' } },
+        {
+          name: 'error',
+          attrs: { type: 'auth' },
+          children: [
+            { name: 'not-authorized', attrs: { xmlns: 'urn:ietf:params:xml:ns:xmpp-stanzas' } },
+          ],
+        },
+      ])
+      const handled = muc.handle(errorPresence)
+
+      expect(handled).toBe(true)
+      await expect(result).rejects.toMatchObject({ condition: 'not-authorized', errorType: 'auth' })
+    })
+
+    it('rejects joinResult() with conflict for an error presence carrying no <x>', async () => {
+      await muc.joinRoom('room@conference.example.org', 'mynick')
+      const result = muc.joinResult('room@conference.example.org')
+
+      const errorPresence = createMockElement('presence', {
+        from: 'room@conference.example.org/mynick',
+        type: 'error',
+      }, [
+        {
+          name: 'error',
+          attrs: { type: 'cancel' },
+          children: [
+            { name: 'conflict', attrs: { xmlns: 'urn:ietf:params:xml:ns:xmpp-stanzas' } },
+          ],
+        },
+      ])
+      expect(muc.handle(errorPresence)).toBe(true)
+
+      await expect(result).rejects.toMatchObject({ condition: 'conflict' })
+    })
+
+    it('does NOT retry after a terminal join error (clears the timeout)', async () => {
+      await muc.joinRoom('room@conference.example.org', 'mynick')
+      const result = muc.joinResult('room@conference.example.org')
+      mockSendStanza.mockClear()
+
+      const errorPresence = createMockElement('presence', {
+        from: 'room@conference.example.org/mynick',
+        type: 'error',
+      }, [
+        {
+          name: 'error',
+          attrs: { type: 'auth' },
+          children: [
+            { name: 'not-authorized', attrs: { xmlns: 'urn:ietf:params:xml:ns:xmpp-stanzas' } },
+          ],
+        },
+      ])
+      muc.handle(errorPresence)
+      await expect(result).rejects.toMatchObject({ condition: 'not-authorized' })
+
+      // Advancing well past the 30s timeout must NOT re-send a join presence.
+      await vi.advanceTimersByTimeAsync(60000)
+      expect(mockSendStanza).not.toHaveBeenCalled()
+    })
+
+    it('ignores an error presence for a room with no in-flight join', async () => {
+      const errorPresence = createMockElement('presence', {
+        from: 'stale@conference.example.org/mynick',
+        type: 'error',
+      }, [
+        {
+          name: 'error',
+          attrs: { type: 'auth' },
+          children: [
+            { name: 'forbidden', attrs: { xmlns: 'urn:ietf:params:xml:ns:xmpp-stanzas' } },
+          ],
+        },
+      ])
+      const handled = muc.handle(errorPresence)
+      expect(handled).toBe(false)
+    })
+
+    it('does not reset an already-joined room on a stray room-level error (no in-flight join)', async () => {
+      // No joinRoom() → no pending join. A room-level (nick-less) error must NOT
+      // emit room:updated {joined:false} and knock an active room out of joined.
+      const errorPresence = createMockElement('presence', {
+        from: 'room@conference.example.org',
+        type: 'error',
+      }, [
+        { name: 'x', attrs: { xmlns: 'http://jabber.org/protocol/muc#user' } },
+        {
+          name: 'error',
+          attrs: { type: 'wait' },
+          children: [
+            { name: 'service-unavailable', attrs: { xmlns: 'urn:ietf:params:xml:ns:xmpp-stanzas' } },
+          ],
+        },
+      ])
+      muc.handle(errorPresence)
+
+      expect(mockEmitSDK).not.toHaveBeenCalledWith(
+        'room:updated',
+        expect.objectContaining({ updates: expect.objectContaining({ joined: false }) })
+      )
+    })
   })
 
   describe('moderateMessage (XEP-0425)', () => {

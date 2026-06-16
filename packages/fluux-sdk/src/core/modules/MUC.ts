@@ -148,6 +148,15 @@ export class MUC extends BaseModule {
         this.handleMUCPresence(stanza, mucUser)
         return true
       }
+      // Join-error presences echo <x muc> (or nothing), not muc#user, so they
+      // miss the gate above. Route them to fail the in-flight join.
+      if (stanza.attrs.type === 'error') {
+        const roomJid = getBareJid(stanza.attrs.from ?? '')
+        if (roomJid && this.pendingJoins.has(roomJid)) {
+          this.failJoin(stanza, roomJid)
+          return true
+        }
+      }
     }
     return false
   }
@@ -161,27 +170,21 @@ export class MUC extends BaseModule {
     const type = stanza.attrs.type
 
     if (!nick) {
-      // Room-level presence (e.g. error)
-      if (type === 'error') {
-        const error = parseXMPPError(stanza)
-        console.error(`[MUC] Room error for ${roomJid}: ${error ? formatXMPPError(error) : 'unknown'}`)
-        this.clearPendingJoin(roomJid)
-        this.pendingOccupants.delete(roomJid) // Clear buffered occupants on error
-        // SDK event only - binding calls store.updateRoom
-        this.deps.emitSDK('room:updated', { roomJid, updates: { joined: false, isJoining: false } })
-        // Settle the join outcome so joinResult() callers don't hang: clearing
-        // the timeout above removes the timeout-reject path. (Task 3 routes
-        // richer error conditions here via failJoin.)
-        this.settleJoinError(
-          roomJid,
-          new RoomJoinError(roomJid, error?.condition ?? 'undefined-condition', error?.type, error?.text)
-        )
+      // Room-level presence (e.g. a join error). Only fail the join when one is
+      // actually in flight — a stray room-level error must not reset an
+      // already-joined room's state. (Mirrors the nick-level branch below.)
+      if (type === 'error' && this.pendingJoins.has(roomJid)) {
+        this.failJoin(stanza, roomJid)
       }
       return
     }
 
     if (type === 'error') {
-      console.error(`[MUC] Presence error for ${from}`)
+      if (this.pendingJoins.has(roomJid)) {
+        this.failJoin(stanza, roomJid)
+      } else {
+        console.error(`[MUC] Presence error for ${from}`)
+      }
       return
     }
 
@@ -379,6 +382,23 @@ export class MUC extends BaseModule {
       deferred.settled = true
       deferred.reject(error)
     }
+  }
+
+  /**
+   * Handle a presence error that fails an in-flight join: log, clear timers,
+   * emit the room state cleanup, and reject the joinResult() outcome.
+   */
+  private failJoin(stanza: Element, roomJid: string): void {
+    const error = parseXMPPError(stanza)
+    console.error(`[MUC] Room error for ${roomJid}: ${error ? formatXMPPError(error) : 'unknown'}`)
+    this.clearPendingJoin(roomJid) // stops the retry on terminal errors
+    this.pendingOccupants.delete(roomJid)
+    // SDK event only - binding calls store.updateRoom
+    this.deps.emitSDK('room:updated', { roomJid, updates: { joined: false, isJoining: false } })
+    this.settleJoinError(
+      roomJid,
+      new RoomJoinError(roomJid, error?.condition ?? 'undefined-condition', error?.type, error?.text)
+    )
   }
 
   /**
