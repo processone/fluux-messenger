@@ -3781,3 +3781,39 @@ describe('roomStore', () => {
     })
   })
 })
+
+describe('acknowledged non-anonymous rooms', () => {
+  const ROOM = 'irc_%23chan@irc.example.com'
+
+  beforeEach(() => {
+    _resetStorageScopeForTesting()
+    localStorageMock.clear()
+    roomStore.setState({ acknowledgedNonAnonymousRooms: new Set() })
+    vi.clearAllMocks()
+  })
+
+  it('reports a room as not acknowledged by default', () => {
+    expect(roomStore.getState().isNonAnonymousRoomAcknowledged(ROOM)).toBe(false)
+  })
+
+  it('marks a room acknowledged and reports it', () => {
+    roomStore.getState().acknowledgeNonAnonymousRoom(ROOM)
+    expect(roomStore.getState().isNonAnonymousRoomAcknowledged(ROOM)).toBe(true)
+  })
+
+  it('does not affect other rooms', () => {
+    roomStore.getState().acknowledgeNonAnonymousRoom(ROOM)
+    expect(roomStore.getState().isNonAnonymousRoomAcknowledged('other@conference.example.com')).toBe(false)
+  })
+
+  it('persists the acknowledgement under the scoped storage key', () => {
+    setStorageScopeJid('alice@example.com')
+    try {
+      roomStore.getState().acknowledgeNonAnonymousRoom(ROOM)
+      expect(localStorageMock._store['fluux-room-nonanon-ack:alice@example.com']).toBeDefined()
+      expect(localStorageMock._store['fluux-room-nonanon-ack']).toBeUndefined()
+    } finally {
+      _resetStorageScopeForTesting()
+    }
+  })
+})

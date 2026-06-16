@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest'
-import { hasStableOccupantIdentity } from './roomCapabilities'
+import {
+  hasStableOccupantIdentity,
+  isNonAnonymousRoom,
+  isPrivateRoom,
+  roomExposesRealJid,
+} from './roomCapabilities'
 
 describe('hasStableOccupantIdentity', () => {
   const NS_OCCUPANT_ID = 'urn:xmpp:occupant-id:0'
@@ -59,5 +64,68 @@ describe('hasStableOccupantIdentity', () => {
     // Unusual but possible: both access flags present
     const features = [...baseMucFeatures, 'muc_semianonymous', 'muc_membersonly', 'muc_open']
     expect(hasStableOccupantIdentity(features)).toBe(true)
+  })
+})
+
+describe('isNonAnonymousRoom', () => {
+  it('returns true when muc_nonanonymous is advertised', () => {
+    expect(isNonAnonymousRoom(['muc_nonanonymous', 'muc_open'])).toBe(true)
+  })
+
+  it('returns false for semi-anonymous rooms', () => {
+    expect(isNonAnonymousRoom(['muc_semianonymous', 'muc_open'])).toBe(false)
+  })
+
+  it('returns false when anonymity is not advertised', () => {
+    expect(isNonAnonymousRoom(['http://jabber.org/protocol/muc', 'muc_persistent'])).toBe(false)
+  })
+
+  it('returns false for empty features', () => {
+    expect(isNonAnonymousRoom([])).toBe(false)
+  })
+})
+
+describe('isPrivateRoom', () => {
+  it('returns true for members-only rooms', () => {
+    expect(isPrivateRoom(['muc_nonanonymous', 'muc_membersonly'])).toBe(true)
+  })
+
+  it('returns true for hidden (unlisted) rooms', () => {
+    expect(isPrivateRoom(['muc_nonanonymous', 'muc_hidden'])).toBe(true)
+  })
+
+  it('returns false for open public rooms', () => {
+    expect(isPrivateRoom(['muc_nonanonymous', 'muc_open', 'muc_public'])).toBe(false)
+  })
+
+  it('returns false when access flags are absent', () => {
+    expect(isPrivateRoom(['muc_nonanonymous'])).toBe(false)
+  })
+})
+
+describe('roomExposesRealJid', () => {
+  it('returns true for a non-anonymous, non-private room (warn before joining)', () => {
+    expect(roomExposesRealJid(['muc_nonanonymous', 'muc_open', 'muc_public'])).toBe(true)
+  })
+
+  it('returns true when non-anonymous and access flags are unknown (fail-safe)', () => {
+    // muc_public absent must NOT silence the warning
+    expect(roomExposesRealJid(['muc_nonanonymous'])).toBe(true)
+  })
+
+  it('returns false for non-anonymous members-only rooms (deliberately private)', () => {
+    expect(roomExposesRealJid(['muc_nonanonymous', 'muc_membersonly'])).toBe(false)
+  })
+
+  it('returns false for non-anonymous hidden rooms (deliberately private)', () => {
+    expect(roomExposesRealJid(['muc_nonanonymous', 'muc_hidden'])).toBe(false)
+  })
+
+  it('returns false for semi-anonymous rooms (JID not exposed)', () => {
+    expect(roomExposesRealJid(['muc_semianonymous', 'muc_open'])).toBe(false)
+  })
+
+  it('returns false when anonymity is not advertised (cannot confirm exposure)', () => {
+    expect(roomExposesRealJid(['http://jabber.org/protocol/muc'])).toBe(false)
   })
 })

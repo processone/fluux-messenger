@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import { TextInput } from './ui/TextInput'
 import { useTranslation } from 'react-i18next'
 import { useModalInput, useListKeyboardNav } from '@/hooks'
+import { useRoomJoinWarning } from '@/hooks/useRoomJoinWarning'
 import {
   useConnection,
   useRoom,
@@ -24,6 +25,7 @@ export function BrowseRoomsModal({ onClose }: BrowseRoomsModalProps) {
   const { t } = useTranslation()
   const { jid: userJid, ownNickname } = useConnection()
   const { browsePublicRooms, joinRoom, getRoom, setActiveRoom, mucServiceJid } = useRoom()
+  const { confirmJoin, warningDialog } = useRoomJoinWarning()
   // NOTE: Use direct store subscription to avoid re-renders from activeMessages changes
   const setActiveConversation = useChatStore((s) => s.setActiveConversation)
   const [rooms, setRooms] = useState<{ jid: string; name: string; occupants?: number }[]>([])
@@ -237,6 +239,8 @@ export function BrowseRoomsModal({ onClose }: BrowseRoomsModalProps) {
     setJoiningRoom(roomJid)
     setError(null)
     try {
+      // Issue #37: warn before joining a room that would expose the user's real JID.
+      if (!(await confirmJoin(roomJid))) return
       await joinRoom(roomJid, nickname.trim())
       void setActiveConversation(null)
       void setActiveRoom(roomJid)
@@ -274,6 +278,7 @@ export function BrowseRoomsModal({ onClose }: BrowseRoomsModalProps) {
 
 
   return (
+    <>
     <ModalShell title={t('rooms.browseRoomsTitle')} onClose={onClose} width="max-w-lg" panelClassName="max-h-[80vh] flex flex-col">
         {/* MUC Service selector */}
         <div className="px-4 py-3 border-b border-fluux-hover flex-shrink-0">
@@ -479,5 +484,7 @@ export function BrowseRoomsModal({ onClose }: BrowseRoomsModalProps) {
           </p>
         </div>
     </ModalShell>
+    {warningDialog}
+    </>
   )
 }

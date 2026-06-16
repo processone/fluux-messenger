@@ -19,6 +19,11 @@ vi.mock('@fluux/sdk', () => ({
     setActiveRoom: mockSetActiveRoom,
     mucServiceJid: 'conference.example.com',
   }),
+  useRoomActions: () => ({
+    getRoomInfo: vi.fn().mockResolvedValue(null),
+    acknowledgeNonAnonymousRoom: vi.fn(),
+    isNonAnonymousRoomAcknowledged: () => false,
+  }),
   WELL_KNOWN_MUC_SERVERS: ['conference.process-one.net', 'muc.xmpp.org'],
   getLocalPart: (jid: string) => jid.split('@')[0],
   generateConsistentColorHexSync: () => '#5588aa',

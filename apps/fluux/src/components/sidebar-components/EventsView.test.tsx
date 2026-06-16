@@ -23,6 +23,10 @@ const mockDismissNotification = vi.fn()
 const mockSetActiveConversation = vi.fn()
 const mockSetActiveRoom = vi.fn()
 const mockNavigate = vi.fn()
+// Room-actions used by useRoomJoinWarning (issue #37 join guard)
+const mockGetRoomInfo = vi.fn()
+const mockAcknowledgeNonAnon = vi.fn()
+const mockIsNonAnonAcknowledged = vi.fn(() => false)
 
 // Default mock state
 let mockSubscriptionRequests: { id: string; from: string }[] = []
@@ -55,6 +59,12 @@ vi.mock('@fluux/sdk', () => ({
   useBlocking: () => ({
     blockJid: mockBlockJid,
   }),
+  // useRoomJoinWarning() pulls the room-inspection actions from here
+  useRoomActions: () => ({
+    getRoomInfo: mockGetRoomInfo,
+    acknowledgeNonAnonymousRoom: mockAcknowledgeNonAnon,
+    isNonAnonymousRoomAcknowledged: mockIsNonAnonAcknowledged,
+  }),
   getBareJid: (jid: string) => jid.split('/')[0],
 }))
 
@@ -86,6 +96,10 @@ describe('EventsView', () => {
     mockStrangerConversations = {}
     mockMucInvitations = []
     mockSystemNotifications = []
+    // Default: room inspection yields nothing → join proceeds without a warning.
+    // (clearAllMocks does not reset mockResolvedValue, so set it explicitly.)
+    mockGetRoomInfo.mockResolvedValue(null)
+    mockIsNonAnonAcknowledged.mockReturnValue(false)
   })
 
   describe('empty state', () => {
@@ -303,6 +317,80 @@ describe('EventsView', () => {
       await waitFor(() => {
         expect(mockAcceptInvitation).toHaveBeenCalledWith('private@conference.example.com', 'secret123')
       })
+    })
+  })
+
+  // Issue #37: accepting an invitation joins the room inside the SDK, so the
+  // real-JID-exposure warning must be applied here too (it is the last join
+  // entry point that the app-level guard does not otherwise cover).
+  describe('MUC invitation join warning (issue #37)', () => {
+    const nonAnonPublic = {
+      supportsMAM: false, supportsReactions: true, supportsHats: false,
+      isNonAnonymous: true, isPrivate: false, isIrcGateway: false, name: 'Public Room',
+    }
+
+    beforeEach(() => {
+      mockMucInvitations = [
+        { id: 'inv1', roomJid: 'room@conference.example.com', from: 'friend@example.com' },
+      ]
+      mockAcceptInvitation.mockResolvedValue(undefined)
+    })
+
+    it('warns before accepting an invitation to a non-anonymous public room; joins + acknowledges only on confirm', async () => {
+      mockGetRoomInfo.mockResolvedValue(nonAnonPublic)
+
+      render(<EventsView />)
+      fireEvent.click(screen.getByText('events.join'))
+
+      // Warning dialog appears; the room is NOT joined yet.
+      await waitFor(() => expect(screen.getByText('rooms.nonAnonWarningConfirm')).toBeInTheDocument())
+      expect(mockAcceptInvitation).not.toHaveBeenCalled()
+
+      fireEvent.click(screen.getByText('rooms.nonAnonWarningConfirm'))
+
+      await waitFor(() => {
+        expect(mockAcceptInvitation).toHaveBeenCalledWith('room@conference.example.com', undefined)
+        expect(mockSetActiveRoom).toHaveBeenCalledWith('room@conference.example.com')
+        expect(mockNavigate).toHaveBeenCalledWith('/rooms/room%40conference.example.com', undefined)
+      })
+      expect(mockAcknowledgeNonAnon).toHaveBeenCalledWith('room@conference.example.com')
+    })
+
+    it('does not accept the invitation when the warning is declined', async () => {
+      mockGetRoomInfo.mockResolvedValue(nonAnonPublic)
+
+      render(<EventsView />)
+      fireEvent.click(screen.getByText('events.join'))
+
+      await waitFor(() => expect(screen.getByText('common.cancel')).toBeInTheDocument())
+      fireEvent.click(screen.getByText('common.cancel'))
+
+      await waitFor(() => expect(screen.queryByText('rooms.nonAnonWarningConfirm')).not.toBeInTheDocument())
+      expect(mockAcceptInvitation).not.toHaveBeenCalled()
+      expect(mockAcknowledgeNonAnon).not.toHaveBeenCalled()
+      expect(mockSetActiveRoom).not.toHaveBeenCalled()
+    })
+
+    it('accepts directly without a warning for a non-anonymous but private room', async () => {
+      mockGetRoomInfo.mockResolvedValue({ ...nonAnonPublic, isPrivate: true, name: 'Private Room' })
+
+      render(<EventsView />)
+      fireEvent.click(screen.getByText('events.join'))
+
+      await waitFor(() => expect(mockAcceptInvitation).toHaveBeenCalledWith('room@conference.example.com', undefined))
+      expect(screen.queryByText('rooms.nonAnonWarningConfirm')).not.toBeInTheDocument()
+      expect(mockAcknowledgeNonAnon).not.toHaveBeenCalled()
+    })
+
+    it('skips the warning for an already-acknowledged room', async () => {
+      mockGetRoomInfo.mockResolvedValue(nonAnonPublic)
+      mockIsNonAnonAcknowledged.mockReturnValue(true)
+
+      render(<EventsView />)
+      fireEvent.click(screen.getByText('events.join'))
+
+      await waitFor(() => expect(mockAcceptInvitation).toHaveBeenCalledWith('room@conference.example.com', undefined))
+      expect(screen.queryByText('rooms.nonAnonWarningConfirm')).not.toBeInTheDocument()
     })
   })
 

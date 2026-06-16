@@ -2,7 +2,7 @@ import { useCallback, useMemo } from 'react'
 import { roomStore, connectionStore } from '../stores'
 import { useRoomStore } from '../react/storeHooks'
 import { useXMPPContext } from '../provider'
-import type { Room, RoomMessage, MentionReference, ChatStateNotification, FileAttachment, MAMQueryState, RoomAffiliation, RoomRole, PollData, PollSettings } from '../core/types'
+import type { Room, RoomMessage, MentionReference, ChatStateNotification, FileAttachment, MAMQueryState, RoomAffiliation, RoomRole, PollData, PollSettings, RoomFeatures } from '../core/types'
 import { createFetchOlderHistory, pickOldestArchiveId } from './shared'
 import {
   findContinueCatchUpCursor,
@@ -143,10 +143,23 @@ export function useRoomActive() {
   const updateLastSeenMessageId = useRoomStore((s) => s.updateLastSeenMessageId)
 
   const joinRoom = useCallback(
-    async (roomJid: string, nickname: string, options?: { maxHistory?: number; password?: string }) => {
+    async (roomJid: string, nickname: string, options?: { maxHistory?: number; password?: string; knownFeatures?: RoomFeatures | null }) => {
       await client.muc.joinRoom(roomJid, nickname, options)
     },
     [client]
+  )
+
+  // Pre-join room inspection + real-JID-exposure acknowledgement (issue #37)
+  const getRoomInfo = useCallback(
+    async (roomJid: string): Promise<RoomFeatures | null> => client.muc.queryRoomFeatures(roomJid),
+    [client]
+  )
+  const acknowledgeNonAnonymousRoom = useCallback((roomJid: string) => {
+    roomStore.getState().acknowledgeNonAnonymousRoom(roomJid)
+  }, [])
+  const isNonAnonymousRoomAcknowledged = useCallback(
+    (roomJid: string) => roomStore.getState().isNonAnonymousRoomAcknowledged(roomJid),
+    []
   )
 
   const sendMessage = useCallback(
@@ -406,6 +419,9 @@ export function useRoomActive() {
   const actions = useMemo(
     () => ({
       joinRoom,
+      getRoomInfo,
+      acknowledgeNonAnonymousRoom,
+      isNonAnonymousRoomAcknowledged,
       markAsRead,
       sendMessage,
       sendWhisper,
@@ -439,6 +455,9 @@ export function useRoomActive() {
     }),
     [
       joinRoom,
+      getRoomInfo,
+      acknowledgeNonAnonymousRoom,
+      isNonAnonymousRoomAcknowledged,
       markAsRead,
       sendMessage,
       sendWhisper,

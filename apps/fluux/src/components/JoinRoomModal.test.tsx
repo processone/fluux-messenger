@@ -39,6 +39,9 @@ vi.mock('@fluux/sdk', () => ({
     joinRoom: mockJoinRoom,
     joinResult: mockJoinResult,
     setActiveRoom: mockSetActiveRoom,
+    getRoomInfo: vi.fn().mockResolvedValue(null),
+    acknowledgeNonAnonymousRoom: vi.fn(),
+    isNonAnonymousRoomAcknowledged: () => false,
   }),
   RoomJoinError,
 }))

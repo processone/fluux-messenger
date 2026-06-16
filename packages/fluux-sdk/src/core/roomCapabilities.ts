@@ -52,3 +52,49 @@ export function hasStableOccupantIdentity(features: string[]): boolean {
   // Features not advertised or ambiguous: default to optimistic
   return true
 }
+
+/**
+ * Whether a MUC room is non-anonymous — every occupant can see every other
+ * occupant's real JID (`muc_nonanonymous`, XEP-0045 §6.4).
+ *
+ * This is the reliable, safety-critical signal for real-JID exposure: compliant
+ * servers report the room's `whois` configuration in disco#info. The opposite
+ * (`muc_semianonymous`, where only moderators see real JIDs) is the common,
+ * safe default. When anonymity is not advertised we conservatively return
+ * `false` (we cannot confirm exposure).
+ *
+ * @param features - Array of feature namespace strings from disco#info
+ */
+export function isNonAnonymousRoom(features: string[]): boolean {
+  return features.includes('muc_nonanonymous')
+}
+
+/**
+ * Whether a MUC room is deliberately private — members-only (`muc_membersonly`)
+ * or unlisted/hidden (`muc_hidden`). These are rooms a user joins by deliberate
+ * invitation rather than public discovery.
+ *
+ * Note: we intentionally do NOT key off `muc_public`. That flag is optional and
+ * means "listed in the service directory" (discoverability), not "world-readable";
+ * gateways and many rooms omit it. Keying off the positive private signals instead
+ * keeps real-JID-exposure detection fail-safe (see {@link roomExposesRealJid}).
+ *
+ * @param features - Array of feature namespace strings from disco#info
+ */
+export function isPrivateRoom(features: string[]): boolean {
+  return features.includes('muc_membersonly') || features.includes('muc_hidden')
+}
+
+/**
+ * Whether joining a room would expose the user's real JID to people they did not
+ * deliberately share it with — i.e. the room is non-anonymous AND not clearly
+ * private. This is the trigger for the pre-join warning (issue #37).
+ *
+ * Fail-safe by design: a missing public/access flag never silences the warning;
+ * only a positive private signal (`muc_membersonly`/`muc_hidden`) suppresses it.
+ *
+ * @param features - Array of feature namespace strings from disco#info
+ */
+export function roomExposesRealJid(features: string[]): boolean {
+  return isNonAnonymousRoom(features) && !isPrivateRoom(features)
+}
