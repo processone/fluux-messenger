@@ -218,8 +218,6 @@ export interface StoreBindings {
     setEntityCounts: (counts: Partial<EntityCounts>) => void
     setMucServiceJid: (jid: string | null) => void
     getMucServiceJid: () => string | null
-    setMucServiceSupportsMAM: (supportsMAM: boolean | null) => void
-    getMucServiceSupportsMAM: () => boolean | null
     // Vhost management
     setVhosts: (vhosts: string[]) => void
     setSelectedVhost: (vhost: string | null) => void

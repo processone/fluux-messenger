@@ -1315,89 +1315,16 @@ describe('MUC Module', () => {
       const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
       mockSendIQ.mockRejectedValue(new Error('Room disco timeout'))
 
-      // Even if MUC service supports MAM globally, we don't fallback
-      // because the room may have MAM explicitly disabled
-      mockStores.admin.getMucServiceSupportsMAM.mockReturnValue(true)
-
       const result = await muc.queryRoomFeatures('room@conference.example.org')
 
-      // Should return null, not fallback to service MAM
+      // Room-level MAM can be disabled even when the MUC service supports it,
+      // so a failed room disco must return null, never fall back to service MAM.
       expect(result).toBeNull()
       warnSpy.mockRestore()
     })
   })
 
-  describe('discoverMucService MAM detection', () => {
-    it('emits admin:muc-service-mam event when MUC service supports MAM', async () => {
-      // Mock disco#items response
-      const itemsResponse = createMockElement('iq', { type: 'result' }, [
-        {
-          name: 'query',
-          attrs: { xmlns: 'http://jabber.org/protocol/disco#items' },
-          children: [
-            { name: 'item', attrs: { jid: 'conference.example.com' } },
-          ],
-        },
-      ])
-
-      // Mock disco#info response for conference service with MAM support
-      const infoResponse = createMockElement('iq', { type: 'result' }, [
-        {
-          name: 'query',
-          attrs: { xmlns: 'http://jabber.org/protocol/disco#info' },
-          children: [
-            { name: 'identity', attrs: { category: 'conference', type: 'text', name: 'MUC' } },
-            { name: 'feature', attrs: { var: 'http://jabber.org/protocol/muc' } },
-            { name: 'feature', attrs: { var: 'urn:xmpp:mam:2' } },
-          ],
-        },
-      ])
-
-      mockSendIQ
-        .mockResolvedValueOnce(itemsResponse)
-        .mockResolvedValueOnce(infoResponse)
-
-      const result = await muc.discoverMucService()
-
-      expect(result).toBe('conference.example.com')
-      expect(mockEmitSDK).toHaveBeenCalledWith('admin:muc-service-mam', { supportsMAM: true })
-    })
-
-    it('emits admin:muc-service-mam with false when MUC service does not support MAM', async () => {
-      // Mock disco#items response
-      const itemsResponse = createMockElement('iq', { type: 'result' }, [
-        {
-          name: 'query',
-          attrs: { xmlns: 'http://jabber.org/protocol/disco#items' },
-          children: [
-            { name: 'item', attrs: { jid: 'conference.example.com' } },
-          ],
-        },
-      ])
-
-      // Mock disco#info response for conference service WITHOUT MAM
-      const infoResponse = createMockElement('iq', { type: 'result' }, [
-        {
-          name: 'query',
-          attrs: { xmlns: 'http://jabber.org/protocol/disco#info' },
-          children: [
-            { name: 'identity', attrs: { category: 'conference', type: 'text', name: 'MUC' } },
-            { name: 'feature', attrs: { var: 'http://jabber.org/protocol/muc' } },
-            // No MAM feature
-          ],
-        },
-      ])
-
-      mockSendIQ
-        .mockResolvedValueOnce(itemsResponse)
-        .mockResolvedValueOnce(infoResponse)
-
-      const result = await muc.discoverMucService()
-
-      expect(result).toBe('conference.example.com')
-      expect(mockEmitSDK).toHaveBeenCalledWith('admin:muc-service-mam', { supportsMAM: false })
-    })
-
+  describe('discoverMucService', () => {
     it('emits admin:muc-service event with discovered JID', async () => {
       const itemsResponse = createMockElement('iq', { type: 'result' }, [
         {

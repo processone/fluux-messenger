@@ -97,8 +97,6 @@ export interface AdminState {
   userList: EntityListState<AdminUser>
   roomList: EntityListState<AdminRoom>
   mucServiceJid: string | null
-  /** Whether the MUC service advertises MAM support globally (XEP-0313) */
-  mucServiceSupportsMAM: boolean | null
 
   // Actions
   setIsAdmin: (isAdmin: boolean) => void
@@ -123,12 +121,10 @@ export interface AdminState {
   appendRoomList: (items: AdminRoom[], pagination: RSMResponse) => void
   resetRoomList: () => void
   setMucServiceJid: (jid: string | null) => void
-  setMucServiceSupportsMAM: (supportsMAM: boolean | null) => void
 
   // Getters
   getCurrentSession: () => AdminSession | null
   getMucServiceJid: () => string | null
-  getMucServiceSupportsMAM: () => boolean | null
 
   reset: () => void
 }
@@ -159,7 +155,6 @@ const initialState = {
   userList: initialEntityListState<AdminUser>(),
   roomList: initialEntityListState<AdminRoom>(),
   mucServiceJid: null as string | null,
-  mucServiceSupportsMAM: null as boolean | null,
 }
 
 export const adminStore = createStore<AdminState>((set, get) => ({
@@ -231,12 +226,10 @@ export const adminStore = createStore<AdminState>((set, get) => ({
   }),
 
   setMucServiceJid: (jid) => set({ mucServiceJid: jid }),
-  setMucServiceSupportsMAM: (supportsMAM) => set({ mucServiceSupportsMAM: supportsMAM }),
 
   // Getters
   getCurrentSession: () => get().currentSession,
   getMucServiceJid: () => get().mucServiceJid,
-  getMucServiceSupportsMAM: () => get().mucServiceSupportsMAM,
 
   reset: () => set(initialState),
 }))

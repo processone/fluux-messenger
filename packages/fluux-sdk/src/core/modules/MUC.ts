@@ -793,20 +793,10 @@ export class MUC extends BaseModule {
         )
 
         if (identity) {
-          // Check if the MUC service supports MAM globally (XEP-0313)
-          // This is useful as a fallback when individual room disco fails
-          const features = infoQuery?.getChildren('feature')
-            .map((f: Element) => f.attrs.var as string)
-            .filter(Boolean) ?? []
-          const serviceSupportsMAM = features.includes(NS_MAM)
-
-          logInfo(`MUC service: ${jid} (MAM=${serviceSupportsMAM})`)
+          logInfo(`MUC service: ${jid}`)
 
           // Emit MUC service JID so the admin store can populate it
           this.deps.emitSDK('admin:muc-service', { mucServiceJid: jid })
-
-          // Emit service-level MAM support for use as fallback
-          this.deps.emitSDK('admin:muc-service-mam', { supportsMAM: serviceSupportsMAM })
 
           return jid
         }
