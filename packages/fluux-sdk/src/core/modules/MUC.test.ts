@@ -2159,6 +2159,33 @@ describe('MUC Module', () => {
       await expect(result).rejects.toMatchObject({ condition: 'not-authorized', errorType: 'auth' })
     })
 
+    it('logs an error event to the XMPP console when a join fails', async () => {
+      await muc.joinRoom('room@conference.example.org', 'mynick')
+      const result = muc.joinResult('room@conference.example.org')
+      result.catch(() => {}) // avoid unhandled-rejection noise before we assert
+
+      const errorPresence = createMockElement('presence', {
+        from: 'room@conference.example.org/mynick',
+        type: 'error',
+      }, [
+        { name: 'x', attrs: { xmlns: 'http://jabber.org/protocol/muc' } },
+        {
+          name: 'error',
+          attrs: { type: 'auth' },
+          children: [
+            { name: 'not-authorized', attrs: { xmlns: 'urn:ietf:params:xml:ns:xmpp-stanzas' } },
+          ],
+        },
+      ])
+      muc.handle(errorPresence)
+      await expect(result).rejects.toMatchObject({ condition: 'not-authorized' })
+
+      const consoleEvent = mockEmitSDK.mock.calls.find((c) => c[0] === 'console:event')
+      expect(consoleEvent?.[1]).toMatchObject({ category: 'error' })
+      expect(consoleEvent?.[1].message).toContain('room@conference.example.org')
+      expect(consoleEvent?.[1].message).toContain('Not authorized')
+    })
+
     it('rejects joinResult() with conflict for an error presence carrying no <x>', async () => {
       await muc.joinRoom('room@conference.example.org', 'mynick')
       const result = muc.joinResult('room@conference.example.org')
