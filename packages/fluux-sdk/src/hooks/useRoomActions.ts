@@ -50,6 +50,13 @@ export function useRoomActions() {
     [client]
   )
 
+  const joinResult = useCallback(
+    async (roomJid: string): Promise<void> => {
+      await client.muc.joinResult(roomJid)
+    },
+    [client]
+  )
+
   const createQuickChat = useCallback(
     async (nickname: string, topic?: string, invitees?: string[]): Promise<string> => {
       return await client.muc.createQuickChat(nickname, topic, invitees)
@@ -379,6 +386,7 @@ export function useRoomActions() {
   return useMemo(
     () => ({
       joinRoom,
+      joinResult,
       createQuickChat,
       leaveRoom,
       getRoom,
@@ -427,6 +435,7 @@ export function useRoomActions() {
     }),
     [
       joinRoom,
+      joinResult,
       createQuickChat,
       leaveRoom,
       getRoom,
