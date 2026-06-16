@@ -395,7 +395,11 @@ export class MUC extends BaseModule {
    */
   private failJoin(stanza: Element, roomJid: string): void {
     const error = parseXMPPError(stanza)
-    console.error(`[MUC] Room error for ${roomJid}: ${error ? formatXMPPError(error) : 'unknown'}`)
+    const reason = error ? formatXMPPError(error) : 'unknown'
+    console.error(`[MUC] Room error for ${roomJid}: ${reason}`)
+    // Surface in the exportable XMPP console as an at-a-glance error event
+    // (the raw error stanza is already logged, this is the readable summary).
+    this.deps.emitSDK('console:event', { message: `Failed to join ${roomJid}: ${reason}`, category: 'error' })
     this.clearPendingJoin(roomJid) // stops the retry on terminal errors
     this.pendingOccupants.delete(roomJid)
     // SDK event only - binding calls store.updateRoom

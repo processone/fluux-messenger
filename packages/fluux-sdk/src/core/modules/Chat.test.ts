@@ -2663,6 +2663,40 @@ describe('XMPPClient Message', () => {
       })
     })
 
+    it('logs an error event to the XMPP console when an invitation is rejected', async () => {
+      await connectClient()
+
+      const errorStanza = createMockElement('message', {
+        from: 'room@conference.example.com',
+        to: 'user@example.com',
+        type: 'error',
+      }, [
+        {
+          name: 'x',
+          attrs: { xmlns: 'http://jabber.org/protocol/muc#user' },
+          children: [
+            { name: 'invite', attrs: { to: 'target@example.com' } },
+          ],
+        },
+        {
+          name: 'error',
+          attrs: { type: 'auth' },
+          children: [
+            { name: 'forbidden', attrs: { xmlns: 'urn:ietf:params:xml:ns:xmpp-stanzas' } },
+          ],
+        },
+      ])
+
+      mockXmppClientInstance._emit('stanza', errorStanza)
+
+      // The invitation rejection lands in the exportable console as an error
+      // event (the transient toast alone wouldn't survive in a shared log).
+      const consoleEvent = emitSDKSpy.mock.calls.find((c: unknown[]) => c[0] === 'console:event')
+      expect(consoleEvent?.[1]).toMatchObject({ category: 'error' })
+      expect(consoleEvent?.[1].message).toContain('room@conference.example.com')
+      expect(consoleEvent?.[1].message).toContain('Forbidden')
+    })
+
     it('should not emit room:invite-error for non-invitation errors', async () => {
       await connectClient()
 
