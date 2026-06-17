@@ -29,8 +29,17 @@ export function setupExternalLinkHandler(): (() => void) | undefined {
   if (!isTauri()) return undefined
 
   const handler = (event: MouseEvent) => {
-    const anchor = (event.target as Element)?.closest?.('a')
+    const target = event.target as Element | null
+    const anchor = target?.closest?.('a')
     if (!anchor) return
+
+    // A click on an interactive control nested inside the link (e.g. the
+    // "Show image" button in a deferred link-preview card) belongs to that
+    // control, not the link — let it handle the click instead of navigating.
+    // This handler runs in the capture phase, so the nested control's own
+    // preventDefault/stopPropagation cannot stop it; this guard is what does.
+    const interactive = target?.closest?.('button, [role="button"]')
+    if (interactive && anchor.contains(interactive)) return
 
     const href = anchor.getAttribute('href')
     if (!href) return
