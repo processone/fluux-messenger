@@ -229,5 +229,24 @@ describe('EncryptionSettings PEP support', () => {
       // Must reach the plugin unaltered — not truncated and not zero-stripped.
       expect(mockImportKeyFromFile).toHaveBeenCalledWith(expect.any(String), externalPassphrase)
     })
+
+    it('shows the masked backup-code field when the file is a Fluux xep0373 backup', async () => {
+      mockPickKeyFile.mockResolvedValue(
+        '-----BEGIN PGP MESSAGE-----\nPassphrase-Format: xep0373\n\nwcDMfakebody\n-----END PGP MESSAGE-----\n',
+      )
+
+      render(<EncryptionSettings />)
+
+      const importButton = await screen.findByRole('button', {
+        name: 'settings.encryption.importFileAction',
+      })
+      fireEvent.click(importButton)
+
+      // The Passphrase-Format header drives the masked dashed input, not free text.
+      await waitFor(() => {
+        expect(document.querySelector('input[name="backup-code"]')).not.toBeNull()
+      })
+      expect(document.querySelector('input[name="passphrase"]')).toBeNull()
+    })
   })
 })

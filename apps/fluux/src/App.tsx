@@ -10,6 +10,7 @@ import { useToastStore } from './stores/toastStore'
 import { UnlockEncryptionDialog } from './components/UnlockEncryptionDialog'
 import { IdentityChoiceDialog } from './components/IdentityChoiceDialog'
 import { RestorePassphraseDialog } from './components/RestorePassphraseDialog'
+import { parseArmorPassphraseFormat } from './e2ee/passphraseFormatHeader'
 import { useWebUnlockDialogStore } from './stores/webUnlockDialogStore'
 import { detectRenderLoop } from '@/utils/renderLoopDetector'
 import { LoginScreen } from './components/LoginScreen'
@@ -440,10 +441,11 @@ function App() {
           title={t('settings.encryption.importFileDialogTitle')}
           body={t('settings.encryption.importFileDialogBody')}
           confirmLabel={t('settings.encryption.importFileAction')}
-          // An imported key (GnuPG / OpenKeychain export) carries an arbitrary
-          // passphrase: free-text entry with a reveal toggle, no password-manager
-          // autofill, and trimming. See RestorePassphraseDialog 'import' mode.
+          // Foreign keys (GnuPG / OpenKeychain) carry an arbitrary passphrase:
+          // free-text entry with a reveal toggle, no autofill, trimming. A Fluux
+          // backup file (Passphrase-Format: xep0373) gets the masked dashed input.
           mode="import"
+          isBackupCode={parseArmorPassphraseFormat(pendingImportFile) === 'xep0373'}
           onConfirm={handleImportFilePassphrase}
           onCancel={() => setPendingImportFile(null)}
         />

@@ -9,6 +9,7 @@ import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { DeleteOpenpgpKeyDialog } from '@/components/DeleteOpenpgpKeyDialog'
 import { BackupPassphraseDialog } from '@/components/BackupPassphraseDialog'
 import { RestorePassphraseDialog } from '@/components/RestorePassphraseDialog'
+import { parseArmorPassphraseFormat } from '@/e2ee/passphraseFormatHeader'
 import { ExternalKeyExportDialog } from '@/components/ExternalKeyExportDialog'
 import { IdentityChoiceDialog } from '@/components/IdentityChoiceDialog'
 import { OwnKeyConflictBanner } from '@/components/OwnKeyConflictBanner'
@@ -1243,10 +1244,11 @@ export function EncryptionSettings() {
           title={t('settings.encryption.importFileDialogTitle')}
           body={t('settings.encryption.importFileDialogBody')}
           confirmLabel={t('settings.encryption.importFileAction')}
-          // An imported key (GnuPG / OpenKeychain export) carries an arbitrary
-          // passphrase: free-text entry with a reveal toggle, no password-manager
-          // autofill, and trimming. See RestorePassphraseDialog 'import' mode.
+          // Foreign keys (GnuPG / OpenKeychain) carry an arbitrary passphrase:
+          // free-text entry with a reveal toggle, no autofill, trimming. A Fluux
+          // backup file (Passphrase-Format: xep0373) gets the masked dashed input.
           mode="import"
+          isBackupCode={parseArmorPassphraseFormat(pendingImportFileArmored) === 'xep0373'}
           onConfirm={handleImportFileConfirm}
           onCancel={() => {
             setShowImportFileDialog(false)

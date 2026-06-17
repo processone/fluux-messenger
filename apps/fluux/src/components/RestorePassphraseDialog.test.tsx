@@ -20,18 +20,26 @@ const noop = () => {}
 describe('RestorePassphraseDialog import mode', () => {
   it('renders a free-text passphrase field with autofill disabled and no hidden username', () => {
     const { container } = render(
-      <RestorePassphraseDialog mode="import" onConfirm={async () => {}} onCancel={noop} />,
+      <RestorePassphraseDialog mode="import" isBackupCode={false} onConfirm={async () => {}} onCancel={noop} />,
     )
     const input = container.querySelector('input[name="passphrase"]') as HTMLInputElement | null
     expect(input).not.toBeNull()
     expect(input!.getAttribute('autocomplete')).toBe('off')
-    // The password-manager hint username must NOT be present in import mode.
     expect(container.querySelector('input[name="username"]')).toBeNull()
+  })
+
+  it('renders the masked backup-code field in import mode when isBackupCode is set', () => {
+    const { container } = render(
+      <RestorePassphraseDialog mode="import" isBackupCode={true} onConfirm={async () => {}} onCancel={noop} />,
+    )
+    // A Fluux xep0373 backup file should get the dashed masked input.
+    expect(container.querySelector('input[name="backup-code"]')).not.toBeNull()
+    expect(container.querySelector('input[name="passphrase"]')).toBeNull()
   })
 
   it('reveals and re-hides the passphrase via the toggle', () => {
     const { container } = render(
-      <RestorePassphraseDialog mode="import" onConfirm={async () => {}} onCancel={noop} />,
+      <RestorePassphraseDialog mode="import" isBackupCode={false} onConfirm={async () => {}} onCancel={noop} />,
     )
     const input = container.querySelector('input[name="passphrase"]') as HTMLInputElement
     expect(input.type).toBe('password')
@@ -46,7 +54,7 @@ describe('RestorePassphraseDialog import mode', () => {
   it('trims surrounding whitespace before calling onConfirm', async () => {
     const onConfirm = vi.fn().mockResolvedValue(undefined)
     const { container } = render(
-      <RestorePassphraseDialog mode="import" onConfirm={onConfirm} onCancel={noop} />,
+      <RestorePassphraseDialog mode="import" isBackupCode={false} onConfirm={onConfirm} onCancel={noop} />,
     )
     const input = container.querySelector('input[name="passphrase"]') as HTMLInputElement
     fireEvent.change(input, { target: { value: '  0228-6308-1219  ' } })

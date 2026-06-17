@@ -42,7 +42,12 @@ interface RestorePassphraseDialogProps {
   body?: string
   /** Override the confirm button label. Defaults to "Restore from server". */
   confirmLabel?: string
-  /** True when the passphrase is an XEP-0373 backup code (XXXX-XXXX-… format). Defaults to !USE_V6_KEYS. */
+  /**
+   * Show the masked XEP-0373 backup-code field (XXXX-XXXX-… format) instead of
+   * a free-text field. Authoritative even in import mode: import-from-file sites
+   * MUST set this from the file's `Passphrase-Format` header (`xep0373` → true,
+   * everything else → false). Defaults to !USE_V6_KEYS for the server-restore flow.
+   */
   isBackupCode?: boolean
   /**
    * 'import' = entering a FOREIGN key's passphrase (GnuPG / OpenKeychain).
@@ -82,9 +87,10 @@ export function RestorePassphraseDialog({
   const backupCursorRef = useRef<number>(0)
 
   const isImport = mode === 'import'
-  // A foreign key's passphrase is arbitrary text, never an XEP-0373 backup
-  // code — so import always uses the free-text field regardless of the default.
-  const useBackupCode = !isImport && isBackupCode
+  // The masked field is driven solely by isBackupCode. Import-from-file sites
+  // pass it based on the file's Passphrase-Format header (a Fluux xep0373 backup
+  // gets the mask; a foreign key's arbitrary passphrase stays free text).
+  const useBackupCode = isBackupCode
 
   const [passphrase, setPassphrase] = useState('')
   const [isRestoring, setIsRestoring] = useState(false)
