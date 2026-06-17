@@ -924,7 +924,7 @@ describe('WebOpenPGPPlugin', () => {
       const { privateKey: foreign } = await openpgp.generateKey({
         type: 'ecc',
         curve: 'curve25519Legacy',
-        userIDs: [{ name: 'Zoidberg', email: 'zoidberg@planet-express.com' }],
+        userIDs: [{ name: 'Imported User', email: 'imported@example.org' }],
         format: 'object',
       })
       const fp = foreign.getFingerprint()
@@ -936,12 +936,12 @@ describe('WebOpenPGPPlugin', () => {
       })) as string
 
       const dest = new TestableWebOpenPGPPlugin()
-      const { ctx } = makeCtx('zoidberg@example.com')
+      const { ctx } = makeCtx('imported@example.com')
       await dest.init(ctx)
 
-      const bundles = await dest.callBackupImportAll('zoidberg@example.com', backup, 'pw')
+      const bundles = await dest.callBackupImportAll('imported@example.com', backup, 'pw')
       const installed = await dest.callBackupImportSelected(
-        'zoidberg@example.com',
+        'imported@example.com',
         backup,
         'pw',
         bundles[0].fingerprint,
@@ -951,7 +951,7 @@ describe('WebOpenPGPPlugin', () => {
       // so the foreign name/email UID is dropped.
       expect(installed.fingerprint).toBe(fp)
       const info = await dest.callValidateCert(installed.publicArmored)
-      expect(info.userIds).toEqual(['xmpp:zoidberg@example.com'])
+      expect(info.userIds).toEqual(['xmpp:imported@example.com'])
     })
 
     it('leaves a key that already has the xmpp: UID unchanged', async () => {

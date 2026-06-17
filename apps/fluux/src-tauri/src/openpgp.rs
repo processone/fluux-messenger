@@ -936,6 +936,20 @@ const USE_V6_KEYS: bool = false;
 ///   expire every currently-alive `[E]` so `.alive()` recipient selection
 ///   picks only the new one while retained subkeys stay decryption-capable
 ///   for historical MAM replay.
+fn generate_cert(user_id: &str) -> Result<Cert> {
+    let profile = if USE_V6_KEYS {
+        openpgp::Profile::RFC9580
+    } else {
+        openpgp::Profile::RFC4880
+    };
+    let (cert, _revocation) = CertBuilder::general_purpose(Some(user_id))
+        .set_profile(profile)
+        .context("select OpenPGP key profile")?
+        .generate()
+        .context("generate OpenPGP cert")?;
+    Ok(cert)
+}
+
 /// Ensure `cert` carries the XEP-0373 §8.5 `xmpp:<jid>` User ID, self-signing
 /// it when absent. Imported foreign keys (GnuPG / OpenKeychain) usually have
 /// only a `Name <email>` UID, but peers verify against the bare `xmpp:` form,
@@ -986,20 +1000,6 @@ fn ensure_account_user_id(cert: Cert, account_jid: &str) -> Result<Cert> {
             .map(|s| s.eq_ignore_ascii_case(&expected))
             .unwrap_or(false)
     }))
-}
-
-fn generate_cert(user_id: &str) -> Result<Cert> {
-    let profile = if USE_V6_KEYS {
-        openpgp::Profile::RFC9580
-    } else {
-        openpgp::Profile::RFC4880
-    };
-    let (cert, _revocation) = CertBuilder::general_purpose(Some(user_id))
-        .set_profile(profile)
-        .context("select OpenPGP key profile")?
-        .generate()
-        .context("generate OpenPGP cert")?;
-    Ok(cert)
 }
 
 /// Strip retired encryption subkeys from `cert`, keeping:
@@ -2608,16 +2608,16 @@ mod tests {
     #[test]
     fn ensure_account_user_id_adds_xmpp_uid_preserving_fingerprint() {
         let (cert, _) =
-            CertBuilder::general_purpose(Some("Zoidberg <zoidberg@planet-express.com>"))
+            CertBuilder::general_purpose(Some("Imported User <imported@example.org>"))
                 .generate()
                 .unwrap();
         let fp = cert.fingerprint().to_hex();
         assert!(
-            !has_uid(&cert, "xmpp:zoidberg@example.com"),
+            !has_uid(&cert, "xmpp:imported@example.com"),
             "fixture must start without the xmpp: UID"
         );
 
-        let augmented = ensure_account_user_id(cert, "zoidberg@example.com").unwrap();
+        let augmented = ensure_account_user_id(cert, "imported@example.com").unwrap();
 
         assert_eq!(
             augmented.fingerprint().to_hex(),
@@ -2631,12 +2631,12 @@ mod tests {
             valid
                 .userids()
                 .any(|u| std::str::from_utf8(u.userid().value()).unwrap()
-                    == "xmpp:zoidberg@example.com"),
+                    == "xmpp:imported@example.com"),
             "added xmpp: UID must be present and valid"
         );
         // Canonicalized to xmpp:-only: the foreign name/email UID is stripped.
         assert!(
-            !has_uid(&augmented, "Zoidberg <zoidberg@planet-express.com>"),
+            !has_uid(&augmented, "Imported User <imported@example.org>"),
             "foreign name/email UID must be stripped"
         );
         assert_eq!(

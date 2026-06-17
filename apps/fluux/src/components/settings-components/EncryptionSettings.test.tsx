@@ -199,7 +199,7 @@ describe('EncryptionSettings PEP support', () => {
     })
 
     it('passes an arbitrary passphrase (with "0" and >24 chars) through verbatim', async () => {
-      // zoidberg's OpenKeychain backup code: 9 groups of 4 digits, with zeros.
+      // An OpenKeychain numeric9x4 backup code: 9 groups of 4 digits, with zeros.
       const externalPassphrase = '1000-2000-3000-4000-5000-6000-7000-8000-9000'
 
       render(<EncryptionSettings />)
