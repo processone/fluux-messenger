@@ -12,9 +12,10 @@ import { Avatar } from './Avatar'
 import { useWindowDrag } from '@/hooks'
 import { getTranslatedStatusText } from '@/utils/statusText'
 import { Tooltip } from './Tooltip'
-import { ArrowLeft, Clock, Hash, Lock, LockOpen, Loader2, Search, ShieldAlert, ShieldCheck, ShieldOff, ShieldX } from 'lucide-react'
+import { Archive, ArchiveRestore, ArrowLeft, Clock, Hash, Lock, LockOpen, Loader2, Search, ShieldAlert, ShieldCheck, ShieldOff, ShieldX, User } from 'lucide-react'
 import type { ConversationEncryptionState } from '@/hooks/useConversationEncryptionState'
 import { useWebUnlockDialogStore } from '@/stores/webUnlockDialogStore'
+import { OverflowMenu, type OverflowMenuItem } from './OverflowMenu'
 
 export interface ChatHeaderProps {
   name: string
@@ -29,6 +30,12 @@ export interface ChatHeaderProps {
   onEnableEncryptionClick?: () => void
   /** Open the contact profile / management screen. 1:1 chats only. */
   onShowProfile?: () => void
+  /** Whether the conversation is archived — selects the menu's Archive vs Unarchive item. 1:1 chats only. */
+  isArchived?: boolean
+  /** Archive the conversation from the overflow menu. 1:1 chats only. */
+  onArchive?: () => void
+  /** Unarchive the conversation from the overflow menu. 1:1 chats only. */
+  onUnarchive?: () => void
 }
 
 export function ChatHeader({
@@ -43,6 +50,9 @@ export function ChatHeader({
   onDisableEncryptionClick,
   onEnableEncryptionClick,
   onShowProfile,
+  isArchived,
+  onArchive,
+  onUnarchive,
 }: ChatHeaderProps) {
   const { t } = useTranslation()
   const isGroupChat = type === 'groupchat'
@@ -54,6 +64,20 @@ export function ChatHeader({
   const fullContact = useRosterStore((s) => jid ? s.contacts.get(jid) : undefined)
   const contactTime = useContactTime(!isGroupChat ? jid : null)
   useLastActivity(!isGroupChat ? jid : null)
+
+  // Overflow (kebab) menu — 1:1 chats only. Surfaces contact info and the
+  // archive toggle, which otherwise live behind the name tap / sidebar.
+  const menuItems: OverflowMenuItem[] = []
+  if (!isGroupChat) {
+    if (onShowProfile) {
+      menuItems.push({ key: 'profile', label: t('sidebar.viewProfile'), icon: User, onClick: onShowProfile })
+    }
+    if (isArchived && onUnarchive) {
+      menuItems.push({ key: 'unarchive', label: t('conversations.unarchive'), icon: ArchiveRestore, onClick: onUnarchive })
+    } else if (!isArchived && onArchive) {
+      menuItems.push({ key: 'archive', label: t('conversations.archive'), icon: Archive, onClick: onArchive })
+    }
+  }
 
   return (
     <header className={`h-14 ${titleBarClass} px-4 flex items-center border-b border-fluux-bg shadow-sm gap-3`} {...dragRegionProps}>
@@ -148,6 +172,16 @@ export function ChatHeader({
         >
           <Search className="size-4" />
         </button>
+      )}
+
+      {/* Overflow (kebab) menu — 1:1 chats only */}
+      {menuItems.length > 0 && (
+        <OverflowMenu
+          ariaLabel={t('contacts.actionsMenu')}
+          items={menuItems}
+          buttonClassName="p-1.5 rounded hover:bg-fluux-hover text-fluux-muted hover:text-fluux-text transition-colors"
+          iconClassName="size-4"
+        />
       )}
     </header>
   )

@@ -411,7 +411,7 @@ export function Sidebar({ onSelectContact, onStartChat, onManageUser, adminCateg
         >
           <div className="sidebar-scroll h-full overflow-y-auto rounded-sm py-0.5 px-0.5">
             <SidebarZoneContext.Provider value={sidebarListRef}>
-              <div key={sidebarView} style={{ animation: 'sidebar-view-enter 150ms ease-out' }}>
+              <div key={sidebarView} className="h-full md:h-auto" style={{ animation: 'sidebar-view-enter 150ms ease-out' }}>
               {sidebarView === 'messages' ? (
                 <ConversationList />
               ) : sidebarView === 'directory' ? (

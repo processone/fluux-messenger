@@ -45,7 +45,7 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
   const { t } = useTranslation()
   // Use useChatActive instead of useChat to avoid subscribing to the conversation list.
   // This prevents re-renders during background MAM sync of other conversations.
-  const { activeConversation, activeMessages, activeTypingUsers, sendMessage, sendReaction, sendCorrection, retractMessage, retryMessage, sendChatState, isArchived, unarchiveConversation, setDraft, getDraft, clearDraft, activeAnimation, sendEasterEgg, clearAnimation, clearFirstNewMessageId, updateLastSeenMessageId, activeMAMState, fetchOlderHistory, continueChatCatchUp, targetMessageId, clearTargetMessageId } = useChatActive()
+  const { activeConversation, activeMessages, activeTypingUsers, sendMessage, sendReaction, sendCorrection, retractMessage, retryMessage, sendChatState, isArchived, archiveConversation, unarchiveConversation, setDraft, getDraft, clearDraft, activeAnimation, sendEasterEgg, clearAnimation, clearFirstNewMessageId, updateLastSeenMessageId, activeMAMState, fetchOlderHistory, continueChatCatchUp, targetMessageId, clearTargetMessageId } = useChatActive()
   // Use useContactIdentities instead of useRoster() to avoid re-renders on
   // presence changes. ChatView only needs contact names and avatars for display.
   const contactsByJid = useContactIdentities()
@@ -371,6 +371,17 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
         onShowProfile={
           activeConversation.type === 'chat' && onShowProfile
             ? () => onShowProfile(activeConversation.id)
+            : undefined
+        }
+        isArchived={activeConversation.type === 'chat' ? isArchived(activeConversation.id) : undefined}
+        onArchive={
+          activeConversation.type === 'chat'
+            ? () => archiveConversation(activeConversation.id)
+            : undefined
+        }
+        onUnarchive={
+          activeConversation.type === 'chat'
+            ? () => unarchiveConversation(activeConversation.id)
             : undefined
         }
       />
