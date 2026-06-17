@@ -333,12 +333,12 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
 
   // 1:1 media trust: a peer absent from the roster contacts map is a stranger
   // (matches the SDK's roster.hasContact stranger definition). Strangers never
-  // auto-load, regardless of policy.
+  // auto-load, regardless of policy. ChatView only renders type==='chat'
+  // conversations; were a non-1:1 peer ever to reach here it would be absent
+  // from the contacts map and so fail safe to 'direct-stranger' (deferred).
   const mediaAutoLoad = computeMediaAutoload(
     mediaPolicy,
-    activeConversation.type === 'chat' && !contactsByJid.has(activeConversation.id)
-      ? 'direct-stranger'
-      : 'direct-contact',
+    contactsByJid.has(activeConversation.id) ? 'direct-contact' : 'direct-stranger',
   )
 
   return (
