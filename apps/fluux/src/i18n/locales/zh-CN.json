@@ -443,6 +443,7 @@
         "attachment": "附件",
         "removeAttachment": "移除附件",
         "reply": "回复",
+        "copyMessage": "复制文本",
         "replyQuoteHiddenEncrypted": "引用已隐藏：原始消息已加密",
         "forwardMessage": "转发消息（即将推出）",
         "moreReactions": "更多回应",

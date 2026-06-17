@@ -321,6 +321,7 @@ vi.mock('lucide-react', () => ({
   Forward: () => <span data-testid="icon-forward">Forward</span>,
   MoreHorizontal: () => <span data-testid="icon-more">More</span>,
   Reply: () => <span data-testid="icon-reply">Reply</span>,
+  Copy: () => <span data-testid="icon-copy">Copy</span>,
   Upload: () => <span data-testid="icon-upload">Upload</span>,
   Trash2: () => <span data-testid="icon-trash">Trash</span>,
   Loader2: () => <span data-testid="icon-loader">Loading</span>,

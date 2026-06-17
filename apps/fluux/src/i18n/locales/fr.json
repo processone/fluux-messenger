@@ -444,6 +444,7 @@
         "attachment": "Pièce jointe",
         "removeAttachment": "Supprimer la pièce jointe",
         "reply": "Répondre",
+        "copyMessage": "Copier le texte",
         "replyQuoteHiddenEncrypted": "Citation masquée: le message d'origine était chiffré",
         "forwardMessage": "Transférer le message (bientôt disponible)",
         "moreReactions": "Plus de réactions",

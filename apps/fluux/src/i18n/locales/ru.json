@@ -443,6 +443,7 @@
         "attachment": "Вложение",
         "removeAttachment": "Удалить вложение",
         "reply": "Ответить",
+        "copyMessage": "Копировать текст",
         "replyQuoteHiddenEncrypted": "Цитата скрыта: оригинал был зашифрован",
         "forwardMessage": "Переслать сообщение (скоро)",
         "moreReactions": "Другие реакции",

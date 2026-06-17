@@ -443,6 +443,7 @@
         "attachment": "Прикачен файл",
         "removeAttachment": "Премахни прикачен файл",
         "reply": "Отговор",
+        "copyMessage": "Копиране на текста",
         "replyQuoteHiddenEncrypted": "Цитатът е скрит: оригиналът беше шифрован",
         "forwardMessage": "Препрати съобщение (очаквайте скоро)",
         "moreReactions": "Още реакции",

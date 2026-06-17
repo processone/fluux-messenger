@@ -445,6 +445,7 @@
         "attachment": "Adjunt",
         "removeAttachment": "Elimina l'adjunt",
         "reply": "Respon",
+        "copyMessage": "Copia el text",
         "replyQuoteHiddenEncrypted": "Cita amagada: l'original estava xifrat",
         "forwardMessage": "Reenvia el missatge (properament)",
         "moreReactions": "Més reaccions",

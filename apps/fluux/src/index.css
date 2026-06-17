@@ -443,6 +443,21 @@ html, body {
   padding-bottom: calc(1rem + env(safe-area-inset-bottom));
 }
 
+/* Utility: guarantee a comfortable >=44px touch hit area for icon-only or */
+/* compact buttons WITHOUT enlarging the glyph or changing desktop density. */
+/* The rule is inert on hovering/fine-pointer devices (mouse): only on touch */
+/* (coarse pointer / no hover) does the minimum box grow and the icon centre. */
+/* Apply to small icon buttons (modal close, header actions, menu rows, etc.). */
+@media (hover: none), (pointer: coarse) {
+  .tap-target {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 2.75rem;
+    min-height: 2.75rem;
+  }
+}
+
 /* Allow native rubber band effect within scrollable elements (macOS) */
 /* Using 'auto' enables the visual bounce, while 'none' on html/body prevents whole-page bounce */
 /* -webkit-overflow-scrolling: touch enables momentum/bounce scrolling in WebKit */

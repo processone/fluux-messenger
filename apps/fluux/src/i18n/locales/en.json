@@ -443,6 +443,7 @@
         "attachment": "Attachment",
         "removeAttachment": "Remove attachment",
         "reply": "Reply",
+        "copyMessage": "Copy text",
         "replyQuoteHiddenEncrypted": "Quote hidden: the original was encrypted",
         "forwardMessage": "Forward message (coming soon)",
         "moreReactions": "More reactions",

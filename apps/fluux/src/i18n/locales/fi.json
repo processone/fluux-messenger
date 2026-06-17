@@ -443,6 +443,7 @@
         "attachment": "Liite",
         "removeAttachment": "Poista liite",
         "reply": "Vastaa",
+        "copyMessage": "Kopioi teksti",
         "replyQuoteHiddenEncrypted": "Lainaus piilotettu: alkuperäinen oli salattu",
         "forwardMessage": "Välitä viesti (tulossa pian)",
         "moreReactions": "Lisää reaktioita",

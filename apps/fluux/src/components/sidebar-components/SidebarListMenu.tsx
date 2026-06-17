@@ -217,16 +217,18 @@ interface MenuButtonProps {
   icon: ReactNode
   label: string
   variant?: 'default' | 'danger'
+  /** Extra classes appended to the row, e.g. `py-3` for a comfortable touch target. */
+  className?: string
 }
 
-export function MenuButton({ onClick, icon, label, variant = 'default' }: MenuButtonProps) {
+export function MenuButton({ onClick, icon, label, variant = 'default', className = '' }: MenuButtonProps) {
   const baseClasses = 'w-full px-3 py-2 flex items-center gap-3 text-start transition-colors'
   const variantClasses = variant === 'danger'
     ? 'text-fluux-red hover:bg-fluux-red hover:text-white'
     : 'text-fluux-text hover:bg-fluux-brand hover:text-fluux-text-on-accent'
 
   return (
-    <button onClick={onClick} className={`${baseClasses} ${variantClasses}`}>
+    <button onClick={onClick} className={`${baseClasses} ${variantClasses} ${className}`}>
       {icon}
       <span>{label}</span>
     </button>
