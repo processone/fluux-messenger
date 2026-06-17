@@ -59,7 +59,7 @@ use sequoia_openpgp::{
     packet::{key, Key, Packet},
     parse::Parse,
     serialize::SerializeInto,
-    types::{AEADAlgorithm, SymmetricAlgorithm},
+    types::{AEADAlgorithm, HashAlgorithm, SymmetricAlgorithm},
 };
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -104,6 +104,12 @@ pub struct KeyStorage {
     /// passphrase file. Intended for unit tests: unit tests on macOS would
     /// otherwise pop a keychain authorization dialog.
     use_keychain: bool,
+    /// Argon2id cost override for the v6 at-rest KDF. `None` (production)
+    /// uses the RFC 9106 §4 second-option policy with a serial fallback;
+    /// `Some(_)` forces exactly those parameters. Set only by the test
+    /// constructors, which choose deliberately cheap costs so the suite
+    /// isn't dominated by a memory-hard KDF unrelated to what's under test.
+    argon2_override: Option<Argon2Params>,
 }
 
 impl KeyStorage {
@@ -113,17 +119,34 @@ impl KeyStorage {
         Self {
             base_dir,
             use_keychain: true,
+            argon2_override: None,
         }
     }
 
     /// Test-only constructor that skips the keychain (CI would otherwise
     /// fail on machines without a configured keychain, and developer
-    /// machines would pop up a macOS authorization dialog).
+    /// machines would pop up a macOS authorization dialog). Also forces the
+    /// cheap Argon2 cost so the ~200 crypto unit tests aren't dominated by a
+    /// memory-hard KDF; production cost is covered by the two tests that use
+    /// [`for_testing_production_kdf`].
     #[cfg(test)]
     pub fn for_testing(base_dir: PathBuf) -> Self {
         Self {
             base_dir,
             use_keychain: false,
+            argon2_override: Some(Argon2Params::CHEAP_FOR_TESTS),
+        }
+    }
+
+    /// Test-only constructor with the **production** Argon2 cost (no cheap
+    /// override) but still keychain-free. Used only by the tests that assert
+    /// the real RFC 9106 §4 parameters reach disk.
+    #[cfg(test)]
+    pub fn for_testing_production_kdf(base_dir: PathBuf) -> Self {
+        Self {
+            base_dir,
+            use_keychain: false,
+            argon2_override: None,
         }
     }
 
@@ -168,7 +191,7 @@ impl KeyStorage {
         let passphrase = random_passphrase()?;
         let backing = self.write_passphrase(jid, &passphrase)?;
         let password = Password::from(passphrase);
-        let encrypted = encrypt_cert_secrets(cert.clone(), &password)?;
+        let encrypted = encrypt_cert_secrets(cert.clone(), &password, self.argon2_override)?;
         let armored = encrypted
             .as_tsk()
             .armored()
@@ -367,6 +390,14 @@ impl Argon2Params {
     /// Serial fallback: if `p > 1` isn't accepted by the runtime, drop
     /// to `p = 1` and bump `t` so the defender does comparable work.
     pub const SERIAL_FALLBACK: Argon2Params = Argon2Params { t: 4, p: 1, m: 16 };
+
+    /// Deliberately minimal cost for unit tests only: `m = 2^10 KiB = 1 MiB`,
+    /// `t = 1`, `p = 1`. Still exercises the full Argon2id S2K + AES-256-OCB
+    /// wrap/unwrap round-trip, but ~200× cheaper than the production cost, so
+    /// the OpenPGP suite isn't bottlenecked on a memory-hard KDF. Never used
+    /// outside `#[cfg(test)]`.
+    #[cfg(test)]
+    pub const CHEAP_FOR_TESTS: Argon2Params = Argon2Params { t: 1, p: 1, m: 10 };
 }
 
 /// Records which Argon2 variant actually produced usable ciphertext the
@@ -422,15 +453,27 @@ fn make_argon2_s2k(params: Argon2Params) -> Result<S2K> {
 /// [`sequoia_openpgp::Profile::RFC9580`], but may still be loaded once
 /// from a pre-v6 install — fall back to the default Iterated+Salted S2K
 /// + CFB path. Argon2 S2K is not valid on v4 keys.
-fn encrypt_cert_secrets(cert: Cert, password: &Password) -> Result<Cert> {
+fn encrypt_cert_secrets(
+    cert: Cert,
+    password: &Password,
+    override_params: Option<Argon2Params>,
+) -> Result<Cert> {
     let mut packets: Vec<Packet> = Vec::new();
     for packet in cert.into_tsk().into_packets() {
         match packet {
             Packet::SecretKey(key) => {
-                packets.push(Packet::SecretKey(encrypt_key_secret(key, password)?));
+                packets.push(Packet::SecretKey(encrypt_key_secret(
+                    key,
+                    password,
+                    override_params,
+                )?));
             }
             Packet::SecretSubkey(key) => {
-                packets.push(Packet::SecretSubkey(encrypt_key_secret(key, password)?));
+                packets.push(Packet::SecretSubkey(encrypt_key_secret(
+                    key,
+                    password,
+                    override_params,
+                )?));
             }
             other => packets.push(other),
         }
@@ -443,12 +486,20 @@ fn encrypt_cert_secrets(cert: Cert, password: &Password) -> Result<Cert> {
 fn encrypt_key_secret<R>(
     key: Key<key::SecretParts, R>,
     password: &Password,
+    override_params: Option<Argon2Params>,
 ) -> Result<Key<key::SecretParts, R>>
 where
     R: key::KeyRole,
 {
     if key.version() >= 6 {
-        encrypt_v6_with_argon2(key, password)
+        encrypt_v6_with_argon2(key, password, override_params)
+    } else if override_params.is_some() {
+        // Test override: v4 keys take the classic Iterated+Salted S2K branch,
+        // whose sequoia default is the maximum OpenPGP iteration count
+        // (~65 MiB of SHA-256), run per packet on every save and load.
+        // Substitute a minimal count so the suite isn't dominated by the
+        // at-rest KDF. Production v4 keeps the default below.
+        encrypt_v4_with_cheap_s2k(key, password)
     } else {
         // RFC 9580 §3.7 restricts Argon2 to v6. Keep classic S2K for any
         // lingering v4 key — we don't generate v4 keys any more, but a
@@ -456,6 +507,27 @@ where
         key.encrypt_secret(password)
             .context("encrypt v4 secret key with default S2K")
     }
+}
+
+/// Test-only fast path for v4 secret packets. Mirrors the classic CFB +
+/// Iterated S2K protection that sequoia's default `encrypt_secret` produces,
+/// but with the minimal iteration count (the default is the maximum the
+/// format allows). Only reached when a [`KeyStorage`] carries an Argon2
+/// override — i.e. from the test constructors.
+fn encrypt_v4_with_cheap_s2k<R>(
+    key: Key<key::SecretParts, R>,
+    password: &Password,
+) -> Result<Key<key::SecretParts, R>>
+where
+    R: key::KeyRole,
+{
+    let s2k = S2K::new_iterated(HashAlgorithm::SHA256, 1024).context("build cheap test S2K")?;
+    let (pub_key, mut secret) = key.take_secret();
+    secret
+        .encrypt_in_place_with(&pub_key, s2k, SymmetricAlgorithm::AES256, None, password)
+        .context("encrypt v4 secret with cheap test S2K")?;
+    let (out, _) = pub_key.add_secret(secret);
+    Ok(out)
 }
 
 /// Try to wrap a v6 secret packet with Argon2id+OCB under our primary
@@ -466,10 +538,19 @@ where
 fn encrypt_v6_with_argon2<R>(
     key: Key<key::SecretParts, R>,
     password: &Password,
+    override_params: Option<Argon2Params>,
 ) -> Result<Key<key::SecretParts, R>>
 where
     R: key::KeyRole,
 {
+    // Test-only override: wrap with exactly the supplied (cheap) parameters,
+    // bypassing the production primary→fallback selection and its
+    // process-global variant recording (only meaningful for the real KDF
+    // policy). Production callers pass `None`.
+    if let Some(params) = override_params {
+        return attempt_argon2_encrypt(key, password, params);
+    }
+
     let primary_err =
         match attempt_argon2_encrypt(key.clone(), password, Argon2Params::RFC9106_SECOND_OPTION) {
             Ok(out) => {
@@ -911,7 +992,7 @@ mod tests {
     #[test]
     fn persisted_tsk_uses_argon2id_with_rfc9106_second_option() {
         let dir = fresh_tmp_dir();
-        let storage = KeyStorage::for_testing(dir.clone());
+        let storage = KeyStorage::for_testing_production_kdf(dir.clone());
         let cert = generate_cert("alice@example.com");
         storage.save("alice@example.com", &cert).unwrap();
 
@@ -949,6 +1030,76 @@ mod tests {
                 SymmetricAlgorithm::AES256,
                 "symmetric cipher must be AES-256"
             );
+        }
+    }
+
+    /// The fast path that keeps the ~200 OpenPGP unit tests cheap:
+    /// `KeyStorage::for_testing()` must wrap secret packets with the
+    /// minimal Argon2 cost parameters, NOT the 64 MiB RFC 9106 production
+    /// cost. Without this, every save/load runs a memory-hard KDF that has
+    /// nothing to do with the behaviour under test, costing tens of seconds
+    /// per test. Production cost is asserted separately by
+    /// `persisted_tsk_uses_argon2id_with_rfc9106_second_option`.
+    #[test]
+    fn for_testing_storage_uses_cheap_argon2_params() {
+        let dir = fresh_tmp_dir();
+        let storage = KeyStorage::for_testing(dir.clone());
+        let cert = generate_cert("alice@example.com");
+        storage.save("alice@example.com", &cert).unwrap();
+
+        let tsk_path = dir
+            .join("openpgp")
+            .join(format!("{}.tsk.asc", sanitize_jid("alice@example.com")));
+        let parts = inspect_on_disk_s2k(&tsk_path);
+        assert!(
+            !parts.is_empty(),
+            "expected at least one encrypted secret packet"
+        );
+        for (s2k, _aead, _symm) in parts {
+            match s2k {
+                S2K::Argon2 { t, p, m, .. } => {
+                    assert_eq!(
+                        (t, p, m),
+                        (1, 1, 10),
+                        "for_testing must use cheap Argon2 (m=2^10 KiB = 1 MiB, t=1, p=1)"
+                    );
+                }
+                other => panic!("expected Argon2 S2K on v6 secret, got {other:?}"),
+            }
+        }
+    }
+
+    /// The same fast path for v4 keys: with `USE_V6_KEYS = false` the openpgp
+    /// tests generate v4 certs, which take the classic Iterated+Salted S2K
+    /// branch (not Argon2). Sequoia's default there is the *maximum* OpenPGP
+    /// iteration count (~65 MiB of SHA-256 per packet), so `for_testing` must
+    /// substitute a minimal count or the v4 save/load tests dominate the suite.
+    #[test]
+    fn for_testing_storage_uses_cheap_classic_s2k_for_v4() {
+        let dir = fresh_tmp_dir();
+        let storage = KeyStorage::for_testing(dir.clone());
+        let cert = generate_v4_cert("legacy@example.com");
+        storage.save("legacy@example.com", &cert).unwrap();
+
+        let tsk_path = dir
+            .join("openpgp")
+            .join(format!("{}.tsk.asc", sanitize_jid("legacy@example.com")));
+        let parts = inspect_on_disk_s2k(&tsk_path);
+        assert!(
+            !parts.is_empty(),
+            "expected at least one encrypted secret packet"
+        );
+        for (s2k, _aead, _symm) in parts {
+            match s2k {
+                S2K::Iterated { hash_bytes, .. } => {
+                    assert!(
+                        hash_bytes <= 100_000,
+                        "for_testing v4 must use a cheap Iterated S2K; got hash_bytes={hash_bytes} \
+                         (sequoia's default is 0x3e00000 = 65_011_712)"
+                    );
+                }
+                other => panic!("expected Iterated S2K on v4 secret, got {other:?}"),
+            }
         }
     }
 
@@ -1043,7 +1194,7 @@ mod tests {
     #[test]
     fn argon2_variant_records_primary_choice_after_first_encrypt() {
         let dir = fresh_tmp_dir();
-        let storage = KeyStorage::for_testing(dir);
+        let storage = KeyStorage::for_testing_production_kdf(dir);
         let cert = generate_cert("alice@example.com");
         storage.save("alice@example.com", &cert).unwrap();
 

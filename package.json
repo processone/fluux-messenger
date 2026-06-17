@@ -14,6 +14,7 @@
     "build:sdk": "npm run build -w @fluux/sdk",
     "build:app": "npm run build -w @xmpp/fluux",
     "test": "npm run test:run --workspaces --if-present",
+    "test:parallel": "node scripts/test-parallel.mjs",
     "test:coverage": "npm run test:coverage --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "lint": "npm run lint --workspaces --if-present",
