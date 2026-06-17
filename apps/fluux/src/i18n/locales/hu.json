@@ -575,7 +575,12 @@
             "acceptedWithoutVerifying": "Új kulcs elfogadva. A partner nincs ellenőrizve",
             "acceptFailed": "Nem sikerült elfogadni az új kulcsot. Próbálja újra"
         },
-        "offlinePlaceholder": "Offline. Az üzenetek újracsatlakozáskor lesznek elküldve"
+        "offlinePlaceholder": "Offline. Az üzenetek újracsatlakozáskor lesznek elküldve",
+        "loadImage": "Kép betöltése",
+        "loadVideo": "Videó betöltése",
+        "loadAudio": "Hang betöltése",
+        "loadFilePreview": "Előnézet betöltése",
+        "showLinkImage": "Kép megjelenítése"
     },
     "dates": {
         "today": "Ma",
@@ -591,7 +596,8 @@
             "updates": "Frissítések",
             "blocked": "Letiltott felhasználók",
             "storage": "Tárhely",
-            "encryption": "Titkosítás"
+            "encryption": "Titkosítás",
+            "privacy": "Adatvédelem"
         },
         "blocked": {
             "title": "Letiltott felhasználók",
@@ -836,7 +842,16 @@
             "unlockPassphraseTooShort": "A jelszónak legalább 8 karakterből kell állnia",
             "lockedBannerBody": "A titkosítási kulcs zárolva van. Add meg a jelszavad a titkosítás aktiválásához erre a munkamenetre.",
             "rotateNotSupportedWeb": "A kulcsrotáció nem elérhető weben. Használd az asztali alkalmazást."
-        }
+        },
+        "mediaAutoDownload": "Médiatartalmak automatikus letöltése",
+        "mediaAutoDownloadDescription": "Válassza meg, mikor töltődjön be automatikusan a kép, videó és a fájl.",
+        "mediaAutoDownloadAlways": "Mindig",
+        "mediaAutoDownloadAlwaysDescription": "Médiatartalmak automatikus betöltése minden beszélgetésben.",
+        "mediaAutoDownloadPrivateOnly": "Csak privát",
+        "mediaAutoDownloadPrivateOnlyDescription": "Automatikus betöltés közvetlen üzenetekben és privát szobákban. Nyilvános csatornákon érintse meg a betöltéshez.",
+        "mediaAutoDownloadNever": "Soha",
+        "mediaAutoDownloadNeverDescription": "Soha ne töltődjön be médiatartalom automatikusan. Érintse meg a betöltéshez bármelyik beszélgetésben.",
+        "mediaAutoDownloadStrangerNote": "A névjegyei közt nem szereplő személyek médiái mindig érintést igényelnek a betöltéshez, függetlenül attól, mit választ itt."
     },
     "update": {
         "title": "Frissítés elérhető",

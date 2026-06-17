@@ -577,7 +577,12 @@
             "acceptedWithoutVerifying": "Neuer Schlüssel akzeptiert. Kontakt ist nicht verifiziert",
             "acceptFailed": "Der neue Schlüssel konnte nicht akzeptiert werden. Versuche es erneut"
         },
-        "offlinePlaceholder": "Offline. Nachrichten werden bei erneuter Verbindung gesendet"
+        "offlinePlaceholder": "Offline. Nachrichten werden bei erneuter Verbindung gesendet",
+        "loadImage": "Bild laden",
+        "loadVideo": "Video laden",
+        "loadAudio": "Audio laden",
+        "loadFilePreview": "Vorschau laden",
+        "showLinkImage": "Bild anzeigen"
     },
     "dates": {
         "today": "Heute",
@@ -593,7 +598,8 @@
             "updates": "Aktualisierungen",
             "blocked": "Blockierte Benutzer",
             "storage": "Speicher",
-            "encryption": "Verschlüsselung"
+            "encryption": "Verschlüsselung",
+            "privacy": "Datenschutz"
         },
         "blocked": {
             "title": "Blockierte Benutzer",
@@ -838,7 +844,16 @@
             "unlockPassphraseTooShort": "Die Passphrase muss mindestens 8 Zeichen lang sein",
             "lockedBannerBody": "Dein Verschlüsselungsschlüssel ist gesperrt. Gib deine Passphrase ein, um die Verschlüsselung für diese Sitzung zu aktivieren.",
             "rotateNotSupportedWeb": "Schlüsselrotation ist im Web nicht verfügbar. Verwende die Desktop-App."
-        }
+        },
+        "mediaAutoDownload": "Medien automatisch herunterladen",
+        "mediaAutoDownloadDescription": "Legen Sie fest, wann Bilder, Videos und Dateien automatisch geladen werden.",
+        "mediaAutoDownloadAlways": "Immer",
+        "mediaAutoDownloadAlwaysDescription": "Medien in jeder Unterhaltung automatisch laden.",
+        "mediaAutoDownloadPrivateOnly": "Nur privat",
+        "mediaAutoDownloadPrivateOnlyDescription": "In Direktnachrichten und privaten Räumen automatisch laden. In öffentlichen Kanälen zum Laden tippen.",
+        "mediaAutoDownloadNever": "Nie",
+        "mediaAutoDownloadNeverDescription": "Medien niemals automatisch laden. Zum Laden in einer beliebigen Unterhaltung tippen.",
+        "mediaAutoDownloadStrangerNote": "Medien von Personen, die nicht in Ihren Kontakten sind, erfordern immer einen Tipp zum Laden, unabhängig von Ihrer Auswahl hier."
     },
     "update": {
         "title": "Update verfügbar",

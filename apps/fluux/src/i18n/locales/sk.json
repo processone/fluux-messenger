@@ -576,7 +576,12 @@
             "acceptedWithoutVerifying": "Nový kľúč prijatý. Kontakt nie je overený",
             "acceptFailed": "Nepodarilo sa prijať nový kľúč. Skúste znova"
         },
-        "offlinePlaceholder": "Offline. Správy sa odošlú po opätovnom pripojení"
+        "offlinePlaceholder": "Offline. Správy sa odošlú po opätovnom pripojení",
+        "loadImage": "Načítať obrázok",
+        "loadVideo": "Načítať video",
+        "loadAudio": "Načítať zvuk",
+        "loadFilePreview": "Načítať náhľad",
+        "showLinkImage": "Zobraziť obrázok"
     },
     "dates": {
         "today": "Dnes",
@@ -592,7 +597,8 @@
             "updates": "Aktualizácie",
             "blocked": "Blokovaní používatelia",
             "storage": "Úložisko",
-            "encryption": "Šifrovanie"
+            "encryption": "Šifrovanie",
+            "privacy": "Súkromie"
         },
         "blocked": {
             "title": "Blokovaní používatelia",
@@ -837,7 +843,16 @@
             "unlockPassphraseTooShort": "Heslo musí mať aspoň 8 znakov",
             "lockedBannerBody": "Šifrovací kľúč je uzamknutý. Zadaj heslo na aktiváciu šifrovania pre toto sedenie.",
             "rotateNotSupportedWeb": "Rotácia kľúča nie je na webe k dispozícii. Použi desktopovú aplikáciu."
-        }
+        },
+        "mediaAutoDownload": "Automatické sťahovanie médií",
+        "mediaAutoDownloadDescription": "Vyberte, kedy sa obrázky, videá a súbory načítavajú automaticky.",
+        "mediaAutoDownloadAlways": "Vždy",
+        "mediaAutoDownloadAlwaysDescription": "Načítavať médiá automaticky v každom rozhovore.",
+        "mediaAutoDownloadPrivateOnly": "Len súkromné",
+        "mediaAutoDownloadPrivateOnlyDescription": "Načítavať automaticky v priamych správach a súkromných miestnostiach. V verejných kanáloch klepnite pre načítanie.",
+        "mediaAutoDownloadNever": "Nikdy",
+        "mediaAutoDownloadNeverDescription": "Nikdy nenačítavať médiá automaticky. Klepnite pre načítanie v akomkoľvek rozhovore.",
+        "mediaAutoDownloadStrangerNote": "Médiá od ľudí, ktorí nie sú vo vašich kontaktoch, vždy vyžadujú klepnutie na načítanie, bez ohľadu na vaše nastavenie."
     },
     "update": {
         "title": "Dostupná aktualizácia",

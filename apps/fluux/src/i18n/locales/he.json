@@ -575,7 +575,12 @@
             "acceptedWithoutVerifying": "המפתח החדש התקבל. העמית לא אומת",
             "acceptFailed": "לא ניתן לקבל את המפתח החדש. נסה שוב"
         },
-        "offlinePlaceholder": "לא מקוון. הודעות יישלחו עם החיבור מחדש"
+        "offlinePlaceholder": "לא מקוון. הודעות יישלחו עם החיבור מחדש",
+        "loadImage": "טען תמונה",
+        "loadVideo": "טען סרטון",
+        "loadAudio": "טען שמע",
+        "loadFilePreview": "טען תצוגה מקדימה",
+        "showLinkImage": "הצג תמונה"
     },
     "dates": {
         "today": "היום",
@@ -591,7 +596,8 @@
             "updates": "עדכונים",
             "blocked": "משתמשים חסומים",
             "storage": "אחסון",
-            "encryption": "הצפנה"
+            "encryption": "הצפנה",
+            "privacy": "פרטיות"
         },
         "blocked": {
             "title": "משתמשים חסומים",
@@ -836,7 +842,16 @@
             "unlockPassphraseTooShort": "ביטוי הסיסמה חייב להכיל לפחות 8 תווים",
             "lockedBannerBody": "מפתח ההצפנה שלך נעול. הזן את ביטוי הסיסמה כדי לאפשר הצפנה לסשן זה.",
             "rotateNotSupportedWeb": "סיבוב מפתחות אינו זמין באינטרנט. השתמש ביישום שולחן העבודה."
-        }
+        },
+        "mediaAutoDownload": "הורדה אוטומטית של מדיה",
+        "mediaAutoDownloadDescription": "בחר מתי תמונות, סרטונים וקבצים נטענים אוטומטית.",
+        "mediaAutoDownloadAlways": "תמיד",
+        "mediaAutoDownloadAlwaysDescription": "טעינת מדיה אוטומטית בכל שיחה.",
+        "mediaAutoDownloadPrivateOnly": "פרטי בלבד",
+        "mediaAutoDownloadPrivateOnlyDescription": "טעינה אוטומטית בהודעות ישירות ובחדרים פרטיים. בערוצים ציבוריים, הקש לטעינה.",
+        "mediaAutoDownloadNever": "לעולם לא",
+        "mediaAutoDownloadNeverDescription": "לעולם אל תטען מדיה אוטומטית. הקש לטעינה בכל שיחה.",
+        "mediaAutoDownloadStrangerNote": "מדיה מאנשים שאינם באנשי הקשר שלך תמיד מצריכה הקשה לטעינה, ללא קשר למה שתבחר כאן."
     },
     "update": {
         "title": "עדכון זמין",

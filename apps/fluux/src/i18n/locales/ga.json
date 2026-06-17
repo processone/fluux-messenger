@@ -575,7 +575,12 @@
             "acceptedWithoutVerifying": "Glacadh leis an eochair nua. Níl an piara fíoraithe",
             "acceptFailed": "Níorbh fhéidir glacadh leis an eochair nua. Bain triail eile as"
         },
-        "offlinePlaceholder": "As líne. Seolfar teachtaireachtaí nuair a athnascfar"
+        "offlinePlaceholder": "As líne. Seolfar teachtaireachtaí nuair a athnascfar",
+        "loadImage": "Luchtaigh íomhá",
+        "loadVideo": "Luchtaigh físeán",
+        "loadAudio": "Luchtaigh fuaim",
+        "loadFilePreview": "Luchtaigh réamhamharc",
+        "showLinkImage": "Taispeáin íomhá"
     },
     "dates": {
         "today": "Inniu",
@@ -591,7 +596,8 @@
             "updates": "Nuashonruithe",
             "blocked": "Úsáideoirí Coiscthe",
             "storage": "Stóráil",
-            "encryption": "Criptiúchán"
+            "encryption": "Criptiúchán",
+            "privacy": "Príobháideacht"
         },
         "blocked": {
             "title": "Úsáideoirí Coiscthe",
@@ -836,7 +842,16 @@
             "unlockPassphraseTooShort": "Caithfidh an pasfhrása a bheith ar a laghad 8 gcarachtar",
             "lockedBannerBody": "Tá d'eochair criptiúcháin glasáilte. Cuir isteach do phasfhrása chun criptiú a chumasú don seisiún seo.",
             "rotateNotSupportedWeb": "Níl rothlú eochrach ar fáil ar an ngréasán. Úsáid an aip deisce."
-        }
+        },
+        "mediaAutoDownload": "Íoslódáil uathoibríoch meán",
+        "mediaAutoDownloadDescription": "Roghnaigh cathain a luchtaítear íomhánna, físeáin agus comhaid go huathoibríoch.",
+        "mediaAutoDownloadAlways": "I gcónaí",
+        "mediaAutoDownloadAlwaysDescription": "Luchtaigh meán go huathoibríoch i ngach comhrá.",
+        "mediaAutoDownloadPrivateOnly": "Príobháideach amháin",
+        "mediaAutoDownloadPrivateOnlyDescription": "Luchtaigh go huathoibríoch i dteachtaireachtaí díreacha agus seomraí príobháideacha. I gcainéil phoiblí, buail chun luchtú.",
+        "mediaAutoDownloadNever": "Riamh",
+        "mediaAutoDownloadNeverDescription": "Ná luchtaigh meán go huathoibríoch choíche. Buail chun luchtú in aon chomhrá.",
+        "mediaAutoDownloadStrangerNote": "Meán ó dhaoine nach bhfuil i do chonarthaí éilíonn buille i gcónaí chun luchtú, cibé rud a roghnaíonn tú anseo."
     },
     "update": {
         "title": "Nuashonrú ar Fáil",

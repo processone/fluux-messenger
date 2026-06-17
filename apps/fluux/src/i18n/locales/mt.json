@@ -577,7 +577,12 @@
             "acceptedWithoutVerifying": "Iċ-ċavetta l-ġdida ġiet aċċettata. Il-parti l-oħra mhix ivverifikata",
             "acceptFailed": "Ma stajtx taċċetta ċ-ċavetta l-ġdida. Erġa' pprova"
         },
-        "offlinePlaceholder": "Offline. Il-messaġġi jintbagħtu meta terġa' tikkonnettja"
+        "offlinePlaceholder": "Offline. Il-messaġġi jintbagħtu meta terġa' tikkonnettja",
+        "loadImage": "Itgħabba l-immaġni",
+        "loadVideo": "Itgħabba l-vidjo",
+        "loadAudio": "Itgħabba l-awdjo",
+        "loadFilePreview": "Itgħabba l-anteprima",
+        "showLinkImage": "Uri l-immaġni"
     },
     "dates": {
         "today": "Illum",
@@ -593,7 +598,8 @@
             "updates": "Aġġornamenti",
             "blocked": "Utenti Imblokkati",
             "storage": "Ħażna",
-            "encryption": "Kriptaġġ"
+            "encryption": "Kriptaġġ",
+            "privacy": "Privatezza"
         },
         "blocked": {
             "title": "Utenti Imblokkati",
@@ -838,7 +844,16 @@
             "unlockPassphraseTooShort": "Il-passphrase għandu jkollu mill-inqas 8 karattri",
             "lockedBannerBody": "Iċ-ċavetta tal-kriptaġġ tiegħek hija msakkar. Daħħal il-passphrase biex tattiva l-kriptaġġ għal din is-sessjoni.",
             "rotateNotSupportedWeb": "Ir-rotazzjoni taċ-ċavetta mhix disponibbli fuq il-web. Uża l-applikazzjoni tal-desktop."
-        }
+        },
+        "mediaAutoDownload": "Tniżżil awtomatiku tal-midja",
+        "mediaAutoDownloadDescription": "Agħżel meta l-immagini, il-vidjows u l-fajls jitgħabbew awtomatikament.",
+        "mediaAutoDownloadAlways": "Dejjem",
+        "mediaAutoDownloadAlwaysDescription": "Itgħabba l-midja awtomatikament f'kull konversazzjoni.",
+        "mediaAutoDownloadPrivateOnly": "Privat biss",
+        "mediaAutoDownloadPrivateOnlyDescription": "Itgħabba awtomatikament fil-messaġġi diretti u l-kmamar privati. Fil-kanali pubbliċi, agħfas biex tgħabba.",
+        "mediaAutoDownloadNever": "Qatt",
+        "mediaAutoDownloadNeverDescription": "Qatt titgħabba l-midja awtomatikament. Agħfas biex tgħabba f'kull konversazzjoni.",
+        "mediaAutoDownloadStrangerNote": "Il-midja minn persuni li mhumiex fil-kuntatti tiegħek dejjem teħtieġ taps biex titgħabba, irrispettivament minn dak li tagħżel hawn."
     },
     "update": {
         "title": "Aġġornament Disponibbli",

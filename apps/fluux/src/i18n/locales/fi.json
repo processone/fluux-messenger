@@ -575,7 +575,12 @@
             "acceptedWithoutVerifying": "Uusi avain hyväksytty. Vertaista ei ole vahvistettu",
             "acceptFailed": "Uuden avaimen hyväksyminen epäonnistui. Yritä uudelleen"
         },
-        "offlinePlaceholder": "Offline-tilassa. Viestit lähetetään, kun yhteys palautuu"
+        "offlinePlaceholder": "Offline-tilassa. Viestit lähetetään, kun yhteys palautuu",
+        "loadImage": "Lataa kuva",
+        "loadVideo": "Lataa video",
+        "loadAudio": "Lataa ääni",
+        "loadFilePreview": "Lataa esikatselu",
+        "showLinkImage": "Näytä kuva"
     },
     "dates": {
         "today": "Tänään",
@@ -591,7 +596,8 @@
             "updates": "Päivitykset",
             "blocked": "Estetyt käyttäjät",
             "storage": "Tallennustila",
-            "encryption": "Salaus"
+            "encryption": "Salaus",
+            "privacy": "Yksityisyys"
         },
         "blocked": {
             "title": "Estetyt käyttäjät",
@@ -836,7 +842,16 @@
             "unlockPassphraseTooShort": "Salasanassa on oltava vähintään 8 merkkiä",
             "lockedBannerBody": "Salausavaimesi on lukittu. Syötä salasana ottaaksesi salauksen käyttöön tässä istunnossa.",
             "rotateNotSupportedWeb": "Avaimen kierto ei ole käytettävissä verkossa. Käytä työpöytäsovellusta."
-        }
+        },
+        "mediaAutoDownload": "Median automaattinen lataus",
+        "mediaAutoDownloadDescription": "Valitse, milloin kuvat, videot ja tiedostot ladataan automaattisesti.",
+        "mediaAutoDownloadAlways": "Aina",
+        "mediaAutoDownloadAlwaysDescription": "Lataa media automaattisesti kaikissa keskusteluissa.",
+        "mediaAutoDownloadPrivateOnly": "Vain yksityiset",
+        "mediaAutoDownloadPrivateOnlyDescription": "Lataa automaattisesti suoraviesteissä ja yksityisissä huoneissa. Julkisissa kanavissa, napauta ladataksesi.",
+        "mediaAutoDownloadNever": "Ei koskaan",
+        "mediaAutoDownloadNeverDescription": "Älä koskaan lataa mediaa automaattisesti. Napauta ladataksesi missä tahansa keskustelussa.",
+        "mediaAutoDownloadStrangerNote": "Henkilöiltä, jotka eivät ole yhteystiedoissasi, peräisin oleva media vaatii aina napautuksen lataamiseen, riippumatta tästä valinnasta."
     },
     "update": {
         "title": "Päivitys saatavilla",

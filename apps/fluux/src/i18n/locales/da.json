@@ -575,7 +575,12 @@
             "acceptedWithoutVerifying": "Ny nøgle accepteret. Kontakten er ikke verificeret",
             "acceptFailed": "Kunne ikke acceptere den nye nøgle. Prøv igen"
         },
-        "offlinePlaceholder": "Offline. Beskeder sendes, når forbindelsen er genoprettet"
+        "offlinePlaceholder": "Offline. Beskeder sendes, når forbindelsen er genoprettet",
+        "loadImage": "Indlæs billede",
+        "loadVideo": "Indlæs video",
+        "loadAudio": "Indlæs lyd",
+        "loadFilePreview": "Indlæs forhåndsvisning",
+        "showLinkImage": "Vis billede"
     },
     "dates": {
         "today": "I dag",
@@ -591,7 +596,8 @@
             "updates": "Opdateringer",
             "blocked": "Blokerede brugere",
             "storage": "Lagring",
-            "encryption": "Kryptering"
+            "encryption": "Kryptering",
+            "privacy": "Privatliv"
         },
         "blocked": {
             "title": "Blokerede brugere",
@@ -836,7 +842,16 @@
             "unlockPassphraseTooShort": "Adgangskoden skal være mindst 8 tegn",
             "lockedBannerBody": "Din krypteringsnøgle er låst. Indtast din adgangskode for at aktivere kryptering for denne session.",
             "rotateNotSupportedWeb": "Nøglerotation er ikke tilgængelig på webbet. Brug desktopappen."
-        }
+        },
+        "mediaAutoDownload": "Automatisk download af medier",
+        "mediaAutoDownloadDescription": "Vælg hvornår billeder, videoer og filer indlæses automatisk.",
+        "mediaAutoDownloadAlways": "Altid",
+        "mediaAutoDownloadAlwaysDescription": "Indlæs medier automatisk i alle samtaler.",
+        "mediaAutoDownloadPrivateOnly": "Kun privat",
+        "mediaAutoDownloadPrivateOnlyDescription": "Indlæs automatisk i direkte beskeder og private rum. I offentlige kanaler, tryk for at indlæse.",
+        "mediaAutoDownloadNever": "Aldrig",
+        "mediaAutoDownloadNeverDescription": "Indlæs aldrig medier automatisk. Tryk for at indlæse i enhver samtale.",
+        "mediaAutoDownloadStrangerNote": "Medier fra personer, der ikke er i dine kontakter, kræver altid et tryk for at indlæse, uanset hvad du vælger her."
     },
     "update": {
         "title": "Opdatering tilgængelig",
