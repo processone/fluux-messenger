@@ -12,7 +12,9 @@ export default defineConfig({
   },
   test: {
     globals: true,
-    environment: 'jsdom',
+    // Default DOM environment. happy-dom is ~2x faster to construct than jsdom; tests that
+    // need jsdom-specific behavior opt back in per-file with `// @vitest-environment jsdom`.
+    environment: 'happy-dom',
     silent: true,
     setupFiles: ['./src/test-setup.ts'],
     include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],

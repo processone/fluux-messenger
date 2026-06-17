@@ -1,3 +1,10 @@
+/**
+ * @vitest-environment jsdom
+ *
+ * Pinned to jsdom: this file checks inline color/gradient styles whose serialization
+ * differs between DOM environments (jsdom normalizes #hex to rgb(); happy-dom, the
+ * default env, keeps the literal). These assertions/snapshots only hold under jsdom.
+ */
 import React from 'react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
