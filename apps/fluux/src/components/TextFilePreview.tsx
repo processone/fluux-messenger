@@ -33,6 +33,7 @@ export function TextFilePreview({ attachment, isSelected = false, isHovered = fa
         variant="card"
         icon={FileText}
         label={t('chat.loadFilePreview')}
+        name={attachment.name}
         sizeLabel={attachment.size ? formatBytes(attachment.size) : undefined}
         onLoad={approve}
       />
