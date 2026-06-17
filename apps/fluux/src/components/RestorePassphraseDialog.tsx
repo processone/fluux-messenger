@@ -50,10 +50,12 @@ interface RestorePassphraseDialogProps {
    */
   isBackupCode?: boolean
   /**
-   * 'import' = entering a FOREIGN key's passphrase (GnuPG / OpenKeychain).
-   * Forces a free-text field with a reveal toggle, disables password-manager
-   * autofill, and trims the value. 'restore' (default) is the server-restore
-   * flow whose passphrase is the user's own saved Fluux backup code.
+   * 'import' = entering a FOREIGN key's passphrase (GnuPG / OpenKeychain): adds
+   * a reveal toggle, disables password-manager autofill, and trims the value.
+   * It does NOT pick the field type — the masked backup-code vs free-text choice
+   * is governed solely by `isBackupCode` (import sites derive it from the file's
+   * Passphrase-Format header). 'restore' (default) is the server-restore flow
+   * whose passphrase is the user's own saved Fluux backup code.
    */
   mode?: 'restore' | 'import'
 }

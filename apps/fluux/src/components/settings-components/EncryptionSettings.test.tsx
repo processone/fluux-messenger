@@ -245,8 +245,8 @@ describe('EncryptionSettings PEP support', () => {
       // The Passphrase-Format header drives the masked dashed input, not free text.
       await waitFor(() => {
         expect(document.querySelector('input[name="backup-code"]')).not.toBeNull()
+        expect(document.querySelector('input[name="passphrase"]')).toBeNull()
       })
-      expect(document.querySelector('input[name="passphrase"]')).toBeNull()
     })
   })
 })
