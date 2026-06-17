@@ -29,7 +29,7 @@ export function withPassphraseFormatHeader(
   armored: string,
   format: PassphraseFormat = currentPassphraseFormat(),
 ): string {
-  if (armored.includes(`${HEADER_KEY}:`)) return armored
+  if (new RegExp(`^${HEADER_KEY}:`, 'm').test(armored)) return armored
   const idx = armored.indexOf(MESSAGE_HEADER)
   if (idx === -1) return armored
   const insertAt = idx + MESSAGE_HEADER.length
