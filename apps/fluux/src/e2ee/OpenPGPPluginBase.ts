@@ -124,6 +124,7 @@ import {
 import { usePinnedPrimaryFingerprintsStore } from '@/stores/pinnedPrimaryFingerprintsStore'
 import { useKeyChangeAlertsStore } from '@/stores/keyChangeAlertsStore'
 import { setTrustStateStatus } from '@/stores/trustStateStatusStore'
+import { withPassphraseFormatHeader } from './passphraseFormatHeader'
 
 // ---------------------------------------------------------------------------
 // XEP-0373 constants
@@ -453,6 +454,18 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
    * {@link deleteIdentity} after recording the intent in the base class.
    */
   protected abstract forgetAccount(accountJid: string): Promise<void>
+
+  /**
+   * Build the armored backup MESSAGE for a file export: the XEP-0373 §5 SKESK
+   * wrap plus a `Passphrase-Format` armor header describing the passphrase
+   * family. Shared by both platforms' {@link exportKeyToFile}. NOT used for the
+   * PEP/server backup, which must stay header-free.
+   */
+  protected async buildExportArmor(passphrase: string): Promise<string> {
+    const ctx = this.requireCtx()
+    const armored = await this.backupEncrypt(ctx.account.jid, passphrase)
+    return withPassphraseFormatHeader(armored)
+  }
 
   /**
    * Export the key to a user-chosen file. Platform-specific: Tauri uses a

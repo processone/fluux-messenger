@@ -193,7 +193,7 @@ export class SequoiaPgpPlugin extends OpenPGPPluginBase {
     }
     let armoredMessage: string
     try {
-      armoredMessage = await this.backupEncrypt(ctx.account.jid, passphrase)
+      armoredMessage = await this.buildExportArmor(passphrase)
     } catch (err) {
       throw this.toPluginError('exportKeyToFile', err)
     }

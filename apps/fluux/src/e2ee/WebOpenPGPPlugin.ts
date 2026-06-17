@@ -573,7 +573,7 @@ export class WebOpenPGPPlugin extends OpenPGPPluginBase {
         'WebOpenPGPPlugin: no identity to export',
       )
     }
-    const armoredMessage = await this.backupEncrypt(ctx.account.jid, passphrase)
+    const armoredMessage = await this.buildExportArmor(passphrase)
     triggerBrowserDownload(armoredMessage, keyExportFilename('openpgp-backup', ctx.account.jid))
     return true
   }
