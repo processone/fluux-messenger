@@ -947,10 +947,11 @@ describe('WebOpenPGPPlugin', () => {
         bundles[0].fingerprint,
       )
 
-      // Fingerprint preserved (trust pinning) and the xmpp: UID is now present.
+      // Fingerprint preserved (trust pinning); canonicalized to xmpp:-only,
+      // so the foreign name/email UID is dropped.
       expect(installed.fingerprint).toBe(fp)
       const info = await dest.callValidateCert(installed.publicArmored)
-      expect(info.userIds).toContain('xmpp:zoidberg@example.com')
+      expect(info.userIds).toEqual(['xmpp:zoidberg@example.com'])
     })
 
     it('leaves a key that already has the xmpp: UID unchanged', async () => {

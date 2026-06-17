@@ -943,37 +943,49 @@ const USE_V6_KEYS: bool = false;
 /// left intact, so trust pinning still holds. No-op when the UID is present.
 fn ensure_account_user_id(cert: Cert, account_jid: &str) -> Result<Cert> {
     let expected = format!("xmpp:{account_jid}");
-    let already = cert.userids().any(|ua| {
+    let has_xmpp = cert.userids().any(|ua| {
         std::str::from_utf8(ua.userid().value())
             .map(|s| s.eq_ignore_ascii_case(&expected))
             .unwrap_or(false)
     });
-    if already {
-        return Ok(cert);
-    }
 
-    let primary_secret = cert
-        .primary_key()
-        .key()
-        .clone()
-        .parts_into_secret()
-        .context("imported key has no secret material, cannot self-sign user ID")?;
-    let mut primary_signer = primary_secret
-        .into_keypair()
-        .context("unlock primary key for user-id binding")?;
+    // Self-sign the xmpp: UID when it is missing.
+    let cert = if has_xmpp {
+        cert
+    } else {
+        let primary_secret = cert
+            .primary_key()
+            .key()
+            .clone()
+            .parts_into_secret()
+            .context("imported key has no secret material, cannot self-sign user ID")?;
+        let mut primary_signer = primary_secret
+            .into_keypair()
+            .context("unlock primary key for user-id binding")?;
+        let uid = UserID::from(expected.clone());
+        let binding = uid
+            .bind(
+                &mut primary_signer,
+                &cert,
+                SignatureBuilder::new(SignatureType::PositiveCertification),
+            )
+            .context("self-sign xmpp user id")?;
+        cert.insert_packets(vec![Packet::from(uid), binding.into()])
+            .context("insert xmpp user id")?
+            .0
+    };
 
-    let uid = UserID::from(expected);
-    let binding = uid
-        .bind(
-            &mut primary_signer,
-            &cert,
-            SignatureBuilder::new(SignatureType::PositiveCertification),
-        )
-        .context("self-sign xmpp user id")?;
-    let (cert, _) = cert
-        .insert_packets(vec![Packet::from(uid), binding.into()])
-        .context("insert xmpp user id")?;
-    Ok(cert)
+    // Canonicalize to xmpp:-only: Fluux publishes no real-name / email UID (the
+    // JID is the sole trust anchor, matching generated keys), so strip any
+    // foreign UIDs the imported key carried.
+    //
+    // NOTE: if key *generation* ever starts adding a name/email UID, relax this
+    // strip so it doesn't also drop those from imported keys.
+    Ok(cert.retain_userids(|ua| {
+        std::str::from_utf8(ua.userid().value())
+            .map(|s| s.eq_ignore_ascii_case(&expected))
+            .unwrap_or(false)
+    }))
 }
 
 fn generate_cert(user_id: &str) -> Result<Cert> {
@@ -2621,6 +2633,16 @@ mod tests {
                 .any(|u| std::str::from_utf8(u.userid().value()).unwrap()
                     == "xmpp:zoidberg@example.com"),
             "added xmpp: UID must be present and valid"
+        );
+        // Canonicalized to xmpp:-only: the foreign name/email UID is stripped.
+        assert!(
+            !has_uid(&augmented, "Zoidberg <zoidberg@planet-express.com>"),
+            "foreign name/email UID must be stripped"
+        );
+        assert_eq!(
+            augmented.userids().count(),
+            1,
+            "only the xmpp: UID must remain"
         );
     }
 

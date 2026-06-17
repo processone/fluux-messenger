@@ -491,19 +491,24 @@ export class WebOpenPGPPlugin extends OpenPGPPluginBase {
   }
 
   /**
-   * XEP-0373 §8.5 requires the key to carry an `xmpp:<jid>` User ID, the trust
-   * anchor peers verify. A foreign imported key (GnuPG / OpenKeychain) usually
-   * has only a `Name <email>` UID, so self-sign the canonical `xmpp:` UID onto
-   * it, preserving the primary key (and thus its fingerprint, so trust pinning
-   * still holds). No-op when the UID is already present, e.g. when restoring a
-   * Fluux backup.
+   * Canonicalize an imported key to the XEP-0373 §8.5 trust anchor: a single
+   * `xmpp:<jid>` User ID. A foreign key (GnuPG / OpenKeychain) carries a
+   * `Name <email>` UID, so we re-sign it with just the `xmpp:` UID: adding the
+   * anchor peers verify and dropping the name/email (Fluux publishes no
+   * real-name component). The primary key is preserved, so the fingerprint (and
+   * trust pinning) is unchanged. A key that is already exactly `xmpp:`-only
+   * (e.g. a restored Fluux backup) is returned untouched, so it isn't re-signed.
+   *
+   * NOTE: if key generation ever starts adding a name/email UID, relax this to
+   * keep them rather than stripping to xmpp:-only.
    */
   private async ensureAccountUserId(
     privateKey: PrivateKey,
     accountJid: string,
   ): Promise<PrivateKey> {
     const expected = accountUserId(accountJid)
-    if (privateKey.getUserIDs().some((u) => u.toLowerCase() === expected.toLowerCase())) {
+    const uids = privateKey.getUserIDs()
+    if (uids.length === 1 && uids[0].toLowerCase() === expected.toLowerCase()) {
       return privateKey
     }
     const { reformatKey } = await import('openpgp')
