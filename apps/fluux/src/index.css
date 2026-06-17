@@ -407,7 +407,8 @@ html, body {
   /* Disable iOS/Safari text-size auto-adjust when rotating */
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
-  /* Prevent double-tap zoom on touch devices; pinch-zoom already disabled via viewport meta */
+  /* Remove the 300ms tap delay (double-tap-to-zoom) on touch; pinch-zoom stays
+     available via the viewport meta for accessibility. */
   touch-action: manipulation;
 }
 
