@@ -136,6 +136,11 @@
   --fluux-text-on-accent: #ffffff;
   --fluux-text-accent: var(--fluux-bg-accent);
   --fluux-text-link: var(--fluux-color-blue);
+  /* Own-message ("you") name. The raw brand accent (hsl 235 86% 65%) only
+     reaches ~2.8:1 on the dark message background, so a dedicated brand-indigo
+     value is used, tuned to clear WCAG AA on both the resting and hover message
+     backgrounds. Dark default here; .light overrides below. */
+  --fluux-text-self: #a5b4fc;
 
   /* Status (named by purpose, not color) */
   --fluux-status-success: var(--fluux-color-green);
@@ -308,6 +313,11 @@
   --fluux-color-blue: #0969da;
   --fluux-color-blue-rgb: 9, 105, 218;
   --fluux-color-gray: #9ca3af;
+
+  /* Own-message ("you") name — brand-indigo darkened for WCAG AA on the white
+     message background and its hover state (the raw accent only reached ~4.6:1
+     at rest and failed on hover). */
+  --fluux-text-self: #4f46e5;
 
   /* Private (whisper) — deeper violet for contrast on light backgrounds */
   --fluux-private: hsl(270, 70%, 48%);
