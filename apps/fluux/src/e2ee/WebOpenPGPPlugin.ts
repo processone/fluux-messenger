@@ -320,7 +320,7 @@ export class WebOpenPGPPlugin extends OpenPGPPluginBase {
   }
 
   protected async backupImport(
-    _accountJid: string,
+    accountJid: string,
     backupMessage: string,
     passphrase: string,
   ): Promise<KeyBundle> {
@@ -346,7 +346,8 @@ export class WebOpenPGPPlugin extends OpenPGPPluginBase {
     // Recover the secret key, accepting a binary TSK, a single armored private
     // key, or OpenKeychain's public-then-private armored payload. A single-key
     // backup yields exactly one; take the first.
-    const [privateKey] = await parseSecretKeysFromBackupPayload(tskBytes)
+    const [parsed] = await parseSecretKeysFromBackupPayload(tskBytes)
+    const privateKey = await this.ensureAccountUserId(parsed, accountJid)
 
     // Store encrypted with the backup passphrase (which becomes the session passphrase)
     const encrypted = await encryptKey({ privateKey, passphrase })
@@ -489,16 +490,41 @@ export class WebOpenPGPPlugin extends OpenPGPPluginBase {
     return bundles
   }
 
+  /**
+   * XEP-0373 §8.5 requires the key to carry an `xmpp:<jid>` User ID, the trust
+   * anchor peers verify. A foreign imported key (GnuPG / OpenKeychain) usually
+   * has only a `Name <email>` UID, so self-sign the canonical `xmpp:` UID onto
+   * it, preserving the primary key (and thus its fingerprint, so trust pinning
+   * still holds). No-op when the UID is already present, e.g. when restoring a
+   * Fluux backup.
+   */
+  private async ensureAccountUserId(
+    privateKey: PrivateKey,
+    accountJid: string,
+  ): Promise<PrivateKey> {
+    const expected = accountUserId(accountJid)
+    if (privateKey.getUserIDs().some((u) => u.toLowerCase() === expected.toLowerCase())) {
+      return privateKey
+    }
+    const { reformatKey } = await import('openpgp')
+    const { privateKey: reformatted } = await reformatKey({
+      privateKey,
+      userIDs: [{ name: expected }],
+      format: 'object',
+    })
+    return reformatted
+  }
+
   protected async backupImportSelected(
-    _accountJid: string,
+    accountJid: string,
     _backupMessage: string,
     passphrase: string,
     selectedFingerprint: string,
   ): Promise<KeyBundle> {
     const { encryptKey } = await import('openpgp')
 
-    const privateKey = this.pendingImportKeys.get(selectedFingerprint)
-    if (!privateKey) {
+    const pending = this.pendingImportKeys.get(selectedFingerprint)
+    if (!pending) {
       this.pendingImportKeys.clear()
       throw new E2EEPluginError(
         'permanent',
@@ -506,6 +532,7 @@ export class WebOpenPGPPlugin extends OpenPGPPluginBase {
         `WebOpenPGPPlugin: no pending import key for fingerprint ${selectedFingerprint}`,
       )
     }
+    const privateKey = await this.ensureAccountUserId(pending, accountJid)
 
     const encrypted = await encryptKey({ privateKey, passphrase })
     const ctx = this.requireCtx()

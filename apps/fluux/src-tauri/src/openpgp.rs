@@ -41,7 +41,7 @@ use openpgp::{
     packet::{
         key::{self, Key4, Key6},
         signature::SignatureBuilder,
-        Key, Packet, PKESK, SKESK,
+        Key, Packet, UserID, PKESK, SKESK,
     },
     parse::{
         stream::{
@@ -412,6 +412,7 @@ impl OpenpgpState {
             .map_err(anyhow_to_string)?;
             let cert = Cert::from_bytes(tsk_armored.as_bytes())
                 .map_err(|e| format!("parse imported TSK: {e}"))?;
+            let cert = ensure_account_user_id(cert, &account_jid).map_err(anyhow_to_string)?;
             let backing = this
                 .storage
                 .save(&account_jid, &cert)
@@ -510,6 +511,7 @@ impl OpenpgpState {
 
             let cert = Cert::from_bytes(tsk_armored.as_bytes())
                 .map_err(|e| format!("parse selected TSK: {e}"))?;
+            let cert = ensure_account_user_id(cert, &account_jid).map_err(anyhow_to_string)?;
             let backing = this
                 .storage
                 .save(&account_jid, &cert)
@@ -934,6 +936,46 @@ const USE_V6_KEYS: bool = false;
 ///   expire every currently-alive `[E]` so `.alive()` recipient selection
 ///   picks only the new one while retained subkeys stay decryption-capable
 ///   for historical MAM replay.
+/// Ensure `cert` carries the XEP-0373 §8.5 `xmpp:<jid>` User ID, self-signing
+/// it when absent. Imported foreign keys (GnuPG / OpenKeychain) usually have
+/// only a `Name <email>` UID, but peers verify against the bare `xmpp:` form,
+/// so we add it before persisting. The primary key (and its fingerprint) is
+/// left intact, so trust pinning still holds. No-op when the UID is present.
+fn ensure_account_user_id(cert: Cert, account_jid: &str) -> Result<Cert> {
+    let expected = format!("xmpp:{account_jid}");
+    let already = cert.userids().any(|ua| {
+        std::str::from_utf8(ua.userid().value())
+            .map(|s| s.eq_ignore_ascii_case(&expected))
+            .unwrap_or(false)
+    });
+    if already {
+        return Ok(cert);
+    }
+
+    let primary_secret = cert
+        .primary_key()
+        .key()
+        .clone()
+        .parts_into_secret()
+        .context("imported key has no secret material, cannot self-sign user ID")?;
+    let mut primary_signer = primary_secret
+        .into_keypair()
+        .context("unlock primary key for user-id binding")?;
+
+    let uid = UserID::from(expected);
+    let binding = uid
+        .bind(
+            &mut primary_signer,
+            &cert,
+            SignatureBuilder::new(SignatureType::PositiveCertification),
+        )
+        .context("self-sign xmpp user id")?;
+    let (cert, _) = cert
+        .insert_packets(vec![Packet::from(uid), binding.into()])
+        .context("insert xmpp user id")?;
+    Ok(cert)
+}
+
 fn generate_cert(user_id: &str) -> Result<Cert> {
     let profile = if USE_V6_KEYS {
         openpgp::Profile::RFC9580
@@ -2539,5 +2581,60 @@ mod tests {
         );
         let expected_fp_len = if super::USE_V6_KEYS { 64 } else { 40 };
         assert_eq!(generated.fingerprint.len(), expected_fp_len);
+    }
+
+    // ---- imported-key xmpp: User ID -------------------------------------
+
+    fn has_uid(cert: &Cert, want: &str) -> bool {
+        cert.userids().any(|u| {
+            std::str::from_utf8(u.userid().value())
+                .map(|s| s == want)
+                .unwrap_or(false)
+        })
+    }
+
+    #[test]
+    fn ensure_account_user_id_adds_xmpp_uid_preserving_fingerprint() {
+        let (cert, _) =
+            CertBuilder::general_purpose(Some("Zoidberg <zoidberg@planet-express.com>"))
+                .generate()
+                .unwrap();
+        let fp = cert.fingerprint().to_hex();
+        assert!(
+            !has_uid(&cert, "xmpp:zoidberg@example.com"),
+            "fixture must start without the xmpp: UID"
+        );
+
+        let augmented = ensure_account_user_id(cert, "zoidberg@example.com").unwrap();
+
+        assert_eq!(
+            augmented.fingerprint().to_hex(),
+            fp,
+            "primary-key fingerprint must be preserved"
+        );
+        // The self-signed UID must be valid under the standard policy.
+        let policy = StandardPolicy::new();
+        let valid = augmented.with_policy(&policy, None).unwrap();
+        assert!(
+            valid
+                .userids()
+                .any(|u| std::str::from_utf8(u.userid().value()).unwrap()
+                    == "xmpp:zoidberg@example.com"),
+            "added xmpp: UID must be present and valid"
+        );
+    }
+
+    #[test]
+    fn ensure_account_user_id_is_noop_when_already_present() {
+        let (cert, _) = CertBuilder::general_purpose(Some("xmpp:already@example.com"))
+            .generate()
+            .unwrap();
+        let before = cert.userids().count();
+        let after = ensure_account_user_id(cert, "already@example.com").unwrap();
+        assert_eq!(
+            after.userids().count(),
+            before,
+            "must not append a duplicate xmpp: UID"
+        );
     }
 }
