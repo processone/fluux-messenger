@@ -4,6 +4,7 @@ import { isE2EEPluginError } from './errors'
 import { createPluginStorage, type StorageBackend } from './PluginStorage'
 import type {
   AccountInfo,
+  ArchiveDecryptItem,
   BareJID,
   ConversationTarget,
   DecryptResult,
@@ -12,6 +13,7 @@ import type {
   EncryptedPayload,
   InboundDecryptContext,
   Logger,
+  PluginConfiguration,
   PluginContext,
   SecurityContextUpdate,
   XMLElementData,
@@ -568,6 +570,88 @@ export class E2EEManager {
     } finally {
       await claim.plugin.closeConversation(handle).catch(() => {})
     }
+  }
+
+  /**
+   * Batched archive decrypt — for a whole page of MAM stanzas from the same
+   * conversation. When every element is claimed by a single plugin that
+   * implements {@link E2EEPlugin.decryptArchiveBatch}, the page is handed over
+   * in one call so a ratcheting plugin can freeze its session state once
+   * instead of per message. Otherwise the host falls back to looping
+   * {@link E2EEManager.decryptArchive} per item.
+   *
+   * The returned array is index-aligned to `stanzaChildren`; an element that
+   * no plugin claims is `null` in its slot (the fallback path), and the batch
+   * fast path is only taken when *all* items are claimed by the same plugin.
+   * `contexts`, when supplied, is also positional — `contexts[i]` accompanies
+   * `stanzaChildren[i]`.
+   */
+  async decryptArchiveBatch(
+    stanzaChildren: XMLElementData[],
+    senderTarget: ConversationTarget,
+    contexts?: (InboundDecryptContext | undefined)[],
+  ): Promise<(DecryptResult | null)[]> {
+    const claims = stanzaChildren.map((child) => this.claimInbound(child))
+    const claimedPlugins = new Set(claims.filter((c) => c !== null).map((c) => c!.plugin))
+    const onlyPlugin = claimedPlugins.size === 1 ? [...claimedPlugins][0] : null
+    const allClaimed = claims.every((c) => c !== null)
+
+    if (onlyPlugin && allClaimed && onlyPlugin.decryptArchiveBatch) {
+      const handle = await onlyPlugin.openConversation(senderTarget)
+      try {
+        const items: ArchiveDecryptItem[] = claims.map((c, i) => ({
+          payload: c!.payload,
+          ...(contexts?.[i] && { context: contexts[i] }),
+        }))
+        return await onlyPlugin.decryptArchiveBatch(handle, items)
+      } finally {
+        await onlyPlugin.closeConversation(handle).catch(() => {})
+      }
+    }
+
+    const results: (DecryptResult | null)[] = []
+    for (let i = 0; i < stanzaChildren.length; i++) {
+      results.push(await this.decryptArchive(stanzaChildren[i], senderTarget, contexts?.[i]))
+    }
+    return results
+  }
+
+  /**
+   * Rebuild a desynchronized session with the conversation peer. Called by the
+   * host when a decrypt reports {@link DecryptStatus} `broken-session`. Selects
+   * the plugin for `target` (same selection as the live send/decrypt path) and
+   * invokes {@link E2EEPlugin.repairSession}. Returns `false` when no plugin is
+   * available or the selected plugin is stateless (no `repairSession`) — there
+   * is then nothing to repair.
+   */
+  async repairSession(target: ConversationTarget): Promise<boolean> {
+    const plugin = await this.selectStrategy(target)
+    if (!plugin?.repairSession) return false
+    const peer = target.kind === 'direct' ? target.peer : target.room
+    const handle = await plugin.openConversation(target)
+    try {
+      await plugin.repairSession(handle, peer)
+      return true
+    } catch (err) {
+      this.logger.warn(`repairSession failed for ${targetLabel(target)} via ${plugin.descriptor.id}`, err)
+      return false
+    } finally {
+      await plugin.closeConversation(handle).catch(() => {})
+    }
+  }
+
+  /**
+   * Forward admin-tunable settings to a registered plugin. The host does not
+   * interpret {@link PluginConfiguration} — each plugin validates its own keys.
+   * Throws if no plugin is registered under `pluginId`; resolves silently when
+   * the plugin has no `configure` hook (it has no tunables).
+   */
+  async configure(pluginId: string, options: PluginConfiguration): Promise<void> {
+    const plugin = this.plugins.get(pluginId)
+    if (!plugin) {
+      throw new Error(`E2EEManager.configure: no plugin registered with id '${pluginId}'`)
+    }
+    await plugin.configure?.(options)
   }
 
   /**

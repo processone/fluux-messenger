@@ -2109,7 +2109,7 @@ describe('WebOpenPGPPlugin', () => {
       const claim = bob.plugin.tryClaimInbound(payload.stanzaElement)!
       const decrypted = await bob.plugin.decrypt(bobHandle, claim)
 
-      expect(decodeBody(decrypted.plaintext)).toBe('hello bob')
+      expect(decodeBody(decrypted.plaintext!)).toBe('hello bob')
       expect(decrypted.securityContext.trust).toBe('tofu')
       expect(decrypted.securityContext.notes).toBeUndefined()
     })
@@ -2221,7 +2221,7 @@ describe('WebOpenPGPPlugin', () => {
       const claim = bob.plugin.tryClaimInbound(payload.stanzaElement)!
       const decrypted = await bob.plugin.decrypt(bobHandle, claim, { messageId: 'm-no-key' })
 
-      expect(decodeBody(decrypted.plaintext)).toBe('from alice')
+      expect(decodeBody(decrypted.plaintext!)).toBe('from alice')
       expect(decrypted.securityContext.trust).toBe('untrusted')
       expect(decrypted.securityContext.notes?.join(' ')).toMatch(/not cached/)
     })
