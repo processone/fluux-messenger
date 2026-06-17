@@ -64,18 +64,21 @@ export function BottomSheet({
         role="dialog"
         aria-modal="true"
         aria-label={ariaLabel}
-        className={`relative z-10 w-full max-w-lg mx-auto bg-fluux-sidebar rounded-t-2xl shadow-xl pb-safe animate-sheet-up ${panelClassName ?? ''}`}
+        className={`relative z-10 flex max-h-[90dvh] w-full max-w-lg mx-auto flex-col bg-fluux-sidebar rounded-t-2xl shadow-xl animate-sheet-up ${panelClassName ?? ''}`}
       >
         {/* Grab handle — affordance that the sheet is draggable/dismissable */}
-        <div className="flex justify-center pt-2 pb-1">
+        <div className="flex shrink-0 justify-center pt-2 pb-1">
           <div className="h-1 w-9 rounded-full bg-fluux-muted/40" />
         </div>
         {title && (
-          <div className="px-4 pb-1 pt-1">
+          <div className="shrink-0 px-4 pb-1 pt-1">
             <h2 className="text-sm font-semibold text-fluux-muted">{title}</h2>
           </div>
         )}
-        {children}
+        {/* Scrollable content so the sheet never exceeds the viewport (landscape /
+            short screens / tall emoji picker). pb-safe keeps the last row clear of
+            the home indicator. */}
+        <div className="min-h-0 flex-1 overflow-y-auto pb-safe">{children}</div>
       </div>
     </div>,
     document.body,
