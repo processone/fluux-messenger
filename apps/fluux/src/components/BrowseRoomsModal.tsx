@@ -14,6 +14,7 @@ import { useChatStore } from '@fluux/sdk/react'
 import { Search, Hash, Loader2, ChevronDown, Server, X } from 'lucide-react'
 import { Tooltip } from './Tooltip'
 import { ModalShell } from './ModalShell'
+import { getRoomJoinErrorMessage } from '@/utils/roomJoinError'
 
 const PAGE_SIZE = 50
 
@@ -24,7 +25,7 @@ interface BrowseRoomsModalProps {
 export function BrowseRoomsModal({ onClose }: BrowseRoomsModalProps) {
   const { t } = useTranslation()
   const { jid: userJid, ownNickname } = useConnection()
-  const { browsePublicRooms, joinRoom, getRoom, setActiveRoom, mucServiceJid } = useRoom()
+  const { browsePublicRooms, joinRoom, joinResult, getRoom, setActiveRoom, mucServiceJid } = useRoom()
   const { confirmJoin, warningDialog } = useRoomJoinWarning()
   // NOTE: Use direct store subscription to avoid re-renders from activeMessages changes
   const setActiveConversation = useChatStore((s) => s.setActiveConversation)
@@ -242,11 +243,12 @@ export function BrowseRoomsModal({ onClose }: BrowseRoomsModalProps) {
       // Issue #37: warn before joining a room that would expose the user's real JID.
       if (!(await confirmJoin(roomJid))) return
       await joinRoom(roomJid, nickname.trim())
+      await joinResult(roomJid)
       void setActiveConversation(null)
       void setActiveRoom(roomJid)
       onClose()
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('rooms.failedToJoinRoom'))
+      setError(getRoomJoinErrorMessage(t, err))
     } finally {
       setJoiningRoom(null)
     }

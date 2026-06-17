@@ -776,9 +776,9 @@ const ChatMessageBubble = memo(function ChatMessageBubble({
     ? (ownNickname || message.from.split('@')[0])
     : (senderContact?.name || message.from.split('@')[0])
 
-  // Get sender color: accent for own messages, contact's pre-calculated color, or fallback to generation
+  // Get sender color: dedicated AA-safe self color for own messages, contact's pre-calculated color, or fallback to generation
   const senderColor = message.isOutgoing
-    ? 'var(--fluux-text-accent)'
+    ? 'var(--fluux-text-self)'
     : senderContact
       ? (isDarkMode ? senderContact.colorDark : senderContact.colorLight) || getConsistentTextColor(message.from.split('/')[0], isDarkMode)
       : getConsistentTextColor(message.from.split('/')[0], isDarkMode)
@@ -812,8 +812,8 @@ const ChatMessageBubble = memo(function ChatMessageBubble({
       return fallbackId ? fallbackId.split('@')[0] : 'Unknown'
     },
     (originalMsg, fallbackId, dark) => {
-      // Own messages: use accent color
-      if (originalMsg?.isOutgoing) return 'var(--fluux-text-accent)'
+      // Own messages: use the dedicated AA-safe self color
+      if (originalMsg?.isOutgoing) return 'var(--fluux-text-self)'
       const senderId = originalMsg?.from.split('/')[0] || fallbackId?.split('/')[0]
       if (!senderId) return 'var(--fluux-brand)'
       const contact = contactsByJid.get(senderId)
