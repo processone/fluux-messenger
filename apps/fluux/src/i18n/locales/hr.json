@@ -40,7 +40,21 @@
         "hidePassword": "Sakrij lozinku",
         "madeBy": "Izradio",
         "ejabberdCreator": ", tvrtka iza",
-        "poweredBy": "Pokreće"
+        "poweredBy": "Pokreće",
+        "errors": {
+            "tlsCertTitle": "Nije moguće provjeriti sigurnosni certifikat poslužitelja",
+            "tlsOtherTitle": "Sigurna veza nije uspjela",
+            "tlsOtherBody": "Nije moguće uspostaviti kriptiranu vezu s poslužiteljem. TLS konfiguracija poslužitelja možda nije podržana. Provjerite adresu poslužitelja ili kontaktirajte administratora poslužitelja.",
+            "unreachableTitle": "Nije moguće dosegnuti poslužitelj",
+            "timeoutBody": "Poslužitelj nije odgovorio na vrijeme. Provjerite mrežu i adresu poslužitelja, zatim pokušajte ponovo.",
+            "refusedBody": "Poslužitelj je odbio vezu. Provjerite adresu i port poslužitelja, zatim pokušajte ponovo.",
+            "cert": {
+                "expired": "Certifikat poslužitelja je istekao. Kontaktirajte administratora poslužitelja. Ako je adresa pogrešna, uredite polje poslužitelja ispod.",
+                "nameMismatch": "Certifikat poslužitelja izdan je za drugi naziv hosta. Provjerite adresu poslužitelja ispod ili kontaktirajte administratora poslužitelja.",
+                "untrusted": "Certifikat poslužitelja je samopotpisan ili izdan od nepoznatog tijela, pa mu se ne može vjerovati. Provjerite adresu poslužitelja ili kontaktirajte administratora poslužitelja.",
+                "generic": "Nije moguće provjeriti sigurnosni certifikat poslužitelja. Provjerite adresu poslužitelja ispod ili kontaktirajte administratora poslužitelja."
+            }
+        }
     },
     "sidebar": {
         "messages": "Poruke",

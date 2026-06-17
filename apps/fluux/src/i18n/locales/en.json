@@ -40,7 +40,21 @@
         "hidePassword": "Hide password",
         "madeBy": "Made by",
         "ejabberdCreator": ", the company behind",
-        "poweredBy": "Powered by"
+        "poweredBy": "Powered by",
+        "errors": {
+            "tlsCertTitle": "Couldn't verify the server's security certificate",
+            "tlsOtherTitle": "Secure connection failed",
+            "tlsOtherBody": "The encrypted connection to the server could not be established. The server's TLS configuration may be unsupported. Check the server address, or contact the server administrator.",
+            "unreachableTitle": "Couldn't reach the server",
+            "timeoutBody": "The server did not respond in time. Check your network and the server address, then try again.",
+            "refusedBody": "The server refused the connection. Check the server address and port, then try again.",
+            "cert": {
+                "expired": "The server's certificate has expired. Contact the server administrator. If the address is wrong, edit the server field below.",
+                "nameMismatch": "The server's certificate was issued for a different host name. Check the server address below, or contact the server administrator.",
+                "untrusted": "The server's certificate is self-signed or issued by an unknown authority, so it can't be trusted. Check the server address, or contact the server administrator.",
+                "generic": "The server's security certificate could not be verified. Check the server address below, or contact the server administrator."
+            }
+        }
     },
     "sidebar": {
         "messages": "Messages",

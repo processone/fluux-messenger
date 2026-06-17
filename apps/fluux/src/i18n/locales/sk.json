@@ -40,7 +40,21 @@
         "hidePassword": "Skryť heslo",
         "madeBy": "Vytvoril",
         "ejabberdCreator": ", spoločnosť za",
-        "poweredBy": "Poháňané"
+        "poweredBy": "Poháňané",
+        "errors": {
+            "tlsCertTitle": "Nepodarilo sa overiť bezpečnostný certifikát servera",
+            "tlsOtherTitle": "Bezpečné pripojenie zlyhalo",
+            "tlsOtherBody": "Nepodarilo sa nadviazať šifrované pripojenie k serveru. Konfigurácia TLS servera nemusí byť podporovaná. Skontrolujte adresu servera alebo kontaktujte správcu servera.",
+            "unreachableTitle": "Server nie je dostupný",
+            "timeoutBody": "Server včas neodpovedal. Skontrolujte sieť a adresu servera, a skúste to znova.",
+            "refusedBody": "Server odmietol pripojenie. Skontrolujte adresu a port servera, a skúste to znova.",
+            "cert": {
+                "expired": "Platnosť certifikátu servera vypršala. Kontaktujte správcu servera. Ak je adresa nesprávna, upravte pole servera nižšie.",
+                "nameMismatch": "Certifikát servera bol vydaný pre iné meno hostiteľa. Skontrolujte adresu servera nižšie alebo kontaktujte správcu servera.",
+                "untrusted": "Certifikát servera je podpísaný sám sebou alebo vydaný neznámou autoritou, preto mu nemožno dôverovať. Skontrolujte adresu servera alebo kontaktujte správcu servera.",
+                "generic": "Bezpečnostný certifikát servera sa nepodarilo overiť. Skontrolujte adresu servera nižšie alebo kontaktujte správcu servera."
+            }
+        }
     },
     "sidebar": {
         "messages": "Správy",

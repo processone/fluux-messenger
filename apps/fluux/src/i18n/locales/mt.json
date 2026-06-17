@@ -40,7 +40,21 @@
         "hidePassword": "Aħbi password",
         "madeBy": "Magħmul minn",
         "ejabberdCreator": ", il-kumpanija wara",
-        "poweredBy": "Ipprovdut minn"
+        "poweredBy": "Ipprovdut minn",
+        "errors": {
+            "tlsCertTitle": "Ma setax jiġi vverifikat iċ-ċertifikat tas-sigurtà tal-server",
+            "tlsOtherTitle": "Il-konnessjoni sigura falliet",
+            "tlsOtherBody": "Ma setgħetx tiġi stabbilita konnessjoni kriptata mal-server. Il-konfigurazzjoni TLS tal-server jista' ma tkunx appoġġjata. Iċċekkja l-indirizz tal-server jew ikkuntattja l-amministratur tal-server.",
+            "unreachableTitle": "Ma setax jintlaħaq il-server",
+            "timeoutBody": "Il-server ma wieġibx fil-ħin. Iċċekkja n-netwerk u l-indirizz tal-server, imbagħad erġa' pprova.",
+            "refusedBody": "Il-server irrifjuta l-konnessjoni. Iċċekkja l-indirizz u l-port tal-server, imbagħad erġa' pprova.",
+            "cert": {
+                "expired": "Iċ-ċertifikat tal-server skada. Ikkuntattja l-amministratur tal-server. Jekk l-indirizz huwa żbaljat, editja l-qasam tal-server hawn taħt.",
+                "nameMismatch": "Iċ-ċertifikat tal-server inħareġ għal isem host differenti. Iċċekkja l-indirizz tal-server hawn taħt jew ikkuntattja l-amministratur tal-server.",
+                "untrusted": "Iċ-ċertifikat tal-server huwa ffirmat waħdu jew maħruġ minn awtorità mhux magħrufa, għalhekk ma jistax jiġi fdat. Iċċekkja l-indirizz tal-server jew ikkuntattja l-amministratur tal-server.",
+                "generic": "Ma setax jiġi vverifikat iċ-ċertifikat tas-sigurtà tal-server. Iċċekkja l-indirizz tal-server hawn taħt jew ikkuntattja l-amministratur tal-server."
+            }
+        }
     },
     "sidebar": {
         "messages": "Messaġġi",

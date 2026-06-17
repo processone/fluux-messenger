@@ -40,7 +40,21 @@
         "hidePassword": "Peida parool",
         "madeBy": "Tegi",
         "ejabberdCreator": ", ettevõte, mis lõi",
-        "poweredBy": "Töötab"
+        "poweredBy": "Töötab",
+        "errors": {
+            "tlsCertTitle": "Serveri turvasertifikaati ei õnnestunud kontrollida",
+            "tlsOtherTitle": "Turvaline ühendus ebaõnnestus",
+            "tlsOtherBody": "Serveriga ei õnnestunud luua krüpteeritud ühendust. Serveri TLS-konfiguratsioon ei pruugi olla toetatud. Kontrolli serveri aadressi või võta ühendust serveri administraatoriga.",
+            "unreachableTitle": "Serverile ei õnnestunud jõuda",
+            "timeoutBody": "Server ei vastanud õigel ajal. Kontrolli oma võrku ja serveri aadressi, seejärel proovi uuesti.",
+            "refusedBody": "Server lükkas ühenduse tagasi. Kontrolli serveri aadressi ja porti, seejärel proovi uuesti.",
+            "cert": {
+                "expired": "Serveri sertifikaat on aegunud. Võta ühendust serveri administraatoriga. Kui aadress on vale, muuda allpool olevat serverivälja.",
+                "nameMismatch": "Serveri sertifikaat on väljastatud teisele hosti nimele. Kontrolli allpool olevat serveri aadressi või võta ühendust serveri administraatoriga.",
+                "untrusted": "Serveri sertifikaat on iseallkirjastatud või väljastatud tundmatu asutuse poolt, seega ei saa seda usaldada. Kontrolli serveri aadressi või võta ühendust serveri administraatoriga.",
+                "generic": "Serveri turvasertifikaati ei õnnestunud kontrollida. Kontrolli allpool olevat serveri aadressi või võta ühendust serveri administraatoriga."
+            }
+        }
     },
     "sidebar": {
         "messages": "Sõnumid",

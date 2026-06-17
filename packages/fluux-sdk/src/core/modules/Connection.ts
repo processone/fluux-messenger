@@ -57,6 +57,7 @@ import { buildUserAgentElement } from '../userAgent'
 import { ProxyManager } from './proxyManager'
 import { isConnectionTraceEnabled } from './connectionDiagnostics'
 import { humanizeStreamError } from './streamErrors'
+import { humanizeTransportError } from './transportErrors'
 
 // Dev-only error logging (checks Vite dev mode, excludes test mode)
 const isDev = (() => {
@@ -2193,9 +2194,12 @@ export class Connection extends BaseModule {
           // bridge close reason is the real, actionable cause — surface it ahead
           // of the local-proxy/transport fallbacks.
           const streamErrorMessage = reason ? humanizeStreamError(reason) : null
+          const transportErrorMessage = reason ? humanizeTransportError(reason) : null
           let errorMsg: string
           if (streamErrorMessage) {
             errorMsg = streamErrorMessage
+          } else if (transportErrorMessage) {
+            errorMsg = transportErrorMessage
           } else if (isProxyMode && isAbnormalClose) {
             errorMsg = 'Connection failed: Unable to reach local proxy. If a firewall prompt appeared, allow the connection and try again.'
           } else if (reason) {

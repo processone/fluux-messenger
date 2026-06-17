@@ -640,6 +640,10 @@ export type { FallbackProcessingResult, FallbackProcessingOptions } from './util
 export { parseXMPPError, formatXMPPError } from './utils/xmppError'
 export type { XMPPStanzaError, XMPPErrorType } from './utils/xmppError'
 
+// Transport error classification and humanization
+export { classifyConnectionError, extractTransportErrorClass, humanizeTransportError } from './core/modules/transportErrors'
+export type { ConnectionErrorKind } from './core/modules/transportErrors'
+
 // MUC join failure error (rejected by client.muc.joinResult)
 export { RoomJoinError } from './core/errors'
 

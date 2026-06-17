@@ -40,7 +40,21 @@
         "hidePassword": "Masquer le mot de passe",
         "madeBy": "Créé par",
         "ejabberdCreator": ", la société qui développe",
-        "poweredBy": "Propulsé par"
+        "poweredBy": "Propulsé par",
+        "errors": {
+            "tlsCertTitle": "Impossible de vérifier le certificat de sécurité du serveur",
+            "tlsOtherTitle": "Échec de la connexion sécurisée",
+            "tlsOtherBody": "La connexion chiffrée au serveur n'a pas pu être établie. La configuration TLS du serveur n'est peut-être pas prise en charge. Vérifiez l'adresse du serveur ou contactez l'administrateur du serveur.",
+            "unreachableTitle": "Impossible de joindre le serveur",
+            "timeoutBody": "Le serveur n'a pas répondu à temps. Vérifiez votre réseau et l'adresse du serveur, puis réessayez.",
+            "refusedBody": "Le serveur a refusé la connexion. Vérifiez l'adresse et le port du serveur, puis réessayez.",
+            "cert": {
+                "expired": "Le certificat du serveur a expiré. Contactez l'administrateur du serveur. Si l'adresse est incorrecte, modifiez le champ serveur ci-dessous.",
+                "nameMismatch": "Le certificat du serveur a été émis pour un nom d'hôte différent. Vérifiez l'adresse du serveur ci-dessous ou contactez l'administrateur du serveur.",
+                "untrusted": "Le certificat du serveur est auto-signé ou émis par une autorité inconnue, il ne peut donc pas être approuvé. Vérifiez l'adresse du serveur ou contactez l'administrateur du serveur.",
+                "generic": "Le certificat de sécurité du serveur n'a pas pu être vérifié. Vérifiez l'adresse du serveur ci-dessous ou contactez l'administrateur du serveur."
+            }
+        }
     },
     "sidebar": {
         "messages": "Messages",

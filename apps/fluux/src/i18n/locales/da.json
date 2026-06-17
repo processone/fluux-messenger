@@ -40,7 +40,21 @@
         "hidePassword": "Skjul adgangskode",
         "madeBy": "Lavet af",
         "ejabberdCreator": ", virksomheden bag",
-        "poweredBy": "Drevet af"
+        "poweredBy": "Drevet af",
+        "errors": {
+            "tlsCertTitle": "Serverens sikkerhedscertifikat kunne ikke bekræftes",
+            "tlsOtherTitle": "Sikker forbindelse mislykkedes",
+            "tlsOtherBody": "Den krypterede forbindelse til serveren kunne ikke oprettes. Serverens TLS-konfiguration er muligvis ikke understøttet. Kontroller serveradressen, eller kontakt serveradministratoren.",
+            "unreachableTitle": "Serveren er ikke tilgængelig",
+            "timeoutBody": "Serveren svarede ikke i tide. Kontroller netværket og serveradressen, og prøv igen.",
+            "refusedBody": "Serveren afviste forbindelsen. Kontroller serveradressen og -porten, og prøv igen.",
+            "cert": {
+                "expired": "Serverens certifikat er udløbet. Kontakt serveradministratoren. Hvis adressen er forkert, skal du redigere serverfeltet nedenfor.",
+                "nameMismatch": "Serverens certifikat er udstedt til et andet værtsnavn. Kontroller serveradressen nedenfor, eller kontakt serveradministratoren.",
+                "untrusted": "Serverens certifikat er selvsigneret eller udstedt af en ukendt myndighed, så det kan ikke stoles på. Kontroller serveradressen, eller kontakt serveradministratoren.",
+                "generic": "Serverens sikkerhedscertifikat kunne ikke bekræftes. Kontroller serveradressen nedenfor, eller kontakt serveradministratoren."
+            }
+        }
     },
     "sidebar": {
         "messages": "Beskeder",

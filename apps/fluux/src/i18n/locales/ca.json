@@ -40,7 +40,21 @@
         "hidePassword": "Amaga el mot de pas",
         "madeBy": "Fet per",
         "ejabberdCreator": ", l'empresa darrere de",
-        "poweredBy": "Funciona amb"
+        "poweredBy": "Funciona amb",
+        "errors": {
+            "tlsCertTitle": "No s'ha pogut verificar el certificat de seguretat del servidor",
+            "tlsOtherTitle": "Ha fallat la connexió segura",
+            "tlsOtherBody": "No s'ha pogut establir la connexió xifrada amb el servidor. La configuració TLS del servidor pot no ser compatible. Comproveu l'adreça del servidor o contacteu amb l'administrador.",
+            "unreachableTitle": "No s'ha pogut connectar amb el servidor",
+            "timeoutBody": "El servidor no ha respost a temps. Comproveu la xarxa i l'adreça del servidor, i torneu-ho a intentar.",
+            "refusedBody": "El servidor ha rebutjat la connexió. Comproveu l'adreça i el port del servidor, i torneu-ho a intentar.",
+            "cert": {
+                "expired": "El certificat del servidor ha caducat. Contacteu amb l'administrador del servidor. Si l'adreça és incorrecta, editeu el camp del servidor a continuació.",
+                "nameMismatch": "El certificat del servidor s'ha emès per a un nom d'amfitrió diferent. Comproveu l'adreça del servidor a continuació o contacteu amb l'administrador.",
+                "untrusted": "El certificat del servidor és autofirmat o emès per una autoritat desconeguda, de manera que no es pot confiar. Comproveu l'adreça del servidor o contacteu amb l'administrador.",
+                "generic": "No s'ha pogut verificar el certificat de seguretat del servidor. Comproveu l'adreça del servidor a continuació o contacteu amb l'administrador."
+            }
+        }
     },
     "sidebar": {
         "messages": "Missatges",

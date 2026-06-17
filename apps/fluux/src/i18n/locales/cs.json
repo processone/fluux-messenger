@@ -40,7 +40,21 @@
         "hidePassword": "Skrýt heslo",
         "madeBy": "Vytvořeno společností",
         "ejabberdCreator": ", společností stojící za",
-        "poweredBy": "Poháněno technologií"
+        "poweredBy": "Poháněno technologií",
+        "errors": {
+            "tlsCertTitle": "Nelze ověřit bezpečnostní certifikát serveru",
+            "tlsOtherTitle": "Zabezpečené připojení se nezdařilo",
+            "tlsOtherBody": "Nelze navázat šifrované připojení k serveru. Konfigurace TLS serveru nemusí být podporována. Zkontrolujte adresu serveru nebo kontaktujte správce serveru.",
+            "unreachableTitle": "Server není dostupný",
+            "timeoutBody": "Server včas neodpověděl. Zkontrolujte síť a adresu serveru a zkuste to znovu.",
+            "refusedBody": "Server odmítl připojení. Zkontrolujte adresu a port serveru a zkuste to znovu.",
+            "cert": {
+                "expired": "Certifikát serveru vypršel. Kontaktujte správce serveru. Pokud je adresa nesprávná, upravte pole serveru níže.",
+                "nameMismatch": "Certifikát serveru byl vydán pro jiný název hostitele. Zkontrolujte adresu serveru níže nebo kontaktujte správce serveru.",
+                "untrusted": "Certifikát serveru je podepsán sám sebou nebo vydán neznámou autoritou, takže mu nelze důvěřovat. Zkontrolujte adresu serveru nebo kontaktujte správce serveru.",
+                "generic": "Bezpečnostní certifikát serveru nelze ověřit. Zkontrolujte adresu serveru níže nebo kontaktujte správce serveru."
+            }
+        }
     },
     "sidebar": {
         "messages": "Zprávy",

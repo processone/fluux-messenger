@@ -40,7 +40,21 @@
         "hidePassword": "Passwort ausblenden",
         "madeBy": "Erstellt von",
         "ejabberdCreator": ", dem Unternehmen hinter",
-        "poweredBy": "Betrieben von"
+        "poweredBy": "Betrieben von",
+        "errors": {
+            "tlsCertTitle": "Das Sicherheitszertifikat des Servers konnte nicht überprüft werden",
+            "tlsOtherTitle": "Sichere Verbindung fehlgeschlagen",
+            "tlsOtherBody": "Die verschlüsselte Verbindung zum Server konnte nicht hergestellt werden. Die TLS-Konfiguration des Servers wird möglicherweise nicht unterstützt. Prüfe die Serveradresse oder wende dich an den Serveradministrator.",
+            "unreachableTitle": "Der Server ist nicht erreichbar",
+            "timeoutBody": "Der Server hat nicht rechtzeitig geantwortet. Prüfe dein Netzwerk und die Serveradresse, und versuche es erneut.",
+            "refusedBody": "Der Server hat die Verbindung abgelehnt. Prüfe die Serveradresse und den Port, und versuche es erneut.",
+            "cert": {
+                "expired": "Das Zertifikat des Servers ist abgelaufen. Wende dich an den Serveradministrator. Wenn die Adresse falsch ist, bearbeite das Serverfeld unten.",
+                "nameMismatch": "Das Zertifikat des Servers wurde für einen anderen Hostnamen ausgestellt. Prüfe die Serveradresse unten oder wende dich an den Serveradministrator.",
+                "untrusted": "Das Sicherheitszertifikat des Servers ist selbstsigniert oder stammt von einer unbekannten Zertifizierungsstelle, daher kann ihm nicht vertraut werden. Überprüfe die Serveradresse, oder wende dich an den Serveradministrator.",
+                "generic": "Das Sicherheitszertifikat des Servers konnte nicht überprüft werden. Prüfe die Serveradresse unten oder wende dich an den Serveradministrator."
+            }
+        }
     },
     "sidebar": {
         "messages": "Nachrichten",

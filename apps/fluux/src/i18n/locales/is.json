@@ -40,7 +40,21 @@
         "hidePassword": "Fela lykilorð",
         "madeBy": "Búið til af",
         "ejabberdCreator": ", fyrirtækið á bak við",
-        "poweredBy": "Keyrt af"
+        "poweredBy": "Keyrt af",
+        "errors": {
+            "tlsCertTitle": "Ekki tókst að staðfesta öryggisvistunarskírteini þjónsins",
+            "tlsOtherTitle": "Örugg tenging mistókst",
+            "tlsOtherBody": "Ekki tókst að koma á dulkóðaðri tengingu við þjóninn. TLS-stilling þjónsins er hugsanlega ekki studd. Athugaðu þjónsföng eða hafðu samband við kerfisstjóra þjónsins.",
+            "unreachableTitle": "Ekki tókst að ná í þjóninn",
+            "timeoutBody": "Þjónninn svaraði ekki í tíma. Athugaðu netið og þjónsföng, og reyndu aftur.",
+            "refusedBody": "Þjónninn hafnaði tengingunni. Athugaðu þjónsföng og gátt, og reyndu aftur.",
+            "cert": {
+                "expired": "Vistunarskírteini þjónsins er útrunnið. Hafðu samband við kerfisstjóra þjónsins. Ef heimilisfangið er rangt, breyttu þjónsreitnum hér að neðan.",
+                "nameMismatch": "Vistunarskírteini þjónsins var gefið út fyrir annað hýsilnafn. Athugaðu þjónsföng hér að neðan eða hafðu samband við kerfisstjóra þjónsins.",
+                "untrusted": "Vistunarskírteini þjónsins er sjálfundirritað eða gefið út af óþekktum aðila, þar af leiðandi er ekki hægt að treysta því. Athugaðu þjónsföng eða hafðu samband við kerfisstjóra þjónsins.",
+                "generic": "Ekki tókst að staðfesta öryggisvistunarskírteini þjónsins. Athugaðu þjónsföng hér að neðan eða hafðu samband við kerfisstjóra þjónsins."
+            }
+        }
     },
     "sidebar": {
         "messages": "Skilaboð",

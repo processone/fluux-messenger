@@ -40,7 +40,21 @@
         "hidePassword": "Skrij geslo",
         "madeBy": "Ustvaril",
         "ejabberdCreator": ", podjetje za",
-        "poweredBy": "Poganja"
+        "poweredBy": "Poganja",
+        "errors": {
+            "tlsCertTitle": "Varnostnega potrdila strežnika ni mogoče preveriti",
+            "tlsOtherTitle": "Varna povezava ni uspela",
+            "tlsOtherBody": "Šifrirane povezave s strežnikom ni bilo mogoče vzpostaviti. Konfiguracija TLS strežnika morda ni podprta. Preverite naslov strežnika ali se obrnite na skrbnika strežnika.",
+            "unreachableTitle": "Strežnika ni mogoče doseči",
+            "timeoutBody": "Strežnik ni odgovoril pravočasno. Preverite omrežje in naslov strežnika, nato poskusite znova.",
+            "refusedBody": "Strežnik je zavrnil povezavo. Preverite naslov in vrata strežnika, nato poskusite znova.",
+            "cert": {
+                "expired": "Potrdilo strežnika je poteklo. Obrnite se na skrbnika strežnika. Če je naslov napačen, uredite polje strežnika spodaj.",
+                "nameMismatch": "Potrdilo strežnika je bilo izdano za drugo ime gostitelja. Preverite naslov strežnika spodaj ali se obrnite na skrbnika strežnika.",
+                "untrusted": "Potrdilo strežnika je samopodpisano ali izdano s strani neznane ustanove, zato mu ni mogoče zaupati. Preverite naslov strežnika ali se obrnite na skrbnika strežnika.",
+                "generic": "Varnostnega potrdila strežnika ni mogoče preveriti. Preverite naslov strežnika spodaj ali se obrnite na skrbnika strežnika."
+            }
+        }
     },
     "sidebar": {
         "messages": "Sporočila",
