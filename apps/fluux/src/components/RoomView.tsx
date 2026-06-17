@@ -1192,9 +1192,9 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
 
   const contact = senderBareJid ? contactsByJid.get(senderBareJid) : undefined
 
-  // Get sender color: accent for own messages, contact's pre-calculated color, or fallback to nick-based generation
+  // Get sender color: dedicated AA-safe self color for own messages, contact's pre-calculated color, or fallback to nick-based generation
   const senderColor = message.isOutgoing
-    ? 'var(--fluux-text-accent)'
+    ? 'var(--fluux-text-self)'
     : resolveSenderColor(resolvedSenderName, contact, isDarkMode ?? true)
 
   // Get my current reactions to this message (room — uses nick)
@@ -1236,8 +1236,8 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
       return fallbackId ? fallbackId.split('/').pop() || 'Unknown' : 'Unknown'
     },
     (originalMsg, fallbackId, dark) => {
-      // Own messages: use accent color
-      if (originalMsg?.isOutgoing) return 'var(--fluux-text-accent)'
+      // Own messages: use the dedicated AA-safe self color
+      if (originalMsg?.isOutgoing) return 'var(--fluux-text-self)'
       const nick = originalMsg?.nick || (fallbackId ? fallbackId.split('/').pop() : undefined)
       if (!nick) return 'var(--fluux-brand)'
       // Same contact-color preference as the main senderColor above, so the

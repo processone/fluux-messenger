@@ -263,8 +263,8 @@ specific gaps:
 
 | #    | Issue                                                                                                                                    | Recommendation                                                     | Sev | Eff |
 |------|------------------------------------------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------|-----|-----|
-| 13.1 | **The composer's "Message Emma Wilson" placeholder looks slightly disabled** — its grey-on-light contrast is borderline against WCAG AA. | Bump placeholder colour to meet 4.5:1 (currently appears ≈ 3.5:1). | M   | S   |
-| 13.2 | The "you" name colour (blue) and "Emma Wilson" name colour (pink) have **lower contrast in light theme** than dark.                      | Verify both pass AA at 16 px regular weight; deepen if not.        | L   | S   |
+| 13.1 | ✅ **Resolved (already passes AA).** The composer placeholder uses `text-fluux-muted` = `#4a4d54` in light, rendered on the `bg-fluux-hover` input bar (`#dcdee3`) = **6.29:1**, above the 4.5:1 AA threshold. The original "≈3.5:1" estimate matched the lighter `text-faint` (`#80848e`, 3.74:1 on white), a token the composer does not use. | Verified — `MessageComposer.tsx:38` (`placeholder:text-fluux-muted`); light tokens at `index.css:303,299`. | M   | S   |
+| 13.2 | ✅ **Resolved.** Peer names (e.g. pink "Emma Wilson") use HSLuv consistent colour (perceptually-uniform `L=35` light / `L=65` dark) = **7.78:1 light / 4.70:1 dark** — AA-clear in both themes; the review's "lower contrast in light" was **inverted** (light is the higher-contrast theme). The real failure was the **"you"** own-message name, which reused the raw brand accent (`hsl(235 86% 65%)`) and failed AA in 3 of 4 states (light-hover 3.38:1, dark 2.78/2.62:1; light-rest only 4.55:1). Fixed with a dedicated, theme-tuned `--fluux-text-self` (brand-indigo `#4f46e5` light / `#a5b4fc` dark) = ≥4.6:1 on rest **and** hover in both themes. | Shipped — `index.css:143,320`; own-message sites `ChatView.tsx:765,800`, `RoomView.tsx:1191,1234`, `SearchContextView.tsx:419,428,450`. | L   | S   |
 
 ---
 
@@ -362,7 +362,7 @@ A copy-paste checklist for triage. Severity in brackets.
 [x] [M] Server (optional) auto-expand on connection failure — §1.2 (auto-expand shipped; Cmd+, hint still not surfaced)
 [ ] [M] Auto-expand Settings search when categories > 6 — §7.4
 [ ] [M] Differentiate "Block user" from "Remove from contacts" — §6.4
-[ ] [M] Light-theme placeholder + name colours WCAG AA pass — §13.1, §13.2
+[x] [M] Light-theme placeholder + name colours WCAG AA pass — §13.1, §13.2 (§13.1 verified passing at 6.29:1; §13.2 "you" name fixed via AA-safe --fluux-text-self, peer names already passed)
 [x] [M] Settings: "Web Push · Not supported" needs context or hide — §7.1
 [x] [M] Conversation list: move unread badge onto avatar — §3.1
 [ ] [M] Surface ⌘K shortcut in chrome — §11.1
