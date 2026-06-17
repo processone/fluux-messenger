@@ -105,9 +105,10 @@ describe('LinkPreviewCard image deferral', () => {
         <LinkPreviewCard preview={preview} />
       </MediaAutoloadProvider>,
     )
-    expect(screen.getByText('T')).toBeInTheDocument()            // text still renders
     expect(container.querySelector('img')).toBeNull()            // OG image suppressed
-    expect(screen.getByRole('button')).toBeInTheDocument()       // the "show image" control
+    const control = screen.getByRole('button')                   // the "show image" control
+    expect(control).toBeInTheDocument()
+    expect(control).toHaveTextContent('T')                       // shows the link title
   })
 
   it('shows the image after tapping the control', () => {
