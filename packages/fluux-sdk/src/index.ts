@@ -407,11 +407,13 @@ export {
 export type { SigncryptEnvelope } from './core/e2ee'
 export type {
   AccountInfo,
+  ArchiveDecryptItem,
   BareJID,
   CapabilityCacheOptions,
   ConversationHandle,
   ConversationTarget,
   DecryptResult,
+  DecryptStatus,
   DeviceIdentifier,
   DiscoFeature,
   DiscoResult,
@@ -427,6 +429,7 @@ export type {
   PEPItem,
   PeerSupport,
   PinnedStrategy,
+  PluginConfiguration,
   PluginContext,
   PluginStorage,
   ProtocolFeatures,

@@ -8,10 +8,12 @@
 
 export type {
   AccountInfo,
+  ArchiveDecryptItem,
   BareJID,
   ConversationHandle,
   ConversationTarget,
   DecryptResult,
+  DecryptStatus,
   DeviceIdentifier,
   DiscoFeature,
   DiscoResult,
@@ -24,6 +26,7 @@ export type {
   Logger,
   PEPItem,
   PeerSupport,
+  PluginConfiguration,
   PluginContext,
   PluginStorage,
   ProtocolFeatures,
