@@ -515,4 +515,26 @@ mod tests {
         decrypt_all_tsks_with_passphrase(&backup, "wrong")
             .expect_err("wrong passphrase must fail");
     }
+
+    // Desktop interop guard: a real OpenKeychain (Android) `numeric9x4` backup.
+    // Its decrypted payload is an armored PUBLIC KEY BLOCK followed by a PRIVATE
+    // KEY BLOCK — confirm Sequoia's CertParser path recovers the secret key (the
+    // shared fixture is also consumed by the web-side consumeMigrationVectors).
+    #[test]
+    fn imports_real_openkeychain_numeric9x4_backup() {
+        let backup =
+            include_str!("../../src/e2ee/fixtures/openkeychain_numeric9x4_backup.asc");
+        let recovered = decrypt_all_tsks_with_passphrase(
+            backup,
+            "0228-6308-1219-5990-0322-8950-3981-3061-6394",
+        )
+        .expect("Sequoia must recover the secret key from an OpenKeychain numeric9x4 backup");
+        assert_eq!(recovered.len(), 1, "expected exactly one secret key");
+        let fp = Cert::from_bytes(recovered[0].as_bytes())
+            .unwrap()
+            .fingerprint()
+            .to_hex()
+            .to_lowercase();
+        assert_eq!(fp, "82973553e2708df2928c1118089050309406e77f");
+    }
 }

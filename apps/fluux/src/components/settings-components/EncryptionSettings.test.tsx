@@ -11,16 +11,19 @@
  *   codes) instead of spinning on "Generating your key…" for 60s.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import { EncryptionSettings } from './EncryptionSettings'
 import { useEncryptionSettingsStore } from '@/stores/encryptionSettingsStore'
 
 const mockCheckPepSupport = vi.fn<() => Promise<boolean>>()
 
 let mockStatus = 'online'
+// Plugin returned by client.e2ee.getPlugin('openpgp'). Null for the PEP
+// tests (which never reach a registered plugin); a stub for the import tests.
+let mockPlugin: Record<string, unknown> | null = null
 const mockClient = {
   discovery: { checkPepSupport: mockCheckPepSupport },
-  e2ee: { getPlugin: () => null },
+  e2ee: { getPlugin: (name: string) => (name === 'openpgp' ? mockPlugin : null) },
 }
 
 vi.mock('@fluux/sdk', async (importOriginal) => {
@@ -48,6 +51,7 @@ describe('EncryptionSettings PEP support', () => {
     vi.clearAllMocks()
     localStorage.clear()
     mockStatus = 'online'
+    mockPlugin = null
     mockCheckPepSupport.mockResolvedValue(true)
     useEncryptionSettingsStore.setState({
       openpgpEnabled: false,
@@ -156,6 +160,74 @@ describe('EncryptionSettings PEP support', () => {
           screen.getByText('settings.encryption.statusRegistrationFailed:timeout'),
         ).toBeInTheDocument()
       })
+    })
+  })
+
+  // Regression: importing an OpenPGP key from a file (GnuPG / OpenKeychain
+  // export) must accept an ARBITRARY passphrase. The import dialog must not
+  // reuse the XEP-0373 §5.4 backup-code mask, which truncates to 24 chars
+  // (6 groups of 4) and strips any character outside
+  // "123456789ABCDEFGHIJKLMNPQRSTUVWXYZ", notably "0". Reported by a user
+  // unable to type their 9-group, zero-containing OpenKeychain backup code.
+  describe('import-from-file passphrase', () => {
+    const mockGetOwnFingerprint = vi.fn<() => string | null>()
+    const mockPickKeyFile = vi.fn<() => Promise<string | null>>()
+    const mockImportKeyFromFile = vi.fn()
+
+    beforeEach(() => {
+      vi.clearAllMocks()
+      localStorage.clear()
+      mockStatus = 'online'
+      mockCheckPepSupport.mockResolvedValue(true)
+      mockGetOwnFingerprint.mockReturnValue('AAAABBBBCCCCDDDDEEEEFFFF0000111122223333')
+      mockPickKeyFile.mockResolvedValue(
+        '-----BEGIN PGP PRIVATE KEY BLOCK-----\n\nfake\n-----END PGP PRIVATE KEY BLOCK-----',
+      )
+      mockImportKeyFromFile.mockResolvedValue({
+        fingerprint: 'AAAABBBBCCCCDDDDEEEEFFFF0000111122223333',
+      })
+      mockPlugin = {
+        getOwnFingerprint: mockGetOwnFingerprint,
+        pickKeyFile: mockPickKeyFile,
+        importKeyFromFile: mockImportKeyFromFile,
+      }
+      useEncryptionSettingsStore.setState({
+        openpgpEnabled: true,
+        pluginRegisteredAt: 1,
+        registrationError: null,
+      })
+    })
+
+    it('passes an arbitrary passphrase (with "0" and >24 chars) through verbatim', async () => {
+      // An OpenKeychain numeric9x4 backup code: 9 groups of 4 digits, with zeros.
+      const externalPassphrase = '1000-2000-3000-4000-5000-6000-7000-8000-9000'
+
+      render(<EncryptionSettings />)
+
+      // The Import-from-file button only renders once the key is "ready".
+      const importButton = await screen.findByRole('button', {
+        name: 'settings.encryption.importFileAction',
+      })
+      fireEvent.click(importButton)
+
+      // The passphrase dialog opens after pickKeyFile() resolves.
+      await waitFor(() => {
+        expect(
+          document.querySelector('input[name="passphrase"], input[name="backup-code"]'),
+        ).not.toBeNull()
+      })
+      const input = document.querySelector(
+        'input[name="passphrase"], input[name="backup-code"]',
+      ) as HTMLInputElement
+
+      fireEvent.change(input, { target: { value: externalPassphrase } })
+      fireEvent.submit(input.closest('form')!)
+
+      await waitFor(() => {
+        expect(mockImportKeyFromFile).toHaveBeenCalled()
+      })
+      // Must reach the plugin unaltered — not truncated and not zero-stripped.
+      expect(mockImportKeyFromFile).toHaveBeenCalledWith(expect.any(String), externalPassphrase)
     })
   })
 })
