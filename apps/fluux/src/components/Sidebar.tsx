@@ -214,7 +214,7 @@ export function Sidebar({ onSelectContact, onStartChat, onManageUser, adminCateg
       style={{ width: isDesktop ? sidebarWidth : '100%' }}
     >
       {/* Icon Rail - with padding for macOS traffic lights */}
-      <div className="w-14 bg-fluux-bg flex flex-col items-center pt-8 pb-3 gap-2">
+      <div className="w-14 bg-fluux-bg flex flex-col items-center pt-8 pb-safe-3 gap-2">
         {/* Fluux logo - enable with VITE_SHOW_LOGO=true */}
         {import.meta.env.VITE_SHOW_LOGO === 'true' && (
           <img
@@ -444,7 +444,7 @@ export function Sidebar({ onSelectContact, onStartChat, onManageUser, adminCateg
         </div>
 
         {/* User Panel - avatar spans both rows */}
-        <div className="px-2 py-2 bg-fluux-sidebar border-t border-fluux-bg">
+        <div className="px-2 pt-2 pb-safe-2 bg-fluux-sidebar border-t border-fluux-bg">
           <div className="flex items-center gap-2 min-w-0">
             {/* Large avatar - clickable for profile settings */}
             <Tooltip content={t('sidebar.viewProfile')} position="top">

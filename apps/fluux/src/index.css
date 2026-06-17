@@ -413,6 +413,7 @@ html, body {
 
 #root {
   height: 100%;
+  background-color: var(--fluux-bg);
   /* Ensure the app content area is never treated as a window drag region.
      The title bar sets -webkit-app-region:drag on its element; without this
      counter-rule, WRY/WebKit can sometimes propagate the drag behavior to
@@ -440,7 +441,32 @@ html, body {
 /* Use on bottom-aligned bars (composer, action bars) so their background */
 /* extends into the home-indicator zone while content stays above it. */
 .pb-safe {
-  padding-bottom: calc(1rem + env(safe-area-inset-bottom));
+  padding-bottom: 1rem;
+}
+
+/* Compact safe-area variants for persistent chrome such as the sidebar rail
+   and account panel. They preserve each component's normal bottom rhythm while
+   letting the surface color fill the gesture area. */
+.pb-safe-2 {
+  padding-bottom: 0.5rem;
+}
+
+.pb-safe-3 {
+  padding-bottom: 0.75rem;
+}
+
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+  .pb-safe {
+    padding-bottom: calc(1rem + env(safe-area-inset-bottom));
+  }
+
+  .pb-safe-2 {
+    padding-bottom: calc(0.5rem + env(safe-area-inset-bottom));
+  }
+
+  .pb-safe-3 {
+    padding-bottom: calc(0.75rem + env(safe-area-inset-bottom));
+  }
 }
 
 /* Utility: guarantee a comfortable >=44px touch hit area for icon-only or */
