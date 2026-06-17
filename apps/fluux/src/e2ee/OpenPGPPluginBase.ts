@@ -476,20 +476,6 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
   abstract exportKeyToFile(passphrase: string): Promise<boolean>
 
   /**
-   * Export the account TSK as an ASCII-armored `PRIVATE KEY BLOCK`, the
-   * standard OpenPGP format expected by external tools (gpg, OpenKeychain,
-   * Kleopatra). Distinct from {@link exportKeyToFile} which produces a
-   * XEP-0373 §5 encrypted MESSAGE only other XMPP clients understand.
-   *
-   * `passphrase` is optional: when provided, secret packets are wrapped
-   * with the standard Iterated+Salted S2K (universally interoperable);
-   * when `null`, secret packets are written in clear and the UI must have
-   * acknowledged the risk. Returns `true` when the file was written,
-   * `false` when the user cancelled the save dialog.
-   */
-  abstract exportPrivateKeyToFile(passphrase: string | null): Promise<boolean>
-
-  /**
    * Open a file picker and return the armored content of the selected
    * file, or `null` when the user cancels the picker.
    */

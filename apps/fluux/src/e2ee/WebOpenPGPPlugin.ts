@@ -574,34 +574,7 @@ export class WebOpenPGPPlugin extends OpenPGPPluginBase {
       )
     }
     const armoredMessage = await this.buildExportArmor(passphrase)
-    triggerBrowserDownload(armoredMessage, keyExportFilename('openpgp-backup', ctx.account.jid))
-    return true
-  }
-
-  async exportPrivateKeyToFile(passphrase: string | null): Promise<boolean> {
-    const ctx = this.requireCtx()
-    await this.requireUnlocked()
-    if (!this.ownBundle || !this.ownPrivateKey) {
-      throw new E2EEPluginError(
-        'permanent',
-        'no-identity',
-        'WebOpenPGPPlugin: no identity to export',
-      )
-    }
-    // openpgp.js carries the secret key material on the in-memory
-    // PrivateKey. For protected export we wrap it with the user-chosen
-    // passphrase via encryptKey(); for unprotected we serialize the
-    // already-decrypted key directly. Either way the output is a
-    // standard armored PRIVATE KEY BLOCK that external tools can ingest.
-    let armoredKey: string
-    if (passphrase && passphrase.length > 0) {
-      const { encryptKey } = await import('openpgp')
-      const encrypted = await encryptKey({ privateKey: this.ownPrivateKey, passphrase })
-      armoredKey = encrypted.armor()
-    } else {
-      armoredKey = this.ownPrivateKey.armor()
-    }
-    triggerBrowserDownload(armoredKey, keyExportFilename('openpgp-private-key', ctx.account.jid))
+    triggerBrowserDownload(armoredMessage, keyExportFilename(ctx.account.jid))
     return true
   }
 
