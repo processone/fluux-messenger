@@ -128,9 +128,10 @@ End-to-end removal, all references confirmed isolated to the one settings button
 - `EncryptionSettings.tsx`: `showExternalExportDialog` state, the
   `handleExternalExportConfirm` callback, the `<ExternalKeyExportDialog>` render,
   and the second export button.
-- Rust: `openpgp_export_private_key` command (`openpgp.rs:829`), the
-  `export_private_key` method (`openpgp.rs:374`), and the registration in
-  `main.rs:1320`.
+- Rust: the entire `openpgp_export.rs` module (`export_tsk_as_private_key_block`
+  + its 5 tests), the `openpgp_export_private_key` command (`openpgp.rs:829`), the
+  `export_private_key` method (`openpgp.rs:374`, which only delegates to that
+  module), and the registration in `main.rs:1320`.
 - i18n: the `externalExport*` keys in every locale file under
   `apps/fluux/src/i18n/locales/`.
 
@@ -155,19 +156,39 @@ matches OpenKeychain's existing behavior.
 
 ## Testing
 
+Existing suites already cover the crypto/format/import core and are reused as-is:
+`backupInterop.test.ts` (export wire format), `consumeMigrationVectors.test.ts`
+(real OpenKeychain `numeric9x4` + TSK import, full decrypt round-trip),
+`consumeSequoiaVectors.test.ts`, `armorDetect.test.ts`, `passphraseGenerator.test.ts`,
+Rust `openpgp_backup.rs` (incl. `imports_real_openkeychain_numeric9x4_backup`),
+and the `RestorePassphraseDialog` / `EncryptionSettings` import-mask tests. The
+new work adds:
+
 - **Parser** (`parseArmorPassphraseFormat`): reads Fluux `xep0373`, OpenKeychain
   `numeric9x4` (existing `openkeychain_numeric9x4_backup.asc` fixture), and
   returns `null` when absent / for a raw `PRIVATE KEY BLOCK`.
 - **Header helper** (`withPassphraseFormatHeader`): inserts the line in the right
   place; idempotent / well-formed armor.
-- **Round-trip (web):** export emits `Passphrase-Format: xep0373` (v4); importing
-  that file selects the masked field; a `bip39` file selects free text.
-- **Mask selection:** import-from-file with `xep0373` → masked; `numeric9x4` /
-  absent → free text (regression guard for Bug 1).
-- **Rust:** the backup/file-export output is unchanged at the armor layer (header
-  added in TS, not Rust); `export_private_key` removed cleanly (compiles).
+- **Export wrapper** (`exportKeyToFile`): **first direct test of this method** —
+  the file-write wrappers have no coverage today, so this needs a harness that
+  stubs the Tauri save dialog (desktop) / browser download (web) and asserts the
+  emitted armor carries `Passphrase-Format: xep0373` (v4) / `bip39` (v6).
+- **Round-trip (web):** export emits the header; re-importing that file selects
+  the masked field for `xep0373`, free text for `bip39`.
+- **Mask selection, two levels:** (a) a new `RestorePassphraseDialog` case —
+  masked backup-code field in *import* mode when the format is `xep0373`, free
+  text otherwise; (b) extend the `EncryptionSettings` "import-from-file passphrase"
+  test for header-driven selection (the existing `numeric9x4`-verbatim case
+  remains valid as the free-text branch and is the Bug-1 regression guard).
+- **Server-path guard:** assert the PEP/server backup (`backupSecretKey`) armor
+  carries **no** `Passphrase-Format` header — protects the byte-identical claim
+  (header lives only on the file export).
 - `keyExportNaming.test.ts`: updated for the simplified signature.
 - **EncryptionSettings:** exactly one export button; no `ExternalKeyExportDialog`.
+- **Deletion:** `openpgp_export.rs` and its 5 tests are removed with the module;
+  the surviving `encrypt_tsk_to_passphrase` tests are untouched. No TS test
+  references `exportPrivateKeyToFile` / `ExternalKeyExportDialog`, so the cut is
+  clean.
 
 ## File reference index
 
@@ -186,6 +207,8 @@ matches OpenKeychain's existing behavior.
   second export button + handler + dialog; parse header at the import site;
   relabel the export button.
 - `apps/fluux/src/App.tsx` — parse header at its import-file site.
-- `apps/fluux/src-tauri/src/openpgp.rs`, `main.rs` — remove `export_private_key`
-  command/method/registration.
+- `apps/fluux/src-tauri/src/openpgp_export.rs` — **delete** the whole module
+  (export logic + 5 tests).
+- `apps/fluux/src-tauri/src/openpgp.rs`, `main.rs` — remove the
+  `export_private_key` method + `openpgp_export_private_key` command + registration.
 - `apps/fluux/src/i18n/locales/*.json` — remove `externalExport*`; relabel export.
