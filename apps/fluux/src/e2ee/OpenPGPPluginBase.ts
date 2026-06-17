@@ -124,6 +124,7 @@ import {
 import { usePinnedPrimaryFingerprintsStore } from '@/stores/pinnedPrimaryFingerprintsStore'
 import { useKeyChangeAlertsStore } from '@/stores/keyChangeAlertsStore'
 import { setTrustStateStatus } from '@/stores/trustStateStatusStore'
+import { withPassphraseFormatHeader } from './passphraseFormatHeader'
 
 // ---------------------------------------------------------------------------
 // XEP-0373 constants
@@ -455,26 +456,24 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
   protected abstract forgetAccount(accountJid: string): Promise<void>
 
   /**
+   * Build the armored backup MESSAGE for a file export: the XEP-0373 §5 SKESK
+   * wrap plus a `Passphrase-Format` armor header describing the passphrase
+   * family. Shared by both platforms' {@link exportKeyToFile}. NOT used for the
+   * PEP/server backup, which must stay header-free.
+   */
+  protected async buildExportArmor(passphrase: string): Promise<string> {
+    const ctx = this.requireCtx()
+    const armored = await this.backupEncrypt(ctx.account.jid, passphrase)
+    return withPassphraseFormatHeader(armored)
+  }
+
+  /**
    * Export the key to a user-chosen file. Platform-specific: Tauri uses a
    * native save dialog; web uses a browser download link.
    * Returns `true` when the file was written, `false` when the user
    * dismissed the dialog without choosing a path.
    */
   abstract exportKeyToFile(passphrase: string): Promise<boolean>
-
-  /**
-   * Export the account TSK as an ASCII-armored `PRIVATE KEY BLOCK`, the
-   * standard OpenPGP format expected by external tools (gpg, OpenKeychain,
-   * Kleopatra). Distinct from {@link exportKeyToFile} which produces a
-   * XEP-0373 §5 encrypted MESSAGE only other XMPP clients understand.
-   *
-   * `passphrase` is optional: when provided, secret packets are wrapped
-   * with the standard Iterated+Salted S2K (universally interoperable);
-   * when `null`, secret packets are written in clear and the UI must have
-   * acknowledged the risk. Returns `true` when the file was written,
-   * `false` when the user cancelled the save dialog.
-   */
-  abstract exportPrivateKeyToFile(passphrase: string | null): Promise<boolean>
 
   /**
    * Open a file picker and return the armored content of the selected

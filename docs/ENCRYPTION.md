@@ -74,6 +74,24 @@ The backup code never leaves your device and is never sent to the server. Only t
 
 From that point on, the new device can read your encrypted history and send encrypted messages under the same identity.
 
+### Exporting your key to a file
+
+Besides the server backup, **Settings → Encryption → Export to file** saves your secret key as an encrypted `.asc` file (named `openpgp-backup-<your-jid>.asc`). It uses the same XEP-0373 §5 format as the server backup — an OpenPGP message locked with your backup code — so nothing readable leaves your device.
+
+You can hand this file to another device or client:
+
+- **Another Fluux device, or another XMPP client that supports XEP-0373** (such as Gajim): use its *import key from file* option and enter the backup code.
+- **OpenKeychain** (Android): use *Restore backup* and enter the backup code.
+- **A desktop OpenPGP keyring (GnuPG, Kleopatra):** these import a raw key, not an encrypted message, so decrypt the file first and import the result. With the GnuPG command line:
+
+  ```
+  gpg --decrypt openpgp-backup-<your-jid>.asc | gpg --import
+  ```
+
+  GnuPG asks for your backup code (the file's passphrase), then imports the recovered key. In Kleopatra, *Decrypt/Verify* the file and import the output the same way.
+
+The file is only as safe as the backup code that locks it. Store it with the same care.
+
 ### What happens if you lose the backup code
 
 **It cannot be recovered.** Not by Fluux, not by your server administrator, not by anyone. If you lose the backup code and you don't have a device that still holds the secret key, the only option is to generate a new key pair. You will keep your account, but:

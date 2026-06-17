@@ -9,20 +9,16 @@
  * filename is the only place we can surface which account a key belongs to.
  */
 
-/** Filename stem per export flavour. */
-export type KeyExportKind = 'openpgp-private-key' | 'openpgp-backup'
-
 /**
- * Build the suggested filename for an exported key.
+ * Build the suggested filename for an exported key backup.
  *
- * @param kind  the export flavour (used as the filename stem)
  * @param jid   the account bare JID the key belongs to
- * @returns e.g. `openpgp-private-key-alice@example.org.asc`; falls back to
- *          `<kind>.asc` when the JID sanitizes to nothing
+ * @returns e.g. `openpgp-backup-alice@example.org.asc`; falls back to
+ *          `openpgp-backup.asc` when the JID sanitizes to nothing
  */
-export function keyExportFilename(kind: KeyExportKind, jid: string): string {
+export function keyExportFilename(jid: string): string {
   const safeJid = sanitizeForFilename(jid)
-  return safeJid ? `${kind}-${safeJid}.asc` : `${kind}.asc`
+  return safeJid ? `openpgp-backup-${safeJid}.asc` : 'openpgp-backup.asc'
 }
 
 /**

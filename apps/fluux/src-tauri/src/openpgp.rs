@@ -361,33 +361,6 @@ impl OpenpgpState {
         .unwrap_or_else(|join_err| Err(format!("backup encrypt task panicked: {join_err}")))
     }
 
-    /// Serialise the in-memory TSK for `account_jid` as an armored
-    /// PRIVATE KEY BLOCK suitable for import by external OpenPGP tools
-    /// (gpg, OpenKeychain, Kleopatra). When `passphrase` is `Some`, the
-    /// secret packets are S2K-wrapped before armoring; when `None`, the
-    /// secret packets are written in clear and the caller must have
-    /// confirmed they accept that.
-    ///
-    /// Runs on the blocking pool because the S2K wrap is non-trivial on
-    /// modern key sizes — keeps the IPC runtime free for the rest of the
-    /// app.
-    pub async fn export_private_key(
-        self: &Arc<Self>,
-        account_jid: String,
-        passphrase: Option<String>,
-    ) -> Result<String, String> {
-        let bundle = self.read_cached_bundle(&account_jid, "account")?;
-        tauri::async_runtime::spawn_blocking(move || {
-            crate::openpgp_export::export_tsk_as_private_key_block(
-                &bundle.secret_armored,
-                passphrase.as_deref(),
-            )
-            .map_err(anyhow_to_string)
-        })
-        .await
-        .unwrap_or_else(|join_err| Err(format!("export task panicked: {join_err}")))
-    }
-
     /// Import a backup fetched from the secret-key PEP node.
     ///
     /// Decrypts `backup_message` with `passphrase`, persists the recovered
@@ -818,21 +791,6 @@ pub async fn openpgp_backup_encrypt(
 ) -> Result<String, String> {
     Arc::clone(&state)
         .encrypt_backup(account_jid, passphrase)
-        .await
-}
-
-/// Export the account TSK as an armored PRIVATE KEY BLOCK for use with
-/// external OpenPGP tools (gpg, OpenKeychain, Kleopatra). `passphrase`
-/// is optional: `Some` wraps the secret packets with S2K; `None` writes
-/// them in clear, and the caller is responsible for warning the user.
-#[tauri::command]
-pub async fn openpgp_export_private_key(
-    account_jid: String,
-    passphrase: Option<String>,
-    state: State<'_, Arc<OpenpgpState>>,
-) -> Result<String, String> {
-    Arc::clone(&state)
-        .export_private_key(account_jid, passphrase)
         .await
 }
 

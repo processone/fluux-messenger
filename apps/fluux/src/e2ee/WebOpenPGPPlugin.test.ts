@@ -47,6 +47,9 @@ class TestableWebOpenPGPPlugin extends WebOpenPGPPlugin {
   callBackupEncrypt(jid: string, passphrase: string) {
     return this.backupEncrypt(jid, passphrase)
   }
+  callBuildExportArmor(passphrase: string) {
+    return this.buildExportArmor(passphrase)
+  }
   callBackupImport(jid: string, msg: string, passphrase: string) {
     return this.backupImport(jid, msg, passphrase)
   }
@@ -858,6 +861,44 @@ describe('WebOpenPGPPlugin', () => {
       await expect(
         dest.callBackupImport('alice@example.com', backupMessage, 'wrong-passphrase'),
       ).rejects.toMatchObject({ code: 'wrong-passphrase' })
+    })
+  })
+
+  describe('file export header', () => {
+    it('exported armor carries Passphrase-Format: xep0373 and round-trips', async () => {
+      const source = new TestableWebOpenPGPPlugin()
+      const sourceCtx = makeCtx('alice@example.com').ctx
+      setSessionPassphrase('source-session-pp')
+      await source.init(sourceCtx)
+      const original = await source.callEnsureKeyMaterial('alice@example.com')
+
+      const exported = await source.callBuildExportArmor('correct horse battery staple eight words ok')
+      expect(exported).toContain('-----BEGIN PGP MESSAGE-----')
+      expect(exported).toMatch(/Passphrase-Format: xep0373/)
+
+      // The header must not break import: a fresh plugin recovers the key.
+      clearSessionPassphrase()
+      const dest = new TestableWebOpenPGPPlugin()
+      const destCtx = makeCtx('alice@example.com').ctx
+      await dest.init(destCtx)
+      const restored = await dest.callBackupImport(
+        'alice@example.com',
+        exported,
+        'correct horse battery staple eight words ok',
+      )
+      expect(restored.fingerprint).toBe(original.fingerprint)
+    })
+
+    it('backupEncrypt output (PEP/server backup) carries NO Passphrase-Format header', async () => {
+      const source = new TestableWebOpenPGPPlugin()
+      const sourceCtx = makeCtx('alice@example.com').ctx
+      setSessionPassphrase('source-session-pp')
+      await source.init(sourceCtx)
+      await source.callEnsureKeyMaterial('alice@example.com')
+
+      const raw = await source.callBackupEncrypt('alice@example.com', 'some passphrase here ok eight')
+      expect(raw).toContain('-----BEGIN PGP MESSAGE-----')
+      expect(raw).not.toContain('Passphrase-Format')
     })
   })
 
