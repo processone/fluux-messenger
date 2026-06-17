@@ -243,7 +243,7 @@ width — but a few rough edges:
 
 | #    | Issue                                                                                                                                                                                                     | Recommendation                                                                                                                   | Sev | Eff |
 |------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------|-----|-----|
-| 12.1 | ⚠️ **Partially addressed.** RoomHeader (group chats) now has a mobile kebab/overflow menu (notifications + room management), but ChatHeader (1:1) still has no overflow menu — only back / avatar / name / encryption / search.                                                                   | Add a kebab menu on the right of the header that opens a mobile sheet with: View members · Mute · Block · Conversation settings. | M   | M   |
+| 12.1 | ✅ **Resolved.** ChatHeader (1:1) now has an overflow (kebab) menu (`OverflowMenu`, shared with the contact-profile kebab) offering **View profile** and **Archive/Unarchive**. Mute is N/A for 1:1 (no per-conversation mute exists); Block stays on the contact-profile screen. | Add a kebab menu on the right of the header that opens a mobile sheet with: View members · Mute · Block · Conversation settings. | M   | M   |
 | 12.2 | ⚠️ **Partially addressed.** The mobile "+" button now has an `aria-label`, but still no visible tooltip for sighted users, and the attachment/reply/edit affordances remain hidden behind it. | Tooltip + a small "+" → "Attachments / GIF / Reply" sheet.                                                                       | L   | S   |
 | 12.3 | The icon rail on mobile is the same width as desktop (~56 px) which feels too wide on a 375 px viewport — eats 15 % of horizontal space.                                                                  | Reduce the icon-rail width on `<sm` breakpoints; consider a bottom-tab pattern below 480 px.                                     | L   | M   |
 | 12.4 | **No swipe gesture to go back** from chat → conversation list (only the `←` button).                                                                                                                      | Add `react-swipeable` left-edge swipe → close chat. Big mobile DX win.                                                           | M   | M   |
@@ -356,7 +356,7 @@ A copy-paste checklist for triage. Severity in brackets.
 [x] [M] Floating "↓ N new" pill on the chat list — §2.3
 [ ] [M] Read-receipts (XEP-0184) with double-checkmark on last message — §2.2
 [ ] [M] Render upload progress UI tied to SDK's UploadState — §14.4 (partial: % shown in send button; bar/tray still open)
-[ ] [M] Mobile: kebab menu in chat header for members/mute/settings — §12.1 (done for rooms; 1:1 ChatHeader still open)
+[x] [M] Mobile: kebab menu in chat header — §12.1 (shipped: 1:1 ChatHeader overflow menu with View profile + Archive/Unarchive, via shared OverflowMenu component)
 [ ] [M] Mobile: left-edge swipe to go back — §12.4
 [ ] [M] Server-status dashboard in Admin empty state — §10.1
 [x] [M] Server (optional) auto-expand on connection failure — §1.2 (auto-expand shipped; Cmd+, hint still not surfaced)

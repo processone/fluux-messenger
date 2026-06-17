@@ -33,6 +33,23 @@ exports[`ChatView > Snapshots > should match snapshot with messages 1`] = `
           </p>
         </div>
       </div>
+      <div
+        class="relative"
+      >
+        <button
+          aria-expanded="false"
+          aria-haspopup="menu"
+          aria-label="contacts.actionsMenu"
+          class="p-1.5 rounded hover:bg-fluux-hover text-fluux-muted hover:text-fluux-text transition-colors"
+          type="button"
+        >
+          <span
+            data-testid="icon-more-vertical"
+          >
+            More
+          </span>
+        </button>
+      </div>
     </header>
     <div
       class="focus-zone flex-1 flex flex-col min-h-0 p-1 relative"
@@ -475,6 +492,23 @@ exports[`ChatView > Snapshots > should match snapshot with typing indicator 1`] 
             Online
           </p>
         </div>
+      </div>
+      <div
+        class="relative"
+      >
+        <button
+          aria-expanded="false"
+          aria-haspopup="menu"
+          aria-label="contacts.actionsMenu"
+          class="p-1.5 rounded hover:bg-fluux-hover text-fluux-muted hover:text-fluux-text transition-colors"
+          type="button"
+        >
+          <span
+            data-testid="icon-more-vertical"
+          >
+            More
+          </span>
+        </button>
       </div>
     </header>
     <div
