@@ -187,7 +187,7 @@ function SystemNotificationItem({ notification, onDismiss }: SystemNotificationI
         <Tooltip content={t('sidebar.dismiss')} position="left">
           <button
             onClick={onDismiss}
-            className="text-fluux-muted hover:text-fluux-text transition-colors"
+            className="text-fluux-muted hover:text-fluux-text transition-colors tap-target"
             aria-label={t('sidebar.dismiss')}
           >
             <X className="size-4" />

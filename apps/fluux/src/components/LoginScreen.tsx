@@ -433,7 +433,7 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
                 }}
                 disabled={isLoading}
                 className="absolute end-2 top-1/2 -translate-y-1/2 p-1 text-fluux-muted hover:text-fluux-text
-                           disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                           disabled:opacity-50 disabled:cursor-not-allowed transition-colors tap-target"
                 aria-label={showPassword ? t('login.hidePassword') : t('login.showPassword')}
               >
                 {showPassword ? (

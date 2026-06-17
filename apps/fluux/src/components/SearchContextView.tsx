@@ -279,7 +279,7 @@ export function SearchContextView({ onBack }: { onBack?: () => void }) {
         {onBack && (
           <button
             onClick={handleBack}
-            className="p-1 -ms-1 rounded hover:bg-fluux-hover md:hidden"
+            className="p-1 -ms-1 rounded hover:bg-fluux-hover md:hidden tap-target"
             aria-label={t('common.back', 'Back')}
           >
             <ArrowLeft className="size-5 text-fluux-muted rtl-mirror" />
