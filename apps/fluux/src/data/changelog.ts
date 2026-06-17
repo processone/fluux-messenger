@@ -14,6 +14,45 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: '0.16.2',
+    date: '2026-06-17',
+    sections: [
+      {
+        type: 'added',
+        items: [
+          'Login screen now explains TLS and certificate connection failures (expired, untrusted, or wrong-host certificates; timeouts; refused connections) with cause-specific guidance instead of a generic error',
+          'Auto-download media setting (Always / Private only / Never) under a new Privacy category — media in public channels and from strangers is no longer fetched automatically',
+          'Overflow (kebab) menu in the 1:1 chat header with View profile and Archive/Unarchive',
+          'Join Room dialog gains a password field for password-protected rooms',
+          'Warning before joining a non-anonymous room that would expose your real JID, shown once per room',
+          'MUC join and invitation errors now appear in the exportable XMPP console',
+        ],
+      },
+      {
+        type: 'changed',
+        items: [
+          'OpenPGP: a single "Export to file" now produces one encrypted backup carrying a Passphrase-Format hint, so importing it here, in OpenKeychain, or in other XEP-0373 clients picks the right passphrase field automatically; the separate raw private-key export was removed',
+          'OpenPGP: exported key files now include the account JID in their filename',
+          'Deferred media placeholders now show the file name, so you can tell what the media is before loading it',
+          'Group chats: surface why a room join fails (password required or incorrect, nickname in use, members-only, banned, full, …) across every join entry point instead of silently spinning',
+        ],
+      },
+      {
+        type: 'fixed',
+        items: [
+          '1:1 message history was empty on Prosody servers — MAM support is now discovered on the account bare JID as well as the server domain (XEP-0313)',
+          'OpenPGP: import keys exported from OpenKeychain or GnuPG — the passphrase field and public-then-private key payloads are now handled',
+          'Message history: recover stale catch-up cursors and forward-fill gaps so stretches of messages (including your own sent messages) are no longer silently skipped after offline periods',
+          'Link previews: the "Show image" control no longer opens the link when tapped, and now shows the link title',
+          'Own-message sender name now meets WCAG AA contrast in both light and dark themes',
+          'Group chats: reactions, edits, and retractions are hidden in IRC gateway rooms that cannot support them (replies still work)',
+          'Group chats: the "delete for all" moderation action is only offered in rooms whose server supports message moderation (XEP-0425)',
+          'Bookmarks added or removed on another device now sync live instead of only after the next reconnect (XEP-0402)',
+        ],
+      },
+    ],
+  },
+  {
     version: '0.16.1',
     date: '2026-06-15',
     sections: [
