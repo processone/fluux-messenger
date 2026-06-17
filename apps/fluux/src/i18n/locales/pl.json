@@ -51,7 +51,7 @@
             "cert": {
                 "expired": "Certyfikat serwera wygasł. Skontaktuj się z administratorem serwera. Jeśli adres jest nieprawidłowy, edytuj pole serwera poniżej.",
                 "nameMismatch": "Certyfikat serwera został wystawiony dla innej nazwy hosta. Sprawdź adres serwera poniżej lub skontaktuj się z administratorem serwera.",
-                "untrusted": "Certyfikat serwera jest podpisany własnoręcznie lub wystawiony przez nieznaną instytucję, dlatego nie można mu zaufać. Sprawdź adres serwera lub skontaktuj się z administratorem serwera.",
+                "untrusted": "Certyfikat serwera jest samopodpisany lub wystawiony przez nieznany urząd certyfikacji, dlatego nie można mu zaufać. Sprawdź adres serwera lub skontaktuj się z administratorem serwera.",
                 "generic": "Nie można zweryfikować certyfikatu zabezpieczeń serwera. Sprawdź adres serwera poniżej lub skontaktuj się z administratorem serwera."
             }
         }

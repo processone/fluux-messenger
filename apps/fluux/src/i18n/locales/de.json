@@ -51,7 +51,7 @@
             "cert": {
                 "expired": "Das Zertifikat des Servers ist abgelaufen. Wende dich an den Serveradministrator. Wenn die Adresse falsch ist, bearbeite das Serverfeld unten.",
                 "nameMismatch": "Das Zertifikat des Servers wurde für einen anderen Hostnamen ausgestellt. Prüfe die Serveradresse unten oder wende dich an den Serveradministrator.",
-                "untrusted": "Das Zertifikat des Servers ist selbstsigniert oder wurde von einer unbekannten Stelle ausgestellt, daher kann es nicht vertraut werden. Prüfe die Serveradresse oder wende dich an den Serveradministrator.",
+                "untrusted": "Das Sicherheitszertifikat des Servers ist selbstsigniert oder stammt von einer unbekannten Zertifizierungsstelle, daher kann ihm nicht vertraut werden. Überprüfe die Serveradresse, oder wende dich an den Serveradministrator.",
                 "generic": "Das Sicherheitszertifikat des Servers konnte nicht überprüft werden. Prüfe die Serveradresse unten oder wende dich an den Serveradministrator."
             }
         }

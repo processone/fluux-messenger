@@ -44,7 +44,7 @@
         "errors": {
             "tlsCertTitle": "Het beveiligingscertificaat van de server kon niet worden geverifieerd",
             "tlsOtherTitle": "Beveiligde verbinding mislukt",
-            "tlsOtherBody": "De versleutelde verbinding met de server kon niet worden tot stand gebracht. De TLS-configuratie van de server wordt mogelijk niet ondersteund. Controleer het serveradres of neem contact op met de serverbeheerder.",
+            "tlsOtherBody": "De versleutelde verbinding met de server kon niet tot stand worden gebracht. De TLS-configuratie van de server wordt mogelijk niet ondersteund. Controleer het serveradres of neem contact op met de serverbeheerder.",
             "unreachableTitle": "De server is niet bereikbaar",
             "timeoutBody": "De server heeft niet op tijd gereageerd. Controleer uw netwerk en het serveradres, en probeer het opnieuw.",
             "refusedBody": "De server heeft de verbinding geweigerd. Controleer het serveradres en de poort, en probeer het opnieuw.",
