@@ -142,7 +142,7 @@ export function RoomHeader({
       {onBack && (
         <button
           onClick={onBack}
-          className="p-1 -ms-1 rounded hover:bg-fluux-hover md:hidden"
+          className="p-1 -ms-1 rounded hover:bg-fluux-hover md:hidden tap-target"
           aria-label={t('rooms.backToRooms')}
         >
           <ArrowLeft className="size-5 text-fluux-muted rtl-mirror" />
@@ -179,7 +179,7 @@ export function RoomHeader({
         <Tooltip content={t('rooms.notificationSettings')} position="bottom" disabled={showNotifyMenu}>
           <button
             onClick={() => setShowNotifyMenu(!showNotifyMenu)}
-            className={`flex items-center gap-1 px-2 py-1.5 rounded-lg transition-colors
+            className={`flex items-center gap-1 px-2 py-1.5 rounded-lg transition-colors tap-target
                        ${notifyMode !== 'mentions'
                          ? 'bg-fluux-brand/20 text-fluux-brand'
                          : 'hover:bg-fluux-hover text-fluux-muted hover:text-fluux-text'
@@ -248,7 +248,7 @@ export function RoomHeader({
       <Tooltip content={t('rooms.inviteMember')} position="bottom">
         <button
           onClick={() => setShowInviteModal(true)}
-          className="p-1.5 rounded-lg hover:bg-fluux-hover text-fluux-muted hover:text-fluux-text transition-colors"
+          className="p-1.5 rounded-lg hover:bg-fluux-hover text-fluux-muted hover:text-fluux-text transition-colors tap-target"
           aria-label={t('rooms.inviteMember')}
         >
           <UserPlus className="size-4" />
@@ -261,7 +261,7 @@ export function RoomHeader({
           <Tooltip content={t('rooms.manageRoom')} position="bottom" disabled={showOwnerMenu}>
             <button
               onClick={() => setShowOwnerMenu(!showOwnerMenu)}
-              className={`flex items-center gap-1 px-2 py-1.5 rounded-lg transition-colors
+              className={`flex items-center gap-1 px-2 py-1.5 rounded-lg transition-colors tap-target
                          ${showOwnerMenu
                            ? 'bg-fluux-hover text-fluux-text'
                            : 'hover:bg-fluux-hover text-fluux-muted hover:text-fluux-text'
@@ -393,7 +393,8 @@ export function RoomHeader({
         <Tooltip content={t('chat.searchInConversation', 'Search in conversation')} position="bottom">
           <button
             onClick={onSearchInConversation}
-            className="p-1.5 rounded hover:bg-fluux-hover text-fluux-muted hover:text-fluux-text transition-colors"
+            className="p-1.5 rounded hover:bg-fluux-hover text-fluux-muted hover:text-fluux-text transition-colors tap-target"
+            aria-label={t('chat.searchInConversation', 'Search in conversation')}
           >
             <Search className="size-4" />
           </button>
@@ -404,7 +405,7 @@ export function RoomHeader({
       <Tooltip content={showOccupants ? t('rooms.hideMembers') : t('rooms.showMembers')} position="bottom">
         <button
           onClick={onToggleOccupants}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-colors
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-colors tap-target
                      ${showOccupants
                        ? 'bg-fluux-brand/20 text-fluux-brand'
                        : 'hover:bg-fluux-hover text-fluux-muted hover:text-fluux-text'

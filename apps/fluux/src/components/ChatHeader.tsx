@@ -85,7 +85,7 @@ export function ChatHeader({
       {onBack && (
         <button
           onClick={onBack}
-          className="p-1 -ms-1 rounded hover:bg-fluux-hover md:hidden"
+          className="p-1 -ms-1 rounded hover:bg-fluux-hover md:hidden tap-target"
           aria-label={t('conversations.backToConversations')}
         >
           <ArrowLeft className="size-5 text-fluux-muted rtl-mirror" />
@@ -167,7 +167,8 @@ export function ChatHeader({
       {onSearchInConversation && (
         <button
           onClick={onSearchInConversation}
-          className="p-1.5 rounded hover:bg-fluux-hover text-fluux-muted hover:text-fluux-text transition-colors"
+          className="p-1.5 rounded hover:bg-fluux-hover text-fluux-muted hover:text-fluux-text transition-colors tap-target"
+          aria-label={t('chat.searchInConversation', 'Search in conversation')}
           title={t('chat.searchInConversation', 'Search in conversation')}
         >
           <Search className="size-4" />
@@ -179,7 +180,7 @@ export function ChatHeader({
         <OverflowMenu
           ariaLabel={t('contacts.actionsMenu')}
           items={menuItems}
-          buttonClassName="p-1.5 rounded hover:bg-fluux-hover text-fluux-muted hover:text-fluux-text transition-colors"
+          buttonClassName="p-1.5 rounded hover:bg-fluux-hover text-fluux-muted hover:text-fluux-text transition-colors tap-target"
           iconClassName="size-4"
         />
       )}
@@ -194,7 +195,7 @@ function formatFingerprint(fp: string): string {
 function KeyLockedIcon({ fingerprint }: { fingerprint?: string }) {
   const { t } = useTranslation()
   const openWebUnlockDialog = useWebUnlockDialogStore((s) => s.openWebUnlockDialog)
-  const btnClass = 'p-1.5 rounded transition-colors'
+  const btnClass = 'p-1.5 rounded transition-colors tap-target'
   const tooltip = (
     <div>
       <div>{t('chat.encryption.keyLockedTooltip')}</div>
@@ -233,7 +234,7 @@ function EncryptionIcon({
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
-  const btnClass = 'p-1.5 rounded transition-colors'
+  const btnClass = 'p-1.5 rounded transition-colors tap-target'
 
   useEffect(() => {
     if (!open) return

@@ -814,7 +814,7 @@ export function MessageComposer({
                   handleFileClick()
                 }}
                 disabled={!isUploadSupported}
-                className={`w-full flex items-center gap-3 px-3 py-2 text-sm text-start transition-colors ${
+                className={`w-full flex items-center gap-3 px-3 py-2 touch:py-3 text-sm text-start transition-colors ${
                   isUploadSupported
                     ? 'text-fluux-text hover:bg-fluux-hover'
                     : 'text-fluux-muted/50 cursor-not-allowed'
@@ -830,7 +830,7 @@ export function MessageComposer({
                     setShowAttachMenu(false)
                     onCreatePoll()
                   }}
-                  className="w-full flex items-center gap-3 px-3 py-2 text-sm text-start text-fluux-text hover:bg-fluux-hover transition-colors"
+                  className="w-full flex items-center gap-3 px-3 py-2 touch:py-3 text-sm text-start text-fluux-text hover:bg-fluux-hover transition-colors"
                 >
                   <BarChart3 className="size-4 flex-shrink-0" />
                   {t('poll.create', 'Create Poll')}

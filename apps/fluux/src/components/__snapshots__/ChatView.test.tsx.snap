@@ -40,7 +40,7 @@ exports[`ChatView > Snapshots > should match snapshot with messages 1`] = `
           aria-expanded="false"
           aria-haspopup="menu"
           aria-label="contacts.actionsMenu"
-          class="p-1.5 rounded hover:bg-fluux-hover text-fluux-muted hover:text-fluux-text transition-colors"
+          class="p-1.5 rounded hover:bg-fluux-hover text-fluux-muted hover:text-fluux-text transition-colors tap-target"
           type="button"
         >
           <span
@@ -500,7 +500,7 @@ exports[`ChatView > Snapshots > should match snapshot with typing indicator 1`] 
           aria-expanded="false"
           aria-haspopup="menu"
           aria-label="contacts.actionsMenu"
-          class="p-1.5 rounded hover:bg-fluux-hover text-fluux-muted hover:text-fluux-text transition-colors"
+          class="p-1.5 rounded hover:bg-fluux-hover text-fluux-muted hover:text-fluux-text transition-colors tap-target"
           type="button"
         >
           <span

@@ -77,7 +77,7 @@ export const MessageReactions = memo(function MessageReactions({
               }
               onReaction(emoji)
             } : undefined}
-            className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-xs
+            className={`inline-flex items-center gap-1 px-1.5 py-0.5 touch:px-2.5 touch:py-1.5 rounded-full text-xs
                        border transition-colors ${
                          myReactions.includes(emoji)
                            ? 'bg-fluux-brand/20 border-fluux-brand'

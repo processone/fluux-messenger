@@ -50,7 +50,7 @@ export function ModalShell({
             <button
               onClick={onClose}
               aria-label={t('common.close')}
-              className="p-1 text-fluux-muted hover:text-fluux-text rounded hover:bg-fluux-hover"
+              className="p-1 text-fluux-muted hover:text-fluux-text rounded hover:bg-fluux-hover tap-target"
             >
               <X className="size-4" />
             </button>
