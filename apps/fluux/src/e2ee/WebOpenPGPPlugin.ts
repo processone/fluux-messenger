@@ -37,6 +37,7 @@ import { KeyPickerRequiredError, NoRecoveryAvailableError } from './recoveryErro
 import { clearSessionPassphrase, getSessionPassphrase, setSessionPassphrase } from './webPassphraseStore'
 import { USE_V6_KEYS } from './passphraseGenerator'
 import { detectArmorKind } from './armorDetect'
+import { parseSecretKeysFromBackupPayload } from './backupKeyMaterial'
 
 const PRIVATE_KEY_STORAGE_KEY = 'private-key'
 
@@ -323,7 +324,7 @@ export class WebOpenPGPPlugin extends OpenPGPPluginBase {
     backupMessage: string,
     passphrase: string,
   ): Promise<KeyBundle> {
-    const { readMessage, decrypt, readPrivateKey, encryptKey } = await import('openpgp')
+    const { readMessage, decrypt, encryptKey } = await import('openpgp')
 
     // Decrypt the backup message. Use format:'binary' to handle both
     // Sequoia-generated backups (binary TSK) and legacy web backups
@@ -342,14 +343,10 @@ export class WebOpenPGPPlugin extends OpenPGPPluginBase {
       )
     }
 
-    // Parse the recovered private key — try binary first (Sequoia format),
-    // fall back to armored (legacy web format).
-    let privateKey
-    try {
-      privateKey = await readPrivateKey({ binaryKey: tskBytes })
-    } catch {
-      privateKey = await readPrivateKey({ armoredKey: new TextDecoder().decode(tskBytes) })
-    }
+    // Recover the secret key, accepting a binary TSK, a single armored private
+    // key, or OpenKeychain's public-then-private armored payload. A single-key
+    // backup yields exactly one; take the first.
+    const [privateKey] = await parseSecretKeysFromBackupPayload(tskBytes)
 
     // Store encrypted with the backup passphrase (which becomes the session passphrase)
     const encrypted = await encryptKey({ privateKey, passphrase })
@@ -376,7 +373,7 @@ export class WebOpenPGPPlugin extends OpenPGPPluginBase {
     backupMessage: string,
     passphrase: string,
   ): Promise<PrivateKey[]> {
-    const { readMessage, decrypt, readPrivateKeys } = await import('openpgp')
+    const { readMessage, decrypt } = await import('openpgp')
 
     const message = await readMessage({ armoredMessage: backupMessage })
     let tskBytes: Uint8Array
@@ -396,13 +393,9 @@ export class WebOpenPGPPlugin extends OpenPGPPluginBase {
       )
     }
 
-    try {
-      return await readPrivateKeys({ binaryKeys: tskBytes })
-    } catch {
-      return await readPrivateKeys({
-        armoredKeys: new TextDecoder().decode(tskBytes),
-      })
-    }
+    // The payload is either a binary TSK (Fluux/Sequoia) or armored key blocks
+    // (OpenKeychain: a public block then a private block); branch accordingly.
+    return parseSecretKeysFromBackupPayload(tskBytes)
   }
 
   /**

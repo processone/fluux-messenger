@@ -1243,6 +1243,10 @@ export function EncryptionSettings() {
           title={t('settings.encryption.importFileDialogTitle')}
           body={t('settings.encryption.importFileDialogBody')}
           confirmLabel={t('settings.encryption.importFileAction')}
+          // An imported key (GnuPG / OpenKeychain export) carries an arbitrary
+          // passphrase: free-text entry with a reveal toggle, no password-manager
+          // autofill, and trimming. See RestorePassphraseDialog 'import' mode.
+          mode="import"
           onConfirm={handleImportFileConfirm}
           onCancel={() => {
             setShowImportFileDialog(false)
