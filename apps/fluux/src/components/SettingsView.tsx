@@ -11,6 +11,7 @@ import {
   BlockedUsersSettings,
   StorageSettings,
   EncryptionSettings,
+  PrivacySettings,
   type SettingsCategory,
   SETTINGS_CATEGORIES,
   DEFAULT_SETTINGS_CATEGORY,
@@ -51,6 +52,8 @@ export function SettingsView({ onBack }: SettingsViewProps) {
         return <LanguageSettings />
       case 'notifications':
         return <NotificationsSettings />
+      case 'privacy':
+        return <PrivacySettings />
       case 'updates':
         // Updates only available on macOS/Windows, not Linux (users update via package manager)
         return isUpdaterEnabled() ? <UpdatesSettings /> : <ProfileSettings />
