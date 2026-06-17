@@ -5,8 +5,24 @@ import { BrowseRoomsModal } from './BrowseRoomsModal'
 // Mock the SDK hooks
 const mockBrowsePublicRooms = vi.fn()
 const mockJoinRoom = vi.fn()
+const mockJoinResult = vi.fn()
 const mockSetActiveRoom = vi.fn()
 const mockSetActiveConversation = vi.fn()
+
+const { RoomJoinError } = vi.hoisted(() => {
+  class RoomJoinError extends Error {
+    constructor(
+      public roomJid: string,
+      public condition: string,
+      public errorType?: string,
+      public text?: string,
+    ) {
+      super(text || `Room join failed: ${condition}`)
+      this.name = 'RoomJoinError'
+    }
+  }
+  return { RoomJoinError }
+})
 
 vi.mock('@fluux/sdk', () => ({
   useConnection: () => ({
@@ -15,6 +31,7 @@ vi.mock('@fluux/sdk', () => ({
   useRoom: () => ({
     browsePublicRooms: mockBrowsePublicRooms,
     joinRoom: mockJoinRoom,
+    joinResult: mockJoinResult,
     getRoom: () => undefined,
     setActiveRoom: mockSetActiveRoom,
     mucServiceJid: 'conference.example.com',
@@ -27,6 +44,7 @@ vi.mock('@fluux/sdk', () => ({
   WELL_KNOWN_MUC_SERVERS: ['conference.process-one.net', 'muc.xmpp.org'],
   getLocalPart: (jid: string) => jid.split('@')[0],
   generateConsistentColorHexSync: () => '#5588aa',
+  RoomJoinError,
 }))
 
 // Mock React store hooks (from @fluux/sdk/react)
@@ -62,6 +80,7 @@ describe('BrowseRoomsModal', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockBrowsePublicRooms.mockResolvedValue({ rooms: sampleRooms, pagination: {} })
+    mockJoinResult.mockResolvedValue(undefined)
   })
 
   describe('rendering', () => {
@@ -463,6 +482,26 @@ describe('BrowseRoomsModal', () => {
       })
     })
 
+    it('shows a mapped inline error when joinResult rejects with a RoomJoinError', async () => {
+      mockJoinRoom.mockResolvedValue(undefined)
+      mockJoinResult.mockRejectedValue(
+        new RoomJoinError('general@conference.example.com', 'registration-required'),
+      )
+
+      render(<BrowseRoomsModal onClose={mockOnClose} />)
+
+      await waitFor(() => {
+        expect(screen.getByText('General Chat')).toBeInTheDocument()
+      })
+
+      fireEvent.click(screen.getAllByText('rooms.join')[0])
+
+      await waitFor(() => {
+        expect(screen.getByText('rooms.membersOnly')).toBeInTheDocument()
+      })
+      expect(mockOnClose).not.toHaveBeenCalled()
+    })
+
     it('should show error when trying to join with whitespace-only nickname', async () => {
       render(<BrowseRoomsModal onClose={mockOnClose} />)
 
@@ -527,6 +566,7 @@ describe('BrowseRoomsModal', () => {
       vi.mocked(await import('@fluux/sdk')).useRoom = () => ({
         browsePublicRooms: mockBrowsePublicRooms,
         joinRoom: mockJoinRoom,
+        joinResult: mockJoinResult,
         getRoom: (jid: string) => mockRoomsMap.get(jid),
         setActiveRoom: mockSetActiveRoom,
         mucServiceJid: 'conference.example.com',

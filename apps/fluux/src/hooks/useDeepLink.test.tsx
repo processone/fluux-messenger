@@ -9,7 +9,23 @@ const mockActivateConversation = vi.fn()
 const mockAddConversation = vi.fn()
 const mockActivateRoom = vi.fn()
 const mockJoinRoom = vi.fn()
+const mockJoinResult = vi.fn()
 const mockHasConversation = vi.fn()
+
+const { RoomJoinError } = vi.hoisted(() => {
+  class RoomJoinError extends Error {
+    constructor(
+      public roomJid: string,
+      public condition: string,
+      public errorType?: string,
+      public text?: string,
+    ) {
+      super(text || `Room join failed: ${condition}`)
+      this.name = 'RoomJoinError'
+    }
+  }
+  return { RoomJoinError }
+})
 
 vi.mock('@fluux/sdk', () => ({
   // Vanilla stores (for imperative .getState() access)
@@ -23,6 +39,7 @@ vi.mock('@fluux/sdk', () => ({
   }),
   useRoom: () => ({
     joinRoom: mockJoinRoom,
+    joinResult: mockJoinResult,
     getRoomInfo: () => Promise.resolve(null),
     isNonAnonymousRoomAcknowledged: () => false,
   }),
@@ -68,6 +85,7 @@ vi.mock('@fluux/sdk', () => ({
     const atIndex = bareJid.indexOf('@')
     return atIndex >= 0 ? bareJid.substring(0, atIndex) : bareJid
   },
+  RoomJoinError,
 }))
 
 // Mock React store hooks (from @fluux/sdk/react)
@@ -143,6 +161,7 @@ describe('useDeepLink', () => {
     mockHasConversation.mockReturnValue(false)
     mockGetCurrent.mockResolvedValue([])
     mockJoinRoom.mockResolvedValue(undefined)
+    mockJoinResult.mockResolvedValue(undefined)
     currentLocation.current = { pathname: '/', search: '' }
     // Suppress "[Navigation] Failed to clear notifications" warnings in tests
     console.warn = vi.fn()
@@ -434,6 +453,40 @@ describe('useDeepLink', () => {
       expect(mockJoinRoom).toHaveBeenCalled()
       // Should navigate to rooms URL
       expect(currentLocation.current.pathname).toBe('/rooms/room%40conference.example.org')
+    })
+
+    test('toasts and still navigates when the join fails', async () => {
+      const { useToastStore } = await import('@/stores/toastStore')
+      useToastStore.setState({ toasts: [] })
+      mockJoinRoom.mockResolvedValue(undefined)
+      mockJoinResult.mockRejectedValue(new RoomJoinError('room@conference.example.org', 'forbidden'))
+
+      let urlCallback: ((urls: string[]) => void) | undefined
+      mockOnOpenUrl.mockImplementation((cb) => {
+        urlCallback = cb
+        return Promise.resolve(mockUnlisten)
+      })
+
+      renderHook(() => useDeepLink(), {
+        wrapper: createWrapper('/messages'),
+      })
+
+      await waitFor(() => {
+        expect(urlCallback).toBeDefined()
+      })
+
+      await act(async () => {
+        urlCallback!(['xmpp:room@conference.example.org?join'])
+      })
+
+      // An error toast was surfaced...
+      await waitFor(() => {
+        expect(useToastStore.getState().toasts.some((t) => t.type === 'error')).toBe(true)
+      })
+      // ...and navigation still happened (navigate regardless of join outcome).
+      await waitFor(() => {
+        expect(currentLocation.current.pathname).toBe('/rooms/room%40conference.example.org')
+      })
     })
 
     test('ignores invalid XMPP URIs', async () => {

@@ -10,6 +10,9 @@ import { useEffect, useRef, useCallback } from 'react'
 import { useChat, useRoom, useRoster, chatStore, type Conversation, parseXmppUri, isMucJid, getBareJid } from '@fluux/sdk'
 import { useConnectionStore } from '@fluux/sdk/react'
 import { useNavigateToTarget } from './useNavigateToTarget'
+import { useTranslation } from 'react-i18next'
+import { useToastStore } from '@/stores/toastStore'
+import { getRoomJoinErrorMessage } from '@/utils/roomJoinError'
 
 // Tauri detection
 const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
@@ -22,8 +25,10 @@ const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
  */
 export function useDeepLink() {
   const { addConversation } = useChat()
-  const { joinRoom, getRoomInfo, isNonAnonymousRoomAcknowledged } = useRoom()
+  const { joinRoom, joinResult, getRoomInfo, isNonAnonymousRoomAcknowledged } = useRoom()
   const { navigateToConversation, navigateToRoom } = useNavigateToTarget()
+  const { t } = useTranslation()
+  const addToast = useToastStore((s) => s.addToast)
   const { contacts } = useRoster()
   // Use focused selector to only subscribe to jid
   const jid = useConnectionStore((s) => s.jid)
@@ -80,9 +85,18 @@ export function useDeepLink() {
 
       // Join the room (reuse the inspection to avoid a second disco query)
       const joinOptions = { ...(password ? { password } : {}), ...(features ? { knownFeatures: features } : {}) }
-      await joinRoom(roomJid, nickname, Object.keys(joinOptions).length > 0 ? joinOptions : undefined)
+      try {
+        await joinRoom(roomJid, nickname, Object.keys(joinOptions).length > 0 ? joinOptions : undefined)
+        await joinResult(roomJid)
+      } catch (err) {
+        // A deep link can carry a password, so distinguish "incorrect password"
+        // from "password required" when the server rejects with not-authorized.
+        addToast('error', getRoomJoinErrorMessage(t, err, { passwordWasSent: !!password }))
+      }
 
-      // Navigate to rooms view and activate the room
+      // Navigate to the room regardless of outcome: on failure the user lands on
+      // the room view with a Join button, and the toast carries the reason. Matches
+      // the issue-#37 "navigate without joining" branch above.
       navigateToRoom(roomJid)
     } else {
       // Handle 1:1 chat URI
