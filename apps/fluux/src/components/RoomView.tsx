@@ -611,17 +611,31 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
         {warningDialog}
       </div>
 
-      {/* Occupant panel (inline sidebar, desktop only — mobile uses full-screen in ChatLayout) */}
+      {/* Occupant panel (>=768px; <768 uses the full-screen panel in ChatLayout).
+          Below lg it's a right-edge drawer over a dimmed backdrop so it doesn't
+          squeeze the chat into a narrow column on tablets; at lg+ there's room
+          for it as an in-flow side column. */}
       {showOccupants && !isSmallScreen() && (
-        <OccupantPanel
-          room={activeRoom}
-          contactsByJid={contactsByJid}
-          ownAvatar={ownAvatar}
-          onClose={handleCloseOccupants}
-          onStartChat={onStartChat}
-          onWhisper={enterWhisperMode}
-          onShowProfile={onShowProfile}
-        />
+        <>
+          <button
+            type="button"
+            aria-hidden="true"
+            tabIndex={-1}
+            onClick={handleCloseOccupants}
+            className="fixed inset-0 z-30 bg-black/50 lg:hidden"
+          />
+          <div className="fixed inset-y-0 end-0 z-40 flex shadow-xl animate-drawer-in lg:static lg:z-auto lg:shadow-none">
+            <OccupantPanel
+              room={activeRoom}
+              contactsByJid={contactsByJid}
+              ownAvatar={ownAvatar}
+              onClose={handleCloseOccupants}
+              onStartChat={onStartChat}
+              onWhisper={enterWhisperMode}
+              onShowProfile={onShowProfile}
+            />
+          </div>
+        </>
       )}
 
       {/* Christmas easter egg animation */}

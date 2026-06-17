@@ -485,6 +485,16 @@ html, body {
   }
 }
 
+/* Tablet occupant drawer: below lg the OccupantPanel is an overlay that slides */
+/* in from the inline-end edge (RTL-aware). The animation is scoped below lg — */
+/* at lg+ the panel is an in-flow column and must not animate or transform. */
+@keyframes drawer-in-end { from { transform: translateX(100%); } to { transform: translateX(0); } }
+@keyframes drawer-in-end-rtl { from { transform: translateX(-100%); } to { transform: translateX(0); } }
+@media (max-width: 1023px) {
+  .animate-drawer-in { animation: drawer-in-end 220ms cubic-bezier(0.32, 0.72, 0, 1); }
+  [dir="rtl"] .animate-drawer-in { animation: drawer-in-end-rtl 220ms cubic-bezier(0.32, 0.72, 0, 1); }
+}
+
 /* Allow native rubber band effect within scrollable elements (macOS) */
 /* Using 'auto' enables the visual bounce, while 'none' on html/body prevents whole-page bounce */
 /* -webkit-overflow-scrolling: touch enables momentum/bounce scrolling in WebKit */
