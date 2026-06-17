@@ -4,7 +4,7 @@ import { extractTransportErrorClass, type ConnectionErrorKind } from '@fluux/sdk
 
 interface LoginErrorPanelProps {
   kind: ConnectionErrorKind
-  /** Raw SDK error string — used for the cert sub-class and the fallback render. */
+  /** Raw SDK error string. Used for the cert sub-class and the fallback render. */
   rawError: string
 }
 

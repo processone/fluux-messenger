@@ -45,4 +45,18 @@ describe('LoginErrorPanel', () => {
     expect(screen.getByText('login.errors.unreachableTitle')).toBeInTheDocument()
     expect(screen.getByText('login.errors.refusedBody')).toBeInTheDocument()
   })
+
+  it('renders the unreachable title and timeout body for a timeout', () => {
+    render(<LoginErrorPanel kind="timeout" rawError="Bridge closed: tls-error timeout" />)
+    expect(screen.getByRole('alert')).toBeInTheDocument()
+    expect(screen.getByText('login.errors.unreachableTitle')).toBeInTheDocument()
+    expect(screen.getByText('login.errors.timeoutBody')).toBeInTheDocument()
+  })
+
+  it('renders the tls-other title and body for a generic TLS failure', () => {
+    render(<LoginErrorPanel kind="tls-other" rawError="Bridge closed: tls-error other" />)
+    expect(screen.getByRole('alert')).toBeInTheDocument()
+    expect(screen.getByText('login.errors.tlsOtherTitle')).toBeInTheDocument()
+    expect(screen.getByText('login.errors.tlsOtherBody')).toBeInTheDocument()
+  })
 })
