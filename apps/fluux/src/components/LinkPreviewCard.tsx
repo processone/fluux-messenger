@@ -97,10 +97,13 @@ export function LinkPreviewCard({ preview, onLoad }: LinkPreviewCardProps) {
           tabIndex={0}
           onClick={(e) => { e.preventDefault(); e.stopPropagation(); approveImage() }}
           onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); approveImage() } }}
-          className="aspect-video bg-fluux-hover/60 hover:bg-fluux-hover flex flex-col items-center justify-center gap-2 text-fluux-muted transition-colors cursor-pointer"
+          className="aspect-video bg-fluux-hover/60 hover:bg-fluux-hover flex flex-col items-center justify-center gap-1.5 px-4 text-center text-fluux-muted transition-colors cursor-pointer"
         >
           <ImageIcon className="size-6" aria-hidden="true" />
           <span className="text-sm font-medium">{t('chat.showLinkImage')}</span>
+          {preview.title && (
+            <span className="text-xs line-clamp-2">{preview.title}</span>
+          )}
         </div>
       )}
 
