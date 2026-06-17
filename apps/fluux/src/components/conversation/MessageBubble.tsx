@@ -4,7 +4,7 @@
  * Uses composition to handle view-specific rendering while sharing
  * the common bubble structure.
  */
-import { useState, useMemo, memo, type ReactNode } from 'react'
+import { useState, useMemo, useRef, useEffect, memo, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { CornerUpRight, AlertCircle, RefreshCw, Lock, ShieldAlert, Ear, UserX } from 'lucide-react'
 import { formatMessagePreview, formatXMPPError, getBareJid, type BaseMessage, type MentionReference, type Contact, type ContactIdentity, type RoomRole, type RoomAffiliation } from '@fluux/sdk'
@@ -26,6 +26,7 @@ import { CollapsibleContent } from './CollapsibleContent'
 import { PollCard } from './PollCard'
 import { PollClosedCard } from './PollClosedCard'
 import { Tooltip } from '../Tooltip'
+import { MessageActionSheet } from './MessageActionSheet'
 
 export interface MessageBubbleProps {
   // Core message data (using BaseMessage interface)
@@ -310,6 +311,17 @@ export const MessageBubble = memo(function MessageBubble({
   const [showAvatarLightbox, setShowAvatarLightbox] = useState(false)
   const [showErrorDetails, setShowErrorDetails] = useState(false)
 
+  // Touch: long-press the message content opens the action sheet — the touch
+  // counterpart of the hover-only MessageToolbar. Handlers are attached
+  // unconditionally (a mouse never fires touch events); native text selection is
+  // suppressed on touch via `touch:select-none` so the hold opens the sheet cleanly.
+  const [showActionSheet, setShowActionSheet] = useState(false)
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const longPressFired = useRef(false)
+
+  // Clear a pending long-press timer if the row unmounts mid-press.
+  useEffect(() => () => { if (longPressTimer.current) clearTimeout(longPressTimer.current) }, [])
+
   // Trust color must track verification LIVE, not freeze at decrypt time.
   // The plugin bakes `verified`/`tofu` onto the message when it's decrypted; if
   // the user verifies the peer later, that baked value never updates. So derive
@@ -374,6 +386,39 @@ export const MessageBubble = memo(function MessageBubble({
     ? `group flex gap-4 -mx-4 px-4 transition-colors ${threadStart ? 'pt-3' : ''} ${threadEnd ? 'pb-1.5' : ''}`
     : `group flex gap-4 ${hoverClass} -mx-4 px-4 py-0.5 transition-colors ${showAvatar ? 'pt-4' : ''}`
 
+  // Action capabilities — shared by the hover toolbar (MessageToolbar) and the
+  // touch action sheet (MessageActionSheet) so the two surfaces stay in lock-step.
+  const canReply = (!isLastMessage || inThread) && !counterpartGone
+  const canEdit = message.isOutgoing && isLastOutgoing && !isIrcGateway
+  const canDelete = (message.isOutgoing || canModerate === true) && !isIrcGateway
+  const canCopyBody = !!message.body && !message.isRetracted && !message.encryptedPayload && !message.unsupportedEncryption
+  const hasMessageActions = !message.isRetracted && (reactionsEnabled || canReply || canEdit || canDelete || canCopyBody)
+
+  // Long-press (touch) → open the action sheet; scrolling (touchmove) or lifting
+  // before the threshold cancels it. longPressFired suppresses the click that a
+  // tap-and-hold would otherwise dispatch to an inner control on release.
+  const handleContentTouchStart = () => {
+    if (!hasMessageActions) return
+    longPressFired.current = false
+    longPressTimer.current = setTimeout(() => {
+      longPressFired.current = true
+      setShowActionSheet(true)
+    }, 500)
+  }
+  const cancelLongPress = () => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current)
+      longPressTimer.current = null
+    }
+  }
+  const swallowPostLongPressClick = (e: React.MouseEvent) => {
+    if (longPressFired.current) {
+      e.preventDefault()
+      e.stopPropagation()
+      longPressFired.current = false
+    }
+  }
+
   return (
     <div
       data-message-id={message.id}
@@ -388,7 +433,7 @@ export const MessageBubble = memo(function MessageBubble({
       <div className={`${timeFormat === '12h' ? 'w-12' : 'w-10'} flex-shrink-0 flex flex-col`}>
         {/* /me action messages always show timestamp instead of avatar */}
         {isActionMessage(message.body) ? (
-          <span className={`block text-center text-[10px] text-fluux-muted font-mono pt-0.5 ${isSelected ? 'opacity-100' : hasKeyboardSelection ? 'opacity-0' : 'opacity-0 group-hover:opacity-100'} transition-opacity`}>
+          <span className={`block text-center text-[10px] text-fluux-muted font-mono pt-0.5 ${isSelected ? 'opacity-100' : hasKeyboardSelection ? 'opacity-0' : 'opacity-0 group-hover:opacity-100 touch:opacity-100'} transition-opacity`}>
             {formatTime(message.timestamp)}
           </span>
         ) : showAvatar ? (
@@ -413,14 +458,20 @@ export const MessageBubble = memo(function MessageBubble({
             />
           </div>
         ) : (
-          <span className={`block text-center text-[10px] text-fluux-muted font-mono pt-0.5 ${isSelected ? 'opacity-100' : hasKeyboardSelection ? 'opacity-0' : 'opacity-0 group-hover:opacity-100'} transition-opacity`}>
+          <span className={`block text-center text-[10px] text-fluux-muted font-mono pt-0.5 ${isSelected ? 'opacity-100' : hasKeyboardSelection ? 'opacity-0' : 'opacity-0 group-hover:opacity-100 touch:opacity-100'} transition-opacity`}>
             {formatTime(message.timestamp)}
           </span>
         )}
       </div>
 
       {/* Content */}
-      <div className={`relative flex-1 min-w-0 ${isSelected ? 'bg-fluux-selection -my-0.5 py-0.5 -ms-2 ps-2 -me-4 pe-4 rounded-s' : ''}${inThread ? ` bg-fluux-private-soft border-x border-fluux-private-border px-2.5 py-1 ${threadStart ? 'border-t rounded-t-lg' : ''} ${threadEnd ? 'border-b rounded-b-lg' : ''}` : ''}`}>
+      <div
+        className={`relative flex-1 min-w-0 touch:select-none touch:[-webkit-touch-callout:none] ${isSelected ? 'bg-fluux-selection -my-0.5 py-0.5 -ms-2 ps-2 -me-4 pe-4 rounded-s' : ''}${inThread ? ` bg-fluux-private-soft border-x border-fluux-private-border px-2.5 py-1 ${threadStart ? 'border-t rounded-t-lg' : ''} ${threadEnd ? 'border-b rounded-b-lg' : ''}` : ''}`}
+        onTouchStart={handleContentTouchStart}
+        onTouchEnd={cancelLongPress}
+        onTouchMove={cancelLongPress}
+        onClickCapture={swallowPostLongPressClick}
+      >
         {threadStart && (counterpartGone ? (
           <div className="flex items-center gap-1.5 pb-1 text-xs font-medium text-fluux-private">
             <Ear className="size-3.5 shrink-0" />
@@ -447,9 +498,9 @@ export const MessageBubble = memo(function MessageBubble({
             onEdit={onEdit}
             onDelete={onDelete}
             myReactions={reactionsEnabled ? myReactions : []}
-            canReply={(!isLastMessage || inThread) && !counterpartGone}
-            canEdit={message.isOutgoing && isLastOutgoing && !isIrcGateway}
-            canDelete={(message.isOutgoing || canModerate === true) && !isIrcGateway}
+            canReply={canReply}
+            canEdit={canEdit}
+            canDelete={canDelete}
             isHidden={hideToolbar || false}
             isSelected={isSelected || false}
             hasKeyboardSelection={hasKeyboardSelection || false}
@@ -472,7 +523,9 @@ export const MessageBubble = memo(function MessageBubble({
                 className="font-medium"
                 style={{ color: senderColor }}
                 onContextMenu={onNickContextMenu}
-                onTouchStart={onNickTouchStart}
+                // Stop the long-press from bubbling to the content wrapper so a
+                // hold on the nick opens the occupant menu, not the message sheet.
+                onTouchStart={(e) => { e.stopPropagation(); onNickTouchStart?.(e) }}
                 onTouchEnd={onNickTouchEnd}
               >
                 {senderName}
@@ -648,6 +701,24 @@ export const MessageBubble = memo(function MessageBubble({
           name={senderName}
           fallbackColor={avatarFallbackColor}
           onClose={() => setShowAvatarLightbox(false)}
+        />
+      )}
+
+      {/* Touch action sheet — opened by long-pressing the message content.
+          Mounted only while open so the list never carries one sheet per row. */}
+      {showActionSheet && (
+        <MessageActionSheet
+          open
+          onClose={() => setShowActionSheet(false)}
+          onReaction={handleReaction}
+          myReactions={reactionsEnabled ? myReactions : []}
+          body={message.body}
+          onReply={onReply}
+          onEdit={onEdit}
+          onDelete={onDelete}
+          canReply={canReply}
+          canEdit={canEdit}
+          canDelete={canDelete}
         />
       )}
     </div>

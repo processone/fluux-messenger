@@ -457,6 +457,7 @@
         "attachment": "مرفق",
         "removeAttachment": "إزالة المرفق",
         "reply": "رد",
+        "copyMessage": "نسخ النص",
         "replyQuoteHiddenEncrypted": "تم إخفاء الاقتباس: كانت الرسالة الأصلية مُشفَّرة",
         "forwardMessage": "إعادة توجيه الرسالة (قريبًا)",
         "moreReactions": "المزيد من التفاعلات",

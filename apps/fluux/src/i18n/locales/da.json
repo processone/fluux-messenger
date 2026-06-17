@@ -457,6 +457,7 @@
         "attachment": "Vedhæftning",
         "removeAttachment": "Fjern vedhæftning",
         "reply": "Svar",
+        "copyMessage": "Kopiér tekst",
         "replyQuoteHiddenEncrypted": "Citat skjult: originalen var krypteret",
         "forwardMessage": "Videresend besked (kommer snart)",
         "moreReactions": "Flere reaktioner",

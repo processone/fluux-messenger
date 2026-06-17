@@ -457,6 +457,7 @@
         "attachment": "Bilaga",
         "removeAttachment": "Ta bort bilaga",
         "reply": "Svara",
+        "copyMessage": "Kopiera text",
         "replyQuoteHiddenEncrypted": "Citat dolt: originalet var krypterat",
         "forwardMessage": "Vidarebefordra meddelande (kommer snart)",
         "moreReactions": "Fler reaktioner",

@@ -468,6 +468,7 @@ vi.mock('lucide-react', () => ({
   Forward: () => <span data-testid="icon-forward">Forward</span>,
   MoreHorizontal: () => <span data-testid="icon-more">More</span>,
   Reply: () => <span data-testid="icon-reply">Reply</span>,
+  Copy: () => <span data-testid="icon-copy">Copy</span>,
   X: () => <span data-testid="icon-x">X</span>,
   ChevronRight: () => <span data-testid="icon-chevron-right">ChevronRight</span>,
   Shield: () => <span data-testid="icon-shield">Shield</span>,

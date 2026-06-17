@@ -1,3 +1,5 @@
+import plugin from 'tailwindcss/plugin'
+
 /** @type {import('tailwindcss').Config} */
 export default {
   content: [
@@ -56,12 +58,29 @@ export default {
           '0%': { opacity: '0', transform: 'translateY(16px)' },
           '100%': { opacity: '1', transform: 'translateY(0)' },
         },
+        'sheet-up': {
+          '0%': { opacity: '0', transform: 'translateY(100%)' },
+          '100%': { opacity: '1', transform: 'translateY(0)' },
+        },
       },
       animation: {
         'tooltip-in': 'tooltip-in 150ms ease-out',
         'toast-in': 'toast-in 200ms ease-out',
+        'sheet-up': 'sheet-up 220ms cubic-bezier(0.32, 0.72, 0, 1)',
       },
     },
   },
-  plugins: [],
+  plugins: [
+    plugin(({ addVariant }) => {
+      // Pointer/hover capability variants. These distinguish a precise hovering
+      // pointer (mouse/trackpad) from a touch screen, independently of viewport
+      // width or platform. Use `can-hover:` to keep desktop hover affordances and
+      // `touch:` to add the touch-only fallback — so desktop behaviour is never
+      // altered, while touch laptops, tablets and a future Tauri-mobile build all
+      // get the touch experience. (Distinct from useIsMobileWeb, which is a
+      // width+platform *layout* query, not a *capability* query.)
+      addVariant('can-hover', '@media (hover: hover) and (pointer: fine)')
+      addVariant('touch', '@media (hover: none), (pointer: coarse)')
+    }),
+  ],
 }

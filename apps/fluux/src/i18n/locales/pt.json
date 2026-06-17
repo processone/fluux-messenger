@@ -459,6 +459,7 @@
         "attachment": "Anexo",
         "removeAttachment": "Remover anexo",
         "reply": "Responder",
+        "copyMessage": "Copiar texto",
         "replyQuoteHiddenEncrypted": "Citação oculta: o original estava cifrado",
         "forwardMessage": "Encaminhar mensagem (brevemente)",
         "moreReactions": "Mais reações",

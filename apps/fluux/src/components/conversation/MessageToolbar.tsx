@@ -5,8 +5,9 @@ import { useClickOutside } from '@/hooks'
 import { Tooltip } from '../Tooltip'
 import { ReactionBurst } from './ReactionBurst'
 
-// Quick reaction emojis shown directly in toolbar
-const TOOLBAR_REACTIONS = ['👍', '❤️', '😂']
+// Quick reaction emojis shown directly in toolbar (also reused by the touch
+// MessageActionSheet so both surfaces offer the same quick reactions).
+export const TOOLBAR_REACTIONS = ['👍', '❤️', '😂']
 
 // Lazy-load emoji picker — only fetched when user opens reaction picker
 const emojiPickerImport = () => import('../EmojiPicker').then(m => ({ default: m.EmojiPicker }))
