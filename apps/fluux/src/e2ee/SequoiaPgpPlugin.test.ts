@@ -2073,7 +2073,7 @@ describe('SequoiaPgpPlugin', () => {
       expect(claim).not.toBeNull()
       const bobHandle = await bob.plugin.openConversation({ kind: 'direct', peer: 'alice@example.com' })
       const decrypted = await bob.plugin.decrypt(bobHandle, claim!)
-      expect(decodeBodyFromPayload(decrypted.plaintext)).toBe('hello bob')
+      expect(decodeBodyFromPayload(decrypted.plaintext!)).toBe('hello bob')
       expect(decrypted.securityContext.protocolId).toBe('openpgp')
       expect(decrypted.securityContext.trust).toBe('tofu')
       expect(decrypted.securityContext.notes).toBeUndefined()
@@ -2093,7 +2093,7 @@ describe('SequoiaPgpPlugin', () => {
       const bobHandle = await bob.plugin.openConversation({ kind: 'direct', peer: 'alice@example.com' })
       const decrypted = await bob.plugin.decrypt(bobHandle, claim)
 
-      expect(decodeBodyFromPayload(decrypted.plaintext)).toBe('hi')
+      expect(decodeBodyFromPayload(decrypted.plaintext!)).toBe('hi')
       expect(decrypted.securityContext.trust).toBe('untrusted')
       expect(decrypted.securityContext.notes?.join(' ')).toMatch(/Sender key not cached/)
     })
@@ -2975,7 +2975,7 @@ describe('SequoiaPgpPlugin', () => {
         encodeBodyAsPayload('post-rotation greeting'),
       )
       const result = await pair.bob.plugin.decrypt(bobHandle, payload)
-      expect(decodeBodyFromPayload(result.plaintext)).toBe('post-rotation greeting')
+      expect(decodeBodyFromPayload(result.plaintext!)).toBe('post-rotation greeting')
       expect(result.securityContext.trust).toBe('tofu')
     })
   })
