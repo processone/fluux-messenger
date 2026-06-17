@@ -577,7 +577,12 @@
             "acceptedWithoutVerifying": "Cheie nouă acceptată. Contactul nu este verificat",
             "acceptFailed": "Nu s-a putut accepta noua cheie. Încearcă din nou"
         },
-        "offlinePlaceholder": "Offline. Mesajele vor fi trimise la reconectare"
+        "offlinePlaceholder": "Offline. Mesajele vor fi trimise la reconectare",
+        "loadImage": "Încarcă imaginea",
+        "loadVideo": "Încarcă videoclipul",
+        "loadAudio": "Încarcă sunetul",
+        "loadFilePreview": "Încarcă previzualizarea",
+        "showLinkImage": "Afișează imaginea"
     },
     "dates": {
         "today": "Astăzi",
@@ -593,7 +598,8 @@
             "updates": "Actualizări",
             "blocked": "Utilizatori blocați",
             "storage": "Stocare",
-            "encryption": "Criptare"
+            "encryption": "Criptare",
+            "privacy": "Confidențialitate"
         },
         "blocked": {
             "title": "Utilizatori blocați",
@@ -838,7 +844,16 @@
             "unlockPassphraseTooShort": "Parola trebuie să aibă cel puțin 8 caractere",
             "lockedBannerBody": "Cheia de criptare este blocată. Introdu parola pentru a activa criptarea pentru această sesiune.",
             "rotateNotSupportedWeb": "Rotația cheii nu este disponibilă pe web. Folosește aplicația desktop."
-        }
+        },
+        "mediaAutoDownload": "Descărcare automată a conținutului media",
+        "mediaAutoDownloadDescription": "Alegeți când imaginile, videoclipurile și fișierele se încarcă automat.",
+        "mediaAutoDownloadAlways": "Întotdeauna",
+        "mediaAutoDownloadAlwaysDescription": "Încarcă conținutul media automat în fiecare conversație.",
+        "mediaAutoDownloadPrivateOnly": "Numai privat",
+        "mediaAutoDownloadPrivateOnlyDescription": "Încarcă automat în mesajele directe și camerele private. În canalele publice, atingeți pentru a încărca.",
+        "mediaAutoDownloadNever": "Niciodată",
+        "mediaAutoDownloadNeverDescription": "Nu încărcați niciodată conținut media automat. Atingeți pentru a încărca în orice conversație.",
+        "mediaAutoDownloadStrangerNote": "Conținutul media de la persoane care nu sunt în contactele dvs. necesită întotdeauna o atingere pentru a se încărca, indiferent de ce alegeți aici."
     },
     "update": {
         "title": "Actualizare disponibilă",

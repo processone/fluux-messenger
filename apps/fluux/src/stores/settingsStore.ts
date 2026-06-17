@@ -2,6 +2,7 @@ import { create } from 'zustand'
 
 export type ThemeMode = 'light' | 'dark' | 'system'
 export type TimeFormat = '12h' | '24h' | 'auto'
+export type MediaAutoDownload = 'always' | 'private-only' | 'never'
 
 /** Font size as percentage of default (100 = normal). Range: 75–150. */
 export type FontSize = number
@@ -13,11 +14,14 @@ interface SettingsState {
   setTimeFormat: (format: TimeFormat) => void
   fontSize: FontSize
   setFontSize: (size: FontSize) => void
+  mediaAutoDownload: MediaAutoDownload
+  setMediaAutoDownload: (value: MediaAutoDownload) => void
 }
 
 const THEME_KEY = 'fluux-theme'
 const TIME_FORMAT_KEY = 'fluux-time-format'
 const FONT_SIZE_KEY = 'fluux-font-size'
+const MEDIA_AUTO_DOWNLOAD_KEY = 'fluux-media-autodownload'
 
 /**
  * Get initial theme mode from localStorage, default to 'system'
@@ -47,6 +51,21 @@ function getInitialTimeFormat(): TimeFormat {
     // localStorage not available
   }
   return 'auto'
+}
+
+/**
+ * Get initial media auto-download policy from localStorage, default to 'private-only'.
+ */
+function getInitialMediaAutoDownload(): MediaAutoDownload {
+  try {
+    const stored = localStorage.getItem(MEDIA_AUTO_DOWNLOAD_KEY)
+    if (stored === 'always' || stored === 'private-only' || stored === 'never') {
+      return stored
+    }
+  } catch {
+    // localStorage not available
+  }
+  return 'private-only'
 }
 
 /**
@@ -100,5 +119,16 @@ export const useSettingsStore = create<SettingsState>((set) => ({
       // localStorage not available
     }
     set({ fontSize: clamped })
+  },
+
+  mediaAutoDownload: getInitialMediaAutoDownload(),
+
+  setMediaAutoDownload: (value) => {
+    try {
+      localStorage.setItem(MEDIA_AUTO_DOWNLOAD_KEY, value)
+    } catch {
+      // localStorage not available
+    }
+    set({ mediaAutoDownload: value })
   },
 }))

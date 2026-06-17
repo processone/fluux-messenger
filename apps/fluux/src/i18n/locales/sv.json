@@ -575,7 +575,12 @@
             "acceptedWithoutVerifying": "Ny nyckel accepterad. Motparten är overifierad",
             "acceptFailed": "Kunde inte acceptera den nya nyckeln. Försök igen"
         },
-        "offlinePlaceholder": "Offline. Meddelanden skickas när anslutningen återupprättats"
+        "offlinePlaceholder": "Offline. Meddelanden skickas när anslutningen återupprättats",
+        "loadImage": "Läs in bild",
+        "loadVideo": "Läs in video",
+        "loadAudio": "Läs in ljud",
+        "loadFilePreview": "Läs in förhandsgranskning",
+        "showLinkImage": "Visa bild"
     },
     "dates": {
         "today": "Idag",
@@ -591,7 +596,8 @@
             "updates": "Uppdateringar",
             "blocked": "Blockerade användare",
             "storage": "Lagring",
-            "encryption": "Kryptering"
+            "encryption": "Kryptering",
+            "privacy": "Sekretess"
         },
         "blocked": {
             "title": "Blockerade användare",
@@ -836,7 +842,16 @@
             "unlockPassphraseTooShort": "Lösenfrasen måste vara minst 8 tecken",
             "lockedBannerBody": "Din krypteringsnyckel är låst. Ange lösenfrasen för att aktivera kryptering för den här sessionen.",
             "rotateNotSupportedWeb": "Nyckelrotering är inte tillgänglig på webben. Använd skrivbordsappen."
-        }
+        },
+        "mediaAutoDownload": "Ladda ned media automatiskt",
+        "mediaAutoDownloadDescription": "Välj när bilder, videor och filer läses in automatiskt.",
+        "mediaAutoDownloadAlways": "Alltid",
+        "mediaAutoDownloadAlwaysDescription": "Läs in media automatiskt i alla konversationer.",
+        "mediaAutoDownloadPrivateOnly": "Bara privat",
+        "mediaAutoDownloadPrivateOnlyDescription": "Läs in automatiskt i direktmeddelanden och privata rum. I offentliga kanaler, tryck för att läsa in.",
+        "mediaAutoDownloadNever": "Aldrig",
+        "mediaAutoDownloadNeverDescription": "Läs aldrig in media automatiskt. Tryck för att läsa in i valfri konversation.",
+        "mediaAutoDownloadStrangerNote": "Media från personer som inte finns i dina kontakter kräver alltid ett tryck för att läsas in, oavsett vad du väljer här."
     },
     "update": {
         "title": "Uppdatering tillgänglig",

@@ -575,7 +575,12 @@
             "acceptedWithoutVerifying": "Nieuwe sleutel geaccepteerd. Contact is niet geverifieerd",
             "acceptFailed": "Kon de nieuwe sleutel niet accepteren. Probeer opnieuw"
         },
-        "offlinePlaceholder": "Offline. Berichten worden verzonden zodra de verbinding is hersteld"
+        "offlinePlaceholder": "Offline. Berichten worden verzonden zodra de verbinding is hersteld",
+        "loadImage": "Afbeelding laden",
+        "loadVideo": "Video laden",
+        "loadAudio": "Audio laden",
+        "loadFilePreview": "Voorbeeld laden",
+        "showLinkImage": "Afbeelding tonen"
     },
     "dates": {
         "today": "Vandaag",
@@ -591,7 +596,8 @@
             "updates": "Updates",
             "blocked": "Geblokkeerde gebruikers",
             "storage": "Opslag",
-            "encryption": "Versleuteling"
+            "encryption": "Versleuteling",
+            "privacy": "Privacy"
         },
         "blocked": {
             "title": "Geblokkeerde gebruikers",
@@ -836,7 +842,16 @@
             "unlockPassphraseTooShort": "De wachtwoordzin moet minimaal 8 tekens bevatten",
             "lockedBannerBody": "Je versleutelingssleutel is vergrendeld. Voer je wachtwoordzin in om versleuteling voor deze sessie te activeren.",
             "rotateNotSupportedWeb": "Sleutelrotatie is niet beschikbaar op het web. Gebruik de desktopapp."
-        }
+        },
+        "mediaAutoDownload": "Media automatisch downloaden",
+        "mediaAutoDownloadDescription": "Kies wanneer afbeeldingen, video's en bestanden automatisch worden geladen.",
+        "mediaAutoDownloadAlways": "Altijd",
+        "mediaAutoDownloadAlwaysDescription": "Media automatisch laden in elk gesprek.",
+        "mediaAutoDownloadPrivateOnly": "Alleen privé",
+        "mediaAutoDownloadPrivateOnlyDescription": "Automatisch laden in directe berichten en privéruimtes. In openbare kanalen, tik om te laden.",
+        "mediaAutoDownloadNever": "Nooit",
+        "mediaAutoDownloadNeverDescription": "Laad nooit automatisch media. Tik om te laden in elk gesprek.",
+        "mediaAutoDownloadStrangerNote": "Media van mensen die niet in uw contacten staan, vereist altijd een tik om te laden, ongeacht wat u hier kiest."
     },
     "update": {
         "title": "Update beschikbaar",

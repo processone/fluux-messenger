@@ -577,7 +577,12 @@
             "acceptedWithoutVerifying": "Nov ključ sprejet. Sogovornik ni preverjen",
             "acceptFailed": "Novega ključa ni bilo mogoče sprejeti. Poskusite znova"
         },
-        "offlinePlaceholder": "Brez povezave. Sporočila bodo poslana ob ponovni povezavi"
+        "offlinePlaceholder": "Brez povezave. Sporočila bodo poslana ob ponovni povezavi",
+        "loadImage": "Naloži sliko",
+        "loadVideo": "Naloži video",
+        "loadAudio": "Naloži zvok",
+        "loadFilePreview": "Naloži predogled",
+        "showLinkImage": "Prikaži sliko"
     },
     "dates": {
         "today": "Danes",
@@ -593,7 +598,8 @@
             "updates": "Posodobitve",
             "blocked": "Blokirani uporabniki",
             "storage": "Shramba",
-            "encryption": "Šifriranje"
+            "encryption": "Šifriranje",
+            "privacy": "Zasebnost"
         },
         "blocked": {
             "title": "Blokirani uporabniki",
@@ -838,7 +844,16 @@
             "unlockPassphraseTooShort": "Geslo mora imeti vsaj 8 znakov",
             "lockedBannerBody": "Šifrirni ključ je zaklenjen. Vnesite geslo za aktivacijo šifriranja za to sejo.",
             "rotateNotSupportedWeb": "Rotacija ključev v spletu ni na voljo. Uporabite namizno aplikacijo."
-        }
+        },
+        "mediaAutoDownload": "Samodejni prenos predstavnosti",
+        "mediaAutoDownloadDescription": "Izberite, kdaj se slike, videi in datoteke naložijo samodejno.",
+        "mediaAutoDownloadAlways": "Vedno",
+        "mediaAutoDownloadAlwaysDescription": "Naloži predstavnost samodejno v vsakem pogovoru.",
+        "mediaAutoDownloadPrivateOnly": "Samo zasebno",
+        "mediaAutoDownloadPrivateOnlyDescription": "Naloži samodejno v neposrednih sporočilih in zasebnih sobah. V javnih kanalih tapnite za nalaganje.",
+        "mediaAutoDownloadNever": "Nikoli",
+        "mediaAutoDownloadNeverDescription": "Nikoli ne naloži predstavnosti samodejno. Tapnite za nalaganje v katerem koli pogovoru.",
+        "mediaAutoDownloadStrangerNote": "Predstavnost od oseb, ki niso v vaših stikih, vedno zahteva tap za nalaganje, ne glede na vašo izbiro tukaj."
     },
     "update": {
         "title": "Na voljo posodobitev",

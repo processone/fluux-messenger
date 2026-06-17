@@ -577,7 +577,12 @@
             "acceptedWithoutVerifying": "Uus võti vastu võetud. Kontakt on kinnitamata",
             "acceptFailed": "Uue võtme vastuvõtmine ebaõnnestus. Proovi uuesti"
         },
-        "offlinePlaceholder": "Võrguühenduseta. Sõnumid saadetakse pärast taasühendamist"
+        "offlinePlaceholder": "Võrguühenduseta. Sõnumid saadetakse pärast taasühendamist",
+        "loadImage": "Laadi pilt",
+        "loadVideo": "Laadi video",
+        "loadAudio": "Laadi heli",
+        "loadFilePreview": "Laadi eelvaade",
+        "showLinkImage": "Kuva pilt"
     },
     "dates": {
         "today": "Täna",
@@ -593,7 +598,8 @@
             "updates": "Värskendused",
             "blocked": "Blokeeritud kasutajad",
             "storage": "Salvestusruum",
-            "encryption": "Krüpteerimine"
+            "encryption": "Krüpteerimine",
+            "privacy": "Privaatsus"
         },
         "blocked": {
             "title": "Blokeeritud kasutajad",
@@ -838,7 +844,16 @@
             "unlockPassphraseTooShort": "Parool peab olema vähemalt 8 märki pikk",
             "lockedBannerBody": "Sinu krüpteerimisvõti on lukustatud. Sisesta parool krüpteerimise aktiveerimiseks selle seansi jaoks.",
             "rotateNotSupportedWeb": "Võtme rotatsioon ei ole veebis saadaval. Kasuta lauaarvutirakendust."
-        }
+        },
+        "mediaAutoDownload": "Meedia automaatne allalaadimine",
+        "mediaAutoDownloadDescription": "Valige, millal pildid, videod ja failid automaatselt laaditakse.",
+        "mediaAutoDownloadAlways": "Alati",
+        "mediaAutoDownloadAlwaysDescription": "Laadi meedia automaatselt igas vestluses.",
+        "mediaAutoDownloadPrivateOnly": "Ainult privaatne",
+        "mediaAutoDownloadPrivateOnlyDescription": "Laadi automaatselt otssõnumites ja privaatsetes tubades. Avalikes kanalites, puudutage laadimiseks.",
+        "mediaAutoDownloadNever": "Mitte kunagi",
+        "mediaAutoDownloadNeverDescription": "Ära kunagi laadi meediat automaatselt. Puudutage laadimiseks mis tahes vestluses.",
+        "mediaAutoDownloadStrangerNote": "Inimestelt pärinev meedia, keda pole teie kontaktide hulgas, vajab laadimiseks alati puudutust, olenemata sellest, mida siin valite."
     },
     "update": {
         "title": "Värskendus saadaval",

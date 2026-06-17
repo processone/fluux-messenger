@@ -575,7 +575,12 @@
             "acceptedWithoutVerifying": "Nýr lykill samþykktur. Jafningi er óstaðfestur",
             "acceptFailed": "Ekki tókst að samþykkja nýja lykilinn. Reyndu aftur"
         },
-        "offlinePlaceholder": "Ónettengt. Skilaboð verða send þegar tengingin kemst á aftur"
+        "offlinePlaceholder": "Ónettengt. Skilaboð verða send þegar tengingin kemst á aftur",
+        "loadImage": "Hlaða mynd",
+        "loadVideo": "Hlaða myndband",
+        "loadAudio": "Hlaða hljóð",
+        "loadFilePreview": "Hlaða forskoðun",
+        "showLinkImage": "Sýna mynd"
     },
     "dates": {
         "today": "Í dag",
@@ -591,7 +596,8 @@
             "updates": "Uppfærslur",
             "blocked": "Útilokaðir notendur",
             "storage": "Geymsla",
-            "encryption": "Dulkóðun"
+            "encryption": "Dulkóðun",
+            "privacy": "Friðhelgi"
         },
         "blocked": {
             "title": "Útilokaðir notendur",
@@ -836,7 +842,16 @@
             "unlockPassphraseTooShort": "Aðgangsorðið verður að vera að minnsta kosti 8 stafir",
             "lockedBannerBody": "Dulkóðunarlykillinn þinn er læstur. Sláðu inn aðgangsorð til að virkja dulkóðun fyrir þessa lotu.",
             "rotateNotSupportedWeb": "Lyklaskipti eru ekki tiltæk á vefnum. Notaðu skjáborðsforritið."
-        }
+        },
+        "mediaAutoDownload": "Sjálfvirk niðurhal miðla",
+        "mediaAutoDownloadDescription": "Veldu hvenær myndir, myndbönd og skrár hlaðast inn sjálfvirkt.",
+        "mediaAutoDownloadAlways": "Alltaf",
+        "mediaAutoDownloadAlwaysDescription": "Hlaða miðla sjálfvirkt í öllum samskiptum.",
+        "mediaAutoDownloadPrivateOnly": "Aðeins einkamál",
+        "mediaAutoDownloadPrivateOnlyDescription": "Hlaða sjálfvirkt í beinni skilaboðum og einkaherbergjum. Í opinberum rásum, ýttu til að hlaða.",
+        "mediaAutoDownloadNever": "Aldrei",
+        "mediaAutoDownloadNeverDescription": "Aldrei hlaða miðla sjálfvirkt. Ýttu til að hlaða í hvaða samskiptum sem er.",
+        "mediaAutoDownloadStrangerNote": "Miðlar frá einstaklingum sem eru ekki í tengiliðalista þínum þurfa alltaf ýtingu til að hlaðast, óháð því hvað þú velur hér."
     },
     "update": {
         "title": "Uppfærsla tiltæk",

@@ -3,8 +3,10 @@
  */
 
 import { useEffect, useRef, useState } from 'react'
-import { ExternalLink } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
+import { ExternalLink, Image as ImageIcon } from 'lucide-react'
 import type { LinkPreview } from '@fluux/sdk'
+import { useDeferredMedia } from '@/hooks/useDeferredMedia'
 
 /**
  * Preview images are often served with `cache-control: max-age=0` (e.g. GitHub's
@@ -24,6 +26,8 @@ export function LinkPreviewCard({ preview, onLoad }: LinkPreviewCardProps) {
   const [attempt, setAttempt] = useState(0)
   const [imagePhase, setImagePhase] = useState<'showing' | 'waiting' | 'gone'>('showing')
   const retryTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const { t } = useTranslation()
+  const { shouldLoad: showImage, approve: approveImage } = useDeferredMedia(preview.image ?? '')
 
   useEffect(() => () => {
     if (retryTimer.current) clearTimeout(retryTimer.current)
@@ -71,7 +75,7 @@ export function LinkPreviewCard({ preview, onLoad }: LinkPreviewCardProps) {
       className="block mt-2 max-w-md border border-fluux-border rounded-lg overflow-hidden bg-fluux-bg/60 hover:bg-fluux-hover/60 transition-colors"
     >
       {/* Image preview - retried once on error, hidden entirely when it keeps failing */}
-      {preview.image && imagePhase !== 'gone' && (
+      {preview.image && showImage && imagePhase !== 'gone' && (
         <div className="aspect-video bg-fluux-bg/80 overflow-hidden">
           {imagePhase === 'showing' && (
             <img
@@ -85,6 +89,18 @@ export function LinkPreviewCard({ preview, onLoad }: LinkPreviewCardProps) {
               onError={handleImageError}
             />
           )}
+        </div>
+      )}
+      {preview.image && !showImage && (
+        <div
+          role="button"
+          tabIndex={0}
+          onClick={(e) => { e.preventDefault(); e.stopPropagation(); approveImage() }}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); approveImage() } }}
+          className="aspect-video bg-fluux-hover/60 hover:bg-fluux-hover flex flex-col items-center justify-center gap-2 text-fluux-muted transition-colors cursor-pointer"
+        >
+          <ImageIcon className="size-6" aria-hidden="true" />
+          <span className="text-sm font-medium">{t('chat.showLinkImage')}</span>
         </div>
       )}
 

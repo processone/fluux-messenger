@@ -576,7 +576,12 @@
             "acceptedWithoutVerifying": "Nouvelle clé acceptée. Correspondant non vérifié",
             "acceptFailed": "Impossible d'accepter la nouvelle clé. Réessayez"
         },
-        "offlinePlaceholder": "Hors ligne. Vos messages partiront à la reconnexion"
+        "offlinePlaceholder": "Hors ligne. Vos messages partiront à la reconnexion",
+        "loadImage": "Charger l'image",
+        "loadVideo": "Charger la vidéo",
+        "loadAudio": "Charger l'audio",
+        "loadFilePreview": "Charger l'aperçu",
+        "showLinkImage": "Afficher l'image"
     },
     "dates": {
         "today": "Aujourd'hui",
@@ -592,7 +597,8 @@
             "updates": "Mises à jour",
             "blocked": "Utilisateurs bloqués",
             "storage": "Stockage",
-            "encryption": "Chiffrement"
+            "encryption": "Chiffrement",
+            "privacy": "Confidentialité"
         },
         "blocked": {
             "title": "Utilisateurs bloqués",
@@ -837,7 +843,16 @@
             "unlockPassphraseTooShort": "La phrase de passe doit comporter au moins 8 caractères",
             "lockedBannerBody": "Votre clé de chiffrement est verrouillée. Saisissez votre phrase de passe pour activer le chiffrement pour cette session.",
             "rotateNotSupportedWeb": "La rotation de clé n'est pas disponible sur le web. Utilisez l'application de bureau."
-        }
+        },
+        "mediaAutoDownload": "Téléchargement automatique des médias",
+        "mediaAutoDownloadDescription": "Choisissez quand les images, vidéos et fichiers se chargent automatiquement.",
+        "mediaAutoDownloadAlways": "Toujours",
+        "mediaAutoDownloadAlwaysDescription": "Charger les médias automatiquement dans toutes les conversations.",
+        "mediaAutoDownloadPrivateOnly": "Privé uniquement",
+        "mediaAutoDownloadPrivateOnlyDescription": "Charger automatiquement dans les messages directs et les salons privés. Dans les salons publics, touchez pour charger.",
+        "mediaAutoDownloadNever": "Jamais",
+        "mediaAutoDownloadNeverDescription": "Ne jamais charger les médias automatiquement. Touchez pour charger dans toute conversation.",
+        "mediaAutoDownloadStrangerNote": "Les médias des personnes absentes de vos contacts nécessitent toujours une action pour se charger, quel que soit ce réglage."
     },
     "update": {
         "title": "Mise à jour disponible",

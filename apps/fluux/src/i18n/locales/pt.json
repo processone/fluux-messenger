@@ -577,7 +577,12 @@
             "acceptedWithoutVerifying": "Nova chave aceite. Contacto não verificado",
             "acceptFailed": "Não foi possível aceitar a nova chave. Tenta novamente"
         },
-        "offlinePlaceholder": "Sem conexão. As mensagens serão enviadas ao reconectar"
+        "offlinePlaceholder": "Sem conexão. As mensagens serão enviadas ao reconectar",
+        "loadImage": "Carregar imagem",
+        "loadVideo": "Carregar vídeo",
+        "loadAudio": "Carregar áudio",
+        "loadFilePreview": "Carregar pré-visualização",
+        "showLinkImage": "Mostrar imagem"
     },
     "dates": {
         "today": "Hoje",
@@ -593,7 +598,8 @@
             "updates": "Atualizações",
             "blocked": "Utilizadores bloqueados",
             "storage": "Armazenamento",
-            "encryption": "Criptografia"
+            "encryption": "Criptografia",
+            "privacy": "Privacidade"
         },
         "blocked": {
             "title": "Utilizadores bloqueados",
@@ -838,7 +844,16 @@
             "unlockPassphraseTooShort": "A frase-passe deve ter pelo menos 8 caracteres",
             "lockedBannerBody": "A sua chave de criptografia está bloqueada. Insira a frase-passe para ativar a criptografia para esta sessão.",
             "rotateNotSupportedWeb": "A rotação de chaves não está disponível na web. Use a aplicação de secretária."
-        }
+        },
+        "mediaAutoDownload": "Transferência automática de ficheiros multimédia",
+        "mediaAutoDownloadDescription": "Escolha quando as imagens, vídeos e ficheiros são carregados automaticamente.",
+        "mediaAutoDownloadAlways": "Sempre",
+        "mediaAutoDownloadAlwaysDescription": "Carregar ficheiros multimédia automaticamente em todas as conversas.",
+        "mediaAutoDownloadPrivateOnly": "Só privado",
+        "mediaAutoDownloadPrivateOnlyDescription": "Carregar automaticamente em mensagens diretas e salas privadas. Nos canais públicos, toque para carregar.",
+        "mediaAutoDownloadNever": "Nunca",
+        "mediaAutoDownloadNeverDescription": "Nunca carregar ficheiros multimédia automaticamente. Toque para carregar em qualquer conversa.",
+        "mediaAutoDownloadStrangerNote": "Os ficheiros multimédia de pessoas que não estão nos seus contactos necessitam sempre de um toque para carregar, independentemente do que escolher aqui."
     },
     "update": {
         "title": "Atualização disponível",

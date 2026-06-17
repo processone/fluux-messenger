@@ -575,7 +575,12 @@
             "acceptedWithoutVerifying": "Naujas raktas priimtas. Kontaktas nepatvirtintas",
             "acceptFailed": "Nepavyko priimti naujo rakto. Bandykite dar kartą"
         },
-        "offlinePlaceholder": "Neprisijungus. Žinutės bus išsiųstos prisijungus iš naujo"
+        "offlinePlaceholder": "Neprisijungus. Žinutės bus išsiųstos prisijungus iš naujo",
+        "loadImage": "Įkelti nuotrauką",
+        "loadVideo": "Įkelti vaizdo įrašą",
+        "loadAudio": "Įkelti garsą",
+        "loadFilePreview": "Įkelti peržiūrą",
+        "showLinkImage": "Rodyti nuotrauką"
     },
     "dates": {
         "today": "Šiandien",
@@ -591,7 +596,8 @@
             "updates": "Atnaujinimai",
             "blocked": "Užblokuoti vartotojai",
             "storage": "Saugykla",
-            "encryption": "Šifravimas"
+            "encryption": "Šifravimas",
+            "privacy": "Privatumas"
         },
         "blocked": {
             "title": "Užblokuoti vartotojai",
@@ -836,7 +842,16 @@
             "unlockPassphraseTooShort": "Slaptažodį turi sudaryti ne mažiau kaip 8 simboliai",
             "lockedBannerBody": "Šifravimo raktas užrakintas. Įveskite slaptažodį, kad įjungtumėte šifravimą šiai sesijai.",
             "rotateNotSupportedWeb": "Rakto rotacija internete negalima. Naudokite darbalaukio programą."
-        }
+        },
+        "mediaAutoDownload": "Automatinis medijos atsisiuntimas",
+        "mediaAutoDownloadDescription": "Pasirinkite, kada nuotraukos, vaizdo įrašai ir failai įkeliami automatiškai.",
+        "mediaAutoDownloadAlways": "Visada",
+        "mediaAutoDownloadAlwaysDescription": "Įkelti mediją automatiškai kiekviename pokalbyje.",
+        "mediaAutoDownloadPrivateOnly": "Tik privatus",
+        "mediaAutoDownloadPrivateOnlyDescription": "Įkelti automatiškai tiesioginėse žinutėse ir privačiuose kambariuose. Viešuose kanaluose palieskite, kad įkeltumėte.",
+        "mediaAutoDownloadNever": "Niekada",
+        "mediaAutoDownloadNeverDescription": "Niekada neįkelti medijos automatiškai. Palieskite, kad įkeltumėte bet kuriame pokalbyje.",
+        "mediaAutoDownloadStrangerNote": "Žmonių, kurių nėra jūsų kontaktuose, medija visada reikalauja palietimo, kad įsikeltų, nepaisant čia pasirinktos parinkties."
     },
     "update": {
         "title": "Pasiekiamas atnaujinimas",

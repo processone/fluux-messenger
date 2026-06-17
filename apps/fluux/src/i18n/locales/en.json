@@ -575,7 +575,12 @@
             "acceptedWithoutVerifying": "New key accepted. Peer is unverified",
             "acceptFailed": "Couldn't accept the new key. Try again"
         },
-        "offlinePlaceholder": "Offline. Messages will be sent when you reconnect"
+        "offlinePlaceholder": "Offline. Messages will be sent when you reconnect",
+        "loadImage": "Load image",
+        "loadVideo": "Load video",
+        "loadAudio": "Load audio",
+        "loadFilePreview": "Load preview",
+        "showLinkImage": "Show image"
     },
     "dates": {
         "today": "Today",
@@ -591,7 +596,8 @@
             "updates": "Updates",
             "blocked": "Blocked Users",
             "storage": "Storage",
-            "encryption": "Encryption"
+            "encryption": "Encryption",
+            "privacy": "Privacy"
         },
         "encryption": {
             "experimental": "Experimental",
@@ -804,6 +810,15 @@
         "timeFormatAuto": "System default",
         "timeFormat12h": "12-hour (2:30 PM)",
         "timeFormat24h": "24-hour (14:30)",
+        "mediaAutoDownload": "Auto-download media",
+        "mediaAutoDownloadDescription": "Choose when images, videos, and files load automatically.",
+        "mediaAutoDownloadAlways": "Always",
+        "mediaAutoDownloadAlwaysDescription": "Load media automatically in every conversation.",
+        "mediaAutoDownloadPrivateOnly": "Private only",
+        "mediaAutoDownloadPrivateOnlyDescription": "Load automatically in direct messages and private rooms. In public channels, tap to load.",
+        "mediaAutoDownloadNever": "Never",
+        "mediaAutoDownloadNeverDescription": "Never load media automatically. Tap to load in any conversation.",
+        "mediaAutoDownloadStrangerNote": "Media from people who aren't in your contacts always needs a tap to load, whatever you choose here.",
         "notifications": "Notifications",
         "notificationStatus": "Desktop Notifications",
         "notificationEnabled": "Enabled. You will receive notifications",

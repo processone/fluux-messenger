@@ -575,7 +575,12 @@
             "acceptedWithoutVerifying": "Ny nøkkel godtatt. Motparten er ikke verifisert",
             "acceptFailed": "Kunne ikke godta den nye nøkkelen. Prøv igjen"
         },
-        "offlinePlaceholder": "Frakoblet. Meldinger sendes når tilkoblingen er gjenopprettet"
+        "offlinePlaceholder": "Frakoblet. Meldinger sendes når tilkoblingen er gjenopprettet",
+        "loadImage": "Last inn bilde",
+        "loadVideo": "Last inn video",
+        "loadAudio": "Last inn lyd",
+        "loadFilePreview": "Last inn forhåndsvisning",
+        "showLinkImage": "Vis bilde"
     },
     "dates": {
         "today": "I dag",
@@ -591,7 +596,8 @@
             "updates": "Oppdateringer",
             "blocked": "Blokkerte brukere",
             "storage": "Lagring",
-            "encryption": "Kryptering"
+            "encryption": "Kryptering",
+            "privacy": "Personvern"
         },
         "blocked": {
             "title": "Blokkerte brukere",
@@ -836,7 +842,16 @@
             "unlockPassphraseTooShort": "Passfrasen må være minst 8 tegn",
             "lockedBannerBody": "Krypteringsnøkkelen din er låst. Oppgi passfrasen din for å aktivere kryptering for denne økt.",
             "rotateNotSupportedWeb": "Nøkkelrotering er ikke tilgjengelig på nettet. Bruk skrivebordsappen."
-        }
+        },
+        "mediaAutoDownload": "Automatisk nedlasting av medier",
+        "mediaAutoDownloadDescription": "Velg når bilder, videoer og filer lastes inn automatisk.",
+        "mediaAutoDownloadAlways": "Alltid",
+        "mediaAutoDownloadAlwaysDescription": "Last inn medier automatisk i alle samtaler.",
+        "mediaAutoDownloadPrivateOnly": "Kun privat",
+        "mediaAutoDownloadPrivateOnlyDescription": "Last inn automatisk i direktemeldinger og private rom. I offentlige kanaler, trykk for å laste inn.",
+        "mediaAutoDownloadNever": "Aldri",
+        "mediaAutoDownloadNeverDescription": "Last aldri inn medier automatisk. Trykk for å laste inn i en hvilken som helst samtale.",
+        "mediaAutoDownloadStrangerNote": "Medier fra personer som ikke er i kontaktlisten din krever alltid et trykk for å lastes inn, uavhengig av hva du velger her."
     },
     "update": {
         "title": "Oppdatering tilgjengelig",

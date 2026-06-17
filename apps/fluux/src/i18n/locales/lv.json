@@ -576,7 +576,12 @@
             "acceptedWithoutVerifying": "Jaunā atslēga pieņemta. Partneris nav verificēts",
             "acceptFailed": "Neizdevās pieņemt jauno atslēgu. Mēģiniet vēlreiz"
         },
-        "offlinePlaceholder": "Bezsaistē. Ziņas tiks nosūtītas pēc atkārtotas savienošanas"
+        "offlinePlaceholder": "Bezsaistē. Ziņas tiks nosūtītas pēc atkārtotas savienošanas",
+        "loadImage": "Ielādēt attēlu",
+        "loadVideo": "Ielādēt videoklipu",
+        "loadAudio": "Ielādēt audio",
+        "loadFilePreview": "Ielādēt priekšskatījumu",
+        "showLinkImage": "Rādīt attēlu"
     },
     "dates": {
         "today": "Šodien",
@@ -592,7 +597,8 @@
             "updates": "Atjauninājumi",
             "blocked": "Bloķētie lietotāji",
             "storage": "Krātuve",
-            "encryption": "Šifrēšana"
+            "encryption": "Šifrēšana",
+            "privacy": "Privātums"
         },
         "blocked": {
             "title": "Bloķētie lietotāji",
@@ -837,7 +843,16 @@
             "unlockPassphraseTooShort": "Parole jābūt vismaz 8 rakstzīmēm",
             "lockedBannerBody": "Jūsu šifrēšanas atslēga ir bloķēta. Ievadiet paroli, lai aktivizētu šifrēšanu šai sesijai.",
             "rotateNotSupportedWeb": "Atslēgas rotācija nav pieejama tīmeklī. Izmantojiet darbvirsmas lietotni."
-        }
+        },
+        "mediaAutoDownload": "Automātiska multivides lejupielāde",
+        "mediaAutoDownloadDescription": "Izvēlieties, kad attēli, videoklipi un faili tiek ielādēti automātiski.",
+        "mediaAutoDownloadAlways": "Vienmēr",
+        "mediaAutoDownloadAlwaysDescription": "Ielādēt multividi automātiski katrā sarunā.",
+        "mediaAutoDownloadPrivateOnly": "Tikai privāti",
+        "mediaAutoDownloadPrivateOnlyDescription": "Ielādēt automātiski tiešajās ziņās un privātajās istabās. Publiskajos kanālos, pieskarieties, lai ielādētu.",
+        "mediaAutoDownloadNever": "Nekad",
+        "mediaAutoDownloadNeverDescription": "Nekad neielādēt multividi automātiski. Pieskarieties, lai ielādētu jebkurā sarunā.",
+        "mediaAutoDownloadStrangerNote": "Multivide no cilvēkiem, kas nav jūsu kontaktos, vienmēr prasa pieskārienu ielādēšanai, neatkarīgi no šeit izvēlētā."
     },
     "update": {
         "title": "Pieejams atjauninājums",

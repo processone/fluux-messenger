@@ -26,6 +26,9 @@ import { findLastEditableMessage, findLastEditableMessageId } from '@/utils/mess
 import { useExpandedMessagesStore } from '@/stores/expandedMessagesStore'
 import { ConfirmDialog } from './ConfirmDialog'
 import { useRoomJoinWarning } from '@/hooks/useRoomJoinWarning'
+import { MediaAutoloadProvider } from '@/contexts'
+import { computeMediaAutoload } from '@/utils/mediaAutoload'
+import { useSettingsStore } from '@/stores/settingsStore'
 import { getRoomJoinErrorMessage } from '@/utils/roomJoinError'
 
 // Generate hat colors from URI using XEP-0392 consistent color
@@ -76,6 +79,8 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
   detectRenderLoop('RoomView')
   const { t } = useTranslation()
   const { activeRoom, activeMessages, activeTypingUsers, sendMessage, sendWhisper, sendReaction, sendPoll, votePoll, closePoll, sendCorrection, retractMessage, moderateMessage, sendChatState, setRoomNotifyAll, activeAnimation, sendEasterEgg, clearAnimation, clearFirstNewMessageId, updateLastSeenMessageId, joinRoom, joinResult, setRoomAvatar, clearRoomAvatar, fetchOlderHistory, continueRoomCatchUp, activeMAMState, submitRoomConfig, setSubject, destroyRoom, setAffiliation, setRole, targetMessageId, clearTargetMessageId } = useRoomActive()
+  const mediaPolicy = useSettingsStore((s) => s.mediaAutoDownload)
+
   // NOTE: Use focused selectors instead of useConnection() hook to avoid
   // re-renders when unrelated connection state changes (error, reconnectAttempt, etc.)
   const ownAvatar = useConnectionStore((s) => s.ownAvatar)
@@ -433,6 +438,11 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
 
   if (!activeRoom) return null
 
+  // Room media trust: open rooms are public; members-only/hidden are private.
+  // A room whose disco hasn't resolved has isPrivate falsy → treated as public
+  // (fail-safe). Strangers do not apply to rooms.
+  const mediaAutoLoad = computeMediaAutoload(mediaPolicy, activeRoom.isPrivate ? 'room-private' : 'room-public')
+
   return (
     <div
       className="flex flex-1 min-h-0 relative"
@@ -499,11 +509,12 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
               onClose={find.close}
             />
           )}
-          <RoomMessageList
-            messages={displayMessages}
-            scrollerRef={scrollRef}
-            isAtBottomRef={isAtBottomRef}
-            room={stableRoom ?? activeRoom}
+          <MediaAutoloadProvider autoLoad={mediaAutoLoad}>
+            <RoomMessageList
+              messages={displayMessages}
+              scrollerRef={scrollRef}
+              isAtBottomRef={isAtBottomRef}
+              room={stableRoom ?? activeRoom}
             contactsByJid={contactsByJid}
             ownAvatar={ownAvatar}
             sendReaction={sendReaction}
@@ -544,7 +555,8 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
             forwardGapTimestamp={activeMAMState?.forwardGapTimestamp}
             onCatchUpHistory={continueRoomCatchUp}
             isCatchingUp={activeMAMState?.isLoading}
-          />
+            />
+          </MediaAutoloadProvider>
         </div>
 
         {/* Input - show composer if joined, join prompt if not */}

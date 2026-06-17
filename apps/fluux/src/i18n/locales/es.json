@@ -577,7 +577,12 @@
             "acceptedWithoutVerifying": "Clave nueva aceptada. El contacto no está verificado",
             "acceptFailed": "No se pudo aceptar la clave nueva. Inténtalo de nuevo"
         },
-        "offlinePlaceholder": "Sin conexión. Los mensajes se enviarán al reconectar"
+        "offlinePlaceholder": "Sin conexión. Los mensajes se enviarán al reconectar",
+        "loadImage": "Cargar imagen",
+        "loadVideo": "Cargar vídeo",
+        "loadAudio": "Cargar audio",
+        "loadFilePreview": "Cargar vista previa",
+        "showLinkImage": "Mostrar imagen"
     },
     "dates": {
         "today": "Hoy",
@@ -593,7 +598,8 @@
             "updates": "Actualizaciones",
             "blocked": "Usuarios Bloqueados",
             "storage": "Almacenamiento",
-            "encryption": "Cifrado"
+            "encryption": "Cifrado",
+            "privacy": "Privacidad"
         },
         "blocked": {
             "title": "Usuarios Bloqueados",
@@ -838,7 +844,16 @@
             "unlockPassphraseTooShort": "La contraseña debe tener al menos 8 caracteres",
             "lockedBannerBody": "Tu clave de cifrado está bloqueada. Introduce tu contraseña para activar el cifrado en esta sesión.",
             "rotateNotSupportedWeb": "La rotación de claves no está disponible en la web. Usa la aplicación de escritorio."
-        }
+        },
+        "mediaAutoDownload": "Descarga automática de multimedia",
+        "mediaAutoDownloadDescription": "Elige cuándo se cargan automáticamente las imágenes, vídeos y archivos.",
+        "mediaAutoDownloadAlways": "Siempre",
+        "mediaAutoDownloadAlwaysDescription": "Cargar multimedia automáticamente en todas las conversaciones.",
+        "mediaAutoDownloadPrivateOnly": "Solo privado",
+        "mediaAutoDownloadPrivateOnlyDescription": "Cargar automáticamente en mensajes directos y salas privadas. En canales públicos, toca para cargar.",
+        "mediaAutoDownloadNever": "Nunca",
+        "mediaAutoDownloadNeverDescription": "No cargar nunca multimedia automáticamente. Toca para cargar en cualquier conversación.",
+        "mediaAutoDownloadStrangerNote": "El multimedia de personas que no están en tus contactos siempre requiere un toque para cargarse, independientemente de lo que elijas aquí."
     },
     "update": {
         "title": "Actualizacion Disponible",

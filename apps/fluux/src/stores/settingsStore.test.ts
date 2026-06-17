@@ -8,7 +8,7 @@ describe('settingsStore', () => {
     vi.mocked(localStorage.getItem).mockClear()
     vi.mocked(localStorage.setItem).mockClear()
     vi.mocked(localStorage.getItem).mockReturnValue(null)
-    useSettingsStore.setState({ themeMode: 'system', timeFormat: 'auto', fontSize: 100 })
+    useSettingsStore.setState({ themeMode: 'system', timeFormat: 'auto', fontSize: 100, mediaAutoDownload: 'private-only' })
   })
 
   describe('initial state', () => {
@@ -92,6 +92,27 @@ describe('settingsStore', () => {
 
       // State should still update
       expect(useSettingsStore.getState().themeMode).toBe('light')
+    })
+  })
+
+  describe('mediaAutoDownload', () => {
+    it('defaults to private-only when localStorage is empty', () => {
+      useSettingsStore.setState({ mediaAutoDownload: 'private-only' })
+      expect(useSettingsStore.getState().mediaAutoDownload).toBe('private-only')
+    })
+
+    it('setMediaAutoDownload persists to localStorage', () => {
+      useSettingsStore.getState().setMediaAutoDownload('always')
+      expect(localStorage.setItem).toHaveBeenCalledWith('fluux-media-autodownload', 'always')
+      expect(useSettingsStore.getState().mediaAutoDownload).toBe('always')
+    })
+
+    it('accepts all three policy values', () => {
+      const { setMediaAutoDownload } = useSettingsStore.getState()
+      for (const v of ['always', 'private-only', 'never'] as const) {
+        setMediaAutoDownload(v)
+        expect(useSettingsStore.getState().mediaAutoDownload).toBe(v)
+      }
     })
   })
 })

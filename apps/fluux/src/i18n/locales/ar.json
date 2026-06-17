@@ -575,7 +575,12 @@
             "acceptedWithoutVerifying": "تم قبول المفتاح الجديد. الطرف الآخر غير موثّق",
             "acceptFailed": "تعذّر قبول المفتاح الجديد. حاول مرة أخرى"
         },
-        "offlinePlaceholder": "غير متصل. سيتم إرسال الرسائل عند إعادة الاتصال"
+        "offlinePlaceholder": "غير متصل. سيتم إرسال الرسائل عند إعادة الاتصال",
+        "loadImage": "تحميل الصورة",
+        "loadVideo": "تحميل الفيديو",
+        "loadAudio": "تحميل الصوت",
+        "loadFilePreview": "تحميل المعاينة",
+        "showLinkImage": "عرض الصورة"
     },
     "dates": {
         "today": "اليوم",
@@ -591,7 +596,8 @@
             "updates": "التحديثات",
             "blocked": "المستخدمون المحظورون",
             "storage": "التخزين",
-            "encryption": "التشفير"
+            "encryption": "التشفير",
+            "privacy": "الخصوصية"
         },
         "blocked": {
             "title": "المستخدمون المحظورون",
@@ -836,7 +842,16 @@
             "unlockPassphraseTooShort": "يجب أن تتكون عبارة المرور من 8 أحرف على الأقل",
             "lockedBannerBody": "مفتاح التشفير مقفل. أدخل عبارة المرور لتفعيل التشفير لهذه الجلسة.",
             "rotateNotSupportedWeb": "دوران المفتاح غير متاح على الويب. استخدم تطبيق سطح المكتب."
-        }
+        },
+        "mediaAutoDownload": "تنزيل الوسائط تلقائيًا",
+        "mediaAutoDownloadDescription": "اختر متى يتم تحميل الصور ومقاطع الفيديو والملفات تلقائيًا.",
+        "mediaAutoDownloadAlways": "دائمًا",
+        "mediaAutoDownloadAlwaysDescription": "تحميل الوسائط تلقائيًا في كل المحادثات.",
+        "mediaAutoDownloadPrivateOnly": "الخاص فقط",
+        "mediaAutoDownloadPrivateOnlyDescription": "تحميل تلقائي في الرسائل المباشرة والغرف الخاصة. في القنوات العامة، اضغط للتحميل.",
+        "mediaAutoDownloadNever": "أبدًا",
+        "mediaAutoDownloadNeverDescription": "لا تحميل تلقائي للوسائط. اضغط للتحميل في أي محادثة.",
+        "mediaAutoDownloadStrangerNote": "وسائط الأشخاص غير الموجودين في جهات اتصالك تتطلب دائمًا ضغطة للتحميل، بغض النظر عن هذا الإعداد."
     },
     "update": {
         "title": "تحديث متاح",

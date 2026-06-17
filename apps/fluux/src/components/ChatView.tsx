@@ -23,6 +23,9 @@ import { findLastEditableMessage, findLastEditableMessageId } from '@/utils/mess
 import { isEncryptedSource } from '@/utils/replyEncryption'
 import { useExpandedMessagesStore } from '@/stores/expandedMessagesStore'
 import { ConfirmDialog } from './ConfirmDialog'
+import { MediaAutoloadProvider } from '@/contexts'
+import { computeMediaAutoload } from '@/utils/mediaAutoload'
+import { useSettingsStore } from '@/stores/settingsStore'
 
 interface ChatViewProps {
   onBack?: () => void
@@ -46,6 +49,7 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
   // Use useContactIdentities instead of useRoster() to avoid re-renders on
   // presence changes. ChatView only needs contact names and avatars for display.
   const contactsByJid = useContactIdentities()
+  const mediaPolicy = useSettingsStore((s) => s.mediaAutoDownload)
   // NOTE: Use focused selectors instead of useConnection() hook to avoid
   // re-renders when unrelated connection state changes (error, reconnectAttempt, etc.)
   const jid = useConnectionStore((s) => s.jid)
@@ -327,6 +331,16 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
     ? contactsByJid.get(activeConversation.id)
     : undefined
 
+  // 1:1 media trust: a peer absent from the roster contacts map is a stranger
+  // (matches the SDK's roster.hasContact stranger definition). Strangers never
+  // auto-load, regardless of policy. ChatView only renders type==='chat'
+  // conversations; were a non-1:1 peer ever to reach here it would be absent
+  // from the contacts map and so fail safe to 'direct-stranger' (deferred).
+  const mediaAutoLoad = computeMediaAutoload(
+    mediaPolicy,
+    contactsByJid.has(activeConversation.id) ? 'direct-contact' : 'direct-stranger',
+  )
+
   return (
     <div
       className="flex flex-col h-full min-h-0 relative"
@@ -417,36 +431,37 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
             onClose={find.close}
           />
         )}
-        <ChatMessageList
-          messages={activeMessages}
-          contactsByJid={contactsByJid}
-          typingUsers={activeTypingUsers}
-          scrollerRef={scrollRef}
-          isAtBottomRef={isAtBottomRef}
-          conversationId={activeConversation.id}
-          conversationType={activeConversation.type}
-          sendReaction={sendReaction}
-          myBareJid={myBareJid}
-          ownAvatar={ownAvatar}
-          ownNickname={ownNickname}
-          onReply={handleReply}
-          onEdit={setEditingMessage}
-          lastOutgoingMessageId={lastOutgoingMessageId}
-          lastMessageId={lastMessageId}
-          isComposing={isComposing}
-          activeReactionPickerMessageId={activeReactionPickerMessageId}
-          onReactionPickerChange={handleReactionPickerChange}
-          retractMessage={retractMessage}
-          retryMessage={retryMessage}
-          selectedMessageId={selectedMessageId}
-          hasKeyboardSelection={hasKeyboardSelection}
-          showToolbarForSelection={showToolbarForSelection}
-          firstNewMessageId={activeConversation.firstNewMessageId}
-          targetMessageId={targetMessageId}
-          clearTargetMessageId={clearTargetMessageId}
-          clearFirstNewMessageId={handleClearFirstNewMessageId}
-          onMessageSeen={handleMessageSeen}
-          isDarkMode={resolvedMode === 'dark'}
+        <MediaAutoloadProvider autoLoad={mediaAutoLoad}>
+          <ChatMessageList
+            messages={activeMessages}
+            contactsByJid={contactsByJid}
+            typingUsers={activeTypingUsers}
+            scrollerRef={scrollRef}
+            isAtBottomRef={isAtBottomRef}
+            conversationId={activeConversation.id}
+            conversationType={activeConversation.type}
+            sendReaction={sendReaction}
+            myBareJid={myBareJid}
+            ownAvatar={ownAvatar}
+            ownNickname={ownNickname}
+            onReply={handleReply}
+            onEdit={setEditingMessage}
+            lastOutgoingMessageId={lastOutgoingMessageId}
+            lastMessageId={lastMessageId}
+            isComposing={isComposing}
+            activeReactionPickerMessageId={activeReactionPickerMessageId}
+            onReactionPickerChange={handleReactionPickerChange}
+            retractMessage={retractMessage}
+            retryMessage={retryMessage}
+            selectedMessageId={selectedMessageId}
+            hasKeyboardSelection={hasKeyboardSelection}
+            showToolbarForSelection={showToolbarForSelection}
+            firstNewMessageId={activeConversation.firstNewMessageId}
+            targetMessageId={targetMessageId}
+            clearTargetMessageId={clearTargetMessageId}
+            clearFirstNewMessageId={handleClearFirstNewMessageId}
+            onMessageSeen={handleMessageSeen}
+            isDarkMode={resolvedMode === 'dark'}
           onScrollToTop={fetchOlderHistory}
           isLoadingOlder={activeMAMState?.isLoading ?? false}
           isHistoryComplete={activeMAMState?.isHistoryComplete ?? false}
@@ -458,7 +473,8 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
           highlightTerms={find.highlightTerms}
           currentMatchId={find.currentMatchId}
           lastSentMessageId={lastSentMessageId}
-        />
+          />
+        </MediaAutoloadProvider>
       </div>
 
       {/* Input */}

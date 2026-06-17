@@ -575,7 +575,12 @@
             "acceptedWithoutVerifying": "Novi ključ prihvaćen. Sugovornik nije provjeren",
             "acceptFailed": "Nije moguće prihvatiti novi ključ. Pokušajte ponovno"
         },
-        "offlinePlaceholder": "Izvanmrežno. Poruke će biti poslane nakon ponovnog povezivanja"
+        "offlinePlaceholder": "Izvanmrežno. Poruke će biti poslane nakon ponovnog povezivanja",
+        "loadImage": "Učitaj sliku",
+        "loadVideo": "Učitaj video",
+        "loadAudio": "Učitaj zvuk",
+        "loadFilePreview": "Učitaj pretpregled",
+        "showLinkImage": "Prikaži sliku"
     },
     "dates": {
         "today": "Danas",
@@ -591,7 +596,8 @@
             "updates": "Ažuriranja",
             "blocked": "Blokirani korisnici",
             "storage": "Pohrana",
-            "encryption": "Šifriranje"
+            "encryption": "Šifriranje",
+            "privacy": "Privatnost"
         },
         "blocked": {
             "title": "Blokirani korisnici",
@@ -836,7 +842,16 @@
             "unlockPassphraseTooShort": "Lozinka mora imati najmanje 8 znakova",
             "lockedBannerBody": "Tvoj ključ za enkripciju je zaključan. Unesi lozinku za aktivaciju enkripcije za ovu sesiju.",
             "rotateNotSupportedWeb": "Rotacija ključa nije dostupna na webu. Koristi aplikaciju za stolna računala."
-        }
+        },
+        "mediaAutoDownload": "Automatsko preuzimanje medija",
+        "mediaAutoDownloadDescription": "Odaberite kada se slike, videozapisi i datoteke učitavaju automatski.",
+        "mediaAutoDownloadAlways": "Uvijek",
+        "mediaAutoDownloadAlwaysDescription": "Učitavaj medije automatski u svim razgovorima.",
+        "mediaAutoDownloadPrivateOnly": "Samo privatno",
+        "mediaAutoDownloadPrivateOnlyDescription": "Učitavaj automatski u izravnim porukama i privatnim sobama. U javnim kanalima, dodirnite za učitavanje.",
+        "mediaAutoDownloadNever": "Nikad",
+        "mediaAutoDownloadNeverDescription": "Nikad ne učitavaj medije automatski. Dodirnite za učitavanje u bilo kojem razgovoru.",
+        "mediaAutoDownloadStrangerNote": "Mediji od osoba koje nisu u vašim kontaktima uvijek zahtijevaju dodir za učitavanje, bez obzira na vaš odabir ovdje."
     },
     "update": {
         "title": "Dostupno ažuriranje",

@@ -577,7 +577,12 @@
             "acceptedWithoutVerifying": "Clau nova acceptada. El contacte no està verificat",
             "acceptFailed": "No s'ha pogut acceptar la clau nova. Torna-ho a provar"
         },
-        "offlinePlaceholder": "Fora de línia. Els missatges s’enviaran en reconnectar"
+        "offlinePlaceholder": "Fora de línia. Els missatges s’enviaran en reconnectar",
+        "loadImage": "Carrega la imatge",
+        "loadVideo": "Carrega el vídeo",
+        "loadAudio": "Carrega l'àudio",
+        "loadFilePreview": "Carrega la previsualització",
+        "showLinkImage": "Mostra la imatge"
     },
     "dates": {
         "today": "Avui",
@@ -593,7 +598,8 @@
             "updates": "Actualitzacions",
             "blocked": "Usuaris blocats",
             "storage": "Emmagatzematge",
-            "encryption": "Xifratge"
+            "encryption": "Xifratge",
+            "privacy": "Privadesa"
         },
         "blocked": {
             "title": "Usuaris blocats",
@@ -838,7 +844,16 @@
             "unlockPassphraseTooShort": "La contrasenya ha de tenir almenys 8 caràcters",
             "lockedBannerBody": "La teva clau de xifratge està bloquejada. Introdueix la contrasenya per activar el xifratge per a aquesta sessió.",
             "rotateNotSupportedWeb": "La rotació de claus no està disponible al web. Utilitza l'aplicació d'escriptori."
-        }
+        },
+        "mediaAutoDownload": "Descàrrega automàtica de multimèdia",
+        "mediaAutoDownloadDescription": "Trieu quan es carreguen automàticament les imatges, els vídeos i els fitxers.",
+        "mediaAutoDownloadAlways": "Sempre",
+        "mediaAutoDownloadAlwaysDescription": "Carrega els multimèdia automàticament en totes les converses.",
+        "mediaAutoDownloadPrivateOnly": "Només privat",
+        "mediaAutoDownloadPrivateOnlyDescription": "Carrega automàticament als missatges directes i les sales privades. Als canals públics, toca per carregar.",
+        "mediaAutoDownloadNever": "Mai",
+        "mediaAutoDownloadNeverDescription": "No carrega mai els multimèdia automàticament. Toca per carregar en qualsevol conversa.",
+        "mediaAutoDownloadStrangerNote": "Els multimèdia de persones que no són als vostres contactes sempre requereixen un toc per carregar-se, sigui quin sigui el que trieu aquí."
     },
     "update": {
         "title": "Actualització disponible",

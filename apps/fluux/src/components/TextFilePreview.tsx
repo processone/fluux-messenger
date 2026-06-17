@@ -2,6 +2,8 @@ import { useTranslation } from 'react-i18next'
 import { FileText, Download, Loader2 } from 'lucide-react'
 import { useTextPreview, formatBytes } from '@/hooks'
 import { canPreviewAsText, getFileTypeLabel } from '@/utils/thumbnail'
+import { DeferredMediaPlaceholder } from './DeferredMediaPlaceholder'
+import { useDeferredMedia } from '@/hooks/useDeferredMedia'
 import type { FileAttachment } from '@fluux/sdk'
 
 interface TextFilePreviewProps {
@@ -19,13 +21,23 @@ interface TextFilePreviewProps {
 export function TextFilePreview({ attachment, isSelected = false, isHovered = false }: TextFilePreviewProps) {
   const { t } = useTranslation()
   const canPreview = canPreviewAsText(attachment.mediaType, attachment.name)
-  const { content, isLoading, error, isTruncated } = useTextPreview(
-    attachment.url,
-    canPreview
-  )
+  const { shouldLoad, approve } = useDeferredMedia(attachment.url)
+  const { content, isLoading, error, isTruncated } = useTextPreview(attachment.url, canPreview && shouldLoad)
 
   // Don't render anything if this isn't a text file
   if (!canPreview) return null
+
+  if (!shouldLoad) {
+    return (
+      <DeferredMediaPlaceholder
+        variant="card"
+        icon={FileText}
+        label={t('chat.loadFilePreview')}
+        sizeLabel={attachment.size ? formatBytes(attachment.size) : undefined}
+        onLoad={approve}
+      />
+    )
+  }
 
   return (
     <div className="mt-2 max-w-md">

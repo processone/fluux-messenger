@@ -577,7 +577,12 @@
             "acceptedWithoutVerifying": "Nuova chiave accettata. Il contatto non è verificato",
             "acceptFailed": "Impossibile accettare la nuova chiave. Riprova"
         },
-        "offlinePlaceholder": "Offline. I messaggi verranno inviati alla riconnessione"
+        "offlinePlaceholder": "Offline. I messaggi verranno inviati alla riconnessione",
+        "loadImage": "Carica immagine",
+        "loadVideo": "Carica video",
+        "loadAudio": "Carica audio",
+        "loadFilePreview": "Carica anteprima",
+        "showLinkImage": "Mostra immagine"
     },
     "dates": {
         "today": "Oggi",
@@ -593,7 +598,8 @@
             "updates": "Aggiornamenti",
             "blocked": "Utenti bloccati",
             "storage": "Archiviazione",
-            "encryption": "Crittografia"
+            "encryption": "Crittografia",
+            "privacy": "Privacy"
         },
         "blocked": {
             "title": "Utenti bloccati",
@@ -838,7 +844,16 @@
             "unlockPassphraseTooShort": "La passphrase deve avere almeno 8 caratteri",
             "lockedBannerBody": "La tua chiave di crittografia è bloccata. Inserisci la tua passphrase per attivare la crittografia per questa sessione.",
             "rotateNotSupportedWeb": "La rotazione delle chiavi non è disponibile sul web. Usa l'app desktop."
-        }
+        },
+        "mediaAutoDownload": "Download automatico dei media",
+        "mediaAutoDownloadDescription": "Scegli quando immagini, video e file vengono caricati automaticamente.",
+        "mediaAutoDownloadAlways": "Sempre",
+        "mediaAutoDownloadAlwaysDescription": "Carica i media automaticamente in ogni conversazione.",
+        "mediaAutoDownloadPrivateOnly": "Solo privato",
+        "mediaAutoDownloadPrivateOnlyDescription": "Carica automaticamente nei messaggi diretti e nelle stanze private. Nei canali pubblici, tocca per caricare.",
+        "mediaAutoDownloadNever": "Mai",
+        "mediaAutoDownloadNeverDescription": "Non caricare mai i media automaticamente. Tocca per caricare in qualsiasi conversazione.",
+        "mediaAutoDownloadStrangerNote": "I media di persone che non sono nei tuoi contatti richiedono sempre un tocco per caricarsi, indipendentemente da ciò che scegli qui."
     },
     "update": {
         "title": "Aggiornamento disponibile",

@@ -577,7 +577,12 @@
             "acceptedWithoutVerifying": "Nový klíč přijat. Kontakt není ověřen",
             "acceptFailed": "Nepodařilo se přijmout nový klíč. Zkuste to znovu"
         },
-        "offlinePlaceholder": "Offline. Zprávy budou odeslány po opětovném připojení"
+        "offlinePlaceholder": "Offline. Zprávy budou odeslány po opětovném připojení",
+        "loadImage": "Načíst obrázek",
+        "loadVideo": "Načíst video",
+        "loadAudio": "Načíst zvuk",
+        "loadFilePreview": "Načíst náhled",
+        "showLinkImage": "Zobrazit obrázek"
     },
     "dates": {
         "today": "Dnes",
@@ -593,7 +598,8 @@
             "updates": "Aktualizace",
             "blocked": "Zablokovaní uživatelé",
             "storage": "Úložiště",
-            "encryption": "Šifrování"
+            "encryption": "Šifrování",
+            "privacy": "Soukromí"
         },
         "blocked": {
             "title": "Zablokovaní uživatelé",
@@ -838,7 +844,16 @@
             "unlockPassphraseTooShort": "Heslo musí mít alespoň 8 znaků",
             "lockedBannerBody": "Šifrovací klíč je uzamčen. Zadej heslo pro aktivaci šifrování pro toto sezení.",
             "rotateNotSupportedWeb": "Rotace klíče není na webu dostupná. Použij desktopovou aplikaci."
-        }
+        },
+        "mediaAutoDownload": "Automatické stahování médií",
+        "mediaAutoDownloadDescription": "Zvolte, kdy se obrázky, videa a soubory načítají automaticky.",
+        "mediaAutoDownloadAlways": "Vždy",
+        "mediaAutoDownloadAlwaysDescription": "Načítat média automaticky v každé konverzaci.",
+        "mediaAutoDownloadPrivateOnly": "Pouze soukromé",
+        "mediaAutoDownloadPrivateOnlyDescription": "Načítat automaticky v přímých zprávách a soukromých místnostech. Ve veřejných kanálech klepněte pro načtení.",
+        "mediaAutoDownloadNever": "Nikdy",
+        "mediaAutoDownloadNeverDescription": "Nikdy nenačítat média automaticky. Klepněte pro načtení v jakékoli konverzaci.",
+        "mediaAutoDownloadStrangerNote": "Média od lidí, kteří nejsou ve vašich kontaktech, vždy vyžadují klepnutí pro načtení, bez ohledu na vaše nastavení."
     },
     "update": {
         "title": "Dostupná aktualizace",
