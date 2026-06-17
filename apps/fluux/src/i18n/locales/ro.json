@@ -40,7 +40,21 @@
         "hidePassword": "Ascunde parola",
         "madeBy": "Realizat de",
         "ejabberdCreator": ", compania din spatele",
-        "poweredBy": "Oferit de"
+        "poweredBy": "Oferit de",
+        "errors": {
+            "tlsCertTitle": "Nu s-a putut verifica certificatul de securitate al serverului",
+            "tlsOtherTitle": "Conexiunea securizată a eșuat",
+            "tlsOtherBody": "Nu s-a putut stabili conexiunea criptată cu serverul. Configurația TLS a serverului poate să nu fie acceptată. Verificați adresa serverului sau contactați administratorul serverului.",
+            "unreachableTitle": "Nu s-a putut ajunge la server",
+            "timeoutBody": "Serverul nu a răspuns la timp. Verificați rețeaua și adresa serverului, apoi încercați din nou.",
+            "refusedBody": "Serverul a refuzat conexiunea. Verificați adresa și portul serverului, apoi încercați din nou.",
+            "cert": {
+                "expired": "Certificatul serverului a expirat. Contactați administratorul serverului. Dacă adresa este greșită, editați câmpul serverului de mai jos.",
+                "nameMismatch": "Certificatul serverului a fost emis pentru un alt nume de gazdă. Verificați adresa serverului de mai jos sau contactați administratorul serverului.",
+                "untrusted": "Certificatul serverului este auto-semnat sau emis de o autoritate necunoscută, deci nu poate fi de încredere. Verificați adresa serverului sau contactați administratorul serverului.",
+                "generic": "Nu s-a putut verifica certificatul de securitate al serverului. Verificați adresa serverului de mai jos sau contactați administratorul serverului."
+            }
+        }
     },
     "sidebar": {
         "messages": "Mesaje",

@@ -40,7 +40,21 @@
         "hidePassword": "Piilota salasana",
         "madeBy": "Tekijä",
         "ejabberdCreator": ", yrityksen takana",
-        "poweredBy": "Käyttää"
+        "poweredBy": "Käyttää",
+        "errors": {
+            "tlsCertTitle": "Palvelimen turvasertifikaattia ei voitu varmentaa",
+            "tlsOtherTitle": "Suojattu yhteys epäonnistui",
+            "tlsOtherBody": "Salattua yhteyttä palvelimeen ei voitu muodostaa. Palvelimen TLS-asetuksia ei ehkä tueta. Tarkista palvelimen osoite tai ota yhteyttä palvelimen ylläpitäjään.",
+            "unreachableTitle": "Palvelimeen ei saatu yhteyttä",
+            "timeoutBody": "Palvelin ei vastannut ajoissa. Tarkista verkko ja palvelimen osoite, sitten yritä uudelleen.",
+            "refusedBody": "Palvelin hylkäsi yhteyden. Tarkista palvelimen osoite ja portti, sitten yritä uudelleen.",
+            "cert": {
+                "expired": "Palvelimen sertifikaatti on vanhentunut. Ota yhteyttä palvelimen ylläpitäjään. Jos osoite on väärä, muokkaa alla olevaa palvelinkenttää.",
+                "nameMismatch": "Palvelimen sertifikaatti on myönnetty eri isäntänimelle. Tarkista alla oleva palvelimen osoite tai ota yhteyttä palvelimen ylläpitäjään.",
+                "untrusted": "Palvelimen sertifikaatti on itse allekirjoitettu tai tuntemattoman viranomaisen myöntämä, joten siihen ei voi luottaa. Tarkista palvelimen osoite tai ota yhteyttä palvelimen ylläpitäjään.",
+                "generic": "Palvelimen turvasertifikaattia ei voitu varmentaa. Tarkista alla oleva palvelimen osoite tai ota yhteyttä palvelimen ylläpitäjään."
+            }
+        }
     },
     "sidebar": {
         "messages": "Viestit",

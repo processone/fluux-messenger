@@ -40,7 +40,21 @@
         "hidePassword": "Skjul passord",
         "madeBy": "Laget av",
         "ejabberdCreator": ", selskapet bak",
-        "poweredBy": "Drevet av"
+        "poweredBy": "Drevet av",
+        "errors": {
+            "tlsCertTitle": "Kunne ikke bekrefte serverens sikkerhetssertifikat",
+            "tlsOtherTitle": "Sikker tilkobling mislyktes",
+            "tlsOtherBody": "Den krypterte tilkoblingen til serveren kunne ikke opprettes. Serverens TLS-konfigurasjon støttes kanskje ikke. Sjekk serveradressen eller kontakt serveradministratoren.",
+            "unreachableTitle": "Serveren er ikke tilgjengelig",
+            "timeoutBody": "Serveren svarte ikke i tide. Sjekk nettverket og serveradressen, og prøv igjen.",
+            "refusedBody": "Serveren nektet tilkoblingen. Sjekk serveradressen og -porten, og prøv igjen.",
+            "cert": {
+                "expired": "Serverens sertifikat er utløpt. Kontakt serveradministratoren. Hvis adressen er feil, rediger serverfeltet nedenfor.",
+                "nameMismatch": "Serverens sertifikat ble utstedt for et annet vertsnavn. Sjekk serveradressen nedenfor eller kontakt serveradministratoren.",
+                "untrusted": "Serverens sertifikat er selvsignert eller utstedt av en ukjent myndighet, så det kan ikke stoles på. Sjekk serveradressen eller kontakt serveradministratoren.",
+                "generic": "Serverens sikkerhetssertifikat kunne ikke bekreftes. Sjekk serveradressen nedenfor eller kontakt serveradministratoren."
+            }
+        }
     },
     "sidebar": {
         "messages": "Meldinger",

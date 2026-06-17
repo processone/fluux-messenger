@@ -40,7 +40,21 @@
         "hidePassword": "Dölj lösenord",
         "madeBy": "Skapat av",
         "ejabberdCreator": ", företaget bakom",
-        "poweredBy": "Drivs av"
+        "poweredBy": "Drivs av",
+        "errors": {
+            "tlsCertTitle": "Det gick inte att verifiera serverns säkerhetscertifikat",
+            "tlsOtherTitle": "Säker anslutning misslyckades",
+            "tlsOtherBody": "Den krypterade anslutningen till servern kunde inte upprättas. Serverns TLS-konfiguration kanske inte stöds. Kontrollera serveradressen eller kontakta serveradministratören.",
+            "unreachableTitle": "Det gick inte att nå servern",
+            "timeoutBody": "Servern svarade inte i tid. Kontrollera nätverket och serveradressen, och försök igen.",
+            "refusedBody": "Servern nekade anslutningen. Kontrollera serveradressen och -porten, och försök igen.",
+            "cert": {
+                "expired": "Serverns certifikat har löpt ut. Kontakta serveradministratören. Om adressen är fel, redigera serverfältet nedan.",
+                "nameMismatch": "Serverns certifikat har utfärdats för ett annat värdnamn. Kontrollera serveradressen nedan eller kontakta serveradministratören.",
+                "untrusted": "Serverns certifikat är självsignerat eller utfärdat av en okänd instans, så det kan inte betraktas som tillförlitligt. Kontrollera serveradressen eller kontakta serveradministratören.",
+                "generic": "Det gick inte att verifiera serverns säkerhetscertifikat. Kontrollera serveradressen nedan eller kontakta serveradministratören."
+            }
+        }
     },
     "sidebar": {
         "messages": "Meddelanden",

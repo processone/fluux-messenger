@@ -40,7 +40,21 @@
         "hidePassword": "Slėpti slaptažodį",
         "madeBy": "Sukūrė",
         "ejabberdCreator": ", įmonė už",
-        "poweredBy": "Veikia su"
+        "poweredBy": "Veikia su",
+        "errors": {
+            "tlsCertTitle": "Nepavyko patikrinti serverio saugos sertifikato",
+            "tlsOtherTitle": "Saugi jungtis nepavyko",
+            "tlsOtherBody": "Nepavyko užmegzti užšifruotos jungties su serveriu. Serverio TLS konfigūracija gali būti nepalaikoma. Patikrinkite serverio adresą arba susisiekite su serverio administratoriumi.",
+            "unreachableTitle": "Nepavyko pasiekti serverio",
+            "timeoutBody": "Serveris laiku neatsiliepė. Patikrinkite tinklą ir serverio adresą, tada bandykite dar kartą.",
+            "refusedBody": "Serveris atmetė jungtį. Patikrinkite serverio adresą ir prievadą, tada bandykite dar kartą.",
+            "cert": {
+                "expired": "Serverio sertifikatas baigė galioti. Susisiekite su serverio administratoriumi. Jei adresas neteisingas, redaguokite serverio lauką žemiau.",
+                "nameMismatch": "Serverio sertifikatas išduotas kitam pagrindinio kompiuterio vardui. Patikrinkite serverio adresą žemiau arba susisiekite su serverio administratoriumi.",
+                "untrusted": "Serverio sertifikatas yra pasirašytas paties arba išduotas nežinomos institucijos, todėl jo negalima pasitikėti. Patikrinkite serverio adresą arba susisiekite su serverio administratoriumi.",
+                "generic": "Nepavyko patikrinti serverio saugos sertifikato. Patikrinkite serverio adresą žemiau arba susisiekite su serverio administratoriumi."
+            }
+        }
     },
     "sidebar": {
         "messages": "Žinutės",

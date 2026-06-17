@@ -40,7 +40,21 @@
         "hidePassword": "Ocultar contraseña",
         "madeBy": "Hecho por",
         "ejabberdCreator": ", la empresa detras de",
-        "poweredBy": "Impulsado por"
+        "poweredBy": "Impulsado por",
+        "errors": {
+            "tlsCertTitle": "No se pudo verificar el certificado de seguridad del servidor",
+            "tlsOtherTitle": "Error en la conexión segura",
+            "tlsOtherBody": "No se pudo establecer la conexión cifrada con el servidor. La configuración TLS del servidor puede no ser compatible. Comprueba la dirección del servidor o contacta con el administrador del servidor.",
+            "unreachableTitle": "No se pudo alcanzar el servidor",
+            "timeoutBody": "El servidor no respondió a tiempo. Comprueba tu red y la dirección del servidor, y vuelve a intentarlo.",
+            "refusedBody": "El servidor rechazó la conexión. Comprueba la dirección y el puerto del servidor, y vuelve a intentarlo.",
+            "cert": {
+                "expired": "El certificado del servidor ha caducado. Contacta con el administrador del servidor. Si la dirección es incorrecta, edita el campo del servidor a continuación.",
+                "nameMismatch": "El certificado del servidor fue emitido para un nombre de host diferente. Comprueba la dirección del servidor a continuación o contacta con el administrador del servidor.",
+                "untrusted": "El certificado del servidor está autofirmado o emitido por una autoridad desconocida, por lo que no se puede confiar en él. Comprueba la dirección del servidor o contacta con el administrador del servidor.",
+                "generic": "No se pudo verificar el certificado de seguridad del servidor. Comprueba la dirección del servidor a continuación o contacta con el administrador del servidor."
+            }
+        }
     },
     "sidebar": {
         "messages": "Mensajes",

@@ -40,7 +40,21 @@
         "hidePassword": "Jelszó elrejtése",
         "madeBy": "Készítette:",
         "ejabberdCreator": ", az alkotója:",
-        "poweredBy": "Hajtja:"
+        "poweredBy": "Hajtja:",
+        "errors": {
+            "tlsCertTitle": "A szerver biztonsági tanúsítványa nem ellenőrizhető",
+            "tlsOtherTitle": "A biztonságos kapcsolat sikertelen",
+            "tlsOtherBody": "A szerverrel nem sikerült titkosított kapcsolatot létrehozni. Lehet, hogy a szerver TLS-konfigurációja nem támogatott. Ellenőrizze a szerver címét, vagy vegye fel a kapcsolatot a szerver adminisztrátorával.",
+            "unreachableTitle": "A szerver nem érhető el",
+            "timeoutBody": "A szerver nem válaszolt időben. Ellenőrizze a hálózatot és a szerver címét, majd próbálja újra.",
+            "refusedBody": "A szerver elutasította a kapcsolatot. Ellenőrizze a szerver címét és portját, majd próbálja újra.",
+            "cert": {
+                "expired": "A szerver tanúsítványa lejárt. Vegye fel a kapcsolatot a szerver adminisztrátorával. Ha a cím hibás, szerkessze az alábbi szerver mezőt.",
+                "nameMismatch": "A szerver tanúsítványát más gazdagépnévre állították ki. Ellenőrizze az alábbi szerver címét, vagy vegye fel a kapcsolatot a szerver adminisztrátorával.",
+                "untrusted": "A szerver tanúsítványa önaláírt vagy ismeretlen hatóság által kiállított, ezért nem megbízható. Ellenőrizze a szerver címét, vagy vegye fel a kapcsolatot a szerver adminisztrátorával.",
+                "generic": "A szerver biztonsági tanúsítványa nem ellenőrizhető. Ellenőrizze az alábbi szerver címét, vagy vegye fel a kapcsolatot a szerver adminisztrátorával."
+            }
+        }
     },
     "sidebar": {
         "messages": "Üzenetek",

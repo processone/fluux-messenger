@@ -40,7 +40,21 @@
         "hidePassword": "Folaigh pasfhocal",
         "madeBy": "Déanta ag",
         "ejabberdCreator": ", an comhlacht a chruthaigh",
-        "poweredBy": "Cumhachtaithe ag"
+        "poweredBy": "Cumhachtaithe ag",
+        "errors": {
+            "tlsCertTitle": "Níorbh fhéidir deimhniú slándála an fhreastalaí a fhíorú",
+            "tlsOtherTitle": "Theip ar an gceangal slán",
+            "tlsOtherBody": "Níorbh fhéidir an ceangal criptithe leis an bhfreastalaí a bhunú. Seans nach dtacaítear le cumraíocht TLS an fhreastalaí. Seiceáil seoladh an fhreastalaí nó déan teagmháil le riarachán an fhreastalaí.",
+            "unreachableTitle": "Níorbh fhéidir an freastalaí a bhaint amach",
+            "timeoutBody": "Níor fhreagair an freastalaí in am. Seiceáil do líonra agus seoladh an fhreastalaí, ansin bain triail as arís.",
+            "refusedBody": "Dhiúltaigh an freastalaí don cheangal. Seiceáil seoladh agus calafort an fhreastalaí, ansin bain triail as arís.",
+            "cert": {
+                "expired": "Tá deimhniú an fhreastalaí imithe in éag. Déan teagmháil le riarachán an fhreastalaí. Má tá an seoladh mícheart, cuir an réimse freastalaí in eagar thíos.",
+                "nameMismatch": "Eisíodh deimhniú an fhreastalaí d'ainm óstaigh difriúil. Seiceáil seoladh an fhreastalaí thíos nó déan teagmháil le riarachán an fhreastalaí.",
+                "untrusted": "Tá deimhniú an fhreastalaí féin-shínithe nó eisíodh é ag údarás anaithnid, mar sin ní féidir muinín a chur ann. Seiceáil seoladh an fhreastalaí nó déan teagmháil le riarachán an fhreastalaí.",
+                "generic": "Níorbh fhéidir deimhniú slándála an fhreastalaí a fhíorú. Seiceáil seoladh an fhreastalaí thíos nó déan teagmháil le riarachán an fhreastalaí."
+            }
+        }
     },
     "sidebar": {
         "messages": "Teachtaireachtaí",

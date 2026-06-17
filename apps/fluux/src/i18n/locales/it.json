@@ -40,7 +40,21 @@
         "hidePassword": "Nascondi password",
         "madeBy": "Creato da",
         "ejabberdCreator": ", l'azienda dietro",
-        "poweredBy": "Realizzato con"
+        "poweredBy": "Realizzato con",
+        "errors": {
+            "tlsCertTitle": "Impossibile verificare il certificato di sicurezza del server",
+            "tlsOtherTitle": "Connessione sicura non riuscita",
+            "tlsOtherBody": "Impossibile stabilire la connessione cifrata con il server. La configurazione TLS del server potrebbe non essere supportata. Controlla l'indirizzo del server o contatta l'amministratore del server.",
+            "unreachableTitle": "Impossibile raggiungere il server",
+            "timeoutBody": "Il server non ha risposto in tempo. Controlla la rete e l'indirizzo del server, poi riprova.",
+            "refusedBody": "Il server ha rifiutato la connessione. Controlla l'indirizzo e la porta del server, poi riprova.",
+            "cert": {
+                "expired": "Il certificato del server è scaduto. Contatta l'amministratore del server. Se l'indirizzo è errato, modifica il campo server in basso.",
+                "nameMismatch": "Il certificato del server è stato emesso per un nome host diverso. Controlla l'indirizzo del server in basso o contatta l'amministratore del server.",
+                "untrusted": "Il certificato del server è auto-firmato o emesso da un'autorità sconosciuta, quindi non può essere considerato affidabile. Controlla l'indirizzo del server o contatta l'amministratore del server.",
+                "generic": "Impossibile verificare il certificato di sicurezza del server. Controlla l'indirizzo del server in basso o contatta l'amministratore del server."
+            }
+        }
     },
     "sidebar": {
         "messages": "Messaggi",

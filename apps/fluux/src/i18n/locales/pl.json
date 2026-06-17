@@ -40,7 +40,21 @@
         "hidePassword": "Ukryj hasło",
         "madeBy": "Stworzone przez",
         "ejabberdCreator": ", firmę stojącą za",
-        "poweredBy": "Napędzane przez"
+        "poweredBy": "Napędzane przez",
+        "errors": {
+            "tlsCertTitle": "Nie można zweryfikować certyfikatu zabezpieczeń serwera",
+            "tlsOtherTitle": "Bezpieczne połączenie nie powiodło się",
+            "tlsOtherBody": "Nie udało się nawiązać szyfrowanego połączenia z serwerem. Konfiguracja TLS serwera może nie być obsługiwana. Sprawdź adres serwera lub skontaktuj się z administratorem serwera.",
+            "unreachableTitle": "Nie można połączyć się z serwerem",
+            "timeoutBody": "Serwer nie odpowiedział na czas. Sprawdź sieć i adres serwera, a następnie spróbuj ponownie.",
+            "refusedBody": "Serwer odrzucił połączenie. Sprawdź adres i port serwera, a następnie spróbuj ponownie.",
+            "cert": {
+                "expired": "Certyfikat serwera wygasł. Skontaktuj się z administratorem serwera. Jeśli adres jest nieprawidłowy, edytuj pole serwera poniżej.",
+                "nameMismatch": "Certyfikat serwera został wystawiony dla innej nazwy hosta. Sprawdź adres serwera poniżej lub skontaktuj się z administratorem serwera.",
+                "untrusted": "Certyfikat serwera jest podpisany własnoręcznie lub wystawiony przez nieznaną instytucję, dlatego nie można mu zaufać. Sprawdź adres serwera lub skontaktuj się z administratorem serwera.",
+                "generic": "Nie można zweryfikować certyfikatu zabezpieczeń serwera. Sprawdź adres serwera poniżej lub skontaktuj się z administratorem serwera."
+            }
+        }
     },
     "sidebar": {
         "messages": "Wiadomości",

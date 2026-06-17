@@ -40,7 +40,21 @@
         "hidePassword": "Slēpt paroli",
         "madeBy": "Izveidoja",
         "ejabberdCreator": ", uzņēmums, kas radīja",
-        "poweredBy": "Darbina"
+        "poweredBy": "Darbina",
+        "errors": {
+            "tlsCertTitle": "Neizdevās pārbaudīt servera drošības sertifikātu",
+            "tlsOtherTitle": "Drošais savienojums neizdevās",
+            "tlsOtherBody": "Neizdevās izveidot šifrētu savienojumu ar serveri. Servera TLS konfigurācija var nebūt atbalstīta. Pārbaudiet servera adresi vai sazinieties ar servera administratoru.",
+            "unreachableTitle": "Neizdevās sasniegt serveri",
+            "timeoutBody": "Serveris laikus neatbildēja. Pārbaudiet tīklu un servera adresi, pēc tam mēģiniet vēlreiz.",
+            "refusedBody": "Serveris noraidīja savienojumu. Pārbaudiet servera adresi un portu, pēc tam mēģiniet vēlreiz.",
+            "cert": {
+                "expired": "Servera sertifikāts ir beidzies. Sazinieties ar servera administratoru. Ja adrese ir nepareiza, rediģējiet servera lauku zemāk.",
+                "nameMismatch": "Servera sertifikāts ir izsniegts citam resursdatora nosaukumam. Pārbaudiet servera adresi zemāk vai sazinieties ar servera administratoru.",
+                "untrusted": "Servera sertifikāts ir pašparakstīts vai izsniegts no nezināmas iestādes, tāpēc tam nevar uzticēties. Pārbaudiet servera adresi vai sazinieties ar servera administratoru.",
+                "generic": "Neizdevās pārbaudīt servera drošības sertifikātu. Pārbaudiet servera adresi zemāk vai sazinieties ar servera administratoru."
+            }
+        }
     },
     "sidebar": {
         "messages": "Ziņojumi",
