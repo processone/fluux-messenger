@@ -132,7 +132,8 @@ export function SearchView() {
           {query && (
             <button
               onClick={clearSearch}
-              className="absolute end-2 top-1/2 -translate-y-1/2 p-0.5 rounded hover:bg-fluux-hover text-fluux-muted"
+              className="absolute end-2 top-1/2 -translate-y-1/2 p-0.5 rounded hover:bg-fluux-hover text-fluux-muted tap-target"
+              aria-label={t('common.clear')}
             >
               <X className="size-3.5" />
             </button>
@@ -170,7 +171,8 @@ export function SearchView() {
           </span>
           <button
             onClick={() => setSearchScope(null)}
-            className="p-0.5 rounded hover:bg-fluux-hover text-fluux-muted flex-shrink-0"
+            className="p-0.5 rounded hover:bg-fluux-hover text-fluux-muted flex-shrink-0 tap-target"
+            aria-label={t('search.clearScope', 'Search all conversations')}
             title={t('search.clearScope', 'Search all conversations')}
           >
             <X className="size-3" />

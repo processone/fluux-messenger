@@ -907,7 +907,7 @@ export function EncryptionSettings() {
                   </code>
                   <button
                     onClick={handleCopyFingerprint}
-                    className="p-1.5 text-fluux-muted hover:text-fluux-text rounded hover:bg-fluux-hover transition-colors"
+                    className="p-1.5 text-fluux-muted hover:text-fluux-text rounded hover:bg-fluux-hover transition-colors tap-target"
                     title={t('settings.encryption.copyFingerprint')}
                     aria-label={t('settings.encryption.copyFingerprint')}
                   >
@@ -936,7 +936,7 @@ export function EncryptionSettings() {
             <button
               onClick={handleDismissLimitations}
               aria-label={t('common.close')}
-              className="flex-shrink-0 p-0.5 text-fluux-muted hover:text-fluux-text rounded transition-colors"
+              className="flex-shrink-0 p-0.5 text-fluux-muted hover:text-fluux-text rounded transition-colors tap-target"
             >
               <X className="size-3.5" />
             </button>

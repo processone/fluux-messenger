@@ -76,7 +76,7 @@ export function SettingsView({ onBack }: SettingsViewProps) {
         {onBack && (
           <button
             onClick={onBack}
-            className="p-1 -ms-1 me-2 rounded hover:bg-fluux-hover md:hidden"
+            className="p-1 -ms-1 me-2 rounded hover:bg-fluux-hover md:hidden tap-target"
             aria-label={t('common.back')}
           >
             <ArrowLeft className="size-5 text-fluux-muted rtl-mirror" />

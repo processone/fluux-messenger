@@ -192,13 +192,13 @@ export function OwnProfileHero({
           ) : (
             <div className="group relative flex items-center justify-center md:justify-start gap-1">
               <h1 className="text-xl font-bold text-fluux-text break-all">{displayName}</h1>
-              <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+              <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100 touch:opacity-100 transition-opacity">
                 <Tooltip content={t('profile.editNickname')} position="top">
                   <button
                     type="button"
                     onClick={handleStartEdit}
                     disabled={!isConnected}
-                    className="p-1 text-fluux-muted hover:text-fluux-text rounded disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="p-1 text-fluux-muted hover:text-fluux-text rounded disabled:opacity-50 disabled:cursor-not-allowed tap-target"
                     aria-label={t('profile.editNickname')}
                   >
                     <Pencil className="size-4" />
@@ -210,7 +210,7 @@ export function OwnProfileHero({
                       type="button"
                       onClick={handleClearNickname}
                       disabled={!isConnected || clearing === 'nickname'}
-                      className="p-1 text-fluux-muted hover:text-fluux-red rounded disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="p-1 text-fluux-muted hover:text-fluux-red rounded disabled:opacity-50 disabled:cursor-not-allowed tap-target"
                       aria-label={t('profile.resetToUsername')}
                     >
                       <Trash2 className="size-4" />
