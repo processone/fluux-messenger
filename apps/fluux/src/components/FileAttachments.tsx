@@ -97,6 +97,7 @@ export const ImageAttachment = memo(function ImageAttachment({ attachment, onLoa
         variant="box"
         icon={ImageIcon}
         label={t('chat.loadImage')}
+        name={attachment.name}
         sizeLabel={attachment.size ? formatBytes(attachment.size) : undefined}
         aspectRatio={aspectRatio}
         maxWidthPx={maxWidthPx}
@@ -259,6 +260,7 @@ export const VideoAttachment = memo(function VideoAttachment({ attachment, onLoa
         variant="box"
         icon={Film}
         label={t('chat.loadVideo')}
+        name={attachment.name}
         sizeLabel={attachment.size ? formatBytes(attachment.size) : undefined}
         aspectRatio={aspectRatio}
         maxWidthPx={448}
@@ -390,6 +392,7 @@ export function AudioAttachment({ attachment }: AttachmentProps) {
         variant="card"
         icon={Music}
         label={t('chat.loadAudio')}
+        name={attachment.name}
         sizeLabel={attachment.size ? formatBytes(attachment.size) : undefined}
         onLoad={approve}
       />

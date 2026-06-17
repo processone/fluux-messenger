@@ -20,4 +20,13 @@ describe('DeferredMediaPlaceholder', () => {
     expect(screen.getByText('Load audio')).toBeInTheDocument()
     expect(screen.queryByText(/MB/)).not.toBeInTheDocument()
   })
+
+  it('shows the file name as a hint, alongside the label and size, when name is given', () => {
+    render(
+      <DeferredMediaPlaceholder variant="box" icon={ImageIcon} label="Load image" name="screenshot.png" sizeLabel="12.7 KB" onLoad={() => {}} />,
+    )
+    expect(screen.getByText('screenshot.png')).toBeInTheDocument()
+    expect(screen.getByText('Load image')).toBeInTheDocument()
+    expect(screen.getByText('12.7 KB')).toBeInTheDocument()
+  })
 })

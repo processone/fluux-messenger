@@ -9,6 +9,8 @@ interface DeferredMediaPlaceholderProps {
   label: string
   /** Pre-formatted size string, e.g. "1.2 MB". Optional. */
   sizeLabel?: string
+  /** Optional file name, shown as a hint of what the media is. */
+  name?: string
   /** Box variant only: reserve the loaded media's aspect ratio to avoid layout shift. */
   aspectRatio?: number
   /** Box variant only: max width in px. */
@@ -22,7 +24,7 @@ interface DeferredMediaPlaceholderProps {
  * leaks no IP until the user explicitly taps.
  */
 export function DeferredMediaPlaceholder({
-  variant, icon: Icon, label, sizeLabel, aspectRatio, maxWidthPx, onLoad,
+  variant, icon: Icon, label, name, sizeLabel, aspectRatio, maxWidthPx, onLoad,
 }: DeferredMediaPlaceholderProps) {
   if (variant === 'box') {
     return (
@@ -39,6 +41,7 @@ export function DeferredMediaPlaceholder({
       >
         <Icon className="size-6" aria-hidden="true" />
         <span className="text-sm font-medium">{label}</span>
+        {name && <span className="text-xs max-w-full truncate" title={name}>{name}</span>}
         {sizeLabel && <span className="text-xs">{sizeLabel}</span>}
       </button>
     )
@@ -55,6 +58,7 @@ export function DeferredMediaPlaceholder({
       </div>
       <div className="flex-1 min-w-0">
         <p className="text-sm font-medium text-fluux-text truncate">{label}</p>
+        {name && <p className="text-xs text-fluux-muted truncate" title={name}>{name}</p>}
         {sizeLabel && <p className="text-xs text-fluux-muted">{sizeLabel}</p>}
       </div>
       <Download className="size-4 text-fluux-muted flex-shrink-0" aria-hidden="true" />
