@@ -248,10 +248,20 @@ export function useDesktopNotifications(): void {
     showConvNotifRef.current = showConversationNotification
   })
 
-  // Open a catch-up window on each transition into 'online' (fresh connect,
-  // SM resume, or post-wake verify→online). Buffer per-conversation during the
-  // window; flush one notification per conversation when it closes. Drop the
-  // buffer if the connection leaves 'online' before flushing.
+  // Open a catch-up window on each transition INTO 'online' from a non-online
+  // status. This covers every path that carries a real reconnect backlog:
+  // fresh connect (login), socket-died/SM-resume, and long-sleep reconnect —
+  // all of which transit 'reconnecting' first. It intentionally does NOT cover
+  // the verify-pass short-sleep path (connected → verifying → connected), where
+  // the connection never dropped: the state machine maps 'verifying' to 'online'
+  // (status never leaves 'online'), no online/resumed event fires, and there is
+  // no backlog flush — messages arrive live. Coalescing that path would require
+  // a wake-triggered window that delays every live notification after each
+  // unlock, which is not worth it for a typically-empty trickle. See the design
+  // doc's Non-goals.
+  // Buffer per-conversation during the window; flush one notification per
+  // conversation when it closes. Drop the buffer if the connection leaves
+  // 'online' before flushing.
   useEffect(() => {
     const prev = prevStatusRef.current
     prevStatusRef.current = status

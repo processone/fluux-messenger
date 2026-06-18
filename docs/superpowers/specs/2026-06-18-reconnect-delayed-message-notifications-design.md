@@ -63,6 +63,19 @@ missed messages only through MAM; that case is explicitly out of scope for this 
 - Per-message notifications for an offline backlog.
 - Summary-style "N messages in M chats" aggregation across conversations.
 - MAM-only deployments without offline storage.
+- **Coalescing the verify-pass short-sleep path.** The catch-up window opens on
+  transitions into `online` from a non-online status, which covers every path
+  that carries a real reconnect backlog (fresh connect, socket-died/SM-resume,
+  long-sleep reconnect — all transit `reconnecting`). It does NOT cover the case
+  where the connection *survives* a brief sleep (`connected → verifying →
+  connected`): the state machine maps `verifying` to `online` so the status never
+  leaves `online`, no `online`/`resumed` event is emitted, and there is no
+  backlog flush — buffered messages arrive as normal live stanzas. Those still
+  notify correctly (the bug is fixed), just one-per-message rather than coalesced.
+  Coalescing this path would require a wake-triggered window that delays every
+  live notification by the window duration after each screen-unlock, even when
+  there is no backlog — not worth it for a typically-empty trickle on a brief
+  sleep.
 
 ## Design
 
