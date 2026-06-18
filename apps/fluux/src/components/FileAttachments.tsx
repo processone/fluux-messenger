@@ -4,7 +4,7 @@ import { Music, Film, FileText, Archive, File, Download, BookOpen, Loader2, Imag
 import { Tooltip } from './Tooltip'
 import { ImageLightbox } from './ImageLightbox'
 import { ImageContextMenu } from './ImageContextMenu'
-import { formatBytes, useAttachmentUrl } from '@/hooks'
+import { formatBytes, useAttachmentUrl, useCachedMediaUrl } from '@/hooks'
 import { DeferredMediaPlaceholder } from './DeferredMediaPlaceholder'
 import { useDeferredMedia } from '@/hooks/useDeferredMedia'
 import { useContextMenu } from '@/hooks/useContextMenu'
@@ -64,6 +64,19 @@ export const ImageAttachment = memo(function ImageAttachment({ attachment, onLoa
     isImage && shouldLoad,
   )
 
+  // When deferred, peek the local cache (network-free). A hit means the bytes
+  // were already fetched once under consent, so displaying them leaks nothing.
+  const { cachedUrl, isPeeking } = useCachedMediaUrl(
+    originalImageSrc,
+    originalEncryption,
+    isImage && !shouldLoad,
+  )
+
+  // Source actually rendered: the consent-gated fetch result, or the cache hit.
+  const effectiveSrc = shouldLoad ? proxiedImageSrc : cachedUrl
+  // True when shown purely from cache without consent — gates lightbox fetch.
+  const displayedFromCacheOnly = !shouldLoad && Boolean(cachedUrl)
+
   // Early return after hooks
   if (!isImage) {
     return null
@@ -90,8 +103,8 @@ export const ImageAttachment = memo(function ImageAttachment({ attachment, onLoa
     ? Math.max(200, Math.round(340 - (aspectRatio - 3) * 20))
     : DEFAULT_MAX_WIDTH
 
-  // Show tap-to-load placeholder when media autoload is deferred
-  if (isImage && !shouldLoad) {
+  // Show tap-to-load placeholder only when deferred AND nothing is cached.
+  if (isImage && !shouldLoad && !cachedUrl && !isPeeking) {
     return (
       <DeferredMediaPlaceholder
         variant="box"
@@ -106,8 +119,8 @@ export const ImageAttachment = memo(function ImageAttachment({ attachment, onLoa
     )
   }
 
-  // Show loading placeholder while fetching
-  if (isLoading) {
+  // Show loading placeholder while fetching (consent path) or peeking the cache.
+  if ((shouldLoad && isLoading) || (!shouldLoad && isPeeking)) {
     return (
       <div
         className="pt-2 rounded-lg bg-fluux-hover/60 flex items-center justify-center"
@@ -124,7 +137,7 @@ export const ImageAttachment = memo(function ImageAttachment({ attachment, onLoa
   // blob reclaim) must not collapse to a compact card, or every row below it
   // shifts — and a burst of such invalidations feeds the message-list
   // ResizeObserver scroll-correction loop on WebKitGTK.
-  if (error || !proxiedImageSrc || loadError) {
+  if (error || !effectiveSrc || loadError) {
     return (
       <a
         href={attachment.url}
@@ -169,7 +182,7 @@ export const ImageAttachment = memo(function ImageAttachment({ attachment, onLoa
         tabIndex={-1}
       >
         <img
-          src={proxiedImageSrc}
+          src={effectiveSrc}
           alt={attachment.name || 'Image attachment'}
           width={width}
           height={height}
@@ -188,18 +201,19 @@ export const ImageAttachment = memo(function ImageAttachment({ attachment, onLoa
       </button>
       <ImageContextMenu
         originalUrl={attachment.url}
-        proxiedUrl={proxiedImageSrc}
+        proxiedUrl={effectiveSrc}
         filename={attachment.name}
         menu={imageMenu}
       />
       {lightboxOpen && (
         <ImageLightbox
           src={attachment.url}
-          placeholderSrc={proxiedImageSrc ?? undefined}
+          placeholderSrc={effectiveSrc ?? undefined}
           alt={attachment.name || 'Image attachment'}
           downloadUrl={attachment.url}
           encryption={attachment.encryption}
           filename={attachment.name}
+          allowFetch={!displayedFromCacheOnly}
           onClose={() => setLightboxOpen(false)}
         />
       )}
