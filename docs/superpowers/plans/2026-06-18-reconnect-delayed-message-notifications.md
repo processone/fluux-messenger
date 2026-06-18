@@ -601,9 +601,16 @@ describe('useDesktopNotifications catch-up window', () => {
 
   it('dispatches immediately outside the catch-up window', async () => {
     const { rerender } = renderHook(() => useDesktopNotifications())
-    await act(async () => {
+    // Commit the status-change render SYNCHRONOUSLY first, then advance time in a
+    // separate async act. Under React 19 + @testing-library/react 16, a rerender()
+    // inside an `await act(async)` defers its commit past advanceTimersByTimeAsync,
+    // so the window-close timer would be scheduled at the wrong fake-time. Split
+    // acts (matching the first test) avoid this.
+    act(() => {
       setStatus('online')
       rerender()
+    })
+    await act(async () => {
       await vi.advanceTimersByTimeAsync(3000) // window opens then closes
     })
     showWebNotification.mockClear()
@@ -626,10 +633,13 @@ describe('useDesktopNotifications catch-up window', () => {
       capturedOnConversationMessage?.(conv('dave'), msg('d1', 'e'))
     })
 
-    // Connection drops before the window flushes.
-    await act(async () => {
+    // Commit the 'reconnecting' transition synchronously so its effect drops the
+    // buffer and clears the timer BEFORE fake time advances.
+    act(() => {
       setStatus('reconnecting')
       rerender()
+    })
+    await act(async () => {
       await vi.advanceTimersByTimeAsync(3000)
     })
 
@@ -750,13 +760,15 @@ Immediately before the `useNotificationEvents({ ... })` call (line ~230), add:
   )
 
   // Route conversation notifications through the coalescer while the window is open.
-  const handleConversationMessage = (conv: Conversation, message: Message) => {
+  // async + await (not fire-and-forget): callers that await the handler — including
+  // the existing posting test — must see the async dispatch complete.
+  const handleConversationMessage = async (conv: Conversation, message: Message) => {
     const coalescer = coalescerRef.current
     if (coalescer.isOpen()) {
       coalescer.add(conv.id, { conv, message })
       return
     }
-    void showConversationNotification(conv, message)
+    await showConversationNotification(conv, message)
   }
 ```
 
