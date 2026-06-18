@@ -276,6 +276,27 @@ const WEB_CACHE_NAME = 'fluux-media'
 const webBlobUrls = new Map<string, string>()
 
 /**
+ * Network-free cache read for plaintext media on web. Checks the in-memory
+ * index then the Cache API. Returns null if no Cache API or no entry.
+ */
+export async function peekWebMediaCache(originalUrl: string): Promise<string | null> {
+  const cached = urlCache.get(originalUrl)
+  if (cached) return cached
+
+  if (typeof caches === 'undefined') return null
+  const cache = await caches.open(WEB_CACHE_NAME)
+  const cachedResponse = await cache.match(originalUrl)
+  if (cachedResponse) {
+    const blob = await cachedResponse.blob()
+    const blobUrl = URL.createObjectURL(blob)
+    urlCache.set(originalUrl, blobUrl)
+    webBlobUrls.set(originalUrl, blobUrl)
+    return blobUrl
+  }
+  return null
+}
+
+/**
  * Resolve a media URL through the browser Cache API (web mode only).
  *
  * 1. Check in-memory map (instant)
@@ -305,25 +326,17 @@ export async function resolveWebMediaUrl(originalUrl: string): Promise<string> {
 }
 
 async function doResolveWeb(originalUrl: string): Promise<string> {
+  const peeked = await peekWebMediaCache(originalUrl)
+  if (peeked) return peeked
+
   const cache = await caches.open(WEB_CACHE_NAME)
 
-  // 2. Check Cache API
-  const cachedResponse = await cache.match(originalUrl)
-  if (cachedResponse) {
-    const blob = await cachedResponse.blob()
-    const blobUrl = URL.createObjectURL(blob)
-    urlCache.set(originalUrl, blobUrl)
-    webBlobUrls.set(originalUrl, blobUrl)
-    return blobUrl
-  }
-
-  // 3. Fetch and cache
+  // Fetch and cache
   const response = await fetch(originalUrl)
   if (!response.ok) {
     throw new Error(`Fetch failed: ${response.status} ${response.statusText}`)
   }
 
-  // Clone before consuming — one copy for Cache API, one for blob URL
   const responseClone = response.clone()
   await cache.put(originalUrl, responseClone)
 
@@ -335,6 +348,29 @@ async function doResolveWeb(originalUrl: string): Promise<string> {
 }
 
 const WEB_DECRYPTED_CACHE_NAME = 'fluux-media-decrypted'
+
+/**
+ * Network-free cache read for encrypted media on web. Returns a blob URL
+ * built from the cached decrypted plaintext. Needs no encryption key.
+ */
+export async function peekWebEncryptedMediaCache(httpsUrl: string): Promise<string | null> {
+  const cacheKey = `enc:${httpsUrl}`
+  const cached = urlCache.get(cacheKey)
+  if (cached) return cached
+
+  if (typeof caches === 'undefined') return null
+  const webCacheKey = `decrypted:${httpsUrl}`
+  const cache = await caches.open(WEB_DECRYPTED_CACHE_NAME)
+  const cachedResponse = await cache.match(webCacheKey)
+  if (cachedResponse) {
+    const blob = await cachedResponse.blob()
+    const blobUrl = URL.createObjectURL(blob)
+    urlCache.set(cacheKey, blobUrl)
+    webBlobUrls.set(cacheKey, blobUrl)
+    return blobUrl
+  }
+  return null
+}
 
 /**
  * Resolve an encrypted attachment URL for web browser.
@@ -371,17 +407,11 @@ async function doResolveWebEncrypted(
   encryption: FileEncryption,
   cacheKey: string,
 ): Promise<string> {
+  const peeked = await peekWebEncryptedMediaCache(httpsUrl)
+  if (peeked) return peeked
+
   const webCacheKey = `decrypted:${httpsUrl}`
   const cache = await caches.open(WEB_DECRYPTED_CACHE_NAME)
-
-  const cachedResponse = await cache.match(webCacheKey)
-  if (cachedResponse) {
-    const blob = await cachedResponse.blob()
-    const blobUrl = URL.createObjectURL(blob)
-    urlCache.set(cacheKey, blobUrl)
-    webBlobUrls.set(cacheKey, blobUrl)
-    return blobUrl
-  }
 
   const response = await fetch(httpsUrl)
   if (!response.ok) {
