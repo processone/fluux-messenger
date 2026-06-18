@@ -569,6 +569,15 @@
       </xmpp:SupportedXep>
     </implements>
 
+    <!-- XEP-0490: Message Displayed Synchronization -->
+    <implements>
+      <xmpp:SupportedXep>
+        <xmpp:xep rdf:resource="https://xmpp.org/extensions/xep-0490.html"/>
+        <xmpp:status>complete</xmpp:status>
+        <xmpp:note>Syncs the 1:1 last-read position across devices via a private PEP node (urn:xmpp:mds:displayed:0); forward-only by archive order with local fallback</xmpp:note>
+      </xmpp:SupportedXep>
+    </implements>
+
     <!-- Planned XEPs -->
 
     <!-- XEP-0184: Message Delivery Receipts -->

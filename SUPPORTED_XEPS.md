@@ -58,6 +58,7 @@ This document lists the XMPP Extension Protocols (XEPs) and related RFCs impleme
 |-------------------------------------------------------|------------------------------|---------------|----------------------------------------------------------------------------------------------------------------------------|
 | [XEP-0085](https://xmpp.org/extensions/xep-0085.html) | Chat State Notifications     | ✅ Implemented | Typing indicators for 1:1 and MUC (throttled for rooms < 30 occupants)                                                     |
 | [XEP-0359](https://xmpp.org/extensions/xep-0359.html) | Unique and Stable Stanza IDs | ✅ Implemented | Message deduplication using stanza-id and origin-id                                                                        |
+| [XEP-0490](https://xmpp.org/extensions/xep-0490.html) | Message Displayed Synchronization | ✅ Implemented | Syncs the 1:1 last-read position across devices via a private PEP node (`urn:xmpp:mds:displayed:0`); forward-only by archive order, with local fallback when PEP is unavailable |
 | [XEP-0393](https://xmpp.org/extensions/xep-0393.html) | Message Styling              | ✅ Implemented | Bold, italic, strikethrough, monospace, block quotes                                                                       |
 | [XEP-0428](https://xmpp.org/extensions/xep-0428.html) | Fallback Indication          | ✅ Implemented | Used with message replies for client compatibility                                                                         |
 | [XEP-0444](https://xmpp.org/extensions/xep-0444.html) | Message Reactions            | ✅ Implemented | Emoji reactions on messages in 1:1 and MUC                                                                                 |
@@ -81,7 +82,7 @@ This document lists the XMPP Extension Protocols (XEPs) and related RFCs impleme
 | XEP                                                   | Name                                          | Status        | Notes                                                                                                                |
 |-------------------------------------------------------|-----------------------------------------------|---------------|----------------------------------------------------------------------------------------------------------------------|
 | [XEP-0060](https://xmpp.org/extensions/xep-0060.html) | Publish-Subscribe                             | ✅ Implemented | PubSub event handling for avatars, nicknames, bookmarks, and settings                                                |
-| [XEP-0163](https://xmpp.org/extensions/xep-0163.html) | Personal Eventing Protocol                    | ✅ Implemented | PEP notifications for avatars (XEP-0084), nicknames (XEP-0172), bookmarks (XEP-0402), appearance settings (XEP-0223) |
+| [XEP-0163](https://xmpp.org/extensions/xep-0163.html) | Personal Eventing Protocol                    | ✅ Implemented | PEP notifications for avatars (XEP-0084), nicknames (XEP-0172), bookmarks (XEP-0402), appearance settings (XEP-0223), read markers (XEP-0490) |
 | [XEP-0223](https://xmpp.org/extensions/xep-0223.html) | Persistent Storage of Private Data via PubSub | ✅ Implemented | Private PEP storage for appearance settings, conversation list sync, and per-room ignored users                      |
 
 ## Multi-User Chat (MUC)
