@@ -20,7 +20,10 @@ Object.defineProperty(globalThis, 'localStorage', {
 import { setupMdsSideEffects } from './mdsSideEffects'
 import { chatStore } from '../stores/chatStore'
 import { connectionStore } from '../stores/connectionStore'
+import { roomStore } from '../stores/roomStore'
 import type { Message } from './types/chat'
+import type { Room, RoomMessage } from './types/room'
+import { getLocalPart } from './jid'
 
 function msg(id: string, stanzaId: string | undefined): Message {
   return {
@@ -58,6 +61,50 @@ function seedMeta(cid: string, lastSeenMessageId?: string): void {
   })
 }
 
+/** Build a RoomMessage (mirrors roomStore.mds.test.ts rmsg helper). */
+function rmsg(room: string, id: string, stanzaId: string, t: number): RoomMessage {
+  return {
+    type: 'groupchat',
+    id,
+    stanzaId,
+    roomJid: room,
+    from: `${room}/alice`,
+    nick: 'alice',
+    body: id,
+    timestamp: new Date(t),
+    isOutgoing: false,
+  } as RoomMessage
+}
+
+/**
+ * Seed a room into roomStore via the real addRoom idiom (mirrors roomStore.mds.test.ts).
+ * addRoom populates rooms, roomEntities, roomMeta, and roomRuntime from one Room object,
+ * so isRoom()/routing and message lookup work. An optional lastSeenMessageId is patched in.
+ */
+function seedRoom(jid: string, messages: RoomMessage[], lastSeenMessageId?: string): void {
+  const room: Room = {
+    jid,
+    name: getLocalPart(jid),
+    nickname: 'testuser',
+    joined: true,
+    isBookmarked: false,
+    occupants: new Map(),
+    messages,
+    unreadCount: 0,
+    mentionsCount: 0,
+    typingUsers: new Set(),
+  }
+  roomStore.getState().addRoom(room)
+  if (lastSeenMessageId !== undefined) {
+    roomStore.setState((s) => {
+      const meta = new Map(s.roomMeta)
+      const existing = meta.get(jid)!
+      meta.set(jid, { ...existing, lastSeenMessageId })
+      return { roomMeta: meta }
+    })
+  }
+}
+
 function makeClient() {
   const handlers: Record<string, Array<(p?: unknown) => void>> = {}
   const register = (ev: string, cb: (p?: unknown) => void) => {
@@ -84,6 +131,7 @@ describe('setupMdsSideEffects', () => {
     vi.useFakeTimers()
     connectionStore.getState().reset()
     chatStore.getState().reset()
+    roomStore.getState().reset()
     localStorageMock.clear()
   })
   afterEach(() => {
@@ -175,6 +223,47 @@ describe('setupMdsSideEffects', () => {
 
     // The marker s2 is already on the node (it is the echo) → must NOT republish.
     expect(client.mds.publishDisplayed).not.toHaveBeenCalled()
+    cleanup()
+  })
+
+  it('publishes the room-archive stanza-id on a local room read advance, debounced', async () => {
+    const ROOM = 'room@conference.example'
+    const client = makeClient()
+    connectionStore.setState({ status: 'online' } as never)
+
+    // Seed the room (rooms + roomRuntime + roomMeta) so isRoom()/routing works.
+    seedRoom(ROOM, [rmsg(ROOM, 'm1', 's1', 1), rmsg(ROOM, 'm2', 's2', 2)], 'm1')
+
+    const cleanup = setupMdsSideEffects(client as never)
+    client._emit('online')
+    await vi.runOnlyPendingTimersAsync() // let the async seed settle
+
+    roomStore.getState().updateLastSeenMessageId(ROOM, 'm2')
+    expect(client.mds.publishDisplayed).not.toHaveBeenCalled() // still debouncing
+    await vi.advanceTimersByTimeAsync(2_000)
+
+    expect(client.mds.publishDisplayed).toHaveBeenCalledTimes(1)
+    expect(client.mds.publishDisplayed).toHaveBeenCalledWith(ROOM, 's2')
+    cleanup()
+  })
+
+  it('seeds a room marker from the node into roomStore', async () => {
+    const ROOM = 'room@conference.example'
+    const client = makeClient()
+    client.mds.fetchAllDisplayed = vi
+      .fn()
+      .mockResolvedValue([{ conversationJid: ROOM, stanzaId: 's2' }])
+    connectionStore.setState({ status: 'online' } as never)
+
+    // roomStore.rooms must contain ROOM with its messages so the seed routes to
+    // the room and applyRemoteDisplayed can resolve the stanza-id to a local id.
+    seedRoom(ROOM, [rmsg(ROOM, 'm1', 's1', 1), rmsg(ROOM, 'm2', 's2', 2)], 'm1')
+
+    const cleanup = setupMdsSideEffects(client as never)
+    client._emit('online')
+    await vi.runOnlyPendingTimersAsync()
+
+    expect(roomStore.getState().roomMeta.get(ROOM)?.lastSeenMessageId).toBe('m2')
     cleanup()
   })
 })
