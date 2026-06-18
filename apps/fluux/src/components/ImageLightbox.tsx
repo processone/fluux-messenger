@@ -65,7 +65,7 @@ export function ImageLightbox({ src, alt, downloadUrl, filename, encryption, pla
         <button
           type="button"
           onClick={() =>
-            void downloadFile(proxiedSrc ?? downloadUrl, filename || 'image', {
+            void downloadFile(proxiedSrc ?? cachedFullRes ?? downloadUrl, filename || 'image', {
               errorMessage: t('common.downloadFailed'),
             })
           }
@@ -105,7 +105,7 @@ export function ImageLightbox({ src, alt, downloadUrl, filename, encryption, pla
 
       <ImageContextMenu
         originalUrl={src}
-        proxiedUrl={proxiedSrc ?? downloadUrl}
+        proxiedUrl={proxiedSrc ?? cachedFullRes ?? downloadUrl}
         filename={filename}
         menu={imageMenu}
       />
