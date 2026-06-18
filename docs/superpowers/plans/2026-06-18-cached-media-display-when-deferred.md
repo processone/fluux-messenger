@@ -27,13 +27,11 @@
 - Test: `apps/fluux/src/utils/mediaCache.test.ts`
 
 **Interfaces:**
-- Consumes: existing module state (`urlCache`, `webBlobUrls`, `getCacheFilePath`, `getDecryptedCacheFilePath`, `WEB_CACHE_NAME`, `WEB_DECRYPTED_CACHE_NAME`).
-- Produces:
+- Consumes: existing module state (`urlCache`, `getCacheFilePath`, `getDecryptedCacheFilePath`).
+- Produces (Tauri only — the web counterparts are Task 2):
   - `peekMediaCache(originalUrl: string): Promise<string | null>` (Tauri plaintext)
-  - `peekWebMediaCache(originalUrl: string): Promise<string | null>` (web plaintext)
   - `peekEncryptedMediaCache(httpsUrl: string): Promise<string | null>` (Tauri encrypted)
-  - `peekWebEncryptedMediaCache(httpsUrl: string): Promise<string | null>` (web encrypted)
-  - All return a renderable local URL (`https://asset.localhost/...` or `blob:...`) on a hit, `null` on a miss. None ever fetch.
+  - Both return a renderable local URL (`https://asset.localhost/...`) on a hit, `null` on a miss. Neither ever fetches.
 
 - [ ] **Step 1: Write the failing tests**
 
