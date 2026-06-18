@@ -9,7 +9,7 @@ import { MessageBubble, MessageList, shouldShowAvatar, whisperThreadPosition, wh
 import { FindOnPageBar } from './conversation/FindOnPageBar'
 import { useFindOnPage, type FindOnPageHandle } from '@/hooks/useFindOnPage'
 import { Avatar } from './Avatar'
-import { selectSelfOccupant, stableNickSet, resolveRoomSender, resolveReplyAvatar, resolveSenderColor } from './conversation/roomSenderResolution'
+import { selectSelfOccupant, stableNickSet, resolveRoomSender, resolveReplyAvatar, resolveSenderColor, resolveNickColor } from './conversation/roomSenderResolution'
 import { format } from 'date-fns'
 import { Shield, Crown, Upload, Loader2, LogIn, AlertCircle, Users, MessageCircle, EyeOff, User, Settings, Ear, X } from 'lucide-react'
 import { ChristmasAnimation } from './ChristmasAnimation'
@@ -907,6 +907,20 @@ export const RoomMessageList = memo(function RoomMessageList({
   knownNicksRef.current = stableNickSet(room.occupants, knownNicksRef.current)
   const knownNicks = knownNicksRef.current
 
+  // Stable nick→color resolver for inline @mention pills. Mirrors the sender-name
+  // color (resolveSenderColor, incl. a roster contact's XEP-0392 color) so a mention
+  // matches the mentioned person's displayed color instead of a bare nick hash.
+  // Backed by a ref so its identity stays stable across presence churn — passing a
+  // fresh closure would bust every memoized row. Reads the latest room/contacts/theme
+  // at call time, which is render time of each body (kept current by the rows that
+  // re-render). See [project_reply_scroll_freeze] for the derived-value class.
+  const mentionColorCtxRef = useRef({ room, contactsByJid, isDarkMode })
+  mentionColorCtxRef.current = { room, contactsByJid, isDarkMode }
+  const resolveMentionColor = useCallback((nick: string) => {
+    const ctx = mentionColorCtxRef.current
+    return resolveNickColor(nick, ctx.room, ctx.contactsByJid, ctx.isDarkMode ?? true)
+  }, [])
+
   // The current user's own occupant record (stable ref across presence churn unless
   // our own role/affiliation changes). Used per-row to compute moderation permission.
   const selfOccupant = useMemo(
@@ -1002,6 +1016,7 @@ export const RoomMessageList = memo(function RoomMessageList({
         replyBareJid={replyBareJid}
         knownNicks={knownNicks}
         contactsByJid={contactsByJid}
+        resolveMentionColor={resolveMentionColor}
         ownAvatar={ownAvatar}
         sendReaction={sendReaction}
         votePoll={votePoll}
@@ -1095,6 +1110,9 @@ interface RoomMessageBubbleWrapperProps {
   replyBareJid: string | undefined
   knownNicks: ReadonlySet<string>
   contactsByJid: Map<string, ContactIdentity>
+  // Stable nick→color resolver for inline @mention pills (built in the list layer
+  // where `room` is available; this row intentionally never sees `room`).
+  resolveMentionColor: (nick: string) => string | undefined
   ownAvatar?: string | null
   sendReaction: (roomJid: string, messageId: string, emojis: string[]) => Promise<void>
   votePoll: (roomJid: string, messageId: string, optionEmoji: string, currentMyReactions: string[], poll: PollData, isClosed?: boolean) => Promise<void>
@@ -1162,6 +1180,7 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
   replyBareJid,
   knownNicks,
   contactsByJid,
+  resolveMentionColor,
   ownAvatar,
   sendReaction,
   votePoll,
@@ -1401,6 +1420,7 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
         mentions={message.mentions}
         nickname={myNick}
         knownNicks={knownNicks}
+        resolveMentionColor={resolveMentionColor}
         whisperWith={message.whisperWith}
         whisperThread={whisperThread}
         counterpartPresent={counterpartPresent}

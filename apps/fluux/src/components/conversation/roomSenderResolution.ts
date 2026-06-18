@@ -108,6 +108,26 @@ export function resolveSenderColor(
   return contactColor || getConsistentTextColor(identifier, isDarkMode)
 }
 
+/**
+ * Display color for an arbitrary room nick (e.g. an inline @mention), using the
+ * SAME resolution as the sender-name color: a roster contact's pre-calculated
+ * XEP-0392 color when the nick maps to a known bare JID, otherwise the nick-hash
+ * color. Keeps a mention pill consistent with the mentioned person's name color.
+ * Mirrors the senderBareJid resolution in resolveRoomSender (occupant JID, then
+ * nickToJidCache) minus the occupant-id fallback, which only applies to the sender.
+ */
+export function resolveNickColor(
+  nick: string,
+  room: Pick<Room, 'occupants' | 'nickToJidCache'>,
+  contactsByJid: ReadonlyMap<string, ContactIdentity>,
+  isDarkMode: boolean,
+): string {
+  const occupant = room.occupants.get(nick)
+  const bareJid = occupant?.jid ? getBareJid(occupant.jid) : room.nickToJidCache?.get(nick)
+  const contact = bareJid ? contactsByJid.get(bareJid) : undefined
+  return resolveSenderColor(nick, contact, isDarkMode)
+}
+
 export function selectSelfOccupant(
   occupants: ReadonlyMap<string, RoomOccupant>,
   myNick: string | undefined,

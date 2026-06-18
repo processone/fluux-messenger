@@ -637,6 +637,30 @@ Steps to follow:
       expect(mentionSpans[1].textContent).toBe('@carol')
     })
 
+    // Mention color must match the sender's displayed color (e.g. a roster
+    // contact's XEP-0392 color), not just the nick hash. renderStyledMessage
+    // takes a resolveMentionColor callback so RoomView can supply the same
+    // color resolution used for the nickname header.
+    it('colors the mention with the resolver result', () => {
+      const resolve = (id: string) => (id === 'alice' ? 'var(--contact-alice)' : undefined)
+      const { container } = render(
+        <div>{renderStyledMessage('Hello @alice!', undefined, 'myNick', undefined, true, resolve)}</div>
+      )
+      const mention = container.querySelector('[data-mention="alice"]') as HTMLElement
+      expect(mention).toBeTruthy()
+      expect(mention.style.color).toBe('var(--contact-alice)')
+    })
+
+    it('falls back to the nick-hash color when the resolver returns undefined', () => {
+      const resolve = () => undefined
+      const { container } = render(
+        <div>{renderStyledMessage('Hello @bob!', undefined, 'myNick', undefined, true, resolve)}</div>
+      )
+      const mention = container.querySelector('[data-mention="bob"]') as HTMLElement
+      expect(mention).toBeTruthy()
+      expect(mention.style.color).toBeTruthy()
+    })
+
     // Unicode nickname support (regression tests)
     it('renders mention with accented characters', () => {
       const container = renderRoomText('@Jérôme is here')

@@ -111,6 +111,10 @@ export interface MessageBubbleProps {
   // Room-specific: known occupant nicks for IRC-style prefix mention highlighting
   knownNicks?: ReadonlySet<string>
 
+  // Room-specific: stable resolver giving a mention pill the same color as the
+  // mentioned person's name (roster contact's XEP-0392 color, else nick hash).
+  resolveMentionColor?: (nick: string) => string | undefined
+
   // XEP-0425: Whether the current user can moderate (retract) this message
   canModerate?: boolean
 
@@ -292,6 +296,7 @@ export const MessageBubble = memo(function MessageBubble({
   mentions,
   nickname,
   knownNicks,
+  resolveMentionColor,
   canModerate,
   isIrcGateway,
   onPollVote,
@@ -610,6 +615,7 @@ export const MessageBubble = memo(function MessageBubble({
               mentions={mentions}
               nickname={nickname}
               knownNicks={knownNicks}
+              resolveMentionColor={resolveMentionColor}
               isDarkMode={isDarkMode}
               highlightTerms={highlightTerms}
               isCurrentMatch={isCurrentMatch}
