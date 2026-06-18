@@ -970,7 +970,12 @@ export const chatStore = createStore<ChatState>()(
 
           if (conv) {
             const newConversations = new Map(state.conversations)
-            newConversations.set(conversationId, { ...conv, lastSeenMessageId: updated.lastSeenMessageId })
+            newConversations.set(conversationId, {
+              ...conv,
+              lastSeenMessageId: updated.lastSeenMessageId,
+              // Keep the combined map coherent with conversationMeta.
+              pendingRemoteDisplayedStanzaId: undefined,
+            })
             return { conversationMeta: newMeta, conversations: newConversations }
           }
 
