@@ -118,21 +118,33 @@ export async function resolveMediaUrl(originalUrl: string): Promise<string> {
   }
 }
 
-async function doResolve(originalUrl: string): Promise<string> {
+/**
+ * Network-free cache read for plaintext media on Tauri.
+ * Checks the in-memory index then the filesystem. Never fetches.
+ */
+export async function peekMediaCache(originalUrl: string): Promise<string | null> {
+  const cached = urlCache.get(originalUrl)
+  if (cached) return cached
+
   const { convertFileSrc } = await import('@tauri-apps/api/core')
   const { exists } = await import('@tauri-apps/plugin-fs')
 
-  // 2. Check filesystem cache
-  // We don't know the MIME type yet, so try to infer from the URL
   const filePath = await getCacheFilePath(originalUrl)
-
   if (await exists(filePath)) {
     const assetUrl = convertFileSrc(filePath)
     urlCache.set(originalUrl, assetUrl)
     return assetUrl
   }
+  return null
+}
+
+async function doResolve(originalUrl: string): Promise<string> {
+  // 1-2. In-memory + filesystem cache (network-free)
+  const peeked = await peekMediaCache(originalUrl)
+  if (peeked) return peeked
 
   // 3. Fetch and cache
+  const { convertFileSrc } = await import('@tauri-apps/api/core')
   const { fetch: tauriFetch } = await import('@tauri-apps/plugin-http')
 
   const response = await tauriFetch(originalUrl, { method: 'GET' })
@@ -143,11 +155,9 @@ async function doResolve(originalUrl: string): Promise<string> {
   const blob = await response.blob()
   const mimeType = blob.type || response.headers.get('content-type') || undefined
 
-  // Recalculate path with MIME type for proper extension
   const finalPath = await getCacheFilePath(originalUrl, mimeType)
 
   const { writeFile } = await import('@tauri-apps/plugin-fs')
-  // Use Response API for broader compatibility (jsdom Blob lacks arrayBuffer)
   const arrayBuffer = await new Response(blob).arrayBuffer()
   await writeFile(finalPath, new Uint8Array(arrayBuffer))
 
@@ -207,21 +217,37 @@ export async function resolveEncryptedMediaUrl(
   }
 }
 
-async function doResolveEncrypted(
-  httpsUrl: string,
-  encryption: FileEncryption,
-  cacheKey: string,
-): Promise<string> {
+/**
+ * Network-free cache read for encrypted media on Tauri. Returns the cached
+ * decrypted (`.dec`) asset URL on a hit. Needs no encryption key.
+ */
+export async function peekEncryptedMediaCache(httpsUrl: string): Promise<string | null> {
+  const cacheKey = `enc:${httpsUrl}`
+  const cached = urlCache.get(cacheKey)
+  if (cached) return cached
+
   const { convertFileSrc } = await import('@tauri-apps/api/core')
-  const { exists, writeFile } = await import('@tauri-apps/plugin-fs')
+  const { exists } = await import('@tauri-apps/plugin-fs')
 
   const filePath = await getDecryptedCacheFilePath(httpsUrl)
-
   if (await exists(filePath)) {
     const assetUrl = convertFileSrc(filePath)
     urlCache.set(cacheKey, assetUrl)
     return assetUrl
   }
+  return null
+}
+
+async function doResolveEncrypted(
+  httpsUrl: string,
+  encryption: FileEncryption,
+  cacheKey: string,
+): Promise<string> {
+  const peeked = await peekEncryptedMediaCache(httpsUrl)
+  if (peeked) return peeked
+
+  const { convertFileSrc } = await import('@tauri-apps/api/core')
+  const { writeFile } = await import('@tauri-apps/plugin-fs')
 
   const { fetch: tauriFetch } = await import('@tauri-apps/plugin-http')
   const response = await tauriFetch(httpsUrl, { method: 'GET' })
@@ -232,6 +258,7 @@ async function doResolveEncrypted(
   const ciphertext = new Uint8Array(await response.arrayBuffer())
   const plaintext = await decryptFile(ciphertext, encryption.key, encryption.iv)
 
+  const filePath = await getDecryptedCacheFilePath(httpsUrl)
   await writeFile(filePath, new Uint8Array(plaintext))
 
   const assetUrl = convertFileSrc(filePath)
