@@ -1,5 +1,6 @@
-import { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { useClickOutside } from './useClickOutside'
+import { useMenuViewportClamp } from './useMenuViewportClamp'
 
 export interface ContextMenuState {
   /** Whether the context menu is currently open */
@@ -92,40 +93,8 @@ export function useContextMenu(options: UseContextMenuOptions = {}): ContextMenu
     return () => document.removeEventListener('scroll', handleScroll, { capture: true })
   }, [isOpen, close])
 
-  // Adjust position after menu renders to keep it within viewport
-  useLayoutEffect(() => {
-    if (!isOpen || !menuRef.current) return
-
-    const menu = menuRef.current
-    const rect = menu.getBoundingClientRect()
-    const viewportWidth = window.innerWidth
-    const viewportHeight = window.innerHeight
-    const padding = 8 // Keep some distance from viewport edges
-
-    let { x, y } = clickPosition.current
-
-    // Adjust horizontal position if menu would overflow right edge
-    if (x + rect.width > viewportWidth - padding) {
-      x = Math.max(padding, viewportWidth - rect.width - padding)
-    }
-
-    // Adjust vertical position if menu would overflow bottom edge
-    if (y + rect.height > viewportHeight - padding) {
-      // Try positioning above the click point
-      const aboveY = clickPosition.current.y - rect.height
-      if (aboveY >= padding) {
-        y = aboveY
-      } else {
-        // If it doesn't fit above either, position at the bottom of viewport
-        y = Math.max(padding, viewportHeight - rect.height - padding)
-      }
-    }
-
-    // Only update if position changed to avoid infinite loops
-    if (x !== position.x || y !== position.y) {
-      setPosition({ x, y })
-    }
-  }, [isOpen, position.x, position.y])
+  // Adjust position after menu renders to keep it within the viewport
+  useMenuViewportClamp(isOpen, menuRef, clickPosition, position, setPosition)
 
   // Right-click handler (desktop). Stable identity (refs + stable setters) so
   // consumers can depend on it without re-creating their own callbacks each render.
