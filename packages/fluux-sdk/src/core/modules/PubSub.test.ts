@@ -258,6 +258,79 @@ describe('PubSub Module', () => {
     })
   })
 
+  describe('MDS incoming notify (XEP-0490)', () => {
+    const mdsEvent = (from: string, itemsChildren: Array<Record<string, unknown>>) =>
+      createMockElement('message', { from, to: 'user@example.com' }, [
+        {
+          name: 'event',
+          attrs: { xmlns: 'http://jabber.org/protocol/pubsub#event' },
+          children: [
+            { name: 'items', attrs: { node: 'urn:xmpp:mds:displayed:0' }, children: itemsChildren },
+          ],
+        },
+      ])
+
+    it('emits chat:displayed-synced for own MDS node notifications', async () => {
+      await connectClient()
+
+      mockXmppClientInstance._emit('stanza', mdsEvent('user@example.com', [
+        {
+          name: 'item',
+          attrs: { id: 'juliet@capulet.example' },
+          children: [
+            {
+              name: 'displayed',
+              attrs: { xmlns: 'urn:xmpp:chat-markers:0', id: 'stanza-99' },
+            },
+          ],
+        },
+      ]))
+
+      expect(emitSDKSpy).toHaveBeenCalledWith('chat:displayed-synced', {
+        conversationId: 'juliet@capulet.example',
+        stanzaId: 'stanza-99',
+      })
+    })
+
+    it('ignores MDS notifications that are not from our own bare JID', async () => {
+      await connectClient()
+
+      mockXmppClientInstance._emit('stanza', mdsEvent('attacker@evil.example', [
+        {
+          name: 'item',
+          attrs: { id: 'juliet@capulet.example' },
+          children: [
+            {
+              name: 'displayed',
+              attrs: { xmlns: 'urn:xmpp:chat-markers:0', id: 'stanza-99' },
+            },
+          ],
+        },
+      ]))
+
+      expect(emitSDKSpy).not.toHaveBeenCalledWith('chat:displayed-synced', expect.anything())
+    })
+
+    it('returns true (handled) for MDS PubSub event messages', async () => {
+      await connectClient()
+
+      const result = xmppClient.pubsub.handle(mdsEvent('user@example.com', [
+        {
+          name: 'item',
+          attrs: { id: 'juliet@capulet.example' },
+          children: [
+            {
+              name: 'displayed',
+              attrs: { xmlns: 'urn:xmpp:chat-markers:0', id: 'stanza-99' },
+            },
+          ],
+        },
+      ]))
+
+      expect(result).toBe(true)
+    })
+  })
+
   describe('stanza handling', () => {
     it('should return true (handled) for PubSub event messages', async () => {
       await connectClient()

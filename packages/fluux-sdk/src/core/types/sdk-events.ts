@@ -145,6 +145,14 @@ export interface ChatEvents {
     updates: Partial<Message>
   }
 
+  /** XEP-0490: a device synced its last-displayed (read) position for a 1:1 conversation */
+  'chat:displayed-synced': {
+    /** Conversation bare JID. */
+    conversationId: string
+    /** XEP-0359 stanza-id of the last displayed message on the publishing device. */
+    stanzaId: string
+  }
+
   /** Message delivery error received from server */
   'chat:message-error': {
     conversationId: string
