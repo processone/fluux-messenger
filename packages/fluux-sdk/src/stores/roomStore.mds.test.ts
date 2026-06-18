@@ -136,4 +136,21 @@ describe('roomStore.applyRemoteDisplayed', () => {
     expect(after?.pendingRemoteDisplayedStanzaId).toBe(undefined)
     expect(after?.lastSeenMessageId).toBe('m2')
   })
+
+  it('resolves a pending room marker once the message arrives via room MAM merge', () => {
+    seedRoom(ROOM, [rmsg('m1', 's1', 1)], 'm1')
+    roomStore.getState().applyRemoteDisplayed(ROOM, 's5') // not loaded → pending
+
+    roomStore.getState().mergeRoomMAMMessages(
+      ROOM,
+      [rmsg('m2', 's2', 2), rmsg('m5', 's5', 5)],
+      {}, // RSMResponse — all fields optional, empty is valid
+      true,
+      'forward'
+    )
+
+    const meta = roomStore.getState().roomMeta.get(ROOM)
+    expect(meta?.lastSeenMessageId).toBe('m5')
+    expect(meta?.pendingRemoteDisplayedStanzaId).toBe(undefined)
+  })
 })

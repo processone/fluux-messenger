@@ -2123,6 +2123,13 @@ export const roomStore = createStore<RoomState>()(
 
       return { rooms: newRooms, roomRuntime: newRuntime, roomMeta: newMeta, mamQueryStates: newStates, roomGaps: newGaps }
     })
+
+    // XEP-0490: a remote room marker may have arrived before its message.
+    // Now that messages are merged, try to resolve it forward-only.
+    const pending = get().roomMeta.get(roomJid)?.pendingRemoteDisplayedStanzaId
+    if (pending) {
+      get().applyRemoteDisplayed(roomJid, pending)
+    }
   },
 
   getRoomMAMQueryState: (roomJid) => {
