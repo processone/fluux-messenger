@@ -277,7 +277,7 @@ describe('useNotificationEvents', () => {
     })
   })
 
-  describe('conversation message freshness checks', () => {
+  describe('conversation unseen-gate (no age gate)', () => {
     it('should notify for an old conversation message that is still unread (no age gate)', () => {
       const onConversationMessage = vi.fn()
       const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000)
