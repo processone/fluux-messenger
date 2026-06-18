@@ -39,10 +39,12 @@ interface PrevRoomState {
  *
  * This hook handles all the filtering logic:
  * - Skip outgoing messages
- * - Skip delayed/historical messages (from MAM)
- * - Skip messages older than 5 minutes
+ * - For 1:1 conversations: notify only when the message is unseen (unreadCount > 0 and
+ *   message id differs from lastSeenMessageId); delivery mechanism and message age are not
+ *   discriminators — an offline-delivered message is "new to me"
  * - Skip if window is visible AND conversation/room is active
- * - For rooms: respect notifyAll/notifyAllPersistent settings
+ * - For rooms: skip delayed/historical messages and messages older than 5 minutes;
+ *   respect notifyAll/notifyAllPersistent settings
  *
  * @remarks
  * Uses Zustand store subscriptions instead of reactive hooks to avoid
@@ -130,7 +132,12 @@ export function useNotificationEvents(handlers: NotificationEventHandlers): void
               isOutgoing: conv.lastMessage.isOutgoing,
               isDelayed: conv.lastMessage.isDelayed,
             },
-            { isActive, windowVisible }
+            {
+              isActive,
+              windowVisible,
+              unreadCount: conv.unreadCount,
+              lastSeenMessageId: conv.lastSeenMessageId,
+            }
           )
 
           if (notify) {
