@@ -75,7 +75,7 @@ The seed does **not** wait for bookmarks. Instead, `mdsSideEffects` self-heals: 
 
 **Apply (incoming):** another device's publish → server pushes a PEP notify (we advertise `+notify`) → `PubSub.handleMdsUpdate` emits `read:displayed-synced` → `storeBindings` routes by room membership → `roomStore.applyRemoteDisplayed` advances forward-only (or stores pending).
 
-**Seed (fresh session):** after bookmarks load, `mds.fetchAllDisplayed()` → route each marker by room membership → `roomStore`/`chatStore.applyRemoteDisplayed` + seed `lastKnownNodeStanzaId`.
+**Seed (fresh session):** on `online`, `mds.fetchAllDisplayed()` → route each marker by current room membership → `roomStore`/`chatStore.applyRemoteDisplayed` + seed `lastKnownNodeStanzaId`; markers for not-yet-known rooms are stashed and drained when `roomStore.rooms` gains the JID (see §6).
 
 ## Edge cases & error handling
 
