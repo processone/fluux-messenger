@@ -86,6 +86,11 @@ const msg = (id: string, body: string) => ({
 
 // showConversationNotification is async (awaits the avatar URL before calling
 // showWebNotification), so assertions must let queued microtasks settle.
+// Three awaits cover the current dispatch chain depth (avatar-URL resolve →
+// showWebNotification). If that chain grows another `await`, bump this count —
+// the immediate-dispatch test would otherwise see 0 calls before the chain
+// settles. (The windowed tests use vi.advanceTimersByTimeAsync, which drains
+// microtasks between timers and isn't sensitive to this depth.)
 const flushMicrotasks = async () => {
   await Promise.resolve()
   await Promise.resolve()

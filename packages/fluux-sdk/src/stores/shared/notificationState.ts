@@ -421,9 +421,6 @@ export function onMessageSeen(
 // Should-Notify Functions
 // ---------------------------------------------------------------------------
 
-/** Freshness threshold: messages older than 5 minutes never trigger notifications. */
-const FRESHNESS_THRESHOLD_MS = 5 * 60 * 1000
-
 /**
  * Should a conversation message trigger a notification?
  *
@@ -446,6 +443,13 @@ export function shouldNotifyConversation(
 }
 
 /**
+ * Room freshness threshold: MUC messages older than 5 minutes never trigger
+ * notifications. Rooms (unlike conversations) still gate on age to suppress
+ * history replay; conversations use the unseen check instead.
+ */
+const ROOM_FRESHNESS_THRESHOLD_MS = 5 * 60 * 1000
+
+/**
  * Should a room message trigger a notification?
  *
  * Returns { shouldNotify, isMention } for the notification handler.
@@ -459,7 +463,7 @@ export function shouldNotifyRoom(
 ): { shouldNotify: boolean; isMention: boolean } {
   const isMention = msg.isMention ?? false
   if (msg.isOutgoing || msg.isDelayed) return { shouldNotify: false, isMention }
-  if (Date.now() - msg.timestamp.getTime() > FRESHNESS_THRESHOLD_MS) return { shouldNotify: false, isMention }
+  if (Date.now() - msg.timestamp.getTime() > ROOM_FRESHNESS_THRESHOLD_MS) return { shouldNotify: false, isMention }
   if (ctx.isActive && ctx.windowVisible) return { shouldNotify: false, isMention }
 
   return { shouldNotify: isMention || notifyAll, isMention }
