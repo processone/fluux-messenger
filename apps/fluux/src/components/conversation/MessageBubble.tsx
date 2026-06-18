@@ -471,7 +471,7 @@ export const MessageBubble = memo(function MessageBubble({
 
       {/* Content */}
       <div
-        className={`relative flex-1 min-w-0 touch:select-none touch:[-webkit-touch-callout:none] ${isSelected ? 'bg-fluux-selection -my-0.5 py-0.5 -ms-2 ps-2 -me-4 pe-4 rounded-s' : ''}${inThread ? ` bg-fluux-private-soft border-x border-fluux-private-border px-2.5 py-1 ${threadStart ? 'border-t rounded-t-lg' : ''} ${threadEnd ? 'border-b rounded-b-lg' : ''}` : ''}`}
+        className={`relative flex-1 min-w-0 touch:select-none touch:[-webkit-touch-callout:none] ${isSelected || showActionSheet ? 'bg-fluux-selection -my-0.5 py-0.5 -ms-2 ps-2 -me-4 pe-4 rounded-s' : ''}${inThread ? ` bg-fluux-private-soft border-x border-fluux-private-border px-2.5 py-1 ${threadStart ? 'border-t rounded-t-lg' : ''} ${threadEnd ? 'border-b rounded-b-lg' : ''}` : ''}`}
         onTouchStart={handleContentTouchStart}
         onTouchEnd={cancelLongPress}
         onTouchMove={cancelLongPress}
