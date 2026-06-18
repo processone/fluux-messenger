@@ -1423,6 +1423,15 @@ export const chatStore = createStore<ChatState>()(
 
           return { messages: newMessagesMap, mamQueryStates: newStates, conversationGaps: newGaps }
         })
+
+        // XEP-0490: a remote displayed marker may have arrived before its message.
+        // Now that messages are merged into state, try to resolve the pending marker
+        // forward-only. applyRemoteDisplayed re-reads the merged messages, resolves
+        // lastSeenMessageId, and clears pendingRemoteDisplayedStanzaId on success.
+        const pending = get().conversationMeta.get(conversationId)?.pendingRemoteDisplayedStanzaId
+        if (pending) {
+          get().applyRemoteDisplayed(conversationId, pending)
+        }
       },
 
       getMAMQueryState: (conversationId) => {

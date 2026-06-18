@@ -108,4 +108,44 @@ describe('chatStore.applyRemoteDisplayed', () => {
     expect(meta?.pendingRemoteDisplayedStanzaId).toBe('s-future')
     expect(meta?.lastSeenMessageId).toBeUndefined() // unchanged
   })
+
+  it('resolves a pending remote marker once the message arrives via MAM merge', () => {
+    const cid = 'juliet@capulet.example'
+
+    // Use distinct timestamps so sortMessagesByTimestamp gives a stable order.
+    const t0 = new Date('2026-01-01T00:00:00Z')
+    const t1 = new Date('2026-01-01T00:01:00Z')
+    const t2 = new Date('2026-01-01T00:02:00Z')
+
+    function timedMsg(id: string, stanzaId: string, ts: Date): Message {
+      return { ...msg(id, stanzaId), timestamp: ts }
+    }
+
+    // Seed initial message m1/s1 and set up conversation meta with lastSeenMessageId=m1
+    seedMessages(cid, [timedMsg('m1', 's1', t0)])
+    chatStore.setState((state) => {
+      const newMeta = new Map(state.conversationMeta)
+      newMeta.set(cid, { unreadCount: 0, lastSeenMessageId: 'm1' })
+      const newConvs = new Map(state.conversations)
+      newConvs.set(cid, { id: cid, name: cid, type: 'chat', unreadCount: 0, lastSeenMessageId: 'm1' })
+      return { conversationMeta: newMeta, conversations: newConvs }
+    })
+
+    // Remote marker for s5 arrives before m5 is loaded → stored as pending
+    chatStore.getState().applyRemoteDisplayed(cid, 's5')
+    expect(chatStore.getState().conversationMeta.get(cid)?.pendingRemoteDisplayedStanzaId).toBe('s5')
+
+    // MAM merge brings in m2 and m5/s5 (newer than m1)
+    chatStore.getState().mergeMAMMessages(
+      cid,
+      [timedMsg('m2', 's2', t1), timedMsg('m5', 's5', t2)],
+      {},
+      true,
+      'forward'
+    )
+
+    const meta = chatStore.getState().conversationMeta.get(cid)
+    expect(meta?.lastSeenMessageId).toBe('m5')
+    expect(meta?.pendingRemoteDisplayedStanzaId).toBe(undefined)
+  })
 })
