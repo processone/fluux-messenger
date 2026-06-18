@@ -63,9 +63,11 @@ Mirror the 1:1 "B5" step: after `roomStore`'s MAM-merge action commits room mess
 - No disambiguation on publish — the source store (roomMeta vs conversationMeta) tells us it's a room.
 - The existing guards apply unchanged: forward-only by index, no regressive publish, exact-equal echo skip, drop-on-disconnect, syncEnabled gating.
 
-### 6. Seed ordering
+### 6. Seed ordering (stash-and-drain self-heal)
 
-`fetchAllDisplayed()` returns mixed chat + room markers. Each is routed via `roomStore.rooms.has(jid)`, so the MDS seed must run **after** the XEP-0402 bookmark fetch has populated `roomStore.rooms` in the fresh-session flow.
+`fetchAllDisplayed()` returns mixed chat + room markers, each routed via `roomStore.rooms.has(jid)`. But the MDS seed runs on the client `online` event, which fires **before** the XEP-0402 bookmark fetch has populated `roomStore.rooms`. On a cold start `roomStore.rooms` is empty (it is ephemeral, no persist), so a room marker would route to chat (a harmless no-op on a non-existent entity) and the room's read position would be dropped for the session.
+
+The seed does **not** wait for bookmarks. Instead, `mdsSideEffects` self-heals: any seed marker whose JID is not a known room at seed time is stashed in a module-local `unroutedSeedMarkers` map (and still routed to chat as a no-op, and its `lastKnownNodeStanzaId` still recorded). A subscription to `roomStore.rooms` drains the stash: when `rooms` gains a stashed JID (the bookmark loaded later in the same session), the stashed marker is re-applied via `roomStore.applyRemoteDisplayed`. Because `applyRemoteDisplayed` is forward-only/idempotent and `lastKnownNodeStanzaId[jid]` was already recorded during the seed, the resulting `roomMeta` change is echo-suppressed by `consider()`/`doPublish`, so there is no republish and no loop. The stash is cleared at the start of each seed and on disconnect. A genuine 1:1 JID also lands in the stash and simply never drains (cleared on the next seed).
 
 ## Data flow
 
@@ -77,7 +79,8 @@ Mirror the 1:1 "B5" step: after `roomStore`'s MAM-merge action commits room mess
 
 ## Edge cases & error handling
 
-- **Mis-route from unsynced bookmark:** a room bookmarked only on another device (not yet synced here) routes its marker to chat as a stray read marker on a non-existent 1:1 entity. Harmless; self-corrects on the next seed once the bookmark syncs. Documented, not guarded.
+- **Seed runs before bookmarks (cold start):** the `online` seed fires before bookmarks populate `roomStore.rooms`, so on a cold start room markers are not yet recognized as rooms. They route to chat as a no-op AND are stashed in `unroutedSeedMarkers`; the `roomStore.rooms` subscription re-applies them once the bookmark lands in the same session (see §6). This replaces the earlier "self-corrects on the next seed" expectation: the position is recovered **within the session**, not on the next cold start.
+- **Mis-route from unsynced bookmark:** a room bookmarked only on another device (not yet synced here) has no bookmark to land this session, so its stashed marker never drains and routes to chat as a harmless no-op on a non-existent 1:1 entity. Self-corrects on a later session once the bookmark syncs. Documented, not guarded.
 - **Stanza-id correctness:** the `<displayed id>` for a room MUST be the room-stamped stanza-id (`by` = room JID), not the user's account-archive id. Verify in the plan that `RoomMessage.stanzaId` already holds the room-stamped value (MUC stamps stanza-id by the room JID; `parseMessageContent` takes `expectedStanzaIdBy`). If MUC parsing doesn't already select the room-stamped id, fix it as part of this work.
 - **PEP unavailable / publish rejected:** best-effort, same as 1:1. Rooms fall back to today's ephemeral behavior. No new persistence.
 - **No regressive publish / echo:** reuse the merged guards unchanged (index comparison, `lastKnownNodeStanzaId` exact-equal skip seeded from notifications and successful publishes).

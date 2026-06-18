@@ -9,6 +9,12 @@
  * the seed isn't re-published. On SM resumption the server replays notifications,
  * so no reseed is needed.
  *
+ * The fresh-session seed runs on the client `online` event, which fires BEFORE
+ * bookmarks load (roomStore.rooms is still empty). A room marker would therefore
+ * route to chat and be dropped. To self-heal, room markers seen at seed time for
+ * a JID that isn't yet a known room are stashed and re-applied once
+ * roomStore.rooms gains that JID (bookmark loaded later in the same session).
+ *
  * localStorage remains the durable buffer for read positions: pending in-memory
  * work is DROPPED on disconnect and re-published (ahead-of-node only) on the next
  * fresh session.
@@ -49,6 +55,11 @@ export function setupMdsSideEffects(
   const lastKnownNodeStanzaId = new Map<string, string>()
   // The lastSeenMessageId we last considered per JID, to detect advances.
   const lastConsideredSeenId = new Map<string, string | undefined>()
+  // Seed markers (jid → stanzaId) whose JID was NOT a known room at seed time.
+  // The fresh-session seed runs before bookmarks load (roomStore.rooms is empty),
+  // so a room's marker would otherwise route to chat and be dropped. We stash it
+  // here and re-apply it when roomStore.rooms gains the JID (self-heal).
+  const unroutedSeedMarkers = new Map<string, string>()
 
   /** Is this JID a known room (bookmarked or joined)? Routes accessors per-store. */
   function isRoom(jid: string): boolean {
@@ -173,6 +184,32 @@ export function setupMdsSideEffects(
     }
   )
 
+  // Self-heal for the seed-before-bookmarks ordering. The fresh-session seed
+  // runs before bookmarks populate roomStore.rooms, so room markers stash in
+  // unroutedSeedMarkers. When rooms gains a stashed JID (bookmark loaded later
+  // in the same session), re-apply its seed marker to the room and drop it.
+  // applyRemoteDisplayed is forward-only/idempotent, and lastKnownNodeStanzaId[jid]
+  // was already recorded during the seed, so the resulting roomMeta change is
+  // echo-suppressed by consider()/doPublish — no republish, no loop.
+  const unsubscribeRoomsSeedDrain = roomStore.subscribe(
+    (state) => state.rooms,
+    () => {
+      if (unroutedSeedMarkers.size === 0) return
+      const rooms = roomStore.getState().rooms
+      // Collect-then-apply: applyRemoteDisplayed writes the combined `rooms` map,
+      // which re-fires this subscription synchronously. Delete each entry from the
+      // stash BEFORE applying so a re-entrant pass finds nothing to redo.
+      const drainable: Array<[string, string]> = []
+      for (const [jid, stanzaId] of unroutedSeedMarkers) {
+        if (rooms.has(jid)) drainable.push([jid, stanzaId])
+      }
+      for (const [jid] of drainable) unroutedSeedMarkers.delete(jid)
+      for (const [jid, stanzaId] of drainable) {
+        roomStore.getState().applyRemoteDisplayed(jid, stanzaId)
+      }
+    }
+  )
+
   // Fresh session: seed from the node, then enable publishing. Publishing stays
   // disabled for the whole async seed so the seeded positions aren't republished.
   const unsubscribeOnline = client.on('online', () => {
@@ -185,16 +222,24 @@ export function setupMdsSideEffects(
         // Node may not exist yet — proceed with an empty seed.
       }
 
+      // Reset the unrouted-marker stash for this seed (mirrors dirty.drop below).
+      unroutedSeedMarkers.clear()
+
       for (const { conversationJid, stanzaId } of markers) {
         const bare = getBareJid(conversationJid)
         lastKnownNodeStanzaId.set(bare, stanzaId)
-        // Route the seed by membership. If a bookmarked room isn't yet in
-        // roomStore.rooms at this point, its marker routes to chat; the position
-        // self-heals on a later fresh-session seed once the room is known.
+        // Route the seed by membership. The fresh-session seed runs BEFORE
+        // bookmarks load (online fires before fetchBookmarks populates
+        // roomStore.rooms), so a bookmarked room is typically NOT yet known
+        // here. Its marker routes to chat (a harmless no-op on a non-existent
+        // entity) AND is stashed so the rooms subscription below re-applies it
+        // once the bookmark lands. A genuine 1:1 JID also lands in the else
+        // branch and simply never drains — cleared on the next seed.
         if (isRoom(bare)) {
           roomStore.getState().applyRemoteDisplayed(bare, stanzaId)
         } else {
           chatStore.getState().applyRemoteDisplayed(bare, stanzaId)
+          unroutedSeedMarkers.set(bare, stanzaId)
         }
       }
 
@@ -246,6 +291,7 @@ export function setupMdsSideEffects(
       if (status !== 'online' && previousStatus === 'online') {
         syncEnabled = false
         dirty.drop()
+        unroutedSeedMarkers.clear()
         if (debounceTimer) {
           clearTimeout(debounceTimer)
           debounceTimer = undefined
@@ -258,11 +304,13 @@ export function setupMdsSideEffects(
   return () => {
     unsubscribeStore()
     unsubscribeRoomStore()
+    unsubscribeRoomsSeedDrain()
     unsubscribeOnline()
     unsubscribeDisplayedSynced()
     unsubscribeResumed()
     unsubscribeConnection()
     dirty.drop()
+    unroutedSeedMarkers.clear()
     if (debounceTimer) {
       clearTimeout(debounceTimer)
       debounceTimer = undefined

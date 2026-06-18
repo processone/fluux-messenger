@@ -266,4 +266,65 @@ describe('setupMdsSideEffects', () => {
     expect(roomStore.getState().roomMeta.get(ROOM)?.lastSeenMessageId).toBe('m2')
     cleanup()
   })
+
+  it('re-applies a seed marker to a room that becomes known after the seed', async () => {
+    const ROOM = 'room@conference.example'
+    const client = makeClient()
+    // The node holds a marker for a room that is NOT yet in roomStore.rooms at
+    // seed time (bookmarks load after the online seed on a cold start).
+    client.mds.fetchAllDisplayed = vi
+      .fn()
+      .mockResolvedValue([{ conversationJid: ROOM, stanzaId: 's2' }])
+    connectionStore.setState({ status: 'online' } as never)
+
+    const cleanup = setupMdsSideEffects(client as never)
+    client._emit('online')
+    await vi.runOnlyPendingTimersAsync() // settle the async seed
+
+    // Room unknown at seed time → marker routed to chat (no-op), so the room's
+    // read position is NOT advanced and no room entity exists yet.
+    expect(roomStore.getState().roomMeta.has(ROOM)).toBe(false)
+
+    // The bookmark now lands: the room (with message s2) appears in roomStore,
+    // firing the rooms subscription, which drains the stashed seed marker. A
+    // freshly-bookmarked room starts with no read position, so the drained
+    // marker is what advances it (no lastSeenMessageId patch here).
+    seedRoom(ROOM, [rmsg(ROOM, 'm1', 's1', 1), rmsg(ROOM, 'm2', 's2', 2)])
+
+    // The stashed marker was drained and applied to the room.
+    expect(roomStore.getState().roomMeta.get(ROOM)?.lastSeenMessageId).toBe('m2')
+
+    // And it must NOT cause an echo republish: lastKnownNodeStanzaId[ROOM] was
+    // recorded during the seed, so consider() is echo-suppressed.
+    await vi.advanceTimersByTimeAsync(2_000)
+    expect(client.mds.publishDisplayed).not.toHaveBeenCalled()
+    cleanup()
+  })
+
+  it('does not re-publish the echo of a live incoming remote marker for a known room', async () => {
+    const ROOM = 'room@conference.example'
+    const client = makeClient()
+    connectionStore.setState({ status: 'online' } as never)
+
+    // Known room with a settled local read position at m1 before the side effect
+    // starts, so the seed snapshots m1 as the last considered position.
+    seedRoom(ROOM, [rmsg(ROOM, 'm1', 's1', 1), rmsg(ROOM, 'm2', 's2', 2)], 'm1')
+
+    const cleanup = setupMdsSideEffects(client as never)
+    client._emit('online')
+    await vi.runOnlyPendingTimersAsync() // settle the async seed
+
+    // A live remote marker for s2 arrives from a peer device. Mirror the binding:
+    // apply the store advance FIRST (roomMeta subscription → consider() enqueues
+    // s2 with no node value yet), THEN record the node high-water mark via the
+    // read:displayed-synced event. Exercises the doPublish exact-equal skip.
+    roomStore.getState().applyRemoteDisplayed(ROOM, 's2')
+    client._emit('read:displayed-synced', { conversationId: ROOM, stanzaId: 's2' })
+
+    await vi.advanceTimersByTimeAsync(2_000)
+
+    // s2 is already on the node (it is the echo) → must NOT republish.
+    expect(client.mds.publishDisplayed).not.toHaveBeenCalled()
+    cleanup()
+  })
 })
