@@ -52,6 +52,7 @@ vi.mock('./useNotificationEvents', () => ({
 vi.mock('@fluux/sdk', () => ({
   rosterStore: { getState: () => ({ getContact: () => undefined }) },
   usePresence: () => ({ presenceStatus: 'online' }),
+  useConnectionStatus: () => ({ status: 'disconnected' }),
 }))
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (k: string) => k }) }))
 

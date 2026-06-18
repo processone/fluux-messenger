@@ -32,7 +32,7 @@ vi.mock('./useNotificationPermission', () => ({
   getNotificationPermissionGranted: () => true,
 }))
 vi.mock('./useNotificationEvents', () => ({ useNotificationEvents: vi.fn() }))
-vi.mock('@fluux/sdk', () => ({ rosterStore: { getState: () => ({ getContact: () => undefined }) }, usePresence: () => ({ presenceStatus: 'online' }) }))
+vi.mock('@fluux/sdk', () => ({ rosterStore: { getState: () => ({ getContact: () => undefined }) }, usePresence: () => ({ presenceStatus: 'online' }), useConnectionStatus: () => ({ status: 'disconnected' }) }))
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (k: string) => k }) }))
 
 import { useDesktopNotifications } from './useDesktopNotifications'
