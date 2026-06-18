@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react'
+import { hasHover } from './useHasHover'
 
 export interface UseMessageHoverStateOptions {
   /** Scroll container of the message list — scopes mousedown/selection detection */
@@ -65,6 +66,11 @@ export function useMessageHoverState({
   }
 
   const armIntentTimer = useCallback((id: string) => {
+    // Touch devices have no hovering pointer, yet mobile browsers synthesize
+    // mouseenter on tap. Arming hover there would surface the desktop-only
+    // hover toolbar alongside the composer — the long-press action sheet is the
+    // touch affordance instead. Re-read live so a docked mouse re-enables it.
+    if (!hasHover()) return
     clearTimer(intentTimerRef)
     intentTimerRef.current = setTimeout(() => {
       intentTimerRef.current = null
