@@ -546,8 +546,11 @@ export const chatStore = createStore<ChatState>()(
             }
 
             const messages = get().messages.get(id) || []
-            // Compute marker position and mark as read atomically
-            const activated = notifState.onActivate(notifInput, messages)
+            // Compute marker position and mark as read atomically.
+            // 1:1 chats treat delayed messages as new (offline delivery), so the
+            // marker may land on a delayed message — unlike rooms, where delayed
+            // means MUC history replay.
+            const activated = notifState.onActivate(notifInput, messages, { treatDelayedAsNew: true })
 
             set((state) => {
               const newMetaEntry = {
