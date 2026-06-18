@@ -369,7 +369,7 @@ export class PubSub extends BaseModule {
     if (!ownBareJid || bareFrom !== ownBareJid) return
 
     for (const { conversationJid, stanzaId } of parseMdsItems(items)) {
-      this.deps.emitSDK('chat:displayed-synced', {
+      this.deps.emitSDK('read:displayed-synced', {
         conversationId: conversationJid,
         stanzaId,
       })

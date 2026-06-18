@@ -69,7 +69,7 @@ function makeClient() {
   return {
     // Connection lifecycle events ('online'/'resumed') use client.on(...).
     on: register,
-    // SDK events ('chat:displayed-synced') use client.subscribe(...).
+    // SDK events ('read:displayed-synced') use client.subscribe(...).
     subscribe: register,
     _emit: (ev: string, p?: unknown) => (handlers[ev] || []).forEach((h) => h(p)),
     mds: {
@@ -163,13 +163,13 @@ describe('setupMdsSideEffects', () => {
     await vi.runOnlyPendingTimersAsync() // let the async seed settle
 
     // A live remote marker for s2 arrives from a peer device (PubSub emits
-    // 'chat:displayed-synced' and storeBindings calls applyRemoteDisplayed). Apply
+    // 'read:displayed-synced' and storeBindings calls applyRemoteDisplayed). Apply
     // the store advance FIRST so the conversationMeta subscription → consider()
     // enqueues s2 with no node value recorded yet (worst-case handler order). Only
     // THEN record the node high-water mark. This exercises the doPublish exact-equal
     // skip specifically — consider() already enqueued before the node value existed.
     chatStore.getState().applyRemoteDisplayed(cid, 's2')
-    client._emit('chat:displayed-synced', { conversationId: cid, stanzaId: 's2' })
+    client._emit('read:displayed-synced', { conversationId: cid, stanzaId: 's2' })
 
     await vi.advanceTimersByTimeAsync(2_000)
 

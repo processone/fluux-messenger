@@ -161,8 +161,8 @@ describe('createStoreBindings', () => {
       expect(mockStores.chat.triggerAnimation).toHaveBeenCalledWith('bob@example.com', 'shake')
     })
 
-    it('should handle chat:displayed-synced', () => {
-      mockClient.emit('chat:displayed-synced', {
+    it('should handle read:displayed-synced', () => {
+      mockClient.emit('read:displayed-synced', {
         conversationId: 'juliet@capulet.example',
         stanzaId: 'stanza-77',
       })

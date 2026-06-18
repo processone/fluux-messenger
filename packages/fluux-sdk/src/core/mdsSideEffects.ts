@@ -93,7 +93,7 @@ export function setupMdsSideEffects(
 
     for (const { key: jid, value: stanzaId } of entries) {
       // Skip when the node already holds exactly this stanza-id: it is the echo
-      // of a remote notify (recorded by the chat:displayed-synced subscription
+      // of a remote notify (recorded by the read:displayed-synced subscription
       // below) or a redundant re-enqueue. The local marker is forward-only, so
       // re-asserting a value the node already has is always pointless.
       if (lastKnownNodeStanzaId.get(jid) === stanzaId) continue
@@ -190,7 +190,7 @@ export function setupMdsSideEffects(
   // within a single emit isn't guaranteed, but doPublish runs ~1500ms later by
   // which time this value is recorded, so the exact-equal skip drops the echo.
   const unsubscribeDisplayedSynced = client.subscribe(
-    'chat:displayed-synced',
+    'read:displayed-synced',
     ({ conversationId, stanzaId }) => {
       lastKnownNodeStanzaId.set(getBareJid(conversationId), stanzaId)
     }

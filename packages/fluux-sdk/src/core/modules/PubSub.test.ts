@@ -270,7 +270,7 @@ describe('PubSub Module', () => {
         },
       ])
 
-    it('emits chat:displayed-synced for own MDS node notifications', async () => {
+    it('emits read:displayed-synced for own MDS node notifications', async () => {
       await connectClient()
 
       mockXmppClientInstance._emit('stanza', mdsEvent('user@example.com', [
@@ -286,7 +286,7 @@ describe('PubSub Module', () => {
         },
       ]))
 
-      expect(emitSDKSpy).toHaveBeenCalledWith('chat:displayed-synced', {
+      expect(emitSDKSpy).toHaveBeenCalledWith('read:displayed-synced', {
         conversationId: 'juliet@capulet.example',
         stanzaId: 'stanza-99',
       })
@@ -308,7 +308,7 @@ describe('PubSub Module', () => {
         },
       ]))
 
-      expect(emitSDKSpy).not.toHaveBeenCalledWith('chat:displayed-synced', expect.anything())
+      expect(emitSDKSpy).not.toHaveBeenCalledWith('read:displayed-synced', expect.anything())
     })
 
     it('returns true (handled) for MDS PubSub event messages', async () => {
