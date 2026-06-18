@@ -160,6 +160,17 @@ describe('createStoreBindings', () => {
       mockClient.emit('chat:animation', { conversationId: 'bob@example.com', animation: 'shake' })
       expect(mockStores.chat.triggerAnimation).toHaveBeenCalledWith('bob@example.com', 'shake')
     })
+
+    it('should handle chat:displayed-synced', () => {
+      mockClient.emit('chat:displayed-synced', {
+        conversationId: 'juliet@capulet.example',
+        stanzaId: 'stanza-77',
+      })
+      expect(mockStores.chat.applyRemoteDisplayed).toHaveBeenCalledWith(
+        'juliet@capulet.example',
+        'stanza-77'
+      )
+    })
   })
 
   describe('room events', () => {

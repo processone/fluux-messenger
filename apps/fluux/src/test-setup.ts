@@ -148,6 +148,7 @@ vi.mock('@fluux/sdk', async (importOriginal) => {
         markAsRead: vi.fn(),
         clearFirstNewMessageId: vi.fn(),
         isArchived: () => false,
+        applyRemoteDisplayed: vi.fn(),
       }),
       subscribe: vi.fn(() => vi.fn()),
     },

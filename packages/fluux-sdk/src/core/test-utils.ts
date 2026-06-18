@@ -976,6 +976,7 @@ export const createMockStoreRefs = (): MockStoreRefs => ({
     updateReactions: vi.fn(),
     updateMessage: vi.fn(),
     triggerAnimation: vi.fn(),
+    applyRemoteDisplayed: vi.fn(),
   } as unknown as MockStoreRefs['chat'],
   roster: {
     setContacts: vi.fn(),
