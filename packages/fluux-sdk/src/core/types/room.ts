@@ -249,6 +249,12 @@ export interface RoomMetadata {
   lastSeenMessageId?: string
   /** ID of the first unread message (calculated when switching to room) */
   firstNewMessageId?: string
+  /**
+   * XEP-0490: a remote device reported reading up to this stanza-id, but the
+   * message is not yet in the loaded room cache. Resolved to lastSeenMessageId
+   * once the message arrives (see mergeRoomMAMMessages).
+   */
+  pendingRemoteDisplayedStanzaId?: string
   /** Most recent message for sidebar preview */
   lastMessage?: RoomMessage
   /**
