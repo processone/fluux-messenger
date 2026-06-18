@@ -272,8 +272,8 @@ export function useDesktopNotifications(): void {
       if (windowTimerRef.current) clearTimeout(windowTimerRef.current)
       windowTimerRef.current = setTimeout(() => {
         windowTimerRef.current = null
-        for (const { payload } of coalescer.flush()) {
-          void showConvNotifRef.current(payload.conv, payload.message)
+        for (const { value } of coalescer.flush()) {
+          void showConvNotifRef.current(value.conv, value.message)
         }
       }, CATCHUP_WINDOW_MS)
     }

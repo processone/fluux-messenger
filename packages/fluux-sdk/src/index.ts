@@ -643,6 +643,10 @@ export type { FallbackProcessingResult, FallbackProcessingOptions } from './util
 export { parseXMPPError, formatXMPPError } from './utils/xmppError'
 export type { XMPPStanzaError, XMPPErrorType } from './utils/xmppError'
 
+// Per-key latest-wins coalescing buffer (pure, no timers)
+export { createKeyedCoalescer } from './utils/keyedCoalescer'
+export type { KeyedCoalescer, CoalescedEntry } from './utils/keyedCoalescer'
+
 // Transport error classification and humanization
 export { classifyConnectionError, extractTransportErrorClass, humanizeTransportError } from './core/modules/transportErrors'
 export type { ConnectionErrorKind } from './core/modules/transportErrors'

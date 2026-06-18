@@ -16,8 +16,8 @@ describe('createNotificationCoalescer', () => {
     expect(c.add('a', 'a2')).toBe(true) // latest wins
     expect(c.add('b', 'b1')).toBe(true)
     expect(c.flush()).toEqual([
-      { id: 'a', payload: 'a2' },
-      { id: 'b', payload: 'b1' },
+      { key: 'a', value: 'a2' },
+      { key: 'b', value: 'b1' },
     ])
   })
 
