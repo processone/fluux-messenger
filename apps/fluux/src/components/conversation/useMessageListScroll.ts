@@ -157,9 +157,6 @@ export function useMessageListScroll({
   // Last scroll data (for saving on conversation switch)
   const lastScrollDataRef = useRef<{ top: number; height: number; client: number } | null>(null)
 
-  // Track whether we've already scrolled to the new message marker (for two-step FAB behavior)
-  const hasScrolledToMarkerRef = useRef(false)
-
   // Track whether user has scrolled at least once since the marker was set.
   // Prevents the marker from being cleared immediately on initial load/scroll-to-marker.
   const userHasScrolledSinceMarkerRef = useRef(false)
@@ -378,19 +375,27 @@ export function useMessageListScroll({
     const scroller = scrollerRef.current
     if (!scroller) return
 
-    // Two-step behavior: first click scrolls to new message marker, second to bottom
-    if (firstNewMessageId && !hasScrolledToMarkerRef.current) {
+    // Two-step behavior: scroll to the new message marker only when it exists AND
+    // is still further down than the current viewport (not yet visible). Otherwise —
+    // including when the marker is already on screen or scrolled above — go straight
+    // to the bottom. This is a live position check rather than a one-shot latch, so a
+    // single click always makes progress toward the bottom: no wasted click when the
+    // user is already sitting at the marker (e.g. right after opening a conversation,
+    // where the init effect auto-scrolls to the marker).
+    if (firstNewMessageId) {
       const escapedId = CSS.escape(firstNewMessageId)
       const messageElement = scroller.querySelector(`[data-message-id="${escapedId}"]`)
 
       if (messageElement) {
         const elementTop = (messageElement as HTMLElement).offsetTop
         const viewportHeight = scroller.clientHeight
-        const targetScrollTop = Math.max(0, elementTop - viewportHeight / 3)
+        const viewportBottom = scroller.scrollTop + viewportHeight
 
-        scroller.scrollTo({ top: targetScrollTop, behavior: 'smooth' })
-        hasScrolledToMarkerRef.current = true
-        return
+        if (elementTop > viewportBottom) {
+          const targetScrollTop = Math.max(0, elementTop - viewportHeight / 3)
+          scroller.scrollTo({ top: targetScrollTop, behavior: 'smooth' })
+          return
+        }
       }
     }
 
@@ -710,7 +715,6 @@ export function useMessageListScroll({
     scrolledAwayFromTopRef.current = false
     lastScrollDataRef.current = null
     prependRef.current = null
-    hasScrolledToMarkerRef.current = false
     setShowScrollToBottom(false)
 
     // Clear any pending media load batch
@@ -1188,7 +1192,6 @@ export function useMessageListScroll({
   const prevFirstNewMessageIdRef = useRef(firstNewMessageId)
   useEffect(() => {
     if (firstNewMessageId !== prevFirstNewMessageIdRef.current) {
-      hasScrolledToMarkerRef.current = false
       userHasScrolledSinceMarkerRef.current = false
       prevFirstNewMessageIdRef.current = firstNewMessageId
     }
