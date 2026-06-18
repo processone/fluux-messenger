@@ -153,6 +153,30 @@ describe('useDesktopNotifications catch-up window', () => {
     expect(showWebNotification).toHaveBeenCalledTimes(1)
   })
 
+  it('includes the unread count in the title when a conversation has multiple unread', async () => {
+    const { rerender } = renderHook(() => useDesktopNotifications())
+
+    act(() => {
+      setStatus('online')
+      rerender()
+    })
+
+    // Use a conv with unreadCount: 3 to exercise the "(N)" suffix branch.
+    const multiUnreadConv = { id: 'eve', name: 'eve', unreadCount: 3, lastSeenMessageId: undefined }
+    act(() => {
+      capturedOnConversationMessage?.(multiUnreadConv, msg('e1', 'hello'))
+    })
+
+    expect(showWebNotification).not.toHaveBeenCalled()
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3000)
+    })
+
+    expect(showWebNotification).toHaveBeenCalledTimes(1)
+    expect(showWebNotification.mock.calls[0][0]).toContain('(3)')
+  })
+
   it('drops buffered notifications when the connection leaves online', async () => {
     const { rerender } = renderHook(() => useDesktopNotifications())
     act(() => {
