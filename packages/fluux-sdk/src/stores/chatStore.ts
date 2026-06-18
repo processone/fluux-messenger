@@ -139,6 +139,12 @@ interface ChatState {
   markAsRead: (conversationId: string) => void
   clearFirstNewMessageId: (conversationId: string) => void
   updateLastSeenMessageId: (conversationId: string, messageId: string) => void
+  /**
+   * XEP-0490: apply a remote device's last-displayed marker. Advances
+   * lastSeenMessageId forward-only by resolving the stanza-id to a local
+   * message id; stores a pending high-water mark if not yet loaded.
+   */
+  applyRemoteDisplayed: (conversationId: string, stanzaId: string) => void
   hasConversation: (id: string) => boolean
   archiveConversation: (id: string) => void
   unarchiveConversation: (id: string) => void
@@ -886,6 +892,64 @@ export const chatStore = createStore<ChatState>()(
 
           const newMeta = new Map(state.conversationMeta)
           newMeta.set(conversationId, { ...meta, lastSeenMessageId: updated.lastSeenMessageId })
+
+          if (conv) {
+            const newConversations = new Map(state.conversations)
+            newConversations.set(conversationId, { ...conv, lastSeenMessageId: updated.lastSeenMessageId })
+            return { conversationMeta: newMeta, conversations: newConversations }
+          }
+
+          return { conversationMeta: newMeta }
+        })
+      },
+
+      applyRemoteDisplayed: (conversationId, stanzaId) => {
+        set((state) => {
+          const meta = state.conversationMeta.get(conversationId)
+          const conv = state.conversations.get(conversationId)
+          if (!meta) return state
+
+          const messages = state.messages.get(conversationId) || []
+          const match = messages.find((m) => m.stanzaId === stanzaId)
+
+          if (!match) {
+            // Message not yet loaded — remember the stanza-id as a high-water
+            // mark to be resolved when the message cache is loaded.
+            const newMeta = new Map(state.conversationMeta)
+            newMeta.set(conversationId, { ...meta, pendingRemoteDisplayedStanzaId: stanzaId })
+
+            if (conv) {
+              const newConversations = new Map(state.conversations)
+              newConversations.set(conversationId, { ...conv, pendingRemoteDisplayedStanzaId: stanzaId })
+              return { conversationMeta: newMeta, conversations: newConversations }
+            }
+
+            return { conversationMeta: newMeta }
+          }
+
+          // Forward-only advance using the shared comparator (compares by index).
+          const updated = notifState.onMessageSeen(
+            {
+              unreadCount: meta.unreadCount,
+              mentionsCount: 0,
+              lastReadAt: meta.lastReadAt,
+              lastSeenMessageId: meta.lastSeenMessageId,
+              firstNewMessageId: meta.firstNewMessageId,
+            },
+            match.id,
+            messages
+          )
+
+          // No advance (same value or onMessageSeen guard prevented regression).
+          if (updated.lastSeenMessageId === meta.lastSeenMessageId) return state
+
+          const newMeta = new Map(state.conversationMeta)
+          newMeta.set(conversationId, {
+            ...meta,
+            lastSeenMessageId: updated.lastSeenMessageId,
+            // Resolved → clear any stale pending marker.
+            pendingRemoteDisplayedStanzaId: undefined,
+          })
 
           if (conv) {
             const newConversations = new Map(state.conversations)
