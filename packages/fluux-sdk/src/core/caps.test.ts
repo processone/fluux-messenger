@@ -6,6 +6,7 @@ import {
   getClientIdentity,
   getCapsNode,
 } from './caps'
+import { NS_MDS_NOTIFY } from './namespaces'
 
 describe('caps (XEP-0115)', () => {
   describe('CLIENT_FEATURES', () => {
@@ -52,6 +53,12 @@ describe('caps (XEP-0115)', () => {
       // Without this, the server will not push PEP headlines when another
       // device of the same account publishes an updated verification list.
       expect(CLIENT_FEATURES).toContain('urn:xmpp:fluux:verifications:0+notify')
+    })
+
+    it('includes the MDS +notify feature so the server pushes read-position updates', () => {
+      expect(CLIENT_FEATURES).toContain(NS_MDS_NOTIFY)
+      // feature appears in the (sorted) XEP-0115 verification string
+      expect(calculateVerificationString()).toContain(`${NS_MDS_NOTIFY}<`)
     })
 
     it('should include XEP-0374 OX-IM discovery feature', () => {
