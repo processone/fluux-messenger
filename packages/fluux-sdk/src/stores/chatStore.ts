@@ -941,7 +941,24 @@ export const chatStore = createStore<ChatState>()(
           )
 
           // No advance (same value or onMessageSeen guard prevented regression).
-          if (updated.lastSeenMessageId === meta.lastSeenMessageId) return state
+          // The matching message IS loaded and the local position is at or past
+          // it, so this marker is resolved — clear any stale pending high-water
+          // mark so it doesn't re-fire a no-op applyRemoteDisplayed on every
+          // mergeMAMMessages. Leave lastSeenMessageId unchanged.
+          if (updated.lastSeenMessageId === meta.lastSeenMessageId) {
+            if (meta.pendingRemoteDisplayedStanzaId === undefined) return state
+            const newMeta = new Map(state.conversationMeta)
+            newMeta.set(conversationId, { ...meta, pendingRemoteDisplayedStanzaId: undefined })
+            if (conv) {
+              const newConversations = new Map(state.conversations)
+              newConversations.set(conversationId, {
+                ...conv,
+                pendingRemoteDisplayedStanzaId: undefined,
+              })
+              return { conversationMeta: newMeta, conversations: newConversations }
+            }
+            return { conversationMeta: newMeta }
+          }
 
           const newMeta = new Map(state.conversationMeta)
           newMeta.set(conversationId, {

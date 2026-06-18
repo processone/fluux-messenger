@@ -109,6 +109,39 @@ describe('chatStore.applyRemoteDisplayed', () => {
     expect(meta?.lastSeenMessageId).toBeUndefined() // unchanged
   })
 
+  it('clears a stale pending marker when the message is present but already passed', () => {
+    const cid = 'juliet@capulet.example'
+    const messages = [msg('m1', 's1'), msg('m2', 's2'), msg('m3', 's3')]
+    seedMessages(cid, messages)
+
+    // Local position is already at m3 (past s2), yet a stale pending marker for
+    // s2 lingers — e.g. set before the message loaded, then resolved by a local
+    // advance that didn't go through applyRemoteDisplayed.
+    chatStore.setState((state) => {
+      const newMeta = new Map(state.conversationMeta)
+      newMeta.set(cid, { unreadCount: 0, lastSeenMessageId: 'm3', pendingRemoteDisplayedStanzaId: 's2' })
+      const newConvs = new Map(state.conversations)
+      newConvs.set(cid, {
+        id: cid,
+        name: cid,
+        type: 'chat',
+        unreadCount: 0,
+        lastSeenMessageId: 'm3',
+        pendingRemoteDisplayedStanzaId: 's2',
+      })
+      return { conversationMeta: newMeta, conversations: newConvs }
+    })
+
+    // s2's message IS present but lastSeenMessageId is already ahead → no advance.
+    chatStore.getState().applyRemoteDisplayed(cid, 's2')
+
+    const meta = chatStore.getState().conversationMeta.get(cid)
+    expect(meta?.lastSeenMessageId).toBe('m3') // unchanged
+    expect(meta?.pendingRemoteDisplayedStanzaId).toBe(undefined) // cleared
+    // Combined conversations map kept in sync.
+    expect(chatStore.getState().conversations.get(cid)?.pendingRemoteDisplayedStanzaId).toBe(undefined)
+  })
+
   it('resolves a pending remote marker once the message arrives via MAM merge', () => {
     const cid = 'juliet@capulet.example'
 
