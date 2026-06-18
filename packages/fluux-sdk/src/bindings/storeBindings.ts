@@ -223,7 +223,11 @@ export function createStoreBindings(
 
   on('read:displayed-synced', ({ conversationId, stanzaId }) => {
     const stores = getStores()
-    stores.chat.applyRemoteDisplayed(conversationId, stanzaId)
+    if (stores.room.rooms.has(conversationId)) {
+      stores.room.applyRemoteDisplayed(conversationId, stanzaId)
+    } else {
+      stores.chat.applyRemoteDisplayed(conversationId, stanzaId)
+    }
   })
 
   on('chat:mam-loading', ({ conversationId, isLoading }) => {

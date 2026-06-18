@@ -1007,6 +1007,8 @@ export const createMockStoreRefs = (): MockStoreRefs => ({
     triggerAnimation: vi.fn(),
     mergeRoomMembers: vi.fn(),
     getRoom: vi.fn().mockReturnValue(undefined),
+    rooms: new Map(),
+    applyRemoteDisplayed: vi.fn(),
   } as unknown as MockStoreRefs['room'],
   events: {
     addSubscriptionRequest: vi.fn(),
