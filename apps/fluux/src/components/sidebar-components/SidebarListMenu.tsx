@@ -19,7 +19,7 @@ import {
   type ReactNode,
   type RefObject,
 } from 'react'
-import { useClickOutside } from '@/hooks'
+import { useClickOutside, useMenuViewportClamp } from '@/hooks'
 
 // ============================================================================
 // Types
@@ -85,6 +85,8 @@ export function SidebarListMenuProvider<T>({
   const longPressTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
   const longPressTriggered = useRef(false)
   const pendingItemRef = useRef<T | null>(null)
+  // Original (unadjusted) anchor, kept separate so re-clamps measure from the true point.
+  const clickPosition = useRef<MenuPosition>({ x: 0, y: 0 })
 
   // Close menu
   const close = useCallback(() => {
@@ -105,10 +107,14 @@ export function SidebarListMenuProvider<T>({
 
   // Open menu for an item
   const openMenu = (item: T, pos: MenuPosition) => {
+    clickPosition.current = pos
     setTargetItem(item)
     setPosition(pos)
     setIsOpen(true)
   }
+
+  // Keep the menu within the viewport once it has rendered (shared with useContextMenu).
+  useMenuViewportClamp(isOpen, menuRef, clickPosition, position, setPosition)
 
   // Create handlers for an item
   const getItemMenuProps = (item: T): ItemMenuProps => {
