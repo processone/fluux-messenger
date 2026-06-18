@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
-import { rosterStore, usePresence } from '@fluux/sdk'
+import { rosterStore, usePresence, useConnectionStatus } from '@fluux/sdk'
 import type { Conversation, Message, Room, RoomMessage } from '@fluux/sdk'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
@@ -19,6 +19,11 @@ import { formatLocalizedPreview } from '@/utils/messagePreviewText'
 import { notificationDebug } from '@/utils/notificationDebug'
 import { showWebNotification } from '@/utils/webNotification'
 import { routeNotificationTarget } from '@/utils/notificationRouting'
+import { createNotificationCoalescer } from './notificationCoalescer'
+
+/** Duration of the post-reconnect window during which offline-delivery
+ *  notifications are coalesced to one per conversation. */
+const CATCHUP_WINDOW_MS = 3000
 
 /**
  * Hook to show desktop notifications for new messages and room mentions.
@@ -39,6 +44,16 @@ export function useDesktopNotifications(): void {
   const navigateToConversationRef = useRef(navigateToConversation)
   const navigateToRoomRef = useRef(navigateToRoom)
   const presenceStatusRef = useRef(presenceStatus)
+
+  const { status } = useConnectionStatus()
+  const prevStatusRef = useRef(status)
+  const windowTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const coalescerRef = useRef(
+    createNotificationCoalescer<{ conv: Conversation; message: Message }>(),
+  )
+  const showConvNotifRef = useRef<(conv: Conversation, message: Message) => void>(
+    () => {},
+  )
 
   useEffect(() => {
     navigateToConversationRef.current = navigateToConversation
@@ -126,7 +141,9 @@ export function useDesktopNotifications(): void {
     }
 
     const senderName = message.from.split('@')[0]
-    const title = conv.name || senderName
+    const baseTitle = conv.name || senderName
+    // When a reconnect backlog collapsed into one notification, surface the count.
+    const title = conv.unreadCount > 1 ? `${baseTitle} (${conv.unreadCount})` : baseTitle
     const body = formatLocalizedPreview(message, t)
 
     notificationDebug.desktopNotification({
@@ -226,9 +243,62 @@ export function useDesktopNotifications(): void {
     }
   }
 
+  // Keep a ref to the latest dispatcher so the window-close timer is never stale.
+  useEffect(() => {
+    showConvNotifRef.current = showConversationNotification
+  })
+
+  // Open a catch-up window on each transition into 'online' (fresh connect,
+  // SM resume, or post-wake verify→online). Buffer per-conversation during the
+  // window; flush one notification per conversation when it closes. Drop the
+  // buffer if the connection leaves 'online' before flushing.
+  useEffect(() => {
+    const prev = prevStatusRef.current
+    prevStatusRef.current = status
+    const coalescer = coalescerRef.current
+
+    if (status === 'online' && prev !== 'online') {
+      coalescer.open()
+      if (windowTimerRef.current) clearTimeout(windowTimerRef.current)
+      windowTimerRef.current = setTimeout(() => {
+        windowTimerRef.current = null
+        for (const { payload } of coalescer.flush()) {
+          void showConvNotifRef.current(payload.conv, payload.message)
+        }
+      }, CATCHUP_WINDOW_MS)
+    }
+
+    if (status !== 'online' && prev === 'online') {
+      if (windowTimerRef.current) {
+        clearTimeout(windowTimerRef.current)
+        windowTimerRef.current = null
+      }
+      coalescer.drop()
+    }
+  }, [status])
+
+  // Drop any pending buffer on unmount.
+  useEffect(
+    () => () => {
+      if (windowTimerRef.current) clearTimeout(windowTimerRef.current)
+      coalescerRef.current.drop()
+    },
+    [],
+  )
+
+  // Route conversation notifications through the coalescer while the window is open.
+  const handleConversationMessage = async (conv: Conversation, message: Message) => {
+    const coalescer = coalescerRef.current
+    if (coalescer.isOpen()) {
+      coalescer.add(conv.id, { conv, message })
+      return
+    }
+    await showConversationNotification(conv, message)
+  }
+
   // Subscribe to notification events
   useNotificationEvents({
-    onConversationMessage: showConversationNotification,
+    onConversationMessage: handleConversationMessage,
     onRoomMessage: showRoomNotification,
   })
 }
