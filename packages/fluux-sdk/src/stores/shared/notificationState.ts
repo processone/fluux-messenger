@@ -58,10 +58,14 @@ export interface NotificationMessage {
   isMention?: boolean
 }
 
-/** Context about the entity's current visibility. */
+/** Context about the entity's current visibility and unread state. */
 export interface EntityContext {
   isActive: boolean
   windowVisible: boolean
+  /** Current unread count for the entity; used to decide notify-worthiness. */
+  unreadCount?: number
+  /** ID of the last message the user has seen; suppresses re-notify of seen content. */
+  lastSeenMessageId?: string
 }
 
 /** Options for message-received notification handling. */
@@ -423,16 +427,21 @@ const FRESHNESS_THRESHOLD_MS = 5 * 60 * 1000
 /**
  * Should a conversation message trigger a notification?
  *
- * Returns true for incoming, non-delayed, fresh messages when the user
- * can't see the conversation (not active, or window hidden).
+ * Notify-worthiness mirrors unread-worthiness: notify for an incoming message the
+ * user has not yet seen, when they can't currently see it (not active, or window
+ * hidden). Delivery mechanism (isDelayed) and message age are intentionally NOT
+ * discriminators — an offline/replayed message delivered on reconnect is "new to me".
+ * The unseen check (unreadCount + lastSeenMessageId) keeps MAM history backfill and
+ * re-synced duplicates silent and is self-limiting (lastSeenMessageId only advances).
  */
 export function shouldNotifyConversation(
   msg: NotificationMessage,
   ctx: EntityContext
 ): boolean {
-  if (msg.isOutgoing || msg.isDelayed) return false
-  if (Date.now() - msg.timestamp.getTime() > FRESHNESS_THRESHOLD_MS) return false
+  if (msg.isOutgoing) return false
   if (ctx.isActive && ctx.windowVisible) return false
+  if ((ctx.unreadCount ?? 0) <= 0) return false
+  if (msg.id === ctx.lastSeenMessageId) return false
   return true
 }
 
