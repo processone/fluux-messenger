@@ -46,6 +46,11 @@ export function useCachedMediaUrl(
       ? (isEncrypted ? peekEncryptedMediaCache : peekMediaCache)
       : (isEncrypted ? peekWebEncryptedMediaCache : peekWebMediaCache)
 
+    // `cancelled` only guards the setState. If an unmount races a web peek that
+    // already created a blob URL, that URL is intentionally kept: the peek
+    // records it in the media-cache index (revoked on cache reset) and a later
+    // peek of the same URL reuses it rather than creating a second — so there is
+    // no leak and nothing to revoke here.
     peek(url).then(
       result => { if (!cancelled) setState({ cachedUrl: result, isPeeking: false }) },
       () => { if (!cancelled) setState({ cachedUrl: null, isPeeking: false }) },
