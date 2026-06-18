@@ -167,13 +167,25 @@ export function onMessageReceived(
  * Scans messages to find the first unseen message (after lastSeenMessageId)
  * and sets the marker, then marks as read.
  *
- * The marker is placed at the first incoming (non-outgoing, non-delayed) message
- * after the lastSeenMessageId position.
+ * The marker is placed at the first incoming message after the lastSeenMessageId
+ * position. Whether a delayed message qualifies depends on `treatDelayedAsNew`,
+ * mirroring `onMessageReceived`:
+ * - 1:1 chats pass `true` — `isDelayed` means "delivered while offline" = new.
+ * - Rooms pass `false` (default) — `isDelayed` means "MUC history replay" = not
+ *   new, so the marker skips it (otherwise joining a room scrolls into the middle
+ *   of replayed history instead of to the bottom).
  */
 export function onActivate(
   state: EntityNotificationState,
-  messages: NotificationMessage[]
+  messages: NotificationMessage[],
+  options?: { treatDelayedAsNew?: boolean }
 ): EntityNotificationState {
+  const { treatDelayedAsNew = false } = options ?? {}
+  // A message qualifies as a "new" marker candidate when it's incoming and either
+  // we treat delayed messages as new (1:1) or it isn't a delayed/history message.
+  const isNewCandidate = (msg: NotificationMessage) =>
+    !msg.isOutgoing && (treatDelayedAsNew || !msg.isDelayed)
+
   let firstNewMessageId: string | undefined = undefined
   let updatedLastSeenMessageId = state.lastSeenMessageId
 
@@ -185,7 +197,7 @@ export function onActivate(
       // Scan forward from lastSeenMessageId to find first unseen incoming message
       for (let i = lastSeenIdx + 1; i < messages.length; i++) {
         const msg = messages[i]
-        if (!msg.isOutgoing) {
+        if (isNewCandidate(msg)) {
           firstNewMessageId = msg.id
           break
         }
@@ -207,18 +219,18 @@ export function onActivate(
 
       if (hasUsableLastReadAt) {
         const firstNew = messages.find(
-          (msg) => msg.timestamp > fallbackReadAt && !msg.isOutgoing
+          (msg) => msg.timestamp > fallbackReadAt && isNewCandidate(msg)
         )
         if (firstNew) {
           firstNewMessageId = firstNew.id
         }
       } else if (state.unreadCount > 0) {
         // No usable lastReadAt — use unreadCount to place marker at the Nth
-        // message from the end (counting only incoming, non-delayed messages).
+        // message from the end (counting only incoming new-candidate messages).
         let remaining = state.unreadCount
         for (let i = messages.length - 1; i >= 0; i--) {
           const m = messages[i]
-          if (!m.isOutgoing) {
+          if (isNewCandidate(m)) {
             remaining--
             if (remaining === 0) {
               firstNewMessageId = m.id
@@ -227,9 +239,9 @@ export function onActivate(
           }
         }
         // If we ran out of messages before exhausting unreadCount,
-        // place marker at the first incoming message.
+        // place marker at the first incoming new-candidate message.
         if (remaining > 0) {
-          const firstIncoming = messages.find((m) => !m.isOutgoing)
+          const firstIncoming = messages.find(isNewCandidate)
           if (firstIncoming) {
             firstNewMessageId = firstIncoming.id
           }
@@ -249,7 +261,7 @@ export function onActivate(
       ? state.lastReadAt
       : new Date(state.lastReadAt as unknown as string)
     const firstNew = messages.find(
-      (msg) => msg.timestamp > lastReadAt && !msg.isOutgoing
+      (msg) => msg.timestamp > lastReadAt && isNewCandidate(msg)
     )
     if (firstNew) {
       firstNewMessageId = firstNew.id
@@ -260,7 +272,7 @@ export function onActivate(
     let remaining = state.unreadCount
     for (let i = messages.length - 1; i >= 0; i--) {
       const m = messages[i]
-      if (!m.isOutgoing) {
+      if (isNewCandidate(m)) {
         remaining--
         if (remaining === 0) {
           firstNewMessageId = m.id
@@ -269,7 +281,7 @@ export function onActivate(
       }
     }
     if (remaining > 0) {
-      const firstIncoming = messages.find((m) => !m.isOutgoing)
+      const firstIncoming = messages.find(isNewCandidate)
       if (firstIncoming) {
         firstNewMessageId = firstIncoming.id
       }

@@ -3812,6 +3812,82 @@ describe('roomStore', () => {
   })
 })
 
+describe('setActiveRoom new-message marker — delayed = MUC/MAM history replay', () => {
+  // Regression guard: the marker (firstNewMessageId) drives scroll position on
+  // room open. For rooms, a delayed message is history replay (either MUC <history>
+  // for non-MAM rooms, or MAM-fetched archive — both carry isDelayed=true), NOT a
+  // new message. The marker must skip them, otherwise joining a room scrolls the
+  // user into the middle of replayed history instead of to the bottom.
+  // roomStore must call onActivate WITHOUT treatDelayedAsNew (unlike chatStore).
+  const ROOM = 'room@conference.example.com'
+
+  beforeEach(() => {
+    _resetStorageScopeForTesting()
+    roomStore.setState({
+      rooms: new Map(),
+      roomEntities: new Map(),
+      roomMeta: new Map(),
+      roomRuntime: new Map(),
+      activeRoomJid: null,
+      drafts: new Map(),
+      mamQueryStates: new Map(),
+      roomGaps: new Map(),
+    })
+    vi.clearAllMocks()
+  })
+
+  function delayedMsg(id: string, nick: string, ts: string): RoomMessage {
+    return {
+      type: 'groupchat',
+      id,
+      roomJid: ROOM,
+      from: `${ROOM}/${nick}`,
+      nick,
+      body: id,
+      timestamp: new Date(ts),
+      isOutgoing: false,
+      isDelayed: true,
+    }
+  }
+
+  function activateWith(messages: RoomMessage[], lastSeenMessageId: string, unreadCount: number) {
+    roomStore.getState().addRoom(createRoom(ROOM, { joined: true, messages, unreadCount }))
+    roomStore.setState((s) => {
+      const meta = new Map(s.roomMeta)
+      const existing = meta.get(ROOM)!
+      meta.set(ROOM, { ...existing, lastSeenMessageId })
+      return { roomMeta: meta }
+    })
+    roomStore.getState().setActiveRoom(ROOM)
+    return roomStore.getState().roomMeta.get(ROOM)?.firstNewMessageId
+  }
+
+  it('sets no marker when only delayed history follows lastSeen (MAM/MUC join)', () => {
+    const marker = activateWith(
+      [
+        createMessage('seen', ROOM, 'alice', 'seen message'),
+        delayedMsg('h-1', 'bob', '2025-01-15T10:00:00Z'),
+        delayedMsg('h-2', 'carol', '2025-01-15T10:30:00Z'),
+      ],
+      'seen',
+      2
+    )
+    expect(marker).toBeUndefined()
+  })
+
+  it('still sets the marker on a genuinely new live (non-delayed) message', () => {
+    const marker = activateWith(
+      [
+        createMessage('seen', ROOM, 'alice', 'seen message'),
+        createMessage('live', ROOM, 'bob', 'live message'), // isDelayed defaults to false
+      ],
+      'seen',
+      1
+    )
+    expect(marker).toBe('live')
+  })
+})
+
 describe('acknowledged non-anonymous rooms', () => {
   const ROOM = 'irc_%23chan@irc.example.com'
 
