@@ -92,6 +92,11 @@ export function setupMdsSideEffects(
     dirty.open()
 
     for (const { key: jid, value: stanzaId } of entries) {
+      // Skip when the node already holds exactly this stanza-id: it is the echo
+      // of a remote notify (recorded by the chat:displayed-synced subscription
+      // below) or a redundant re-enqueue. The local marker is forward-only, so
+      // re-asserting a value the node already has is always pointless.
+      if (lastKnownNodeStanzaId.get(jid) === stanzaId) continue
       try {
         await client.mds.publishDisplayed(jid, stanzaId)
         lastKnownNodeStanzaId.set(jid, stanzaId)
@@ -119,6 +124,10 @@ export function setupMdsSideEffects(
     if (nodeId) {
       const candidateIdx = indexOfStanza(conversationId, stanzaId)
       const nodeIdx = indexOfStanza(conversationId, nodeId)
+      // When nodeIdx === -1 the node's high-water message is outside the loaded
+      // window, so we can't prove the candidate is ahead — publish optimistically
+      // and rely on (a) the local marker being forward-only and (b) the next
+      // fresh-session seed re-reading the node to self-heal a rare backward move.
       if (candidateIdx !== -1 && nodeIdx !== -1 && candidateIdx <= nodeIdx) return
     }
 
@@ -173,6 +182,20 @@ export function setupMdsSideEffects(
     })()
   })
 
+  // Live remote notify: a peer device published a new read position. The
+  // storeBindings binding applies it (advancing lastSeenMessageId, which fires
+  // our conversationMeta subscription → consider()). Record the node high-water
+  // mark here so the no-regressive guard / exact-equal skip recognises the echo
+  // and we don't re-publish the exact marker we just received. Handler order
+  // within a single emit isn't guaranteed, but doPublish runs ~1500ms later by
+  // which time this value is recorded, so the exact-equal skip drops the echo.
+  const unsubscribeDisplayedSynced = client.subscribe(
+    'chat:displayed-synced',
+    ({ conversationId, stanzaId }) => {
+      lastKnownNodeStanzaId.set(getBareJid(conversationId), stanzaId)
+    }
+  )
+
   // SM resumption: server replays notifications; keep publishing enabled, no reseed.
   const unsubscribeResumed = client.on('resumed', () => {
     dirty.open()
@@ -200,6 +223,7 @@ export function setupMdsSideEffects(
   return () => {
     unsubscribeStore()
     unsubscribeOnline()
+    unsubscribeDisplayedSynced()
     unsubscribeResumed()
     unsubscribeConnection()
     dirty.drop()

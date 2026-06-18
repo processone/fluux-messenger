@@ -60,13 +60,17 @@ function seedMeta(cid: string, lastSeenMessageId?: string): void {
 
 function makeClient() {
   const handlers: Record<string, Array<(p?: unknown) => void>> = {}
+  const register = (ev: string, cb: (p?: unknown) => void) => {
+    ;(handlers[ev] ||= []).push(cb)
+    return () => {
+      handlers[ev] = (handlers[ev] || []).filter((h) => h !== cb)
+    }
+  }
   return {
-    on: (ev: string, cb: (p?: unknown) => void) => {
-      ;(handlers[ev] ||= []).push(cb)
-      return () => {
-        handlers[ev] = (handlers[ev] || []).filter((h) => h !== cb)
-      }
-    },
+    // Connection lifecycle events ('online'/'resumed') use client.on(...).
+    on: register,
+    // SDK events ('chat:displayed-synced') use client.subscribe(...).
+    subscribe: register,
     _emit: (ev: string, p?: unknown) => (handlers[ev] || []).forEach((h) => h(p)),
     mds: {
       publishDisplayed: vi.fn().mockResolvedValue(undefined),
@@ -139,6 +143,37 @@ describe('setupMdsSideEffects', () => {
     connectionStore.setState({ status: 'connecting' } as never) // disconnect
     await vi.advanceTimersByTimeAsync(5_000)
 
+    expect(client.mds.publishDisplayed).not.toHaveBeenCalled()
+    cleanup()
+  })
+
+  it('does not re-publish the echo of a live incoming remote marker', async () => {
+    const cid = 'juliet@capulet.example'
+    const client = makeClient()
+    connectionStore.setState({ status: 'online' } as never)
+
+    // Conversation already exists with a settled local read position at m1 before
+    // the side effect starts, so the fresh-session seed snapshots m1 as the last
+    // considered position (no spurious publish for the existing position).
+    seedMessages(cid, [msg('m1', 's1'), msg('m2', 's2')])
+    seedMeta(cid, 'm1')
+
+    const cleanup = setupMdsSideEffects(client as never)
+    client._emit('online')
+    await vi.runOnlyPendingTimersAsync() // let the async seed settle
+
+    // A live remote marker for s2 arrives from a peer device (PubSub emits
+    // 'chat:displayed-synced' and storeBindings calls applyRemoteDisplayed). Apply
+    // the store advance FIRST so the conversationMeta subscription → consider()
+    // enqueues s2 with no node value recorded yet (worst-case handler order). Only
+    // THEN record the node high-water mark. This exercises the doPublish exact-equal
+    // skip specifically — consider() already enqueued before the node value existed.
+    chatStore.getState().applyRemoteDisplayed(cid, 's2')
+    client._emit('chat:displayed-synced', { conversationId: cid, stanzaId: 's2' })
+
+    await vi.advanceTimersByTimeAsync(2_000)
+
+    // The marker s2 is already on the node (it is the echo) → must NOT republish.
     expect(client.mds.publishDisplayed).not.toHaveBeenCalled()
     cleanup()
   })
