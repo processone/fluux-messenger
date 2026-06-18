@@ -42,7 +42,7 @@ vi.mock('@tauri-apps/plugin-http', () => ({
   fetch: (url: string, opts: unknown) => mockTauriFetch(url, opts),
 }))
 
-import { resolveMediaUrl, clearMediaCache, getMediaCacheSize, resetMediaUrlCache } from './mediaCache'
+import { resolveMediaUrl, clearMediaCache, getMediaCacheSize, resetMediaUrlCache, peekMediaCache, peekEncryptedMediaCache, peekWebMediaCache, peekWebEncryptedMediaCache } from './mediaCache'
 
 describe('mediaCache', () => {
   beforeEach(() => {
@@ -212,5 +212,123 @@ describe('mediaCache', () => {
       const size = await getMediaCacheSize()
       expect(size).toBe(150000)
     })
+  })
+})
+
+describe('peekMediaCache (Tauri, network-free)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    resetMediaUrlCache()
+    mockIsTauri.mockReturnValue(true)
+    mockAppCacheDir.mockResolvedValue('/cache/com.processone.fluux')
+    mockJoin.mockImplementation((...args: string[]) => Promise.resolve(args.join('/')))
+    mockMkdir.mockResolvedValue(undefined)
+    mockConvertFileSrc.mockImplementation((p: string) => `https://asset.localhost/${p}`)
+  })
+
+  it('returns null on a miss without fetching', async () => {
+    mockExists.mockResolvedValue(false)
+    const result = await peekMediaCache('https://upload.example.com/a.png')
+    expect(result).toBeNull()
+    expect(mockTauriFetch).not.toHaveBeenCalled()
+  })
+
+  it('returns the asset URL on a filesystem hit without fetching', async () => {
+    mockExists.mockResolvedValue(true)
+    const result = await peekMediaCache('https://upload.example.com/a.png')
+    expect(result).toMatch(/^https:\/\/asset\.localhost\//)
+    expect(mockTauriFetch).not.toHaveBeenCalled()
+  })
+})
+
+describe('peekEncryptedMediaCache (Tauri, network-free)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    resetMediaUrlCache()
+    mockIsTauri.mockReturnValue(true)
+    mockAppCacheDir.mockResolvedValue('/cache/com.processone.fluux')
+    mockJoin.mockImplementation((...args: string[]) => Promise.resolve(args.join('/')))
+    mockMkdir.mockResolvedValue(undefined)
+    mockConvertFileSrc.mockImplementation((p: string) => `https://asset.localhost/${p}`)
+  })
+
+  it('returns the decrypted asset URL on a hit, with no fetch and no key', async () => {
+    mockExists.mockResolvedValue(true)
+    const result = await peekEncryptedMediaCache('https://upload.example.com/enc.bin')
+    expect(result).toMatch(/^https:\/\/asset\.localhost\/.*\.dec$/)
+    expect(mockTauriFetch).not.toHaveBeenCalled()
+  })
+
+  it('returns null on a miss', async () => {
+    mockExists.mockResolvedValue(false)
+    expect(await peekEncryptedMediaCache('https://upload.example.com/enc.bin')).toBeNull()
+  })
+})
+
+describe('peekWebMediaCache (web Cache API, network-free)', () => {
+  let matchResult: Response | undefined
+  const fetchSpy = vi.fn()
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    resetMediaUrlCache()
+    mockIsTauri.mockReturnValue(false)
+    matchResult = undefined
+    vi.stubGlobal('caches', {
+      open: async () => ({ match: async () => matchResult }),
+    })
+    vi.stubGlobal('fetch', fetchSpy)
+  })
+
+  it('returns null on a miss without fetching', async () => {
+    matchResult = undefined
+    expect(await peekWebMediaCache('https://x/a.png')).toBeNull()
+    expect(fetchSpy).not.toHaveBeenCalled()
+  })
+
+  it('returns a blob URL on a Cache API hit without fetching', async () => {
+    matchResult = new Response(new Blob([new Uint8Array([1, 2, 3])], { type: 'image/png' }))
+    const result = await peekWebMediaCache('https://x/a.png')
+    expect(result).toMatch(/^blob:/)
+    expect(fetchSpy).not.toHaveBeenCalled()
+  })
+
+  it('returns null when the Cache API is unavailable', async () => {
+    vi.stubGlobal('caches', undefined)
+    expect(await peekWebMediaCache('https://x/a.png')).toBeNull()
+  })
+})
+
+describe('peekWebEncryptedMediaCache (web Cache API, encrypted, network-free)', () => {
+  let matchResult: Response | undefined
+  const fetchSpy = vi.fn()
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    resetMediaUrlCache()
+    mockIsTauri.mockReturnValue(false)
+    matchResult = undefined
+    vi.stubGlobal('caches', {
+      open: async () => ({ match: async () => matchResult }),
+    })
+    vi.stubGlobal('fetch', fetchSpy)
+  })
+
+  it('returns null on a miss without fetching', async () => {
+    matchResult = undefined
+    expect(await peekWebEncryptedMediaCache('https://x/enc.bin')).toBeNull()
+    expect(fetchSpy).not.toHaveBeenCalled()
+  })
+
+  it('returns a blob URL on a Cache API hit without fetching or decryption', async () => {
+    matchResult = new Response(new Blob([new Uint8Array([4, 5, 6])], { type: 'application/octet-stream' }))
+    const result = await peekWebEncryptedMediaCache('https://x/enc.bin')
+    expect(result).toMatch(/^blob:/)
+    expect(fetchSpy).not.toHaveBeenCalled()
+  })
+
+  it('returns null when the Cache API is unavailable', async () => {
+    vi.stubGlobal('caches', undefined)
+    expect(await peekWebEncryptedMediaCache('https://x/enc.bin')).toBeNull()
   })
 })

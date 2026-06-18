@@ -6,7 +6,10 @@ import { __resetApprovedMediaUrlsForTest } from '@/utils/mediaAutoload'
 import type { FileAttachment } from '@fluux/sdk'
 
 // Spy created via vi.hoisted so it exists when the hoisted vi.mock factory runs.
-const { useAttachmentUrlSpy } = vi.hoisted(() => ({ useAttachmentUrlSpy: vi.fn() }))
+const { useAttachmentUrlSpy, useCachedMediaUrlSpy } = vi.hoisted(() => ({
+  useAttachmentUrlSpy: vi.fn(),
+  useCachedMediaUrlSpy: vi.fn(),
+}))
 
 // Mock react-i18next
 vi.mock('react-i18next', () => ({
@@ -28,6 +31,8 @@ vi.mock('@/hooks', () => ({
   useProxiedUrl: (url: string | undefined, enc: unknown, enabled: boolean) => {
     return useAttachmentUrlSpy(url, enc, enabled)
   },
+  useCachedMediaUrl: (url: string | undefined, enc: unknown, enabled: boolean) =>
+    useCachedMediaUrlSpy(url, enc, enabled),
   formatBytes: (bytes: number) => `${bytes} B`,
 }))
 
@@ -45,6 +50,7 @@ describe('FileAttachments', () => {
       isLoading: false,
       error: null,
     })
+    useCachedMediaUrlSpy.mockReturnValue({ cachedUrl: null, isPeeking: false })
   })
 
   describe('ImageAttachment', () => {
@@ -288,6 +294,7 @@ describe('ImageAttachment deferral', () => {
       isLoading: false,
       error: null,
     }))
+    useCachedMediaUrlSpy.mockReturnValue({ cachedUrl: null, isPeeking: false })
   })
 
   it('defers (placeholder, no fetch) when autoLoad is false', () => {
@@ -316,5 +323,64 @@ describe('ImageAttachment deferral', () => {
     render(<ImageAttachment attachment={deferralImageAttachment} />)
     expect(screen.queryByText('chat.loadImage')).not.toBeInTheDocument()
     expect(screen.getByRole('img')).toBeInTheDocument()
+  })
+})
+
+describe('ImageAttachment cached-while-deferred', () => {
+  const attachment = { url: 'https://x/a.jpg', name: 'a.jpg', mediaType: 'image/jpeg', size: 1234, width: 800, height: 600 }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    __resetApprovedMediaUrlsForTest()
+    // Deferred: the consent-gated fetch path returns nothing.
+    useAttachmentUrlSpy.mockImplementation((_u: string | undefined, _e: unknown, enabled: boolean) => ({
+      url: enabled ? 'blob:fetched' : null,
+      isLoading: false,
+      error: null,
+    }))
+  })
+
+  it('renders the image from cache without entering the fetch path', () => {
+    useCachedMediaUrlSpy.mockReturnValue({ cachedUrl: 'blob:cached', isPeeking: false })
+    render(
+      <MediaAutoloadProvider autoLoad={false}>
+        <ImageAttachment attachment={attachment} />
+      </MediaAutoloadProvider>,
+    )
+    const img = screen.getByRole('img')
+    expect(img).toHaveAttribute('src', 'blob:cached')
+    expect(screen.queryByText('chat.loadImage')).not.toBeInTheDocument()
+    // Fetch path must be disabled while displaying from cache.
+    expect(useAttachmentUrlSpy).toHaveBeenLastCalledWith('https://x/a.jpg', undefined, false)
+  })
+
+  it('shows the placeholder on a cache miss', () => {
+    useCachedMediaUrlSpy.mockReturnValue({ cachedUrl: null, isPeeking: false })
+    render(
+      <MediaAutoloadProvider autoLoad={false}>
+        <ImageAttachment attachment={attachment} />
+      </MediaAutoloadProvider>,
+    )
+    expect(screen.getByText('chat.loadImage')).toBeInTheDocument()
+    expect(screen.queryByRole('img')).not.toBeInTheDocument()
+  })
+
+  it('shows neither image nor placeholder while peeking', () => {
+    useCachedMediaUrlSpy.mockReturnValue({ cachedUrl: null, isPeeking: true })
+    render(
+      <MediaAutoloadProvider autoLoad={false}>
+        <ImageAttachment attachment={attachment} />
+      </MediaAutoloadProvider>,
+    )
+    expect(screen.queryByText('chat.loadImage')).not.toBeInTheDocument()
+    expect(screen.queryByRole('img')).not.toBeInTheDocument()
+  })
+
+  it('peek is disabled (not called with enabled) once the user consents', () => {
+    useCachedMediaUrlSpy.mockReturnValue({ cachedUrl: null, isPeeking: false })
+    render(<ImageAttachment attachment={attachment} />) // no provider → autoLoad true
+    expect(screen.getByRole('img')).toHaveAttribute('src', 'blob:fetched')
+    // Peek must be disabled when the fetch path is active.
+    expect(useCachedMediaUrlSpy).toHaveBeenLastCalledWith('https://x/a.jpg', undefined, false)
   })
 })
