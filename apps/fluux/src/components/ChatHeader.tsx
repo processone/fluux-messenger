@@ -15,7 +15,8 @@ import { Tooltip } from './Tooltip'
 import { Archive, ArchiveRestore, ArrowLeft, Clock, Hash, Lock, LockOpen, Loader2, Search, ShieldAlert, ShieldCheck, ShieldOff, ShieldX, User } from 'lucide-react'
 import type { ConversationEncryptionState } from '@/hooks/useConversationEncryptionState'
 import { useWebUnlockDialogStore } from '@/stores/webUnlockDialogStore'
-import { OverflowMenu, type OverflowMenuItem } from './OverflowMenu'
+import { HeaderOverflowKebab, type OverflowEntry } from './header/HeaderOverflowKebab'
+import { inlineClass, kebabClass } from './header/headerOverflow'
 
 export interface ChatHeaderProps {
   name: string
@@ -65,22 +66,25 @@ export function ChatHeader({
   const contactTime = useContactTime(!isGroupChat ? jid : null)
   useLastActivity(!isGroupChat ? jid : null)
 
-  // Overflow (kebab) menu — 1:1 chats only. Surfaces contact info and the
-  // archive toggle, which otherwise live behind the name tap / sidebar.
-  const menuItems: OverflowMenuItem[] = []
+  // 1:1 overflow entries: search (collapses on narrow widths) + profile/archive
+  // (always in the kebab). Group chats expose none of these.
+  const overflowEntries: OverflowEntry[] = []
+  if (onSearchInConversation) {
+    overflowEntries.push({ kind: 'action', key: 'search', label: t('chat.searchInConversation', 'Search in conversation'), icon: Search, onSelect: onSearchInConversation, kebabClassName: kebabClass('search') })
+  }
   if (!isGroupChat) {
     if (onShowProfile) {
-      menuItems.push({ key: 'profile', label: t('sidebar.viewProfile'), icon: User, onClick: onShowProfile })
+      overflowEntries.push({ kind: 'action', key: 'profile', label: t('sidebar.viewProfile'), icon: User, onSelect: onShowProfile })
     }
     if (isArchived && onUnarchive) {
-      menuItems.push({ key: 'unarchive', label: t('conversations.unarchive'), icon: ArchiveRestore, onClick: onUnarchive })
+      overflowEntries.push({ kind: 'action', key: 'unarchive', label: t('conversations.unarchive'), icon: ArchiveRestore, onSelect: onUnarchive })
     } else if (!isArchived && onArchive) {
-      menuItems.push({ key: 'archive', label: t('conversations.archive'), icon: Archive, onClick: onArchive })
+      overflowEntries.push({ kind: 'action', key: 'archive', label: t('conversations.archive'), icon: Archive, onSelect: onArchive })
     }
   }
 
   return (
-    <header className={`h-14 ${titleBarClass} px-4 flex items-center border-b border-fluux-bg shadow-sm gap-3`} {...dragRegionProps}>
+    <header className={`@container h-14 ${titleBarClass} px-4 flex items-center border-b border-fluux-bg shadow-sm gap-3`} {...dragRegionProps}>
       {/* Back button - mobile only */}
       {onBack && (
         <button
@@ -163,27 +167,22 @@ export function ChatHeader({
         />
       )}
 
-      {/* Search in conversation */}
+      {/* Search in conversation — inline copy (collapses on narrow widths) */}
       {onSearchInConversation && (
-        <button
-          onClick={onSearchInConversation}
-          className="p-1.5 rounded hover:bg-fluux-hover text-fluux-muted hover:text-fluux-text transition-colors tap-target"
-          aria-label={t('chat.searchInConversation', 'Search in conversation')}
-          title={t('chat.searchInConversation', 'Search in conversation')}
-        >
-          <Search className="size-4" />
-        </button>
+        <div className={inlineClass('search')}>
+          <button
+            onClick={onSearchInConversation}
+            className="p-1.5 rounded hover:bg-fluux-hover text-fluux-muted hover:text-fluux-text transition-colors tap-target"
+            aria-label={t('chat.searchInConversation', 'Search in conversation')}
+            title={t('chat.searchInConversation', 'Search in conversation')}
+          >
+            <Search className="size-4" />
+          </button>
+        </div>
       )}
 
-      {/* Overflow (kebab) menu — 1:1 chats only */}
-      {menuItems.length > 0 && (
-        <OverflowMenu
-          ariaLabel={t('contacts.actionsMenu')}
-          items={menuItems}
-          buttonClassName="p-1.5 rounded hover:bg-fluux-hover text-fluux-muted hover:text-fluux-text transition-colors tap-target"
-          iconClassName="size-4"
-        />
-      )}
+      {/* Overflow (kebab) menu */}
+      <HeaderOverflowKebab ariaLabel={t('contacts.actionsMenu')} entries={overflowEntries} />
     </header>
   )
 }
