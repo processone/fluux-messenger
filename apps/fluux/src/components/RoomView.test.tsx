@@ -290,6 +290,11 @@ vi.mock('@fluux/sdk/react', () => ({
 // Mock app hooks
 vi.mock('@/hooks', () => ({
   useClickOutside: () => {},
+  useAnchoredMenu: () => ({
+    triggerRef: { current: null },
+    menuRef: { current: null },
+    position: { x: 0, y: 0 },
+  }),
   useMentionAutocomplete: () => ({
     state: {
       isActive: false,
