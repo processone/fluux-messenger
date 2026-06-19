@@ -398,6 +398,10 @@ vi.mock('@/hooks/useRoomJoinWarning', () => ({
   useRoomJoinWarning: () => ({ confirmJoin: () => Promise.resolve(true), warningDialog: null }),
 }))
 
+vi.mock('@/hooks/useHasHover', () => ({
+  useHasHover: () => true,
+}))
+
 // Mock utils
 vi.mock('@/utils/presence', () => ({
   getTranslatedShowText: () => 'Online',
@@ -476,6 +480,8 @@ vi.mock('lucide-react', () => ({
   Copy: () => <span data-testid="icon-copy">Copy</span>,
   X: () => <span data-testid="icon-x">X</span>,
   ChevronRight: () => <span data-testid="icon-chevron-right">ChevronRight</span>,
+  ChevronLeft: () => <span data-testid="icon-chevron-left">ChevronLeft</span>,
+  MoreVertical: () => <span data-testid="icon-more-vertical">MoreVertical</span>,
   Shield: () => <span data-testid="icon-shield">Shield</span>,
   Crown: () => <span data-testid="icon-crown">Crown</span>,
   UserCheck: () => <span data-testid="icon-user-check">UserCheck</span>,
