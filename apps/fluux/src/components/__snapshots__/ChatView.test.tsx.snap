@@ -8,7 +8,7 @@ exports[`ChatView > Snapshots > should match snapshot with messages 1`] = `
     class="flex flex-col h-full min-h-0 relative"
   >
     <header
-      class="h-14  px-4 flex items-center border-b border-fluux-bg shadow-sm gap-3"
+      class="@container h-14  px-4 flex items-center border-b border-fluux-bg shadow-sm gap-3"
     >
       <div
         data-testid="avatar"
@@ -33,22 +33,24 @@ exports[`ChatView > Snapshots > should match snapshot with messages 1`] = `
           </p>
         </div>
       </div>
-      <div
-        class="relative"
-      >
-        <button
-          aria-expanded="false"
-          aria-haspopup="menu"
-          aria-label="contacts.actionsMenu"
-          class="p-1.5 rounded hover:bg-fluux-hover text-fluux-muted hover:text-fluux-text transition-colors tap-target"
-          type="button"
+      <div>
+        <div
+          class="relative"
         >
-          <span
-            data-testid="icon-more-vertical"
+          <button
+            aria-expanded="false"
+            aria-haspopup="menu"
+            aria-label="contacts.actionsMenu"
+            class="p-1.5 rounded hover:bg-fluux-hover text-fluux-muted hover:text-fluux-text transition-colors tap-target"
+            type="button"
           >
-            More
-          </span>
-        </button>
+            <span
+              data-testid="icon-more-vertical"
+            >
+              More
+            </span>
+          </button>
+        </div>
       </div>
     </header>
     <div
@@ -468,7 +470,7 @@ exports[`ChatView > Snapshots > should match snapshot with typing indicator 1`] 
     class="flex flex-col h-full min-h-0 relative"
   >
     <header
-      class="h-14  px-4 flex items-center border-b border-fluux-bg shadow-sm gap-3"
+      class="@container h-14  px-4 flex items-center border-b border-fluux-bg shadow-sm gap-3"
     >
       <div
         data-testid="avatar"
@@ -493,22 +495,24 @@ exports[`ChatView > Snapshots > should match snapshot with typing indicator 1`] 
           </p>
         </div>
       </div>
-      <div
-        class="relative"
-      >
-        <button
-          aria-expanded="false"
-          aria-haspopup="menu"
-          aria-label="contacts.actionsMenu"
-          class="p-1.5 rounded hover:bg-fluux-hover text-fluux-muted hover:text-fluux-text transition-colors tap-target"
-          type="button"
+      <div>
+        <div
+          class="relative"
         >
-          <span
-            data-testid="icon-more-vertical"
+          <button
+            aria-expanded="false"
+            aria-haspopup="menu"
+            aria-label="contacts.actionsMenu"
+            class="p-1.5 rounded hover:bg-fluux-hover text-fluux-muted hover:text-fluux-text transition-colors tap-target"
+            type="button"
           >
-            More
-          </span>
-        </button>
+            <span
+              data-testid="icon-more-vertical"
+            >
+              More
+            </span>
+          </button>
+        </div>
       </div>
     </header>
     <div
