@@ -60,6 +60,9 @@ export function setupMdsSideEffects(
   // so a room's marker would otherwise route to chat and be dropped. We stash it
   // here and re-apply it when roomStore.rooms gains the JID (self-heal).
   const unroutedSeedMarkers = new Map<string, string>()
+  // Live conversation/room JIDs, to detect user deletes (retraction). Maintained
+  // while disarmed; the removed delta is retracted only while armed (syncEnabled).
+  let trackedJids = new Set<string>()
 
   /** Is this JID a known room (bookmarked or joined)? Routes accessors per-store. */
   function isRoom(jid: string): boolean {
@@ -159,6 +162,52 @@ export function setupMdsSideEffects(
     schedulePublish()
   }
 
+  /** Current live set: 1:1 conversation entities ∪ known rooms. */
+  function liveJids(): Set<string> {
+    const s = new Set<string>()
+    for (const jid of chatStore.getState().conversationEntities.keys()) s.add(jid)
+    for (const jid of roomStore.getState().rooms.keys()) s.add(jid)
+    return s
+  }
+
+  /** Forget a JID's in-memory publisher state so a retract/recreate is clean. */
+  function evictJid(jid: string): void {
+    lastKnownNodeStanzaId.delete(jid)
+    lastConsideredSeenId.delete(jid)
+    unroutedSeedMarkers.delete(jid)
+    dirty.delete(jid)
+  }
+
+  /**
+   * Detect user deletes and retract their MDS markers. Armed only while online
+   * and synced; a wholesale clear (logout/reset) is treated as teardown and
+   * retracts nothing.
+   */
+  function reconcileDeletions(): void {
+    const current = liveJids()
+
+    if (!syncEnabled || connectionStore.getState().status !== 'online') {
+      trackedJids = current // keep baseline synced while disarmed; never retract
+      return
+    }
+    // Wholesale clear (logout/reset/account switch): MANY entities vanish in one
+    // tick while still online+synced (e.g. chatStore.reset()). Never mass-retract.
+    // A single entity going to empty is a genuine delete of the last conversation
+    // (the size-1 baseline), so the guard requires the baseline to have held >1 —
+    // sequential one-at-a-time deletes each still retract.
+    if (current.size === 0 && trackedJids.size > 1) {
+      trackedJids = current
+      return
+    }
+    for (const jid of trackedJids) {
+      if (!current.has(jid)) {
+        evictJid(jid)
+        void client.mds.retractDisplayed(jid) // best-effort
+      }
+    }
+    trackedJids = current
+  }
+
   // Watch conversationMeta for read-position changes. On any change, re-consider
   // every conversation; consider() de-dupes via lastConsideredSeenId so only
   // actual advances enqueue a publish.
@@ -210,6 +259,19 @@ export function setupMdsSideEffects(
     }
   )
 
+  // Detect user deletes (a JID leaving the live set) and retract its marker.
+  // Separate from the seed-drain rooms subscription above: distinct concern,
+  // both firing on a `rooms` change is fine. reconcileDeletions self-guards
+  // (disarmed → only re-syncs the baseline; wholesale clear → retracts nothing).
+  const unsubscribeChatEntities = chatStore.subscribe(
+    (state) => state.conversationEntities,
+    () => reconcileDeletions()
+  )
+  const unsubscribeRoomEntities = roomStore.subscribe(
+    (state) => state.rooms,
+    () => reconcileDeletions()
+  )
+
   // Fresh session: seed from the node, then enable publishing. Publishing stays
   // disabled for the whole async seed so the seeded positions aren't republished.
   const unsubscribeOnline = client.on('online', () => {
@@ -258,6 +320,9 @@ export function setupMdsSideEffects(
       }
 
       syncEnabled = true
+      // Rebuild the delete-detection baseline to the current live set so the
+      // fresh-session population is never seen as deletions.
+      trackedJids = liveJids()
       logInfo('MDS: seeded read positions and enabled publishing')
     })()
   })
@@ -280,6 +345,9 @@ export function setupMdsSideEffects(
   const unsubscribeResumed = client.on('resumed', () => {
     dirty.open()
     syncEnabled = true
+    // Rebuild the delete-detection baseline to the current live set (mirrors the
+    // fresh-session handler) so a resume's known entities aren't seen as deletes.
+    trackedJids = liveJids()
   })
 
   // On disconnect: DROP pending work and cancel the timer. localStorage is the
@@ -290,6 +358,8 @@ export function setupMdsSideEffects(
     (status) => {
       if (status !== 'online' && previousStatus === 'online') {
         syncEnabled = false
+        // Clear the delete-detection baseline: a teardown is not a delete.
+        trackedJids = new Set()
         dirty.drop()
         unroutedSeedMarkers.clear()
         if (debounceTimer) {
@@ -305,6 +375,8 @@ export function setupMdsSideEffects(
     unsubscribeStore()
     unsubscribeRoomStore()
     unsubscribeRoomsSeedDrain()
+    unsubscribeChatEntities()
+    unsubscribeRoomEntities()
     unsubscribeOnline()
     unsubscribeDisplayedSynced()
     unsubscribeResumed()

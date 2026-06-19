@@ -122,8 +122,14 @@ function makeClient() {
     mds: {
       publishDisplayed: vi.fn().mockResolvedValue(undefined),
       fetchAllDisplayed: vi.fn().mockResolvedValue([]),
+      retractDisplayed: vi.fn().mockResolvedValue(undefined),
     },
   }
+}
+
+/** Add a 1:1 conversation entity via the real addConversation store action. */
+function addConversation(id: string): void {
+  chatStore.getState().addConversation({ id, name: id, type: 'chat', unreadCount: 0 })
 }
 
 describe('setupMdsSideEffects', () => {
@@ -325,6 +331,57 @@ describe('setupMdsSideEffects', () => {
 
     // s2 is already on the node (it is the echo) → must NOT republish.
     expect(client.mds.publishDisplayed).not.toHaveBeenCalled()
+    cleanup()
+  })
+
+  it('retracts the MDS marker when a conversation is deleted while online+synced', async () => {
+    const cid = 'juliet@capulet.example'
+    const client = makeClient()
+    connectionStore.setState({ status: 'online' } as never)
+    const cleanup = setupMdsSideEffects(client as never)
+    client._emit('online')
+    await vi.runOnlyPendingTimersAsync() // seed completes → syncEnabled true, baseline built
+
+    // a conversation exists (in conversationEntities), then is deleted
+    addConversation(cid)
+    await vi.advanceTimersByTimeAsync(0)
+    chatStore.getState().deleteConversation(cid)
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(client.mds.retractDisplayed).toHaveBeenCalledWith(cid)
+    cleanup()
+  })
+
+  it('does NOT retract on a wholesale clear (logout/reset)', async () => {
+    const client = makeClient()
+    connectionStore.setState({ status: 'online' } as never)
+    const cleanup = setupMdsSideEffects(client as never)
+    client._emit('online')
+    await vi.runOnlyPendingTimersAsync()
+
+    addConversation('a@x')
+    addConversation('b@x')
+    await vi.advanceTimersByTimeAsync(0)
+
+    chatStore.getState().reset() // mass clear
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(client.mds.retractDisplayed).not.toHaveBeenCalled()
+    cleanup()
+  })
+
+  it('does NOT retract while offline or before sync is enabled', async () => {
+    const cid = 'c@x'
+    const client = makeClient()
+    connectionStore.setState({ status: 'connecting' } as never) // not online
+    const cleanup = setupMdsSideEffects(client as never)
+
+    addConversation(cid)
+    await vi.advanceTimersByTimeAsync(0)
+    chatStore.getState().deleteConversation(cid)
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(client.mds.retractDisplayed).not.toHaveBeenCalled()
     cleanup()
   })
 })
