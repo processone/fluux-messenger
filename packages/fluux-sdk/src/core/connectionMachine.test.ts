@@ -40,6 +40,14 @@ describe('connectionMachine', () => {
       expect(context.lastError).toBeNull()
       actor.stop()
     })
+
+    it('should default displayAsleep to false and smResumeWindowMs to SM_SESSION_TIMEOUT_MS', () => {
+      const actor = createActor(connectionMachine).start()
+      const { context } = actor.getSnapshot()
+      expect(context.displayAsleep).toBe(false)
+      expect(context.smResumeWindowMs).toBe(SM_SESSION_TIMEOUT_MS)
+      actor.stop()
+    })
   })
 
   describe('happy path: idle → connecting → connected.healthy', () => {
@@ -1203,6 +1211,8 @@ describe('connectionMachine', () => {
           smResumeViable: true,
           sleepStartTime: null,
           retryInitialFailure: false,
+          displayAsleep: false,
+          smResumeWindowMs: SM_SESSION_TIMEOUT_MS,
         }
         const info = getReconnectInfoFromContext(context)
         expect(info.attempt).toBe(3)
@@ -1219,6 +1229,8 @@ describe('connectionMachine', () => {
           smResumeViable: true,
           sleepStartTime: null,
           retryInitialFailure: false,
+          displayAsleep: false,
+          smResumeWindowMs: SM_SESSION_TIMEOUT_MS,
         }
         const info = getReconnectInfoFromContext(context)
         expect(info.attempt).toBe(0)

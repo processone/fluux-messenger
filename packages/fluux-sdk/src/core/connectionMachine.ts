@@ -133,6 +133,12 @@ export interface ConnectionMachineContext {
    *  known-good session (e.g., page-reload auto-reconnect). Reset on
    *  DISCONNECT and on entry to connected/terminal states. */
   retryInitialFailure: boolean
+  /** When true, the primary display is off (asleep). Reconnect backoff is held
+   *  in reconnecting.paused — no timer is armed — until DISPLAY_ACTIVE arrives. */
+  displayAsleep: boolean
+  /** SM resume window in ms. Defaults to SM_SESSION_TIMEOUT_MS; overridden by the
+   *  server's <enabled max> value (XEP-0198 §3) via the SM_ENABLED event. */
+  smResumeWindowMs: number
 }
 
 /**
@@ -313,6 +319,8 @@ export const connectionMachine = setup({
     smResumeViable: true,
     sleepStartTime: null,
     retryInitialFailure: false,
+    displayAsleep: false,
+    smResumeWindowMs: SM_SESSION_TIMEOUT_MS,
   },
   initial: 'idle',
   // Top-level event handlers apply to all states.
