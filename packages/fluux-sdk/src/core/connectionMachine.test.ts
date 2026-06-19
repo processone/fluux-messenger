@@ -564,6 +564,27 @@ describe('connectionMachine', () => {
     })
   })
 
+  describe('SM_ENABLED (server resume window)', () => {
+    it('should set smResumeWindowMs from the server max at top level', () => {
+      const actor = createActor(connectionMachine).start()
+      actor.send({ type: 'CONNECT' })
+      actor.send({ type: 'CONNECTION_SUCCESS' })
+      // ejabberd default 300s
+      actor.send({ type: 'SM_ENABLED', maxMs: 300_000 })
+      expect(actor.getSnapshot().context.smResumeWindowMs).toBe(300_000)
+      actor.stop()
+    })
+
+    it('should not transition state on SM_ENABLED', () => {
+      const actor = createActor(connectionMachine).start()
+      actor.send({ type: 'CONNECT' })
+      actor.send({ type: 'CONNECTION_SUCCESS' })
+      actor.send({ type: 'SM_ENABLED', maxMs: 300_000 })
+      expect(actor.getSnapshot().value).toEqual({ connected: 'healthy' })
+      actor.stop()
+    })
+  })
+
   describe('terminal states', () => {
     describe('resource conflict', () => {
       it('should transition from connected to terminal.conflict', () => {

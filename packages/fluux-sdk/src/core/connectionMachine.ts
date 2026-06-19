@@ -105,6 +105,9 @@ export type ConnectionMachineEvent =
   | { type: 'CANCEL_RECONNECT' }
   | { type: 'TRIGGER_RECONNECT' }
   | { type: 'SET_RETRY_INITIAL'; retry: boolean }
+  | { type: 'DISPLAY_ACTIVE' }
+  | { type: 'DISPLAY_INACTIVE' }
+  | { type: 'SM_ENABLED'; maxMs: number }
 
 /**
  * Context (extended state) for the connection machine.
@@ -280,6 +283,14 @@ export const connectionMachine = setup({
     markSmResumeNotViable: assign({
       smResumeViable: false,
     }),
+
+    // Capture the server-advertised SM resume window (XEP-0198 <enabled max>).
+    setSmResumeWindow: assign(({ event }) => {
+      if (event.type === 'SM_ENABLED') {
+        return { smResumeWindowMs: event.maxMs }
+      }
+      return {}
+    }),
   },
   guards: {
     // Did the sleep duration exceed SM session timeout?
@@ -329,6 +340,9 @@ export const connectionMachine = setup({
   on: {
     SET_RETRY_INITIAL: {
       actions: 'setRetryInitialFailure',
+    },
+    SM_ENABLED: {
+      actions: 'setSmResumeWindow',
     },
   },
   states: {
