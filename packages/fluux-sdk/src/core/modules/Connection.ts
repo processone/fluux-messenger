@@ -2335,6 +2335,22 @@ export class Connection extends BaseModule {
    */
   private async attemptReconnect(): Promise<void> {
     logInfo('attemptReconnect: starting')
+
+    // Single systemic reconnect funnel gate (spec change #5). Every reconnect
+    // entry — backoff `after`, the display-active/wake kick, and dead-socket
+    // recovery — reaches here via reconnecting.attempting. When the app says
+    // auto-reconnect is not desired (e.g. post-logout), tear down any in-flight
+    // client and land in `disconnected` (a clean spinner-exit state) instead of
+    // opening a connection. No machine context flag — the regression-prone
+    // XState machine is untouched by this gate.
+    if (!this.shouldAutoReconnect()) {
+      logInfo('attemptReconnect: shouldAutoReconnect() === false, aborting and disconnecting')
+      this.stores.console.addEvent('Reconnect suppressed: auto-reconnect not desired', 'connection')
+      this.cleanupClient()
+      this.sendMachineEvent({ type: 'DISCONNECT' }, 'attemptReconnect:not-desired')
+      return
+    }
+
     this.stores.console.addEvent(
       `Reconnect attempt starting (state=${JSON.stringify(this.getMachineState())})`,
       'connection'

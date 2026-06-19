@@ -4210,6 +4210,69 @@ describe('XMPPClient Connection', () => {
         allowed = false
         expect((client.connection as any).shouldAutoReconnect()).toBe(false)
       })
+
+      it('attemptReconnect with shouldAutoReconnect()===false creates no client and drives the machine to disconnected', async () => {
+        // Use an isolated mock client instance + stores so the disconnect event
+        // does not cross-talk with the outer `xmppClient` (from beforeEach),
+        // which shares the module-level mockXmppClientInstance and would
+        // otherwise run its own (default-allowed) reconnect attempt against this
+        // same socket close and create a phantom client.
+        let allowed = true
+        const ownInstance = createMockXmppClient()
+        mockClientFactory._setInstance(ownInstance)
+        const client = new XMPPClient({ debug: false, shouldAutoReconnect: () => allowed })
+        client.bindStores(createMockStores())
+
+        const p = client.connect({
+          jid: 'user@example.com',
+          password: 'secret',
+          server: 'example.com',
+          skipDiscovery: true,
+        })
+        await vi.advanceTimersByTimeAsync(0)
+        ownInstance._emit('online')
+        await p
+
+        // Deny further reconnects, then kill the socket.
+        allowed = false
+        mockClientFactory.mockClear()
+        mockClientFactory._setInstance(ownInstance)
+        ownInstance._emit('disconnect', { clean: false })
+        // SOCKET_DIED → reconnecting.waiting → (after) attempting → attemptReconnect gate
+        await vi.advanceTimersByTimeAsync(2000)
+
+        // No new client created — the gate short-circuited before createXmppClient.
+        expect(mockClientFactory).not.toHaveBeenCalled()
+        // Machine landed in disconnected (clean spinner-exit state).
+        expect((client.connection as any).getMachineState()).toBe('disconnected')
+
+        client.cancelReconnect()
+      })
+
+      it('attemptReconnect with shouldAutoReconnect()===true proceeds to create a client', async () => {
+        const ownInstance = createMockXmppClient()
+        mockClientFactory._setInstance(ownInstance)
+        const client = new XMPPClient({ debug: false, shouldAutoReconnect: () => true })
+        client.bindStores(createMockStores())
+
+        const p = client.connect({
+          jid: 'user@example.com',
+          password: 'secret',
+          server: 'example.com',
+          skipDiscovery: true,
+        })
+        await vi.advanceTimersByTimeAsync(0)
+        ownInstance._emit('online')
+        await p
+
+        mockClientFactory.mockClear()
+        mockClientFactory._setInstance(ownInstance)
+        ownInstance._emit('disconnect', { clean: false })
+        await vi.advanceTimersByTimeAsync(2000)
+
+        expect(mockClientFactory).toHaveBeenCalled()
+        client.cancelReconnect()
+      })
     })
 
     it('should preserve rooms across multiple rapid disconnect/reconnect cycles', async () => {
