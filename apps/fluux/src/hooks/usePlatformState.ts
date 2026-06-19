@@ -198,6 +198,23 @@ export function shouldRunKeepaliveReconnect(
 }
 
 /**
+ * Decide whether a keepalive tick represents a real sleep/wake gap (rather
+ * than a steady-state ~30s tick).
+ *
+ * The Rust thread measures wall-clock elapsed per iteration; after the
+ * machine slept the first post-wake tick carries a large `sleptMs`. A
+ * wake-tick must be routed through `shouldHandleWake('keepalive')` so it
+ * honors the post-reload cooldown and the wake debounce; a steady-state tick
+ * skips that and just runs the cheap health probe.
+ *
+ * Uses the project-wide SLEEP_THRESHOLD_MS line. An undefined `sleptMs`
+ * (legacy `()` payload) is treated as a non-wake tick.
+ */
+export function isKeepaliveWakeTick(sleptMs: number | undefined): boolean {
+  return (sleptMs ?? 0) >= SLEEP_THRESHOLD_MS
+}
+
+/**
  * Decide whether a wake from sleep should reload the Tauri webview.
  *
  * Background: after a confirmed sleep/wake cycle the WRY/WKWebView on

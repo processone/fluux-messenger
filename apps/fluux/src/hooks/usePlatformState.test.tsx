@@ -104,6 +104,7 @@ import {
   RELOAD_MARKER_STORAGE_KEY,
   parseKeepalivePayload,
   shouldRunKeepaliveReconnect,
+  isKeepaliveWakeTick,
 } from './usePlatformState'
 
 describe('usePlatformState', () => {
@@ -545,6 +546,31 @@ describe('usePlatformState', () => {
 
     it('still blocks an undefined-display tick when the user logged out', () => {
       expect(shouldRunKeepaliveReconnect({ displayActive: undefined }, 'logged-out')).toBe(false)
+    })
+  })
+
+  describe('isKeepaliveWakeTick', () => {
+    // A steady-state tick reports sleptMs ~= 30s (the interval). A tick that
+    // arrives after a sleep gap reports a much larger sleptMs and must be
+    // routed through the wake debounce/cooldown rather than the plain probe.
+    // Threshold is SLEEP_THRESHOLD_MS (180s), shared with the wake reload gate.
+
+    const THRESHOLD = 180_000 // SLEEP_THRESHOLD_MS
+
+    it('returns true at and above the sleep threshold (real wake gap)', () => {
+      expect(isKeepaliveWakeTick(THRESHOLD)).toBe(true)
+      expect(isKeepaliveWakeTick(600_000)).toBe(true)
+      expect(isKeepaliveWakeTick(2.5 * 60 * 60 * 1000)).toBe(true)
+    })
+
+    it('returns false for a steady-state ~30s tick', () => {
+      expect(isKeepaliveWakeTick(30_000)).toBe(false)
+      expect(isKeepaliveWakeTick(0)).toBe(false)
+      expect(isKeepaliveWakeTick(THRESHOLD - 1)).toBe(false)
+    })
+
+    it('treats undefined sleptMs (legacy build) as a non-wake tick', () => {
+      expect(isKeepaliveWakeTick(undefined)).toBe(false)
     })
   })
 
