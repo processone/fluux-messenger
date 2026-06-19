@@ -3,6 +3,7 @@ import type { UnlistenFn } from '@tauri-apps/api/event'
 import { useXMPP, useSystemState, usePresence, consoleStore } from '@fluux/sdk'
 import { useConnectionStore } from '@fluux/sdk/react'
 import { isTauri } from '../utils/tauri'
+import type { ReconnectIntent } from '../utils/reconnectIntent'
 import { startWakeGracePeriod, startSyncGracePeriod } from '../utils/renderLoopDetector'
 
 // ── Constants ──────────────────────────────────────────────────────────────────
@@ -171,6 +172,29 @@ export function parseKeepalivePayload(raw: unknown): KeepalivePayload {
       typeof record.displayActive === 'boolean' ? record.displayActive : undefined,
     sleptMs: typeof record.sleptMs === 'number' ? record.sleptMs : undefined,
   }
+}
+
+/**
+ * Decide whether a keepalive tick should drive a reconnect/health check.
+ *
+ * Order matters and both gates are hard blocks:
+ *  1. `payload.displayActive === false` -> false. The primary display is off
+ *     (closed lid with no external screen, idle screen-off, DarkWake); we hold
+ *     reconnect attempts to avoid PowerNap/DarkWake battery churn.
+ *  2. `intent !== 'active'` -> false. The user deliberately logged out; never
+ *     log them back in on a tick that lands during a logout race.
+ *
+ * A missing/undefined `displayActive` (legacy binary emitting the `()`
+ * payload) fails open to "display active" — losing the field must never
+ * silently kill reconnection now that the keepalive is the reconnect authority.
+ */
+export function shouldRunKeepaliveReconnect(
+  payload: KeepalivePayload,
+  intent: ReconnectIntent
+): boolean {
+  if (payload.displayActive === false) return false
+  if (intent !== 'active') return false
+  return true
 }
 
 /**

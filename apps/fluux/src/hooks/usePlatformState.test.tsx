@@ -103,6 +103,7 @@ import {
   isWithinReloadCooldown,
   RELOAD_MARKER_STORAGE_KEY,
   parseKeepalivePayload,
+  shouldRunKeepaliveReconnect,
 } from './usePlatformState'
 
 describe('usePlatformState', () => {
@@ -515,6 +516,35 @@ describe('usePlatformState', () => {
         displayActive: undefined,
         sleptMs: undefined,
       })
+    })
+  })
+
+  describe('shouldRunKeepaliveReconnect', () => {
+    // Two gates, in this order:
+    //  1. payload.displayActive === false  -> never reconnect (DarkWake).
+    //  2. intent !== 'active'              -> never reconnect (logout race).
+    // A missing displayActive (legacy build) fails open to true.
+
+    it('returns false when the display is asleep, regardless of intent', () => {
+      expect(shouldRunKeepaliveReconnect({ displayActive: false }, 'active')).toBe(false)
+      expect(shouldRunKeepaliveReconnect({ displayActive: false }, 'logged-out')).toBe(false)
+    })
+
+    it('returns false when the display is on but the user logged out', () => {
+      expect(shouldRunKeepaliveReconnect({ displayActive: true }, 'logged-out')).toBe(false)
+    })
+
+    it('returns true when the display is on and the intent is active', () => {
+      expect(shouldRunKeepaliveReconnect({ displayActive: true }, 'active')).toBe(true)
+    })
+
+    it('fails open: undefined displayActive (legacy build) + active intent -> true', () => {
+      expect(shouldRunKeepaliveReconnect({ displayActive: undefined }, 'active')).toBe(true)
+      expect(shouldRunKeepaliveReconnect({}, 'active')).toBe(true)
+    })
+
+    it('still blocks an undefined-display tick when the user logged out', () => {
+      expect(shouldRunKeepaliveReconnect({ displayActive: undefined }, 'logged-out')).toBe(false)
     })
   })
 
