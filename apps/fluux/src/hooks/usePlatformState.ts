@@ -142,6 +142,38 @@ export function shouldHandleDisplayWake(payload: SystemWakePayload | undefined):
 }
 
 /**
+ * Payload for the Rust 30s `xmpp-keepalive` tick. Mirrors the Rust
+ * `KeepalivePayload` (serde camelCase). An older binary emits the legacy
+ * `()` payload (undefined); both fields are then absent.
+ */
+export interface KeepalivePayload {
+  /** False on macOS DarkWake/PowerNap (display off). Absent on a legacy build. */
+  displayActive?: boolean
+  /** Wall-clock ms elapsed since the previous tick — large after a sleep gap. */
+  sleptMs?: number
+}
+
+/**
+ * Safely extract a {@link KeepalivePayload} from a raw Tauri event payload.
+ *
+ * A legacy `()` payload (undefined) or any malformed value yields
+ * `{ displayActive: undefined, sleptMs: undefined }` — never throws. A
+ * missing/undefined `displayActive` is treated as `true` (fail-open) by the
+ * downstream gate, so losing the field can never silently kill reconnection.
+ */
+export function parseKeepalivePayload(raw: unknown): KeepalivePayload {
+  if (!raw || typeof raw !== 'object') {
+    return { displayActive: undefined, sleptMs: undefined }
+  }
+  const record = raw as Record<string, unknown>
+  return {
+    displayActive:
+      typeof record.displayActive === 'boolean' ? record.displayActive : undefined,
+    sleptMs: typeof record.sleptMs === 'number' ? record.sleptMs : undefined,
+  }
+}
+
+/**
  * Decide whether a wake from sleep should reload the Tauri webview.
  *
  * Background: after a confirmed sleep/wake cycle the WRY/WKWebView on

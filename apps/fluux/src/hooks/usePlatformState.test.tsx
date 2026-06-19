@@ -102,6 +102,7 @@ import {
   clearReloadMarker,
   isWithinReloadCooldown,
   RELOAD_MARKER_STORAGE_KEY,
+  parseKeepalivePayload,
 } from './usePlatformState'
 
 describe('usePlatformState', () => {
@@ -467,6 +468,53 @@ describe('usePlatformState', () => {
 
     it('returns true when displayActive is missing but payload exists (fail-open)', () => {
       expect(shouldHandleDisplayWake({})).toBe(true)
+    })
+  })
+
+  describe('parseKeepalivePayload', () => {
+    // The Rust keepalive thread emits { displayActive, sleptMs } (serde
+    // camelCase). An older binary emits the legacy () payload (undefined).
+    // Parsing must never throw and must default a missing displayActive to
+    // undefined so the downstream gate fails open (treats it as active).
+
+    it('parses a well-formed payload', () => {
+      expect(parseKeepalivePayload({ displayActive: true, sleptMs: 30_000 })).toEqual({
+        displayActive: true,
+        sleptMs: 30_000,
+      })
+      expect(parseKeepalivePayload({ displayActive: false, sleptMs: 600_000 })).toEqual({
+        displayActive: false,
+        sleptMs: 600_000,
+      })
+    })
+
+    it('returns undefined fields for a legacy () / undefined payload (no throw)', () => {
+      expect(parseKeepalivePayload(undefined)).toEqual({
+        displayActive: undefined,
+        sleptMs: undefined,
+      })
+      expect(parseKeepalivePayload(null)).toEqual({
+        displayActive: undefined,
+        sleptMs: undefined,
+      })
+    })
+
+    it('ignores fields of the wrong type without throwing', () => {
+      expect(parseKeepalivePayload({ displayActive: 'yes', sleptMs: 'soon' })).toEqual({
+        displayActive: undefined,
+        sleptMs: undefined,
+      })
+    })
+
+    it('does not throw on a non-object primitive', () => {
+      expect(parseKeepalivePayload(42)).toEqual({
+        displayActive: undefined,
+        sleptMs: undefined,
+      })
+      expect(parseKeepalivePayload('xmpp-keepalive')).toEqual({
+        displayActive: undefined,
+        sleptMs: undefined,
+      })
     })
   })
 
