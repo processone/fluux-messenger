@@ -125,7 +125,7 @@ export function SearchView() {
             onChange={(e) => search(e.target.value)}
             onKeyDown={handleInPrefixKeyDown}
             placeholder={t('search.placeholder', 'Search messages…')}
-            className="w-full ps-8 pe-8 py-1.5 text-sm bg-fluux-input border border-fluux-border rounded-md
+            className="w-full ps-8 pe-8 py-1.5 text-sm bg-fluux-bg border border-fluux-border rounded-md
                        text-fluux-text placeholder-fluux-muted
                        focus:outline-none focus:ring-1 focus:ring-fluux-brand focus:border-fluux-brand"
           />
