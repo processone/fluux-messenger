@@ -83,6 +83,14 @@ export function ChatHeader({
     }
   }
 
+  // When the kebab holds an always-shown entry (profile/archive on a 1:1), it must
+  // stay visible at every width. When its only entry is the tier-collapsible search
+  // (e.g. a group chat), the trigger should hide once search goes inline — otherwise
+  // a wide header shows a kebab whose single row is container-query-hidden, i.e. an
+  // empty menu. kebabClass('search') matches search's reveal threshold.
+  const hasAlwaysShownEntry = overflowEntries.some((e) => !e.kebabClassName)
+  const kebabWrapperClass = hasAlwaysShownEntry ? undefined : kebabClass('search')
+
   return (
     <header className={`@container h-14 ${titleBarClass} px-4 flex items-center border-b border-fluux-bg shadow-sm gap-3`} {...dragRegionProps}>
       {/* Back button - mobile only */}
@@ -182,7 +190,9 @@ export function ChatHeader({
       )}
 
       {/* Overflow (kebab) menu */}
-      <HeaderOverflowKebab ariaLabel={t('contacts.actionsMenu')} entries={overflowEntries} />
+      <div className={kebabWrapperClass}>
+        <HeaderOverflowKebab ariaLabel={t('contacts.actionsMenu')} entries={overflowEntries} />
+      </div>
     </header>
   )
 }
