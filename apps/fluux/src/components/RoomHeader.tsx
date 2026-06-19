@@ -6,19 +6,23 @@
  * - Room management (owners/admins): settings, subject, avatar, members
  * - Occupant panel toggle
  */
-import { useState, useRef } from 'react'
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { Room } from '@fluux/sdk'
 import { generateConsistentColorHexSync, getUniqueOccupantCount } from '@fluux/sdk'
 import { Avatar } from './Avatar'
 import { Tooltip } from './Tooltip'
-import { useWindowDrag, useClickOutside, useAnchoredMenu } from '@/hooks'
+import { useWindowDrag } from '@/hooks'
 import { renderTextWithLinks } from '@/utils/messageStyles'
 import { AvatarCropModal } from './AvatarCropModal'
 import { InviteToRoomModal } from './InviteToRoomModal'
 import { RoomConfigModal } from './RoomConfigModal'
 import { RoomMembersModal } from './RoomMembersModal'
 import { RoomHatsModal } from './RoomHatsModal'
+import { HeaderSubmenuButton } from './header/HeaderSubmenuButton'
+import { HeaderOverflowKebab, type OverflowEntry } from './header/HeaderOverflowKebab'
+import { buildNotifyGroup, buildManagementGroup, notifyModeOf } from './header/roomHeaderActions'
+import { inlineClass, kebabClass } from './header/headerOverflow'
 import {
   Hash,
   ArrowLeft,
@@ -28,20 +32,10 @@ import {
   Bell,
   BellOff,
   BellRing,
-  Check,
-  ChevronDown,
-  Trash2,
   Settings,
   UserPlus,
-  UserMinus,
-  Image,
-  Type,
-  Award,
   Search,
 } from 'lucide-react'
-
-// Notification mode for rooms
-type NotifyMode = 'mentions' | 'all-session' | 'all-always'
 
 export interface RoomHeaderProps {
   room: Room
@@ -71,18 +65,12 @@ export function RoomHeader({
   onSearchInConversation,
 }: RoomHeaderProps) {
   const { t } = useTranslation()
-  const [showNotifyMenu, setShowNotifyMenu] = useState(false)
-  const [showOwnerMenu, setShowOwnerMenu] = useState(false)
   const [showAvatarModal, setShowAvatarModal] = useState(false)
   const [showInviteModal, setShowInviteModal] = useState(false)
   const [showConfigModal, setShowConfigModal] = useState(false)
   const [showMembersModal, setShowMembersModal] = useState(false)
   const [showHatsModal, setShowHatsModal] = useState(false)
   const [avatarError, setAvatarError] = useState<string | null>(null)
-  const notifyMenuRef = useRef<HTMLDivElement>(null)
-  const ownerMenuRef = useRef<HTMLDivElement>(null)
-  const notifyMenu = useAnchoredMenu(showNotifyMenu)
-  const ownerMenu = useAnchoredMenu(showOwnerMenu)
   const { titleBarClass, dragRegionProps } = useWindowDrag()
 
   // Get self occupant to check affiliation
@@ -91,55 +79,25 @@ export function RoomHeader({
   const isAdmin = selfOccupant?.affiliation === 'admin'
   const canManageRoom = isOwner || isAdmin
 
-  // Close menus when clicking outside
-  const closeNotifyMenu = () => setShowNotifyMenu(false)
-  useClickOutside(notifyMenuRef, closeNotifyMenu, showNotifyMenu)
-
-  const closeOwnerMenu = () => setShowOwnerMenu(false)
-  useClickOutside(ownerMenuRef, closeOwnerMenu, showOwnerMenu)
-
-  // Determine current notification mode
-  const getNotifyMode = (): NotifyMode => {
-    if (room.notifyAllPersistent) return 'all-always'
-    if (room.notifyAll) return 'all-session'
-    return 'mentions'
-  }
-  const notifyMode = getNotifyMode()
-
   // Count unique users by bare JID (multiple connections from same user count as one)
   const uniqueOccupantCount = getUniqueOccupantCount(room.occupants.values())
 
-  // Get icon based on mode
-  const NotifyIcon = notifyMode === 'mentions' ? BellOff
-    : notifyMode === 'all-always' ? BellRing
-    : Bell
-
-  const handleSelectMode = (mode: NotifyMode) => {
-    switch (mode) {
-      case 'mentions':
-        // Turn off both session and persistent
-        void setRoomNotifyAll(room.jid, false, false)
-        if (room.notifyAllPersistent) {
-          void setRoomNotifyAll(room.jid, false, true)
-        }
-        break
-      case 'all-session':
-        // Enable session-only, disable persistent
-        void setRoomNotifyAll(room.jid, true, false)
-        if (room.notifyAllPersistent) {
-          void setRoomNotifyAll(room.jid, false, true)
-        }
-        break
-      case 'all-always':
-        // Enable persistent (and clear session)
-        void setRoomNotifyAll(room.jid, true, true)
-        break
-    }
-    setShowNotifyMenu(false)
-  }
+  const mode = notifyModeOf(room)
+  const NotifyIcon = mode === 'mentions' ? BellOff : mode === 'all-always' ? BellRing : Bell
+  const notifyGroup = buildNotifyGroup({ room, t, setRoomNotifyAll })
+  const managementGroup = buildManagementGroup({
+    room, t, isOwner, canManageRoom,
+    onConfig: () => setShowConfigModal(true),
+    onAvatar: () => setShowAvatarModal(true),
+    onClearAvatar: async () => {
+      try { await clearRoomAvatar(room.jid) } catch { setAvatarError(t('rooms.avatarClearFailed')) }
+    },
+    onMembers: () => setShowMembersModal(true),
+    onHats: () => { if (room.supportsHats) setShowHatsModal(true) },
+  })
 
   return (
-    <header className={`h-14 ${titleBarClass} px-4 flex items-center border-b border-fluux-bg shadow-sm gap-3`} {...dragRegionProps}>
+    <header className={`@container h-14 ${titleBarClass} px-4 flex items-center border-b border-fluux-bg shadow-sm gap-3`} {...dragRegionProps}>
       {/* Back button - mobile only */}
       {onBack && (
         <button
@@ -176,240 +134,71 @@ export function RoomHeader({
         </p>
       </div>
 
-      {/* Notification dropdown */}
-      <div className="relative" ref={notifyMenuRef}>
-        <Tooltip content={t('rooms.notificationSettings')} position="bottom" disabled={showNotifyMenu}>
-          <button
-            ref={notifyMenu.triggerRef}
-            onClick={() => setShowNotifyMenu(!showNotifyMenu)}
-            className={`flex items-center gap-1 px-2 py-1.5 rounded-lg transition-colors tap-target
-                       ${notifyMode !== 'mentions'
-                         ? 'bg-fluux-brand/20 text-fluux-brand'
-                         : 'hover:bg-fluux-hover text-fluux-muted hover:text-fluux-text'
-                       }`}
-            aria-label={t('rooms.notificationSettings')}
-          >
-            <NotifyIcon className="size-4" />
-            <ChevronDown className={`size-3 transition-transform ${showNotifyMenu ? 'rotate-180' : ''}`} />
-          </button>
-        </Tooltip>
-
-        {/* Dropdown menu */}
-        {showNotifyMenu && (
-          <div
-            ref={notifyMenu.menuRef}
-            style={{ left: notifyMenu.position.x, top: notifyMenu.position.y }}
-            className="fixed w-56 max-w-[calc(100vw-1rem)] bg-fluux-bg border border-fluux-hover rounded-lg shadow-lg z-30 py-1">
-            {/* Mentions only */}
-            <button
-              onClick={() => handleSelectMode('mentions')}
-              className="w-full px-3 py-2 flex items-center gap-3 hover:bg-fluux-hover text-start transition-colors"
-            >
-              <BellOff className="size-4 text-fluux-muted" />
-              <div className="flex-1">
-                <div className="text-sm text-fluux-text">{t('rooms.mentionsOnly')}</div>
-                <div className="text-xs text-fluux-muted">{t('rooms.defaultBehavior')}</div>
-              </div>
-              {notifyMode === 'mentions' && (
-                <Check className="size-4 text-fluux-brand" />
-              )}
-            </button>
-
-            {/* All messages (session) */}
-            <button
-              onClick={() => handleSelectMode('all-session')}
-              className="w-full px-3 py-2 flex items-center gap-3 hover:bg-fluux-hover text-start transition-colors"
-            >
-              <Bell className="size-4 text-fluux-muted" />
-              <div className="flex-1">
-                <div className="text-sm text-fluux-text">{t('rooms.allMessages')}</div>
-                <div className="text-xs text-fluux-muted">{t('rooms.thisSessionOnly')}</div>
-              </div>
-              {notifyMode === 'all-session' && (
-                <Check className="size-4 text-fluux-brand" />
-              )}
-            </button>
-
-            {/* All messages (always) - only for bookmarked rooms, not quick chats */}
-            {!room.isQuickChat && (
-              <button
-                onClick={() => handleSelectMode('all-always')}
-                className="w-full px-3 py-2 flex items-center gap-3 hover:bg-fluux-hover text-start transition-colors"
-              >
-                <BellRing className="size-4 text-fluux-muted" />
-                <div className="flex-1">
-                  <div className="text-sm text-fluux-text">{t('rooms.allMessages')}</div>
-                  <div className="text-xs text-fluux-muted">{t('rooms.alwaysSavedToBookmark')}</div>
-                </div>
-                {notifyMode === 'all-always' && (
-                  <Check className="size-4 text-fluux-brand" />
-                )}
-              </button>
-            )}
-          </div>
-        )}
+      {/* Notification settings — inline copy (wide tier) */}
+      <div className={inlineClass('wide')}>
+        <HeaderSubmenuButton
+          ariaLabel={t('rooms.notificationSettings')}
+          tooltip={t('rooms.notificationSettings')}
+          icon={NotifyIcon}
+          active={mode !== 'mentions'}
+          group={notifyGroup}
+        />
       </div>
 
-      {/* Invite member - available to all occupants */}
-      <Tooltip content={t('rooms.inviteMember')} position="bottom">
-        <button
-          onClick={() => setShowInviteModal(true)}
-          className="p-1.5 rounded-lg hover:bg-fluux-hover text-fluux-muted hover:text-fluux-text transition-colors tap-target"
-          aria-label={t('rooms.inviteMember')}
-        >
-          <UserPlus className="size-4" />
-        </button>
-      </Tooltip>
+      {/* Invite member — inline copy (wide tier) */}
+      <div className={inlineClass('wide')}>
+        <Tooltip content={t('rooms.inviteMember')} position="bottom">
+          <button
+            onClick={() => setShowInviteModal(true)}
+            className="p-1.5 rounded-lg hover:bg-fluux-hover text-fluux-muted hover:text-fluux-text transition-colors tap-target"
+            aria-label={t('rooms.inviteMember')}
+          >
+            <UserPlus className="size-4" />
+          </button>
+        </Tooltip>
+      </div>
 
-      {/* Room management dropdown (owners/admins only) */}
-      {canManageRoom && (
-        <div className="relative" ref={ownerMenuRef}>
-          <Tooltip content={t('rooms.manageRoom')} position="bottom" disabled={showOwnerMenu}>
-            <button
-              ref={ownerMenu.triggerRef}
-              onClick={() => setShowOwnerMenu(!showOwnerMenu)}
-              className={`flex items-center gap-1 px-2 py-1.5 rounded-lg transition-colors tap-target
-                         ${showOwnerMenu
-                           ? 'bg-fluux-hover text-fluux-text'
-                           : 'hover:bg-fluux-hover text-fluux-muted hover:text-fluux-text'
-                         }`}
-              aria-label={t('rooms.manageRoom')}
-            >
-              <Settings className="size-4" />
-              <ChevronDown className={`size-3 transition-transform ${showOwnerMenu ? 'rotate-180' : ''}`} />
-            </button>
-          </Tooltip>
-
-          {/* Room management dropdown menu */}
-          {showOwnerMenu && (
-            <div
-              ref={ownerMenu.menuRef}
-              style={{ left: ownerMenu.position.x, top: ownerMenu.position.y }}
-              className="fixed w-56 max-w-[calc(100vw-1rem)] bg-fluux-bg border border-fluux-hover rounded-lg shadow-lg z-30 py-1">
-              {/* Room Settings */}
-              <button
-                onClick={() => {
-                  setShowConfigModal(true)
-                  setShowOwnerMenu(false)
-                }}
-                className="w-full px-3 py-2 flex items-center gap-3 hover:bg-fluux-hover text-start transition-colors"
-              >
-                <Settings className="size-4 text-fluux-muted" />
-                <div className="flex-1">
-                  <div className="text-sm text-fluux-text">{t('rooms.roomSettings')}</div>
-                  <div className="text-xs text-fluux-muted">{t('rooms.configureRoom')}</div>
-                </div>
-              </button>
-
-              {/* Change Room Subject - opens config modal */}
-              <button
-                onClick={() => {
-                  setShowConfigModal(true)
-                  setShowOwnerMenu(false)
-                }}
-                className="w-full px-3 py-2 flex items-center gap-3 hover:bg-fluux-hover text-start transition-colors"
-              >
-                <Type className="size-4 text-fluux-muted" />
-                <div className="flex-1">
-                  <div className="text-sm text-fluux-text">{t('rooms.changeSubject')}</div>
-                </div>
-              </button>
-
-              {/* Change Room Avatar (owner only) */}
-              {isOwner && (
-                <button
-                  onClick={() => {
-                    setShowAvatarModal(true)
-                    setShowOwnerMenu(false)
-                  }}
-                  className="w-full px-3 py-2 flex items-center gap-3 hover:bg-fluux-hover text-start transition-colors"
-                >
-                  <Image className="size-4 text-fluux-muted" />
-                  <div className="flex-1">
-                    <div className="text-sm text-fluux-text">{t('rooms.changeAvatar')}</div>
-                  </div>
-                </button>
-              )}
-
-              {/* Clear Room Avatar (owner only, only show if room has avatar) */}
-              {isOwner && room.avatar && (
-                <button
-                  onClick={async () => {
-                    try {
-                      await clearRoomAvatar(room.jid)
-                      setShowOwnerMenu(false)
-                    } catch {
-                      setAvatarError(t('rooms.avatarClearFailed'))
-                    }
-                  }}
-                  className="w-full px-3 py-2 flex items-center gap-3 hover:bg-fluux-hover text-start transition-colors text-fluux-red"
-                >
-                  <Trash2 className="size-4" />
-                  <div className="flex-1">
-                    <div className="text-sm">{t('rooms.removeAvatar')}</div>
-                  </div>
-                </button>
-              )}
-
-              {/* Manage Membership - owner and admin */}
-              {canManageRoom && (
-                <button
-                  onClick={() => {
-                    setShowMembersModal(true)
-                    setShowOwnerMenu(false)
-                  }}
-                  className="w-full px-3 py-2 flex items-center gap-3 hover:bg-fluux-hover text-start transition-colors"
-                >
-                  <UserMinus className="size-4 text-fluux-muted" />
-                  <div className="flex-1">
-                    <div className="text-sm text-fluux-text">{t('rooms.manageMembership')}</div>
-                    <div className="text-xs text-fluux-muted">{t('rooms.kickBanMembers')}</div>
-                  </div>
-                </button>
-              )}
-
-              {/* Manage Hats - owner only */}
-              {isOwner && (
-                <button
-                  onClick={() => {
-                    if (!room.supportsHats) return
-                    setShowHatsModal(true)
-                    setShowOwnerMenu(false)
-                  }}
-                  disabled={!room.supportsHats}
-                  className={`w-full px-3 py-2 flex items-center gap-3 text-start transition-colors ${
-                    room.supportsHats
-                      ? 'hover:bg-fluux-hover'
-                      : 'opacity-50 cursor-not-allowed'
-                  }`}
-                  title={!room.supportsHats ? t('rooms.hatsNotEnabled') : undefined}
-                >
-                  <Award className="size-4 text-fluux-muted" />
-                  <div className="flex-1">
-                    <div className="text-sm text-fluux-text">{t('rooms.manageHats')}</div>
-                    <div className="text-xs text-fluux-muted">
-                      {room.supportsHats ? t('rooms.manageHatsDesc') : t('rooms.hatsNotEnabled')}
-                    </div>
-                  </div>
-                </button>
-              )}
-            </div>
-          )}
+      {/* Room management — inline copy (wide tier, owners/admins only) */}
+      {managementGroup && (
+        <div className={inlineClass('wide')}>
+          <HeaderSubmenuButton
+            ariaLabel={t('rooms.manageRoom')}
+            tooltip={t('rooms.manageRoom')}
+            icon={Settings}
+            group={managementGroup}
+          />
         </div>
       )}
 
-      {/* Search in room */}
+      {/* Search — inline copy (search tier) */}
       {onSearchInConversation && (
-        <Tooltip content={t('chat.searchInConversation', 'Search in conversation')} position="bottom">
-          <button
-            onClick={onSearchInConversation}
-            className="p-1.5 rounded hover:bg-fluux-hover text-fluux-muted hover:text-fluux-text transition-colors tap-target"
-            aria-label={t('chat.searchInConversation', 'Search in conversation')}
-          >
-            <Search className="size-4" />
-          </button>
-        </Tooltip>
+        <div className={inlineClass('search')}>
+          <Tooltip content={t('chat.searchInConversation', 'Search in conversation')} position="bottom">
+            <button
+              onClick={onSearchInConversation}
+              className="p-1.5 rounded hover:bg-fluux-hover text-fluux-muted hover:text-fluux-text transition-colors tap-target"
+              aria-label={t('chat.searchInConversation', 'Search in conversation')}
+            >
+              <Search className="size-4" />
+            </button>
+          </Tooltip>
+        </div>
       )}
+
+      {/* Overflow kebab — holds the collapsed copies */}
+      <HeaderOverflowKebab
+        ariaLabel={t('rooms.roomActions', 'Room actions')}
+        entries={[
+          ...(onSearchInConversation
+            ? [{ kind: 'action', key: 'search', label: t('chat.searchInConversation', 'Search in conversation'), icon: Search, onSelect: onSearchInConversation, kebabClassName: kebabClass('search') } as OverflowEntry]
+            : []),
+          { kind: 'action', key: 'invite', label: t('rooms.inviteMember'), icon: UserPlus, onSelect: () => setShowInviteModal(true), kebabClassName: kebabClass('wide') },
+          { kind: 'submenu', key: 'notify', label: t('rooms.notificationSettings'), icon: NotifyIcon, group: notifyGroup, kebabClassName: kebabClass('wide') },
+          ...(managementGroup
+            ? [{ kind: 'submenu', key: 'manage', label: t('rooms.manageRoom'), icon: Settings, group: managementGroup, kebabClassName: kebabClass('wide') } as OverflowEntry]
+            : []),
+        ]}
+      />
 
       {/* Occupant toggle button */}
       <Tooltip content={showOccupants ? t('rooms.hideMembers') : t('rooms.showMembers')} position="bottom">

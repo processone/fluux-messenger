@@ -233,6 +233,7 @@
         "notJoinedNoHistory": "Du er ikke i dette rum",
         "joinToLoadHistory": "Deltag for at indlæse beskeder",
         "notificationSettings": "Notifikationsindstillinger",
+        "roomActions": "Rumshandlinger",
         "mentionsOnly": "Kun omtaler",
         "defaultBehavior": "Standardadfærd",
         "allMessages": "Alle beskeder",

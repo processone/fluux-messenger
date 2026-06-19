@@ -233,6 +233,7 @@
         "notJoinedNoHistory": "Вы не в этой конференции",
         "joinToLoadHistory": "Войдите, чтобы загрузить сообщения",
         "notificationSettings": "Настройки уведомлений",
+        "roomActions": "Действия комнаты",
         "mentionsOnly": "Только упоминания",
         "defaultBehavior": "Поведение по умолчанию",
         "allMessages": "Все сообщения",

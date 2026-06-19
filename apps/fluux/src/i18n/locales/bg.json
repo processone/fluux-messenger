@@ -233,6 +233,7 @@
         "notJoinedNoHistory": "Не сте в тази стая",
         "joinToLoadHistory": "Присъединете се за зареждане на съобщения",
         "notificationSettings": "Настройки за известия",
+        "roomActions": "Действия в стаята",
         "mentionsOnly": "Само споменавания",
         "defaultBehavior": "Поведение по подразбиране",
         "allMessages": "Всички съобщения",

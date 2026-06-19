@@ -233,6 +233,7 @@
         "notJoinedNoHistory": "您不在此房间中",
         "joinToLoadHistory": "加入即可加载消息",
         "notificationSettings": "通知设置",
+        "roomActions": "房间操作",
         "mentionsOnly": "仅提及",
         "defaultBehavior": "默认行为",
         "allMessages": "所有消息",

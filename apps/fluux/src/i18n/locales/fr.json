@@ -234,6 +234,7 @@
         "notJoinedNoHistory": "Vous n'êtes pas dans ce salon",
         "joinToLoadHistory": "Rejoindre pour charger les messages",
         "notificationSettings": "Paramètres de notification",
+        "roomActions": "Actions du salon",
         "mentionsOnly": "Mentions uniquement",
         "defaultBehavior": "Comportement par défaut",
         "allMessages": "Tous les messages",

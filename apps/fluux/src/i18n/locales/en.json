@@ -233,6 +233,7 @@
         "notJoinedNoHistory": "You are not in this room",
         "joinToLoadHistory": "Join to load messages",
         "notificationSettings": "Notification settings",
+        "roomActions": "Room actions",
         "mentionsOnly": "Mentions only",
         "defaultBehavior": "Default behavior",
         "allMessages": "All messages",

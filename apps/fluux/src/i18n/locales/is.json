@@ -233,6 +233,7 @@
         "notJoinedNoHistory": "Þú ert ekki í þessu herbergi",
         "joinToLoadHistory": "Gangt inn til að hlaða skilaboðum",
         "notificationSettings": "Tilkynningastillingar",
+        "roomActions": "Herbergisaðgerðir",
         "mentionsOnly": "Aðeins tilvísanir",
         "defaultBehavior": "Sjálfgefin hegðun",
         "allMessages": "Öll skilaboð",

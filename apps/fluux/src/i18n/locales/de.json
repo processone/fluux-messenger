@@ -235,6 +235,7 @@
         "notJoinedNoHistory": "Sie sind nicht in diesem Raum",
         "joinToLoadHistory": "Beitreten um Nachrichten zu laden",
         "notificationSettings": "Benachrichtigungseinstellungen",
+        "roomActions": "Raumaktionen",
         "mentionsOnly": "Nur Erwähnungen",
         "defaultBehavior": "Standardverhalten",
         "allMessages": "Alle Nachrichten",
