@@ -20,6 +20,7 @@ import {
   getConnectionStatusFromState,
   getReconnectInfoFromContext,
   isTerminalState,
+  SM_SESSION_TIMEOUT_MS,
   type ConnectionActor,
   type ConnectionMachineEvent,
   type ConnectionStateValue,
@@ -979,18 +980,43 @@ export class Connection extends BaseModule {
   /**
    * Handle a keepalive tick from an external clock (e.g., Rust native timer).
    *
-   * Routes the tick to the appropriate action based on the current connection
-   * state — the app does not need to inspect status and decide which method
-   * to call. Safe to invoke on every tick; no-ops when there is nothing to do.
+   * Display-gated: when `displayActive === false` the tick does NO network
+   * work (no health check, no reconnect nudge) and only informs the machine
+   * via DISPLAY_INACTIVE so a held backoff ladder enters reconnecting.paused.
+   * When `displayActive` is true or undefined (legacy no-arg tick, fail-open):
+   * send DISPLAY_ACTIVE, then route by state — reconnecting → nudge, connected
+   * → lightweight health check, anything else → no-op.
    *
-   * - `reconnecting`: nudge the state machine out of `reconnecting.waiting`
-   *   so a frozen JS setTimeout backoff doesn't stall recovery.
-   * - `connected` (online): run a lightweight health check (SM ack) without
-   *   changing status or triggering presence events.
-   * - anything else: no-op.
+   * @param displayActive Primary-display power state from the native probe.
+   *   `false` => display off (do not reconnect). `undefined` => legacy payload,
+   *   treated as active (fail-open).
+   * @param sleptMs Real wall-clock elapsed reported by the native loop. A long
+   *   gap indicates the machine slept; used to send an immediate wake kick.
    */
-  handleKeepaliveTick(): void {
+  handleKeepaliveTick(displayActive?: boolean, sleptMs?: number): void {
+    if (displayActive === false) {
+      // Display off: zero outbound work; just release/hold the ladder.
+      this.sendMachineEvent({ type: 'DISPLAY_INACTIVE' }, 'keepalive:display-inactive')
+      return
+    }
+
+    // Display on (or legacy fail-open): mark the machine active. In
+    // reconnecting.waiting this acts as an immediate kick to attempting.
+    this.sendMachineEvent({ type: 'DISPLAY_ACTIVE' }, 'keepalive:display-active')
+
     if (this.isInReconnectingState()) {
+      // A long elapsed gap means we just woke — go immediately rather than
+      // waiting out the (possibly frozen) backoff timer.
+      if (sleptMs != null && sleptMs >= SM_SESSION_TIMEOUT_MS) {
+        // Defer to an in-flight wake recovery rather than spawning a parallel
+        // teardown+reconnect (handleAwake's single-flight already owns it).
+        if (this.deadSocketRecoveryInProgress || this.handleAwakeInFlight) {
+          this.nudgeReconnect()
+          return
+        }
+        this.handleDeadSocket({ immediateReconnect: true, source: 'keepalive-wake' })
+        return
+      }
       this.nudgeReconnect()
       return
     }

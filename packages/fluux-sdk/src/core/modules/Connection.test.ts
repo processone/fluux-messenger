@@ -4144,8 +4144,12 @@ describe('XMPPClient Connection', () => {
         xmppClient.handleKeepaliveTick()
         await vi.advanceTimersByTimeAsync(0)
 
-        // nudge should have skipped the backoff and started a new attempt
-        expect(mockClientFactory.mock.calls.length).toBeGreaterThan(clientsBefore)
+        // nudge should have skipped the backoff and started a new attempt.
+        // EXACTLY one: a fail-open (undefined) tick sends DISPLAY_ACTIVE, which
+        // already kicks reconnecting.waiting → attempting; the follow-up
+        // nudgeReconnect() (TRIGGER_RECONNECT) is a no-op in attempting, so the
+        // DISPLAY_ACTIVE kick + nudge must NOT double-create a client.
+        expect(mockClientFactory.mock.calls.length).toBe(clientsBefore + 1)
       })
 
       it('is safe to tick repeatedly (no dedup)', async () => {
@@ -4189,6 +4193,109 @@ describe('XMPPClient Connection', () => {
         const freshClient = new XMPPClient()
         freshClient.handleKeepaliveTick()
         // No crash, no side effects — method returns silently
+      })
+
+      describe('display gating', () => {
+        function getActor() {
+          return (xmppClient.connection as any).getConnectionActor()
+        }
+
+        it('(false) when connected runs NO health check (no SM <r/>)', async () => {
+          // outer beforeEach leaves us disconnected; connect first
+          const p = xmppClient.connect({
+            jid: 'user@example.com', password: 'secret', server: 'example.com', skipDiscovery: true,
+          })
+          mockXmppClientInstance._emit('online')
+          await p
+          mockXmppClientInstance.send.mockClear()
+
+          ;(xmppClient.connection as any).handleKeepaliveTick(false, 30_000)
+          await vi.advanceTimersByTimeAsync(100)
+
+          expect(mockXmppClientInstance.send).not.toHaveBeenCalled()
+        })
+
+        it('(false) sends DISPLAY_INACTIVE to the machine', async () => {
+          const actor = getActor()
+          const sendSpy = vi.spyOn(actor, 'send')
+
+          ;(xmppClient.connection as any).handleKeepaliveTick(false, 30_000)
+
+          expect(sendSpy).toHaveBeenCalledWith(expect.objectContaining({ type: 'DISPLAY_INACTIVE' }))
+          expect(sendSpy).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'DISPLAY_ACTIVE' }))
+        })
+
+        it('(true) when connected runs a health check (SM <r/>) and sends DISPLAY_ACTIVE', async () => {
+          const p = xmppClient.connect({
+            jid: 'user@example.com', password: 'secret', server: 'example.com', skipDiscovery: true,
+          })
+          mockXmppClientInstance._emit('online')
+          await p
+          mockXmppClientInstance.send.mockClear()
+          const actor = getActor()
+          const sendSpy = vi.spyOn(actor, 'send')
+
+          mockXmppClientInstance.send.mockImplementation(() => {
+            setTimeout(() => {
+              mockXmppClientInstance._emit('nonza', createMockElement('a', { xmlns: 'urn:xmpp:sm:3', h: '5' }))
+            }, 50)
+            return Promise.resolve()
+          })
+
+          ;(xmppClient.connection as any).handleKeepaliveTick(true, 30_000)
+          await vi.advanceTimersByTimeAsync(100)
+
+          expect(sendSpy).toHaveBeenCalledWith(expect.objectContaining({ type: 'DISPLAY_ACTIVE' }))
+          expect(mockXmppClientInstance.send).toHaveBeenCalled()
+        })
+
+        it('(undefined) keeps legacy fail-open behaviour: connected runs a health check', async () => {
+          const p = xmppClient.connect({
+            jid: 'user@example.com', password: 'secret', server: 'example.com', skipDiscovery: true,
+          })
+          mockXmppClientInstance._emit('online')
+          await p
+          mockXmppClientInstance.send.mockClear()
+          mockXmppClientInstance.send.mockImplementation(() => {
+            setTimeout(() => {
+              mockXmppClientInstance._emit('nonza', createMockElement('a', { xmlns: 'urn:xmpp:sm:3', h: '5' }))
+            }, 50)
+            return Promise.resolve()
+          })
+
+          ;(xmppClient.connection as any).handleKeepaliveTick()
+          await vi.advanceTimersByTimeAsync(100)
+
+          expect(mockXmppClientInstance.send).toHaveBeenCalled()
+        })
+
+        it('(false) x20 during a long display-off creates zero clients (no accumulation)', async () => {
+          const p = xmppClient.connect({
+            jid: 'user@example.com', password: 'secret', server: 'example.com', skipDiscovery: true,
+          })
+          mockXmppClientInstance._emit('online')
+          await p
+          // Kill the socket so the machine is reconnecting.
+          mockXmppClientInstance._emit('disconnect', { clean: false })
+          await vi.advanceTimersByTimeAsync(1000)
+          await vi.advanceTimersByTimeAsync(30_000) // let first attempt fail → waiting
+          const clientsBefore = mockClientFactory.mock.calls.length
+          mockXmppClientInstance.send.mockClear() // ignore connection-setup sends
+
+          for (let i = 0; i < 20; i++) {
+            ;(xmppClient.connection as any).handleKeepaliveTick(false, 30_000)
+            await vi.advanceTimersByTimeAsync(0)
+          }
+
+          expect(mockClientFactory.mock.calls.length).toBe(clientsBefore)
+          expect(mockXmppClientInstance.send).not.toHaveBeenCalled()
+        })
+      })
+
+      it('XMPPClient.handleKeepaliveTick forwards (displayActive, sleptMs) to the connection', () => {
+        const spy = vi.spyOn(xmppClient.connection, 'handleKeepaliveTick')
+        xmppClient.handleKeepaliveTick(false, 120_000)
+        expect(spy).toHaveBeenCalledWith(false, 120_000)
       })
     })
 
