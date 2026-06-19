@@ -1108,12 +1108,17 @@ export class XMPPClient {
   /**
    * Handle a keepalive tick from an external clock (e.g., Rust native timer).
    *
-   * The SDK routes the tick internally: nudges a stalled reconnect loop,
-   * runs a health check when connected, or no-ops otherwise. Apps should
-   * call this on every tick without inspecting connection status.
+   * The SDK routes the tick internally based on connection state and the
+   * display-power signal: nudges a stalled reconnect loop, runs a health
+   * check when connected, or no-ops. When `displayActive` is `false` the
+   * tick does no network work and only informs the state machine.
+   *
+   * @param displayActive Primary-display power state (undefined = legacy
+   *   payload, treated as active / fail-open).
+   * @param sleptMs Real wall-clock elapsed reported by the native loop.
    */
-  handleKeepaliveTick(): void {
-    this.connection.handleKeepaliveTick()
+  handleKeepaliveTick(displayActive?: boolean, sleptMs?: number): void {
+    this.connection.handleKeepaliveTick(displayActive, sleptMs)
   }
 
   /**
