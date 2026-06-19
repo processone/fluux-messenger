@@ -38,7 +38,7 @@ exports[`RoomView > Snapshots > should match snapshot for non-joined room 1`] = 
           </p>
         </div>
         <div
-          class="hidden @min-[600px]:flex"
+          class="hidden @[600px]:flex"
         >
           <div
             class="relative"
@@ -67,7 +67,7 @@ exports[`RoomView > Snapshots > should match snapshot for non-joined room 1`] = 
           </div>
         </div>
         <div
-          class="hidden @min-[600px]:flex"
+          class="hidden @[600px]:flex"
         >
           <div
             class="inline-flex"
@@ -85,21 +85,25 @@ exports[`RoomView > Snapshots > should match snapshot for non-joined room 1`] = 
           </div>
         </div>
         <div
-          class="relative"
+          class="flex @[600px]:hidden"
         >
-          <button
-            aria-expanded="false"
-            aria-haspopup="menu"
-            aria-label="rooms.roomActions"
-            class="p-1.5 rounded hover:bg-fluux-hover text-fluux-muted hover:text-fluux-text transition-colors tap-target"
-            type="button"
+          <div
+            class="relative"
           >
-            <span
-              data-testid="icon-more-vertical"
+            <button
+              aria-expanded="false"
+              aria-haspopup="menu"
+              aria-label="rooms.roomActions"
+              class="p-1.5 rounded hover:bg-fluux-hover text-fluux-muted hover:text-fluux-text transition-colors tap-target"
+              type="button"
             >
-              MoreVertical
-            </span>
-          </button>
+              <span
+                data-testid="icon-more-vertical"
+              >
+                MoreVertical
+              </span>
+            </button>
+          </div>
         </div>
         <div
           class="inline-flex"

@@ -22,7 +22,7 @@ import { RoomHatsModal } from './RoomHatsModal'
 import { HeaderSubmenuButton } from './header/HeaderSubmenuButton'
 import { HeaderOverflowKebab, type OverflowEntry } from './header/HeaderOverflowKebab'
 import { buildNotifyGroup, buildManagementGroup, notifyModeOf } from './header/roomHeaderActions'
-import { inlineClass, kebabClass } from './header/headerOverflow'
+import { inlineClass, kebabClass, KEBAB_TRIGGER_CLASS } from './header/headerOverflow'
 import {
   Hash,
   ArrowLeft,
@@ -185,20 +185,24 @@ export function RoomHeader({
         </div>
       )}
 
-      {/* Overflow kebab — holds the collapsed copies */}
-      <HeaderOverflowKebab
-        ariaLabel={t('rooms.roomActions', 'Room actions')}
-        entries={[
-          ...(onSearchInConversation
-            ? [{ kind: 'action', key: 'search', label: t('chat.searchInConversation', 'Search in conversation'), icon: Search, onSelect: onSearchInConversation, kebabClassName: kebabClass('search') } as OverflowEntry]
-            : []),
-          { kind: 'action', key: 'invite', label: t('rooms.inviteMember'), icon: UserPlus, onSelect: () => setShowInviteModal(true), kebabClassName: kebabClass('wide') },
-          { kind: 'submenu', key: 'notify', label: t('rooms.notificationSettings'), icon: NotifyIcon, group: notifyGroup, kebabClassName: kebabClass('wide') },
-          ...(managementGroup
-            ? [{ kind: 'submenu', key: 'manage', label: t('rooms.manageRoom'), icon: Settings, group: managementGroup, kebabClassName: kebabClass('wide') } as OverflowEntry]
-            : []),
-        ]}
-      />
+      {/* Overflow kebab — holds the collapsed copies. Every room entry also has
+          an inline copy, so once the header is wide enough to show them all the
+          kebab is redundant: KEBAB_TRIGGER_CLASS hides it at the wide tier. */}
+      <div className={KEBAB_TRIGGER_CLASS}>
+        <HeaderOverflowKebab
+          ariaLabel={t('rooms.roomActions', 'Room actions')}
+          entries={[
+            ...(onSearchInConversation
+              ? [{ kind: 'action', key: 'search', label: t('chat.searchInConversation', 'Search in conversation'), icon: Search, onSelect: onSearchInConversation, kebabClassName: kebabClass('search') } as OverflowEntry]
+              : []),
+            { kind: 'action', key: 'invite', label: t('rooms.inviteMember'), icon: UserPlus, onSelect: () => setShowInviteModal(true), kebabClassName: kebabClass('wide') },
+            { kind: 'submenu', key: 'notify', label: t('rooms.notificationSettings'), icon: NotifyIcon, group: notifyGroup, kebabClassName: kebabClass('wide') },
+            ...(managementGroup
+              ? [{ kind: 'submenu', key: 'manage', label: t('rooms.manageRoom'), icon: Settings, group: managementGroup, kebabClassName: kebabClass('wide') } as OverflowEntry]
+              : []),
+          ]}
+        />
+      </div>
 
       {/* Occupant toggle button */}
       <Tooltip content={showOccupants ? t('rooms.hideMembers') : t('rooms.showMembers')} position="bottom">

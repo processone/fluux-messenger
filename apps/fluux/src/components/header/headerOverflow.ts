@@ -35,17 +35,27 @@ export type OverflowTier = 'pinned' | 'search' | 'wide'
  * its copy inside the overflow surface. Exactly one copy is visible at any width.
  *
  * NOTE: every string here is a literal so Tailwind's JIT content scanner emits
- * the arbitrary `@min-[…]` container variants. Never build these by
+ * the arbitrary `@[…]` container variants. Never build these by
  * concatenating a tier prefix at runtime.
+ *
+ * Syntax note: `@tailwindcss/container-queries` (v0.1.x) spells an arbitrary
+ * one-off container width as `@[440px]:` (→ `@container (min-width: 440px)`).
+ * The `@min-[440px]:` form is a different (Tailwind v4) spelling that this
+ * plugin does NOT emit — using it silently produces no CSS, so the collapse
+ * never fires. Keep these as `@[…]`.
  */
+// The `inline` copy is a header button laid out in the header's flex row, so its
+// visible state is `flex`. The `kebab` copy is a stacked dropdown row (a submenu
+// entry holds a section title above several item rows), so its visible state must
+// be `block` — using `flex` there would lay the title and items out horizontally.
 export const OVERFLOW_TIER: Record<OverflowTier, { inline: string; kebab: string }> = {
   pinned: { inline: 'flex', kebab: 'hidden' },
-  search: { inline: 'hidden @min-[440px]:flex', kebab: 'flex @min-[440px]:hidden' },
-  wide: { inline: 'hidden @min-[600px]:flex', kebab: 'flex @min-[600px]:hidden' },
+  search: { inline: 'hidden @[440px]:flex', kebab: 'block @[440px]:hidden' },
+  wide: { inline: 'hidden @[600px]:flex', kebab: 'block @[600px]:hidden' },
 }
 
 /** Hide the kebab trigger once the widest collapsible tier is shown inline. */
-export const KEBAB_TRIGGER_CLASS = 'flex @min-[600px]:hidden'
+export const KEBAB_TRIGGER_CLASS = 'flex @[600px]:hidden'
 
 export function inlineClass(tier: OverflowTier): string {
   return OVERFLOW_TIER[tier].inline
