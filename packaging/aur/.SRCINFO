@@ -1,6 +1,6 @@
 pkgbase = fluux-messenger-bin
 	pkgdesc = A modern XMPP chat client built with Tauri
-	pkgver = 0.16.1
+	pkgver = 0.16.2
 	pkgrel = 1
 	url = https://github.com/processone/fluux-messenger
 	arch = x86_64
@@ -13,9 +13,9 @@ pkgbase = fluux-messenger-bin
 	optdepends = xdg-utils: for opening URLs
 	provides = fluux-messenger
 	conflicts = fluux-messenger
-	source_x86_64 = fluux-messenger-bin-0.16.1-x86_64.tar.gz::https://github.com/processone/fluux-messenger/releases/download/v0.16.1/Fluux-Messenger_0.16.1_Linux_x64.tar.gz
+	source_x86_64 = fluux-messenger-bin-0.16.2-x86_64.tar.gz::https://github.com/processone/fluux-messenger/releases/download/v0.16.2/Fluux-Messenger_0.16.2_Linux_x64.tar.gz
 	sha256sums_x86_64 = SKIP
-	source_aarch64 = fluux-messenger-bin-0.16.1-aarch64.tar.gz::https://github.com/processone/fluux-messenger/releases/download/v0.16.1/Fluux-Messenger_0.16.1_Linux_arm64.tar.gz
+	source_aarch64 = fluux-messenger-bin-0.16.2-aarch64.tar.gz::https://github.com/processone/fluux-messenger/releases/download/v0.16.2/Fluux-Messenger_0.16.2_Linux_arm64.tar.gz
 	sha256sums_aarch64 = SKIP
 
 pkgname = fluux-messenger-bin
