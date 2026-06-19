@@ -607,6 +607,23 @@ describe('connectionMachine', () => {
       c.stop()
     })
 
+    it('should clear displayAsleep when reset via DISCONNECT from paused', () => {
+      actor.send({ type: 'DISPLAY_INACTIVE' })
+      expect(actor.getSnapshot().context.displayAsleep).toBe(true)
+      actor.send({ type: 'DISCONNECT' })
+      expect(actor.getSnapshot().value).toBe('disconnected')
+      expect(actor.getSnapshot().context.displayAsleep).toBe(false)
+      actor.stop()
+    })
+
+    it('should still mark SM resume not viable on WAKE with a long sleep while waiting', () => {
+      // WAKE (long) is orthogonal to the display gate — viability still flips.
+      actor.send({ type: 'WAKE', sleepDurationMs: SM_SESSION_TIMEOUT_MS + 1000 })
+      expect(actor.getSnapshot().context.smResumeViable).toBe(false)
+      expect(actor.getSnapshot().context.reconnectAttempt).toBe(1)
+      actor.stop()
+    })
+
     it('should ignore DISPLAY_INACTIVE in connected.healthy', () => {
       const c = createActor(connectionMachine).start()
       c.send({ type: 'CONNECT' })

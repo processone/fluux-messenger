@@ -206,6 +206,7 @@ export const connectionMachine = setup({
       smResumeViable: true,
       sleepStartTime: null,
       retryInitialFailure: false,
+      displayAsleep: false,
     }),
 
     // Set the retryInitialFailure flag from a SET_RETRY_INITIAL event
