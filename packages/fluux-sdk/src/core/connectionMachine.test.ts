@@ -497,6 +497,82 @@ describe('connectionMachine', () => {
     })
   })
 
+  describe('display-gated backoff (paused)', () => {
+    let actor: ReturnType<typeof createActor<typeof connectionMachine>>
+
+    beforeEach(() => {
+      actor = createActor(connectionMachine).start()
+      actor.send({ type: 'CONNECT' })
+      actor.send({ type: 'CONNECTION_SUCCESS' })
+      actor.send({ type: 'SOCKET_DIED' })
+      // reconnecting.waiting, attempt=1
+    })
+
+    it('should move waiting -> paused on DISPLAY_INACTIVE and set displayAsleep', () => {
+      actor.send({ type: 'DISPLAY_INACTIVE' })
+      expect(actor.getSnapshot().value).toEqual({ reconnecting: 'paused' })
+      expect(actor.getSnapshot().context.displayAsleep).toBe(true)
+      actor.stop()
+    })
+
+    it('should preserve the attempt counter and delay when pausing', () => {
+      // Build up backoff to attempt 3 (delay 4000ms)
+      actor.send({ type: 'TRIGGER_RECONNECT' })
+      actor.send({ type: 'CONNECTION_ERROR', error: 'fail' })
+      actor.send({ type: 'TRIGGER_RECONNECT' })
+      actor.send({ type: 'CONNECTION_ERROR', error: 'fail' })
+      expect(actor.getSnapshot().context.reconnectAttempt).toBe(3)
+      expect(actor.getSnapshot().context.nextRetryDelayMs).toBe(4000)
+
+      actor.send({ type: 'DISPLAY_INACTIVE' })
+      expect(actor.getSnapshot().value).toEqual({ reconnecting: 'paused' })
+      // Counter and delay untouched by the pause.
+      expect(actor.getSnapshot().context.reconnectAttempt).toBe(3)
+      expect(actor.getSnapshot().context.nextRetryDelayMs).toBe(4000)
+      actor.stop()
+    })
+
+    it('should NOT advance the ladder while paused (no after timer armed)', async () => {
+      vi.useFakeTimers()
+      try {
+        const timed = createActor(connectionMachine).start()
+        timed.send({ type: 'CONNECT' })
+        timed.send({ type: 'CONNECTION_SUCCESS' })
+        timed.send({ type: 'SOCKET_DIED' })
+        timed.send({ type: 'DISPLAY_INACTIVE' })
+        expect(timed.getSnapshot().value).toEqual({ reconnecting: 'paused' })
+
+        // Advance well past any backoff delay (cap is 120s).
+        await vi.advanceTimersByTimeAsync(MAX_RECONNECT_DELAY * 5)
+        expect(timed.getSnapshot().value).toEqual({ reconnecting: 'paused' })
+        expect(timed.getSnapshot().context.reconnectAttempt).toBe(1)
+        expect(timed.getSnapshot().context.nextRetryDelayMs).toBe(INITIAL_RECONNECT_DELAY)
+        timed.stop()
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+
+    it('should ignore DISPLAY_INACTIVE in connected.healthy', () => {
+      const c = createActor(connectionMachine).start()
+      c.send({ type: 'CONNECT' })
+      c.send({ type: 'CONNECTION_SUCCESS' })
+      c.send({ type: 'DISPLAY_INACTIVE' })
+      expect(c.getSnapshot().value).toEqual({ connected: 'healthy' })
+      c.stop()
+    })
+
+    it('should ignore DISPLAY_INACTIVE in terminal.conflict', () => {
+      const c = createActor(connectionMachine).start()
+      c.send({ type: 'CONNECT' })
+      c.send({ type: 'CONNECTION_SUCCESS' })
+      c.send({ type: 'CONFLICT' })
+      c.send({ type: 'DISPLAY_INACTIVE' })
+      expect(c.getSnapshot().value).toEqual({ terminal: 'conflict' })
+      c.stop()
+    })
+  })
+
   describe('exponential backoff', () => {
     it('should double the delay with each attempt', () => {
       const actor = createActor(connectionMachine).start()

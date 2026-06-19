@@ -156,6 +156,7 @@ export type ConnectionStateValue =
   | { connected: 'verifying' }
   | { reconnecting: 'waiting' }
   | { reconnecting: 'attempting' }
+  | { reconnecting: 'paused' }
   | { terminal: 'conflict' }
   | { terminal: 'authFailed' }
   | { terminal: 'maxRetries' }
@@ -290,6 +291,16 @@ export const connectionMachine = setup({
         return { smResumeWindowMs: event.maxMs }
       }
       return {}
+    }),
+
+    // Mark the primary display as off (entering reconnecting.paused)
+    setDisplayAsleep: assign({
+      displayAsleep: true,
+    }),
+
+    // Clear the display-off flag (resuming from reconnecting.paused)
+    clearDisplayAsleep: assign({
+      displayAsleep: false,
     }),
   },
   guards: {
@@ -603,6 +614,12 @@ export const connectionMachine = setup({
               target: 'attempting',
               actions: 'clearTargetTime',
             },
+            // Primary display went off — hold the backoff ladder with no timer.
+            // Preserve reconnectAttempt/nextRetryDelayMs (PAUSE, never RESET).
+            DISPLAY_INACTIVE: {
+              target: 'paused',
+              actions: 'setDisplayAsleep',
+            },
           },
         },
 
@@ -641,6 +658,33 @@ export const connectionMachine = setup({
             ],
             // Already attempting — ignore to prevent parallel attempts
             TRIGGER_RECONNECT: {},
+          },
+        },
+
+        /**
+         * Display-gated hold. The primary display is off, so the backoff ladder
+         * is paused with NO `after` timer armed — zero reconnect work happens
+         * until the display comes back. The attempt counter and nextRetryDelayMs
+         * are preserved so the ladder resumes where it left off.
+         */
+        paused: {
+          on: {
+            // Display came back — kick straight to attempting, preserving the
+            // attempt counter so failure continues the existing backoff.
+            DISPLAY_ACTIVE: {
+              target: 'attempting',
+              actions: ['clearDisplayAsleep', 'clearTargetTime'],
+            },
+            // User logout / cancel — clean exit.
+            DISCONNECT: {
+              target: '#connection.disconnected',
+              actions: 'resetReconnectState',
+            },
+            // Explicit trigger also resumes the attempt.
+            TRIGGER_RECONNECT: {
+              target: 'attempting',
+              actions: ['clearDisplayAsleep', 'clearTargetTime'],
+            },
           },
         },
       },
