@@ -62,6 +62,27 @@ describe('parseMdsItems', () => {
   })
 })
 
+describe('Mds.retractDisplayed', () => {
+  it('sends a pubsub retract for the conversation item on the MDS node', async () => {
+    const sendIQ = vi.fn().mockResolvedValue(xml('iq', { type: 'result' }))
+    const mds = new Mds(makeDeps(sendIQ)) // reuse the makeDeps helper in this file
+
+    await mds.retractDisplayed('juliet@capulet.example')
+
+    const iq = sendIQ.mock.calls[0][0]
+    expect(iq.attrs.type).toBe('set')
+    const retract = iq.getChild('pubsub', NS_PUBSUB)?.getChild('retract')
+    expect(retract?.attrs.node).toBe(NS_MDS)
+    expect(retract?.getChild('item')?.attrs.id).toBe('juliet@capulet.example')
+  })
+
+  it('swallows errors (absent item / no node) — best effort', async () => {
+    const sendIQ = vi.fn().mockRejectedValue(new Error('item-not-found'))
+    const mds = new Mds(makeDeps(sendIQ))
+    await expect(mds.retractDisplayed('x@example')).resolves.toBeUndefined()
+  })
+})
+
 describe('Mds.fetchAllDisplayed', () => {
   it('queries the node and returns parsed markers; empty on missing node', async () => {
     const result = xml('iq', { type: 'result' },

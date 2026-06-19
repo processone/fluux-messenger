@@ -78,6 +78,30 @@ export class Mds {
   }
 
   /**
+   * Best-effort retract of a conversation's displayed marker (e.g. on delete).
+   * Tolerates an absent item or missing node — the goal is node hygiene, not
+   * correctness, and a still-active conversation on another device will simply
+   * republish its marker.
+   */
+  async retractDisplayed(conversationJid: string): Promise<void> {
+    if (!this.deps.getCurrentJid()) return
+
+    const iq = xml('iq', { type: 'set', id: `mds_retract_${generateUUID()}` },
+      xml('pubsub', { xmlns: NS_PUBSUB },
+        xml('retract', { node: NS_MDS },
+          xml('item', { id: conversationJid }),
+        ),
+      ),
+    )
+
+    try {
+      await this.deps.sendIQ(iq)
+    } catch {
+      // Best-effort: item may not exist, or the node may be absent.
+    }
+  }
+
+  /**
    * Fetch all per-conversation displayed markers from our own MDS node.
    * Returns an empty array if the node does not exist yet.
    */
