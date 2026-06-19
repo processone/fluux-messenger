@@ -1079,11 +1079,21 @@ export const chatStore = createStore<ChatState>()(
             void searchIndex.updateMessage(updatedMessage)
           }
 
-          // Update lastMessage if this was the last message in the conversation
+          // Refresh the lastMessage preview when this update touches it. Match
+          // positionally (the updated message is the newest array element) OR by
+          // identity (the updated message IS the current preview). The identity
+          // tier is load-bearing for deferred decrypt: an encrypted message can
+          // be the stored preview while a trailing bodiless-signal placeholder
+          // (an encrypted reaction/retraction) sits after it in the array, so a
+          // purely positional gate would leave the sidebar stuck on
+          // "[OpenPGP-encrypted message]" after the real message decrypts.
+          const meta = state.conversationMeta.get(conversationId)
+          const conv = state.conversations.get(conversationId)
           const isLastMessage = messageIndex === updatedConvMessages.length - 1
-          if (isLastMessage) {
-            const meta = state.conversationMeta.get(conversationId)
-            const conv = state.conversations.get(conversationId)
+          const isPreviewMessage =
+            !!meta?.lastMessage &&
+            findMessageIndexById([meta.lastMessage], updatedMessage.id) !== -1
+          if (isLastMessage || isPreviewMessage) {
             if (meta && conv) {
               // Update metadata map
               const newMeta = new Map(state.conversationMeta)
