@@ -170,7 +170,13 @@ export function setupMdsSideEffects(
     return s
   }
 
-  /** Forget a JID's in-memory publisher state so a retract/recreate is clean. */
+  /**
+   * Forget a JID's in-memory publisher state so a retract/recreate is clean.
+   * `dirty.delete` drops a still-buffered (debounced) publish; a publish that
+   * already flushed and is awaiting its IQ can still win the race and re-assert
+   * the marker after the retract. That is an accepted best-effort limitation
+   * (hygiene, not correctness) and self-heals on the next fresh-session seed.
+   */
   function evictJid(jid: string): void {
     lastKnownNodeStanzaId.delete(jid)
     lastConsideredSeenId.delete(jid)
