@@ -1805,6 +1805,20 @@ export class Connection extends BaseModule {
         const smMax = nonza.attrs.max != null ? `${nonza.attrs.max}s` : 'unknown'
         this.stores.console.addEvent(`Stream Management enabled (id: ${smId})`, 'sm')
         logInfo(`SM enabled (id: ${smId}, server max: ${smMax})`)
+        // Source the SM resume window from the server (XEP-0198 §3 <enabled max>,
+        // seconds). The machine guards compare sleep duration against this window
+        // instead of the hardcoded SM_SESSION_TIMEOUT_MS, which over-estimates
+        // (ejabberd often grants 300s). Only override when the server sends max;
+        // otherwise the machine keeps its SM_SESSION_TIMEOUT_MS default.
+        if (nonza.attrs.max != null) {
+          const maxSec = Number(nonza.attrs.max)
+          if (Number.isFinite(maxSec) && maxSec > 0) {
+            this.sendMachineEvent(
+              { type: 'SM_ENABLED', maxMs: maxSec * 1000 },
+              'sm-enabled:server-max'
+            )
+          }
+        }
         // New session means no pending resume, so any future 'fail' events are real failures
         this.smResumeCompleted = true
         // Cache SM state for reconnection (survives socket death).

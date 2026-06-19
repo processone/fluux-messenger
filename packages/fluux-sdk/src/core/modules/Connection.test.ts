@@ -4382,6 +4382,43 @@ describe('XMPPClient Connection', () => {
       })
     })
 
+    describe('SM server resume window (change #6)', () => {
+      function getActor() {
+        return (xmppClient.connection as any).getConnectionActor()
+      }
+
+      it('sends SM_ENABLED with maxMs derived from <enabled max> seconds', async () => {
+        const actor = getActor()
+        const sendSpy = vi.spyOn(actor, 'send')
+
+        const p = xmppClient.connect({
+          jid: 'user@example.com', password: 'secret', server: 'example.com', skipDiscovery: true,
+        })
+        // Give the live SM object an id so the persistence branch is satisfied.
+        ;(mockXmppClientInstance as any).streamManagement = { id: 'sm-id-123', inbound: 0, enabled: true }
+        mockXmppClientInstance._emit('nonza', createMockElement('enabled', { xmlns: 'urn:xmpp:sm:3', id: 'sm-id-123', max: '300' }))
+        mockXmppClientInstance._emit('online')
+        await p
+
+        expect(sendSpy).toHaveBeenCalledWith({ type: 'SM_ENABLED', maxMs: 300_000 })
+      })
+
+      it('does not send SM_ENABLED when the server omits max', async () => {
+        const actor = getActor()
+        const sendSpy = vi.spyOn(actor, 'send')
+
+        const p = xmppClient.connect({
+          jid: 'user@example.com', password: 'secret', server: 'example.com', skipDiscovery: true,
+        })
+        ;(mockXmppClientInstance as any).streamManagement = { id: 'sm-id-456', inbound: 0, enabled: true }
+        mockXmppClientInstance._emit('nonza', createMockElement('enabled', { xmlns: 'urn:xmpp:sm:3', id: 'sm-id-456' }))
+        mockXmppClientInstance._emit('online')
+        await p
+
+        expect(sendSpy).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'SM_ENABLED' }))
+      })
+    })
+
     it('should preserve rooms across multiple rapid disconnect/reconnect cycles', async () => {
       // Simulate 9 rooms joined (as seen in the real log)
       const nineRooms = Array.from({ length: 9 }, (_, i) => ({
