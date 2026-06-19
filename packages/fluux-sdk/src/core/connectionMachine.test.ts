@@ -644,6 +644,23 @@ describe('connectionMachine', () => {
     })
   })
 
+  describe('getConnectionStatusFromState (paused)', () => {
+    it('maps reconnecting.paused to the reconnecting status (not disconnected)', () => {
+      expect(getConnectionStatusFromState({ reconnecting: 'paused' })).toBe('reconnecting')
+    })
+
+    it('keeps store status reconnecting while held in paused (no bounce to disconnected)', () => {
+      const actor = createActor(connectionMachine).start()
+      actor.send({ type: 'CONNECT' })
+      actor.send({ type: 'CONNECTION_SUCCESS' })
+      actor.send({ type: 'SOCKET_DIED' })
+      actor.send({ type: 'DISPLAY_INACTIVE' })
+      expect(actor.getSnapshot().value).toEqual({ reconnecting: 'paused' })
+      expect(getConnectionStatusFromState(actor.getSnapshot().value)).toBe('reconnecting')
+      actor.stop()
+    })
+  })
+
   describe('exponential backoff', () => {
     it('should double the delay with each attempt', () => {
       const actor = createActor(connectionMachine).start()

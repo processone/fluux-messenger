@@ -791,6 +791,12 @@ export function getConnectionStatusFromState(stateValue: ConnectionStateValue): 
         // waiting↔attempting loop. This prevents wake-detection effects from
         // re-entering handleAwake() mid-reconnect.
         return 'reconnecting'
+      case 'paused':
+        // Display-gated hold (no backoff timer armed). Still 'reconnecting' from
+        // the store/UI's view so App does NOT route to LoginScreen
+        // (status === 'disconnected') or strand the full-screen spinner while
+        // the primary display is off.
+        return 'reconnecting'
     }
   }
 
