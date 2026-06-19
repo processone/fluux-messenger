@@ -1,4 +1,5 @@
 import plugin from 'tailwindcss/plugin'
+import containerQueries from '@tailwindcss/container-queries'
 
 /** @type {import('tailwindcss').Config} */
 export default {
@@ -71,6 +72,7 @@ export default {
     },
   },
   plugins: [
+    containerQueries,
     plugin(({ addVariant }) => {
       // Pointer/hover capability variants. These distinguish a precise hovering
       // pointer (mouse/trackpad) from a touch screen, independently of viewport
