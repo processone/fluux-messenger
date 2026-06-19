@@ -583,6 +583,30 @@ describe('connectionMachine', () => {
       expect(actor.getSnapshot().value).toEqual({ connected: 'healthy' })
       actor.stop()
     })
+
+    it('should use server max (300s) to gate SM resume viability on WAKE', () => {
+      const actor = createActor(connectionMachine).start()
+      actor.send({ type: 'CONNECT' })
+      actor.send({ type: 'CONNECTION_SUCCESS' })
+      actor.send({ type: 'SM_ENABLED', maxMs: 300_000 })
+      actor.send({ type: 'SOCKET_DIED' })
+      // Now reconnecting.waiting. A 400s sleep exceeds the 300s server window
+      // even though it is below the 600s default constant.
+      actor.send({ type: 'WAKE', sleepDurationMs: 400_000 })
+      expect(actor.getSnapshot().context.smResumeViable).toBe(false)
+      actor.stop()
+    })
+
+    it('should fall back to SM_SESSION_TIMEOUT_MS when server omits max', () => {
+      const actor = createActor(connectionMachine).start()
+      actor.send({ type: 'CONNECT' })
+      actor.send({ type: 'CONNECTION_SUCCESS' })
+      actor.send({ type: 'SOCKET_DIED' })
+      // No SM_ENABLED → default 600s window. A 400s sleep stays viable.
+      actor.send({ type: 'WAKE', sleepDurationMs: 400_000 })
+      expect(actor.getSnapshot().context.smResumeViable).toBe(true)
+      actor.stop()
+    })
   })
 
   describe('terminal states', () => {

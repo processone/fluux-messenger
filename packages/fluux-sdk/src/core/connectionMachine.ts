@@ -293,19 +293,19 @@ export const connectionMachine = setup({
     }),
   },
   guards: {
-    // Did the sleep duration exceed SM session timeout?
-    sleepExceedsSMTimeout: ({ event }) => {
+    // Did the sleep duration exceed the SM resume window (server max if known)?
+    sleepExceedsSMTimeout: ({ context, event }) => {
       if (event.type === 'WAKE') {
-        return (event.sleepDurationMs ?? 0) > SM_SESSION_TIMEOUT_MS
+        return (event.sleepDurationMs ?? 0) > context.smResumeWindowMs
       }
       return false
     },
 
-    // Did the sleep duration (computed from context) exceed SM timeout?
+    // Did the sleep duration (computed from context) exceed the SM resume window?
     // Used when SOCKET_DIED arrives in sleeping state before WAKE.
     sleepExceedsSMTimeoutFromContext: ({ context }) => {
       if (context.sleepStartTime == null) return false
-      return (Date.now() - context.sleepStartTime) > SM_SESSION_TIMEOUT_MS
+      return (Date.now() - context.sleepStartTime) > context.smResumeWindowMs
     },
 
     // Should CONNECTION_ERROR in the `connecting` state route into the
