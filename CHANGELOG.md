@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Read-position sync across your devices (XEP-0490 Message Displayed Synchronization): the last-read marker in 1:1 chats and group chats now follows you between desktop and web
+- Read-position sync (XEP-0490): deleting a conversation also clears its synced read marker, so the position does not linger on your other devices
 
 ## [0.16.2] - 2026-06-22
 
