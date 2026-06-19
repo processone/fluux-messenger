@@ -145,6 +145,10 @@ export class Connection extends BaseModule {
   private xmpp: Client | null = null
   private credentials: ConnectOptions | null = null
 
+  // Pull-based gate evaluated at the top of attemptReconnect(). Defaults to
+  // always-allowed so non-app SDK consumers (bots) reconnect unconditionally.
+  private shouldAutoReconnect: () => boolean = () => true
+
   /**
    * XState connection state machine actor.
    * Replaces the error-prone boolean flags (isReconnecting, hasEverConnected,
@@ -216,6 +220,10 @@ export class Connection extends BaseModule {
 
   constructor(deps: ModuleDependencies) {
     super(deps)
+
+    if (deps.shouldAutoReconnect) {
+      this.shouldAutoReconnect = deps.shouldAutoReconnect
+    }
 
     // Create proxy manager
     this.proxyManager = new ProxyManager({

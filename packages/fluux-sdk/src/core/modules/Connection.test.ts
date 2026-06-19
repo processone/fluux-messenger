@@ -4192,6 +4192,26 @@ describe('XMPPClient Connection', () => {
       })
     })
 
+    describe('shouldAutoReconnect injection', () => {
+      it('defaults to allowing reconnect when no predicate is provided', () => {
+        // xmppClient is constructed in the outer beforeEach with no predicate
+        expect((xmppClient.connection as any).shouldAutoReconnect()).toBe(true)
+      })
+
+      it('uses the injected predicate', () => {
+        const client = new XMPPClient({ debug: false, shouldAutoReconnect: () => false })
+        expect((client.connection as any).shouldAutoReconnect()).toBe(false)
+      })
+
+      it('evaluates the predicate live (pull-based, not cached)', () => {
+        let allowed = true
+        const client = new XMPPClient({ debug: false, shouldAutoReconnect: () => allowed })
+        expect((client.connection as any).shouldAutoReconnect()).toBe(true)
+        allowed = false
+        expect((client.connection as any).shouldAutoReconnect()).toBe(false)
+      })
+    })
+
     it('should preserve rooms across multiple rapid disconnect/reconnect cycles', async () => {
       // Simulate 9 rooms joined (as seen in the real log)
       const nineRooms = Array.from({ length: 9 }, (_, i) => ({

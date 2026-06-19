@@ -219,6 +219,7 @@ type RetryOutcome =
 export class XMPPClient {
   protected currentJid: string | null = null
   private storageAdapter?: StorageAdapter
+  private shouldAutoReconnect?: () => boolean
   private e2eeStorageBackend: StorageBackend = new InMemoryStorageBackend()
   private proxyAdapter?: ProxyAdapter
   private privacyOptions?: PrivacyOptions
@@ -482,6 +483,7 @@ export class XMPPClient {
 
     // Store storage adapter for session persistence
     this.storageAdapter = config.storageAdapter
+    this.shouldAutoReconnect = config.shouldAutoReconnect
     this.proxyAdapter = config.proxyAdapter
     // Store privacy options for avatar fetching behavior
     this.privacyOptions = config.privacyOptions
@@ -657,6 +659,7 @@ export class XMPPClient {
       registerMAMCollector: (queryId: string, collector: (stanza: Element) => void) => this.registerMAMCollector(queryId, collector),
       privacyOptions: this.privacyOptions,
       getE2EEManager: () => this.e2ee,
+      shouldAutoReconnect: this.shouldAutoReconnect,
     }
 
     this.connection = new Connection(moduleDeps)
