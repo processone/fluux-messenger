@@ -72,14 +72,14 @@ export function HeaderOverflowKebab({ ariaLabel, entries, triggerClassName }: He
 
   useClickOutside(containerRef, () => setIsOpen(false), isOpen && hasHover)
 
+  const close = () => { setIsOpen(false); setSheetView('root') }
+
   useEffect(() => {
     if (!isOpen) return
-    const onEsc = (e: KeyboardEvent) => { if (e.key === 'Escape') setIsOpen(false) }
+    const onEsc = (e: KeyboardEvent) => { if (e.key === 'Escape') close() }
     document.addEventListener('keydown', onEsc)
     return () => document.removeEventListener('keydown', onEsc)
   }, [isOpen])
-
-  const close = () => { setIsOpen(false); setSheetView('root') }
 
   if (entries.length === 0) return null
 

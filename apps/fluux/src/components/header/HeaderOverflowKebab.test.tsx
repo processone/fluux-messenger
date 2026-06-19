@@ -59,6 +59,7 @@ describe('HeaderOverflowKebab', () => {
     // sub-view shows the option
     fireEvent.click(screen.getByText('Mentions only'))
     expect(onMode).toHaveBeenCalledTimes(1)
+    expect(screen.queryByText('Mentions only')).not.toBeInTheDocument()
   })
 
   it('touch: back returns to root without firing actions', () => {
