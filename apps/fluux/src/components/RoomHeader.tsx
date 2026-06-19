@@ -12,7 +12,7 @@ import type { Room } from '@fluux/sdk'
 import { generateConsistentColorHexSync, getUniqueOccupantCount } from '@fluux/sdk'
 import { Avatar } from './Avatar'
 import { Tooltip } from './Tooltip'
-import { useWindowDrag, useClickOutside } from '@/hooks'
+import { useWindowDrag, useClickOutside, useAnchoredMenu } from '@/hooks'
 import { renderTextWithLinks } from '@/utils/messageStyles'
 import { AvatarCropModal } from './AvatarCropModal'
 import { InviteToRoomModal } from './InviteToRoomModal'
@@ -81,6 +81,8 @@ export function RoomHeader({
   const [avatarError, setAvatarError] = useState<string | null>(null)
   const notifyMenuRef = useRef<HTMLDivElement>(null)
   const ownerMenuRef = useRef<HTMLDivElement>(null)
+  const notifyMenu = useAnchoredMenu(showNotifyMenu)
+  const ownerMenu = useAnchoredMenu(showOwnerMenu)
   const { titleBarClass, dragRegionProps } = useWindowDrag()
 
   // Get self occupant to check affiliation
@@ -178,6 +180,7 @@ export function RoomHeader({
       <div className="relative" ref={notifyMenuRef}>
         <Tooltip content={t('rooms.notificationSettings')} position="bottom" disabled={showNotifyMenu}>
           <button
+            ref={notifyMenu.triggerRef}
             onClick={() => setShowNotifyMenu(!showNotifyMenu)}
             className={`flex items-center gap-1 px-2 py-1.5 rounded-lg transition-colors tap-target
                        ${notifyMode !== 'mentions'
@@ -193,7 +196,10 @@ export function RoomHeader({
 
         {/* Dropdown menu */}
         {showNotifyMenu && (
-          <div className="absolute start-0 sm:start-auto sm:end-0 top-full mt-1 w-56 bg-fluux-bg border border-fluux-hover rounded-lg shadow-lg z-30 py-1">
+          <div
+            ref={notifyMenu.menuRef}
+            style={{ left: notifyMenu.position.x, top: notifyMenu.position.y }}
+            className="fixed w-56 max-w-[calc(100vw-1rem)] bg-fluux-bg border border-fluux-hover rounded-lg shadow-lg z-30 py-1">
             {/* Mentions only */}
             <button
               onClick={() => handleSelectMode('mentions')}
@@ -260,6 +266,7 @@ export function RoomHeader({
         <div className="relative" ref={ownerMenuRef}>
           <Tooltip content={t('rooms.manageRoom')} position="bottom" disabled={showOwnerMenu}>
             <button
+              ref={ownerMenu.triggerRef}
               onClick={() => setShowOwnerMenu(!showOwnerMenu)}
               className={`flex items-center gap-1 px-2 py-1.5 rounded-lg transition-colors tap-target
                          ${showOwnerMenu
@@ -275,7 +282,10 @@ export function RoomHeader({
 
           {/* Room management dropdown menu */}
           {showOwnerMenu && (
-            <div className="absolute start-0 sm:start-auto sm:end-0 top-full mt-1 w-56 bg-fluux-bg border border-fluux-hover rounded-lg shadow-lg z-30 py-1">
+            <div
+              ref={ownerMenu.menuRef}
+              style={{ left: ownerMenu.position.x, top: ownerMenu.position.y }}
+              className="fixed w-56 max-w-[calc(100vw-1rem)] bg-fluux-bg border border-fluux-hover rounded-lg shadow-lg z-30 py-1">
               {/* Room Settings */}
               <button
                 onClick={() => {

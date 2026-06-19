@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useClickOutside } from '@/hooks'
+import { useClickOutside, useAnchoredMenu } from '@/hooks'
 import { usePresence, useXMPP, type PresenceStatus } from '@fluux/sdk'
 import { useConnectionStore } from '@fluux/sdk/react'
 import { ChevronDown, Check, RefreshCw, X } from 'lucide-react'
@@ -29,8 +29,8 @@ export function PresenceSelector({ isOpen: isOpenProp, onOpenChange }: PresenceS
   const [statusInput, setStatusInput] = useState(statusMessage || '')
   const [focusedIndex, setFocusedIndex] = useState(-1)
   const menuRef = useRef<HTMLDivElement>(null)
-  const dropdownRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  const menu = useAnchoredMenu(isOpen, { direction: 'up' })
 
   const currentOption = presenceOptions.find(p => p.value === presenceShow) || presenceOptions[0]
 
@@ -70,13 +70,13 @@ export function PresenceSelector({ isOpen: isOpenProp, onOpenChange }: PresenceS
         e.preventDefault()
         e.stopPropagation()
         // Focus dropdown to prevent focus moving to other elements
-        dropdownRef.current?.focus()
+        menu.menuRef.current?.focus()
         setFocusedIndex(prev => Math.min(prev + 1, presenceOptions.length - 1))
       } else if (e.key === 'ArrowUp' && !isInStatusInput) {
         e.preventDefault()
         e.stopPropagation()
         // Focus dropdown to prevent focus moving to other elements
-        dropdownRef.current?.focus()
+        menu.menuRef.current?.focus()
         setFocusedIndex(prev => Math.max(prev - 1, 0))
       } else if (e.key === 'Enter' && !isInStatusInput && focusedIndex >= 0) {
         e.preventDefault()
@@ -93,7 +93,7 @@ export function PresenceSelector({ isOpen: isOpenProp, onOpenChange }: PresenceS
     // Use capture phase to intercept events before other handlers
     window.addEventListener('keydown', handleKeyDown, true)
     return () => window.removeEventListener('keydown', handleKeyDown, true)
-  }, [isOpen, focusedIndex, setPresence, statusMessage, setIsOpen])
+  }, [isOpen, focusedIndex, setPresence, statusMessage, setIsOpen, menu.menuRef])
 
   const handleSelectPresence = (value: PresenceStatus) => {
     // PresenceStatus includes 'offline' but we only show online/away/dnd options
@@ -125,6 +125,7 @@ export function PresenceSelector({ isOpen: isOpenProp, onOpenChange }: PresenceS
       {/* Trigger - styled as a distinct chip */}
       <Tooltip content={t('presence.changeStatus')} position="top" disabled={isOpen} className="min-w-0">
         <button
+          ref={menu.triggerRef}
           onClick={() => setIsOpen(!isOpen)}
           className="flex items-center gap-1.5 px-2 py-1 text-xs rounded-full bg-fluux-hover hover:bg-fluux-bg border border-transparent hover:border-fluux-muted/30 transition-colors group min-w-0 max-w-full overflow-hidden"
         >
@@ -139,9 +140,10 @@ export function PresenceSelector({ isOpen: isOpenProp, onOpenChange }: PresenceS
       {/* Dropdown */}
       {isOpen && (
         <div
-          ref={dropdownRef}
+          ref={menu.menuRef}
           tabIndex={-1}
-          className="absolute bottom-full start-0 mb-2 w-56 bg-fluux-bg rounded-lg shadow-xl border border-fluux-hover py-1 z-50 overflow-hidden outline-none"
+          style={{ left: menu.position.x, top: menu.position.y }}
+          className="fixed w-56 max-w-[calc(100vw-1rem)] bg-fluux-bg rounded-lg shadow-xl border border-fluux-hover py-1 z-50 overflow-hidden outline-none"
         >
           {/* Presence options */}
           {presenceOptions.map((option, index) => (

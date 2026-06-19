@@ -9,7 +9,7 @@ import { useTranslation } from 'react-i18next'
 import type { ContactIdentity } from '@fluux/sdk'
 import { useRosterStore, useContactTime, useLastActivity } from '@fluux/sdk/react'
 import { Avatar } from './Avatar'
-import { useWindowDrag } from '@/hooks'
+import { useWindowDrag, useAnchoredMenu } from '@/hooks'
 import { getTranslatedStatusText } from '@/utils/statusText'
 import { Tooltip } from './Tooltip'
 import { Archive, ArchiveRestore, ArrowLeft, Clock, Hash, Lock, LockOpen, Loader2, Search, ShieldAlert, ShieldCheck, ShieldOff, ShieldX, User } from 'lucide-react'
@@ -234,6 +234,7 @@ function EncryptionIcon({
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
+  const menu = useAnchoredMenu(open)
   const btnClass = 'p-1.5 rounded transition-colors tap-target'
 
   useEffect(() => {
@@ -283,6 +284,7 @@ function EncryptionIcon({
       <div ref={containerRef} className="relative">
         <Tooltip content={t('chat.encryption.rejectedTooltip')} position="bottom" disabled={open}>
           <button
+            ref={menu.triggerRef}
             type="button"
             onClick={() => setOpen((v) => !v)}
             className={`${btnClass} text-red-500 hover:text-red-600 cursor-pointer`}
@@ -293,7 +295,10 @@ function EncryptionIcon({
           </button>
         </Tooltip>
         {open && (
-          <div className="absolute right-0 top-full mt-1 w-72 rounded-lg border border-fluux-hover bg-fluux-bg shadow-lg z-50 py-2 px-3 overflow-hidden">
+          <div
+            ref={menu.menuRef}
+            style={{ left: menu.position.x, top: menu.position.y }}
+            className="fixed w-72 max-w-[calc(100vw-1rem)] rounded-lg border border-fluux-hover bg-fluux-bg shadow-lg z-50 py-2 px-3 overflow-hidden">
             <div className="text-sm font-medium text-red-600 dark:text-red-400 mb-1.5">
               {t('chat.encryption.rejectedTitle')}
             </div>
@@ -323,6 +328,7 @@ function EncryptionIcon({
       <div ref={containerRef} className="relative">
         <Tooltip content={t('chat.encryption.plaintextForcedTooltip')} position="bottom" disabled={open}>
           <button
+            ref={menu.triggerRef}
             type="button"
             onClick={() => setOpen((v) => !v)}
             className={`${btnClass} text-fluux-muted hover:text-fluux-text cursor-pointer`}
@@ -333,7 +339,10 @@ function EncryptionIcon({
           </button>
         </Tooltip>
         {open && (
-          <div className="absolute right-0 top-full mt-1 w-56 rounded-lg border border-fluux-hover bg-fluux-bg shadow-lg z-50 py-1 overflow-hidden">
+          <div
+            ref={menu.menuRef}
+            style={{ left: menu.position.x, top: menu.position.y }}
+            className="fixed w-56 max-w-[calc(100vw-1rem)] rounded-lg border border-fluux-hover bg-fluux-bg shadow-lg z-50 py-1 overflow-hidden">
             {onEnableClick && (
               <button
                 type="button"
@@ -410,6 +419,7 @@ function EncryptionIcon({
         disabled={open}
       >
         <button
+          ref={menu.triggerRef}
           type="button"
           onClick={() => setOpen((v) => !v)}
           className={`${btnClass} ${colorClass} cursor-pointer`}
@@ -420,7 +430,10 @@ function EncryptionIcon({
         </button>
       </Tooltip>
       {open && (
-        <div className="absolute right-0 top-full mt-1 w-56 rounded-lg border border-fluux-hover bg-fluux-bg shadow-lg z-50 py-1 overflow-hidden">
+        <div
+          ref={menu.menuRef}
+          style={{ left: menu.position.x, top: menu.position.y }}
+          className="fixed w-56 max-w-[calc(100vw-1rem)] rounded-lg border border-fluux-hover bg-fluux-bg shadow-lg z-50 py-1 overflow-hidden">
           {onVerifyClick && (
             <button
               type="button"
