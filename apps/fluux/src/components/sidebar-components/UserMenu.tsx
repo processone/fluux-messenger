@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useClickOutside, useIsMobileWeb } from '@/hooks'
+import { useClickOutside, useIsMobileWeb, useAnchoredMenu } from '@/hooks'
 import { useModals } from '@/contexts'
 import { useConsole } from '@fluux/sdk'
 import { AboutModal } from '../AboutModal'
@@ -31,6 +31,7 @@ export function UserMenu({ onLogout }: UserMenuProps) {
     return localStorage.getItem('xmpp-remember-me') !== 'true'
   })
   const menuRef = useRef<HTMLDivElement>(null)
+  const menu = useAnchoredMenu(isOpen, { direction: 'up' })
   const { toggle: toggleConsole, isOpen: consoleOpen } = useConsole()
   const { actions: modalActions } = useModals()
   const isMobile = useIsMobileWeb()
@@ -58,6 +59,7 @@ export function UserMenu({ onLogout }: UserMenuProps) {
       <div className="relative flex-shrink-0" ref={menuRef}>
         <Tooltip content={t('common.options')} position="top" disabled={isOpen}>
           <button
+            ref={menu.triggerRef}
             onClick={() => setIsOpen(!isOpen)}
             className="p-2 text-fluux-muted hover:text-fluux-text rounded hover:bg-fluux-hover"
           >
@@ -66,7 +68,10 @@ export function UserMenu({ onLogout }: UserMenuProps) {
         </Tooltip>
 
         {isOpen && (
-          <div className="absolute bottom-full end-0 mb-2 w-48 bg-fluux-bg rounded-lg shadow-xl border border-fluux-hover py-1 z-50">
+          <div
+            ref={menu.menuRef}
+            style={{ left: menu.position.x, top: menu.position.y }}
+            className="fixed w-48 max-w-[calc(100vw-1rem)] bg-fluux-bg rounded-lg shadow-xl border border-fluux-hover py-1 z-50">
             {/* Console toggle - hidden on mobile */}
             {!isMobile && (
               <button

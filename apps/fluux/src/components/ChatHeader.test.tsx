@@ -17,6 +17,11 @@ vi.mock('@/hooks', () => ({
     titleBarClass: 'mt-5',
     dragRegionProps: { 'data-tauri-drag-region': true },
   }),
+  useAnchoredMenu: () => ({
+    triggerRef: { current: null },
+    menuRef: { current: null },
+    position: { x: 0, y: 0 },
+  }),
 }))
 
 // Mock @fluux/sdk/react store hooks

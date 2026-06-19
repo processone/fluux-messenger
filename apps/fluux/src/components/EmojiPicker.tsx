@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useHasHover } from '@/hooks'
 import { useSettingsStore, type ThemeMode } from '@/stores/settingsStore'
 import data from '@emoji-mart/data'
 import { Picker } from 'emoji-mart'
@@ -22,6 +23,10 @@ export function EmojiPicker({ onSelect, onClose }: EmojiPickerProps) {
   const { i18n } = useTranslation()
   const themeMode = useSettingsStore((s) => s.themeMode)
   const theme = resolveTheme(themeMode)
+  // Only auto-focus the search on devices with a real keyboard. On touch the
+  // emoji-mart search field would summon the on-screen keyboard, which covers
+  // the emoji grid (especially inside the mobile reaction bottom sheet).
+  const hasHover = useHasHover()
 
   useEffect(() => {
     if (!containerRef.current) return
@@ -37,7 +42,7 @@ export function EmojiPicker({ onSelect, onClose }: EmojiPickerProps) {
       perLine: 8,
       maxFrequentRows: 1,
       locale: i18n.language.split('-')[0], // e.g. 'en' from 'en-US'
-      autoFocus: true,
+      autoFocus: hasHover,
     })
 
     pickerRef.current = picker
@@ -49,8 +54,8 @@ export function EmojiPicker({ onSelect, onClose }: EmojiPickerProps) {
       // Clean up: remove the picker element
       container.replaceChildren()
     }
-    // Re-create picker when theme or locale changes
-  }, [theme, i18n.language, onSelect])
+    // Re-create picker when theme, locale, or hover capability changes
+  }, [theme, i18n.language, onSelect, hasHover])
 
   // Close on Escape key
   useEffect(() => {
