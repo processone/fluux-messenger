@@ -14,7 +14,7 @@ export function DevicesSection() {
         {hasResources ? t('profile.otherConnectedDevices') : t('profile.connectedDevices')}
       </h3>
       {hasResources ? (
-        <ul className="space-y-2 w-fit max-w-md">
+        <ul className="space-y-2 w-full max-w-md">
           {Array.from(ownResources.entries()).map(([resource, presence]: [string, ResourcePresence]) => (
             <DeviceListItem
               key={resource}
