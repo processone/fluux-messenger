@@ -620,6 +620,11 @@ export const connectionMachine = setup({
               target: 'paused',
               actions: 'setDisplayAsleep',
             },
+            // Display active while waiting acts as an immediate kick (like VISIBLE).
+            DISPLAY_ACTIVE: {
+              target: 'attempting',
+              actions: ['clearDisplayAsleep', 'clearTargetTime'],
+            },
           },
         },
 

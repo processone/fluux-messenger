@@ -553,6 +553,60 @@ describe('connectionMachine', () => {
       }
     })
 
+    it('should resume paused -> attempting on DISPLAY_ACTIVE, preserving the counter', () => {
+      // Build up to attempt 3, then pause
+      actor.send({ type: 'TRIGGER_RECONNECT' })
+      actor.send({ type: 'CONNECTION_ERROR', error: 'fail' })
+      actor.send({ type: 'TRIGGER_RECONNECT' })
+      actor.send({ type: 'CONNECTION_ERROR', error: 'fail' })
+      expect(actor.getSnapshot().context.reconnectAttempt).toBe(3)
+      actor.send({ type: 'DISPLAY_INACTIVE' })
+      expect(actor.getSnapshot().value).toEqual({ reconnecting: 'paused' })
+
+      // Display back → immediate attempt, counter intact.
+      actor.send({ type: 'DISPLAY_ACTIVE' })
+      expect(actor.getSnapshot().value).toEqual({ reconnecting: 'attempting' })
+      expect(actor.getSnapshot().context.displayAsleep).toBe(false)
+      expect(actor.getSnapshot().context.reconnectAttempt).toBe(3)
+      expect(actor.getSnapshot().context.reconnectTargetTime).toBeNull()
+      actor.stop()
+    })
+
+    it('should continue backoff from the preserved attempt after resume + CONNECTION_ERROR', () => {
+      actor.send({ type: 'TRIGGER_RECONNECT' })
+      actor.send({ type: 'CONNECTION_ERROR', error: 'fail' })
+      actor.send({ type: 'TRIGGER_RECONNECT' })
+      actor.send({ type: 'CONNECTION_ERROR', error: 'fail' })
+      expect(actor.getSnapshot().context.reconnectAttempt).toBe(3)
+      expect(actor.getSnapshot().context.nextRetryDelayMs).toBe(4000)
+
+      actor.send({ type: 'DISPLAY_INACTIVE' })
+      actor.send({ type: 'DISPLAY_ACTIVE' })
+      // attempting again, then a failure should advance 3 -> 4 (8000ms), not reset.
+      actor.send({ type: 'CONNECTION_ERROR', error: 'fail' })
+      expect(actor.getSnapshot().context.reconnectAttempt).toBe(4)
+      expect(actor.getSnapshot().context.nextRetryDelayMs).toBe(8000)
+      actor.stop()
+    })
+
+    it('should treat DISPLAY_ACTIVE in waiting as an immediate kick to attempting', () => {
+      // Still in waiting (attempt=1). DISPLAY_ACTIVE acts like VISIBLE.
+      expect(actor.getSnapshot().value).toEqual({ reconnecting: 'waiting' })
+      actor.send({ type: 'DISPLAY_ACTIVE' })
+      expect(actor.getSnapshot().value).toEqual({ reconnecting: 'attempting' })
+      expect(actor.getSnapshot().context.reconnectAttempt).toBe(1)
+      actor.stop()
+    })
+
+    it('should ignore DISPLAY_ACTIVE in connected.healthy', () => {
+      const c = createActor(connectionMachine).start()
+      c.send({ type: 'CONNECT' })
+      c.send({ type: 'CONNECTION_SUCCESS' })
+      c.send({ type: 'DISPLAY_ACTIVE' })
+      expect(c.getSnapshot().value).toEqual({ connected: 'healthy' })
+      c.stop()
+    })
+
     it('should ignore DISPLAY_INACTIVE in connected.healthy', () => {
       const c = createActor(connectionMachine).start()
       c.send({ type: 'CONNECT' })
