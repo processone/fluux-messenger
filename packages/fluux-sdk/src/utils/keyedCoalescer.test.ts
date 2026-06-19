@@ -33,4 +33,15 @@ describe('createKeyedCoalescer', () => {
     expect(c.size()).toBe(0)
     expect(c.flush()).toEqual([])
   })
+
+  it('delete(key) drops a buffered entry so it is not flushed', () => {
+    const c = createKeyedCoalescer<string, number>()
+    c.open()
+    c.add('a', 1)
+    c.add('b', 2)
+    expect(c.delete('a')).toBe(true)
+    expect(c.delete('missing')).toBe(false)
+    expect(c.size()).toBe(1)
+    expect(c.flush()).toEqual([{ key: 'b', value: 2 }])
+  })
 })

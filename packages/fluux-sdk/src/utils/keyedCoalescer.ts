@@ -26,6 +26,8 @@ export interface KeyedCoalescer<K, V> {
   flush(): CoalescedEntry<K, V>[]
   /** Clear the buffer and close without returning entries. */
   drop(): void
+  /** Drop any buffered value for key. Returns true if an entry was removed. */
+  delete(key: K): boolean
   /** Number of distinct keys currently buffered. */
   size(): number
 }
@@ -54,6 +56,7 @@ export function createKeyedCoalescer<K = string, V = unknown>(): KeyedCoalescer<
       buffer.clear()
       open = false
     },
+    delete: (key) => buffer.delete(key),
     size: () => buffer.size,
   }
 }
