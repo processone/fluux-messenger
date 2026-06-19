@@ -35,12 +35,17 @@
  * │  WAKE(long)      │          │
  * └──────┬───────────┘──────────┘
  *        ▼
- * ┌──────────────────────────┐
- * │        reconnecting       │
- * │ ┌──────────┐ ┌──────────┐ │
- * │ │ waiting   │ │attempting│ │
- * │ └──────────┘ └──────────┘ │
- * └──────┬─────────────────────┘
+ * ┌──────────────────────────────────────────────┐
+ * │                  reconnecting                   │
+ * │  ┌──────────┐  timer expiry  ┌──────────┐      │
+ * │  │ waiting   │───────────────►│attempting│      │
+ * │  └────┬─────┘◄───────────────└──────────┘      │
+ * │   ▲   │ DISPLAY_INACTIVE   CONNECTION_ERROR     │
+ * │   │   ▼                                          │
+ * │   │ ┌──────────┐  DISPLAY_ACTIVE / TRIGGER_RECONNECT
+ * │   └─│  paused   │──────────────────► attempting  │
+ * │ DISPLAY_ACTIVE └──────────┘                     │
+ * └──────┬─────────────────────────────────────────┘
  *        │ DISCONNECT / CANCEL_RECONNECT
  *        ▼
  * ┌──────────────┐
@@ -550,6 +555,19 @@ export const connectionMachine = setup({
 
     /**
      * Lost connection, attempting to recover with exponential backoff.
+     *
+     * ## Display-gate boundary (intentional)
+     *
+     * The display gate engages only when a `DISPLAY_INACTIVE` keepalive tick
+     * lands in `waiting` (`waiting → paused`). The `connected.*` states
+     * deliberately do NOT track display state — `DISPLAY_INACTIVE` is ignored
+     * there. Consequence: a reconnect that *begins* while the display is already
+     * off runs the backoff ladder for at most one keepalive interval (~30s)
+     * before the next `DISPLAY_INACTIVE` tick parks it in `paused`. That is a
+     * bounded, self-healing leak, intentionally accepted to avoid threading
+     * display state through every connected substate. An in-flight `attempting`
+     * is never interrupted by the gate — it completes its attempt and
+     * re-evaluates in `waiting`, where the next tick can pause it.
      */
     reconnecting: {
       initial: 'waiting',
@@ -672,6 +690,13 @@ export const connectionMachine = setup({
          * is paused with NO `after` timer armed — zero reconnect work happens
          * until the display comes back. The attempt counter and nextRetryDelayMs
          * are preserved so the ladder resumes where it left off.
+         *
+         * The gate is entered only from `waiting` (see the `reconnecting`
+         * doc-comment for why `connected.*` does not track display state and the
+         * resulting bounded, self-healing leak). DISCONNECT / CANCEL_RECONNECT /
+         * CONFLICT / AUTH_ERROR are handled by the parent `reconnecting.on`
+         * (inherited just like `waiting`/`attempting`), which runs
+         * `resetReconnectState` and thereby clears `displayAsleep` on exit.
          */
         paused: {
           on: {
@@ -681,12 +706,9 @@ export const connectionMachine = setup({
               target: 'attempting',
               actions: ['clearDisplayAsleep', 'clearTargetTime'],
             },
-            // User logout / cancel — clean exit.
-            DISCONNECT: {
-              target: '#connection.disconnected',
-              actions: 'resetReconnectState',
-            },
-            // Explicit trigger also resumes the attempt.
+            // Explicit user-initiated retry deliberately overrides the display
+            // gate: a manual retry wins over the "display off" hold and resumes
+            // the attempt immediately (counter preserved).
             TRIGGER_RECONNECT: {
               target: 'attempting',
               actions: ['clearDisplayAsleep', 'clearTargetTime'],

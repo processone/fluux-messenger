@@ -616,6 +616,18 @@ describe('connectionMachine', () => {
       actor.stop()
     })
 
+    it('should let TRIGGER_RECONNECT override the display gate from paused', () => {
+      actor.send({ type: 'DISPLAY_INACTIVE' })
+      expect(actor.getSnapshot().value).toEqual({ reconnecting: 'paused' })
+      expect(actor.getSnapshot().context.displayAsleep).toBe(true)
+
+      // User-initiated retry wins over the "display off" hold.
+      actor.send({ type: 'TRIGGER_RECONNECT' })
+      expect(actor.getSnapshot().value).toEqual({ reconnecting: 'attempting' })
+      expect(actor.getSnapshot().context.displayAsleep).toBe(false)
+      actor.stop()
+    })
+
     it('should still mark SM resume not viable on WAKE with a long sleep while waiting', () => {
       // WAKE (long) is orthogonal to the display gate — viability still flips.
       actor.send({ type: 'WAKE', sleepDurationMs: SM_SESSION_TIMEOUT_MS + 1000 })
