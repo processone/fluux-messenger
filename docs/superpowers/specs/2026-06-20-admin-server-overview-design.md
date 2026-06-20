@@ -89,15 +89,18 @@ interface ServerStats {
   `fetchServerStats`, `isLoadingStats`. Reuses existing `executeSimpleCommand` /
   `executeApiCommand` helpers.
 
-**Data sources** (per metric; ⚠ = confirm against the live ejabberd during implementation):
+**Data sources** (per metric). Confirmed against the live process-one.net ejabberd via a session
+console export (2026-06-20): the server advertises `jabber:iq:version` (mod_version active) and
+`http://jabber.org/protocol/commands`. ⚠ = still to confirm live (the export did not include admin
+command traffic).
 | Metric | Source |
 |---|---|
 | registeredUsers | XEP-0133 `get-registered-users-num` → field `registeredusersnum` |
 | onlineUsers | XEP-0133 `get-online-users-num` → field `onlineusersnum` |
 | onlineRooms | ejabberd api-command `muc_online_rooms_count` (existing path in `fetchEntityCounts`) |
 | vhostCount | `fetchVhosts().length` (existing) |
-| uptimeSeconds | ⚠ ejabberd api-command `stats` with `name=uptimeseconds` (fallback: `uptime`) |
-| version | ⚠ XEP-0092 `jabber:iq:version` query to the domain bare JID (fallback: parse `status` text) |
+| uptimeSeconds | ejabberd api-command `stats` with `name=uptimeseconds`. ⚠ Parse the returned value **tolerantly** — read the single non-fixed value field rather than hard-coding its `var` (`stat`/`res`/etc. unconfirmed). |
+| version | **Confirmed:** XEP-0092 `jabber:iq:version` to the domain bare JID (`<name>ejabberd</name><version>…</version>`). mod_version advertised on process-one.net. |
 
 ## C — Friendly kit (reusable foundation)
 
