@@ -653,6 +653,8 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
       ownFingerprint,
       isSecretKeyUnavailableError,
     )
+    const reason = details && details.length ? ` (${details.join('; ')})` : ''
+    this.ctx.logger.info(`Trust-state verdict: ${status}${reason}`)
     if (status === 'pending-seal') {
       await this.sealTrustStateNow()
       return

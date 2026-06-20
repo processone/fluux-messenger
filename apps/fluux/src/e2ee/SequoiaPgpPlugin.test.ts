@@ -2795,6 +2795,37 @@ describe('SequoiaPgpPlugin', () => {
     })
   })
 
+  describe('trust-state verdict instrumentation', () => {
+    // Task 4: After computing the trust-state verdict, the plugin must log it
+    // via ctx.logger.info so it lands in both the webview console (fluux.log)
+    // and the in-app console store (via the E2EE diagnostic logger fan-out).
+
+    it('logs the trust-state verdict via ctx.logger.info after init', async () => {
+      const { ctx } = makeContext('me@example.com')
+      const infoCalls: string[] = []
+      ctx.logger.info = (message: string) => { infoCalls.push(message) }
+
+      await plugin.init(ctx)
+
+      // A trust-state verdict log must be emitted (status can be any non-trivial
+      // value: pending-seal on first run, sealed on subsequent, etc.)
+      expect(infoCalls.some((m) => /trust.?state/i.test(m))).toBe(true)
+    })
+
+    it('includes the verdict status in the log message', async () => {
+      const { ctx } = makeContext('me@example.com')
+      const infoCalls: string[] = []
+      ctx.logger.info = (message: string) => { infoCalls.push(message) }
+
+      await plugin.init(ctx)
+
+      const verdictLog = infoCalls.find((m) => /trust.?state/i.test(m))
+      expect(verdictLog).toBeDefined()
+      // The message must contain a recognizable status keyword
+      expect(verdictLog).toMatch(/sealed|pending-seal|awaiting-key|compromised|uninitialized/)
+    })
+  })
+
   describe('backup sync marker (getBackedUpFingerprint)', () => {
     // The marker lets the UI answer "is my local key already backed up?"
     // without re-prompting for the passphrase. These tests pin the
