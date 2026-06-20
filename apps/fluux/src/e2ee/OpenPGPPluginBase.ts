@@ -125,6 +125,7 @@ import { usePinnedPrimaryFingerprintsStore } from '@/stores/pinnedPrimaryFingerp
 import { useKeyChangeAlertsStore } from '@/stores/keyChangeAlertsStore'
 import { setTrustStateStatus } from '@/stores/trustStateStatusStore'
 import { withPassphraseFormatHeader } from './passphraseFormatHeader'
+import { isSecretKeyUnavailableError } from './keyUnavailable'
 
 // ---------------------------------------------------------------------------
 // XEP-0373 constants
@@ -641,7 +642,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     }
   }
 
-  private async verifyTrustStateOnInit(): Promise<void> {
+  protected async verifyTrustStateOnInit(): Promise<void> {
     const ownPublicArmored = this.ownBundle?.publicArmored
     const ownFingerprint = this.ownBundle?.fingerprint
     if (!ownPublicArmored || !ownFingerprint || !this.ctx) return
@@ -650,12 +651,28 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
       (ciphertext, senderPub) => this.decryptWithOwnKey(jid, ciphertext, senderPub),
       ownPublicArmored,
       ownFingerprint,
+      isSecretKeyUnavailableError,
     )
+    const reason = details && details.length ? ` (${details.join('; ')})` : ''
+    this.ctx.logger.info(`Trust-state verdict: ${status}${reason}`)
     if (status === 'pending-seal') {
       await this.sealTrustStateNow()
       return
     }
     setTrustStateStatus(status, details)
+  }
+
+  /**
+   * Re-verify the trust-state seal after the secret key becomes usable again
+   * (recovery / unlock). `activateSubscriptions()` is idempotent (guarded) and
+   * runs the seal check on first activation; the explicit `verifyTrustStateOnInit()`
+   * covers the case where subscriptions were already active (so the guard skips
+   * the internal check). Resolves a deferred `awaiting-key` verdict to `sealed`
+   * for an unchanged cert. Fire-and-forget: the verify catches internally.
+   */
+  protected reverifyTrustStateAfterKeyChange(): void {
+    this.activateSubscriptions()
+    void this.verifyTrustStateOnInit()
   }
 
   async resealTrustState(): Promise<void> {
@@ -883,6 +900,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     // locally so history stays decryptable. Re-run deferred decrypts so any
     // still-stashed messages are recovered immediately.
     ctx.notifyKeyUnlocked?.()
+    this.reverifyTrustStateAfterKeyChange()
 
     return { fingerprint: bundle.fingerprint }
   }
@@ -1175,6 +1193,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     // stashed while the key was absent stay "could not be decrypted" until an
     // unrelated trigger (reconnect, app restart) re-registers the plugin.
     ctx.notifyKeyUnlocked?.()
+    this.reverifyTrustStateAfterKeyChange()
 
     return { fingerprint: bundle.fingerprint }
   }

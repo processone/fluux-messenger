@@ -115,6 +115,7 @@ export async function verifyTrustStateSeal(
   decryptFn: DecryptFn,
   ownPublicArmored: string,
   ownFingerprint: string,
+  isKeyUnavailable: (err: unknown) => boolean = () => false,
 ): Promise<{ status: TrustStateStatus; details?: string[] }> {
   const sealArmored = localStorage.getItem(getSealKey())
 
@@ -127,7 +128,11 @@ export async function verifyTrustStateSeal(
   let decrypted: Awaited<ReturnType<DecryptFn>>
   try {
     decrypted = await decryptFn(sealArmored, ownPublicArmored)
-  } catch {
+  } catch (err) {
+    // A decrypt failure because the secret key is unavailable (locked /
+    // unrecoverable) is NOT a tamper signal — there is simply no
+    // verdict yet. Only a decrypt failure with a usable key is suspicious.
+    if (isKeyUnavailable(err)) return { status: 'awaiting-key' }
     if (storesAreEmpty()) return { status: 'pending-seal' }
     return { status: 'compromised', details: ['Trust state seal could not be decrypted'] }
   }
