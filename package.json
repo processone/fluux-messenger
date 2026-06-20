@@ -46,7 +46,6 @@
     "@tauri-apps/plugin-deep-link": "^2.4.7"
   },
   "overrides": {
-    "serialize-javascript": "7.0.6",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "zod-validation-error": "4.0.2",
