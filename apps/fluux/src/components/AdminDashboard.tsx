@@ -27,22 +27,22 @@ export function AdminDashboard({ activeCategory, onCategoryChange }: AdminDashbo
   const {
     commands,
     commandsByCategory,
-    entityCounts,
+    serverStats,
     isDiscovering,
     isExecuting,
     executeCommand,
-    fetchEntityCounts,
+    fetchServerStats,
     discoverMucService,
     isAdmin,
   } = useAdmin()
 
-  // Fetch entity counts on mount
+  // Fetch server overview stats on mount (also feeds the category count badges)
   useEffect(() => {
     if (commands.length > 0) {
-      fetchEntityCounts().catch(console.error)
-      discoverMucService().catch(console.error)
+      void fetchServerStats()
+      void discoverMucService()
     }
-  }, [commands.length, fetchEntityCounts, discoverMucService])
+  }, [commands.length, fetchServerStats, discoverMucService])
 
   // Check if we have announcement commands
   const hasAnnouncements = commandsByCategory.announcement.length > 0
@@ -95,37 +95,22 @@ export function AdminDashboard({ activeCategory, onCategoryChange }: AdminDashbo
 
   return (
     <div className="px-2 py-2 space-y-1">
-      {/* Statistics Category */}
+      {/* Statistics Category - opens the ServerOverview dashboard (non-expanding) */}
       {hasStats && (
-        <>
-          <CategoryButton
-            icon={BarChart3}
-            label={t('admin.categories.statistics')}
-            isActive={activeCategory === 'stats'}
-            onClick={() => onCategoryChange(activeCategory === 'stats' ? null : 'stats')}
-          />
-
-          {/* Stats commands (shown when stats is active) */}
-          {activeCategory === 'stats' && (
-            <div className="ms-6 space-y-0.5 mb-2">
-              {commandsByCategory.stats.map(cmd => (
-                <CommandButton
-                  key={cmd.node}
-                  command={cmd}
-                  onClick={() => handleExecuteCommand(cmd.node)}
-                  disabled={isExecuting}
-                />
-              ))}
-            </div>
-          )}
-        </>
+        <CategoryButton
+          icon={BarChart3}
+          label={t('admin.categories.statistics')}
+          isActive={activeCategory === 'stats'}
+          onClick={() => onCategoryChange(activeCategory === 'stats' ? null : 'stats')}
+          hasExpandableContent={false}
+        />
       )}
 
       {/* Users Category */}
       <CategoryButton
         icon={Users}
         label={t('admin.categories.users')}
-        count={entityCounts.users}
+        count={serverStats?.registeredUsers}
         isActive={activeCategory === 'users'}
         onClick={() => onCategoryChange(activeCategory === 'users' ? null : 'users')}
         hasExpandableContent={false}
@@ -135,7 +120,7 @@ export function AdminDashboard({ activeCategory, onCategoryChange }: AdminDashbo
       <CategoryButton
         icon={Hash}
         label={t('admin.categories.rooms')}
-        count={entityCounts.rooms}
+        count={serverStats?.onlineRooms}
         isActive={activeCategory === 'rooms'}
         onClick={() => onCategoryChange(activeCategory === 'rooms' ? null : 'rooms')}
         hasExpandableContent={false}

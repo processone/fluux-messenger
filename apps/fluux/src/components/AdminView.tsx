@@ -12,6 +12,7 @@ import { UserListItem } from './UserListItem'
 import { RoomListItem } from './RoomListItem'
 import { AdminUserView } from './AdminUserView'
 import { AdminRoomView } from './AdminRoomView'
+import { ServerOverview } from './ServerOverview'
 
 interface AdminViewProps {
   activeCategory: AdminCategory | null
@@ -243,6 +244,8 @@ export function AdminView({ activeCategory, onBack }: AdminViewProps) {
       return t('admin.userView.title')
     }
     switch (activeCategory) {
+      case 'stats':
+        return t('admin.overview.title')
       case 'users':
         return t('admin.categories.users')
       case 'rooms':
@@ -258,6 +261,8 @@ export function AdminView({ activeCategory, onBack }: AdminViewProps) {
       return <User className="size-5 text-fluux-brand" />
     }
     switch (activeCategory) {
+      case 'stats':
+        return <Server className="size-5 text-fluux-brand" />
       case 'users':
         return <Users className="size-5 text-fluux-brand" />
       case 'rooms':
@@ -309,6 +314,11 @@ export function AdminView({ activeCategory, onBack }: AdminViewProps) {
           isExecuting={isExecuting}
         />
       )
+    }
+
+    // Server overview dashboard for the stats category
+    if (activeCategory === 'stats') {
+      return <ServerOverview />
     }
 
     // Show entity lists based on active category
