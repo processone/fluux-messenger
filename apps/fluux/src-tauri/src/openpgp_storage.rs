@@ -934,6 +934,66 @@ mod tests {
     }
 
     #[test]
+    fn failed_resave_keeps_prior_key_decryptable() {
+        // The core regression guard against losing the passphrase. If a
+        // re-save fails partway (here the TSK write is sabotaged), the
+        // PREVIOUSLY saved key must remain fully decryptable. The original
+        // bug minted + committed a fresh passphrase BEFORE writing the TSK,
+        // so a failed write left the keychain holding a passphrase for a key
+        // that never landed and overwrote the only copy of the prior one —
+        // permanently bricking the on-disk key. Reusing the existing
+        // passphrase makes a failed re-save a no-op for the passphrase store,
+        // so the prior (passphrase, key) pair survives intact.
+        let dir = fresh_tmp_dir();
+        let storage = KeyStorage::for_testing(dir.clone());
+        let original = generate_cert("alice@example.com");
+        let original_fp = original.fingerprint().to_hex();
+        storage.save("alice@example.com", &original).unwrap();
+
+        // Capture the passphrase store as it stands after the good save.
+        let pass_path = storage
+            .passphrase_fallback_path("alice@example.com")
+            .unwrap();
+        let pass_before = fs::read(&pass_path).unwrap();
+
+        // Sabotage the next TSK write: `atomic_write` writes "<path>.tmp"
+        // first, so making that path a directory forces the write to fail
+        // before the real key file is ever touched.
+        let key_path = storage.key_file_path("alice@example.com").unwrap();
+        let mut tmp = key_path.as_os_str().to_os_string();
+        tmp.push(".tmp");
+        let tmp = PathBuf::from(tmp);
+        fs::create_dir(&tmp).unwrap();
+
+        // Attempt a re-save (e.g. a subkey rotation) — it must fail.
+        let rotated = generate_cert("alice@example.com");
+        let result = storage.save("alice@example.com", &rotated);
+        assert!(result.is_err(), "the sabotaged re-save must fail");
+
+        // Remove the saboteur so it can't interfere with the load below.
+        fs::remove_dir(&tmp).unwrap();
+
+        // The passphrase store must be byte-for-byte unchanged: a failed
+        // re-save may not have rotated or scrubbed the working passphrase.
+        let pass_after = fs::read(&pass_path).unwrap();
+        assert_eq!(
+            pass_before, pass_after,
+            "a failed re-save must not touch the passphrase store"
+        );
+
+        // And the ORIGINAL key must still load and decrypt.
+        let loaded = storage
+            .load("alice@example.com")
+            .expect("load must succeed after a failed re-save")
+            .expect("the original key must still be present");
+        assert_eq!(
+            loaded.cert.fingerprint().to_hex(),
+            original_fp,
+            "the prior key must remain decryptable after a failed re-save"
+        );
+    }
+
+    #[test]
     fn save_refuses_cleartext_fallback_when_disallowed() {
         // Security: where the cleartext `.pass` fallback is disabled (macOS,
         // where a keychain always exists), a save that cannot reach the
