@@ -360,6 +360,8 @@ export class Admin extends BaseModule {
    * Fetch structured server vital-signs for the overview dashboard.
    * Each metric is fetched independently; a missing/forbidden command omits
    * that metric rather than failing the whole snapshot (discovery-driven).
+   *
+   * NOTE: _vhost is reserved for future per-vhost scoping (not yet wired).
    */
   async fetchServerStats(_vhost?: string): Promise<ServerStats> {
     const stats: ServerStats = { fetchedAt: Date.now() }
@@ -367,13 +369,15 @@ export class Admin extends BaseModule {
     try {
       const form = await this.executeSimpleCommand('get-registered-users-num')
       const v = form ? getFormFieldValue(form, 'registeredusersnum') : undefined
-      if (v != null && v !== '') stats.registeredUsers = parseInt(v, 10)
+      const n = this.parseCount(v)
+      if (n !== undefined) stats.registeredUsers = n
     } catch { /* unavailable */ }
 
     try {
       const form = await this.executeSimpleCommand('get-online-users-num')
       const v = form ? getFormFieldValue(form, 'onlineusersnum') : undefined
-      if (v != null && v !== '') stats.onlineUsers = parseInt(v, 10)
+      const n = this.parseCount(v)
+      if (n !== undefined) stats.onlineUsers = n
     } catch { /* unavailable */ }
 
     try {
@@ -384,7 +388,8 @@ export class Admin extends BaseModule {
            getFormFieldValue(form, 'onlineroomsnum') ??
            getFormFieldValue(form, 'rooms'))
         : undefined
-      if (v != null && v !== '') stats.onlineRooms = parseInt(v, 10)
+      const n = this.parseCount(v)
+      if (n !== undefined) stats.onlineRooms = n
     } catch { /* unavailable */ }
 
     const uptime = await this.fetchUptimeSeconds()
@@ -419,6 +424,13 @@ export class Admin extends BaseModule {
       }
     } catch { /* unavailable */ }
     return null
+  }
+
+  /** Parse a count field tolerantly: returns undefined for missing/non-numeric values. */
+  private parseCount(value: string | undefined): number | undefined {
+    if (value == null || value === '') return undefined
+    const n = parseInt(value, 10)
+    return Number.isNaN(n) ? undefined : n
   }
 
   /** Read server software version via XEP-0092 (jabber:iq:version) on the domain. */
