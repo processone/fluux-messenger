@@ -74,7 +74,7 @@ function App() {
   useExternalLinkHandler()
   // Must stay mounted even during the full-screen auto-reconnect spinner:
   // native keepalive / wake listeners are what unstick reconnect after long sleep.
-  usePlatformState()
+  const { displayActive } = usePlatformState()
   useAccountScopeRehydration()
   const update = useAutoUpdate({ autoCheck: true })
 
@@ -337,7 +337,7 @@ function App() {
   // Only show for initial page load reconnect, NOT for wake-from-sleep reconnect.
   // Once we've been online, stay in ChatLayout and show inline reconnect indicator.
   // Uses status !== 'online' to cover all intermediate states (reconnecting, error, etc.)
-  if (isAutoReconnecting && !hasBeenOnline && status !== 'online') {
+  if (isAutoReconnecting && !hasBeenOnline && status !== 'online' && displayActive) {
     return (
       <>
         <TitleBar />

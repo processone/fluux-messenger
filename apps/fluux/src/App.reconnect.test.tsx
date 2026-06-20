@@ -7,10 +7,14 @@ const {
   mockUseConnectionStatus,
   mockUsePlatformState,
   mockGetSession,
+  mockPlatformDisplayActive,
 } = vi.hoisted(() => ({
   mockUseConnectionStatus: vi.fn(),
   mockUsePlatformState: vi.fn(),
   mockGetSession: vi.fn(),
+  // App destructures `{ displayActive }` from usePlatformState(); default true
+  // so the mock never returns undefined (which would throw on destructure).
+  mockPlatformDisplayActive: { current: true },
 }))
 
 vi.mock('@fluux/sdk', () => ({
@@ -29,7 +33,10 @@ vi.mock('./hooks/useSessionPersistence', () => ({
 }))
 
 vi.mock('./hooks/usePlatformState', () => ({
-  usePlatformState: () => mockUsePlatformState(),
+  usePlatformState: () => {
+    mockUsePlatformState()
+    return { displayActive: mockPlatformDisplayActive.current }
+  },
 }))
 
 vi.mock('./hooks', () => ({
@@ -99,6 +106,7 @@ vi.mock('./components/UpdateModal', () => ({
 describe('App reconnect recovery hooks', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mockPlatformDisplayActive.current = true
     mockUseConnectionStatus.mockReturnValue({ status: 'connecting' })
     mockGetSession.mockReturnValue({
       jid: 'user@example.com',
@@ -129,6 +137,7 @@ describe('App connection-state routing (after the user has been online)', () => 
 
   beforeEach(() => {
     vi.clearAllMocks()
+    mockPlatformDisplayActive.current = true
     // A stored session persists throughout: logout-keep-data and
     // cancel-reconnect both leave credentials behind while the connection
     // is no longer online. The gate must not key its login/chat decision on
@@ -221,6 +230,7 @@ describe('App connection-state routing (after the user has been online)', () => 
 describe('App connection gate — initial load and fresh login', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mockPlatformDisplayActive.current = true
   })
 
   it('shows the auto-reconnect spinner (not LoginScreen) for a disconnected status during the initial reconnect', () => {
@@ -273,5 +283,45 @@ describe('App connection gate — initial load and fresh login', () => {
     )
 
     expect(screen.getByTestId('login-screen')).toBeInTheDocument()
+  })
+
+  it('drops the full-screen spinner and shows ChatLayout when reconnecting while display is asleep (B2)', () => {
+    // Initial auto-reconnect (stored session, never been online) holds in
+    // reconnecting.paused: status stays 'reconnecting' forever. The spinner
+    // must NOT strand — render ChatLayout (paused chrome) instead.
+    mockPlatformDisplayActive.current = false
+    mockGetSession.mockReturnValue({
+      jid: 'user@example.com',
+      password: 'secret',
+      server: 'example.com',
+    })
+    mockUseConnectionStatus.mockReturnValue({ status: 'reconnecting', jid: 'user@example.com' })
+
+    render(
+      <MemoryRouter initialEntries={['/messages']}>
+        <App />
+      </MemoryRouter>
+    )
+
+    expect(screen.queryByText('Reconnecting...')).not.toBeInTheDocument()
+    expect(screen.getByTestId('chat-layout')).toBeInTheDocument()
+  })
+
+  it('still shows the spinner when reconnecting with display active (normal initial reconnect)', () => {
+    mockPlatformDisplayActive.current = true
+    mockGetSession.mockReturnValue({
+      jid: 'user@example.com',
+      password: 'secret',
+      server: 'example.com',
+    })
+    mockUseConnectionStatus.mockReturnValue({ status: 'reconnecting', jid: 'user@example.com' })
+
+    render(
+      <MemoryRouter initialEntries={['/messages']}>
+        <App />
+      </MemoryRouter>
+    )
+
+    expect(screen.getByText('Reconnecting...')).toBeInTheDocument()
   })
 })

@@ -43,7 +43,9 @@ vi.mock('./hooks/useFullscreen', () => ({
 }))
 
 vi.mock('./hooks/usePlatformState', () => ({
-  usePlatformState: vi.fn(),
+  // App destructures `{ displayActive }`; default true so the mock never
+  // returns undefined (which would throw on destructure).
+  usePlatformState: vi.fn(() => ({ displayActive: true })),
 }))
 
 // Mock Tauri close handler (no-op in tests)

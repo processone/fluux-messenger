@@ -744,6 +744,19 @@ describe('usePlatformState', () => {
       await fireKeepalive({ displayActive: true, sleptMs: 600_000 })
       expect(mockClientHandleKeepaliveTick).toHaveBeenCalledWith(true, 600_000)
     })
+
+    it('returns displayActive=false after a display-off tick', async () => {
+      mockConnectionStatus.current = 'online'
+      const { result } = renderHook(() => usePlatformState())
+      await fireKeepalive({ displayActive: false, sleptMs: 30_000 })
+      expect(result.current.displayActive).toBe(false)
+    })
+
+    it('defaults displayActive=true before any tick', () => {
+      mockConnectionStatus.current = 'reconnecting'
+      const { result } = renderHook(() => usePlatformState())
+      expect(result.current.displayActive).toBe(true)
+    })
   })
 
   describe('shouldHandleDisplayWake', () => {

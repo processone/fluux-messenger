@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import type { UnlistenFn } from '@tauri-apps/api/event'
 import { useXMPP, useSystemState, usePresence, consoleStore } from '@fluux/sdk'
 import { useConnectionStore } from '@fluux/sdk/react'
@@ -299,6 +299,10 @@ export function usePlatformState() {
   // Last keepalive tick's displayActive value. Defaults true pre-first-tick
   // so a cold-start visibility/focus nudge still works (fail-open).
   const displayActiveRef = useRef(true)
+  // Reactive mirror of displayActiveRef for App's spinner gate. Refs don't
+  // re-render; this state lets App drop the full-screen "Reconnexion…"
+  // spinner when the machine holds in reconnecting.paused (display off).
+  const [displayActive, setDisplayActive] = useState(true)
 
   useEffect(() => {
     statusRef.current = status
@@ -718,7 +722,9 @@ export function usePlatformState() {
       // here. The SDK routes the tick internally (nudge / health check / no-op).
       void listen('xmpp-keepalive', (event) => {
         const payload = parseKeepalivePayload(event?.payload)
-        displayActiveRef.current = payload.displayActive !== false
+        const active = payload.displayActive !== false
+        displayActiveRef.current = active
+        setDisplayActive(active)
         // Intent gate (defense-in-depth, change #5) + display gate (contract
         // rule 1): never even nudge when logged-out or while display asleep.
         if (!shouldRunKeepaliveReconnect(payload, getReconnectIntent())) return
@@ -815,4 +821,9 @@ export function usePlatformState() {
       presenceDisconnect()
     }
   }, [status, presenceConnect, presenceDisconnect, notifyActive, logEvent, markOsIdleUnavailable])
+
+  // Reactive display state for App's full-screen spinner gate: when a
+  // display-paused reconnect holds the machine in reconnecting.paused, App
+  // drops the spinner (it would otherwise spin forever) and renders ChatLayout.
+  return { displayActive }
 }
