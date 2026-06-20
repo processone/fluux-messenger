@@ -736,6 +736,7 @@
             "pepUnsupportedBanner": "O seu servidor não suporta a publicação de eventos pessoais (PEP, XEP-0163), necessária para a criptografia OpenPGP (XEP-0373). A criptografia de ponta a ponta não pode ser ativada nesta conta. Contacte o administrador do servidor.",
             "statusPepUnsupported": "Não é possível ativar a criptografia: o seu servidor não suporta PEP (XEP-0163), exigido pelo OpenPGP (XEP-0373).",
             "statusRegistrationFailed": "A configuração da criptografia falhou ({{code}}). Consulte a consola do programador para obter detalhes.",
+            "notProtectedAtRest": "Não há nenhum porta-chaves do sistema disponível aqui, por isso a frase-passe da sua chave é armazenada sem cifragem num ficheiro no disco. A chave não está protegida em repouso. Qualquer pessoa que consiga ler os ficheiros deste dispositivo poderia usá-la.",
             "backupLabel": "Cópia de segurança da chave",
             "backupDescription": "Publica uma cópia cifrada da tua chave no teu servidor XMPP. Protegida por uma frase-passe que só tu conheces, e legível apenas pela tua conta (access_model: whitelist). Permite ler o histórico cifrado num novo dispositivo após iniciares sessão e introduzires a frase-passe.",
             "backupAction": "Guardar no servidor",
@@ -810,6 +811,7 @@
             "identityChoice": {
                 "title": "Já existe uma identidade OpenPGP para esta conta",
                 "body": "Este navegador não tem chave local, mas o servidor já anuncia uma chave para sua conta. Gerar uma nova chave aqui bifurcaria silenciosamente sua identidade: correspondentes que cifraram para a chave existente não poderiam entregar mensagens. Escolha como resolver isso:",
+                "bodyKeyUnrecoverable": "A chave OpenPGP deste dispositivo já não pode ser desbloqueada, por isso a cifragem não pode iniciar. A sua identidade publicada não é afetada. Recupere-a restaurando a cópia de segurança no servidor ou importando um ficheiro de chave, ou substitua-a se não for possível. Escolha como pretende resolver:",
                 "publishedFingerprintLabel": "Impressão publicada",
                 "restoreFromServerTitle": "Restaurar do backup do servidor",
                 "restoreFromServerBody": "Use a senha de backup que você definiu ao ativar a criptografia em outro dispositivo. A chave privada correspondente é obtida do servidor e desbloqueada localmente.",

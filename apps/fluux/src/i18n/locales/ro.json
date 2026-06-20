@@ -736,6 +736,7 @@
             "pepUnsupportedBanner": "Serverul dumneavoastră nu acceptă publicarea de evenimente personale (PEP, XEP-0163), necesară pentru criptarea OpenPGP (XEP-0373). Criptarea end-to-end nu poate fi activată pe acest cont. Contactați administratorul serverului.",
             "statusPepUnsupported": "Criptarea nu poate fi activată: serverul nu acceptă PEP (XEP-0163), necesar pentru OpenPGP (XEP-0373).",
             "statusRegistrationFailed": "Configurarea criptării a eșuat ({{code}}). Consultați consola dezvoltatorului pentru detalii.",
+            "notProtectedAtRest": "Aici nu există niciun inel de chei al sistemului, așa că fraza de acces a cheii tale este stocată necriptată într-un fișier pe disc. Cheia nu este protejată în repaus. Oricine poate citi fișierele acestui dispozitiv ar putea-o folosi.",
             "backupLabel": "Copie de rezervă a cheii",
             "backupDescription": "Publicați o copie criptată a cheii dvs. pe serverul XMPP. Protejată de o frază de acces pe care doar dvs. o cunoașteți și citibilă doar de contul dvs. (access_model: whitelist). Vă permite să citiți istoricul criptat pe un dispozitiv nou după autentificare și introducerea frazei.",
             "backupAction": "Salvează pe server",
@@ -810,6 +811,7 @@
             "identityChoice": {
                 "title": "Există deja o identitate OpenPGP pentru acest cont",
                 "body": "Acest browser nu are nicio cheie locală, dar serverul anunță deja o cheie pentru contul tău. Generarea unei chei noi aici ar bifurca în tăcere identitatea ta: corespondenții care au criptat pentru cheia existentă nu ar putea livra mesaje. Alege cum vrei să rezolvi acest lucru:",
+                "bodyKeyUnrecoverable": "Cheia OpenPGP a acestui dispozitiv nu mai poate fi deblocată, așa că criptarea nu poate porni. Identitatea ta publicată nu este afectată. Recuperează-o restaurând copia de rezervă de pe server sau importând un fișier de cheie, ori înlocuiește-o dacă nu poți. Alege cum vrei să rezolvi:",
                 "publishedFingerprintLabel": "Amprenta publicată",
                 "restoreFromServerTitle": "Restaurează din backup-ul serverului",
                 "restoreFromServerBody": "Folosește parola de backup pe care ai setat-o când ai activat criptarea pe alt dispozitiv. Cheia privată corespunzătoare este preluată de pe server și deblocată local.",

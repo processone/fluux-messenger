@@ -736,6 +736,7 @@
             "pepUnsupportedBanner": "Teie server ei toeta isiklike sündmuste avaldamist (PEP, XEP-0163), mida OpenPGP-krüpteerimine (XEP-0373) nõuab. Otsast lõpuni krüpteerimist ei saa sellel kontol sisse lülitada. Võtke ühendust serveri administraatoriga.",
             "statusPepUnsupported": "Krüpteerimist ei saa sisse lülitada: server ei toeta PEP-i (XEP-0163), mida OpenPGP (XEP-0373) nõuab.",
             "statusRegistrationFailed": "Krüpteerimise seadistamine ebaõnnestus ({{code}}). Üksikasjad leiate arendaja konsoolist.",
+            "notProtectedAtRest": "Siin pole süsteemi võtmehoidlat saadaval, seega salvestatakse teie võtme paroolifraas krüptimata failina kettale. Võti pole puhkeolekus kaitstud. Igaüks, kes saab lugeda selle seadme faile, võib seda kasutada.",
             "backupLabel": "Võtme varukoopia",
             "backupDescription": "Avalda võtme krüpteeritud koopia oma XMPP serveris. Kaitstud paroolifraasiga, mida tead ainult sina, ja loetav ainult sinu kontolt (access_model: whitelist). Võimaldab lugeda krüpteeritud ajalugu uues seadmes pärast sisselogimist ja paroolifraasi sisestamist.",
             "backupAction": "Salvesta serverisse",
@@ -810,6 +811,7 @@
             "identityChoice": {
                 "title": "Sellele kontole on juba olemas OpenPGP identiteet",
                 "body": "Sellel brauseril pole kohalikku võtit, kuid server reklaamib juba teie konto jaoks võtit. Uue võtme genereerimine siin lõhestaks vaikselt teie identiteedi: kontaktid, kes krüpteerisid olemasoleva võtmega, ei saaks sõnumeid kohale toimetada. Valige, kuidas seda lahendada:",
+                "bodyKeyUnrecoverable": "Selle seadme OpenPGP-võtit ei saa enam avada, seega ei saa krüptimist käivitada. Teie avaldatud identiteeti see ei mõjuta. Taastage see serveri varukoopiast või võtmefaili importides, või asendage see, kui te ei saa. Valige, kuidas soovite selle lahendada:",
                 "publishedFingerprintLabel": "Avaldatud sõrmejälg",
                 "restoreFromServerTitle": "Taastamine serveri varundusest",
                 "restoreFromServerBody": "Kasutage varunduse paroolifraasi, mille seadsite krüptimise lubamisel teisel seadmel. Vastav privaatvõti tuuakse serverist ja avatakse kohalikult.",

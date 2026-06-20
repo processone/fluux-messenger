@@ -736,6 +736,7 @@
             "pepUnsupportedBanner": "El teu servidor no admet la publicació d'esdeveniments personals (PEP, XEP-0163), necessària per al xifratge OpenPGP (XEP-0373). El xifratge d'extrem a extrem no es pot activar en aquest compte. Contacta amb l'administrador del servidor.",
             "statusPepUnsupported": "No es pot activar el xifratge: el servidor no admet PEP (XEP-0163), requerit per OpenPGP (XEP-0373).",
             "statusRegistrationFailed": "La configuració del xifratge ha fallat ({{code}}). Consulta la consola del desenvolupador per als detalls.",
+            "notProtectedAtRest": "Aquí no hi ha cap clauer del sistema disponible, de manera que la frase de contrasenya de la teva clau es desa sense xifrar en un fitxer al disc. La clau no està protegida en repòs. Qualsevol que pugui llegir els fitxers d'aquest dispositiu podria utilitzar-la.",
             "backupLabel": "Còpia de seguretat de la clau",
             "backupDescription": "Publica una còpia xifrada de la teva clau al teu servidor XMPP. Protegida per una frase de pas que només tu coneixes, i només llegible pel teu compte (access_model: whitelist). Et permet llegir l'historial xifrat en un nou dispositiu després d'iniciar sessió i introduir la frase de pas.",
             "backupAction": "Desa al servidor",
@@ -810,6 +811,7 @@
             "identityChoice": {
                 "title": "Ja existeix una identitat OpenPGP per a aquest compte",
                 "body": "Aquest navegador no té cap clau local, però el servidor ja anuncia una clau per al vostre compte. Generar una nova clau aquí bifurcaria silenciosament la vostra identitat: els corresponsals que xifraven a la clau existent no podrien lliurar missatges. Trieu com voleu resoldre-ho:",
+                "bodyKeyUnrecoverable": "La clau OpenPGP d'aquest dispositiu ja no es pot desbloquejar, així que el xifratge no pot començar. La teva identitat publicada no es veu afectada. Recupera-la restaurant la còpia de seguretat del servidor o important un fitxer de clau, o substitueix-la si no pots. Tria com vols resoldre-ho:",
                 "publishedFingerprintLabel": "Empremta publicada",
                 "restoreFromServerTitle": "Restaurar des de la còpia de seguretat del servidor",
                 "restoreFromServerBody": "Utilitzeu la contrasenya de còpia de seguretat que vau definir en activar el xifratge en un altre dispositiu. La clau privada corresponent es recupera del servidor i es desbloqueja localment.",

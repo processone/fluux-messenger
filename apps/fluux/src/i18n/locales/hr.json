@@ -734,6 +734,7 @@
             "pepUnsupportedBanner": "Vaš poslužitelj ne podržava objavu osobnih događaja (PEP, XEP-0163), koju OpenPGP šifriranje (XEP-0373) zahtijeva. Šifriranje s kraja na kraj ne može se uključiti na ovom računu. Obratite se administratoru poslužitelja.",
             "statusPepUnsupported": "Šifriranje se ne može uključiti: poslužitelj ne podržava PEP (XEP-0163), koji OpenPGP (XEP-0373) zahtijeva.",
             "statusRegistrationFailed": "Postavljanje šifriranja nije uspjelo ({{code}}). Detalje potražite u programskoj konzoli.",
+            "notProtectedAtRest": "Ovdje nije dostupan sustavski svežanj ključeva, pa se zaporka vašeg ključa pohranjuje nešifrirano u datoteci na disku. Ključ nije zaštićen u mirovanju. Svatko tko može čitati datoteke ovog uređaja mogao bi ga upotrijebiti.",
             "backupLabel": "Sigurnosna kopija ključa",
             "backupDescription": "Objavite šifriranu kopiju ključa na svom XMPP poslužitelju. Zaštićena lozinkom koju znate samo vi, čitljiva samo vašem računu (access_model: whitelist). Omogućuje čitanje šifrirane povijesti na novom uređaju nakon prijave i unosa lozinke.",
             "backupAction": "Spremi na poslužitelj",
@@ -808,6 +809,7 @@
             "identityChoice": {
                 "title": "Za ovaj račun već postoji OpenPGP identitet",
                 "body": "Ovaj preglednik nema lokalni ključ, ali poslužitelj već oglašava ključ za vaš račun. Generiranje novog ključa ovdje tiho bi razdvojilo vaš identitet: korespondenti koji su šifrirali postojećim ključem ne bi mogli isporučiti poruke. Odaberite kako to riješiti:",
+                "bodyKeyUnrecoverable": "OpenPGP ključ ovog uređaja više se ne može otključati, pa se šifriranje ne može pokrenuti. Vaš objavljeni identitet nije pogođen. Oporavite ga vraćanjem sigurnosne kopije s poslužitelja ili uvozom datoteke ključa, ili ga zamijenite ako ne možete. Odaberite kako želite to riješiti:",
                 "publishedFingerprintLabel": "Objavljeni otisak",
                 "restoreFromServerTitle": "Vrati iz sigurnosne kopije poslužitelja",
                 "restoreFromServerBody": "Upotrijebite lozinku sigurnosne kopije koju ste postavili pri omogućavanju šifriranja na drugom uređaju. Odgovarajući privatni ključ dohvaća se s poslužitelja i otključava lokalno.",

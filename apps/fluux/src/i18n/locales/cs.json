@@ -736,6 +736,7 @@
             "pepUnsupportedBanner": "Váš server nepodporuje publikování osobních událostí (PEP, XEP-0163), které šifrování OpenPGP (XEP-0373) vyžaduje. Koncové šifrování nelze na tomto účtu zapnout. Kontaktujte správce serveru.",
             "statusPepUnsupported": "Šifrování nelze zapnout: server nepodporuje PEP (XEP-0163), který OpenPGP (XEP-0373) vyžaduje.",
             "statusRegistrationFailed": "Nastavení šifrování selhalo ({{code}}). Podrobnosti najdete v konzoli vývojáře.",
+            "notProtectedAtRest": "Není zde k dispozici žádná systémová klíčenka, takže přístupová fráze vašeho klíče je uložena nezašifrovaně v souboru na disku. Klíč není chráněn v klidu. Kdokoli, kdo dokáže číst soubory tohoto zařízení, by jej mohl použít.",
             "backupLabel": "Záloha klíče",
             "backupDescription": "Zveřejněte šifrovanou kopii svého klíče na svém XMPP serveru. Chráněna heslem, které znáte jen vy, a čitelná pouze vaším účtem (access_model: whitelist). Umožňuje číst šifrovanou historii na novém zařízení po přihlášení a zadání hesla.",
             "backupAction": "Uložit na server",
@@ -810,6 +811,7 @@
             "identityChoice": {
                 "title": "Pro tento účet již existuje identita OpenPGP",
                 "body": "Tento prohlížeč nemá místní klíč, ale server již oznamuje klíč pro váš účet. Vygenerování nového klíče zde by tiše rozdělilo vaši identitu: kontakty, které šifrovaly stávajícím klíčem, by nemohly doručit zprávy. Zvolte, jak chcete tento problém vyřešit:",
+                "bodyKeyUnrecoverable": "Klíč OpenPGP tohoto zařízení už nelze odemknout, takže šifrování nelze spustit. Vaše zveřejněná identita není dotčena. Obnovte ji ze zálohy na serveru nebo importem souboru s klíčem, nebo ji nahraďte, pokud to nejde. Zvolte, jak to chcete vyřešit:",
                 "publishedFingerprintLabel": "Publikovaný otisk",
                 "restoreFromServerTitle": "Obnovit ze zálohy na serveru",
                 "restoreFromServerBody": "Použijte přístupovou frázi zálohy, kterou jste nastavili při povolení šifrování na jiném zařízení. Odpovídající soukromý klíč se načte ze serveru a lokálně odemkne.",

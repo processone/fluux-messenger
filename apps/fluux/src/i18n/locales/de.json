@@ -736,6 +736,7 @@
             "pepUnsupportedBanner": "Dein Server unterstützt kein Personal Eventing (PEP, XEP-0163), das für die OpenPGP-Verschlüsselung (XEP-0373) erforderlich ist. Ende-zu-Ende-Verschlüsselung kann für dieses Konto nicht aktiviert werden. Wende dich an den Serveradministrator.",
             "statusPepUnsupported": "Verschlüsselung kann nicht aktiviert werden: Der Server unterstützt kein PEP (XEP-0163), das für OpenPGP (XEP-0373) erforderlich ist.",
             "statusRegistrationFailed": "Einrichtung der Verschlüsselung fehlgeschlagen ({{code}}). Details in der Entwicklerkonsole.",
+            "notProtectedAtRest": "Hier ist kein System-Schlüsselbund verfügbar, daher wird die Passphrase Ihres Schlüssels unverschlüsselt in einer Datei auf der Festplatte gespeichert. Der Schlüssel ist im Ruhezustand nicht geschützt. Jeder, der die Dateien dieses Geräts lesen kann, könnte ihn verwenden.",
             "backupLabel": "Schlüssel-Backup",
             "backupDescription": "Veröffentliche eine verschlüsselte Kopie deines Schlüssels auf deinem XMPP-Server. Geschützt durch eine nur dir bekannte Passphrase und nur von deinem Konto lesbar (access_model: whitelist). Ermöglicht es, den verschlüsselten Verlauf auf einem neuen Gerät zu lesen, nachdem du dich angemeldet und die Passphrase eingegeben hast.",
             "backupAction": "Auf Server sichern",
@@ -810,6 +811,7 @@
             "identityChoice": {
                 "title": "Für dieses Konto existiert bereits eine OpenPGP-Identität",
                 "body": "Dieser Browser hat keinen lokalen Schlüssel, aber der Server kündigt bereits einen Schlüssel für Ihr Konto an. Das Generieren eines neuen Schlüssels hier würde Ihre Identität stillschweigend aufspalten: Korrespondenten, die mit dem vorhandenen Schlüssel verschlüsselt haben, könnten keine Nachrichten mehr zustellen. Wählen Sie, wie Sie dies lösen möchten:",
+                "bodyKeyUnrecoverable": "Der OpenPGP-Schlüssel dieses Geräts kann nicht mehr entsperrt werden, daher kann die Verschlüsselung nicht gestartet werden. Ihre veröffentlichte Identität ist nicht betroffen. Stellen Sie sie über Ihr Server-Backup oder eine Schlüsseldatei wiederher, oder ersetzen Sie sie, falls das nicht möglich ist. Wählen Sie, wie Sie dies lösen möchten:",
                 "publishedFingerprintLabel": "Veröffentlichter Fingerabdruck",
                 "restoreFromServerTitle": "Aus Server-Backup wiederherstellen",
                 "restoreFromServerBody": "Verwenden Sie die Backup-Passphrase, die Sie beim Aktivieren der Verschlüsselung auf einem anderen Gerät festgelegt haben. Der passende private Schlüssel wird vom Server abgerufen und lokal entsperrt.",

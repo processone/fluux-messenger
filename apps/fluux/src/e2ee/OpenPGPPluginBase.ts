@@ -271,6 +271,21 @@ export function classifyBoundaryError(err: unknown): { kind: E2EEErrorKind; code
   if (msg.includes('passphrase for account') && msg.includes('not in the keychain')) {
     return { kind: 'permanent', code: 'key-unrecoverable' }
   }
+  // The stored passphrase no longer decrypts the on-disk TSK (keychain/key
+  // desync, or a corrupted secret-key packet). Sequoia surfaces this as
+  // "decrypt persisted TSK ..." / "decrypt primary secret key" and, for a
+  // wrong passphrase against a v4/CFB secret, "unexpected EOF". It is a
+  // permanent condition the user can only resolve by restoring or replacing
+  // the key — never a retryable transient — so the host can route to recovery
+  // instead of showing an opaque `(unknown)`.
+  if (
+    msg.includes('decrypt persisted tsk') ||
+    msg.includes('decrypt primary secret key') ||
+    msg.includes('decrypt secret subkey') ||
+    msg.includes('unexpected eof')
+  ) {
+    return { kind: 'permanent', code: 'key-unrecoverable' }
+  }
   if (msg.includes('no key for account') || msg.includes('no identity')) {
     return { kind: 'permanent', code: 'key-missing' }
   }
@@ -362,6 +377,26 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
    * the symmetrical desktop bug. Always reset in a `finally`.
    */
   protected _allowSilentRegenerate = false
+
+  /**
+   * Set by {@link init} when {@link ensureIdentity} fails with a
+   * `key-unrecoverable` error — a local key exists but cannot be unlocked
+   * (keychain/key desync, a corrupted secret-key packet, or a passphrase
+   * that has gone missing). The plugin stays REGISTERED (init swallows the
+   * error) so the host can read this flag and route the user to recovery
+   * via the IdentityChoiceDialog (restore from server backup / import file /
+   * replace identity), instead of dead-ending on an opaque registration
+   * failure. Cleared the moment a usable identity is established.
+   */
+  protected _keyRecoveryNeeded = false
+
+  /**
+   * True when a local key exists but could not be unlocked, so the host
+   * should route the user through recovery. @see {@link _keyRecoveryNeeded}.
+   */
+  isKeyRecoveryNeeded(): boolean {
+    return this._keyRecoveryNeeded
+  }
 
   // ---------------------------------------------------------------------------
   // Abstract crypto methods — implemented by each platform subclass
@@ -513,6 +548,16 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
         // the encryption-settings toggle flow) and route the user to a
         // resolution: import the matching private key, or explicitly
         // retire the published identity.
+        return
+      }
+      if (err instanceof E2EEPluginError && err.code === 'key-unrecoverable') {
+        // A local key exists but cannot be unlocked (keychain/key desync,
+        // corrupted secret packet, or a missing passphrase). Keep the
+        // plugin registered and flag the condition so the host can route
+        // the user to recovery (restore / import / replace) via the
+        // IdentityChoiceDialog, instead of failing registration with an
+        // opaque error the UI can only render as "(unknown)".
+        this._keyRecoveryNeeded = true
         return
       }
       throw err
@@ -677,6 +722,9 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
       throw this.toPluginError('ensureIdentity', err)
     }
     this.ownBundle = bundle
+    // A usable identity is established — clear any prior recovery flag so a
+    // successful restore/import/replace lifts the host's recovery routing.
+    this._keyRecoveryNeeded = false
 
     await this.checkOwnPublishedKeyConsistency(bundle)
     if (getOwnKeyConflict()) {
@@ -1920,6 +1968,17 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
 
   getOwnFingerprint(): string | null {
     return this.ownBundle?.fingerprint ?? null
+  }
+
+  /**
+   * Whether the active key's passphrase is protected by the OS keychain.
+   * `false` means it falls back to a cleartext file on disk (desktop on a
+   * platform with no secret service) — the UI warns the user it is not
+   * protected at rest. `null` when no identity is established yet. (Web
+   * always reports `false`; callers gate the warning on desktop.)
+   */
+  isKeychainBacked(): boolean | null {
+    return this.ownBundle?.keychainBacked ?? null
   }
 
   getBackedUpFingerprint(): string | null {

@@ -734,6 +734,7 @@
             "pepUnsupportedBanner": "您的服务器不支持个人事件发布（PEP，XEP-0163），而 OpenPGP 加密（XEP-0373）需要该功能。此账号无法启用端到端加密。请联系服务器管理员。",
             "statusPepUnsupported": "无法启用加密：服务器不支持 OpenPGP（XEP-0373）所需的 PEP（XEP-0163）。",
             "statusRegistrationFailed": "加密设置失败（{{code}}）。详情请查看开发者控制台。",
+            "notProtectedAtRest": "此处没有可用的系统密钥串，因此您密钥的口令以未加密的方式存储在磁盘上的文件中。该密钥在静态时未受保护。任何能读取此设备文件的人都可能使用它。",
             "backupLabel": "密钥备份",
             "backupDescription": "将已加密的密钥副本发布到您的 XMPP 服务器上。该密钥由仅您知晓的密码短语保护，且仅您的账号可读取（访问模式：白名单）。登录并输入密码短语后，您可以在新设备上读取加密历史记录。",
             "backupAction": "备份到服务器",
@@ -808,6 +809,7 @@
             "identityChoice": {
                 "title": "此账户已存在 OpenPGP 身份",
                 "body": "此浏览器没有本地密钥，但服务器已为您的账户公布了密钥。在此生成新密钥会悄悄分叉您的身份：已对现有密钥进行加密的联系人将无法投递消息。请选择如何解决：",
+                "bodyKeyUnrecoverable": "此设备的 OpenPGP 密钥已无法解锁，因此无法启动加密。您已发布的身份不受影响。可通过恢复服务器备份或导入密钥文件来找回它，若无法找回则替换它。请选择您想如何解决：",
                 "publishedFingerprintLabel": "已发布指纹",
                 "restoreFromServerTitle": "从服务器备份恢复",
                 "restoreFromServerBody": "使用您在另一台设备上启用加密时设置的备份密码短语。相应的私钥将从服务器获取并在本地解锁。",

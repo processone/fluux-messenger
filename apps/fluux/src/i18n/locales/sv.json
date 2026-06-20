@@ -734,6 +734,7 @@
             "pepUnsupportedBanner": "Din server stöder inte personal eventing (PEP, XEP-0163), som OpenPGP-kryptering (XEP-0373) kräver. End-to-end-kryptering kan inte aktiveras på det här kontot. Kontakta din serveradministratör.",
             "statusPepUnsupported": "Kryptering kan inte aktiveras: servern stöder inte PEP (XEP-0163), som OpenPGP (XEP-0373) kräver.",
             "statusRegistrationFailed": "Konfigurationen av kryptering misslyckades ({{code}}). Se utvecklarkonsolen för detaljer.",
+            "notProtectedAtRest": "Det finns ingen systemnyckelring tillgänglig här, så nyckelns lösenfras lagras okrypterad i en fil på disken. Nyckeln är inte skyddad i vila. Alla som kan läsa enhetens filer kan använda den.",
             "backupLabel": "Nyckelsäkerhetskopia",
             "backupDescription": "Publicera en krypterad kopia av din nyckel på din XMPP-server. Skyddad av en lösenfras som bara du känner till och endast läsbar av ditt konto (access_model: whitelist). Låter dig läsa krypterad historik på en ny enhet efter inloggning och inmatning av lösenfrasen.",
             "backupAction": "Säkerhetskopiera till server",
@@ -808,6 +809,7 @@
             "identityChoice": {
                 "title": "En OpenPGP-identitet finns redan för detta konto",
                 "body": "Denna webbläsare har ingen lokal nyckel, men servern annonserar redan en nyckel för ditt konto. Att generera en ny nyckel här skulle tyst förgrena din identitet: korrespondenter som krypterade till den befintliga nyckeln skulle inte kunna leverera meddelanden. Välj hur du vill lösa detta:",
+                "bodyKeyUnrecoverable": "OpenPGP-nyckeln på den här enheten kan inte längre låsas upp, så kryptering kan inte startas. Din publicerade identitet påverkas inte. Återställ den från din serversäkerhetskopia eller genom att importera en nyckelfil, eller ersätt den om du inte kan. Välj hur du vill lösa detta:",
                 "publishedFingerprintLabel": "Publicerat fingeravtryck",
                 "restoreFromServerTitle": "Återställ från serverbackup",
                 "restoreFromServerBody": "Använd backup-lösenfrasen som du ställde in när du aktiverade kryptering på en annan enhet. Motsvarande privata nyckel hämtas från servern och låses upp lokalt.",

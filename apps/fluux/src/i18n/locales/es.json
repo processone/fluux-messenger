@@ -736,6 +736,7 @@
             "pepUnsupportedBanner": "Tu servidor no admite la publicación de eventos personales (PEP, XEP-0163), necesaria para el cifrado OpenPGP (XEP-0373). El cifrado de extremo a extremo no se puede activar en esta cuenta. Contacta con el administrador de tu servidor.",
             "statusPepUnsupported": "No se puede activar el cifrado: tu servidor no admite PEP (XEP-0163), requerido por OpenPGP (XEP-0373).",
             "statusRegistrationFailed": "La configuración del cifrado ha fallado ({{code}}). Consulta la consola del desarrollador para más detalles.",
+            "notProtectedAtRest": "Aquí no hay ningún llavero del sistema disponible, por lo que la frase de contraseña de tu clave se almacena sin cifrar en un archivo del disco. La clave no está protegida en reposo. Cualquiera que pueda leer los archivos de este dispositivo podría usarla.",
             "backupLabel": "Copia de seguridad de la clave",
             "backupDescription": "Publica una copia cifrada de tu clave en tu servidor XMPP. Protegida por una frase de contraseña que solo tú conoces, y legible únicamente por tu cuenta (access_model: whitelist). Te permite leer el historial cifrado en un nuevo dispositivo tras iniciar sesión e introducir la frase.",
             "backupAction": "Guardar en el servidor",
@@ -810,6 +811,7 @@
             "identityChoice": {
                 "title": "Ya existe una identidad OpenPGP para esta cuenta",
                 "body": "Este navegador no tiene clave local, pero el servidor ya anuncia una clave para tu cuenta. Generar una nueva clave aquí bifurcaría silenciosamente tu identidad: los corresponsales que cifraron a la clave existente no podrían entregar mensajes. Elige cómo resolverlo:",
+                "bodyKeyUnrecoverable": "La clave OpenPGP de este dispositivo ya no se puede desbloquear, por lo que el cifrado no puede iniciarse. Tu identidad publicada no se ve afectada. Recupérala restaurando tu copia de seguridad del servidor o importando un archivo de clave, o reemplázala si no puedes. Elige cómo quieres resolverlo:",
                 "publishedFingerprintLabel": "Huella publicada",
                 "restoreFromServerTitle": "Restaurar desde la copia de seguridad del servidor",
                 "restoreFromServerBody": "Usa la frase de contraseña de copia de seguridad que estableciste al activar el cifrado en otro dispositivo. La clave privada correspondiente se recupera del servidor y se desbloquea localmente.",

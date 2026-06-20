@@ -735,6 +735,7 @@
             "pepUnsupportedBanner": "Váš server nepodporuje publikovanie osobných udalostí (PEP, XEP-0163), ktoré šifrovanie OpenPGP (XEP-0373) vyžaduje. Šifrovanie typu end-to-end nie je možné na tomto účte zapnúť. Kontaktujte správcu servera.",
             "statusPepUnsupported": "Šifrovanie nie je možné zapnúť: server nepodporuje PEP (XEP-0163), ktorý OpenPGP (XEP-0373) vyžaduje.",
             "statusRegistrationFailed": "Nastavenie šifrovania zlyhalo ({{code}}). Podrobnosti nájdete v konzole vývojára.",
+            "notProtectedAtRest": "Nie je tu k dispozícii žiadny systémový zväzok kľúčov, takže prístupová fráza vášho kľúča je uložená nezašifrovaná v súbore na disku. Kľúč nie je chránený v pokoji. Ktokoľvek, kto dokáže čítať súbory tohto zariadenia, by ho mohol použiť.",
             "backupLabel": "Záloha kľúča",
             "backupDescription": "Zverejnite šifrovanú kópiu svojho kľúča na svojom XMPP serveri. Chránená heslom, ktoré poznáte len vy, a čitateľná iba vaším účtom (access_model: whitelist). Umožňuje čítať šifrovanú históriu na novom zariadení po prihlásení a zadaní hesla.",
             "backupAction": "Uložiť na server",
@@ -809,6 +810,7 @@
             "identityChoice": {
                 "title": "Pre tento účet už existuje identita OpenPGP",
                 "body": "Tento prehliadač nemá miestny kľúč, ale server už oznamuje kľúč pre váš účet. Vygenerovanie nového kľúča tu by ticho rozdelilo vašu identitu: korešpondenti, ktorí šifrovali existujúcim kľúčom, by nemohli doručovať správy. Vyberte, ako to vyriešiť:",
+                "bodyKeyUnrecoverable": "Kľúč OpenPGP tohto zariadenia už nie je možné odomknúť, takže šifrovanie sa nedá spustiť. Vaša zverejnená identita nie je dotknutá. Obnovte ju zo zálohy na serveri alebo importom súboru s kľúčom, alebo ju nahraďte, ak to nie je možné. Vyberte, ako to chcete vyriešiť:",
                 "publishedFingerprintLabel": "Publikovaný odtlačok",
                 "restoreFromServerTitle": "Obnoviť zo zálohy servera",
                 "restoreFromServerBody": "Použite prístupovú frázu zálohy, ktorú ste nastavili pri povolení šifrovania na inom zariadení. Príslušný súkromný kľúč sa načíta zo servera a lokálne sa odomkne.",

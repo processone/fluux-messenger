@@ -5,6 +5,14 @@ import { AlertTriangle, Loader2, Server, FileUp, RotateCcw } from 'lucide-react'
 type Phase = 'choose' | 'restoring' | 'importing' | 'confirm-replace' | 'replacing'
 
 interface IdentityChoiceDialogProps {
+  /**
+   * Why the dialog opened, which selects the explanatory body copy:
+   *   - `no-local-key` (default): this device has no key but the server
+   *     advertises an identity (fresh device / cleared browser).
+   *   - `local-key-unrecoverable`: a local key exists but can't be unlocked
+   *     (keychain/key desync, corruption, missing passphrase).
+   */
+  reason?: 'no-local-key' | 'local-key-unrecoverable'
   /** True when the server holds a secret-key backup the user can restore. */
   hasServerBackup: boolean
   /** Fingerprint(s) currently published on PEP — surfaced so the user sees what they're choosing between. */
@@ -38,6 +46,7 @@ interface IdentityChoiceDialogProps {
  * because the user closed a modal.
  */
 export function IdentityChoiceDialog({
+  reason = 'no-local-key',
   hasServerBackup,
   publishedFingerprints,
   onRestoreFromServer,
@@ -46,6 +55,10 @@ export function IdentityChoiceDialog({
   onCancel,
 }: IdentityChoiceDialogProps) {
   const { t } = useTranslation()
+  const bodyKey =
+    reason === 'local-key-unrecoverable'
+      ? 'settings.encryption.identityChoice.bodyKeyUnrecoverable'
+      : 'settings.encryption.identityChoice.body'
   const passphraseInputRef = useRef<HTMLInputElement | null>(null)
 
   const [phase, setPhase] = useState<Phase>('choose')
@@ -142,9 +155,7 @@ export function IdentityChoiceDialog({
           <h3 className="text-lg font-semibold text-fluux-text mb-1">
             {t('settings.encryption.identityChoice.title')}
           </h3>
-          <p className="text-sm text-fluux-muted">
-            {t('settings.encryption.identityChoice.body')}
-          </p>
+          <p className="text-sm text-fluux-muted">{t(bodyKey)}</p>
         </div>
 
         <div className="flex-1 overflow-y-auto min-h-0 px-5">
