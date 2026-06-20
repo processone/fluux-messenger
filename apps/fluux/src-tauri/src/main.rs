@@ -1026,6 +1026,15 @@ struct KeepalivePayload {
     slept_ms: u64,
 }
 
+/// Construct a keepalive payload. Pure seam so the loop's payload shape is
+/// unit-testable without the FFI display probe or the Tauri emitter.
+fn build_keepalive_payload(display_active: bool, slept_ms: u64) -> KeepalivePayload {
+    KeepalivePayload {
+        display_active,
+        slept_ms,
+    }
+}
+
 /// Forward a WebView console message to the terminal via tracing.
 /// Only produces output when a tracing subscriber is active (--verbose or RUST_LOG).
 #[tauri::command]
@@ -2082,6 +2091,20 @@ mod tests {
             pick_proxy_uri(&candidates).as_deref(),
             Some("http://proxy:3128")
         );
+    }
+
+    #[test]
+    fn test_build_keepalive_payload_carries_fields() {
+        let payload = build_keepalive_payload(true, 90_000);
+        assert!(payload.display_active);
+        assert_eq!(payload.slept_ms, 90_000);
+    }
+
+    #[test]
+    fn test_build_keepalive_payload_inactive_display() {
+        let payload = build_keepalive_payload(false, 0);
+        assert!(!payload.display_active);
+        assert_eq!(payload.slept_ms, 0);
     }
 
     #[test]
