@@ -390,6 +390,11 @@ export class DemoClient extends XMPPClient {
     for (const event of data.activityEvents) {
       activityLogStore.getState().addEvent(event)
     }
+
+    // Trigger admin command discovery so the admin panel appears in demo.
+    // The real client runs this in handleConnectionSuccess; demo bypasses that
+    // path, so kick it off here against the seeded disco#items responses.
+    void this.admin.discoverAdminCommands()
   }
 
   /**
