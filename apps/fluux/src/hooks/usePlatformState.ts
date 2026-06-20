@@ -4,6 +4,7 @@ import { useXMPP, useSystemState, usePresence, consoleStore } from '@fluux/sdk'
 import { useConnectionStore } from '@fluux/sdk/react'
 import { isTauri } from '../utils/tauri'
 import type { ReconnectIntent } from '../utils/reconnectIntent'
+import { getReconnectIntent } from '@/utils/reconnectIntent'
 import { startWakeGracePeriod, startSyncGracePeriod } from '../utils/renderLoopDetector'
 
 // ── Constants ──────────────────────────────────────────────────────────────────
@@ -295,6 +296,9 @@ export function usePlatformState() {
   const statusRef = useRef(status)
   const osIdleUnavailableRef = useRef(false)
   const osIdleUnavailableLoggedRef = useRef(false)
+  // Last keepalive tick's displayActive value. Defaults true pre-first-tick
+  // so a cold-start visibility/focus nudge still works (fail-open).
+  const displayActiveRef = useRef(true)
 
   useEffect(() => {
     statusRef.current = status
@@ -704,10 +708,22 @@ export function usePlatformState() {
     let cleanedUp = false
 
     void import('@tauri-apps/api/event').then(({ listen }) => {
-      // Rust-driven keepalive tick every 30s. The SDK routes the tick
-      // internally (nudge reconnect, health check, or no-op).
-      void listen('xmpp-keepalive', () => {
-        client.handleKeepaliveTick()
+      // Rust-driven keepalive tick every 30s. The Rust thread keeps emitting
+      // even when the display is asleep; the JS-side reconnect work is gated
+      // here. The SDK routes the tick internally (nudge / health check / no-op).
+      void listen('xmpp-keepalive', (event) => {
+        const payload = parseKeepalivePayload(event?.payload)
+        displayActiveRef.current = payload.displayActive !== false
+        // Intent gate (defense-in-depth, change #5) + display gate (contract
+        // rule 1): never even nudge when logged-out or while display asleep.
+        if (!shouldRunKeepaliveReconnect(payload, getReconnectIntent())) return
+        // A sleep-gap tick is a wake signal: honor the post-reload cooldown
+        // and the cross-source debounce. A steady-state ~30s tick skips that
+        // and just runs the health probe.
+        if (isKeepaliveWakeTick(payload.sleptMs) && !shouldHandleWake('keepalive')) {
+          return
+        }
+        client.handleKeepaliveTick(payload.displayActive, payload.sleptMs)
       }).then((fn) => {
         if (cleanedUp) { fn() } else { unlistenKeepalive = fn }
       })
@@ -748,7 +764,7 @@ export function usePlatformState() {
       unlistenKeepalive?.()
       unlistenProxyClosed?.()
     }
-  }, [client])
+  }, [client, shouldHandleWake])
 
   // ── Effect 6: Presence machine sync with connection status ────────────────
 

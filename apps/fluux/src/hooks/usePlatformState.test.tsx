@@ -14,11 +14,65 @@ const {
   mockClientNotifySystemState,
   mockClientNudgeReconnect,
   mockClientVerifyConnectionHealth,
+  mockClientHandleKeepaliveTick,
+  mockGetReconnectIntent,
   mockConnectionStatus,
   tauriListeners,
   mockListen,
+  tauriIpc,
+  tauriEventPluginInternals,
 } = vi.hoisted(() => {
+  // Tauri event bus emulation.
+  //
+  // The hook subscribes via `await import('@tauri-apps/api/event')` inside an
+  // effect. Vitest's `vi.mock('@tauri-apps/api/event')` factory does NOT
+  // intercept that dynamic import in this file (it resolves the real module),
+  // but the real `listen()` is built on `@tauri-apps/api/core`'s `invoke` +
+  // `transformCallback`. We mock *core* with a faithful IPC stub that routes
+  // `plugin:event|listen` into `tauriListeners`, so a real `listen()` call
+  // still ends up captured here regardless of which `event` module the hook
+  // got. `tauriListeners.get(name)!({ payload })` then drives the handler.
   const listeners = new Map<string, (event?: { payload?: unknown }) => unknown>()
+  let nextCallbackId = 1
+  const callbacks = new Map<number, (raw: unknown) => void>()
+  const ipc = {
+    transformCallback(cb: (raw: unknown) => void): number {
+      const id = nextCallbackId++
+      callbacks.set(id, cb)
+      return id
+    },
+    invoke(cmd: string, args?: Record<string, unknown>): Promise<unknown> {
+      if (cmd === 'plugin:event|listen') {
+        const event = String(args?.event)
+        const handlerId = args?.handler as number
+        const cb = callbacks.get(handlerId)
+        // The real backend invokes the transformed callback with the full
+        // event object; `listen()` forwards it straight to the user handler,
+        // so our captured handler accepts `{ payload }`.
+        listeners.set(event, (e?: { payload?: unknown }) => {
+          cb?.({ event, id: handlerId, payload: e?.payload })
+        })
+        return Promise.resolve(handlerId)
+      }
+      if (cmd === 'plugin:event|unlisten') {
+        // We only ever register one handler per event name in these tests.
+        return Promise.resolve()
+      }
+      // Other commands (e.g. get_idle_time) — default to a benign value.
+      return Promise.resolve(0)
+    },
+    unregisterCallback(id: number): void {
+      callbacks.delete(id)
+    },
+  }
+  // The real `@tauri-apps/api/event` `_unlisten()` (run on effect cleanup)
+  // calls `window.__TAURI_EVENT_PLUGIN_INTERNALS__.unregisterListener`.
+  const eventPluginInternals = {
+    unregisterListener(_event: string, _eventId: number): void {
+      // No-op: tests re-register per render; `tauriListeners` is cleared in
+      // the global beforeEach.
+    },
+  }
   return {
     mockNotifyIdle: vi.fn(),
     mockNotifyActive: vi.fn(),
@@ -28,8 +82,12 @@ const {
     mockClientNotifySystemState: vi.fn().mockResolvedValue(undefined),
     mockClientNudgeReconnect: vi.fn(),
     mockClientVerifyConnectionHealth: vi.fn().mockResolvedValue(undefined),
+    mockClientHandleKeepaliveTick: vi.fn(),
+    mockGetReconnectIntent: vi.fn(() => 'active' as 'active' | 'logged-out'),
     mockConnectionStatus: { current: 'online' },
     tauriListeners: listeners,
+    tauriIpc: ipc,
+    tauriEventPluginInternals: eventPluginInternals,
     mockListen: vi.fn((event: string, handler: (event?: { payload?: unknown }) => unknown) => {
       listeners.set(event, handler)
       return Promise.resolve(() => {
@@ -41,9 +99,19 @@ const {
   }
 })
 
-// Mock Tauri APIs
+/** Install the functional Tauri IPC stub so `isTauri()` is true and the real
+ *  `listen()` routes through `tauriListeners`. Mirrors what a real Tauri
+ *  webview injects on `window`. */
+function installTauriIpc() {
+  ;(window as any).__TAURI_INTERNALS__ = tauriIpc
+  ;(window as any).__TAURI_EVENT_PLUGIN_INTERNALS__ = tauriEventPluginInternals
+}
+
+// Mock Tauri APIs. core is mocked with the functional IPC stub so the real
+// event module (reached by the hook's dynamic import) still works.
 vi.mock('@tauri-apps/api/core', () => ({
-  invoke: vi.fn(),
+  invoke: (cmd: string, args?: Record<string, unknown>) => tauriIpc.invoke(cmd, args),
+  transformCallback: (cb: (raw: unknown) => void) => tauriIpc.transformCallback(cb),
 }))
 
 vi.mock('@tauri-apps/api/event', () => ({
@@ -67,6 +135,7 @@ vi.mock('@fluux/sdk', () => ({
       notifySystemState: mockClientNotifySystemState,
       nudgeReconnect: mockClientNudgeReconnect,
       verifyConnectionHealth: mockClientVerifyConnectionHealth,
+      handleKeepaliveTick: mockClientHandleKeepaliveTick,
     },
   }),
   useSystemState: () => ({
@@ -88,6 +157,10 @@ vi.mock('@fluux/sdk', () => ({
       addEvent: vi.fn(),
     }),
   },
+}))
+
+vi.mock('@/utils/reconnectIntent', () => ({
+  getReconnectIntent: () => mockGetReconnectIntent(),
 }))
 
 // Import after mocks are set up
@@ -113,11 +186,22 @@ describe('usePlatformState', () => {
     vi.useFakeTimers()
     mockConnectionStatus.current = 'online'
     tauriListeners.clear()
+    // Default to web mode (isTauri() === false): the activity/idle tests rely
+    // on it. Tauri-mode describe blocks call installTauriIpc() to flip it on.
+    delete (window as any).__TAURI_INTERNALS__
+    // The event-plugin internals stay installed for the whole file so the real
+    // `_unlisten()` (run async on effect cleanup) never reads an undefined
+    // global and rejects.
+    ;(window as any).__TAURI_EVENT_PLUGIN_INTERNALS__ = tauriEventPluginInternals
   })
 
   afterEach(() => {
     vi.useRealTimers()
-    delete (window as any).__TAURI_INTERNALS__
+    // Point __TAURI_INTERNALS__ at the functional IPC stub so any pending async
+    // effect cleanup (real `@tauri-apps/api/event` `_unlisten()` → core.invoke,
+    // which runs during testing-library's unmount AFTER this hook) finds a
+    // working `invoke` instead of throwing on an undefined global.
+    ;(window as any).__TAURI_INTERNALS__ = tauriIpc
   })
 
   describe('activity detection', () => {
@@ -452,6 +536,76 @@ describe('usePlatformState', () => {
       })
 
       expect(mockClientNotifySystemState).toHaveBeenCalledWith('visible')
+    })
+  })
+
+  describe('Effect 5 keepalive gate', () => {
+    const fireKeepalive = async (payload: unknown) => {
+      // The hook registers the listener via `await import(...).then(...)`, whose
+      // resolution interleaves microtasks and the (faked) timer/macrotask queue.
+      // Poll until the listener is registered, flushing both each iteration.
+      for (let i = 0; i < 30 && !tauriListeners.has('xmpp-keepalive'); i++) {
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(0)
+          await Promise.resolve()
+        })
+      }
+      const handler = tauriListeners.get('xmpp-keepalive')
+      expect(handler).toBeDefined()
+      await act(async () => {
+        handler!({ payload })
+        await Promise.resolve()
+      })
+    }
+
+    beforeEach(() => {
+      installTauriIpc()
+      mockGetReconnectIntent.mockReturnValue('active')
+    })
+
+    it('forwards displayActive + sleptMs to handleKeepaliveTick on a steady-state tick', async () => {
+      mockConnectionStatus.current = 'online'
+      renderHook(() => usePlatformState())
+      await fireKeepalive({ displayActive: true, sleptMs: 30_000 })
+      expect(mockClientHandleKeepaliveTick).toHaveBeenCalledWith(true, 30_000)
+    })
+
+    it('does not call handleKeepaliveTick when displayActive is false', async () => {
+      mockConnectionStatus.current = 'online'
+      renderHook(() => usePlatformState())
+      await fireKeepalive({ displayActive: false, sleptMs: 30_000 })
+      expect(mockClientHandleKeepaliveTick).not.toHaveBeenCalled()
+    })
+
+    it('does not call handleKeepaliveTick when intent is logged-out', async () => {
+      mockGetReconnectIntent.mockReturnValue('logged-out')
+      mockConnectionStatus.current = 'online'
+      renderHook(() => usePlatformState())
+      await fireKeepalive({ displayActive: true, sleptMs: 30_000 })
+      expect(mockClientHandleKeepaliveTick).not.toHaveBeenCalled()
+    })
+
+    it('treats a legacy () payload as display-active (fail-open)', async () => {
+      mockConnectionStatus.current = 'online'
+      renderHook(() => usePlatformState())
+      await fireKeepalive(undefined)
+      expect(mockClientHandleKeepaliveTick).toHaveBeenCalledWith(undefined, undefined)
+    })
+
+    it('routes a wake-tick through the post-reload cooldown (suppressed within cooldown)', async () => {
+      writeReloadMarker(Date.now() - 1_000)
+      mockConnectionStatus.current = 'reconnecting'
+      renderHook(() => usePlatformState())
+      await fireKeepalive({ displayActive: true, sleptMs: 600_000 })
+      expect(mockClientHandleKeepaliveTick).not.toHaveBeenCalled()
+    })
+
+    it('runs a wake-tick once the cooldown has elapsed', async () => {
+      clearReloadMarker()
+      mockConnectionStatus.current = 'reconnecting'
+      renderHook(() => usePlatformState())
+      await fireKeepalive({ displayActive: true, sleptMs: 600_000 })
+      expect(mockClientHandleKeepaliveTick).toHaveBeenCalledWith(true, 600_000)
     })
   })
 
