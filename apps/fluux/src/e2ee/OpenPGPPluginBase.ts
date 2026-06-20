@@ -125,6 +125,7 @@ import { usePinnedPrimaryFingerprintsStore } from '@/stores/pinnedPrimaryFingerp
 import { useKeyChangeAlertsStore } from '@/stores/keyChangeAlertsStore'
 import { setTrustStateStatus } from '@/stores/trustStateStatusStore'
 import { withPassphraseFormatHeader } from './passphraseFormatHeader'
+import { isSecretKeyUnavailableError } from './keyUnavailable'
 
 // ---------------------------------------------------------------------------
 // XEP-0373 constants
@@ -650,6 +651,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
       (ciphertext, senderPub) => this.decryptWithOwnKey(jid, ciphertext, senderPub),
       ownPublicArmored,
       ownFingerprint,
+      isSecretKeyUnavailableError,
     )
     if (status === 'pending-seal') {
       await this.sealTrustStateNow()
