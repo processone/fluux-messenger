@@ -553,15 +553,6 @@ export interface AdminEvents {
     isExecuting: boolean
   }
 
-  /** Entity counts updated */
-  'admin:entity-counts': {
-    counts: {
-      users?: number
-      onlineUsers?: number
-      rooms?: number
-    }
-  }
-
   /** Server vital-signs snapshot updated */
   'admin:server-stats': {
     stats: ServerStats

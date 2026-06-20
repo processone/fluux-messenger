@@ -234,7 +234,6 @@ export function createDefaultStoreBindings(options: DefaultStoreBindingsOptions 
       setIsDiscovering: adminStore.getState().setIsDiscovering,
       setIsExecuting: adminStore.getState().setIsExecuting,
       getCurrentSession: () => adminStore.getState().currentSession,
-      setEntityCounts: adminStore.getState().setEntityCounts,
       setMucServiceJid: adminStore.getState().setMucServiceJid,
       setServerStats: adminStore.getState().setServerStats,
       getMucServiceJid: () => adminStore.getState().mucServiceJid,

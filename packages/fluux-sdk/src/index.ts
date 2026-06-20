@@ -311,7 +311,6 @@ export type {
   AdminUser,
   AdminRoom,
   EntityListState,
-  EntityCounts,
   AdminCategory,
   ServerStats,
 

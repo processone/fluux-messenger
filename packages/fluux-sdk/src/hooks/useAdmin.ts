@@ -134,7 +134,6 @@ export function useAdmin() {
 
   // Entity list state
   const activeCategory = useAdminStore((s) => s.activeCategory)
-  const entityCounts = useAdminStore((s) => s.entityCounts)
   const userList = useAdminStore((s) => s.userList)
   const roomList = useAdminStore((s) => s.roomList)
   const mucServiceJid = useAdminStore((s) => s.mucServiceJid)
@@ -299,11 +298,6 @@ export function useAdmin() {
     adminStore.getState().setActiveCategory(category)
   }, [])
 
-  // Fetch entity counts for sidebar badges
-  const fetchEntityCounts = useCallback(async () => {
-    return client.admin.fetchEntityCounts()
-  }, [client])
-
   // Fetch structured server vital-signs for the overview dashboard.
   const fetchServerStats = useCallback(async () => {
     const store = adminStore.getState()
@@ -459,7 +453,6 @@ export function useAdmin() {
       canManageUser,
       setSelectedVhost,
       setActiveCategory,
-      fetchEntityCounts,
       fetchServerStats,
       fetchVhosts,
       fetchUsers,
@@ -487,7 +480,6 @@ export function useAdmin() {
       canManageUser,
       setSelectedVhost,
       setActiveCategory,
-      fetchEntityCounts,
       fetchServerStats,
       fetchVhosts,
       fetchUsers,
@@ -523,7 +515,6 @@ export function useAdmin() {
 
       // Entity list state
       activeCategory,
-      entityCounts,
       userList,
       roomList,
       mucServiceJid,
@@ -557,7 +548,6 @@ export function useAdmin() {
       vhosts,
       selectedVhost,
       activeCategory,
-      entityCounts,
       userList,
       roomList,
       mucServiceJid,

@@ -744,7 +744,6 @@ export const createMockStores = (): MockStoreBindings => ({
     setIsDiscovering: vi.fn(),
     setIsExecuting: vi.fn(),
     getCurrentSession: vi.fn().mockReturnValue(null),
-    setEntityCounts: vi.fn(),
     setMucServiceJid: vi.fn(),
     setServerStats: vi.fn(),
     getMucServiceJid: vi.fn().mockReturnValue(null),
@@ -834,7 +833,6 @@ export const createMockXMPPClientForHooks = () => ({
   admin: {
     executeAdminCommand: vi.fn(),
     cancelAdminCommand: vi.fn(),
-    fetchEntityCounts: vi.fn(),
     fetchVhosts: vi.fn(),
     fetchUserList: vi.fn(),
     discoverMucService: vi.fn(),

@@ -222,20 +222,6 @@ export interface EntityListState<T> {
 }
 
 /**
- * Server entity counts for admin dashboard.
- *
- * @category Admin
- */
-export interface EntityCounts {
-  /** Total registered users */
-  users?: number
-  /** Currently online users */
-  onlineUsers?: number
-  /** Total MUC rooms */
-  rooms?: number
-}
-
-/**
  * Structured server vital-signs for the admin overview dashboard.
  *
  * Every metric is optional: a metric is omitted when the server does not

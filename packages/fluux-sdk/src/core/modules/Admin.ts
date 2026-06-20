@@ -24,7 +24,6 @@ import type {
   RSMResponse,
   AdminUser,
   AdminRoom,
-  EntityCounts,
   ServerStats,
 } from '../types'
 
@@ -292,64 +291,6 @@ export class Admin extends BaseModule {
       // Ignore cancel errors
     }
     this.deps.emitSDK('admin:session', { session: null })
-  }
-
-  // ============================================================================
-  // Entity Counts
-  // ============================================================================
-
-  /**
-   * Fetch entity counts for admin dashboard badges.
-   * Executes get-registered-users-num, get-online-users-num, and muc_online_rooms_count commands.
-   */
-  async fetchEntityCounts(): Promise<EntityCounts> {
-    const counts: EntityCounts = {}
-
-    // Try to fetch registered users count
-    try {
-      const regResult = await this.executeSimpleCommand('get-registered-users-num')
-      if (regResult) {
-        const numField = getFormFieldValue(regResult, 'registeredusersnum')
-        if (numField) {
-          counts.users = parseInt(numField, 10)
-        }
-      }
-    } catch {
-      // Command may not be available
-    }
-
-    // Try to fetch online users count
-    try {
-      const onlineResult = await this.executeSimpleCommand('get-online-users-num')
-      if (onlineResult) {
-        const numField = getFormFieldValue(onlineResult, 'onlineusersnum')
-        if (numField) {
-          counts.onlineUsers = parseInt(numField, 10)
-        }
-      }
-    } catch {
-      // Command may not be available
-    }
-
-    // Try to fetch online MUC rooms count using ejabberd API command
-    // Note: This is sent to the server domain (not MUC service) with api-commands/ prefix
-    try {
-      const roomsResult = await this.executeApiCommand('muc_online_rooms_count')
-      if (roomsResult) {
-        // The field name varies - try common variations
-        const numField = getFormFieldValue(roomsResult, 'onlineroomsnum') ||
-                        getFormFieldValue(roomsResult, 'rooms') ||
-                        getFormFieldValue(roomsResult, 'count')
-        if (numField) {
-          counts.rooms = parseInt(numField, 10)
-        }
-      }
-    } catch {
-      // Command may not be available
-    }
-
-    this.deps.emitSDK('admin:entity-counts', { counts })
-    return counts
   }
 
   // ============================================================================

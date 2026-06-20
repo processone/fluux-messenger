@@ -5,7 +5,6 @@ import type {
   AdminUser,
   AdminRoom,
   EntityListState,
-  EntityCounts,
   RSMResponse,
   AdminCategory,
   ServerStats,
@@ -94,7 +93,6 @@ export interface AdminState {
 
   // Entity list management (new)
   activeCategory: AdminCategory | null
-  entityCounts: EntityCounts
   userList: EntityListState<AdminUser>
   roomList: EntityListState<AdminRoom>
   mucServiceJid: string | null
@@ -118,7 +116,6 @@ export interface AdminState {
 
   // Entity list actions
   setActiveCategory: (category: AdminCategory | null) => void
-  setEntityCounts: (counts: Partial<EntityCounts>) => void
   setUserList: (state: Partial<EntityListState<AdminUser>>) => void
   appendUserList: (items: AdminUser[], pagination: RSMResponse) => void
   resetUserList: () => void
@@ -142,8 +139,6 @@ const initialStats: AdminStats = {
   lastFetched: null,
 }
 
-const initialEntityCounts: EntityCounts = {}
-
 const initialState = {
   isAdmin: false,
   commands: [] as AdminCommand[],
@@ -158,7 +153,6 @@ const initialState = {
   selectedVhost: null as string | null,
   // Entity list management
   activeCategory: null as AdminCategory | null,
-  entityCounts: initialEntityCounts,
   userList: initialEntityListState<AdminUser>(),
   roomList: initialEntityListState<AdminRoom>(),
   mucServiceJid: null as string | null,
@@ -195,10 +189,6 @@ export const adminStore = createStore<AdminState>((set, get) => ({
 
   // Entity list actions
   setActiveCategory: (category) => set({ activeCategory: category }),
-
-  setEntityCounts: (counts) => set((state) => ({
-    entityCounts: { ...state.entityCounts, ...counts },
-  })),
 
   setUserList: (update) => set((state) => ({
     userList: { ...state.userList, ...update },

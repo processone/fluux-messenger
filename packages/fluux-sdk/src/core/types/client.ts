@@ -16,7 +16,7 @@ import type { HttpUploadService } from './upload'
 import type { WebPushService, WebPushStatus } from './webpush'
 import type { RSMResponse, MAMQueryState } from './pagination'
 import type { MAMQueryDirection } from '../../stores/shared/mamState'
-import type { AdminCommand, AdminSession, EntityCounts, ServerStats } from './admin'
+import type { AdminCommand, AdminSession, ServerStats } from './admin'
 import type { StorageAdapter } from './storage'
 import type { ProxyAdapter } from './proxy'
 
@@ -215,7 +215,6 @@ export interface StoreBindings {
     setIsDiscovering: (loading: boolean) => void
     setIsExecuting: (loading: boolean) => void
     getCurrentSession: () => AdminSession | null
-    setEntityCounts: (counts: Partial<EntityCounts>) => void
     setMucServiceJid: (jid: string | null) => void
     setServerStats: (stats: ServerStats | null) => void
     getMucServiceJid: () => string | null
