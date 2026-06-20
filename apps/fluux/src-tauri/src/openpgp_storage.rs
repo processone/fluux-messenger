@@ -34,15 +34,22 @@
 //! older install — stay on the classic Iterated+Salted S2K + CFB path.
 //! Argon2 is only defined for v6 per RFC 9580 §3.7.
 //!
-//! ## Keychain unavailable — filesystem fallback
+//! ## Keychain unavailable — filesystem fallback (platform-dependent)
 //!
-//! When the keychain is genuinely unreachable — Linux box with no secret
-//! service running, an intentionally locked macOS login keychain, or a
-//! corrupted credential store — we fall through to writing the base64
-//! passphrase into a 0600-permissioned file next to the key file. This is
-//! the design-documented fallback ("Keychain not enabled/working ...
-//! fallback to the web approach"). Callers learn which path was taken via
-//! [`PassphraseBacking`] so the UI can nudge the user in a future slice.
+//! On platforms WITHOUT a guaranteed OS keychain — a Linux box with no
+//! secret service running, or a corrupted credential store — we fall through
+//! to writing the base64 passphrase into a 0600-permissioned file next to the
+//! key file ("Keychain not enabled/working ... fallback to the web
+//! approach"). Callers learn which path was taken via [`PassphraseBacking`]
+//! so the UI can warn the user that the key is not protected at rest.
+//!
+//! On **macOS** a keychain always exists, so this cleartext fallback is
+//! DISABLED: a keychain failure (including an intentionally locked login
+//! keychain) is surfaced as a hard error rather than silently downgrading to
+//! a colocated cleartext passphrase, which would defeat at-rest protection.
+//! Symmetrically, on a keychain *error* (as opposed to a genuine "no entry")
+//! we only fall through to `.pass` where that fallback is allowed; on macOS
+//! the error propagates so we never trust a possibly-stale cleartext file.
 //!
 //! ## Concurrency
 //!
@@ -83,7 +90,10 @@ pub enum PassphraseBacking {
     /// Passphrase lives in the OS keychain. Preferred path.
     Keychain,
     /// Passphrase lives in `<app_data>/openpgp/<jid>.pass` on disk,
-    /// 0600 on Unix. Used when the keychain call failed.
+    /// 0600 on Unix. Used on platforms without a guaranteed OS keychain
+    /// (e.g. Linux without a secret service). The key is NOT protected at
+    /// rest in this mode — the UI warns the user. Never reached on macOS,
+    /// where the cleartext fallback is disabled.
     FilesystemFallback,
 }
 
@@ -111,6 +121,11 @@ pub struct KeyStorage {
     /// encrypted key would silently defeat at-rest protection, so a keychain
     /// failure is surfaced as a hard error instead of a cleartext downgrade.
     allow_file_fallback: bool,
+    /// Test seam: force the keychain read to return an error (a transient
+    /// gnome-keyring/KWallet/D-Bus failure) so the fall-through behaviour can
+    /// be exercised without touching the real OS keychain.
+    #[cfg(test)]
+    simulate_keychain_error: bool,
     /// Argon2id cost override for the v6 at-rest KDF. `None` (production)
     /// uses the RFC 9106 §4 second-option policy with a serial fallback;
     /// `Some(_)` forces exactly those parameters. Set only by the test
@@ -129,6 +144,8 @@ impl KeyStorage {
             // macOS always has a keychain, so refuse the cleartext fallback
             // there. Other desktops (Linux without a secret service) keep it.
             allow_file_fallback: !cfg!(target_os = "macos"),
+            #[cfg(test)]
+            simulate_keychain_error: false,
             argon2_override: None,
         }
     }
@@ -145,6 +162,7 @@ impl KeyStorage {
             base_dir,
             use_keychain: false,
             allow_file_fallback: true,
+            simulate_keychain_error: false,
             argon2_override: Some(Argon2Params::CHEAP_FOR_TESTS),
         }
     }
@@ -160,6 +178,23 @@ impl KeyStorage {
             base_dir,
             use_keychain: false,
             allow_file_fallback: false,
+            simulate_keychain_error: false,
+            argon2_override: Some(Argon2Params::CHEAP_FOR_TESTS),
+        }
+    }
+
+    /// Test-only constructor that simulates a keychain that ERRORS (locked /
+    /// access-denied / D-Bus hiccup) rather than being absent. `keep_fallback`
+    /// chooses the platform posture: `true` = Linux (cleartext `.pass`
+    /// allowed, so a keychain error must fall through to it); `false` = macOS
+    /// (fallback disallowed, so a keychain error must propagate).
+    #[cfg(test)]
+    pub fn for_testing_keychain_error(base_dir: PathBuf, keep_fallback: bool) -> Self {
+        Self {
+            base_dir,
+            use_keychain: true,
+            allow_file_fallback: keep_fallback,
+            simulate_keychain_error: true,
             argon2_override: Some(Argon2Params::CHEAP_FOR_TESTS),
         }
     }
@@ -173,6 +208,7 @@ impl KeyStorage {
             base_dir,
             use_keychain: false,
             allow_file_fallback: true,
+            simulate_keychain_error: false,
             argon2_override: None,
         }
     }
@@ -300,6 +336,17 @@ impl KeyStorage {
 
     // -- passphrase plumbing --
 
+    /// Read the keychain entry for `jid`, distinguishing a genuine `NoEntry`
+    /// (`Ok(None)`) from a real keychain failure (`Err`). The test seam lets
+    /// the error path be exercised without touching the real OS keychain.
+    fn read_keychain(&self, jid: &str) -> Result<Option<Vec<u8>>> {
+        #[cfg(test)]
+        if self.simulate_keychain_error {
+            return Err(anyhow!("simulated keychain failure"));
+        }
+        read_keychain_passphrase(jid)
+    }
+
     /// Read the per-account passphrase. Tries the keychain first; falls
     /// through to the on-disk `.pass` file where that fallback is allowed.
     ///
@@ -311,10 +358,29 @@ impl KeyStorage {
     /// that fallback may hold a stale value for a different key.
     fn read_passphrase(&self, jid: &str) -> Result<Option<(Vec<u8>, PassphraseBacking)>> {
         if self.use_keychain {
-            // A genuine keychain *error* propagates via `?`; only a real
-            // `NoEntry` (mapped to `None`) falls through to the file fallback.
-            if let Some(bytes) = read_keychain_passphrase(jid)? {
-                return Ok(Some((bytes, PassphraseBacking::Keychain)));
+            match self.read_keychain(jid) {
+                Ok(Some(bytes)) => {
+                    return Ok(Some((bytes, PassphraseBacking::Keychain)))
+                }
+                // Genuinely no keychain entry — fall through to the file
+                // fallback where allowed.
+                Ok(None) => {}
+                Err(e) => {
+                    // A real keychain error (locked / access-denied / D-Bus
+                    // hiccup). Where there is NO cleartext fallback (macOS),
+                    // this is fatal — we must not silently trust a stale
+                    // `.pass`. But where the fallback is the legitimate store
+                    // (Linux without a secret service), a transient keychain
+                    // error must NOT brick a user whose passphrase is validly
+                    // on disk: fall through to the `.pass` file instead of
+                    // hard-failing. `write_passphrase` scrubs `.pass` on every
+                    // successful keychain write, so a surviving `.pass` only
+                    // exists when the keychain has never worked — in which
+                    // case it is the correct source.
+                    if !self.allow_file_fallback {
+                        return Err(e);
+                    }
+                }
             }
         }
         if !self.allow_file_fallback {
@@ -991,6 +1057,48 @@ mod tests {
             original_fp,
             "the prior key must remain decryptable after a failed re-save"
         );
+    }
+
+    #[test]
+    fn linux_keychain_error_falls_through_to_pass_file() {
+        // Regression guard (audit H2): on Linux without a secret service the
+        // passphrase lives in `.pass`. A *transient* keychain error (locked
+        // gnome-keyring/KWallet, D-Bus hiccup) must NOT brick a recoverable
+        // key — `read_passphrase` must fall through to the valid `.pass` file
+        // rather than propagating the error.
+        let dir = fresh_tmp_dir();
+        // Set up a key whose passphrase is in `.pass` (keychain-free harness).
+        let setup = KeyStorage::for_testing(dir.clone());
+        let cert = generate_cert("alice@example.com");
+        let fp = cert.fingerprint().to_hex();
+        setup.save("alice@example.com", &cert).unwrap();
+
+        // Now read with a keychain-enabled storage whose keychain ERRORS,
+        // but with the cleartext fallback allowed (Linux posture).
+        let linux = KeyStorage::for_testing_keychain_error(dir.clone(), true);
+        let loaded = linux
+            .load("alice@example.com")
+            .expect("a transient keychain error must fall through to .pass")
+            .expect("the key must still be present");
+        assert_eq!(loaded.cert.fingerprint().to_hex(), fp);
+        assert_eq!(loaded.backing, PassphraseBacking::FilesystemFallback);
+    }
+
+    #[test]
+    fn macos_keychain_error_does_not_fall_through_to_cleartext() {
+        // The flip side of H2: where the cleartext fallback is disallowed
+        // (macOS), a keychain error must PROPAGATE — never silently trust a
+        // possibly-stale `.pass` file. Even with a `.pass` present on disk,
+        // the load must fail loudly.
+        let dir = fresh_tmp_dir();
+        let setup = KeyStorage::for_testing(dir.clone());
+        let cert = generate_cert("alice@example.com");
+        setup.save("alice@example.com", &cert).unwrap();
+
+        let macos = KeyStorage::for_testing_keychain_error(dir.clone(), false);
+        macos
+            .load("alice@example.com")
+            .expect_err("a keychain error must propagate when fallback is disallowed");
     }
 
     #[test]
