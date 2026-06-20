@@ -665,7 +665,9 @@ export function usePlatformState() {
       }
 
       // Sub-threshold, machine was awake, or web mode: just nudge a
-      // stalled reconnect via notifySystemState('visible').
+      // stalled reconnect via notifySystemState('visible') — unless the
+      // last keepalive tick reported the display off (display-gated reconnect).
+      if (!displayActiveRef.current) return
       try {
         await client.notifySystemState('visible')
       } catch (err) {
@@ -681,6 +683,9 @@ export function usePlatformState() {
     // immediately triggers the stalled reconnect.
     const handleWindowFocus = () => {
       if (statusRef.current !== 'reconnecting') return
+      // Reconnect is display-gated: if the last keepalive tick reported the
+      // primary display off, a focus event must not nudge a reconnect.
+      if (!displayActiveRef.current) return
       if (!shouldHandleWake('window-focus')) return
 
       console.log('[PlatformState] Window focused while reconnecting, triggering reconnect')

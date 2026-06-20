@@ -386,6 +386,45 @@ describe('usePlatformState', () => {
       expect(focusCalls).toHaveLength(0)
       addSpy.mockRestore()
     })
+
+    it('suppresses the focus nudge when the last keepalive tick was displayActive=false', async () => {
+      installTauriIpc()
+      mockConnectionStatus.current = 'reconnecting'
+      renderHook(() => usePlatformState())
+
+      // A display-off tick lands first, recording displayActive=false.
+      for (let i = 0; i < 30 && !tauriListeners.has('xmpp-keepalive'); i++) {
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(0)
+          await Promise.resolve()
+        })
+      }
+      const ka = tauriListeners.get('xmpp-keepalive')
+      await act(async () => {
+        ka?.({ payload: { displayActive: false, sleptMs: 30_000 } })
+        await Promise.resolve()
+      })
+      vi.clearAllMocks()
+
+      await act(async () => {
+        window.dispatchEvent(new Event('focus'))
+        await Promise.resolve()
+      })
+
+      expect(mockClientNotifySystemState).not.toHaveBeenCalledWith('visible')
+    })
+
+    it('still nudges on focus before any tick has arrived (cold-start fail-open)', async () => {
+      mockConnectionStatus.current = 'reconnecting'
+      renderHook(() => usePlatformState())
+
+      await act(async () => {
+        window.dispatchEvent(new Event('focus'))
+        await Promise.resolve()
+      })
+
+      expect(mockClientNotifySystemState).toHaveBeenCalledWith('visible')
+    })
   })
 
   describe('heartbeat during reconnecting status', () => {
