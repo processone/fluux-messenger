@@ -138,6 +138,8 @@ export function useAdmin() {
   const userList = useAdminStore((s) => s.userList)
   const roomList = useAdminStore((s) => s.roomList)
   const mucServiceJid = useAdminStore((s) => s.mucServiceJid)
+  const serverStats = useAdminStore((s) => s.serverStats)
+  const isLoadingStats = useAdminStore((s) => s.isLoadingStats)
 
   // Group commands by category
   const commandsByCategory = useMemo(() => {
@@ -302,6 +304,17 @@ export function useAdmin() {
     return client.admin.fetchEntityCounts()
   }, [client])
 
+  // Fetch structured server vital-signs for the overview dashboard.
+  const fetchServerStats = useCallback(async () => {
+    const store = adminStore.getState()
+    store.setIsLoadingStats(true)
+    try {
+      return await client.admin.fetchServerStats(store.selectedVhost || undefined)
+    } finally {
+      adminStore.getState().setIsLoadingStats(false)
+    }
+  }, [client])
+
   // Fetch available virtual hosts
   const fetchVhosts = useCallback(async () => {
     return client.admin.fetchVhosts()
@@ -447,6 +460,7 @@ export function useAdmin() {
       setSelectedVhost,
       setActiveCategory,
       fetchEntityCounts,
+      fetchServerStats,
       fetchVhosts,
       fetchUsers,
       loadMoreUsers,
@@ -474,6 +488,7 @@ export function useAdmin() {
       setSelectedVhost,
       setActiveCategory,
       fetchEntityCounts,
+      fetchServerStats,
       fetchVhosts,
       fetchUsers,
       loadMoreUsers,
@@ -512,6 +527,8 @@ export function useAdmin() {
       userList,
       roomList,
       mucServiceJid,
+      serverStats,
+      isLoadingStats,
 
       // Computed
       hasCommands: commands.length > 0,
@@ -544,6 +561,8 @@ export function useAdmin() {
       userList,
       roomList,
       mucServiceJid,
+      serverStats,
+      isLoadingStats,
       actions,
     ]
   )
