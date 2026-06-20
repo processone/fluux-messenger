@@ -56,3 +56,8 @@ export function formatBoolean(value: boolean): string {
 export function formatDateTime(epochMs: number): string {
   return new Date(epochMs).toLocaleString()
 }
+
+/** Epoch ms → locale time string (hours:minutes, no date). */
+export function formatTime(epochMs: number): string {
+  return new Date(epochMs).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+}

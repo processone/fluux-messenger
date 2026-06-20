@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { formatDuration, formatCount, formatBytes, formatBoolean, formatDateTime } from './format'
+import { formatDuration, formatCount, formatBytes, formatBoolean, formatDateTime, formatTime } from './format'
 
 describe('formatDuration', () => {
   it('formats multi-unit durations, largest two units', () => {
@@ -39,5 +39,12 @@ describe('formatDateTime', () => {
   it('renders a locale string for an epoch ms', () => {
     const ts = 1718880000000
     expect(formatDateTime(ts)).toBe(new Date(ts).toLocaleString())
+  })
+})
+
+describe('formatTime', () => {
+  it('renders hour:minute for an epoch ms', () => {
+    const ts = 1718900000000
+    expect(formatTime(ts)).toBe(new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }))
   })
 })

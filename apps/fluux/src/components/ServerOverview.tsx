@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { RefreshCw, ChevronRight } from 'lucide-react'
 import { useAdmin, type ServerStats, type AdminCommand } from '@fluux/sdk'
 import { OVERVIEW_CARDS } from './admin/adminOverview'
-import { formatDateTime } from '@/utils/format'
+import { formatTime } from '@/utils/format'
 
 /**
  * Friendly server overview: a discovery-driven grid of vital-signs cards plus
@@ -32,7 +32,7 @@ export function ServerOverview() {
     s: t('admin.overview.units.s'),
   }
 
-  const stats = serverStats as ServerStats | null
+  const stats = serverStats
   const presentCards = stats
     ? OVERVIEW_CARDS.filter(card => stats[card.key] !== undefined && stats[card.key] !== null)
     : []
@@ -43,7 +43,7 @@ export function ServerOverview() {
       <div className="flex items-center justify-between mb-4">
         <div className="text-sm text-fluux-muted">
           {stats?.fetchedAt
-            ? t('admin.overview.updatedAt', { time: formatDateTime(stats.fetchedAt).split(', ').pop() })
+            ? t('admin.overview.updatedAt', { time: formatTime(stats.fetchedAt) })
             : null}
         </div>
         <button
