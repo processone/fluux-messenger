@@ -533,7 +533,9 @@ export function usePlatformState() {
     let unlistenSleep: UnlistenFn | undefined
 
     void import('@tauri-apps/api/event').then(({ listen }) => {
-      // Immediate wake notification
+      // Immediate wake notification — DEMOTED to rendering-only. The native
+      // keepalive tick is the reconnect authority now; OS wake only triggers
+      // the WRY webview reload when the sleep span is long enough.
       void listen<SystemWakePayload | undefined>('system-did-wake', (event) => {
         if (cancelled) return
         // DarkWake filter: when macOS wakes for background sync and the
@@ -548,20 +550,21 @@ export function usePlatformState() {
         if (!shouldHandleWake('system-did-wake')) return
         const sleepDuration = sleepStartRef.current ? Date.now() - sleepStartRef.current : undefined
         sleepStartRef.current = null
-        handleWakeFromSleep(sleepDuration, 'system-did-wake')
+        maybeReloadOnLongWake(sleepDuration, 'system-did-wake')
       }).then(fn => {
         if (cancelled) { fn() } else { unlistenWake = fn }
       })
 
-      // Deferred wake notification (app was in background during wake;
-      // Tauri delivers the event with a delay measured in seconds).
+      // Deferred wake notification — DEMOTED to rendering-only (same rationale).
+      // App was in background during wake; Tauri delivers it with a delay
+      // measured in seconds.
       void listen<number>('system-did-wake-deferred', (event) => {
         if (cancelled) return
         const delaySecs = event.payload || 0
         if (!shouldHandleWake('system-did-wake-deferred')) return
         const sleepDuration = sleepStartRef.current ? Date.now() - sleepStartRef.current : undefined
         sleepStartRef.current = null
-        handleWakeFromSleep(sleepDuration, `system-did-wake-deferred +${delaySecs}s`)
+        maybeReloadOnLongWake(sleepDuration, `system-did-wake-deferred +${delaySecs}s`)
       }).then(fn => {
         if (cancelled) { fn() } else { unlistenWakeDeferred = fn }
       })
@@ -584,7 +587,7 @@ export function usePlatformState() {
       unlistenWakeDeferred?.()
       unlistenSleep?.()
     }
-  }, [client, shouldHandleWake, logEvent, handleWakeFromSleep])
+  }, [client, shouldHandleWake, logEvent, maybeReloadOnLongWake])
 
   // ── Effect 3: Time-gap wake detection (JS heartbeat) ──────────────────────
   // Also runs during 'reconnecting' status so we still update the heartbeat

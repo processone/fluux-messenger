@@ -578,6 +578,66 @@ describe('usePlatformState', () => {
     })
   })
 
+  // Wait for an effect to register a Tauri listener (the hook subscribes via
+  // an async dynamic import — flush micro + faked-macro tasks until present).
+  const waitForListener = async (name: string) => {
+    for (let i = 0; i < 30 && !tauriListeners.has(name); i++) {
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0)
+        await Promise.resolve()
+      })
+    }
+  }
+
+  describe('Effect 2 OS-wake demotion (reload-only)', () => {
+    beforeEach(() => {
+      installTauriIpc()
+      clearReloadMarker()
+    })
+
+    it('does NOT call notifySystemState("awake") on system-did-wake (reconnect is keepalive-driven)', async () => {
+      mockConnectionStatus.current = 'online'
+      renderHook(() => usePlatformState())
+      await waitForListener('system-did-wake')
+
+      const wake = tauriListeners.get('system-did-wake')
+      expect(wake).toBeDefined()
+      await act(async () => {
+        wake!({ payload: { displayActive: true } })
+        await Promise.resolve()
+      })
+
+      // No 'awake' notify at all — not even with an undefined duration
+      // (expect.anything() would miss the undefined-arg case, so assert on the
+      // first arg directly).
+      const awakeCalls = mockClientNotifySystemState.mock.calls.filter(
+        (args) => args[0] === 'awake'
+      )
+      expect(awakeCalls).toHaveLength(0)
+    })
+
+    it('does NOT call notifySystemState("awake") on system-did-wake-deferred', async () => {
+      mockConnectionStatus.current = 'online'
+      renderHook(() => usePlatformState())
+      await waitForListener('system-did-wake-deferred')
+
+      const deferred = tauriListeners.get('system-did-wake-deferred')
+      expect(deferred).toBeDefined()
+      await act(async () => {
+        deferred!({ payload: 9000 })
+        await Promise.resolve()
+      })
+
+      // No 'awake' notify at all — not even with an undefined duration
+      // (expect.anything() would miss the undefined-arg case, so assert on the
+      // first arg directly).
+      const awakeCalls = mockClientNotifySystemState.mock.calls.filter(
+        (args) => args[0] === 'awake'
+      )
+      expect(awakeCalls).toHaveLength(0)
+    })
+  })
+
   describe('Effect 5 keepalive gate', () => {
     const fireKeepalive = async (payload: unknown) => {
       // The hook registers the listener via `await import(...).then(...)`, whose
