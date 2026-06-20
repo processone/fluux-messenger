@@ -52,17 +52,22 @@ const NS_BLOCKING = 'urn:xmpp:blocking'
 const NS_MAM = 'urn:xmpp:mam:2'
 const NS_COMMANDS = 'http://jabber.org/protocol/commands'
 const NS_DATA_FORMS = 'jabber:x:data'
+const NS_ADMIN = 'http://jabber.org/protocol/admin'
+const NS_VERSION = 'jabber:iq:version'
 
 /** Minimal Element-like object returned by mock IQ responses. */
 interface MockElement {
   name: string
   attrs: Record<string, string>
-  text?: string
+  /** Text content as a property (legacy mock shape). */
+  _text?: string
   children: MockElement[]
   getChild: (name: string, xmlns?: string) => MockElement | undefined
   getChildren: (name: string) => MockElement[]
   getChildText: (name: string) => string | null
   getText: () => string
+  /** Text content as a method — matches ltx/@xmpp Element.text() used by parseDataForm/version parsing. */
+  text: () => string
   toString: () => string
 }
 
@@ -201,9 +206,21 @@ export class DemoClient extends XMPPClient {
       return this.buildAccountDiscoInfoResponse()
     }
 
+    // disco#items on the commands node → advertise a demo admin command set,
+    // so Admin.discoverAdminCommands() makes the demo user an admin.
+    if (xmlns === NS_DISCO_ITEMS && queryChild?.attrs?.node === NS_COMMANDS) {
+      return this.buildAdminCommandsResponse()
+    }
+
     // disco#items to the conference service → return room list for fetchRoomList()
     if (xmlns === NS_DISCO_ITEMS && to === this.conferenceService) {
       return this.buildDiscoItemsResponse()
+    }
+
+    // --- Server version (XEP-0092) ---
+    // fetchServerVersion() queries jabber:iq:version on the domain.
+    if (xmlns === NS_VERSION) {
+      return this.buildVersionResponse()
     }
 
     // --- vCard-temp (XEP-0054) ---
@@ -260,7 +277,7 @@ export class DemoClient extends XMPPClient {
       (c: any) => c.name === 'command' && c.attrs?.xmlns === NS_COMMANDS
     )
     if (commandChild) {
-      return this.buildCommandResponse()
+      return this.buildAdminCommandResponse(commandChild)
     }
 
     // Fallback: return empty stub so callers using .getChild() etc.
@@ -668,7 +685,7 @@ export class DemoClient extends XMPPClient {
     return {
       name,
       attrs,
-      text,
+      _text: text,
       children,
       getChild: (childName: string, xmlns?: string) =>
         children.find(c => c.name === childName && (!xmlns || c.attrs.xmlns === xmlns)),
@@ -676,9 +693,12 @@ export class DemoClient extends XMPPClient {
         children.filter(c => c.name === childName),
       getChildText: (childName: string) => {
         const child = children.find(c => c.name === childName)
-        return child?.text ?? null
+        return child?._text ?? null
       },
       getText: () => text ?? '',
+      // ltx/@xmpp Element exposes text() as a method; parseDataForm and the
+      // XEP-0092 version parser both call .text(), so mirror that shape.
+      text: () => text ?? '',
       toString: () => `<${name}/>`,
     }
   }
@@ -891,7 +911,7 @@ export class DemoClient extends XMPPClient {
     ])
   }
 
-  /** Build an ad-hoc command completed response (XEP-0050). */
+  /** Build a generic ad-hoc command completed response (XEP-0050) fallback. */
   private buildCommandResponse(): MockElement {
     return this.mockElement('iq', { type: 'result' }, [
       this.mockElement('command', {
@@ -899,6 +919,125 @@ export class DemoClient extends XMPPClient {
         status: 'completed',
       }, [
         this.mockElement('note', { type: 'info' }, [], 'Demo mode — command simulated'),
+      ]),
+    ])
+  }
+
+  // -------------------------------------------------------------------------
+  // Private helpers — admin / server-overview seed data (dev-only)
+  // -------------------------------------------------------------------------
+
+  /**
+   * Advertise a demo admin command set on the commands node so
+   * Admin.discoverAdminCommands() treats the demo user as an admin and
+   * populates commandsByCategory.stats. Includes the stat commands that
+   * fetchServerStats() drives. (The demo entry point also seeds the admin
+   * store directly; this keeps the discovery path honest.)
+   */
+  private buildAdminCommandsResponse(): MockElement {
+    const nodes: Array<{ node: string; name: string }> = [
+      { node: `${NS_ADMIN}#get-registered-users-num`, name: 'Get Number of Registered Users' },
+      { node: `${NS_ADMIN}#get-online-users-num`, name: 'Get Number of Online Users' },
+      { node: 'api-commands/stats', name: 'Server Statistics' },
+      { node: 'api-commands/muc_online_rooms_count', name: 'Number of Online MUC Rooms' },
+    ]
+    const items = nodes.map(({ node, name }) =>
+      this.mockElement('item', { jid: this.selfJid.split('@')[1] || '', node, name })
+    )
+    return this.mockElement('iq', { type: 'result' }, [
+      this.mockElement('query', { xmlns: NS_DISCO_ITEMS, node: NS_COMMANDS }, items),
+    ])
+  }
+
+  /** Build a XEP-0092 (jabber:iq:version) response for the demo server. */
+  private buildVersionResponse(): MockElement {
+    return this.mockElement('iq', { type: 'result' }, [
+      this.mockElement('query', { xmlns: NS_VERSION }, [
+        this.mockElement('name', {}, [], 'ejabberd'),
+        this.mockElement('version', {}, [], '26.01 (demo)'),
+        this.mockElement('os', {}, [], 'Demo OS'),
+      ]),
+    ])
+  }
+
+  /**
+   * Dispatch an ad-hoc / api command IQ to a seeded response so
+   * fetchServerStats() can populate all six overview cards.
+   *
+   * Handles the two-step api-commands (stats, muc_online_rooms_count): the
+   * first `execute` returns status="executing" with a form; the follow-up
+   * `complete` returns the result form.
+   */
+  private buildAdminCommandResponse(commandChild: any): MockElement {
+    const node = (commandChild?.attrs?.node as string | undefined) ?? ''
+    const action = (commandChild?.attrs?.action as string | undefined) ?? 'execute'
+
+    // --- XEP-0133 single-step stat commands ---
+    if (node.endsWith('#get-registered-users-num')) {
+      return this.buildStatFormResponse('registeredusersnum', '42')
+    }
+    if (node.endsWith('#get-online-users-num')) {
+      return this.buildStatFormResponse('onlineusersnum', '8')
+    }
+
+    // --- ejabberd two-step api-commands ---
+    // muc_online_rooms_count: execute → form requiring `service`; complete → count.
+    if (node === 'api-commands/muc_online_rooms_count') {
+      if (action === 'execute') {
+        return this.buildExecutingFormResponse(node, 'muc-rooms-sess', 'service')
+      }
+      return this.buildStatFormResponse('count', '5')
+    }
+    // stats: execute → form requiring `name`; complete → numeric stat value.
+    if (node === 'api-commands/stats') {
+      if (action === 'execute') {
+        return this.buildExecutingFormResponse(node, 'stats-sess', 'name')
+      }
+      // 259200 seconds = 3 days uptime
+      return this.buildStatFormResponse('stat', '259200')
+    }
+
+    // Anything else: generic "command simulated" completed note.
+    return this.buildCommandResponse()
+  }
+
+  /**
+   * Build a completed command response carrying a single result field
+   * (`<field var=...><value>...</value></field>`) inside a result form.
+   */
+  private buildStatFormResponse(fieldVar: string, value: string): MockElement {
+    return this.mockElement('iq', { type: 'result' }, [
+      this.mockElement('command', { xmlns: NS_COMMANDS, status: 'completed' }, [
+        this.mockElement('x', { xmlns: NS_DATA_FORMS, type: 'result' }, [
+          this.buildFormField(fieldVar, value),
+        ]),
+      ]),
+    ])
+  }
+
+  /**
+   * Build an executing (multi-step) command response with a form that
+   * requires a single field, so executeApiCommand() submits the override
+   * value and then issues the `complete` step.
+   */
+  private buildExecutingFormResponse(
+    node: string,
+    sessionId: string,
+    fieldVar: string
+  ): MockElement {
+    return this.mockElement('iq', { type: 'result' }, [
+      this.mockElement('command', {
+        xmlns: NS_COMMANDS,
+        node,
+        status: 'executing',
+        sessionid: sessionId,
+      }, [
+        this.mockElement('actions', { execute: 'complete' }, [
+          this.mockElement('complete', {}),
+        ]),
+        this.mockElement('x', { xmlns: NS_DATA_FORMS, type: 'form' }, [
+          this.buildFormField(fieldVar, ''),
+        ]),
       ]),
     ])
   }
