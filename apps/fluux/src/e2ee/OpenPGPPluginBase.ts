@@ -660,6 +660,19 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     setTrustStateStatus(status, details)
   }
 
+  /**
+   * Re-verify the trust-state seal after the secret key becomes usable again
+   * (recovery / unlock). `activateSubscriptions()` is idempotent (guarded) and
+   * runs the seal check on first activation; the explicit `verifyTrustStateOnInit()`
+   * covers the case where subscriptions were already active (so the guard skips
+   * the internal check). Resolves a deferred `awaiting-key` verdict to `sealed`
+   * for an unchanged cert. Fire-and-forget: the verify catches internally.
+   */
+  protected reverifyTrustStateAfterKeyChange(): void {
+    this.activateSubscriptions()
+    void this.verifyTrustStateOnInit()
+  }
+
   async resealTrustState(): Promise<void> {
     const ownPublicArmored = this.ownBundle?.publicArmored
     if (!ownPublicArmored || !this.ctx) return
@@ -885,13 +898,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     // locally so history stays decryptable. Re-run deferred decrypts so any
     // still-stashed messages are recovered immediately.
     ctx.notifyKeyUnlocked?.()
-    // The secret key is now usable again — re-run the trust-state seal check so
-    // a deferred `awaiting-key` verdict resolves. `init()` returns early without
-    // activating subscriptions on key-unrecoverable, so recovery must BOTH
-    // ensure subscriptions are active AND run the verification explicitly for
-    // the case where they already were.
-    this.activateSubscriptions() // idempotent: activates subs (+ verifies) if not yet active
-    void this.verifyTrustStateOnInit() // explicit re-check when subs were already active
+    this.reverifyTrustStateAfterKeyChange()
 
     return { fingerprint: bundle.fingerprint }
   }
@@ -1184,13 +1191,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     // stashed while the key was absent stay "could not be decrypted" until an
     // unrelated trigger (reconnect, app restart) re-registers the plugin.
     ctx.notifyKeyUnlocked?.()
-    // The secret key is now usable again — re-run the trust-state seal check so
-    // a deferred `awaiting-key` verdict resolves (to `sealed` for an unchanged
-    // cert). `init()` returns early without activating subscriptions on
-    // key-unrecoverable, so recovery must BOTH ensure subscriptions are active
-    // AND run the verification explicitly for the case where they already were.
-    this.activateSubscriptions() // idempotent: activates subs (+ verifies) if not yet active
-    void this.verifyTrustStateOnInit() // explicit re-check when subs were already active
+    this.reverifyTrustStateAfterKeyChange()
 
     return { fingerprint: bundle.fingerprint }
   }

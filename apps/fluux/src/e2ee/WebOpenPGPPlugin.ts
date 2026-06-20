@@ -667,12 +667,8 @@ export class WebOpenPGPPlugin extends OpenPGPPluginBase {
         throw new KeyPickerRequiredError(result.candidates, result.backupContext)
       }
       // restoreSecretKey installed + published the recovered key and set the
-      // session passphrase. Activate subscriptions and report recovery.
-      // (restoreSecretKey → doInstallKey already re-verifies the trust state;
-      // the explicit call keeps parity for the case where subs were already
-      // active and is a harmless no-op otherwise.)
-      this.activateSubscriptions()
-      void this.verifyTrustStateOnInit()
+      // session passphrase. Report recovery.
+      // restoreSecretKey() -> doInstallKey() already re-verifies the trust state.
       return { recovered: true }
     }
   }
