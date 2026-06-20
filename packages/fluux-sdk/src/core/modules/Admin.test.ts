@@ -869,4 +869,80 @@ describe('XMPPClient Admin', () => {
       await expect(xmppClient.admin.fetchRoomList()).rejects.toThrow('MUC service not available')
     })
   })
+
+  describe('executeApiCommand overrides', () => {
+    // Wrap a <command> element in an IQ response exposing getChild('command', NS).
+    function wrapInIqResponse(commandEl: ReturnType<typeof createAdminMockElement>) {
+      return {
+        name: 'iq',
+        attrs: { type: 'result' },
+        getChild: (name: string, xmlns?: string) => {
+          if (name === 'command' && xmlns === 'http://jabber.org/protocol/commands') {
+            return commandEl
+          }
+          return undefined
+        },
+      }
+    }
+
+    // Build a data-form <x> element whose `field` carries the given var/value,
+    // matching the getChildren/getChild semantics parseDataForm relies on.
+    function formWithField(
+      formType: string,
+      fieldVar: string,
+      fieldValue: string | null
+    ): AdminMockChild {
+      const valueChildren: AdminMockChild[] =
+        fieldValue != null ? [{ name: 'value', text: () => fieldValue }] : []
+      return {
+        name: 'x',
+        attrs: { xmlns: 'jabber:x:data', type: formType },
+        getChildren: (name: string) => {
+          if (name === 'field') {
+            return [{
+              name: 'field',
+              attrs: { var: fieldVar, type: 'text-single' },
+              getChild: () => undefined,
+              getChildren: (n: string) => (n === 'value' ? valueChildren : []),
+            }]
+          }
+          return []
+        },
+        getChild: () => undefined,
+      }
+    }
+
+    it('submits overridden field values for two-step api-commands', async () => {
+      await connectClient()
+
+      // execute → returns a form requiring `name` (default value 'registeredusers')
+      const executing = createAdminMockElement('command', {
+        xmlns: 'http://jabber.org/protocol/commands',
+        node: 'api-commands/stats',
+        status: 'executing',
+        sessionid: 'sess-1',
+      }, [formWithField('form', 'name', 'registeredusers')])
+
+      // complete → returns the stat value
+      const completed = createAdminMockElement('command', {
+        xmlns: 'http://jabber.org/protocol/commands',
+        node: 'api-commands/stats',
+        status: 'completed',
+      }, [formWithField('result', 'stat', '42')])
+
+      mockXmppClientInstance.iqCaller.request
+        .mockResolvedValueOnce(wrapInIqResponse(executing))
+        .mockResolvedValueOnce(wrapInIqResponse(completed))
+
+      await (xmppClient.admin as any).executeApiCommand('stats', { name: 'uptimeseconds' })
+
+      // Capture the second (complete) request and read the submitted `name` value.
+      // The mocked xml() returns { name, attrs, children }, so traverse children:
+      // iq > command > x(submit) > field(var=name) > value > 'uptimeseconds'
+      const completeReq = mockXmppClientInstance.iqCaller.request.mock.calls[1][0] as any
+      const submitForm = completeReq.children?.[0]?.children?.[0]
+      const nameField = submitForm?.children?.find((c: any) => c.attrs?.var === 'name')
+      expect(nameField?.children?.[0]?.children?.[0]).toBe('uptimeseconds')
+    })
+  })
 })

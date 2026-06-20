@@ -388,7 +388,10 @@ export class Admin extends BaseModule {
    * Handles multi-step commands that require form submission.
    * @param commandName - The command name (e.g., muc_online_rooms_count)
    */
-  private async executeApiCommand(commandName: string): Promise<DataForm | null> {
+  private async executeApiCommand(
+    commandName: string,
+    overrides?: Record<string, string | string[]>
+  ): Promise<DataForm | null> {
     const currentJid = this.deps.getCurrentJid()
     if (!currentJid) return null
 
@@ -421,12 +424,15 @@ export class Admin extends BaseModule {
         const sessionId = command.attrs.sessionid
         const form = parseDataForm(formEl)
 
-        // Build submit form with default values from the form
-        // Filter out fixed fields and fields without var (they shouldn't be submitted)
+        // Build submit form: use caller-provided overrides where present, else the
+        // server-supplied default value. Filter out fixed fields and fields
+        // without var (they shouldn't be submitted).
         const submitFields = form.fields
           .filter(field => field.var && field.type !== 'fixed')
           .map(field => {
-            const values = Array.isArray(field.value) ? field.value : (field.value ? [field.value] : [])
+            const overridden = overrides?.[field.var]
+            const raw = overridden !== undefined ? overridden : field.value
+            const values = Array.isArray(raw) ? raw : (raw ? [raw] : [])
             return xml('field', { var: field.var },
               ...values.map((v: string) => xml('value', {}, v))
             )
