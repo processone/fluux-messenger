@@ -17,21 +17,24 @@ const {
   mockClientHandleKeepaliveTick,
   mockGetReconnectIntent,
   mockConnectionStatus,
+  mockIsTauriMode,
   tauriListeners,
-  mockListen,
   tauriIpc,
   tauriEventPluginInternals,
 } = vi.hoisted(() => {
   // Tauri event bus emulation.
   //
-  // The hook subscribes via `await import('@tauri-apps/api/event')` inside an
-  // effect. Vitest's `vi.mock('@tauri-apps/api/event')` factory does NOT
-  // intercept that dynamic import in this file (it resolves the real module),
-  // but the real `listen()` is built on `@tauri-apps/api/core`'s `invoke` +
-  // `transformCallback`. We mock *core* with a faithful IPC stub that routes
-  // `plugin:event|listen` into `tauriListeners`, so a real `listen()` call
-  // still ends up captured here regardless of which `event` module the hook
-  // got. `tauriListeners.get(name)!({ payload })` then drives the handler.
+  // The hook subscribes via `import('@tauri-apps/api/event')` from two separate
+  // effects (Effect 2 wake/sleep, Effect 5 keepalive). We deliberately do NOT
+  // mock `@tauri-apps/api/event`: a `vi.mock(.../event)` factory does not
+  // reliably intercept BOTH concurrent dynamic imports of the same specifier
+  // (the second can race ahead of the mock registry and resolve the real
+  // module), which made keepalive-listener registration intermittently miss
+  // the mock. Instead we let the REAL `listen()` run for every effect and mock
+  // only `@tauri-apps/api/core` with a faithful IPC stub that routes
+  // `transformCallback` + `plugin:event|listen` into `tauriListeners`. One
+  // deterministic registration path, no race.
+  // `tauriListeners.get(name)!({ payload })` then drives the handler.
   const listeners = new Map<string, (event?: { payload?: unknown }) => unknown>()
   let nextCallbackId = 1
   const callbacks = new Map<number, (raw: unknown) => void>()
@@ -85,37 +88,48 @@ const {
     mockClientHandleKeepaliveTick: vi.fn(),
     mockGetReconnectIntent: vi.fn(() => 'active' as 'active' | 'logged-out'),
     mockConnectionStatus: { current: 'online' },
+    // Drives the mocked `isTauri()` (see vi.mock('../utils/tauri') below).
+    // Decoupling the Tauri-mode decision from `window.__TAURI_INTERNALS__`
+    // lets us keep a functional IPC stub installed for the WHOLE file (so the
+    // real `transformCallback` never throws on a leaked async resolution)
+    // while individual web-mode tests still report isTauri() === false.
+    mockIsTauriMode: { current: false },
     tauriListeners: listeners,
     tauriIpc: ipc,
     tauriEventPluginInternals: eventPluginInternals,
-    mockListen: vi.fn((event: string, handler: (event?: { payload?: unknown }) => unknown) => {
-      listeners.set(event, handler)
-      return Promise.resolve(() => {
-        if (listeners.get(event) === handler) {
-          listeners.delete(event)
-        }
-      })
-    }),
   }
 })
 
-/** Install the functional Tauri IPC stub so `isTauri()` is true and the real
- *  `listen()` routes through `tauriListeners`. Mirrors what a real Tauri
- *  webview injects on `window`. */
+/** Flip the hook into Tauri mode for a describe block / test. `isTauri()` is
+ *  mocked to read `mockIsTauriMode` (see below), so this is independent of
+ *  `window.__TAURI_INTERNALS__` — which stays installed for the whole file so
+ *  the real `listen()`/`transformCallback` can never throw on a leaked async
+ *  resolution. */
 function installTauriIpc() {
-  ;(window as any).__TAURI_INTERNALS__ = tauriIpc
-  ;(window as any).__TAURI_EVENT_PLUGIN_INTERNALS__ = tauriEventPluginInternals
+  mockIsTauriMode.current = true
 }
 
-// Mock Tauri APIs. core is mocked with the functional IPC stub so the real
-// event module (reached by the hook's dynamic import) still works.
+// `isTauri()` is decoupled from `window.__TAURI_INTERNALS__` here: the global
+// must remain a functional IPC stub at all times (a real `listen()` resolution
+// that survives a test or the whole file would otherwise call
+// `transformCallback` on an undefined global and surface as an unhandled
+// rejection — including bleeding into sibling test files in the same worker).
+// `mockIsTauriMode` carries the web-vs-Tauri decision instead.
+vi.mock('../utils/tauri', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../utils/tauri')>()
+  return {
+    ...actual,
+    isTauri: () => mockIsTauriMode.current,
+  }
+})
+
+// Mock only `@tauri-apps/api/core` with the functional IPC stub. The real
+// `@tauri-apps/api/event` module is left intact so EVERY `listen()` (from both
+// effects) routes through this stub deterministically — see the note in the
+// hoisted block for why the event module is intentionally not mocked.
 vi.mock('@tauri-apps/api/core', () => ({
   invoke: (cmd: string, args?: Record<string, unknown>) => tauriIpc.invoke(cmd, args),
   transformCallback: (cb: (raw: unknown) => void) => tauriIpc.transformCallback(cb),
-}))
-
-vi.mock('@tauri-apps/api/event', () => ({
-  listen: mockListen,
 }))
 
 vi.mock('@/utils/renderLoopDetector', () => ({
@@ -188,19 +202,23 @@ describe('usePlatformState', () => {
     tauriListeners.clear()
     // Default to web mode (isTauri() === false): the activity/idle tests rely
     // on it. Tauri-mode describe blocks call installTauriIpc() to flip it on.
-    delete (window as any).__TAURI_INTERNALS__
-    // The event-plugin internals stay installed for the whole file so the real
-    // `_unlisten()` (run async on effect cleanup) never reads an undefined
-    // global and rejects.
+    mockIsTauriMode.current = false
+    // The IPC stub + event-plugin internals stay installed for the WHOLE file
+    // (never deleted) so any real `@tauri-apps/api/event` `listen()` /
+    // `_unlisten()` that resolves async — even after a test or the whole file
+    // has finished — finds a working `transformCallback` / `invoke` instead of
+    // throwing an unhandled rejection (which would otherwise bleed into the
+    // next test file sharing this worker).
+    ;(window as any).__TAURI_INTERNALS__ = tauriIpc
     ;(window as any).__TAURI_EVENT_PLUGIN_INTERNALS__ = tauriEventPluginInternals
   })
 
   afterEach(() => {
     vi.useRealTimers()
-    // Point __TAURI_INTERNALS__ at the functional IPC stub so any pending async
-    // effect cleanup (real `@tauri-apps/api/event` `_unlisten()` → core.invoke,
-    // which runs during testing-library's unmount AFTER this hook) finds a
-    // working `invoke` instead of throwing on an undefined global.
+    // Leave the functional IPC stub installed (do NOT delete it): pending async
+    // effect cleanup (real `_unlisten()` → core.invoke) can still run during
+    // testing-library's unmount after this hook, and a later file's leaked
+    // resolution must also find a working global.
     ;(window as any).__TAURI_INTERNALS__ = tauriIpc
   })
 

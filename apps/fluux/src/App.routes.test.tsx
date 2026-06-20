@@ -9,6 +9,22 @@ import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import App from './App'
 
+// Stub the Tauri IPC modules so the real `@tauri-apps/api/{core,event}` are
+// never instantiated in this worker. `usePlatformState` is mocked away below,
+// so nothing here calls them — but a sibling file (usePlatformState.test.tsx)
+// drives the real production listener and can leave a pending async
+// `listen()` resolution in flight. Without these stubs that resolution hits
+// the real `transformCallback`, which reads `window.__TAURI_INTERNALS__` and
+// throws an unhandled rejection when the global is absent. Mocking both
+// modules here keeps the worker isolation-safe regardless of test ordering.
+vi.mock('@tauri-apps/api/core', () => ({
+  invoke: vi.fn(() => Promise.resolve(0)),
+  transformCallback: vi.fn((cb: (raw: unknown) => void) => cb),
+}))
+vi.mock('@tauri-apps/api/event', () => ({
+  listen: vi.fn(() => Promise.resolve(() => {})),
+}))
+
 // Mock SDK hooks
 vi.mock('@fluux/sdk', () => ({
   useConnectionStatus: vi.fn(() => ({
