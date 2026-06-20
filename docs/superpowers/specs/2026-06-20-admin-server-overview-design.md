@@ -89,18 +89,31 @@ interface ServerStats {
   `fetchServerStats`, `isLoadingStats`. Reuses existing `executeSimpleCommand` /
   `executeApiCommand` helpers.
 
-**Data sources** (per metric). Confirmed against the live process-one.net ejabberd via a session
-console export (2026-06-20): the server advertises `jabber:iq:version` (mod_version active) and
-`http://jabber.org/protocol/commands`. ⚠ = still to confirm live (the export did not include admin
-command traffic).
-| Metric | Source |
-|---|---|
-| registeredUsers | XEP-0133 `get-registered-users-num` → field `registeredusersnum` |
-| onlineUsers | XEP-0133 `get-online-users-num` → field `onlineusersnum` |
-| onlineRooms | ejabberd api-command `muc_online_rooms_count` (existing path in `fetchEntityCounts`) |
-| vhostCount | `fetchVhosts().length` (existing) |
-| uptimeSeconds | ejabberd api-command `stats` with `name=uptimeseconds`. ⚠ Parse the returned value **tolerantly** — read the single non-fixed value field rather than hard-coding its `var` (`stat`/`res`/etc. unconfirmed). |
-| version | **Confirmed:** XEP-0092 `jabber:iq:version` to the domain bare JID (`<name>ejabberd</name><version>…</version>`). mod_version advertised on process-one.net. |
+**Data sources** (per metric). Confirmed against the live process-one.net ejabberd via two session
+console exports (2026-06-20), including real admin command request/response traffic.
+| Metric | Command | Steps | Result field (observed) |
+|---|---|---|---|
+| registeredUsers | `http://jabber.org/protocol/admin#get-registered-users-num` | 1 (execute) | `registeredusersnum` ✅ (15) |
+| onlineUsers | `http://jabber.org/protocol/admin#get-online-users-num` | 1 (execute) | `onlineusersnum` ✅ (7) |
+| onlineRooms | `api-commands/muc_online_rooms_count` | 2 (form `service`) | `count` ✅ (10) |
+| vhostCount | `fetchVhosts().length` (existing) | — | — |
+| uptimeSeconds | `api-commands/stats` (mod_admin_extra) with `name=uptimeseconds` | 2 (form `name`) | ⚠ parse tolerantly (likely `stat`; not completed in export) |
+| version | XEP-0092 `jabber:iq:version` to the domain bare JID | 1 | `<name>ejabberd</name><version>…</version>` ✅ mod_version advertised |
+
+**Implementation notes from the live traffic:**
+- `muc_online_rooms_count` and `stats` are **two-step** api-commands: `execute` returns
+  `status="executing"` + a form with a `<required/>` field; resubmit with `action="complete"`.
+  The existing `executeApiCommand` helper already implements this; reuse it.
+- `muc_online_rooms_count` form field `service` defaults to the MUC vhost
+  (`conference.process-one.net`). **Submit `service=global`** to count rooms across all vhosts
+  (the current `fetchEntityCounts` submits the default → counts one vhost only). Command is
+  "added in 26.01" → absent on older ejabberd → discovery-driven omission handles it.
+- `stats` allowed `name` values (from server instructions): `registeredusers`, `onlineusers`,
+  `onlineusersnode`, `uptimeseconds`, `processes`. For uptime, submit `name=uptimeseconds`; read
+  the result value from the single non-fixed/non-hidden text field that isn't `name` (tolerant —
+  don't hard-code the var).
+- `registeredusersnum` / `onlineusersnum` are returned with `xml:lang="fr"` human labels
+  ("Nombre d'utilisateurs enregistrés") — we ignore the server label and use our own i18n label.
 
 ## C — Friendly kit (reusable foundation)
 
