@@ -130,7 +130,7 @@ export async function verifyTrustStateSeal(
     decrypted = await decryptFn(sealArmored, ownPublicArmored)
   } catch (err) {
     // A decrypt failure because the secret key is unavailable (locked /
-    // unrecoverable / recovering) is NOT a tamper signal — there is simply no
+    // unrecoverable) is NOT a tamper signal — there is simply no
     // verdict yet. Only a decrypt failure with a usable key is suspicious.
     if (isKeyUnavailable(err)) return { status: 'awaiting-key' }
     if (storesAreEmpty()) return { status: 'pending-seal' }

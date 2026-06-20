@@ -35,6 +35,16 @@ describe('verifyTrustStateSeal: key-unavailable classification', () => {
     expect(res.status).toBe('awaiting-key')
   })
 
+  it('returns awaiting-key when decrypt fails with a key-locked (transient) error', async () => {
+    setPins({ 'peer@example.com': 'PEERFP' })
+    await sealTrustState(passthroughEncrypt, OWN_PUBLIC)
+    const decryptLocked = async () => {
+      throw new E2EEPluginError('transient', 'key-locked', 'key is locked')
+    }
+    const res = await verifyTrustStateSeal(decryptLocked, OWN_PUBLIC, OWN_FP, isKeyUnavailable)
+    expect(res.status).toBe('awaiting-key')
+  })
+
   it('still returns compromised when decrypt fails for a non-key reason', async () => {
     setPins({ 'peer@example.com': 'PEERFP' })
     await sealTrustState(passthroughEncrypt, OWN_PUBLIC)
