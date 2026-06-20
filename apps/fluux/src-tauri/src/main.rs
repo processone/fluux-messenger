@@ -1061,6 +1061,18 @@ fn detect_sleep_gap(
     }
 }
 
+/// Decide how long to wait before the next keepalive iteration. When the prior
+/// iteration detected a sleep gap (`Some`), wait `ZERO` so the post-wake tick
+/// fires immediately instead of waiting out another full interval; otherwise
+/// wait the normal `KEEPALIVE_INTERVAL`. Pure seam.
+fn next_wait(slept: Option<u64>) -> std::time::Duration {
+    if slept.is_some() {
+        std::time::Duration::ZERO
+    } else {
+        KEEPALIVE_INTERVAL
+    }
+}
+
 /// Forward a WebView console message to the terminal via tracing.
 /// Only produces output when a tracing subscriber is active (--verbose or RUST_LOG).
 #[tauri::command]
@@ -2120,6 +2132,17 @@ mod tests {
     }
 
     use std::time::Duration;
+
+    #[test]
+    fn test_next_wait_no_gap_uses_interval() {
+        assert_eq!(next_wait(None), KEEPALIVE_INTERVAL);
+    }
+
+    #[test]
+    fn test_next_wait_after_gap_fires_immediately() {
+        // A detected sleep gap → fire the next tick immediately (zero wait).
+        assert_eq!(next_wait(Some(9_000_000)), Duration::ZERO);
+    }
 
     #[test]
     fn test_detect_sleep_gap_normal_interval_no_gap() {
