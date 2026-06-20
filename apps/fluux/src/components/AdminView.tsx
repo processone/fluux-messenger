@@ -442,7 +442,9 @@ export function AdminView({ activeCategory, onBack }: AdminViewProps) {
           </button>
         )}
         {getIcon()}
-        <h2 className="ms-2 font-semibold text-fluux-text capitalize">{getTitle()}</h2>
+        {/* Only raw command-node titles need capitalize ("delete user" → "Delete User");
+            i18n titles (overview, users, rooms) are already correctly cased. */}
+        <h2 className={`ms-2 font-semibold text-fluux-text ${currentSession?.node ? 'capitalize' : ''}`}>{getTitle()}</h2>
       </div>
 
       {/* Content */}
