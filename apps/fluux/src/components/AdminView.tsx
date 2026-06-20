@@ -37,7 +37,7 @@ export function AdminView({ activeCategory, onBack }: AdminViewProps) {
     // Entity list state and methods
     userList,
     roomList,
-    entityCounts,
+    serverStats,
     hasMoreUsers,
     hasMoreRooms,
     fetchUsers,
@@ -353,7 +353,7 @@ export function AdminView({ activeCategory, onBack }: AdminViewProps) {
             isLoading={userList.isLoading}
             hasMore={hasMoreUsers && !userSearchQuery}
             searchValue={userSearchQuery}
-            totalCount={entityCounts.users}
+            totalCount={serverStats?.registeredUsers}
             onSearchChange={setUserSearchQuery}
             onLoadMore={loadMoreUsers}
             emptyMessage={t('admin.userList.noUsers')}
@@ -403,7 +403,7 @@ export function AdminView({ activeCategory, onBack }: AdminViewProps) {
           isLoading={roomList.isLoading}
           hasMore={hasMoreRooms && !roomSearchQuery}
           searchValue={roomSearchQuery}
-          totalCount={entityCounts.rooms}
+          totalCount={serverStats?.onlineRooms}
           onSearchChange={setRoomSearchQuery}
           onLoadMore={loadMoreRooms}
           emptyMessage={t('admin.roomList.noRooms')}
