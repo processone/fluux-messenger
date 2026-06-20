@@ -1970,6 +1970,17 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     return this.ownBundle?.fingerprint ?? null
   }
 
+  /**
+   * Whether the active key's passphrase is protected by the OS keychain.
+   * `false` means it falls back to a cleartext file on disk (desktop on a
+   * platform with no secret service) — the UI warns the user it is not
+   * protected at rest. `null` when no identity is established yet. (Web
+   * always reports `false`; callers gate the warning on desktop.)
+   */
+  isKeychainBacked(): boolean | null {
+    return this.ownBundle?.keychainBacked ?? null
+  }
+
   getBackedUpFingerprint(): string | null {
     const jid = this.ctx?.account.jid
     if (!jid) return null

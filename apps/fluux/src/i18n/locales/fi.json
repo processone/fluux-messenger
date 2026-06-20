@@ -734,6 +734,7 @@
             "pepUnsupportedBanner": "Palvelimesi ei tue henkilökohtaisten tapahtumien julkaisua (PEP, XEP-0163), jota OpenPGP-salaus (XEP-0373) edellyttää. Päästä päähän -salausta ei voi ottaa käyttöön tällä tilillä. Ota yhteyttä palvelimen ylläpitäjään.",
             "statusPepUnsupported": "Salausta ei voi ottaa käyttöön: palvelin ei tue PEP:iä (XEP-0163), jota OpenPGP (XEP-0373) edellyttää.",
             "statusRegistrationFailed": "Salauksen määritys epäonnistui ({{code}}). Katso tiedot kehittäjäkonsolista.",
+            "notProtectedAtRest": "Täällä ei ole järjestelmän avainnippua käytettävissä, joten avaimesi tunnuslause tallennetaan salaamattomana tiedostoon levylle. Avain ei ole suojattu levossa. Kuka tahansa, joka voi lukea tämän laitteen tiedostoja, voi käyttää sitä.",
             "backupLabel": "Avaimen varmuuskopio",
             "backupDescription": "Julkaise avaimesta salattu kopio XMPP-palvelimellesi. Suojattu vain sinun tuntemallasi tunnuslauseella ja luettavissa vain tililläsi (access_model: whitelist). Mahdollistaa salatun historian lukemisen uudella laitteella sisäänkirjautumisen ja tunnuslauseen syöttämisen jälkeen.",
             "backupAction": "Varmuuskopioi palvelimelle",
@@ -808,6 +809,7 @@
             "identityChoice": {
                 "title": "OpenPGP-identiteetti on jo olemassa tälle tilille",
                 "body": "Tällä selaimella ei ole paikallista avainta, mutta palvelin ilmoittaa jo avaimen tilillesi. Uuden avaimen luominen täällä hajottaisi identiteettisi hiljaisesti: kirjeenvaihtokumppanit, jotka salasivat olemassa olevalla avaimella, eivät voisi toimittaa viestejä. Valitse, miten haluat ratkaista tämän:",
+                "bodyKeyUnrecoverable": "Tämän laitteen OpenPGP-avainta ei voi enää avata, joten salausta ei voi käynnistää. Julkaistuun identiteettiisi tämä ei vaikuta. Palauta se palvelimen varmuuskopiosta tai tuomalla avaintiedosto, tai korvaa se, jos et voi. Valitse, miten haluat ratkaista tämän:",
                 "publishedFingerprintLabel": "Julkaistu sormenjälki",
                 "restoreFromServerTitle": "Palauta palvelimen varmuuskopiosta",
                 "restoreFromServerBody": "Käytä varmuuskopioinnin tunnuslausetta, jonka asetit ottaessasi salauksen käyttöön toisella laitteella. Vastaava yksityinen avain noudetaan palvelimelta ja avataan paikallisesti.",

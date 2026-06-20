@@ -734,6 +734,7 @@
             "pepUnsupportedBanner": "Je server ondersteunt geen personal eventing (PEP, XEP-0163), wat vereist is voor OpenPGP-versleuteling (XEP-0373). End-to-end-versleuteling kan voor dit account niet worden ingeschakeld. Neem contact op met je serverbeheerder.",
             "statusPepUnsupported": "Versleuteling kan niet worden ingeschakeld: je server ondersteunt geen PEP (XEP-0163), vereist door OpenPGP (XEP-0373).",
             "statusRegistrationFailed": "Het instellen van versleuteling is mislukt ({{code}}). Raadpleeg de ontwikkelaarsconsole voor details.",
+            "notProtectedAtRest": "Er is hier geen systeemsleutelbos beschikbaar, dus de wachtwoordzin van je sleutel wordt onversleuteld in een bestand op schijf opgeslagen. De sleutel is niet beschermd in rust. Iedereen die de bestanden van dit apparaat kan lezen, kan hem gebruiken.",
             "backupLabel": "Sleutelback-up",
             "backupDescription": "Publiceer een versleutelde kopie van je sleutel op je XMPP-server. Beschermd door een wachtwoordzin die alleen jij kent en alleen leesbaar door je account (access_model: whitelist). Je kunt versleutelde geschiedenis op een nieuw apparaat lezen na inloggen en het invoeren van de wachtwoordzin.",
             "backupAction": "Naar server back-uppen",
@@ -808,6 +809,7 @@
             "identityChoice": {
                 "title": "Er bestaat al een OpenPGP-identiteit voor dit account",
                 "body": "Deze browser heeft geen lokale sleutel, maar de server adverteert al een sleutel voor je account. Een nieuwe sleutel hier genereren zou je identiteit stilletjes splitsen: correspondenten die naar de bestaande sleutel hebben versleuteld zouden geen berichten kunnen afleveren. Kies hoe je dit wilt oplossen:",
+                "bodyKeyUnrecoverable": "De OpenPGP-sleutel van dit apparaat kan niet meer worden ontgrendeld, dus versleuteling kan niet starten. Je gepubliceerde identiteit blijft ongewijzigd. Herstel deze via je serverback-up of door een sleutelbestand te importeren, of vervang deze als dat niet lukt. Kies hoe je dit wilt oplossen:",
                 "publishedFingerprintLabel": "Gepubliceerde vingerafdruk",
                 "restoreFromServerTitle": "Herstellen vanuit server-back-up",
                 "restoreFromServerBody": "Gebruik de back-up-wachtzin die je hebt ingesteld bij het inschakelen van versleuteling op een ander apparaat. De bijbehorende privésleutel wordt opgehaald van de server en lokaal ontgrendeld.",

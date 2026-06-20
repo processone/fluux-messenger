@@ -736,6 +736,7 @@
             "pepUnsupportedBanner": "Il tuo server non supporta la pubblicazione di eventi personali (PEP, XEP-0163), richiesta dalla crittografia OpenPGP (XEP-0373). La crittografia end-to-end non può essere attivata su questo account. Contatta l'amministratore del server.",
             "statusPepUnsupported": "Impossibile attivare la crittografia: il tuo server non supporta PEP (XEP-0163), richiesto da OpenPGP (XEP-0373).",
             "statusRegistrationFailed": "Configurazione della crittografia non riuscita ({{code}}). Consulta la console sviluppatore per i dettagli.",
+            "notProtectedAtRest": "Qui non è disponibile alcun portachiavi di sistema, quindi la passphrase della tua chiave viene memorizzata in chiaro in un file sul disco. La chiave non è protetta a riposo. Chiunque possa leggere i file di questo dispositivo potrebbe usarla.",
             "backupLabel": "Backup della chiave",
             "backupDescription": "Pubblica una copia cifrata della tua chiave sul tuo server XMPP. Protetta da una passphrase che conosci solo tu, leggibile solo dal tuo account (access_model: whitelist). Ti permette di leggere lo storico cifrato su un nuovo dispositivo dopo l'accesso e l'inserimento della passphrase.",
             "backupAction": "Salva sul server",
@@ -810,6 +811,7 @@
             "identityChoice": {
                 "title": "Esiste già un'identità OpenPGP per questo account",
                 "body": "Questo browser non ha una chiave locale, ma il server annuncia già una chiave per il tuo account. Generare una nuova chiave qui biforcherebbe silenziosamente la tua identità: i corrispondenti che hanno cifrato sulla chiave esistente non potrebbero consegnare i messaggi. Scegli come risolverlo:",
+                "bodyKeyUnrecoverable": "La chiave OpenPGP di questo dispositivo non può più essere sbloccata, quindi la cifratura non può avviarsi. La tua identità pubblicata non è interessata. Recuperala ripristinando il backup sul server o importando un file di chiave, oppure sostituiscila se non puoi. Scegli come vuoi risolvere:",
                 "publishedFingerprintLabel": "Impronta pubblicata",
                 "restoreFromServerTitle": "Ripristina dal backup del server",
                 "restoreFromServerBody": "Usa la passphrase di backup impostata quando hai attivato la crittografia su un altro dispositivo. La chiave privata corrispondente viene recuperata dal server e sbloccata localmente.",

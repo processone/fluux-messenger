@@ -734,6 +734,7 @@
             "pepUnsupportedBanner": "Serveren din støtter ikke personal eventing (PEP, XEP-0163), som OpenPGP-kryptering (XEP-0373) krever. Ende-til-ende-kryptering kan ikke aktiveres på denne kontoen. Kontakt serveradministratoren.",
             "statusPepUnsupported": "Kryptering kan ikke aktiveres: serveren støtter ikke PEP (XEP-0163), som OpenPGP (XEP-0373) krever.",
             "statusRegistrationFailed": "Oppsett av kryptering mislyktes ({{code}}). Se utviklerkonsollen for detaljer.",
+            "notProtectedAtRest": "Det finnes ingen systemnøkkelring her, så nøkkelens passordfrase lagres ukryptert i en fil på disken. Nøkkelen er ikke beskyttet i hvile. Alle som kan lese filene på denne enheten, kan bruke den.",
             "backupLabel": "Nøkkelsikkerhetskopi",
             "backupDescription": "Publiser en kryptert kopi av nøkkelen på XMPP-serveren din. Beskyttet av en passordsetning bare du kjenner, og kun lesbar av kontoen din (access_model: whitelist). Lar deg lese kryptert historikk på en ny enhet etter pålogging og innskriving av passordsetningen.",
             "backupAction": "Sikkerhetskopier til server",
@@ -808,6 +809,7 @@
             "identityChoice": {
                 "title": "En OpenPGP-identitet finnes allerede for denne kontoen",
                 "body": "Denne nettleseren har ingen lokal nøkkel, men serveren annonserer allerede en nøkkel for kontoen din. Å generere en ny nøkkel her ville stille forgrene identiteten din: korrespondenter som krypterte til den eksisterende nøkkelen ville ikke kunne levere meldinger. Velg hvordan du vil løse dette:",
+                "bodyKeyUnrecoverable": "OpenPGP-nøkkelen på denne enheten kan ikke lenger låses opp, så kryptering kan ikke startes. Din publiserte identitet er upåvirket. Gjenopprett den fra serversikkerhetskopien eller ved å importere en nøkkelfil, eller erstatt den hvis du ikke kan. Velg hvordan du vil løse dette:",
                 "publishedFingerprintLabel": "Publisert fingeravtrykk",
                 "restoreFromServerTitle": "Gjenopprett fra server-sikkerhetskopi",
                 "restoreFromServerBody": "Bruk sikkerhetskopiens passordfrase du satte når du aktiverte kryptering på en annen enhet. Den tilsvarende private nøkkelen hentes fra serveren og låses opp lokalt.",

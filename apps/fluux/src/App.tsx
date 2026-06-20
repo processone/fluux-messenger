@@ -461,6 +461,7 @@ function App() {
       )}
       {pendingIdentityChoice && (
         <IdentityChoiceDialog
+          reason={pendingIdentityChoice.reason}
           hasServerBackup={pendingIdentityChoice.hasBackup}
           publishedFingerprints={pendingIdentityChoice.publishedFingerprints}
           onRestoreFromServer={handleIdentityRestoreFromServer}
