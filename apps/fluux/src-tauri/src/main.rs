@@ -1035,6 +1035,32 @@ fn build_keepalive_payload(display_active: bool, slept_ms: u64) -> KeepalivePayl
     }
 }
 
+/// Native keepalive cadence. The thread emits an `xmpp-keepalive` event every
+/// `KEEPALIVE_INTERVAL`, regardless of display state.
+const KEEPALIVE_INTERVAL: std::time::Duration = std::time::Duration::from_secs(30);
+
+/// Floor above the interval beyond which an iteration's measured wall-clock
+/// elapsed is attributed to the machine having slept rather than to scheduler
+/// jitter. `30s + 90s = 120s`, well above any plausible jitter and aligned
+/// with the JS `SLEEP_THRESHOLD_MS`-driven wake handling.
+const SLEEP_GAP_MARGIN: std::time::Duration = std::time::Duration::from_secs(90);
+
+/// Wall-clock wake detection. When a loop iteration's measured `elapsed` is at
+/// or above `interval + margin`, the machine almost certainly slept through the
+/// `sleep()` call; return `Some(elapsed_ms)` so the loop can fire immediately.
+/// Otherwise (normal tick + jitter) return `None`. Pure seam — no FFI, no clock.
+fn detect_sleep_gap(
+    elapsed: std::time::Duration,
+    interval: std::time::Duration,
+    margin: std::time::Duration,
+) -> Option<u64> {
+    if elapsed >= interval + margin {
+        Some(elapsed.as_millis() as u64)
+    } else {
+        None
+    }
+}
+
 /// Forward a WebView console message to the terminal via tracing.
 /// Only produces output when a tracing subscriber is active (--verbose or RUST_LOG).
 #[tauri::command]
@@ -2090,6 +2116,43 @@ mod tests {
         assert_eq!(
             pick_proxy_uri(&candidates).as_deref(),
             Some("http://proxy:3128")
+        );
+    }
+
+    use std::time::Duration;
+
+    #[test]
+    fn test_detect_sleep_gap_normal_interval_no_gap() {
+        // Steady-state 30s tick: not a sleep.
+        assert_eq!(
+            detect_sleep_gap(KEEPALIVE_INTERVAL, KEEPALIVE_INTERVAL, SLEEP_GAP_MARGIN),
+            None
+        );
+    }
+
+    #[test]
+    fn test_detect_sleep_gap_scheduler_jitter_no_false_positive() {
+        // 30s + 89s of jitter is still under the 120s floor → no false positive.
+        let elapsed = KEEPALIVE_INTERVAL + Duration::from_secs(89);
+        assert_eq!(detect_sleep_gap(elapsed, KEEPALIVE_INTERVAL, SLEEP_GAP_MARGIN), None);
+    }
+
+    #[test]
+    fn test_detect_sleep_gap_exact_floor_is_gap() {
+        // Exactly interval + margin = 120s → treated as slept (inclusive boundary).
+        let elapsed = KEEPALIVE_INTERVAL + SLEEP_GAP_MARGIN;
+        assert_eq!(
+            detect_sleep_gap(elapsed, KEEPALIVE_INTERVAL, SLEEP_GAP_MARGIN),
+            Some(120_000)
+        );
+    }
+
+    #[test]
+    fn test_detect_sleep_gap_long_sleep_returns_millis() {
+        let elapsed = Duration::from_secs(9000);
+        assert_eq!(
+            detect_sleep_gap(elapsed, KEEPALIVE_INTERVAL, SLEEP_GAP_MARGIN),
+            Some(9_000_000)
         );
     }
 
