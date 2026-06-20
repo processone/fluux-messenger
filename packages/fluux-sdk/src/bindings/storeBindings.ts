@@ -568,6 +568,11 @@ export function createStoreBindings(
     stores.admin.setMucServiceJid(mucServiceJid)
   })
 
+  on('admin:server-stats', ({ stats }) => {
+    const stores = getStores()
+    stores.admin.setServerStats(stats)
+  })
+
   // ============================================================================
   // Console Events (optional, for debugging)
   // ============================================================================

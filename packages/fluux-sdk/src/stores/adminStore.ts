@@ -8,6 +8,7 @@ import type {
   EntityCounts,
   RSMResponse,
   AdminCategory,
+  ServerStats,
 } from '../core/types'
 
 // Re-export for convenience
@@ -98,6 +99,10 @@ export interface AdminState {
   roomList: EntityListState<AdminRoom>
   mucServiceJid: string | null
 
+  // Server overview vital-signs (new)
+  serverStats: ServerStats | null
+  isLoadingStats: boolean
+
   // Actions
   setIsAdmin: (isAdmin: boolean) => void
   setCommands: (commands: AdminCommand[]) => void
@@ -121,6 +126,8 @@ export interface AdminState {
   appendRoomList: (items: AdminRoom[], pagination: RSMResponse) => void
   resetRoomList: () => void
   setMucServiceJid: (jid: string | null) => void
+  setServerStats: (stats: ServerStats | null) => void
+  setIsLoadingStats: (loading: boolean) => void
 
   // Getters
   getCurrentSession: () => AdminSession | null
@@ -155,6 +162,8 @@ const initialState = {
   userList: initialEntityListState<AdminUser>(),
   roomList: initialEntityListState<AdminRoom>(),
   mucServiceJid: null as string | null,
+  serverStats: null as ServerStats | null,
+  isLoadingStats: false,
 }
 
 export const adminStore = createStore<AdminState>((set, get) => ({
@@ -226,6 +235,10 @@ export const adminStore = createStore<AdminState>((set, get) => ({
   }),
 
   setMucServiceJid: (jid) => set({ mucServiceJid: jid }),
+
+  setServerStats: (stats) => set({ serverStats: stats }),
+
+  setIsLoadingStats: (loading) => set({ isLoadingStats: loading }),
 
   // Getters
   getCurrentSession: () => get().currentSession,

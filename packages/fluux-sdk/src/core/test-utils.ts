@@ -746,6 +746,7 @@ export const createMockStores = (): MockStoreBindings => ({
     getCurrentSession: vi.fn().mockReturnValue(null),
     setEntityCounts: vi.fn(),
     setMucServiceJid: vi.fn(),
+    setServerStats: vi.fn(),
     getMucServiceJid: vi.fn().mockReturnValue(null),
     setVhosts: vi.fn(),
     setSelectedVhost: vi.fn(),
