@@ -2989,7 +2989,10 @@ describe('SequoiaPgpPlugin', () => {
     // refactor of the Rust messages (or a bundler quirk that loses
     // E2EEPluginError identity) is caught loudly.
 
-    it('ensureIdentity raises a permanent E2EEPluginError when the key is unrecoverable', async () => {
+    it('init() flags recovery (does not throw) when the key is unrecoverable', async () => {
+      // A missing passphrase for a present key is `key-unrecoverable`. init()
+      // keeps the plugin registered and flags recovery so the host routes to
+      // the IdentityChoiceDialog, rather than failing registration outright.
       const { ctx } = makeContext('me@example.com')
       const fakeInvoke: InvokeFn = async (cmd) => {
         if (cmd === 'openpgp_ensure_key') {
@@ -3000,16 +3003,52 @@ describe('SequoiaPgpPlugin', () => {
         throw new Error('unexpected cmd: ' + cmd)
       }
       const unrecoverablePlugin = new SequoiaPgpPlugin({ invoke: fakeInvoke })
-      let caught: unknown
-      try {
-        await unrecoverablePlugin.init(ctx)
-      } catch (err) {
-        caught = err
+      await unrecoverablePlugin.init(ctx) // must resolve, not reject
+
+      expect(unrecoverablePlugin.isKeyRecoveryNeeded()).toBe(true)
+      // And the raw classification is still the permanent recovery code.
+      const { kind, code } = SequoiaPgpPlugin.classifyBoundaryError(
+        new Error(
+          "passphrase for account 'me@example.com' is not in the keychain or on disk — key material cannot be decrypted",
+        ),
+      )
+      expect(kind).toBe('permanent')
+      expect(code).toBe('key-unrecoverable')
+    })
+
+    it('classifies a TSK decrypt failure (stale passphrase / unexpected EOF) as permanent key-unrecoverable', () => {
+      // Real production failure: the stored passphrase no longer decrypts
+      // the on-disk TSK (keychain/key desync). Sequoia reports "unexpected
+      // EOF" while decrypting the secret key. This must be a PERMANENT
+      // `key-unrecoverable` so the UI routes to recovery instead of showing
+      // an opaque, retryable `(unknown)`.
+      const { kind, code } = SequoiaPgpPlugin.classifyBoundaryError(
+        new Error(
+          'decrypt persisted TSK with stored passphrase: decrypt primary secret key: unexpected EOF',
+        ),
+      )
+      expect(kind).toBe('permanent')
+      expect(code).toBe('key-unrecoverable')
+    })
+
+    it('init() swallows an unrecoverable local key and flags recovery instead of throwing', async () => {
+      // The stored passphrase no longer decrypts the on-disk TSK. init()
+      // must NOT throw (which would fail registration and hide the recovery
+      // UI); it stays registered and flags recovery so the host opens the
+      // IdentityChoiceDialog.
+      const { ctx } = makeContext('me@example.com')
+      const fakeInvoke: InvokeFn = async (cmd) => {
+        if (cmd === 'openpgp_has_persisted_key') return true as never
+        if (cmd === 'openpgp_ensure_key') {
+          throw new Error(
+            'decrypt persisted TSK with stored passphrase: decrypt primary secret key: unexpected EOF',
+          )
+        }
+        throw new Error('unexpected cmd: ' + cmd)
       }
-      expect(isE2EEPluginError(caught)).toBe(true)
-      const e = caught as E2EEPluginError
-      expect(e.kind).toBe('permanent')
-      expect(e.code).toBe('key-unrecoverable')
+      const recoveringPlugin = new SequoiaPgpPlugin({ invoke: fakeInvoke })
+      await recoveringPlugin.init(ctx) // must resolve, not reject
+      expect(recoveringPlugin.isKeyRecoveryNeeded()).toBe(true)
     })
 
     it('ensureIdentity raises a transient E2EEPluginError on IPC panic', async () => {
