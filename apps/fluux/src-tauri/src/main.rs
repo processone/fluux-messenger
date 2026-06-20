@@ -2037,12 +2037,29 @@ fn main() {
             if let Some(window) = app.get_webview_window("main") {
                 let running = keepalive_flag_for_setup.clone();
                 std::thread::spawn(move || {
+                    // Measure real wall-clock elapsed per iteration so a sleep
+                    // the machine slept through (the `sleep()` call returns
+                    // late) is detected and the post-wake tick fires
+                    // immediately instead of waiting out another full interval.
+                    // The display state is probed FRESH every emit and the tick
+                    // keeps arriving every interval even when the display is
+                    // off, so the JS state machine can learn when it returns.
+                    let mut wait = KEEPALIVE_INTERVAL;
                     while running.load(Ordering::Relaxed) {
-                        std::thread::sleep(std::time::Duration::from_secs(30));
+                        let started = std::time::Instant::now();
+                        std::thread::sleep(wait);
                         if !running.load(Ordering::Relaxed) {
                             break;
                         }
-                        let _ = window.emit("xmpp-keepalive", ());
+                        let elapsed = started.elapsed();
+                        let (payload, next) = keepalive_step(
+                            elapsed,
+                            KEEPALIVE_INTERVAL,
+                            SLEEP_GAP_MARGIN,
+                            keepalive_display_active,
+                        );
+                        let _ = window.emit("xmpp-keepalive", payload);
+                        wait = next;
                     }
                 });
             }
@@ -2167,6 +2184,21 @@ mod tests {
     }
 
     use std::time::Duration;
+
+    #[test]
+    fn test_loop_contract_fires_immediately_after_simulated_sleep() {
+        // Iteration 1: a 2.5h sleep gap → emit immediately (ZERO wait), payload
+        // carries the slept_ms. Iteration 2: steady state → 30s wait.
+        let (p1, w1) =
+            keepalive_step(Duration::from_secs(9000), KEEPALIVE_INTERVAL, SLEEP_GAP_MARGIN, || true);
+        assert_eq!(w1, Duration::ZERO);
+        assert_eq!(p1.slept_ms, 9_000_000);
+
+        let (p2, w2) =
+            keepalive_step(KEEPALIVE_INTERVAL, KEEPALIVE_INTERVAL, SLEEP_GAP_MARGIN, || true);
+        assert_eq!(w2, KEEPALIVE_INTERVAL);
+        assert_eq!(p2.slept_ms, 0);
+    }
 
     #[test]
     fn test_keepalive_display_active_is_callable() {
