@@ -1014,6 +1014,18 @@ mod macos {
     }
 }
 
+/// Payload for the native `xmpp-keepalive` event. Serialized with camelCase
+/// keys to match the WebView's `KeepalivePayload` interface
+/// (`displayActive`, `sleptMs`). Mirrors `macos::WakeEventPayload`'s serde
+/// convention so the JS side can parse both uniformly.
+#[derive(Serialize, Clone)]
+struct KeepalivePayload {
+    #[serde(rename = "displayActive")]
+    display_active: bool,
+    #[serde(rename = "sleptMs")]
+    slept_ms: u64,
+}
+
 /// Forward a WebView console message to the terminal via tracing.
 /// Only produces output when a tracing subscriber is active (--verbose or RUST_LOG).
 #[tauri::command]
@@ -2070,5 +2082,26 @@ mod tests {
             pick_proxy_uri(&candidates).as_deref(),
             Some("http://proxy:3128")
         );
+    }
+
+    #[test]
+    fn test_keepalive_payload_serializes_camel_case() {
+        let payload = KeepalivePayload {
+            display_active: true,
+            slept_ms: 120_000,
+        };
+        let json = serde_json::to_string(&payload).expect("serialize");
+        assert_eq!(json, r#"{"displayActive":true,"sleptMs":120000}"#);
+    }
+
+    #[test]
+    fn test_keepalive_payload_is_clone() {
+        let payload = KeepalivePayload {
+            display_active: false,
+            slept_ms: 0,
+        };
+        let cloned = payload.clone();
+        assert!(!cloned.display_active);
+        assert_eq!(cloned.slept_ms, 0);
     }
 }
