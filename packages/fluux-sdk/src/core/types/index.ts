@@ -140,6 +140,7 @@ export type {
   EntityListState,
   EntityCounts,
   AdminCategory,
+  ServerStats,
 } from './admin'
 
 // Client types
