@@ -850,7 +850,7 @@ mod macos {
         fn CGDisplayIsAsleep(display: u32) -> i32;
     }
 
-    fn is_display_active() -> bool {
+    pub(crate) fn is_display_active() -> bool {
         // SAFETY: CGMainDisplayID / CGDisplayIsAsleep are pure Core Graphics
         // queries with no preconditions; safe to call from any thread.
         unsafe {
@@ -1089,6 +1089,23 @@ fn keepalive_step<F: Fn() -> bool>(
     let display_active = display_probe();
     let payload = build_keepalive_payload(display_active, slept.unwrap_or(0));
     (payload, next_wait(slept))
+}
+
+/// Crate-level display-active probe for the keepalive thread. Fails open:
+/// returns `true` on platforms without a display-sleep probe, and the macOS
+/// `CGDisplayIsAsleep` path is documented to default active on any ambiguity.
+/// Failing open is mandatory — since `system-did-wake` is demoted to
+/// reload-only, a stuck-`false` probe would otherwise silently kill
+/// reconnection forever.
+fn keepalive_display_active() -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        macos::is_display_active()
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        true
+    }
 }
 
 /// Forward a WebView console message to the terminal via tracing.
@@ -2150,6 +2167,18 @@ mod tests {
     }
 
     use std::time::Duration;
+
+    #[test]
+    fn test_keepalive_display_active_is_callable() {
+        // Must not panic; on non-macOS hosts it fails open to `true`.
+        let _v: bool = keepalive_display_active();
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    #[test]
+    fn test_keepalive_display_active_fails_open_off_macos() {
+        assert!(keepalive_display_active());
+    }
 
     #[test]
     fn test_keepalive_step_steady_state_uses_probe_and_interval() {
