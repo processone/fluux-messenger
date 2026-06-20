@@ -642,7 +642,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     }
   }
 
-  private async verifyTrustStateOnInit(): Promise<void> {
+  protected async verifyTrustStateOnInit(): Promise<void> {
     const ownPublicArmored = this.ownBundle?.publicArmored
     const ownFingerprint = this.ownBundle?.fingerprint
     if (!ownPublicArmored || !ownFingerprint || !this.ctx) return
@@ -885,6 +885,13 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     // locally so history stays decryptable. Re-run deferred decrypts so any
     // still-stashed messages are recovered immediately.
     ctx.notifyKeyUnlocked?.()
+    // The secret key is now usable again — re-run the trust-state seal check so
+    // a deferred `awaiting-key` verdict resolves. `init()` returns early without
+    // activating subscriptions on key-unrecoverable, so recovery must BOTH
+    // ensure subscriptions are active AND run the verification explicitly for
+    // the case where they already were.
+    this.activateSubscriptions() // idempotent: activates subs (+ verifies) if not yet active
+    void this.verifyTrustStateOnInit() // explicit re-check when subs were already active
 
     return { fingerprint: bundle.fingerprint }
   }
@@ -1177,6 +1184,13 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     // stashed while the key was absent stay "could not be decrypted" until an
     // unrelated trigger (reconnect, app restart) re-registers the plugin.
     ctx.notifyKeyUnlocked?.()
+    // The secret key is now usable again — re-run the trust-state seal check so
+    // a deferred `awaiting-key` verdict resolves (to `sealed` for an unchanged
+    // cert). `init()` returns early without activating subscriptions on
+    // key-unrecoverable, so recovery must BOTH ensure subscriptions are active
+    // AND run the verification explicitly for the case where they already were.
+    this.activateSubscriptions() // idempotent: activates subs (+ verifies) if not yet active
+    void this.verifyTrustStateOnInit() // explicit re-check when subs were already active
 
     return { fingerprint: bundle.fingerprint }
   }
