@@ -110,7 +110,7 @@ export type ConnectionMachineEvent =
   | { type: 'CANCEL_RECONNECT' }
   | { type: 'TRIGGER_RECONNECT' }
   | { type: 'SET_RETRY_INITIAL'; retry: boolean }
-  | { type: 'DISPLAY_ACTIVE' }
+  | { type: 'DISPLAY_ACTIVE'; sleptMs?: number }
   | { type: 'DISPLAY_INACTIVE' }
   | { type: 'SM_ENABLED'; maxMs: number }
 
@@ -317,6 +317,13 @@ export const connectionMachine = setup({
       }
       return false
     },
+
+    // Did a display-off wake elapse past the SM resume window (server max if
+    // known)? When the display comes back after a long off-period the server
+    // has already discarded the SM session, so the next attempt must fresh-bind
+    // rather than send a doomed <resume/>.
+    displayWakeExceedsSMTimeout: ({ context, event }) =>
+      event.type === 'DISPLAY_ACTIVE' && (event.sleptMs ?? 0) > context.smResumeWindowMs,
 
     // Did the sleep duration (computed from context) exceed the SM resume window?
     // Used when SOCKET_DIED arrives in sleeping state before WAKE.
@@ -640,10 +647,20 @@ export const connectionMachine = setup({
               actions: 'setDisplayAsleep',
             },
             // Display active while waiting acts as an immediate kick (like VISIBLE).
-            DISPLAY_ACTIVE: {
-              target: 'attempting',
-              actions: ['clearDisplayAsleep', 'clearTargetTime'],
-            },
+            // A long display-off (sleptMs > SM window) also marks SM resume not
+            // viable so the kicked attempt fresh-binds instead of sending a
+            // doomed <resume/> the server has already discarded.
+            DISPLAY_ACTIVE: [
+              {
+                guard: 'displayWakeExceedsSMTimeout',
+                target: 'attempting',
+                actions: ['clearDisplayAsleep', 'clearTargetTime', 'markSmResumeNotViable'],
+              },
+              {
+                target: 'attempting',
+                actions: ['clearDisplayAsleep', 'clearTargetTime'],
+              },
+            ],
           },
         },
 
@@ -701,11 +718,21 @@ export const connectionMachine = setup({
         paused: {
           on: {
             // Display came back — kick straight to attempting, preserving the
-            // attempt counter so failure continues the existing backoff.
-            DISPLAY_ACTIVE: {
-              target: 'attempting',
-              actions: ['clearDisplayAsleep', 'clearTargetTime'],
-            },
+            // attempt counter so failure continues the existing backoff. A long
+            // display-off (sleptMs > SM window) also marks SM resume not viable
+            // so the resumed attempt fresh-binds instead of sending a doomed
+            // <resume/> the server has already discarded.
+            DISPLAY_ACTIVE: [
+              {
+                guard: 'displayWakeExceedsSMTimeout',
+                target: 'attempting',
+                actions: ['clearDisplayAsleep', 'clearTargetTime', 'markSmResumeNotViable'],
+              },
+              {
+                target: 'attempting',
+                actions: ['clearDisplayAsleep', 'clearTargetTime'],
+              },
+            ],
             // Explicit user-initiated retry deliberately overrides the display
             // gate: a manual retry wins over the "display off" hold and resumes
             // the attempt immediately (counter preserved).

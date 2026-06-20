@@ -10,6 +10,7 @@ import {
   RECONNECT_ATTEMPT_TIMEOUT_MS,
   XMPP_STREAM_OPEN_TIMEOUT_MS,
 } from './connectionTimeouts'
+import { SM_SESSION_TIMEOUT_MS } from '../connectionMachine'
 import {
   createMockXmppClient,
   createMockStores,
@@ -4289,6 +4290,26 @@ describe('XMPPClient Connection', () => {
 
           expect(mockClientFactory.mock.calls.length).toBe(clientsBefore)
           expect(mockXmppClientInstance.send).not.toHaveBeenCalled()
+        })
+
+        it('(true, long sleptMs) while reconnecting marks SM resume not viable', async () => {
+          const p = xmppClient.connect({
+            jid: 'user@example.com', password: 'secret', server: 'example.com', skipDiscovery: true,
+          })
+          mockXmppClientInstance._emit('online')
+          await p
+          // Kill the socket so the machine is reconnecting.
+          mockXmppClientInstance._emit('disconnect', { clean: false })
+          await vi.advanceTimersByTimeAsync(1000)
+          await vi.advanceTimersByTimeAsync(30_000) // let first attempt fail → waiting
+
+          // A long display-off elapsed past the SM resume window — the next
+          // attempt must fresh-bind, not send a doomed <resume/>.
+          ;(xmppClient.connection as any).handleKeepaliveTick(true, SM_SESSION_TIMEOUT_MS + 60_000)
+          await vi.advanceTimersByTimeAsync(0)
+
+          const ctx = getActor().getSnapshot().context
+          expect(ctx.smResumeViable).toBe(false)
         })
       })
 

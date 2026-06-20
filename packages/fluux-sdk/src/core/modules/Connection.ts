@@ -20,7 +20,6 @@ import {
   getConnectionStatusFromState,
   getReconnectInfoFromContext,
   isTerminalState,
-  SM_SESSION_TIMEOUT_MS,
   type ConnectionActor,
   type ConnectionMachineEvent,
   type ConnectionStateValue,
@@ -1000,23 +999,24 @@ export class Connection extends BaseModule {
       return
     }
 
-    // Display on (or legacy fail-open): mark the machine active. In
-    // reconnecting.waiting this acts as an immediate kick to attempting.
-    this.sendMachineEvent({ type: 'DISPLAY_ACTIVE' }, 'keepalive:display-active')
+    // Display on (or legacy fail-open): mark the machine active, carrying the
+    // elapsed gap. In reconnecting.{waiting,paused} this acts as an immediate
+    // kick to attempting; when the gap exceeded the SM resume window the
+    // guarded handler also marks SM resume not viable so the kicked attempt
+    // fresh-binds instead of sending a doomed <resume/> the server discarded.
+    this.sendMachineEvent({ type: 'DISPLAY_ACTIVE', sleptMs }, 'keepalive:display-active')
 
     if (this.isInReconnectingState()) {
-      // A long elapsed gap means we just woke — go immediately rather than
-      // waiting out the (possibly frozen) backoff timer.
-      if (sleptMs != null && sleptMs >= SM_SESSION_TIMEOUT_MS) {
-        // Defer to an in-flight wake recovery rather than spawning a parallel
-        // teardown+reconnect (handleAwake's single-flight already owns it).
-        if (this.deadSocketRecoveryInProgress || this.handleAwakeInFlight) {
-          this.nudgeReconnect()
-          return
-        }
-        this.handleDeadSocket({ immediateReconnect: true, source: 'keepalive-wake' })
+      // Single-flight: defer to an in-flight wake recovery rather than racing a
+      // parallel reconnect (handleAwake's single-flight already owns it). This
+      // coalescing keeps concurrent wake signals (the OS deferred-wake path +
+      // this keepalive kick) from each spawning a client.
+      if (this.deadSocketRecoveryInProgress || this.handleAwakeInFlight) {
+        this.nudgeReconnect()
         return
       }
+      // Safety no-op for any reconnecting substate the DISPLAY_ACTIVE kick did
+      // not already advance to attempting (TRIGGER_RECONNECT is ignored there).
       this.nudgeReconnect()
       return
     }

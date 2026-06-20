@@ -636,6 +636,69 @@ describe('connectionMachine', () => {
       actor.stop()
     })
 
+    it('should mark SM resume not viable on DISPLAY_ACTIVE (long sleep) from paused', () => {
+      actor.send({ type: 'DISPLAY_INACTIVE' })
+      expect(actor.getSnapshot().value).toEqual({ reconnecting: 'paused' })
+
+      // A long display-off elapsed past the SM resume window — the server has
+      // discarded the SM session, so the next attempt must fresh-bind.
+      actor.send({ type: 'DISPLAY_ACTIVE', sleptMs: SM_SESSION_TIMEOUT_MS + 1000 })
+      expect(actor.getSnapshot().value).toEqual({ reconnecting: 'attempting' })
+      expect(actor.getSnapshot().context.smResumeViable).toBe(false)
+      expect(actor.getSnapshot().context.displayAsleep).toBe(false)
+      actor.stop()
+    })
+
+    it('should keep SM resume viable on DISPLAY_ACTIVE (short/undefined sleep) from paused', () => {
+      actor.send({ type: 'DISPLAY_INACTIVE' })
+      expect(actor.getSnapshot().value).toEqual({ reconnecting: 'paused' })
+
+      // Short blip (and the legacy undefined payload) leaves viability untouched.
+      actor.send({ type: 'DISPLAY_ACTIVE', sleptMs: 30_000 })
+      expect(actor.getSnapshot().value).toEqual({ reconnecting: 'attempting' })
+      expect(actor.getSnapshot().context.smResumeViable).toBe(true)
+      actor.stop()
+    })
+
+    it('should leave SM resume viable on DISPLAY_ACTIVE with undefined sleptMs from paused', () => {
+      actor.send({ type: 'DISPLAY_INACTIVE' })
+      actor.send({ type: 'DISPLAY_ACTIVE' })
+      expect(actor.getSnapshot().value).toEqual({ reconnecting: 'attempting' })
+      expect(actor.getSnapshot().context.smResumeViable).toBe(true)
+      actor.stop()
+    })
+
+    it('should mark SM resume not viable on DISPLAY_ACTIVE (long sleep) from waiting', () => {
+      expect(actor.getSnapshot().value).toEqual({ reconnecting: 'waiting' })
+
+      actor.send({ type: 'DISPLAY_ACTIVE', sleptMs: SM_SESSION_TIMEOUT_MS + 1000 })
+      expect(actor.getSnapshot().value).toEqual({ reconnecting: 'attempting' })
+      expect(actor.getSnapshot().context.smResumeViable).toBe(false)
+      actor.stop()
+    })
+
+    it('should keep SM resume viable on DISPLAY_ACTIVE (short/undefined sleep) from waiting', () => {
+      expect(actor.getSnapshot().value).toEqual({ reconnecting: 'waiting' })
+
+      actor.send({ type: 'DISPLAY_ACTIVE', sleptMs: 30_000 })
+      expect(actor.getSnapshot().value).toEqual({ reconnecting: 'attempting' })
+      expect(actor.getSnapshot().context.smResumeViable).toBe(true)
+      actor.stop()
+    })
+
+    it('should gate DISPLAY_ACTIVE viability on the server window (SM_ENABLED 300s)', () => {
+      // A 400s sleep is below the 600s default constant but above a 300s server
+      // window — it must mark SM resume not viable.
+      actor.send({ type: 'SM_ENABLED', maxMs: 300_000 })
+      actor.send({ type: 'DISPLAY_INACTIVE' })
+      expect(actor.getSnapshot().value).toEqual({ reconnecting: 'paused' })
+
+      actor.send({ type: 'DISPLAY_ACTIVE', sleptMs: 400_000 })
+      expect(actor.getSnapshot().value).toEqual({ reconnecting: 'attempting' })
+      expect(actor.getSnapshot().context.smResumeViable).toBe(false)
+      actor.stop()
+    })
+
     it('should ignore DISPLAY_INACTIVE in connected.healthy', () => {
       const c = createActor(connectionMachine).start()
       c.send({ type: 'CONNECT' })
