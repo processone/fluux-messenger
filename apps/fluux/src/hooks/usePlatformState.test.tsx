@@ -638,6 +638,44 @@ describe('usePlatformState', () => {
     })
   })
 
+  describe('Effect 4 window-shown reload routing', () => {
+    beforeEach(() => {
+      installTauriIpc()
+      clearReloadMarker()
+    })
+
+    it('routes a long visibility-wake reload through maybeReloadOnLongWake (writes the reload marker)', async () => {
+      const reloadSpy = vi.fn()
+      Object.defineProperty(window, 'location', {
+        configurable: true,
+        value: { ...window.location, reload: reloadSpy },
+      })
+
+      const start = Date.now()
+      mockConnectionStatus.current = 'online'
+      renderHook(() => usePlatformState())
+
+      // Hide the page.
+      await act(async () => {
+        Object.defineProperty(document, 'hidden', { configurable: true, value: true })
+        document.dispatchEvent(new Event('visibilitychange'))
+        await Promise.resolve()
+      })
+
+      // Advance the clock past SLEEP_THRESHOLD_MS so both hidden-span AND
+      // heartbeat-gap exceed it (real sleep), then show the page.
+      vi.setSystemTime(new Date(start + 200_000))
+      await act(async () => {
+        Object.defineProperty(document, 'hidden', { configurable: true, value: false })
+        document.dispatchEvent(new Event('visibilitychange'))
+        await Promise.resolve()
+      })
+
+      expect(reloadSpy).toHaveBeenCalled()
+      expect(readReloadMarker()).toBeGreaterThan(0)
+    })
+  })
+
   describe('Effect 5 keepalive gate', () => {
     const fireKeepalive = async (payload: unknown) => {
       // The hook registers the listener via `await import(...).then(...)`, whose

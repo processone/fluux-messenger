@@ -656,15 +656,12 @@ export function usePlatformState() {
 
       // If the hide was long enough to count as a real sleep on Tauri,
       // reload the webview (same rendering-context hazard as OS sleep).
-      // Cross-check the JS heartbeat: if it was firing normally (gap
-      // below threshold), the machine was awake and the app was merely
-      // hidden — no rendering context loss, no reload needed.
+      // Cross-check the JS heartbeat: a small gap means JS was running
+      // (machine awake, app merely hidden) — no rendering loss, no reload.
+      // Route through maybeReloadOnLongWake so the decision/marker write is
+      // shared with the OS-wake path and unit-testable.
       if (shouldReloadOnVisibilityWake(hiddenDuration, heartbeatGap, isTauri())) {
-        const secs = Math.round(hiddenDuration / 1000)
-        console.log(`[PlatformState] Wake from sleep (visibility, ${secs}s), reloading webview to restore rendering`)
-        logEvent(`Wake from sleep (visibility, ${secs}s), reloading webview`)
-        window.location.reload()
-        return
+        if (maybeReloadOnLongWake(hiddenDuration, 'visibility')) return
       }
 
       // Sub-threshold, machine was awake, or web mode: just nudge a
