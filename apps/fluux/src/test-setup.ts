@@ -54,6 +54,27 @@ void i18n.use(initReactI18next).init({
         status: {
           reconnecting: 'Reconnecting...',
         },
+        // Admin server overview (ServerOverview component tests)
+        admin: {
+          overview: {
+            title: 'Server overview',
+            refresh: 'Refresh',
+            updatedAt: 'Updated at {{time}}',
+            advanced: 'Advanced',
+            advancedHint: 'Run a raw server command',
+            empty: 'Server statistics are unavailable.',
+            retry: 'Retry',
+            units: { d: 'd', h: 'h', m: 'm', s: 's' },
+            cards: {
+              uptime: 'Uptime',
+              version: 'Server version',
+              registeredUsers: 'Registered users',
+              onlineUsers: 'Online users',
+              onlineRooms: 'Active rooms',
+              vhosts: 'Virtual hosts',
+            },
+          },
+        },
       },
     },
   },
