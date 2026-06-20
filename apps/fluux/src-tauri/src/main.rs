@@ -1073,6 +1073,24 @@ fn next_wait(slept: Option<u64>) -> std::time::Duration {
     }
 }
 
+/// One keepalive iteration's pure work: detect a sleep gap from the measured
+/// `elapsed`, probe the display state **fresh** (so a transient stuck reading
+/// can't poison later ticks), build the payload, and compute the next wait.
+/// Returns the payload to emit and the duration to sleep before the next tick.
+/// The Tauri `emit` and the real wall-clock measurement stay in the thread;
+/// this seam takes them as inputs so it is fully unit-testable.
+fn keepalive_step<F: Fn() -> bool>(
+    elapsed: std::time::Duration,
+    interval: std::time::Duration,
+    margin: std::time::Duration,
+    display_probe: F,
+) -> (KeepalivePayload, std::time::Duration) {
+    let slept = detect_sleep_gap(elapsed, interval, margin);
+    let display_active = display_probe();
+    let payload = build_keepalive_payload(display_active, slept.unwrap_or(0));
+    (payload, next_wait(slept))
+}
+
 /// Forward a WebView console message to the terminal via tracing.
 /// Only produces output when a tracing subscriber is active (--verbose or RUST_LOG).
 #[tauri::command]
@@ -2132,6 +2150,51 @@ mod tests {
     }
 
     use std::time::Duration;
+
+    #[test]
+    fn test_keepalive_step_steady_state_uses_probe_and_interval() {
+        let (payload, wait) =
+            keepalive_step(KEEPALIVE_INTERVAL, KEEPALIVE_INTERVAL, SLEEP_GAP_MARGIN, || true);
+        assert!(payload.display_active);
+        assert_eq!(payload.slept_ms, 0);
+        assert_eq!(wait, KEEPALIVE_INTERVAL);
+    }
+
+    #[test]
+    fn test_keepalive_step_sleep_gap_immediate_and_carries_slept_ms() {
+        let elapsed = Duration::from_secs(9000);
+        let (payload, wait) =
+            keepalive_step(elapsed, KEEPALIVE_INTERVAL, SLEEP_GAP_MARGIN, || true);
+        assert_eq!(payload.slept_ms, 9_000_000);
+        assert_eq!(wait, Duration::ZERO);
+    }
+
+    #[test]
+    fn test_keepalive_step_probe_read_fresh_each_call() {
+        // Probe flips false→true between calls; each payload reflects the
+        // value read at that call (guards the stuck-`false` landmine).
+        let state = std::cell::Cell::new(false);
+        let probe = || {
+            let v = state.get();
+            state.set(!v);
+            v
+        };
+        let (p1, _) = keepalive_step(KEEPALIVE_INTERVAL, KEEPALIVE_INTERVAL, SLEEP_GAP_MARGIN, &probe);
+        let (p2, _) = keepalive_step(KEEPALIVE_INTERVAL, KEEPALIVE_INTERVAL, SLEEP_GAP_MARGIN, &probe);
+        assert!(!p1.display_active);
+        assert!(p2.display_active);
+    }
+
+    #[test]
+    fn test_keepalive_step_display_inactive_still_emits() {
+        // Display off → still produce a payload (the tick keeps arriving so
+        // the state machine can learn when the display returns).
+        let (payload, wait) =
+            keepalive_step(KEEPALIVE_INTERVAL, KEEPALIVE_INTERVAL, SLEEP_GAP_MARGIN, || false);
+        assert!(!payload.display_active);
+        assert_eq!(payload.slept_ms, 0);
+        assert_eq!(wait, KEEPALIVE_INTERVAL);
+    }
 
     #[test]
     fn test_next_wait_no_gap_uses_interval() {
