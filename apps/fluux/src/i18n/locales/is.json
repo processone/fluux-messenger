@@ -233,6 +233,7 @@
         "notJoinedNoHistory": "Þú ert ekki í þessu herbergi",
         "joinToLoadHistory": "Gangt inn til að hlaða skilaboðum",
         "notificationSettings": "Tilkynningastillingar",
+        "roomActions": "Herbergisaðgerðir",
         "mentionsOnly": "Aðeins tilvísanir",
         "defaultBehavior": "Sjálfgefin hegðun",
         "allMessages": "Öll skilaboð",
@@ -733,6 +734,7 @@
             "pepUnsupportedBanner": "Netþjónninn þinn styður ekki birtingu persónulegra atburða (PEP, XEP-0163), sem OpenPGP-dulritun (XEP-0373) krefst. Ekki er hægt að virkja enda-í-enda dulritun á þessum aðgangi. Hafðu samband við kerfisstjóra netþjónsins.",
             "statusPepUnsupported": "Ekki er hægt að virkja dulritun: netþjónninn styður ekki PEP (XEP-0163), sem OpenPGP (XEP-0373) krefst.",
             "statusRegistrationFailed": "Uppsetning dulritunar mistókst ({{code}}). Sjá nánar í forritaraglugganum.",
+            "notProtectedAtRest": "Engin kerfislyklakippa er tiltæk hér, svo lykilorðsetning lykilsins þíns er geymd ódulkóðuð í skrá á disknum. Lykillinn er ekki varinn í hvíld. Hver sem getur lesið skrár þessa tækis gæti notað hann.",
             "backupLabel": "Lyklaöryggisafrit",
             "backupDescription": "Birta dulritað eintak af lyklinum á XMPP-þjóninn þinn. Verndað með aðgangsorði sem aðeins þú þekkir og aðeins læsilegt af reikningnum þínum (access_model: whitelist). Gerir þér kleift að lesa dulritaðan feril á nýju tæki eftir innskráningu og innslátt aðgangsorðsins.",
             "backupAction": "Afrita á þjón",
@@ -807,6 +809,7 @@
             "identityChoice": {
                 "title": "OpenPGP-auðkenni er nú þegar til fyrir þennan reikning",
                 "body": "Þessi vafri hefur engan staðbundinn lykil, en netþjónninn auglýsir nú þegar lykil fyrir reikninginn þinn. Að búa til nýjan lykil hér myndi þegjandi tvískipta auðkenni þínu: tengiliðir sem dulkóðuðu á núverandi lykilinn gætu ekki afhent skilaboð. Veldu hvernig þú vilt leysa þetta:",
+                "bodyKeyUnrecoverable": "Ekki er lengur hægt að opna OpenPGP-lykil þessa tækis, svo dulkóðun getur ekki hafist. Birta auðkennið þitt verður fyrir engum áhrifum. Endurheimtu það úr afriti á netþjóninum eða með því að flytja inn lykilskrá, eða skiptu því út ef þú getur það ekki. Veldu hvernig þú vilt leysa þetta:",
                 "publishedFingerprintLabel": "Birtur fingrafar",
                 "restoreFromServerTitle": "Endurheimta úr afriti netþjóns",
                 "restoreFromServerBody": "Notaðu öryggisafritslykilorðið sem þú stilltir þegar þú virkjaðir dulkóðun á öðru tæki. Samsvarandi einkalykill er sóttur af netþjóni og opnaður staðbundið.",

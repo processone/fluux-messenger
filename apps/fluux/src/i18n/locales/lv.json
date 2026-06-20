@@ -234,6 +234,7 @@
         "notJoinedNoHistory": "Jūs neesat šajā istabā",
         "joinToLoadHistory": "Pievienojieties, lai ielādētu ziņojumus",
         "notificationSettings": "Paziņojumu iestatījumi",
+        "roomActions": "Istabas darbības",
         "mentionsOnly": "Tikai pieminējumi",
         "defaultBehavior": "Noklusējuma uzvedība",
         "allMessages": "Visi ziņojumi",
@@ -734,6 +735,7 @@
             "pepUnsupportedBanner": "Jūsu serveris neatbalsta personisko notikumu publicēšanu (PEP, XEP-0163), kas nepieciešama OpenPGP šifrēšanai (XEP-0373). Pilnīgu šifrēšanu šajā kontā nevar ieslēgt. Sazinieties ar servera administratoru.",
             "statusPepUnsupported": "Šifrēšanu nevar ieslēgt: serveris neatbalsta PEP (XEP-0163), kas nepieciešams OpenPGP (XEP-0373).",
             "statusRegistrationFailed": "Šifrēšanas iestatīšana neizdevās ({{code}}). Detaļas meklējiet izstrādātāja konsolē.",
+            "notProtectedAtRest": "Šeit nav pieejama sistēmas atslēgu saišķa, tāpēc jūsu atslēgas paroles frāze tiek glabāta nešifrēta failā diskā. Atslēga nav aizsargāta miera stāvoklī. Ikviens, kurš var lasīt šīs ierīces failus, varētu to izmantot.",
             "backupLabel": "Atslēgas rezerves kopija",
             "backupDescription": "Publicējiet šifrētu atslēgas kopiju savā XMPP serverī. Aizsargāta ar paroles frāzi, kuru zināt tikai jūs, un lasāma tikai jūsu kontam (access_model: whitelist). Ļauj lasīt šifrēto vēsturi jaunā ierīcē pēc pieteikšanās un paroles frāzes ievadīšanas.",
             "backupAction": "Saglabāt serverī",
@@ -808,6 +810,7 @@
             "identityChoice": {
                 "title": "Šim kontam jau eksistē OpenPGP identitāte",
                 "body": "Šim pārlūkam nav lokālas atslēgas, bet serveris jau izziņo jūsu kontam atslēgu. Jaunas atslēgas ģenerēšana šeit klusi sašķeltu jūsu identitāti: korespondenti, kuri šifrēja uz esošo atslēgu, nevarētu piegādāt ziņas. Izvēlieties, kā to atrisināt:",
+                "bodyKeyUnrecoverable": "Šīs ierīces OpenPGP atslēgu vairs nevar atbloķēt, tāpēc šifrēšanu nevar sākt. Jūsu publicēto identitāti tas neietekmē. Atjaunojiet to no servera dublējuma vai importējot atslēgas failu, vai aizstājiet to, ja nevarat. Izvēlieties, kā vēlaties to atrisināt:",
                 "publishedFingerprintLabel": "Publicētais pirkstu nospiedums",
                 "restoreFromServerTitle": "Atjaunot no servera dublējuma",
                 "restoreFromServerBody": "Izmantojiet dublējuma paroli, ko iestatījāt, iespējojot šifrēšanu citā ierīcē. Atbilstošā privātā atslēga tiek izgūta no servera un atbloķēta lokāli.",

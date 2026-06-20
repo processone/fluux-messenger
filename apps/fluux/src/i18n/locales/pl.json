@@ -235,6 +235,7 @@
         "notJoinedNoHistory": "Nie jesteś w tym pokoju",
         "joinToLoadHistory": "Dołącz, aby załadować wiadomości",
         "notificationSettings": "Ustawienia powiadomień",
+        "roomActions": "Akcje pokoju",
         "mentionsOnly": "Tylko wzmianki",
         "defaultBehavior": "Domyślne zachowanie",
         "allMessages": "Wszystkie wiadomości",
@@ -735,6 +736,7 @@
             "pepUnsupportedBanner": "Twój serwer nie obsługuje publikowania zdarzeń osobistych (PEP, XEP-0163), wymaganego przez szyfrowanie OpenPGP (XEP-0373). Szyfrowania end-to-end nie można włączyć na tym koncie. Skontaktuj się z administratorem serwera.",
             "statusPepUnsupported": "Nie można włączyć szyfrowania: serwer nie obsługuje PEP (XEP-0163), wymaganego przez OpenPGP (XEP-0373).",
             "statusRegistrationFailed": "Konfiguracja szyfrowania nie powiodła się ({{code}}). Szczegóły w konsoli dewelopera.",
+            "notProtectedAtRest": "Brak tu dostępnego pęku kluczy systemu, więc hasło Twojego klucza jest przechowywane bez szyfrowania w pliku na dysku. Klucz nie jest chroniony w spoczynku. Każdy, kto może odczytać pliki tego urządzenia, może go użyć.",
             "backupLabel": "Kopia zapasowa klucza",
             "backupDescription": "Opublikuj zaszyfrowaną kopię swojego klucza na serwerze XMPP. Chroniona hasłem, które tylko Ty znasz, i czytelna tylko dla Twojego konta (access_model: whitelist). Pozwala czytać zaszyfrowaną historię na nowym urządzeniu po zalogowaniu i wprowadzeniu hasła.",
             "backupAction": "Zapisz na serwerze",
@@ -809,6 +811,7 @@
             "identityChoice": {
                 "title": "Dla tego konta istnieje już tożsamość OpenPGP",
                 "body": "Ta przeglądarka nie ma lokalnego klucza, ale serwer już ogłasza klucz dla twojego konta. Wygenerowanie tutaj nowego klucza po cichu rozdzieliłoby twoją tożsamość: korespondenci, którzy szyfrowali do istniejącego klucza, nie mogliby dostarczać wiadomości. Wybierz, jak to rozwiązać:",
+                "bodyKeyUnrecoverable": "Klucza OpenPGP tego urządzenia nie można już odblokować, więc szyfrowanie nie może się uruchomić. Twoja opublikowana tożsamość pozostaje nienaruszona. Odzyskaj ją, przywracając kopię zapasową z serwera lub importując plik klucza, albo zastąp ją, jeśli to niemożliwe. Wybierz, jak chcesz to rozwiązać:",
                 "publishedFingerprintLabel": "Opublikowany odcisk",
                 "restoreFromServerTitle": "Przywróć z kopii zapasowej serwera",
                 "restoreFromServerBody": "Użyj hasła kopii zapasowej ustawionego przy włączaniu szyfrowania na innym urządzeniu. Odpowiadający klucz prywatny jest pobierany z serwera i odblokowywany lokalnie.",

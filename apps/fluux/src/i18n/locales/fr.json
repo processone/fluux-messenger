@@ -234,6 +234,7 @@
         "notJoinedNoHistory": "Vous n'êtes pas dans ce salon",
         "joinToLoadHistory": "Rejoindre pour charger les messages",
         "notificationSettings": "Paramètres de notification",
+        "roomActions": "Actions du salon",
         "mentionsOnly": "Mentions uniquement",
         "defaultBehavior": "Comportement par défaut",
         "allMessages": "Tous les messages",
@@ -734,6 +735,7 @@
             "pepUnsupportedBanner": "Votre serveur ne prend pas en charge la publication d'événements personnels (PEP, XEP-0163), requise par le chiffrement OpenPGP (XEP-0373). Le chiffrement de bout en bout ne peut pas être activé sur ce compte. Contactez l'administrateur de votre serveur.",
             "statusPepUnsupported": "Impossible d'activer le chiffrement : votre serveur ne prend pas en charge PEP (XEP-0163), requis par OpenPGP (XEP-0373).",
             "statusRegistrationFailed": "Échec de l'activation du chiffrement ({{code}}). Consultez la console développeur pour les détails.",
+            "notProtectedAtRest": "Aucun trousseau système n'est disponible ici ; la phrase secrète de votre clé est donc stockée en clair dans un fichier sur le disque. La clé n'est pas protégée au repos. Quiconque peut lire les fichiers de cet appareil pourrait l'utiliser.",
             "backupLabel": "Sauvegarde de la clé",
             "backupDescription": "Publie une copie chiffrée de votre clé sur votre serveur XMPP. Protégée par une phrase secrète que vous seul connaissez, lisible uniquement par votre compte (access model : whitelist). Permet de lire l'historique chiffré sur un nouvel appareil après connexion et saisie de la phrase.",
             "backupAction": "Sauvegarder sur le serveur",
@@ -808,6 +810,7 @@
             "identityChoice": {
                 "title": "Une identité OpenPGP existe déjà pour ce compte",
                 "body": "Ce navigateur n'a pas de clé locale, mais le serveur annonce déjà une clé pour votre compte. Générer une nouvelle clé ici ferait silencieusement bifurquer votre identité: les correspondants qui chiffraient vers la clé existante ne pourraient plus vous joindre. Choisissez comment résoudre ce conflit :",
+                "bodyKeyUnrecoverable": "La clé OpenPGP de cet appareil ne peut plus être déverrouillée, le chiffrement ne peut donc pas démarrer. Votre identité publiée n'est pas affectée. Récupérez-la en restaurant votre sauvegarde sur le serveur ou en important un fichier de clé, ou remplacez-la si c'est impossible. Choisissez comment résoudre ce problème :",
                 "publishedFingerprintLabel": "Empreinte publiée",
                 "restoreFromServerTitle": "Restaurer depuis la sauvegarde serveur",
                 "restoreFromServerBody": "Utilisez la phrase de passe de sauvegarde que vous avez définie en activant le chiffrement sur un autre appareil. La clé privée correspondante est récupérée depuis le serveur et déverrouillée localement.",

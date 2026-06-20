@@ -13,6 +13,7 @@ import { RoomListItem } from './RoomListItem'
 import { AdminUserView } from './AdminUserView'
 import { AdminRoomView } from './AdminRoomView'
 import { ServerOverview } from './ServerOverview'
+import { getAdminBackTarget } from './adminBackTarget'
 
 interface AdminViewProps {
   activeCategory: AdminCategory | null
@@ -162,6 +163,31 @@ export function AdminView({ activeCategory, onBack }: AdminViewProps) {
     if (activeCategory === 'users') {
       resetUserList()
       void fetchUsers()
+    }
+  }
+
+  // Mobile header back button: step back exactly one level
+  // (detail → list → admin root), instead of collapsing to the root.
+  const handleHeaderBack = () => {
+    switch (
+      getAdminBackTarget({
+        hasSession: !!currentSession,
+        hasSelectedUser: !!selectedUser,
+        hasSelectedRoom: !!selectedRoom,
+      })
+    ) {
+      case 'session':
+        handleCloseSession()
+        break
+      case 'user':
+        setSelectedUser(null)
+        break
+      case 'room':
+        setSelectedRoom(null)
+        break
+      case 'exit':
+        onBack?.()
+        break
     }
   }
 
@@ -434,7 +460,7 @@ export function AdminView({ activeCategory, onBack }: AdminViewProps) {
         {/* Back button - mobile only */}
         {onBack && (
           <button
-            onClick={onBack}
+            onClick={handleHeaderBack}
             className="p-1 -ms-1 me-2 rounded hover:bg-fluux-hover md:hidden tap-target"
             aria-label={t('common.back')}
           >

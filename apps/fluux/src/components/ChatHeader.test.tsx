@@ -11,7 +11,7 @@ vi.mock('react-i18next', () => ({
   }),
 }))
 
-// Mock useWindowDrag hook
+// Mock useWindowDrag hook and other hooks used by ChatHeader and HeaderOverflowKebab
 vi.mock('@/hooks', () => ({
   useWindowDrag: () => ({
     titleBarClass: 'mt-5',
@@ -22,6 +22,13 @@ vi.mock('@/hooks', () => ({
     menuRef: { current: null },
     position: { x: 0, y: 0 },
   }),
+  useClickOutside: () => {},
+}))
+
+// Mock useHasHover (used by HeaderOverflowKebab — separate import path)
+vi.mock('@/hooks/useHasHover', () => ({
+  useHasHover: () => true,
+  hasHover: () => true,
 }))
 
 // Mock @fluux/sdk/react store hooks

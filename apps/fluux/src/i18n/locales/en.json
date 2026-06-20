@@ -233,6 +233,7 @@
         "notJoinedNoHistory": "You are not in this room",
         "joinToLoadHistory": "Join to load messages",
         "notificationSettings": "Notification settings",
+        "roomActions": "Room actions",
         "mentionsOnly": "Mentions only",
         "defaultBehavior": "Default behavior",
         "allMessages": "All messages",
@@ -632,6 +633,7 @@
             "pepUnsupportedBanner": "Your server does not support personal eventing (PEP, XEP-0163), which OpenPGP encryption (XEP-0373) requires. End-to-end encryption can't be enabled on this account. Contact your server administrator.",
             "statusPepUnsupported": "Encryption can't be enabled: your server does not support PEP (XEP-0163), required by OpenPGP (XEP-0373).",
             "statusRegistrationFailed": "Encryption setup failed ({{code}}). Check the developer console for details.",
+            "notProtectedAtRest": "No system keychain is available here, so your key's passphrase is stored unencrypted in a file on disk. The key is not protected at rest. Anyone who can read this device's files could use it.",
             "copyFingerprint": "Copy fingerprint",
             "copyFailed": "Couldn't copy fingerprint",
             "toggleFailed": "Couldn't change encryption setting",
@@ -723,6 +725,7 @@
             "identityChoice": {
                 "title": "An OpenPGP identity already exists for this account",
                 "body": "This browser has no local key, but the server already advertises one for your account. Generating a new key here would silently fork your identity: peers who encrypted to the existing key would no longer be able to deliver messages. Pick how you want to resolve this:",
+                "bodyKeyUnrecoverable": "This device's OpenPGP key can no longer be unlocked, so encryption can't start. Your published identity is unaffected. Recover it by restoring your server backup or importing a key file, or replace it if you can't. Pick how you want to resolve this:",
                 "publishedFingerprintLabel": "Published fingerprint",
                 "restoreFromServerTitle": "Restore from server backup",
                 "restoreFromServerBody": "Use the backup passphrase you set when enabling encryption on another device. The matching private key is fetched from the server and unlocked locally.",

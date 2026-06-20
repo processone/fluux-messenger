@@ -640,6 +640,12 @@ export class WebOpenPGPPlugin extends OpenPGPPluginBase {
       // below routes through restoreSecretKey → doInstallKey, which already
       // notifies, so only this happy path needs an explicit call.)
       this.requireCtx().notifyKeyUnlocked?.()
+      // The key is usable now — re-run the trust-state seal check so a deferred
+      // `awaiting-key` verdict resolves to `sealed`. `init()` returns early
+      // (no subscriptions) when the key was locked, so `activateSubscriptions()`
+      // above runs it for that case; this explicit call covers re-unlock where
+      // subscriptions were already active.
+      void this.verifyTrustStateOnInit()
       return { recovered: false }
     } catch (err) {
       if (!isRecoverableLocalFailure(err)) {
@@ -661,8 +667,8 @@ export class WebOpenPGPPlugin extends OpenPGPPluginBase {
         throw new KeyPickerRequiredError(result.candidates, result.backupContext)
       }
       // restoreSecretKey installed + published the recovered key and set the
-      // session passphrase. Activate subscriptions and report recovery.
-      this.activateSubscriptions()
+      // session passphrase. Report recovery.
+      // restoreSecretKey() -> doInstallKey() already re-verifies the trust state.
       return { recovered: true }
     }
   }

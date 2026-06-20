@@ -134,6 +134,11 @@ function makeFakeRust() {
 
   let nextFingerprint = 1
   const accounts = new Map<string, KeyBundle>()
+  // One-shot decrypt-failure hook (test-only). When set, the NEXT
+  // `openpgp_decrypt` invoke rejects with an E2EEPluginError carrying this
+  // code, then the hook clears itself. Lets a test drive the trust-state
+  // seal check into `awaiting-key` (key-unavailable) without a real keychain.
+  let nextDecryptFailureCode: E2EEPluginError['code'] | null = null
 
   const makeArmored = (fp: string, uid: string, kind: string, rotation = 0) =>
     makeOpenPgpArmor(
@@ -196,6 +201,11 @@ function makeFakeRust() {
         ) as T
       }
       case 'openpgp_decrypt': {
+        if (nextDecryptFailureCode) {
+          const code = nextDecryptFailureCode
+          nextDecryptFailureCode = null
+          throw new E2EEPluginError('permanent', code, `simulated ${code} on decrypt`)
+        }
         const jid = args!.accountJid as string
         const bundle = accounts.get(jid)
         if (!bundle) throw new Error(`no key for ${jid}`)
@@ -358,7 +368,16 @@ function makeFakeRust() {
     }
   }
 
-  return { invoke, accounts }
+  /**
+   * Arm a one-shot decrypt failure: the next `openpgp_decrypt` invoke rejects
+   * with an `E2EEPluginError` carrying `code` (e.g. `'key-unrecoverable'`).
+   * Test-only hook used to defer the trust-state seal check to `awaiting-key`.
+   */
+  const failNextOwnDecryptWith = (code: E2EEPluginError['code']) => {
+    nextDecryptFailureCode = code
+  }
+
+  return { invoke, accounts, failNextOwnDecryptWith }
 }
 
 /**
@@ -2710,6 +2729,101 @@ describe('SequoiaPgpPlugin', () => {
         deletedNodes.filter((n) => n.startsWith('urn:xmpp:openpgp:0:public-keys:')),
       ).toHaveLength(0)
     })
+
+    it('re-verifies the trust state after recovery (awaiting-key -> sealed)', async () => {
+      // Regression: when the secret key is unavailable at init time (keychain /
+      // TSK desync), the seal check defers to `awaiting-key` instead of raising
+      // the false "compromised" alarm. Once the user recovers the key, the
+      // recovery completion must RE-RUN the seal check so the deferred verdict
+      // resolves to `sealed` for the unchanged cert — otherwise the trust state
+      // stays stuck at `awaiting-key` until an unrelated reconnect/restart.
+      const { getTrustStateStatus } = await import('@/stores/trustStateStatusStore')
+      const pinStore = await import('@/stores/pinnedPrimaryFingerprintsStore')
+
+      // Phase 1 — a first plugin instance seals the trust state. A pin makes the
+      // stores non-empty so a real seal (encrypted-to-self) is written, and a
+      // secret-key backup is published so the later recovery can restore it.
+      const { ctx: ctxA } = makeContext('me@example.com')
+      await plugin.init(ctxA)
+      pinStore.usePinnedPrimaryFingerprintsStore.setState({
+        pinnedFingerprintByJid: { 'peer@example.com': 'PEERFP000000' },
+      })
+      const passthroughA = plugin as unknown as {
+        verifyTrustStateOnInit(): Promise<void>
+      }
+      // The pin mutation schedules a debounced reseal; force the seal now so it
+      // exists deterministically before the deferred-verify phase.
+      await passthroughA.verifyTrustStateOnInit()
+      await plugin.backupSecretKey('shared-pp')
+      const backup = await plugin.fetchSecretKeyBackup()
+      expect(backup).toBeTruthy()
+      expect(getTrustStateStatus()).toBe('sealed')
+
+      // Phase 2 — a fresh plugin (same JID + key + seal) initialises, then its
+      // seal check is driven while the secret key is momentarily unusable: the
+      // decrypt throws key-unrecoverable, so the verdict defers to
+      // `awaiting-key`. We arm the one-shot failure immediately before invoking
+      // the seal check so only that decrypt is affected (init's own
+      // `verifyTrustStateOnInit` is fire-and-forget, so we re-drive it
+      // deterministically here).
+      const pluginB = new SequoiaPgpPlugin({ invoke: fake.invoke })
+      const { ctx: ctxB } = makeContext('me@example.com')
+      ctxB.xmpp.publishPEP(SECRET_KEY_NODE, {
+        id: 'current',
+        payload: {
+          name: 'secretkey',
+          attrs: { xmlns: 'urn:xmpp:openpgp:0' },
+          children: [encodeOpenPgpArmorForXep0373(backup!)],
+        },
+      })
+      await pluginB.init(ctxB)
+      const passthroughB = pluginB as unknown as {
+        verifyTrustStateOnInit(): Promise<void>
+      }
+      fake.failNextOwnDecryptWith('key-unrecoverable')
+      await passthroughB.verifyTrustStateOnInit()
+      expect(getTrustStateStatus()).toBe('awaiting-key')
+
+      // Phase 3 — recovery restores the same cert; the recovery completion must
+      // re-run the seal check, which now decrypts cleanly against the unchanged
+      // cert and resolves to `sealed`. The re-verify is fire-and-forget
+      // (`void this.verifyTrustStateOnInit()`), so flush the microtask/timer
+      // queue before asserting the resolved verdict.
+      await pluginB.restoreSecretKey('shared-pp')
+      await new Promise((resolve) => setTimeout(resolve, 0))
+      expect(getTrustStateStatus()).toBe('sealed')
+    })
+  })
+
+  describe('trust-state verdict instrumentation', () => {
+    // Task 4: After computing the trust-state verdict, the plugin must log it
+    // via ctx.logger.info so it lands in both the webview console (fluux.log)
+    // and the in-app console store (via the E2EE diagnostic logger fan-out).
+
+    it('logs the trust-state verdict via ctx.logger.info after init', async () => {
+      const { ctx } = makeContext('me@example.com')
+      const infoCalls: string[] = []
+      ctx.logger.info = (message: string) => { infoCalls.push(message) }
+
+      await plugin.init(ctx)
+
+      // A trust-state verdict log must be emitted (status can be any non-trivial
+      // value: pending-seal on first run, sealed on subsequent, etc.)
+      expect(infoCalls.some((m) => /trust.?state/i.test(m))).toBe(true)
+    })
+
+    it('includes the verdict status in the log message', async () => {
+      const { ctx } = makeContext('me@example.com')
+      const infoCalls: string[] = []
+      ctx.logger.info = (message: string) => { infoCalls.push(message) }
+
+      await plugin.init(ctx)
+
+      const verdictLog = infoCalls.find((m) => /trust.?state/i.test(m))
+      expect(verdictLog).toBeDefined()
+      // The message must contain a recognizable status keyword
+      expect(verdictLog).toMatch(/sealed|pending-seal|awaiting-key|compromised|uninitialized/)
+    })
   })
 
   describe('backup sync marker (getBackedUpFingerprint)', () => {
@@ -2989,7 +3103,10 @@ describe('SequoiaPgpPlugin', () => {
     // refactor of the Rust messages (or a bundler quirk that loses
     // E2EEPluginError identity) is caught loudly.
 
-    it('ensureIdentity raises a permanent E2EEPluginError when the key is unrecoverable', async () => {
+    it('init() flags recovery (does not throw) when the key is unrecoverable', async () => {
+      // A missing passphrase for a present key is `key-unrecoverable`. init()
+      // keeps the plugin registered and flags recovery so the host routes to
+      // the IdentityChoiceDialog, rather than failing registration outright.
       const { ctx } = makeContext('me@example.com')
       const fakeInvoke: InvokeFn = async (cmd) => {
         if (cmd === 'openpgp_ensure_key') {
@@ -3000,16 +3117,52 @@ describe('SequoiaPgpPlugin', () => {
         throw new Error('unexpected cmd: ' + cmd)
       }
       const unrecoverablePlugin = new SequoiaPgpPlugin({ invoke: fakeInvoke })
-      let caught: unknown
-      try {
-        await unrecoverablePlugin.init(ctx)
-      } catch (err) {
-        caught = err
+      await unrecoverablePlugin.init(ctx) // must resolve, not reject
+
+      expect(unrecoverablePlugin.isKeyRecoveryNeeded()).toBe(true)
+      // And the raw classification is still the permanent recovery code.
+      const { kind, code } = SequoiaPgpPlugin.classifyBoundaryError(
+        new Error(
+          "passphrase for account 'me@example.com' is not in the keychain or on disk — key material cannot be decrypted",
+        ),
+      )
+      expect(kind).toBe('permanent')
+      expect(code).toBe('key-unrecoverable')
+    })
+
+    it('classifies a TSK decrypt failure (stale passphrase / unexpected EOF) as permanent key-unrecoverable', () => {
+      // Real production failure: the stored passphrase no longer decrypts
+      // the on-disk TSK (keychain/key desync). Sequoia reports "unexpected
+      // EOF" while decrypting the secret key. This must be a PERMANENT
+      // `key-unrecoverable` so the UI routes to recovery instead of showing
+      // an opaque, retryable `(unknown)`.
+      const { kind, code } = SequoiaPgpPlugin.classifyBoundaryError(
+        new Error(
+          'decrypt persisted TSK with stored passphrase: decrypt primary secret key: unexpected EOF',
+        ),
+      )
+      expect(kind).toBe('permanent')
+      expect(code).toBe('key-unrecoverable')
+    })
+
+    it('init() swallows an unrecoverable local key and flags recovery instead of throwing', async () => {
+      // The stored passphrase no longer decrypts the on-disk TSK. init()
+      // must NOT throw (which would fail registration and hide the recovery
+      // UI); it stays registered and flags recovery so the host opens the
+      // IdentityChoiceDialog.
+      const { ctx } = makeContext('me@example.com')
+      const fakeInvoke: InvokeFn = async (cmd) => {
+        if (cmd === 'openpgp_has_persisted_key') return true as never
+        if (cmd === 'openpgp_ensure_key') {
+          throw new Error(
+            'decrypt persisted TSK with stored passphrase: decrypt primary secret key: unexpected EOF',
+          )
+        }
+        throw new Error('unexpected cmd: ' + cmd)
       }
-      expect(isE2EEPluginError(caught)).toBe(true)
-      const e = caught as E2EEPluginError
-      expect(e.kind).toBe('permanent')
-      expect(e.code).toBe('key-unrecoverable')
+      const recoveringPlugin = new SequoiaPgpPlugin({ invoke: fakeInvoke })
+      await recoveringPlugin.init(ctx) // must resolve, not reject
+      expect(recoveringPlugin.isKeyRecoveryNeeded()).toBe(true)
     })
 
     it('ensureIdentity raises a transient E2EEPluginError on IPC panic', async () => {

@@ -233,6 +233,7 @@
         "notJoinedNoHistory": "Ön nem tagja ennek a szobának",
         "joinToLoadHistory": "Csatlakozzon az üzenetek betöltéséhez",
         "notificationSettings": "Értesítési beállítások",
+        "roomActions": "Szoba műveletek",
         "mentionsOnly": "Csak említések",
         "defaultBehavior": "Alapértelmezett viselkedés",
         "allMessages": "Minden üzenet",
@@ -733,6 +734,7 @@
             "pepUnsupportedBanner": "A szervered nem támogatja a személyes események közzétételét (PEP, XEP-0163), amelyet az OpenPGP-titkosítás (XEP-0373) megkövetel. A végpontok közötti titkosítás nem kapcsolható be ezen a fiókon. Fordulj a szerver rendszergazdájához.",
             "statusPepUnsupported": "A titkosítás nem kapcsolható be: a szerver nem támogatja a PEP-et (XEP-0163), amelyet az OpenPGP (XEP-0373) megkövetel.",
             "statusRegistrationFailed": "A titkosítás beállítása sikertelen ({{code}}). Részletek a fejlesztői konzolon.",
+            "notProtectedAtRest": "Itt nem érhető el rendszerkulcstartó, ezért a kulcs jelmondata titkosítatlanul, fájlban tárolódik a lemezen. A kulcs nyugalmi állapotban nincs védve. Bárki, aki el tudja olvasni az eszköz fájljait, használhatja.",
             "backupLabel": "Kulcs biztonsági mentése",
             "backupDescription": "Tegyen közzé egy titkosított másolatot a kulcsáról az XMPP-kiszolgálón. Egy csak Ön által ismert jelmondat védi, és csak az Ön fiókja olvashatja (access_model: whitelist). Lehetővé teszi a titkosított előzmények olvasását új eszközön bejelentkezés és a jelmondat megadása után.",
             "backupAction": "Mentés a kiszolgálóra",
@@ -807,6 +809,7 @@
             "identityChoice": {
                 "title": "Ehhez a fiókhoz már létezik OpenPGP-identitás",
                 "body": "Ennek a böngészőnek nincs helyi kulcsa, de a szerver már egy kulcsot hirdet a fiókjához. Új kulcs generálása itt csendben elágaztatná az identitását: a meglévő kulcshoz titkosító partnerek nem tudnának üzeneteket kézbesíteni. Válassza ki, hogyan szeretné megoldani ezt:",
+                "bodyKeyUnrecoverable": "Ennek az eszköznek az OpenPGP-kulcsa már nem oldható fel, ezért a titkosítás nem indítható el. A közzétett identitását ez nem érinti. Állítsa vissza a kiszolgálón lévő biztonsági mentésből vagy egy kulcsfájl importálásával, vagy cserélje le, ha nem tudja. Válassza ki, hogyan szeretné megoldani:",
                 "publishedFingerprintLabel": "Közzétett ujjlenyomat",
                 "restoreFromServerTitle": "Visszaállítás a szerver biztonsági mentéséből",
                 "restoreFromServerBody": "Használja azt a biztonsági mentési jelszót, amelyet a titkosítás engedélyezésekor egy másik eszközön beállított. A megfelelő privát kulcs letöltődik a szerverről, és helyileg fel lesz oldva.",

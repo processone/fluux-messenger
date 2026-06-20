@@ -1749,7 +1749,7 @@ dependencies = [
 
 [[package]]
 name = "fluux"
-version = "0.16.1"
+version = "0.16.2"
 dependencies = [
  "anyhow",
  "base64 0.22.1",

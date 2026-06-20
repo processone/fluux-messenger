@@ -52,7 +52,6 @@ const NS_BLOCKING = 'urn:xmpp:blocking'
 const NS_MAM = 'urn:xmpp:mam:2'
 const NS_COMMANDS = 'http://jabber.org/protocol/commands'
 const NS_DATA_FORMS = 'jabber:x:data'
-const NS_ADMIN = 'http://jabber.org/protocol/admin'
 const NS_VERSION = 'jabber:iq:version'
 
 /** Minimal Element-like object returned by mock IQ responses. */
@@ -204,12 +203,6 @@ export class DemoClient extends XMPPClient {
     // targets this JID and would otherwise warn about a missing PEP.
     if (xmlns === NS_DISCO_INFO && to && to === this.selfJid) {
       return this.buildAccountDiscoInfoResponse()
-    }
-
-    // disco#items on the commands node → advertise a demo admin command set,
-    // so Admin.discoverAdminCommands() makes the demo user an admin.
-    if (xmlns === NS_DISCO_ITEMS && queryChild?.attrs?.node === NS_COMMANDS) {
-      return this.buildAdminCommandsResponse()
     }
 
     // disco#items to the conference service → return room list for fetchRoomList()
@@ -390,11 +383,6 @@ export class DemoClient extends XMPPClient {
     for (const event of data.activityEvents) {
       activityLogStore.getState().addEvent(event)
     }
-
-    // Trigger admin command discovery so the admin panel appears in demo.
-    // The real client runs this in handleConnectionSuccess; demo bypasses that
-    // path, so kick it off here against the seeded disco#items responses.
-    void this.admin.discoverAdminCommands()
   }
 
   /**
@@ -931,28 +919,6 @@ export class DemoClient extends XMPPClient {
   // -------------------------------------------------------------------------
   // Private helpers — admin / server-overview seed data (dev-only)
   // -------------------------------------------------------------------------
-
-  /**
-   * Advertise a demo admin command set on the commands node so
-   * Admin.discoverAdminCommands() treats the demo user as an admin and
-   * populates commandsByCategory.stats. Includes the stat commands that
-   * fetchServerStats() drives. (The demo entry point also seeds the admin
-   * store directly; this keeps the discovery path honest.)
-   */
-  private buildAdminCommandsResponse(): MockElement {
-    const nodes: Array<{ node: string; name: string }> = [
-      { node: `${NS_ADMIN}#get-registered-users-num`, name: 'Get Number of Registered Users' },
-      { node: `${NS_ADMIN}#get-online-users-num`, name: 'Get Number of Online Users' },
-      { node: 'api-commands/stats', name: 'Server Statistics' },
-      { node: 'api-commands/muc_online_rooms_count', name: 'Number of Online MUC Rooms' },
-    ]
-    const items = nodes.map(({ node, name }) =>
-      this.mockElement('item', { jid: this.selfJid.split('@')[1] || '', node, name })
-    )
-    return this.mockElement('iq', { type: 'result' }, [
-      this.mockElement('query', { xmlns: NS_DISCO_ITEMS, node: NS_COMMANDS }, items),
-    ])
-  }
 
   /** Build a XEP-0092 (jabber:iq:version) response for the demo server. */
   private buildVersionResponse(): MockElement {

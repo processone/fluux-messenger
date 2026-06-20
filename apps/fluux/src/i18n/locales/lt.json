@@ -233,6 +233,7 @@
         "notJoinedNoHistory": "Jūs nesate šiame kambaryje",
         "joinToLoadHistory": "Prisijunkite įkelti žinutes",
         "notificationSettings": "Pranešimų nustatymai",
+        "roomActions": "Kambario veiksmai",
         "mentionsOnly": "Tik paminėjimai",
         "defaultBehavior": "Numatytoji elgsena",
         "allMessages": "Visos žinutės",
@@ -733,6 +734,7 @@
             "pepUnsupportedBanner": "Jūsų serveris nepalaiko asmeninių įvykių skelbimo (PEP, XEP-0163), kurio reikalauja OpenPGP šifravimas (XEP-0373). Ištisinio šifravimo šioje paskyroje įjungti negalima. Kreipkitės į serverio administratorių.",
             "statusPepUnsupported": "Šifravimo įjungti negalima: serveris nepalaiko PEP (XEP-0163), kurio reikalauja OpenPGP (XEP-0373).",
             "statusRegistrationFailed": "Šifravimo sąranka nepavyko ({{code}}). Išsamesnę informaciją rasite kūrėjo konsolėje.",
+            "notProtectedAtRest": "Čia nėra prieinamos sistemos raktų saugyklos, todėl jūsų rakto slaptafrazė saugoma nešifruota faile diske. Raktas nėra apsaugotas ramybės būsenoje. Bet kas, galintis skaityti šio įrenginio failus, gali jį panaudoti.",
             "backupLabel": "Rakto atsarginė kopija",
             "backupDescription": "Paskelbkite užšifruotą rakto kopiją savo XMPP serveryje. Apsaugota slaptažodine fraze, kurią žinote tik jūs, ir skaitoma tik jūsų paskyros (access_model: whitelist). Leidžia skaityti šifruotą istoriją naujame įrenginyje po prisijungimo ir slaptažodinės frazės įvedimo.",
             "backupAction": "Išsaugoti į serverį",
@@ -807,6 +809,7 @@
             "identityChoice": {
                 "title": "Šiai paskyrai jau yra OpenPGP tapatybė",
                 "body": "Ši naršyklė neturi vietinio rakto, bet serveris jau skelbia jūsų paskyros raktą. Naujo rakto generavimas čia tyliai padalintų jūsų tapatybę: korespondentai, kurie šifravo esamu raktu, negalėtų pristatyti pranešimų. Pasirinkite, kaip tai išspręsti:",
+                "bodyKeyUnrecoverable": "Šio įrenginio OpenPGP rakto nebegalima atrakinti, todėl šifravimas negali būti pradėtas. Jūsų paskelbtai tapatybei tai neturi įtakos. Atkurkite ją iš serverio atsarginės kopijos arba importuodami rakto failą, arba pakeiskite ją, jei negalite. Pasirinkite, kaip norite tai išspręsti:",
                 "publishedFingerprintLabel": "Paskelbtas pirštų atspaudas",
                 "restoreFromServerTitle": "Atkurti iš serverio atsarginės kopijos",
                 "restoreFromServerBody": "Naudokite atsarginės kopijos slaptafrazę, kurią nustatėte įjungdami šifravimą kitame įrenginyje. Atitinkamas privatusis raktas gaunamas iš serverio ir atrakinamas vietoje.",

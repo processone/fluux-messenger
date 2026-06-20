@@ -178,6 +178,11 @@ function App() {
     accountJid: string
     hasBackup: boolean
     publishedFingerprints: string[]
+    // Why the dialog opened — drives the intro copy. `no-local-key` is the
+    // fresh-device/new-browser case; `local-key-unrecoverable` is a present
+    // but unreadable key (keychain/key desync, corruption, missing
+    // passphrase) that the storage atomicity fix now surfaces for recovery.
+    reason?: 'no-local-key' | 'local-key-unrecoverable'
   } | null>(null)
   // Holds the armored file content while the user types the file
   // passphrase. Decoupled from `pendingIdentityChoice` so the choice
@@ -209,41 +214,69 @@ function App() {
       // On web, after registration the key may be in locked state — show the
       // unlock dialog so the user can supply the session passphrase.
       void registerE2EEPlugins(client).then(async () => {
-        if (isTauri || !isOpenpgpEnabled()) return
-        // Web auto-init: if the server already advertises an OpenPGP
-        // identity but the local IndexedDB has no key (cleared cookies,
-        // new browser profile, fresh install of Fluux web on the same
-        // account), route the user to IdentityChoiceDialog up-front
-        // instead of through the unlock dialog. The crypto guard would
-        // refuse silent generation either way, but a clean dialog is
-        // friendlier than a generic unlock failure.
+        if (!isOpenpgpEnabled()) return
+        // Connect-time E2EE recovery routing (both platforms). Two
+        // conditions resolve through the same IdentityChoiceDialog:
+        //
+        //   - `local-key-unrecoverable`: a local key exists but couldn't
+        //     be unlocked (keychain/key desync, corruption, missing
+        //     passphrase). The plugin stays registered and flags this so
+        //     we don't dead-end on an opaque registration failure.
+        //   - `no-local-key`: no local key while the server already
+        //     advertises an identity (fresh device / cleared browser).
+        //     Silent generation would fork the identity, so we route to a
+        //     deliberate choice instead.
         const accountJid = jid ? jid.split('/')[0] : null
         const plugin = client.e2ee?.getPlugin('openpgp') as
-          | { hasNoLocalKey?: () => Promise<boolean> }
+          | {
+              hasNoLocalKey?: () => Promise<boolean>
+              isKeyRecoveryNeeded?: () => boolean
+            }
           | null
           | undefined
-        if (accountJid && plugin?.hasNoLocalKey) {
+        if (accountJid && plugin) {
           try {
-            const hasNoLocal = await plugin.hasNoLocalKey()
-            if (hasNoLocal) {
+            const recoveryNeeded = plugin.isKeyRecoveryNeeded?.() === true
+            const hasNoLocal =
+              !recoveryNeeded && plugin.hasNoLocalKey
+                ? await plugin.hasNoLocalKey()
+                : false
+            // An unrecoverable local key always needs a decision (even with
+            // no server backup, the user still needs import/replace). A
+            // missing local key only needs one when the server holds an
+            // identity to reconcile against.
+            if (recoveryNeeded || hasNoLocal) {
               const state = await probeRemoteIdentityState(client, accountJid)
-              if (state.hasServerIdentity) {
+              if (recoveryNeeded || state.hasServerIdentity) {
                 setPendingIdentityChoice({
                   accountJid,
                   hasBackup: state.backupMessage !== null,
                   publishedFingerprints: state.publishedFingerprints,
+                  reason: recoveryNeeded
+                    ? 'local-key-unrecoverable'
+                    : 'no-local-key',
                 })
                 return
               }
             }
           } catch {
-            // Probe failure (transient network, server down): fall
-            // through to the unlock dialog. The crypto guard remains
-            // effective; the worst case is a confused error message
-            // until the user re-toggles via Settings.
+            // Probe failure (transient network, server down): fall through.
+            // For an unrecoverable key we still open the dialog so the user
+            // isn't stranded — restore-from-server will simply be disabled
+            // until the probe succeeds; import/replace remain available.
+            if (plugin.isKeyRecoveryNeeded?.() === true) {
+              setPendingIdentityChoice({
+                accountJid,
+                hasBackup: false,
+                publishedFingerprints: [],
+                reason: 'local-key-unrecoverable',
+              })
+              return
+            }
           }
         }
-        if (isKeyLocked()) {
+        // Web-only: a stored-but-locked key needs the session passphrase.
+        if (!isTauri && isKeyLocked()) {
           openWebUnlockDialog()
         }
       })
@@ -428,6 +461,7 @@ function App() {
       )}
       {pendingIdentityChoice && (
         <IdentityChoiceDialog
+          reason={pendingIdentityChoice.reason}
           hasServerBackup={pendingIdentityChoice.hasBackup}
           publishedFingerprints={pendingIdentityChoice.publishedFingerprints}
           onRestoreFromServer={handleIdentityRestoreFromServer}

@@ -233,6 +233,7 @@
         "notJoinedNoHistory": "Níl tú sa seomra seo",
         "joinToLoadHistory": "Téigh isteach le teachtaireachtaí a luchtú",
         "notificationSettings": "Socruithe fógraí",
+        "roomActions": "Gníomhartha seomra",
         "mentionsOnly": "Tagairtí amháin",
         "defaultBehavior": "Iompraíocht réamhshocraithe",
         "allMessages": "Gach teachtaireacht",
@@ -733,6 +734,7 @@
             "pepUnsupportedBanner": "Ní thacaíonn do fhreastalaí le foilsiú imeachtaí pearsanta (PEP, XEP-0163), atá de dhíth ar chriptiú OpenPGP (XEP-0373). Ní féidir criptiú ó cheann go ceann a chumasú ar an gcuntas seo. Déan teagmháil le riarthóir do fhreastalaí.",
             "statusPepUnsupported": "Ní féidir an criptiú a chumasú: ní thacaíonn an freastalaí le PEP (XEP-0163), atá de dhíth ar OpenPGP (XEP-0373).",
             "statusRegistrationFailed": "Theip ar shocrú an chriptithe ({{code}}). Féach an consól forbartha le haghaidh sonraí.",
+            "notProtectedAtRest": "Níl aon fáinne eochracha córais ar fáil anseo, mar sin stóráiltear pasfhrása d'eochrach gan chriptiú i gcomhad ar an diosca. Níl an eochair cosanta agus í ina staid scíthe. D'fhéadfadh aon duine atá in ann comhaid an ghléis seo a léamh í a úsáid.",
             "backupLabel": "Cúltaca eochrach",
             "backupDescription": "Foilsigh cóip chriptithe d'eochair ar do fhreastalaí XMPP. Faoi chosaint ag pasfhrása nach bhfuil ach agatsa, agus inléite ag do chuntas amháin (access_model: whitelist). Cuireann sé ar do chumas an stair chriptithe a léamh ar ghléas nua tar éis logáil isteach agus an pasfhrása a iontráil.",
             "backupAction": "Sábháil chuig freastalaí",
@@ -807,6 +809,7 @@
             "identityChoice": {
                 "title": "Tá féiniúlacht OpenPGP ann cheana don chuntas seo",
                 "body": "Níl eochair áitiúil ag an mbrabhsálaí seo, ach tá an freastalaí ag fógairt eochair don chuntas seo cheana. Bhainfeadh giniúint eochrach nua anseo do fhéiniúlacht ina dhá leath go ciúin: ní bheadh comhfhreagraithe a chriptítheann chuig an eochair atá ann in ann teachtaireachtaí a sheachadadh. Roghnaigh conas é sin a réiteach:",
+                "bodyKeyUnrecoverable": "Ní féidir eochair OpenPGP an ghléis seo a dhíghlasáil a thuilleadh, mar sin ní féidir leis an gcriptiú tosú. Níl tionchar ar bith ar an aitheantas foilsithe agat. Aisghabh é trí do chúltaca freastalaí a athchóiriú nó trí chomhad eochrach a iompórtáil, nó cuir ina ionad é mura féidir leat. Roghnaigh conas is mian leat é seo a réiteach:",
                 "publishedFingerprintLabel": "Méarlorg foilsithe",
                 "restoreFromServerTitle": "Athchóirigh ó chúltaca freastalaí",
                 "restoreFromServerBody": "Úsáid an pasfhrása cúltaca a shocraigh tú agus tú ag cumasú criptithe ar ghléas eile. Faightear an eochair phríobháideach chomhfhreagrach ón bhfreastalaí agus díghlasáiltear go háitiúil í.",

@@ -235,6 +235,7 @@
         "notJoinedNoHistory": "M'intix f'din il-kamra",
         "joinToLoadHistory": "Idħol biex tgħabbi l-messaġġi",
         "notificationSettings": "Settings tan-notifiki",
+        "roomActions": "Azzjonijiet tal-kamra",
         "mentionsOnly": "Mentions biss",
         "defaultBehavior": "Imġiba default",
         "allMessages": "Il-messaġġi kollha",
@@ -735,6 +736,7 @@
             "pepUnsupportedBanner": "Is-server tiegħek ma jappoġġjax il-pubblikazzjoni ta' avvenimenti personali (PEP, XEP-0163), meħtieġa mill-kriptaġġ OpenPGP (XEP-0373). Il-kriptaġġ minn tarf sa tarf ma jistax jiġi attivat f'dan il-kont. Ikkuntattja lill-amministratur tas-server.",
             "statusPepUnsupported": "Il-kriptaġġ ma jistax jiġi attivat: is-server ma jappoġġjax PEP (XEP-0163), meħtieġ minn OpenPGP (XEP-0373).",
             "statusRegistrationFailed": "Il-konfigurazzjoni tal-kriptaġġ falliet ({{code}}). Iċċekkja l-console tal-iżviluppatur għad-dettalji.",
+            "notProtectedAtRest": "M'hawn l-ebda keychain tas-sistema disponibbli hawn, għalhekk il-frażi tal-password taċ-ċavetta tiegħek tinħażen mhux kriptata f'fajl fuq id-disk. Iċ-ċavetta mhix protetta waqt il-mistrieħ. Kull min jista' jaqra l-fajls ta' dan l-apparat jista' jużaha.",
             "backupLabel": "Backup taċ-ċavetta",
             "backupDescription": "Ippubblika kopja kriptata taċ-ċavetta tiegħek fuq is-server XMPP tiegħek. Imħarsa minn frażi sigrieta li int biss tafha, u tinqara biss mill-kont tiegħek (access_model: whitelist). Tippermettilek taqra l-istorja kriptata fuq tagħmir ġdid wara li tidħol u ddaħħal il-frażi.",
             "backupAction": "Issejvja fuq is-server",
@@ -809,6 +811,7 @@
             "identityChoice": {
                 "title": "Diġà teżisti identità OpenPGP għal dan il-kont",
                 "body": "Dan il-brawżer m'għandu l-ebda ċavetta lokali, iżda s-server diġà jħabbar ċavetta għall-kont tiegħek. Iġġenerar ċavetta ġdida hawn jaqsam fil-kwiet l-identità tiegħek: korrispondenti li ċifraw fuq iċ-ċavetta eżistenti ma jistgħux iwasslu messaġġi. Agħżel kif tixtieq tirrisolvi dan:",
+                "bodyKeyUnrecoverable": "Iċ-ċavetta OpenPGP ta' dan l-apparat ma tistax tinfetaħ aktar, għalhekk il-kriptaġġ ma jistax jibda. L-identità ppubblikata tiegħek mhix affettwata. Irkupraha billi tirrestawra l-backup tas-server jew billi timporta fajl taċ-ċavetta, jew ibdilha jekk ma tistax. Agħżel kif trid issolvi dan:",
                 "publishedFingerprintLabel": "Marka tas-swaba' ppubblikata",
                 "restoreFromServerTitle": "Restawra mill-backup tas-server",
                 "restoreFromServerBody": "Uża l-passfrażi tal-backup li ssettjajt meta ppermettejt il-kriptaġġ fuq apparat ieħor. Iċ-ċavetta privata korrispondenti tinġabar mis-server u tinfetaħ lokalment.",

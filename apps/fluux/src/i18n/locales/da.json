@@ -233,6 +233,7 @@
         "notJoinedNoHistory": "Du er ikke i dette rum",
         "joinToLoadHistory": "Deltag for at indlæse beskeder",
         "notificationSettings": "Notifikationsindstillinger",
+        "roomActions": "Rumshandlinger",
         "mentionsOnly": "Kun omtaler",
         "defaultBehavior": "Standardadfærd",
         "allMessages": "Alle beskeder",
@@ -733,6 +734,7 @@
             "pepUnsupportedBanner": "Din server understøtter ikke personal eventing (PEP, XEP-0163), som OpenPGP-kryptering (XEP-0373) kræver. End-to-end-kryptering kan ikke aktiveres på denne konto. Kontakt din serveradministrator.",
             "statusPepUnsupported": "Kryptering kan ikke aktiveres: serveren understøtter ikke PEP (XEP-0163), som OpenPGP (XEP-0373) kræver.",
             "statusRegistrationFailed": "Opsætning af kryptering mislykkedes ({{code}}). Se udviklerkonsollen for detaljer.",
+            "notProtectedAtRest": "Der er ingen systemnøglering tilgængelig her, så din nøgles adgangssætning gemmes ukrypteret i en fil på disken. Nøglen er ikke beskyttet i hvile. Enhver, der kan læse denne enheds filer, kan bruge den.",
             "backupLabel": "Nøglesikkerhedskopi",
             "backupDescription": "Udgiv en krypteret kopi af din nøgle på din XMPP-server. Beskyttet med en adgangssætning, kun du kender, og kun læsbar af din konto (access_model: whitelist). Lader dig læse krypteret historik på en ny enhed efter login og indtastning af adgangssætningen.",
             "backupAction": "Sikkerhedskopier til server",
@@ -807,6 +809,7 @@
             "identityChoice": {
                 "title": "Der findes allerede en OpenPGP-identitet for denne konto",
                 "body": "Denne browser har ingen lokal nøgle, men serveren annoncerer allerede en nøgle for din konto. Hvis du genererer en ny nøgle her, vil din identitet stille blive forgrenet: korrespondenter, der krypterede til den eksisterende nøgle, vil ikke kunne levere beskeder. Vælg, hvordan du vil løse dette:",
+                "bodyKeyUnrecoverable": "OpenPGP-nøglen på denne enhed kan ikke længere låses op, så kryptering kan ikke startes. Din offentliggjorte identitet er upåvirket. Gendan den fra din serversikkerhedskopi eller ved at importere en nøglefil, eller erstat den, hvis du ikke kan. Vælg, hvordan du vil løse dette:",
                 "publishedFingerprintLabel": "Publiceret fingeraftryk",
                 "restoreFromServerTitle": "Gendan fra serverbackup",
                 "restoreFromServerBody": "Brug backup-adgangskoden, du angav, da du aktiverede kryptering på en anden enhed. Den tilsvarende private nøgle hentes fra serveren og låses op lokalt.",

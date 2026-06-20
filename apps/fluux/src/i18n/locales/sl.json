@@ -235,6 +235,7 @@
         "notJoinedNoHistory": "Niste v tej sobi",
         "joinToLoadHistory": "Pridružite se za nalaganje sporočil",
         "notificationSettings": "Nastavitve obvestil",
+        "roomActions": "Dejanja sobe",
         "mentionsOnly": "Samo omembe",
         "defaultBehavior": "Privzeto vedenje",
         "allMessages": "Vsa sporočila",
@@ -735,6 +736,7 @@
             "pepUnsupportedBanner": "Vaš strežnik ne podpira objavljanja osebnih dogodkov (PEP, XEP-0163), ki ga šifriranje OpenPGP (XEP-0373) zahteva. Šifriranja od konca do konca na tem računu ni mogoče vklopiti. Obrnite se na skrbnika strežnika.",
             "statusPepUnsupported": "Šifriranja ni mogoče vklopiti: strežnik ne podpira PEP (XEP-0163), ki ga OpenPGP (XEP-0373) zahteva.",
             "statusRegistrationFailed": "Nastavitev šifriranja ni uspela ({{code}}). Podrobnosti najdete v razvijalski konzoli.",
+            "notProtectedAtRest": "Tu ni na voljo nobene sistemske zbirke ključev, zato je geslo vašega ključa shranjeno nešifrirano v datoteki na disku. Ključ v mirovanju ni zaščiten. Kdor koli, ki lahko bere datoteke te naprave, bi ga lahko uporabil.",
             "backupLabel": "Varnostna kopija ključa",
             "backupDescription": "Objavite šifrirano kopijo ključa na svojem strežniku XMPP. Zaščitena z geslom, ki ga poznate samo vi, in berljiva samo vašemu računu (access_model: whitelist). Omogoča branje šifrirane zgodovine na novi napravi po prijavi in vnosu gesla.",
             "backupAction": "Shrani na strežnik",
@@ -809,6 +811,7 @@
             "identityChoice": {
                 "title": "Za ta račun že obstaja OpenPGP identiteta",
                 "body": "Ta brskalnik nima lokalnega ključa, vendar strežnik že oglašuje ključ za vaš račun. Generiranje novega ključa tukaj bi tiho razcepilo vašo identiteto: dopisovalci, ki so šifrirali na obstoječi ključ, ne bi mogli dostaviti sporočil. Izberite, kako želite to rešiti:",
+                "bodyKeyUnrecoverable": "Ključa OpenPGP te naprave ni več mogoče odkleniti, zato šifriranja ni mogoče zagnati. Vaša objavljena identiteta ni prizadeta. Obnovite jo iz varnostne kopije na strežniku ali z uvozom datoteke ključa, ali pa jo zamenjajte, če to ni mogoče. Izberite, kako želite to rešiti:",
                 "publishedFingerprintLabel": "Objavljen prstni odtis",
                 "restoreFromServerTitle": "Obnovi iz strežniške varnostne kopije",
                 "restoreFromServerBody": "Uporabite geslo varnostne kopije, ki ste ga nastavili pri omogočanju šifriranja na drugi napravi. Ustrezni zasebni ključ se pridobi s strežnika in odklene lokalno.",
