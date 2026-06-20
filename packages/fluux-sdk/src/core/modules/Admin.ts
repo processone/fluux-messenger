@@ -13,6 +13,7 @@ import {
   NS_DATA_FORMS,
   NS_MUC_OWNER,
   NS_RSM,
+  NS_VERSION,
 } from '../namespaces'
 import type {
   AdminCommand,
@@ -24,6 +25,7 @@ import type {
   AdminUser,
   AdminRoom,
   EntityCounts,
+  ServerStats,
 } from '../types'
 
 /**
@@ -348,6 +350,98 @@ export class Admin extends BaseModule {
 
     this.deps.emitSDK('admin:entity-counts', { counts })
     return counts
+  }
+
+  // ============================================================================
+  // Server Overview Stats
+  // ============================================================================
+
+  /**
+   * Fetch structured server vital-signs for the overview dashboard.
+   * Each metric is fetched independently; a missing/forbidden command omits
+   * that metric rather than failing the whole snapshot (discovery-driven).
+   */
+  async fetchServerStats(_vhost?: string): Promise<ServerStats> {
+    const stats: ServerStats = { fetchedAt: Date.now() }
+
+    try {
+      const form = await this.executeSimpleCommand('get-registered-users-num')
+      const v = form ? getFormFieldValue(form, 'registeredusersnum') : undefined
+      if (v != null && v !== '') stats.registeredUsers = parseInt(v, 10)
+    } catch { /* unavailable */ }
+
+    try {
+      const form = await this.executeSimpleCommand('get-online-users-num')
+      const v = form ? getFormFieldValue(form, 'onlineusersnum') : undefined
+      if (v != null && v !== '') stats.onlineUsers = parseInt(v, 10)
+    } catch { /* unavailable */ }
+
+    try {
+      // service=global → count rooms across all vhosts (default is one conference vhost)
+      const form = await this.executeApiCommand('muc_online_rooms_count', { service: 'global' })
+      const v = form
+        ? (getFormFieldValue(form, 'count') ??
+           getFormFieldValue(form, 'onlineroomsnum') ??
+           getFormFieldValue(form, 'rooms'))
+        : undefined
+      if (v != null && v !== '') stats.onlineRooms = parseInt(v, 10)
+    } catch { /* unavailable */ }
+
+    const uptime = await this.fetchUptimeSeconds()
+    if (uptime != null) stats.uptimeSeconds = uptime
+
+    const version = await this.fetchServerVersion()
+    if (version) stats.version = version
+
+    try {
+      const vhosts = await this.fetchVhosts()
+      if (vhosts.length > 0) stats.vhostCount = vhosts.length
+    } catch { /* unavailable */ }
+
+    this.deps.emitSDK('admin:server-stats', { stats })
+    return stats
+  }
+
+  /**
+   * Read server uptime via the ejabberd `stats` api-command (name=uptimeseconds).
+   * Parses the result value tolerantly — the value field var is not hard-coded.
+   */
+  private async fetchUptimeSeconds(): Promise<number | null> {
+    try {
+      const form = await this.executeApiCommand('stats', { name: 'uptimeseconds' })
+      if (!form) return null
+      for (const field of form.fields) {
+        if (field.type === 'fixed' || field.type === 'hidden') continue
+        if (field.var === 'name') continue
+        const raw = Array.isArray(field.value) ? field.value[0] : field.value
+        const n = raw != null ? parseInt(raw, 10) : NaN
+        if (!Number.isNaN(n)) return n
+      }
+    } catch { /* unavailable */ }
+    return null
+  }
+
+  /** Read server software version via XEP-0092 (jabber:iq:version) on the domain. */
+  private async fetchServerVersion(): Promise<string | null> {
+    const currentJid = this.deps.getCurrentJid()
+    const domain = currentJid ? getDomain(currentJid) : null
+    if (!domain) return null
+    try {
+      const iq = xml(
+        'iq',
+        { type: 'get', to: domain, id: `ver_${generateUUID()}` },
+        xml('query', { xmlns: NS_VERSION })
+      )
+      const result = await this.deps.sendIQ(iq)
+      const query = result.getChild('query', NS_VERSION)
+      if (!query) return null
+      const name = query.getChild('name')?.text() || ''
+      const version = query.getChild('version')?.text() || ''
+      const combined = [name, version].filter(Boolean).join(' ').trim()
+      return combined || null
+    } catch {
+      return null
+    }
   }
 
   /**
