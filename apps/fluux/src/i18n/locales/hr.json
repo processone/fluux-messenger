@@ -1130,6 +1130,29 @@
         "roomList": {
             "title": "Sobe za razgovor",
             "noRooms": "Sobe nisu pronađene"
+        },
+        "overview": {
+            "title": "Pregled poslužitelja",
+            "refresh": "Osvježi",
+            "updatedAt": "Ažurirano u {{time}}",
+            "advanced": "Napredno",
+            "advancedHint": "Pokreni izravnu naredbu poslužitelja",
+            "empty": "Statistika poslužitelja nije dostupna.",
+            "retry": "Pokušaj ponovno",
+            "units": {
+                "d": "d",
+                "h": "h",
+                "m": "min",
+                "s": "s"
+            },
+            "cards": {
+                "uptime": "Vrijeme rada",
+                "version": "Verzija poslužitelja",
+                "registeredUsers": "Registrirani korisnici",
+                "onlineUsers": "Korisnici na mreži",
+                "onlineRooms": "Aktivne sobe",
+                "vhosts": "Virtualni poslužitelji"
+            }
         }
     },
     "commandPalette": {

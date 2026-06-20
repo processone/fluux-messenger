@@ -1132,6 +1132,29 @@
         "roomList": {
             "title": "Kmamar ta' Chat",
             "noRooms": "Ma nstabux kmamar"
+        },
+        "overview": {
+            "title": "Ħarsa ġenerali tas-server",
+            "refresh": "Aġġorna",
+            "updatedAt": "Aġġornat fil-{{time}}",
+            "advanced": "Avvanzat",
+            "advancedHint": "Mexxi kmand dirett tas-server",
+            "empty": "L-istatistika tas-server mhix disponibbli.",
+            "retry": "Erġa' pprova",
+            "units": {
+                "d": "j",
+                "h": "s",
+                "m": "min",
+                "s": "s"
+            },
+            "cards": {
+                "uptime": "Ħin tax-xogħol",
+                "version": "Verżjoni tas-server",
+                "registeredUsers": "Utenti rreġistrati",
+                "onlineUsers": "Utenti online",
+                "onlineRooms": "Kmamar attivi",
+                "vhosts": "Hosts virtwali"
+            }
         }
     },
     "commandPalette": {

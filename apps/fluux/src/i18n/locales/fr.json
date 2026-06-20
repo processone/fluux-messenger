@@ -1131,6 +1131,29 @@
         "roomList": {
             "title": "Salons de discussion",
             "noRooms": "Aucun salon trouvé"
+        },
+        "overview": {
+            "title": "Vue d'ensemble du serveur",
+            "refresh": "Actualiser",
+            "updatedAt": "Mis à jour à {{time}}",
+            "advanced": "Avancé",
+            "advancedHint": "Exécuter une commande serveur brute",
+            "empty": "Les statistiques du serveur sont indisponibles.",
+            "retry": "Réessayer",
+            "units": {
+                "d": "j",
+                "h": "h",
+                "m": "min",
+                "s": "s"
+            },
+            "cards": {
+                "uptime": "Disponibilité",
+                "version": "Version du serveur",
+                "registeredUsers": "Utilisateurs enregistrés",
+                "onlineUsers": "Utilisateurs en ligne",
+                "onlineRooms": "Salons actifs",
+                "vhosts": "Hôtes virtuels"
+            }
         }
     },
     "commandPalette": {

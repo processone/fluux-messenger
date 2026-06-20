@@ -1130,6 +1130,29 @@
         "roomList": {
             "title": "Chatrum",
             "noRooms": "Ingen rum fundet"
+        },
+        "overview": {
+            "title": "Serveroversigt",
+            "refresh": "Opdater",
+            "updatedAt": "Opdateret kl. {{time}}",
+            "advanced": "Avanceret",
+            "advancedHint": "Kør en rå serverkommando",
+            "empty": "Serverstatistik er ikke tilgængelig.",
+            "retry": "Prøv igen",
+            "units": {
+                "d": "d",
+                "h": "t",
+                "m": "min",
+                "s": "s"
+            },
+            "cards": {
+                "uptime": "Oppetid",
+                "version": "Serverversion",
+                "registeredUsers": "Registrerede brugere",
+                "onlineUsers": "Online-brugere",
+                "onlineRooms": "Aktive rum",
+                "vhosts": "Virtuelle værter"
+            }
         }
     },
     "commandPalette": {

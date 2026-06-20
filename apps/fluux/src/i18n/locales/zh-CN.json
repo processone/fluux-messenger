@@ -1130,6 +1130,29 @@
         "roomList": {
             "title": "聊天室",
             "noRooms": "未找到房间"
+        },
+        "overview": {
+            "title": "服务器概览",
+            "refresh": "刷新",
+            "updatedAt": "更新于 {{time}}",
+            "advanced": "高级",
+            "advancedHint": "运行原始服务器命令",
+            "empty": "服务器统计信息不可用。",
+            "retry": "重试",
+            "units": {
+                "d": "天",
+                "h": "时",
+                "m": "分",
+                "s": "秒"
+            },
+            "cards": {
+                "uptime": "运行时间",
+                "version": "服务器版本",
+                "registeredUsers": "注册用户",
+                "onlineUsers": "在线用户",
+                "onlineRooms": "活跃房间",
+                "vhosts": "虚拟主机"
+            }
         }
     },
     "commandPalette": {

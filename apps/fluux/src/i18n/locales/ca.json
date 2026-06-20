@@ -1132,6 +1132,29 @@
         "roomList": {
             "title": "Sales de xat",
             "noRooms": "No s'han trobat sales"
+        },
+        "overview": {
+            "title": "Resum del servidor",
+            "refresh": "Actualitza",
+            "updatedAt": "Actualitzat a les {{time}}",
+            "advanced": "Avançat",
+            "advancedHint": "Executa una ordre directa del servidor",
+            "empty": "Les estadístiques del servidor no estan disponibles.",
+            "retry": "Torna-ho a provar",
+            "units": {
+                "d": "d",
+                "h": "h",
+                "m": "min",
+                "s": "s"
+            },
+            "cards": {
+                "uptime": "Temps actiu",
+                "version": "Versió del servidor",
+                "registeredUsers": "Usuaris registrats",
+                "onlineUsers": "Usuaris en línia",
+                "onlineRooms": "Sales actives",
+                "vhosts": "Amfitrions virtuals"
+            }
         }
     },
     "commandPalette": {

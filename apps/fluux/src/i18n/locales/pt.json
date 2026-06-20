@@ -1132,6 +1132,29 @@
         "roomList": {
             "title": "Salas de chat",
             "noRooms": "Nenhuma sala encontrada"
+        },
+        "overview": {
+            "title": "Visão geral do servidor",
+            "refresh": "Atualizar",
+            "updatedAt": "Atualizado às {{time}}",
+            "advanced": "Avançado",
+            "advancedHint": "Executar um comando direto do servidor",
+            "empty": "As estatísticas do servidor não estão disponíveis.",
+            "retry": "Tentar novamente",
+            "units": {
+                "d": "d",
+                "h": "h",
+                "m": "min",
+                "s": "s"
+            },
+            "cards": {
+                "uptime": "Tempo de atividade",
+                "version": "Versão do servidor",
+                "registeredUsers": "Utilizadores registados",
+                "onlineUsers": "Utilizadores online",
+                "onlineRooms": "Salas ativas",
+                "vhosts": "Anfitriões virtuais"
+            }
         }
     },
     "commandPalette": {

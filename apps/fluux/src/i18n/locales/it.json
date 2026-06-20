@@ -1132,6 +1132,29 @@
         "roomList": {
             "title": "Stanze di chat",
             "noRooms": "Nessuna stanza trovata"
+        },
+        "overview": {
+            "title": "Panoramica del server",
+            "refresh": "Aggiorna",
+            "updatedAt": "Aggiornato alle {{time}}",
+            "advanced": "Avanzate",
+            "advancedHint": "Esegui un comando diretto del server",
+            "empty": "Le statistiche del server non sono disponibili.",
+            "retry": "Riprova",
+            "units": {
+                "d": "g",
+                "h": "h",
+                "m": "min",
+                "s": "s"
+            },
+            "cards": {
+                "uptime": "Tempo di attività",
+                "version": "Versione del server",
+                "registeredUsers": "Utenti registrati",
+                "onlineUsers": "Utenti online",
+                "onlineRooms": "Stanze attive",
+                "vhosts": "Host virtuali"
+            }
         }
     },
     "commandPalette": {

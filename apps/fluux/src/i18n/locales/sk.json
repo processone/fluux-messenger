@@ -1131,6 +1131,29 @@
         "roomList": {
             "title": "Chatovacie miestnosti",
             "noRooms": "Žiadne miestnosti sa nenašli"
+        },
+        "overview": {
+            "title": "Prehľad servera",
+            "refresh": "Obnoviť",
+            "updatedAt": "Aktualizované o {{time}}",
+            "advanced": "Rozšírené",
+            "advancedHint": "Spustiť priamy príkaz servera",
+            "empty": "Štatistiky servera nie sú dostupné.",
+            "retry": "Skúsiť znova",
+            "units": {
+                "d": "d",
+                "h": "h",
+                "m": "min",
+                "s": "s"
+            },
+            "cards": {
+                "uptime": "Doba prevádzky",
+                "version": "Verzia servera",
+                "registeredUsers": "Registrovaní používatelia",
+                "onlineUsers": "Používatelia online",
+                "onlineRooms": "Aktívne miestnosti",
+                "vhosts": "Virtuálne hostiteľské servery"
+            }
         }
     },
     "commandPalette": {

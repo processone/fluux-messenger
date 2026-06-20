@@ -1130,6 +1130,29 @@
         "roomList": {
             "title": "Spjallherbergi",
             "noRooms": "Engin herbergi fundust"
+        },
+        "overview": {
+            "title": "Yfirlit netþjóns",
+            "refresh": "Endurnýja",
+            "updatedAt": "Uppfært kl. {{time}}",
+            "advanced": "Ítarlegt",
+            "advancedHint": "Keyra hráa netþjónsskipun",
+            "empty": "Tölfræði netþjóns er ekki tiltæk.",
+            "retry": "Reyna aftur",
+            "units": {
+                "d": "d",
+                "h": "klst",
+                "m": "mín",
+                "s": "s"
+            },
+            "cards": {
+                "uptime": "Keyrslutími",
+                "version": "Útgáfa netþjóns",
+                "registeredUsers": "Skráðir notendur",
+                "onlineUsers": "Notendur á netinu",
+                "onlineRooms": "Virk herbergi",
+                "vhosts": "Sýndarþjónar"
+            }
         }
     },
     "commandPalette": {

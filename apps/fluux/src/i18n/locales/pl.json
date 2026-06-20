@@ -1132,6 +1132,29 @@
         "roomList": {
             "title": "Pokoje czatowe",
             "noRooms": "Nie znaleziono pokoi"
+        },
+        "overview": {
+            "title": "Przegląd serwera",
+            "refresh": "Odśwież",
+            "updatedAt": "Zaktualizowano o {{time}}",
+            "advanced": "Zaawansowane",
+            "advancedHint": "Uruchom bezpośrednie polecenie serwera",
+            "empty": "Statystyki serwera są niedostępne.",
+            "retry": "Spróbuj ponownie",
+            "units": {
+                "d": "d",
+                "h": "g",
+                "m": "min",
+                "s": "s"
+            },
+            "cards": {
+                "uptime": "Czas działania",
+                "version": "Wersja serwera",
+                "registeredUsers": "Zarejestrowani użytkownicy",
+                "onlineUsers": "Użytkownicy online",
+                "onlineRooms": "Aktywne pokoje",
+                "vhosts": "Hosty wirtualne"
+            }
         }
     },
     "commandPalette": {

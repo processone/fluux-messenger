@@ -1130,6 +1130,29 @@
         "roomList": {
             "title": "Chattrum",
             "noRooms": "Inga rum hittades"
+        },
+        "overview": {
+            "title": "Serveröversikt",
+            "refresh": "Uppdatera",
+            "updatedAt": "Uppdaterad kl. {{time}}",
+            "advanced": "Avancerat",
+            "advancedHint": "Kör ett rått serverkommando",
+            "empty": "Serverstatistik är inte tillgänglig.",
+            "retry": "Försök igen",
+            "units": {
+                "d": "d",
+                "h": "tim",
+                "m": "min",
+                "s": "s"
+            },
+            "cards": {
+                "uptime": "Drifttid",
+                "version": "Serverversion",
+                "registeredUsers": "Registrerade användare",
+                "onlineUsers": "Användare online",
+                "onlineRooms": "Aktiva rum",
+                "vhosts": "Virtuella värdar"
+            }
         }
     },
     "commandPalette": {

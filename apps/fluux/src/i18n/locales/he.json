@@ -1130,6 +1130,29 @@
         "roomList": {
             "title": "חדרי צ'אט",
             "noRooms": "לא נמצאו חדרים"
+        },
+        "overview": {
+            "title": "סקירת שרת",
+            "refresh": "רענן",
+            "updatedAt": "עודכן בשעה {{time}}",
+            "advanced": "מתקדם",
+            "advancedHint": "הרצת פקודת שרת גולמית",
+            "empty": "נתוני השרת אינם זמינים.",
+            "retry": "נסה שוב",
+            "units": {
+                "d": "י",
+                "h": "ש",
+                "m": "דק",
+                "s": "שנ"
+            },
+            "cards": {
+                "uptime": "זמן פעילות",
+                "version": "גרסת שרת",
+                "registeredUsers": "משתמשים רשומים",
+                "onlineUsers": "משתמשים מחוברים",
+                "onlineRooms": "חדרים פעילים",
+                "vhosts": "מארחים וירטואליים"
+            }
         }
     },
     "commandPalette": {

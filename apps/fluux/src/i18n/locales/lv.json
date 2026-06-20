@@ -1131,6 +1131,29 @@
         "roomList": {
             "title": "Tērzēšanas istabas",
             "noRooms": "Istabas nav atrastas"
+        },
+        "overview": {
+            "title": "Servera pārskats",
+            "refresh": "Atsvaidzināt",
+            "updatedAt": "Atjaunināts plkst. {{time}}",
+            "advanced": "Papildu",
+            "advancedHint": "Izpildīt tiešu servera komandu",
+            "empty": "Servera statistika nav pieejama.",
+            "retry": "Mēģināt vēlreiz",
+            "units": {
+                "d": "d",
+                "h": "st",
+                "m": "min",
+                "s": "s"
+            },
+            "cards": {
+                "uptime": "Darbības laiks",
+                "version": "Servera versija",
+                "registeredUsers": "Reģistrētie lietotāji",
+                "onlineUsers": "Tiešsaistes lietotāji",
+                "onlineRooms": "Aktīvās istabas",
+                "vhosts": "Virtuālie saimnieki"
+            }
         }
     },
     "commandPalette": {

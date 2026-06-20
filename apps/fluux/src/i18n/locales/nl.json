@@ -1130,6 +1130,29 @@
         "roomList": {
             "title": "Chatgroepen",
             "noRooms": "Geen groepen gevonden"
+        },
+        "overview": {
+            "title": "Serveroverzicht",
+            "refresh": "Vernieuwen",
+            "updatedAt": "Bijgewerkt om {{time}}",
+            "advanced": "Geavanceerd",
+            "advancedHint": "Een ruwe serveropdracht uitvoeren",
+            "empty": "Serverstatistieken zijn niet beschikbaar.",
+            "retry": "Opnieuw",
+            "units": {
+                "d": "d",
+                "h": "u",
+                "m": "min",
+                "s": "s"
+            },
+            "cards": {
+                "uptime": "Bedrijfstijd",
+                "version": "Serverversie",
+                "registeredUsers": "Geregistreerde gebruikers",
+                "onlineUsers": "Online gebruikers",
+                "onlineRooms": "Actieve groepen",
+                "vhosts": "Virtuele hosts"
+            }
         }
     },
     "commandPalette": {
