@@ -106,6 +106,7 @@ import { PubSub } from './modules/PubSub'
 import { Blocking } from './modules/Blocking'
 import { Ignore } from './modules/Ignore'
 import { ConversationSync, type SyncedConversation } from './modules/ConversationSync'
+import { Mds } from './modules/Mds'
 import { WebPush } from './modules/WebPush'
 import { EntityTime } from './modules/EntityTime'
 import { LastActivity } from './modules/LastActivity'
@@ -308,6 +309,12 @@ export class XMPPClient {
    * Persists 1:1 conversation lists (active + archived) via PEP (XEP-0223 private storage).
    */
   public conversationSync!: ConversationSync
+
+  /**
+   * MDS module (XEP-0490: Message Displayed Synchronization).
+   * Publishes/fetches per-conversation last-displayed stanza-ids via PEP.
+   */
+  public mds!: Mds
 
   /**
    * Web Push module (p1:push).
@@ -673,6 +680,7 @@ export class XMPPClient {
     this.blocking = new Blocking(moduleDeps)
     this.ignore = new Ignore(moduleDeps)
     this.conversationSync = new ConversationSync(moduleDeps)
+    this.mds = new Mds(moduleDeps)
     this.webPush = new WebPush(moduleDeps)
     this.entityTime = new EntityTime(moduleDeps)
     this.lastActivity = new LastActivity(moduleDeps)

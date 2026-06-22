@@ -160,6 +160,32 @@ describe('createStoreBindings', () => {
       mockClient.emit('chat:animation', { conversationId: 'bob@example.com', animation: 'shake' })
       expect(mockStores.chat.triggerAnimation).toHaveBeenCalledWith('bob@example.com', 'shake')
     })
+
+    it('should handle read:displayed-synced', () => {
+      mockClient.emit('read:displayed-synced', {
+        conversationId: 'juliet@capulet.example',
+        stanzaId: 'stanza-77',
+      })
+      expect(mockStores.chat.applyRemoteDisplayed).toHaveBeenCalledWith(
+        'juliet@capulet.example',
+        'stanza-77'
+      )
+    })
+
+    it('routes read:displayed-synced for a known room to roomStore', () => {
+      const roomApply = vi.fn()
+      mockStores.room.applyRemoteDisplayed = roomApply
+      ;(mockStores.room.rooms as Map<string, unknown>).set('room@conf.example', {})
+      mockClient.emit('read:displayed-synced', { conversationId: 'room@conf.example', stanzaId: 's7' })
+      expect(roomApply).toHaveBeenCalledWith('room@conf.example', 's7')
+      expect(mockStores.chat.applyRemoteDisplayed).not.toHaveBeenCalled()
+    })
+
+    it('routes read:displayed-synced for a non-room JID to chatStore', () => {
+      mockClient.emit('read:displayed-synced', { conversationId: 'juliet@capulet.example', stanzaId: 's8' })
+      expect(mockStores.chat.applyRemoteDisplayed).toHaveBeenCalledWith('juliet@capulet.example', 's8')
+      expect(mockStores.room.applyRemoteDisplayed).not.toHaveBeenCalled()
+    })
   })
 
   describe('room events', () => {

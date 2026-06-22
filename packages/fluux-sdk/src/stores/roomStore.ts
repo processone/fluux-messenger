@@ -372,6 +372,12 @@ export interface RoomState {
   getActiveRoomJid: () => string | null
   clearFirstNewMessageId: (roomJid: string) => void
   updateLastSeenMessageId: (roomJid: string, messageId: string) => void
+  /**
+   * XEP-0490: apply a remote device's last-displayed marker. Advances
+   * lastSeenMessageId forward-only by resolving the stanza-id to a local
+   * message id; stores a pending high-water mark if not yet loaded.
+   */
+  applyRemoteDisplayed: (roomJid: string, stanzaId: string) => void
   setTyping: (roomJid: string, nick: string, isTyping: boolean) => void
 
   // Bookmark actions
@@ -1474,6 +1480,72 @@ export const roomStore = createStore<RoomState>()(
     })
   },
 
+  applyRemoteDisplayed: (roomJid, stanzaId) => {
+    set((state) => {
+      const meta = state.roomMeta.get(roomJid)
+      const existing = state.rooms.get(roomJid)
+      if (!meta) return state
+
+      const runtime = state.roomRuntime.get(roomJid)
+      const messages = runtime?.messages ?? existing?.messages ?? []
+      const match = messages.find((m) => m.stanzaId === stanzaId)
+
+      if (!match) {
+        const newMeta = new Map(state.roomMeta)
+        newMeta.set(roomJid, { ...meta, pendingRemoteDisplayedStanzaId: stanzaId })
+        if (existing) {
+          const newRooms = new Map(state.rooms)
+          newRooms.set(roomJid, { ...existing, pendingRemoteDisplayedStanzaId: stanzaId })
+          return { roomMeta: newMeta, rooms: newRooms }
+        }
+        return { roomMeta: newMeta }
+      }
+
+      const updated = notifState.onMessageSeen(
+        {
+          unreadCount: meta.unreadCount,
+          mentionsCount: meta.mentionsCount,
+          lastReadAt: meta.lastReadAt,
+          lastSeenMessageId: meta.lastSeenMessageId,
+          firstNewMessageId: meta.firstNewMessageId,
+        },
+        match.id,
+        messages
+      )
+
+      // No advance: the matching message is loaded and the local position is at
+      // or past it — the marker is resolved; clear any stale pending mark.
+      if (updated.lastSeenMessageId === meta.lastSeenMessageId) {
+        if (meta.pendingRemoteDisplayedStanzaId === undefined) return state
+        const newMeta = new Map(state.roomMeta)
+        newMeta.set(roomJid, { ...meta, pendingRemoteDisplayedStanzaId: undefined })
+        if (existing) {
+          const newRooms = new Map(state.rooms)
+          newRooms.set(roomJid, { ...existing, pendingRemoteDisplayedStanzaId: undefined })
+          return { roomMeta: newMeta, rooms: newRooms }
+        }
+        return { roomMeta: newMeta }
+      }
+
+      const newMeta = new Map(state.roomMeta)
+      newMeta.set(roomJid, {
+        ...meta,
+        lastSeenMessageId: updated.lastSeenMessageId,
+        pendingRemoteDisplayedStanzaId: undefined,
+      })
+      if (existing) {
+        const newRooms = new Map(state.rooms)
+        newRooms.set(roomJid, {
+          ...existing,
+          lastSeenMessageId: updated.lastSeenMessageId,
+          pendingRemoteDisplayedStanzaId: undefined,
+        })
+        return { roomMeta: newMeta, rooms: newRooms }
+      }
+      return { roomMeta: newMeta }
+    })
+  },
+
   setTyping: (roomJid, nick, isTyping) => {
     if (isTyping) {
       // Set auto-clear timeout in case "paused" is missed
@@ -2051,6 +2123,13 @@ export const roomStore = createStore<RoomState>()(
 
       return { rooms: newRooms, roomRuntime: newRuntime, roomMeta: newMeta, mamQueryStates: newStates, roomGaps: newGaps }
     })
+
+    // XEP-0490: a remote room marker may have arrived before its message.
+    // Now that messages are merged, try to resolve it forward-only.
+    const pending = get().roomMeta.get(roomJid)?.pendingRemoteDisplayedStanzaId
+    if (pending) {
+      get().applyRemoteDisplayed(roomJid, pending)
+    }
   },
 
   getRoomMAMQueryState: (roomJid) => {

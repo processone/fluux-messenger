@@ -110,6 +110,12 @@ export interface ConversationMetadata {
   lastSeenMessageId?: string
   /** ID of the first unread message (calculated when switching to conversation) */
   firstNewMessageId?: string
+  /**
+   * XEP-0490: a remote device reported reading up to this stanza-id, but the
+   * message is not yet in the local cache. Resolved to lastSeenMessageId once
+   * the message arrives (see mergeMAMMessages).
+   */
+  pendingRemoteDisplayedStanzaId?: string
 }
 
 /**

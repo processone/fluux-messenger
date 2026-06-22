@@ -62,11 +62,15 @@ vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (k: string) => k }),
 }))
 
-vi.mock('@fluux/sdk', () => ({
-  rosterStore: { getState: () => ({ getContact: () => undefined }) },
-  usePresence: () => ({ presenceStatus: 'online' }),
-  useConnectionStatus: () => ({ status: currentStatus }),
-}))
+vi.mock('@fluux/sdk', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@fluux/sdk')>()
+  return {
+    ...actual,
+    rosterStore: { getState: () => ({ getContact: () => undefined }) },
+    usePresence: () => ({ presenceStatus: 'online' }),
+    useConnectionStatus: () => ({ status: currentStatus }),
+  }
+})
 
 import { useDesktopNotifications } from './useDesktopNotifications'
 

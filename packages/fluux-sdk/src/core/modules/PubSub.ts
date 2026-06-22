@@ -21,7 +21,8 @@ import { xml } from '@xmpp/client'
 import type { Element } from '@xmpp/client'
 import { BaseModule } from './BaseModule'
 import { getBareJid } from '../jid'
-import { NS_PUBSUB, NS_NICK, NS_OPENPGP_PUBLIC_KEYS, NS_BOOKMARKS } from '../namespaces'
+import { NS_PUBSUB, NS_NICK, NS_OPENPGP_PUBLIC_KEYS, NS_BOOKMARKS, NS_MDS } from '../namespaces'
+import { parseMdsItems } from './Mds'
 import { generateUUID } from '../../utils/uuid'
 import { dataToElement, elementToData } from '../e2ee/stanzaAdapter'
 import type { PEPItem, Subscription, XMLElementData } from '../e2ee'
@@ -138,6 +139,13 @@ export class PubSub extends BaseModule {
     // sync live instead of only on the next reconnect's fetchBookmarks.
     if (node === NS_BOOKMARKS) {
       this.handleBookmarksUpdate(bareFrom, items)
+    }
+
+    // XEP-0490: Message Displayed Synchronization. A push here means another
+    // of our own clients updated its last-displayed position for a 1:1
+    // conversation — sync the read position across devices.
+    if (node === NS_MDS) {
+      this.handleMdsUpdate(bareFrom, items)
     }
 
     // Dispatch to any user-registered subscribers for (bareFrom, node).
@@ -349,6 +357,22 @@ export class PubSub extends BaseModule {
       if (roomJid) {
         this.deps.emitSDK('room:bookmark-removed', { roomJid })
       }
+    }
+  }
+
+  /**
+   * XEP-0490: apply an incoming displayed-marker notification from our own
+   * MDS node. Other entities' MDS nodes are ignored (own-account PEP only).
+   */
+  private handleMdsUpdate(bareFrom: string, items: Element): void {
+    const ownBareJid = getBareJid(this.deps.getCurrentJid() ?? '')
+    if (!ownBareJid || bareFrom !== ownBareJid) return
+
+    for (const { conversationJid, stanzaId } of parseMdsItems(items)) {
+      this.deps.emitSDK('read:displayed-synced', {
+        conversationId: conversationJid,
+        stanzaId,
+      })
     }
   }
 
