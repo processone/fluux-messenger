@@ -16,6 +16,7 @@ import { useTranslation } from 'react-i18next'
 import type { BaseMessage } from '@fluux/sdk'
 import { useMessageCopyFormatter } from '@/hooks'
 import { useViewportObserver } from '@/hooks/useViewportObserver'
+import { useRenderCostProbe } from '@/hooks/useRenderCostProbe'
 import { detectRenderLoop } from '@/utils/renderLoopDetector'
 import { DateSeparator } from './DateSeparator'
 import { NewMessageMarker } from './NewMessageMarker'
@@ -119,6 +120,10 @@ export function MessageList<T extends BaseMessage>({
 }: MessageListProps<T>) {
   // Detect render loops before they freeze the UI
   detectRenderLoop('MessageList')
+
+  // Attribute slow message-list renders (room-entry stall triage on WebKitGTK):
+  // splits the cost into React commit vs browser layout/paint in fluux.log.
+  useRenderCostProbe('MessageList', () => `rows=${messages.length}, conversation=${conversationId}`)
 
   const { t } = useTranslation()
 
