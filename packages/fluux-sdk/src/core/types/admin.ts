@@ -261,8 +261,17 @@ export interface ServerStats {
   version?: string
   /** Total registered users (XEP-0133 get-registered-users-num). */
   registeredUsers?: number
-  /** Currently online users (XEP-0133 get-online-users-num). */
+  /**
+   * Distinct currently-online users (unique bare JIDs, deduped from the
+   * XEP-0133 get-online-users-list). A user connected from several devices
+   * counts once — contrast with {@link onlineSessions}.
+   */
   onlineUsers?: number
+  /**
+   * Currently-online sessions/resources (XEP-0133 get-online-users-num). One
+   * per connected device, so this is >= {@link onlineUsers}.
+   */
+  onlineSessions?: number
   /** Active MUC rooms across all vhosts (muc_online_rooms_count, service=global). */
   onlineRooms?: number
   /** Number of virtual hosts the admin can see. */

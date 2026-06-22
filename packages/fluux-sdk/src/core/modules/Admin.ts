@@ -322,11 +322,24 @@ export class Admin extends BaseModule {
     } catch { /* unavailable */ }
 
     try {
+      // get-online-users-num counts SESSIONS/resources, not distinct users: a
+      // user connected from several devices is counted once per device.
       const form = await this.executeSimpleCommand('get-online-users-num')
       const v = form ? getFormFieldValue(form, 'onlineusersnum') : undefined
       const n = this.parseCount(v)
-      if (n !== undefined) stats.onlineUsers = n
+      if (n !== undefined) stats.onlineSessions = n
     } catch { /* unavailable */ }
+
+    // Distinct online users: dedupe the online-users list by bare JID. Skip the
+    // (potentially large) list fetch when no sessions are online.
+    if (stats.onlineSessions !== 0) {
+      try {
+        const jids = await this.fetchOnlineUserJids()
+        if (jids.size > 0) stats.onlineUsers = jids.size
+      } catch { /* unavailable */ }
+    } else {
+      stats.onlineUsers = 0
+    }
 
     try {
       // service=global → count rooms across all vhosts (default is one conference vhost)

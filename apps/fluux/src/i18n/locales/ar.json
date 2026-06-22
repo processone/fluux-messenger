@@ -1155,8 +1155,9 @@
             "cards": {
                 "uptime": "مدة التشغيل",
                 "version": "إصدار الخادم",
-                "registeredUsers": "المستخدمون المسجلون",
-                "onlineUsers": "المستخدمون المتصلون",
+                "users": "المستخدمون",
+                "onlineSuffix": "{{n}} متصل",
+                "onlineSessions": "الجلسات المتصلة",
                 "onlineRooms": "الغرف النشطة",
                 "vhosts": "المضيفون الافتراضيون"
             }

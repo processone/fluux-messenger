@@ -1155,8 +1155,9 @@
             "cards": {
                 "uptime": "Veikimo laikas",
                 "version": "Serverio versija",
-                "registeredUsers": "Registruoti naudotojai",
-                "onlineUsers": "Prisijungę naudotojai",
+                "users": "Naudotojai",
+                "onlineSuffix": "{{n}} prisijungę",
+                "onlineSessions": "Aktyvūs seansai",
                 "onlineRooms": "Aktyvūs kambariai",
                 "vhosts": "Virtualūs serveriai"
             }

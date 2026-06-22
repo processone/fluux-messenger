@@ -1155,8 +1155,9 @@
             "cards": {
                 "uptime": "Bedrijfstijd",
                 "version": "Serverversie",
-                "registeredUsers": "Geregistreerde gebruikers",
-                "onlineUsers": "Online gebruikers",
+                "users": "Gebruikers",
+                "onlineSuffix": "{{n}} online",
+                "onlineSessions": "Online sessies",
                 "onlineRooms": "Actieve groepen",
                 "vhosts": "Virtuele hosts"
             }

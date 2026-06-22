@@ -1155,8 +1155,9 @@
             "cards": {
                 "uptime": "Час роботи",
                 "version": "Версія сервера",
-                "registeredUsers": "Зареєстровані користувачі",
-                "onlineUsers": "Користувачі в мережі",
+                "users": "Користувачі",
+                "onlineSuffix": "{{n}} у мережі",
+                "onlineSessions": "Активні сеанси",
                 "onlineRooms": "Активні кімнати",
                 "vhosts": "Віртуальні хости"
             }

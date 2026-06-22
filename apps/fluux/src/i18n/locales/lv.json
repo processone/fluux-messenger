@@ -1156,8 +1156,9 @@
             "cards": {
                 "uptime": "Darbības laiks",
                 "version": "Servera versija",
-                "registeredUsers": "Reģistrētie lietotāji",
-                "onlineUsers": "Tiešsaistes lietotāji",
+                "users": "Lietotāji",
+                "onlineSuffix": "{{n}} tiešsaistē",
+                "onlineSessions": "Tiešsaistes sesijas",
                 "onlineRooms": "Aktīvās istabas",
                 "vhosts": "Virtuālie saimnieki"
             }

@@ -13,7 +13,7 @@ vi.mock('@fluux/sdk', async (importOriginal) => {
 beforeEach(() => {
   fetchServerStats.mockReset()
   adminReturn = {
-    serverStats: { registeredUsers: 15, onlineUsers: 7, onlineRooms: 10, uptimeSeconds: 86400, version: 'ejabberd 26.01', vhostCount: 1, fetchedAt: Date.now() },
+    serverStats: { registeredUsers: 15, onlineUsers: 6, onlineSessions: 11, onlineRooms: 10, uptimeSeconds: 86400, version: 'ejabberd 26.01', vhostCount: 1, fetchedAt: Date.now() },
     isLoadingStats: false,
     fetchServerStats,
   }
@@ -22,16 +22,21 @@ beforeEach(() => {
 describe('ServerOverview', () => {
   it('renders a card per present metric', () => {
     render(<ServerOverview />)
-    expect(screen.getByText('Registered users')).toBeInTheDocument()
-    expect(screen.getByText('15')).toBeInTheDocument()
+    expect(screen.getByText('Users')).toBeInTheDocument()
+    expect(screen.getByText('15')).toBeInTheDocument() // registered headline
+    expect(screen.getByText('6 online')).toBeInTheDocument() // distinct online sub-line
+    expect(screen.getByText('Online sessions')).toBeInTheDocument()
+    expect(screen.getByText('11')).toBeInTheDocument() // sessions
     expect(screen.getByText('Active rooms')).toBeInTheDocument()
     expect(screen.getByText('1d')).toBeInTheDocument() // uptime 86400 -> "1d"
   })
 
-  it('omits cards for absent metrics', () => {
+  it('omits cards for absent metrics, and the online sub-line when missing', () => {
     adminReturn.serverStats = { registeredUsers: 15, fetchedAt: Date.now() }
     render(<ServerOverview />)
-    expect(screen.getByText('Registered users')).toBeInTheDocument()
+    expect(screen.getByText('Users')).toBeInTheDocument()
+    expect(screen.getByText('15')).toBeInTheDocument()
+    expect(screen.queryByText('6 online')).not.toBeInTheDocument() // no onlineUsers → no sub-line
     expect(screen.queryByText('Server version')).not.toBeInTheDocument()
   })
 

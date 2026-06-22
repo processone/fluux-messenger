@@ -1155,8 +1155,9 @@
             "cards": {
                 "uptime": "Vrijeme rada",
                 "version": "Verzija poslužitelja",
-                "registeredUsers": "Registrirani korisnici",
-                "onlineUsers": "Korisnici na mreži",
+                "users": "Korisnici",
+                "onlineSuffix": "{{n}} na mreži",
+                "onlineSessions": "Online sesije",
                 "onlineRooms": "Aktivne sobe",
                 "vhosts": "Virtualni poslužitelji"
             }

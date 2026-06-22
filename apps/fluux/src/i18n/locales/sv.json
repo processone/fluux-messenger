@@ -1155,8 +1155,9 @@
             "cards": {
                 "uptime": "Drifttid",
                 "version": "Serverversion",
-                "registeredUsers": "Registrerade användare",
-                "onlineUsers": "Användare online",
+                "users": "Användare",
+                "onlineSuffix": "{{n}} online",
+                "onlineSessions": "Aktiva sessioner",
                 "onlineRooms": "Aktiva rum",
                 "vhosts": "Virtuella värdar"
             }
