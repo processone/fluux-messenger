@@ -8,6 +8,7 @@ import type {
   RSMResponse,
   AdminCategory,
   ServerStats,
+  LastActivityEntry,
 } from '../core/types'
 
 // Re-export for convenience
@@ -97,6 +98,12 @@ export interface AdminState {
   roomList: EntityListState<AdminRoom>
   mucServiceJid: string | null
 
+  // User-list extras (online snapshot + lazy last-activity)
+  onlineJids: Set<string>
+  lastActivity: Map<string, LastActivityEntry>
+  lastActivitySupported: boolean
+  usersTruncated: boolean
+
   // Server overview vital-signs (new)
   serverStats: ServerStats | null
   isLoadingStats: boolean
@@ -123,6 +130,10 @@ export interface AdminState {
   appendRoomList: (items: AdminRoom[], pagination: RSMResponse) => void
   resetRoomList: () => void
   setMucServiceJid: (jid: string | null) => void
+  setOnlineJids: (jids: Set<string>) => void
+  setLastActivity: (jid: string, entry: LastActivityEntry) => void
+  setLastActivitySupported: (supported: boolean) => void
+  setUsersTruncated: (truncated: boolean) => void
   setServerStats: (stats: ServerStats | null) => void
   setIsLoadingStats: (loading: boolean) => void
 
@@ -156,6 +167,10 @@ const initialState = {
   userList: initialEntityListState<AdminUser>(),
   roomList: initialEntityListState<AdminRoom>(),
   mucServiceJid: null as string | null,
+  onlineJids: new Set<string>(),
+  lastActivity: new Map<string, LastActivityEntry>(),
+  lastActivitySupported: true,
+  usersTruncated: false,
   serverStats: null as ServerStats | null,
   isLoadingStats: false,
 }
@@ -226,6 +241,18 @@ export const adminStore = createStore<AdminState>((set, get) => ({
 
   setMucServiceJid: (jid) => set({ mucServiceJid: jid }),
 
+  setOnlineJids: (jids) => set({ onlineJids: jids }),
+
+  setLastActivity: (jid, entry) => set((state) => {
+    const next = new Map(state.lastActivity)
+    next.set(jid, entry)
+    return { lastActivity: next }
+  }),
+
+  setLastActivitySupported: (supported) => set({ lastActivitySupported: supported }),
+
+  setUsersTruncated: (truncated) => set({ usersTruncated: truncated }),
+
   setServerStats: (stats) => set({ serverStats: stats }),
 
   setIsLoadingStats: (loading) => set({ isLoadingStats: loading }),
@@ -234,5 +261,9 @@ export const adminStore = createStore<AdminState>((set, get) => ({
   getCurrentSession: () => get().currentSession,
   getMucServiceJid: () => get().mucServiceJid,
 
-  reset: () => set(initialState),
+  reset: () => set({
+    ...initialState,
+    onlineJids: new Set<string>(),
+    lastActivity: new Map<string, LastActivityEntry>(),
+  }),
 }))

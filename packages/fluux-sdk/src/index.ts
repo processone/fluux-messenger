@@ -314,6 +314,7 @@ export type {
   AdminCategory,
   ServerStats,
   LastActivityResult,
+  LastActivityEntry,
 
   // XEP-0313: Message Archive Management
   MAMQueryOptions,

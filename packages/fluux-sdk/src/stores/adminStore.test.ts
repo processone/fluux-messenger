@@ -236,4 +236,38 @@ describe('adminStore', () => {
       expect(stored?.fields.find(f => f.var === 'select')?.options).toHaveLength(2)
     })
   })
+
+  describe('admin user-list extras', () => {
+    beforeEach(() => adminStore.getState().reset())
+
+    it('setLastActivity replaces the map reference (per-key subscribers re-render)', () => {
+      const before = adminStore.getState().lastActivity
+      adminStore.getState().setLastActivity('a@x.com', { state: 'loading', seconds: null })
+      const after = adminStore.getState().lastActivity
+      expect(after).not.toBe(before)
+      expect(after.get('a@x.com')).toEqual({ state: 'loading', seconds: null })
+    })
+
+    it('setOnlineJids / setLastActivitySupported / setUsersTruncated store values', () => {
+      adminStore.getState().setOnlineJids(new Set(['a@x.com']))
+      adminStore.getState().setLastActivitySupported(false)
+      adminStore.getState().setUsersTruncated(true)
+      const s = adminStore.getState()
+      expect(s.onlineJids.has('a@x.com')).toBe(true)
+      expect(s.lastActivitySupported).toBe(false)
+      expect(s.usersTruncated).toBe(true)
+    })
+
+    it('reset restores last-activity defaults', () => {
+      adminStore.getState().setLastActivity('a@x.com', { state: 'loaded', seconds: 1 })
+      adminStore.getState().setLastActivitySupported(false)
+      adminStore.getState().setUsersTruncated(true)
+      adminStore.getState().reset()
+      const s = adminStore.getState()
+      expect(s.lastActivity.size).toBe(0)
+      expect(s.onlineJids.size).toBe(0)
+      expect(s.lastActivitySupported).toBe(true)
+      expect(s.usersTruncated).toBe(false)
+    })
+  })
 })

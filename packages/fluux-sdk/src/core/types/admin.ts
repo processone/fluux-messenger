@@ -200,6 +200,18 @@ export interface LastActivityResult {
 }
 
 /**
+ * Lazy per-JID last-activity cell held in the admin store for the user list.
+ *
+ * @category Admin
+ */
+export interface LastActivityEntry {
+  /** 'loading' while in flight; 'loaded' once resolved (seconds may still be null). */
+  state: 'loading' | 'loaded'
+  /** Seconds since last logout; null = unknown/unavailable. */
+  seconds: number | null
+}
+
+/**
  * A room in the admin room list.
  *
  * @category Admin
