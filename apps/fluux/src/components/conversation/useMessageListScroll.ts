@@ -16,7 +16,7 @@
  */
 
 import { useRef, useEffect, useLayoutEffect, useState, useCallback } from 'react'
-import { scrollStateManager } from '@/utils/scrollStateManager'
+import { scrollStateManager, type ScrollAnchor } from '@/utils/scrollStateManager'
 import { createResizeLoopMonitor } from './resizeLoopMonitor'
 import { createSlowCorrectionMonitor } from './slowCorrectionMonitor'
 
@@ -42,6 +42,54 @@ const LOAD_COOLDOWN_MS = 500 // minimum time between load triggers
 const SAVE_THROTTLE_MS = 100 // minimum time between position saves
 const PREPEND_COOLDOWN_MS = 500 // time to keep prepend flag after restore (prevents re-trigger)
 const MEDIA_LOAD_DEBOUNCE_MS = 150 // debounce time for batching image load events
+
+// ============================================================================
+// ANCHOR HELPERS (content-stable scroll restoration)
+// ============================================================================
+
+/**
+ * Find the bottom-most visible message row and the gap between its bottom edge
+ * and the viewport bottom. This anchor survives a change in the loaded message
+ * set (memory eviction + cache re-hydration), unlike a raw scrollTop.
+ */
+function findBottomAnchor(scroller: HTMLElement): ScrollAnchor | null {
+  const rows = scroller.querySelectorAll('.message-row[data-message-id]')
+  if (rows.length === 0) return null
+  const viewportBottom = scroller.scrollTop + scroller.clientHeight
+  // Binary search (rows are in ascending offsetTop order) for the bottom-most row
+  // whose top is above the viewport bottom — the last visible row. O(log n), so
+  // it's cheap to run on every scroll event (keeps the anchor at the latest pos).
+  let lo = 0
+  let hi = rows.length - 1
+  let found = 0
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1
+    if ((rows[mid] as HTMLElement).offsetTop < viewportBottom) {
+      found = mid
+      lo = mid + 1
+    } else {
+      hi = mid - 1
+    }
+  }
+  const el = rows[found] as HTMLElement
+  const messageId = el.dataset.messageId
+  if (!messageId) return null
+  return { messageId, bottomGap: viewportBottom - (el.offsetTop + el.offsetHeight) }
+}
+
+/**
+ * Restore scroll so the anchor message's bottom sits at its saved offset from the
+ * viewport bottom. Returns false if the anchor message isn't currently loaded
+ * (scrolled up beyond the re-hydrated window) so the caller can fall back.
+ */
+function restoreToAnchor(scroller: HTMLElement, anchor: ScrollAnchor): boolean {
+  const el = scroller.querySelector(
+    `.message-row[data-message-id="${CSS.escape(anchor.messageId)}"]`
+  ) as HTMLElement | null
+  if (!el) return false
+  scroller.scrollTop = el.offsetTop + el.offsetHeight + anchor.bottomGap - scroller.clientHeight
+  return true
+}
 
 // ============================================================================
 // TYPES
@@ -156,6 +204,10 @@ export function useMessageListScroll({
 
   // Last scroll data (for saving on conversation switch)
   const lastScrollDataRef = useRef<{ top: number; height: number; client: number } | null>(null)
+  // Bottom-most-visible message anchor, captured (throttled) during scroll so it
+  // survives the conversation switch (at switch time the DOM is already the new
+  // conversation). Used for content-stable position restoration on return.
+  const lastAnchorRef = useRef<ScrollAnchor | null>(null)
 
   // Track whether we've already scrolled to the new message marker (for two-step FAB behavior)
   const hasScrolledToMarkerRef = useRef(false)
@@ -625,6 +677,10 @@ export function useMessageListScroll({
 
     // Update refs (NO React state updates here except FAB)
     lastScrollDataRef.current = { top: scrollTop, height: scrollHeight, client: clientHeight }
+    // Capture the bottom-most-visible anchor on every scroll event (binary search,
+    // cheap) so it reflects the latest position — at switch time the DOM is already
+    // the new conversation, so this must be captured live during scroll.
+    lastAnchorRef.current = findBottomAnchor(el)
     isAtBottomRef.current = distFromBottom < AT_BOTTOM_THRESHOLD
 
     // Track user scroll during media load batch
@@ -663,11 +719,13 @@ export function useMessageListScroll({
       }
     }
 
-    // Save position for cross-conversation persistence (throttled)
+    // Save position for cross-conversation persistence (throttled). Capture the
+    // bottom-most-visible anchor here too — throttled so the DOM query is bounded,
+    // and during scroll because at switch time the DOM is already the new room.
     const now = Date.now()
     if (now - lastSaveTimeRef.current > SAVE_THROTTLE_MS) {
       lastSaveTimeRef.current = now
-      scrollStateManager.saveScrollPosition(conversationId, scrollTop, scrollHeight, clientHeight)
+      scrollStateManager.saveScrollPosition(conversationId, scrollTop, scrollHeight, clientHeight, lastAnchorRef.current ?? undefined)
     }
 
     // Track if user scrolled away from top (allows re-trigger of load)
@@ -701,7 +759,7 @@ export function useMessageListScroll({
     // LEAVING old conversation - save position
     if (prevConversationRef.current && lastScrollDataRef.current) {
       const { top, height, client } = lastScrollDataRef.current
-      scrollStateManager.leaveConversation(prevConversationRef.current, top, height, client)
+      scrollStateManager.leaveConversation(prevConversationRef.current, top, height, client, lastAnchorRef.current ?? undefined)
     }
 
     // ENTERING new conversation - reset state
@@ -709,6 +767,7 @@ export function useMessageListScroll({
     userHasScrolledSinceMarkerRef.current = false
     scrolledAwayFromTopRef.current = false
     lastScrollDataRef.current = null
+    lastAnchorRef.current = null
     prependRef.current = null
     hasScrolledToMarkerRef.current = false
     setShowScrollToBottom(false)
@@ -732,15 +791,21 @@ export function useMessageListScroll({
 
       debugLog('CONVERSATION ACTION', { action, savedPos, scrollHeight: scroller.scrollHeight })
 
-      if (action === 'restore-position' && savedPos !== null) {
+      if (action === 'restore-position') {
+        const savedAnchor = scrollStateManager.getSavedAnchor(conversationId)
         const maxScrollTop = scroller.scrollHeight - scroller.clientHeight
-        if (savedPos <= maxScrollTop && maxScrollTop > 0) {
-          // Position is valid — restore it
+        // Prefer the content-stable anchor (survives memory eviction + cache
+        // re-hydration); fall back to the legacy pixel scrollTop (bounds-checked),
+        // then to bottom when neither is usable (e.g. scrolled up beyond the
+        // re-hydrated window so the anchor message isn't loaded).
+        if (savedAnchor && restoreToAnchor(scroller, savedAnchor)) {
+          isAtBottomRef.current = (scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight) < AT_BOTTOM_THRESHOLD
+          debugLog('RESTORE via anchor', { savedAnchor })
+        } else if (savedPos !== null && savedPos <= maxScrollTop && maxScrollTop > 0) {
           scroller.scrollTop = savedPos
           isAtBottomRef.current = false
         } else {
-          // Position is out of bounds (content not loaded yet) — scroll to bottom instead
-          debugLog('RESTORE POSITION OUT OF BOUNDS, scrolling to bottom', {
+          debugLog('RESTORE out of bounds / anchor missing, scrolling to bottom', {
             savedPos, maxScrollTop, scrollHeight: scroller.scrollHeight,
           })
           scroller.scrollTop = scroller.scrollHeight
@@ -839,7 +904,7 @@ export function useMessageListScroll({
       if (prevConversationRef.current) {
         if (lastScrollDataRef.current) {
           const { top, height, client } = lastScrollDataRef.current
-          scrollStateManager.leaveConversation(prevConversationRef.current, top, height, client)
+          scrollStateManager.leaveConversation(prevConversationRef.current, top, height, client, lastAnchorRef.current ?? undefined)
         } else {
           scrollStateManager.markAsLeft(prevConversationRef.current)
         }

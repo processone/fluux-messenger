@@ -103,7 +103,7 @@ export function RoomsList() {
         const L = latestRef.current
         const hasActive = !!roomStore.getState().activeRoomJid
         void L.setActiveConversation(null)
-        void L.setActiveRoom(roomJid)
+        void roomStore.getState().activateRoom(roomJid)
         L.navigateToRooms(roomJid, { replace: hasActive })
       },
       onActivate: async (roomJid) => {
@@ -112,11 +112,11 @@ export function RoomsList() {
         const hasActive = !!roomStore.getState().activeRoomJid
         if (room?.joined) {
           void L.setActiveConversation(null)
-          void L.setActiveRoom(roomJid)
+          void roomStore.getState().activateRoom(roomJid)
         } else {
           await L.joinRoom(roomJid, room?.nickname ?? '')
           void L.setActiveConversation(null)
-          void L.setActiveRoom(roomJid)
+          void roomStore.getState().activateRoom(roomJid)
         }
         L.navigateToRooms(roomJid, { replace: hasActive })
       },

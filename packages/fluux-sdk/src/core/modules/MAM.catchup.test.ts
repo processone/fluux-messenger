@@ -609,22 +609,24 @@ describe('MAM Background Catch-Up', () => {
         },
       ] as any)
 
-      // getRoom is needed by queryRoomArchive for nickname AND by catchUpAllRooms
-      // after loadMessagesFromCache (to re-read messages from the store)
+      // getRoom is needed by queryRoomArchive for the nickname.
       vi.mocked(mockStores.room.getRoom).mockReturnValue({
         jid: 'room1@conference.example.com',
         nickname: 'me',
-        messages: [{
-          type: 'groupchat' as const,
-          id: 'msg-1',
-          roomJid: 'room1@conference.example.com',
-          from: 'room1@conference.example.com/sender',
-          body: 'Hello',
-          timestamp: cachedTimestamp,
-          isOutgoing: false,
-          isDelayed: false,
-        }],
       } as any)
+
+      // The forward cursor now comes from a PURE cache read (peek): catchUpRoom
+      // uses loadMessagesFromCache's RETURN value, not a store re-read.
+      vi.mocked(mockStores.room.loadMessagesFromCache).mockResolvedValue([{
+        type: 'groupchat' as const,
+        id: 'msg-1',
+        roomJid: 'room1@conference.example.com',
+        from: 'room1@conference.example.com/sender',
+        body: 'Hello',
+        timestamp: cachedTimestamp,
+        isOutgoing: false,
+        isDelayed: false,
+      }] as any)
 
       mockXmppClientInstance.iqCaller.request.mockResolvedValue(createFinResponse())
 
@@ -635,8 +637,8 @@ describe('MAM Background Catch-Up', () => {
       // Verify MAM query was made
       expect(mockXmppClientInstance.iqCaller.request).toHaveBeenCalled()
 
-      // Verify loadMessagesFromCache was called before deciding query direction
-      expect(mockStores.room.loadMessagesFromCache).toHaveBeenCalledWith('room1@conference.example.com', { limit: 100 })
+      // Verify the cursor cache read happened (pure peek, no RAM write) before deciding direction
+      expect(mockStores.room.loadMessagesFromCache).toHaveBeenCalledWith('room1@conference.example.com', { limit: 100, peek: true })
 
       // The emitted room:mam-messages event should have direction='forward' (start filter used)
       expect(emitSDKSpy).toHaveBeenCalledWith('room:mam-messages', expect.objectContaining({
@@ -769,6 +771,8 @@ describe('MAM Background Catch-Up', () => {
         jid: 'room1@conference.example.com', nickname: 'me', messages: roomMessages,
       } as any)
 
+      // Cursor source = pure cache peek (catchUpRoom uses the return value).
+      vi.mocked(mockStores.room.loadMessagesFromCache).mockResolvedValue(roomMessages as any)
       const querySpy = vi.spyOn(xmppClient.mam, 'queryRoomArchive').mockResolvedValue({ messages: [], complete: true, rsm: {} })
 
       const catchUpPromise = xmppClient.mam.catchUpAllRooms({ sessionStartTime })
@@ -795,6 +799,8 @@ describe('MAM Background Catch-Up', () => {
         jid: 'room1@conference.example.com', nickname: 'me', messages: roomMessages,
       } as any)
 
+      // Cursor source = pure cache peek (catchUpRoom uses the return value).
+      vi.mocked(mockStores.room.loadMessagesFromCache).mockResolvedValue(roomMessages as any)
       const querySpy = vi.spyOn(xmppClient.mam, 'queryRoomArchive').mockResolvedValue({ messages: [], complete: true, rsm: {} })
 
       const catchUpPromise = xmppClient.mam.catchUpAllRooms()

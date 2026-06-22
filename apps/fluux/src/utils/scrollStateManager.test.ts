@@ -122,6 +122,29 @@ describe('ScrollStateManager', () => {
     })
   })
 
+  describe('getSavedAnchor', () => {
+    it('returns null for an unknown conversation', () => {
+      expect(manager.getSavedAnchor('unknown')).toBeNull()
+    })
+
+    it('returns the anchor when the user left scrolled-up', () => {
+      const anchor = { messageId: 'msg-42', bottomGap: 12 }
+      manager.leaveConversation('conv1', 200, 1000, 100, anchor)
+      expect(manager.getSavedAnchor('conv1')).toEqual(anchor)
+    })
+
+    it('returns null when the user was at the bottom (no restore needed)', () => {
+      const anchor = { messageId: 'msg-42', bottomGap: 0 }
+      manager.leaveConversation('conv1', 900, 1000, 100, anchor)
+      expect(manager.getSavedAnchor('conv1')).toBeNull()
+    })
+
+    it('returns null when no anchor was captured (legacy save)', () => {
+      manager.leaveConversation('conv1', 200, 1000, 100)
+      expect(manager.getSavedAnchor('conv1')).toBeNull()
+    })
+  })
+
   describe('updateMessageCount', () => {
     it('returns false for first update (no previous count)', () => {
       manager.enterConversation('conv1', 0)

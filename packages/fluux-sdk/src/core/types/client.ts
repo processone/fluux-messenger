@@ -200,8 +200,10 @@ export interface StoreBindings {
     clearRoomNeedsCatchUp: (roomJid: string) => void
     // Preview refresh: update lastMessage without affecting message history
     updateLastMessagePreview: (roomJid: string, lastMessage: RoomMessage) => void
-    // Load messages from IndexedDB cache into the room's in-memory message array
-    loadMessagesFromCache: (roomJid: string, options?: { limit?: number; before?: Date; after?: Date }) => Promise<RoomMessage[]>
+    // Load messages from IndexedDB cache into the room's in-memory message array.
+    // `peek: true` returns the cached messages WITHOUT writing the store (a pure
+    // read for computing a catch-up cursor on a non-active room).
+    loadMessagesFromCache: (roomJid: string, options?: { limit?: number; before?: Date; after?: Date; peek?: boolean }) => Promise<RoomMessage[]>
     // Load preview from cache for non-MAM rooms (only updates lastMessage, not messages array)
     loadPreviewFromCache: (roomJid: string) => Promise<RoomMessage | null>
     // XEP-0045: Merge affiliated members (for offline member display, avatar resolution, mentions)
