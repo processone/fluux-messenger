@@ -100,8 +100,10 @@ export interface StoreBindings {
     // Refresh the preview's content in place, but only when it is the referenced
     // message — heals a deferred-decrypted lastMessage for an unopened conversation.
     refreshLastMessageContent?: (conversationId: string, messageId: string, updates: Partial<Message>) => void
-    // Load messages from IndexedDB cache into the conversation's in-memory message array
-    loadMessagesFromCache?: (conversationId: string, options?: { limit?: number }) => Promise<unknown>
+    // Load messages from IndexedDB cache into the conversation's in-memory message
+    // array. `peek: true` returns the cached messages WITHOUT writing the store
+    // (a pure read for computing a catch-up cursor on a non-active conversation).
+    loadMessagesFromCache?: (conversationId: string, options?: { limit?: number; peek?: boolean }) => Promise<unknown>
     // Get all conversations for MAM catch-up
     getAllConversations: () => Array<{ id: string; messages: Message[] }>
     // Persisted forward-gap boundary for automatic catch-up recovery

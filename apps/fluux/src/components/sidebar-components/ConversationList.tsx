@@ -85,7 +85,7 @@ export function ConversationList() {
       const L = latestNavRef.current
       const hasActive = !!chatStore.getState().activeConversationId
       void L.setActiveRoom(null)
-      void L.setActiveConversation(convId)
+      void chatStore.getState().activateConversation(convId)
       L.navigateToMessages(convId, { replace: hasActive })
     }
   }
@@ -176,7 +176,7 @@ export function ArchiveList() {
       const L = latestNavRef.current
       const hasActive = !!chatStore.getState().activeConversationId
       void L.setActiveRoom(null)
-      void L.setActiveConversation(convId)
+      void chatStore.getState().activateConversation(convId)
       L.navigateToArchive(convId, { replace: hasActive })
     }
   }

@@ -923,15 +923,18 @@ export class MAM extends BaseModule {
           // Skip if disconnected (avoid queuing doomed queries)
           if (this.deps.stores?.connection.getStatus() !== 'online') return
 
-          // Load IndexedDB cache first so we know the newest cached message
-          // and can do a proper forward catch-up instead of fetching only latest.
-          // Without this, conv.messages is empty after app restart (runtime-only),
-          // causing a backward "before:''" query that creates gaps with old cache.
-          await this.deps.stores?.chat.loadMessagesFromCache?.(conv.id, { limit: MAM_CACHE_LOAD_LIMIT })
-
-          // Re-read messages after cache load (store was mutated)
-          const updatedConv = this.deps.stores?.chat.getAllConversations()?.find(c => c.id === conv.id)
-          const messages = updatedConv?.messages || conv.messages || []
+          // Read the newest cached messages to compute a proper forward cursor — a
+          // PURE read (peek) that does NOT populate the store. Background catch-up
+          // runs for NON-active conversations; only the active one is resident in
+          // RAM, and mergeMAMMessages persists results to IndexedDB. We still need
+          // the cached messages (not just the persisted preview timestamp) so the
+          // cursor lands on the newest PRE-session message and fills the whole gap.
+          const cached = (await this.deps.stores?.chat.loadMessagesFromCache?.(conv.id, { limit: MAM_CACHE_LOAD_LIMIT, peek: true })) as Array<{ timestamp?: Date }> | undefined
+          // `cached` (the pure peek read) is the cursor source; fall back to the
+          // conversation's resident messages (empty for an evicted non-active
+          // conversation in production) only when the cache read is empty —
+          // mirroring the prior `|| conv.messages || []` chain.
+          const messages = cached && cached.length > 0 ? cached : (conv.messages ?? [])
 
           // Shared cursor policy (same as rooms) — forward from the newest
           // pre-session message, or from a persisted gap boundary when one

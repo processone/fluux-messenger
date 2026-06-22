@@ -95,6 +95,42 @@ describe('chatStore', () => {
     vi.clearAllMocks()
   })
 
+  describe('message eviction on deactivation (memory windowing)', () => {
+    it('evicts the previous conversation messages when switching away, keeping meta', () => {
+      const A = 'a@example.com'
+      const B = 'b@example.com'
+      chatStore.getState().addConversation(createConversation(A))
+      chatStore.getState().addConversation(createConversation(B))
+      chatStore.setState({ activeConversationId: A })
+      chatStore.getState().addMessage(createMessage(A, 'hello'))
+      chatStore.getState().addMessage(createMessage(A, 'world'))
+      expect(chatStore.getState().messages.get(A)?.length).toBe(2)
+      const lastMessageBefore = chatStore.getState().conversations.get(A)?.lastMessage
+
+      chatStore.getState().setActiveConversation(B)
+
+      // A's messages are evicted from RAM...
+      expect(chatStore.getState().messages.get(A) ?? []).toEqual([])
+      // ...but its identity / sidebar preview are preserved.
+      expect(chatStore.getState().conversations.get(A)).toBeDefined()
+      expect(chatStore.getState().conversations.get(A)?.lastMessage).toEqual(lastMessageBefore)
+      expect(chatStore.getState().activeConversationId).toBe(B)
+    })
+
+    it('keeps the newly-activated conversation messages resident', () => {
+      const A = 'a@example.com'
+      chatStore.getState().addConversation(createConversation(A))
+      chatStore.setState({ activeConversationId: A })
+      chatStore.getState().addMessage(createMessage(A, 'hi'))
+      chatStore.setState({ activeConversationId: null })
+
+      chatStore.getState().setActiveConversation(A)
+
+      expect(chatStore.getState().messages.get(A)?.length).toBe(1)
+      expect(chatStore.getState().activeConversationId).toBe(A)
+    })
+  })
+
   describe('initial state', () => {
     it('should have empty conversations and messages', () => {
       const state = chatStore.getState()
@@ -1824,6 +1860,12 @@ describe('chatStore', () => {
     })
 
     describe('stanzaId backfill (closes the MAM cursor data gap)', () => {
+      // The MAM-path backfill writes the patched array into the resident map, which
+      // now only happens for the active conversation.
+      beforeEach(() => {
+        chatStore.setState({ activeConversationId: 'alice@example.com' })
+      })
+
       it('backfills stanzaId onto an outgoing message when its archived copy arrives via MAM', () => {
         chatStore.getState().addConversation(createConversation('alice@example.com'))
 
@@ -1911,6 +1953,26 @@ describe('chatStore', () => {
     })
 
     describe('mergeMAMMessages', () => {
+      // These tests exercise the foreground merge-into-RAM path (the active
+      // conversation / scroll-up). Background catch-up of a NON-active
+      // conversation (IndexedDB + preview, no RAM) is covered separately below.
+      beforeEach(() => {
+        chatStore.setState({ activeConversationId: 'alice@example.com' })
+      })
+
+      it('does NOT populate RAM for a non-active conversation (IndexedDB + preview only)', () => {
+        chatStore.setState({ activeConversationId: 'other@example.com' })
+        chatStore.getState().addConversation(createConversation('alice@example.com'))
+        const mam: Message[] = [
+          { type: 'chat', id: 'bg-1', conversationId: 'alice@example.com', from: 'alice@example.com', body: 'caught up', timestamp: new Date('2024-02-01T10:00:00Z'), isOutgoing: false, stanzaId: 's-bg-1' },
+        ]
+        chatStore.getState().mergeMAMMessages('alice@example.com', mam, {}, true, 'forward')
+        // Non-active → resident array NOT populated...
+        expect(chatStore.getState().messages.get('alice@example.com') ?? []).toEqual([])
+        // ...but the sidebar preview is updated.
+        expect(chatStore.getState().conversationMeta.get('alice@example.com')?.lastMessage?.id).toBe('bg-1')
+      })
+
       it('should merge MAM messages with existing messages', () => {
         chatStore.getState().addConversation(createConversation('alice@example.com'))
 
