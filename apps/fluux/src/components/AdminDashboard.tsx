@@ -3,7 +3,6 @@ import { useTranslation } from 'react-i18next'
 import {
   ChevronRight,
   Users,
-  BarChart3,
   Megaphone,
   Loader2,
   Server,
@@ -56,9 +55,6 @@ export function AdminDashboard({ activeCategory, onCategoryChange }: AdminDashbo
     }
   }
 
-  // Check if we have stats commands
-  const hasStats = commandsByCategory.stats.length > 0
-
   // Check if we have other/uncategorized commands
   const hasOther = commandsByCategory.other.length > 0
 
@@ -95,17 +91,6 @@ export function AdminDashboard({ activeCategory, onCategoryChange }: AdminDashbo
 
   return (
     <div className="px-2 py-2 space-y-1">
-      {/* Statistics Category - opens the ServerOverview dashboard (non-expanding) */}
-      {hasStats && (
-        <CategoryButton
-          icon={BarChart3}
-          label={t('admin.categories.statistics')}
-          isActive={activeCategory === 'stats'}
-          onClick={() => onCategoryChange(activeCategory === 'stats' ? null : 'stats')}
-          hasExpandableContent={false}
-        />
-      )}
-
       {/* Users Category */}
       <CategoryButton
         icon={Users}
