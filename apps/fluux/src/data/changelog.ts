@@ -42,6 +42,8 @@ export const changelog: ChangelogEntry[] = [
       {
         type: 'fixed',
         items: [
+          'OpenPGP: automatically recover when the stored key passphrase no longer decrypts the on-disk secret key, instead of failing encryption with an opaque error after connecting',
+          'OpenPGP: no longer show a false "local trust data may have been tampered with" warning after a benign key recovery, since the certificate and verified peers are unchanged',
           '1:1 message history was empty on Prosody servers — MAM support is now discovered on the account bare JID as well as the server domain (XEP-0313)',
           'OpenPGP: import keys exported from OpenKeychain or GnuPG — the passphrase field and public-then-private key payloads are now handled',
           'Message history: recover stale catch-up cursors and forward-fill gaps so stretches of messages (including your own sent messages) are no longer silently skipped after offline periods',
