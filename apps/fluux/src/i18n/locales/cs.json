@@ -1140,8 +1140,6 @@
             "title": "Přehled serveru",
             "refresh": "Obnovit",
             "updatedAt": "Aktualizováno v {{time}}",
-            "advanced": "Pokročilé",
-            "advancedHint": "Spustit přímý příkaz serveru",
             "empty": "Statistiky serveru nejsou dostupné.",
             "retry": "Zkusit znovu",
             "units": {

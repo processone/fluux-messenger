@@ -1140,8 +1140,6 @@
             "title": "Pregled strežnika",
             "refresh": "Osveži",
             "updatedAt": "Posodobljeno ob {{time}}",
-            "advanced": "Napredno",
-            "advancedHint": "Zaženi neposredni strežniški ukaz",
             "empty": "Statistika strežnika ni na voljo.",
             "retry": "Poskusi znova",
             "units": {

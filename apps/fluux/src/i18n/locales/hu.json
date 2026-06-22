@@ -1138,8 +1138,6 @@
             "title": "Kiszolgáló áttekintése",
             "refresh": "Frissítés",
             "updatedAt": "Frissítve: {{time}}",
-            "advanced": "Speciális",
-            "advancedHint": "Nyers kiszolgálóparancs futtatása",
             "empty": "A kiszolgáló statisztikái nem érhetők el.",
             "retry": "Újra",
             "units": {

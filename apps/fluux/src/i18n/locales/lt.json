@@ -1138,8 +1138,6 @@
             "title": "Serverio apžvalga",
             "refresh": "Atnaujinti",
             "updatedAt": "Atnaujinta {{time}}",
-            "advanced": "Išplėstinė",
-            "advancedHint": "Vykdyti tiesioginę serverio komandą",
             "empty": "Serverio statistika nepasiekiama.",
             "retry": "Bandyti dar kartą",
             "units": {

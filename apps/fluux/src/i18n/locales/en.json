@@ -1138,8 +1138,6 @@
             "title": "Server overview",
             "refresh": "Refresh",
             "updatedAt": "Updated at {{time}}",
-            "advanced": "Advanced",
-            "advancedHint": "Run a raw server command",
             "empty": "Server statistics are unavailable.",
             "retry": "Retry",
             "units": {

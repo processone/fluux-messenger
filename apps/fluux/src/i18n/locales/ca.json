@@ -1140,8 +1140,6 @@
             "title": "Resum del servidor",
             "refresh": "Actualitza",
             "updatedAt": "Actualitzat a les {{time}}",
-            "advanced": "Avançat",
-            "advancedHint": "Executa una ordre directa del servidor",
             "empty": "Les estadístiques del servidor no estan disponibles.",
             "retry": "Torna-ho a provar",
             "units": {

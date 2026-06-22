@@ -1138,8 +1138,6 @@
             "title": "服务器概览",
             "refresh": "刷新",
             "updatedAt": "更新于 {{time}}",
-            "advanced": "高级",
-            "advancedHint": "运行原始服务器命令",
             "empty": "服务器统计信息不可用。",
             "retry": "重试",
             "units": {

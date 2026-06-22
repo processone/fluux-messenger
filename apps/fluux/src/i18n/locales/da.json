@@ -1138,8 +1138,6 @@
             "title": "Serveroversigt",
             "refresh": "Opdater",
             "updatedAt": "Opdateret kl. {{time}}",
-            "advanced": "Avanceret",
-            "advancedHint": "Kør en rå serverkommando",
             "empty": "Serverstatistik er ikke tilgængelig.",
             "retry": "Prøv igen",
             "units": {

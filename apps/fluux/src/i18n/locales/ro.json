@@ -1140,8 +1140,6 @@
             "title": "Prezentare generală server",
             "refresh": "Reîmprospătează",
             "updatedAt": "Actualizat la {{time}}",
-            "advanced": "Avansat",
-            "advancedHint": "Rulează o comandă brută de server",
             "empty": "Statisticile serverului nu sunt disponibile.",
             "retry": "Reîncearcă",
             "units": {

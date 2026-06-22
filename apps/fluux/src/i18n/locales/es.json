@@ -1140,8 +1140,6 @@
             "title": "Resumen del servidor",
             "refresh": "Actualizar",
             "updatedAt": "Actualizado a las {{time}}",
-            "advanced": "Avanzado",
-            "advancedHint": "Ejecutar un comando directo del servidor",
             "empty": "Las estadísticas del servidor no están disponibles.",
             "retry": "Reintentar",
             "units": {

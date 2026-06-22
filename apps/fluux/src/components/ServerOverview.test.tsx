@@ -16,9 +16,6 @@ beforeEach(() => {
     serverStats: { registeredUsers: 15, onlineUsers: 7, onlineRooms: 10, uptimeSeconds: 86400, version: 'ejabberd 26.01', vhostCount: 1, fetchedAt: Date.now() },
     isLoadingStats: false,
     fetchServerStats,
-    commandsByCategory: { user: [], stats: [], announcement: [], other: [] },
-    executeCommand: vi.fn(),
-    isExecuting: false,
   }
 })
 
