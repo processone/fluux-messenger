@@ -1066,6 +1066,7 @@
             "description": "您在此服务器上没有管理员权限。请联系您的服务器管理员以获取访问权限。"
         },
         "selectCommand": "从侧边栏选择命令",
+        "openSections": "打开管理部分",
         "execute": "执行",
         "executing": "正在执行…",
         "next": "下一个",

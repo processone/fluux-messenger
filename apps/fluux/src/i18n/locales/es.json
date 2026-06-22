@@ -1068,6 +1068,7 @@
             "description": "No tienes privilegios de administrador en este servidor. Contacta al administrador del servidor para obtener acceso."
         },
         "selectCommand": "Selecciona un comando de la barra lateral",
+        "openSections": "Abrir las secciones de administración",
         "execute": "Ejecutar",
         "executing": "Ejecutando...",
         "next": "Siguiente",

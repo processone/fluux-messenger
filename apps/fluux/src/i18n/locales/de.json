@@ -1068,6 +1068,7 @@
             "description": "Sie haben keine Administratorrechte auf diesem Server. Kontaktieren Sie Ihren Server-Administrator für Zugang."
         },
         "selectCommand": "Wählen Sie einen Befehl aus der Seitenleiste",
+        "openSections": "Administrationsbereiche öffnen",
         "execute": "Ausführen",
         "executing": "Wird ausgeführt...",
         "next": "Weiter",

@@ -1066,6 +1066,7 @@
             "description": "Nemate administratorske ovlasti na ovom poslužitelju. Kontaktirajte administratora poslužitelja za pristup."
         },
         "selectCommand": "Odaberite naredbu iz bočne trake",
+        "openSections": "Otvori odjeljke administracije",
         "execute": "Izvrši",
         "executing": "Izvršavanje...",
         "next": "Dalje",

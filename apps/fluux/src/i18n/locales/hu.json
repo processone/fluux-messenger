@@ -1066,6 +1066,7 @@
             "description": "Önnek nincs adminisztrátori jogosultsága ezen a szerveren. Vegye fel a kapcsolatot a szerver adminisztrátorával a hozzáférésért."
         },
         "selectCommand": "Válasszon egy parancsot az oldalsávból",
+        "openSections": "Adminisztrációs szakaszok megnyitása",
         "execute": "Végrehajtás",
         "executing": "Végrehajtás...",
         "next": "Következő",

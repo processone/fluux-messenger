@@ -47,6 +47,18 @@ const adminState = {
   clearPendingSelectedUserJid: vi.fn(),
   getRoomOptions: vi.fn().mockResolvedValue({ type: 'result', fields: [] }),
   hasCommand: () => false,
+  commands: [{ node: 'stat-node', name: 'Stat', category: 'stats' }],
+  commandsByCategory: {
+    user: [],
+    stats: [{ node: 'stat-node', name: 'Stat', category: 'stats' }],
+    announcement: [],
+    other: [],
+  },
+  isDiscovering: false,
+  isAdmin: true,
+  discoverMucService: vi.fn(),
+  executeCommand: vi.fn(),
+  fetchServerStats: vi.fn(),
 }
 
 const setActiveCategory = vi.fn()
@@ -101,5 +113,33 @@ describe('AdminView header back button', () => {
     fireEvent.click(screen.getByLabelText('common.back'))
 
     expect(onBack).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('AdminView mobile section sheet', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('opens the section sheet from the header menu button', () => {
+    render(<AdminView activeCategory="rooms" onBack={vi.fn()} />)
+
+    // The sheet (and its Statistics section button) is not rendered until opened.
+    expect(screen.queryByText('admin.categories.statistics')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByLabelText('admin.openSections'))
+
+    expect(screen.getByText('admin.categories.statistics')).toBeInTheDocument()
+  })
+
+  it('navigates and closes the sheet when a main-content section is chosen', () => {
+    render(<AdminView activeCategory="rooms" onBack={vi.fn()} />)
+
+    fireEvent.click(screen.getByLabelText('admin.openSections'))
+    fireEvent.click(screen.getByRole('button', { name: 'admin.categories.users' }))
+
+    expect(setActiveCategory).toHaveBeenCalledWith('users')
+    // Sheet closed → its Statistics button is gone again.
+    expect(screen.queryByText('admin.categories.statistics')).not.toBeInTheDocument()
   })
 })

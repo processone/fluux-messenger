@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Server, Users, Hash, User, Plus, ArrowLeft } from 'lucide-react'
+import { Server, Users, Hash, User, Plus, ArrowLeft, Menu } from 'lucide-react'
 import { useAdmin, useXMPP, adminStore, type AdminCategory, type AdminUser, type AdminRoom } from '@fluux/sdk'
 import { useWindowDrag, useModalInput } from '@/hooks'
 import { Tooltip } from './Tooltip'
@@ -14,6 +14,8 @@ import { AdminUserView } from './AdminUserView'
 import { AdminRoomView } from './AdminRoomView'
 import { ServerOverview } from './ServerOverview'
 import { getAdminBackTarget } from './adminBackTarget'
+import { BottomSheet } from './ui/BottomSheet'
+import { AdminDashboard } from './AdminDashboard'
 
 interface AdminViewProps {
   activeCategory: AdminCategory | null
@@ -68,6 +70,7 @@ export function AdminView({ activeCategory, onBack }: AdminViewProps) {
   const [selectedUser, setSelectedUser] = useState<AdminUser | null>(null)
   const [selectedRoom, setSelectedRoom] = useState<AdminRoom | null>(null)
   const [showAddUserModal, setShowAddUserModal] = useState(false)
+  const [sectionsSheetOpen, setSectionsSheetOpen] = useState(false)
 
   // Fetch vhosts when users category becomes active
   useEffect(() => {
@@ -194,6 +197,20 @@ export function AdminView({ activeCategory, onBack }: AdminViewProps) {
         break
     }
   }
+
+  // Section sheet (mobile): main-content sections navigate and close the sheet;
+  // announcements/other only expand inline, so the sheet stays open.
+  const handleSheetCategoryChange = (category: AdminCategory | null) => {
+    adminStore.getState().setActiveCategory(category)
+    if (category === null || category === 'stats' || category === 'users' || category === 'rooms') {
+      setSectionsSheetOpen(false)
+    }
+  }
+
+  // Executing a command from the sheet opens a session in the main area — close the sheet.
+  useEffect(() => {
+    if (currentSession) setSectionsSheetOpen(false)
+  }, [currentSession])
 
   const handlePrev = async () => {
     try {
@@ -475,6 +492,15 @@ export function AdminView({ activeCategory, onBack }: AdminViewProps) {
         {/* Only raw command-node titles need capitalize ("delete user" → "Delete User");
             i18n titles (overview, users, rooms) are already correctly cased. */}
         <h2 className={`ms-2 font-semibold text-fluux-text ${currentSession?.node ? 'capitalize' : ''}`}>{getTitle()}</h2>
+        {onBack && (
+          <button
+            onClick={() => setSectionsSheetOpen(true)}
+            className="p-1 -me-1 ms-auto rounded hover:bg-fluux-hover md:hidden tap-target"
+            aria-label={t('admin.openSections')}
+          >
+            <Menu className="size-5 text-fluux-muted" />
+          </button>
+        )}
       </div>
 
       {/* Content */}
@@ -490,6 +516,16 @@ export function AdminView({ activeCategory, onBack }: AdminViewProps) {
           onClose={() => setShowAddUserModal(false)}
         />
       )}
+
+      {/* Mobile section navigation sheet */}
+      <BottomSheet
+        open={sectionsSheetOpen}
+        onClose={() => setSectionsSheetOpen(false)}
+        title={t('admin.title')}
+        ariaLabel={t('admin.title')}
+      >
+        <AdminDashboard activeCategory={activeCategory} onCategoryChange={handleSheetCategoryChange} />
+      </BottomSheet>
     </div>
   )
 }

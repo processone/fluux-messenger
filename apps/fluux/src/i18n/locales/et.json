@@ -1068,6 +1068,7 @@
             "description": "Sul pole selles serveris halduri õigusi. Võta ligipääsu saamiseks ühendust serveri halduriga."
         },
         "selectCommand": "Vali käsk külgribalt",
+        "openSections": "Ava administreerimise jaotised",
         "execute": "Käivita",
         "executing": "Käivitamine...",
         "next": "Järgmine",

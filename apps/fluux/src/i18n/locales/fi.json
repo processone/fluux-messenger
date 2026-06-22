@@ -1066,6 +1066,7 @@
             "description": "Sinulla ei ole ylläpitäjän oikeuksia tällä palvelimella. Ota yhteyttä palvelimen ylläpitäjään saadaksesi käyttöoikeuden."
         },
         "selectCommand": "Valitse komento sivupalkista",
+        "openSections": "Avaa hallintaosiot",
         "execute": "Suorita",
         "executing": "Suoritetaan...",
         "next": "Seuraava",

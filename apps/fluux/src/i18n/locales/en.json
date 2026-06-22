@@ -1066,6 +1066,7 @@
             "description": "You don't have administrator privileges on this server. Contact your server administrator for access."
         },
         "selectCommand": "Select a command from the sidebar",
+        "openSections": "Open admin sections",
         "execute": "Execute",
         "executing": "Executing...",
         "next": "Next",

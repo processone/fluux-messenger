@@ -1066,6 +1066,7 @@
             "description": "Du har ikke administratorrettigheder på denne server. Kontakt din serveradministrator for adgang."
         },
         "selectCommand": "Vælg en kommando fra sidebjælken",
+        "openSections": "Åbn administrationsafsnit",
         "execute": "Udfør",
         "executing": "Udfører...",
         "next": "Næste",

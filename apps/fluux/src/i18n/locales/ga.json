@@ -1066,6 +1066,7 @@
             "description": "Níl pribhléidí riaracháin agat ar an bhfreastalaí seo. Déan teagmháil le riarthóir an fhreastalaí le haghaidh rochtana."
         },
         "selectCommand": "Roghnaigh ordú ón mbarra taoibh",
+        "openSections": "Oscail rannáin riaracháin",
         "execute": "Rith",
         "executing": "Ag rith...",
         "next": "Ar aghaidh",
