@@ -26,6 +26,8 @@ interface AttachmentProps {
   attachment: FileAttachment
   /** Called when image/video loads - useful for scroll adjustment */
   onLoad?: () => void
+  /** When true (the local user's own message), bypass media-autoload deferral. */
+  isOwnMessage?: boolean
 }
 
 /**
@@ -33,7 +35,7 @@ interface AttachmentProps {
  * Falls back to main URL when no thumbnail is provided (e.g., from other XMPP clients)
  * Uses direct media URLs for browser/WebView loading.
  */
-export const ImageAttachment = memo(function ImageAttachment({ attachment, onLoad }: AttachmentProps) {
+export const ImageAttachment = memo(function ImageAttachment({ attachment, onLoad, isOwnMessage }: AttachmentProps) {
   const { t } = useTranslation()
   const isImage = attachment.mediaType?.startsWith('image/') ?? false
   const [lightboxOpen, setLightboxOpen] = useState(false)
@@ -53,7 +55,7 @@ export const ImageAttachment = memo(function ImageAttachment({ attachment, onLoa
   const [loadError, setLoadError] = useState(() => failedUrlCache.has(originalImageSrc))
 
   // Media-autoload gating: defer fetch unless policy allows or user tapped
-  const { shouldLoad, approve } = useDeferredMedia(originalImageSrc)
+  const { shouldLoad, approve } = useDeferredMedia(originalImageSrc, isOwnMessage)
 
   // Fetch + decrypt if encrypted (XEP-0454), or proxy through the platform
   // cache for plaintext. Branches internal to the hook; renderer is
@@ -225,7 +227,7 @@ export const ImageAttachment = memo(function ImageAttachment({ attachment, onLoa
  * Video attachment with inline player and info bar
  * Uses direct media URLs for browser/WebView loading.
  */
-export const VideoAttachment = memo(function VideoAttachment({ attachment, onLoad }: AttachmentProps) {
+export const VideoAttachment = memo(function VideoAttachment({ attachment, onLoad, isOwnMessage }: AttachmentProps) {
   const { t } = useTranslation()
   const isVideo = attachment.mediaType?.startsWith('video/') ?? false
 
@@ -233,7 +235,7 @@ export const VideoAttachment = memo(function VideoAttachment({ attachment, onLoa
   const [loadError, setLoadError] = useState(() => failedUrlCache.has(attachment.url))
 
   // Media-autoload gating: defer fetch unless policy allows or user tapped
-  const { shouldLoad, approve } = useDeferredMedia(attachment.url)
+  const { shouldLoad, approve } = useDeferredMedia(attachment.url, isOwnMessage)
 
   // Resolve URL for video playback (only when it's a video). Both main
   // file and poster/thumbnail go through useAttachmentUrl so the
@@ -376,7 +378,7 @@ export const VideoAttachment = memo(function VideoAttachment({ attachment, onLoa
  * Audio attachment with inline player
  * Uses direct media URLs for browser/WebView loading.
  */
-export function AudioAttachment({ attachment }: AttachmentProps) {
+export function AudioAttachment({ attachment, isOwnMessage }: AttachmentProps) {
   const { t } = useTranslation()
   const isAudio = (attachment.mediaType?.startsWith('audio/') ?? false) && !attachment.thumbnail
 
@@ -384,7 +386,7 @@ export function AudioAttachment({ attachment }: AttachmentProps) {
   const [loadError, setLoadError] = useState(() => failedUrlCache.has(attachment.url))
 
   // Media-autoload gating: defer fetch unless policy allows or user tapped
-  const { shouldLoad, approve } = useDeferredMedia(attachment.url)
+  const { shouldLoad, approve } = useDeferredMedia(attachment.url, isOwnMessage)
 
   // Resolve URL for audio playback (only when it's audio). Encrypted
   // audio is transparently fetched + decrypted.

@@ -12,16 +12,18 @@ interface TextFilePreviewProps {
   isSelected?: boolean
   /** Whether the parent message is hovered (for gradient adaptation) */
   isHovered?: boolean
+  /** When true (the local user's own message), bypass media-autoload deferral. */
+  isOwnMessage?: boolean
 }
 
 /**
  * Renders an inline text file preview with the file content displayed
  * in a code block, plus a download card below.
  */
-export function TextFilePreview({ attachment, isSelected = false, isHovered = false }: TextFilePreviewProps) {
+export function TextFilePreview({ attachment, isSelected = false, isHovered = false, isOwnMessage }: TextFilePreviewProps) {
   const { t } = useTranslation()
   const canPreview = canPreviewAsText(attachment.mediaType, attachment.name)
-  const { shouldLoad, approve } = useDeferredMedia(attachment.url)
+  const { shouldLoad, approve } = useDeferredMedia(attachment.url, isOwnMessage)
   const { content, isLoading, error, isTruncated } = useTextPreview(attachment.url, canPreview && shouldLoad)
 
   // Don't render anything if this isn't a text file

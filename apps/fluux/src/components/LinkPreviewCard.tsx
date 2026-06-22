@@ -20,14 +20,16 @@ const MAX_IMAGE_ATTEMPTS = 2
 interface LinkPreviewCardProps {
   preview: LinkPreview
   onLoad?: () => void
+  /** When true (the local user's own message), bypass media-autoload deferral. */
+  isOwnMessage?: boolean
 }
 
-export function LinkPreviewCard({ preview, onLoad }: LinkPreviewCardProps) {
+export function LinkPreviewCard({ preview, onLoad, isOwnMessage }: LinkPreviewCardProps) {
   const [attempt, setAttempt] = useState(0)
   const [imagePhase, setImagePhase] = useState<'showing' | 'waiting' | 'gone'>('showing')
   const retryTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const { t } = useTranslation()
-  const { shouldLoad: showImage, approve: approveImage } = useDeferredMedia(preview.image ?? '')
+  const { shouldLoad: showImage, approve: approveImage } = useDeferredMedia(preview.image ?? '', isOwnMessage)
 
   useEffect(() => () => {
     if (retryTimer.current) clearTimeout(retryTimer.current)

@@ -24,6 +24,8 @@ interface MessageAttachmentsProps {
   isSelected?: boolean
   /** Whether the parent message is hovered (for gradient adaptation) */
   isHovered?: boolean
+  /** Whether the parent message is the local user's own (bypasses media-autoload deferral). */
+  isOwnMessage?: boolean
 }
 
 /**
@@ -31,7 +33,7 @@ interface MessageAttachmentsProps {
  * Each attachment component internally checks if it should render
  * based on the attachment's media type.
  */
-export function MessageAttachments({ attachment, onMediaLoad, isSelected, isHovered }: MessageAttachmentsProps) {
+export function MessageAttachments({ attachment, onMediaLoad, isSelected, isHovered, isOwnMessage }: MessageAttachmentsProps) {
   if (!attachment) return null
 
   const canPreview = canPreviewAsText(attachment.mediaType, attachment.name)
@@ -39,16 +41,16 @@ export function MessageAttachments({ attachment, onMediaLoad, isSelected, isHove
   return (
     <>
       {/* Image attachment preview */}
-      <ImageAttachment attachment={attachment} onLoad={onMediaLoad} />
+      <ImageAttachment attachment={attachment} onLoad={onMediaLoad} isOwnMessage={isOwnMessage} />
 
       {/* Video attachment with inline player */}
-      <VideoAttachment attachment={attachment} onLoad={onMediaLoad} />
+      <VideoAttachment attachment={attachment} onLoad={onMediaLoad} isOwnMessage={isOwnMessage} />
 
       {/* Audio attachment with inline player */}
-      <AudioAttachment attachment={attachment} />
+      <AudioAttachment attachment={attachment} isOwnMessage={isOwnMessage} />
 
       {/* Text file preview (code, markdown, json, etc.) */}
-      {canPreview && <TextFilePreview attachment={attachment} isSelected={isSelected} isHovered={isHovered} />}
+      {canPreview && <TextFilePreview attachment={attachment} isSelected={isSelected} isHovered={isHovered} isOwnMessage={isOwnMessage} />}
 
       {/* Document/file attachment card (PDF, Word, etc.) */}
       {shouldShowFileCard(attachment, canPreview) && (

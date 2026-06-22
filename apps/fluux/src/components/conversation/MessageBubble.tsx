@@ -623,10 +623,10 @@ export const MessageBubble = memo(function MessageBubble({
           )}
 
           {/* File attachments (image, video, audio, text preview, document card) - hidden for retracted */}
-          {!message.isRetracted && <MessageAttachments attachment={message.attachment} onMediaLoad={onMediaLoad} isSelected={isSelected} isHovered={isHovered} />}
+          {!message.isRetracted && <MessageAttachments attachment={message.attachment} onMediaLoad={onMediaLoad} isSelected={isSelected} isHovered={isHovered} isOwnMessage={message.isOutgoing} />}
 
           {/* Link preview - hidden for retracted */}
-          {!message.isRetracted && message.linkPreview && <LinkPreviewCard preview={message.linkPreview} onLoad={onMediaLoad} />}
+          {!message.isRetracted && message.linkPreview && <LinkPreviewCard preview={message.linkPreview} onLoad={onMediaLoad} isOwnMessage={message.isOutgoing} />}
 
           {/* Poll display - hidden for retracted */}
           {!message.isRetracted && message.poll && (

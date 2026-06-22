@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import { ImageAttachment, VideoAttachment, AudioAttachment } from './FileAttachments'
+import { MessageAttachments } from './MessageAttachments'
 import { MediaAutoloadProvider } from '@/contexts'
 import { __resetApprovedMediaUrlsForTest } from '@/utils/mediaAutoload'
 import type { FileAttachment } from '@fluux/sdk'
@@ -382,5 +383,36 @@ describe('ImageAttachment cached-while-deferred', () => {
     expect(screen.getByRole('img')).toHaveAttribute('src', 'blob:fetched')
     // Peek must be disabled when the fetch path is active.
     expect(useCachedMediaUrlSpy).toHaveBeenLastCalledWith('https://x/a.jpg', undefined, false)
+  })
+})
+
+describe('MessageAttachments own-message threading', () => {
+  beforeEach(() => {
+    __resetApprovedMediaUrlsForTest()
+    useAttachmentUrlSpy.mockImplementation((_u: string | undefined, _e: unknown, enabled: boolean) => ({
+      url: enabled ? 'blob:loaded' : null,
+      isLoading: false,
+      error: null,
+    }))
+    useCachedMediaUrlSpy.mockReturnValue({ cachedUrl: null, isPeeking: false })
+  })
+
+  it('loads an own-message image inline even when autoLoad is false', () => {
+    render(
+      <MediaAutoloadProvider autoLoad={false}>
+        <MessageAttachments attachment={deferralImageAttachment} isOwnMessage />
+      </MediaAutoloadProvider>,
+    )
+    expect(screen.getByRole('img')).toBeInTheDocument()
+    expect(screen.queryByText('chat.loadImage')).not.toBeInTheDocument()
+  })
+
+  it('defers a non-own image when autoLoad is false', () => {
+    render(
+      <MediaAutoloadProvider autoLoad={false}>
+        <MessageAttachments attachment={deferralImageAttachment} />
+      </MediaAutoloadProvider>,
+    )
+    expect(screen.getByText('chat.loadImage')).toBeInTheDocument()
   })
 })
