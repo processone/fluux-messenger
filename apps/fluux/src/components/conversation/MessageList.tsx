@@ -24,6 +24,7 @@ import { HistoryGapMarker } from './HistoryGapMarker'
 import { TypingIndicator } from './TypingIndicator'
 import { groupMessagesByDate } from './messageGrouping'
 import { useMessageListScroll } from './useMessageListScroll'
+import { MessageWidthProvider } from './messageWidthContext'
 import { Loader2, ChevronUp, ChevronDown } from 'lucide-react'
 import { Tooltip } from '../Tooltip'
 
@@ -233,6 +234,7 @@ export function MessageList<T extends BaseMessage>({
   const showEmpty = !showLoading && messages.length === 0
 
   return (
+    <MessageWidthProvider containerRef={scrollContainerRef}>
     <div className="relative flex-1 flex flex-col min-h-0">
       {/* Scrollable message container - always mounted to preserve scroll position */}
       <div
@@ -366,5 +368,6 @@ export function MessageList<T extends BaseMessage>({
         </Tooltip>
       </div>
     </div>
+    </MessageWidthProvider>
   )
 }
