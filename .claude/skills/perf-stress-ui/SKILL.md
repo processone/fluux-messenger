@@ -17,6 +17,15 @@ and `docs/superpowers/specs/2026-06-05-perf-stress-ui-harness-design.md`.
 - `mode:live` = reorders on every message (worst case).
 For custom sequences, drive `window.__demoClient.emitSDK('room:message', { roomJid, message })`.
 
+**Single big-room switch-mount** (the WebKitGTK ~3s freeze on opening a large busy room):
+`?stress=rooms:1,messages:1000,occupants:97,activate:1,msgStep:0&perf=1&tutorial=false`
+- `occupants:N` seeds N occupants; `msgStep:0`/`roomStep:N` map to `msgStepMs`/`roomStepMs`
+  (use `msgStep:0` to seed a 1000-msg backlog instantly).
+- `activate:1` auto-navigates into `stress-0@conference.<demo-domain>` after seeding (re-asserts the
+  hash for ~3s to beat the demo's default-route nav). Demo domain is usually `fluux.chat`.
+- Verified: mounts **1000 `.message-row` ≈ 47k DOM nodes**. The 3s wall-clock only reproduces on
+  Linux/WebKitGTK — on macOS the mount is cheap, so measure **node count** (see §2), not wall-clock.
+
 **Test EVERY churn source, not just messages.** A component can be decoupled from
 one and still storm on another (PR #451 killed the composer's *message* re-renders
 but it still re-renders ~1:1 on *occupant* churn — `addOccupant`/`removeOccupant`
@@ -39,6 +48,16 @@ NOT ignore a symlink, and it shows in `git status`). `@fluux/sdk` is aliased to
 ## 2. Measure
 - **Preferred:** `await window.__perf.measure('label', () => window.__demoClient.runStressScenario({ kind:'room-join', rooms:15, messagesPerRoom:150, mode:'live' }))`
   → per-component render table (react-scan).
+- **Switch-mount cost (node count = the platform-independent metric).** The WebKitGTK freeze is
+  layout of a huge DOM; node count is its proxy and is measurable on ANY platform (the wall-clock
+  freeze only reproduces on Linux). Two helpers on `window.__perf`:
+  - `__perf.domNodes('[data-message-list]')` → `{ total, messageRows }` for the currently-open room.
+  - `await __perf.measureSwitch('stress-0@conference.fluux.chat')` → navigates into the room and
+    reports `{ durationMs, messageRows, domNodes, renders }` (durationMs includes a fixed settle
+    wait — use domNodes/renders, not wall-clock, as the signal).
+  Baseline (pre-windowing, 1000-msg room): **messageRows 1000, domNodes ≈47k**, renders dominated by
+  `MessageBubble`×1000 + `Tooltip`×~3000. A windowing/virtualization fix should cut these ~8×; assert
+  the reduced node count as a regression guard (`RENDER_PERF_TESTS.md`).
 - **If `?perf=1` / react-scan HANGS the renderer on load** (seen: react-scan +
   React-Compiler + StrictMode over the full demo tree — every eval/screenshot times
   out): skip it and use the always-on detector instead. `window.__det = await import('/src/utils/renderLoopDetector.ts')`

@@ -13,6 +13,17 @@ describe('parseStressParam', () => {
     const s = parseStressParam(new URLSearchParams('stress=rooms:abc,foo:bar,messages:10'))
     expect(s).toEqual({ kind: 'room-join', messagesPerRoom: 10 })
   })
+  it('parses the single-big-room repro: activate + instant seed', () => {
+    const s = parseStressParam(new URLSearchParams('stress=rooms:1,messages:1000,occupants:97,activate:1,msgStep:0,roomStep:5'))
+    expect(s).toEqual({
+      kind: 'room-join', rooms: 1, messagesPerRoom: 1000, occupants: 97,
+      activate: true, msgStepMs: 0, roomStepMs: 5,
+    })
+  })
+  it('treats activate other than 1/true as false', () => {
+    const s = parseStressParam(new URLSearchParams('stress=rooms:1,activate:0'))
+    expect(s).toEqual({ kind: 'room-join', rooms: 1, activate: false })
+  })
 })
 
 describe('aggregateRenders', () => {
