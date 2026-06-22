@@ -162,22 +162,9 @@ adminStore.getState().setUsers([
   'sophia@fluux.chat', 'olivia@fluux.chat', 'mia@fluux.chat',
   'liam@fluux.chat', 'ava@fluux.chat', 'alex@fluux.chat',
 ])
-adminStore.getState().setUserList({
-  items: [
-    { jid: 'emma@fluux.chat', username: 'emma', isOnline: true },
-    { jid: 'james@fluux.chat', username: 'james', isOnline: true },
-    { jid: 'sophia@fluux.chat', username: 'sophia', isOnline: true },
-    { jid: 'olivia@fluux.chat', username: 'olivia', isOnline: true },
-    { jid: 'mia@fluux.chat', username: 'mia', isOnline: false },
-    { jid: 'liam@fluux.chat', username: 'liam', isOnline: true },
-    { jid: 'ava@fluux.chat', username: 'ava', isOnline: true },
-    { jid: 'alex@fluux.chat', username: 'alex', isOnline: false },
-  ],
-  isLoading: false,
-  error: null,
-  searchQuery: '',
-  pagination: { count: 8 },
-})
+// The admin user list is populated on demand by DemoClient when the users
+// category is opened (fetchAllUsers -> get-registered-users-list), so no static
+// seed is needed here. See DemoClient.demoAdminUsers().
 adminStore.getState().setRoomList({
   items: [
     { jid: 'team@conference.fluux.chat', name: 'Team Chat', occupants: 6 },

@@ -53,6 +53,7 @@ const NS_MAM = 'urn:xmpp:mam:2'
 const NS_COMMANDS = 'http://jabber.org/protocol/commands'
 const NS_DATA_FORMS = 'jabber:x:data'
 const NS_VERSION = 'jabber:iq:version'
+const NS_LAST = 'jabber:iq:last'
 
 /** Minimal Element-like object returned by mock IQ responses. */
 interface MockElement {
@@ -214,6 +215,12 @@ export class DemoClient extends XMPPClient {
     // fetchServerVersion() queries jabber:iq:version on the domain.
     if (xmlns === NS_VERSION) {
       return this.buildVersionResponse()
+    }
+
+    // --- Last activity (XEP-0012) ---
+    // The admin user list lazily queries jabber:iq:last per offline row.
+    if (xmlns === NS_LAST) {
+      return this.buildLastActivityResponse(to)
     }
 
     // --- vCard-temp (XEP-0054) ---
@@ -932,6 +939,61 @@ export class DemoClient extends XMPPClient {
   }
 
   /**
+   * Deterministic ~30-user directory for the friendly admin user list.
+   * Includes the demo personas plus filler accounts, with a stable
+   * online/offline split so the list, presence dots, and last-login column
+   * all show a realistic spread without a server.
+   */
+  private demoAdminUsers(): { jid: string; online: boolean }[] {
+    const domain = this.selfJid.split('@')[1] || 'fluux.chat'
+    const names = [
+      'you', 'emma', 'james', 'sophia', 'olivia', 'mia', 'liam', 'ava', 'alex',
+      'noah', 'isabella', 'ethan', 'charlotte', 'lucas', 'amelia', 'mason', 'harper',
+      'logan', 'evelyn', 'jackson', 'abigail', 'aiden', 'emily', 'elijah', 'elizabeth',
+      'grayson', 'sofia', 'carter', 'avery', 'jack',
+    ]
+    // Stable split: roughly two thirds online (offline every third index).
+    return names.map((n, i) => ({ jid: `${n}@${domain}`, online: i % 3 !== 0 }))
+  }
+
+  /**
+   * Deterministic seconds-since-last-logout for a JID, spread across buckets
+   * from minutes to ~1.4 years so the last-login column shows variety.
+   */
+  private demoLastActivitySeconds(jid: string): number {
+    let hash = 0
+    for (let i = 0; i < jid.length; i++) {
+      hash = (hash * 31 + jid.charCodeAt(i)) >>> 0
+    }
+    const buckets = [90, 1800, 7200, 86400 * 2, 86400 * 9, 86400 * 40, 86400 * 200, 86400 * 500]
+    return buckets[hash % buckets.length]
+  }
+
+  /**
+   * Build a completed XEP-0133 command response whose result form carries a
+   * single multi-value JID field (e.g. registereduserjids / onlineuserjids).
+   * No RSM `<set>` is included, so the full-fetch loop terminates after one page.
+   */
+  private buildUserListResponse(jids: string[], fieldVar: string): MockElement {
+    const valueChildren = jids.map((j) => this.mockElement('value', {}, [], j))
+    return this.mockElement('iq', { type: 'result' }, [
+      this.mockElement('command', { xmlns: NS_COMMANDS, status: 'completed' }, [
+        this.mockElement('x', { xmlns: NS_DATA_FORMS, type: 'result' }, [
+          this.mockElement('field', { var: fieldVar }, valueChildren),
+        ]),
+      ]),
+    ])
+  }
+
+  /** Build a XEP-0012 (jabber:iq:last) response with a deterministic interval. */
+  private buildLastActivityResponse(jid?: string): MockElement {
+    const seconds = jid ? this.demoLastActivitySeconds(jid) : 0
+    return this.mockElement('iq', { type: 'result' }, [
+      this.mockElement('query', { xmlns: NS_LAST, seconds: String(seconds) }),
+    ])
+  }
+
+  /**
    * Dispatch an ad-hoc / api command IQ to a seeded response so
    * fetchServerStats() can populate all six overview cards.
    *
@@ -945,10 +1007,25 @@ export class DemoClient extends XMPPClient {
 
     // --- XEP-0133 single-step stat commands ---
     if (node.endsWith('#get-registered-users-num')) {
-      return this.buildStatFormResponse('registeredusersnum', '42')
+      return this.buildStatFormResponse('registeredusersnum', String(this.demoAdminUsers().length))
     }
     if (node.endsWith('#get-online-users-num')) {
-      return this.buildStatFormResponse('onlineusersnum', '8')
+      const onlineCount = this.demoAdminUsers().filter((u) => u.online).length
+      return this.buildStatFormResponse('onlineusersnum', String(onlineCount))
+    }
+
+    // --- XEP-0133 user-directory commands (drive the friendly user list) ---
+    if (node.endsWith('#get-registered-users-list')) {
+      return this.buildUserListResponse(
+        this.demoAdminUsers().map((u) => u.jid),
+        'registereduserjids'
+      )
+    }
+    if (node.endsWith('#get-online-users-list')) {
+      return this.buildUserListResponse(
+        this.demoAdminUsers().filter((u) => u.online).map((u) => u.jid),
+        'onlineuserjids'
+      )
     }
 
     // --- ejabberd two-step api-commands ---
