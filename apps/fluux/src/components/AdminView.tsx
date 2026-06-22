@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Server, Users, Hash, User, Plus, ArrowLeft } from 'lucide-react'
-import { useAdmin, useXMPP, type AdminCategory, type AdminUser, type AdminRoom } from '@fluux/sdk'
+import { useAdmin, useXMPP, adminStore, type AdminCategory, type AdminUser, type AdminRoom } from '@fluux/sdk'
 import { useWindowDrag, useModalInput } from '@/hooks'
 import { Tooltip } from './Tooltip'
 import { ModalShell } from './ModalShell'
@@ -167,13 +167,14 @@ export function AdminView({ activeCategory, onBack }: AdminViewProps) {
   }
 
   // Mobile header back button: step back exactly one level
-  // (detail → list → admin root), instead of collapsing to the root.
+  // (detail → list → overview → exit), instead of collapsing to the root.
   const handleHeaderBack = () => {
     switch (
       getAdminBackTarget({
         hasSession: !!currentSession,
         hasSelectedUser: !!selectedUser,
         hasSelectedRoom: !!selectedRoom,
+        activeCategory,
       })
     ) {
       case 'session':
@@ -184,6 +185,9 @@ export function AdminView({ activeCategory, onBack }: AdminViewProps) {
         break
       case 'room':
         setSelectedRoom(null)
+        break
+      case 'overview':
+        adminStore.getState().setActiveCategory('stats')
         break
       case 'exit':
         onBack?.()

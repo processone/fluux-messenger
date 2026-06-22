@@ -49,9 +49,12 @@ const adminState = {
   hasCommand: () => false,
 }
 
+const setActiveCategory = vi.fn()
+
 vi.mock('@fluux/sdk', () => ({
   useAdmin: () => adminState,
   useXMPP: () => ({ client: { muc: { destroyRoom: vi.fn() } } }),
+  adminStore: { getState: () => ({ setActiveCategory }) },
 }))
 
 // Import after mocks are registered.
@@ -79,12 +82,21 @@ describe('AdminView header back button', () => {
     expect(onBack).not.toHaveBeenCalled()
   })
 
-  it('calls onBack (exit to admin root) from the room list level', () => {
+  it('returns to the overview from the room list level (does not exit)', () => {
     const onBack = vi.fn()
     render(<AdminView activeCategory="rooms" onBack={onBack} />)
 
-    // At the list level (no detail open).
     expect(screen.getByText('admin.roomList.title')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByLabelText('common.back'))
+
+    expect(setActiveCategory).toHaveBeenCalledWith('stats')
+    expect(onBack).not.toHaveBeenCalled()
+  })
+
+  it('exits admin from the overview / no-category level', () => {
+    const onBack = vi.fn()
+    render(<AdminView activeCategory={null} onBack={onBack} />)
 
     fireEvent.click(screen.getByLabelText('common.back'))
 
