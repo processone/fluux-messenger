@@ -1135,6 +1135,29 @@
         "roomList": {
             "title": "Klepetalnice",
             "noRooms": "Ni najdenih sob"
+        },
+        "overview": {
+            "title": "Pregled strežnika",
+            "refresh": "Osveži",
+            "updatedAt": "Posodobljeno ob {{time}}",
+            "advanced": "Napredno",
+            "advancedHint": "Zaženi neposredni strežniški ukaz",
+            "empty": "Statistika strežnika ni na voljo.",
+            "retry": "Poskusi znova",
+            "units": {
+                "d": "d",
+                "h": "h",
+                "m": "min",
+                "s": "s"
+            },
+            "cards": {
+                "uptime": "Čas delovanja",
+                "version": "Različica strežnika",
+                "registeredUsers": "Registrirani uporabniki",
+                "onlineUsers": "Uporabniki na spletu",
+                "onlineRooms": "Aktivne sobe",
+                "vhosts": "Navidezni gostitelji"
+            }
         }
     },
     "commandPalette": {

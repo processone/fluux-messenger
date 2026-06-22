@@ -311,8 +311,8 @@ export type {
   AdminUser,
   AdminRoom,
   EntityListState,
-  EntityCounts,
   AdminCategory,
+  ServerStats,
 
   // XEP-0313: Message Archive Management
   MAMQueryOptions,

@@ -13,6 +13,7 @@ import {
   NS_DATA_FORMS,
   NS_MUC_OWNER,
   NS_RSM,
+  NS_VERSION,
 } from '../namespaces'
 import type {
   AdminCommand,
@@ -23,7 +24,7 @@ import type {
   RSMResponse,
   AdminUser,
   AdminRoom,
-  EntityCounts,
+  ServerStats,
 } from '../types'
 
 /**
@@ -293,61 +294,107 @@ export class Admin extends BaseModule {
   }
 
   // ============================================================================
-  // Entity Counts
+  // Server Overview Stats
   // ============================================================================
 
   /**
-   * Fetch entity counts for admin dashboard badges.
-   * Executes get-registered-users-num, get-online-users-num, and muc_online_rooms_count commands.
+   * Fetch structured server vital-signs for the overview dashboard.
+   * Each metric is fetched independently; a missing/forbidden command omits
+   * that metric rather than failing the whole snapshot (discovery-driven).
+   *
+   * NOTE: _vhost is reserved for future per-vhost scoping (not yet wired).
    */
-  async fetchEntityCounts(): Promise<EntityCounts> {
-    const counts: EntityCounts = {}
+  async fetchServerStats(_vhost?: string): Promise<ServerStats> {
+    const stats: ServerStats = { fetchedAt: Date.now() }
 
-    // Try to fetch registered users count
     try {
-      const regResult = await this.executeSimpleCommand('get-registered-users-num')
-      if (regResult) {
-        const numField = getFormFieldValue(regResult, 'registeredusersnum')
-        if (numField) {
-          counts.users = parseInt(numField, 10)
-        }
-      }
-    } catch {
-      // Command may not be available
-    }
+      const form = await this.executeSimpleCommand('get-registered-users-num')
+      const v = form ? getFormFieldValue(form, 'registeredusersnum') : undefined
+      const n = this.parseCount(v)
+      if (n !== undefined) stats.registeredUsers = n
+    } catch { /* unavailable */ }
 
-    // Try to fetch online users count
     try {
-      const onlineResult = await this.executeSimpleCommand('get-online-users-num')
-      if (onlineResult) {
-        const numField = getFormFieldValue(onlineResult, 'onlineusersnum')
-        if (numField) {
-          counts.onlineUsers = parseInt(numField, 10)
-        }
-      }
-    } catch {
-      // Command may not be available
-    }
+      const form = await this.executeSimpleCommand('get-online-users-num')
+      const v = form ? getFormFieldValue(form, 'onlineusersnum') : undefined
+      const n = this.parseCount(v)
+      if (n !== undefined) stats.onlineUsers = n
+    } catch { /* unavailable */ }
 
-    // Try to fetch online MUC rooms count using ejabberd API command
-    // Note: This is sent to the server domain (not MUC service) with api-commands/ prefix
     try {
-      const roomsResult = await this.executeApiCommand('muc_online_rooms_count')
-      if (roomsResult) {
-        // The field name varies - try common variations
-        const numField = getFormFieldValue(roomsResult, 'onlineroomsnum') ||
-                        getFormFieldValue(roomsResult, 'rooms') ||
-                        getFormFieldValue(roomsResult, 'count')
-        if (numField) {
-          counts.rooms = parseInt(numField, 10)
-        }
-      }
-    } catch {
-      // Command may not be available
-    }
+      // service=global → count rooms across all vhosts (default is one conference vhost)
+      const form = await this.executeApiCommand('muc_online_rooms_count', { service: 'global' })
+      const v = form
+        ? (getFormFieldValue(form, 'count') ??
+           getFormFieldValue(form, 'onlineroomsnum') ??
+           getFormFieldValue(form, 'rooms'))
+        : undefined
+      const n = this.parseCount(v)
+      if (n !== undefined) stats.onlineRooms = n
+    } catch { /* unavailable */ }
 
-    this.deps.emitSDK('admin:entity-counts', { counts })
-    return counts
+    const uptime = await this.fetchUptimeSeconds()
+    if (uptime != null) stats.uptimeSeconds = uptime
+
+    const version = await this.fetchServerVersion()
+    if (version) stats.version = version
+
+    try {
+      const vhosts = await this.fetchVhosts()
+      if (vhosts.length > 0) stats.vhostCount = vhosts.length
+    } catch { /* unavailable */ }
+
+    this.deps.emitSDK('admin:server-stats', { stats })
+    return stats
+  }
+
+  /**
+   * Read server uptime via the ejabberd `stats` api-command (name=uptimeseconds).
+   * Parses the result value tolerantly — the value field var is not hard-coded.
+   */
+  private async fetchUptimeSeconds(): Promise<number | null> {
+    try {
+      const form = await this.executeApiCommand('stats', { name: 'uptimeseconds' })
+      if (!form) return null
+      for (const field of form.fields) {
+        if (field.type === 'fixed' || field.type === 'hidden') continue
+        if (field.var === 'name') continue
+        const raw = Array.isArray(field.value) ? field.value[0] : field.value
+        const n = raw != null ? parseInt(raw, 10) : NaN
+        if (!Number.isNaN(n)) return n
+      }
+    } catch { /* unavailable */ }
+    return null
+  }
+
+  /** Parse a count field tolerantly: returns undefined for missing/non-numeric values. */
+  private parseCount(value: string | undefined): number | undefined {
+    if (value == null || value === '') return undefined
+    const n = parseInt(value, 10)
+    return Number.isNaN(n) ? undefined : n
+  }
+
+  /** Read server software version via XEP-0092 (jabber:iq:version) on the domain. */
+  private async fetchServerVersion(): Promise<string | null> {
+    const currentJid = this.deps.getCurrentJid()
+    const domain = currentJid ? getDomain(currentJid) : null
+    if (!domain) return null
+    try {
+      const iq = xml(
+        'iq',
+        { type: 'get', to: domain, id: `ver_${generateUUID()}` },
+        xml('query', { xmlns: NS_VERSION })
+      )
+      const result = await this.deps.sendIQ(iq)
+      const query = result.getChild('query', NS_VERSION)
+      if (!query) return null
+      const name = query.getChild('name')?.text() || ''
+      const version = query.getChild('version')?.text() || ''
+      const combined = [name, version].filter(Boolean).join(' ').trim()
+      return combined || null
+    } catch {
+      return null
+    }
   }
 
   /**
@@ -388,7 +435,10 @@ export class Admin extends BaseModule {
    * Handles multi-step commands that require form submission.
    * @param commandName - The command name (e.g., muc_online_rooms_count)
    */
-  private async executeApiCommand(commandName: string): Promise<DataForm | null> {
+  private async executeApiCommand(
+    commandName: string,
+    overrides?: Record<string, string | string[]>
+  ): Promise<DataForm | null> {
     const currentJid = this.deps.getCurrentJid()
     if (!currentJid) return null
 
@@ -421,12 +471,15 @@ export class Admin extends BaseModule {
         const sessionId = command.attrs.sessionid
         const form = parseDataForm(formEl)
 
-        // Build submit form with default values from the form
-        // Filter out fixed fields and fields without var (they shouldn't be submitted)
+        // Build submit form: use caller-provided overrides where present, else the
+        // server-supplied default value. Filter out fixed fields and fields
+        // without var (they shouldn't be submitted).
         const submitFields = form.fields
           .filter(field => field.var && field.type !== 'fixed')
           .map(field => {
-            const values = Array.isArray(field.value) ? field.value : (field.value ? [field.value] : [])
+            const overridden = overrides?.[field.var]
+            const raw = overridden !== undefined ? overridden : field.value
+            const values = Array.isArray(raw) ? raw : (raw ? [raw] : [])
             return xml('field', { var: field.var },
               ...values.map((v: string) => xml('value', {}, v))
             )

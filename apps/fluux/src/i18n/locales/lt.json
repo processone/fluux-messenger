@@ -1133,6 +1133,29 @@
         "roomList": {
             "title": "Pokalbių kambariai",
             "noRooms": "Kambarių nerasta"
+        },
+        "overview": {
+            "title": "Serverio apžvalga",
+            "refresh": "Atnaujinti",
+            "updatedAt": "Atnaujinta {{time}}",
+            "advanced": "Išplėstinė",
+            "advancedHint": "Vykdyti tiesioginę serverio komandą",
+            "empty": "Serverio statistika nepasiekiama.",
+            "retry": "Bandyti dar kartą",
+            "units": {
+                "d": "d",
+                "h": "val",
+                "m": "min",
+                "s": "s"
+            },
+            "cards": {
+                "uptime": "Veikimo laikas",
+                "version": "Serverio versija",
+                "registeredUsers": "Registruoti naudotojai",
+                "onlineUsers": "Prisijungę naudotojai",
+                "onlineRooms": "Aktyvūs kambariai",
+                "vhosts": "Virtualūs serveriai"
+            }
         }
     },
     "commandPalette": {

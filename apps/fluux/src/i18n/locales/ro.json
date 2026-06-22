@@ -1135,6 +1135,29 @@
         "roomList": {
             "title": "Camere de discuții",
             "noRooms": "Nicio cameră găsită"
+        },
+        "overview": {
+            "title": "Prezentare generală server",
+            "refresh": "Reîmprospătează",
+            "updatedAt": "Actualizat la {{time}}",
+            "advanced": "Avansat",
+            "advancedHint": "Rulează o comandă brută de server",
+            "empty": "Statisticile serverului nu sunt disponibile.",
+            "retry": "Reîncearcă",
+            "units": {
+                "d": "z",
+                "h": "h",
+                "m": "min",
+                "s": "s"
+            },
+            "cards": {
+                "uptime": "Timp de funcționare",
+                "version": "Versiune server",
+                "registeredUsers": "Utilizatori înregistrați",
+                "onlineUsers": "Utilizatori online",
+                "onlineRooms": "Camere active",
+                "vhosts": "Gazde virtuale"
+            }
         }
     },
     "commandPalette": {

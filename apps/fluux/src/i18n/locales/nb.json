@@ -1133,6 +1133,29 @@
         "roomList": {
             "title": "Chatterom",
             "noRooms": "Ingen rom funnet"
+        },
+        "overview": {
+            "title": "Serveroversikt",
+            "refresh": "Oppdater",
+            "updatedAt": "Oppdatert kl. {{time}}",
+            "advanced": "Avansert",
+            "advancedHint": "Kjør en rå serverkommando",
+            "empty": "Serverstatistikk er ikke tilgjengelig.",
+            "retry": "Prøv igjen",
+            "units": {
+                "d": "d",
+                "h": "t",
+                "m": "min",
+                "s": "s"
+            },
+            "cards": {
+                "uptime": "Oppetid",
+                "version": "Serverversjon",
+                "registeredUsers": "Registrerte brukere",
+                "onlineUsers": "Pålogga brukere",
+                "onlineRooms": "Aktive rom",
+                "vhosts": "Virtuelle verter"
+            }
         }
     },
     "commandPalette": {

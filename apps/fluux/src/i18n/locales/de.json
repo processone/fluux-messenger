@@ -1135,6 +1135,29 @@
         "roomList": {
             "title": "Chaträume",
             "noRooms": "Keine Räume gefunden"
+        },
+        "overview": {
+            "title": "Serverübersicht",
+            "refresh": "Aktualisieren",
+            "updatedAt": "Aktualisiert um {{time}}",
+            "advanced": "Erweitert",
+            "advancedHint": "Einen rohen Serverbefehl ausführen",
+            "empty": "Serverstatistiken sind nicht verfügbar.",
+            "retry": "Erneut versuchen",
+            "units": {
+                "d": "T",
+                "h": "Std",
+                "m": "Min",
+                "s": "s"
+            },
+            "cards": {
+                "uptime": "Betriebszeit",
+                "version": "Serverversion",
+                "registeredUsers": "Registrierte Benutzer",
+                "onlineUsers": "Online-Benutzer",
+                "onlineRooms": "Aktive Räume",
+                "vhosts": "Virtuelle Hosts"
+            }
         }
     },
     "commandPalette": {

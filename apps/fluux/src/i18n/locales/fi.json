@@ -1133,6 +1133,29 @@
         "roomList": {
             "title": "Keskusteluhuoneet",
             "noRooms": "Huoneita ei löytynyt"
+        },
+        "overview": {
+            "title": "Palvelimen yleiskatsaus",
+            "refresh": "Päivitä",
+            "updatedAt": "Päivitetty klo {{time}}",
+            "advanced": "Lisäasetukset",
+            "advancedHint": "Suorita suora palvelinkomento",
+            "empty": "Palvelimen tilastot eivät ole saatavilla.",
+            "retry": "Yritä uudelleen",
+            "units": {
+                "d": "pv",
+                "h": "t",
+                "m": "min",
+                "s": "s"
+            },
+            "cards": {
+                "uptime": "Käyttöaika",
+                "version": "Palvelimen versio",
+                "registeredUsers": "Rekisteröidyt käyttäjät",
+                "onlineUsers": "Käyttäjät paikalla",
+                "onlineRooms": "Aktiiviset huoneet",
+                "vhosts": "Virtuaalipalvelimet"
+            }
         }
     },
     "commandPalette": {

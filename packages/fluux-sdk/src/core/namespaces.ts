@@ -9,6 +9,9 @@
 export const NS_DISCO_INFO = 'http://jabber.org/protocol/disco#info'
 export const NS_DISCO_ITEMS = 'http://jabber.org/protocol/disco#items'
 
+// XEP-0092: Software Version
+export const NS_VERSION = 'jabber:iq:version'
+
 // XEP-0363: HTTP File Upload
 export const NS_HTTP_UPLOAD = 'urn:xmpp:http:upload:0'
 

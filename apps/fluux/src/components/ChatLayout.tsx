@@ -475,9 +475,10 @@ function ChatLayoutContent() {
   }
 
   // On mobile, show main content area only when there's actual content to display
-  // For admin: only 'users' and 'rooms' categories have main view content
-  // 'stats' and 'announcements' just expand to show commands in the sidebar
-  const adminHasMainContent = adminSession || adminCategory === 'users' || adminCategory === 'rooms'
+  // For admin: 'users', 'rooms', and 'stats' categories have main view content
+  // ('stats' renders the ServerOverview dashboard); 'announcements' just expands
+  // to show commands in the sidebar
+  const adminHasMainContent = adminSession || adminCategory === 'users' || adminCategory === 'rooms' || adminCategory === 'stats'
   // Settings: only show content when a category is explicitly selected (on mobile, let user choose from sidebar first)
   const settingsHasContent = sidebarView === 'settings' && !!settingsCategory
   const hasActiveContent = !!(activeConversationId || activeRoomJid || selectedContact || adminHasMainContent || settingsHasContent || searchPreviewResult || activityPreviewEvent)

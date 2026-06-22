@@ -12,6 +12,7 @@ import { UserListItem } from './UserListItem'
 import { RoomListItem } from './RoomListItem'
 import { AdminUserView } from './AdminUserView'
 import { AdminRoomView } from './AdminRoomView'
+import { ServerOverview } from './ServerOverview'
 import { getAdminBackTarget } from './adminBackTarget'
 
 interface AdminViewProps {
@@ -37,7 +38,7 @@ export function AdminView({ activeCategory, onBack }: AdminViewProps) {
     // Entity list state and methods
     userList,
     roomList,
-    entityCounts,
+    serverStats,
     hasMoreUsers,
     hasMoreRooms,
     fetchUsers,
@@ -269,6 +270,8 @@ export function AdminView({ activeCategory, onBack }: AdminViewProps) {
       return t('admin.userView.title')
     }
     switch (activeCategory) {
+      case 'stats':
+        return t('admin.overview.title')
       case 'users':
         return t('admin.categories.users')
       case 'rooms':
@@ -284,6 +287,8 @@ export function AdminView({ activeCategory, onBack }: AdminViewProps) {
       return <User className="size-5 text-fluux-brand" />
     }
     switch (activeCategory) {
+      case 'stats':
+        return <Server className="size-5 text-fluux-brand" />
       case 'users':
         return <Users className="size-5 text-fluux-brand" />
       case 'rooms':
@@ -337,6 +342,11 @@ export function AdminView({ activeCategory, onBack }: AdminViewProps) {
       )
     }
 
+    // Server overview dashboard for the stats category
+    if (activeCategory === 'stats') {
+      return <ServerOverview />
+    }
+
     // Show entity lists based on active category
     if (activeCategory === 'users') {
       return (
@@ -369,7 +379,7 @@ export function AdminView({ activeCategory, onBack }: AdminViewProps) {
             isLoading={userList.isLoading}
             hasMore={hasMoreUsers && !userSearchQuery}
             searchValue={userSearchQuery}
-            totalCount={entityCounts.users}
+            totalCount={serverStats?.registeredUsers}
             onSearchChange={setUserSearchQuery}
             onLoadMore={loadMoreUsers}
             emptyMessage={t('admin.userList.noUsers')}
@@ -419,7 +429,7 @@ export function AdminView({ activeCategory, onBack }: AdminViewProps) {
           isLoading={roomList.isLoading}
           hasMore={hasMoreRooms && !roomSearchQuery}
           searchValue={roomSearchQuery}
-          totalCount={entityCounts.rooms}
+          totalCount={serverStats?.onlineRooms}
           onSearchChange={setRoomSearchQuery}
           onLoadMore={loadMoreRooms}
           emptyMessage={t('admin.roomList.noRooms')}
@@ -458,7 +468,9 @@ export function AdminView({ activeCategory, onBack }: AdminViewProps) {
           </button>
         )}
         {getIcon()}
-        <h2 className="ms-2 font-semibold text-fluux-text capitalize">{getTitle()}</h2>
+        {/* Only raw command-node titles need capitalize ("delete user" → "Delete User");
+            i18n titles (overview, users, rooms) are already correctly cased. */}
+        <h2 className={`ms-2 font-semibold text-fluux-text ${currentSession?.node ? 'capitalize' : ''}`}>{getTitle()}</h2>
       </div>
 
       {/* Content */}

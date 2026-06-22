@@ -5,9 +5,9 @@ import type {
   AdminUser,
   AdminRoom,
   EntityListState,
-  EntityCounts,
   RSMResponse,
   AdminCategory,
+  ServerStats,
 } from '../core/types'
 
 // Re-export for convenience
@@ -93,10 +93,13 @@ export interface AdminState {
 
   // Entity list management (new)
   activeCategory: AdminCategory | null
-  entityCounts: EntityCounts
   userList: EntityListState<AdminUser>
   roomList: EntityListState<AdminRoom>
   mucServiceJid: string | null
+
+  // Server overview vital-signs (new)
+  serverStats: ServerStats | null
+  isLoadingStats: boolean
 
   // Actions
   setIsAdmin: (isAdmin: boolean) => void
@@ -113,7 +116,6 @@ export interface AdminState {
 
   // Entity list actions
   setActiveCategory: (category: AdminCategory | null) => void
-  setEntityCounts: (counts: Partial<EntityCounts>) => void
   setUserList: (state: Partial<EntityListState<AdminUser>>) => void
   appendUserList: (items: AdminUser[], pagination: RSMResponse) => void
   resetUserList: () => void
@@ -121,6 +123,8 @@ export interface AdminState {
   appendRoomList: (items: AdminRoom[], pagination: RSMResponse) => void
   resetRoomList: () => void
   setMucServiceJid: (jid: string | null) => void
+  setServerStats: (stats: ServerStats | null) => void
+  setIsLoadingStats: (loading: boolean) => void
 
   // Getters
   getCurrentSession: () => AdminSession | null
@@ -134,8 +138,6 @@ const initialStats: AdminStats = {
   registeredUsers: null,
   lastFetched: null,
 }
-
-const initialEntityCounts: EntityCounts = {}
 
 const initialState = {
   isAdmin: false,
@@ -151,10 +153,11 @@ const initialState = {
   selectedVhost: null as string | null,
   // Entity list management
   activeCategory: null as AdminCategory | null,
-  entityCounts: initialEntityCounts,
   userList: initialEntityListState<AdminUser>(),
   roomList: initialEntityListState<AdminRoom>(),
   mucServiceJid: null as string | null,
+  serverStats: null as ServerStats | null,
+  isLoadingStats: false,
 }
 
 export const adminStore = createStore<AdminState>((set, get) => ({
@@ -186,10 +189,6 @@ export const adminStore = createStore<AdminState>((set, get) => ({
 
   // Entity list actions
   setActiveCategory: (category) => set({ activeCategory: category }),
-
-  setEntityCounts: (counts) => set((state) => ({
-    entityCounts: { ...state.entityCounts, ...counts },
-  })),
 
   setUserList: (update) => set((state) => ({
     userList: { ...state.userList, ...update },
@@ -226,6 +225,10 @@ export const adminStore = createStore<AdminState>((set, get) => ({
   }),
 
   setMucServiceJid: (jid) => set({ mucServiceJid: jid }),
+
+  setServerStats: (stats) => set({ serverStats: stats }),
+
+  setIsLoadingStats: (loading) => set({ isLoadingStats: loading }),
 
   // Getters
   getCurrentSession: () => get().currentSession,

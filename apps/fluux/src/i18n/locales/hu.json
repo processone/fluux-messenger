@@ -1133,6 +1133,29 @@
         "roomList": {
             "title": "Csevegőszobák",
             "noRooms": "Nem található szoba"
+        },
+        "overview": {
+            "title": "Kiszolgáló áttekintése",
+            "refresh": "Frissítés",
+            "updatedAt": "Frissítve: {{time}}",
+            "advanced": "Speciális",
+            "advancedHint": "Nyers kiszolgálóparancs futtatása",
+            "empty": "A kiszolgáló statisztikái nem érhetők el.",
+            "retry": "Újra",
+            "units": {
+                "d": "n",
+                "h": "ó",
+                "m": "p",
+                "s": "mp"
+            },
+            "cards": {
+                "uptime": "Üzemidő",
+                "version": "Kiszolgáló verziója",
+                "registeredUsers": "Regisztrált felhasználók",
+                "onlineUsers": "Online felhasználók",
+                "onlineRooms": "Aktív szobák",
+                "vhosts": "Virtuális gazdagépek"
+            }
         }
     },
     "commandPalette": {

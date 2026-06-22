@@ -37,10 +37,10 @@ All screenshots are generated automatically from the [demo mode](../docs/DEMO_MO
 
 ## Administration
 
-| Admin Panel                                                                                      |
-|--------------------------------------------------------------------------------------------------|
-| <a href="./07-admin-dark.png"><img src="./07-admin-dark.png" width="400" alt="Admin Panel"/></a> |
-| *Manage users, rooms, and server commands from the client*                                       |
+| Server Overview                                                                                       |
+|-------------------------------------------------------------------------------------------------------|
+| <a href="./07-admin-dark.png"><img src="./07-admin-dark.png" width="400" alt="Server Overview"/></a>  |
+| *At-a-glance server vital signs (uptime, version, users, rooms) plus user/room management*            |
 
 ## Customization
 

@@ -15,7 +15,7 @@ import type { Room, RoomOccupant, RoomMember, RoomMessage, RoomAffiliation, Room
 import type { ServerInfo } from './discovery'
 import type { HttpUploadService } from './upload'
 import type { WebPushService, WebPushStatus } from './webpush'
-import type { AdminCommand, AdminSession } from './admin'
+import type { AdminCommand, AdminSession, ServerStats } from './admin'
 import type { RSMResponse } from './pagination'
 import type { MAMQueryDirection } from '../../stores/shared/mamState'
 import type { SystemNotificationType } from './events'
@@ -561,13 +561,9 @@ export interface AdminEvents {
     isExecuting: boolean
   }
 
-  /** Entity counts updated */
-  'admin:entity-counts': {
-    counts: {
-      users?: number
-      onlineUsers?: number
-      rooms?: number
-    }
+  /** Server vital-signs snapshot updated */
+  'admin:server-stats': {
+    stats: ServerStats
   }
 
   /** Virtual hosts discovered */

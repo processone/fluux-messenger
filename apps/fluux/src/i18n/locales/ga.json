@@ -1133,6 +1133,29 @@
         "roomList": {
             "title": "Seomraí Comhrá",
             "noRooms": "Níor aimsíodh seomraí"
+        },
+        "overview": {
+            "title": "Forbhreathnú freastalaí",
+            "refresh": "Athnuaigh",
+            "updatedAt": "Nuashonraithe ag {{time}}",
+            "advanced": "Casta",
+            "advancedHint": "Rith ordú amh freastalaí",
+            "empty": "Níl staitisticí an fhreastalaí ar fáil.",
+            "retry": "Bain triail eile as",
+            "units": {
+                "d": "l",
+                "h": "u",
+                "m": "n",
+                "s": "s"
+            },
+            "cards": {
+                "uptime": "Aga fónaimh",
+                "version": "Leagan an fhreastalaí",
+                "registeredUsers": "Úsáideoirí cláraithe",
+                "onlineUsers": "Úsáideoirí ar líne",
+                "onlineRooms": "Seomraí gníomhacha",
+                "vhosts": "Óstaigh fhíorúla"
+            }
         }
     },
     "commandPalette": {

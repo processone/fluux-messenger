@@ -222,17 +222,28 @@ export interface EntityListState<T> {
 }
 
 /**
- * Server entity counts for admin dashboard.
+ * Structured server vital-signs for the admin overview dashboard.
+ *
+ * Every metric is optional: a metric is omitted when the server does not
+ * advertise / authorise the underlying command (discovery-driven).
  *
  * @category Admin
  */
-export interface EntityCounts {
-  /** Total registered users */
-  users?: number
-  /** Currently online users */
+export interface ServerStats {
+  /** Server uptime in seconds (ejabberd `stats uptimeseconds`). */
+  uptimeSeconds?: number
+  /** Server software version, e.g. "ejabberd 26.01" (XEP-0092). */
+  version?: string
+  /** Total registered users (XEP-0133 get-registered-users-num). */
+  registeredUsers?: number
+  /** Currently online users (XEP-0133 get-online-users-num). */
   onlineUsers?: number
-  /** Total MUC rooms */
-  rooms?: number
+  /** Active MUC rooms across all vhosts (muc_online_rooms_count, service=global). */
+  onlineRooms?: number
+  /** Number of virtual hosts the admin can see. */
+  vhostCount?: number
+  /** Epoch ms when this snapshot was fetched. */
+  fetchedAt: number
 }
 
 /**

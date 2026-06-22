@@ -188,7 +188,6 @@ adminStore.getState().setRoomList({
   searchQuery: '',
   pagination: { count: 2 },
 })
-adminStore.getState().setEntityCounts({ users: 8, onlineUsers: 6, rooms: 2 })
 adminStore.getState().setStats({ onlineUsers: 6, registeredUsers: 8, lastFetched: new Date() })
 
 // Seed an ignored user in Team Chat so the occupant panel shows the "Ignored Users" section

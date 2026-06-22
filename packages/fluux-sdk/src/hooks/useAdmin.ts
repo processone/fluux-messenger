@@ -134,10 +134,11 @@ export function useAdmin() {
 
   // Entity list state
   const activeCategory = useAdminStore((s) => s.activeCategory)
-  const entityCounts = useAdminStore((s) => s.entityCounts)
   const userList = useAdminStore((s) => s.userList)
   const roomList = useAdminStore((s) => s.roomList)
   const mucServiceJid = useAdminStore((s) => s.mucServiceJid)
+  const serverStats = useAdminStore((s) => s.serverStats)
+  const isLoadingStats = useAdminStore((s) => s.isLoadingStats)
 
   // Group commands by category
   const commandsByCategory = useMemo(() => {
@@ -297,9 +298,15 @@ export function useAdmin() {
     adminStore.getState().setActiveCategory(category)
   }, [])
 
-  // Fetch entity counts for sidebar badges
-  const fetchEntityCounts = useCallback(async () => {
-    return client.admin.fetchEntityCounts()
+  // Fetch structured server vital-signs for the overview dashboard.
+  const fetchServerStats = useCallback(async () => {
+    const store = adminStore.getState()
+    store.setIsLoadingStats(true)
+    try {
+      return await client.admin.fetchServerStats(store.selectedVhost || undefined)
+    } finally {
+      adminStore.getState().setIsLoadingStats(false)
+    }
   }, [client])
 
   // Fetch available virtual hosts
@@ -446,7 +453,7 @@ export function useAdmin() {
       canManageUser,
       setSelectedVhost,
       setActiveCategory,
-      fetchEntityCounts,
+      fetchServerStats,
       fetchVhosts,
       fetchUsers,
       loadMoreUsers,
@@ -473,7 +480,7 @@ export function useAdmin() {
       canManageUser,
       setSelectedVhost,
       setActiveCategory,
-      fetchEntityCounts,
+      fetchServerStats,
       fetchVhosts,
       fetchUsers,
       loadMoreUsers,
@@ -508,10 +515,11 @@ export function useAdmin() {
 
       // Entity list state
       activeCategory,
-      entityCounts,
       userList,
       roomList,
       mucServiceJid,
+      serverStats,
+      isLoadingStats,
 
       // Computed
       hasCommands: commands.length > 0,
@@ -540,10 +548,11 @@ export function useAdmin() {
       vhosts,
       selectedVhost,
       activeCategory,
-      entityCounts,
       userList,
       roomList,
       mucServiceJid,
+      serverStats,
+      isLoadingStats,
       actions,
     ]
   )

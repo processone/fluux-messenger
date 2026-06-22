@@ -1135,6 +1135,29 @@
         "roomList": {
             "title": "Chatovací místnosti",
             "noRooms": "Žádné místnosti nenalezeny"
+        },
+        "overview": {
+            "title": "Přehled serveru",
+            "refresh": "Obnovit",
+            "updatedAt": "Aktualizováno v {{time}}",
+            "advanced": "Pokročilé",
+            "advancedHint": "Spustit přímý příkaz serveru",
+            "empty": "Statistiky serveru nejsou dostupné.",
+            "retry": "Zkusit znovu",
+            "units": {
+                "d": "d",
+                "h": "h",
+                "m": "min",
+                "s": "s"
+            },
+            "cards": {
+                "uptime": "Doba běhu",
+                "version": "Verze serveru",
+                "registeredUsers": "Registrovaní uživatelé",
+                "onlineUsers": "Uživatelé online",
+                "onlineRooms": "Aktivní místnosti",
+                "vhosts": "Virtuální hostitelé"
+            }
         }
     },
     "commandPalette": {

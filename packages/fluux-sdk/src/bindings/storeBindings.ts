@@ -557,11 +557,6 @@ export function createStoreBindings(
     stores.admin.setIsExecuting(isExecuting)
   })
 
-  on('admin:entity-counts', ({ counts }) => {
-    const stores = getStores()
-    stores.admin.setEntityCounts(counts)
-  })
-
   on('admin:vhosts', ({ vhosts }) => {
     const stores = getStores()
     stores.admin.setVhosts(vhosts)
@@ -575,6 +570,11 @@ export function createStoreBindings(
   on('admin:muc-service', ({ mucServiceJid }) => {
     const stores = getStores()
     stores.admin.setMucServiceJid(mucServiceJid)
+  })
+
+  on('admin:server-stats', ({ stats }) => {
+    const stores = getStores()
+    stores.admin.setServerStats(stats)
   })
 
   // ============================================================================
