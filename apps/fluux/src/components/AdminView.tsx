@@ -60,6 +60,8 @@ export function AdminView({ activeCategory, onBack }: AdminViewProps) {
     // Room options
     getRoomOptions,
     hasCommand,
+    // Last activity
+    requestLastActivity,
   } = useAdmin()
 
   // Local state
@@ -388,6 +390,7 @@ export function AdminView({ activeCategory, onBack }: AdminViewProps) {
               <UserListItem
                 user={user}
                 onSelect={handleSelectUser}
+                requestLastActivity={requestLastActivity}
               />
             )}
             headerAction={
