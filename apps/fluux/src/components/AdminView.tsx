@@ -385,10 +385,14 @@ export function AdminView({ activeCategory, onBack }: AdminViewProps) {
           )}
           {usersTruncated && (
             <div className="mb-3 px-3 py-2 text-sm rounded-lg bg-amber-500/10 text-amber-700 dark:text-amber-300">
-              {t('admin.users.truncatedBanner', {
-                shown: filteredUsers.length,
-                total: serverStats?.registeredUsers ?? userList.items.length,
-              })}
+              {serverStats?.registeredUsers != null
+                ? t('admin.users.truncatedBanner', {
+                    shown: filteredUsers.length,
+                    total: serverStats.registeredUsers,
+                  })
+                : t('admin.users.truncatedBannerNoTotal', {
+                    shown: filteredUsers.length,
+                  })}
             </div>
           )}
           <EntityListView
