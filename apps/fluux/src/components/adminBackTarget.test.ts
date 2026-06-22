@@ -31,4 +31,12 @@ describe('getAdminBackTarget', () => {
   it('exits admin when no category is active', () => {
     expect(getAdminBackTarget({ ...base, activeCategory: null })).toBe('exit')
   })
+
+  it('returns to the overview from the announcements section', () => {
+    expect(getAdminBackTarget({ ...base, activeCategory: 'announcements' })).toBe('overview')
+  })
+
+  it('returns to the overview from the other section', () => {
+    expect(getAdminBackTarget({ ...base, activeCategory: 'other' })).toBe('overview')
+  })
 })

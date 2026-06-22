@@ -89,6 +89,7 @@ export function ServerOverview() {
               return (
                 <button
                   key={String(card.key)}
+                  type="button"
                   onClick={() => adminStore.getState().setActiveCategory(target)}
                   className="p-4 rounded-xl bg-fluux-bg border border-fluux-hover text-start hover:bg-fluux-hover hover:border-fluux-brand/40 transition-colors tap-target"
                 >

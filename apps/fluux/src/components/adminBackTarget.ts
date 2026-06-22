@@ -19,6 +19,6 @@ export function getAdminBackTarget(state: {
   if (state.hasSession) return 'session'
   if (state.hasSelectedUser) return 'user'
   if (state.hasSelectedRoom) return 'room'
-  if (state.activeCategory === 'users' || state.activeCategory === 'rooms') return 'overview'
+  if (state.activeCategory && state.activeCategory !== 'stats') return 'overview'
   return 'exit'
 }
