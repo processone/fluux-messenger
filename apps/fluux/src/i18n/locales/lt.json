@@ -1066,6 +1066,7 @@
             "description": "Jūs neturite administratoriaus teisių šiame serveryje. Susisiekite su serverio administratoriumi dėl prieigos."
         },
         "selectCommand": "Pasirinkite komandą iš šoninės juostos",
+        "openSections": "Atidaryti administravimo skyrius",
         "execute": "Vykdyti",
         "executing": "Vykdoma...",
         "next": "Toliau",

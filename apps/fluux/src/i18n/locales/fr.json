@@ -1067,6 +1067,7 @@
             "description": "Vous n'avez pas les privilèges administrateur sur ce serveur. Contactez l'administrateur du serveur pour obtenir l'accès."
         },
         "selectCommand": "Sélectionnez une commande dans la barre latérale",
+        "openSections": "Ouvrir les sections d'administration",
         "execute": "Exécuter",
         "executing": "Exécution...",
         "next": "Suivant",

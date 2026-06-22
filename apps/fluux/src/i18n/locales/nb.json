@@ -1066,6 +1066,7 @@
             "description": "Du har ikke administratorrettigheter på denne serveren. Kontakt serveradministratoren for tilgang."
         },
         "selectCommand": "Velg en kommando fra sidepanelet",
+        "openSections": "Åpne administrasjonsavsnitt",
         "execute": "Utfør",
         "executing": "Utfører...",
         "next": "Neste",

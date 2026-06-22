@@ -730,12 +730,11 @@ function ChatLayoutContent() {
     setAdminCategory(category)
   }
 
-  // Admin "home": on a wide screen, default to the server overview (stats) when
-  // entering the admin panel with nothing selected. Runs before paint to avoid a
-  // flash of the empty placeholder. Mobile keeps the list-first convention so the
-  // category list shows first, and non-admins still see the access-denied state.
+  // Admin "home": default to the server overview (stats) when entering the
+  // admin panel with nothing selected. Runs before paint to avoid a flash of
+  // the empty placeholder. Non-admins still see the access-denied state.
   useLayoutEffect(() => {
-    if (sidebarView !== 'admin' || isSmallScreen()) return
+    if (sidebarView !== 'admin') return
     if (!adminIsAdmin || adminCategory || adminSession) return
     adminStore.getState().setActiveCategory('stats')
   }, [sidebarView, adminIsAdmin, adminCategory, adminSession])

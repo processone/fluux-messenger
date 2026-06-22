@@ -1066,6 +1066,7 @@
             "description": "Je hebt geen beheerdersrechten op deze server. Neem contact op met je serverbeheerder voor toegang."
         },
         "selectCommand": "Selecteer een commando uit de zijbalk",
+        "openSections": "Beheerssecties openen",
         "execute": "Uitvoeren",
         "executing": "Uitvoeren...",
         "next": "Volgende",

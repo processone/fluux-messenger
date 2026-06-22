@@ -1068,6 +1068,7 @@
             "description": "M'għandekx privileġġi ta' amministratur fuq dan is-server. Ikkuntattja l-amministratur tas-server tiegħek għal aċċess."
         },
         "selectCommand": "Agħżel kmand mis-sidebar",
+        "openSections": "Iftaħ it-taqsimiet tal-amministrazzjoni",
         "execute": "Eżegwixxi",
         "executing": "Qed jeżegwixxi...",
         "next": "Li jmiss",

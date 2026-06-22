@@ -1066,6 +1066,7 @@
             "description": "Du har inte administratörsbehörighet på denna server. Kontakta din serveradministratör för åtkomst."
         },
         "selectCommand": "Välj ett kommando från sidofältet",
+        "openSections": "Öppna administrationssektioner",
         "execute": "Utför",
         "executing": "Utför...",
         "next": "Nästa",

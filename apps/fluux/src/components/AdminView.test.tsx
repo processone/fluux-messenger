@@ -47,11 +47,26 @@ const adminState = {
   clearPendingSelectedUserJid: vi.fn(),
   getRoomOptions: vi.fn().mockResolvedValue({ type: 'result', fields: [] }),
   hasCommand: () => false,
+  commands: [{ node: 'stat-node', name: 'Stat', category: 'stats' }],
+  commandsByCategory: {
+    user: [],
+    stats: [{ node: 'stat-node', name: 'Stat', category: 'stats' }],
+    announcement: [],
+    other: [],
+  },
+  isDiscovering: false,
+  isAdmin: true,
+  discoverMucService: vi.fn(),
+  executeCommand: vi.fn(),
+  fetchServerStats: vi.fn(),
 }
+
+const setActiveCategory = vi.fn()
 
 vi.mock('@fluux/sdk', () => ({
   useAdmin: () => adminState,
   useXMPP: () => ({ client: { muc: { destroyRoom: vi.fn() } } }),
+  adminStore: { getState: () => ({ setActiveCategory }) },
 }))
 
 // Import after mocks are registered.
@@ -79,15 +94,52 @@ describe('AdminView header back button', () => {
     expect(onBack).not.toHaveBeenCalled()
   })
 
-  it('calls onBack (exit to admin root) from the room list level', () => {
+  it('returns to the overview from the room list level (does not exit)', () => {
     const onBack = vi.fn()
     render(<AdminView activeCategory="rooms" onBack={onBack} />)
 
-    // At the list level (no detail open).
     expect(screen.getByText('admin.roomList.title')).toBeInTheDocument()
 
     fireEvent.click(screen.getByLabelText('common.back'))
 
+    expect(setActiveCategory).toHaveBeenCalledWith('stats')
+    expect(onBack).not.toHaveBeenCalled()
+  })
+
+  it('exits admin from the overview / no-category level', () => {
+    const onBack = vi.fn()
+    render(<AdminView activeCategory={null} onBack={onBack} />)
+
+    fireEvent.click(screen.getByLabelText('common.back'))
+
     expect(onBack).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('AdminView mobile section sheet', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('opens the section sheet from the header menu button', () => {
+    render(<AdminView activeCategory="rooms" onBack={vi.fn()} />)
+
+    // The sheet (and its Users section button) is not rendered until opened.
+    expect(screen.queryByText('admin.categories.users')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByLabelText('admin.openSections'))
+
+    expect(screen.getByText('admin.categories.users')).toBeInTheDocument()
+  })
+
+  it('navigates and closes the sheet when a main-content section is chosen', () => {
+    render(<AdminView activeCategory="rooms" onBack={vi.fn()} />)
+
+    fireEvent.click(screen.getByLabelText('admin.openSections'))
+    fireEvent.click(screen.getByRole('button', { name: 'admin.categories.users' }))
+
+    expect(setActiveCategory).toHaveBeenCalledWith('users')
+    // Sheet closed → its section buttons are gone again.
+    expect(screen.queryByText('admin.categories.users')).not.toBeInTheDocument()
   })
 })

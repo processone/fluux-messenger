@@ -1,34 +1,42 @@
 import { describe, it, expect } from 'vitest'
 import { getAdminBackTarget } from './adminBackTarget'
 
+const base = { hasSession: false, hasSelectedUser: false, hasSelectedRoom: false, activeCategory: null }
+
 describe('getAdminBackTarget', () => {
-  it('returns "exit" when at the list level (nothing selected)', () => {
-    expect(
-      getAdminBackTarget({ hasSession: false, hasSelectedUser: false, hasSelectedRoom: false })
-    ).toBe('exit')
+  it('prioritises a command session above everything', () => {
+    expect(getAdminBackTarget({ ...base, hasSession: true, hasSelectedUser: true, activeCategory: 'users' })).toBe('session')
   })
 
-  it('returns "user" when a user detail is open, so back steps to the list (not the root)', () => {
-    expect(
-      getAdminBackTarget({ hasSession: false, hasSelectedUser: true, hasSelectedRoom: false })
-    ).toBe('user')
+  it('steps out of a selected user before the list', () => {
+    expect(getAdminBackTarget({ ...base, hasSelectedUser: true, activeCategory: 'users' })).toBe('user')
   })
 
-  it('returns "room" when a room detail is open, so back steps to the list (not the root)', () => {
-    expect(
-      getAdminBackTarget({ hasSession: false, hasSelectedUser: false, hasSelectedRoom: true })
-    ).toBe('room')
+  it('steps out of a selected room before the list', () => {
+    expect(getAdminBackTarget({ ...base, hasSelectedRoom: true, activeCategory: 'rooms' })).toBe('room')
   })
 
-  it('returns "session" when a command session is active', () => {
-    expect(
-      getAdminBackTarget({ hasSession: true, hasSelectedUser: false, hasSelectedRoom: false })
-    ).toBe('session')
+  it('returns to the overview from the users list', () => {
+    expect(getAdminBackTarget({ ...base, activeCategory: 'users' })).toBe('overview')
   })
 
-  it('prioritises an active session over a stale selection', () => {
-    expect(
-      getAdminBackTarget({ hasSession: true, hasSelectedUser: true, hasSelectedRoom: false })
-    ).toBe('session')
+  it('returns to the overview from the rooms list', () => {
+    expect(getAdminBackTarget({ ...base, activeCategory: 'rooms' })).toBe('overview')
+  })
+
+  it('exits admin from the overview itself', () => {
+    expect(getAdminBackTarget({ ...base, activeCategory: 'stats' })).toBe('exit')
+  })
+
+  it('exits admin when no category is active', () => {
+    expect(getAdminBackTarget({ ...base, activeCategory: null })).toBe('exit')
+  })
+
+  it('returns to the overview from the announcements section', () => {
+    expect(getAdminBackTarget({ ...base, activeCategory: 'announcements' })).toBe('overview')
+  })
+
+  it('returns to the overview from the other section', () => {
+    expect(getAdminBackTarget({ ...base, activeCategory: 'other' })).toBe('overview')
   })
 })

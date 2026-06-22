@@ -1066,6 +1066,7 @@
             "description": "Þú hefur ekki stjórnendaréttindi á þessum þjóni. Hafðu samband við stjórnanda þjónsins til að fá aðgang."
         },
         "selectCommand": "Veldu skipun frá hliðarstikunni",
+        "openSections": "Opna stjórnunarhluta",
         "execute": "Keyra",
         "executing": "Keyri...",
         "next": "Næsta",

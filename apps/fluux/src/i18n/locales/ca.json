@@ -1068,6 +1068,7 @@
             "description": "No tens privilegis d'administrador en aquest servidor. Contacta amb l'administrador del servidor per obtenir accés."
         },
         "selectCommand": "Selecciona una comanda de la barra lateral",
+        "openSections": "Obrir les seccions d'administració",
         "execute": "Executa",
         "executing": "Executant...",
         "next": "Següent",

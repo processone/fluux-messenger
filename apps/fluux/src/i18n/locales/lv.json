@@ -1067,6 +1067,7 @@
             "description": "Jums nav administratora tiesību šajā serverī. Sazinieties ar servera administratoru, lai saņemtu piekļuvi."
         },
         "selectCommand": "Izvēlieties komandu no sānjoslas",
+        "openSections": "Atvērt administrācijas sadaļas",
         "execute": "Izpildīt",
         "executing": "Izpilda...",
         "next": "Nākamais",

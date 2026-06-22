@@ -1067,6 +1067,7 @@
             "description": "Nemáte oprávnenia správcu na tomto serveri. Kontaktujte správcu servera pre prístup."
         },
         "selectCommand": "Vyberte príkaz z bočného panela",
+        "openSections": "Otvoriť sekcie administrácie",
         "execute": "Vykonať",
         "executing": "Vykonáva sa...",
         "next": "Ďalej",
