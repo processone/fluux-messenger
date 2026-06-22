@@ -114,6 +114,8 @@ Thumbnails for images and videos are encrypted with their own separate key so a 
 
 **Caveat on link previews.** The ciphertext URL is still visible to your upload server (since it hosts the file), and to any proxy or monitoring tool between your client and that server. The *contents* are not — anyone who grabs the URL by itself gets only ciphertext bytes they cannot decrypt without the AES key.
 
+**Caveat for the web client.** Step 4 above downloads the ciphertext from your upload server before decrypting it. In the web version that download is a cross-origin browser request, so the host serving uploaded files (the XMPP HTTP File Upload service) must send [CORS](https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS) headers allowing the origin from which Fluux is served. Without it, encrypted attachments cannot be fetched and decrypted, so they will not open or preview. The desktop app downloads files through its native HTTP client and is not subject to this.
+
 **Compatibility.** Clients that don't yet implement this will see a message saying the content is encrypted, with a fallback notice — same as they would for text. Plain (non-encrypted) file attachments, sent in conversations where E2EE is off, keep working exactly as before.
 
 ## Encrypt-to-self and message history
