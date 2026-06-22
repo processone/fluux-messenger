@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { detectRenderLoop } from '@/utils/renderLoopDetector'
 import { Sidebar, type SidebarView } from './Sidebar'
@@ -153,6 +153,7 @@ function ChatLayoutContent() {
   // NOTE: Don't use useAdmin() hook - it subscribes to many values. Use focused selectors.
   const adminSession = useAdminStore((s) => s.currentSession)
   const adminCategory = useAdminStore((s) => s.activeCategory)
+  const adminIsAdmin = useAdminStore((s) => s.isAdmin)
   const clearAdminSession = () => {
     adminStore.getState().setCurrentSession(null)
     adminStore.getState().setTargetJid(null)
@@ -728,6 +729,16 @@ function ChatLayoutContent() {
     }
     setAdminCategory(category)
   }
+
+  // Admin "home": on a wide screen, default to the server overview (stats) when
+  // entering the admin panel with nothing selected. Runs before paint to avoid a
+  // flash of the empty placeholder. Mobile keeps the list-first convention so the
+  // category list shows first, and non-admins still see the access-denied state.
+  useLayoutEffect(() => {
+    if (sidebarView !== 'admin' || isSmallScreen()) return
+    if (!adminIsAdmin || adminCategory || adminSession) return
+    adminStore.getState().setActiveCategory('stats')
+  }, [sidebarView, adminIsAdmin, adminCategory, adminSession])
 
   // Handle managing a user from roster context menu
   const handleManageUser = (jid: string) => {
