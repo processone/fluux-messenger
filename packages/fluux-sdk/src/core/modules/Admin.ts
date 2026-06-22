@@ -27,6 +27,11 @@ import type {
   ServerStats,
 } from '../types'
 
+/** Hard cap on the full user-directory fetch. Past this, escalate to server-side search. */
+export const MAX_USERS = 10000
+/** RSM page size for the full user-directory fetch (large to minimize roundtrips). */
+export const USER_PAGE_SIZE = 1500
+
 /**
  * Server administration module via XEP-0050 Ad-Hoc Commands and XEP-0133 Service Administration.
  *
@@ -690,6 +695,39 @@ export class Admin extends BaseModule {
     }
 
     return { users, pagination }
+  }
+
+  /**
+   * Fetch the entire registered-user directory by looping {@link fetchUserList}
+   * over RSM pages until complete or {@link MAX_USERS} is reached.
+   *
+   * @returns the accumulated users and whether the directory was truncated at the cap.
+   */
+  async fetchAllUsers(vhost?: string): Promise<{ users: AdminUser[]; truncated: boolean }> {
+    const all: AdminUser[] = []
+    let after: string | undefined
+    let truncated = false
+    // Guard against a server that ignores RSM and never advances the cursor.
+    const maxPages = Math.ceil(MAX_USERS / USER_PAGE_SIZE) + 2
+
+    for (let page = 0; page < maxPages; page++) {
+      const { users, pagination } = await this.fetchUserList(vhost, {
+        max: USER_PAGE_SIZE,
+        ...(after ? { after } : {}),
+      })
+      all.push(...users)
+
+      if (all.length >= MAX_USERS) {
+        all.length = MAX_USERS
+        truncated = true
+        break
+      }
+      // Stop when the page is short and the server provides no next cursor.
+      if (users.length < USER_PAGE_SIZE && !pagination.last) break
+      after = pagination.last
+    }
+
+    return { users: all, truncated }
   }
 
   // ============================================================================
