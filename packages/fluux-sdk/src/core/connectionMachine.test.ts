@@ -40,6 +40,14 @@ describe('connectionMachine', () => {
       expect(context.lastError).toBeNull()
       actor.stop()
     })
+
+    it('should default displayAsleep to false and smResumeWindowMs to SM_SESSION_TIMEOUT_MS', () => {
+      const actor = createActor(connectionMachine).start()
+      const { context } = actor.getSnapshot()
+      expect(context.displayAsleep).toBe(false)
+      expect(context.smResumeWindowMs).toBe(SM_SESSION_TIMEOUT_MS)
+      actor.stop()
+    })
   })
 
   describe('happy path: idle → connecting → connected.healthy', () => {
@@ -489,6 +497,245 @@ describe('connectionMachine', () => {
     })
   })
 
+  describe('display-gated backoff (paused)', () => {
+    let actor: ReturnType<typeof createActor<typeof connectionMachine>>
+
+    beforeEach(() => {
+      actor = createActor(connectionMachine).start()
+      actor.send({ type: 'CONNECT' })
+      actor.send({ type: 'CONNECTION_SUCCESS' })
+      actor.send({ type: 'SOCKET_DIED' })
+      // reconnecting.waiting, attempt=1
+    })
+
+    it('should move waiting -> paused on DISPLAY_INACTIVE and set displayAsleep', () => {
+      actor.send({ type: 'DISPLAY_INACTIVE' })
+      expect(actor.getSnapshot().value).toEqual({ reconnecting: 'paused' })
+      expect(actor.getSnapshot().context.displayAsleep).toBe(true)
+      actor.stop()
+    })
+
+    it('should preserve the attempt counter and delay when pausing', () => {
+      // Build up backoff to attempt 3 (delay 4000ms)
+      actor.send({ type: 'TRIGGER_RECONNECT' })
+      actor.send({ type: 'CONNECTION_ERROR', error: 'fail' })
+      actor.send({ type: 'TRIGGER_RECONNECT' })
+      actor.send({ type: 'CONNECTION_ERROR', error: 'fail' })
+      expect(actor.getSnapshot().context.reconnectAttempt).toBe(3)
+      expect(actor.getSnapshot().context.nextRetryDelayMs).toBe(4000)
+
+      actor.send({ type: 'DISPLAY_INACTIVE' })
+      expect(actor.getSnapshot().value).toEqual({ reconnecting: 'paused' })
+      // Counter and delay untouched by the pause.
+      expect(actor.getSnapshot().context.reconnectAttempt).toBe(3)
+      expect(actor.getSnapshot().context.nextRetryDelayMs).toBe(4000)
+      actor.stop()
+    })
+
+    it('should NOT advance the ladder while paused (no after timer armed)', async () => {
+      vi.useFakeTimers()
+      try {
+        const timed = createActor(connectionMachine).start()
+        timed.send({ type: 'CONNECT' })
+        timed.send({ type: 'CONNECTION_SUCCESS' })
+        timed.send({ type: 'SOCKET_DIED' })
+        timed.send({ type: 'DISPLAY_INACTIVE' })
+        expect(timed.getSnapshot().value).toEqual({ reconnecting: 'paused' })
+
+        // Advance well past any backoff delay (cap is 120s).
+        await vi.advanceTimersByTimeAsync(MAX_RECONNECT_DELAY * 5)
+        expect(timed.getSnapshot().value).toEqual({ reconnecting: 'paused' })
+        expect(timed.getSnapshot().context.reconnectAttempt).toBe(1)
+        expect(timed.getSnapshot().context.nextRetryDelayMs).toBe(INITIAL_RECONNECT_DELAY)
+        timed.stop()
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+
+    it('should resume paused -> attempting on DISPLAY_ACTIVE, preserving the counter', () => {
+      // Build up to attempt 3, then pause
+      actor.send({ type: 'TRIGGER_RECONNECT' })
+      actor.send({ type: 'CONNECTION_ERROR', error: 'fail' })
+      actor.send({ type: 'TRIGGER_RECONNECT' })
+      actor.send({ type: 'CONNECTION_ERROR', error: 'fail' })
+      expect(actor.getSnapshot().context.reconnectAttempt).toBe(3)
+      actor.send({ type: 'DISPLAY_INACTIVE' })
+      expect(actor.getSnapshot().value).toEqual({ reconnecting: 'paused' })
+
+      // Display back → immediate attempt, counter intact.
+      actor.send({ type: 'DISPLAY_ACTIVE' })
+      expect(actor.getSnapshot().value).toEqual({ reconnecting: 'attempting' })
+      expect(actor.getSnapshot().context.displayAsleep).toBe(false)
+      expect(actor.getSnapshot().context.reconnectAttempt).toBe(3)
+      expect(actor.getSnapshot().context.reconnectTargetTime).toBeNull()
+      actor.stop()
+    })
+
+    it('should continue backoff from the preserved attempt after resume + CONNECTION_ERROR', () => {
+      actor.send({ type: 'TRIGGER_RECONNECT' })
+      actor.send({ type: 'CONNECTION_ERROR', error: 'fail' })
+      actor.send({ type: 'TRIGGER_RECONNECT' })
+      actor.send({ type: 'CONNECTION_ERROR', error: 'fail' })
+      expect(actor.getSnapshot().context.reconnectAttempt).toBe(3)
+      expect(actor.getSnapshot().context.nextRetryDelayMs).toBe(4000)
+
+      actor.send({ type: 'DISPLAY_INACTIVE' })
+      actor.send({ type: 'DISPLAY_ACTIVE' })
+      // attempting again, then a failure should advance 3 -> 4 (8000ms), not reset.
+      actor.send({ type: 'CONNECTION_ERROR', error: 'fail' })
+      expect(actor.getSnapshot().context.reconnectAttempt).toBe(4)
+      expect(actor.getSnapshot().context.nextRetryDelayMs).toBe(8000)
+      actor.stop()
+    })
+
+    it('should treat DISPLAY_ACTIVE in waiting as an immediate kick to attempting', () => {
+      // Still in waiting (attempt=1). DISPLAY_ACTIVE acts like VISIBLE.
+      expect(actor.getSnapshot().value).toEqual({ reconnecting: 'waiting' })
+      actor.send({ type: 'DISPLAY_ACTIVE' })
+      expect(actor.getSnapshot().value).toEqual({ reconnecting: 'attempting' })
+      expect(actor.getSnapshot().context.reconnectAttempt).toBe(1)
+      actor.stop()
+    })
+
+    it('should ignore DISPLAY_ACTIVE in connected.healthy', () => {
+      const c = createActor(connectionMachine).start()
+      c.send({ type: 'CONNECT' })
+      c.send({ type: 'CONNECTION_SUCCESS' })
+      c.send({ type: 'DISPLAY_ACTIVE' })
+      expect(c.getSnapshot().value).toEqual({ connected: 'healthy' })
+      c.stop()
+    })
+
+    it('should clear displayAsleep when reset via DISCONNECT from paused', () => {
+      actor.send({ type: 'DISPLAY_INACTIVE' })
+      expect(actor.getSnapshot().context.displayAsleep).toBe(true)
+      actor.send({ type: 'DISCONNECT' })
+      expect(actor.getSnapshot().value).toBe('disconnected')
+      expect(actor.getSnapshot().context.displayAsleep).toBe(false)
+      actor.stop()
+    })
+
+    it('should let TRIGGER_RECONNECT override the display gate from paused', () => {
+      actor.send({ type: 'DISPLAY_INACTIVE' })
+      expect(actor.getSnapshot().value).toEqual({ reconnecting: 'paused' })
+      expect(actor.getSnapshot().context.displayAsleep).toBe(true)
+
+      // User-initiated retry wins over the "display off" hold.
+      actor.send({ type: 'TRIGGER_RECONNECT' })
+      expect(actor.getSnapshot().value).toEqual({ reconnecting: 'attempting' })
+      expect(actor.getSnapshot().context.displayAsleep).toBe(false)
+      actor.stop()
+    })
+
+    it('should still mark SM resume not viable on WAKE with a long sleep while waiting', () => {
+      // WAKE (long) is orthogonal to the display gate — viability still flips.
+      actor.send({ type: 'WAKE', sleepDurationMs: SM_SESSION_TIMEOUT_MS + 1000 })
+      expect(actor.getSnapshot().context.smResumeViable).toBe(false)
+      expect(actor.getSnapshot().context.reconnectAttempt).toBe(1)
+      actor.stop()
+    })
+
+    it('should mark SM resume not viable on DISPLAY_ACTIVE (long sleep) from paused', () => {
+      actor.send({ type: 'DISPLAY_INACTIVE' })
+      expect(actor.getSnapshot().value).toEqual({ reconnecting: 'paused' })
+
+      // A long display-off elapsed past the SM resume window — the server has
+      // discarded the SM session, so the next attempt must fresh-bind.
+      actor.send({ type: 'DISPLAY_ACTIVE', sleptMs: SM_SESSION_TIMEOUT_MS + 1000 })
+      expect(actor.getSnapshot().value).toEqual({ reconnecting: 'attempting' })
+      expect(actor.getSnapshot().context.smResumeViable).toBe(false)
+      expect(actor.getSnapshot().context.displayAsleep).toBe(false)
+      actor.stop()
+    })
+
+    it('should keep SM resume viable on DISPLAY_ACTIVE (short/undefined sleep) from paused', () => {
+      actor.send({ type: 'DISPLAY_INACTIVE' })
+      expect(actor.getSnapshot().value).toEqual({ reconnecting: 'paused' })
+
+      // Short blip (and the legacy undefined payload) leaves viability untouched.
+      actor.send({ type: 'DISPLAY_ACTIVE', sleptMs: 30_000 })
+      expect(actor.getSnapshot().value).toEqual({ reconnecting: 'attempting' })
+      expect(actor.getSnapshot().context.smResumeViable).toBe(true)
+      actor.stop()
+    })
+
+    it('should leave SM resume viable on DISPLAY_ACTIVE with undefined sleptMs from paused', () => {
+      actor.send({ type: 'DISPLAY_INACTIVE' })
+      actor.send({ type: 'DISPLAY_ACTIVE' })
+      expect(actor.getSnapshot().value).toEqual({ reconnecting: 'attempting' })
+      expect(actor.getSnapshot().context.smResumeViable).toBe(true)
+      actor.stop()
+    })
+
+    it('should mark SM resume not viable on DISPLAY_ACTIVE (long sleep) from waiting', () => {
+      expect(actor.getSnapshot().value).toEqual({ reconnecting: 'waiting' })
+
+      actor.send({ type: 'DISPLAY_ACTIVE', sleptMs: SM_SESSION_TIMEOUT_MS + 1000 })
+      expect(actor.getSnapshot().value).toEqual({ reconnecting: 'attempting' })
+      expect(actor.getSnapshot().context.smResumeViable).toBe(false)
+      actor.stop()
+    })
+
+    it('should keep SM resume viable on DISPLAY_ACTIVE (short/undefined sleep) from waiting', () => {
+      expect(actor.getSnapshot().value).toEqual({ reconnecting: 'waiting' })
+
+      actor.send({ type: 'DISPLAY_ACTIVE', sleptMs: 30_000 })
+      expect(actor.getSnapshot().value).toEqual({ reconnecting: 'attempting' })
+      expect(actor.getSnapshot().context.smResumeViable).toBe(true)
+      actor.stop()
+    })
+
+    it('should gate DISPLAY_ACTIVE viability on the server window (SM_ENABLED 300s)', () => {
+      // A 400s sleep is below the 600s default constant but above a 300s server
+      // window — it must mark SM resume not viable.
+      actor.send({ type: 'SM_ENABLED', maxMs: 300_000 })
+      actor.send({ type: 'DISPLAY_INACTIVE' })
+      expect(actor.getSnapshot().value).toEqual({ reconnecting: 'paused' })
+
+      actor.send({ type: 'DISPLAY_ACTIVE', sleptMs: 400_000 })
+      expect(actor.getSnapshot().value).toEqual({ reconnecting: 'attempting' })
+      expect(actor.getSnapshot().context.smResumeViable).toBe(false)
+      actor.stop()
+    })
+
+    it('should ignore DISPLAY_INACTIVE in connected.healthy', () => {
+      const c = createActor(connectionMachine).start()
+      c.send({ type: 'CONNECT' })
+      c.send({ type: 'CONNECTION_SUCCESS' })
+      c.send({ type: 'DISPLAY_INACTIVE' })
+      expect(c.getSnapshot().value).toEqual({ connected: 'healthy' })
+      c.stop()
+    })
+
+    it('should ignore DISPLAY_INACTIVE in terminal.conflict', () => {
+      const c = createActor(connectionMachine).start()
+      c.send({ type: 'CONNECT' })
+      c.send({ type: 'CONNECTION_SUCCESS' })
+      c.send({ type: 'CONFLICT' })
+      c.send({ type: 'DISPLAY_INACTIVE' })
+      expect(c.getSnapshot().value).toEqual({ terminal: 'conflict' })
+      c.stop()
+    })
+  })
+
+  describe('getConnectionStatusFromState (paused)', () => {
+    it('maps reconnecting.paused to the reconnecting status (not disconnected)', () => {
+      expect(getConnectionStatusFromState({ reconnecting: 'paused' })).toBe('reconnecting')
+    })
+
+    it('keeps store status reconnecting while held in paused (no bounce to disconnected)', () => {
+      const actor = createActor(connectionMachine).start()
+      actor.send({ type: 'CONNECT' })
+      actor.send({ type: 'CONNECTION_SUCCESS' })
+      actor.send({ type: 'SOCKET_DIED' })
+      actor.send({ type: 'DISPLAY_INACTIVE' })
+      expect(actor.getSnapshot().value).toEqual({ reconnecting: 'paused' })
+      expect(getConnectionStatusFromState(actor.getSnapshot().value)).toBe('reconnecting')
+      actor.stop()
+    })
+  })
+
   describe('exponential backoff', () => {
     it('should double the delay with each attempt', () => {
       const actor = createActor(connectionMachine).start()
@@ -552,6 +799,51 @@ describe('connectionMachine', () => {
       const target2 = actor.getSnapshot().context.reconnectTargetTime!
       expect(target2).toBeGreaterThanOrEqual(beforeAttempt2 + 2000)
 
+      actor.stop()
+    })
+  })
+
+  describe('SM_ENABLED (server resume window)', () => {
+    it('should set smResumeWindowMs from the server max at top level', () => {
+      const actor = createActor(connectionMachine).start()
+      actor.send({ type: 'CONNECT' })
+      actor.send({ type: 'CONNECTION_SUCCESS' })
+      // ejabberd default 300s
+      actor.send({ type: 'SM_ENABLED', maxMs: 300_000 })
+      expect(actor.getSnapshot().context.smResumeWindowMs).toBe(300_000)
+      actor.stop()
+    })
+
+    it('should not transition state on SM_ENABLED', () => {
+      const actor = createActor(connectionMachine).start()
+      actor.send({ type: 'CONNECT' })
+      actor.send({ type: 'CONNECTION_SUCCESS' })
+      actor.send({ type: 'SM_ENABLED', maxMs: 300_000 })
+      expect(actor.getSnapshot().value).toEqual({ connected: 'healthy' })
+      actor.stop()
+    })
+
+    it('should use server max (300s) to gate SM resume viability on WAKE', () => {
+      const actor = createActor(connectionMachine).start()
+      actor.send({ type: 'CONNECT' })
+      actor.send({ type: 'CONNECTION_SUCCESS' })
+      actor.send({ type: 'SM_ENABLED', maxMs: 300_000 })
+      actor.send({ type: 'SOCKET_DIED' })
+      // Now reconnecting.waiting. A 400s sleep exceeds the 300s server window
+      // even though it is below the 600s default constant.
+      actor.send({ type: 'WAKE', sleepDurationMs: 400_000 })
+      expect(actor.getSnapshot().context.smResumeViable).toBe(false)
+      actor.stop()
+    })
+
+    it('should fall back to SM_SESSION_TIMEOUT_MS when server omits max', () => {
+      const actor = createActor(connectionMachine).start()
+      actor.send({ type: 'CONNECT' })
+      actor.send({ type: 'CONNECTION_SUCCESS' })
+      actor.send({ type: 'SOCKET_DIED' })
+      // No SM_ENABLED → default 600s window. A 400s sleep stays viable.
+      actor.send({ type: 'WAKE', sleepDurationMs: 400_000 })
+      expect(actor.getSnapshot().context.smResumeViable).toBe(true)
       actor.stop()
     })
   })
@@ -1203,6 +1495,8 @@ describe('connectionMachine', () => {
           smResumeViable: true,
           sleepStartTime: null,
           retryInitialFailure: false,
+          displayAsleep: false,
+          smResumeWindowMs: SM_SESSION_TIMEOUT_MS,
         }
         const info = getReconnectInfoFromContext(context)
         expect(info.attempt).toBe(3)
@@ -1219,6 +1513,8 @@ describe('connectionMachine', () => {
           smResumeViable: true,
           sleepStartTime: null,
           retryInitialFailure: false,
+          displayAsleep: false,
+          smResumeWindowMs: SM_SESSION_TIMEOUT_MS,
         }
         const info = getReconnectInfoFromContext(context)
         expect(info.attempt).toBe(0)

@@ -1,8 +1,10 @@
-import { useEffect, useRef, useCallback } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import type { UnlistenFn } from '@tauri-apps/api/event'
 import { useXMPP, useSystemState, usePresence, consoleStore } from '@fluux/sdk'
 import { useConnectionStore } from '@fluux/sdk/react'
 import { isTauri } from '../utils/tauri'
+import type { ReconnectIntent } from '../utils/reconnectIntent'
+import { getReconnectIntent } from '@/utils/reconnectIntent'
 import { startWakeGracePeriod, startSyncGracePeriod } from '../utils/renderLoopDetector'
 
 // ── Constants ──────────────────────────────────────────────────────────────────
@@ -142,6 +144,78 @@ export function shouldHandleDisplayWake(payload: SystemWakePayload | undefined):
 }
 
 /**
+ * Payload for the Rust 30s `xmpp-keepalive` tick. Mirrors the Rust
+ * `KeepalivePayload` (serde camelCase). An older binary emits the legacy
+ * `()` payload (undefined); both fields are then absent.
+ */
+export interface KeepalivePayload {
+  /** False on macOS DarkWake/PowerNap (display off). Absent on a legacy build. */
+  displayActive?: boolean
+  /** Wall-clock ms elapsed since the previous tick — large after a sleep gap. */
+  sleptMs?: number
+}
+
+/**
+ * Safely extract a {@link KeepalivePayload} from a raw Tauri event payload.
+ *
+ * A legacy `()` payload (undefined) or any malformed value yields
+ * `{ displayActive: undefined, sleptMs: undefined }` — never throws. A
+ * missing/undefined `displayActive` is treated as `true` (fail-open) by the
+ * downstream gate, so losing the field can never silently kill reconnection.
+ */
+export function parseKeepalivePayload(raw: unknown): KeepalivePayload {
+  if (!raw || typeof raw !== 'object') {
+    return { displayActive: undefined, sleptMs: undefined }
+  }
+  const record = raw as Record<string, unknown>
+  return {
+    displayActive:
+      typeof record.displayActive === 'boolean' ? record.displayActive : undefined,
+    sleptMs: typeof record.sleptMs === 'number' ? record.sleptMs : undefined,
+  }
+}
+
+/**
+ * Decide whether a keepalive tick should drive a reconnect/health check.
+ *
+ * Order matters and both gates are hard blocks:
+ *  1. `payload.displayActive === false` -> false. The primary display is off
+ *     (closed lid with no external screen, idle screen-off, DarkWake); we hold
+ *     reconnect attempts to avoid PowerNap/DarkWake battery churn.
+ *  2. `intent !== 'active'` -> false. The user deliberately logged out; never
+ *     log them back in on a tick that lands during a logout race.
+ *
+ * A missing/undefined `displayActive` (legacy binary emitting the `()`
+ * payload) fails open to "display active" — losing the field must never
+ * silently kill reconnection now that the keepalive is the reconnect authority.
+ */
+export function shouldRunKeepaliveReconnect(
+  payload: KeepalivePayload,
+  intent: ReconnectIntent
+): boolean {
+  if (payload.displayActive === false) return false
+  if (intent !== 'active') return false
+  return true
+}
+
+/**
+ * Decide whether a keepalive tick represents a real sleep/wake gap (rather
+ * than a steady-state ~30s tick).
+ *
+ * The Rust thread measures wall-clock elapsed per iteration; after the
+ * machine slept the first post-wake tick carries a large `sleptMs`. A
+ * wake-tick must be routed through `shouldHandleWake('keepalive')` so it
+ * honors the post-reload cooldown and the wake debounce; a steady-state tick
+ * skips that and just runs the cheap health probe.
+ *
+ * Uses the project-wide SLEEP_THRESHOLD_MS line. An undefined `sleptMs`
+ * (legacy `()` payload) is treated as a non-wake tick.
+ */
+export function isKeepaliveWakeTick(sleptMs: number | undefined): boolean {
+  return (sleptMs ?? 0) >= SLEEP_THRESHOLD_MS
+}
+
+/**
  * Decide whether a wake from sleep should reload the Tauri webview.
  *
  * Background: after a confirmed sleep/wake cycle the WRY/WKWebView on
@@ -222,6 +296,13 @@ export function usePlatformState() {
   const statusRef = useRef(status)
   const osIdleUnavailableRef = useRef(false)
   const osIdleUnavailableLoggedRef = useRef(false)
+  // Last keepalive tick's displayActive value. Defaults true pre-first-tick
+  // so a cold-start visibility/focus nudge still works (fail-open).
+  const displayActiveRef = useRef(true)
+  // Reactive mirror of displayActiveRef for App's spinner gate. Refs don't
+  // re-render; this state lets App drop the full-screen "Reconnexion…"
+  // spinner when the machine holds in reconnecting.paused (display off).
+  const [displayActive, setDisplayActive] = useState(true)
 
   useEffect(() => {
     statusRef.current = status
@@ -456,7 +537,9 @@ export function usePlatformState() {
     let unlistenSleep: UnlistenFn | undefined
 
     void import('@tauri-apps/api/event').then(({ listen }) => {
-      // Immediate wake notification
+      // Immediate wake notification — DEMOTED to rendering-only. The native
+      // keepalive tick is the reconnect authority now; OS wake only triggers
+      // the WRY webview reload when the sleep span is long enough.
       void listen<SystemWakePayload | undefined>('system-did-wake', (event) => {
         if (cancelled) return
         // DarkWake filter: when macOS wakes for background sync and the
@@ -471,20 +554,21 @@ export function usePlatformState() {
         if (!shouldHandleWake('system-did-wake')) return
         const sleepDuration = sleepStartRef.current ? Date.now() - sleepStartRef.current : undefined
         sleepStartRef.current = null
-        handleWakeFromSleep(sleepDuration, 'system-did-wake')
+        maybeReloadOnLongWake(sleepDuration, 'system-did-wake')
       }).then(fn => {
         if (cancelled) { fn() } else { unlistenWake = fn }
       })
 
-      // Deferred wake notification (app was in background during wake;
-      // Tauri delivers the event with a delay measured in seconds).
+      // Deferred wake notification — DEMOTED to rendering-only (same rationale).
+      // App was in background during wake; Tauri delivers it with a delay
+      // measured in seconds.
       void listen<number>('system-did-wake-deferred', (event) => {
         if (cancelled) return
         const delaySecs = event.payload || 0
         if (!shouldHandleWake('system-did-wake-deferred')) return
         const sleepDuration = sleepStartRef.current ? Date.now() - sleepStartRef.current : undefined
         sleepStartRef.current = null
-        handleWakeFromSleep(sleepDuration, `system-did-wake-deferred +${delaySecs}s`)
+        maybeReloadOnLongWake(sleepDuration, `system-did-wake-deferred +${delaySecs}s`)
       }).then(fn => {
         if (cancelled) { fn() } else { unlistenWakeDeferred = fn }
       })
@@ -507,7 +591,7 @@ export function usePlatformState() {
       unlistenWakeDeferred?.()
       unlistenSleep?.()
     }
-  }, [client, shouldHandleWake, logEvent, handleWakeFromSleep])
+  }, [client, shouldHandleWake, logEvent, maybeReloadOnLongWake])
 
   // ── Effect 3: Time-gap wake detection (JS heartbeat) ──────────────────────
   // Also runs during 'reconnecting' status so we still update the heartbeat
@@ -576,19 +660,18 @@ export function usePlatformState() {
 
       // If the hide was long enough to count as a real sleep on Tauri,
       // reload the webview (same rendering-context hazard as OS sleep).
-      // Cross-check the JS heartbeat: if it was firing normally (gap
-      // below threshold), the machine was awake and the app was merely
-      // hidden — no rendering context loss, no reload needed.
+      // Cross-check the JS heartbeat: a small gap means JS was running
+      // (machine awake, app merely hidden) — no rendering loss, no reload.
+      // Route through maybeReloadOnLongWake so the decision/marker write is
+      // shared with the OS-wake path and unit-testable.
       if (shouldReloadOnVisibilityWake(hiddenDuration, heartbeatGap, isTauri())) {
-        const secs = Math.round(hiddenDuration / 1000)
-        console.log(`[PlatformState] Wake from sleep (visibility, ${secs}s), reloading webview to restore rendering`)
-        logEvent(`Wake from sleep (visibility, ${secs}s), reloading webview`)
-        window.location.reload()
-        return
+        if (maybeReloadOnLongWake(hiddenDuration, 'visibility')) return
       }
 
       // Sub-threshold, machine was awake, or web mode: just nudge a
-      // stalled reconnect via notifySystemState('visible').
+      // stalled reconnect via notifySystemState('visible') — unless the
+      // last keepalive tick reported the display off (display-gated reconnect).
+      if (!displayActiveRef.current) return
       try {
         await client.notifySystemState('visible')
       } catch (err) {
@@ -604,6 +687,9 @@ export function usePlatformState() {
     // immediately triggers the stalled reconnect.
     const handleWindowFocus = () => {
       if (statusRef.current !== 'reconnecting') return
+      // Reconnect is display-gated: if the last keepalive tick reported the
+      // primary display off, a focus event must not nudge a reconnect.
+      if (!displayActiveRef.current) return
       if (!shouldHandleWake('window-focus')) return
 
       console.log('[PlatformState] Window focused while reconnecting, triggering reconnect')
@@ -631,10 +717,24 @@ export function usePlatformState() {
     let cleanedUp = false
 
     void import('@tauri-apps/api/event').then(({ listen }) => {
-      // Rust-driven keepalive tick every 30s. The SDK routes the tick
-      // internally (nudge reconnect, health check, or no-op).
-      void listen('xmpp-keepalive', () => {
-        client.handleKeepaliveTick()
+      // Rust-driven keepalive tick every 30s. The Rust thread keeps emitting
+      // even when the display is asleep; the JS-side reconnect work is gated
+      // here. The SDK routes the tick internally (nudge / health check / no-op).
+      void listen('xmpp-keepalive', (event) => {
+        const payload = parseKeepalivePayload(event?.payload)
+        const active = payload.displayActive !== false
+        displayActiveRef.current = active
+        setDisplayActive(active)
+        // Intent gate (defense-in-depth, change #5) + display gate (contract
+        // rule 1): never even nudge when logged-out or while display asleep.
+        if (!shouldRunKeepaliveReconnect(payload, getReconnectIntent())) return
+        // A sleep-gap tick is a wake signal: honor the post-reload cooldown
+        // and the cross-source debounce. A steady-state ~30s tick skips that
+        // and just runs the health probe.
+        if (isKeepaliveWakeTick(payload.sleptMs) && !shouldHandleWake('keepalive')) {
+          return
+        }
+        client.handleKeepaliveTick(payload.displayActive, payload.sleptMs)
       }).then((fn) => {
         if (cleanedUp) { fn() } else { unlistenKeepalive = fn }
       })
@@ -675,7 +775,7 @@ export function usePlatformState() {
       unlistenKeepalive?.()
       unlistenProxyClosed?.()
     }
-  }, [client])
+  }, [client, shouldHandleWake])
 
   // ── Effect 6: Presence machine sync with connection status ────────────────
 
@@ -721,4 +821,9 @@ export function usePlatformState() {
       presenceDisconnect()
     }
   }, [status, presenceConnect, presenceDisconnect, notifyActive, logEvent, markOsIdleUnavailable])
+
+  // Reactive display state for App's full-screen spinner gate: when a
+  // display-paused reconnect holds the machine in reconnecting.paused, App
+  // drops the spinner (it would otherwise spin forever) and renders ChatLayout.
+  return { displayActive }
 }

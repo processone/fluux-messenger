@@ -55,6 +55,13 @@ export interface ModuleDependencies {
    * which case messages simply flow in cleartext.
    */
   getE2EEManager?: () => E2EEManager | null
+  /**
+   * Pull-based predicate: "is automatic reconnection currently allowed?"
+   * Evaluated live at the single reconnect funnel (Connection.attemptReconnect).
+   * Keeps the SDK headless — the app wires this to its reconnect-intent flag.
+   * Defaults to always-allowed when omitted.
+   */
+  shouldAutoReconnect?: () => boolean
 }
 
 /**

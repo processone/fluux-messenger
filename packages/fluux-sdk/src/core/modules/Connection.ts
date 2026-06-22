@@ -145,6 +145,10 @@ export class Connection extends BaseModule {
   private xmpp: Client | null = null
   private credentials: ConnectOptions | null = null
 
+  // Pull-based gate evaluated at the top of attemptReconnect(). Defaults to
+  // always-allowed so non-app SDK consumers (bots) reconnect unconditionally.
+  private shouldAutoReconnect: () => boolean = () => true
+
   /**
    * XState connection state machine actor.
    * Replaces the error-prone boolean flags (isReconnecting, hasEverConnected,
@@ -216,6 +220,10 @@ export class Connection extends BaseModule {
 
   constructor(deps: ModuleDependencies) {
     super(deps)
+
+    if (deps.shouldAutoReconnect) {
+      this.shouldAutoReconnect = deps.shouldAutoReconnect
+    }
 
     // Create proxy manager
     this.proxyManager = new ProxyManager({
@@ -971,18 +979,44 @@ export class Connection extends BaseModule {
   /**
    * Handle a keepalive tick from an external clock (e.g., Rust native timer).
    *
-   * Routes the tick to the appropriate action based on the current connection
-   * state — the app does not need to inspect status and decide which method
-   * to call. Safe to invoke on every tick; no-ops when there is nothing to do.
+   * Display-gated: when `displayActive === false` the tick does NO network
+   * work (no health check, no reconnect nudge) and only informs the machine
+   * via DISPLAY_INACTIVE so a held backoff ladder enters reconnecting.paused.
+   * When `displayActive` is true or undefined (legacy no-arg tick, fail-open):
+   * send DISPLAY_ACTIVE, then route by state — reconnecting → nudge, connected
+   * → lightweight health check, anything else → no-op.
    *
-   * - `reconnecting`: nudge the state machine out of `reconnecting.waiting`
-   *   so a frozen JS setTimeout backoff doesn't stall recovery.
-   * - `connected` (online): run a lightweight health check (SM ack) without
-   *   changing status or triggering presence events.
-   * - anything else: no-op.
+   * @param displayActive Primary-display power state from the native probe.
+   *   `false` => display off (do not reconnect). `undefined` => legacy payload,
+   *   treated as active (fail-open).
+   * @param sleptMs Real wall-clock elapsed reported by the native loop. A long
+   *   gap indicates the machine slept; used to send an immediate wake kick.
    */
-  handleKeepaliveTick(): void {
+  handleKeepaliveTick(displayActive?: boolean, sleptMs?: number): void {
+    if (displayActive === false) {
+      // Display off: zero outbound work; just release/hold the ladder.
+      this.sendMachineEvent({ type: 'DISPLAY_INACTIVE' }, 'keepalive:display-inactive')
+      return
+    }
+
+    // Display on (or legacy fail-open): mark the machine active, carrying the
+    // elapsed gap. In reconnecting.{waiting,paused} this acts as an immediate
+    // kick to attempting; when the gap exceeded the SM resume window the
+    // guarded handler also marks SM resume not viable so the kicked attempt
+    // fresh-binds instead of sending a doomed <resume/> the server discarded.
+    this.sendMachineEvent({ type: 'DISPLAY_ACTIVE', sleptMs }, 'keepalive:display-active')
+
     if (this.isInReconnectingState()) {
+      // Single-flight: defer to an in-flight wake recovery rather than racing a
+      // parallel reconnect (handleAwake's single-flight already owns it). This
+      // coalescing keeps concurrent wake signals (the OS deferred-wake path +
+      // this keepalive kick) from each spawning a client.
+      if (this.deadSocketRecoveryInProgress || this.handleAwakeInFlight) {
+        this.nudgeReconnect()
+        return
+      }
+      // Safety no-op for any reconnecting substate the DISPLAY_ACTIVE kick did
+      // not already advance to attempting (TRIGGER_RECONNECT is ignored there).
       this.nudgeReconnect()
       return
     }
@@ -1771,6 +1805,20 @@ export class Connection extends BaseModule {
         const smMax = nonza.attrs.max != null ? `${nonza.attrs.max}s` : 'unknown'
         this.stores.console.addEvent(`Stream Management enabled (id: ${smId})`, 'sm')
         logInfo(`SM enabled (id: ${smId}, server max: ${smMax})`)
+        // Source the SM resume window from the server (XEP-0198 §3 <enabled max>,
+        // seconds). The machine guards compare sleep duration against this window
+        // instead of the hardcoded SM_SESSION_TIMEOUT_MS, which over-estimates
+        // (ejabberd often grants 300s). Only override when the server sends max;
+        // otherwise the machine keeps its SM_SESSION_TIMEOUT_MS default.
+        if (nonza.attrs.max != null) {
+          const maxSec = Number(nonza.attrs.max)
+          if (Number.isFinite(maxSec) && maxSec > 0) {
+            this.sendMachineEvent(
+              { type: 'SM_ENABLED', maxMs: maxSec * 1000 },
+              'sm-enabled:server-max'
+            )
+          }
+        }
         // New session means no pending resume, so any future 'fail' events are real failures
         this.smResumeCompleted = true
         // Cache SM state for reconnection (survives socket death).
@@ -2327,6 +2375,22 @@ export class Connection extends BaseModule {
    */
   private async attemptReconnect(): Promise<void> {
     logInfo('attemptReconnect: starting')
+
+    // Single systemic reconnect funnel gate (spec change #5). Every reconnect
+    // entry — backoff `after`, the display-active/wake kick, and dead-socket
+    // recovery — reaches here via reconnecting.attempting. When the app says
+    // auto-reconnect is not desired (e.g. post-logout), tear down any in-flight
+    // client and land in `disconnected` (a clean spinner-exit state) instead of
+    // opening a connection. No machine context flag — the regression-prone
+    // XState machine is untouched by this gate.
+    if (!this.shouldAutoReconnect()) {
+      logInfo('attemptReconnect: shouldAutoReconnect() === false, aborting and disconnecting')
+      this.stores.console.addEvent('Reconnect suppressed: auto-reconnect not desired', 'connection')
+      this.cleanupClient()
+      this.sendMachineEvent({ type: 'DISCONNECT' }, 'attemptReconnect:not-desired')
+      return
+    }
+
     this.stores.console.addEvent(
       `Reconnect attempt starting (state=${JSON.stringify(this.getMachineState())})`,
       'connection'

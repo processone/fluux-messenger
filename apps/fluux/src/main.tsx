@@ -15,6 +15,7 @@ import { installBeforeInputGuard } from './utils/tauriInputFix'
 import { logStartupCapabilities } from './utils/startupDiagnostics'
 import { startStallSentinel } from './utils/stallSentinel'
 import { registerServiceWorker } from './utils/serviceWorkerUpdate'
+import { getReconnectIntent } from './utils/reconnectIntent'
 
 // Check if running in Tauri
 const isTauri = '__TAURI_INTERNALS__' in window
@@ -109,7 +110,11 @@ window.addEventListener('vite:preloadError', async (event) => {
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <RenderLoopBoundary>
-      <XMPPProvider debug={import.meta.env.DEV} proxyAdapter={proxyAdapter}>
+      <XMPPProvider
+        debug={import.meta.env.DEV}
+        proxyAdapter={proxyAdapter}
+        shouldAutoReconnect={() => getReconnectIntent() === 'active'}
+      >
         <ThemeProvider>
           <HashRouter>
             <App />

@@ -14,11 +14,68 @@ const {
   mockClientNotifySystemState,
   mockClientNudgeReconnect,
   mockClientVerifyConnectionHealth,
+  mockClientHandleKeepaliveTick,
+  mockGetReconnectIntent,
   mockConnectionStatus,
+  mockIsTauriMode,
   tauriListeners,
-  mockListen,
+  tauriIpc,
+  tauriEventPluginInternals,
 } = vi.hoisted(() => {
+  // Tauri event bus emulation.
+  //
+  // The hook subscribes via `import('@tauri-apps/api/event')` from two separate
+  // effects (Effect 2 wake/sleep, Effect 5 keepalive). We deliberately do NOT
+  // mock `@tauri-apps/api/event`: a `vi.mock(.../event)` factory does not
+  // reliably intercept BOTH concurrent dynamic imports of the same specifier
+  // (the second can race ahead of the mock registry and resolve the real
+  // module), which made keepalive-listener registration intermittently miss
+  // the mock. Instead we let the REAL `listen()` run for every effect and mock
+  // only `@tauri-apps/api/core` with a faithful IPC stub that routes
+  // `transformCallback` + `plugin:event|listen` into `tauriListeners`. One
+  // deterministic registration path, no race.
+  // `tauriListeners.get(name)!({ payload })` then drives the handler.
   const listeners = new Map<string, (event?: { payload?: unknown }) => unknown>()
+  let nextCallbackId = 1
+  const callbacks = new Map<number, (raw: unknown) => void>()
+  const ipc = {
+    transformCallback(cb: (raw: unknown) => void): number {
+      const id = nextCallbackId++
+      callbacks.set(id, cb)
+      return id
+    },
+    invoke(cmd: string, args?: Record<string, unknown>): Promise<unknown> {
+      if (cmd === 'plugin:event|listen') {
+        const event = String(args?.event)
+        const handlerId = args?.handler as number
+        const cb = callbacks.get(handlerId)
+        // The real backend invokes the transformed callback with the full
+        // event object; `listen()` forwards it straight to the user handler,
+        // so our captured handler accepts `{ payload }`.
+        listeners.set(event, (e?: { payload?: unknown }) => {
+          cb?.({ event, id: handlerId, payload: e?.payload })
+        })
+        return Promise.resolve(handlerId)
+      }
+      if (cmd === 'plugin:event|unlisten') {
+        // We only ever register one handler per event name in these tests.
+        return Promise.resolve()
+      }
+      // Other commands (e.g. get_idle_time) — default to a benign value.
+      return Promise.resolve(0)
+    },
+    unregisterCallback(id: number): void {
+      callbacks.delete(id)
+    },
+  }
+  // The real `@tauri-apps/api/event` `_unlisten()` (run on effect cleanup)
+  // calls `window.__TAURI_EVENT_PLUGIN_INTERNALS__.unregisterListener`.
+  const eventPluginInternals = {
+    unregisterListener(_event: string, _eventId: number): void {
+      // No-op: tests re-register per render; `tauriListeners` is cleared in
+      // the global beforeEach.
+    },
+  }
   return {
     mockNotifyIdle: vi.fn(),
     mockNotifyActive: vi.fn(),
@@ -28,26 +85,51 @@ const {
     mockClientNotifySystemState: vi.fn().mockResolvedValue(undefined),
     mockClientNudgeReconnect: vi.fn(),
     mockClientVerifyConnectionHealth: vi.fn().mockResolvedValue(undefined),
+    mockClientHandleKeepaliveTick: vi.fn(),
+    mockGetReconnectIntent: vi.fn(() => 'active' as 'active' | 'logged-out'),
     mockConnectionStatus: { current: 'online' },
+    // Drives the mocked `isTauri()` (see vi.mock('../utils/tauri') below).
+    // Decoupling the Tauri-mode decision from `window.__TAURI_INTERNALS__`
+    // lets us keep a functional IPC stub installed for the WHOLE file (so the
+    // real `transformCallback` never throws on a leaked async resolution)
+    // while individual web-mode tests still report isTauri() === false.
+    mockIsTauriMode: { current: false },
     tauriListeners: listeners,
-    mockListen: vi.fn((event: string, handler: (event?: { payload?: unknown }) => unknown) => {
-      listeners.set(event, handler)
-      return Promise.resolve(() => {
-        if (listeners.get(event) === handler) {
-          listeners.delete(event)
-        }
-      })
-    }),
+    tauriIpc: ipc,
+    tauriEventPluginInternals: eventPluginInternals,
   }
 })
 
-// Mock Tauri APIs
-vi.mock('@tauri-apps/api/core', () => ({
-  invoke: vi.fn(),
-}))
+/** Flip the hook into Tauri mode for a describe block / test. `isTauri()` is
+ *  mocked to read `mockIsTauriMode` (see below), so this is independent of
+ *  `window.__TAURI_INTERNALS__` — which stays installed for the whole file so
+ *  the real `listen()`/`transformCallback` can never throw on a leaked async
+ *  resolution. */
+function installTauriIpc() {
+  mockIsTauriMode.current = true
+}
 
-vi.mock('@tauri-apps/api/event', () => ({
-  listen: mockListen,
+// `isTauri()` is decoupled from `window.__TAURI_INTERNALS__` here: the global
+// must remain a functional IPC stub at all times (a real `listen()` resolution
+// that survives a test or the whole file would otherwise call
+// `transformCallback` on an undefined global and surface as an unhandled
+// rejection — including bleeding into sibling test files in the same worker).
+// `mockIsTauriMode` carries the web-vs-Tauri decision instead.
+vi.mock('../utils/tauri', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../utils/tauri')>()
+  return {
+    ...actual,
+    isTauri: () => mockIsTauriMode.current,
+  }
+})
+
+// Mock only `@tauri-apps/api/core` with the functional IPC stub. The real
+// `@tauri-apps/api/event` module is left intact so EVERY `listen()` (from both
+// effects) routes through this stub deterministically — see the note in the
+// hoisted block for why the event module is intentionally not mocked.
+vi.mock('@tauri-apps/api/core', () => ({
+  invoke: (cmd: string, args?: Record<string, unknown>) => tauriIpc.invoke(cmd, args),
+  transformCallback: (cb: (raw: unknown) => void) => tauriIpc.transformCallback(cb),
 }))
 
 vi.mock('@/utils/renderLoopDetector', () => ({
@@ -67,6 +149,7 @@ vi.mock('@fluux/sdk', () => ({
       notifySystemState: mockClientNotifySystemState,
       nudgeReconnect: mockClientNudgeReconnect,
       verifyConnectionHealth: mockClientVerifyConnectionHealth,
+      handleKeepaliveTick: mockClientHandleKeepaliveTick,
     },
   }),
   useSystemState: () => ({
@@ -90,6 +173,10 @@ vi.mock('@fluux/sdk', () => ({
   },
 }))
 
+vi.mock('@/utils/reconnectIntent', () => ({
+  getReconnectIntent: () => mockGetReconnectIntent(),
+}))
+
 // Import after mocks are set up
 import {
   usePlatformState,
@@ -102,6 +189,9 @@ import {
   clearReloadMarker,
   isWithinReloadCooldown,
   RELOAD_MARKER_STORAGE_KEY,
+  parseKeepalivePayload,
+  shouldRunKeepaliveReconnect,
+  isKeepaliveWakeTick,
 } from './usePlatformState'
 
 describe('usePlatformState', () => {
@@ -110,11 +200,26 @@ describe('usePlatformState', () => {
     vi.useFakeTimers()
     mockConnectionStatus.current = 'online'
     tauriListeners.clear()
+    // Default to web mode (isTauri() === false): the activity/idle tests rely
+    // on it. Tauri-mode describe blocks call installTauriIpc() to flip it on.
+    mockIsTauriMode.current = false
+    // The IPC stub + event-plugin internals stay installed for the WHOLE file
+    // (never deleted) so any real `@tauri-apps/api/event` `listen()` /
+    // `_unlisten()` that resolves async — even after a test or the whole file
+    // has finished — finds a working `transformCallback` / `invoke` instead of
+    // throwing an unhandled rejection (which would otherwise bleed into the
+    // next test file sharing this worker).
+    ;(window as any).__TAURI_INTERNALS__ = tauriIpc
+    ;(window as any).__TAURI_EVENT_PLUGIN_INTERNALS__ = tauriEventPluginInternals
   })
 
   afterEach(() => {
     vi.useRealTimers()
-    delete (window as any).__TAURI_INTERNALS__
+    // Leave the functional IPC stub installed (do NOT delete it): pending async
+    // effect cleanup (real `_unlisten()` → core.invoke) can still run during
+    // testing-library's unmount after this hook, and a later file's leaked
+    // resolution must also find a working global.
+    ;(window as any).__TAURI_INTERNALS__ = tauriIpc
   })
 
   describe('activity detection', () => {
@@ -299,6 +404,45 @@ describe('usePlatformState', () => {
       expect(focusCalls).toHaveLength(0)
       addSpy.mockRestore()
     })
+
+    it('suppresses the focus nudge when the last keepalive tick was displayActive=false', async () => {
+      installTauriIpc()
+      mockConnectionStatus.current = 'reconnecting'
+      renderHook(() => usePlatformState())
+
+      // A display-off tick lands first, recording displayActive=false.
+      for (let i = 0; i < 30 && !tauriListeners.has('xmpp-keepalive'); i++) {
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(0)
+          await Promise.resolve()
+        })
+      }
+      const ka = tauriListeners.get('xmpp-keepalive')
+      await act(async () => {
+        ka?.({ payload: { displayActive: false, sleptMs: 30_000 } })
+        await Promise.resolve()
+      })
+      vi.clearAllMocks()
+
+      await act(async () => {
+        window.dispatchEvent(new Event('focus'))
+        await Promise.resolve()
+      })
+
+      expect(mockClientNotifySystemState).not.toHaveBeenCalledWith('visible')
+    })
+
+    it('still nudges on focus before any tick has arrived (cold-start fail-open)', async () => {
+      mockConnectionStatus.current = 'reconnecting'
+      renderHook(() => usePlatformState())
+
+      await act(async () => {
+        window.dispatchEvent(new Event('focus'))
+        await Promise.resolve()
+      })
+
+      expect(mockClientNotifySystemState).toHaveBeenCalledWith('visible')
+    })
   })
 
   describe('heartbeat during reconnecting status', () => {
@@ -452,6 +596,187 @@ describe('usePlatformState', () => {
     })
   })
 
+  // Wait for an effect to register a Tauri listener (the hook subscribes via
+  // an async dynamic import — flush micro + faked-macro tasks until present).
+  const waitForListener = async (name: string) => {
+    for (let i = 0; i < 30 && !tauriListeners.has(name); i++) {
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0)
+        await Promise.resolve()
+      })
+    }
+  }
+
+  describe('Effect 2 OS-wake demotion (reload-only)', () => {
+    beforeEach(() => {
+      installTauriIpc()
+      clearReloadMarker()
+    })
+
+    it('does NOT call notifySystemState("awake") on system-did-wake (reconnect is keepalive-driven)', async () => {
+      mockConnectionStatus.current = 'online'
+      renderHook(() => usePlatformState())
+      await waitForListener('system-did-wake')
+
+      const wake = tauriListeners.get('system-did-wake')
+      expect(wake).toBeDefined()
+      await act(async () => {
+        wake!({ payload: { displayActive: true } })
+        await Promise.resolve()
+      })
+
+      // No 'awake' notify at all — not even with an undefined duration
+      // (expect.anything() would miss the undefined-arg case, so assert on the
+      // first arg directly).
+      const awakeCalls = mockClientNotifySystemState.mock.calls.filter(
+        (args) => args[0] === 'awake'
+      )
+      expect(awakeCalls).toHaveLength(0)
+    })
+
+    it('does NOT call notifySystemState("awake") on system-did-wake-deferred', async () => {
+      mockConnectionStatus.current = 'online'
+      renderHook(() => usePlatformState())
+      await waitForListener('system-did-wake-deferred')
+
+      const deferred = tauriListeners.get('system-did-wake-deferred')
+      expect(deferred).toBeDefined()
+      await act(async () => {
+        deferred!({ payload: 9000 })
+        await Promise.resolve()
+      })
+
+      // No 'awake' notify at all — not even with an undefined duration
+      // (expect.anything() would miss the undefined-arg case, so assert on the
+      // first arg directly).
+      const awakeCalls = mockClientNotifySystemState.mock.calls.filter(
+        (args) => args[0] === 'awake'
+      )
+      expect(awakeCalls).toHaveLength(0)
+    })
+  })
+
+  describe('Effect 4 window-shown reload routing', () => {
+    beforeEach(() => {
+      installTauriIpc()
+      clearReloadMarker()
+    })
+
+    it('routes a long visibility-wake reload through maybeReloadOnLongWake (writes the reload marker)', async () => {
+      const reloadSpy = vi.fn()
+      Object.defineProperty(window, 'location', {
+        configurable: true,
+        value: { ...window.location, reload: reloadSpy },
+      })
+
+      const start = Date.now()
+      mockConnectionStatus.current = 'online'
+      renderHook(() => usePlatformState())
+
+      // Hide the page.
+      await act(async () => {
+        Object.defineProperty(document, 'hidden', { configurable: true, value: true })
+        document.dispatchEvent(new Event('visibilitychange'))
+        await Promise.resolve()
+      })
+
+      // Advance the clock past SLEEP_THRESHOLD_MS so both hidden-span AND
+      // heartbeat-gap exceed it (real sleep), then show the page.
+      vi.setSystemTime(new Date(start + 200_000))
+      await act(async () => {
+        Object.defineProperty(document, 'hidden', { configurable: true, value: false })
+        document.dispatchEvent(new Event('visibilitychange'))
+        await Promise.resolve()
+      })
+
+      expect(reloadSpy).toHaveBeenCalled()
+      expect(readReloadMarker()).toBeGreaterThan(0)
+    })
+  })
+
+  describe('Effect 5 keepalive gate', () => {
+    const fireKeepalive = async (payload: unknown) => {
+      // The hook registers the listener via `await import(...).then(...)`, whose
+      // resolution interleaves microtasks and the (faked) timer/macrotask queue.
+      // Poll until the listener is registered, flushing both each iteration.
+      for (let i = 0; i < 30 && !tauriListeners.has('xmpp-keepalive'); i++) {
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(0)
+          await Promise.resolve()
+        })
+      }
+      const handler = tauriListeners.get('xmpp-keepalive')
+      expect(handler).toBeDefined()
+      await act(async () => {
+        handler!({ payload })
+        await Promise.resolve()
+      })
+    }
+
+    beforeEach(() => {
+      installTauriIpc()
+      mockGetReconnectIntent.mockReturnValue('active')
+    })
+
+    it('forwards displayActive + sleptMs to handleKeepaliveTick on a steady-state tick', async () => {
+      mockConnectionStatus.current = 'online'
+      renderHook(() => usePlatformState())
+      await fireKeepalive({ displayActive: true, sleptMs: 30_000 })
+      expect(mockClientHandleKeepaliveTick).toHaveBeenCalledWith(true, 30_000)
+    })
+
+    it('does not call handleKeepaliveTick when displayActive is false', async () => {
+      mockConnectionStatus.current = 'online'
+      renderHook(() => usePlatformState())
+      await fireKeepalive({ displayActive: false, sleptMs: 30_000 })
+      expect(mockClientHandleKeepaliveTick).not.toHaveBeenCalled()
+    })
+
+    it('does not call handleKeepaliveTick when intent is logged-out', async () => {
+      mockGetReconnectIntent.mockReturnValue('logged-out')
+      mockConnectionStatus.current = 'online'
+      renderHook(() => usePlatformState())
+      await fireKeepalive({ displayActive: true, sleptMs: 30_000 })
+      expect(mockClientHandleKeepaliveTick).not.toHaveBeenCalled()
+    })
+
+    it('treats a legacy () payload as display-active (fail-open)', async () => {
+      mockConnectionStatus.current = 'online'
+      renderHook(() => usePlatformState())
+      await fireKeepalive(undefined)
+      expect(mockClientHandleKeepaliveTick).toHaveBeenCalledWith(undefined, undefined)
+    })
+
+    it('routes a wake-tick through the post-reload cooldown (suppressed within cooldown)', async () => {
+      writeReloadMarker(Date.now() - 1_000)
+      mockConnectionStatus.current = 'reconnecting'
+      renderHook(() => usePlatformState())
+      await fireKeepalive({ displayActive: true, sleptMs: 600_000 })
+      expect(mockClientHandleKeepaliveTick).not.toHaveBeenCalled()
+    })
+
+    it('runs a wake-tick once the cooldown has elapsed', async () => {
+      clearReloadMarker()
+      mockConnectionStatus.current = 'reconnecting'
+      renderHook(() => usePlatformState())
+      await fireKeepalive({ displayActive: true, sleptMs: 600_000 })
+      expect(mockClientHandleKeepaliveTick).toHaveBeenCalledWith(true, 600_000)
+    })
+
+    it('returns displayActive=false after a display-off tick', async () => {
+      mockConnectionStatus.current = 'online'
+      const { result } = renderHook(() => usePlatformState())
+      await fireKeepalive({ displayActive: false, sleptMs: 30_000 })
+      expect(result.current.displayActive).toBe(false)
+    })
+
+    it('defaults displayActive=true before any tick', () => {
+      mockConnectionStatus.current = 'reconnecting'
+      const { result } = renderHook(() => usePlatformState())
+      expect(result.current.displayActive).toBe(true)
+    })
+  })
+
   describe('shouldHandleDisplayWake', () => {
     it('returns true when no payload is attached (Linux/Windows or older build)', () => {
       expect(shouldHandleDisplayWake(undefined)).toBe(true)
@@ -467,6 +792,107 @@ describe('usePlatformState', () => {
 
     it('returns true when displayActive is missing but payload exists (fail-open)', () => {
       expect(shouldHandleDisplayWake({})).toBe(true)
+    })
+  })
+
+  describe('parseKeepalivePayload', () => {
+    // The Rust keepalive thread emits { displayActive, sleptMs } (serde
+    // camelCase). An older binary emits the legacy () payload (undefined).
+    // Parsing must never throw and must default a missing displayActive to
+    // undefined so the downstream gate fails open (treats it as active).
+
+    it('parses a well-formed payload', () => {
+      expect(parseKeepalivePayload({ displayActive: true, sleptMs: 30_000 })).toEqual({
+        displayActive: true,
+        sleptMs: 30_000,
+      })
+      expect(parseKeepalivePayload({ displayActive: false, sleptMs: 600_000 })).toEqual({
+        displayActive: false,
+        sleptMs: 600_000,
+      })
+    })
+
+    it('returns undefined fields for a legacy () / undefined payload (no throw)', () => {
+      expect(parseKeepalivePayload(undefined)).toEqual({
+        displayActive: undefined,
+        sleptMs: undefined,
+      })
+      expect(parseKeepalivePayload(null)).toEqual({
+        displayActive: undefined,
+        sleptMs: undefined,
+      })
+    })
+
+    it('ignores fields of the wrong type without throwing', () => {
+      expect(parseKeepalivePayload({ displayActive: 'yes', sleptMs: 'soon' })).toEqual({
+        displayActive: undefined,
+        sleptMs: undefined,
+      })
+    })
+
+    it('does not throw on a non-object primitive', () => {
+      expect(parseKeepalivePayload(42)).toEqual({
+        displayActive: undefined,
+        sleptMs: undefined,
+      })
+      expect(parseKeepalivePayload('xmpp-keepalive')).toEqual({
+        displayActive: undefined,
+        sleptMs: undefined,
+      })
+    })
+  })
+
+  describe('shouldRunKeepaliveReconnect', () => {
+    // Two gates, in this order:
+    //  1. payload.displayActive === false  -> never reconnect (DarkWake).
+    //  2. intent !== 'active'              -> never reconnect (logout race).
+    // A missing displayActive (legacy build) fails open to true.
+
+    it('returns false when the display is asleep, regardless of intent', () => {
+      expect(shouldRunKeepaliveReconnect({ displayActive: false }, 'active')).toBe(false)
+      expect(shouldRunKeepaliveReconnect({ displayActive: false }, 'logged-out')).toBe(false)
+    })
+
+    it('returns false when the display is on but the user logged out', () => {
+      expect(shouldRunKeepaliveReconnect({ displayActive: true }, 'logged-out')).toBe(false)
+    })
+
+    it('returns true when the display is on and the intent is active', () => {
+      expect(shouldRunKeepaliveReconnect({ displayActive: true }, 'active')).toBe(true)
+    })
+
+    it('fails open: undefined displayActive (legacy build) + active intent -> true', () => {
+      expect(shouldRunKeepaliveReconnect({ displayActive: undefined }, 'active')).toBe(true)
+      expect(shouldRunKeepaliveReconnect({}, 'active')).toBe(true)
+    })
+
+    it('still blocks an undefined-display tick when the user logged out', () => {
+      expect(shouldRunKeepaliveReconnect({ displayActive: undefined }, 'logged-out')).toBe(false)
+    })
+  })
+
+  describe('isKeepaliveWakeTick', () => {
+    // A steady-state tick reports sleptMs ~= 30s (the interval). A tick that
+    // arrives after a sleep gap reports a much larger sleptMs and must be
+    // routed through the wake debounce/cooldown rather than the plain probe.
+    // Threshold is SLEEP_THRESHOLD_MS (180s), shared with the wake reload gate.
+
+    const THRESHOLD = 180_000 // SLEEP_THRESHOLD_MS
+
+    it('returns true at and above the sleep threshold (real wake gap)', () => {
+      expect(isKeepaliveWakeTick(THRESHOLD)).toBe(true)
+      expect(isKeepaliveWakeTick(600_000)).toBe(true)
+      expect(isKeepaliveWakeTick(2.5 * 60 * 60 * 1000)).toBe(true)
+    })
+
+    it('returns false for a steady-state ~30s tick', () => {
+      expect(isKeepaliveWakeTick(30_000)).toBe(false)
+      expect(isKeepaliveWakeTick(0)).toBe(false)
+      expect(isKeepaliveWakeTick(THRESHOLD - 1)).toBe(false)
+    })
+
+    it('treats undefined sleptMs (legacy build) as a non-wake tick', () => {
+      expect(isKeepaliveWakeTick(undefined)).toBe(false)
     })
   })
 

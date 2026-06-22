@@ -35,12 +35,17 @@
  * │  WAKE(long)      │          │
  * └──────┬───────────┘──────────┘
  *        ▼
- * ┌──────────────────────────┐
- * │        reconnecting       │
- * │ ┌──────────┐ ┌──────────┐ │
- * │ │ waiting   │ │attempting│ │
- * │ └──────────┘ └──────────┘ │
- * └──────┬─────────────────────┘
+ * ┌──────────────────────────────────────────────┐
+ * │                  reconnecting                   │
+ * │  ┌──────────┐  timer expiry  ┌──────────┐      │
+ * │  │ waiting   │───────────────►│attempting│      │
+ * │  └────┬─────┘◄───────────────└──────────┘      │
+ * │   ▲   │ DISPLAY_INACTIVE   CONNECTION_ERROR     │
+ * │   │   ▼                                          │
+ * │   │ ┌──────────┐  DISPLAY_ACTIVE / TRIGGER_RECONNECT
+ * │   └─│  paused   │──────────────────► attempting  │
+ * │ DISPLAY_ACTIVE └──────────┘                     │
+ * └──────┬─────────────────────────────────────────┘
  *        │ DISCONNECT / CANCEL_RECONNECT
  *        ▼
  * ┌──────────────┐
@@ -105,6 +110,9 @@ export type ConnectionMachineEvent =
   | { type: 'CANCEL_RECONNECT' }
   | { type: 'TRIGGER_RECONNECT' }
   | { type: 'SET_RETRY_INITIAL'; retry: boolean }
+  | { type: 'DISPLAY_ACTIVE'; sleptMs?: number }
+  | { type: 'DISPLAY_INACTIVE' }
+  | { type: 'SM_ENABLED'; maxMs: number }
 
 /**
  * Context (extended state) for the connection machine.
@@ -133,6 +141,12 @@ export interface ConnectionMachineContext {
    *  known-good session (e.g., page-reload auto-reconnect). Reset on
    *  DISCONNECT and on entry to connected/terminal states. */
   retryInitialFailure: boolean
+  /** When true, the primary display is off (asleep). Reconnect backoff is held
+   *  in reconnecting.paused — no timer is armed — until DISPLAY_ACTIVE arrives. */
+  displayAsleep: boolean
+  /** SM resume window in ms. Defaults to SM_SESSION_TIMEOUT_MS; overridden by the
+   *  server's <enabled max> value (XEP-0198 §3) via the SM_ENABLED event. */
+  smResumeWindowMs: number
 }
 
 /**
@@ -147,6 +161,7 @@ export type ConnectionStateValue =
   | { connected: 'verifying' }
   | { reconnecting: 'waiting' }
   | { reconnecting: 'attempting' }
+  | { reconnecting: 'paused' }
   | { terminal: 'conflict' }
   | { terminal: 'authFailed' }
   | { terminal: 'maxRetries' }
@@ -196,6 +211,7 @@ export const connectionMachine = setup({
       smResumeViable: true,
       sleepStartTime: null,
       retryInitialFailure: false,
+      displayAsleep: false,
     }),
 
     // Set the retryInitialFailure flag from a SET_RETRY_INITIAL event
@@ -274,21 +290,46 @@ export const connectionMachine = setup({
     markSmResumeNotViable: assign({
       smResumeViable: false,
     }),
+
+    // Capture the server-advertised SM resume window (XEP-0198 <enabled max>).
+    setSmResumeWindow: assign(({ event }) => {
+      if (event.type === 'SM_ENABLED') {
+        return { smResumeWindowMs: event.maxMs }
+      }
+      return {}
+    }),
+
+    // Mark the primary display as off (entering reconnecting.paused)
+    setDisplayAsleep: assign({
+      displayAsleep: true,
+    }),
+
+    // Clear the display-off flag (resuming from reconnecting.paused)
+    clearDisplayAsleep: assign({
+      displayAsleep: false,
+    }),
   },
   guards: {
-    // Did the sleep duration exceed SM session timeout?
-    sleepExceedsSMTimeout: ({ event }) => {
+    // Did the sleep duration exceed the SM resume window (server max if known)?
+    sleepExceedsSMTimeout: ({ context, event }) => {
       if (event.type === 'WAKE') {
-        return (event.sleepDurationMs ?? 0) > SM_SESSION_TIMEOUT_MS
+        return (event.sleepDurationMs ?? 0) > context.smResumeWindowMs
       }
       return false
     },
 
-    // Did the sleep duration (computed from context) exceed SM timeout?
+    // Did a display-off wake elapse past the SM resume window (server max if
+    // known)? When the display comes back after a long off-period the server
+    // has already discarded the SM session, so the next attempt must fresh-bind
+    // rather than send a doomed <resume/>.
+    displayWakeExceedsSMTimeout: ({ context, event }) =>
+      event.type === 'DISPLAY_ACTIVE' && (event.sleptMs ?? 0) > context.smResumeWindowMs,
+
+    // Did the sleep duration (computed from context) exceed the SM resume window?
     // Used when SOCKET_DIED arrives in sleeping state before WAKE.
     sleepExceedsSMTimeoutFromContext: ({ context }) => {
       if (context.sleepStartTime == null) return false
-      return (Date.now() - context.sleepStartTime) > SM_SESSION_TIMEOUT_MS
+      return (Date.now() - context.sleepStartTime) > context.smResumeWindowMs
     },
 
     // Should CONNECTION_ERROR in the `connecting` state route into the
@@ -313,6 +354,8 @@ export const connectionMachine = setup({
     smResumeViable: true,
     sleepStartTime: null,
     retryInitialFailure: false,
+    displayAsleep: false,
+    smResumeWindowMs: SM_SESSION_TIMEOUT_MS,
   },
   initial: 'idle',
   // Top-level event handlers apply to all states.
@@ -321,6 +364,9 @@ export const connectionMachine = setup({
   on: {
     SET_RETRY_INITIAL: {
       actions: 'setRetryInitialFailure',
+    },
+    SM_ENABLED: {
+      actions: 'setSmResumeWindow',
     },
   },
   states: {
@@ -516,6 +562,19 @@ export const connectionMachine = setup({
 
     /**
      * Lost connection, attempting to recover with exponential backoff.
+     *
+     * ## Display-gate boundary (intentional)
+     *
+     * The display gate engages only when a `DISPLAY_INACTIVE` keepalive tick
+     * lands in `waiting` (`waiting → paused`). The `connected.*` states
+     * deliberately do NOT track display state — `DISPLAY_INACTIVE` is ignored
+     * there. Consequence: a reconnect that *begins* while the display is already
+     * off runs the backoff ladder for at most one keepalive interval (~30s)
+     * before the next `DISPLAY_INACTIVE` tick parks it in `paused`. That is a
+     * bounded, self-healing leak, intentionally accepted to avoid threading
+     * display state through every connected substate. An in-flight `attempting`
+     * is never interrupted by the gate — it completes its attempt and
+     * re-evaluates in `waiting`, where the next tick can pause it.
      */
     reconnecting: {
       initial: 'waiting',
@@ -581,6 +640,27 @@ export const connectionMachine = setup({
               target: 'attempting',
               actions: 'clearTargetTime',
             },
+            // Primary display went off — hold the backoff ladder with no timer.
+            // Preserve reconnectAttempt/nextRetryDelayMs (PAUSE, never RESET).
+            DISPLAY_INACTIVE: {
+              target: 'paused',
+              actions: 'setDisplayAsleep',
+            },
+            // Display active while waiting acts as an immediate kick (like VISIBLE).
+            // A long display-off (sleptMs > SM window) also marks SM resume not
+            // viable so the kicked attempt fresh-binds instead of sending a
+            // doomed <resume/> the server has already discarded.
+            DISPLAY_ACTIVE: [
+              {
+                guard: 'displayWakeExceedsSMTimeout',
+                target: 'attempting',
+                actions: ['clearDisplayAsleep', 'clearTargetTime', 'markSmResumeNotViable'],
+              },
+              {
+                target: 'attempting',
+                actions: ['clearDisplayAsleep', 'clearTargetTime'],
+              },
+            ],
           },
         },
 
@@ -619,6 +699,47 @@ export const connectionMachine = setup({
             ],
             // Already attempting — ignore to prevent parallel attempts
             TRIGGER_RECONNECT: {},
+          },
+        },
+
+        /**
+         * Display-gated hold. The primary display is off, so the backoff ladder
+         * is paused with NO `after` timer armed — zero reconnect work happens
+         * until the display comes back. The attempt counter and nextRetryDelayMs
+         * are preserved so the ladder resumes where it left off.
+         *
+         * The gate is entered only from `waiting` (see the `reconnecting`
+         * doc-comment for why `connected.*` does not track display state and the
+         * resulting bounded, self-healing leak). DISCONNECT / CANCEL_RECONNECT /
+         * CONFLICT / AUTH_ERROR are handled by the parent `reconnecting.on`
+         * (inherited just like `waiting`/`attempting`), which runs
+         * `resetReconnectState` and thereby clears `displayAsleep` on exit.
+         */
+        paused: {
+          on: {
+            // Display came back — kick straight to attempting, preserving the
+            // attempt counter so failure continues the existing backoff. A long
+            // display-off (sleptMs > SM window) also marks SM resume not viable
+            // so the resumed attempt fresh-binds instead of sending a doomed
+            // <resume/> the server has already discarded.
+            DISPLAY_ACTIVE: [
+              {
+                guard: 'displayWakeExceedsSMTimeout',
+                target: 'attempting',
+                actions: ['clearDisplayAsleep', 'clearTargetTime', 'markSmResumeNotViable'],
+              },
+              {
+                target: 'attempting',
+                actions: ['clearDisplayAsleep', 'clearTargetTime'],
+              },
+            ],
+            // Explicit user-initiated retry deliberately overrides the display
+            // gate: a manual retry wins over the "display off" hold and resumes
+            // the attempt immediately (counter preserved).
+            TRIGGER_RECONNECT: {
+              target: 'attempting',
+              actions: ['clearDisplayAsleep', 'clearTargetTime'],
+            },
           },
         },
       },
@@ -718,6 +839,12 @@ export function getConnectionStatusFromState(stateValue: ConnectionStateValue): 
         // status-driven effects see a stable value across the whole
         // waiting↔attempting loop. This prevents wake-detection effects from
         // re-entering handleAwake() mid-reconnect.
+        return 'reconnecting'
+      case 'paused':
+        // Display-gated hold (no backoff timer armed). Still 'reconnecting' from
+        // the store/UI's view so App does NOT route to LoginScreen
+        // (status === 'disconnected') or strand the full-screen spinner while
+        // the primary display is off.
         return 'reconnecting'
     }
   }

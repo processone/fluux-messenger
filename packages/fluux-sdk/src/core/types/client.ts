@@ -399,4 +399,10 @@ export interface XMPPClientConfig {
    * ```
    */
   proxyAdapter?: ProxyAdapter
+  /**
+   * Pull-based predicate the SDK evaluates before each automatic reconnect
+   * attempt. Return `false` to suppress auto-reconnect (e.g., after an
+   * explicit logout). Evaluated live — no cached copy. Defaults to always-on.
+   */
+  shouldAutoReconnect?: () => boolean
 }

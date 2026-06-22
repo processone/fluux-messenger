@@ -850,7 +850,7 @@ mod macos {
         fn CGDisplayIsAsleep(display: u32) -> i32;
     }
 
-    fn is_display_active() -> bool {
+    pub(crate) fn is_display_active() -> bool {
         // SAFETY: CGMainDisplayID / CGDisplayIsAsleep are pure Core Graphics
         // queries with no preconditions; safe to call from any thread.
         unsafe {
@@ -1011,6 +1011,100 @@ mod macos {
                 }),
             );
         }
+    }
+}
+
+/// Payload for the native `xmpp-keepalive` event. Serialized with camelCase
+/// keys to match the WebView's `KeepalivePayload` interface
+/// (`displayActive`, `sleptMs`). Mirrors `macos::WakeEventPayload`'s serde
+/// convention so the JS side can parse both uniformly.
+#[derive(Serialize, Clone)]
+struct KeepalivePayload {
+    #[serde(rename = "displayActive")]
+    display_active: bool,
+    #[serde(rename = "sleptMs")]
+    slept_ms: u64,
+}
+
+/// Construct a keepalive payload. Pure seam so the loop's payload shape is
+/// unit-testable without the FFI display probe or the Tauri emitter.
+fn build_keepalive_payload(display_active: bool, slept_ms: u64) -> KeepalivePayload {
+    KeepalivePayload {
+        display_active,
+        slept_ms,
+    }
+}
+
+/// Native keepalive cadence. The thread emits an `xmpp-keepalive` event every
+/// `KEEPALIVE_INTERVAL`, regardless of display state.
+const KEEPALIVE_INTERVAL: std::time::Duration = std::time::Duration::from_secs(30);
+
+/// Floor above the interval beyond which an iteration's measured wall-clock
+/// elapsed is attributed to the machine having slept rather than to scheduler
+/// jitter. `30s + 90s = 120s`, well above any plausible jitter and aligned
+/// with the JS `SLEEP_THRESHOLD_MS`-driven wake handling.
+const SLEEP_GAP_MARGIN: std::time::Duration = std::time::Duration::from_secs(90);
+
+/// Wall-clock wake detection. When a loop iteration's measured `elapsed` is at
+/// or above `interval + margin`, the machine almost certainly slept through the
+/// `sleep()` call; return `Some(elapsed_ms)` so the loop can fire immediately.
+/// Otherwise (normal tick + jitter) return `None`. Pure seam — no FFI, no clock.
+fn detect_sleep_gap(
+    elapsed: std::time::Duration,
+    interval: std::time::Duration,
+    margin: std::time::Duration,
+) -> Option<u64> {
+    if elapsed >= interval + margin {
+        Some(elapsed.as_millis() as u64)
+    } else {
+        None
+    }
+}
+
+/// Decide how long to wait before the next keepalive iteration. When the prior
+/// iteration detected a sleep gap (`Some`), wait `ZERO` so the post-wake tick
+/// fires immediately instead of waiting out another full interval; otherwise
+/// wait the normal `KEEPALIVE_INTERVAL`. Pure seam.
+fn next_wait(slept: Option<u64>) -> std::time::Duration {
+    if slept.is_some() {
+        std::time::Duration::ZERO
+    } else {
+        KEEPALIVE_INTERVAL
+    }
+}
+
+/// One keepalive iteration's pure work: detect a sleep gap from the measured
+/// `elapsed`, probe the display state **fresh** (so a transient stuck reading
+/// can't poison later ticks), build the payload, and compute the next wait.
+/// Returns the payload to emit and the duration to sleep before the next tick.
+/// The Tauri `emit` and the real wall-clock measurement stay in the thread;
+/// this seam takes them as inputs so it is fully unit-testable.
+fn keepalive_step<F: Fn() -> bool>(
+    elapsed: std::time::Duration,
+    interval: std::time::Duration,
+    margin: std::time::Duration,
+    display_probe: F,
+) -> (KeepalivePayload, std::time::Duration) {
+    let slept = detect_sleep_gap(elapsed, interval, margin);
+    let display_active = display_probe();
+    let payload = build_keepalive_payload(display_active, slept.unwrap_or(0));
+    (payload, next_wait(slept))
+}
+
+/// Crate-level display-active probe for the keepalive thread. Fails open:
+/// returns `true` on platforms without a display-sleep probe, and the macOS
+/// `CGDisplayIsAsleep` path is documented to default active on any ambiguity.
+/// Failing open is mandatory — since `system-did-wake` is demoted to
+/// reload-only, a stuck-`false` probe would otherwise silently kill
+/// reconnection forever.
+fn keepalive_display_active() -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        macos::is_display_active()
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        true
     }
 }
 
@@ -1943,12 +2037,29 @@ fn main() {
             if let Some(window) = app.get_webview_window("main") {
                 let running = keepalive_flag_for_setup.clone();
                 std::thread::spawn(move || {
+                    // Measure real wall-clock elapsed per iteration so a sleep
+                    // the machine slept through (the `sleep()` call returns
+                    // late) is detected and the post-wake tick fires
+                    // immediately instead of waiting out another full interval.
+                    // The display state is probed FRESH every emit and the tick
+                    // keeps arriving every interval even when the display is
+                    // off, so the JS state machine can learn when it returns.
+                    let mut wait = KEEPALIVE_INTERVAL;
                     while running.load(Ordering::Relaxed) {
-                        std::thread::sleep(std::time::Duration::from_secs(30));
+                        let started = std::time::Instant::now();
+                        std::thread::sleep(wait);
                         if !running.load(Ordering::Relaxed) {
                             break;
                         }
-                        let _ = window.emit("xmpp-keepalive", ());
+                        let elapsed = started.elapsed();
+                        let (payload, next) = keepalive_step(
+                            elapsed,
+                            KEEPALIVE_INTERVAL,
+                            SLEEP_GAP_MARGIN,
+                            keepalive_display_active,
+                        );
+                        let _ = window.emit("xmpp-keepalive", payload);
+                        wait = next;
                     }
                 });
             }
@@ -2070,5 +2181,160 @@ mod tests {
             pick_proxy_uri(&candidates).as_deref(),
             Some("http://proxy:3128")
         );
+    }
+
+    use std::time::Duration;
+
+    #[test]
+    fn test_loop_contract_fires_immediately_after_simulated_sleep() {
+        // Iteration 1: a 2.5h sleep gap → emit immediately (ZERO wait), payload
+        // carries the slept_ms. Iteration 2: steady state → 30s wait.
+        let (p1, w1) =
+            keepalive_step(Duration::from_secs(9000), KEEPALIVE_INTERVAL, SLEEP_GAP_MARGIN, || true);
+        assert_eq!(w1, Duration::ZERO);
+        assert_eq!(p1.slept_ms, 9_000_000);
+
+        let (p2, w2) =
+            keepalive_step(KEEPALIVE_INTERVAL, KEEPALIVE_INTERVAL, SLEEP_GAP_MARGIN, || true);
+        assert_eq!(w2, KEEPALIVE_INTERVAL);
+        assert_eq!(p2.slept_ms, 0);
+    }
+
+    #[test]
+    fn test_keepalive_display_active_is_callable() {
+        // Must not panic; on non-macOS hosts it fails open to `true`.
+        let _v: bool = keepalive_display_active();
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    #[test]
+    fn test_keepalive_display_active_fails_open_off_macos() {
+        assert!(keepalive_display_active());
+    }
+
+    #[test]
+    fn test_keepalive_step_steady_state_uses_probe_and_interval() {
+        let (payload, wait) =
+            keepalive_step(KEEPALIVE_INTERVAL, KEEPALIVE_INTERVAL, SLEEP_GAP_MARGIN, || true);
+        assert!(payload.display_active);
+        assert_eq!(payload.slept_ms, 0);
+        assert_eq!(wait, KEEPALIVE_INTERVAL);
+    }
+
+    #[test]
+    fn test_keepalive_step_sleep_gap_immediate_and_carries_slept_ms() {
+        let elapsed = Duration::from_secs(9000);
+        let (payload, wait) =
+            keepalive_step(elapsed, KEEPALIVE_INTERVAL, SLEEP_GAP_MARGIN, || true);
+        assert_eq!(payload.slept_ms, 9_000_000);
+        assert_eq!(wait, Duration::ZERO);
+    }
+
+    #[test]
+    fn test_keepalive_step_probe_read_fresh_each_call() {
+        // Probe flips false→true between calls; each payload reflects the
+        // value read at that call (guards the stuck-`false` landmine).
+        let state = std::cell::Cell::new(false);
+        let probe = || {
+            let v = state.get();
+            state.set(!v);
+            v
+        };
+        let (p1, _) = keepalive_step(KEEPALIVE_INTERVAL, KEEPALIVE_INTERVAL, SLEEP_GAP_MARGIN, &probe);
+        let (p2, _) = keepalive_step(KEEPALIVE_INTERVAL, KEEPALIVE_INTERVAL, SLEEP_GAP_MARGIN, &probe);
+        assert!(!p1.display_active);
+        assert!(p2.display_active);
+    }
+
+    #[test]
+    fn test_keepalive_step_display_inactive_still_emits() {
+        // Display off → still produce a payload (the tick keeps arriving so
+        // the state machine can learn when the display returns).
+        let (payload, wait) =
+            keepalive_step(KEEPALIVE_INTERVAL, KEEPALIVE_INTERVAL, SLEEP_GAP_MARGIN, || false);
+        assert!(!payload.display_active);
+        assert_eq!(payload.slept_ms, 0);
+        assert_eq!(wait, KEEPALIVE_INTERVAL);
+    }
+
+    #[test]
+    fn test_next_wait_no_gap_uses_interval() {
+        assert_eq!(next_wait(None), KEEPALIVE_INTERVAL);
+    }
+
+    #[test]
+    fn test_next_wait_after_gap_fires_immediately() {
+        // A detected sleep gap → fire the next tick immediately (zero wait).
+        assert_eq!(next_wait(Some(9_000_000)), Duration::ZERO);
+    }
+
+    #[test]
+    fn test_detect_sleep_gap_normal_interval_no_gap() {
+        // Steady-state 30s tick: not a sleep.
+        assert_eq!(
+            detect_sleep_gap(KEEPALIVE_INTERVAL, KEEPALIVE_INTERVAL, SLEEP_GAP_MARGIN),
+            None
+        );
+    }
+
+    #[test]
+    fn test_detect_sleep_gap_scheduler_jitter_no_false_positive() {
+        // 30s + 89s of jitter is still under the 120s floor → no false positive.
+        let elapsed = KEEPALIVE_INTERVAL + Duration::from_secs(89);
+        assert_eq!(detect_sleep_gap(elapsed, KEEPALIVE_INTERVAL, SLEEP_GAP_MARGIN), None);
+    }
+
+    #[test]
+    fn test_detect_sleep_gap_exact_floor_is_gap() {
+        // Exactly interval + margin = 120s → treated as slept (inclusive boundary).
+        let elapsed = KEEPALIVE_INTERVAL + SLEEP_GAP_MARGIN;
+        assert_eq!(
+            detect_sleep_gap(elapsed, KEEPALIVE_INTERVAL, SLEEP_GAP_MARGIN),
+            Some(120_000)
+        );
+    }
+
+    #[test]
+    fn test_detect_sleep_gap_long_sleep_returns_millis() {
+        let elapsed = Duration::from_secs(9000);
+        assert_eq!(
+            detect_sleep_gap(elapsed, KEEPALIVE_INTERVAL, SLEEP_GAP_MARGIN),
+            Some(9_000_000)
+        );
+    }
+
+    #[test]
+    fn test_build_keepalive_payload_carries_fields() {
+        let payload = build_keepalive_payload(true, 90_000);
+        assert!(payload.display_active);
+        assert_eq!(payload.slept_ms, 90_000);
+    }
+
+    #[test]
+    fn test_build_keepalive_payload_inactive_display() {
+        let payload = build_keepalive_payload(false, 0);
+        assert!(!payload.display_active);
+        assert_eq!(payload.slept_ms, 0);
+    }
+
+    #[test]
+    fn test_keepalive_payload_serializes_camel_case() {
+        let payload = KeepalivePayload {
+            display_active: true,
+            slept_ms: 120_000,
+        };
+        let json = serde_json::to_string(&payload).expect("serialize");
+        assert_eq!(json, r#"{"displayActive":true,"sleptMs":120000}"#);
+    }
+
+    #[test]
+    fn test_keepalive_payload_is_clone() {
+        let payload = KeepalivePayload {
+            display_active: false,
+            slept_ms: 0,
+        };
+        let cloned = payload.clone();
+        assert!(!cloned.display_active);
+        assert_eq!(cloned.slept_ms, 0);
     }
 }
