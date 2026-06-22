@@ -2,7 +2,9 @@ import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Server, Users, Hash, User, Plus, ArrowLeft, Menu } from 'lucide-react'
 import { useAdmin, useXMPP, adminStore, type AdminCategory, type AdminUser, type AdminRoom } from '@fluux/sdk'
+import { useAdminStore } from '@fluux/sdk/react'
 import { useWindowDrag, useModalInput } from '@/hooks'
+import { useWindowedList } from '../hooks/useWindowedList'
 import { Tooltip } from './Tooltip'
 import { ModalShell } from './ModalShell'
 import { AdminCommandForm, AdminCommandResult } from './AdminCommandForm'
@@ -41,10 +43,8 @@ export function AdminView({ activeCategory, onBack }: AdminViewProps) {
     userList,
     roomList,
     serverStats,
-    hasMoreUsers,
     hasMoreRooms,
-    fetchUsers,
-    loadMoreUsers,
+    fetchAllUsers,
     resetUserList,
     fetchRooms,
     loadMoreRooms,
@@ -62,7 +62,11 @@ export function AdminView({ activeCategory, onBack }: AdminViewProps) {
     // Room options
     getRoomOptions,
     hasCommand,
+    // Last activity
+    requestLastActivity,
   } = useAdmin()
+
+  const usersTruncated = useAdminStore((s) => s.usersTruncated)
 
   // Local state
   const [userSearchQuery, setUserSearchQuery] = useState('')
@@ -82,7 +86,7 @@ export function AdminView({ activeCategory, onBack }: AdminViewProps) {
   // Fetch users when users category becomes active (always refresh on enter)
   useEffect(() => {
     if (activeCategory === 'users' && !userList.isLoading) {
-      fetchUsers().catch(console.error)
+      fetchAllUsers().catch(console.error)
     }
   }, [activeCategory]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -165,7 +169,7 @@ export function AdminView({ activeCategory, onBack }: AdminViewProps) {
     // Refresh user list after user-mutating commands (delete, password change, etc.)
     if (activeCategory === 'users') {
       resetUserList()
-      void fetchUsers()
+      void fetchAllUsers()
     }
   }
 
@@ -249,7 +253,7 @@ export function AdminView({ activeCategory, onBack }: AdminViewProps) {
     setShowAddUserModal(false)
     // Refresh user list
     resetUserList()
-    void fetchUsers()
+    void fetchAllUsers()
   }
 
   const handleDestroyRoom = async (jid: string) => {
@@ -264,13 +268,19 @@ export function AdminView({ activeCategory, onBack }: AdminViewProps) {
   }
 
 
-  // Filter users by search query (client-side for now)
+  // Filter users by search query (complete: runs over the full fetched directory)
   const filteredUsers = userSearchQuery
     ? userList.items.filter(user =>
         user.jid.toLowerCase().includes(userSearchQuery.toLowerCase()) ||
         (user.username && user.username.toLowerCase().includes(userSearchQuery.toLowerCase()))
       )
     : userList.items
+
+  const usersWindow = useWindowedList(filteredUsers, {
+    initial: 60,
+    step: 60,
+    resetKey: `${userSearchQuery}|${selectedVhost ?? ''}`,
+  })
 
   // Filter rooms by search query (client-side for now)
   const filteredRooms = roomSearchQuery
@@ -394,21 +404,34 @@ export function AdminView({ activeCategory, onBack }: AdminViewProps) {
               </select>
             </div>
           )}
+          {usersTruncated && (
+            <div className="mb-3 px-3 py-2 text-sm rounded-lg bg-amber-500/10 text-amber-700 dark:text-amber-300">
+              {serverStats?.registeredUsers != null
+                ? t('admin.users.truncatedBanner', {
+                    shown: filteredUsers.length,
+                    total: serverStats.registeredUsers,
+                  })
+                : t('admin.users.truncatedBannerNoTotal', {
+                    shown: filteredUsers.length,
+                  })}
+            </div>
+          )}
           <EntityListView
             title={t('admin.userList.title')}
-            items={filteredUsers}
+            items={usersWindow.visible}
             isLoading={userList.isLoading}
-            hasMore={hasMoreUsers && !userSearchQuery}
+            hasMore={usersWindow.hasMore}
             searchValue={userSearchQuery}
             totalCount={serverStats?.registeredUsers}
             onSearchChange={setUserSearchQuery}
-            onLoadMore={loadMoreUsers}
+            onLoadMore={usersWindow.loadMore}
             emptyMessage={t('admin.userList.noUsers')}
             keyExtractor={(user) => user.jid}
             renderItem={(user) => (
               <UserListItem
                 user={user}
                 onSelect={handleSelectUser}
+                requestLastActivity={requestLastActivity}
               />
             )}
             headerAction={

@@ -1114,7 +1114,13 @@
         "users": {
             "delete": "Ħassar utent",
             "changePassword": "Ibdel password",
-            "endSessions": "Temm sessjonijiet"
+            "endSessions": "Temm sessjonijiet",
+            "online": "Online",
+            "offline": "Offline",
+            "onlineNow": "Online issa",
+            "justNow": "bħalissa",
+            "truncatedBanner": "Qed jintwerew l-ewwel {{shown}} minn {{total}} utenti. Irfina t-tfittxija tiegħek biex tnaqqas ir-riżultati.",
+            "truncatedBannerNoTotal": "Qed jintwerew l-ewwel {{shown}} utenti. Irfina t-tfittxija tiegħek biex tnaqqas ir-riżultati."
         },
         "userView": {
             "title": "Utent",
@@ -1141,8 +1147,6 @@
             "title": "Ħarsa ġenerali tas-server",
             "refresh": "Aġġorna",
             "updatedAt": "Aġġornat fil-{{time}}",
-            "advanced": "Avvanzat",
-            "advancedHint": "Mexxi kmand dirett tas-server",
             "empty": "L-istatistika tas-server mhix disponibbli.",
             "retry": "Erġa' pprova",
             "units": {
@@ -1154,8 +1158,9 @@
             "cards": {
                 "uptime": "Ħin tax-xogħol",
                 "version": "Verżjoni tas-server",
-                "registeredUsers": "Utenti rreġistrati",
-                "onlineUsers": "Utenti online",
+                "users": "Utenti",
+                "onlineSuffix": "{{n}} online",
+                "onlineSessions": "Sessjonijiet online",
                 "onlineRooms": "Kmamar attivi",
                 "vhosts": "Hosts virtwali"
             }

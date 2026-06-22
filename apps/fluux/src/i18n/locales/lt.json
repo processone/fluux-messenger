@@ -1112,7 +1112,13 @@
         "users": {
             "delete": "Ištrinti vartotoją",
             "changePassword": "Keisti slaptažodį",
-            "endSessions": "Baigti sesijas"
+            "endSessions": "Baigti sesijas",
+            "online": "Online",
+            "offline": "Offline",
+            "onlineNow": "Online dabar",
+            "justNow": "ką tik",
+            "truncatedBanner": "Rodomi pirmieji {{shown}} iš {{total}} vartotojų. Patikslinkite paiešką, kad susiaurintumėte rezultatus.",
+            "truncatedBannerNoTotal": "Rodomi pirmieji {{shown}} vartotojų. Patikslinkite paiešką, kad susiaurintumėte rezultatus."
         },
         "userView": {
             "title": "Vartotojas",
@@ -1139,8 +1145,6 @@
             "title": "Serverio apžvalga",
             "refresh": "Atnaujinti",
             "updatedAt": "Atnaujinta {{time}}",
-            "advanced": "Išplėstinė",
-            "advancedHint": "Vykdyti tiesioginę serverio komandą",
             "empty": "Serverio statistika nepasiekiama.",
             "retry": "Bandyti dar kartą",
             "units": {
@@ -1152,8 +1156,9 @@
             "cards": {
                 "uptime": "Veikimo laikas",
                 "version": "Serverio versija",
-                "registeredUsers": "Registruoti naudotojai",
-                "onlineUsers": "Prisijungę naudotojai",
+                "users": "Naudotojai",
+                "onlineSuffix": "{{n}} prisijungę",
+                "onlineSessions": "Aktyvūs seansai",
                 "onlineRooms": "Aktyvūs kambariai",
                 "vhosts": "Virtualūs serveriai"
             }

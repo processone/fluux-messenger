@@ -1114,7 +1114,13 @@
         "users": {
             "delete": "Izbriši uporabnika",
             "changePassword": "Spremeni geslo",
-            "endSessions": "Končaj seje"
+            "endSessions": "Končaj seje",
+            "online": "Online",
+            "offline": "Offline",
+            "onlineNow": "Online zdaj",
+            "justNow": "pravkar",
+            "truncatedBanner": "Prikazanih je prvih {{shown}} od {{total}} uporabnikov. Natančneje določite iskanje za zožitev rezultatov.",
+            "truncatedBannerNoTotal": "Prikazanih je prvih {{shown}} uporabnikov. Natančneje določite iskanje za zožitev rezultatov."
         },
         "userView": {
             "title": "Uporabnik",
@@ -1141,8 +1147,6 @@
             "title": "Pregled strežnika",
             "refresh": "Osveži",
             "updatedAt": "Posodobljeno ob {{time}}",
-            "advanced": "Napredno",
-            "advancedHint": "Zaženi neposredni strežniški ukaz",
             "empty": "Statistika strežnika ni na voljo.",
             "retry": "Poskusi znova",
             "units": {
@@ -1154,8 +1158,9 @@
             "cards": {
                 "uptime": "Čas delovanja",
                 "version": "Različica strežnika",
-                "registeredUsers": "Registrirani uporabniki",
-                "onlineUsers": "Uporabniki na spletu",
+                "users": "Uporabniki",
+                "onlineSuffix": "{{n}} na spletu",
+                "onlineSessions": "Aktivne seje",
                 "onlineRooms": "Aktivne sobe",
                 "vhosts": "Navidezni gostitelji"
             }

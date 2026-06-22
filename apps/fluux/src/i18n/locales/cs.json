@@ -1114,7 +1114,13 @@
         "users": {
             "delete": "Smazat uživatele",
             "changePassword": "Změnit heslo",
-            "endSessions": "Ukončit relace"
+            "endSessions": "Ukončit relace",
+            "online": "Online",
+            "offline": "Offline",
+            "onlineNow": "Online nyní",
+            "justNow": "právě teď",
+            "truncatedBanner": "Zobrazuje se prvních {{shown}} z {{total}} uživatelů. Upřesněte hledání pro zúžení výsledků.",
+            "truncatedBannerNoTotal": "Zobrazuje se prvních {{shown}} uživatelů. Upřesněte hledání pro zúžení výsledků."
         },
         "userView": {
             "title": "Uživatel",
@@ -1141,8 +1147,6 @@
             "title": "Přehled serveru",
             "refresh": "Obnovit",
             "updatedAt": "Aktualizováno v {{time}}",
-            "advanced": "Pokročilé",
-            "advancedHint": "Spustit přímý příkaz serveru",
             "empty": "Statistiky serveru nejsou dostupné.",
             "retry": "Zkusit znovu",
             "units": {
@@ -1154,8 +1158,9 @@
             "cards": {
                 "uptime": "Doba běhu",
                 "version": "Verze serveru",
-                "registeredUsers": "Registrovaní uživatelé",
-                "onlineUsers": "Uživatelé online",
+                "users": "Uživatelé",
+                "onlineSuffix": "{{n}} online",
+                "onlineSessions": "Online relace",
                 "onlineRooms": "Aktivní místnosti",
                 "vhosts": "Virtuální hostitelé"
             }

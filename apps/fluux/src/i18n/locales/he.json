@@ -1112,7 +1112,13 @@
         "users": {
             "delete": "מחיקת משתמש",
             "changePassword": "שינוי סיסמה",
-            "endSessions": "סיום סשנים"
+            "endSessions": "סיום סשנים",
+            "online": "מחובר",
+            "offline": "לא מחובר",
+            "onlineNow": "מחובר עכשיו",
+            "justNow": "הרגע",
+            "truncatedBanner": "מוצגים {{shown}} הראשונים מתוך {{total}} משתמשים. צמצם את החיפוש לתוצאות מדויקות יותר.",
+            "truncatedBannerNoTotal": "מוצגים {{shown}} הראשונים. צמצם את החיפוש לתוצאות מדויקות יותר."
         },
         "userView": {
             "title": "משתמש",
@@ -1139,8 +1145,6 @@
             "title": "סקירת שרת",
             "refresh": "רענן",
             "updatedAt": "עודכן בשעה {{time}}",
-            "advanced": "מתקדם",
-            "advancedHint": "הרצת פקודת שרת גולמית",
             "empty": "נתוני השרת אינם זמינים.",
             "retry": "נסה שוב",
             "units": {
@@ -1152,8 +1156,9 @@
             "cards": {
                 "uptime": "זמן פעילות",
                 "version": "גרסת שרת",
-                "registeredUsers": "משתמשים רשומים",
-                "onlineUsers": "משתמשים מחוברים",
+                "users": "משתמשים",
+                "onlineSuffix": "{{n}} מחוברים",
+                "onlineSessions": "סשנים מחוברים",
                 "onlineRooms": "חדרים פעילים",
                 "vhosts": "מארחים וירטואליים"
             }

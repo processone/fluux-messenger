@@ -68,8 +68,9 @@ void i18n.use(initReactI18next).init({
             cards: {
               uptime: 'Uptime',
               version: 'Server version',
-              registeredUsers: 'Registered users',
-              onlineUsers: 'Online users',
+              users: 'Users',
+              onlineSuffix: '{{n}} online',
+              onlineSessions: 'Online sessions',
               onlineRooms: 'Active rooms',
               vhosts: 'Virtual hosts',
             },
@@ -397,9 +398,18 @@ vi.mock('@fluux/sdk/react', () => ({
     const state = {
       mucServiceJid: null,
       setActiveCategory: vi.fn(),
+      onlineJids: new Set<string>(),
+      lastActivity: new Map(),
+      lastActivitySupported: true,
+      usersTruncated: false,
     }
     return selector ? selector(state) : state
   }),
+  useAdmin: vi.fn(() => ({
+    requestLastActivity: vi.fn(),
+    fetchAllUsers: vi.fn(),
+    usersTruncated: false,
+  })),
   useBlockingStore: vi.fn((selector) => {
     const state = {
       blockedJids: [],

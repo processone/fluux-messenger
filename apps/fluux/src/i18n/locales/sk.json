@@ -1113,7 +1113,13 @@
         "users": {
             "delete": "Vymazať používateľa",
             "changePassword": "Zmeniť heslo",
-            "endSessions": "Ukončiť relácie"
+            "endSessions": "Ukončiť relácie",
+            "online": "Online",
+            "offline": "Offline",
+            "onlineNow": "Online teraz",
+            "justNow": "práve teraz",
+            "truncatedBanner": "Zobrazuje sa prvých {{shown}} z {{total}} používateľov. Spresnite hľadanie pre zúženie výsledkov.",
+            "truncatedBannerNoTotal": "Zobrazuje sa prvých {{shown}} používateľov. Spresnite hľadanie pre zúženie výsledkov."
         },
         "userView": {
             "title": "Používateľ",
@@ -1140,8 +1146,6 @@
             "title": "Prehľad servera",
             "refresh": "Obnoviť",
             "updatedAt": "Aktualizované o {{time}}",
-            "advanced": "Rozšírené",
-            "advancedHint": "Spustiť priamy príkaz servera",
             "empty": "Štatistiky servera nie sú dostupné.",
             "retry": "Skúsiť znova",
             "units": {
@@ -1153,8 +1157,9 @@
             "cards": {
                 "uptime": "Doba prevádzky",
                 "version": "Verzia servera",
-                "registeredUsers": "Registrovaní používatelia",
-                "onlineUsers": "Používatelia online",
+                "users": "Používatelia",
+                "onlineSuffix": "{{n}} online",
+                "onlineSessions": "Online relácie",
                 "onlineRooms": "Aktívne miestnosti",
                 "vhosts": "Virtuálne hostiteľské servery"
             }

@@ -124,12 +124,12 @@ describe('AdminView mobile section sheet', () => {
   it('opens the section sheet from the header menu button', () => {
     render(<AdminView activeCategory="rooms" onBack={vi.fn()} />)
 
-    // The sheet (and its Statistics section button) is not rendered until opened.
-    expect(screen.queryByText('admin.categories.statistics')).not.toBeInTheDocument()
+    // The sheet (and its Users section button) is not rendered until opened.
+    expect(screen.queryByText('admin.categories.users')).not.toBeInTheDocument()
 
     fireEvent.click(screen.getByLabelText('admin.openSections'))
 
-    expect(screen.getByText('admin.categories.statistics')).toBeInTheDocument()
+    expect(screen.getByText('admin.categories.users')).toBeInTheDocument()
   })
 
   it('navigates and closes the sheet when a main-content section is chosen', () => {
@@ -139,7 +139,7 @@ describe('AdminView mobile section sheet', () => {
     fireEvent.click(screen.getByRole('button', { name: 'admin.categories.users' }))
 
     expect(setActiveCategory).toHaveBeenCalledWith('users')
-    // Sheet closed → its Statistics button is gone again.
-    expect(screen.queryByText('admin.categories.statistics')).not.toBeInTheDocument()
+    // Sheet closed → its section buttons are gone again.
+    expect(screen.queryByText('admin.categories.users')).not.toBeInTheDocument()
   })
 })

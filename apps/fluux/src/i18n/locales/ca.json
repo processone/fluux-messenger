@@ -1114,7 +1114,13 @@
         "users": {
             "delete": "Elimina l'usuari",
             "changePassword": "Canvia el mot de pas",
-            "endSessions": "Finalitza sessions"
+            "endSessions": "Finalitza sessions",
+            "online": "En línia",
+            "offline": "Fora de línia",
+            "onlineNow": "En línia ara",
+            "justNow": "ara mateix",
+            "truncatedBanner": "Es mostren els primers {{shown}} de {{total}} usuaris. Refineu la cerca per reduir els resultats.",
+            "truncatedBannerNoTotal": "Es mostren els primers {{shown}} usuaris. Refineu la cerca per reduir els resultats."
         },
         "userView": {
             "title": "Usuari",
@@ -1141,8 +1147,6 @@
             "title": "Resum del servidor",
             "refresh": "Actualitza",
             "updatedAt": "Actualitzat a les {{time}}",
-            "advanced": "Avançat",
-            "advancedHint": "Executa una ordre directa del servidor",
             "empty": "Les estadístiques del servidor no estan disponibles.",
             "retry": "Torna-ho a provar",
             "units": {
@@ -1154,8 +1158,9 @@
             "cards": {
                 "uptime": "Temps actiu",
                 "version": "Versió del servidor",
-                "registeredUsers": "Usuaris registrats",
-                "onlineUsers": "Usuaris en línia",
+                "users": "Usuaris",
+                "onlineSuffix": "{{n}} en línia",
+                "onlineSessions": "Sessions en línia",
                 "onlineRooms": "Sales actives",
                 "vhosts": "Amfitrions virtuals"
             }

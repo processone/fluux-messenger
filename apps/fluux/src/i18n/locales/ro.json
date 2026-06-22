@@ -1114,7 +1114,13 @@
         "users": {
             "delete": "Șterge utilizatorul",
             "changePassword": "Schimbă parola",
-            "endSessions": "Închide sesiunile"
+            "endSessions": "Închide sesiunile",
+            "online": "Online",
+            "offline": "Offline",
+            "onlineNow": "Online acum",
+            "justNow": "chiar acum",
+            "truncatedBanner": "Se afișează primii {{shown}} din {{total}} utilizatori. Rafinați căutarea pentru a reduce rezultatele.",
+            "truncatedBannerNoTotal": "Se afișează primii {{shown}} utilizatori. Rafinați căutarea pentru a reduce rezultatele."
         },
         "userView": {
             "title": "Utilizator",
@@ -1141,8 +1147,6 @@
             "title": "Prezentare generală server",
             "refresh": "Reîmprospătează",
             "updatedAt": "Actualizat la {{time}}",
-            "advanced": "Avansat",
-            "advancedHint": "Rulează o comandă brută de server",
             "empty": "Statisticile serverului nu sunt disponibile.",
             "retry": "Reîncearcă",
             "units": {
@@ -1154,8 +1158,9 @@
             "cards": {
                 "uptime": "Timp de funcționare",
                 "version": "Versiune server",
-                "registeredUsers": "Utilizatori înregistrați",
-                "onlineUsers": "Utilizatori online",
+                "users": "Utilizatori",
+                "onlineSuffix": "{{n}} online",
+                "onlineSessions": "Sesiuni online",
                 "onlineRooms": "Camere active",
                 "vhosts": "Gazde virtuale"
             }

@@ -1112,7 +1112,13 @@
         "users": {
             "delete": "删除用户",
             "changePassword": "更改密码",
-            "endSessions": "结束会话"
+            "endSessions": "结束会话",
+            "online": "在线",
+            "offline": "离线",
+            "onlineNow": "当前在线",
+            "justNow": "刚刚",
+            "truncatedBanner": "显示前 {{shown}} 名用户，共 {{total}} 名。请细化搜索以缩小结果范围。",
+            "truncatedBannerNoTotal": "显示前 {{shown}} 名用户。请细化搜索以缩小结果范围。"
         },
         "userView": {
             "title": "用户",
@@ -1139,8 +1145,6 @@
             "title": "服务器概览",
             "refresh": "刷新",
             "updatedAt": "更新于 {{time}}",
-            "advanced": "高级",
-            "advancedHint": "运行原始服务器命令",
             "empty": "服务器统计信息不可用。",
             "retry": "重试",
             "units": {
@@ -1152,8 +1156,9 @@
             "cards": {
                 "uptime": "运行时间",
                 "version": "服务器版本",
-                "registeredUsers": "注册用户",
-                "onlineUsers": "在线用户",
+                "users": "用户",
+                "onlineSuffix": "{{n}} 在线",
+                "onlineSessions": "在线会话",
                 "onlineRooms": "活跃房间",
                 "vhosts": "虚拟主机"
             }

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { formatDuration, formatCount, formatBytes, formatBoolean, formatDateTime, formatTime } from './format'
+import { formatDuration, formatCount, formatBytes, formatBoolean, formatDateTime, formatTime, formatRelativeTime } from './format'
 
 describe('formatDuration', () => {
   it('formats multi-unit durations, largest two units', () => {
@@ -46,5 +46,29 @@ describe('formatTime', () => {
   it('renders hour:minute for an epoch ms', () => {
     const ts = 1718900000000
     expect(formatTime(ts)).toBe(new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }))
+  })
+})
+
+describe('formatRelativeTime', () => {
+  it('returns the just-now label under a minute', () => {
+    expect(formatRelativeTime(0, 'en', 'just now')).toBe('just now')
+    expect(formatRelativeTime(59, 'en', 'just now')).toBe('just now')
+  })
+  it('picks a single coarse unit per bucket, fully localized via Intl', () => {
+    expect(formatRelativeTime(60, 'en', 'just now')).toBe('1 min. ago')
+    expect(formatRelativeTime(3600, 'en', 'just now')).toBe('1 hr. ago')
+    expect(formatRelativeTime(2 * 86400, 'en', 'just now')).toBe('2 days ago')
+    expect(formatRelativeTime(14 * 86400, 'en', 'just now')).toBe('2 wk. ago')
+    expect(formatRelativeTime(60 * 86400, 'en', 'just now')).toBe('2 mo. ago')
+    expect(formatRelativeTime(400 * 86400, 'en', 'just now')).toBe('1 yr. ago')
+  })
+  it('localizes the unit and word order per locale (not just the number)', () => {
+    // Intl inserts Unicode spaces (e.g. U+202F in fr); normalize before comparing.
+    const norm = (s: string) => s.replace(/\s/g, ' ')
+    expect(norm(formatRelativeTime(2 * 86400, 'fr', "à l'instant"))).toBe('il y a 2 j')
+    expect(norm(formatRelativeTime(2 * 86400, 'de', 'gerade eben'))).toBe('vor 2 Tagen')
+  })
+  it('clamps negatives to the just-now label', () => {
+    expect(formatRelativeTime(-5, 'en', 'just now')).toBe('just now')
   })
 })

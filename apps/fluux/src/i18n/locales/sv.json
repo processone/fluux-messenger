@@ -1112,7 +1112,13 @@
         "users": {
             "delete": "Ta bort användare",
             "changePassword": "Ändra lösenord",
-            "endSessions": "Avsluta sessioner"
+            "endSessions": "Avsluta sessioner",
+            "online": "Online",
+            "offline": "Offline",
+            "onlineNow": "Online nu",
+            "justNow": "just nu",
+            "truncatedBanner": "Visar de första {{shown}} av {{total}} användare. Förfina din sökning för att begränsa resultaten.",
+            "truncatedBannerNoTotal": "Visar de första {{shown}} användare. Förfina din sökning för att begränsa resultaten."
         },
         "userView": {
             "title": "Användare",
@@ -1139,8 +1145,6 @@
             "title": "Serveröversikt",
             "refresh": "Uppdatera",
             "updatedAt": "Uppdaterad kl. {{time}}",
-            "advanced": "Avancerat",
-            "advancedHint": "Kör ett rått serverkommando",
             "empty": "Serverstatistik är inte tillgänglig.",
             "retry": "Försök igen",
             "units": {
@@ -1152,8 +1156,9 @@
             "cards": {
                 "uptime": "Drifttid",
                 "version": "Serverversion",
-                "registeredUsers": "Registrerade användare",
-                "onlineUsers": "Användare online",
+                "users": "Användare",
+                "onlineSuffix": "{{n}} online",
+                "onlineSessions": "Aktiva sessioner",
                 "onlineRooms": "Aktiva rum",
                 "vhosts": "Virtuella värdar"
             }

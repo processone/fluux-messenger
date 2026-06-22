@@ -1114,7 +1114,13 @@
         "users": {
             "delete": "Kustuta kasutaja",
             "changePassword": "Muuda parooli",
-            "endSessions": "Lõpeta seansid"
+            "endSessions": "Lõpeta seansid",
+            "online": "Online",
+            "offline": "Offline",
+            "onlineNow": "Praegu online",
+            "justNow": "just nüüd",
+            "truncatedBanner": "Kuvatakse esimesed {{shown}} kasutajat {{total}}-st. Täpsustage otsingut tulemuste kitsendamiseks.",
+            "truncatedBannerNoTotal": "Kuvatakse esimesed {{shown}} kasutajat. Täpsustage otsingut tulemuste kitsendamiseks."
         },
         "userView": {
             "title": "Kasutaja",
@@ -1141,8 +1147,6 @@
             "title": "Serveri ülevaade",
             "refresh": "Värskenda",
             "updatedAt": "Uuendatud kell {{time}}",
-            "advanced": "Täpsem",
-            "advancedHint": "Käivita serveri toorkäsk",
             "empty": "Serveri statistika pole saadaval.",
             "retry": "Proovi uuesti",
             "units": {
@@ -1154,8 +1158,9 @@
             "cards": {
                 "uptime": "Tööaeg",
                 "version": "Serveri versioon",
-                "registeredUsers": "Registreeritud kasutajad",
-                "onlineUsers": "Võrgus kasutajad",
+                "users": "Kasutajad",
+                "onlineSuffix": "{{n}} võrgus",
+                "onlineSessions": "Aktiivsed seansid",
                 "onlineRooms": "Aktiivsed toad",
                 "vhosts": "Virtuaalsed hostid"
             }

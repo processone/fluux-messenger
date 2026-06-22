@@ -187,6 +187,31 @@ export interface AdminUser {
 }
 
 /**
+ * Result of an XEP-0012 last-activity query against an arbitrary account.
+ * Discriminates a server-wide feature absence from a per-user null.
+ *
+ * @category Admin
+ */
+export interface LastActivityResult {
+  /** Seconds since the user last logged out; null = unknown for this user. */
+  seconds: number | null
+  /** True only when the server returns feature-not-implemented (no mod_last). */
+  unsupported: boolean
+}
+
+/**
+ * Lazy per-JID last-activity cell held in the admin store for the user list.
+ *
+ * @category Admin
+ */
+export interface LastActivityEntry {
+  /** 'loading' while in flight; 'loaded' once resolved (seconds may still be null). */
+  state: 'loading' | 'loaded'
+  /** Seconds since last logout; null = unknown/unavailable. */
+  seconds: number | null
+}
+
+/**
  * A room in the admin room list.
  *
  * @category Admin
@@ -236,8 +261,17 @@ export interface ServerStats {
   version?: string
   /** Total registered users (XEP-0133 get-registered-users-num). */
   registeredUsers?: number
-  /** Currently online users (XEP-0133 get-online-users-num). */
+  /**
+   * Distinct currently-online users (unique bare JIDs, deduped from the
+   * XEP-0133 get-online-users-list). A user connected from several devices
+   * counts once — contrast with {@link onlineSessions}.
+   */
   onlineUsers?: number
+  /**
+   * Currently-online sessions/resources (XEP-0133 get-online-users-num). One
+   * per connected device, so this is >= {@link onlineUsers}.
+   */
+  onlineSessions?: number
   /** Active MUC rooms across all vhosts (muc_online_rooms_count, service=global). */
   onlineRooms?: number
   /** Number of virtual hosts the admin can see. */

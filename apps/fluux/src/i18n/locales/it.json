@@ -1114,7 +1114,13 @@
         "users": {
             "delete": "Elimina utente",
             "changePassword": "Cambia password",
-            "endSessions": "Termina sessioni"
+            "endSessions": "Termina sessioni",
+            "online": "Online",
+            "offline": "Offline",
+            "onlineNow": "Online ora",
+            "justNow": "proprio adesso",
+            "truncatedBanner": "Mostra i primi {{shown}} di {{total}} utenti. Affina la ricerca per restringere i risultati.",
+            "truncatedBannerNoTotal": "Mostra i primi {{shown}} utenti. Affina la ricerca per restringere i risultati."
         },
         "userView": {
             "title": "Utente",
@@ -1141,8 +1147,6 @@
             "title": "Panoramica del server",
             "refresh": "Aggiorna",
             "updatedAt": "Aggiornato alle {{time}}",
-            "advanced": "Avanzate",
-            "advancedHint": "Esegui un comando diretto del server",
             "empty": "Le statistiche del server non sono disponibili.",
             "retry": "Riprova",
             "units": {
@@ -1154,8 +1158,9 @@
             "cards": {
                 "uptime": "Tempo di attività",
                 "version": "Versione del server",
-                "registeredUsers": "Utenti registrati",
-                "onlineUsers": "Utenti online",
+                "users": "Utenti",
+                "onlineSuffix": "{{n}} online",
+                "onlineSessions": "Sessioni online",
                 "onlineRooms": "Stanze attive",
                 "vhosts": "Host virtuali"
             }

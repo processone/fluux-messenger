@@ -1112,7 +1112,13 @@
         "users": {
             "delete": "Scrios úsáideoir",
             "changePassword": "Athraigh pasfhocal",
-            "endSessions": "Críochnaigh seisiúin"
+            "endSessions": "Críochnaigh seisiúin",
+            "online": "Ar líne",
+            "offline": "As líne",
+            "onlineNow": "Ar líne anois",
+            "justNow": "ar ball beag",
+            "truncatedBanner": "Ag taispeáint na chéad {{shown}} as {{total}} úsáideoir. Caolú do chuardach chun torthaí a chúngú.",
+            "truncatedBannerNoTotal": "Ag taispeáint na chéad {{shown}} úsáideoir. Caolú do chuardach chun torthaí a chúngú."
         },
         "userView": {
             "title": "Úsáideoir",
@@ -1139,8 +1145,6 @@
             "title": "Forbhreathnú freastalaí",
             "refresh": "Athnuaigh",
             "updatedAt": "Nuashonraithe ag {{time}}",
-            "advanced": "Casta",
-            "advancedHint": "Rith ordú amh freastalaí",
             "empty": "Níl staitisticí an fhreastalaí ar fáil.",
             "retry": "Bain triail eile as",
             "units": {
@@ -1152,8 +1156,9 @@
             "cards": {
                 "uptime": "Aga fónaimh",
                 "version": "Leagan an fhreastalaí",
-                "registeredUsers": "Úsáideoirí cláraithe",
-                "onlineUsers": "Úsáideoirí ar líne",
+                "users": "Úsáideoirí",
+                "onlineSuffix": "{{n}} ar líne",
+                "onlineSessions": "Seisiúin ar líne",
                 "onlineRooms": "Seomraí gníomhacha",
                 "vhosts": "Óstaigh fhíorúla"
             }

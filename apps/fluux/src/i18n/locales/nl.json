@@ -1112,7 +1112,13 @@
         "users": {
             "delete": "Gebruiker verwijderen",
             "changePassword": "Wachtwoord wijzigen",
-            "endSessions": "Sessies beeindigen"
+            "endSessions": "Sessies beeindigen",
+            "online": "Online",
+            "offline": "Offline",
+            "onlineNow": "Nu online",
+            "justNow": "zojuist",
+            "truncatedBanner": "De eerste {{shown}} van {{total}} gebruikers worden weergegeven. Verfijn uw zoekopdracht om de resultaten te beperken.",
+            "truncatedBannerNoTotal": "De eerste {{shown}} gebruikers worden weergegeven. Verfijn uw zoekopdracht om de resultaten te beperken."
         },
         "userView": {
             "title": "Gebruiker",
@@ -1139,8 +1145,6 @@
             "title": "Serveroverzicht",
             "refresh": "Vernieuwen",
             "updatedAt": "Bijgewerkt om {{time}}",
-            "advanced": "Geavanceerd",
-            "advancedHint": "Een ruwe serveropdracht uitvoeren",
             "empty": "Serverstatistieken zijn niet beschikbaar.",
             "retry": "Opnieuw",
             "units": {
@@ -1152,8 +1156,9 @@
             "cards": {
                 "uptime": "Bedrijfstijd",
                 "version": "Serverversie",
-                "registeredUsers": "Geregistreerde gebruikers",
-                "onlineUsers": "Online gebruikers",
+                "users": "Gebruikers",
+                "onlineSuffix": "{{n}} online",
+                "onlineSessions": "Online sessies",
                 "onlineRooms": "Actieve groepen",
                 "vhosts": "Virtuele hosts"
             }
