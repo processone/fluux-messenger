@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { RefreshCw, ChevronRight } from 'lucide-react'
-import { useAdmin, type ServerStats, type AdminCommand } from '@fluux/sdk'
+import { useAdmin, adminStore, type ServerStats, type AdminCommand } from '@fluux/sdk'
 import { OVERVIEW_CARDS } from './admin/adminOverview'
 import { formatTime } from '@/utils/format'
 
@@ -72,15 +72,33 @@ export function ServerOverview() {
           {presentCards.map(card => {
             const Icon = card.icon
             const value = stats![card.key] as NonNullable<ServerStats[keyof ServerStats]>
-            return (
-              <div key={String(card.key)} className="p-4 rounded-xl bg-fluux-bg border border-fluux-hover">
+            const inner = (
+              <>
                 <div className="flex items-center gap-2 text-fluux-muted mb-2">
                   <Icon className="size-4" />
                   <span className="text-xs font-medium">{t(card.labelKey)}</span>
+                  {card.target && <ChevronRight className="size-4 ms-auto rtl-mirror" />}
                 </div>
                 <div className="text-2xl font-semibold text-fluux-text break-words" title={String(value)}>
                   {card.format(value, durationUnits)}
                 </div>
+              </>
+            )
+            if (card.target) {
+              const target = card.target
+              return (
+                <button
+                  key={String(card.key)}
+                  onClick={() => adminStore.getState().setActiveCategory(target)}
+                  className="p-4 rounded-xl bg-fluux-bg border border-fluux-hover text-start hover:bg-fluux-hover hover:border-fluux-brand/40 transition-colors tap-target"
+                >
+                  {inner}
+                </button>
+              )
+            }
+            return (
+              <div key={String(card.key)} className="p-4 rounded-xl bg-fluux-bg border border-fluux-hover">
+                {inner}
               </div>
             )
           })}

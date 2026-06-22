@@ -1,5 +1,5 @@
 import { Clock, Tag, Users, UserCheck, Hash, Server } from 'lucide-react'
-import type { ServerStats } from '@fluux/sdk'
+import type { ServerStats, AdminCategory } from '@fluux/sdk'
 import { formatDuration, formatCount, type DurationUnits } from '@/utils/format'
 
 export interface OverviewCardDef {
@@ -7,6 +7,8 @@ export interface OverviewCardDef {
   icon: React.ComponentType<{ className?: string }>
   labelKey: string
   format: (value: NonNullable<ServerStats[keyof ServerStats]>, durationUnits: DurationUnits) => string
+  /** When set, the card is interactive and navigates to this admin section on click. */
+  target?: AdminCategory
 }
 
 /**
@@ -17,8 +19,8 @@ export interface OverviewCardDef {
 export const OVERVIEW_CARDS: OverviewCardDef[] = [
   { key: 'uptimeSeconds', icon: Clock, labelKey: 'admin.overview.cards.uptime', format: (v, u) => formatDuration(v as number, u) },
   { key: 'version', icon: Tag, labelKey: 'admin.overview.cards.version', format: (v) => String(v) },
-  { key: 'registeredUsers', icon: Users, labelKey: 'admin.overview.cards.registeredUsers', format: (v) => formatCount(v as number) },
+  { key: 'registeredUsers', icon: Users, labelKey: 'admin.overview.cards.registeredUsers', format: (v) => formatCount(v as number), target: 'users' },
   { key: 'onlineUsers', icon: UserCheck, labelKey: 'admin.overview.cards.onlineUsers', format: (v) => formatCount(v as number) },
-  { key: 'onlineRooms', icon: Hash, labelKey: 'admin.overview.cards.onlineRooms', format: (v) => formatCount(v as number) },
+  { key: 'onlineRooms', icon: Hash, labelKey: 'admin.overview.cards.onlineRooms', format: (v) => formatCount(v as number), target: 'rooms' },
   { key: 'vhostCount', icon: Server, labelKey: 'admin.overview.cards.vhosts', format: (v) => formatCount(v as number) },
 ]

@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import { ServerOverview } from './ServerOverview'
+import { adminStore } from '@fluux/sdk'
 
 const fetchServerStats = vi.fn()
 let adminReturn: Record<string, unknown>
@@ -20,6 +21,26 @@ beforeEach(() => {
     executeCommand: vi.fn(),
     isExecuting: false,
   }
+  adminStore.getState().setActiveCategory(null)
+})
+
+describe('ServerOverview navigation cards', () => {
+  it('navigates to user management when the registered-users card is clicked', () => {
+    render(<ServerOverview />)
+    fireEvent.click(screen.getByRole('button', { name: /Registered users/ }))
+    expect(adminStore.getState().activeCategory).toBe('users')
+  })
+
+  it('navigates to room management when the rooms card is clicked', () => {
+    render(<ServerOverview />)
+    fireEvent.click(screen.getByRole('button', { name: /Active rooms/ }))
+    expect(adminStore.getState().activeCategory).toBe('rooms')
+  })
+
+  it('leaves read-only cards (uptime) non-interactive', () => {
+    render(<ServerOverview />)
+    expect(screen.queryByRole('button', { name: /Uptime/ })).not.toBeInTheDocument()
+  })
 })
 
 describe('ServerOverview', () => {
