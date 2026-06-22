@@ -68,7 +68,7 @@ export function ServerOverview() {
           </button>
         </div>
       ) : (
-        <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
           {presentCards.map(card => {
             const Icon = card.icon
             const value = stats![card.key] as NonNullable<ServerStats[keyof ServerStats]>
@@ -78,7 +78,7 @@ export function ServerOverview() {
                   <Icon className="size-4" />
                   <span className="text-xs font-medium">{t(card.labelKey)}</span>
                 </div>
-                <div className="text-2xl font-semibold text-fluux-text truncate" title={String(value)}>
+                <div className="text-2xl font-semibold text-fluux-text break-words" title={String(value)}>
                   {card.format(value, durationUnits)}
                 </div>
               </div>
