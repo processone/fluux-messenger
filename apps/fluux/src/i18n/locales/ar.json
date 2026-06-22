@@ -1111,7 +1111,18 @@
         "users": {
             "delete": "حذف المستخدم",
             "changePassword": "تغيير كلمة المرور",
-            "endSessions": "إنهاء الجلسات"
+            "endSessions": "إنهاء الجلسات",
+            "online": "متصل",
+            "offline": "غير متصل",
+            "onlineNow": "متصل الآن",
+            "justNow": "الآن",
+            "unitMinute": "د",
+            "unitHour": "س",
+            "unitDay": "ي",
+            "unitWeek": "أ",
+            "unitMonth": "ش",
+            "unitYear": "ع",
+            "truncatedBanner": "عرض أول {{shown}} من {{total}} مستخدم. قم بتحسين البحث لتضييق النتائج."
         },
         "userView": {
             "title": "المستخدم",

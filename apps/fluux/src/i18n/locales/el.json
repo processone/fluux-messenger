@@ -1112,7 +1112,18 @@
         "users": {
             "delete": "Διαγραφή χρήστη",
             "changePassword": "Αλλαγή κωδικού πρόσβασης",
-            "endSessions": "Τερματισμός συνεδριών"
+            "endSessions": "Τερματισμός συνεδριών",
+            "online": "Σε σύνδεση",
+            "offline": "Εκτός σύνδεσης",
+            "onlineNow": "Σε σύνδεση τώρα",
+            "justNow": "μόλις τώρα",
+            "unitMinute": "λ",
+            "unitHour": "ω",
+            "unitDay": "η",
+            "unitWeek": "εβδ",
+            "unitMonth": "μ",
+            "unitYear": "χ",
+            "truncatedBanner": "Εμφάνιση των πρώτων {{shown}} από {{total}} χρήστες. Βελτιώστε την αναζήτησή σας για να περιορίσετε τα αποτελέσματα."
         },
         "userView": {
             "title": "Χρήστης",

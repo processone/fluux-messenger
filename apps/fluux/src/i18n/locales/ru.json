@@ -1111,7 +1111,18 @@
         "users": {
             "delete": "Удалить пользователя",
             "changePassword": "Изменить пароль",
-            "endSessions": "Завершить сессии"
+            "endSessions": "Завершить сессии",
+            "online": "Онлайн",
+            "offline": "Офлайн",
+            "onlineNow": "Онлайн сейчас",
+            "justNow": "только что",
+            "unitMinute": "мин",
+            "unitHour": "ч",
+            "unitDay": "д",
+            "unitWeek": "нед",
+            "unitMonth": "мес",
+            "unitYear": "г",
+            "truncatedBanner": "Показаны первые {{shown}} из {{total}} пользователей. Уточните поиск для сужения результатов."
         },
         "userView": {
             "title": "Пользователь",

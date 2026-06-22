@@ -1111,7 +1111,18 @@
         "users": {
             "delete": "Выдаліць карыстальніка",
             "changePassword": "Змяніць пароль",
-            "endSessions": "Завяршыць сесіі"
+            "endSessions": "Завяршыць сесіі",
+            "online": "Анлайн",
+            "offline": "Афлайн",
+            "onlineNow": "Анлайн зараз",
+            "justNow": "толькі што",
+            "unitMinute": "хв",
+            "unitHour": "г",
+            "unitDay": "д",
+            "unitWeek": "т",
+            "unitMonth": "м",
+            "unitYear": "г",
+            "truncatedBanner": "Паказана першых {{shown}} з {{total}} карыстальнікаў. Удакладніце пошук для звужэння вынікаў."
         },
         "userView": {
             "title": "Карыстальнік",

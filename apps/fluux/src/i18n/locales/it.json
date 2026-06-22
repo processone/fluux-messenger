@@ -1113,7 +1113,18 @@
         "users": {
             "delete": "Elimina utente",
             "changePassword": "Cambia password",
-            "endSessions": "Termina sessioni"
+            "endSessions": "Termina sessioni",
+            "online": "Online",
+            "offline": "Offline",
+            "onlineNow": "Online ora",
+            "justNow": "proprio adesso",
+            "unitMinute": "m",
+            "unitHour": "h",
+            "unitDay": "g",
+            "unitWeek": "s",
+            "unitMonth": "mes",
+            "unitYear": "a",
+            "truncatedBanner": "Mostra i primi {{shown}} di {{total}} utenti. Affina la ricerca per restringere i risultati."
         },
         "userView": {
             "title": "Utente",

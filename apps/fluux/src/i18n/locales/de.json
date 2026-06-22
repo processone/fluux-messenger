@@ -1113,7 +1113,18 @@
         "users": {
             "delete": "Benutzer löschen",
             "changePassword": "Passwort ändern",
-            "endSessions": "Sitzungen beenden"
+            "endSessions": "Sitzungen beenden",
+            "online": "Online",
+            "offline": "Offline",
+            "onlineNow": "Jetzt online",
+            "justNow": "gerade eben",
+            "unitMinute": "Min",
+            "unitHour": "Std",
+            "unitDay": "T",
+            "unitWeek": "Wo",
+            "unitMonth": "Mt",
+            "unitYear": "J",
+            "truncatedBanner": "Die ersten {{shown}} von {{total}} Benutzern werden angezeigt. Verfeinern Sie Ihre Suche, um die Ergebnisse einzugrenzen."
         },
         "userView": {
             "title": "Benutzer",

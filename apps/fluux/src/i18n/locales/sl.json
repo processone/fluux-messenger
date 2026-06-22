@@ -1113,7 +1113,18 @@
         "users": {
             "delete": "Izbriši uporabnika",
             "changePassword": "Spremeni geslo",
-            "endSessions": "Končaj seje"
+            "endSessions": "Končaj seje",
+            "online": "Online",
+            "offline": "Offline",
+            "onlineNow": "Online zdaj",
+            "justNow": "pravkar",
+            "unitMinute": "m",
+            "unitHour": "u",
+            "unitDay": "d",
+            "unitWeek": "t",
+            "unitMonth": "mes",
+            "unitYear": "l",
+            "truncatedBanner": "Prikazanih je prvih {{shown}} od {{total}} uporabnikov. Natančneje določite iskanje za zožitev rezultatov."
         },
         "userView": {
             "title": "Uporabnik",

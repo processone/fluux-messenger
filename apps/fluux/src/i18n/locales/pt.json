@@ -1113,7 +1113,18 @@
         "users": {
             "delete": "Eliminar utilizador",
             "changePassword": "Alterar palavra-passe",
-            "endSessions": "Terminar sessões"
+            "endSessions": "Terminar sessões",
+            "online": "Online",
+            "offline": "Offline",
+            "onlineNow": "Online agora",
+            "justNow": "agora mesmo",
+            "unitMinute": "m",
+            "unitHour": "h",
+            "unitDay": "d",
+            "unitWeek": "s",
+            "unitMonth": "mês",
+            "unitYear": "a",
+            "truncatedBanner": "A mostrar os primeiros {{shown}} de {{total}} utilizadores. Refine a sua pesquisa para restringir os resultados."
         },
         "userView": {
             "title": "Utilizador",

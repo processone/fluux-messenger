@@ -1111,7 +1111,18 @@
         "users": {
             "delete": "מחיקת משתמש",
             "changePassword": "שינוי סיסמה",
-            "endSessions": "סיום סשנים"
+            "endSessions": "סיום סשנים",
+            "online": "מחובר",
+            "offline": "לא מחובר",
+            "onlineNow": "מחובר עכשיו",
+            "justNow": "הרגע",
+            "unitMinute": "ד'",
+            "unitHour": "ש'",
+            "unitDay": "י",
+            "unitWeek": "ש",
+            "unitMonth": "ח",
+            "unitYear": "ש",
+            "truncatedBanner": "מוצגים {{shown}} הראשונים מתוך {{total}} משתמשים. צמצם את החיפוש לתוצאות מדויקות יותר."
         },
         "userView": {
             "title": "משתמש",

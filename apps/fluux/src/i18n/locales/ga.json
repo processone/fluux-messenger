@@ -1111,7 +1111,18 @@
         "users": {
             "delete": "Scrios úsáideoir",
             "changePassword": "Athraigh pasfhocal",
-            "endSessions": "Críochnaigh seisiúin"
+            "endSessions": "Críochnaigh seisiúin",
+            "online": "Ar líne",
+            "offline": "As líne",
+            "onlineNow": "Ar líne anois",
+            "justNow": "ar ball beag",
+            "unitMinute": "n",
+            "unitHour": "u",
+            "unitDay": "l",
+            "unitWeek": "s",
+            "unitMonth": "mí",
+            "unitYear": "b",
+            "truncatedBanner": "Ag taispeáint na chéad {{shown}} as {{total}} úsáideoir. Caolú do chuardach chun torthaí a chúngú."
         },
         "userView": {
             "title": "Úsáideoir",

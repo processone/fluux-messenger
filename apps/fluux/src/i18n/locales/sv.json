@@ -1111,7 +1111,18 @@
         "users": {
             "delete": "Ta bort användare",
             "changePassword": "Ändra lösenord",
-            "endSessions": "Avsluta sessioner"
+            "endSessions": "Avsluta sessioner",
+            "online": "Online",
+            "offline": "Offline",
+            "onlineNow": "Online nu",
+            "justNow": "just nu",
+            "unitMinute": "m",
+            "unitHour": "t",
+            "unitDay": "d",
+            "unitWeek": "v",
+            "unitMonth": "mån",
+            "unitYear": "år",
+            "truncatedBanner": "Visar de första {{shown}} av {{total}} användare. Förfina din sökning för att begränsa resultaten."
         },
         "userView": {
             "title": "Användare",

@@ -1113,7 +1113,18 @@
         "users": {
             "delete": "Smazat uživatele",
             "changePassword": "Změnit heslo",
-            "endSessions": "Ukončit relace"
+            "endSessions": "Ukončit relace",
+            "online": "Online",
+            "offline": "Offline",
+            "onlineNow": "Online nyní",
+            "justNow": "právě teď",
+            "unitMinute": "m",
+            "unitHour": "h",
+            "unitDay": "d",
+            "unitWeek": "t",
+            "unitMonth": "měs",
+            "unitYear": "r",
+            "truncatedBanner": "Zobrazuje se prvních {{shown}} z {{total}} uživatelů. Upřesněte hledání pro zúžení výsledků."
         },
         "userView": {
             "title": "Uživatel",

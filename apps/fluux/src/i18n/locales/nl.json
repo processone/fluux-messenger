@@ -1111,7 +1111,18 @@
         "users": {
             "delete": "Gebruiker verwijderen",
             "changePassword": "Wachtwoord wijzigen",
-            "endSessions": "Sessies beeindigen"
+            "endSessions": "Sessies beeindigen",
+            "online": "Online",
+            "offline": "Offline",
+            "onlineNow": "Nu online",
+            "justNow": "zojuist",
+            "unitMinute": "m",
+            "unitHour": "u",
+            "unitDay": "d",
+            "unitWeek": "w",
+            "unitMonth": "mnd",
+            "unitYear": "j",
+            "truncatedBanner": "De eerste {{shown}} van {{total}} gebruikers worden weergegeven. Verfijn uw zoekopdracht om de resultaten te beperken."
         },
         "userView": {
             "title": "Gebruiker",

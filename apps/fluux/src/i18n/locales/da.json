@@ -1111,7 +1111,18 @@
         "users": {
             "delete": "Slet bruger",
             "changePassword": "Skift adgangskode",
-            "endSessions": "Afslut sessioner"
+            "endSessions": "Afslut sessioner",
+            "online": "Online",
+            "offline": "Offline",
+            "onlineNow": "Online nu",
+            "justNow": "lige nu",
+            "unitMinute": "m",
+            "unitHour": "t",
+            "unitDay": "d",
+            "unitWeek": "u",
+            "unitMonth": "md",
+            "unitYear": "år",
+            "truncatedBanner": "Viser de første {{shown}} af {{total}} brugere. Præciser din søgning for at indsnævre resultaterne."
         },
         "userView": {
             "title": "Bruger",

@@ -1111,7 +1111,18 @@
         "users": {
             "delete": "Slett bruker",
             "changePassword": "Endre passord",
-            "endSessions": "Avslutt økter"
+            "endSessions": "Avslutt økter",
+            "online": "Online",
+            "offline": "Offline",
+            "onlineNow": "Online nå",
+            "justNow": "akkurat nå",
+            "unitMinute": "m",
+            "unitHour": "t",
+            "unitDay": "d",
+            "unitWeek": "u",
+            "unitMonth": "md",
+            "unitYear": "år",
+            "truncatedBanner": "Viser de første {{shown}} av {{total}} brukere. Presis søket for å begrense resultatene."
         },
         "userView": {
             "title": "Bruker",

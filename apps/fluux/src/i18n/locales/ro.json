@@ -1113,7 +1113,18 @@
         "users": {
             "delete": "Șterge utilizatorul",
             "changePassword": "Schimbă parola",
-            "endSessions": "Închide sesiunile"
+            "endSessions": "Închide sesiunile",
+            "online": "Online",
+            "offline": "Offline",
+            "onlineNow": "Online acum",
+            "justNow": "chiar acum",
+            "unitMinute": "m",
+            "unitHour": "h",
+            "unitDay": "z",
+            "unitWeek": "s",
+            "unitMonth": "l",
+            "unitYear": "a",
+            "truncatedBanner": "Se afișează primii {{shown}} din {{total}} utilizatori. Rafinați căutarea pentru a reduce rezultatele."
         },
         "userView": {
             "title": "Utilizator",

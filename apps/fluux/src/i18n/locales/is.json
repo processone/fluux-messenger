@@ -1111,7 +1111,18 @@
         "users": {
             "delete": "Eyða notanda",
             "changePassword": "Breyta lykilorði",
-            "endSessions": "Ljúka lotum"
+            "endSessions": "Ljúka lotum",
+            "online": "Á netinu",
+            "offline": "Ótengdur",
+            "onlineNow": "Á netinu núna",
+            "justNow": "rétt í þessu",
+            "unitMinute": "m",
+            "unitHour": "k",
+            "unitDay": "d",
+            "unitWeek": "v",
+            "unitMonth": "mán",
+            "unitYear": "ár",
+            "truncatedBanner": "Sýnir fyrstu {{shown}} af {{total}} notendum. Þrengdu leitina til að fá færri niðurstöður."
         },
         "userView": {
             "title": "Notandi",
