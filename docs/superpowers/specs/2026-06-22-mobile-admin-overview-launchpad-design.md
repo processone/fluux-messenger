@@ -69,9 +69,11 @@ later is a one-line change.
 
 ### `ServerOverview.tsx` — render tappable cards
 For cards with a `target`, render an interactive element (button semantics) that
-calls `setActiveCategory(card.target)`; otherwise render the current static
-`<div>`. `setActiveCategory` is read directly from `useAdminStore` (it is a
-store — no prop drilling). A trailing chevron icon signals interactivity.
+calls `adminStore.getState().setActiveCategory(card.target)`; otherwise render
+the current static `<div>`. The setter is reached via the vanilla `adminStore`
+imported from `@fluux/sdk` (matching how `ChatLayout` navigates) — no prop
+drilling and no extra re-render subscription. A trailing chevron icon signals
+interactivity.
 
 ### `adminBackTarget.ts` — new `'overview'` target
 Extend `AdminBackTarget` to include `'overview'` and pass `activeCategory` into
@@ -83,18 +85,26 @@ Logic: session/user/room take priority as today; then if `activeCategory` is
 `users`/`rooms`, return `'overview'`; otherwise `'exit'`. `AdminView`'s
 `handleHeaderBack` adds an `'overview'` case → `setActiveCategory('stats')`.
 
-### `AdminSectionNav` — extracted shared section list (new)
-Extract the category-button list currently inside `AdminDashboard` into a small,
-self-contained `AdminSectionNav` component (props: active category + an
-`onSelect(category)` callback). The desktop sidebar (`AdminDashboard`) and the
-mobile sheet both render it, so the section list lives in one place.
+### Mobile section sheet — reuse `AdminDashboard`
+The sheet hosts the existing `AdminDashboard` component rather than a new
+extracted nav. `AdminDashboard` already is the section list and already handles
+the inline expansion of Announcements/Other and command execution; extracting a
+thinner `AdminSectionNav` would duplicate that. Reuse keeps the section logic in
+one place (DRY) and lowers risk.
 
 ### `AdminView.tsx` — mobile header menu button + sheet
-- Add a `☰` button to the header, `md:hidden`, opposite the existing back arrow.
+- Add a `☰` button to the header, `md:hidden`, on the trailing edge (`ms-auto`)
+  opposite the existing back arrow.
 - Local `useState` for sheet open/close.
 - Render `BottomSheet` (reused from `ui/BottomSheet.tsx` — portal, `max-h-[90dvh]`,
-  grab handle, Escape/backdrop close, safe-area) containing `AdminSectionNav`.
-  Selecting a section calls `setActiveCategory` and closes the sheet.
+  grab handle, Escape/backdrop close, safe-area) containing
+  `<AdminDashboard activeCategory={activeCategory} onCategoryChange={…} />`.
+- Sheet close rules: selecting a main-content category (`stats`/`users`/`rooms`)
+  or re-tapping the active one (`onCategoryChange(null)`) closes the sheet;
+  selecting `announcements`/`other` keeps it open so its command list expands
+  inline. An effect closes the sheet when a command session opens
+  (`currentSession` becomes non-null), so executing a command from the sheet
+  reveals the session form in the main area.
 
 ### `ChatLayout.tsx` — extend default to mobile
 Remove the `isSmallScreen()` early-return from the stats auto-default effect so
@@ -104,20 +114,20 @@ the overview is the admin home on every viewport.
 
 - No bottom tab bar (rejected — no app-wide bottom-bar paradigm exists).
 - No persistent top section strip.
-- Desktop sidebar layout is unchanged except for the extracted `AdminSectionNav`.
+- Desktop sidebar layout and `AdminDashboard` are unchanged (the sheet reuses
+  `AdminDashboard` as-is).
 - Read-only stat cards keep their exact current appearance.
 
 ## Testing
 
 - `adminBackTarget.test.ts`: add cases — list category → `'overview'`; stats/null
   → `'exit'`; existing session/user/room precedence still holds.
-- `AdminSectionNav`: render test (all categories present, `onSelect` fires with
-  the right category).
 - `ServerOverview`: assert the *registered users* and *rooms* cards are buttons
-  that call `setActiveCategory('users')` / `('rooms')`; assert read-only cards are
-  not interactive.
-- `AdminView`: the menu button is `md:hidden` and toggles the sheet; selecting a
-  section in the sheet sets the category and closes the sheet.
+  that call `setActiveCategory('users')` / `('rooms')` on click; assert read-only
+  cards (uptime/version/online-users/vhosts) render no button/`role`.
+- `AdminView`: the menu button is present (`md:hidden`) and toggles the sheet;
+  selecting a main-content category in the embedded `AdminDashboard` closes the
+  sheet; selecting `announcements`/`other` leaves it open.
 
 ## Open items
 
