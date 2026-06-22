@@ -1155,8 +1155,9 @@
             "cards": {
                 "uptime": "Käyttöaika",
                 "version": "Palvelimen versio",
-                "registeredUsers": "Rekisteröidyt käyttäjät",
-                "onlineUsers": "Käyttäjät paikalla",
+                "users": "Käyttäjät",
+                "onlineSuffix": "{{n}} paikalla",
+                "onlineSessions": "Aktiiviset istunnot",
                 "onlineRooms": "Aktiiviset huoneet",
                 "vhosts": "Virtuaalipalvelimet"
             }

@@ -1157,8 +1157,9 @@
             "cards": {
                 "uptime": "Tempo de atividade",
                 "version": "Versão do servidor",
-                "registeredUsers": "Utilizadores registados",
-                "onlineUsers": "Utilizadores online",
+                "users": "Utilizadores",
+                "onlineSuffix": "{{n}} online",
+                "onlineSessions": "Sessões online",
                 "onlineRooms": "Salas ativas",
                 "vhosts": "Anfitriões virtuais"
             }

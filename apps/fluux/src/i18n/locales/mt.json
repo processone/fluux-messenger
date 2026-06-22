@@ -1157,8 +1157,9 @@
             "cards": {
                 "uptime": "Ħin tax-xogħol",
                 "version": "Verżjoni tas-server",
-                "registeredUsers": "Utenti rreġistrati",
-                "onlineUsers": "Utenti online",
+                "users": "Utenti",
+                "onlineSuffix": "{{n}} online",
+                "onlineSessions": "Sessjonijiet online",
                 "onlineRooms": "Kmamar attivi",
                 "vhosts": "Hosts virtwali"
             }

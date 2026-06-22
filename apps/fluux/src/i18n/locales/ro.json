@@ -1157,8 +1157,9 @@
             "cards": {
                 "uptime": "Timp de funcționare",
                 "version": "Versiune server",
-                "registeredUsers": "Utilizatori înregistrați",
-                "onlineUsers": "Utilizatori online",
+                "users": "Utilizatori",
+                "onlineSuffix": "{{n}} online",
+                "onlineSessions": "Sesiuni online",
                 "onlineRooms": "Camere active",
                 "vhosts": "Gazde virtuale"
             }

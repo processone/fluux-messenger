@@ -1155,8 +1155,9 @@
             "cards": {
                 "uptime": "Aga fónaimh",
                 "version": "Leagan an fhreastalaí",
-                "registeredUsers": "Úsáideoirí cláraithe",
-                "onlineUsers": "Úsáideoirí ar líne",
+                "users": "Úsáideoirí",
+                "onlineSuffix": "{{n}} ar líne",
+                "onlineSessions": "Seisiúin ar líne",
                 "onlineRooms": "Seomraí gníomhacha",
                 "vhosts": "Óstaigh fhíorúla"
             }

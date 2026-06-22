@@ -1155,8 +1155,9 @@
             "cards": {
                 "uptime": "运行时间",
                 "version": "服务器版本",
-                "registeredUsers": "注册用户",
-                "onlineUsers": "在线用户",
+                "users": "用户",
+                "onlineSuffix": "{{n}} 在线",
+                "onlineSessions": "在线会话",
                 "onlineRooms": "活跃房间",
                 "vhosts": "虚拟主机"
             }

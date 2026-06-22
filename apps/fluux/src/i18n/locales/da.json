@@ -1155,8 +1155,9 @@
             "cards": {
                 "uptime": "Oppetid",
                 "version": "Serverversion",
-                "registeredUsers": "Registrerede brugere",
-                "onlineUsers": "Online-brugere",
+                "users": "Brugere",
+                "onlineSuffix": "{{n}} online",
+                "onlineSessions": "Onlinesessioner",
                 "onlineRooms": "Aktive rum",
                 "vhosts": "Virtuelle værter"
             }

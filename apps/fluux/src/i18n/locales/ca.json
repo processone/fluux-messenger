@@ -1157,8 +1157,9 @@
             "cards": {
                 "uptime": "Temps actiu",
                 "version": "Versió del servidor",
-                "registeredUsers": "Usuaris registrats",
-                "onlineUsers": "Usuaris en línia",
+                "users": "Usuaris",
+                "onlineSuffix": "{{n}} en línia",
+                "onlineSessions": "Sessions en línia",
                 "onlineRooms": "Sales actives",
                 "vhosts": "Amfitrions virtuals"
             }

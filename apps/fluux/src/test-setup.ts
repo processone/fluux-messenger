@@ -68,8 +68,9 @@ void i18n.use(initReactI18next).init({
             cards: {
               uptime: 'Uptime',
               version: 'Server version',
-              registeredUsers: 'Registered users',
-              onlineUsers: 'Online users',
+              users: 'Users',
+              onlineSuffix: '{{n}} online',
+              onlineSessions: 'Online sessions',
               onlineRooms: 'Active rooms',
               vhosts: 'Virtual hosts',
             },

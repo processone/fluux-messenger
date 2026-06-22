@@ -1155,8 +1155,9 @@
             "cards": {
                 "uptime": "Keyrslutími",
                 "version": "Útgáfa netþjóns",
-                "registeredUsers": "Skráðir notendur",
-                "onlineUsers": "Notendur á netinu",
+                "users": "Notendur",
+                "onlineSuffix": "{{n}} tengdir",
+                "onlineSessions": "Virkar setur",
                 "onlineRooms": "Virk herbergi",
                 "vhosts": "Sýndarþjónar"
             }

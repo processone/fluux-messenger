@@ -1155,8 +1155,9 @@
             "cards": {
                 "uptime": "Üzemidő",
                 "version": "Kiszolgáló verziója",
-                "registeredUsers": "Regisztrált felhasználók",
-                "onlineUsers": "Online felhasználók",
+                "users": "Felhasználók",
+                "onlineSuffix": "{{n}} online",
+                "onlineSessions": "Online munkamenetek",
                 "onlineRooms": "Aktív szobák",
                 "vhosts": "Virtuális gazdagépek"
             }

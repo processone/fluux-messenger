@@ -1157,8 +1157,9 @@
             "cards": {
                 "uptime": "Doba běhu",
                 "version": "Verze serveru",
-                "registeredUsers": "Registrovaní uživatelé",
-                "onlineUsers": "Uživatelé online",
+                "users": "Uživatelé",
+                "onlineSuffix": "{{n}} online",
+                "onlineSessions": "Online relace",
                 "onlineRooms": "Aktivní místnosti",
                 "vhosts": "Virtuální hostitelé"
             }

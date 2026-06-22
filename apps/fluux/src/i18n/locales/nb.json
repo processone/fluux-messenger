@@ -1155,8 +1155,9 @@
             "cards": {
                 "uptime": "Oppetid",
                 "version": "Serverversjon",
-                "registeredUsers": "Registrerte brukere",
-                "onlineUsers": "Pålogga brukere",
+                "users": "Brukere",
+                "onlineSuffix": "{{n}} pålogget",
+                "onlineSessions": "Aktive økter",
                 "onlineRooms": "Aktive rom",
                 "vhosts": "Virtuelle verter"
             }

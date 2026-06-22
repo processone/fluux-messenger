@@ -68,6 +68,7 @@ export function ServerOverview() {
           {presentCards.map(card => {
             const Icon = card.icon
             const value = stats![card.key] as NonNullable<ServerStats[keyof ServerStats]>
+            const secondary = card.secondaryKey ? stats![card.secondaryKey] : undefined
             return (
               <div key={String(card.key)} className="p-4 rounded-xl bg-fluux-bg border border-fluux-hover">
                 <div className="flex items-center gap-2 text-fluux-muted mb-2">
@@ -77,6 +78,11 @@ export function ServerOverview() {
                 <div className="text-2xl font-semibold text-fluux-text break-words" title={String(value)}>
                   {card.format(value, durationUnits)}
                 </div>
+                {card.secondaryLabelKey && secondary != null && (
+                  <div className="text-xs text-fluux-muted mt-1">
+                    {t(card.secondaryLabelKey, { n: secondary as number })}
+                  </div>
+                )}
               </div>
             )
           })}

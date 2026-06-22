@@ -1170,6 +1170,28 @@ describe('XMPPClient Admin', () => {
       }
     }
 
+    // Build a result-form <x> carrying one multi-value <field var> (jid-multi).
+    function multiResultForm(fieldVar: string, values: string[]): AdminMockChild {
+      return {
+        name: 'x',
+        attrs: { xmlns: 'jabber:x:data', type: 'result' },
+        getChildren: (name: string) => {
+          if (name === 'field') {
+            return [{
+              name: 'field',
+              attrs: { var: fieldVar, type: 'jid-multi' },
+              getChild: () => undefined,
+              getChildren: (n: string) => (n === 'value'
+                ? values.map((v) => ({ name: 'value', text: () => v }))
+                : []),
+            }]
+          }
+          return []
+        },
+        getChild: () => undefined,
+      }
+    }
+
     // Build an executing-step form <x> requiring `fieldVar` (two-step commands).
     function executingForm(fieldVar: string, defaultValue: string): AdminMockChild {
       return {
@@ -1271,6 +1293,14 @@ describe('XMPPClient Admin', () => {
           if (node.endsWith('#get-online-users-num')) {
             return Promise.resolve(completedCommand(node, resultForm('onlineusersnum', '7')))
           }
+          if (node.endsWith('#get-online-users-list')) {
+            // 3 sessions across 2 distinct bare JIDs (alice has two devices).
+            return Promise.resolve(completedCommand(node, multiResultForm('onlineuserjids', [
+              'alice@example.com/phone',
+              'alice@example.com/desktop',
+              'bob@example.com',
+            ])))
+          }
           if (node === 'api-commands/muc_online_rooms_count') {
             return action === 'complete'
               ? Promise.resolve(completedCommand(node, resultForm('count', '10')))
@@ -1294,7 +1324,8 @@ describe('XMPPClient Admin', () => {
       const stats = await xmppClient.admin.fetchServerStats()
 
       expect(stats.registeredUsers).toBe(15)
-      expect(stats.onlineUsers).toBe(7)
+      expect(stats.onlineSessions).toBe(7)
+      expect(stats.onlineUsers).toBe(2) // 3 sessions deduped to 2 distinct bare JIDs
       expect(stats.onlineRooms).toBe(10)
       expect(stats.uptimeSeconds).toBe(86400)
       expect(stats.version).toContain('ejabberd')
@@ -1329,7 +1360,8 @@ describe('XMPPClient Admin', () => {
 
       expect(stats.registeredUsers).toBeUndefined()
       // Others still present
-      expect(stats.onlineUsers).toBe(7)
+      expect(stats.onlineSessions).toBe(7)
+      expect(stats.onlineUsers).toBe(2)
       expect(stats.fetchedAt).toBeGreaterThan(0)
     })
   })
