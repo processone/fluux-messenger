@@ -6,7 +6,9 @@ import { useAdminStore } from '@fluux/sdk/react'
 import { UserListItem } from './UserListItem'
 
 function setAdminState(partial: Record<string, unknown>) {
-  ;(useAdminStore as unknown as { mockImplementation: Function }).mockImplementation(
+  ;(useAdminStore as unknown as {
+    mockImplementation: (impl: (selector?: (s: unknown) => unknown) => unknown) => void
+  }).mockImplementation(
     (selector?: (s: unknown) => unknown) => {
       const state = {
         onlineJids: new Set<string>(),
