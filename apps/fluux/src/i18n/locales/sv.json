@@ -1122,7 +1122,8 @@
             "unitWeek": "v",
             "unitMonth": "mån",
             "unitYear": "år",
-            "truncatedBanner": "Visar de första {{shown}} av {{total}} användare. Förfina din sökning för att begränsa resultaten."
+            "truncatedBanner": "Visar de första {{shown}} av {{total}} användare. Förfina din sökning för att begränsa resultaten.",
+            "truncatedBannerNoTotal": "Visar de första {{shown}} användare. Förfina din sökning för att begränsa resultaten."
         },
         "userView": {
             "title": "Användare",

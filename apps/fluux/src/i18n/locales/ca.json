@@ -1124,7 +1124,8 @@
             "unitWeek": "s",
             "unitMonth": "mes",
             "unitYear": "a",
-            "truncatedBanner": "Es mostren els primers {{shown}} de {{total}} usuaris. Refineu la cerca per reduir els resultats."
+            "truncatedBanner": "Es mostren els primers {{shown}} de {{total}} usuaris. Refineu la cerca per reduir els resultats.",
+            "truncatedBannerNoTotal": "Es mostren els primers {{shown}} usuaris. Refineu la cerca per reduir els resultats."
         },
         "userView": {
             "title": "Usuari",

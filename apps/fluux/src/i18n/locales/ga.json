@@ -1122,7 +1122,8 @@
             "unitWeek": "s",
             "unitMonth": "mí",
             "unitYear": "b",
-            "truncatedBanner": "Ag taispeáint na chéad {{shown}} as {{total}} úsáideoir. Caolú do chuardach chun torthaí a chúngú."
+            "truncatedBanner": "Ag taispeáint na chéad {{shown}} as {{total}} úsáideoir. Caolú do chuardach chun torthaí a chúngú.",
+            "truncatedBannerNoTotal": "Ag taispeáint na chéad {{shown}} úsáideoir. Caolú do chuardach chun torthaí a chúngú."
         },
         "userView": {
             "title": "Úsáideoir",

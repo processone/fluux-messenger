@@ -1123,7 +1123,8 @@
             "unitWeek": "sem",
             "unitMonth": "mois",
             "unitYear": "an",
-            "truncatedBanner": "Affichage des {{shown}} premiers utilisateurs sur {{total}}. Affinez votre recherche pour réduire les résultats."
+            "truncatedBanner": "Affichage des {{shown}} premiers utilisateurs sur {{total}}. Affinez votre recherche pour réduire les résultats.",
+            "truncatedBannerNoTotal": "Affichage des {{shown}} premiers utilisateurs. Affinez votre recherche pour réduire les résultats."
         },
         "userView": {
             "title": "Utilisateur",

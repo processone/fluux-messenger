@@ -1124,7 +1124,8 @@
             "unitWeek": "s",
             "unitMonth": "l",
             "unitYear": "a",
-            "truncatedBanner": "Se afișează primii {{shown}} din {{total}} utilizatori. Rafinați căutarea pentru a reduce rezultatele."
+            "truncatedBanner": "Se afișează primii {{shown}} din {{total}} utilizatori. Rafinați căutarea pentru a reduce rezultatele.",
+            "truncatedBannerNoTotal": "Se afișează primii {{shown}} utilizatori. Rafinați căutarea pentru a reduce rezultatele."
         },
         "userView": {
             "title": "Utilizator",

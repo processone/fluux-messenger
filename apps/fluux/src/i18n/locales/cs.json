@@ -1124,7 +1124,8 @@
             "unitWeek": "t",
             "unitMonth": "měs",
             "unitYear": "r",
-            "truncatedBanner": "Zobrazuje se prvních {{shown}} z {{total}} uživatelů. Upřesněte hledání pro zúžení výsledků."
+            "truncatedBanner": "Zobrazuje se prvních {{shown}} z {{total}} uživatelů. Upřesněte hledání pro zúžení výsledků.",
+            "truncatedBannerNoTotal": "Zobrazuje se prvních {{shown}} uživatelů. Upřesněte hledání pro zúžení výsledků."
         },
         "userView": {
             "title": "Uživatel",

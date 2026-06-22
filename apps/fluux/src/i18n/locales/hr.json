@@ -1122,7 +1122,8 @@
             "unitWeek": "tj",
             "unitMonth": "mj",
             "unitYear": "g",
-            "truncatedBanner": "Prikazuje se prvih {{shown}} od {{total}} korisnika. Precizite pretragu za uže rezultate."
+            "truncatedBanner": "Prikazuje se prvih {{shown}} od {{total}} korisnika. Precizite pretragu za uže rezultate.",
+            "truncatedBannerNoTotal": "Prikazuje se prvih {{shown}} korisnika. Precizite pretragu za uže rezultate."
         },
         "userView": {
             "title": "Korisnik",

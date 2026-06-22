@@ -1124,7 +1124,8 @@
             "unitWeek": "n",
             "unitMonth": "k",
             "unitYear": "a",
-            "truncatedBanner": "Kuvatakse esimesed {{shown}} kasutajat {{total}} -st. Täpsustage otsingut tulemuste kitsendamiseks."
+            "truncatedBanner": "Kuvatakse esimesed {{shown}} kasutajat {{total}}-st. Täpsustage otsingut tulemuste kitsendamiseks.",
+            "truncatedBannerNoTotal": "Kuvatakse esimesed {{shown}} kasutajat. Täpsustage otsingut tulemuste kitsendamiseks."
         },
         "userView": {
             "title": "Kasutaja",

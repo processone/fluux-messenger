@@ -1122,7 +1122,8 @@
             "unitWeek": "u",
             "unitMonth": "md",
             "unitYear": "år",
-            "truncatedBanner": "Viser de første {{shown}} av {{total}} brukere. Presis søket for å begrense resultatene."
+            "truncatedBanner": "Viser de første {{shown}} av {{total}} brukere. Presis søket for å begrense resultatene.",
+            "truncatedBannerNoTotal": "Viser de første {{shown}} brukere. Presis søket for å begrense resultatene."
         },
         "userView": {
             "title": "Bruker",

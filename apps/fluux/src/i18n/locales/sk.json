@@ -1123,7 +1123,8 @@
             "unitWeek": "t",
             "unitMonth": "mes",
             "unitYear": "r",
-            "truncatedBanner": "Zobrazuje sa prvých {{shown}} z {{total}} používateľov. Spresnite hľadanie pre zúženie výsledkov."
+            "truncatedBanner": "Zobrazuje sa prvých {{shown}} z {{total}} používateľov. Spresnite hľadanie pre zúženie výsledkov.",
+            "truncatedBannerNoTotal": "Zobrazuje sa prvých {{shown}} používateľov. Spresnite hľadanie pre zúženie výsledkov."
         },
         "userView": {
             "title": "Používateľ",

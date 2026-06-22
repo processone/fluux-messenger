@@ -1122,7 +1122,8 @@
             "unitWeek": "h",
             "unitMonth": "hó",
             "unitYear": "é",
-            "truncatedBanner": "Az első {{shown}} felhasználó látható {{total}} -ből. Szűkítse le a keresést a találatok csökkentéséhez."
+            "truncatedBanner": "Az első {{shown}} felhasználó látható {{total}}-ből. Szűkítse le a keresést a találatok csökkentéséhez.",
+            "truncatedBannerNoTotal": "Az első {{shown}} felhasználó látható. Szűkítse le a keresést a találatok csökkentéséhez."
         },
         "userView": {
             "title": "Felhasználó",

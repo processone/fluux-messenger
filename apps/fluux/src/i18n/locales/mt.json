@@ -1124,7 +1124,8 @@
             "unitWeek": "ġ",
             "unitMonth": "x",
             "unitYear": "s",
-            "truncatedBanner": "Qed jintwerew l-ewwel {{shown}} minn {{total}} utenti. Irfina t-tfittxija tiegħek biex tnaqqas ir-riżultati."
+            "truncatedBanner": "Qed jintwerew l-ewwel {{shown}} minn {{total}} utenti. Irfina t-tfittxija tiegħek biex tnaqqas ir-riżultati.",
+            "truncatedBannerNoTotal": "Qed jintwerew l-ewwel {{shown}} utenti. Irfina t-tfittxija tiegħek biex tnaqqas ir-riżultati."
         },
         "userView": {
             "title": "Utent",

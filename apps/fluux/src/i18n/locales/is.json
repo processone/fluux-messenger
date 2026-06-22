@@ -1122,7 +1122,8 @@
             "unitWeek": "v",
             "unitMonth": "mán",
             "unitYear": "ár",
-            "truncatedBanner": "Sýnir fyrstu {{shown}} af {{total}} notendum. Þrengdu leitina til að fá færri niðurstöður."
+            "truncatedBanner": "Sýnir fyrstu {{shown}} af {{total}} notendum. Þrengdu leitina til að fá færri niðurstöður.",
+            "truncatedBannerNoTotal": "Sýnir fyrstu {{shown}} notendum. Þrengdu leitina til að fá færri niðurstöður."
         },
         "userView": {
             "title": "Notandi",

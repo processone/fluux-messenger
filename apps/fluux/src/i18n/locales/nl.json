@@ -1122,7 +1122,8 @@
             "unitWeek": "w",
             "unitMonth": "mnd",
             "unitYear": "j",
-            "truncatedBanner": "De eerste {{shown}} van {{total}} gebruikers worden weergegeven. Verfijn uw zoekopdracht om de resultaten te beperken."
+            "truncatedBanner": "De eerste {{shown}} van {{total}} gebruikers worden weergegeven. Verfijn uw zoekopdracht om de resultaten te beperken.",
+            "truncatedBannerNoTotal": "De eerste {{shown}} gebruikers worden weergegeven. Verfijn uw zoekopdracht om de resultaten te beperken."
         },
         "userView": {
             "title": "Gebruiker",
