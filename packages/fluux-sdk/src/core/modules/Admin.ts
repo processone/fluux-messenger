@@ -722,8 +722,8 @@ export class Admin extends BaseModule {
         truncated = true
         break
       }
-      // Stop when the page is short and the server provides no next cursor.
-      if (users.length < USER_PAGE_SIZE && !pagination.last) break
+      // Stop when the server signals no more pages (no cursor) or returns nothing.
+      if (users.length === 0 || !pagination.last) break
       after = pagination.last
     }
 

@@ -15,7 +15,7 @@ import {
   type MockXmppClient,
   type MockStoreBindings,
 } from '../test-utils'
-import { MAX_USERS } from './Admin'
+import { MAX_USERS, USER_PAGE_SIZE } from './Admin'
 
 let mockXmppClientInstance: MockXmppClient
 
@@ -779,7 +779,7 @@ describe('XMPPClient Admin', () => {
     })
   })
 
-  describe('User Management', () => {
+  describe('fetchAllUsers', () => {
     // Build a completed get-registered-users-list command with the given jids and
     // an optional RSM <last> cursor (so fetchAllUsers knows whether to keep paging).
     function completedUsersCommand(jids: string[], lastCursor?: string) {
@@ -853,6 +853,19 @@ describe('XMPPClient Admin', () => {
 
       expect(result.users).toHaveLength(MAX_USERS)
       expect(result.truncated).toBe(true)
+    })
+
+    it('fetchAllUsers stops on full final page with no cursor', async () => {
+      await connectClient()
+      const jids = Array.from({ length: USER_PAGE_SIZE }, (_, i) => `u${i}@x.com`)
+      mockXmppClientInstance.iqCaller.request
+        .mockResolvedValue(wrapInIqResponse(completedUsersCommand(jids)))
+
+      const result = await xmppClient.admin.fetchAllUsers()
+
+      expect(result.users).toHaveLength(USER_PAGE_SIZE)
+      expect(result.truncated).toBe(false)
+      expect(mockXmppClientInstance.iqCaller.request).toHaveBeenCalledTimes(1)
     })
   })
 
