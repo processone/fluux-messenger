@@ -1096,6 +1096,43 @@ describe('XMPPClient Admin', () => {
     })
   })
 
+  describe('fetchLastActivity', () => {
+    it('fetchLastActivity parses seconds on success', async () => {
+      await connectClient()
+      mockXmppClientInstance.iqCaller.request.mockResolvedValue({
+        name: 'iq',
+        attrs: { type: 'result' },
+        getChild: (n: string, xmlns?: string) =>
+          n === 'query' && xmlns === 'jabber:iq:last'
+            ? { attrs: { seconds: '3600' } }
+            : undefined,
+      })
+
+      const res = await xmppClient.admin.fetchLastActivity('bob@x.com')
+      expect(res).toEqual({ seconds: 3600, unsupported: false })
+    })
+
+    it('fetchLastActivity reports unsupported on feature-not-implemented', async () => {
+      await connectClient()
+      const err: any = new Error('not implemented')
+      err.condition = 'feature-not-implemented'
+      mockXmppClientInstance.iqCaller.request.mockRejectedValue(err)
+
+      const res = await xmppClient.admin.fetchLastActivity('bob@x.com')
+      expect(res).toEqual({ seconds: null, unsupported: true })
+    })
+
+    it('fetchLastActivity returns per-user null on other errors', async () => {
+      await connectClient()
+      const err: any = new Error('item not found')
+      err.condition = 'item-not-found'
+      mockXmppClientInstance.iqCaller.request.mockRejectedValue(err)
+
+      const res = await xmppClient.admin.fetchLastActivity('ghost@x.com')
+      expect(res).toEqual({ seconds: null, unsupported: false })
+    })
+  })
+
   describe('fetchServerStats', () => {
     // Wrap a <command> element in an IQ response exposing getChild('command', NS).
     function wrapCommand(commandEl: ReturnType<typeof createAdminMockElement>) {

@@ -14,6 +14,7 @@ import {
   NS_MUC_OWNER,
   NS_RSM,
   NS_VERSION,
+  NS_LAST,
 } from '../namespaces'
 import type {
   AdminCommand,
@@ -25,6 +26,7 @@ import type {
   AdminUser,
   AdminRoom,
   ServerStats,
+  LastActivityResult,
 } from '../types'
 
 /** Hard cap on the full user-directory fetch. Past this, escalate to server-side search. */
@@ -778,6 +780,30 @@ export class Admin extends BaseModule {
       return new Set(jids.filter(Boolean).map((j) => getBareJid(j)))
     } catch {
       return new Set()
+    }
+  }
+
+  /**
+   * Query last activity (XEP-0012 jabber:iq:last) for an arbitrary bare JID.
+   * Roster-independent (unlike the roster-coupled LastActivity module), so it
+   * works for any account in the admin directory.
+   */
+  async fetchLastActivity(jid: string): Promise<LastActivityResult> {
+    const bare = getBareJid(jid)
+    try {
+      const iq = xml('iq', { type: 'get', to: bare, id: `last_${generateUUID()}` },
+        xml('query', { xmlns: NS_LAST })
+      )
+      const result = await this.deps.sendIQ(iq)
+      const query = result.getChild('query', NS_LAST)
+      const secondsStr = query?.attrs?.seconds
+      if (secondsStr === undefined) return { seconds: null, unsupported: false }
+      const seconds = parseInt(secondsStr, 10)
+      if (Number.isNaN(seconds)) return { seconds: null, unsupported: false }
+      return { seconds, unsupported: false }
+    } catch (err) {
+      const condition = (err as { condition?: string })?.condition
+      return { seconds: null, unsupported: condition === 'feature-not-implemented' }
     }
   }
 
