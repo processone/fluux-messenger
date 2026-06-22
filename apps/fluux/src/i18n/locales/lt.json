@@ -1116,12 +1116,6 @@
             "offline": "Offline",
             "onlineNow": "Online dabar",
             "justNow": "ką tik",
-            "unitMinute": "min",
-            "unitHour": "val",
-            "unitDay": "d",
-            "unitWeek": "sav",
-            "unitMonth": "mėn",
-            "unitYear": "m",
             "truncatedBanner": "Rodomi pirmieji {{shown}} iš {{total}} vartotojų. Patikslinkite paiešką, kad susiaurintumėte rezultatus.",
             "truncatedBannerNoTotal": "Rodomi pirmieji {{shown}} vartotojų. Patikslinkite paiešką, kad susiaurintumėte rezultatus."
         },

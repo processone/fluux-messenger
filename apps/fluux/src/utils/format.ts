@@ -62,30 +62,23 @@ export function formatTime(epochMs: number): string {
   return new Date(epochMs).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 }
 
-export interface RelativeTimeLabels {
-  justNow: string
-  minute: string
-  hour: string
-  day: string
-  week: string
-  month: string
-  year: string
-}
-
 /**
- * Seconds-ago to a friendly single-unit relative string ("just now", "5m ago",
- * "2d ago"). Pure: the caller passes localized unit labels. The "{n}{unit} ago"
- * shape is intentionally compact for admin scanning, not precise.
+ * Seconds-ago to a fully localized relative-time string ("2 days ago",
+ * "il y a 2 j", "vor 2 Tagen", "2天前"). Uses Intl.RelativeTimeFormat so the
+ * number, unit, word, and word order are correct in every locale. Under a
+ * minute it returns the caller-supplied `justNow` label. A single coarse unit
+ * is chosen for compact admin scanning, not precision.
  */
-export function formatRelativeTime(secondsAgo: number, labels: RelativeTimeLabels): string {
+export function formatRelativeTime(secondsAgo: number, locale: string, justNow: string): string {
   const s = Math.floor(secondsAgo)
-  if (s < 60) return labels.justNow
+  if (s < 60) return justNow
   const minute = 60, hour = 3600, day = 86400, week = 604800, month = 2592000, year = 31536000
-  const pick = (value: number, unit: string) => `${value}${unit} ago`
-  if (s < hour) return pick(Math.floor(s / minute), labels.minute)
-  if (s < day) return pick(Math.floor(s / hour), labels.hour)
-  if (s < week) return pick(Math.floor(s / day), labels.day)
-  if (s < month) return pick(Math.floor(s / week), labels.week)
-  if (s < year) return pick(Math.floor(s / month), labels.month)
-  return pick(Math.floor(s / year), labels.year)
+  const rtf = new Intl.RelativeTimeFormat(locale, { numeric: 'always', style: 'short' })
+  const fmt = (value: number, unit: Intl.RelativeTimeFormatUnit) => rtf.format(-value, unit)
+  if (s < hour) return fmt(Math.floor(s / minute), 'minute')
+  if (s < day) return fmt(Math.floor(s / hour), 'hour')
+  if (s < week) return fmt(Math.floor(s / day), 'day')
+  if (s < month) return fmt(Math.floor(s / week), 'week')
+  if (s < year) return fmt(Math.floor(s / month), 'month')
+  return fmt(Math.floor(s / year), 'year')
 }

@@ -1116,12 +1116,6 @@
             "offline": "离线",
             "onlineNow": "当前在线",
             "justNow": "刚刚",
-            "unitMinute": "分",
-            "unitHour": "时",
-            "unitDay": "天",
-            "unitWeek": "周",
-            "unitMonth": "月",
-            "unitYear": "年",
             "truncatedBanner": "显示前 {{shown}} 名用户，共 {{total}} 名。请细化搜索以缩小结果范围。",
             "truncatedBannerNoTotal": "显示前 {{shown}} 名用户。请细化搜索以缩小结果范围。"
         },

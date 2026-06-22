@@ -1116,12 +1116,6 @@
             "offline": "Offline",
             "onlineNow": "Online sada",
             "justNow": "upravo sada",
-            "unitMinute": "m",
-            "unitHour": "h",
-            "unitDay": "d",
-            "unitWeek": "tj",
-            "unitMonth": "mj",
-            "unitYear": "g",
             "truncatedBanner": "Prikazuje se prvih {{shown}} od {{total}} korisnika. Precizite pretragu za uže rezultate.",
             "truncatedBannerNoTotal": "Prikazuje se prvih {{shown}} korisnika. Precizite pretragu za uže rezultate."
         },

@@ -1116,12 +1116,6 @@
             "offline": "Offline",
             "onlineNow": "Online nu",
             "justNow": "lige nu",
-            "unitMinute": "m",
-            "unitHour": "t",
-            "unitDay": "d",
-            "unitWeek": "u",
-            "unitMonth": "md",
-            "unitYear": "år",
             "truncatedBanner": "Viser de første {{shown}} af {{total}} brugere. Præciser din søgning for at indsnævre resultaterne.",
             "truncatedBannerNoTotal": "Viser de første {{shown}} brugere. Præciser din søgning for at indsnævre resultaterne."
         },

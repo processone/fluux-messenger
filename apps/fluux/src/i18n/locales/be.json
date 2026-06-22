@@ -1116,12 +1116,6 @@
             "offline": "Афлайн",
             "onlineNow": "Анлайн цяпер",
             "justNow": "толькі што",
-            "unitMinute": "хв",
-            "unitHour": "гадз",
-            "unitDay": "д",
-            "unitWeek": "т",
-            "unitMonth": "м",
-            "unitYear": "г",
             "truncatedBanner": "Паказана першых {{shown}} з {{total}} карыстальнікаў. Удакладніце пошук для звужэння вынікаў.",
             "truncatedBannerNoTotal": "Паказана першых {{shown}} карыстальнікаў. Удакладніце пошук для звужэння вынікаў."
         },

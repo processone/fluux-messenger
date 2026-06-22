@@ -1116,12 +1116,6 @@
             "offline": "לא מחובר",
             "onlineNow": "מחובר עכשיו",
             "justNow": "הרגע",
-            "unitMinute": "ד'",
-            "unitHour": "ש'",
-            "unitDay": "י",
-            "unitWeek": "שב",
-            "unitMonth": "ח",
-            "unitYear": "ש",
             "truncatedBanner": "מוצגים {{shown}} הראשונים מתוך {{total}} משתמשים. צמצם את החיפוש לתוצאות מדויקות יותר.",
             "truncatedBannerNoTotal": "מוצגים {{shown}} הראשונים. צמצם את החיפוש לתוצאות מדויקות יותר."
         },

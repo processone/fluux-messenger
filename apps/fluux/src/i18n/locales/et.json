@@ -1118,12 +1118,6 @@
             "offline": "Offline",
             "onlineNow": "Praegu online",
             "justNow": "just nüüd",
-            "unitMinute": "m",
-            "unitHour": "t",
-            "unitDay": "p",
-            "unitWeek": "n",
-            "unitMonth": "k",
-            "unitYear": "a",
             "truncatedBanner": "Kuvatakse esimesed {{shown}} kasutajat {{total}}-st. Täpsustage otsingut tulemuste kitsendamiseks.",
             "truncatedBannerNoTotal": "Kuvatakse esimesed {{shown}} kasutajat. Täpsustage otsingut tulemuste kitsendamiseks."
         },

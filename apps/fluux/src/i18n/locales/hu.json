@@ -1116,12 +1116,6 @@
             "offline": "Offline",
             "onlineNow": "Online most",
             "justNow": "éppen most",
-            "unitMinute": "p",
-            "unitHour": "ó",
-            "unitDay": "n",
-            "unitWeek": "h",
-            "unitMonth": "hó",
-            "unitYear": "é",
             "truncatedBanner": "Az első {{shown}} felhasználó látható {{total}}-ből. Szűkítse le a keresést a találatok csökkentéséhez.",
             "truncatedBannerNoTotal": "Az első {{shown}} felhasználó látható. Szűkítse le a keresést a találatok csökkentéséhez."
         },

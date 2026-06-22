@@ -1116,12 +1116,6 @@
             "offline": "Офлайн",
             "onlineNow": "Онлайн зараз",
             "justNow": "щойно",
-            "unitMinute": "хв",
-            "unitHour": "год",
-            "unitDay": "д",
-            "unitWeek": "т",
-            "unitMonth": "міс",
-            "unitYear": "р",
             "truncatedBanner": "Показано перших {{shown}} із {{total}} користувачів. Уточніть пошук для звуження результатів.",
             "truncatedBannerNoTotal": "Показано перших {{shown}} користувачів. Уточніть пошук для звуження результатів."
         },

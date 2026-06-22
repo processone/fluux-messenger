@@ -1117,12 +1117,6 @@
             "offline": "Hors ligne",
             "onlineNow": "En ligne maintenant",
             "justNow": "à l'instant",
-            "unitMinute": "min",
-            "unitHour": "h",
-            "unitDay": "j",
-            "unitWeek": "sem",
-            "unitMonth": "mois",
-            "unitYear": "an",
             "truncatedBanner": "Affichage des {{shown}} premiers utilisateurs sur {{total}}. Affinez votre recherche pour réduire les résultats.",
             "truncatedBannerNoTotal": "Affichage des {{shown}} premiers utilisateurs. Affinez votre recherche pour réduire les résultats."
         },

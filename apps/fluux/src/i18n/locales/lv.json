@@ -1117,12 +1117,6 @@
             "offline": "Bezsaistē",
             "onlineNow": "Tiešsaistē tagad",
             "justNow": "tikko",
-            "unitMinute": "min",
-            "unitHour": "h",
-            "unitDay": "d",
-            "unitWeek": "ned",
-            "unitMonth": "mēn",
-            "unitYear": "g",
             "truncatedBanner": "Rāda pirmos {{shown}} no {{total}} lietotājiem. Precizējiet meklēšanu, lai sašaurinātu rezultātus.",
             "truncatedBannerNoTotal": "Rāda pirmos {{shown}} lietotājus. Precizējiet meklēšanu, lai sašaurinātu rezultātus."
         },

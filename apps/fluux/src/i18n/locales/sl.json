@@ -1118,12 +1118,6 @@
             "offline": "Offline",
             "onlineNow": "Online zdaj",
             "justNow": "pravkar",
-            "unitMinute": "m",
-            "unitHour": "u",
-            "unitDay": "d",
-            "unitWeek": "t",
-            "unitMonth": "mes",
-            "unitYear": "l",
             "truncatedBanner": "Prikazanih je prvih {{shown}} od {{total}} uporabnikov. Natančneje določite iskanje za zožitev rezultatov.",
             "truncatedBannerNoTotal": "Prikazanih je prvih {{shown}} uporabnikov. Natančneje določite iskanje za zožitev rezultatov."
         },

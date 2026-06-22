@@ -1118,12 +1118,6 @@
             "offline": "Offline",
             "onlineNow": "Online issa",
             "justNow": "bħalissa",
-            "unitMinute": "m",
-            "unitHour": "s",
-            "unitDay": "j",
-            "unitWeek": "ġ",
-            "unitMonth": "x",
-            "unitYear": "s",
             "truncatedBanner": "Qed jintwerew l-ewwel {{shown}} minn {{total}} utenti. Irfina t-tfittxija tiegħek biex tnaqqas ir-riżultati.",
             "truncatedBannerNoTotal": "Qed jintwerew l-ewwel {{shown}} utenti. Irfina t-tfittxija tiegħek biex tnaqqas ir-riżultati."
         },

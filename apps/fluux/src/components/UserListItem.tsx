@@ -2,7 +2,7 @@ import { useEffect, useRef, memo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { type AdminUser, type LastActivityEntry } from '@fluux/sdk'
 import { useAdminStore } from '@fluux/sdk/react'
-import { formatRelativeTime, formatDateTime, type RelativeTimeLabels } from '../utils/format'
+import { formatRelativeTime, formatDateTime } from '../utils/format'
 
 interface UserListItemProps {
   user: AdminUser
@@ -12,7 +12,7 @@ interface UserListItemProps {
 }
 
 function UserListItemImpl({ user, onSelect, requestLastActivity }: UserListItemProps) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   // Per-key subscriptions only (never the whole map): render-perf rule.
   const entry = useAdminStore((s) => s.lastActivity.get(user.jid)) as LastActivityEntry | undefined
   const supported = useAdminStore((s) => s.lastActivitySupported)
@@ -41,16 +41,6 @@ function UserListItemImpl({ user, onSelect, requestLastActivity }: UserListItemP
     return () => observer.disconnect()
   }, [user.jid, isOnline, supported, requestLastActivity])
 
-  const labels: RelativeTimeLabels = {
-    justNow: t('admin.users.justNow'),
-    minute: t('admin.users.unitMinute'),
-    hour: t('admin.users.unitHour'),
-    day: t('admin.users.unitDay'),
-    week: t('admin.users.unitWeek'),
-    month: t('admin.users.unitMonth'),
-    year: t('admin.users.unitYear'),
-  }
-
   const renderCell = () => {
     if (isOnline === true) {
       return (
@@ -67,7 +57,7 @@ function UserListItemImpl({ user, onSelect, requestLastActivity }: UserListItemP
     const absolute = formatDateTime(Date.now() - entry.seconds * 1000)
     return (
       <span className="text-xs text-fluux-muted" title={absolute}>
-        {formatRelativeTime(entry.seconds, labels)}
+        {formatRelativeTime(entry.seconds, i18n.language, t('admin.users.justNow'))}
       </span>
     )
   }
