@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { formatDuration, formatCount, formatBytes, formatBoolean, formatDateTime, formatTime } from './format'
+import { formatDuration, formatCount, formatBytes, formatBoolean, formatDateTime, formatTime, formatRelativeTime } from './format'
 
 describe('formatDuration', () => {
   it('formats multi-unit durations, largest two units', () => {
@@ -46,5 +46,25 @@ describe('formatTime', () => {
   it('renders hour:minute for an epoch ms', () => {
     const ts = 1718900000000
     expect(formatTime(ts)).toBe(new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }))
+  })
+})
+
+const L = { justNow: 'just now', minute: 'm', hour: 'h', day: 'd', week: 'w', month: 'mo', year: 'y' }
+
+describe('formatRelativeTime', () => {
+  it('returns just-now under a minute', () => {
+    expect(formatRelativeTime(0, L)).toBe('just now')
+    expect(formatRelativeTime(59, L)).toBe('just now')
+  })
+  it('picks a single coarse unit per bucket', () => {
+    expect(formatRelativeTime(60, L)).toBe('1m ago')
+    expect(formatRelativeTime(3600, L)).toBe('1h ago')
+    expect(formatRelativeTime(2 * 86400, L)).toBe('2d ago')
+    expect(formatRelativeTime(14 * 86400, L)).toBe('2w ago')
+    expect(formatRelativeTime(60 * 86400, L)).toBe('2mo ago')
+    expect(formatRelativeTime(400 * 86400, L)).toBe('1y ago')
+  })
+  it('clamps negatives to just-now', () => {
+    expect(formatRelativeTime(-5, L)).toBe('just now')
   })
 })

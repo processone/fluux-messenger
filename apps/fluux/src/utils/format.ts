@@ -61,3 +61,31 @@ export function formatDateTime(epochMs: number): string {
 export function formatTime(epochMs: number): string {
   return new Date(epochMs).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 }
+
+export interface RelativeTimeLabels {
+  justNow: string
+  minute: string
+  hour: string
+  day: string
+  week: string
+  month: string
+  year: string
+}
+
+/**
+ * Seconds-ago to a friendly single-unit relative string ("just now", "5m ago",
+ * "2d ago"). Pure: the caller passes localized unit labels. The "{n}{unit} ago"
+ * shape is intentionally compact for admin scanning, not precise.
+ */
+export function formatRelativeTime(secondsAgo: number, labels: RelativeTimeLabels): string {
+  const s = Math.floor(secondsAgo)
+  if (s < 60) return labels.justNow
+  const minute = 60, hour = 3600, day = 86400, week = 604800, month = 2592000, year = 31536000
+  const pick = (value: number, unit: string) => `${value}${unit} ago`
+  if (s < hour) return pick(Math.floor(s / minute), labels.minute)
+  if (s < day) return pick(Math.floor(s / hour), labels.hour)
+  if (s < week) return pick(Math.floor(s / day), labels.day)
+  if (s < month) return pick(Math.floor(s / week), labels.week)
+  if (s < year) return pick(Math.floor(s / month), labels.month)
+  return pick(Math.floor(s / year), labels.year)
+}
