@@ -1139,8 +1139,6 @@
             "title": "Servera pārskats",
             "refresh": "Atsvaidzināt",
             "updatedAt": "Atjaunināts plkst. {{time}}",
-            "advanced": "Papildu",
-            "advancedHint": "Izpildīt tiešu servera komandu",
             "empty": "Servera statistika nav pieejama.",
             "retry": "Mēģināt vēlreiz",
             "units": {

@@ -1140,8 +1140,6 @@
             "title": "Serveri ülevaade",
             "refresh": "Värskenda",
             "updatedAt": "Uuendatud kell {{time}}",
-            "advanced": "Täpsem",
-            "advancedHint": "Käivita serveri toorkäsk",
             "empty": "Serveri statistika pole saadaval.",
             "retry": "Proovi uuesti",
             "units": {

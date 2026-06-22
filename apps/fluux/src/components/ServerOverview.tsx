@@ -1,13 +1,12 @@
 import { useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
-import { RefreshCw, ChevronRight } from 'lucide-react'
-import { useAdmin, type ServerStats, type AdminCommand } from '@fluux/sdk'
+import { RefreshCw } from 'lucide-react'
+import { useAdmin, type ServerStats } from '@fluux/sdk'
 import { OVERVIEW_CARDS } from './admin/adminOverview'
 import { formatTime } from '@/utils/format'
 
 /**
- * Friendly server overview: a discovery-driven grid of vital-signs cards plus
- * an "Advanced" disclosure that preserves the raw stats command runner.
+ * Friendly server overview: a discovery-driven grid of vital-signs cards.
  */
 export function ServerOverview() {
   const { t } = useTranslation()
@@ -15,9 +14,6 @@ export function ServerOverview() {
     serverStats,
     isLoadingStats,
     fetchServerStats,
-    commandsByCategory,
-    executeCommand,
-    isExecuting,
   } = useAdmin()
 
   // Fetch on mount (idempotent enough; refresh is manual otherwise).
@@ -85,29 +81,6 @@ export function ServerOverview() {
             )
           })}
         </div>
-      )}
-
-      {/* Advanced: raw stats commands (preserved capability) */}
-      {commandsByCategory.stats.length > 0 && (
-        <details className="mt-6 group">
-          <summary className="flex items-center gap-1.5 cursor-pointer text-sm text-fluux-muted hover:text-fluux-text select-none">
-            <ChevronRight className="size-4 transition-transform group-open:rotate-90" />
-            {t('admin.overview.advanced')}
-          </summary>
-          <p className="text-xs text-fluux-muted mt-1 ms-5">{t('admin.overview.advancedHint')}</p>
-          <div className="mt-2 ms-5 space-y-0.5">
-            {commandsByCategory.stats.map((cmd: AdminCommand) => (
-              <button
-                key={cmd.node}
-                onClick={() => { void executeCommand(cmd.node) }}
-                disabled={isExecuting}
-                className="w-full px-2 py-1.5 rounded flex items-center justify-between text-start text-sm text-fluux-muted hover:bg-fluux-hover hover:text-fluux-text disabled:opacity-50 transition-colors"
-              >
-                <span className="truncate">{cmd.name}</span>
-              </button>
-            ))}
-          </div>
-        </details>
       )}
     </div>
   )

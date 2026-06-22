@@ -1140,8 +1140,6 @@
             "title": "Przegląd serwera",
             "refresh": "Odśwież",
             "updatedAt": "Zaktualizowano o {{time}}",
-            "advanced": "Zaawansowane",
-            "advancedHint": "Uruchom bezpośrednie polecenie serwera",
             "empty": "Statystyki serwera są niedostępne.",
             "retry": "Spróbuj ponownie",
             "units": {

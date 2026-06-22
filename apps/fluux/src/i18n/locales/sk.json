@@ -1139,8 +1139,6 @@
             "title": "Prehľad servera",
             "refresh": "Obnoviť",
             "updatedAt": "Aktualizované o {{time}}",
-            "advanced": "Rozšírené",
-            "advancedHint": "Spustiť priamy príkaz servera",
             "empty": "Štatistiky servera nie sú dostupné.",
             "retry": "Skúsiť znova",
             "units": {

@@ -1140,8 +1140,6 @@
             "title": "Ħarsa ġenerali tas-server",
             "refresh": "Aġġorna",
             "updatedAt": "Aġġornat fil-{{time}}",
-            "advanced": "Avvanzat",
-            "advancedHint": "Mexxi kmand dirett tas-server",
             "empty": "L-istatistika tas-server mhix disponibbli.",
             "retry": "Erġa' pprova",
             "units": {

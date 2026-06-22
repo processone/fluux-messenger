@@ -1138,8 +1138,6 @@
             "title": "Yfirlit netþjóns",
             "refresh": "Endurnýja",
             "updatedAt": "Uppfært kl. {{time}}",
-            "advanced": "Ítarlegt",
-            "advancedHint": "Keyra hráa netþjónsskipun",
             "empty": "Tölfræði netþjóns er ekki tiltæk.",
             "retry": "Reyna aftur",
             "units": {

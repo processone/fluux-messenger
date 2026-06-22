@@ -1140,8 +1140,6 @@
             "title": "Serverübersicht",
             "refresh": "Aktualisieren",
             "updatedAt": "Aktualisiert um {{time}}",
-            "advanced": "Erweitert",
-            "advancedHint": "Einen rohen Serverbefehl ausführen",
             "empty": "Serverstatistiken sind nicht verfügbar.",
             "retry": "Erneut versuchen",
             "units": {
