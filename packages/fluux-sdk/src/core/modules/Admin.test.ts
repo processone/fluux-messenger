@@ -779,6 +779,65 @@ describe('XMPPClient Admin', () => {
     })
   })
 
+  describe('fetchOnlineUserJids', () => {
+    function wrapInIqResponse(commandEl: ReturnType<typeof createAdminMockElement>) {
+      return {
+        name: 'iq',
+        attrs: { type: 'result' },
+        getChild: (name: string, xmlns?: string) => {
+          if (name === 'command' && xmlns === 'http://jabber.org/protocol/commands') {
+            return commandEl
+          }
+          return undefined
+        },
+      }
+    }
+
+    it('fetchOnlineUserJids returns a Set of bared online JIDs', async () => {
+      await connectClient()
+      const cmd = createAdminMockElement(
+        'command',
+        { xmlns: 'http://jabber.org/protocol/commands', status: 'completed',
+          node: 'http://jabber.org/protocol/admin#get-online-users-list' },
+        [{
+          name: 'x',
+          attrs: { xmlns: 'jabber:x:data', type: 'result' },
+          getChildren: (name: string) =>
+            name === 'field'
+              ? [{
+                  name: 'field',
+                  attrs: { var: 'onlineuserjids' },
+                  getChild: () => undefined,
+                  getChildren: (n: string) =>
+                    n === 'value'
+                      ? [
+                          { name: 'value', text: () => 'alice@x.com/phone' },
+                          { name: 'value', text: () => 'alice@x.com/desktop' },
+                          { name: 'value', text: () => 'bob@x.com' },
+                        ]
+                      : [],
+                }]
+              : [],
+          getChild: () => undefined,
+        }]
+      )
+      mockXmppClientInstance.iqCaller.request.mockResolvedValue(wrapInIqResponse(cmd))
+
+      const set = await xmppClient.admin.fetchOnlineUserJids()
+
+      expect(set).toBeInstanceOf(Set)
+      expect([...set].sort()).toEqual(['alice@x.com', 'bob@x.com'])
+    })
+
+    it('fetchOnlineUserJids returns an empty Set when the command fails', async () => {
+      await connectClient()
+      mockXmppClientInstance.iqCaller.request.mockRejectedValue(new Error('forbidden'))
+
+      const set = await xmppClient.admin.fetchOnlineUserJids()
+      expect(set.size).toBe(0)
+    })
+  })
+
   describe('fetchAllUsers', () => {
     // Build a completed get-registered-users-list command with the given jids and
     // an optional RSM <last> cursor (so fetchAllUsers knows whether to keep paging).

@@ -1,6 +1,6 @@
 import { xml, Element } from '@xmpp/client'
 import { BaseModule } from './BaseModule'
-import { getDomain, getLocalPart } from '../jid'
+import { getDomain, getLocalPart, getBareJid } from '../jid'
 import { generateUUID } from '../../utils/uuid'
 import { parseDataForm, getFormFieldValue, getFormFieldValues } from '../../utils/dataForm'
 import { parseRSMResponse, buildRSMElement } from '../../utils/rsm'
@@ -728,6 +728,57 @@ export class Admin extends BaseModule {
     }
 
     return { users: all, truncated }
+  }
+
+  /**
+   * Fetch the set of currently-online users (XEP-0133 get-online-users-list).
+   * JIDs are bared so callers can match against bare JIDs in the user list.
+   *
+   * @returns a Set of bare JIDs, or an empty Set when the command is
+   *   unavailable/unauthorised (so callers degrade to "no online info").
+   */
+  async fetchOnlineUserJids(vhost?: string): Promise<Set<string>> {
+    const currentJid = this.deps.getCurrentJid()
+    if (!currentJid) return new Set()
+
+    const node = `${NS_ADMIN}#get-online-users-list`
+    const domain = vhost || getDomain(currentJid)
+
+    try {
+      const executeIq = xml(
+        'iq',
+        { type: 'set', to: domain, id: `online_${generateUUID()}` },
+        xml('command', { xmlns: NS_COMMANDS, node, action: 'execute' })
+      )
+      const executeResult = await this.deps.sendIQ(executeIq)
+      let command = executeResult.getChild('command', NS_COMMANDS)
+      if (!command) return new Set()
+
+      if (command.attrs.status === 'executing') {
+        const sessionId = command.attrs.sessionid
+        const completeIq = xml(
+          'iq',
+          { type: 'set', to: domain, id: `online_${generateUUID()}` },
+          xml('command', { xmlns: NS_COMMANDS, node, action: 'complete', sessionid: sessionId },
+            xml('x', { xmlns: NS_DATA_FORMS, type: 'submit' })
+          )
+        )
+        const completeResult = await this.deps.sendIQ(completeIq)
+        command = completeResult.getChild('command', NS_COMMANDS)
+        if (!command) return new Set()
+      }
+
+      const formEl = command.getChild('x', NS_DATA_FORMS)
+      if (!formEl) return new Set()
+      const form = parseDataForm(formEl)
+      let jids = getFormFieldValues(form, 'onlineuserjids')
+      if (jids.length === 0) jids = getFormFieldValues(form, 'accountjids')
+      if (jids.length === 0) jids = getFormFieldValues(form, 'userjids')
+
+      return new Set(jids.filter(Boolean).map((j) => getBareJid(j)))
+    } catch {
+      return new Set()
+    }
   }
 
   // ============================================================================
