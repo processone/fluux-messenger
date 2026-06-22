@@ -120,4 +120,13 @@ describe('LinkPreviewCard image deferral', () => {
     fireEvent.click(screen.getByRole('button'))
     expect(container.querySelector('img')).not.toBeNull()
   })
+
+  it('shows the OG image for an own-message preview even when autoLoad is false', () => {
+    const { container } = render(
+      <MediaAutoloadProvider autoLoad={false}>
+        <LinkPreviewCard preview={preview} isOwnMessage />
+      </MediaAutoloadProvider>,
+    )
+    expect(container.querySelector('img')).not.toBeNull()
+  })
 })
