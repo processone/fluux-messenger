@@ -1111,7 +1111,13 @@
         "users": {
             "delete": "删除用户",
             "changePassword": "更改密码",
-            "endSessions": "结束会话"
+            "endSessions": "结束会话",
+            "online": "在线",
+            "offline": "离线",
+            "onlineNow": "当前在线",
+            "justNow": "刚刚",
+            "truncatedBanner": "显示前 {{shown}} 名用户，共 {{total}} 名。请细化搜索以缩小结果范围。",
+            "truncatedBannerNoTotal": "显示前 {{shown}} 名用户。请细化搜索以缩小结果范围。"
         },
         "userView": {
             "title": "用户",

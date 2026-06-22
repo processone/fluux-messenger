@@ -1112,7 +1112,13 @@
         "users": {
             "delete": "Dzēst lietotāju",
             "changePassword": "Mainīt paroli",
-            "endSessions": "Beigt sesijas"
+            "endSessions": "Beigt sesijas",
+            "online": "Tiešsaistē",
+            "offline": "Bezsaistē",
+            "onlineNow": "Tiešsaistē tagad",
+            "justNow": "tikko",
+            "truncatedBanner": "Rāda pirmos {{shown}} no {{total}} lietotājiem. Precizējiet meklēšanu, lai sašaurinātu rezultātus.",
+            "truncatedBannerNoTotal": "Rāda pirmos {{shown}} lietotājus. Precizējiet meklēšanu, lai sašaurinātu rezultātus."
         },
         "userView": {
             "title": "Lietotājs",

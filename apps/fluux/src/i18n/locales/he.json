@@ -1111,7 +1111,13 @@
         "users": {
             "delete": "מחיקת משתמש",
             "changePassword": "שינוי סיסמה",
-            "endSessions": "סיום סשנים"
+            "endSessions": "סיום סשנים",
+            "online": "מחובר",
+            "offline": "לא מחובר",
+            "onlineNow": "מחובר עכשיו",
+            "justNow": "הרגע",
+            "truncatedBanner": "מוצגים {{shown}} הראשונים מתוך {{total}} משתמשים. צמצם את החיפוש לתוצאות מדויקות יותר.",
+            "truncatedBannerNoTotal": "מוצגים {{shown}} הראשונים. צמצם את החיפוש לתוצאות מדויקות יותר."
         },
         "userView": {
             "title": "משתמש",

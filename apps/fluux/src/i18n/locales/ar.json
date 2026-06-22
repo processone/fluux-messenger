@@ -1111,7 +1111,13 @@
         "users": {
             "delete": "حذف المستخدم",
             "changePassword": "تغيير كلمة المرور",
-            "endSessions": "إنهاء الجلسات"
+            "endSessions": "إنهاء الجلسات",
+            "online": "متصل",
+            "offline": "غير متصل",
+            "onlineNow": "متصل الآن",
+            "justNow": "الآن",
+            "truncatedBanner": "عرض أول {{shown}} من {{total}} مستخدم. قم بتحسين البحث لتضييق النتائج.",
+            "truncatedBannerNoTotal": "عرض أول {{shown}} مستخدم. قم بتحسين البحث لتضييق النتائج."
         },
         "userView": {
             "title": "المستخدم",

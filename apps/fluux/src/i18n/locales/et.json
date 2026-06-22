@@ -1113,7 +1113,13 @@
         "users": {
             "delete": "Kustuta kasutaja",
             "changePassword": "Muuda parooli",
-            "endSessions": "Lõpeta seansid"
+            "endSessions": "Lõpeta seansid",
+            "online": "Online",
+            "offline": "Offline",
+            "onlineNow": "Praegu online",
+            "justNow": "just nüüd",
+            "truncatedBanner": "Kuvatakse esimesed {{shown}} kasutajat {{total}}-st. Täpsustage otsingut tulemuste kitsendamiseks.",
+            "truncatedBannerNoTotal": "Kuvatakse esimesed {{shown}} kasutajat. Täpsustage otsingut tulemuste kitsendamiseks."
         },
         "userView": {
             "title": "Kasutaja",

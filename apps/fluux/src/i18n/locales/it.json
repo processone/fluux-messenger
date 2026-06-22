@@ -1113,7 +1113,13 @@
         "users": {
             "delete": "Elimina utente",
             "changePassword": "Cambia password",
-            "endSessions": "Termina sessioni"
+            "endSessions": "Termina sessioni",
+            "online": "Online",
+            "offline": "Offline",
+            "onlineNow": "Online ora",
+            "justNow": "proprio adesso",
+            "truncatedBanner": "Mostra i primi {{shown}} di {{total}} utenti. Affina la ricerca per restringere i risultati.",
+            "truncatedBannerNoTotal": "Mostra i primi {{shown}} utenti. Affina la ricerca per restringere i risultati."
         },
         "userView": {
             "title": "Utente",

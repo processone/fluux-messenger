@@ -313,6 +313,8 @@ export type {
   EntityListState,
   AdminCategory,
   ServerStats,
+  LastActivityResult,
+  LastActivityEntry,
 
   // XEP-0313: Message Archive Management
   MAMQueryOptions,

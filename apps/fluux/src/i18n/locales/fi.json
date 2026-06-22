@@ -1111,7 +1111,13 @@
         "users": {
             "delete": "Poista käyttäjä",
             "changePassword": "Vaihda salasana",
-            "endSessions": "Lopeta istunnot"
+            "endSessions": "Lopeta istunnot",
+            "online": "Online",
+            "offline": "Offline",
+            "onlineNow": "Paikalla nyt",
+            "justNow": "juuri nyt",
+            "truncatedBanner": "Näytetään ensimmäiset {{shown}} käyttäjää {{total}}:stä. Rajaa hakua tarkentaaksesi tuloksia.",
+            "truncatedBannerNoTotal": "Näytetään ensimmäiset {{shown}} käyttäjää. Rajaa hakua tarkentaaksesi tuloksia."
         },
         "userView": {
             "title": "Käyttäjä",

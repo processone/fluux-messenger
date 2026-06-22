@@ -1111,7 +1111,13 @@
         "users": {
             "delete": "Obriši korisnika",
             "changePassword": "Promijeni lozinku",
-            "endSessions": "Završi sesije"
+            "endSessions": "Završi sesije",
+            "online": "Online",
+            "offline": "Offline",
+            "onlineNow": "Online sada",
+            "justNow": "upravo sada",
+            "truncatedBanner": "Prikazuje se prvih {{shown}} od {{total}} korisnika. Precizite pretragu za uže rezultate.",
+            "truncatedBannerNoTotal": "Prikazuje se prvih {{shown}} korisnika. Precizite pretragu za uže rezultate."
         },
         "userView": {
             "title": "Korisnik",

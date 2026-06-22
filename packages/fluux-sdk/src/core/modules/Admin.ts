@@ -1,6 +1,6 @@
 import { xml, Element } from '@xmpp/client'
 import { BaseModule } from './BaseModule'
-import { getDomain, getLocalPart } from '../jid'
+import { getDomain, getLocalPart, getBareJid } from '../jid'
 import { generateUUID } from '../../utils/uuid'
 import { parseDataForm, getFormFieldValue, getFormFieldValues } from '../../utils/dataForm'
 import { parseRSMResponse, buildRSMElement } from '../../utils/rsm'
@@ -14,6 +14,7 @@ import {
   NS_MUC_OWNER,
   NS_RSM,
   NS_VERSION,
+  NS_LAST,
 } from '../namespaces'
 import type {
   AdminCommand,
@@ -25,7 +26,13 @@ import type {
   AdminUser,
   AdminRoom,
   ServerStats,
+  LastActivityResult,
 } from '../types'
+
+/** Hard cap on the full user-directory fetch. Past this, escalate to server-side search. */
+export const MAX_USERS = 10000
+/** RSM page size for the full user-directory fetch (large to minimize roundtrips). */
+export const USER_PAGE_SIZE = 1500
 
 /**
  * Server administration module via XEP-0050 Ad-Hoc Commands and XEP-0133 Service Administration.
@@ -690,6 +697,114 @@ export class Admin extends BaseModule {
     }
 
     return { users, pagination }
+  }
+
+  /**
+   * Fetch the entire registered-user directory by looping {@link fetchUserList}
+   * over RSM pages until complete or {@link MAX_USERS} is reached.
+   *
+   * @returns the accumulated users and whether the directory was truncated at the cap.
+   */
+  async fetchAllUsers(vhost?: string): Promise<{ users: AdminUser[]; truncated: boolean }> {
+    const all: AdminUser[] = []
+    let after: string | undefined
+    let truncated = false
+    // Guard against a server that ignores RSM and never advances the cursor.
+    const maxPages = Math.ceil(MAX_USERS / USER_PAGE_SIZE) + 2
+
+    for (let page = 0; page < maxPages; page++) {
+      const { users, pagination } = await this.fetchUserList(vhost, {
+        max: USER_PAGE_SIZE,
+        ...(after ? { after } : {}),
+      })
+      all.push(...users)
+
+      if (all.length >= MAX_USERS) {
+        all.length = MAX_USERS
+        truncated = true
+        break
+      }
+      // Stop when the server signals no more pages (no cursor) or returns nothing.
+      if (users.length === 0 || !pagination.last) break
+      after = pagination.last
+    }
+
+    return { users: all, truncated }
+  }
+
+  /**
+   * Fetch the set of currently-online users (XEP-0133 get-online-users-list).
+   * JIDs are bared so callers can match against bare JIDs in the user list.
+   *
+   * @returns a Set of bare JIDs, or an empty Set when the command is
+   *   unavailable/unauthorised (so callers degrade to "no online info").
+   */
+  async fetchOnlineUserJids(vhost?: string): Promise<Set<string>> {
+    const currentJid = this.deps.getCurrentJid()
+    if (!currentJid) return new Set()
+
+    const node = `${NS_ADMIN}#get-online-users-list`
+    const domain = vhost || getDomain(currentJid)
+
+    try {
+      const executeIq = xml(
+        'iq',
+        { type: 'set', to: domain, id: `online_${generateUUID()}` },
+        xml('command', { xmlns: NS_COMMANDS, node, action: 'execute' })
+      )
+      const executeResult = await this.deps.sendIQ(executeIq)
+      let command = executeResult.getChild('command', NS_COMMANDS)
+      if (!command) return new Set()
+
+      if (command.attrs.status === 'executing') {
+        const sessionId = command.attrs.sessionid
+        const completeIq = xml(
+          'iq',
+          { type: 'set', to: domain, id: `online_${generateUUID()}` },
+          xml('command', { xmlns: NS_COMMANDS, node, action: 'complete', sessionid: sessionId },
+            xml('x', { xmlns: NS_DATA_FORMS, type: 'submit' })
+          )
+        )
+        const completeResult = await this.deps.sendIQ(completeIq)
+        command = completeResult.getChild('command', NS_COMMANDS)
+        if (!command) return new Set()
+      }
+
+      const formEl = command.getChild('x', NS_DATA_FORMS)
+      if (!formEl) return new Set()
+      const form = parseDataForm(formEl)
+      let jids = getFormFieldValues(form, 'onlineuserjids')
+      if (jids.length === 0) jids = getFormFieldValues(form, 'accountjids')
+      if (jids.length === 0) jids = getFormFieldValues(form, 'userjids')
+
+      return new Set(jids.filter(Boolean).map((j) => getBareJid(j)))
+    } catch {
+      return new Set()
+    }
+  }
+
+  /**
+   * Query last activity (XEP-0012 jabber:iq:last) for an arbitrary bare JID.
+   * Roster-independent (unlike the roster-coupled LastActivity module), so it
+   * works for any account in the admin directory.
+   */
+  async fetchLastActivity(jid: string): Promise<LastActivityResult> {
+    const bare = getBareJid(jid)
+    try {
+      const iq = xml('iq', { type: 'get', to: bare, id: `last_${generateUUID()}` },
+        xml('query', { xmlns: NS_LAST })
+      )
+      const result = await this.deps.sendIQ(iq)
+      const query = result.getChild('query', NS_LAST)
+      const secondsStr = query?.attrs?.seconds
+      if (secondsStr === undefined) return { seconds: null, unsupported: false }
+      const seconds = parseInt(secondsStr, 10)
+      if (Number.isNaN(seconds)) return { seconds: null, unsupported: false }
+      return { seconds, unsupported: false }
+    } catch (err) {
+      const condition = (err as { condition?: string })?.condition
+      return { seconds: null, unsupported: condition === 'feature-not-implemented' }
+    }
   }
 
   // ============================================================================

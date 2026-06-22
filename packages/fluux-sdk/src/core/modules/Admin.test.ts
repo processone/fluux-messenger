@@ -15,6 +15,7 @@ import {
   type MockXmppClient,
   type MockStoreBindings,
 } from '../test-utils'
+import { MAX_USERS, USER_PAGE_SIZE } from './Admin'
 
 let mockXmppClientInstance: MockXmppClient
 
@@ -778,6 +779,155 @@ describe('XMPPClient Admin', () => {
     })
   })
 
+  describe('fetchOnlineUserJids', () => {
+    function wrapInIqResponse(commandEl: ReturnType<typeof createAdminMockElement>) {
+      return {
+        name: 'iq',
+        attrs: { type: 'result' },
+        getChild: (name: string, xmlns?: string) => {
+          if (name === 'command' && xmlns === 'http://jabber.org/protocol/commands') {
+            return commandEl
+          }
+          return undefined
+        },
+      }
+    }
+
+    it('fetchOnlineUserJids returns a Set of bared online JIDs', async () => {
+      await connectClient()
+      const cmd = createAdminMockElement(
+        'command',
+        { xmlns: 'http://jabber.org/protocol/commands', status: 'completed',
+          node: 'http://jabber.org/protocol/admin#get-online-users-list' },
+        [{
+          name: 'x',
+          attrs: { xmlns: 'jabber:x:data', type: 'result' },
+          getChildren: (name: string) =>
+            name === 'field'
+              ? [{
+                  name: 'field',
+                  attrs: { var: 'onlineuserjids' },
+                  getChild: () => undefined,
+                  getChildren: (n: string) =>
+                    n === 'value'
+                      ? [
+                          { name: 'value', text: () => 'alice@x.com/phone' },
+                          { name: 'value', text: () => 'alice@x.com/desktop' },
+                          { name: 'value', text: () => 'bob@x.com' },
+                        ]
+                      : [],
+                }]
+              : [],
+          getChild: () => undefined,
+        }]
+      )
+      mockXmppClientInstance.iqCaller.request.mockResolvedValue(wrapInIqResponse(cmd))
+
+      const set = await xmppClient.admin.fetchOnlineUserJids()
+
+      expect(set).toBeInstanceOf(Set)
+      expect([...set].sort()).toEqual(['alice@x.com', 'bob@x.com'])
+    })
+
+    it('fetchOnlineUserJids returns an empty Set when the command fails', async () => {
+      await connectClient()
+      mockXmppClientInstance.iqCaller.request.mockRejectedValue(new Error('forbidden'))
+
+      const set = await xmppClient.admin.fetchOnlineUserJids()
+      expect(set.size).toBe(0)
+    })
+  })
+
+  describe('fetchAllUsers', () => {
+    // Build a completed get-registered-users-list command with the given jids and
+    // an optional RSM <last> cursor (so fetchAllUsers knows whether to keep paging).
+    function completedUsersCommand(jids: string[], lastCursor?: string) {
+      const children: any[] = [
+        {
+          name: 'x',
+          attrs: { xmlns: 'jabber:x:data', type: 'result' },
+          getChildren: (name: string) =>
+            name === 'field'
+              ? [{
+                  name: 'field',
+                  attrs: { var: 'registereduserjids' },
+                  getChild: () => undefined,
+                  getChildren: (n: string) =>
+                    n === 'value' ? jids.map((j) => ({ name: 'value', text: () => j })) : [],
+                }]
+              : [],
+          getChild: () => undefined,
+        },
+      ]
+      if (lastCursor !== undefined) {
+        children.push({
+          name: 'set',
+          attrs: { xmlns: 'http://jabber.org/protocol/rsm' },
+          getChild: (n: string) =>
+            n === 'last' ? { getText: () => lastCursor, attrs: {} } : undefined,
+          getChildren: () => [],
+        })
+      }
+      return createAdminMockElement(
+        'command',
+        { xmlns: 'http://jabber.org/protocol/commands', status: 'completed',
+          node: 'http://jabber.org/protocol/admin#get-registered-users-list' },
+        children
+      )
+    }
+
+    function wrapInIqResponse(commandEl: ReturnType<typeof createAdminMockElement>) {
+      return {
+        name: 'iq',
+        attrs: { type: 'result' },
+        getChild: (name: string, xmlns?: string) => {
+          if (name === 'command' && xmlns === 'http://jabber.org/protocol/commands') {
+            return commandEl
+          }
+          return undefined
+        },
+      }
+    }
+
+    it('fetchAllUsers accumulates across pages until no cursor remains', async () => {
+      await connectClient()
+      mockXmppClientInstance.iqCaller.request
+        .mockResolvedValueOnce(wrapInIqResponse(completedUsersCommand(['a@x.com', 'b@x.com'], 'b@x.com')))
+        .mockResolvedValueOnce(wrapInIqResponse(completedUsersCommand(['c@x.com'], undefined)))
+
+      const result = await xmppClient.admin.fetchAllUsers()
+
+      expect(result.users.map((u) => u.jid)).toEqual(['a@x.com', 'b@x.com', 'c@x.com'])
+      expect(result.truncated).toBe(false)
+    })
+
+    it('fetchAllUsers caps at MAX_USERS and reports truncated', async () => {
+      await connectClient()
+      // A single page that already exceeds the cap (server ignored RSM max).
+      const huge = Array.from({ length: MAX_USERS + 25 }, (_, i) => `u${i}@x.com`)
+      mockXmppClientInstance.iqCaller.request
+        .mockResolvedValue(wrapInIqResponse(completedUsersCommand(huge, 'cursor')))
+
+      const result = await xmppClient.admin.fetchAllUsers()
+
+      expect(result.users).toHaveLength(MAX_USERS)
+      expect(result.truncated).toBe(true)
+    })
+
+    it('fetchAllUsers stops on full final page with no cursor', async () => {
+      await connectClient()
+      const jids = Array.from({ length: USER_PAGE_SIZE }, (_, i) => `u${i}@x.com`)
+      mockXmppClientInstance.iqCaller.request
+        .mockResolvedValue(wrapInIqResponse(completedUsersCommand(jids)))
+
+      const result = await xmppClient.admin.fetchAllUsers()
+
+      expect(result.users).toHaveLength(USER_PAGE_SIZE)
+      expect(result.truncated).toBe(false)
+      expect(mockXmppClientInstance.iqCaller.request).toHaveBeenCalledTimes(1)
+    })
+  })
+
   describe('fetchRoomList', () => {
     it('should use provided MUC service JID', async () => {
       await connectClient()
@@ -943,6 +1093,43 @@ describe('XMPPClient Admin', () => {
       const submitForm = completeReq.children?.[0]?.children?.[0]
       const nameField = submitForm?.children?.find((c: any) => c.attrs?.var === 'name')
       expect(nameField?.children?.[0]?.children?.[0]).toBe('uptimeseconds')
+    })
+  })
+
+  describe('fetchLastActivity', () => {
+    it('fetchLastActivity parses seconds on success', async () => {
+      await connectClient()
+      mockXmppClientInstance.iqCaller.request.mockResolvedValue({
+        name: 'iq',
+        attrs: { type: 'result' },
+        getChild: (n: string, xmlns?: string) =>
+          n === 'query' && xmlns === 'jabber:iq:last'
+            ? { attrs: { seconds: '3600' } }
+            : undefined,
+      })
+
+      const res = await xmppClient.admin.fetchLastActivity('bob@x.com')
+      expect(res).toEqual({ seconds: 3600, unsupported: false })
+    })
+
+    it('fetchLastActivity reports unsupported on feature-not-implemented', async () => {
+      await connectClient()
+      const err: any = new Error('not implemented')
+      err.condition = 'feature-not-implemented'
+      mockXmppClientInstance.iqCaller.request.mockRejectedValue(err)
+
+      const res = await xmppClient.admin.fetchLastActivity('bob@x.com')
+      expect(res).toEqual({ seconds: null, unsupported: true })
+    })
+
+    it('fetchLastActivity returns per-user null on other errors', async () => {
+      await connectClient()
+      const err: any = new Error('item not found')
+      err.condition = 'item-not-found'
+      mockXmppClientInstance.iqCaller.request.mockRejectedValue(err)
+
+      const res = await xmppClient.admin.fetchLastActivity('ghost@x.com')
+      expect(res).toEqual({ seconds: null, unsupported: false })
     })
   })
 

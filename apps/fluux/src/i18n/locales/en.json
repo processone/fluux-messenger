@@ -1111,7 +1111,13 @@
         "users": {
             "delete": "Delete user",
             "changePassword": "Change password",
-            "endSessions": "End sessions"
+            "endSessions": "End sessions",
+            "online": "Online",
+            "offline": "Offline",
+            "onlineNow": "Online now",
+            "justNow": "just now",
+            "truncatedBanner": "Showing the first {{shown}} of {{total}} users. Refine your search to narrow results.",
+            "truncatedBannerNoTotal": "Showing the first {{shown}} users. Refine your search to narrow results."
         },
         "userView": {
             "title": "User",

@@ -1111,7 +1111,13 @@
         "users": {
             "delete": "Felhasználó törlése",
             "changePassword": "Jelszó módosítása",
-            "endSessions": "Munkamenetek befejezése"
+            "endSessions": "Munkamenetek befejezése",
+            "online": "Online",
+            "offline": "Offline",
+            "onlineNow": "Online most",
+            "justNow": "éppen most",
+            "truncatedBanner": "Az első {{shown}} felhasználó látható {{total}}-ből. Szűkítse le a keresést a találatok csökkentéséhez.",
+            "truncatedBannerNoTotal": "Az első {{shown}} felhasználó látható. Szűkítse le a keresést a találatok csökkentéséhez."
         },
         "userView": {
             "title": "Felhasználó",

@@ -1113,7 +1113,13 @@
         "users": {
             "delete": "Elimina l'usuari",
             "changePassword": "Canvia el mot de pas",
-            "endSessions": "Finalitza sessions"
+            "endSessions": "Finalitza sessions",
+            "online": "En línia",
+            "offline": "Fora de línia",
+            "onlineNow": "En línia ara",
+            "justNow": "ara mateix",
+            "truncatedBanner": "Es mostren els primers {{shown}} de {{total}} usuaris. Refineu la cerca per reduir els resultats.",
+            "truncatedBannerNoTotal": "Es mostren els primers {{shown}} usuaris. Refineu la cerca per reduir els resultats."
         },
         "userView": {
             "title": "Usuari",
