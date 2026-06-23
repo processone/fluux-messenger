@@ -164,3 +164,19 @@ Every phase is verified on **both** macOS (WKWebView) and Linux (WebKitGTK) befo
 - **Alignment micro-jumps from estimate/measure divergence** — mitigated by measured-offset anchoring + 2-step correction + overscan; the spike measures pixel accuracy explicitly.
 - **Imperative `scrollTop` writes coexisting with the library's scroll observation** — verified in the spike (stick-to-bottom case).
 - **Date-group/separator flattening edge cases** (empty groups, marker position) — covered by adapting the existing grouping tests.
+
+## Spike results — 2026-06-23 (macOS, headless preview)
+
+Ran the throwaway harness (`/spike.html`, 1000 varied-height rows) against the committed `@tanstack` adapter + alignment + interface, viewport 1200×900.
+
+**Validated (positive):**
+- **Windowing:** 1000 messages → **24 mounted rows** (`≤ ~60` ✓); `getTotalSize` tracks measured rows.
+- **Scroll tracking:** on a scroll event, `@tanstack`'s window moves to the correct index range (e.g. scroll to msg-200 → window 180–216, msg-200 mounted) and `getOffsetForIndex` stays consistent with each row's `translateY`.
+- **Prepend-anchor convergence:** the immediate (estimated) restore drifted +318px because `@tanstack` re-measures the newly-mounted rows after the prepend; applying the designed **post-measure correction** (re-read offset → re-set scrollTop) brought the anchor to its saved offset with **delta 0 in one step**. The 2-step correction in the design is therefore load-bearing and converges.
+
+**Could not be validated headlessly (preview-fidelity limits, not findings against the design):**
+- The headless preview **throttles `requestAnimationFrame`**, so the 2-step correction's rAF (and `ensureMessageMounted`'s rAF) do not auto-fire — the immediate-only restore drifts until corrected. Worked around by dispatching corrections synchronously from evals.
+- Programmatic `scrollTop` does **not auto-fire `scroll`** in the headless preview (real WKWebView/WebKitGTK do); worked around with an explicit `dispatchEvent`.
+- Therefore: real-rAF pixel-accuracy, **smoothness** (no visible mid-correction flash), jump-to-unmounted exact alignment, and steady-state stick-to-bottom (needs the content-`ResizeObserver` re-stick loop, which the simplified harness omits) **must be confirmed on real engines**.
+
+**Gate status:** windowing + the core mechanism (scroll tracking, offset consistency, anchor convergence) are **positive**, with **no red flag** for `@tanstack`. The decision to keep `@tanstack` (vs. the custom fallback) is **pending the real macOS (`tauri:dev`) and Linux/WebKitGTK runs** of `/spike.html`, which is kept on the branch for that purpose. Current lean: **proceed with `@tanstack` into Phase 2.1 behind the flag**, and confirm smoothness on real engines during integration. The harness is removed once that confirmation lands.
