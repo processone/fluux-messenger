@@ -9,7 +9,17 @@
 
 export type MessageListItem<T extends { id: string }> =
   | { kind: 'date'; key: string; date: string }
-  | { kind: 'message'; key: string; message: T; showAvatar: boolean; isFirstNew: boolean }
+  | {
+      kind: 'message'
+      key: string
+      message: T
+      showAvatar: boolean
+      isFirstNew: boolean
+      /** Index of this message within its date group, and the group's message array —
+       *  both needed to call the caller's renderMessage(msg, idx, groupMessages, ...). */
+      indexInGroup: number
+      groupMessages: T[]
+    }
 
 export interface VirtualWindowItem {
   index: number

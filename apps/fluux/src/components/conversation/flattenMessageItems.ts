@@ -35,6 +35,8 @@ export function flattenMessageItems<T extends { id: string }>(
         message,
         showAvatar: opts.showAvatar(group.messages, i),
         isFirstNew: message.id === opts.firstNewMessageId,
+        indexInGroup: i,
+        groupMessages: group.messages,
       })
     })
   }

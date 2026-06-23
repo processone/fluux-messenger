@@ -32,4 +32,12 @@ describe('flattenMessageItems', () => {
     expect(flagged).toHaveLength(1)
     expect((flagged[0] as { message: { id: string } }).message.id).toBe('b')
   })
+
+  it('carries per-group index and the group message array on each message item', () => {
+    const { items } = flattenMessageItems(groups, { showAvatar: () => true })
+    const messageItems = items.filter(i => i.kind === 'message') as Array<{ indexInGroup: number; groupMessages: { id: string }[] }>
+    expect(messageItems.map(i => i.indexInGroup)).toEqual([0, 1, 0]) // a,b in group 1; c in group 2
+    expect(messageItems[0].groupMessages.map(m => m.id)).toEqual(['a', 'b'])
+    expect(messageItems[2].groupMessages.map(m => m.id)).toEqual(['c'])
+  })
 })

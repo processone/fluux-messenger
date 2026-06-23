@@ -2,7 +2,6 @@ import { describe, it, expect, vi } from 'vitest'
 import { renderHook } from '@testing-library/react'
 import { useRef } from 'react'
 import { useTanstackMessageVirtualizer } from './tanstackMessageVirtualizer'
-import type { MessageListItem } from './messageVirtualizer'
 
 // Mock the real @tanstack/react-virtual surface the adapter uses (jsdom has no layout):
 // a fixed 40px row height exposes deterministic offsets for every index.
@@ -19,11 +18,8 @@ vi.mock('@tanstack/react-virtual', () => ({
   }),
 }))
 
-function makeItems(ids: string[]): { items: MessageListItem<{ id: string }>[]; indexById: Map<string, number> } {
-  const items: MessageListItem<{ id: string }>[] = ids.map((id) => ({
-    kind: 'message', key: id, message: { id }, showAvatar: true, isFirstNew: false,
-  }))
-  return { items, indexById: new Map(ids.map((id, i) => [id, i])) }
+function makeItems(ids: string[]): { items: { key: string }[]; indexById: Map<string, number> } {
+  return { items: ids.map((id) => ({ key: id })), indexById: new Map(ids.map((id, i) => [id, i])) }
 }
 
 describe('useTanstackMessageVirtualizer', () => {

@@ -8,7 +8,6 @@
 import { useRef, useState, useCallback, useLayoutEffect, useEffect } from 'react'
 import { useTanstackMessageVirtualizer } from '../components/conversation/tanstackMessageVirtualizer'
 import { markerScrollTop, prependAnchorScrollTop } from '../components/conversation/messageScrollAlignment'
-import type { MessageListItem } from '../components/conversation/messageVirtualizer'
 
 interface SpikeMsg { id: string; text: string; tall: boolean }
 interface PrependResult { anchorId: string; savedTop: number; restoredTop: number | null; delta: number | null }
@@ -56,9 +55,7 @@ export function VirtualizationSpike() {
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const [messages, setMessages] = useState<SpikeMsg[]>(() => makeMessages(1000))
 
-  const items: MessageListItem<SpikeMsg>[] = messages.map((m) => ({
-    kind: 'message', key: m.id, message: m, showAvatar: true, isFirstNew: false,
-  }))
+  const items = messages.map((m) => ({ key: m.id }))
   const indexById = new Map(messages.map((m, i) => [m.id, i]))
   const v = useTanstackMessageVirtualizer({ items, indexById, scrollRef })
 
