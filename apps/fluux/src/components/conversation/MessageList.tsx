@@ -22,9 +22,12 @@ import { NewMessageMarker } from './NewMessageMarker'
 import { HistoryStartMarker } from './HistoryStartMarker'
 import { HistoryGapMarker } from './HistoryGapMarker'
 import { TypingIndicator } from './TypingIndicator'
-import { groupMessagesByDate } from './messageGrouping'
+import { groupMessagesByDate, shouldShowAvatar } from './messageGrouping'
 import { useMessageListScroll } from './useMessageListScroll'
 import { MessageWidthProvider } from './messageWidthContext'
+import { isFeatureEnabled } from '@/utils/featureFlags'
+import { buildMessageListItems, type RenderItem } from './messageListItems'
+import { useTanstackMessageVirtualizer } from './tanstackMessageVirtualizer'
 import { Loader2, ChevronUp, ChevronDown } from 'lucide-react'
 import { Tooltip } from '../Tooltip'
 
@@ -170,6 +173,48 @@ export function MessageList<T extends BaseMessage>({
   // Local ref for multi-message selection (scroll hook has its own internal ref)
   const scrollContainerRef = useRef<HTMLDivElement>(null)
 
+  // --------------------------------------------------------------------------
+  // VIRTUALIZATION (behind the enableMessageVirtualization flag, default OFF)
+  // --------------------------------------------------------------------------
+
+  const showLoading = !!(isLoading && loadingState)
+  const showEmpty = !showLoading && messages.length === 0
+  const hasContent = !showLoading && !showEmpty
+  const showHeader = hasContent && (!!isHistoryComplete || !!onScrollToTop)
+  const showFooter = hasContent
+
+  // Disabled in staticMode (search/activity previews manage their own scroll).
+  const virtualized = isFeatureEnabled('enableMessageVirtualization') && !staticMode
+
+  // Built unconditionally (hooks rule); empty when not virtualized, so the
+  // virtualizer below is inert and the flag-OFF render path is unchanged.
+  const { items: virtualItems, indexById } = useMemo(
+    () =>
+      virtualized && hasContent
+        ? buildMessageListItems(groupedMessages, {
+            firstNewMessageId,
+            showAvatar: shouldShowAvatar,
+            showHeader,
+            showFooter,
+          })
+        : { items: [] as RenderItem<T>[], indexById: new Map<string, number>() },
+    [virtualized, hasContent, groupedMessages, firstNewMessageId, showHeader, showFooter],
+  )
+  const virtualizer = useTanstackMessageVirtualizer({ items: virtualItems, indexById, scrollRef: scrollContainerRef })
+  const activeVirtualizer = virtualized ? virtualizer : undefined
+
+  // Gap marker position: the first chronological message past the forward-catch-up
+  // boundary (the per-group computation in the legacy render reduces to this).
+  const gapMarkerMessageId = useMemo(() => {
+    if (!forwardGapTimestamp || !onCatchUpHistory) return undefined
+    for (const g of groupedMessages) {
+      for (const m of g.messages) {
+        if (m.timestamp.getTime() > forwardGapTimestamp) return m.id
+      }
+    }
+    return undefined
+  }, [groupedMessages, forwardGapTimestamp, onCatchUpHistory])
+
   const {
     setScrollContainerRef: setScrollContainerRefFromHook,
     contentWrapperRef,
@@ -195,6 +240,7 @@ export function MessageList<T extends BaseMessage>({
     typingUsersCount: typingUsers.length,
     lastMessageReactionsKey,
     staticMode,
+    virtualizer: activeVirtualizer,
   })
 
   // Combined ref setter for scroll container
@@ -229,9 +275,67 @@ export function MessageList<T extends BaseMessage>({
   // Detect Mac for keyboard shortcut display
   const isMac = typeof navigator !== 'undefined' && navigator.platform.toUpperCase().indexOf('MAC') >= 0
 
-  // Determine what content to show inside the scroll container
-  const showLoading = isLoading && loadingState
-  const showEmpty = !showLoading && messages.length === 0
+  // renderItem: render one flattened item by kind (virtualized path). Faithful to the
+  // legacy JSX so the only difference is windowing. NOT memoized — closes over the
+  // current handlers/props.
+  const renderItem = (item: RenderItem<T>): ReactNode => {
+    switch (item.kind) {
+      case 'header':
+        return isHistoryComplete ? (
+          <HistoryStartMarker />
+        ) : onScrollToTop ? (
+          <div className="flex justify-center py-3">
+            <button
+              onClick={handleLoadEarlier}
+              disabled={isLoadingOlder}
+              className={`flex items-center gap-1 px-3 py-1.5 text-xs rounded-full transition-colors ${
+                isLoadingOlder
+                  ? 'text-fluux-muted cursor-wait'
+                  : 'text-fluux-muted hover:text-fluux-text hover:bg-fluux-hover'
+              }`}
+            >
+              {isLoadingOlder ? <Loader2 className="size-4 animate-spin" /> : <ChevronUp className="size-4" />}
+              {t('chat.loadEarlierMessages')}
+            </button>
+          </div>
+        ) : null
+      case 'date':
+        return (
+          <div data-date-separator={item.date}>
+            <DateSeparator date={item.date} />
+          </div>
+        )
+      case 'message': {
+        const msg = item.message
+        return (
+          <div
+            className="message-row"
+            data-message-id={msg.id}
+            data-stanza-id={msg.stanzaId}
+            data-origin-id={msg.originId}
+            style={msg.id === lastSentMessageId ? { animation: 'message-send 300ms ease-out' } : undefined}
+          >
+            {msg.id === gapMarkerMessageId && onCatchUpHistory && (
+              <HistoryGapMarker onLoadMore={onCatchUpHistory} isLoading={isCatchingUp ?? false} />
+            )}
+            {item.isFirstNew && <NewMessageMarker />}
+            {renderMessage(msg, item.indexInGroup, item.groupMessages, item.isFirstNew, handleMediaLoad)}
+          </div>
+        )
+      }
+      case 'footer':
+        return (
+          <>
+            {extraContent}
+            <div className="pb-4">
+              {typingUsers.length > 0 && (
+                <TypingIndicator typingUsers={typingUsers} formatUser={formatTypingUser} />
+              )}
+            </div>
+          </>
+        )
+    }
+  }
 
   return (
     <MessageWidthProvider containerRef={scrollContainerRef}>
@@ -258,7 +362,24 @@ export function MessageList<T extends BaseMessage>({
         )}
 
         {/* Content wrapper for resize observation - only render when we have messages */}
-        {!showLoading && !showEmpty && (
+        {hasContent && (virtualized ? (
+        /* Virtualized: the wrapper is the spacer; only the visible window mounts. */
+        <div
+          ref={contentWrapperRef}
+          style={{ height: virtualizer.getTotalSize(), position: 'relative', width: '100%' }}
+        >
+          {virtualizer.getVirtualItems().map((v) => (
+            <div
+              key={virtualItems[v.index].key}
+              data-index={v.index}
+              ref={virtualizer.measureElement}
+              style={{ position: 'absolute', top: 0, left: 0, width: '100%', transform: `translateY(${v.start}px)` }}
+            >
+              {renderItem(virtualItems[v.index])}
+            </div>
+          ))}
+        </div>
+        ) : (
         <div ref={contentWrapperRef}>
           {/* History start marker - shown when all server history has been loaded */}
           {isHistoryComplete && <HistoryStartMarker />}
@@ -339,7 +460,7 @@ export function MessageList<T extends BaseMessage>({
             )}
           </div>
         </div>
-        )}
+        ))}
       </div>
 
       {/* Scroll to bottom FAB with spring animation */}

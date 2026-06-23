@@ -19,6 +19,7 @@ import { useRef, useEffect, useLayoutEffect, useState, useCallback } from 'react
 import { scrollStateManager, type ScrollAnchor } from '@/utils/scrollStateManager'
 import { createResizeLoopMonitor } from './resizeLoopMonitor'
 import { createSlowCorrectionMonitor } from './slowCorrectionMonitor'
+import type { MessageVirtualizer } from './messageVirtualizer'
 
 // ============================================================================
 // DEBUG
@@ -115,6 +116,10 @@ export interface UseMessageListScrollOptions {
    *  Used by read-only preview views (search context, activity context) that manage
    *  their own scroll positioning. */
   staticMode?: boolean
+  /** When present (virtualization flag ON), scroll math uses this interface instead
+   *  of reading the DOM directly — so it works for unmounted rows. Absent → unchanged
+   *  DOM-based behavior. Wired in Task 7. */
+  virtualizer?: MessageVirtualizer
 }
 
 export interface UseMessageListScrollResult {
