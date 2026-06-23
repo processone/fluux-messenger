@@ -1,4 +1,4 @@
-import React, { useState, useRef, memo, useCallback } from 'react'
+import React, { useState, useRef, useEffect, memo, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useListKeyboardNav, useRouteSync } from '@/hooks'
 import { detectRenderLoop, trackSelectorChange } from '@/utils/renderLoopDetector'
@@ -275,6 +275,11 @@ export const ConversationItem = memo(function ConversationItem({
   const draft = useChatStore((s) => s.drafts.get(conversation.id))
 
   const isGroupChat = conversation.type === 'groupchat'
+  // Room avatars render as a raw <img> (no Avatar fallback). A dead blob: URL
+  // (WebKit reclaim across sleep) would otherwise show a broken-image glyph;
+  // fall back to the Hash icon instead. Reset when the URL changes.
+  const [roomAvatarBroken, setRoomAvatarBroken] = useState(false)
+  useEffect(() => { setRoomAvatarBroken(false) }, [room?.avatar])
   const menuProps = getItemMenuProps(conversation)
   // While the long-press / context menu is open, highlight the targeted cell so
   // the user can clearly see which conversation the action will apply to.
@@ -316,12 +321,14 @@ export const ConversationItem = memo(function ConversationItem({
             keeps its full width and stops truncating short names. */}
         <div className="relative flex-shrink-0">
           {isGroupChat ? (
-            room?.avatar ? (
+            room?.avatar && !roomAvatarBroken ? (
               <img
                 src={room.avatar}
                 alt={conversation.name}
                 className="size-8 rounded-full object-cover"
                 draggable={false}
+                onError={() => setRoomAvatarBroken(true)}
+                onLoad={(e) => { if (e.currentTarget.naturalWidth === 0) setRoomAvatarBroken(true) }}
               />
             ) : (
               <Hash

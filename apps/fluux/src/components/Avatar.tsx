@@ -1,4 +1,4 @@
-import { useState, useEffect, type ReactNode } from 'react'
+import { useState, useEffect, useRef, type ReactNode } from 'react'
 import { generateConsistentColorHexSync, type PresenceStatus, type PresenceShow } from '@fluux/sdk'
 import { APP_OFFLINE_PRESENCE_COLOR, PRESENCE_COLORS } from '@/constants/ui'
 
@@ -269,9 +269,27 @@ export function Avatar({
     ? { backgroundColor: PRESENCE_CSS_VARS[resolvedPresence] }
     : undefined
 
-  // Track image load errors to fall back to letter display
+  // Track image load errors to fall back to letter display.
   const [imgError, setImgError] = useState(false)
-  useEffect(() => { setImgError(false) }, [avatarUrl])
+  const imgRef = useRef<HTMLImageElement>(null)
+  // WebKit (Tauri webview) does not reliably fire `<img>` onError for a revoked
+  // `blob:` URL whose backing store it reclaimed across an OS sleep — the image
+  // silently fails to decode and the row shows a broken-image glyph instead of
+  // the letter fallback. Don't depend on the error event: after the load
+  // settles, a failed image is `complete` with `naturalWidth === 0`. Reset on
+  // URL change, check immediately if already settled, and re-check shortly after
+  // for the no-event case.
+  useEffect(() => {
+    setImgError(false)
+    if (!avatarUrl) return
+    const checkBroken = () => {
+      const img = imgRef.current
+      if (img && img.complete && img.naturalWidth === 0) setImgError(true)
+    }
+    checkBroken()
+    const timer = setTimeout(checkBroken, 1500)
+    return () => clearTimeout(timer)
+  }, [avatarUrl])
 
   // Animated GIF: show static first frame by default, animate on hover
   const staticFrame = useStaticFrame(avatarUrl)
@@ -309,11 +327,13 @@ export function Avatar({
     >
       {avatarUrl && !imgError ? (
         <img
+          ref={imgRef}
           src={staticFrame && !hovered ? staticFrame : avatarUrl}
           alt={displayName}
           className="w-full h-full rounded-full object-cover"
           draggable={false}
           onError={() => setImgError(true)}
+          onLoad={(e) => { if (e.currentTarget.naturalWidth === 0) setImgError(true) }}
         />
       ) : (
         // Letter fallback with consistent color
