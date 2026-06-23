@@ -1043,6 +1043,30 @@ export class Profile extends BaseModule {
         }
       }
 
+      // Safety net for roster contacts the mapping loop above missed. The loop
+      // only re-points JIDs present in the IndexedDB hash-mapping store, but a
+      // contact can hold a (now-dead) avatar blob without such a mapping — e.g.
+      // its avatar arrived via MUC vcard-temp presence rather than a PEP/vCard
+      // fetch, or the mapping/data was evicted. Without this, that contact keeps
+      // a dead blob: URL after a WebKit reclaim and renders as a broken image.
+      // Drive off the roster store (source of truth for live contacts + hashes):
+      //   - hash bytes still cached → re-point to the fresh URL (idempotent),
+      //   - hash bytes gone        → re-fetch so it heals instead of staying broken.
+      const contacts = this.deps.stores?.roster?.sortedContacts?.() ?? []
+      for (const contact of contacts) {
+        if (!contact.avatarHash) continue
+        const url = freshUrls.get(contact.avatarHash)
+        if (url) {
+          if (contact.avatar !== url) {
+            this.updateAvatar(contact.jid, url, contact.avatarHash)
+          }
+        } else if (!contact.avatar || contact.avatar.startsWith('blob:')) {
+          // Only refetch contacts whose current pointer is empty or a revoked
+          // blob: URL — leave data: URIs and other live pointers untouched.
+          this.fetchAvatarData(contact.jid, contact.avatarHash).catch(() => {})
+        }
+      }
+
       // MUC occupant avatars live in each room's occupant map (keyed by nick),
       // not in the contact/room hash store, so the loop above never touches
       // them. After blob invalidation (WebKit reclaiming memory on sleep, or

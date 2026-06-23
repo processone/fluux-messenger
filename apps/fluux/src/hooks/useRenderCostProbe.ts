@@ -19,7 +19,24 @@
 import { useLayoutEffect, useRef } from 'react'
 import { createRenderCostProbe, type RenderCostProbe } from '@/utils/renderCostProbe'
 
+// Timestamp (performance.now) of the last page visibility transition. When a
+// render's measurement window contains one, the render→commit gap is wall-clock
+// idle (tab hidden, or the laptop slept mid-render) rather than render work —
+// producing absurd "render cost" values (e.g. ~18min for 50 rows after an OS
+// sleep). We discard those, mirroring stallSentinel's document.hidden guard.
+let lastVisibilityChangeAt = Number.NEGATIVE_INFINITY
+let visibilityTrackingStarted = false
+function ensureVisibilityTracking(): void {
+  if (visibilityTrackingStarted || typeof document === 'undefined') return
+  visibilityTrackingStarted = true
+  document.addEventListener('visibilitychange', () => {
+    lastVisibilityChangeAt = performance.now()
+  })
+}
+
 export function useRenderCostProbe(label: string, getContext: () => string): void {
+  ensureVisibilityTracking()
+
   // Read at render-body call time — before this component's children render.
   const renderStart = performance.now()
 
@@ -36,7 +53,11 @@ export function useRenderCostProbe(label: string, getContext: () => string): voi
       const layoutPaintMs = painted - commitDone
       const totalMs = reactMs + layoutPaintMs
 
-      if (probeRef.current?.record(totalMs, painted)) {
+      // A visibility transition at/after renderStart means this window spanned a
+      // hidden/sleep period — the measured cost is idle wall clock, not render work.
+      const spannedHidden = lastVisibilityChangeAt >= renderStart || document.hidden
+
+      if (probeRef.current?.record(totalMs, painted, spannedHidden)) {
         console.warn(
           `[RenderCostProbe] ${label} render cost ~${Math.round(totalMs)}ms ` +
           `(react=${Math.round(reactMs)}ms, layoutPaint=${Math.round(layoutPaintMs)}ms, ${getContext()})`

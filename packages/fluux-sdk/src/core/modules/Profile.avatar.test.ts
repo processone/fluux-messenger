@@ -960,6 +960,46 @@ describe('XMPPClient Own Avatar', () => {
       expect(emitSDKSpy).not.toHaveBeenCalledWith('room:occupant-avatar', expect.objectContaining({ nick: 'Carol' }))
     })
 
+    it('re-points a roster contact whose hash the mapping store missed', async () => {
+      emitSDKSpy.mockClear()
+
+      const { refreshAllBlobUrls, getAllAvatarHashes } = await import('../../utils/avatarCache')
+      // A fresh URL exists for the contact's hash, but the IndexedDB mapping
+      // store does NOT list this JID (e.g. the avatar arrived via MUC
+      // vcard-temp presence, not a PEP/vCard fetch). The mapping loop misses it;
+      // the roster-store safety net must still re-point its dead blob.
+      vi.mocked(refreshAllBlobUrls).mockResolvedValue(new Map([['hash-seb', 'blob:fresh-seb']]))
+      vi.mocked(getAllAvatarHashes).mockResolvedValue([])
+      mockStores.roster.sortedContacts.mockReturnValue([
+        { jid: 'seb@example.com', name: 'Seb', presence: 'online', subscription: 'both', avatar: 'blob:dead-seb', avatarHash: 'hash-seb' },
+      ])
+
+      await xmppClient.profile.refreshAllAvatarBlobUrls()
+
+      expect(emitSDKSpy).toHaveBeenCalledWith('roster:avatar', {
+        jid: 'seb@example.com', avatar: 'blob:fresh-seb', avatarHash: 'hash-seb',
+      })
+    })
+
+    it('re-fetches a roster contact whose cached avatar bytes are gone', async () => {
+      emitSDKSpy.mockClear()
+
+      const { refreshAllBlobUrls, getAllAvatarHashes } = await import('../../utils/avatarCache')
+      // Another contact is cached (so the size-0 short-circuit doesn't fire), but
+      // Seb's hash has no fresh URL → his bytes were evicted from IndexedDB.
+      // His pointer is a now-dead blob, so the safety net must re-fetch to heal.
+      vi.mocked(refreshAllBlobUrls).mockResolvedValue(new Map([['hash-other', 'blob:other']]))
+      vi.mocked(getAllAvatarHashes).mockResolvedValue([])
+      const fetchSpy = vi.spyOn(xmppClient.profile, 'fetchAvatarData').mockResolvedValue()
+      mockStores.roster.sortedContacts.mockReturnValue([
+        { jid: 'seb@example.com', name: 'Seb', presence: 'online', subscription: 'both', avatar: 'blob:dead-seb', avatarHash: 'hash-seb' },
+      ])
+
+      await xmppClient.profile.refreshAllAvatarBlobUrls()
+
+      expect(fetchSpy).toHaveBeenCalledWith('seb@example.com', 'hash-seb')
+    })
+
     it('should re-point the current user\'s own avatar via connection:own-avatar', async () => {
       emitSDKSpy.mockClear()
 

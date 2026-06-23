@@ -26,8 +26,14 @@ export interface RenderCostProbe {
    * Record one render whose total cost was `totalMs`, observed at `now` (ms,
    * monotonic e.g. performance.now()). Returns true when the caller should log
    * a diagnostic line (cost ≥ threshold and cooldown elapsed).
+   *
+   * `spannedHidden` flags that the measurement window crossed a page-hidden /
+   * OS-sleep boundary, where the render→commit wall clock measures idle time,
+   * not render work (e.g. ~18min for 50 rows after a laptop sleep). Such a
+   * sample is always discarded, and — being meaningless — does not consume the
+   * cooldown, so it never masks the next genuine slow render.
    */
-  record(totalMs: number, now: number): boolean
+  record(totalMs: number, now: number, spannedHidden?: boolean): boolean
 }
 
 export interface RenderCostProbeOptions {
@@ -51,7 +57,8 @@ export function createRenderCostProbe(
   let lastReportAt = Number.NEGATIVE_INFINITY
 
   return {
-    record(totalMs: number, now: number): boolean {
+    record(totalMs: number, now: number, spannedHidden = false): boolean {
+      if (spannedHidden) return false
       if (totalMs < thresholdMs) return false
       if (now - lastReportAt < cooldownMs) return false
       lastReportAt = now
