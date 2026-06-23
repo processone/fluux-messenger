@@ -303,7 +303,16 @@ export function classifyBoundaryError(err: unknown): { kind: E2EEErrorKind; code
     // "Error during parsing. This message / key probably does not conform to
     // a valid OpenPGP format." Structurally malformed → never decrypts.
     msg.includes('during parsing') ||
-    msg.includes('conform to a valid openpgp')
+    msg.includes('conform to a valid openpgp') ||
+    // Sequoia stream decryptor fed bytes that are not parseable OpenPGP at
+    // all: "Malformed packet: Malformed CTB: MSB of ptag … not set (ptag is
+    // a dash, perhaps this is an ASCII-armor encoded message)". Like the
+    // openpgp.js cases above, no key change can ever open structurally
+    // invalid bytes, so this is terminal — without it the failure falls
+    // through to `transient/unknown` and stanzaDecrypt re-stashes the
+    // message, making retryPendingDecrypts re-attempt (and re-log) it on
+    // every launch forever.
+    msg.includes('malformed packet')
   ) {
     return { kind: 'permanent', code: 'malformed-data' }
   }

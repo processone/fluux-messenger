@@ -3145,6 +3145,26 @@ describe('SequoiaPgpPlugin', () => {
       expect(code).toBe('key-unrecoverable')
     })
 
+    it('classifies a Sequoia malformed-packet decrypt failure as permanent malformed-data', () => {
+      // Real production failure (dev-era / corrupt ciphertext): the stored
+      // <openpgp> payload is not parseable OpenPGP at all. Sequoia's stream
+      // decryptor reports "Malformed CTB: MSB of ptag not set (ptag is a
+      // dash, perhaps this is an ASCII-armor encoded message)". No key change
+      // can ever open structurally invalid bytes, so this MUST be a PERMANENT
+      // `malformed-data` — otherwise stanzaDecrypt re-stashes it and
+      // retryPendingDecrypts re-attempts (and re-logs) it on every launch
+      // forever.
+      const { kind, code } = SequoiaPgpPlugin.classifyBoundaryError(
+        new Error(
+          'SequoiaPgpPlugin: decrypt: open decryptor: Malformed packet: Malformed CTB: ' +
+            'MSB of ptag (0b00101101) not set (ptag is a dash, perhaps this is an ' +
+            'ASCII-armor encoded message).',
+        ),
+      )
+      expect(kind).toBe('permanent')
+      expect(code).toBe('malformed-data')
+    })
+
     it('init() swallows an unrecoverable local key and flags recovery instead of throwing', async () => {
       // The stored passphrase no longer decrypts the on-disk TSK. init()
       // must NOT throw (which would fail registration and hide the recovery
