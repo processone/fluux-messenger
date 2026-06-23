@@ -1,10 +1,24 @@
 import type { StressScenario } from '@fluux/sdk'
 
-/** Parse `?stress=rooms:15,messages:150,occupants:80,mode:backfill` into a scenario. */
-export function parseStressParam(params: URLSearchParams): StressScenario | null {
+/**
+ * Parsed `?stress=…` result: the SDK scenario (consumed by buildStressEvents)
+ * plus app-only harness directives that buildStressEvents ignores.
+ */
+export type ParsedStress = StressScenario & {
+  /** `activate:1` — after seeding, navigate to the first seeded room so the
+   *  switch-mount cost (the WebKitGTK freeze) can be observed/measured. */
+  activate?: boolean
+}
+
+/**
+ * Parse `?stress=rooms:1,messages:1000,occupants:97,activate:1,msgStep:0` into a scenario.
+ * `msgStep`/`roomStep` map to the SDK `msgStepMs`/`roomStepMs` (use `msgStep:0`
+ * to seed a big backlog instantly). `activate:1` auto-switches into the room.
+ */
+export function parseStressParam(params: URLSearchParams): ParsedStress | null {
   const raw = params.get('stress')
   if (raw === null) return null
-  const scenario: StressScenario = { kind: 'room-join' }
+  const scenario: ParsedStress = { kind: 'room-join' }
   for (const part of raw.split(',')) {
     const [key, value] = part.split(':')
     if (!key || value === undefined) continue
@@ -14,6 +28,9 @@ export function parseStressParam(params: URLSearchParams): StressScenario | null
       case 'messages': if (Number.isFinite(n)) scenario.messagesPerRoom = n; break
       case 'occupants': if (Number.isFinite(n)) scenario.occupants = n; break
       case 'mode': if (value === 'backfill' || value === 'live') scenario.mode = value; break
+      case 'msgStep': if (Number.isFinite(n)) scenario.msgStepMs = n; break
+      case 'roomStep': if (Number.isFinite(n)) scenario.roomStepMs = n; break
+      case 'activate': scenario.activate = value === '1' || value === 'true'; break
     }
   }
   return scenario
@@ -59,7 +76,47 @@ export async function installPerfHarness(): Promise<void> {
       console.table(top)
       return report
     },
+    /**
+     * Count mounted DOM nodes under `selector` (default: the message list).
+     * This is THE platform-independent proxy for the WebKitGTK layout cost — the
+     * windowing/virtualization fix is a node-count reduction, and node count is
+     * measurable anywhere (the 3s wall-clock freeze only reproduces on Linux).
+     */
+    domNodes: (selector = '[data-message-list]') => {
+      const roots = document.querySelectorAll(selector)
+      let total = 0
+      roots.forEach((r) => { total += r.querySelectorAll('*').length })
+      const result = { selector, roots: roots.length, total, messageRows: document.querySelectorAll('.message-row').length }
+      console.table(result)
+      return result
+    },
+    /**
+     * Switch into a (pre-seeded) room via the route hash and report the mount
+     * cost: DOM node count + react-scan render counts. Use after seeding inactive,
+     * e.g. `__demoClient.runStressScenario({ kind:'room-join', rooms:1, occupants:97, messagesPerRoom:1000, msgStepMs:0 })`
+     * then `__perf.measureSwitch('stress-0@conference.<domain>')`.
+     * durationMs includes a fixed settle wait — on macOS the mount is cheap, so
+     * rely on domNodes/renders (not wall-clock) as the signal.
+     */
+    async measureSwitch(roomJid: string) {
+      counts = {}
+      const t0 = performance.now()
+      window.location.hash = '#/rooms/' + encodeURIComponent(roomJid)
+      await new Promise((r) => setTimeout(r, 500))
+      const list = document.querySelector('[data-message-list]')
+      const report = {
+        label: `switch:${roomJid}`,
+        durationMs: Math.round(performance.now() - t0),
+        messageRows: document.querySelectorAll('.message-row').length,
+        domNodes: list ? list.querySelectorAll('*').length : 0,
+        renders: Object.entries(counts).sort((a, b) => b[1] - a[1]),
+        note: 'durationMs includes a fixed settle wait; use domNodes/renders as the platform-independent signal',
+      }
+      console.table({ messageRows: report.messageRows, domNodes: report.domNodes, durationMs: report.durationMs })
+      console.table(report.renders)
+      return report
+    },
     detector: det,
   }
-  console.info('[perf] window.__perf ready — try await __perf.measure("burst", () => __demoClient.runStressScenario({ kind: "room-join", rooms: 15, messagesPerRoom: 150, mode: "live" }))')
+  console.info('[perf] window.__perf ready. Single big-room repro:\n  __demoClient.runStressScenario({ kind:"room-join", rooms:1, occupants:97, messagesPerRoom:1000, mode:"backfill", msgStepMs:0 })\n  then: await __perf.measureSwitch("stress-0@conference.<your-demo-domain>")\n  or one-shot URL: ?stress=rooms:1,messages:1000,occupants:97,activate:1,msgStep:0&perf=1')
 }

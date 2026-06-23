@@ -144,7 +144,7 @@ interface ChatState {
    * lastSeenMessageId forward-only by resolving the stanza-id to a local
    * message id; stores a pending high-water mark if not yet loaded.
    */
-  applyRemoteDisplayed: (conversationId: string, stanzaId: string) => void
+  applyRemoteDisplayed: (conversationId: string, stanzaId: string, messagesOverride?: Message[]) => void
   hasConversation: (id: string) => boolean
   archiveConversation: (id: string) => void
   unarchiveConversation: (id: string) => void
@@ -218,7 +218,7 @@ interface ChatState {
    */
   refreshLastMessageContent: (conversationId: string, messageId: string, updates: Partial<Message>) => void
   // IndexedDB message loading
-  loadMessagesFromCache: (conversationId: string, options?: { limit?: number; before?: Date }) => Promise<Message[]>
+  loadMessagesFromCache: (conversationId: string, options?: { limit?: number; before?: Date; peek?: boolean }) => Promise<Message[]>
   loadOlderMessagesFromCache: (conversationId: string, limit?: number) => Promise<Message[]>
   setTargetMessageId: (id: string | null) => void
   switchAccount: (jid: string | null) => void
@@ -514,28 +514,39 @@ export const chatStore = createStore<ChatState>()(
         // Skip if already the active conversation (prevents duplicate side effects)
         if (id === prevId) return
 
-        // Deactivate previous conversation (clears marker)
+        // Deactivate previous conversation: clear its "new messages" marker (if
+        // any) and EVICT its message array from RAM. Only the active conversation
+        // keeps its messages resident — the durable copy stays in IndexedDB and is
+        // rehydrated by activateConversation on return. Meta / lastMessage are
+        // preserved, so the sidebar preview and unread badge are unaffected.
         if (prevId && prevId !== id) {
           const prevMeta = get().conversationMeta.get(prevId)
-          if (prevMeta?.firstNewMessageId) {
-            const deactivated = notifState.onDeactivate({
-              unreadCount: prevMeta.unreadCount,
-              mentionsCount: 0,
-              lastReadAt: prevMeta.lastReadAt,
-              lastSeenMessageId: prevMeta.lastSeenMessageId,
-              firstNewMessageId: prevMeta.firstNewMessageId,
-            })
-            set((state) => {
-              const newMeta = new Map(state.conversationMeta)
-              newMeta.set(prevId, { ...prevMeta, firstNewMessageId: deactivated.firstNewMessageId })
-              const newConversations = new Map(state.conversations)
-              const prevConv = newConversations.get(prevId)
-              if (prevConv) {
-                newConversations.set(prevId, { ...prevConv, firstNewMessageId: deactivated.firstNewMessageId })
-              }
-              return { conversationMeta: newMeta, conversations: newConversations }
-            })
-          }
+          const hadMarker = !!prevMeta?.firstNewMessageId
+          const clearedFirstNewMessageId = hadMarker
+            ? notifState.onDeactivate({
+                unreadCount: prevMeta!.unreadCount,
+                mentionsCount: 0,
+                lastReadAt: prevMeta!.lastReadAt,
+                lastSeenMessageId: prevMeta!.lastSeenMessageId,
+                firstNewMessageId: prevMeta!.firstNewMessageId,
+              }).firstNewMessageId
+            : undefined
+
+          set((state) => {
+            const newMessages = new Map(state.messages)
+            newMessages.delete(prevId)
+            if (!hadMarker) {
+              return { messages: newMessages }
+            }
+            const newMeta = new Map(state.conversationMeta)
+            if (prevMeta) newMeta.set(prevId, { ...prevMeta, firstNewMessageId: clearedFirstNewMessageId })
+            const newConversations = new Map(state.conversations)
+            const prevConv = newConversations.get(prevId)
+            if (prevConv) {
+              newConversations.set(prevId, { ...prevConv, firstNewMessageId: clearedFirstNewMessageId })
+            }
+            return { messages: newMessages, conversationMeta: newMeta, conversations: newConversations }
+          })
         }
 
         if (id) {
@@ -903,13 +914,15 @@ export const chatStore = createStore<ChatState>()(
         })
       },
 
-      applyRemoteDisplayed: (conversationId, stanzaId) => {
+      applyRemoteDisplayed: (conversationId, stanzaId, messagesOverride) => {
         set((state) => {
           const meta = state.conversationMeta.get(conversationId)
           const conv = state.conversations.get(conversationId)
           if (!meta) return state
 
-          const messages = state.messages.get(conversationId) || []
+          // A non-active conversation keeps no resident array (memory windowing), so
+          // mergeMAMMessages passes the just-merged array here; otherwise read RAM.
+          const messages = messagesOverride ?? (state.messages.get(conversationId) || [])
           const match = messages.find((m) => m.stanzaId === stanzaId)
 
           if (!match) {
@@ -1335,6 +1348,9 @@ export const chatStore = createStore<ChatState>()(
       },
 
       mergeMAMMessages: (conversationId, mamMessages, rsm, complete, direction) => {
+        // Captured from inside set() so the post-set MDS marker resolution can read the
+        // merged array even for a non-active conversation (whose array isn't in RAM).
+        let mergedForMarker: Message[] = []
         set((state) => {
           // Get existing messages for this conversation
           const rawExisting = state.messages.get(conversationId) || []
@@ -1365,6 +1381,7 @@ export const chatStore = createStore<ChatState>()(
                   getChatMessageKeys,
                   MAX_MESSAGES_PER_CONVERSATION
                 )
+          mergedForMarker = trimmed
 
           // Newest fetched message timestamp marks the gap edge for an incomplete
           // forward catch-up (parity with rooms).
@@ -1394,12 +1411,13 @@ export const chatStore = createStore<ChatState>()(
             newGaps = syncGap(state.conversationGaps, conversationId, gapStart, gapEnd)
           }
 
-          // If no new messages (all duplicates), only update MAM state - skip messages/conversations
-          // This prevents unnecessary re-renders when merging duplicates.
-          // Exception: if we backfilled stanzaIds onto existing messages, persist
-          // that patched array (trimmed === existingMessages here) to the store.
+          // If no new messages (all duplicates), only update MAM state to avoid
+          // unnecessary re-renders. Exception: a stanzaId backfill onto existing
+          // RAM messages must persist — but only for the ACTIVE conversation
+          // (non-active conversations keep no resident array).
+          const isActive = state.activeConversationId === conversationId
           if (newMessages.length === 0) {
-            if (patched.length === 0) {
+            if (patched.length === 0 || !isActive) {
               return { mamQueryStates: newStates, conversationGaps: newGaps }
             }
             const backfilledMap = new Map(state.messages)
@@ -1407,39 +1425,50 @@ export const chatStore = createStore<ChatState>()(
             return { messages: backfilledMap, mamQueryStates: newStates, conversationGaps: newGaps }
           }
 
-          // Persist only locally-persistable messages to IndexedDB
+          // Persist to IndexedDB regardless of active state (durable history).
           const persistableMessages = newMessages.filter(msg => !msg.noLocalStore)
           if (persistableMessages.length > 0) {
             void messageCache.saveMessages(persistableMessages)
             searchIndex.indexMessages(persistableMessages).catch((e) => console.warn('[searchIndex] indexMessages failed:', e))
           }
 
-          // Update messages map (only when we have new messages)
-          const newMessagesMap = new Map(state.messages)
-          newMessagesMap.set(conversationId, trimmed)
-
-          // Update lastMessage with the newest previewable message after
-          // merge/sort, skipping bodiless signal placeholders (e.g. undecrypted
-          // encrypted reactions). A real message also supersedes an existing
-          // stuck placeholder even when older. isResolvedSamePreview additionally
-          // heals a preview stuck on the encrypted fallback when MAM brings in the
-          // now-decrypted copy of that same message (same id/timestamp).
+          // Sidebar preview: newest previewable message (skips bodiless signal
+          // placeholders; heals a stuck encrypted-fallback preview via
+          // shouldReplaceLastMessage / isResolvedSamePreview).
           const lastMessage = findLastPreviewableMessage(trimmed)
           const meta = state.conversationMeta.get(conversationId)
           const conv = state.conversations.get(conversationId)
-          if (
+          const previewUpdate = !!(
             meta && conv && lastMessage &&
             (shouldReplaceLastMessage(meta.lastMessage, lastMessage) ||
               isResolvedSamePreview(meta.lastMessage, lastMessage))
-          ) {
-            // Update metadata map
+          )
+
+          // NON-ACTIVE conversation (background catch-up): the messages are durable
+          // in IndexedDB and the preview/gap are updated, but we DON'T populate the
+          // resident array. Only the active conversation is kept in RAM, so a
+          // reconnect's forward catch-up can't refill a backgrounded conversation
+          // toward the cap. It rehydrates from cache on open.
+          if (!isActive) {
+            if (previewUpdate) {
+              const newMeta = new Map(state.conversationMeta)
+              newMeta.set(conversationId, { ...meta!, lastMessage })
+              const newConversations = new Map(state.conversations)
+              newConversations.set(conversationId, { ...conv!, lastMessage })
+              return { mamQueryStates: newStates, conversationMeta: newMeta, conversations: newConversations, conversationGaps: newGaps }
+            }
+            return { mamQueryStates: newStates, conversationGaps: newGaps }
+          }
+
+          // ACTIVE conversation: populate the resident messages map.
+          const newMessagesMap = new Map(state.messages)
+          newMessagesMap.set(conversationId, trimmed)
+
+          if (previewUpdate) {
             const newMeta = new Map(state.conversationMeta)
-            newMeta.set(conversationId, { ...meta, lastMessage })
-
-            // Update combined map
+            newMeta.set(conversationId, { ...meta!, lastMessage })
             const newConversations = new Map(state.conversations)
-            newConversations.set(conversationId, { ...conv, lastMessage })
-
+            newConversations.set(conversationId, { ...conv!, lastMessage })
             return { messages: newMessagesMap, mamQueryStates: newStates, conversationMeta: newMeta, conversations: newConversations, conversationGaps: newGaps }
           }
 
@@ -1452,7 +1481,7 @@ export const chatStore = createStore<ChatState>()(
         // lastSeenMessageId, and clears pendingRemoteDisplayedStanzaId on success.
         const pending = get().conversationMeta.get(conversationId)?.pendingRemoteDisplayedStanzaId
         if (pending) {
-          get().applyRemoteDisplayed(conversationId, pending)
+          get().applyRemoteDisplayed(conversationId, pending, mergedForMarker)
         }
       },
 
@@ -1527,7 +1556,7 @@ export const chatStore = createStore<ChatState>()(
       // Load messages from IndexedDB cache for a conversation
       // For initial load (no 'before'), loads the LATEST 100 messages to show most recent first
       loadMessagesFromCache: async (conversationId, options = {}) => {
-        const { limit = 100, before } = options
+        const { limit = 100, before, peek } = options
         try {
           const cachedMessages = await messageCache.getMessages(conversationId, {
             limit,
@@ -1537,7 +1566,10 @@ export const chatStore = createStore<ChatState>()(
             latest: !before,
           })
 
-          if (cachedMessages.length > 0) {
+          // `peek`: pure read that returns the messages WITHOUT writing the store —
+          // used to compute a catch-up cursor for a non-active conversation without
+          // pulling its history into RAM (only the active conversation is resident).
+          if (!peek && cachedMessages.length > 0) {
             set((state) => {
               const existingMessages = state.messages.get(conversationId) || []
 

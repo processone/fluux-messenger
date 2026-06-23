@@ -14,6 +14,17 @@
 
 const DEBUG = false
 
+/**
+ * A content-stable scroll anchor: the bottom-most visible message and the gap
+ * (px) between its bottom edge and the viewport bottom. Survives a change in the
+ * loaded message set (e.g. after memory eviction + re-hydration from cache),
+ * unlike a raw pixel scrollTop whose meaning depends on the total content height.
+ */
+export interface ScrollAnchor {
+  messageId: string
+  bottomGap: number
+}
+
 interface ScrollState {
   /** Saved scroll position (scrollTop) */
   scrollTop: number
@@ -23,6 +34,8 @@ interface ScrollState {
   savedAt: number
   /** Total scroll height when saved (for validation) */
   scrollHeight: number
+  /** Content-stable anchor (preferred over scrollTop for restoration). */
+  anchor?: ScrollAnchor
 }
 
 interface ConversationState {
@@ -128,7 +141,8 @@ class ScrollStateManager {
     conversationId: string,
     scrollTop: number,
     scrollHeight: number,
-    clientHeight: number
+    clientHeight: number,
+    anchor?: ScrollAnchor
   ): void {
     const state = this.getState(conversationId)
     const distanceFromBottom = scrollHeight - scrollTop - clientHeight
@@ -140,18 +154,21 @@ class ScrollStateManager {
       scrollHeight,
       distanceFromBottom,
       wasAtBottom,
+      anchorMessageId: anchor?.messageId,
     })
 
     if (wasAtBottom) {
       // If at bottom, clear any saved position - we'll scroll to bottom on return
       delete state.scrollState
     } else {
-      // Save the scroll position for restoration
+      // Save the scroll position for restoration. The anchor (bottom-most visible
+      // message) is preferred on restore; scrollTop is the legacy fallback.
       state.scrollState = {
         scrollTop,
         wasAtBottom,
         savedAt: Date.now(),
         scrollHeight,
+        anchor,
       }
     }
   }
@@ -164,10 +181,11 @@ class ScrollStateManager {
     conversationId: string,
     scrollTop: number,
     scrollHeight: number,
-    clientHeight: number
+    clientHeight: number,
+    anchor?: ScrollAnchor
   ): void {
     // Save position first
-    this.saveScrollPosition(conversationId, scrollTop, scrollHeight, clientHeight)
+    this.saveScrollPosition(conversationId, scrollTop, scrollHeight, clientHeight, anchor)
 
     const state = this.getState(conversationId)
     this.log('leaveConversation', {
@@ -214,6 +232,23 @@ class ScrollStateManager {
     }
 
     return state.scrollState.scrollTop
+  }
+
+  /**
+   * Get the saved scroll anchor (bottom-most visible message) for restoration.
+   * Returns null when the user was at the bottom, the state is stale, or no
+   * anchor was captured. Preferred over {@link getSavedScrollTop}: it survives a
+   * change in the loaded message set (memory eviction + cache re-hydration).
+   */
+  getSavedAnchor(conversationId: string): ScrollAnchor | null {
+    const state = this.states.get(conversationId)
+    if (!state?.scrollState || state.scrollState.wasAtBottom) {
+      return null
+    }
+    if (Date.now() - state.scrollState.savedAt > this.staleThresholdMs) {
+      return null
+    }
+    return state.scrollState.anchor ?? null
   }
 
   /**

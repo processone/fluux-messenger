@@ -377,7 +377,7 @@ export interface RoomState {
    * lastSeenMessageId forward-only by resolving the stanza-id to a local
    * message id; stores a pending high-water mark if not yet loaded.
    */
-  applyRemoteDisplayed: (roomJid: string, stanzaId: string) => void
+  applyRemoteDisplayed: (roomJid: string, stanzaId: string, messagesOverride?: RoomMessage[]) => void
   setTyping: (roomJid: string, nick: string, isTyping: boolean) => void
 
   // Bookmark actions
@@ -410,7 +410,7 @@ export interface RoomState {
   getDismissedPollIds: (roomJid: string) => Set<string>
 
   // IndexedDB cache loading
-  loadMessagesFromCache: (roomJid: string, options?: GetMessagesOptions) => Promise<RoomMessage[]>
+  loadMessagesFromCache: (roomJid: string, options?: GetMessagesOptions & { peek?: boolean }) => Promise<RoomMessage[]>
   loadOlderMessagesFromCache: (roomJid: string, limit?: number) => Promise<RoomMessage[]>
   /** Load only the latest message from cache for sidebar preview (doesn't modify messages array) */
   loadPreviewFromCache: (roomJid: string) => Promise<RoomMessage | null>
@@ -1333,28 +1333,50 @@ export const roomStore = createStore<RoomState>()(
     // Skip if already the active room (prevents duplicate side effects)
     if (roomJid === prevJid) return
 
-    // Deactivate previous room (clears marker)
+    // Deactivate previous room: clear its "new messages" marker (if any) and
+    // EVICT its message array from RAM. Only the active room keeps its messages
+    // resident — the durable copy stays in IndexedDB and is rehydrated by
+    // activateRoom on return. Entity / meta / lastMessage / occupants are kept,
+    // so the sidebar preview and unread badge are unaffected. This bounds memory
+    // (no longer every visited room holds up to MAX_MESSAGES_PER_ROOM) and shrinks
+    // the DOM mounted on the next switch into a large room.
     if (prevJid && prevJid !== roomJid) {
       const prevMeta = get().roomMeta.get(prevJid)
-      if (prevMeta?.firstNewMessageId) {
-        const deactivated = notifState.onDeactivate({
-          unreadCount: prevMeta.unreadCount,
-          mentionsCount: prevMeta.mentionsCount,
-          lastReadAt: prevMeta.lastReadAt,
-          lastSeenMessageId: prevMeta.lastSeenMessageId,
-          firstNewMessageId: prevMeta.firstNewMessageId,
-        })
-        set((state) => {
-          const newMeta = new Map(state.roomMeta)
-          newMeta.set(prevJid, { ...prevMeta, firstNewMessageId: deactivated.firstNewMessageId })
-          const newRooms = new Map(state.rooms)
-          const prevRoom = newRooms.get(prevJid)
-          if (prevRoom) {
-            newRooms.set(prevJid, { ...prevRoom, firstNewMessageId: deactivated.firstNewMessageId })
-          }
-          return { roomMeta: newMeta, rooms: newRooms }
-        })
-      }
+      const hadMarker = !!prevMeta?.firstNewMessageId
+      const clearedFirstNewMessageId = hadMarker
+        ? notifState.onDeactivate({
+            unreadCount: prevMeta!.unreadCount,
+            mentionsCount: prevMeta!.mentionsCount,
+            lastReadAt: prevMeta!.lastReadAt,
+            lastSeenMessageId: prevMeta!.lastSeenMessageId,
+            firstNewMessageId: prevMeta!.firstNewMessageId,
+          }).firstNewMessageId
+        : undefined
+
+      set((state) => {
+        // Evict from the runtime mirror (messages live here).
+        const newRuntime = new Map(state.roomRuntime)
+        const prevRuntime = newRuntime.get(prevJid)
+        if (prevRuntime && prevRuntime.messages.length > 0) {
+          newRuntime.set(prevJid, { ...prevRuntime, messages: [] })
+        }
+
+        // Evict from the combined map mirror; carry the (possibly cleared) marker.
+        const newRooms = new Map(state.rooms)
+        const prevRoom = newRooms.get(prevJid)
+        if (prevRoom) {
+          const updatedPrevRoom = { ...prevRoom, messages: [] }
+          if (hadMarker) updatedPrevRoom.firstNewMessageId = clearedFirstNewMessageId
+          newRooms.set(prevJid, updatedPrevRoom)
+        }
+
+        const newMeta = new Map(state.roomMeta)
+        if (prevMeta && hadMarker) {
+          newMeta.set(prevJid, { ...prevMeta, firstNewMessageId: clearedFirstNewMessageId })
+        }
+
+        return { roomRuntime: newRuntime, rooms: newRooms, roomMeta: newMeta }
+      })
     }
 
     if (roomJid) {
@@ -1480,14 +1502,16 @@ export const roomStore = createStore<RoomState>()(
     })
   },
 
-  applyRemoteDisplayed: (roomJid, stanzaId) => {
+  applyRemoteDisplayed: (roomJid, stanzaId, messagesOverride) => {
     set((state) => {
       const meta = state.roomMeta.get(roomJid)
       const existing = state.rooms.get(roomJid)
       if (!meta) return state
 
       const runtime = state.roomRuntime.get(roomJid)
-      const messages = runtime?.messages ?? existing?.messages ?? []
+      // A non-active room keeps no resident array (memory windowing), so
+      // mergeRoomMAMMessages passes the just-merged array here; else read runtime/rooms.
+      const messages = messagesOverride ?? runtime?.messages ?? existing?.messages ?? []
       const match = messages.find((m) => m.stanzaId === stanzaId)
 
       if (!match) {
@@ -1857,7 +1881,10 @@ export const roomStore = createStore<RoomState>()(
         latest: !options.before,
       }
       const cachedMessages = await messageCache.getRoomMessages(roomJid, queryOptions)
-      if (cachedMessages.length > 0) {
+      // `peek`: a pure read that returns the messages WITHOUT pulling them into the
+      // store. Used to compute a catch-up cursor for a non-active room without
+      // breaking the invariant that only the active room is resident in RAM.
+      if (!options.peek && cachedMessages.length > 0) {
         // Merge with existing messages in memory using shared utilities
         set((state) => {
           const newRooms = new Map(state.rooms)
@@ -2033,6 +2060,9 @@ export const roomStore = createStore<RoomState>()(
   },
 
   mergeRoomMAMMessages: (roomJid, mamMessages, rsm, complete, direction, preserveGapMarker = false) => {
+    // Captured from inside set() so the post-set MDS marker resolution can read the
+    // merged array even for a non-active room (whose array isn't resident).
+    let mergedForMarker: RoomMessage[] = []
     set((state) => {
       const room = state.rooms.get(roomJid)
       if (!room) return state
@@ -2057,6 +2087,7 @@ export const roomStore = createStore<RoomState>()(
               getRoomMessageKeys,
               MAX_MESSAGES_PER_ROOM
             )
+      mergedForMarker = merged
 
       // Compute the newest fetched timestamp for gap marker positioning.
       // When a forward catch-up ends incomplete, this marks where the gap starts.
@@ -2093,32 +2124,43 @@ export const roomStore = createStore<RoomState>()(
         return { mamQueryStates: newStates, roomGaps: newGaps }
       }
 
-      // Persist only locally-persistable messages to IndexedDB
+      // Persist to IndexedDB regardless of active state — this is the durable
+      // history that rehydrates on open (search index too).
       const persistableMessages = newFromMAM.filter(msg => !msg.noLocalStore)
       if (persistableMessages.length > 0) {
         void messageCache.saveRoomMessages(persistableMessages)
         searchIndex.indexMessages(persistableMessages).catch((e) => console.warn('[searchIndex] indexMessages failed:', e))
       }
 
-      // Get the last non-ignored message from merged messages for sidebar preview
+      // Sidebar preview = newest non-ignored across the merged set.
       const lastMessage = (merged.length > 0 ? findLastNonIgnoredMessage(merged, roomJid, room.nickToJidCache) : undefined) ?? room.lastMessage
 
-      // Update room messages (only when we have new messages)
-      const newRooms = new Map(state.rooms)
-      newRooms.set(roomJid, { ...room, messages: merged, lastMessage })
-
-      // Update runtime
-      const newRuntime = new Map(state.roomRuntime)
-      const existingRuntime = newRuntime.get(roomJid)
-      if (existingRuntime) {
-        newRuntime.set(roomJid, { ...existingRuntime, messages: merged })
-      }
-
-      // Update metadata with lastMessage for sidebar
       const newMeta = new Map(state.roomMeta)
       const existingMeta = newMeta.get(roomJid)
       if (existingMeta) {
         newMeta.set(roomJid, { ...existingMeta, lastMessage })
+      }
+
+      // NON-ACTIVE room (background catch-up): the messages are now durable in
+      // IndexedDB and the preview / gap / cursor are updated — but we do NOT
+      // populate the resident array. Only the active room is kept in RAM, so a
+      // reconnect's forward catch-up can't refill a backgrounded room toward the
+      // cap (the switch-mount freeze). It rehydrates from cache on open.
+      if (state.activeRoomJid !== roomJid) {
+        const newRooms = new Map(state.rooms)
+        newRooms.set(roomJid, { ...room, lastMessage })
+        // roomRuntime deliberately untouched.
+        return { rooms: newRooms, roomMeta: newMeta, mamQueryStates: newStates, roomGaps: newGaps }
+      }
+
+      // ACTIVE room: populate the resident array (foreground catch-up / scroll-up).
+      const newRooms = new Map(state.rooms)
+      newRooms.set(roomJid, { ...room, messages: merged, lastMessage })
+
+      const newRuntime = new Map(state.roomRuntime)
+      const existingRuntime = newRuntime.get(roomJid)
+      if (existingRuntime) {
+        newRuntime.set(roomJid, { ...existingRuntime, messages: merged })
       }
 
       return { rooms: newRooms, roomRuntime: newRuntime, roomMeta: newMeta, mamQueryStates: newStates, roomGaps: newGaps }
@@ -2128,7 +2170,7 @@ export const roomStore = createStore<RoomState>()(
     // Now that messages are merged, try to resolve it forward-only.
     const pending = get().roomMeta.get(roomJid)?.pendingRemoteDisplayedStanzaId
     if (pending) {
-      get().applyRemoteDisplayed(roomJid, pending)
+      get().applyRemoteDisplayed(roomJid, pending, mergedForMarker)
     }
   },
 

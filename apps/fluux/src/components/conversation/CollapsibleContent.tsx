@@ -1,7 +1,8 @@
-import { useRef, useEffect, useState, type ReactNode } from 'react'
+import { useRef, useEffect, useState, useCallback, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ChevronDown, ChevronUp } from 'lucide-react'
 import { useExpandedMessagesStore } from '@/stores/expandedMessagesStore'
+import { useRemeasureOnWidthChange } from './messageWidthContext'
 
 /** Maximum height in pixels before content is collapsed */
 const MAX_COLLAPSED_HEIGHT = 500
@@ -17,6 +18,12 @@ interface CollapsibleContentProps {
   isSelected?: boolean
   /** Whether the message is currently hovered (affects gradient color) */
   isHovered?: boolean
+  /**
+   * Whether the content contains media (image/video/audio/link preview) whose
+   * async load changes height. Only such messages keep a per-message
+   * ResizeObserver; pure text re-measures via the shared width signal on resize.
+   */
+  hasMedia?: boolean
 }
 
 /**
@@ -35,6 +42,7 @@ export function CollapsibleContent({
   className = '',
   isSelected = false,
   isHovered = false,
+  hasMedia = false,
 }: CollapsibleContentProps) {
   const { t } = useTranslation()
   const contentRef = useRef<HTMLDivElement>(null)
@@ -42,26 +50,30 @@ export function CollapsibleContent({
   const isExpanded = useExpandedMessagesStore((state) => state.isExpanded(messageId))
   const toggle = useExpandedMessagesStore((state) => state.toggle)
 
-  // Measure content height to determine if collapsing is needed
-  useEffect(() => {
-    const checkHeight = () => {
-      if (contentRef.current) {
-        const contentHeight = contentRef.current.scrollHeight
-        setNeedsCollapsing(contentHeight > MAX_COLLAPSED_HEIGHT)
-      }
-    }
-
-    // Check immediately
-    checkHeight()
-
-    // Also check after images/media load (they can change height)
-    const observer = new ResizeObserver(checkHeight)
+  // Re-evaluate whether the content needs collapsing. Reads layout
+  // (scrollHeight) so it runs after render/paint. Stable identity (live ref).
+  const measure = useCallback(() => {
     if (contentRef.current) {
-      observer.observe(contentRef.current)
+      setNeedsCollapsing(contentRef.current.scrollHeight > MAX_COLLAPSED_HEIGHT)
     }
+  }, [])
 
+  // Measure on mount and whenever the content itself changes. Media whose height
+  // changes asynchronously (image/video load) can't be caught by the shared
+  // width signal, so media messages — and only those — keep their own observer.
+  // Pure-text messages (the vast majority) get none, avoiding a
+  // ResizeObserver-per-message storm on window resize in large rooms.
+  useEffect(() => {
+    measure()
+    if (!hasMedia || !contentRef.current) return
+    const observer = new ResizeObserver(measure)
+    observer.observe(contentRef.current)
     return () => observer.disconnect()
-  }, [children])
+  }, [children, hasMedia, measure])
+
+  // Re-measure on resize (text rewrap) via the list's single shared, debounced
+  // width observer — no per-message resize observer.
+  useRemeasureOnWidthChange(measure)
 
   // If content doesn't need collapsing, render normally
   if (!needsCollapsing) {

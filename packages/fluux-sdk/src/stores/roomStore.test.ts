@@ -113,6 +113,46 @@ describe('roomStore', () => {
     vi.clearAllMocks()
   })
 
+  describe('message eviction on deactivation (memory windowing)', () => {
+    it('evicts the previous room messages from RAM when switching away, keeping meta', () => {
+      const roomA = 'a@conference.example.com'
+      const roomB = 'b@conference.example.com'
+      const msgs = [
+        createMessage('m1', roomA, 'nick', 'hello'),
+        createMessage('m2', roomA, 'nick', 'world'),
+      ]
+      roomStore.getState().addRoom(createRoom(roomA, { joined: true, messages: msgs, lastMessage: msgs[1] }))
+      roomStore.getState().addRoom(createRoom(roomB, { joined: true }))
+      roomStore.setState({ activeRoomJid: roomA })
+
+      // Sanity: A is resident before switching away.
+      expect(roomStore.getState().roomRuntime.get(roomA)?.messages).toHaveLength(2)
+
+      roomStore.getState().setActiveRoom(roomB)
+
+      // A's messages are evicted from both mirrors (rooms + roomRuntime)...
+      expect(roomStore.getState().roomRuntime.get(roomA)?.messages).toEqual([])
+      expect(roomStore.getState().rooms.get(roomA)?.messages).toEqual([])
+      // ...but its sidebar preview / identity are preserved.
+      expect(roomStore.getState().rooms.get(roomA)?.lastMessage).toEqual(msgs[1])
+      expect(roomStore.getState().rooms.get(roomA)?.joined).toBe(true)
+      expect(roomStore.getState().activeRoomJid).toBe(roomB)
+    })
+
+    it('keeps the newly-activated room messages resident', () => {
+      const roomA = 'a@conference.example.com'
+      const msgs = [createMessage('m1', roomA, 'nick', 'hello')]
+      roomStore.getState().addRoom(createRoom(roomA, { joined: true, messages: msgs }))
+      roomStore.setState({ activeRoomJid: null })
+
+      // Activating A (no previous active room) must not evict A.
+      roomStore.getState().setActiveRoom(roomA)
+
+      expect(roomStore.getState().roomRuntime.get(roomA)?.messages).toHaveLength(1)
+      expect(roomStore.getState().activeRoomJid).toBe(roomA)
+    })
+  })
+
   describe('addRoom', () => {
     it('should add a room to the store', () => {
       const room = createRoom('test@conference.example.com')
@@ -2773,6 +2813,31 @@ describe('roomStore', () => {
 
     beforeEach(() => {
       roomStore.getState().addRoom(createRoom(roomJid, { joined: true }))
+      // These tests exercise the foreground merge-into-RAM path (scroll-up /
+      // active-room catch-up), so the room must be the active one. Background
+      // catch-up of a NON-active room (IDB + preview, no RAM) is covered below.
+      roomStore.setState({ activeRoomJid: roomJid })
+    })
+
+    it('background catch-up of a NON-active room persists to IndexedDB + preview but not RAM', () => {
+      // roomJid is NOT the active room here (background catch-up of another room).
+      roomStore.setState({ activeRoomJid: 'other@conference.example.com' })
+      vi.mocked(messageCache.saveRoomMessages).mockClear()
+
+      const mam: RoomMessage[] = [
+        { type: 'groupchat', id: 'bg-1', roomJid, from: `${roomJid}/bob`, nick: 'bob', body: 'caught up 1', timestamp: new Date('2024-02-01T10:00:00Z'), isOutgoing: false },
+        { type: 'groupchat', id: 'bg-2', roomJid, from: `${roomJid}/bob`, nick: 'bob', body: 'caught up 2', timestamp: new Date('2024-02-01T10:01:00Z'), isOutgoing: false },
+      ]
+
+      roomStore.getState().mergeRoomMAMMessages(roomJid, mam, {}, true, 'forward')
+
+      // Persisted to IndexedDB (durable history)...
+      expect(messageCache.saveRoomMessages).toHaveBeenCalled()
+      // ...sidebar preview updated...
+      expect(roomStore.getState().rooms.get(roomJid)?.lastMessage?.id).toBe('bg-2')
+      // ...but the resident array is NOT populated (only the active room is in RAM).
+      expect(roomStore.getState().rooms.get(roomJid)?.messages).toEqual([])
+      expect(roomStore.getState().roomRuntime.get(roomJid)?.messages).toEqual([])
     })
 
     it('should merge older MAM messages at the start with direction backward', () => {

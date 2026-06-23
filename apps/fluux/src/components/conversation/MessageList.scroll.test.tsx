@@ -63,11 +63,15 @@ class MockResizeObserver {
     this.targets.push(target)
   }
 
-  // Find the live observer watching a given element (don't rely on creation
-  // order — the content observer now exists alongside the container one).
+  // Find the live observer watching a given element. The scroll container is
+  // watched by TWO observers: MessageWidthProvider's width observer (created
+  // first, as a child effect) and useMessageListScroll's scroll-correction
+  // observer (created last, in the parent effect). These tests target the
+  // correction observer, so return the LAST match. (The content observer watches
+  // the inner wrapper, not the container, so it never matches here.)
   static observing(target: Element | null): MockResizeObserver | undefined {
     if (!target) return undefined
-    return MockResizeObserver.instances.find((inst) => inst.targets.includes(target))
+    return [...MockResizeObserver.instances].reverse().find((inst) => inst.targets.includes(target))
   }
   unobserve() {}
   disconnect() {

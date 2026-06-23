@@ -10,6 +10,7 @@
  * - Right-click context menu: private message, copy JID, ignore, user info
  */
 import { useState, useRef, useMemo, memo } from 'react'
+import { useVirtualizer } from '@tanstack/react-virtual'
 import { useTranslation } from 'react-i18next'
 import type { Room, RoomOccupant, ContactIdentity, RoomAffiliation, RoomRole } from '@fluux/sdk'
 import { getPresenceFromShow, getBareJid, generateConsistentColorHexSync, canKick, canBan, getAvailableAffiliations, getAvailableRoles } from '@fluux/sdk'
@@ -484,6 +485,178 @@ export function OccupantPanel({
     }
   }
 
+  // Discriminated union of every renderable row across the three sections. Defined here so
+  // the offline/ignored variants can borrow the element types of the memos above.
+  type PanelItem =
+    | { type: 'role-header'; key: string; role: string; count: number }
+    | { type: 'occupant'; key: string; group: GroupedOccupant }
+    | { type: 'offline-header'; key: string; count: number }
+    | { type: 'offline'; key: string; member: (typeof offlineMembers)[number] }
+    | { type: 'ignored-header'; key: string; count: number }
+    | { type: 'ignored'; key: string; ignoredUser: (typeof hiddenIgnoredUsers)[number] }
+
+  // Flatten the three sections (online-by-role, offline members, hidden-ignored) into a
+  // single discriminated-union list so the whole panel can be windowed by one virtualizer.
+  // Memoized on the three section sources so unrelated re-renders don't rebuild it.
+  const items = useMemo<PanelItem[]>(() => {
+    const list: PanelItem[] = []
+    for (const { role, occupants } of groupedOccupants) {
+      list.push({ type: 'role-header', key: `role:${role}`, role, count: occupants.length })
+      for (const group of occupants) {
+        list.push({ type: 'occupant', key: group.bareJid || group.primaryNick, group })
+      }
+    }
+    if (offlineMembers.length > 0) {
+      list.push({ type: 'offline-header', key: 'offline-header', count: offlineMembers.length })
+      for (const member of offlineMembers) {
+        list.push({ type: 'offline', key: `offline:${member.jid}`, member })
+      }
+    }
+    if (hiddenIgnoredUsers.length > 0) {
+      list.push({ type: 'ignored-header', key: 'ignored-header', count: hiddenIgnoredUsers.length })
+      for (const ignoredUser of hiddenIgnoredUsers) {
+        list.push({ type: 'ignored', key: `ignored:${ignoredUser.identifier}`, ignoredUser })
+      }
+    }
+    return list
+  }, [groupedOccupants, offlineMembers, hiddenIgnoredUsers])
+
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const virtualizer = useVirtualizer({
+    count: items.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => 44,
+    overscan: 12,
+  })
+
+  // Render one flattened item. NOT memoized — it must close over the current handlers,
+  // props and translations so the rows behave exactly as the un-virtualized version did.
+  const renderItem = (item: PanelItem): React.ReactNode => {
+    switch (item.type) {
+      case 'role-header':
+        return (
+          <div className="pt-2 px-4 py-1 flex items-center gap-2 text-xs font-semibold text-fluux-muted uppercase">
+            {getRoleIcon(item.role)}
+            <span>{getRoleLabel(item.role)}</span>
+            <span className="text-fluux-muted/60">— {item.count}</span>
+          </div>
+        )
+      case 'occupant':
+        return (
+          <OccupantRow
+            group={item.group}
+            roomJid={room.jid}
+            roomNickname={room.nickname}
+            ownAvatar={ownAvatar}
+            forceOffline={forceOffline}
+            contactsByJid={contactsByJid}
+            ignored={isOccupantIgnored(item.group)}
+            onContextMenu={rowHandlers.onContextMenu}
+            onTouchStart={rowHandlers.onTouchStart}
+            onTouchEnd={rowHandlers.onTouchEnd}
+            onTouchMove={rowHandlers.onTouchMove}
+          />
+        )
+      case 'offline-header':
+        return (
+          <div className="pt-2 px-4 py-1 flex items-center gap-2 text-xs font-semibold text-fluux-muted uppercase">
+            <span>{t('rooms.offlineMembers')}</span>
+            <span className="text-fluux-muted/60">— {item.count}</span>
+          </div>
+        )
+      case 'offline': {
+        const member = item.member
+        const contact = contactsByJid.get(member.jid)
+        const displayName = member.nick || contact?.name || member.jid
+        return (
+          <Tooltip
+            content={`${t(`rooms.${member.affiliation}`)} · ${member.jid}`}
+            position="left"
+            className="block"
+          >
+            <div className="px-4 py-1.5 flex items-center gap-2 hover:bg-fluux-hover/50 cursor-default opacity-60">
+              <Avatar
+                identifier={displayName}
+                name={displayName}
+                avatarUrl={contact?.avatar}
+                size="sm"
+                presence="offline"
+                presenceBorderColor="border-fluux-sidebar"
+              />
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="truncate text-sm text-fluux-text">
+                    {displayName}
+                  </span>
+                  {getAffiliationBadge(member.affiliation)}
+                </div>
+                <p className="text-xs text-fluux-muted truncate">{member.jid}</p>
+              </div>
+            </div>
+          </Tooltip>
+        )
+      }
+      case 'ignored-header':
+        return (
+          <div className="pt-2 px-4 py-1 flex items-center gap-2 text-xs font-semibold text-fluux-muted uppercase">
+            <EyeOff className="size-3" />
+            <span>{t('rooms.ignoredUsers')}</span>
+            <span className="text-fluux-muted/60">— {item.count}</span>
+          </div>
+        )
+      case 'ignored': {
+        const ignoredUser = item.ignoredUser
+        const displayName = ignoredUser.displayName
+        // Determine if identifier is an occupantId (not a JID or nick)
+        const isOccupantId = ignoredUser.identifier !== ignoredUser.jid && ignoredUser.identifier !== displayName
+        const syntheticGroup: GroupedOccupant = {
+          bareJid: ignoredUser.jid,
+          connections: [{
+            nick: displayName,
+            affiliation: 'none',
+            role: 'none',
+            occupantId: isOccupantId ? ignoredUser.identifier : undefined,
+          } as RoomOccupant],
+          primaryNick: displayName,
+        }
+        return (
+          <Tooltip
+            content={ignoredUser.jid || ignoredUser.displayName}
+            position="left"
+            className="block"
+          >
+            <div
+              onContextMenu={(e) => handleOccupantContextMenu(e, syntheticGroup)}
+              onTouchStart={(e) => handleOccupantTouchStart(e, syntheticGroup)}
+              onTouchEnd={menu.handleTouchEnd}
+              onTouchMove={menu.handleTouchEnd}
+              className="px-4 py-1.5 flex items-center gap-2 hover:bg-fluux-hover/50 cursor-default opacity-40"
+            >
+              <Avatar
+                identifier={displayName}
+                name={displayName}
+                size="sm"
+                presence="offline"
+                presenceBorderColor="border-fluux-sidebar"
+              />
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="truncate text-sm text-fluux-text">
+                    {displayName}
+                  </span>
+                  <EyeOff className="size-3 text-fluux-muted" />
+                </div>
+                {ignoredUser.jid && (
+                  <p className="text-xs text-fluux-muted truncate">{ignoredUser.jid}</p>
+                )}
+              </div>
+            </div>
+          </Tooltip>
+        )
+      }
+    }
+  }
+
   return (
     <div className={`${fullScreen ? 'w-full h-full' : 'w-64 border-s border-fluux-bg'} flex flex-col bg-fluux-sidebar`}>
       {/* Panel header */}
@@ -514,144 +687,31 @@ export function OccupantPanel({
         )}
       </div>
 
-      {/* Occupant list */}
-      <div className="flex-1 overflow-y-auto">
-        {groupedOccupants.map(({ role, occupants }) => (
-          <div key={role} className="py-2">
-            {/* Role header */}
-            <div className="px-4 py-1 flex items-center gap-2 text-xs font-semibold text-fluux-muted uppercase">
-              {getRoleIcon(role)}
-              <span>{getRoleLabel(role)}</span>
-              <span className="text-fluux-muted/60">— {occupants.length}</span>
-            </div>
-
-            {/* Grouped occupants in this role — each row is a memoized OccupantRow so a
-                presence/occupant event re-renders ONLY the changed row, not the whole list. */}
-            {occupants.map((group) => (
-              <OccupantRow
-                key={group.bareJid || group.primaryNick}
-                group={group}
-                roomJid={room.jid}
-                roomNickname={room.nickname}
-                ownAvatar={ownAvatar}
-                forceOffline={forceOffline}
-                contactsByJid={contactsByJid}
-                ignored={isOccupantIgnored(group)}
-                onContextMenu={rowHandlers.onContextMenu}
-                onTouchStart={rowHandlers.onTouchStart}
-                onTouchEnd={rowHandlers.onTouchEnd}
-                onTouchMove={rowHandlers.onTouchMove}
-              />
-            ))}
-          </div>
-        ))}
-
-        {/* Offline affiliated members */}
-        {offlineMembers.length > 0 && (
-          <div className="py-2">
-            <div className="px-4 py-1 flex items-center gap-2 text-xs font-semibold text-fluux-muted uppercase">
-              <span>{t('rooms.offlineMembers')}</span>
-              <span className="text-fluux-muted/60">— {offlineMembers.length}</span>
-            </div>
-            {offlineMembers.map((member) => {
-              const contact = contactsByJid.get(member.jid)
-              const displayName = member.nick || contact?.name || member.jid
-              return (
-                <Tooltip
-                  key={member.jid}
-                  content={`${t(`rooms.${member.affiliation}`)} · ${member.jid}`}
-                  position="left"
-                  className="block"
-                >
-                  <div className="px-4 py-1.5 flex items-center gap-2 hover:bg-fluux-hover/50 cursor-default opacity-60">
-                    <Avatar
-                      identifier={displayName}
-                      name={displayName}
-                      avatarUrl={contact?.avatar}
-                      size="sm"
-                      presence="offline"
-                      presenceBorderColor="border-fluux-sidebar"
-                    />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <span className="truncate text-sm text-fluux-text">
-                          {displayName}
-                        </span>
-                        {getAffiliationBadge(member.affiliation)}
-                      </div>
-                      <p className="text-xs text-fluux-muted truncate">{member.jid}</p>
-                    </div>
-                  </div>
-                </Tooltip>
-              )
-            })}
-          </div>
-        )}
-
-        {/* Ignored users not currently in room */}
-        {hiddenIgnoredUsers.length > 0 && (
-          <div className="py-2">
-            <div className="px-4 py-1 flex items-center gap-2 text-xs font-semibold text-fluux-muted uppercase">
-              <EyeOff className="size-3" />
-              <span>{t('rooms.ignoredUsers')}</span>
-              <span className="text-fluux-muted/60">— {hiddenIgnoredUsers.length}</span>
-            </div>
-            {hiddenIgnoredUsers.map((ignoredUser) => {
-              const displayName = ignoredUser.displayName
-              // Determine if identifier is an occupantId (not a JID or nick)
-              const isOccupantId = ignoredUser.identifier !== ignoredUser.jid && ignoredUser.identifier !== displayName
-              const syntheticGroup: GroupedOccupant = {
-                bareJid: ignoredUser.jid,
-                connections: [{
-                  nick: displayName,
-                  affiliation: 'none',
-                  role: 'none',
-                  occupantId: isOccupantId ? ignoredUser.identifier : undefined,
-                } as RoomOccupant],
-                primaryNick: displayName,
-              }
-              return (
-                <Tooltip
-                  key={ignoredUser.identifier}
-                  content={ignoredUser.jid || ignoredUser.displayName}
-                  position="left"
-                  className="block"
-                >
-                  <div
-                    onContextMenu={(e) => handleOccupantContextMenu(e, syntheticGroup)}
-                    onTouchStart={(e) => handleOccupantTouchStart(e, syntheticGroup)}
-                    onTouchEnd={menu.handleTouchEnd}
-                    onTouchMove={menu.handleTouchEnd}
-                    className="px-4 py-1.5 flex items-center gap-2 hover:bg-fluux-hover/50 cursor-default opacity-40"
-                  >
-                    <Avatar
-                      identifier={displayName}
-                      name={displayName}
-                      size="sm"
-                      presence="offline"
-                      presenceBorderColor="border-fluux-sidebar"
-                    />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <span className="truncate text-sm text-fluux-text">
-                          {displayName}
-                        </span>
-                        <EyeOff className="size-3 text-fluux-muted" />
-                      </div>
-                      {ignoredUser.jid && (
-                        <p className="text-xs text-fluux-muted truncate">{ignoredUser.jid}</p>
-                      )}
-                    </div>
-                  </div>
-                </Tooltip>
-              )
-            })}
-          </div>
-        )}
-
-        {room.occupants.size === 0 && offlineMembers.length === 0 && (
+      {/* Occupant list — windowed: all three sections are flattened into `items` and
+          only the visible slice is mounted (see the `items` memo + virtualizer above). */}
+      <div ref={scrollRef} className="flex-1 overflow-y-auto">
+        {items.length === 0 ? (
           <div className="px-4 py-8 text-center text-fluux-muted text-sm">
             {t('rooms.noMembersInRoom')}
+          </div>
+        ) : (
+          <div style={{ height: virtualizer.getTotalSize(), position: 'relative', width: '100%' }}>
+            {virtualizer.getVirtualItems().map((virtualRow) => (
+              <div
+                key={items[virtualRow.index].key}
+                data-index={virtualRow.index}
+                ref={virtualizer.measureElement}
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  width: '100%',
+                  transform: `translateY(${virtualRow.start}px)`,
+                }}
+              >
+                {renderItem(items[virtualRow.index])}
+              </div>
+            ))}
           </div>
         )}
       </div>

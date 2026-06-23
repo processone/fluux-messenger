@@ -23,13 +23,16 @@ vi.mock('react-i18next', () => ({
   }),
 }))
 
-// Mock ResizeObserver
+// Mock ResizeObserver, tracking how many times observe() is called so tests can
+// assert the per-message observer is only attached for content that can grow.
+let observeCount = 0
 class MockResizeObserver {
   callback: ResizeObserverCallback
   constructor(callback: ResizeObserverCallback) {
     this.callback = callback
   }
   observe() {
+    observeCount++
     // Trigger callback immediately to simulate measurement
     this.callback([], this)
   }
@@ -43,6 +46,35 @@ describe('CollapsibleContent', () => {
   beforeEach(() => {
     // Reset store state before each test
     useExpandedMessagesStore.getState().clear()
+    observeCount = 0
+    // Deterministic baseline: short (0px). Tests that need tall content override
+    // this within the test; this reset prevents an override leaking across tests.
+    Object.defineProperty(HTMLElement.prototype, 'scrollHeight', { configurable: true, get: () => 0 })
+  })
+
+  it('does NOT attach a per-message ResizeObserver for text content (no media)', () => {
+    // Text height only changes on resize, handled by the shared width signal —
+    // not a per-message observer. True even for tall text. (beforeEach resets.)
+    Object.defineProperty(HTMLElement.prototype, 'scrollHeight', { configurable: true, get: () => 800 })
+
+    render(
+      <CollapsibleContent messageId="msg-1">
+        <p>Tall text content</p>
+      </CollapsibleContent>
+    )
+    // No per-message observer even though it's tall...
+    expect(observeCount).toBe(0)
+    // ...but it still collapses (measured on mount).
+    expect(screen.getByText('Show more')).toBeInTheDocument()
+  })
+
+  it('attaches a per-message ResizeObserver only when hasMedia (async media height)', () => {
+    render(
+      <CollapsibleContent messageId="msg-1" hasMedia>
+        <p>Message with an attachment</p>
+      </CollapsibleContent>
+    )
+    expect(observeCount).toBeGreaterThan(0)
   })
 
   it('should render children normally when content is short', () => {

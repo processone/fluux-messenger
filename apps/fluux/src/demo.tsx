@@ -56,7 +56,26 @@ demoClient.setDiscoverableRooms(getDiscoverableRooms())
 const stressScenario = parseStressParam(params)
 if (stressScenario) {
   // Defer so the first paint happens before the load starts.
-  setTimeout(() => demoClient.runStressScenario(stressScenario), 500)
+  setTimeout(() => {
+    demoClient.runStressScenario(stressScenario)
+    if (stressScenario.activate) {
+      // After seeding finishes, navigate into the first seeded room to surface the
+      // switch-mount cost. Room JIDs are `stress-<i>@conference.<domain>` (see
+      // buildStressEvents); conferenceService = `conference.${self.domain}`.
+      const roomJid = `stress-0@conference.${demoData.self.domain}`
+      const target = '#/rooms/' + encodeURIComponent(roomJid)
+      const seedMs = (stressScenario.messagesPerRoom ?? 0) * (stressScenario.msgStepMs ?? 10) + 300
+      // Re-assert the hash for a few seconds: the app runs its own default-route
+      // navigation on startup which would otherwise clobber a single early set.
+      setTimeout(() => {
+        let tries = 0
+        const id = setInterval(() => {
+          if (window.location.hash !== target) window.location.hash = target
+          if (++tries >= 12) clearInterval(id)
+        }, 250)
+      }, seedMs)
+    }
+  }, 500)
 }
 
 if (params.get('perf') === '1') {
