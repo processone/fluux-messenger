@@ -40,7 +40,21 @@
         "hidePassword": "Folaigh pasfhocal",
         "madeBy": "Déanta ag",
         "ejabberdCreator": ", an comhlacht a chruthaigh",
-        "poweredBy": "Cumhachtaithe ag"
+        "poweredBy": "Cumhachtaithe ag",
+        "errors": {
+            "tlsCertTitle": "Níorbh fhéidir deimhniú slándála an fhreastalaí a fhíorú",
+            "tlsOtherTitle": "Theip ar an gceangal slán",
+            "tlsOtherBody": "Níorbh fhéidir an ceangal criptithe leis an bhfreastalaí a bhunú. Seans nach dtacaítear le cumraíocht TLS an fhreastalaí. Seiceáil seoladh an fhreastalaí nó déan teagmháil le riarachán an fhreastalaí.",
+            "unreachableTitle": "Níorbh fhéidir an freastalaí a bhaint amach",
+            "timeoutBody": "Níor fhreagair an freastalaí in am. Seiceáil do líonra agus seoladh an fhreastalaí, ansin bain triail as arís.",
+            "refusedBody": "Dhiúltaigh an freastalaí don cheangal. Seiceáil seoladh agus calafort an fhreastalaí, ansin bain triail as arís.",
+            "cert": {
+                "expired": "Tá deimhniú an fhreastalaí imithe in éag. Déan teagmháil le riarachán an fhreastalaí. Má tá an seoladh mícheart, cuir an réimse freastalaí in eagar thíos.",
+                "nameMismatch": "Eisíodh deimhniú an fhreastalaí d'ainm óstaigh difriúil. Seiceáil seoladh an fhreastalaí thíos nó déan teagmháil le riarachán an fhreastalaí.",
+                "untrusted": "Tá deimhniú an fhreastalaí féin-shínithe nó eisíodh é ag údarás anaithnid, mar sin ní féidir muinín a chur ann. Seiceáil seoladh an fhreastalaí nó déan teagmháil le riarachán an fhreastalaí.",
+                "generic": "Níorbh fhéidir deimhniú slándála an fhreastalaí a fhíorú. Seiceáil seoladh an fhreastalaí thíos nó déan teagmháil le riarachán an fhreastalaí."
+            }
+        }
     },
     "sidebar": {
         "messages": "Teachtaireachtaí",
@@ -201,6 +215,16 @@
         "invalidRoomAddress": "Seoladh seomra neamhbhailí (ba cheart seomra@conference.freastalaí)",
         "joinRoomHint": "Cuir isteach seoladh iomlán an tseomra le dul isteach i seomra comhrá poiblí.",
         "failedToJoinRoom": "Theip ar dhul isteach sa seomra",
+        "passwordProtected": "Tá an seomra seo cosanta le pasfhocal",
+        "roomPassword": "Pasfhocal",
+        "passwordRequired": "Tá an seomra seo cosanta le pasfhocal. Cuir isteach an pasfhocal chun dul isteach.",
+        "incorrectPassword": "Pasfhocal mícheart.",
+        "nicknameInUse": "Tá an leasainm sin in úsáid cheana sa seomra seo.",
+        "membersOnly": "Is do chomhaltaí amháin an seomra seo. Ní mór duit bheith i do chomhalta chun dul isteach.",
+        "bannedFromRoom": "Cuireadh cosc ort sa seomra seo.",
+        "roomFull": "Tá an seomra seo lán.",
+        "registeredNicknameRequired": "Éilíonn an seomra seo do leasainm cláraithe.",
+        "roomNotFound": "Seomra gan aimsiú.",
         "nonAnonWarningTitle": "Bí páirteach i gcainéal neamhanaithnid?",
         "nonAnonWarningMessage": "Is féidir le gach duine in “{{room}}” do sheoladh fíor (d’aitheantas XMPP/Jabber) a fheiceáil. Bí páirteach mar sin féin?",
         "nonAnonWarningConfirm": "Bí páirteach mar sin féin",
@@ -209,6 +233,7 @@
         "notJoinedNoHistory": "Níl tú sa seomra seo",
         "joinToLoadHistory": "Téigh isteach le teachtaireachtaí a luchtú",
         "notificationSettings": "Socruithe fógraí",
+        "roomActions": "Gníomhartha seomra",
         "mentionsOnly": "Tagairtí amháin",
         "defaultBehavior": "Iompraíocht réamhshocraithe",
         "allMessages": "Gach teachtaireacht",
@@ -433,6 +458,7 @@
         "attachment": "Ceangaltán",
         "removeAttachment": "Bain ceangaltán",
         "reply": "Freagair",
+        "copyMessage": "Cóipeáil téacs",
         "replyQuoteHiddenEncrypted": "Athfhriotal i bhfolach: bhí an bunteachtaireacht criptithe",
         "forwardMessage": "Seol ar aghaidh (ag teacht go luath)",
         "moreReactions": "Níos mó frithghníomhartha",
@@ -565,7 +591,12 @@
             "acceptedWithoutVerifying": "Glacadh leis an eochair nua. Níl an piara fíoraithe",
             "acceptFailed": "Níorbh fhéidir glacadh leis an eochair nua. Bain triail eile as"
         },
-        "offlinePlaceholder": "As líne. Seolfar teachtaireachtaí nuair a athnascfar"
+        "offlinePlaceholder": "As líne. Seolfar teachtaireachtaí nuair a athnascfar",
+        "loadImage": "Luchtaigh íomhá",
+        "loadVideo": "Luchtaigh físeán",
+        "loadAudio": "Luchtaigh fuaim",
+        "loadFilePreview": "Luchtaigh réamhamharc",
+        "showLinkImage": "Taispeáin íomhá"
     },
     "dates": {
         "today": "Inniu",
@@ -581,7 +612,8 @@
             "updates": "Nuashonruithe",
             "blocked": "Úsáideoirí Coiscthe",
             "storage": "Stóráil",
-            "encryption": "Criptiúchán"
+            "encryption": "Criptiúchán",
+            "privacy": "Príobháideacht"
         },
         "blocked": {
             "title": "Úsáideoirí Coiscthe",
@@ -702,6 +734,7 @@
             "pepUnsupportedBanner": "Ní thacaíonn do fhreastalaí le foilsiú imeachtaí pearsanta (PEP, XEP-0163), atá de dhíth ar chriptiú OpenPGP (XEP-0373). Ní féidir criptiú ó cheann go ceann a chumasú ar an gcuntas seo. Déan teagmháil le riarthóir do fhreastalaí.",
             "statusPepUnsupported": "Ní féidir an criptiú a chumasú: ní thacaíonn an freastalaí le PEP (XEP-0163), atá de dhíth ar OpenPGP (XEP-0373).",
             "statusRegistrationFailed": "Theip ar shocrú an chriptithe ({{code}}). Féach an consól forbartha le haghaidh sonraí.",
+            "notProtectedAtRest": "Níl aon fáinne eochracha córais ar fáil anseo, mar sin stóráiltear pasfhrása d'eochrach gan chriptiú i gcomhad ar an diosca. Níl an eochair cosanta agus í ina staid scíthe. D'fhéadfadh aon duine atá in ann comhaid an ghléis seo a léamh í a úsáid.",
             "backupLabel": "Cúltaca eochrach",
             "backupDescription": "Foilsigh cóip chriptithe d'eochair ar do fhreastalaí XMPP. Faoi chosaint ag pasfhrása nach bhfuil ach agatsa, agus inléite ag do chuntas amháin (access_model: whitelist). Cuireann sé ar do chumas an stair chriptithe a léamh ar ghléas nua tar éis logáil isteach agus an pasfhrása a iontráil.",
             "backupAction": "Sábháil chuig freastalaí",
@@ -776,6 +809,7 @@
             "identityChoice": {
                 "title": "Tá féiniúlacht OpenPGP ann cheana don chuntas seo",
                 "body": "Níl eochair áitiúil ag an mbrabhsálaí seo, ach tá an freastalaí ag fógairt eochair don chuntas seo cheana. Bhainfeadh giniúint eochrach nua anseo do fhéiniúlacht ina dhá leath go ciúin: ní bheadh comhfhreagraithe a chriptítheann chuig an eochair atá ann in ann teachtaireachtaí a sheachadadh. Roghnaigh conas é sin a réiteach:",
+                "bodyKeyUnrecoverable": "Ní féidir eochair OpenPGP an ghléis seo a dhíghlasáil a thuilleadh, mar sin ní féidir leis an gcriptiú tosú. Níl tionchar ar bith ar an aitheantas foilsithe agat. Aisghabh é trí do chúltaca freastalaí a athchóiriú nó trí chomhad eochrach a iompórtáil, nó cuir ina ionad é mura féidir leat. Roghnaigh conas is mian leat é seo a réiteach:",
                 "publishedFingerprintLabel": "Méarlorg foilsithe",
                 "restoreFromServerTitle": "Athchóirigh ó chúltaca freastalaí",
                 "restoreFromServerBody": "Úsáid an pasfhrása cúltaca a shocraigh tú agus tú ag cumasú criptithe ar ghléas eile. Faightear an eochair phríobháideach chomhfhreagrach ón bhfreastalaí agus díghlasáiltear go háitiúil í.",
@@ -802,19 +836,6 @@
             "importFileSuccess": "Iompórtáladh an eochair ó chomhad",
             "importFileFailed": "Níorbh fhéidir an comhad roghnaithe a léamh",
             "unsupportedKeyAlgorithm": "Úsáideann an eochair iompórtáilte algartam nach dtacaítear leis a thuilleadh (m.sh. DSA nó ElGamal). Úsáid eochair OpenPGP nua-aimseartha (Curve25519, Ed25519 nó RSA ar a laghad 2048 ngiotán).",
-            "externalExportAction": "Easpórtáil le haghaidh uirlis sheachtrach OpenPGP",
-            "externalExportDialogTitle": "Easpórtáil eochair phríobháideach le haghaidh uirlis sheachtrach OpenPGP",
-            "externalExportDialogBody": "Cruthaíonn sé comhad caighdeánach eochrach príobháidí OpenPGP (PRIVATE KEY BLOCK) is féidir leat a iompórtáil isteach in gpg, OpenKeychain, Kleopatra agus uirlisí eile.",
-            "externalExportProtectedLabel": "Cosanta le frása pasfhocail",
-            "externalExportProtectedDescription": "Molta. Roghnaigh frása pasfhocail; criptítear an comhad easpórtáilte agus iarrfaidh uirlisí seachtracha é le linn iompórtála.",
-            "externalExportUnprotectedLabel": "Gan criptiú",
-            "externalExportUnprotectedDescription": "Tá d'eochair phríobháideach sa chomhad easpórtáilte i ngnáth-théacs. Úsáid í amháin má dhiúltaíonn an uirlis sprice d'eochracha atá cosanta le frása pasfhocail.",
-            "externalExportUnprotectedWarning": "Gan frása pasfhocail, is féidir le duine ar bith a bhfuil rochtain aige ar an gcomhad easpórtáilte tú a phearsanú agus do theachtaireachtaí roimhe seo agus amach anseo a dhíchriptiú. Scrios an comhad chomh luath agus a bheidh sé iompórtáilte agat.",
-            "externalExportUnprotectedAcknowledgment": "Tuigim na rioscaí agus ba mhaith liom m'eochair phríobháideach a easpórtáil gan chriptiú.",
-            "externalExportPassphraseLabel": "Frása pasfhocail",
-            "externalExportConfirmPassphraseLabel": "Deimhnigh an frása pasfhocail",
-            "externalExportPassphraseMismatch": "Ní mheaitseálann na frásaí pasfhocail.",
-            "externalExportSuccess": "Eochair phríobháideach easpórtáilte chuig comhad",
             "unlockDialogTitle": "Díghlasáil criptiú céim ar chéim",
             "unlockDialogBody": "Cuir isteach do phasfhrása chun do eochair a dhíchriptiú don seisiún seo.",
             "unlockDialogSetupTitle": "Cumraigh criptiú céim ar chéim",
@@ -826,7 +847,16 @@
             "unlockPassphraseTooShort": "Caithfidh an pasfhrása a bheith ar a laghad 8 gcarachtar",
             "lockedBannerBody": "Tá d'eochair criptiúcháin glasáilte. Cuir isteach do phasfhrása chun criptiú a chumasú don seisiún seo.",
             "rotateNotSupportedWeb": "Níl rothlú eochrach ar fáil ar an ngréasán. Úsáid an aip deisce."
-        }
+        },
+        "mediaAutoDownload": "Íoslódáil uathoibríoch meán",
+        "mediaAutoDownloadDescription": "Roghnaigh cathain a luchtaítear íomhánna, físeáin agus comhaid go huathoibríoch.",
+        "mediaAutoDownloadAlways": "I gcónaí",
+        "mediaAutoDownloadAlwaysDescription": "Luchtaigh meán go huathoibríoch i ngach comhrá.",
+        "mediaAutoDownloadPrivateOnly": "Príobháideach amháin",
+        "mediaAutoDownloadPrivateOnlyDescription": "Luchtaigh go huathoibríoch i dteachtaireachtaí díreacha agus seomraí príobháideacha. I gcainéil phoiblí, buail chun luchtú.",
+        "mediaAutoDownloadNever": "Riamh",
+        "mediaAutoDownloadNeverDescription": "Ná luchtaigh meán go huathoibríoch choíche. Buail chun luchtú in aon chomhrá.",
+        "mediaAutoDownloadStrangerNote": "Meán ó dhaoine nach bhfuil i do chonarthaí éilíonn buille i gcónaí chun luchtú, cibé rud a roghnaíonn tú anseo."
     },
     "update": {
         "title": "Nuashonrú ar Fáil",
@@ -1036,6 +1066,7 @@
             "description": "Níl pribhléidí riaracháin agat ar an bhfreastalaí seo. Déan teagmháil le riarthóir an fhreastalaí le haghaidh rochtana."
         },
         "selectCommand": "Roghnaigh ordú ón mbarra taoibh",
+        "openSections": "Oscail rannáin riaracháin",
         "execute": "Rith",
         "executing": "Ag rith...",
         "next": "Ar aghaidh",
@@ -1081,7 +1112,13 @@
         "users": {
             "delete": "Scrios úsáideoir",
             "changePassword": "Athraigh pasfhocal",
-            "endSessions": "Críochnaigh seisiúin"
+            "endSessions": "Críochnaigh seisiúin",
+            "online": "Ar líne",
+            "offline": "As líne",
+            "onlineNow": "Ar líne anois",
+            "justNow": "ar ball beag",
+            "truncatedBanner": "Ag taispeáint na chéad {{shown}} as {{total}} úsáideoir. Caolú do chuardach chun torthaí a chúngú.",
+            "truncatedBannerNoTotal": "Ag taispeáint na chéad {{shown}} úsáideoir. Caolú do chuardach chun torthaí a chúngú."
         },
         "userView": {
             "title": "Úsáideoir",
@@ -1103,6 +1140,28 @@
         "roomList": {
             "title": "Seomraí Comhrá",
             "noRooms": "Níor aimsíodh seomraí"
+        },
+        "overview": {
+            "title": "Forbhreathnú freastalaí",
+            "refresh": "Athnuaigh",
+            "updatedAt": "Nuashonraithe ag {{time}}",
+            "empty": "Níl staitisticí an fhreastalaí ar fáil.",
+            "retry": "Bain triail eile as",
+            "units": {
+                "d": "l",
+                "h": "u",
+                "m": "n",
+                "s": "s"
+            },
+            "cards": {
+                "uptime": "Aga fónaimh",
+                "version": "Leagan an fhreastalaí",
+                "users": "Úsáideoirí",
+                "onlineSuffix": "{{n}} ar líne",
+                "onlineSessions": "Seisiúin ar líne",
+                "onlineRooms": "Seomraí gníomhacha",
+                "vhosts": "Óstaigh fhíorúla"
+            }
         }
     },
     "commandPalette": {

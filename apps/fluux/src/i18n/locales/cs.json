@@ -40,7 +40,21 @@
         "hidePassword": "Skrýt heslo",
         "madeBy": "Vytvořeno společností",
         "ejabberdCreator": ", společností stojící za",
-        "poweredBy": "Poháněno technologií"
+        "poweredBy": "Poháněno technologií",
+        "errors": {
+            "tlsCertTitle": "Nelze ověřit bezpečnostní certifikát serveru",
+            "tlsOtherTitle": "Zabezpečené připojení se nezdařilo",
+            "tlsOtherBody": "Nelze navázat šifrované připojení k serveru. Konfigurace TLS serveru nemusí být podporována. Zkontrolujte adresu serveru nebo kontaktujte správce serveru.",
+            "unreachableTitle": "Server není dostupný",
+            "timeoutBody": "Server včas neodpověděl. Zkontrolujte síť a adresu serveru a zkuste to znovu.",
+            "refusedBody": "Server odmítl připojení. Zkontrolujte adresu a port serveru a zkuste to znovu.",
+            "cert": {
+                "expired": "Certifikát serveru vypršel. Kontaktujte správce serveru. Pokud je adresa nesprávná, upravte pole serveru níže.",
+                "nameMismatch": "Certifikát serveru byl vydán pro jiný název hostitele. Zkontrolujte adresu serveru níže nebo kontaktujte správce serveru.",
+                "untrusted": "Certifikát serveru je podepsán sám sebou nebo vydán neznámou autoritou, takže mu nelze důvěřovat. Zkontrolujte adresu serveru nebo kontaktujte správce serveru.",
+                "generic": "Bezpečnostní certifikát serveru nelze ověřit. Zkontrolujte adresu serveru níže nebo kontaktujte správce serveru."
+            }
+        }
     },
     "sidebar": {
         "messages": "Zprávy",
@@ -203,6 +217,16 @@
         "invalidRoomAddress": "Neplatná adresa místnosti (měla by být room@conference.server)",
         "joinRoomHint": "Zadejte úplnou adresu místnosti pro vstup do veřejné chatovací místnosti.",
         "failedToJoinRoom": "Nepodařilo se vstoupit do místnosti",
+        "passwordProtected": "Tato místnost je chráněna heslem",
+        "roomPassword": "Heslo",
+        "passwordRequired": "Tato místnost je chráněna heslem. Zadejte heslo pro vstup.",
+        "incorrectPassword": "Nesprávné heslo.",
+        "nicknameInUse": "Tato přezdívka se v této místnosti již používá.",
+        "membersOnly": "Tato místnost je jen pro členy. Musíte být členem, abyste mohli vstoupit.",
+        "bannedFromRoom": "Byl jste z této místnosti zablokován.",
+        "roomFull": "Tato místnost je plná.",
+        "registeredNicknameRequired": "Tato místnost vyžaduje vaši registrovanou přezdívku.",
+        "roomNotFound": "Místnost nenalezena.",
         "nonAnonWarningTitle": "Připojit se k neanonymnímu kanálu?",
         "nonAnonWarningMessage": "Každý v „{{room}}“ uvidí vaši skutečnou adresu (vaše XMPP/Jabber ID). Přesto se připojit?",
         "nonAnonWarningConfirm": "Přesto se připojit",
@@ -211,6 +235,7 @@
         "notJoinedNoHistory": "Nejste v této místnosti",
         "joinToLoadHistory": "Vstupte pro načtení zpráv",
         "notificationSettings": "Nastavení oznámení",
+        "roomActions": "Akce místnosti",
         "mentionsOnly": "Pouze zmínky",
         "defaultBehavior": "Výchozí chování",
         "allMessages": "Všechny zprávy",
@@ -435,6 +460,7 @@
         "attachment": "Příloha",
         "removeAttachment": "Odebrat přílohu",
         "reply": "Odpovědět",
+        "copyMessage": "Kopírovat text",
         "replyQuoteHiddenEncrypted": "Citace skryta: originál byl šifrovaný",
         "forwardMessage": "Přeposlat zprávu (již brzy)",
         "moreReactions": "Více reakcí",
@@ -567,7 +593,12 @@
             "acceptedWithoutVerifying": "Nový klíč přijat. Kontakt není ověřen",
             "acceptFailed": "Nepodařilo se přijmout nový klíč. Zkuste to znovu"
         },
-        "offlinePlaceholder": "Offline. Zprávy budou odeslány po opětovném připojení"
+        "offlinePlaceholder": "Offline. Zprávy budou odeslány po opětovném připojení",
+        "loadImage": "Načíst obrázek",
+        "loadVideo": "Načíst video",
+        "loadAudio": "Načíst zvuk",
+        "loadFilePreview": "Načíst náhled",
+        "showLinkImage": "Zobrazit obrázek"
     },
     "dates": {
         "today": "Dnes",
@@ -583,7 +614,8 @@
             "updates": "Aktualizace",
             "blocked": "Zablokovaní uživatelé",
             "storage": "Úložiště",
-            "encryption": "Šifrování"
+            "encryption": "Šifrování",
+            "privacy": "Soukromí"
         },
         "blocked": {
             "title": "Zablokovaní uživatelé",
@@ -704,6 +736,7 @@
             "pepUnsupportedBanner": "Váš server nepodporuje publikování osobních událostí (PEP, XEP-0163), které šifrování OpenPGP (XEP-0373) vyžaduje. Koncové šifrování nelze na tomto účtu zapnout. Kontaktujte správce serveru.",
             "statusPepUnsupported": "Šifrování nelze zapnout: server nepodporuje PEP (XEP-0163), který OpenPGP (XEP-0373) vyžaduje.",
             "statusRegistrationFailed": "Nastavení šifrování selhalo ({{code}}). Podrobnosti najdete v konzoli vývojáře.",
+            "notProtectedAtRest": "Není zde k dispozici žádná systémová klíčenka, takže přístupová fráze vašeho klíče je uložena nezašifrovaně v souboru na disku. Klíč není chráněn v klidu. Kdokoli, kdo dokáže číst soubory tohoto zařízení, by jej mohl použít.",
             "backupLabel": "Záloha klíče",
             "backupDescription": "Zveřejněte šifrovanou kopii svého klíče na svém XMPP serveru. Chráněna heslem, které znáte jen vy, a čitelná pouze vaším účtem (access_model: whitelist). Umožňuje číst šifrovanou historii na novém zařízení po přihlášení a zadání hesla.",
             "backupAction": "Uložit na server",
@@ -778,6 +811,7 @@
             "identityChoice": {
                 "title": "Pro tento účet již existuje identita OpenPGP",
                 "body": "Tento prohlížeč nemá místní klíč, ale server již oznamuje klíč pro váš účet. Vygenerování nového klíče zde by tiše rozdělilo vaši identitu: kontakty, které šifrovaly stávajícím klíčem, by nemohly doručit zprávy. Zvolte, jak chcete tento problém vyřešit:",
+                "bodyKeyUnrecoverable": "Klíč OpenPGP tohoto zařízení už nelze odemknout, takže šifrování nelze spustit. Vaše zveřejněná identita není dotčena. Obnovte ji ze zálohy na serveru nebo importem souboru s klíčem, nebo ji nahraďte, pokud to nejde. Zvolte, jak to chcete vyřešit:",
                 "publishedFingerprintLabel": "Publikovaný otisk",
                 "restoreFromServerTitle": "Obnovit ze zálohy na serveru",
                 "restoreFromServerBody": "Použijte přístupovou frázi zálohy, kterou jste nastavili při povolení šifrování na jiném zařízení. Odpovídající soukromý klíč se načte ze serveru a lokálně odemkne.",
@@ -804,19 +838,6 @@
             "importFileSuccess": "Klíč byl importován ze souboru",
             "importFileFailed": "Nepodařilo se přečíst vybraný soubor",
             "unsupportedKeyAlgorithm": "Importovaný klíč používá algoritmus, který již není podporován (např. DSA nebo ElGamal). Použijte moderní klíč OpenPGP (Curve25519, Ed25519 nebo RSA s alespoň 2048 bity).",
-            "externalExportAction": "Exportovat pro externí nástroj OpenPGP",
-            "externalExportDialogTitle": "Exportovat soukromý klíč pro externí nástroj OpenPGP",
-            "externalExportDialogBody": "Vytvoří standardní soubor se soukromým klíčem OpenPGP (PRIVATE KEY BLOCK), který lze importovat do gpg, OpenKeychain, Kleopatry a dalších nástrojů.",
-            "externalExportProtectedLabel": "Chráněno přístupovou frází",
-            "externalExportProtectedDescription": "Doporučeno. Zvolte přístupovou frázi; exportovaný soubor bude zašifrován a externí nástroje si o ni při importu řeknou.",
-            "externalExportUnprotectedLabel": "Bez šifrování",
-            "externalExportUnprotectedDescription": "Exportovaný soubor obsahuje váš soukromý klíč v otevřené podobě. Použijte pouze v případě, že cílový nástroj odmítá klíče chráněné přístupovou frází.",
-            "externalExportUnprotectedWarning": "Bez přístupové fráze může kdokoli s přístupem k exportovanému souboru vystupovat vaším jménem a dešifrovat vaše minulé i budoucí zprávy. Soubor smažte ihned po importu.",
-            "externalExportUnprotectedAcknowledgment": "Rozumím rizikům a chci exportovat svůj soukromý klíč bez šifrování.",
-            "externalExportPassphraseLabel": "Přístupová fráze",
-            "externalExportConfirmPassphraseLabel": "Potvrzení přístupové fráze",
-            "externalExportPassphraseMismatch": "Přístupové fráze se neshodují.",
-            "externalExportSuccess": "Soukromý klíč exportován do souboru",
             "unlockDialogTitle": "Odemknout end-to-end šifrování",
             "unlockDialogBody": "Zadej heslo pro dešifrování klíče pro toto sezení.",
             "unlockDialogSetupTitle": "Nastavit end-to-end šifrování",
@@ -828,7 +849,16 @@
             "unlockPassphraseTooShort": "Heslo musí mít alespoň 8 znaků",
             "lockedBannerBody": "Šifrovací klíč je uzamčen. Zadej heslo pro aktivaci šifrování pro toto sezení.",
             "rotateNotSupportedWeb": "Rotace klíče není na webu dostupná. Použij desktopovou aplikaci."
-        }
+        },
+        "mediaAutoDownload": "Automatické stahování médií",
+        "mediaAutoDownloadDescription": "Zvolte, kdy se obrázky, videa a soubory načítají automaticky.",
+        "mediaAutoDownloadAlways": "Vždy",
+        "mediaAutoDownloadAlwaysDescription": "Načítat média automaticky v každé konverzaci.",
+        "mediaAutoDownloadPrivateOnly": "Pouze soukromé",
+        "mediaAutoDownloadPrivateOnlyDescription": "Načítat automaticky v přímých zprávách a soukromých místnostech. Ve veřejných kanálech klepněte pro načtení.",
+        "mediaAutoDownloadNever": "Nikdy",
+        "mediaAutoDownloadNeverDescription": "Nikdy nenačítat média automaticky. Klepněte pro načtení v jakékoli konverzaci.",
+        "mediaAutoDownloadStrangerNote": "Média od lidí, kteří nejsou ve vašich kontaktech, vždy vyžadují klepnutí pro načtení, bez ohledu na vaše nastavení."
     },
     "update": {
         "title": "Dostupná aktualizace",
@@ -1038,6 +1068,7 @@
             "description": "Nemáte oprávnění správce na tomto serveru. Kontaktujte správce vašeho serveru pro přístup."
         },
         "selectCommand": "Vyberte příkaz z postranního panelu",
+        "openSections": "Otevřít sekce administrace",
         "execute": "Provést",
         "executing": "Provádění...",
         "next": "Další",
@@ -1083,7 +1114,13 @@
         "users": {
             "delete": "Smazat uživatele",
             "changePassword": "Změnit heslo",
-            "endSessions": "Ukončit relace"
+            "endSessions": "Ukončit relace",
+            "online": "Online",
+            "offline": "Offline",
+            "onlineNow": "Online nyní",
+            "justNow": "právě teď",
+            "truncatedBanner": "Zobrazuje se prvních {{shown}} z {{total}} uživatelů. Upřesněte hledání pro zúžení výsledků.",
+            "truncatedBannerNoTotal": "Zobrazuje se prvních {{shown}} uživatelů. Upřesněte hledání pro zúžení výsledků."
         },
         "userView": {
             "title": "Uživatel",
@@ -1105,6 +1142,28 @@
         "roomList": {
             "title": "Chatovací místnosti",
             "noRooms": "Žádné místnosti nenalezeny"
+        },
+        "overview": {
+            "title": "Přehled serveru",
+            "refresh": "Obnovit",
+            "updatedAt": "Aktualizováno v {{time}}",
+            "empty": "Statistiky serveru nejsou dostupné.",
+            "retry": "Zkusit znovu",
+            "units": {
+                "d": "d",
+                "h": "h",
+                "m": "min",
+                "s": "s"
+            },
+            "cards": {
+                "uptime": "Doba běhu",
+                "version": "Verze serveru",
+                "users": "Uživatelé",
+                "onlineSuffix": "{{n}} online",
+                "onlineSessions": "Online relace",
+                "onlineRooms": "Aktivní místnosti",
+                "vhosts": "Virtuální hostitelé"
+            }
         }
     },
     "commandPalette": {

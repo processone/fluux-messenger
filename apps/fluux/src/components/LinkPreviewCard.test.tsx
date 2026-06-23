@@ -1,7 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, fireEvent, act } from '@testing-library/react'
+import { render, fireEvent, act, screen } from '@testing-library/react'
 import { LinkPreviewCard, IMAGE_RETRY_DELAY_MS } from './LinkPreviewCard'
 import type { LinkPreview } from '@fluux/sdk'
+import { MediaAutoloadProvider } from '@/contexts'
+import { __resetApprovedMediaUrlsForTest } from '@/utils/mediaAutoload'
 
 const preview: LinkPreview = {
   url: 'https://github.com/processone/fluux-messenger/pull/493',
@@ -90,5 +92,41 @@ describe('LinkPreviewCard', () => {
     const img = container.querySelector('img')
     expect(img).not.toBeNull()
     expect(img).toHaveAttribute('src', previewB.image)
+  })
+})
+
+describe('LinkPreviewCard image deferral', () => {
+  beforeEach(() => __resetApprovedMediaUrlsForTest())
+  const preview = { url: 'https://ex.com/p', title: 'T', description: 'D', image: 'https://ex.com/og.png', siteName: 'Ex' }
+
+  it('hides the OG image and shows a tap-to-load control when autoLoad is false', () => {
+    const { container } = render(
+      <MediaAutoloadProvider autoLoad={false}>
+        <LinkPreviewCard preview={preview} />
+      </MediaAutoloadProvider>,
+    )
+    expect(container.querySelector('img')).toBeNull()            // OG image suppressed
+    const control = screen.getByRole('button')                   // the "show image" control
+    expect(control).toBeInTheDocument()
+    expect(control).toHaveTextContent('T')                       // shows the link title
+  })
+
+  it('shows the image after tapping the control', () => {
+    const { container } = render(
+      <MediaAutoloadProvider autoLoad={false}>
+        <LinkPreviewCard preview={preview} />
+      </MediaAutoloadProvider>,
+    )
+    fireEvent.click(screen.getByRole('button'))
+    expect(container.querySelector('img')).not.toBeNull()
+  })
+
+  it('shows the OG image for an own-message preview even when autoLoad is false', () => {
+    const { container } = render(
+      <MediaAutoloadProvider autoLoad={false}>
+        <LinkPreviewCard preview={preview} isOwnMessage />
+      </MediaAutoloadProvider>,
+    )
+    expect(container.querySelector('img')).not.toBeNull()
   })
 })

@@ -40,7 +40,21 @@
         "hidePassword": "Slėpti slaptažodį",
         "madeBy": "Sukūrė",
         "ejabberdCreator": ", įmonė už",
-        "poweredBy": "Veikia su"
+        "poweredBy": "Veikia su",
+        "errors": {
+            "tlsCertTitle": "Nepavyko patikrinti serverio saugos sertifikato",
+            "tlsOtherTitle": "Saugi jungtis nepavyko",
+            "tlsOtherBody": "Nepavyko užmegzti užšifruotos jungties su serveriu. Serverio TLS konfigūracija gali būti nepalaikoma. Patikrinkite serverio adresą arba susisiekite su serverio administratoriumi.",
+            "unreachableTitle": "Nepavyko pasiekti serverio",
+            "timeoutBody": "Serveris laiku neatsiliepė. Patikrinkite tinklą ir serverio adresą, tada bandykite dar kartą.",
+            "refusedBody": "Serveris atmetė jungtį. Patikrinkite serverio adresą ir prievadą, tada bandykite dar kartą.",
+            "cert": {
+                "expired": "Serverio sertifikatas baigė galioti. Susisiekite su serverio administratoriumi. Jei adresas neteisingas, redaguokite serverio lauką žemiau.",
+                "nameMismatch": "Serverio sertifikatas išduotas kitam pagrindinio kompiuterio vardui. Patikrinkite serverio adresą žemiau arba susisiekite su serverio administratoriumi.",
+                "untrusted": "Serverio sertifikatas yra pasirašytas paties arba išduotas nežinomos institucijos, todėl jo negalima pasitikėti. Patikrinkite serverio adresą arba susisiekite su serverio administratoriumi.",
+                "generic": "Nepavyko patikrinti serverio saugos sertifikato. Patikrinkite serverio adresą žemiau arba susisiekite su serverio administratoriumi."
+            }
+        }
     },
     "sidebar": {
         "messages": "Žinutės",
@@ -201,6 +215,16 @@
         "invalidRoomAddress": "Neteisingas kambario adresas (turėtų būti kambarys@conference.serveris)",
         "joinRoomHint": "Įveskite pilną kambario adresą prisijungti prie viešo pokalbių kambario.",
         "failedToJoinRoom": "Nepavyko prisijungti prie kambario",
+        "passwordProtected": "Šis kambarys yra apsaugotas slaptažodžiu",
+        "roomPassword": "Slaptažodis",
+        "passwordRequired": "Šis kambarys yra apsaugotas slaptažodžiu. Įveskite slaptažodį, norėdami prisijungti.",
+        "incorrectPassword": "Neteisingas slaptažodis.",
+        "nicknameInUse": "Šis slapyvardis jau naudojamas šiame kambaryje.",
+        "membersOnly": "Šis kambarys skirtas tik nariams. Norint prisijungti, turite būti narys.",
+        "bannedFromRoom": "Jums uždrausta patekti į šį kambarį.",
+        "roomFull": "Šis kambarys pilnas.",
+        "registeredNicknameRequired": "Šis kambarys reikalauja jūsų registruoto slapyvardžio.",
+        "roomNotFound": "Kambarys nerastas.",
         "nonAnonWarningTitle": "Prisijungti prie neanoniminio kanalo?",
         "nonAnonWarningMessage": "Visi kanale „{{room}}“ matys jūsų tikrąjį adresą (jūsų XMPP/Jabber ID). Vis tiek prisijungti?",
         "nonAnonWarningConfirm": "Vis tiek prisijungti",
@@ -209,6 +233,7 @@
         "notJoinedNoHistory": "Jūs nesate šiame kambaryje",
         "joinToLoadHistory": "Prisijunkite įkelti žinutes",
         "notificationSettings": "Pranešimų nustatymai",
+        "roomActions": "Kambario veiksmai",
         "mentionsOnly": "Tik paminėjimai",
         "defaultBehavior": "Numatytoji elgsena",
         "allMessages": "Visos žinutės",
@@ -433,6 +458,7 @@
         "attachment": "Priedas",
         "removeAttachment": "Pašalinti priedą",
         "reply": "Atsakyti",
+        "copyMessage": "Kopijuoti tekstą",
         "replyQuoteHiddenEncrypted": "Citata paslėpta: originalas buvo užšifruotas",
         "forwardMessage": "Persiųsti žinutę (greitai)",
         "moreReactions": "Daugiau reakcijų",
@@ -565,7 +591,12 @@
             "acceptedWithoutVerifying": "Naujas raktas priimtas. Kontaktas nepatvirtintas",
             "acceptFailed": "Nepavyko priimti naujo rakto. Bandykite dar kartą"
         },
-        "offlinePlaceholder": "Neprisijungus. Žinutės bus išsiųstos prisijungus iš naujo"
+        "offlinePlaceholder": "Neprisijungus. Žinutės bus išsiųstos prisijungus iš naujo",
+        "loadImage": "Įkelti nuotrauką",
+        "loadVideo": "Įkelti vaizdo įrašą",
+        "loadAudio": "Įkelti garsą",
+        "loadFilePreview": "Įkelti peržiūrą",
+        "showLinkImage": "Rodyti nuotrauką"
     },
     "dates": {
         "today": "Šiandien",
@@ -581,7 +612,8 @@
             "updates": "Atnaujinimai",
             "blocked": "Užblokuoti vartotojai",
             "storage": "Saugykla",
-            "encryption": "Šifravimas"
+            "encryption": "Šifravimas",
+            "privacy": "Privatumas"
         },
         "blocked": {
             "title": "Užblokuoti vartotojai",
@@ -702,6 +734,7 @@
             "pepUnsupportedBanner": "Jūsų serveris nepalaiko asmeninių įvykių skelbimo (PEP, XEP-0163), kurio reikalauja OpenPGP šifravimas (XEP-0373). Ištisinio šifravimo šioje paskyroje įjungti negalima. Kreipkitės į serverio administratorių.",
             "statusPepUnsupported": "Šifravimo įjungti negalima: serveris nepalaiko PEP (XEP-0163), kurio reikalauja OpenPGP (XEP-0373).",
             "statusRegistrationFailed": "Šifravimo sąranka nepavyko ({{code}}). Išsamesnę informaciją rasite kūrėjo konsolėje.",
+            "notProtectedAtRest": "Čia nėra prieinamos sistemos raktų saugyklos, todėl jūsų rakto slaptafrazė saugoma nešifruota faile diske. Raktas nėra apsaugotas ramybės būsenoje. Bet kas, galintis skaityti šio įrenginio failus, gali jį panaudoti.",
             "backupLabel": "Rakto atsarginė kopija",
             "backupDescription": "Paskelbkite užšifruotą rakto kopiją savo XMPP serveryje. Apsaugota slaptažodine fraze, kurią žinote tik jūs, ir skaitoma tik jūsų paskyros (access_model: whitelist). Leidžia skaityti šifruotą istoriją naujame įrenginyje po prisijungimo ir slaptažodinės frazės įvedimo.",
             "backupAction": "Išsaugoti į serverį",
@@ -776,6 +809,7 @@
             "identityChoice": {
                 "title": "Šiai paskyrai jau yra OpenPGP tapatybė",
                 "body": "Ši naršyklė neturi vietinio rakto, bet serveris jau skelbia jūsų paskyros raktą. Naujo rakto generavimas čia tyliai padalintų jūsų tapatybę: korespondentai, kurie šifravo esamu raktu, negalėtų pristatyti pranešimų. Pasirinkite, kaip tai išspręsti:",
+                "bodyKeyUnrecoverable": "Šio įrenginio OpenPGP rakto nebegalima atrakinti, todėl šifravimas negali būti pradėtas. Jūsų paskelbtai tapatybei tai neturi įtakos. Atkurkite ją iš serverio atsarginės kopijos arba importuodami rakto failą, arba pakeiskite ją, jei negalite. Pasirinkite, kaip norite tai išspręsti:",
                 "publishedFingerprintLabel": "Paskelbtas pirštų atspaudas",
                 "restoreFromServerTitle": "Atkurti iš serverio atsarginės kopijos",
                 "restoreFromServerBody": "Naudokite atsarginės kopijos slaptafrazę, kurią nustatėte įjungdami šifravimą kitame įrenginyje. Atitinkamas privatusis raktas gaunamas iš serverio ir atrakinamas vietoje.",
@@ -802,19 +836,6 @@
             "importFileSuccess": "Raktas importuotas iš failo",
             "importFileFailed": "Nepavyko perskaityti pasirinkto failo",
             "unsupportedKeyAlgorithm": "Importuotas raktas naudoja algoritmą, kuris nebepalaikomas (pvz., DSA arba ElGamal). Naudokite šiuolaikinį OpenPGP raktą (Curve25519, Ed25519 arba bent 2048 bitų RSA).",
-            "externalExportAction": "Eksportuoti į išorinį OpenPGP įrankį",
-            "externalExportDialogTitle": "Eksportuoti privatųjį raktą į išorinį OpenPGP įrankį",
-            "externalExportDialogBody": "Sukuria standartinį OpenPGP privačiojo rakto failą (PRIVATE KEY BLOCK), kurį galite importuoti į gpg, OpenKeychain, Kleopatra ir kitus įrankius.",
-            "externalExportProtectedLabel": "Apsaugotas slaptafraze",
-            "externalExportProtectedDescription": "Rekomenduojama. Pasirinkite slaptafrazę; eksportuotas failas bus užšifruotas, o išoriniai įrankiai jos paprašys importuojant.",
-            "externalExportUnprotectedLabel": "Be šifravimo",
-            "externalExportUnprotectedDescription": "Eksportuotame faile jūsų privatusis raktas yra atviru tekstu. Naudokite tik tada, jei tikslinis įrankis atsisako priimti slaptafraze apsaugotus raktus.",
-            "externalExportUnprotectedWarning": "Be slaptafrazės bet kas, turintis prieigą prie eksportuoto failo, gali apsimesti jumis ir iššifruoti jūsų ankstesnius bei būsimus pranešimus. Ištrinkite failą iškart po importavimo.",
-            "externalExportUnprotectedAcknowledgment": "Suprantu riziką ir noriu eksportuoti savo privatųjį raktą nešifruotą.",
-            "externalExportPassphraseLabel": "Slaptafrazė",
-            "externalExportConfirmPassphraseLabel": "Patvirtinkite slaptafrazę",
-            "externalExportPassphraseMismatch": "Slaptafrazės nesutampa.",
-            "externalExportSuccess": "Privatusis raktas eksportuotas į failą",
             "unlockDialogTitle": "Atrakinti vienpusio šifravimo apsaugą",
             "unlockDialogBody": "Įveskite slaptažodį, kad iššifruotumėte raktą šiai sesijai.",
             "unlockDialogSetupTitle": "Nustatyti vienpusio šifravimo apsaugą",
@@ -826,7 +847,16 @@
             "unlockPassphraseTooShort": "Slaptažodį turi sudaryti ne mažiau kaip 8 simboliai",
             "lockedBannerBody": "Šifravimo raktas užrakintas. Įveskite slaptažodį, kad įjungtumėte šifravimą šiai sesijai.",
             "rotateNotSupportedWeb": "Rakto rotacija internete negalima. Naudokite darbalaukio programą."
-        }
+        },
+        "mediaAutoDownload": "Automatinis medijos atsisiuntimas",
+        "mediaAutoDownloadDescription": "Pasirinkite, kada nuotraukos, vaizdo įrašai ir failai įkeliami automatiškai.",
+        "mediaAutoDownloadAlways": "Visada",
+        "mediaAutoDownloadAlwaysDescription": "Įkelti mediją automatiškai kiekviename pokalbyje.",
+        "mediaAutoDownloadPrivateOnly": "Tik privatus",
+        "mediaAutoDownloadPrivateOnlyDescription": "Įkelti automatiškai tiesioginėse žinutėse ir privačiuose kambariuose. Viešuose kanaluose palieskite, kad įkeltumėte.",
+        "mediaAutoDownloadNever": "Niekada",
+        "mediaAutoDownloadNeverDescription": "Niekada neįkelti medijos automatiškai. Palieskite, kad įkeltumėte bet kuriame pokalbyje.",
+        "mediaAutoDownloadStrangerNote": "Žmonių, kurių nėra jūsų kontaktuose, medija visada reikalauja palietimo, kad įsikeltų, nepaisant čia pasirinktos parinkties."
     },
     "update": {
         "title": "Pasiekiamas atnaujinimas",
@@ -1036,6 +1066,7 @@
             "description": "Jūs neturite administratoriaus teisių šiame serveryje. Susisiekite su serverio administratoriumi dėl prieigos."
         },
         "selectCommand": "Pasirinkite komandą iš šoninės juostos",
+        "openSections": "Atidaryti administravimo skyrius",
         "execute": "Vykdyti",
         "executing": "Vykdoma...",
         "next": "Toliau",
@@ -1081,7 +1112,13 @@
         "users": {
             "delete": "Ištrinti vartotoją",
             "changePassword": "Keisti slaptažodį",
-            "endSessions": "Baigti sesijas"
+            "endSessions": "Baigti sesijas",
+            "online": "Online",
+            "offline": "Offline",
+            "onlineNow": "Online dabar",
+            "justNow": "ką tik",
+            "truncatedBanner": "Rodomi pirmieji {{shown}} iš {{total}} vartotojų. Patikslinkite paiešką, kad susiaurintumėte rezultatus.",
+            "truncatedBannerNoTotal": "Rodomi pirmieji {{shown}} vartotojų. Patikslinkite paiešką, kad susiaurintumėte rezultatus."
         },
         "userView": {
             "title": "Vartotojas",
@@ -1103,6 +1140,28 @@
         "roomList": {
             "title": "Pokalbių kambariai",
             "noRooms": "Kambarių nerasta"
+        },
+        "overview": {
+            "title": "Serverio apžvalga",
+            "refresh": "Atnaujinti",
+            "updatedAt": "Atnaujinta {{time}}",
+            "empty": "Serverio statistika nepasiekiama.",
+            "retry": "Bandyti dar kartą",
+            "units": {
+                "d": "d",
+                "h": "val",
+                "m": "min",
+                "s": "s"
+            },
+            "cards": {
+                "uptime": "Veikimo laikas",
+                "version": "Serverio versija",
+                "users": "Naudotojai",
+                "onlineSuffix": "{{n}} prisijungę",
+                "onlineSessions": "Aktyvūs seansai",
+                "onlineRooms": "Aktyvūs kambariai",
+                "vhosts": "Virtualūs serveriai"
+            }
         }
     },
     "commandPalette": {

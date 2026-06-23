@@ -124,6 +124,8 @@ import {
 import { usePinnedPrimaryFingerprintsStore } from '@/stores/pinnedPrimaryFingerprintsStore'
 import { useKeyChangeAlertsStore } from '@/stores/keyChangeAlertsStore'
 import { setTrustStateStatus } from '@/stores/trustStateStatusStore'
+import { withPassphraseFormatHeader } from './passphraseFormatHeader'
+import { isSecretKeyUnavailableError } from './keyUnavailable'
 
 // ---------------------------------------------------------------------------
 // XEP-0373 constants
@@ -270,6 +272,21 @@ export function classifyBoundaryError(err: unknown): { kind: E2EEErrorKind; code
   if (msg.includes('passphrase for account') && msg.includes('not in the keychain')) {
     return { kind: 'permanent', code: 'key-unrecoverable' }
   }
+  // The stored passphrase no longer decrypts the on-disk TSK (keychain/key
+  // desync, or a corrupted secret-key packet). Sequoia surfaces this as
+  // "decrypt persisted TSK ..." / "decrypt primary secret key" and, for a
+  // wrong passphrase against a v4/CFB secret, "unexpected EOF". It is a
+  // permanent condition the user can only resolve by restoring or replacing
+  // the key — never a retryable transient — so the host can route to recovery
+  // instead of showing an opaque `(unknown)`.
+  if (
+    msg.includes('decrypt persisted tsk') ||
+    msg.includes('decrypt primary secret key') ||
+    msg.includes('decrypt secret subkey') ||
+    msg.includes('unexpected eof')
+  ) {
+    return { kind: 'permanent', code: 'key-unrecoverable' }
+  }
   if (msg.includes('no key for account') || msg.includes('no identity')) {
     return { kind: 'permanent', code: 'key-missing' }
   }
@@ -286,7 +303,16 @@ export function classifyBoundaryError(err: unknown): { kind: E2EEErrorKind; code
     // "Error during parsing. This message / key probably does not conform to
     // a valid OpenPGP format." Structurally malformed → never decrypts.
     msg.includes('during parsing') ||
-    msg.includes('conform to a valid openpgp')
+    msg.includes('conform to a valid openpgp') ||
+    // Sequoia stream decryptor fed bytes that are not parseable OpenPGP at
+    // all: "Malformed packet: Malformed CTB: MSB of ptag … not set (ptag is
+    // a dash, perhaps this is an ASCII-armor encoded message)". Like the
+    // openpgp.js cases above, no key change can ever open structurally
+    // invalid bytes, so this is terminal — without it the failure falls
+    // through to `transient/unknown` and stanzaDecrypt re-stashes the
+    // message, making retryPendingDecrypts re-attempt (and re-log) it on
+    // every launch forever.
+    msg.includes('malformed packet')
   ) {
     return { kind: 'permanent', code: 'malformed-data' }
   }
@@ -361,6 +387,26 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
    * the symmetrical desktop bug. Always reset in a `finally`.
    */
   protected _allowSilentRegenerate = false
+
+  /**
+   * Set by {@link init} when {@link ensureIdentity} fails with a
+   * `key-unrecoverable` error — a local key exists but cannot be unlocked
+   * (keychain/key desync, a corrupted secret-key packet, or a passphrase
+   * that has gone missing). The plugin stays REGISTERED (init swallows the
+   * error) so the host can read this flag and route the user to recovery
+   * via the IdentityChoiceDialog (restore from server backup / import file /
+   * replace identity), instead of dead-ending on an opaque registration
+   * failure. Cleared the moment a usable identity is established.
+   */
+  protected _keyRecoveryNeeded = false
+
+  /**
+   * True when a local key exists but could not be unlocked, so the host
+   * should route the user through recovery. @see {@link _keyRecoveryNeeded}.
+   */
+  isKeyRecoveryNeeded(): boolean {
+    return this._keyRecoveryNeeded
+  }
 
   // ---------------------------------------------------------------------------
   // Abstract crypto methods — implemented by each platform subclass
@@ -455,26 +501,24 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
   protected abstract forgetAccount(accountJid: string): Promise<void>
 
   /**
+   * Build the armored backup MESSAGE for a file export: the XEP-0373 §5 SKESK
+   * wrap plus a `Passphrase-Format` armor header describing the passphrase
+   * family. Shared by both platforms' {@link exportKeyToFile}. NOT used for the
+   * PEP/server backup, which must stay header-free.
+   */
+  protected async buildExportArmor(passphrase: string): Promise<string> {
+    const ctx = this.requireCtx()
+    const armored = await this.backupEncrypt(ctx.account.jid, passphrase)
+    return withPassphraseFormatHeader(armored)
+  }
+
+  /**
    * Export the key to a user-chosen file. Platform-specific: Tauri uses a
    * native save dialog; web uses a browser download link.
    * Returns `true` when the file was written, `false` when the user
    * dismissed the dialog without choosing a path.
    */
   abstract exportKeyToFile(passphrase: string): Promise<boolean>
-
-  /**
-   * Export the account TSK as an ASCII-armored `PRIVATE KEY BLOCK`, the
-   * standard OpenPGP format expected by external tools (gpg, OpenKeychain,
-   * Kleopatra). Distinct from {@link exportKeyToFile} which produces a
-   * XEP-0373 §5 encrypted MESSAGE only other XMPP clients understand.
-   *
-   * `passphrase` is optional: when provided, secret packets are wrapped
-   * with the standard Iterated+Salted S2K (universally interoperable);
-   * when `null`, secret packets are written in clear and the UI must have
-   * acknowledged the risk. Returns `true` when the file was written,
-   * `false` when the user cancelled the save dialog.
-   */
-  abstract exportPrivateKeyToFile(passphrase: string | null): Promise<boolean>
 
   /**
    * Open a file picker and return the armored content of the selected
@@ -514,6 +558,16 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
         // the encryption-settings toggle flow) and route the user to a
         // resolution: import the matching private key, or explicitly
         // retire the published identity.
+        return
+      }
+      if (err instanceof E2EEPluginError && err.code === 'key-unrecoverable') {
+        // A local key exists but cannot be unlocked (keychain/key desync,
+        // corrupted secret packet, or a missing passphrase). Keep the
+        // plugin registered and flag the condition so the host can route
+        // the user to recovery (restore / import / replace) via the
+        // IdentityChoiceDialog, instead of failing registration with an
+        // opaque error the UI can only render as "(unknown)".
+        this._keyRecoveryNeeded = true
         return
       }
       throw err
@@ -597,7 +651,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     }
   }
 
-  private async verifyTrustStateOnInit(): Promise<void> {
+  protected async verifyTrustStateOnInit(): Promise<void> {
     const ownPublicArmored = this.ownBundle?.publicArmored
     const ownFingerprint = this.ownBundle?.fingerprint
     if (!ownPublicArmored || !ownFingerprint || !this.ctx) return
@@ -606,12 +660,28 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
       (ciphertext, senderPub) => this.decryptWithOwnKey(jid, ciphertext, senderPub),
       ownPublicArmored,
       ownFingerprint,
+      isSecretKeyUnavailableError,
     )
+    const reason = details && details.length ? ` (${details.join('; ')})` : ''
+    this.ctx.logger.info(`Trust-state verdict: ${status}${reason}`)
     if (status === 'pending-seal') {
       await this.sealTrustStateNow()
       return
     }
     setTrustStateStatus(status, details)
+  }
+
+  /**
+   * Re-verify the trust-state seal after the secret key becomes usable again
+   * (recovery / unlock). `activateSubscriptions()` is idempotent (guarded) and
+   * runs the seal check on first activation; the explicit `verifyTrustStateOnInit()`
+   * covers the case where subscriptions were already active (so the guard skips
+   * the internal check). Resolves a deferred `awaiting-key` verdict to `sealed`
+   * for an unchanged cert. Fire-and-forget: the verify catches internally.
+   */
+  protected reverifyTrustStateAfterKeyChange(): void {
+    this.activateSubscriptions()
+    void this.verifyTrustStateOnInit()
   }
 
   async resealTrustState(): Promise<void> {
@@ -678,6 +748,9 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
       throw this.toPluginError('ensureIdentity', err)
     }
     this.ownBundle = bundle
+    // A usable identity is established — clear any prior recovery flag so a
+    // successful restore/import/replace lifts the host's recovery routing.
+    this._keyRecoveryNeeded = false
 
     await this.checkOwnPublishedKeyConsistency(bundle)
     if (getOwnKeyConflict()) {
@@ -836,6 +909,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     // locally so history stays decryptable. Re-run deferred decrypts so any
     // still-stashed messages are recovered immediately.
     ctx.notifyKeyUnlocked?.()
+    this.reverifyTrustStateAfterKeyChange()
 
     return { fingerprint: bundle.fingerprint }
   }
@@ -1128,6 +1202,7 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
     // stashed while the key was absent stay "could not be decrypted" until an
     // unrelated trigger (reconnect, app restart) re-registers the plugin.
     ctx.notifyKeyUnlocked?.()
+    this.reverifyTrustStateAfterKeyChange()
 
     return { fingerprint: bundle.fingerprint }
   }
@@ -1921,6 +1996,17 @@ export abstract class OpenPGPPluginBase implements E2EEPlugin {
 
   getOwnFingerprint(): string | null {
     return this.ownBundle?.fingerprint ?? null
+  }
+
+  /**
+   * Whether the active key's passphrase is protected by the OS keychain.
+   * `false` means it falls back to a cleartext file on disk (desktop on a
+   * platform with no secret service) — the UI warns the user it is not
+   * protected at rest. `null` when no identity is established yet. (Web
+   * always reports `false`; callers gate the warning on desktop.)
+   */
+  isKeychainBacked(): boolean | null {
+    return this.ownBundle?.keychainBacked ?? null
   }
 
   getBackedUpFingerprint(): string | null {

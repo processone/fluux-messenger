@@ -212,6 +212,10 @@ export interface RoomEntity {
    *  (XEP-0444), retractions (XEP-0424) or corrections (XEP-0308), so the UI
    *  hides those affordances for these rooms. See issue #228. */
   isIrcGateway?: boolean
+  /** True if the room supports XEP-0425 moderated message retraction
+   *  (`urn:xmpp:message-moderate:1` on the room's disco#info). `undefined` until
+   *  room disco resolves; the moderation affordance shows unless this is `false`. */
+  supportsModeration?: boolean
 
   // Mute control
   /** When true, the room won't bubble up in the sidebar on new messages.
@@ -245,6 +249,12 @@ export interface RoomMetadata {
   lastSeenMessageId?: string
   /** ID of the first unread message (calculated when switching to room) */
   firstNewMessageId?: string
+  /**
+   * XEP-0490: a remote device reported reading up to this stanza-id, but the
+   * message is not yet in the loaded room cache. Resolved to lastSeenMessageId
+   * once the message arrives (see mergeRoomMAMMessages).
+   */
+  pendingRemoteDisplayedStanzaId?: string
   /** Most recent message for sidebar preview */
   lastMessage?: RoomMessage
   /**
@@ -315,6 +325,9 @@ export interface RoomFeatures {
   /** Room is an IRC gateway channel (Biboumi et al.), detected via a conference/irc
    *  disco#info identity. IRC has no reactions/retractions/corrections concept (see #228) */
   isIrcGateway: boolean
+  /** Room supports XEP-0425 moderated message retraction, advertised as
+   *  `urn:xmpp:message-moderate:1` on the room's own disco#info. */
+  supportsModeration: boolean
   /** Display name from the conference identity, if advertised */
   name?: string
 }

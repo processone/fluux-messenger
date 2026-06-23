@@ -41,7 +41,7 @@ use openpgp::{
     packet::{
         key::{self, Key4, Key6},
         signature::SignatureBuilder,
-        Key, Packet, PKESK, SKESK,
+        Key, Packet, UserID, PKESK, SKESK,
     },
     parse::{
         stream::{
@@ -361,33 +361,6 @@ impl OpenpgpState {
         .unwrap_or_else(|join_err| Err(format!("backup encrypt task panicked: {join_err}")))
     }
 
-    /// Serialise the in-memory TSK for `account_jid` as an armored
-    /// PRIVATE KEY BLOCK suitable for import by external OpenPGP tools
-    /// (gpg, OpenKeychain, Kleopatra). When `passphrase` is `Some`, the
-    /// secret packets are S2K-wrapped before armoring; when `None`, the
-    /// secret packets are written in clear and the caller must have
-    /// confirmed they accept that.
-    ///
-    /// Runs on the blocking pool because the S2K wrap is non-trivial on
-    /// modern key sizes — keeps the IPC runtime free for the rest of the
-    /// app.
-    pub async fn export_private_key(
-        self: &Arc<Self>,
-        account_jid: String,
-        passphrase: Option<String>,
-    ) -> Result<String, String> {
-        let bundle = self.read_cached_bundle(&account_jid, "account")?;
-        tauri::async_runtime::spawn_blocking(move || {
-            crate::openpgp_export::export_tsk_as_private_key_block(
-                &bundle.secret_armored,
-                passphrase.as_deref(),
-            )
-            .map_err(anyhow_to_string)
-        })
-        .await
-        .unwrap_or_else(|join_err| Err(format!("export task panicked: {join_err}")))
-    }
-
     /// Import a backup fetched from the secret-key PEP node.
     ///
     /// Decrypts `backup_message` with `passphrase`, persists the recovered
@@ -412,6 +385,7 @@ impl OpenpgpState {
             .map_err(anyhow_to_string)?;
             let cert = Cert::from_bytes(tsk_armored.as_bytes())
                 .map_err(|e| format!("parse imported TSK: {e}"))?;
+            let cert = ensure_account_user_id(cert, &account_jid).map_err(anyhow_to_string)?;
             let backing = this
                 .storage
                 .save(&account_jid, &cert)
@@ -510,6 +484,7 @@ impl OpenpgpState {
 
             let cert = Cert::from_bytes(tsk_armored.as_bytes())
                 .map_err(|e| format!("parse selected TSK: {e}"))?;
+            let cert = ensure_account_user_id(cert, &account_jid).map_err(anyhow_to_string)?;
             let backing = this
                 .storage
                 .save(&account_jid, &cert)
@@ -819,21 +794,6 @@ pub async fn openpgp_backup_encrypt(
         .await
 }
 
-/// Export the account TSK as an armored PRIVATE KEY BLOCK for use with
-/// external OpenPGP tools (gpg, OpenKeychain, Kleopatra). `passphrase`
-/// is optional: `Some` wraps the secret packets with S2K; `None` writes
-/// them in clear, and the caller is responsible for warning the user.
-#[tauri::command]
-pub async fn openpgp_export_private_key(
-    account_jid: String,
-    passphrase: Option<String>,
-    state: State<'_, Arc<OpenpgpState>>,
-) -> Result<String, String> {
-    Arc::clone(&state)
-        .export_private_key(account_jid, passphrase)
-        .await
-}
-
 /// Import a backup published on `urn:xmpp:openpgp:0:secret-key`: decrypts
 /// with `passphrase`, persists the recovered TSK locally (wrapped with
 /// our at-rest Argon2id passphrase), and returns the [`PublicKeyInfo`]
@@ -946,6 +906,58 @@ fn generate_cert(user_id: &str) -> Result<Cert> {
         .generate()
         .context("generate OpenPGP cert")?;
     Ok(cert)
+}
+
+/// Ensure `cert` carries the XEP-0373 §8.5 `xmpp:<jid>` User ID, self-signing
+/// it when absent. Imported foreign keys (GnuPG / OpenKeychain) usually have
+/// only a `Name <email>` UID, but peers verify against the bare `xmpp:` form,
+/// so we add it before persisting. The primary key (and its fingerprint) is
+/// left intact, so trust pinning still holds. No-op when the UID is present.
+fn ensure_account_user_id(cert: Cert, account_jid: &str) -> Result<Cert> {
+    let expected = format!("xmpp:{account_jid}");
+    let has_xmpp = cert.userids().any(|ua| {
+        std::str::from_utf8(ua.userid().value())
+            .map(|s| s.eq_ignore_ascii_case(&expected))
+            .unwrap_or(false)
+    });
+
+    // Self-sign the xmpp: UID when it is missing.
+    let cert = if has_xmpp {
+        cert
+    } else {
+        let primary_secret = cert
+            .primary_key()
+            .key()
+            .clone()
+            .parts_into_secret()
+            .context("imported key has no secret material, cannot self-sign user ID")?;
+        let mut primary_signer = primary_secret
+            .into_keypair()
+            .context("unlock primary key for user-id binding")?;
+        let uid = UserID::from(expected.clone());
+        let binding = uid
+            .bind(
+                &mut primary_signer,
+                &cert,
+                SignatureBuilder::new(SignatureType::PositiveCertification),
+            )
+            .context("self-sign xmpp user id")?;
+        cert.insert_packets(vec![Packet::from(uid), binding.into()])
+            .context("insert xmpp user id")?
+            .0
+    };
+
+    // Canonicalize to xmpp:-only: Fluux publishes no real-name / email UID (the
+    // JID is the sole trust anchor, matching generated keys), so strip any
+    // foreign UIDs the imported key carried.
+    //
+    // NOTE: if key *generation* ever starts adding a name/email UID, relax this
+    // strip so it doesn't also drop those from imported keys.
+    Ok(cert.retain_userids(|ua| {
+        std::str::from_utf8(ua.userid().value())
+            .map(|s| s.eq_ignore_ascii_case(&expected))
+            .unwrap_or(false)
+    }))
 }
 
 /// Strip retired encryption subkeys from `cert`, keeping:
@@ -2539,5 +2551,70 @@ mod tests {
         );
         let expected_fp_len = if super::USE_V6_KEYS { 64 } else { 40 };
         assert_eq!(generated.fingerprint.len(), expected_fp_len);
+    }
+
+    // ---- imported-key xmpp: User ID -------------------------------------
+
+    fn has_uid(cert: &Cert, want: &str) -> bool {
+        cert.userids().any(|u| {
+            std::str::from_utf8(u.userid().value())
+                .map(|s| s == want)
+                .unwrap_or(false)
+        })
+    }
+
+    #[test]
+    fn ensure_account_user_id_adds_xmpp_uid_preserving_fingerprint() {
+        let (cert, _) =
+            CertBuilder::general_purpose(Some("Imported User <imported@example.org>"))
+                .generate()
+                .unwrap();
+        let fp = cert.fingerprint().to_hex();
+        assert!(
+            !has_uid(&cert, "xmpp:imported@example.com"),
+            "fixture must start without the xmpp: UID"
+        );
+
+        let augmented = ensure_account_user_id(cert, "imported@example.com").unwrap();
+
+        assert_eq!(
+            augmented.fingerprint().to_hex(),
+            fp,
+            "primary-key fingerprint must be preserved"
+        );
+        // The self-signed UID must be valid under the standard policy.
+        let policy = StandardPolicy::new();
+        let valid = augmented.with_policy(&policy, None).unwrap();
+        assert!(
+            valid
+                .userids()
+                .any(|u| std::str::from_utf8(u.userid().value()).unwrap()
+                    == "xmpp:imported@example.com"),
+            "added xmpp: UID must be present and valid"
+        );
+        // Canonicalized to xmpp:-only: the foreign name/email UID is stripped.
+        assert!(
+            !has_uid(&augmented, "Imported User <imported@example.org>"),
+            "foreign name/email UID must be stripped"
+        );
+        assert_eq!(
+            augmented.userids().count(),
+            1,
+            "only the xmpp: UID must remain"
+        );
+    }
+
+    #[test]
+    fn ensure_account_user_id_is_noop_when_already_present() {
+        let (cert, _) = CertBuilder::general_purpose(Some("xmpp:already@example.com"))
+            .generate()
+            .unwrap();
+        let before = cert.userids().count();
+        let after = ensure_account_user_id(cert, "already@example.com").unwrap();
+        assert_eq!(
+            after.userids().count(),
+            before,
+            "must not append a duplicate xmpp: UID"
+        );
     }
 }

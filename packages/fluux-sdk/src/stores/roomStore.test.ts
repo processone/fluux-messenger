@@ -171,6 +171,36 @@ describe('roomStore', () => {
     })
   })
 
+  describe('supportsModeration entity propagation (F3 / XEP-0425)', () => {
+    it('propagates supportsModeration to the room entity on addRoom', () => {
+      roomStore.getState().addRoom({ ...createRoom('mod@conference.example.com'), supportsModeration: true })
+      expect(roomStore.getState().roomEntities.get('mod@conference.example.com')?.supportsModeration).toBe(true)
+    })
+
+    it('updates supportsModeration on the entity via updateRoom', () => {
+      roomStore.getState().addRoom({ ...createRoom('mod@conference.example.com'), supportsModeration: undefined })
+      roomStore.getState().updateRoom('mod@conference.example.com', { supportsModeration: false })
+      expect(roomStore.getState().roomEntities.get('mod@conference.example.com')?.supportsModeration).toBe(false)
+    })
+  })
+
+  describe('anonymity flag entity propagation (F6)', () => {
+    it('propagates isNonAnonymous/isPrivate to the room entity on addRoom', () => {
+      roomStore.getState().addRoom({ ...createRoom('r@conference.example.com'), isNonAnonymous: true, isPrivate: false })
+      const entity = roomStore.getState().roomEntities.get('r@conference.example.com')
+      expect(entity?.isNonAnonymous).toBe(true)
+      expect(entity?.isPrivate).toBe(false)
+    })
+
+    it('updates isNonAnonymous/isPrivate on the entity via updateRoom', () => {
+      roomStore.getState().addRoom(createRoom('r@conference.example.com'))
+      roomStore.getState().updateRoom('r@conference.example.com', { isNonAnonymous: true, isPrivate: true })
+      const entity = roomStore.getState().roomEntities.get('r@conference.example.com')
+      expect(entity?.isNonAnonymous).toBe(true)
+      expect(entity?.isPrivate).toBe(true)
+    })
+  })
+
   describe('updateRoom', () => {
     it('should update an existing room', () => {
       roomStore.getState().addRoom(createRoom('test@conference.example.com', { name: 'Test' }))
@@ -3844,6 +3874,82 @@ describe('roomStore', () => {
 
       expect(roomStore.getState().roomMeta.get(ROOM)?.lastMessage?.body).toBe('real content')
     })
+  })
+})
+
+describe('setActiveRoom new-message marker — delayed = MUC/MAM history replay', () => {
+  // Regression guard: the marker (firstNewMessageId) drives scroll position on
+  // room open. For rooms, a delayed message is history replay (either MUC <history>
+  // for non-MAM rooms, or MAM-fetched archive — both carry isDelayed=true), NOT a
+  // new message. The marker must skip them, otherwise joining a room scrolls the
+  // user into the middle of replayed history instead of to the bottom.
+  // roomStore must call onActivate WITHOUT treatDelayedAsNew (unlike chatStore).
+  const ROOM = 'room@conference.example.com'
+
+  beforeEach(() => {
+    _resetStorageScopeForTesting()
+    roomStore.setState({
+      rooms: new Map(),
+      roomEntities: new Map(),
+      roomMeta: new Map(),
+      roomRuntime: new Map(),
+      activeRoomJid: null,
+      drafts: new Map(),
+      mamQueryStates: new Map(),
+      roomGaps: new Map(),
+    })
+    vi.clearAllMocks()
+  })
+
+  function delayedMsg(id: string, nick: string, ts: string): RoomMessage {
+    return {
+      type: 'groupchat',
+      id,
+      roomJid: ROOM,
+      from: `${ROOM}/${nick}`,
+      nick,
+      body: id,
+      timestamp: new Date(ts),
+      isOutgoing: false,
+      isDelayed: true,
+    }
+  }
+
+  function activateWith(messages: RoomMessage[], lastSeenMessageId: string, unreadCount: number) {
+    roomStore.getState().addRoom(createRoom(ROOM, { joined: true, messages, unreadCount }))
+    roomStore.setState((s) => {
+      const meta = new Map(s.roomMeta)
+      const existing = meta.get(ROOM)!
+      meta.set(ROOM, { ...existing, lastSeenMessageId })
+      return { roomMeta: meta }
+    })
+    roomStore.getState().setActiveRoom(ROOM)
+    return roomStore.getState().roomMeta.get(ROOM)?.firstNewMessageId
+  }
+
+  it('sets no marker when only delayed history follows lastSeen (MAM/MUC join)', () => {
+    const marker = activateWith(
+      [
+        createMessage('seen', ROOM, 'alice', 'seen message'),
+        delayedMsg('h-1', 'bob', '2025-01-15T10:00:00Z'),
+        delayedMsg('h-2', 'carol', '2025-01-15T10:30:00Z'),
+      ],
+      'seen',
+      2
+    )
+    expect(marker).toBeUndefined()
+  })
+
+  it('still sets the marker on a genuinely new live (non-delayed) message', () => {
+    const marker = activateWith(
+      [
+        createMessage('seen', ROOM, 'alice', 'seen message'),
+        createMessage('live', ROOM, 'bob', 'live message'), // isDelayed defaults to false
+      ],
+      'seen',
+      1
+    )
+    expect(marker).toBe('live')
   })
 })
 

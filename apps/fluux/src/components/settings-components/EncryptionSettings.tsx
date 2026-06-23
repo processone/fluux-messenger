@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Copy, Check, Lock, AlertTriangle, Trash2, CloudUpload, CloudDownload, RefreshCw, X, Info, ChevronDown, ChevronRight, FileDown, FileUp } from 'lucide-react'
 import { useConnection, useXMPPContext } from '@fluux/sdk'
@@ -9,7 +9,7 @@ import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { DeleteOpenpgpKeyDialog } from '@/components/DeleteOpenpgpKeyDialog'
 import { BackupPassphraseDialog } from '@/components/BackupPassphraseDialog'
 import { RestorePassphraseDialog } from '@/components/RestorePassphraseDialog'
-import { ExternalKeyExportDialog } from '@/components/ExternalKeyExportDialog'
+import { parseArmorPassphraseFormat } from '@/e2ee/passphraseFormatHeader'
 import { IdentityChoiceDialog } from '@/components/IdentityChoiceDialog'
 import { OwnKeyConflictBanner } from '@/components/OwnKeyConflictBanner'
 import { TrustStateCompromisedBanner } from '@/components/TrustStateCompromisedBanner'
@@ -59,6 +59,10 @@ export function EncryptionSettings() {
   const addToast = useToastStore((s) => s.addToast)
 
   const [fingerprint, setFingerprint] = useState<string | null>(null)
+  // Desktop only: false when the key's passphrase fell back to a cleartext
+  // file on disk (no OS secret service), i.e. the key is not protected at
+  // rest. Refreshed whenever the active fingerprint changes.
+  const [keychainBacked, setKeychainBacked] = useState<boolean | null>(null)
   const [isCopied, setIsCopied] = useState(false)
   const [isToggling, setIsToggling] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
@@ -93,6 +97,7 @@ export function EncryptionSettings() {
     accountJid: string
     hasBackup: boolean
     publishedFingerprints: string[]
+    reason?: 'no-local-key' | 'local-key-unrecoverable'
   } | null>(null)
 
   const [limitationsDismissed, setLimitationsDismissed] = useState(
@@ -102,7 +107,6 @@ export function EncryptionSettings() {
   const [rotateDescVisible, setRotateDescVisible] = useState(false)
   const [dangerZoneExpanded, setDangerZoneExpanded] = useState(false)
   const [showExportFileDialog, setShowExportFileDialog] = useState(false)
-  const [showExternalExportDialog, setShowExternalExportDialog] = useState(false)
   const [showImportFileDialog, setShowImportFileDialog] = useState(false)
   const [pendingImportFileArmored, setPendingImportFileArmored] = useState<string | null>(null)
   const openWebUnlockDialog = useWebUnlockDialogStore((s) => s.openWebUnlockDialog)
@@ -216,6 +220,76 @@ export function EncryptionSettings() {
     }
   }, [openpgpEnabled, online, client, registrationError])
 
+  // Surface recovery from Settings when a local key exists but can't be
+  // unlocked. The connect-time dialog (App.tsx) may have been dismissed, and
+  // the toggle gates on `hasNoLocalKey()` which is false for a present-but-
+  // broken key — so without this the panel would report a misleading state
+  // and the user would be stuck. Auto-open ONCE per mount (the ref guard
+  // prevents re-opening on dismiss, so the user isn't trapped); re-entering
+  // Settings or toggling re-offers it.
+  const recoveryPromptedRef = useRef(false)
+  useEffect(() => {
+    if (recoveryPromptedRef.current) return
+    if (!online || !openpgpEnabled || pendingIdentityChoice || registrationError) {
+      return
+    }
+    const plugin = client.e2ee?.getPlugin('openpgp') as
+      | { isKeyRecoveryNeeded?: () => boolean }
+      | null
+      | undefined
+    if (plugin?.isKeyRecoveryNeeded?.() !== true) return
+    const bareJid = jid ? jid.split('/')[0] : null
+    if (!bareJid) return
+    recoveryPromptedRef.current = true
+    let cancelled = false
+    void (async () => {
+      let next: {
+        accountJid: string
+        hasBackup: boolean
+        publishedFingerprints: string[]
+        reason: 'local-key-unrecoverable'
+      }
+      try {
+        const state = await probeRemoteIdentityState(client, bareJid)
+        next = {
+          accountJid: bareJid,
+          hasBackup: state.backupMessage !== null,
+          publishedFingerprints: state.publishedFingerprints,
+          reason: 'local-key-unrecoverable',
+        }
+      } catch {
+        // Probe failed: still open so import/replace are reachable; restore
+        // stays disabled until the server probe succeeds.
+        next = {
+          accountJid: bareJid,
+          hasBackup: false,
+          publishedFingerprints: [],
+          reason: 'local-key-unrecoverable',
+        }
+      }
+      if (!cancelled) setPendingIdentityChoice(next)
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [online, openpgpEnabled, pendingIdentityChoice, registrationError, client, jid])
+
+  // Track whether the active key is keychain-backed (desktop only). Keyed on
+  // `fingerprint` so it refreshes after every path that establishes a key
+  // (connect-time load, restore, import, generate). Web never warns: its
+  // `keychainBacked: false` means IndexedDB + session passphrase, not
+  // cleartext on disk.
+  useEffect(() => {
+    if (!isTauri() || !fingerprint) {
+      setKeychainBacked(null)
+      return
+    }
+    const plugin = client.e2ee?.getPlugin('openpgp') as
+      | { isKeychainBacked?: () => boolean | null }
+      | null
+    setKeychainBacked(plugin?.isKeychainBacked?.() ?? null)
+  }, [fingerprint, client])
+
   const handleToggle = useCallback(async () => {
     const next = !openpgpEnabled
     setIsToggling(true)
@@ -311,22 +385,34 @@ export function EncryptionSettings() {
       // (returning device) pays no extra IQ.
       await registerE2EEPlugins(client)
       const plugin = client.e2ee?.getPlugin('openpgp') as
-        | { hasNoLocalKey?: () => Promise<boolean> }
+        | {
+            hasNoLocalKey?: () => Promise<boolean>
+            isKeyRecoveryNeeded?: () => boolean
+          }
         | null
         | undefined
-      const hasNoLocal = plugin?.hasNoLocalKey
-        ? await plugin.hasNoLocalKey()
-        : false
-      if (!hasNoLocal) return
+      // A present-but-unreadable local key (keychain/key desync) needs the
+      // same recovery dialog as a missing key — but `hasNoLocalKey()` is
+      // false for it (the .tsk.asc exists), so consult the recovery flag too.
+      // Without this, a user who dismissed the connect-time dialog and came to
+      // Settings to "fix encryption" would see the toggle report all-good
+      // while encryption silently never starts.
+      const recoveryNeeded = plugin?.isKeyRecoveryNeeded?.() === true
+      const hasNoLocal =
+        !recoveryNeeded && plugin?.hasNoLocalKey
+          ? await plugin.hasNoLocalKey()
+          : false
+      if (!recoveryNeeded && !hasNoLocal) return
       const state = await probeRemoteIdentityState(client, bareJid)
-      // The guard wouldn't have fired without server identity, but
-      // re-check defensively — the server's PEP could have changed
-      // between init's probe and ours.
-      if (!state.hasServerIdentity) return
+      // For a missing key we only prompt when the server has an identity to
+      // reconcile against; an unrecoverable local key always needs a decision
+      // (import/replace remain available even with no server backup).
+      if (!recoveryNeeded && !state.hasServerIdentity) return
       setPendingIdentityChoice({
         accountJid: bareJid,
         hasBackup: state.backupMessage !== null,
         publishedFingerprints: state.publishedFingerprints,
+        reason: recoveryNeeded ? 'local-key-unrecoverable' : 'no-local-key',
       })
     } catch (err) {
       // A probe failure is structurally different from a generic toggle
@@ -724,24 +810,6 @@ export function EncryptionSettings() {
     [client, addToast, t],
   )
 
-  const handleExternalExportConfirm = useCallback(
-    async (passphrase: string | null) => {
-      const plugin = client.e2ee?.getPlugin('openpgp') as
-        | { exportPrivateKeyToFile?: (pp: string | null) => Promise<boolean> }
-        | null
-        | undefined
-      if (!plugin?.exportPrivateKeyToFile) {
-        throw new Error(t('settings.encryption.backupPluginUnavailable'))
-      }
-      const saved = await plugin.exportPrivateKeyToFile(passphrase)
-      setShowExternalExportDialog(false)
-      if (saved) {
-        addToast('success', t('settings.encryption.externalExportSuccess'))
-      }
-    },
-    [client, addToast, t],
-  )
-
   const handleImportFileRequest = useCallback(async () => {
     const plugin = client.e2ee?.getPlugin('openpgp') as
       | { pickKeyFile?: () => Promise<string | null> }
@@ -926,7 +994,7 @@ export function EncryptionSettings() {
                   </code>
                   <button
                     onClick={handleCopyFingerprint}
-                    className="p-1.5 text-fluux-muted hover:text-fluux-text rounded hover:bg-fluux-hover transition-colors"
+                    className="p-1.5 text-fluux-muted hover:text-fluux-text rounded hover:bg-fluux-hover transition-colors tap-target"
                     title={t('settings.encryption.copyFingerprint')}
                     aria-label={t('settings.encryption.copyFingerprint')}
                   >
@@ -939,6 +1007,19 @@ export function EncryptionSettings() {
                 </div>
               )}
             </div>
+          </div>
+        )}
+
+        {/* Not-protected-at-rest warning — desktop with no OS keychain, so the
+            key's passphrase sits in a cleartext file. Security state, not
+            dismissible. */}
+        {keychainBacked === false && (
+          <div
+            role="alert"
+            className="flex gap-2 p-3 rounded-lg bg-red-500/10 text-xs text-red-600 dark:text-red-400 leading-snug"
+          >
+            <AlertTriangle className="size-4 flex-shrink-0 mt-0.5" />
+            <p className="flex-1">{t('settings.encryption.notProtectedAtRest')}</p>
           </div>
         )}
 
@@ -955,7 +1036,7 @@ export function EncryptionSettings() {
             <button
               onClick={handleDismissLimitations}
               aria-label={t('common.close')}
-              className="flex-shrink-0 p-0.5 text-fluux-muted hover:text-fluux-text rounded transition-colors"
+              className="flex-shrink-0 p-0.5 text-fluux-muted hover:text-fluux-text rounded transition-colors tap-target"
             >
               <X className="size-3.5" />
             </button>
@@ -1055,13 +1136,6 @@ export function EncryptionSettings() {
                     >
                       <FileUp className="size-3.5" />
                       {t('settings.encryption.importFileAction')}
-                    </button>
-                    <button
-                      onClick={() => setShowExternalExportDialog(true)}
-                      className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-fluux-hover hover:bg-fluux-active text-fluux-text rounded transition-colors"
-                    >
-                      <FileDown className="size-3.5" />
-                      {t('settings.encryption.externalExportAction')}
                     </button>
                   </div>
                 </>
@@ -1212,6 +1286,7 @@ export function EncryptionSettings() {
 
       {pendingIdentityChoice && (
         <IdentityChoiceDialog
+          reason={pendingIdentityChoice.reason}
           hasServerBackup={pendingIdentityChoice.hasBackup}
           publishedFingerprints={pendingIdentityChoice.publishedFingerprints}
           onRestoreFromServer={handleIdentityChoiceRestore}
@@ -1231,18 +1306,16 @@ export function EncryptionSettings() {
         />
       )}
 
-      {showExternalExportDialog && (
-        <ExternalKeyExportDialog
-          onConfirm={handleExternalExportConfirm}
-          onCancel={() => setShowExternalExportDialog(false)}
-        />
-      )}
-
       {showImportFileDialog && pendingImportFileArmored && (
         <RestorePassphraseDialog
           title={t('settings.encryption.importFileDialogTitle')}
           body={t('settings.encryption.importFileDialogBody')}
           confirmLabel={t('settings.encryption.importFileAction')}
+          // Foreign keys (GnuPG / OpenKeychain) carry an arbitrary passphrase:
+          // free-text entry with a reveal toggle, no autofill, trimming. A Fluux
+          // backup file (Passphrase-Format: xep0373) gets the masked dashed input.
+          mode="import"
+          isBackupCode={parseArmorPassphraseFormat(pendingImportFileArmored) === 'xep0373'}
           onConfirm={handleImportFileConfirm}
           onCancel={() => {
             setShowImportFileDialog(false)

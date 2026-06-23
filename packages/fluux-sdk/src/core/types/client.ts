@@ -16,7 +16,7 @@ import type { HttpUploadService } from './upload'
 import type { WebPushService, WebPushStatus } from './webpush'
 import type { RSMResponse, MAMQueryState } from './pagination'
 import type { MAMQueryDirection } from '../../stores/shared/mamState'
-import type { AdminCommand, AdminSession, EntityCounts } from './admin'
+import type { AdminCommand, AdminSession, ServerStats } from './admin'
 import type { StorageAdapter } from './storage'
 import type { ProxyAdapter } from './proxy'
 
@@ -219,11 +219,9 @@ export interface StoreBindings {
     setIsDiscovering: (loading: boolean) => void
     setIsExecuting: (loading: boolean) => void
     getCurrentSession: () => AdminSession | null
-    setEntityCounts: (counts: Partial<EntityCounts>) => void
     setMucServiceJid: (jid: string | null) => void
+    setServerStats: (stats: ServerStats | null) => void
     getMucServiceJid: () => string | null
-    setMucServiceSupportsMAM: (supportsMAM: boolean | null) => void
-    getMucServiceSupportsMAM: () => boolean | null
     // Vhost management
     setVhosts: (vhosts: string[]) => void
     setSelectedVhost: (vhost: string | null) => void
@@ -405,4 +403,10 @@ export interface XMPPClientConfig {
    * ```
    */
   proxyAdapter?: ProxyAdapter
+  /**
+   * Pull-based predicate the SDK evaluates before each automatic reconnect
+   * attempt. Return `false` to suppress auto-reconnect (e.g., after an
+   * explicit logout). Evaluated live — no cached copy. Defaults to always-on.
+   */
+  shouldAutoReconnect?: () => boolean
 }

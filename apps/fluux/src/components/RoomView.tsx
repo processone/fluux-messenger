@@ -9,7 +9,7 @@ import { MessageBubble, MessageList, shouldShowAvatar, whisperThreadPosition, wh
 import { FindOnPageBar } from './conversation/FindOnPageBar'
 import { useFindOnPage, type FindOnPageHandle } from '@/hooks/useFindOnPage'
 import { Avatar } from './Avatar'
-import { selectSelfOccupant, stableNickSet, resolveRoomSender, resolveReplyAvatar, resolveSenderColor } from './conversation/roomSenderResolution'
+import { selectSelfOccupant, stableNickSet, resolveRoomSender, resolveReplyAvatar, resolveSenderColor, resolveNickColor } from './conversation/roomSenderResolution'
 import { format } from 'date-fns'
 import { Shield, Crown, Upload, Loader2, LogIn, AlertCircle, Users, MessageCircle, EyeOff, User, Settings, Ear, X } from 'lucide-react'
 import { ChristmasAnimation } from './ChristmasAnimation'
@@ -26,6 +26,10 @@ import { findLastEditableMessage, findLastEditableMessageId } from '@/utils/mess
 import { useExpandedMessagesStore } from '@/stores/expandedMessagesStore'
 import { ConfirmDialog } from './ConfirmDialog'
 import { useRoomJoinWarning } from '@/hooks/useRoomJoinWarning'
+import { MediaAutoloadProvider } from '@/contexts'
+import { computeMediaAutoload } from '@/utils/mediaAutoload'
+import { useSettingsStore } from '@/stores/settingsStore'
+import { getRoomJoinErrorMessage } from '@/utils/roomJoinError'
 
 // Generate hat colors from URI using XEP-0392 consistent color
 function getHatColors(hat: { uri: string; hue?: number }) {
@@ -74,7 +78,9 @@ const EMPTY_OCCUPANTS: Map<string, RoomOccupant> = new Map()
 export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = false, onShowOccupantsChange, onStartChat, onShowProfile, findOnPageRef, onSearchInConversation }: RoomViewProps) {
   detectRenderLoop('RoomView')
   const { t } = useTranslation()
-  const { activeRoom, activeMessages, activeTypingUsers, sendMessage, sendWhisper, sendReaction, sendPoll, votePoll, closePoll, sendCorrection, retractMessage, moderateMessage, sendChatState, setRoomNotifyAll, activeAnimation, sendEasterEgg, clearAnimation, clearFirstNewMessageId, updateLastSeenMessageId, joinRoom, setRoomAvatar, clearRoomAvatar, fetchOlderHistory, continueRoomCatchUp, activeMAMState, submitRoomConfig, setSubject, destroyRoom, setAffiliation, setRole, targetMessageId, clearTargetMessageId } = useRoomActive()
+  const { activeRoom, activeMessages, activeTypingUsers, sendMessage, sendWhisper, sendReaction, sendPoll, votePoll, closePoll, sendCorrection, retractMessage, moderateMessage, sendChatState, setRoomNotifyAll, activeAnimation, sendEasterEgg, clearAnimation, clearFirstNewMessageId, updateLastSeenMessageId, joinRoom, joinResult, setRoomAvatar, clearRoomAvatar, fetchOlderHistory, continueRoomCatchUp, activeMAMState, submitRoomConfig, setSubject, destroyRoom, setAffiliation, setRole, targetMessageId, clearTargetMessageId } = useRoomActive()
+  const mediaPolicy = useSettingsStore((s) => s.mediaAutoDownload)
+
   // NOTE: Use focused selectors instead of useConnection() hook to avoid
   // re-renders when unrelated connection state changes (error, reconnectAttempt, etc.)
   const ownAvatar = useConnectionStore((s) => s.ownAvatar)
@@ -432,6 +438,11 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
 
   if (!activeRoom) return null
 
+  // Room media trust: open rooms are public; members-only/hidden are private.
+  // A room whose disco hasn't resolved has isPrivate falsy → treated as public
+  // (fail-safe). Strangers do not apply to rooms.
+  const mediaAutoLoad = computeMediaAutoload(mediaPolicy, activeRoom.isPrivate ? 'room-private' : 'room-public')
+
   return (
     <div
       className="flex flex-1 min-h-0 relative"
@@ -498,11 +509,12 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
               onClose={find.close}
             />
           )}
-          <RoomMessageList
-            messages={displayMessages}
-            scrollerRef={scrollRef}
-            isAtBottomRef={isAtBottomRef}
-            room={stableRoom ?? activeRoom}
+          <MediaAutoloadProvider autoLoad={mediaAutoLoad}>
+            <RoomMessageList
+              messages={displayMessages}
+              scrollerRef={scrollRef}
+              isAtBottomRef={isAtBottomRef}
+              room={stableRoom ?? activeRoom}
             contactsByJid={contactsByJid}
             ownAvatar={ownAvatar}
             sendReaction={sendReaction}
@@ -543,7 +555,8 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
             forwardGapTimestamp={activeMAMState?.forwardGapTimestamp}
             onCatchUpHistory={continueRoomCatchUp}
             isCatchingUp={activeMAMState?.isLoading}
-          />
+            />
+          </MediaAutoloadProvider>
         </div>
 
         {/* Input - show composer if joined, join prompt if not */}
@@ -585,7 +598,12 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
             onJoin={async () => {
               // Issue #37: warn before joining a room that would expose the user's real JID.
               if (await confirmJoin(activeRoom.jid)) {
-                await joinRoom(activeRoom.jid, activeRoom.nickname)
+                try {
+                  await joinRoom(activeRoom.jid, activeRoom.nickname)
+                  await joinResult(activeRoom.jid)
+                } catch (err) {
+                  addToast('error', getRoomJoinErrorMessage(t, err))
+                }
               }
             }}
           />
@@ -593,17 +611,31 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
         {warningDialog}
       </div>
 
-      {/* Occupant panel (inline sidebar, desktop only — mobile uses full-screen in ChatLayout) */}
+      {/* Occupant panel (>=768px; <768 uses the full-screen panel in ChatLayout).
+          Below lg it's a right-edge drawer over a dimmed backdrop so it doesn't
+          squeeze the chat into a narrow column on tablets; at lg+ there's room
+          for it as an in-flow side column. */}
       {showOccupants && !isSmallScreen() && (
-        <OccupantPanel
-          room={activeRoom}
-          contactsByJid={contactsByJid}
-          ownAvatar={ownAvatar}
-          onClose={handleCloseOccupants}
-          onStartChat={onStartChat}
-          onWhisper={enterWhisperMode}
-          onShowProfile={onShowProfile}
-        />
+        <>
+          <button
+            type="button"
+            aria-hidden="true"
+            tabIndex={-1}
+            onClick={handleCloseOccupants}
+            className="fixed inset-0 z-30 bg-black/50 lg:hidden"
+          />
+          <div className="fixed inset-y-0 end-0 z-40 flex shadow-xl animate-drawer-in lg:static lg:z-auto lg:shadow-none">
+            <OccupantPanel
+              room={activeRoom}
+              contactsByJid={contactsByJid}
+              ownAvatar={ownAvatar}
+              onClose={handleCloseOccupants}
+              onStartChat={onStartChat}
+              onWhisper={enterWhisperMode}
+              onShowProfile={onShowProfile}
+            />
+          </div>
+        </>
       )}
 
       {/* Christmas easter egg animation */}
@@ -875,6 +907,20 @@ export const RoomMessageList = memo(function RoomMessageList({
   knownNicksRef.current = stableNickSet(room.occupants, knownNicksRef.current)
   const knownNicks = knownNicksRef.current
 
+  // Stable nick→color resolver for inline @mention pills. Mirrors the sender-name
+  // color (resolveSenderColor, incl. a roster contact's XEP-0392 color) so a mention
+  // matches the mentioned person's displayed color instead of a bare nick hash.
+  // Backed by a ref so its identity stays stable across presence churn — passing a
+  // fresh closure would bust every memoized row. Reads the latest room/contacts/theme
+  // at call time, which is render time of each body (kept current by the rows that
+  // re-render). See [project_reply_scroll_freeze] for the derived-value class.
+  const mentionColorCtxRef = useRef({ room, contactsByJid, isDarkMode })
+  mentionColorCtxRef.current = { room, contactsByJid, isDarkMode }
+  const resolveMentionColor = useCallback((nick: string) => {
+    const ctx = mentionColorCtxRef.current
+    return resolveNickColor(nick, ctx.room, ctx.contactsByJid, ctx.isDarkMode ?? true)
+  }, [])
+
   // The current user's own occupant record (stable ref across presence churn unless
   // our own role/affiliation changes). Used per-row to compute moderation permission.
   const selfOccupant = useMemo(
@@ -970,6 +1016,7 @@ export const RoomMessageList = memo(function RoomMessageList({
         replyBareJid={replyBareJid}
         knownNicks={knownNicks}
         contactsByJid={contactsByJid}
+        resolveMentionColor={resolveMentionColor}
         ownAvatar={ownAvatar}
         sendReaction={sendReaction}
         votePoll={votePoll}
@@ -1063,6 +1110,9 @@ interface RoomMessageBubbleWrapperProps {
   replyBareJid: string | undefined
   knownNicks: ReadonlySet<string>
   contactsByJid: Map<string, ContactIdentity>
+  // Stable nick→color resolver for inline @mention pills (built in the list layer
+  // where `room` is available; this row intentionally never sees `room`).
+  resolveMentionColor: (nick: string) => string | undefined
   ownAvatar?: string | null
   sendReaction: (roomJid: string, messageId: string, emojis: string[]) => Promise<void>
   votePoll: (roomJid: string, messageId: string, optionEmoji: string, currentMyReactions: string[], poll: PollData, isClosed?: boolean) => Promise<void>
@@ -1130,6 +1180,7 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
   replyBareJid,
   knownNicks,
   contactsByJid,
+  resolveMentionColor,
   ownAvatar,
   sendReaction,
   votePoll,
@@ -1186,9 +1237,9 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
 
   const contact = senderBareJid ? contactsByJid.get(senderBareJid) : undefined
 
-  // Get sender color: accent for own messages, contact's pre-calculated color, or fallback to nick-based generation
+  // Get sender color: dedicated AA-safe self color for own messages, contact's pre-calculated color, or fallback to nick-based generation
   const senderColor = message.isOutgoing
-    ? 'var(--fluux-text-accent)'
+    ? 'var(--fluux-text-self)'
     : resolveSenderColor(resolvedSenderName, contact, isDarkMode ?? true)
 
   // Get my current reactions to this message (room — uses nick)
@@ -1230,8 +1281,8 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
       return fallbackId ? fallbackId.split('/').pop() || 'Unknown' : 'Unknown'
     },
     (originalMsg, fallbackId, dark) => {
-      // Own messages: use accent color
-      if (originalMsg?.isOutgoing) return 'var(--fluux-text-accent)'
+      // Own messages: use the dedicated AA-safe self color
+      if (originalMsg?.isOutgoing) return 'var(--fluux-text-self)'
       const nick = originalMsg?.nick || (fallbackId ? fallbackId.split('/').pop() : undefined)
       if (!nick) return 'var(--fluux-brand)'
       // Same contact-color preference as the main senderColor above, so the
@@ -1369,6 +1420,7 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
         mentions={message.mentions}
         nickname={myNick}
         knownNicks={knownNicks}
+        resolveMentionColor={resolveMentionColor}
         whisperWith={message.whisperWith}
         whisperThread={whisperThread}
         counterpartPresent={counterpartPresent}

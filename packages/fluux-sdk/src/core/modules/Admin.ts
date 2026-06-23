@@ -1,6 +1,6 @@
 import { xml, Element } from '@xmpp/client'
 import { BaseModule } from './BaseModule'
-import { getDomain, getLocalPart } from '../jid'
+import { getDomain, getLocalPart, getBareJid } from '../jid'
 import { generateUUID } from '../../utils/uuid'
 import { parseDataForm, getFormFieldValue, getFormFieldValues } from '../../utils/dataForm'
 import { parseRSMResponse, buildRSMElement } from '../../utils/rsm'
@@ -13,6 +13,8 @@ import {
   NS_DATA_FORMS,
   NS_MUC_OWNER,
   NS_RSM,
+  NS_VERSION,
+  NS_LAST,
 } from '../namespaces'
 import type {
   AdminCommand,
@@ -23,8 +25,14 @@ import type {
   RSMResponse,
   AdminUser,
   AdminRoom,
-  EntityCounts,
+  ServerStats,
+  LastActivityResult,
 } from '../types'
+
+/** Hard cap on the full user-directory fetch. Past this, escalate to server-side search. */
+export const MAX_USERS = 10000
+/** RSM page size for the full user-directory fetch (large to minimize roundtrips). */
+export const USER_PAGE_SIZE = 1500
 
 /**
  * Server administration module via XEP-0050 Ad-Hoc Commands and XEP-0133 Service Administration.
@@ -293,61 +301,120 @@ export class Admin extends BaseModule {
   }
 
   // ============================================================================
-  // Entity Counts
+  // Server Overview Stats
   // ============================================================================
 
   /**
-   * Fetch entity counts for admin dashboard badges.
-   * Executes get-registered-users-num, get-online-users-num, and muc_online_rooms_count commands.
+   * Fetch structured server vital-signs for the overview dashboard.
+   * Each metric is fetched independently; a missing/forbidden command omits
+   * that metric rather than failing the whole snapshot (discovery-driven).
+   *
+   * NOTE: _vhost is reserved for future per-vhost scoping (not yet wired).
    */
-  async fetchEntityCounts(): Promise<EntityCounts> {
-    const counts: EntityCounts = {}
+  async fetchServerStats(_vhost?: string): Promise<ServerStats> {
+    const stats: ServerStats = { fetchedAt: Date.now() }
 
-    // Try to fetch registered users count
     try {
-      const regResult = await this.executeSimpleCommand('get-registered-users-num')
-      if (regResult) {
-        const numField = getFormFieldValue(regResult, 'registeredusersnum')
-        if (numField) {
-          counts.users = parseInt(numField, 10)
-        }
-      }
-    } catch {
-      // Command may not be available
+      const form = await this.executeSimpleCommand('get-registered-users-num')
+      const v = form ? getFormFieldValue(form, 'registeredusersnum') : undefined
+      const n = this.parseCount(v)
+      if (n !== undefined) stats.registeredUsers = n
+    } catch { /* unavailable */ }
+
+    try {
+      // get-online-users-num counts SESSIONS/resources, not distinct users: a
+      // user connected from several devices is counted once per device.
+      const form = await this.executeSimpleCommand('get-online-users-num')
+      const v = form ? getFormFieldValue(form, 'onlineusersnum') : undefined
+      const n = this.parseCount(v)
+      if (n !== undefined) stats.onlineSessions = n
+    } catch { /* unavailable */ }
+
+    // Distinct online users: dedupe the online-users list by bare JID. Skip the
+    // (potentially large) list fetch when no sessions are online.
+    if (stats.onlineSessions !== 0) {
+      try {
+        const jids = await this.fetchOnlineUserJids()
+        if (jids.size > 0) stats.onlineUsers = jids.size
+      } catch { /* unavailable */ }
+    } else {
+      stats.onlineUsers = 0
     }
 
-    // Try to fetch online users count
     try {
-      const onlineResult = await this.executeSimpleCommand('get-online-users-num')
-      if (onlineResult) {
-        const numField = getFormFieldValue(onlineResult, 'onlineusersnum')
-        if (numField) {
-          counts.onlineUsers = parseInt(numField, 10)
-        }
-      }
-    } catch {
-      // Command may not be available
-    }
+      // service=global → count rooms across all vhosts (default is one conference vhost)
+      const form = await this.executeApiCommand('muc_online_rooms_count', { service: 'global' })
+      const v = form
+        ? (getFormFieldValue(form, 'count') ??
+           getFormFieldValue(form, 'onlineroomsnum') ??
+           getFormFieldValue(form, 'rooms'))
+        : undefined
+      const n = this.parseCount(v)
+      if (n !== undefined) stats.onlineRooms = n
+    } catch { /* unavailable */ }
 
-    // Try to fetch online MUC rooms count using ejabberd API command
-    // Note: This is sent to the server domain (not MUC service) with api-commands/ prefix
+    const uptime = await this.fetchUptimeSeconds()
+    if (uptime != null) stats.uptimeSeconds = uptime
+
+    const version = await this.fetchServerVersion()
+    if (version) stats.version = version
+
     try {
-      const roomsResult = await this.executeApiCommand('muc_online_rooms_count')
-      if (roomsResult) {
-        // The field name varies - try common variations
-        const numField = getFormFieldValue(roomsResult, 'onlineroomsnum') ||
-                        getFormFieldValue(roomsResult, 'rooms') ||
-                        getFormFieldValue(roomsResult, 'count')
-        if (numField) {
-          counts.rooms = parseInt(numField, 10)
-        }
-      }
-    } catch {
-      // Command may not be available
-    }
+      const vhosts = await this.fetchVhosts()
+      if (vhosts.length > 0) stats.vhostCount = vhosts.length
+    } catch { /* unavailable */ }
 
-    this.deps.emitSDK('admin:entity-counts', { counts })
-    return counts
+    this.deps.emitSDK('admin:server-stats', { stats })
+    return stats
+  }
+
+  /**
+   * Read server uptime via the ejabberd `stats` api-command (name=uptimeseconds).
+   * Parses the result value tolerantly — the value field var is not hard-coded.
+   */
+  private async fetchUptimeSeconds(): Promise<number | null> {
+    try {
+      const form = await this.executeApiCommand('stats', { name: 'uptimeseconds' })
+      if (!form) return null
+      for (const field of form.fields) {
+        if (field.type === 'fixed' || field.type === 'hidden') continue
+        if (field.var === 'name') continue
+        const raw = Array.isArray(field.value) ? field.value[0] : field.value
+        const n = raw != null ? parseInt(raw, 10) : NaN
+        if (!Number.isNaN(n)) return n
+      }
+    } catch { /* unavailable */ }
+    return null
+  }
+
+  /** Parse a count field tolerantly: returns undefined for missing/non-numeric values. */
+  private parseCount(value: string | undefined): number | undefined {
+    if (value == null || value === '') return undefined
+    const n = parseInt(value, 10)
+    return Number.isNaN(n) ? undefined : n
+  }
+
+  /** Read server software version via XEP-0092 (jabber:iq:version) on the domain. */
+  private async fetchServerVersion(): Promise<string | null> {
+    const currentJid = this.deps.getCurrentJid()
+    const domain = currentJid ? getDomain(currentJid) : null
+    if (!domain) return null
+    try {
+      const iq = xml(
+        'iq',
+        { type: 'get', to: domain, id: `ver_${generateUUID()}` },
+        xml('query', { xmlns: NS_VERSION })
+      )
+      const result = await this.deps.sendIQ(iq)
+      const query = result.getChild('query', NS_VERSION)
+      if (!query) return null
+      const name = query.getChild('name')?.text() || ''
+      const version = query.getChild('version')?.text() || ''
+      const combined = [name, version].filter(Boolean).join(' ').trim()
+      return combined || null
+    } catch {
+      return null
+    }
   }
 
   /**
@@ -388,7 +455,10 @@ export class Admin extends BaseModule {
    * Handles multi-step commands that require form submission.
    * @param commandName - The command name (e.g., muc_online_rooms_count)
    */
-  private async executeApiCommand(commandName: string): Promise<DataForm | null> {
+  private async executeApiCommand(
+    commandName: string,
+    overrides?: Record<string, string | string[]>
+  ): Promise<DataForm | null> {
     const currentJid = this.deps.getCurrentJid()
     if (!currentJid) return null
 
@@ -421,12 +491,15 @@ export class Admin extends BaseModule {
         const sessionId = command.attrs.sessionid
         const form = parseDataForm(formEl)
 
-        // Build submit form with default values from the form
-        // Filter out fixed fields and fields without var (they shouldn't be submitted)
+        // Build submit form: use caller-provided overrides where present, else the
+        // server-supplied default value. Filter out fixed fields and fields
+        // without var (they shouldn't be submitted).
         const submitFields = form.fields
           .filter(field => field.var && field.type !== 'fixed')
           .map(field => {
-            const values = Array.isArray(field.value) ? field.value : (field.value ? [field.value] : [])
+            const overridden = overrides?.[field.var]
+            const raw = overridden !== undefined ? overridden : field.value
+            const values = Array.isArray(raw) ? raw : (raw ? [raw] : [])
             return xml('field', { var: field.var },
               ...values.map((v: string) => xml('value', {}, v))
             )
@@ -637,6 +710,114 @@ export class Admin extends BaseModule {
     }
 
     return { users, pagination }
+  }
+
+  /**
+   * Fetch the entire registered-user directory by looping {@link fetchUserList}
+   * over RSM pages until complete or {@link MAX_USERS} is reached.
+   *
+   * @returns the accumulated users and whether the directory was truncated at the cap.
+   */
+  async fetchAllUsers(vhost?: string): Promise<{ users: AdminUser[]; truncated: boolean }> {
+    const all: AdminUser[] = []
+    let after: string | undefined
+    let truncated = false
+    // Guard against a server that ignores RSM and never advances the cursor.
+    const maxPages = Math.ceil(MAX_USERS / USER_PAGE_SIZE) + 2
+
+    for (let page = 0; page < maxPages; page++) {
+      const { users, pagination } = await this.fetchUserList(vhost, {
+        max: USER_PAGE_SIZE,
+        ...(after ? { after } : {}),
+      })
+      all.push(...users)
+
+      if (all.length >= MAX_USERS) {
+        all.length = MAX_USERS
+        truncated = true
+        break
+      }
+      // Stop when the server signals no more pages (no cursor) or returns nothing.
+      if (users.length === 0 || !pagination.last) break
+      after = pagination.last
+    }
+
+    return { users: all, truncated }
+  }
+
+  /**
+   * Fetch the set of currently-online users (XEP-0133 get-online-users-list).
+   * JIDs are bared so callers can match against bare JIDs in the user list.
+   *
+   * @returns a Set of bare JIDs, or an empty Set when the command is
+   *   unavailable/unauthorised (so callers degrade to "no online info").
+   */
+  async fetchOnlineUserJids(vhost?: string): Promise<Set<string>> {
+    const currentJid = this.deps.getCurrentJid()
+    if (!currentJid) return new Set()
+
+    const node = `${NS_ADMIN}#get-online-users-list`
+    const domain = vhost || getDomain(currentJid)
+
+    try {
+      const executeIq = xml(
+        'iq',
+        { type: 'set', to: domain, id: `online_${generateUUID()}` },
+        xml('command', { xmlns: NS_COMMANDS, node, action: 'execute' })
+      )
+      const executeResult = await this.deps.sendIQ(executeIq)
+      let command = executeResult.getChild('command', NS_COMMANDS)
+      if (!command) return new Set()
+
+      if (command.attrs.status === 'executing') {
+        const sessionId = command.attrs.sessionid
+        const completeIq = xml(
+          'iq',
+          { type: 'set', to: domain, id: `online_${generateUUID()}` },
+          xml('command', { xmlns: NS_COMMANDS, node, action: 'complete', sessionid: sessionId },
+            xml('x', { xmlns: NS_DATA_FORMS, type: 'submit' })
+          )
+        )
+        const completeResult = await this.deps.sendIQ(completeIq)
+        command = completeResult.getChild('command', NS_COMMANDS)
+        if (!command) return new Set()
+      }
+
+      const formEl = command.getChild('x', NS_DATA_FORMS)
+      if (!formEl) return new Set()
+      const form = parseDataForm(formEl)
+      let jids = getFormFieldValues(form, 'onlineuserjids')
+      if (jids.length === 0) jids = getFormFieldValues(form, 'accountjids')
+      if (jids.length === 0) jids = getFormFieldValues(form, 'userjids')
+
+      return new Set(jids.filter(Boolean).map((j) => getBareJid(j)))
+    } catch {
+      return new Set()
+    }
+  }
+
+  /**
+   * Query last activity (XEP-0012 jabber:iq:last) for an arbitrary bare JID.
+   * Roster-independent (unlike the roster-coupled LastActivity module), so it
+   * works for any account in the admin directory.
+   */
+  async fetchLastActivity(jid: string): Promise<LastActivityResult> {
+    const bare = getBareJid(jid)
+    try {
+      const iq = xml('iq', { type: 'get', to: bare, id: `last_${generateUUID()}` },
+        xml('query', { xmlns: NS_LAST })
+      )
+      const result = await this.deps.sendIQ(iq)
+      const query = result.getChild('query', NS_LAST)
+      const secondsStr = query?.attrs?.seconds
+      if (secondsStr === undefined) return { seconds: null, unsupported: false }
+      const seconds = parseInt(secondsStr, 10)
+      if (Number.isNaN(seconds)) return { seconds: null, unsupported: false }
+      return { seconds, unsupported: false }
+    } catch (err) {
+      const condition = (err as { condition?: string })?.condition
+      return { seconds: null, unsupported: condition === 'feature-not-implemented' }
+    }
   }
 
   // ============================================================================

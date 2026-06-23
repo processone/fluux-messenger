@@ -15,7 +15,7 @@ import type { Room, RoomOccupant, RoomMember, RoomMessage, RoomAffiliation, Room
 import type { ServerInfo } from './discovery'
 import type { HttpUploadService } from './upload'
 import type { WebPushService, WebPushStatus } from './webpush'
-import type { AdminCommand, AdminSession } from './admin'
+import type { AdminCommand, AdminSession, ServerStats } from './admin'
 import type { RSMResponse } from './pagination'
 import type { MAMQueryDirection } from '../../stores/shared/mamState'
 import type { SystemNotificationType } from './events'
@@ -143,6 +143,14 @@ export interface ChatEvents {
     conversationId: string
     messageId: string
     updates: Partial<Message>
+  }
+
+  /** XEP-0490: a device synced its last-displayed (read) position for a conversation (1:1 or room) */
+  'read:displayed-synced': {
+    /** Conversation bare JID (1:1 contact or MUC room). */
+    conversationId: string
+    /** XEP-0359 stanza-id of the last displayed message on the publishing device. */
+    stanzaId: string
   }
 
   /** Message delivery error received from server */
@@ -553,13 +561,9 @@ export interface AdminEvents {
     isExecuting: boolean
   }
 
-  /** Entity counts updated */
-  'admin:entity-counts': {
-    counts: {
-      users?: number
-      onlineUsers?: number
-      rooms?: number
-    }
+  /** Server vital-signs snapshot updated */
+  'admin:server-stats': {
+    stats: ServerStats
   }
 
   /** Virtual hosts discovered */
@@ -575,11 +579,6 @@ export interface AdminEvents {
   /** MUC service discovered */
   'admin:muc-service': {
     mucServiceJid: string
-  }
-
-  /** MUC service MAM support discovered */
-  'admin:muc-service-mam': {
-    supportsMAM: boolean
   }
 }
 

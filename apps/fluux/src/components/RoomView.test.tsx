@@ -1,8 +1,30 @@
+/**
+ * @vitest-environment jsdom
+ *
+ * Pinned to jsdom: this file checks inline color/gradient styles whose serialization
+ * differs between DOM environments (jsdom normalizes #hex to rgb(); happy-dom, the
+ * default env, keeps the literal). These assertions/snapshots only hold under jsdom.
+ */
 import React from 'react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { RoomView } from './RoomView'
 import type { RoomMessage, Room, RoomOccupant, Contact } from '@fluux/sdk'
+
+const { RoomJoinError } = vi.hoisted(() => {
+  class RoomJoinError extends Error {
+    constructor(
+      public roomJid: string,
+      public condition: string,
+      public errorType?: string,
+      public text?: string,
+    ) {
+      super(text || `Room join failed: ${condition}`)
+      this.name = 'RoomJoinError'
+    }
+  }
+  return { RoomJoinError }
+})
 
 // Helper to create test room messages
 const createRoomMessage = (overrides: Partial<RoomMessage> = {}): RoomMessage => ({
@@ -64,6 +86,7 @@ const mockRetractMessage = vi.fn()
 const mockSendChatState = vi.fn()
 const mockSetRoomNotifyAll = vi.fn()
 const mockJoinRoom = vi.fn()
+const mockJoinResult = vi.fn()
 const mockSetRoomAvatar = vi.fn()
 const mockClearRoomAvatar = vi.fn()
 const mockClearFirstNewMessageId = vi.fn()
@@ -103,6 +126,7 @@ function _isReplyToIgnoredUser(
 // Mock SDK hooks and pure functions
 vi.mock('@fluux/sdk', () => ({
   useReferencedMessage: () => undefined,
+  RoomJoinError,
   useRoomActive: () => ({
     activeRoom: mockActiveRoom,
     activeMessages: mockActiveMessages,
@@ -118,6 +142,7 @@ vi.mock('@fluux/sdk', () => ({
     clearAnimation: mockClearAnimation,
     clearFirstNewMessageId: mockClearFirstNewMessageId,
     joinRoom: mockJoinRoom,
+    joinResult: mockJoinResult,
     setRoomAvatar: mockSetRoomAvatar,
     clearRoomAvatar: mockClearRoomAvatar,
   }),
@@ -265,6 +290,11 @@ vi.mock('@fluux/sdk/react', () => ({
 // Mock app hooks
 vi.mock('@/hooks', () => ({
   useClickOutside: () => {},
+  useAnchoredMenu: () => ({
+    triggerRef: { current: null },
+    menuRef: { current: null },
+    position: { x: 0, y: 0 },
+  }),
   useMentionAutocomplete: () => ({
     state: {
       isActive: false,
@@ -364,6 +394,14 @@ vi.mock('@/hooks', () => ({
     !!target && !!mockActiveRoom?.occupants?.has(target.nick),
 }))
 
+vi.mock('@/hooks/useRoomJoinWarning', () => ({
+  useRoomJoinWarning: () => ({ confirmJoin: () => Promise.resolve(true), warningDialog: null }),
+}))
+
+vi.mock('@/hooks/useHasHover', () => ({
+  useHasHover: () => true,
+}))
+
 // Mock utils
 vi.mock('@/utils/presence', () => ({
   getTranslatedShowText: () => 'Online',
@@ -439,8 +477,11 @@ vi.mock('lucide-react', () => ({
   Forward: () => <span data-testid="icon-forward">Forward</span>,
   MoreHorizontal: () => <span data-testid="icon-more">More</span>,
   Reply: () => <span data-testid="icon-reply">Reply</span>,
+  Copy: () => <span data-testid="icon-copy">Copy</span>,
   X: () => <span data-testid="icon-x">X</span>,
   ChevronRight: () => <span data-testid="icon-chevron-right">ChevronRight</span>,
+  ChevronLeft: () => <span data-testid="icon-chevron-left">ChevronLeft</span>,
+  MoreVertical: () => <span data-testid="icon-more-vertical">MoreVertical</span>,
   Shield: () => <span data-testid="icon-shield">Shield</span>,
   Crown: () => <span data-testid="icon-crown">Crown</span>,
   UserCheck: () => <span data-testid="icon-user-check">UserCheck</span>,
@@ -529,6 +570,7 @@ describe('RoomView', () => {
 
     // Reset mock functions
     vi.clearAllMocks()
+    mockJoinResult.mockResolvedValue(undefined)
   })
 
   describe('Empty state', () => {
@@ -550,6 +592,24 @@ describe('RoomView', () => {
 
       // Should show join button
       expect(screen.getByText(/rooms.joinToParticipate/)).toBeInTheDocument()
+    })
+
+    it('toasts a localized message when the join fails', async () => {
+      const { useToastStore } = await import('@/stores/toastStore')
+      useToastStore.setState({ toasts: [] })
+      mockActiveRoom = createRoom({ joined: false })
+      mockJoinRoom.mockResolvedValue(undefined)
+      mockJoinResult.mockRejectedValue(
+        new RoomJoinError('room@conference.example.com', 'registration-required'),
+      )
+
+      render(<RoomView />)
+      fireEvent.click(screen.getByText(/rooms.joinToParticipate/))
+
+      await waitFor(() => {
+        const toasts = useToastStore.getState().toasts
+        expect(toasts.some((t) => t.type === 'error' && t.message === 'rooms.membersOnly')).toBe(true)
+      })
     })
   })
 

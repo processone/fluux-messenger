@@ -171,6 +171,59 @@ fn stream_error_condition_from_error(message: &str) -> Option<String> {
     }
 }
 
+/// Classify a rustls/transport error string into a stable transport-error class
+/// used in the WebSocket close reason (recovered by `transport_error_class_from_error`).
+/// Certificate failures are sub-classified so the UI can tailor its guidance.
+/// Matching is substring/lower-cased and falls back to `"certificate"` / `"other"`.
+fn classify_tls_error(error_detail: &str) -> &'static str {
+    let lower = error_detail.to_lowercase();
+    if lower.contains("certificate") || lower.contains("cert ") {
+        if lower.contains("expired") {
+            "certificate-expired"
+        } else if lower.contains("notvalidforname") || lower.contains("not valid for") {
+            "certificate-name-mismatch"
+        } else if lower.contains("unknownissuer")
+            || lower.contains("unknown issuer")
+            || lower.contains("self-signed")
+            || lower.contains("self signed")
+        {
+            "certificate-untrusted"
+        } else {
+            "certificate"
+        }
+    } else if lower.contains("timed out") || lower.contains("timeout") {
+        "timeout"
+    } else if lower.contains("refused") || lower.contains("reset") {
+        "refused"
+    } else {
+        "other"
+    }
+}
+
+/// Extract the transport-error class that an upstream-connect failure encodes.
+///
+/// `upgrade_to_tls` embeds `tls-error: <class>` in its error string (mirroring
+/// how `perform_starttls` embeds `stream-error: <cond>`); `connect_first_endpoint`
+/// aggregates endpoint failures into one string that preserves the substring.
+/// Returns the class (e.g. `certificate-expired`), or `None` when no transport
+/// class marker is present.
+fn transport_error_class_from_error(message: &str) -> Option<String> {
+    const MARKER: &str = "tls-error: ";
+    let start = message.find(MARKER)? + MARKER.len();
+    let rest = &message[start..];
+    // The class is delimited by the next whitespace or closing paren
+    // (the marker is embedded as "(tls-error: <class>): ...").
+    let end = rest
+        .find(|c: char| c.is_whitespace() || c == ')')
+        .unwrap_or(rest.len());
+    let class = rest[..end].trim();
+    if class.is_empty() {
+        None
+    } else {
+        Some(class.to_string())
+    }
+}
+
 /// Send the RFC 7395 `<close/>` plus a WebSocket close frame carrying `reason`,
 /// so the client (xmpp.js) gets a deterministic disconnect with the real cause
 /// instead of an abrupt socket drop. Best-effort, bounded by a short timeout.
@@ -312,20 +365,12 @@ async fn upgrade_to_tls(
         .await
         .map_err(|e| {
             let error_detail = format!("{}", e);
-            let classification = if error_detail.contains("ertificate") {
-                "certificate_error"
-            } else if error_detail.contains("timed out") || error_detail.contains("timeout") {
-                "timeout"
-            } else if error_detail.contains("refused") || error_detail.contains("reset") {
-                "connection_refused"
-            } else {
-                "other"
-            };
-            error!(host, error = %e, error_class = classification, "TLS handshake failed");
-            format!(
-                "TLS handshake failed with {} ({}): {}",
-                host, classification, e
-            )
+            let class = classify_tls_error(&error_detail);
+            error!(host, error = %e, error_class = class, "TLS handshake failed");
+            // Embed a stable `tls-error: <class>` marker so the connection
+            // handler can recover the class for the WebSocket close reason.
+            // The marker survives the `connect_first_endpoint` aggregation.
+            format!("TLS handshake failed with {} (tls-error: {}): {}", host, class, e)
         })
 }
 
@@ -592,8 +637,17 @@ async fn handle_connection(
                         // (e.g. host-unknown) when the server reported one, else the
                         // transport message.
                         let condition = stream_error_condition_from_error(&err);
-                        let reason =
-                            format_bridge_close_reason("UpstreamConnectFailed", condition.as_deref());
+                        // No stream-error condition? Fall back to a transport
+                        // class (TLS/cert, timeout, refused) so the client can
+                        // render specific error UX. Stream errors still win.
+                        let label = if condition.is_some() {
+                            "UpstreamConnectFailed".to_string()
+                        } else if let Some(class) = transport_error_class_from_error(&err) {
+                            format!("tls-error {class}")
+                        } else {
+                            "UpstreamConnectFailed".to_string()
+                        };
+                        let reason = format_bridge_close_reason(&label, condition.as_deref());
                         warn!(
                             conn_id,
                             error = %err,
@@ -1853,6 +1907,57 @@ mod tests {
             close_reason.contains("host-unknown"),
             "WebSocket close reason must carry the upstream stream-error condition, got: {close_reason:?}"
         );
+    }
+
+    // --- classify_tls_error / transport_error_class_from_error tests ---
+
+    #[test]
+    fn test_classify_tls_error_certificate_subclasses() {
+        assert_eq!(classify_tls_error("invalid peer certificate: Expired"), "certificate-expired");
+        assert_eq!(classify_tls_error("invalid peer certificate: NotValidForName"), "certificate-name-mismatch");
+        assert_eq!(classify_tls_error("invalid peer certificate: UnknownIssuer"), "certificate-untrusted");
+        assert_eq!(classify_tls_error("invalid peer certificate: BadEncoding"), "certificate");
+    }
+
+    #[test]
+    fn test_classify_tls_error_transport() {
+        assert_eq!(classify_tls_error("connection timed out"), "timeout");
+        assert_eq!(classify_tls_error("connection refused"), "refused");
+        assert_eq!(classify_tls_error("connection reset by peer"), "refused");
+        assert_eq!(classify_tls_error("some unrecognised tls failure"), "other");
+    }
+
+    #[test]
+    fn test_transport_error_class_from_marker() {
+        assert_eq!(
+            transport_error_class_from_error("TLS handshake failed with h (tls-error: certificate-expired): boom"),
+            Some("certificate-expired".to_string())
+        );
+    }
+
+    #[test]
+    fn test_transport_error_class_from_aggregated_message() {
+        let aggregated = "All endpoints failed:\n  - 1.2.3.4:5223: TLS handshake failed with h (tls-error: certificate-untrusted): x\n  - 5.6.7.8:5223: TLS handshake failed with h (tls-error: certificate-untrusted): y";
+        assert_eq!(
+            transport_error_class_from_error(aggregated),
+            Some("certificate-untrusted".to_string())
+        );
+    }
+
+    #[test]
+    fn test_transport_error_class_absent() {
+        assert_eq!(transport_error_class_from_error("STARTTLS: server stream-error: host-unknown"), None);
+        assert_eq!(transport_error_class_from_error("WebSocket ECONNERROR"), None);
+    }
+
+    #[test]
+    fn test_format_close_reason_with_transport_class_label() {
+        // The transport class is passed as the label; the legacy prefix is preserved.
+        assert_eq!(
+            format_bridge_close_reason("tls-error certificate-expired", None),
+            "Bridge closed: tls-error certificate-expired"
+        );
+        assert!(format_bridge_close_reason("tls-error certificate", None).starts_with("Bridge closed"));
     }
 
     // --- stream_error_condition_from_error tests ---

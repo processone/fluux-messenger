@@ -23,6 +23,24 @@ vi.mock('@fluux/sdk', () => ({
     },
     useConnectionActions: () => ({ connect: mockUseConnection().connect }),
     deleteFastToken: (...args: unknown[]) => mockDeleteFastToken(...args),
+    classifyConnectionError: (error: string) => {
+        if (!error) return 'unknown'
+        const m = error.match(/tls-error[:\s]+([a-z][a-z-]*)/i)
+        if (m) {
+            const c = m[1].toLowerCase()
+            if (c.startsWith('certificate')) return 'tls-certificate'
+            if (c === 'timeout') return 'timeout'
+            if (c === 'refused') return 'connection-refused'
+            return 'tls-other'
+        }
+        const lower = error.toLowerCase()
+        if (lower.includes('not-authorized') || lower.includes('authentication failed')) return 'auth'
+        return 'unknown'
+    },
+    extractTransportErrorClass: (text: string) => {
+        const m = text.match(/tls-error[:\s]+([a-z][a-z-]*)/i)
+        return m ? m[1].toLowerCase() : null
+    },
 }))
 
 // Mock react-i18next
@@ -334,6 +352,30 @@ describe('LoginScreen', () => {
             })
 
             expect(localStorage.getItem('xmpp-last-server')).toBe('wss://custom.example.com/ws')
+        })
+    })
+
+    describe('LoginErrorPanel integration', () => {
+        it('renders the structured cert panel for a TLS certificate error', () => {
+            mockUseConnection.mockReturnValue({
+                status: 'error',
+                error: 'Bridge closed: tls-error certificate-expired',
+                connect: mockConnect,
+            })
+            render(<LoginScreen />)
+            expect(screen.getByRole('alert')).toBeInTheDocument()
+            expect(screen.getByText('login.errors.tlsCertTitle')).toBeInTheDocument()
+        })
+
+        it('renders the raw string (no alert role) for an unknown connection error', () => {
+            mockUseConnection.mockReturnValue({
+                status: 'error',
+                error: 'WebSocket ECONNERROR',
+                connect: mockConnect,
+            })
+            render(<LoginScreen />)
+            expect(screen.getByText('WebSocket ECONNERROR')).toBeInTheDocument()
+            expect(screen.queryByRole('alert')).toBeNull()
         })
     })
 

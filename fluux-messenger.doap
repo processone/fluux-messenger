@@ -569,6 +569,15 @@
       </xmpp:SupportedXep>
     </implements>
 
+    <!-- XEP-0490: Message Displayed Synchronization -->
+    <implements>
+      <xmpp:SupportedXep>
+        <xmpp:xep rdf:resource="https://xmpp.org/extensions/xep-0490.html"/>
+        <xmpp:status>complete</xmpp:status>
+        <xmpp:note>Syncs the last-read position for 1:1 chats and MUC rooms across devices via a private PEP node (urn:xmpp:mds:displayed:0); forward-only by archive order with local fallback</xmpp:note>
+      </xmpp:SupportedXep>
+    </implements>
+
     <!-- Planned XEPs -->
 
     <!-- XEP-0184: Message Delivery Receipts -->
@@ -596,6 +605,13 @@
     </implements>
 
     <!-- Releases -->
+    <release>
+      <Version>
+        <revision>0.16.2</revision>
+        <created>2026-06-22</created>
+        <file-release rdf:resource="https://github.com/processone/fluux-messenger/releases/tag/v0.16.2"/>
+      </Version>
+    </release>
     <release>
       <Version>
         <revision>0.16.1</revision>

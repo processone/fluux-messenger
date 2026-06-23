@@ -40,7 +40,21 @@
         "hidePassword": "Ukryj hasło",
         "madeBy": "Stworzone przez",
         "ejabberdCreator": ", firmę stojącą za",
-        "poweredBy": "Napędzane przez"
+        "poweredBy": "Napędzane przez",
+        "errors": {
+            "tlsCertTitle": "Nie można zweryfikować certyfikatu zabezpieczeń serwera",
+            "tlsOtherTitle": "Bezpieczne połączenie nie powiodło się",
+            "tlsOtherBody": "Nie udało się nawiązać szyfrowanego połączenia z serwerem. Konfiguracja TLS serwera może nie być obsługiwana. Sprawdź adres serwera lub skontaktuj się z administratorem serwera.",
+            "unreachableTitle": "Nie można połączyć się z serwerem",
+            "timeoutBody": "Serwer nie odpowiedział na czas. Sprawdź sieć i adres serwera, a następnie spróbuj ponownie.",
+            "refusedBody": "Serwer odrzucił połączenie. Sprawdź adres i port serwera, a następnie spróbuj ponownie.",
+            "cert": {
+                "expired": "Certyfikat serwera wygasł. Skontaktuj się z administratorem serwera. Jeśli adres jest nieprawidłowy, edytuj pole serwera poniżej.",
+                "nameMismatch": "Certyfikat serwera został wystawiony dla innej nazwy hosta. Sprawdź adres serwera poniżej lub skontaktuj się z administratorem serwera.",
+                "untrusted": "Certyfikat serwera jest samopodpisany lub wystawiony przez nieznany urząd certyfikacji, dlatego nie można mu zaufać. Sprawdź adres serwera lub skontaktuj się z administratorem serwera.",
+                "generic": "Nie można zweryfikować certyfikatu zabezpieczeń serwera. Sprawdź adres serwera poniżej lub skontaktuj się z administratorem serwera."
+            }
+        }
     },
     "sidebar": {
         "messages": "Wiadomości",
@@ -203,6 +217,16 @@
         "invalidRoomAddress": "Nieprawidłowy adres pokoju (powinien być pokój@konferencja.serwer)",
         "joinRoomHint": "Wpisz pełny adres pokoju, aby dołączyć do publicznego czatu.",
         "failedToJoinRoom": "Nie udało się dołączyć do pokoju",
+        "passwordProtected": "Ten pokój jest chroniony hasłem",
+        "roomPassword": "Hasło",
+        "passwordRequired": "Ten pokój jest chroniony hasłem. Wpisz hasło, aby dołączyć.",
+        "incorrectPassword": "Nieprawidłowe hasło.",
+        "nicknameInUse": "Ten pseudonim jest już używany w tym pokoju.",
+        "membersOnly": "Ten pokój jest tylko dla członków. Musisz być członkiem, aby dołączyć.",
+        "bannedFromRoom": "Zostałeś zbanowany z tego pokoju.",
+        "roomFull": "Ten pokój jest pełny.",
+        "registeredNicknameRequired": "Ten pokój wymaga twojego zarejestrowanego pseudonimu.",
+        "roomNotFound": "Pokój nie został znaleziony.",
         "nonAnonWarningTitle": "Dołączyć do nieanonimowego kanału?",
         "nonAnonWarningMessage": "Wszyscy w „{{room}}” widzą Twój prawdziwy adres (Twój identyfikator XMPP/Jabber). Dołączyć mimo to?",
         "nonAnonWarningConfirm": "Dołącz mimo to",
@@ -211,6 +235,7 @@
         "notJoinedNoHistory": "Nie jesteś w tym pokoju",
         "joinToLoadHistory": "Dołącz, aby załadować wiadomości",
         "notificationSettings": "Ustawienia powiadomień",
+        "roomActions": "Akcje pokoju",
         "mentionsOnly": "Tylko wzmianki",
         "defaultBehavior": "Domyślne zachowanie",
         "allMessages": "Wszystkie wiadomości",
@@ -435,6 +460,7 @@
         "attachment": "Załącznik",
         "removeAttachment": "Usuń załącznik",
         "reply": "Odpowiedz",
+        "copyMessage": "Kopiuj tekst",
         "replyQuoteHiddenEncrypted": "Cytat ukryty: oryginał był zaszyfrowany",
         "forwardMessage": "Przekaż wiadomość (wkrótce)",
         "moreReactions": "Więcej reakcji",
@@ -567,7 +593,12 @@
             "acceptedWithoutVerifying": "Nowy klucz zaakceptowany. Rozmówca niezweryfikowany",
             "acceptFailed": "Nie udało się zaakceptować nowego klucza. Spróbuj ponownie"
         },
-        "offlinePlaceholder": "Offline. Wiadomości zostaną wysłane po ponownym połączeniu"
+        "offlinePlaceholder": "Offline. Wiadomości zostaną wysłane po ponownym połączeniu",
+        "loadImage": "Załaduj obraz",
+        "loadVideo": "Załaduj wideo",
+        "loadAudio": "Załaduj audio",
+        "loadFilePreview": "Załaduj podgląd",
+        "showLinkImage": "Pokaż obraz"
     },
     "dates": {
         "today": "Dzisiaj",
@@ -583,7 +614,8 @@
             "updates": "Aktualizacje",
             "blocked": "Zablokowani użytkownicy",
             "storage": "Pamięć",
-            "encryption": "Szyfrowanie"
+            "encryption": "Szyfrowanie",
+            "privacy": "Prywatność"
         },
         "blocked": {
             "title": "Zablokowani użytkownicy",
@@ -704,6 +736,7 @@
             "pepUnsupportedBanner": "Twój serwer nie obsługuje publikowania zdarzeń osobistych (PEP, XEP-0163), wymaganego przez szyfrowanie OpenPGP (XEP-0373). Szyfrowania end-to-end nie można włączyć na tym koncie. Skontaktuj się z administratorem serwera.",
             "statusPepUnsupported": "Nie można włączyć szyfrowania: serwer nie obsługuje PEP (XEP-0163), wymaganego przez OpenPGP (XEP-0373).",
             "statusRegistrationFailed": "Konfiguracja szyfrowania nie powiodła się ({{code}}). Szczegóły w konsoli dewelopera.",
+            "notProtectedAtRest": "Brak tu dostępnego pęku kluczy systemu, więc hasło Twojego klucza jest przechowywane bez szyfrowania w pliku na dysku. Klucz nie jest chroniony w spoczynku. Każdy, kto może odczytać pliki tego urządzenia, może go użyć.",
             "backupLabel": "Kopia zapasowa klucza",
             "backupDescription": "Opublikuj zaszyfrowaną kopię swojego klucza na serwerze XMPP. Chroniona hasłem, które tylko Ty znasz, i czytelna tylko dla Twojego konta (access_model: whitelist). Pozwala czytać zaszyfrowaną historię na nowym urządzeniu po zalogowaniu i wprowadzeniu hasła.",
             "backupAction": "Zapisz na serwerze",
@@ -778,6 +811,7 @@
             "identityChoice": {
                 "title": "Dla tego konta istnieje już tożsamość OpenPGP",
                 "body": "Ta przeglądarka nie ma lokalnego klucza, ale serwer już ogłasza klucz dla twojego konta. Wygenerowanie tutaj nowego klucza po cichu rozdzieliłoby twoją tożsamość: korespondenci, którzy szyfrowali do istniejącego klucza, nie mogliby dostarczać wiadomości. Wybierz, jak to rozwiązać:",
+                "bodyKeyUnrecoverable": "Klucza OpenPGP tego urządzenia nie można już odblokować, więc szyfrowanie nie może się uruchomić. Twoja opublikowana tożsamość pozostaje nienaruszona. Odzyskaj ją, przywracając kopię zapasową z serwera lub importując plik klucza, albo zastąp ją, jeśli to niemożliwe. Wybierz, jak chcesz to rozwiązać:",
                 "publishedFingerprintLabel": "Opublikowany odcisk",
                 "restoreFromServerTitle": "Przywróć z kopii zapasowej serwera",
                 "restoreFromServerBody": "Użyj hasła kopii zapasowej ustawionego przy włączaniu szyfrowania na innym urządzeniu. Odpowiadający klucz prywatny jest pobierany z serwera i odblokowywany lokalnie.",
@@ -804,19 +838,6 @@
             "importFileSuccess": "Klucz zaimportowany z pliku",
             "importFileFailed": "Nie można odczytać wybranego pliku",
             "unsupportedKeyAlgorithm": "Zaimportowany klucz używa algorytmu, który nie jest już obsługiwany (np. DSA lub ElGamal). Użyj nowoczesnego klucza OpenPGP (Curve25519, Ed25519 lub RSA o długości co najmniej 2048 bitów).",
-            "externalExportAction": "Eksportuj do zewnętrznego narzędzia OpenPGP",
-            "externalExportDialogTitle": "Eksport klucza prywatnego do zewnętrznego narzędzia OpenPGP",
-            "externalExportDialogBody": "Tworzy standardowy plik klucza prywatnego OpenPGP (PRIVATE KEY BLOCK), który można zaimportować do gpg, OpenKeychain, Kleopatry i innych narzędzi.",
-            "externalExportProtectedLabel": "Chroniony hasłem",
-            "externalExportProtectedDescription": "Zalecane. Wybierz hasło; eksportowany plik zostanie zaszyfrowany, a zewnętrzne narzędzia poproszą o nie podczas importu.",
-            "externalExportUnprotectedLabel": "Bez szyfrowania",
-            "externalExportUnprotectedDescription": "Wyeksportowany plik zawiera Twój klucz prywatny w postaci jawnej. Używaj tylko wtedy, gdy docelowe narzędzie odrzuca klucze chronione hasłem.",
-            "externalExportUnprotectedWarning": "Bez hasła każdy, kto ma dostęp do wyeksportowanego pliku, może podszyć się pod Ciebie i odszyfrować Twoje przeszłe oraz przyszłe wiadomości. Usuń plik, jak tylko go zaimportujesz.",
-            "externalExportUnprotectedAcknowledgment": "Rozumiem ryzyko i chcę wyeksportować mój klucz prywatny bez szyfrowania.",
-            "externalExportPassphraseLabel": "Hasło",
-            "externalExportConfirmPassphraseLabel": "Potwierdź hasło",
-            "externalExportPassphraseMismatch": "Hasła nie są zgodne.",
-            "externalExportSuccess": "Klucz prywatny wyeksportowany do pliku",
             "unlockDialogTitle": "Odblokuj szyfrowanie końcowe",
             "unlockDialogBody": "Wprowadź hasło, aby odszyfrować klucz na tę sesję.",
             "unlockDialogSetupTitle": "Skonfiguruj szyfrowanie końcowe",
@@ -828,7 +849,16 @@
             "unlockPassphraseTooShort": "Hasło musi mieć co najmniej 8 znaków",
             "lockedBannerBody": "Klucz szyfrowania jest zablokowany. Wprowadź hasło, aby aktywować szyfrowanie na tę sesję.",
             "rotateNotSupportedWeb": "Rotacja klucza nie jest dostępna w przeglądarce. Użyj aplikacji desktopowej."
-        }
+        },
+        "mediaAutoDownload": "Automatyczne pobieranie multimediów",
+        "mediaAutoDownloadDescription": "Wybierz, kiedy obrazy, filmy i pliki ładują się automatycznie.",
+        "mediaAutoDownloadAlways": "Zawsze",
+        "mediaAutoDownloadAlwaysDescription": "Ładuj multimedia automatycznie w każdej rozmowie.",
+        "mediaAutoDownloadPrivateOnly": "Tylko prywatne",
+        "mediaAutoDownloadPrivateOnlyDescription": "Ładuj automatycznie w wiadomościach bezpośrednich i prywatnych pokojach. W kanałach publicznych, dotknij, aby załadować.",
+        "mediaAutoDownloadNever": "Nigdy",
+        "mediaAutoDownloadNeverDescription": "Nigdy nie ładuj multimediów automatycznie. Dotknij, aby załadować w dowolnej rozmowie.",
+        "mediaAutoDownloadStrangerNote": "Multimedia od osób spoza kontaktów zawsze wymagają dotknięcia, aby się załadować, niezależnie od wybranego tu ustawienia."
     },
     "update": {
         "title": "Dostępna aktualizacja",
@@ -1038,6 +1068,7 @@
             "description": "Nie masz uprawnień administratora na tym serwerze. Skontaktuj się z administratorem serwera, aby uzyskać dostęp."
         },
         "selectCommand": "Wybierz polecenie z paska bocznego",
+        "openSections": "Otwórz sekcje administracyjne",
         "execute": "Wykonaj",
         "executing": "Wykonywanie...",
         "next": "Dalej",
@@ -1083,7 +1114,13 @@
         "users": {
             "delete": "Usuń użytkownika",
             "changePassword": "Zmień hasło",
-            "endSessions": "Zakończ sesje"
+            "endSessions": "Zakończ sesje",
+            "online": "Online",
+            "offline": "Offline",
+            "onlineNow": "Online teraz",
+            "justNow": "przed chwilą",
+            "truncatedBanner": "Wyświetlanie pierwszych {{shown}} z {{total}} użytkowników. Zawęź wyszukiwanie, aby ograniczyć wyniki.",
+            "truncatedBannerNoTotal": "Wyświetlanie pierwszych {{shown}} użytkowników. Zawęź wyszukiwanie, aby ograniczyć wyniki."
         },
         "userView": {
             "title": "Użytkownik",
@@ -1105,6 +1142,28 @@
         "roomList": {
             "title": "Pokoje czatowe",
             "noRooms": "Nie znaleziono pokoi"
+        },
+        "overview": {
+            "title": "Przegląd serwera",
+            "refresh": "Odśwież",
+            "updatedAt": "Zaktualizowano o {{time}}",
+            "empty": "Statystyki serwera są niedostępne.",
+            "retry": "Spróbuj ponownie",
+            "units": {
+                "d": "d",
+                "h": "g",
+                "m": "min",
+                "s": "s"
+            },
+            "cards": {
+                "uptime": "Czas działania",
+                "version": "Wersja serwera",
+                "users": "Użytkownicy",
+                "onlineSuffix": "{{n}} online",
+                "onlineSessions": "Aktywne sesje",
+                "onlineRooms": "Aktywne pokoje",
+                "vhosts": "Hosty wirtualne"
+            }
         }
     },
     "commandPalette": {

@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Server, Users, Hash, User, Plus, ArrowLeft } from 'lucide-react'
-import { useAdmin, useXMPP, type AdminCategory, type AdminUser, type AdminRoom } from '@fluux/sdk'
+import { Server, Users, Hash, User, Plus, ArrowLeft, Menu } from 'lucide-react'
+import { useAdmin, useXMPP, adminStore, type AdminCategory, type AdminUser, type AdminRoom } from '@fluux/sdk'
+import { useAdminStore } from '@fluux/sdk/react'
 import { useWindowDrag, useModalInput } from '@/hooks'
+import { useWindowedList } from '../hooks/useWindowedList'
 import { Tooltip } from './Tooltip'
 import { ModalShell } from './ModalShell'
 import { AdminCommandForm, AdminCommandResult } from './AdminCommandForm'
@@ -12,6 +14,10 @@ import { UserListItem } from './UserListItem'
 import { RoomListItem } from './RoomListItem'
 import { AdminUserView } from './AdminUserView'
 import { AdminRoomView } from './AdminRoomView'
+import { ServerOverview } from './ServerOverview'
+import { getAdminBackTarget } from './adminBackTarget'
+import { BottomSheet } from './ui/BottomSheet'
+import { AdminDashboard } from './AdminDashboard'
 
 interface AdminViewProps {
   activeCategory: AdminCategory | null
@@ -36,11 +42,9 @@ export function AdminView({ activeCategory, onBack }: AdminViewProps) {
     // Entity list state and methods
     userList,
     roomList,
-    entityCounts,
-    hasMoreUsers,
+    serverStats,
     hasMoreRooms,
-    fetchUsers,
-    loadMoreUsers,
+    fetchAllUsers,
     resetUserList,
     fetchRooms,
     loadMoreRooms,
@@ -58,7 +62,11 @@ export function AdminView({ activeCategory, onBack }: AdminViewProps) {
     // Room options
     getRoomOptions,
     hasCommand,
+    // Last activity
+    requestLastActivity,
   } = useAdmin()
+
+  const usersTruncated = useAdminStore((s) => s.usersTruncated)
 
   // Local state
   const [userSearchQuery, setUserSearchQuery] = useState('')
@@ -66,6 +74,7 @@ export function AdminView({ activeCategory, onBack }: AdminViewProps) {
   const [selectedUser, setSelectedUser] = useState<AdminUser | null>(null)
   const [selectedRoom, setSelectedRoom] = useState<AdminRoom | null>(null)
   const [showAddUserModal, setShowAddUserModal] = useState(false)
+  const [sectionsSheetOpen, setSectionsSheetOpen] = useState(false)
 
   // Fetch vhosts when users category becomes active
   useEffect(() => {
@@ -77,7 +86,7 @@ export function AdminView({ activeCategory, onBack }: AdminViewProps) {
   // Fetch users when users category becomes active (always refresh on enter)
   useEffect(() => {
     if (activeCategory === 'users' && !userList.isLoading) {
-      fetchUsers().catch(console.error)
+      fetchAllUsers().catch(console.error)
     }
   }, [activeCategory]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -160,9 +169,52 @@ export function AdminView({ activeCategory, onBack }: AdminViewProps) {
     // Refresh user list after user-mutating commands (delete, password change, etc.)
     if (activeCategory === 'users') {
       resetUserList()
-      void fetchUsers()
+      void fetchAllUsers()
     }
   }
+
+  // Mobile header back button: step back exactly one level
+  // (detail → list → overview → exit), instead of collapsing to the root.
+  const handleHeaderBack = () => {
+    switch (
+      getAdminBackTarget({
+        hasSession: !!currentSession,
+        hasSelectedUser: !!selectedUser,
+        hasSelectedRoom: !!selectedRoom,
+        activeCategory,
+      })
+    ) {
+      case 'session':
+        handleCloseSession()
+        break
+      case 'user':
+        setSelectedUser(null)
+        break
+      case 'room':
+        setSelectedRoom(null)
+        break
+      case 'overview':
+        adminStore.getState().setActiveCategory('stats')
+        break
+      case 'exit':
+        onBack?.()
+        break
+    }
+  }
+
+  // Section sheet (mobile): main-content sections navigate and close the sheet;
+  // announcements/other only expand inline, so the sheet stays open.
+  const handleSheetCategoryChange = (category: AdminCategory | null) => {
+    adminStore.getState().setActiveCategory(category)
+    if (category === null || category === 'stats' || category === 'users' || category === 'rooms') {
+      setSectionsSheetOpen(false)
+    }
+  }
+
+  // Executing a command from the sheet opens a session in the main area — close the sheet.
+  useEffect(() => {
+    if (currentSession) setSectionsSheetOpen(false)
+  }, [currentSession])
 
   const handlePrev = async () => {
     try {
@@ -201,7 +253,7 @@ export function AdminView({ activeCategory, onBack }: AdminViewProps) {
     setShowAddUserModal(false)
     // Refresh user list
     resetUserList()
-    void fetchUsers()
+    void fetchAllUsers()
   }
 
   const handleDestroyRoom = async (jid: string) => {
@@ -216,13 +268,19 @@ export function AdminView({ activeCategory, onBack }: AdminViewProps) {
   }
 
 
-  // Filter users by search query (client-side for now)
+  // Filter users by search query (complete: runs over the full fetched directory)
   const filteredUsers = userSearchQuery
     ? userList.items.filter(user =>
         user.jid.toLowerCase().includes(userSearchQuery.toLowerCase()) ||
         (user.username && user.username.toLowerCase().includes(userSearchQuery.toLowerCase()))
       )
     : userList.items
+
+  const usersWindow = useWindowedList(filteredUsers, {
+    initial: 60,
+    step: 60,
+    resetKey: `${userSearchQuery}|${selectedVhost ?? ''}`,
+  })
 
   // Filter rooms by search query (client-side for now)
   const filteredRooms = roomSearchQuery
@@ -243,6 +301,8 @@ export function AdminView({ activeCategory, onBack }: AdminViewProps) {
       return t('admin.userView.title')
     }
     switch (activeCategory) {
+      case 'stats':
+        return t('admin.overview.title')
       case 'users':
         return t('admin.categories.users')
       case 'rooms':
@@ -258,6 +318,8 @@ export function AdminView({ activeCategory, onBack }: AdminViewProps) {
       return <User className="size-5 text-fluux-brand" />
     }
     switch (activeCategory) {
+      case 'stats':
+        return <Server className="size-5 text-fluux-brand" />
       case 'users':
         return <Users className="size-5 text-fluux-brand" />
       case 'rooms':
@@ -311,6 +373,11 @@ export function AdminView({ activeCategory, onBack }: AdminViewProps) {
       )
     }
 
+    // Server overview dashboard for the stats category
+    if (activeCategory === 'stats') {
+      return <ServerOverview />
+    }
+
     // Show entity lists based on active category
     if (activeCategory === 'users') {
       return (
@@ -337,21 +404,34 @@ export function AdminView({ activeCategory, onBack }: AdminViewProps) {
               </select>
             </div>
           )}
+          {usersTruncated && (
+            <div className="mb-3 px-3 py-2 text-sm rounded-lg bg-amber-500/10 text-amber-700 dark:text-amber-300">
+              {serverStats?.registeredUsers != null
+                ? t('admin.users.truncatedBanner', {
+                    shown: filteredUsers.length,
+                    total: serverStats.registeredUsers,
+                  })
+                : t('admin.users.truncatedBannerNoTotal', {
+                    shown: filteredUsers.length,
+                  })}
+            </div>
+          )}
           <EntityListView
             title={t('admin.userList.title')}
-            items={filteredUsers}
+            items={usersWindow.visible}
             isLoading={userList.isLoading}
-            hasMore={hasMoreUsers && !userSearchQuery}
+            hasMore={usersWindow.hasMore}
             searchValue={userSearchQuery}
-            totalCount={entityCounts.users}
+            totalCount={serverStats?.registeredUsers}
             onSearchChange={setUserSearchQuery}
-            onLoadMore={loadMoreUsers}
+            onLoadMore={usersWindow.loadMore}
             emptyMessage={t('admin.userList.noUsers')}
             keyExtractor={(user) => user.jid}
             renderItem={(user) => (
               <UserListItem
                 user={user}
                 onSelect={handleSelectUser}
+                requestLastActivity={requestLastActivity}
               />
             )}
             headerAction={
@@ -359,7 +439,7 @@ export function AdminView({ activeCategory, onBack }: AdminViewProps) {
                 <button
                   onClick={handleAddUser}
                   className="p-1.5 text-fluux-muted hover:text-fluux-brand hover:bg-fluux-hover
-                             rounded-lg transition-colors"
+                             rounded-lg transition-colors tap-target"
                   aria-label={t('admin.userList.addUser')}
                 >
                   <Plus className="size-5" />
@@ -393,7 +473,7 @@ export function AdminView({ activeCategory, onBack }: AdminViewProps) {
           isLoading={roomList.isLoading}
           hasMore={hasMoreRooms && !roomSearchQuery}
           searchValue={roomSearchQuery}
-          totalCount={entityCounts.rooms}
+          totalCount={serverStats?.onlineRooms}
           onSearchChange={setRoomSearchQuery}
           onLoadMore={loadMoreRooms}
           emptyMessage={t('admin.roomList.noRooms')}
@@ -420,19 +500,30 @@ export function AdminView({ activeCategory, onBack }: AdminViewProps) {
   return (
     <div className="flex-1 flex flex-col min-h-0 bg-fluux-sidebar">
       {/* Header */}
-      <div className={`flex items-center px-4 py-3 ${titleBarClass} border-b border-fluux-bg`}>
+      <div className={`h-14 flex items-center px-4 ${titleBarClass} border-b border-fluux-bg`}>
         {/* Back button - mobile only */}
         {onBack && (
           <button
-            onClick={onBack}
-            className="p-1 -ms-1 me-2 rounded hover:bg-fluux-hover md:hidden"
+            onClick={handleHeaderBack}
+            className="p-1 -ms-1 me-2 rounded hover:bg-fluux-hover md:hidden tap-target"
             aria-label={t('common.back')}
           >
             <ArrowLeft className="size-5 text-fluux-muted rtl-mirror" />
           </button>
         )}
         {getIcon()}
-        <h2 className="ms-2 font-semibold text-fluux-text capitalize">{getTitle()}</h2>
+        {/* Only raw command-node titles need capitalize ("delete user" → "Delete User");
+            i18n titles (overview, users, rooms) are already correctly cased. */}
+        <h2 className={`ms-2 font-semibold text-fluux-text ${currentSession?.node ? 'capitalize' : ''}`}>{getTitle()}</h2>
+        {onBack && (
+          <button
+            onClick={() => setSectionsSheetOpen(true)}
+            className="p-1 -me-1 ms-auto rounded hover:bg-fluux-hover md:hidden tap-target"
+            aria-label={t('admin.openSections')}
+          >
+            <Menu className="size-5 text-fluux-muted" />
+          </button>
+        )}
       </div>
 
       {/* Content */}
@@ -448,6 +539,16 @@ export function AdminView({ activeCategory, onBack }: AdminViewProps) {
           onClose={() => setShowAddUserModal(false)}
         />
       )}
+
+      {/* Mobile section navigation sheet */}
+      <BottomSheet
+        open={sectionsSheetOpen}
+        onClose={() => setSectionsSheetOpen(false)}
+        title={t('admin.title')}
+        ariaLabel={t('admin.title')}
+      >
+        <AdminDashboard activeCategory={activeCategory} onCategoryChange={handleSheetCategoryChange} />
+      </BottomSheet>
     </div>
   )
 }

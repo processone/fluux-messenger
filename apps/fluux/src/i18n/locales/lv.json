@@ -40,7 +40,21 @@
         "hidePassword": "Slēpt paroli",
         "madeBy": "Izveidoja",
         "ejabberdCreator": ", uzņēmums, kas radīja",
-        "poweredBy": "Darbina"
+        "poweredBy": "Darbina",
+        "errors": {
+            "tlsCertTitle": "Neizdevās pārbaudīt servera drošības sertifikātu",
+            "tlsOtherTitle": "Drošais savienojums neizdevās",
+            "tlsOtherBody": "Neizdevās izveidot šifrētu savienojumu ar serveri. Servera TLS konfigurācija var nebūt atbalstīta. Pārbaudiet servera adresi vai sazinieties ar servera administratoru.",
+            "unreachableTitle": "Neizdevās sasniegt serveri",
+            "timeoutBody": "Serveris laikus neatbildēja. Pārbaudiet tīklu un servera adresi, pēc tam mēģiniet vēlreiz.",
+            "refusedBody": "Serveris noraidīja savienojumu. Pārbaudiet servera adresi un portu, pēc tam mēģiniet vēlreiz.",
+            "cert": {
+                "expired": "Servera sertifikāts ir beidzies. Sazinieties ar servera administratoru. Ja adrese ir nepareiza, rediģējiet servera lauku zemāk.",
+                "nameMismatch": "Servera sertifikāts ir izsniegts citam resursdatora nosaukumam. Pārbaudiet servera adresi zemāk vai sazinieties ar servera administratoru.",
+                "untrusted": "Servera sertifikāts ir pašparakstīts vai izsniegts no nezināmas iestādes, tāpēc tam nevar uzticēties. Pārbaudiet servera adresi vai sazinieties ar servera administratoru.",
+                "generic": "Neizdevās pārbaudīt servera drošības sertifikātu. Pārbaudiet servera adresi zemāk vai sazinieties ar servera administratoru."
+            }
+        }
     },
     "sidebar": {
         "messages": "Ziņojumi",
@@ -202,6 +216,16 @@
         "invalidRoomAddress": "Nederīga istabas adrese (jābūt istaba@conference.serveris)",
         "joinRoomHint": "Ievadiet pilnu istabas adresi, lai pievienotos publiskai tērzēšanas istabai.",
         "failedToJoinRoom": "Neizdevās pievienoties istabai",
+        "passwordProtected": "Šī istaba ir aizsargāta ar paroli",
+        "roomPassword": "Parole",
+        "passwordRequired": "Šī istaba ir aizsargāta ar paroli. Ievadiet paroli, lai pievienotos.",
+        "incorrectPassword": "Nepareiza parole.",
+        "nicknameInUse": "Šis segvārds šajā istabā jau tiek lietots.",
+        "membersOnly": "Šī istaba ir tikai locekļiem. Lai pievienotos, jums jābūt loceklim.",
+        "bannedFromRoom": "Jums ir liegta piekļuve šai istabai.",
+        "roomFull": "Šī istaba ir pilna.",
+        "registeredNicknameRequired": "Šī istaba pieprasa jūsu reģistrēto segvārdu.",
+        "roomNotFound": "Istaba nav atrasta.",
         "nonAnonWarningTitle": "Pievienoties neanonīmam kanālam?",
         "nonAnonWarningMessage": "Visi kanālā “{{room}}” var redzēt jūsu īsto adresi (jūsu XMPP/Jabber ID). Tomēr pievienoties?",
         "nonAnonWarningConfirm": "Tomēr pievienoties",
@@ -210,6 +234,7 @@
         "notJoinedNoHistory": "Jūs neesat šajā istabā",
         "joinToLoadHistory": "Pievienojieties, lai ielādētu ziņojumus",
         "notificationSettings": "Paziņojumu iestatījumi",
+        "roomActions": "Istabas darbības",
         "mentionsOnly": "Tikai pieminējumi",
         "defaultBehavior": "Noklusējuma uzvedība",
         "allMessages": "Visi ziņojumi",
@@ -434,6 +459,7 @@
         "attachment": "Pielikums",
         "removeAttachment": "Noņemt pielikumu",
         "reply": "Atbildēt",
+        "copyMessage": "Kopēt tekstu",
         "replyQuoteHiddenEncrypted": "Citāts paslēpts: oriģināls bija šifrēts",
         "forwardMessage": "Pārsūtīt ziņojumu (drīzumā)",
         "moreReactions": "Vairāk reakciju",
@@ -566,7 +592,12 @@
             "acceptedWithoutVerifying": "Jaunā atslēga pieņemta. Partneris nav verificēts",
             "acceptFailed": "Neizdevās pieņemt jauno atslēgu. Mēģiniet vēlreiz"
         },
-        "offlinePlaceholder": "Bezsaistē. Ziņas tiks nosūtītas pēc atkārtotas savienošanas"
+        "offlinePlaceholder": "Bezsaistē. Ziņas tiks nosūtītas pēc atkārtotas savienošanas",
+        "loadImage": "Ielādēt attēlu",
+        "loadVideo": "Ielādēt videoklipu",
+        "loadAudio": "Ielādēt audio",
+        "loadFilePreview": "Ielādēt priekšskatījumu",
+        "showLinkImage": "Rādīt attēlu"
     },
     "dates": {
         "today": "Šodien",
@@ -582,7 +613,8 @@
             "updates": "Atjauninājumi",
             "blocked": "Bloķētie lietotāji",
             "storage": "Krātuve",
-            "encryption": "Šifrēšana"
+            "encryption": "Šifrēšana",
+            "privacy": "Privātums"
         },
         "blocked": {
             "title": "Bloķētie lietotāji",
@@ -703,6 +735,7 @@
             "pepUnsupportedBanner": "Jūsu serveris neatbalsta personisko notikumu publicēšanu (PEP, XEP-0163), kas nepieciešama OpenPGP šifrēšanai (XEP-0373). Pilnīgu šifrēšanu šajā kontā nevar ieslēgt. Sazinieties ar servera administratoru.",
             "statusPepUnsupported": "Šifrēšanu nevar ieslēgt: serveris neatbalsta PEP (XEP-0163), kas nepieciešams OpenPGP (XEP-0373).",
             "statusRegistrationFailed": "Šifrēšanas iestatīšana neizdevās ({{code}}). Detaļas meklējiet izstrādātāja konsolē.",
+            "notProtectedAtRest": "Šeit nav pieejama sistēmas atslēgu saišķa, tāpēc jūsu atslēgas paroles frāze tiek glabāta nešifrēta failā diskā. Atslēga nav aizsargāta miera stāvoklī. Ikviens, kurš var lasīt šīs ierīces failus, varētu to izmantot.",
             "backupLabel": "Atslēgas rezerves kopija",
             "backupDescription": "Publicējiet šifrētu atslēgas kopiju savā XMPP serverī. Aizsargāta ar paroles frāzi, kuru zināt tikai jūs, un lasāma tikai jūsu kontam (access_model: whitelist). Ļauj lasīt šifrēto vēsturi jaunā ierīcē pēc pieteikšanās un paroles frāzes ievadīšanas.",
             "backupAction": "Saglabāt serverī",
@@ -777,6 +810,7 @@
             "identityChoice": {
                 "title": "Šim kontam jau eksistē OpenPGP identitāte",
                 "body": "Šim pārlūkam nav lokālas atslēgas, bet serveris jau izziņo jūsu kontam atslēgu. Jaunas atslēgas ģenerēšana šeit klusi sašķeltu jūsu identitāti: korespondenti, kuri šifrēja uz esošo atslēgu, nevarētu piegādāt ziņas. Izvēlieties, kā to atrisināt:",
+                "bodyKeyUnrecoverable": "Šīs ierīces OpenPGP atslēgu vairs nevar atbloķēt, tāpēc šifrēšanu nevar sākt. Jūsu publicēto identitāti tas neietekmē. Atjaunojiet to no servera dublējuma vai importējot atslēgas failu, vai aizstājiet to, ja nevarat. Izvēlieties, kā vēlaties to atrisināt:",
                 "publishedFingerprintLabel": "Publicētais pirkstu nospiedums",
                 "restoreFromServerTitle": "Atjaunot no servera dublējuma",
                 "restoreFromServerBody": "Izmantojiet dublējuma paroli, ko iestatījāt, iespējojot šifrēšanu citā ierīcē. Atbilstošā privātā atslēga tiek izgūta no servera un atbloķēta lokāli.",
@@ -803,19 +837,6 @@
             "importFileSuccess": "Atslēga importēta no faila",
             "importFileFailed": "Neizdevās nolasīt izvēlēto failu",
             "unsupportedKeyAlgorithm": "Importētā atslēga izmanto algoritmu, kas vairs netiek atbalstīts (piemēram, DSA vai ElGamal). Izmantojiet modernu OpenPGP atslēgu (Curve25519, Ed25519 vai RSA vismaz 2048 bitu).",
-            "externalExportAction": "Eksportēt ārējam OpenPGP rīkam",
-            "externalExportDialogTitle": "Eksportēt privāto atslēgu ārējam OpenPGP rīkam",
-            "externalExportDialogBody": "Izveido standarta OpenPGP privātās atslēgas failu (PRIVATE KEY BLOCK), ko varat importēt rīkos gpg, OpenKeychain, Kleopatra un citos.",
-            "externalExportProtectedLabel": "Aizsargāta ar paroles frāzi",
-            "externalExportProtectedDescription": "Ieteicams. Izvēlieties paroles frāzi; eksportētais fails tiek šifrēts, un ārējie rīki to prasīs importēšanas laikā.",
-            "externalExportUnprotectedLabel": "Bez šifrēšanas",
-            "externalExportUnprotectedDescription": "Eksportētajā failā jūsu privātā atslēga ir atklātā tekstā. Izmantojiet tikai tad, ja mērķa rīks atsakās pieņemt ar paroles frāzi aizsargātas atslēgas.",
-            "externalExportUnprotectedWarning": "Bez paroles frāzes ikviens, kam ir piekļuve eksportētajam failam, var uzdoties par jums un atšifrēt jūsu pagātnes un nākotnes ziņojumus. Izdzēsiet failu, tiklīdz esat to importējis.",
-            "externalExportUnprotectedAcknowledgment": "Es saprotu riskus un vēlos eksportēt savu privāto atslēgu nešifrētu.",
-            "externalExportPassphraseLabel": "Paroles frāze",
-            "externalExportConfirmPassphraseLabel": "Apstipriniet paroles frāzi",
-            "externalExportPassphraseMismatch": "Paroles frāzes nesakrīt.",
-            "externalExportSuccess": "Privātā atslēga eksportēta failā",
             "unlockDialogTitle": "Atslēgt pilnīgu šifrēšanu",
             "unlockDialogBody": "Ievadiet paroli, lai atšifrētu atslēgu šai sesijai.",
             "unlockDialogSetupTitle": "Iestatīt pilnīgu šifrēšanu",
@@ -827,7 +848,16 @@
             "unlockPassphraseTooShort": "Parole jābūt vismaz 8 rakstzīmēm",
             "lockedBannerBody": "Jūsu šifrēšanas atslēga ir bloķēta. Ievadiet paroli, lai aktivizētu šifrēšanu šai sesijai.",
             "rotateNotSupportedWeb": "Atslēgas rotācija nav pieejama tīmeklī. Izmantojiet darbvirsmas lietotni."
-        }
+        },
+        "mediaAutoDownload": "Automātiska multivides lejupielāde",
+        "mediaAutoDownloadDescription": "Izvēlieties, kad attēli, videoklipi un faili tiek ielādēti automātiski.",
+        "mediaAutoDownloadAlways": "Vienmēr",
+        "mediaAutoDownloadAlwaysDescription": "Ielādēt multividi automātiski katrā sarunā.",
+        "mediaAutoDownloadPrivateOnly": "Tikai privāti",
+        "mediaAutoDownloadPrivateOnlyDescription": "Ielādēt automātiski tiešajās ziņās un privātajās istabās. Publiskajos kanālos, pieskarieties, lai ielādētu.",
+        "mediaAutoDownloadNever": "Nekad",
+        "mediaAutoDownloadNeverDescription": "Nekad neielādēt multividi automātiski. Pieskarieties, lai ielādētu jebkurā sarunā.",
+        "mediaAutoDownloadStrangerNote": "Multivide no cilvēkiem, kas nav jūsu kontaktos, vienmēr prasa pieskārienu ielādēšanai, neatkarīgi no šeit izvēlētā."
     },
     "update": {
         "title": "Pieejams atjauninājums",
@@ -1037,6 +1067,7 @@
             "description": "Jums nav administratora tiesību šajā serverī. Sazinieties ar servera administratoru, lai saņemtu piekļuvi."
         },
         "selectCommand": "Izvēlieties komandu no sānjoslas",
+        "openSections": "Atvērt administrācijas sadaļas",
         "execute": "Izpildīt",
         "executing": "Izpilda...",
         "next": "Nākamais",
@@ -1082,7 +1113,13 @@
         "users": {
             "delete": "Dzēst lietotāju",
             "changePassword": "Mainīt paroli",
-            "endSessions": "Beigt sesijas"
+            "endSessions": "Beigt sesijas",
+            "online": "Tiešsaistē",
+            "offline": "Bezsaistē",
+            "onlineNow": "Tiešsaistē tagad",
+            "justNow": "tikko",
+            "truncatedBanner": "Rāda pirmos {{shown}} no {{total}} lietotājiem. Precizējiet meklēšanu, lai sašaurinātu rezultātus.",
+            "truncatedBannerNoTotal": "Rāda pirmos {{shown}} lietotājus. Precizējiet meklēšanu, lai sašaurinātu rezultātus."
         },
         "userView": {
             "title": "Lietotājs",
@@ -1104,6 +1141,28 @@
         "roomList": {
             "title": "Tērzēšanas istabas",
             "noRooms": "Istabas nav atrastas"
+        },
+        "overview": {
+            "title": "Servera pārskats",
+            "refresh": "Atsvaidzināt",
+            "updatedAt": "Atjaunināts plkst. {{time}}",
+            "empty": "Servera statistika nav pieejama.",
+            "retry": "Mēģināt vēlreiz",
+            "units": {
+                "d": "d",
+                "h": "st",
+                "m": "min",
+                "s": "s"
+            },
+            "cards": {
+                "uptime": "Darbības laiks",
+                "version": "Servera versija",
+                "users": "Lietotāji",
+                "onlineSuffix": "{{n}} tiešsaistē",
+                "onlineSessions": "Tiešsaistes sesijas",
+                "onlineRooms": "Aktīvās istabas",
+                "vhosts": "Virtuālie saimnieki"
+            }
         }
     },
     "commandPalette": {

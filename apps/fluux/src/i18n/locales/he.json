@@ -40,7 +40,21 @@
         "hidePassword": "הסתר סיסמה",
         "madeBy": "נוצר על ידי",
         "ejabberdCreator": ", החברה מאחורי",
-        "poweredBy": "מופעל באמצעות"
+        "poweredBy": "מופעל באמצעות",
+        "errors": {
+            "tlsCertTitle": "לא ניתן לאמת את אישור האבטחה של השרת",
+            "tlsOtherTitle": "החיבור המאובטח נכשל",
+            "tlsOtherBody": "לא ניתן היה ליצור חיבור מוצפן לשרת. ייתכן שתצורת ה-TLS של השרת אינה נתמכת. בדוק את כתובת השרת, או פנה למנהל השרת.",
+            "unreachableTitle": "לא ניתן להגיע לשרת",
+            "timeoutBody": "השרת לא הגיב בזמן. בדוק את הרשת ואת כתובת השרת, ואז נסה שוב.",
+            "refusedBody": "השרת דחה את החיבור. בדוק את כתובת השרת והפורט, ואז נסה שוב.",
+            "cert": {
+                "expired": "תוקף אישור השרת פג. פנה למנהל השרת. אם הכתובת שגויה, ערוך את שדה השרת למטה.",
+                "nameMismatch": "אישור השרת הונפק עבור שם מארח שונה. בדוק את כתובת השרת למטה, או פנה למנהל השרת.",
+                "untrusted": "אישור השרת חתום עצמית או הונפק על ידי רשות לא מוכרת, ולכן לא ניתן לסמוך עליו. בדוק את כתובת השרת, או פנה למנהל השרת.",
+                "generic": "לא ניתן לאמת את אישור האבטחה של השרת. בדוק את כתובת השרת למטה, או פנה למנהל השרת."
+            }
+        }
     },
     "sidebar": {
         "messages": "הודעות",
@@ -201,6 +215,16 @@
         "invalidRoomAddress": "כתובת חדר לא תקינה (צריך להיות room@conference.server)",
         "joinRoomHint": "הזן את כתובת החדר המלאה להצטרפות לחדר צ'אט ציבורי.",
         "failedToJoinRoom": "ההצטרפות לחדר נכשלה",
+        "passwordProtected": "חדר זה מוגן בסיסמה",
+        "roomPassword": "סיסמה",
+        "passwordRequired": "חדר זה מוגן בסיסמה. הזן את הסיסמה כדי להצטרף.",
+        "incorrectPassword": "סיסמה שגויה.",
+        "nicknameInUse": "כינוי זה כבר בשימוש בחדר זה.",
+        "membersOnly": "חדר זה מיועד לחברים בלבד. עליך להיות חבר כדי להצטרף.",
+        "bannedFromRoom": "הגישה שלך לחדר זה נחסמה.",
+        "roomFull": "חדר זה מלא.",
+        "registeredNicknameRequired": "חדר זה דורש את הכינוי הרשום שלך.",
+        "roomNotFound": "החדר לא נמצא.",
         "nonAnonWarningTitle": "להצטרף לערוץ לא אנונימי?",
         "nonAnonWarningMessage": "כל מי שנמצא ב„{{room}}“ יכול לראות את הכתובת האמיתית שלך (מזהה ה-XMPP/Jabber שלך). להצטרף בכל זאת?",
         "nonAnonWarningConfirm": "להצטרף בכל זאת",
@@ -209,6 +233,7 @@
         "notJoinedNoHistory": "אינך בחדר זה",
         "joinToLoadHistory": "הצטרף לטעינת הודעות",
         "notificationSettings": "הגדרות התראות",
+        "roomActions": "פעולות חדר",
         "mentionsOnly": "אזכורים בלבד",
         "defaultBehavior": "ברירת מחדל",
         "allMessages": "כל ההודעות",
@@ -433,6 +458,7 @@
         "attachment": "קובץ מצורף",
         "removeAttachment": "הסרת קובץ מצורף",
         "reply": "תגובה",
+        "copyMessage": "העתקת טקסט",
         "replyQuoteHiddenEncrypted": "הציטוט הוסתר: המקור היה מוצפן",
         "forwardMessage": "העברת הודעה (בקרוב)",
         "moreReactions": "תגובות נוספות",
@@ -565,7 +591,12 @@
             "acceptedWithoutVerifying": "המפתח החדש התקבל. העמית לא אומת",
             "acceptFailed": "לא ניתן לקבל את המפתח החדש. נסה שוב"
         },
-        "offlinePlaceholder": "לא מקוון. הודעות יישלחו עם החיבור מחדש"
+        "offlinePlaceholder": "לא מקוון. הודעות יישלחו עם החיבור מחדש",
+        "loadImage": "טען תמונה",
+        "loadVideo": "טען סרטון",
+        "loadAudio": "טען שמע",
+        "loadFilePreview": "טען תצוגה מקדימה",
+        "showLinkImage": "הצג תמונה"
     },
     "dates": {
         "today": "היום",
@@ -581,7 +612,8 @@
             "updates": "עדכונים",
             "blocked": "משתמשים חסומים",
             "storage": "אחסון",
-            "encryption": "הצפנה"
+            "encryption": "הצפנה",
+            "privacy": "פרטיות"
         },
         "blocked": {
             "title": "משתמשים חסומים",
@@ -702,6 +734,7 @@
             "pepUnsupportedBanner": "השרת שלך אינו תומך בפרסום אירועים אישיים (PEP,‏ XEP-0163), הנדרש להצפנת OpenPGP (XEP-0373). לא ניתן להפעיל הצפנה מקצה לקצה בחשבון זה. פנה למנהל השרת.",
             "statusPepUnsupported": "לא ניתן להפעיל את ההצפנה: השרת אינו תומך ב-PEP (XEP-0163), הנדרש עבור OpenPGP (XEP-0373).",
             "statusRegistrationFailed": "הגדרת ההצפנה נכשלה ({{code}}). בדוק את קונסולת המפתחים לפרטים.",
+            "notProtectedAtRest": "אין כאן צרור מפתחות מערכת זמין, ולכן משפט הסיסמה של המפתח שלך מאוחסן ללא הצפנה בקובץ בדיסק. המפתח אינו מוגן במנוחה. כל מי שיכול לקרוא את הקבצים של מכשיר זה יוכל להשתמש בו.",
             "backupLabel": "גיבוי מפתח",
             "backupDescription": "פרסם עותק מוצפן של המפתח שלך בשרת ה-XMPP שלך. מוגן על-ידי משפט סיסמה שרק אתה יודע, וקריא רק על-ידי החשבון שלך (access_model: whitelist). מאפשר לך לקרוא היסטוריה מוצפנת במכשיר חדש לאחר התחברות והקלדת משפט הסיסמה.",
             "backupAction": "שמור בשרת",
@@ -776,6 +809,7 @@
             "identityChoice": {
                 "title": "כבר קיימת זהות OpenPGP עבור חשבון זה",
                 "body": "אין במפתח מקומי בדפדפן זה, אך השרת כבר מפרסם מפתח לחשבונך. יצירת מפתח חדש כאן תיצור פיצול שקט בזהותך: אנשי קשר שהצפינו למפתח הקיים לא יוכלו למסור הודעות. בחר כיצד לפתור זאת:",
+                "bodyKeyUnrecoverable": "לא ניתן עוד לפתוח את מפתח ה-OpenPGP של מכשיר זה, ולכן ההצפנה לא יכולה להתחיל. הזהות המפורסמת שלך אינה מושפעת. שחזר אותה משחזור הגיבוי בשרת או על ידי ייבוא קובץ מפתח, או החלף אותה אם אינך יכול. בחר כיצד ברצונך לפתור זאת:",
                 "publishedFingerprintLabel": "טביעת אצבע שפורסמה",
                 "restoreFromServerTitle": "שחזר מגיבוי השרת",
                 "restoreFromServerBody": "השתמש בביטוי הסיסמה של הגיבוי שהגדרת בעת הפעלת ההצפנה במכשיר אחר. המפתח הפרטי המתאים מאוחזר מהשרת ונפתח באופן מקומי.",
@@ -802,19 +836,6 @@
             "importFileSuccess": "המפתח יובא מהקובץ",
             "importFileFailed": "לא ניתן היה לקרוא את הקובץ שנבחר",
             "unsupportedKeyAlgorithm": "המפתח המיובא משתמש באלגוריתם שאינו נתמך עוד (למשל DSA או ElGamal). השתמש במפתח OpenPGP מודרני (Curve25519, Ed25519 או RSA של לפחות 2048 ביט).",
-            "externalExportAction": "ייצא לכלי OpenPGP חיצוני",
-            "externalExportDialogTitle": "ייצוא מפתח פרטי לכלי OpenPGP חיצוני",
-            "externalExportDialogBody": "מפיק קובץ מפתח פרטי תקני בתבנית OpenPGP (PRIVATE KEY BLOCK) שניתן לייבא לכלים gpg, OpenKeychain, Kleopatra ואחרים.",
-            "externalExportProtectedLabel": "מוגן במשפט סיסמה",
-            "externalExportProtectedDescription": "מומלץ. בחר משפט סיסמה; הקובץ המיוצא יוצפן וכלים חיצוניים יבקשו אותו בעת הייבוא.",
-            "externalExportUnprotectedLabel": "ללא הצפנה",
-            "externalExportUnprotectedDescription": "הקובץ המיוצא מכיל את המפתח הפרטי שלך כטקסט גלוי. השתמש רק אם הכלי היעד מסרב לקבל מפתחות המוגנים במשפט סיסמה.",
-            "externalExportUnprotectedWarning": "ללא משפט סיסמה, כל מי שניגש לקובץ המיוצא יכול להתחזות לך ולפענח את הודעותיך מהעבר ומהעתיד. מחק את הקובץ מיד לאחר הייבוא.",
-            "externalExportUnprotectedAcknowledgment": "אני מבין את הסיכונים ומעוניין לייצא את המפתח הפרטי שלי ללא הצפנה.",
-            "externalExportPassphraseLabel": "משפט סיסמה",
-            "externalExportConfirmPassphraseLabel": "אישור משפט סיסמה",
-            "externalExportPassphraseMismatch": "משפטי הסיסמה אינם תואמים.",
-            "externalExportSuccess": "המפתח הפרטי יוצא לקובץ",
             "unlockDialogTitle": "בטל נעילת הצפנה מקצה לקצה",
             "unlockDialogBody": "הזן את ביטוי הסיסמה שלך כדי לפענח את המפתח שלך לסשן זה.",
             "unlockDialogSetupTitle": "הגדר הצפנה מקצה לקצה",
@@ -826,7 +847,16 @@
             "unlockPassphraseTooShort": "ביטוי הסיסמה חייב להכיל לפחות 8 תווים",
             "lockedBannerBody": "מפתח ההצפנה שלך נעול. הזן את ביטוי הסיסמה כדי לאפשר הצפנה לסשן זה.",
             "rotateNotSupportedWeb": "סיבוב מפתחות אינו זמין באינטרנט. השתמש ביישום שולחן העבודה."
-        }
+        },
+        "mediaAutoDownload": "הורדה אוטומטית של מדיה",
+        "mediaAutoDownloadDescription": "בחר מתי תמונות, סרטונים וקבצים נטענים אוטומטית.",
+        "mediaAutoDownloadAlways": "תמיד",
+        "mediaAutoDownloadAlwaysDescription": "טעינת מדיה אוטומטית בכל שיחה.",
+        "mediaAutoDownloadPrivateOnly": "פרטי בלבד",
+        "mediaAutoDownloadPrivateOnlyDescription": "טעינה אוטומטית בהודעות ישירות ובחדרים פרטיים. בערוצים ציבוריים, הקש לטעינה.",
+        "mediaAutoDownloadNever": "לעולם לא",
+        "mediaAutoDownloadNeverDescription": "לעולם אל תטען מדיה אוטומטית. הקש לטעינה בכל שיחה.",
+        "mediaAutoDownloadStrangerNote": "מדיה מאנשים שאינם באנשי הקשר שלך תמיד מצריכה הקשה לטעינה, ללא קשר למה שתבחר כאן."
     },
     "update": {
         "title": "עדכון זמין",
@@ -1036,6 +1066,7 @@
             "description": "אין לך הרשאות מנהל בשרת זה. פנה למנהל השרת לקבלת גישה."
         },
         "selectCommand": "בחר פקודה מסרגל הצד",
+        "openSections": "פתח מקטעי ניהול",
         "execute": "ביצוע",
         "executing": "מבצע...",
         "next": "הבא",
@@ -1081,7 +1112,13 @@
         "users": {
             "delete": "מחיקת משתמש",
             "changePassword": "שינוי סיסמה",
-            "endSessions": "סיום סשנים"
+            "endSessions": "סיום סשנים",
+            "online": "מחובר",
+            "offline": "לא מחובר",
+            "onlineNow": "מחובר עכשיו",
+            "justNow": "הרגע",
+            "truncatedBanner": "מוצגים {{shown}} הראשונים מתוך {{total}} משתמשים. צמצם את החיפוש לתוצאות מדויקות יותר.",
+            "truncatedBannerNoTotal": "מוצגים {{shown}} הראשונים. צמצם את החיפוש לתוצאות מדויקות יותר."
         },
         "userView": {
             "title": "משתמש",
@@ -1103,6 +1140,28 @@
         "roomList": {
             "title": "חדרי צ'אט",
             "noRooms": "לא נמצאו חדרים"
+        },
+        "overview": {
+            "title": "סקירת שרת",
+            "refresh": "רענן",
+            "updatedAt": "עודכן בשעה {{time}}",
+            "empty": "נתוני השרת אינם זמינים.",
+            "retry": "נסה שוב",
+            "units": {
+                "d": "י",
+                "h": "ש",
+                "m": "דק",
+                "s": "שנ"
+            },
+            "cards": {
+                "uptime": "זמן פעילות",
+                "version": "גרסת שרת",
+                "users": "משתמשים",
+                "onlineSuffix": "{{n}} מחוברים",
+                "onlineSessions": "סשנים מחוברים",
+                "onlineRooms": "חדרים פעילים",
+                "vhosts": "מארחים וירטואליים"
+            }
         }
     },
     "commandPalette": {

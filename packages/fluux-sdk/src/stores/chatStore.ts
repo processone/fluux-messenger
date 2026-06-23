@@ -139,6 +139,12 @@ interface ChatState {
   markAsRead: (conversationId: string) => void
   clearFirstNewMessageId: (conversationId: string) => void
   updateLastSeenMessageId: (conversationId: string, messageId: string) => void
+  /**
+   * XEP-0490: apply a remote device's last-displayed marker. Advances
+   * lastSeenMessageId forward-only by resolving the stanza-id to a local
+   * message id; stores a pending high-water mark if not yet loaded.
+   */
+  applyRemoteDisplayed: (conversationId: string, stanzaId: string, messagesOverride?: Message[]) => void
   hasConversation: (id: string) => boolean
   archiveConversation: (id: string) => void
   unarchiveConversation: (id: string) => void
@@ -557,8 +563,11 @@ export const chatStore = createStore<ChatState>()(
             }
 
             const messages = get().messages.get(id) || []
-            // Compute marker position and mark as read atomically
-            const activated = notifState.onActivate(notifInput, messages)
+            // Compute marker position and mark as read atomically.
+            // 1:1 chats treat delayed messages as new (offline delivery), so the
+            // marker may land on a delayed message — unlike rooms, where delayed
+            // means MUC history replay.
+            const activated = notifState.onActivate(notifInput, messages, { treatDelayedAsNew: true })
 
             set((state) => {
               const newMetaEntry = {
@@ -905,6 +914,88 @@ export const chatStore = createStore<ChatState>()(
         })
       },
 
+      applyRemoteDisplayed: (conversationId, stanzaId, messagesOverride) => {
+        set((state) => {
+          const meta = state.conversationMeta.get(conversationId)
+          const conv = state.conversations.get(conversationId)
+          if (!meta) return state
+
+          // A non-active conversation keeps no resident array (memory windowing), so
+          // mergeMAMMessages passes the just-merged array here; otherwise read RAM.
+          const messages = messagesOverride ?? (state.messages.get(conversationId) || [])
+          const match = messages.find((m) => m.stanzaId === stanzaId)
+
+          if (!match) {
+            // Message not yet loaded — remember the stanza-id as a high-water
+            // mark to be resolved when the message cache is loaded.
+            const newMeta = new Map(state.conversationMeta)
+            newMeta.set(conversationId, { ...meta, pendingRemoteDisplayedStanzaId: stanzaId })
+
+            if (conv) {
+              const newConversations = new Map(state.conversations)
+              newConversations.set(conversationId, { ...conv, pendingRemoteDisplayedStanzaId: stanzaId })
+              return { conversationMeta: newMeta, conversations: newConversations }
+            }
+
+            return { conversationMeta: newMeta }
+          }
+
+          // Forward-only advance using the shared comparator (compares by index).
+          const updated = notifState.onMessageSeen(
+            {
+              unreadCount: meta.unreadCount,
+              mentionsCount: 0,
+              lastReadAt: meta.lastReadAt,
+              lastSeenMessageId: meta.lastSeenMessageId,
+              firstNewMessageId: meta.firstNewMessageId,
+            },
+            match.id,
+            messages
+          )
+
+          // No advance (same value or onMessageSeen guard prevented regression).
+          // The matching message IS loaded and the local position is at or past
+          // it, so this marker is resolved — clear any stale pending high-water
+          // mark so it doesn't re-fire a no-op applyRemoteDisplayed on every
+          // mergeMAMMessages. Leave lastSeenMessageId unchanged.
+          if (updated.lastSeenMessageId === meta.lastSeenMessageId) {
+            if (meta.pendingRemoteDisplayedStanzaId === undefined) return state
+            const newMeta = new Map(state.conversationMeta)
+            newMeta.set(conversationId, { ...meta, pendingRemoteDisplayedStanzaId: undefined })
+            if (conv) {
+              const newConversations = new Map(state.conversations)
+              newConversations.set(conversationId, {
+                ...conv,
+                pendingRemoteDisplayedStanzaId: undefined,
+              })
+              return { conversationMeta: newMeta, conversations: newConversations }
+            }
+            return { conversationMeta: newMeta }
+          }
+
+          const newMeta = new Map(state.conversationMeta)
+          newMeta.set(conversationId, {
+            ...meta,
+            lastSeenMessageId: updated.lastSeenMessageId,
+            // Resolved → clear any stale pending marker.
+            pendingRemoteDisplayedStanzaId: undefined,
+          })
+
+          if (conv) {
+            const newConversations = new Map(state.conversations)
+            newConversations.set(conversationId, {
+              ...conv,
+              lastSeenMessageId: updated.lastSeenMessageId,
+              // Keep the combined map coherent with conversationMeta.
+              pendingRemoteDisplayedStanzaId: undefined,
+            })
+            return { conversationMeta: newMeta, conversations: newConversations }
+          }
+
+          return { conversationMeta: newMeta }
+        })
+      },
+
       hasConversation: (id) => {
         return get().conversations.has(id)
       },
@@ -1087,11 +1178,21 @@ export const chatStore = createStore<ChatState>()(
             void searchIndex.updateMessage(updatedMessage)
           }
 
-          // Update lastMessage if this was the last message in the conversation
+          // Refresh the lastMessage preview when this update touches it. Match
+          // positionally (the updated message is the newest array element) OR by
+          // identity (the updated message IS the current preview). The identity
+          // tier is load-bearing for deferred decrypt: an encrypted message can
+          // be the stored preview while a trailing bodiless-signal placeholder
+          // (an encrypted reaction/retraction) sits after it in the array, so a
+          // purely positional gate would leave the sidebar stuck on
+          // "[OpenPGP-encrypted message]" after the real message decrypts.
+          const meta = state.conversationMeta.get(conversationId)
+          const conv = state.conversations.get(conversationId)
           const isLastMessage = messageIndex === updatedConvMessages.length - 1
-          if (isLastMessage) {
-            const meta = state.conversationMeta.get(conversationId)
-            const conv = state.conversations.get(conversationId)
+          const isPreviewMessage =
+            !!meta?.lastMessage &&
+            findMessageIndexById([meta.lastMessage], updatedMessage.id) !== -1
+          if (isLastMessage || isPreviewMessage) {
             if (meta && conv) {
               // Update metadata map
               const newMeta = new Map(state.conversationMeta)
@@ -1247,6 +1348,9 @@ export const chatStore = createStore<ChatState>()(
       },
 
       mergeMAMMessages: (conversationId, mamMessages, rsm, complete, direction) => {
+        // Captured from inside set() so the post-set MDS marker resolution can read the
+        // merged array even for a non-active conversation (whose array isn't in RAM).
+        let mergedForMarker: Message[] = []
         set((state) => {
           // Get existing messages for this conversation
           const rawExisting = state.messages.get(conversationId) || []
@@ -1277,6 +1381,7 @@ export const chatStore = createStore<ChatState>()(
                   getChatMessageKeys,
                   MAX_MESSAGES_PER_CONVERSATION
                 )
+          mergedForMarker = trimmed
 
           // Newest fetched message timestamp marks the gap edge for an incomplete
           // forward catch-up (parity with rooms).
@@ -1369,6 +1474,15 @@ export const chatStore = createStore<ChatState>()(
 
           return { messages: newMessagesMap, mamQueryStates: newStates, conversationGaps: newGaps }
         })
+
+        // XEP-0490: a remote displayed marker may have arrived before its message.
+        // Now that messages are merged into state, try to resolve the pending marker
+        // forward-only. applyRemoteDisplayed re-reads the merged messages, resolves
+        // lastSeenMessageId, and clears pendingRemoteDisplayedStanzaId on success.
+        const pending = get().conversationMeta.get(conversationId)?.pendingRemoteDisplayedStanzaId
+        if (pending) {
+          get().applyRemoteDisplayed(conversationId, pending, mergedForMarker)
+        }
       },
 
       getMAMQueryState: (conversationId) => {

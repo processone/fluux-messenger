@@ -14,6 +14,8 @@ import { tauriProxyAdapter } from './utils/tauriProxyAdapter'
 import { installBeforeInputGuard } from './utils/tauriInputFix'
 import { logStartupCapabilities } from './utils/startupDiagnostics'
 import { startStallSentinel } from './utils/stallSentinel'
+import { registerServiceWorker } from './utils/serviceWorkerUpdate'
+import { getReconnectIntent } from './utils/reconnectIntent'
 
 // Check if running in Tauri
 const isTauri = '__TAURI_INTERNALS__' in window
@@ -22,15 +24,12 @@ const isTauri = '__TAURI_INTERNALS__' in window
 const disableTcpProxy = localStorage.getItem('fluux:disable-tcp-proxy') === 'true'
 const proxyAdapter = isTauri && !disableTcpProxy ? tauriProxyAdapter : undefined
 
-// Register service worker only in browser (not Tauri)
-// Tauri uses a custom protocol that doesn't support service workers
-if (!isTauri && 'serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('./sw.js').catch(() => {
-      // Service worker registration failed - ignore silently
-      // This can happen in development or unsupported environments
-    })
-  })
+// Register service worker only in browser (not Tauri).
+// Tauri uses a custom protocol that doesn't support service workers.
+// registerServiceWorker also wires auto-reload-on-update so deployed updates
+// land without needing to reinstall an installed PWA (see serviceWorkerUpdate.ts).
+if (!isTauri) {
+  registerServiceWorker()
 }
 
 // Add 'user-interacted' class to html on first user interaction
@@ -111,7 +110,11 @@ window.addEventListener('vite:preloadError', async (event) => {
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <RenderLoopBoundary>
-      <XMPPProvider debug={import.meta.env.DEV} proxyAdapter={proxyAdapter}>
+      <XMPPProvider
+        debug={import.meta.env.DEV}
+        proxyAdapter={proxyAdapter}
+        shouldAutoReconnect={() => getReconnectIntent() === 'active'}
+      >
         <ThemeProvider>
           <HashRouter>
             <App />

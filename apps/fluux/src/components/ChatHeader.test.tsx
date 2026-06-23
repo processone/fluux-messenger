@@ -11,12 +11,24 @@ vi.mock('react-i18next', () => ({
   }),
 }))
 
-// Mock useWindowDrag hook
+// Mock useWindowDrag hook and other hooks used by ChatHeader and HeaderOverflowKebab
 vi.mock('@/hooks', () => ({
   useWindowDrag: () => ({
     titleBarClass: 'mt-5',
     dragRegionProps: { 'data-tauri-drag-region': true },
   }),
+  useAnchoredMenu: () => ({
+    triggerRef: { current: null },
+    menuRef: { current: null },
+    position: { x: 0, y: 0 },
+  }),
+  useClickOutside: () => {},
+}))
+
+// Mock useHasHover (used by HeaderOverflowKebab — separate import path)
+vi.mock('@/hooks/useHasHover', () => ({
+  useHasHover: () => true,
+  hasHover: () => true,
 }))
 
 // Mock @fluux/sdk/react store hooks
@@ -309,6 +321,103 @@ describe('ChatHeader', () => {
 
       const header = container.querySelector('header')
       expect(header).toHaveAttribute('data-tauri-drag-region', 'true')
+    })
+  })
+
+  describe('Conversation menu (kebab)', () => {
+    const openMenu = () =>
+      fireEvent.click(screen.getByRole('button', { name: 'contacts.actionsMenu' }))
+
+    it('renders a conversation menu for a 1:1 chat', () => {
+      render(
+        <ChatHeader
+          name="Alice"
+          type="chat"
+          jid="alice@example.com"
+          onShowProfile={vi.fn()}
+          isArchived={false}
+          onArchive={vi.fn()}
+          onUnarchive={vi.fn()}
+        />
+      )
+
+      expect(screen.getByRole('button', { name: 'contacts.actionsMenu' })).toBeInTheDocument()
+    })
+
+    it('opens a Contact info item that calls onShowProfile', () => {
+      const onShowProfile = vi.fn()
+      render(
+        <ChatHeader
+          name="Alice"
+          type="chat"
+          jid="alice@example.com"
+          onShowProfile={onShowProfile}
+          isArchived={false}
+          onArchive={vi.fn()}
+          onUnarchive={vi.fn()}
+        />
+      )
+
+      openMenu()
+      fireEvent.click(screen.getByText('sidebar.viewProfile'))
+      expect(onShowProfile).toHaveBeenCalledTimes(1)
+    })
+
+    it('shows Archive (not Unarchive) for an unarchived chat and calls onArchive', () => {
+      const onArchive = vi.fn()
+      render(
+        <ChatHeader
+          name="Alice"
+          type="chat"
+          jid="alice@example.com"
+          onShowProfile={vi.fn()}
+          isArchived={false}
+          onArchive={onArchive}
+          onUnarchive={vi.fn()}
+        />
+      )
+
+      openMenu()
+      expect(screen.queryByText('conversations.unarchive')).not.toBeInTheDocument()
+      fireEvent.click(screen.getByText('conversations.archive'))
+      expect(onArchive).toHaveBeenCalledTimes(1)
+    })
+
+    it('shows Unarchive (not Archive) for an archived chat and calls onUnarchive', () => {
+      const onUnarchive = vi.fn()
+      render(
+        <ChatHeader
+          name="Alice"
+          type="chat"
+          jid="alice@example.com"
+          onShowProfile={vi.fn()}
+          isArchived={true}
+          onArchive={vi.fn()}
+          onUnarchive={onUnarchive}
+        />
+      )
+
+      openMenu()
+      expect(screen.queryByText('conversations.archive')).not.toBeInTheDocument()
+      fireEvent.click(screen.getByText('conversations.unarchive'))
+      expect(onUnarchive).toHaveBeenCalledTimes(1)
+    })
+
+    it('does not render the conversation menu in group chat mode', () => {
+      render(
+        <ChatHeader
+          name="Room"
+          type="groupchat"
+          jid="room@conf.example.com"
+          isArchived={false}
+          onArchive={vi.fn()}
+          onUnarchive={vi.fn()}
+        />
+      )
+
+      expect(
+        screen.queryByRole('button', { name: 'contacts.actionsMenu' })
+      ).not.toBeInTheDocument()
     })
   })
 })

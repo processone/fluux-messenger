@@ -1,0 +1,14 @@
+{
+  "tsk": {
+    "fixture": "openpgp_tsk_backup.asc",
+    "format": "Fluux/Sequoia-style backup: a binary Transferable Secret Key wrapped in a passphrase-encrypted OpenPGP MESSAGE",
+    "passphrase": "TWNK-KD5Y-MT3T-E1GS-DRDB-KVTW",
+    "fingerprint": "b65eb2c2aa56b9a740b2d9254c026544de17a68e"
+  },
+  "openkeychain": {
+    "fixture": "openkeychain_numeric9x4_backup.asc",
+    "format": "OpenKeychain (Android) numeric9x4 backup: decrypts to an armored PUBLIC KEY BLOCK followed by a PRIVATE KEY BLOCK; passphrase is the 9x4 backup code used verbatim, dashes included",
+    "passphrase": "0228-6308-1219-5990-0322-8950-3981-3061-6394",
+    "fingerprint": "82973553e2708df2928c1118089050309406e77f"
+  }
+}

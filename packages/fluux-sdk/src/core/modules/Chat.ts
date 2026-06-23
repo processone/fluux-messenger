@@ -1642,11 +1642,18 @@ export class Chat extends BaseModule {
     const mucUser = stanza.getChild('x', NS_MUC_USER)
     const invite = mucUser?.getChild('invite')
     if (invite) {
+      const reason = formatXMPPError(error)
       this.deps.emitSDK('room:invite-error', {
         roomJid: bareFrom,
-        error: formatXMPPError(error),
+        error: reason,
         condition: error.condition,
         errorType: error.type,
+      })
+      // Surface in the exportable XMPP console as an at-a-glance error event;
+      // the toast is transient and wouldn't survive in a shared log.
+      this.deps.emitSDK('console:event', {
+        message: `MUC invitation to ${bareFrom} rejected: ${reason}`,
+        category: 'error',
       })
       return
     }

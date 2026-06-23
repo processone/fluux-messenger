@@ -214,7 +214,7 @@ export function Sidebar({ onSelectContact, onStartChat, onManageUser, adminCateg
       style={{ width: isDesktop ? sidebarWidth : '100%' }}
     >
       {/* Icon Rail - with padding for macOS traffic lights */}
-      <div className="w-14 bg-fluux-bg flex flex-col items-center pt-8 pb-3 gap-2">
+      <div className="w-14 bg-fluux-bg flex flex-col items-center pt-8 pb-safe-3 gap-2">
         {/* Fluux logo - enable with VITE_SHOW_LOGO=true */}
         {import.meta.env.VITE_SHOW_LOGO === 'true' && (
           <img
@@ -298,7 +298,16 @@ export function Sidebar({ onSelectContact, onStartChat, onManageUser, adminCateg
         {/* Header - with drag region for window movement */}
         <div className={`h-14 ${titleBarClass} px-4 flex items-center border-b border-fluux-bg shadow-sm`} {...dragRegionProps}>
           <h1 className="flex-1 font-semibold text-fluux-text truncate">
-            {sidebarView === 'messages' ? t('sidebar.messages')
+            {sidebarView === 'admin' && isAdmin ? (
+              // Clicking the title returns to the admin "home" (server overview)
+              <button
+                type="button"
+                onClick={() => onAdminCategoryChange?.('stats')}
+                className="text-start hover:text-fluux-brand transition-colors"
+              >
+                {t('sidebar.admin')}
+              </button>
+            ) : sidebarView === 'messages' ? t('sidebar.messages')
               : sidebarView === 'rooms' ? t('sidebar.rooms')
               : sidebarView === 'directory' ? t('sidebar.connections')
               : sidebarView === 'archive' ? t('sidebar.archive')
@@ -411,7 +420,7 @@ export function Sidebar({ onSelectContact, onStartChat, onManageUser, adminCateg
         >
           <div className="sidebar-scroll h-full overflow-y-auto rounded-sm py-0.5 px-0.5">
             <SidebarZoneContext.Provider value={sidebarListRef}>
-              <div key={sidebarView} style={{ animation: 'sidebar-view-enter 150ms ease-out' }}>
+              <div key={sidebarView} className="h-full md:h-auto" style={{ animation: 'sidebar-view-enter 150ms ease-out' }}>
               {sidebarView === 'messages' ? (
                 <ConversationList />
               ) : sidebarView === 'directory' ? (
@@ -444,7 +453,7 @@ export function Sidebar({ onSelectContact, onStartChat, onManageUser, adminCateg
         </div>
 
         {/* User Panel - avatar spans both rows */}
-        <div className="px-2 py-2 bg-fluux-sidebar border-t border-fluux-bg">
+        <div className="px-2 pt-2 pb-safe-2 bg-fluux-sidebar border-t border-fluux-bg">
           <div className="flex items-center gap-2 min-w-0">
             {/* Large avatar - clickable for profile settings */}
             <Tooltip content={t('sidebar.viewProfile')} position="top">

@@ -11,6 +11,7 @@ import {
   BlockedUsersSettings,
   StorageSettings,
   EncryptionSettings,
+  PrivacySettings,
   type SettingsCategory,
   SETTINGS_CATEGORIES,
   DEFAULT_SETTINGS_CATEGORY,
@@ -51,6 +52,8 @@ export function SettingsView({ onBack }: SettingsViewProps) {
         return <LanguageSettings />
       case 'notifications':
         return <NotificationsSettings />
+      case 'privacy':
+        return <PrivacySettings />
       case 'updates':
         // Updates only available on macOS/Windows, not Linux (users update via package manager)
         return isUpdaterEnabled() ? <UpdatesSettings /> : <ProfileSettings />
@@ -73,7 +76,7 @@ export function SettingsView({ onBack }: SettingsViewProps) {
         {onBack && (
           <button
             onClick={onBack}
-            className="p-1 -ms-1 me-2 rounded hover:bg-fluux-hover md:hidden"
+            className="p-1 -ms-1 me-2 rounded hover:bg-fluux-hover md:hidden tap-target"
             aria-label={t('common.back')}
           >
             <ArrowLeft className="size-5 text-fluux-muted rtl-mirror" />

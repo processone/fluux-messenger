@@ -40,7 +40,21 @@
         "hidePassword": "Piilota salasana",
         "madeBy": "Tekijä",
         "ejabberdCreator": ", yrityksen takana",
-        "poweredBy": "Käyttää"
+        "poweredBy": "Käyttää",
+        "errors": {
+            "tlsCertTitle": "Palvelimen turvasertifikaattia ei voitu varmentaa",
+            "tlsOtherTitle": "Suojattu yhteys epäonnistui",
+            "tlsOtherBody": "Salattua yhteyttä palvelimeen ei voitu muodostaa. Palvelimen TLS-asetuksia ei ehkä tueta. Tarkista palvelimen osoite tai ota yhteyttä palvelimen ylläpitäjään.",
+            "unreachableTitle": "Palvelimeen ei saatu yhteyttä",
+            "timeoutBody": "Palvelin ei vastannut ajoissa. Tarkista verkko ja palvelimen osoite, sitten yritä uudelleen.",
+            "refusedBody": "Palvelin hylkäsi yhteyden. Tarkista palvelimen osoite ja portti, sitten yritä uudelleen.",
+            "cert": {
+                "expired": "Palvelimen sertifikaatti on vanhentunut. Ota yhteyttä palvelimen ylläpitäjään. Jos osoite on väärä, muokkaa alla olevaa palvelinkenttää.",
+                "nameMismatch": "Palvelimen sertifikaatti on myönnetty eri isäntänimelle. Tarkista alla oleva palvelimen osoite tai ota yhteyttä palvelimen ylläpitäjään.",
+                "untrusted": "Palvelimen sertifikaatti on itse allekirjoitettu tai tuntemattoman viranomaisen myöntämä, joten siihen ei voi luottaa. Tarkista palvelimen osoite tai ota yhteyttä palvelimen ylläpitäjään.",
+                "generic": "Palvelimen turvasertifikaattia ei voitu varmentaa. Tarkista alla oleva palvelimen osoite tai ota yhteyttä palvelimen ylläpitäjään."
+            }
+        }
     },
     "sidebar": {
         "messages": "Viestit",
@@ -201,6 +215,16 @@
         "invalidRoomAddress": "Virheellinen huoneosoite (pitäisi olla huone@conference.palvelin)",
         "joinRoomHint": "Syötä huoneen koko osoite liittyäksesi julkiseen keskusteluhuoneeseen.",
         "failedToJoinRoom": "Huoneeseen liittyminen epäonnistui",
+        "passwordProtected": "Tämä huone on salasanasuojattu",
+        "roomPassword": "Salasana",
+        "passwordRequired": "Tämä huone on salasanasuojattu. Anna salasana liittyäksesi.",
+        "incorrectPassword": "Väärä salasana.",
+        "nicknameInUse": "Tämä nimimerkki on jo käytössä tässä huoneessa.",
+        "membersOnly": "Tämä huone on vain jäsenille. Sinun täytyy olla jäsen liittyäksesi.",
+        "bannedFromRoom": "Sinut on estetty tästä huoneesta.",
+        "roomFull": "Tämä huone on täynnä.",
+        "registeredNicknameRequired": "Tämä huone vaatii rekisteröidyn nimimerkkisi.",
+        "roomNotFound": "Huonetta ei löydy.",
         "nonAnonWarningTitle": "Liitytäänkö ei-anonyymiin kanavaan?",
         "nonAnonWarningMessage": "Kaikki kanavalla ”{{room}}” näkevät todellisen osoitteesi (XMPP/Jabber-tunnuksesi). Liitytäänkö silti?",
         "nonAnonWarningConfirm": "Liity silti",
@@ -209,6 +233,7 @@
         "notJoinedNoHistory": "Et ole tässä huoneessa",
         "joinToLoadHistory": "Liity ladataksesi viestit",
         "notificationSettings": "Ilmoitusasetukset",
+        "roomActions": "Huoneen toiminnot",
         "mentionsOnly": "Vain maininnat",
         "defaultBehavior": "Oletuskäyttäytyminen",
         "allMessages": "Kaikki viestit",
@@ -433,6 +458,7 @@
         "attachment": "Liite",
         "removeAttachment": "Poista liite",
         "reply": "Vastaa",
+        "copyMessage": "Kopioi teksti",
         "replyQuoteHiddenEncrypted": "Lainaus piilotettu: alkuperäinen oli salattu",
         "forwardMessage": "Välitä viesti (tulossa pian)",
         "moreReactions": "Lisää reaktioita",
@@ -565,7 +591,12 @@
             "acceptedWithoutVerifying": "Uusi avain hyväksytty. Vertaista ei ole vahvistettu",
             "acceptFailed": "Uuden avaimen hyväksyminen epäonnistui. Yritä uudelleen"
         },
-        "offlinePlaceholder": "Offline-tilassa. Viestit lähetetään, kun yhteys palautuu"
+        "offlinePlaceholder": "Offline-tilassa. Viestit lähetetään, kun yhteys palautuu",
+        "loadImage": "Lataa kuva",
+        "loadVideo": "Lataa video",
+        "loadAudio": "Lataa ääni",
+        "loadFilePreview": "Lataa esikatselu",
+        "showLinkImage": "Näytä kuva"
     },
     "dates": {
         "today": "Tänään",
@@ -581,7 +612,8 @@
             "updates": "Päivitykset",
             "blocked": "Estetyt käyttäjät",
             "storage": "Tallennustila",
-            "encryption": "Salaus"
+            "encryption": "Salaus",
+            "privacy": "Yksityisyys"
         },
         "blocked": {
             "title": "Estetyt käyttäjät",
@@ -702,6 +734,7 @@
             "pepUnsupportedBanner": "Palvelimesi ei tue henkilökohtaisten tapahtumien julkaisua (PEP, XEP-0163), jota OpenPGP-salaus (XEP-0373) edellyttää. Päästä päähän -salausta ei voi ottaa käyttöön tällä tilillä. Ota yhteyttä palvelimen ylläpitäjään.",
             "statusPepUnsupported": "Salausta ei voi ottaa käyttöön: palvelin ei tue PEP:iä (XEP-0163), jota OpenPGP (XEP-0373) edellyttää.",
             "statusRegistrationFailed": "Salauksen määritys epäonnistui ({{code}}). Katso tiedot kehittäjäkonsolista.",
+            "notProtectedAtRest": "Täällä ei ole järjestelmän avainnippua käytettävissä, joten avaimesi tunnuslause tallennetaan salaamattomana tiedostoon levylle. Avain ei ole suojattu levossa. Kuka tahansa, joka voi lukea tämän laitteen tiedostoja, voi käyttää sitä.",
             "backupLabel": "Avaimen varmuuskopio",
             "backupDescription": "Julkaise avaimesta salattu kopio XMPP-palvelimellesi. Suojattu vain sinun tuntemallasi tunnuslauseella ja luettavissa vain tililläsi (access_model: whitelist). Mahdollistaa salatun historian lukemisen uudella laitteella sisäänkirjautumisen ja tunnuslauseen syöttämisen jälkeen.",
             "backupAction": "Varmuuskopioi palvelimelle",
@@ -776,6 +809,7 @@
             "identityChoice": {
                 "title": "OpenPGP-identiteetti on jo olemassa tälle tilille",
                 "body": "Tällä selaimella ei ole paikallista avainta, mutta palvelin ilmoittaa jo avaimen tilillesi. Uuden avaimen luominen täällä hajottaisi identiteettisi hiljaisesti: kirjeenvaihtokumppanit, jotka salasivat olemassa olevalla avaimella, eivät voisi toimittaa viestejä. Valitse, miten haluat ratkaista tämän:",
+                "bodyKeyUnrecoverable": "Tämän laitteen OpenPGP-avainta ei voi enää avata, joten salausta ei voi käynnistää. Julkaistuun identiteettiisi tämä ei vaikuta. Palauta se palvelimen varmuuskopiosta tai tuomalla avaintiedosto, tai korvaa se, jos et voi. Valitse, miten haluat ratkaista tämän:",
                 "publishedFingerprintLabel": "Julkaistu sormenjälki",
                 "restoreFromServerTitle": "Palauta palvelimen varmuuskopiosta",
                 "restoreFromServerBody": "Käytä varmuuskopioinnin tunnuslausetta, jonka asetit ottaessasi salauksen käyttöön toisella laitteella. Vastaava yksityinen avain noudetaan palvelimelta ja avataan paikallisesti.",
@@ -802,19 +836,6 @@
             "importFileSuccess": "Avain tuotu tiedostosta",
             "importFileFailed": "Valittua tiedostoa ei voitu lukea",
             "unsupportedKeyAlgorithm": "Tuotu avain käyttää algoritmia, jota ei enää tueta (esim. DSA tai ElGamal). Käytä modernia OpenPGP-avainta (Curve25519, Ed25519 tai RSA vähintään 2048 bittiä).",
-            "externalExportAction": "Vie ulkoista OpenPGP-työkalua varten",
-            "externalExportDialogTitle": "Vie yksityinen avain ulkoista OpenPGP-työkalua varten",
-            "externalExportDialogBody": "Tuottaa OpenPGP-standardin mukaisen yksityisen avaimen tiedoston (PRIVATE KEY BLOCK), jonka voit tuoda työkaluihin gpg, OpenKeychain, Kleopatra ja muihin.",
-            "externalExportProtectedLabel": "Suojattu salauslauseella",
-            "externalExportProtectedDescription": "Suositeltavaa. Valitse salauslause; viety tiedosto salataan, ja ulkoiset työkalut pyytävät sitä tuonnin yhteydessä.",
-            "externalExportUnprotectedLabel": "Ei salausta",
-            "externalExportUnprotectedDescription": "Viety tiedosto sisältää yksityisen avaimesi selkokielisenä. Käytä vain, jos kohdetyökalu ei hyväksy salauslauseella suojattuja avaimia.",
-            "externalExportUnprotectedWarning": "Ilman salauslausetta jokainen, joka pääsee käsiksi vietyyn tiedostoon, voi esiintyä sinuna ja purkaa aiemmat ja tulevat viestisi. Poista tiedosto heti, kun olet tuonut sen.",
-            "externalExportUnprotectedAcknowledgment": "Ymmärrän riskit ja haluan viedä yksityisen avaimeni salaamattomana.",
-            "externalExportPassphraseLabel": "Salauslause",
-            "externalExportConfirmPassphraseLabel": "Vahvista salauslause",
-            "externalExportPassphraseMismatch": "Salauslauseet eivät täsmää.",
-            "externalExportSuccess": "Yksityinen avain viety tiedostoon",
             "unlockDialogTitle": "Avaa päästä päähän -salaus",
             "unlockDialogBody": "Syötä salasana avataksesi salausavaimesi tätä istuntoa varten.",
             "unlockDialogSetupTitle": "Asenna päästä päähän -salaus",
@@ -826,7 +847,16 @@
             "unlockPassphraseTooShort": "Salasanassa on oltava vähintään 8 merkkiä",
             "lockedBannerBody": "Salausavaimesi on lukittu. Syötä salasana ottaaksesi salauksen käyttöön tässä istunnossa.",
             "rotateNotSupportedWeb": "Avaimen kierto ei ole käytettävissä verkossa. Käytä työpöytäsovellusta."
-        }
+        },
+        "mediaAutoDownload": "Median automaattinen lataus",
+        "mediaAutoDownloadDescription": "Valitse, milloin kuvat, videot ja tiedostot ladataan automaattisesti.",
+        "mediaAutoDownloadAlways": "Aina",
+        "mediaAutoDownloadAlwaysDescription": "Lataa media automaattisesti kaikissa keskusteluissa.",
+        "mediaAutoDownloadPrivateOnly": "Vain yksityiset",
+        "mediaAutoDownloadPrivateOnlyDescription": "Lataa automaattisesti suoraviesteissä ja yksityisissä huoneissa. Julkisissa kanavissa, napauta ladataksesi.",
+        "mediaAutoDownloadNever": "Ei koskaan",
+        "mediaAutoDownloadNeverDescription": "Älä koskaan lataa mediaa automaattisesti. Napauta ladataksesi missä tahansa keskustelussa.",
+        "mediaAutoDownloadStrangerNote": "Henkilöiltä, jotka eivät ole yhteystiedoissasi, peräisin oleva media vaatii aina napautuksen lataamiseen, riippumatta tästä valinnasta."
     },
     "update": {
         "title": "Päivitys saatavilla",
@@ -1036,6 +1066,7 @@
             "description": "Sinulla ei ole ylläpitäjän oikeuksia tällä palvelimella. Ota yhteyttä palvelimen ylläpitäjään saadaksesi käyttöoikeuden."
         },
         "selectCommand": "Valitse komento sivupalkista",
+        "openSections": "Avaa hallintaosiot",
         "execute": "Suorita",
         "executing": "Suoritetaan...",
         "next": "Seuraava",
@@ -1081,7 +1112,13 @@
         "users": {
             "delete": "Poista käyttäjä",
             "changePassword": "Vaihda salasana",
-            "endSessions": "Lopeta istunnot"
+            "endSessions": "Lopeta istunnot",
+            "online": "Online",
+            "offline": "Offline",
+            "onlineNow": "Paikalla nyt",
+            "justNow": "juuri nyt",
+            "truncatedBanner": "Näytetään ensimmäiset {{shown}} käyttäjää {{total}}:stä. Rajaa hakua tarkentaaksesi tuloksia.",
+            "truncatedBannerNoTotal": "Näytetään ensimmäiset {{shown}} käyttäjää. Rajaa hakua tarkentaaksesi tuloksia."
         },
         "userView": {
             "title": "Käyttäjä",
@@ -1103,6 +1140,28 @@
         "roomList": {
             "title": "Keskusteluhuoneet",
             "noRooms": "Huoneita ei löytynyt"
+        },
+        "overview": {
+            "title": "Palvelimen yleiskatsaus",
+            "refresh": "Päivitä",
+            "updatedAt": "Päivitetty klo {{time}}",
+            "empty": "Palvelimen tilastot eivät ole saatavilla.",
+            "retry": "Yritä uudelleen",
+            "units": {
+                "d": "pv",
+                "h": "t",
+                "m": "min",
+                "s": "s"
+            },
+            "cards": {
+                "uptime": "Käyttöaika",
+                "version": "Palvelimen versio",
+                "users": "Käyttäjät",
+                "onlineSuffix": "{{n}} paikalla",
+                "onlineSessions": "Aktiiviset istunnot",
+                "onlineRooms": "Aktiiviset huoneet",
+                "vhosts": "Virtuaalipalvelimet"
+            }
         }
     },
     "commandPalette": {

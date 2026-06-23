@@ -40,7 +40,21 @@
         "hidePassword": "Hide password",
         "madeBy": "Made by",
         "ejabberdCreator": ", the company behind",
-        "poweredBy": "Powered by"
+        "poweredBy": "Powered by",
+        "errors": {
+            "tlsCertTitle": "Couldn't verify the server's security certificate",
+            "tlsOtherTitle": "Secure connection failed",
+            "tlsOtherBody": "The encrypted connection to the server could not be established. The server's TLS configuration may be unsupported. Check the server address, or contact the server administrator.",
+            "unreachableTitle": "Couldn't reach the server",
+            "timeoutBody": "The server did not respond in time. Check your network and the server address, then try again.",
+            "refusedBody": "The server refused the connection. Check the server address and port, then try again.",
+            "cert": {
+                "expired": "The server's certificate has expired. Contact the server administrator. If the address is wrong, edit the server field below.",
+                "nameMismatch": "The server's certificate was issued for a different host name. Check the server address below, or contact the server administrator.",
+                "untrusted": "The server's certificate is self-signed or issued by an unknown authority, so it can't be trusted. Check the server address, or contact the server administrator.",
+                "generic": "The server's security certificate could not be verified. Check the server address below, or contact the server administrator."
+            }
+        }
     },
     "sidebar": {
         "messages": "Messages",
@@ -201,6 +215,16 @@
         "invalidRoomAddress": "Invalid room address (should be room@conference.server)",
         "joinRoomHint": "Enter the full room address to join a public chat room.",
         "failedToJoinRoom": "Failed to join room",
+        "passwordProtected": "This room is password-protected",
+        "roomPassword": "Password",
+        "passwordRequired": "This room is password-protected. Enter the password to join.",
+        "incorrectPassword": "Incorrect password.",
+        "nicknameInUse": "That nickname is already in use in this room.",
+        "membersOnly": "This room is members-only. You need to be a member to join.",
+        "bannedFromRoom": "You've been banned from this room.",
+        "roomFull": "This room is full.",
+        "registeredNicknameRequired": "This room requires your registered nickname.",
+        "roomNotFound": "Room not found.",
         "nonAnonWarningTitle": "Join non-anonymous channel?",
         "nonAnonWarningMessage": "Everyone in “{{room}}” can see your real address (your XMPP/Jabber ID). Join anyway?",
         "nonAnonWarningConfirm": "Join anyway",
@@ -209,6 +233,7 @@
         "notJoinedNoHistory": "You are not in this room",
         "joinToLoadHistory": "Join to load messages",
         "notificationSettings": "Notification settings",
+        "roomActions": "Room actions",
         "mentionsOnly": "Mentions only",
         "defaultBehavior": "Default behavior",
         "allMessages": "All messages",
@@ -433,6 +458,7 @@
         "attachment": "Attachment",
         "removeAttachment": "Remove attachment",
         "reply": "Reply",
+        "copyMessage": "Copy text",
         "replyQuoteHiddenEncrypted": "Quote hidden: the original was encrypted",
         "forwardMessage": "Forward message (coming soon)",
         "moreReactions": "More reactions",
@@ -565,7 +591,12 @@
             "acceptedWithoutVerifying": "New key accepted. Peer is unverified",
             "acceptFailed": "Couldn't accept the new key. Try again"
         },
-        "offlinePlaceholder": "Offline. Messages will be sent when you reconnect"
+        "offlinePlaceholder": "Offline. Messages will be sent when you reconnect",
+        "loadImage": "Load image",
+        "loadVideo": "Load video",
+        "loadAudio": "Load audio",
+        "loadFilePreview": "Load preview",
+        "showLinkImage": "Show image"
     },
     "dates": {
         "today": "Today",
@@ -581,7 +612,8 @@
             "updates": "Updates",
             "blocked": "Blocked Users",
             "storage": "Storage",
-            "encryption": "Encryption"
+            "encryption": "Encryption",
+            "privacy": "Privacy"
         },
         "encryption": {
             "experimental": "Experimental",
@@ -601,6 +633,7 @@
             "pepUnsupportedBanner": "Your server does not support personal eventing (PEP, XEP-0163), which OpenPGP encryption (XEP-0373) requires. End-to-end encryption can't be enabled on this account. Contact your server administrator.",
             "statusPepUnsupported": "Encryption can't be enabled: your server does not support PEP (XEP-0163), required by OpenPGP (XEP-0373).",
             "statusRegistrationFailed": "Encryption setup failed ({{code}}). Check the developer console for details.",
+            "notProtectedAtRest": "No system keychain is available here, so your key's passphrase is stored unencrypted in a file on disk. The key is not protected at rest. Anyone who can read this device's files could use it.",
             "copyFingerprint": "Copy fingerprint",
             "copyFailed": "Couldn't copy fingerprint",
             "toggleFailed": "Couldn't change encryption setting",
@@ -692,6 +725,7 @@
             "identityChoice": {
                 "title": "An OpenPGP identity already exists for this account",
                 "body": "This browser has no local key, but the server already advertises one for your account. Generating a new key here would silently fork your identity: peers who encrypted to the existing key would no longer be able to deliver messages. Pick how you want to resolve this:",
+                "bodyKeyUnrecoverable": "This device's OpenPGP key can no longer be unlocked, so encryption can't start. Your published identity is unaffected. Recover it by restoring your server backup or importing a key file, or replace it if you can't. Pick how you want to resolve this:",
                 "publishedFingerprintLabel": "Published fingerprint",
                 "restoreFromServerTitle": "Restore from server backup",
                 "restoreFromServerBody": "Use the backup passphrase you set when enabling encryption on another device. The matching private key is fetched from the server and unlocked locally.",
@@ -718,19 +752,6 @@
             "importFileSuccess": "Key imported from file",
             "importFileFailed": "Could not read the selected file",
             "unsupportedKeyAlgorithm": "Imported key uses an algorithm that is no longer supported (e.g. DSA or ElGamal). Use a modern OpenPGP key (Curve25519, Ed25519, or RSA at least 2048 bits).",
-            "externalExportAction": "Export for external OpenPGP tool",
-            "externalExportDialogTitle": "Export private key for an external OpenPGP tool",
-            "externalExportDialogBody": "Produces a standard OpenPGP private key file (PRIVATE KEY BLOCK) that you can import into gpg, OpenKeychain, Kleopatra, and other tools.",
-            "externalExportProtectedLabel": "Protected by a passphrase",
-            "externalExportProtectedDescription": "Recommended. Pick a passphrase; the exported file is encrypted and external tools will ask for it on import.",
-            "externalExportUnprotectedLabel": "No encryption",
-            "externalExportUnprotectedDescription": "The exported file contains your private key in clear text. Use only if your target tool refuses passphrase-protected keys.",
-            "externalExportUnprotectedWarning": "Without a passphrase, anyone with access to the exported file can impersonate you and decrypt your past and future messages. Delete the file as soon as you have imported it.",
-            "externalExportUnprotectedAcknowledgment": "I understand the risks and want to export my private key unencrypted.",
-            "externalExportPassphraseLabel": "Passphrase",
-            "externalExportConfirmPassphraseLabel": "Confirm passphrase",
-            "externalExportPassphraseMismatch": "Passphrases do not match.",
-            "externalExportSuccess": "Private key exported to file",
             "unlockDialogTitle": "Unlock End-to-End Encryption",
             "unlockDialogBody": "Enter your passphrase to decrypt your encryption key for this session.",
             "unlockDialogSetupTitle": "Set up End-to-End Encryption",
@@ -794,6 +815,15 @@
         "timeFormatAuto": "System default",
         "timeFormat12h": "12-hour (2:30 PM)",
         "timeFormat24h": "24-hour (14:30)",
+        "mediaAutoDownload": "Auto-download media",
+        "mediaAutoDownloadDescription": "Choose when images, videos, and files load automatically.",
+        "mediaAutoDownloadAlways": "Always",
+        "mediaAutoDownloadAlwaysDescription": "Load media automatically in every conversation.",
+        "mediaAutoDownloadPrivateOnly": "Private only",
+        "mediaAutoDownloadPrivateOnlyDescription": "Load automatically in direct messages and private rooms. In public channels, tap to load.",
+        "mediaAutoDownloadNever": "Never",
+        "mediaAutoDownloadNeverDescription": "Never load media automatically. Tap to load in any conversation.",
+        "mediaAutoDownloadStrangerNote": "Media from people who aren't in your contacts always needs a tap to load, whatever you choose here.",
         "notifications": "Notifications",
         "notificationStatus": "Desktop Notifications",
         "notificationEnabled": "Enabled. You will receive notifications",
@@ -1036,6 +1066,7 @@
             "description": "You don't have administrator privileges on this server. Contact your server administrator for access."
         },
         "selectCommand": "Select a command from the sidebar",
+        "openSections": "Open admin sections",
         "execute": "Execute",
         "executing": "Executing...",
         "next": "Next",
@@ -1081,7 +1112,13 @@
         "users": {
             "delete": "Delete user",
             "changePassword": "Change password",
-            "endSessions": "End sessions"
+            "endSessions": "End sessions",
+            "online": "Online",
+            "offline": "Offline",
+            "onlineNow": "Online now",
+            "justNow": "just now",
+            "truncatedBanner": "Showing the first {{shown}} of {{total}} users. Refine your search to narrow results.",
+            "truncatedBannerNoTotal": "Showing the first {{shown}} users. Refine your search to narrow results."
         },
         "userView": {
             "title": "User",
@@ -1103,6 +1140,28 @@
         "roomList": {
             "title": "Chat Rooms",
             "noRooms": "No rooms found"
+        },
+        "overview": {
+            "title": "Server overview",
+            "refresh": "Refresh",
+            "updatedAt": "Updated at {{time}}",
+            "empty": "Server statistics are unavailable.",
+            "retry": "Retry",
+            "units": {
+                "d": "d",
+                "h": "h",
+                "m": "m",
+                "s": "s"
+            },
+            "cards": {
+                "uptime": "Uptime",
+                "version": "Server version",
+                "users": "Users",
+                "onlineSuffix": "{{n}} online",
+                "onlineSessions": "Online sessions",
+                "onlineRooms": "Active rooms",
+                "vhosts": "Virtual hosts"
+            }
         }
     },
     "commandPalette": {

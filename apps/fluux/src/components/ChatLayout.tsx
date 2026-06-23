@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { detectRenderLoop } from '@/utils/renderLoopDetector'
 import { Sidebar, type SidebarView } from './Sidebar'
@@ -153,6 +153,7 @@ function ChatLayoutContent() {
   // NOTE: Don't use useAdmin() hook - it subscribes to many values. Use focused selectors.
   const adminSession = useAdminStore((s) => s.currentSession)
   const adminCategory = useAdminStore((s) => s.activeCategory)
+  const adminIsAdmin = useAdminStore((s) => s.isAdmin)
   const clearAdminSession = () => {
     adminStore.getState().setCurrentSession(null)
     adminStore.getState().setTargetJid(null)
@@ -475,9 +476,10 @@ function ChatLayoutContent() {
   }
 
   // On mobile, show main content area only when there's actual content to display
-  // For admin: only 'users' and 'rooms' categories have main view content
-  // 'stats' and 'announcements' just expand to show commands in the sidebar
-  const adminHasMainContent = adminSession || adminCategory === 'users' || adminCategory === 'rooms'
+  // For admin: 'users', 'rooms', and 'stats' categories have main view content
+  // ('stats' renders the ServerOverview dashboard); 'announcements' just expands
+  // to show commands in the sidebar
+  const adminHasMainContent = adminSession || adminCategory === 'users' || adminCategory === 'rooms' || adminCategory === 'stats'
   // Settings: only show content when a category is explicitly selected (on mobile, let user choose from sidebar first)
   const settingsHasContent = sidebarView === 'settings' && !!settingsCategory
   const hasActiveContent = !!(activeConversationId || activeRoomJid || selectedContact || adminHasMainContent || settingsHasContent || searchPreviewResult || activityPreviewEvent)
@@ -727,6 +729,15 @@ function ChatLayoutContent() {
     }
     setAdminCategory(category)
   }
+
+  // Admin "home": default to the server overview (stats) when entering the
+  // admin panel with nothing selected. Runs before paint to avoid a flash of
+  // the empty placeholder. Non-admins still see the access-denied state.
+  useLayoutEffect(() => {
+    if (sidebarView !== 'admin') return
+    if (!adminIsAdmin || adminCategory || adminSession) return
+    adminStore.getState().setActiveCategory('stats')
+  }, [sidebarView, adminIsAdmin, adminCategory, adminSession])
 
   // Handle managing a user from roster context menu
   const handleManageUser = (jid: string) => {

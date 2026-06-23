@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { AlertTriangle, Loader2 } from 'lucide-react'
+import { AlertTriangle, Eye, EyeOff, Loader2 } from 'lucide-react'
 import { USE_V6_KEYS } from '@/e2ee/passphraseGenerator'
 
 const BACKUP_CODE_ALPHABET = '123456789ABCDEFGHIJKLMNPQRSTUVWXYZ'
@@ -42,8 +42,22 @@ interface RestorePassphraseDialogProps {
   body?: string
   /** Override the confirm button label. Defaults to "Restore from server". */
   confirmLabel?: string
-  /** True when the passphrase is an XEP-0373 backup code (XXXX-XXXX-… format). Defaults to !USE_V6_KEYS. */
+  /**
+   * Show the masked XEP-0373 backup-code field (XXXX-XXXX-… format) instead of
+   * a free-text field. Authoritative even in import mode: import-from-file sites
+   * MUST set this from the file's `Passphrase-Format` header (`xep0373` → true,
+   * everything else → false). Defaults to !USE_V6_KEYS for the server-restore flow.
+   */
   isBackupCode?: boolean
+  /**
+   * 'import' = entering a FOREIGN key's passphrase (GnuPG / OpenKeychain): adds
+   * a reveal toggle, disables password-manager autofill, and trims the value.
+   * It does NOT pick the field type — the masked backup-code vs free-text choice
+   * is governed solely by `isBackupCode` (import sites derive it from the file's
+   * Passphrase-Format header). 'restore' (default) is the server-restore flow
+   * whose passphrase is the user's own saved Fluux backup code.
+   */
+  mode?: 'restore' | 'import'
 }
 
 /**
@@ -68,14 +82,22 @@ export function RestorePassphraseDialog({
   body,
   confirmLabel,
   isBackupCode = !USE_V6_KEYS,
+  mode = 'restore',
 }: RestorePassphraseDialogProps) {
   const { t } = useTranslation()
   const inputRef = useRef<HTMLInputElement | null>(null)
   const backupCursorRef = useRef<number>(0)
 
+  const isImport = mode === 'import'
+  // The masked field is driven solely by isBackupCode. Import-from-file sites
+  // pass it based on the file's Passphrase-Format header (a Fluux xep0373 backup
+  // gets the mask; a foreign key's arbitrary passphrase stays free text).
+  const useBackupCode = isBackupCode
+
   const [passphrase, setPassphrase] = useState('')
   const [isRestoring, setIsRestoring] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [showPassphrase, setShowPassphrase] = useState(false)
 
   useEffect(() => {
     inputRef.current?.focus()
@@ -92,10 +114,10 @@ export function RestorePassphraseDialog({
   // After backup code reformatting, restore cursor position to where the
   // user was typing rather than jumping to the end.
   useLayoutEffect(() => {
-    if (isBackupCode && inputRef.current) {
+    if (useBackupCode && inputRef.current) {
       inputRef.current.setSelectionRange(backupCursorRef.current, backupCursorRef.current)
     }
-  }, [passphrase, isBackupCode])
+  }, [passphrase, useBackupCode])
 
   const handleBackupCodeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const input = e.currentTarget
@@ -137,7 +159,9 @@ export function RestorePassphraseDialog({
     setIsRestoring(true)
     setError(null)
     try {
-      await onConfirm(passphrase)
+      // Import passphrases are often pasted/transcribed codes — trim stray
+      // whitespace so the verbatim raw-key path doesn't fail on it.
+      await onConfirm(isImport ? passphrase.trim() : passphrase)
       // Parent is expected to close the dialog on success; we stay
       // mounted and spinner-disabled so a successful-but-slow path
       // doesn't let the user mash the button.
@@ -149,7 +173,7 @@ export function RestorePassphraseDialog({
       setError(err instanceof Error ? err.message : String(err))
       setIsRestoring(false)
     }
-  }, [onConfirm, passphrase])
+  }, [onConfirm, passphrase, isImport])
 
   return (
     <div
@@ -169,8 +193,12 @@ export function RestorePassphraseDialog({
           onSubmit={(e) => { e.preventDefault(); void handleConfirm() }}
           className="contents"
         >
-        {/* Hidden username distinguishes this entry from the XMPP login in password managers. */}
-        <input type="text" name="username" autoComplete="section-openpgp username" value="openpgp-passphrase" readOnly aria-hidden="true" className="hidden" />
+        {/* Hidden username distinguishes this entry from the XMPP login in password
+            managers. Omitted for import: a foreign key's passphrase is never the
+            saved Fluux credential, so the manager must not offer to fill or save it. */}
+        {!isImport && (
+          <input type="text" name="username" autoComplete="section-openpgp username" value="openpgp-passphrase" readOnly aria-hidden="true" className="hidden" />
+        )}
         <div className="px-5 pt-5 pb-3">
           <h3 className="text-lg font-semibold text-fluux-text mb-1">
             {title ?? t('settings.encryption.restoreDialogTitle')}
@@ -191,7 +219,7 @@ export function RestorePassphraseDialog({
           <label className="block text-sm text-fluux-text mb-1">
             {t('settings.encryption.restorePassphraseLabel')}
           </label>
-          {isBackupCode ? (
+          {useBackupCode ? (
             <input
               ref={inputRef}
               type="text"
@@ -209,20 +237,41 @@ export function RestorePassphraseDialog({
               className="w-full px-3 py-2 mb-4 rounded-lg bg-fluux-bg border border-fluux-hover text-fluux-text font-mono tracking-widest focus:outline-none focus:border-fluux-brand disabled:opacity-50"
             />
           ) : (
-            <input
-              ref={inputRef}
-              type="password"
-              name="passphrase"
-              autoComplete="section-openpgp current-password"
-              value={passphrase}
-              disabled={isRestoring}
-              onChange={(e) => {
-                setPassphrase(e.target.value)
-                if (error) setError(null)
-              }}
-              placeholder={t('settings.encryption.restorePassphrasePlaceholder')}
-              className="w-full px-3 py-2 mb-4 rounded-lg bg-fluux-bg border border-fluux-hover text-fluux-text focus:outline-none focus:border-fluux-brand disabled:opacity-50"
-            />
+            <div className="relative mb-4">
+              <input
+                ref={inputRef}
+                type={showPassphrase ? 'text' : 'password'}
+                name="passphrase"
+                // Import: never the saved Fluux credential — opt out of the manager.
+                autoComplete={isImport ? 'off' : 'section-openpgp current-password'}
+                spellCheck={isImport ? false : undefined}
+                autoCorrect={isImport ? 'off' : undefined}
+                autoCapitalize={isImport ? 'none' : undefined}
+                value={passphrase}
+                disabled={isRestoring}
+                onChange={(e) => {
+                  setPassphrase(e.target.value)
+                  if (error) setError(null)
+                }}
+                placeholder={t('settings.encryption.restorePassphrasePlaceholder')}
+                className="w-full px-3 py-2 pe-10 rounded-lg bg-fluux-bg border border-fluux-hover text-fluux-text focus:outline-none focus:border-fluux-brand disabled:opacity-50"
+              />
+              {isImport && (
+                <button
+                  type="button"
+                  tabIndex={-1}
+                  onClick={() => {
+                    setShowPassphrase((v) => !v)
+                    inputRef.current?.focus()
+                  }}
+                  disabled={isRestoring}
+                  className="absolute end-2 top-1/2 -translate-y-1/2 p-1 text-fluux-muted hover:text-fluux-text disabled:opacity-50 transition-colors"
+                  aria-label={showPassphrase ? t('login.hidePassword') : t('login.showPassword')}
+                >
+                  {showPassphrase ? <EyeOff className="size-5" /> : <Eye className="size-5" />}
+                </button>
+              )}
+            </div>
           )}
 
           {error && (

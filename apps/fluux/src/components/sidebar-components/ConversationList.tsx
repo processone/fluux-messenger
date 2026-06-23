@@ -1,4 +1,4 @@
-import React, { useState, useRef, memo, useCallback } from 'react'
+import React, { useState, useRef, useEffect, memo, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useListKeyboardNav, useRouteSync } from '@/hooks'
 import { detectRenderLoop, trackSelectorChange } from '@/utils/renderLoopDetector'
@@ -264,7 +264,7 @@ export const ConversationItem = memo(function ConversationItem({
   const { t, i18n } = useTranslation()
   const connectionStatus = useConnectionStore((s) => s.status)
   const forceOffline = connectionStatus !== 'online'
-  const { getItemMenuProps, isOpen, longPressTriggered } = useSidebarListMenu<Conversation>()
+  const { getItemMenuProps, isOpen, longPressTriggered, targetItem } = useSidebarListMenu<Conversation>()
   const currentLang = i18n.language.split('-')[0]
   const timeFormat = useSettingsStore((s) => s.timeFormat)
 
@@ -275,7 +275,15 @@ export const ConversationItem = memo(function ConversationItem({
   const draft = useChatStore((s) => s.drafts.get(conversation.id))
 
   const isGroupChat = conversation.type === 'groupchat'
+  // Room avatars render as a raw <img> (no Avatar fallback). A dead blob: URL
+  // (WebKit reclaim across sleep) would otherwise show a broken-image glyph;
+  // fall back to the Hash icon instead. Reset when the URL changes.
+  const [roomAvatarBroken, setRoomAvatarBroken] = useState(false)
+  useEffect(() => { setRoomAvatarBroken(false) }, [room?.avatar])
   const menuProps = getItemMenuProps(conversation)
+  // While the long-press / context menu is open, highlight the targeted cell so
+  // the user can clearly see which conversation the action will apply to.
+  const isMenuTarget = isOpen && targetItem?.id === conversation.id
 
   const handleClick = () => {
     if (isOpen || longPressTriggered.current) return
@@ -298,25 +306,29 @@ export const ConversationItem = memo(function ConversationItem({
         onMouseEnter={onMouseEnter}
         onMouseMove={onMouseMove}
         className={`w-full relative px-2 py-1.5 rounded border flex items-center gap-3 text-start cursor-pointer
-                    transition-colors ${isActive
+                    transition-colors ${isMenuTarget ? 'ring-2 ring-fluux-brand ring-inset z-10' : ''} ${isActive
                       ? "bg-fluux-sidebar-item-active text-fluux-text border-transparent before:content-[''] before:absolute before:left-0 before:top-1.5 before:bottom-1.5 before:w-[3px] before:rounded-r-full before:bg-fluux-sidebar-item-active-accent"
-                      : isSelected
-                        ? 'bg-fluux-hover text-fluux-text border-fluux-brand'
-                        : isKeyboardNav
-                          ? 'text-fluux-muted border-transparent'
-                          : 'text-fluux-muted border-transparent hover:bg-fluux-hover hover:text-fluux-text'}`}
+                      : isMenuTarget
+                        ? 'bg-fluux-hover text-fluux-text border-transparent'
+                        : isSelected
+                          ? 'bg-fluux-hover text-fluux-text border-fluux-brand'
+                          : isKeyboardNav
+                            ? 'text-fluux-muted border-transparent'
+                            : 'text-fluux-muted border-transparent hover:bg-fluux-hover hover:text-fluux-text'}`}
       >
         {/* Avatar wrapper — the unread badge overlays the avatar (UX_REVIEW §3.1)
             instead of taking its own flex column, so the name/preview column
             keeps its full width and stops truncating short names. */}
         <div className="relative flex-shrink-0">
           {isGroupChat ? (
-            room?.avatar ? (
+            room?.avatar && !roomAvatarBroken ? (
               <img
                 src={room.avatar}
                 alt={conversation.name}
                 className="size-8 rounded-full object-cover"
                 draggable={false}
+                onError={() => setRoomAvatarBroken(true)}
+                onLoad={(e) => { if (e.currentTarget.naturalWidth === 0) setRoomAvatarBroken(true) }}
               />
             ) : (
               <Hash

@@ -201,6 +201,10 @@ export async function decryptStanzaInPlace(
   // OpenPGP): it will never decrypt regardless of keys, so it is terminal —
   // do NOT stash for retry. Distinct from a signature rejection.
   let terminalFailure = false
+  // Set when a ratcheting plugin reports `broken-session`: the session is
+  // desynced and a plain retry cannot help. We trigger E2EEManager.repairSession
+  // and, like a terminal failure, do NOT stash for deferred retry.
+  let sessionNeedsRepair = false
 
   try {
     const messageId = stanza.attrs.id
@@ -225,9 +229,25 @@ export async function decryptStanzaInPlace(
         ? await manager.decryptArchive(claim.payload.stanzaElement, target, context)
         : await manager.decryptInbound(claim.payload.stanzaElement, target, context)
     if (result) {
-      plaintext = new TextDecoder().decode(result.plaintext)
-      securityContext = result.securityContext
-      if (result.authoredAt) authoredAt = result.authoredAt
+      const status = result.status ?? 'ok'
+      if (status === 'broken-session') {
+        // Ratchet desync — the message cannot be opened until the session is
+        // rebuilt. Trigger repair (fire-and-forget; a plain retry can't fix a
+        // desync) and fall through to the failure path below for the
+        // placeholder + untrusted security context. Not stashed for retry.
+        sessionNeedsRepair = true
+        failureReason = result.securityContext?.notes?.[0] ?? 'broken session'
+        void manager.repairSession(target).catch(() => {})
+      } else {
+        // `ok` and `unverifiable` carry plaintext; `control-message` carries
+        // none (a key-transport / ratchet-advance message). When plaintext is
+        // absent, nothing is decoded and no body is synthesized below — the
+        // control message is consumed silently. Trust comes from the plugin's
+        // securityContext either way (`unverifiable` reports a reduced trust).
+        if (result.plaintext) plaintext = new TextDecoder().decode(result.plaintext)
+        securityContext = result.securityContext
+        if (result.authoredAt) authoredAt = result.authoredAt
+      }
     } else {
       failureReason = 'no plugin claimed the payload'
     }
@@ -266,7 +286,9 @@ export async function decryptStanzaInPlace(
               ? 'rejected: invalid signature'
               : terminalFailure
                 ? 'permanent: malformed payload — not retried'
-                : 'retryable'
+                : sessionNeedsRepair
+                  ? 'broken session — repair triggered, not retried'
+                  : 'retryable'
         }): ${failureReason}`,
       )
     if (isRejection) {
@@ -284,19 +306,22 @@ export async function decryptStanzaInPlace(
       // a placeholder body would surface a forged reaction as a ghost text
       // message. The warn above records the drop in the E2EE events log.
     } else {
-      // Decrypt failure. A structurally malformed payload is terminal — never
-      // stash it (it would re-fail every reconnect). Everything else (key
-      // locked, plugin missing, etc.) is retryable: stash for deferred retry.
-      if (!terminalFailure) stashPayload(stanza, originalStanzaXml)
+      // Decrypt failure. A structurally malformed payload is terminal and a
+      // broken session won't heal on a plain retry — never stash either (it
+      // would re-fail every reconnect; repair drives the broken-session fix).
+      // Everything else (key locked, plugin missing, etc.) is retryable: stash
+      // for deferred retry.
+      const noRetry = terminalFailure || sessionNeedsRepair
+      if (!noRetry) stashPayload(stanza, originalStanzaXml)
       const existingBody = stanza.getChild('body')
-      if (terminalFailure && existingBody) {
-        // The payload will NEVER decrypt, so the sender's XEP-0373 fallback
-        // <body> (cleartext the sender controls) must not stand in as the
-        // message — it would otherwise be shown verbatim forever and counted as
-        // a successful decrypt when retryPendingDecrypts re-runs. Replace it
-        // with the placeholder, mirroring the signature-rejection path above. A
-        // RETRYABLE failure instead keeps the hint: a later successful retry
-        // replaces it with the real plaintext.
+      if (noRetry && existingBody) {
+        // The payload won't be opened by a retry, so the sender's XEP-0373
+        // fallback <body> (cleartext the sender controls) must not stand in as
+        // the message — it would otherwise be shown verbatim forever and
+        // counted as a successful decrypt when retryPendingDecrypts re-runs.
+        // Replace it with the placeholder, mirroring the signature-rejection
+        // path above. A RETRYABLE failure instead keeps the hint: a later
+        // successful retry replaces it with the real plaintext.
         existingBody.children = [COULD_NOT_DECRYPT_BODY]
       } else if (!existingBody) {
         stanza.children.push(xml('body', {}, COULD_NOT_DECRYPT_BODY))
@@ -304,7 +329,13 @@ export async function decryptStanzaInPlace(
       securityContext = {
         protocolId: claim.plugin.descriptor.id,
         trust: 'untrusted',
-        notes: [terminalFailure ? 'Could not decrypt (malformed)' : 'Could not decrypt'],
+        notes: [
+          terminalFailure
+            ? 'Could not decrypt (malformed)'
+            : sessionNeedsRepair
+              ? 'Could not decrypt (session needs repair)'
+              : 'Could not decrypt',
+        ],
       }
     }
   } else if (plaintext !== null) {
@@ -370,7 +401,7 @@ export async function decryptStanzaInPlace(
     attempted: true,
     ...(securityContext && { securityContext }),
     ...(authoredAt && { authoredAt }),
-    ...((failureReason !== null && !terminalFailure && securityContext?.trust !== 'rejected' || needsDeferredVerification) && {
+    ...((failureReason !== null && !terminalFailure && !sessionNeedsRepair && securityContext?.trust !== 'rejected' || needsDeferredVerification) && {
       encryptedPayloadXml: originalStanzaXml,
     }),
   }

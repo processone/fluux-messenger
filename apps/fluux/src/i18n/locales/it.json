@@ -40,7 +40,21 @@
         "hidePassword": "Nascondi password",
         "madeBy": "Creato da",
         "ejabberdCreator": ", l'azienda dietro",
-        "poweredBy": "Realizzato con"
+        "poweredBy": "Realizzato con",
+        "errors": {
+            "tlsCertTitle": "Impossibile verificare il certificato di sicurezza del server",
+            "tlsOtherTitle": "Connessione sicura non riuscita",
+            "tlsOtherBody": "Impossibile stabilire la connessione cifrata con il server. La configurazione TLS del server potrebbe non essere supportata. Controlla l'indirizzo del server o contatta l'amministratore del server.",
+            "unreachableTitle": "Impossibile raggiungere il server",
+            "timeoutBody": "Il server non ha risposto in tempo. Controlla la rete e l'indirizzo del server, poi riprova.",
+            "refusedBody": "Il server ha rifiutato la connessione. Controlla l'indirizzo e la porta del server, poi riprova.",
+            "cert": {
+                "expired": "Il certificato del server è scaduto. Contatta l'amministratore del server. Se l'indirizzo è errato, modifica il campo server in basso.",
+                "nameMismatch": "Il certificato del server è stato emesso per un nome host diverso. Controlla l'indirizzo del server in basso o contatta l'amministratore del server.",
+                "untrusted": "Il certificato del server è auto-firmato o emesso da un'autorità sconosciuta, quindi non può essere considerato affidabile. Controlla l'indirizzo del server o contatta l'amministratore del server.",
+                "generic": "Impossibile verificare il certificato di sicurezza del server. Controlla l'indirizzo del server in basso o contatta l'amministratore del server."
+            }
+        }
     },
     "sidebar": {
         "messages": "Messaggi",
@@ -203,6 +217,16 @@
         "invalidRoomAddress": "Indirizzo stanza non valido (deve essere stanza@conferenza.server)",
         "joinRoomHint": "Inserisci l'indirizzo completo della stanza per entrare in una chat pubblica.",
         "failedToJoinRoom": "Impossibile entrare nella stanza",
+        "passwordProtected": "Questa stanza è protetta da password",
+        "roomPassword": "Password",
+        "passwordRequired": "Questa stanza è protetta da password. Inserisci la password per accedere.",
+        "incorrectPassword": "Password errata.",
+        "nicknameInUse": "Quel soprannome è già in uso in questa stanza.",
+        "membersOnly": "Questa stanza è riservata ai membri. Devi essere membro per accedere.",
+        "bannedFromRoom": "Sei stato bandito da questa stanza.",
+        "roomFull": "Questa stanza è piena.",
+        "registeredNicknameRequired": "Questa stanza richiede il tuo soprannome registrato.",
+        "roomNotFound": "Stanza non trovata.",
         "nonAnonWarningTitle": "Entrare in un canale non anonimo?",
         "nonAnonWarningMessage": "Tutti in «{{room}}» possono vedere il tuo indirizzo reale (il tuo ID XMPP/Jabber). Entrare comunque?",
         "nonAnonWarningConfirm": "Entra comunque",
@@ -211,6 +235,7 @@
         "notJoinedNoHistory": "Non sei in questa stanza",
         "joinToLoadHistory": "Entra per caricare i messaggi",
         "notificationSettings": "Impostazioni notifiche",
+        "roomActions": "Azioni stanza",
         "mentionsOnly": "Solo menzioni",
         "defaultBehavior": "Comportamento predefinito",
         "allMessages": "Tutti i messaggi",
@@ -435,6 +460,7 @@
         "attachment": "Allegato",
         "removeAttachment": "Rimuovi allegato",
         "reply": "Rispondi",
+        "copyMessage": "Copia testo",
         "replyQuoteHiddenEncrypted": "Citazione nascosta: l'originale era cifrato",
         "forwardMessage": "Inoltra messaggio (in arrivo)",
         "moreReactions": "Altre reazioni",
@@ -567,7 +593,12 @@
             "acceptedWithoutVerifying": "Nuova chiave accettata. Il contatto non è verificato",
             "acceptFailed": "Impossibile accettare la nuova chiave. Riprova"
         },
-        "offlinePlaceholder": "Offline. I messaggi verranno inviati alla riconnessione"
+        "offlinePlaceholder": "Offline. I messaggi verranno inviati alla riconnessione",
+        "loadImage": "Carica immagine",
+        "loadVideo": "Carica video",
+        "loadAudio": "Carica audio",
+        "loadFilePreview": "Carica anteprima",
+        "showLinkImage": "Mostra immagine"
     },
     "dates": {
         "today": "Oggi",
@@ -583,7 +614,8 @@
             "updates": "Aggiornamenti",
             "blocked": "Utenti bloccati",
             "storage": "Archiviazione",
-            "encryption": "Crittografia"
+            "encryption": "Crittografia",
+            "privacy": "Privacy"
         },
         "blocked": {
             "title": "Utenti bloccati",
@@ -704,6 +736,7 @@
             "pepUnsupportedBanner": "Il tuo server non supporta la pubblicazione di eventi personali (PEP, XEP-0163), richiesta dalla crittografia OpenPGP (XEP-0373). La crittografia end-to-end non può essere attivata su questo account. Contatta l'amministratore del server.",
             "statusPepUnsupported": "Impossibile attivare la crittografia: il tuo server non supporta PEP (XEP-0163), richiesto da OpenPGP (XEP-0373).",
             "statusRegistrationFailed": "Configurazione della crittografia non riuscita ({{code}}). Consulta la console sviluppatore per i dettagli.",
+            "notProtectedAtRest": "Qui non è disponibile alcun portachiavi di sistema, quindi la passphrase della tua chiave viene memorizzata in chiaro in un file sul disco. La chiave non è protetta a riposo. Chiunque possa leggere i file di questo dispositivo potrebbe usarla.",
             "backupLabel": "Backup della chiave",
             "backupDescription": "Pubblica una copia cifrata della tua chiave sul tuo server XMPP. Protetta da una passphrase che conosci solo tu, leggibile solo dal tuo account (access_model: whitelist). Ti permette di leggere lo storico cifrato su un nuovo dispositivo dopo l'accesso e l'inserimento della passphrase.",
             "backupAction": "Salva sul server",
@@ -778,6 +811,7 @@
             "identityChoice": {
                 "title": "Esiste già un'identità OpenPGP per questo account",
                 "body": "Questo browser non ha una chiave locale, ma il server annuncia già una chiave per il tuo account. Generare una nuova chiave qui biforcherebbe silenziosamente la tua identità: i corrispondenti che hanno cifrato sulla chiave esistente non potrebbero consegnare i messaggi. Scegli come risolverlo:",
+                "bodyKeyUnrecoverable": "La chiave OpenPGP di questo dispositivo non può più essere sbloccata, quindi la cifratura non può avviarsi. La tua identità pubblicata non è interessata. Recuperala ripristinando il backup sul server o importando un file di chiave, oppure sostituiscila se non puoi. Scegli come vuoi risolvere:",
                 "publishedFingerprintLabel": "Impronta pubblicata",
                 "restoreFromServerTitle": "Ripristina dal backup del server",
                 "restoreFromServerBody": "Usa la passphrase di backup impostata quando hai attivato la crittografia su un altro dispositivo. La chiave privata corrispondente viene recuperata dal server e sbloccata localmente.",
@@ -804,19 +838,6 @@
             "importFileSuccess": "Chiave importata dal file",
             "importFileFailed": "Impossibile leggere il file selezionato",
             "unsupportedKeyAlgorithm": "La chiave importata utilizza un algoritmo non più supportato (ad esempio DSA o ElGamal). Usa una chiave OpenPGP moderna (Curve25519, Ed25519 o RSA di almeno 2048 bit).",
-            "externalExportAction": "Esporta per uno strumento OpenPGP esterno",
-            "externalExportDialogTitle": "Esporta la chiave privata per uno strumento OpenPGP esterno",
-            "externalExportDialogBody": "Produce un file di chiave privata OpenPGP standard (PRIVATE KEY BLOCK) che puoi importare in gpg, OpenKeychain, Kleopatra e altri strumenti.",
-            "externalExportProtectedLabel": "Protetta da una passphrase",
-            "externalExportProtectedDescription": "Consigliato. Scegli una passphrase; il file esportato viene cifrato e gli strumenti esterni la chiederanno all'importazione.",
-            "externalExportUnprotectedLabel": "Nessuna crittografia",
-            "externalExportUnprotectedDescription": "Il file esportato contiene la tua chiave privata in chiaro. Usalo solo se lo strumento di destinazione rifiuta le chiavi protette da passphrase.",
-            "externalExportUnprotectedWarning": "Senza passphrase, chiunque abbia accesso al file esportato può impersonarti e decifrare i tuoi messaggi passati e futuri. Elimina il file non appena lo hai importato.",
-            "externalExportUnprotectedAcknowledgment": "Comprendo i rischi e desidero esportare la mia chiave privata senza cifratura.",
-            "externalExportPassphraseLabel": "Passphrase",
-            "externalExportConfirmPassphraseLabel": "Conferma la passphrase",
-            "externalExportPassphraseMismatch": "Le passphrase non corrispondono.",
-            "externalExportSuccess": "Chiave privata esportata su file",
             "unlockDialogTitle": "Sblocca la crittografia end-to-end",
             "unlockDialogBody": "Inserisci la tua passphrase per decifrare la tua chiave per questa sessione.",
             "unlockDialogSetupTitle": "Configura la crittografia end-to-end",
@@ -828,7 +849,16 @@
             "unlockPassphraseTooShort": "La passphrase deve avere almeno 8 caratteri",
             "lockedBannerBody": "La tua chiave di crittografia è bloccata. Inserisci la tua passphrase per attivare la crittografia per questa sessione.",
             "rotateNotSupportedWeb": "La rotazione delle chiavi non è disponibile sul web. Usa l'app desktop."
-        }
+        },
+        "mediaAutoDownload": "Download automatico dei media",
+        "mediaAutoDownloadDescription": "Scegli quando immagini, video e file vengono caricati automaticamente.",
+        "mediaAutoDownloadAlways": "Sempre",
+        "mediaAutoDownloadAlwaysDescription": "Carica i media automaticamente in ogni conversazione.",
+        "mediaAutoDownloadPrivateOnly": "Solo privato",
+        "mediaAutoDownloadPrivateOnlyDescription": "Carica automaticamente nei messaggi diretti e nelle stanze private. Nei canali pubblici, tocca per caricare.",
+        "mediaAutoDownloadNever": "Mai",
+        "mediaAutoDownloadNeverDescription": "Non caricare mai i media automaticamente. Tocca per caricare in qualsiasi conversazione.",
+        "mediaAutoDownloadStrangerNote": "I media di persone che non sono nei tuoi contatti richiedono sempre un tocco per caricarsi, indipendentemente da ciò che scegli qui."
     },
     "update": {
         "title": "Aggiornamento disponibile",
@@ -1038,6 +1068,7 @@
             "description": "Non hai privilegi di amministratore su questo server. Contatta l'amministratore del server per l'accesso."
         },
         "selectCommand": "Seleziona un comando dalla barra laterale",
+        "openSections": "Apri le sezioni di amministrazione",
         "execute": "Esegui",
         "executing": "Esecuzione...",
         "next": "Avanti",
@@ -1083,7 +1114,13 @@
         "users": {
             "delete": "Elimina utente",
             "changePassword": "Cambia password",
-            "endSessions": "Termina sessioni"
+            "endSessions": "Termina sessioni",
+            "online": "Online",
+            "offline": "Offline",
+            "onlineNow": "Online ora",
+            "justNow": "proprio adesso",
+            "truncatedBanner": "Mostra i primi {{shown}} di {{total}} utenti. Affina la ricerca per restringere i risultati.",
+            "truncatedBannerNoTotal": "Mostra i primi {{shown}} utenti. Affina la ricerca per restringere i risultati."
         },
         "userView": {
             "title": "Utente",
@@ -1105,6 +1142,28 @@
         "roomList": {
             "title": "Stanze di chat",
             "noRooms": "Nessuna stanza trovata"
+        },
+        "overview": {
+            "title": "Panoramica del server",
+            "refresh": "Aggiorna",
+            "updatedAt": "Aggiornato alle {{time}}",
+            "empty": "Le statistiche del server non sono disponibili.",
+            "retry": "Riprova",
+            "units": {
+                "d": "g",
+                "h": "h",
+                "m": "min",
+                "s": "s"
+            },
+            "cards": {
+                "uptime": "Tempo di attività",
+                "version": "Versione del server",
+                "users": "Utenti",
+                "onlineSuffix": "{{n}} online",
+                "onlineSessions": "Sessioni online",
+                "onlineRooms": "Stanze attive",
+                "vhosts": "Host virtuali"
+            }
         }
     },
     "commandPalette": {

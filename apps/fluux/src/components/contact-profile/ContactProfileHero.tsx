@@ -105,7 +105,7 @@ export function ContactProfileHero({
                     type="button"
                     onClick={onStartEdit}
                     aria-label={t('contacts.rename')}
-                    className="p-1 ms-1 text-fluux-muted hover:text-fluux-text rounded opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity"
+                    className="p-1 ms-1 text-fluux-muted hover:text-fluux-text rounded opacity-0 group-hover:opacity-100 focus:opacity-100 touch:opacity-100 transition-opacity tap-target"
                   >
                     <Pencil className="size-4" />
                   </button>

@@ -9,6 +9,9 @@
 export const NS_DISCO_INFO = 'http://jabber.org/protocol/disco#info'
 export const NS_DISCO_ITEMS = 'http://jabber.org/protocol/disco#items'
 
+// XEP-0092: Software Version
+export const NS_VERSION = 'jabber:iq:version'
+
 // XEP-0363: HTTP File Upload
 export const NS_HTTP_UPLOAD = 'urn:xmpp:http:upload:0'
 
@@ -95,6 +98,13 @@ export const NS_DELAY = 'urn:xmpp:delay'
 
 // XEP-0359: Unique and Stable Stanza IDs
 export const NS_STANZA_ID = 'urn:xmpp:sid:0'
+
+// XEP-0333: Chat Markers
+export const NS_CHAT_MARKERS = 'urn:xmpp:chat-markers:0'
+
+// XEP-0490: Message Displayed Synchronization (MDS)
+export const NS_MDS = 'urn:xmpp:mds:displayed:0'
+export const NS_MDS_NOTIFY = 'urn:xmpp:mds:displayed:0+notify'
 
 // XEP-0372: References
 export const NS_REFERENCE = 'urn:xmpp:reference:0'

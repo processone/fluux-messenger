@@ -15,7 +15,10 @@ const PRIVATE_KEY_HEADER = '-----BEGIN PGP PRIVATE KEY BLOCK-----'
 
 export function detectArmorKind(armored: string): ArmorKind {
   if (!armored) return 'unknown'
-  const trimmed = armored.replace(/^\\uFEFF/, '').trimStart()
+  // trimStart() also strips a leading BOM: U+FEFF (ZWNBSP) is an ECMAScript
+  // whitespace code point, so it is removed along with any leading
+  // whitespace/blank lines. No separate BOM-strip step is needed.
+  const trimmed = armored.trimStart()
   if (trimmed.startsWith(MESSAGE_HEADER)) return 'message'
   if (trimmed.startsWith(PRIVATE_KEY_HEADER)) return 'private-key'
   return 'unknown'

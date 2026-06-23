@@ -40,7 +40,21 @@
         "hidePassword": "Fela lykilorð",
         "madeBy": "Búið til af",
         "ejabberdCreator": ", fyrirtækið á bak við",
-        "poweredBy": "Keyrt af"
+        "poweredBy": "Keyrt af",
+        "errors": {
+            "tlsCertTitle": "Ekki tókst að staðfesta öryggisvistunarskírteini þjónsins",
+            "tlsOtherTitle": "Örugg tenging mistókst",
+            "tlsOtherBody": "Ekki tókst að koma á dulkóðaðri tengingu við þjóninn. TLS-stilling þjónsins er hugsanlega ekki studd. Athugaðu þjónsföng eða hafðu samband við kerfisstjóra þjónsins.",
+            "unreachableTitle": "Ekki tókst að ná í þjóninn",
+            "timeoutBody": "Þjónninn svaraði ekki í tíma. Athugaðu netið og þjónsföng, og reyndu aftur.",
+            "refusedBody": "Þjónninn hafnaði tengingunni. Athugaðu þjónsföng og gátt, og reyndu aftur.",
+            "cert": {
+                "expired": "Vistunarskírteini þjónsins er útrunnið. Hafðu samband við kerfisstjóra þjónsins. Ef heimilisfangið er rangt, breyttu þjónsreitnum hér að neðan.",
+                "nameMismatch": "Vistunarskírteini þjónsins var gefið út fyrir annað hýsilnafn. Athugaðu þjónsföng hér að neðan eða hafðu samband við kerfisstjóra þjónsins.",
+                "untrusted": "Vistunarskírteini þjónsins er sjálfundirritað eða gefið út af óþekktum aðila, þar af leiðandi er ekki hægt að treysta því. Athugaðu þjónsföng eða hafðu samband við kerfisstjóra þjónsins.",
+                "generic": "Ekki tókst að staðfesta öryggisvistunarskírteini þjónsins. Athugaðu þjónsföng hér að neðan eða hafðu samband við kerfisstjóra þjónsins."
+            }
+        }
     },
     "sidebar": {
         "messages": "Skilaboð",
@@ -201,6 +215,16 @@
         "invalidRoomAddress": "Ógilt heimilisfang herbergis (ætti að vera herbergi@conference.þjónn)",
         "joinRoomHint": "Sláðu inn fullt heimilisfang herbergis til að ganga í opinbert spjallherbergi.",
         "failedToJoinRoom": "Ekki tókst að ganga í herbergi",
+        "passwordProtected": "Þetta herbergi er lykilorðsvarið",
+        "roomPassword": "Lykilorð",
+        "passwordRequired": "Þetta herbergi er lykilorðsvarið. Sláðu inn lykilorðið til að ganga í.",
+        "incorrectPassword": "Rangt lykilorð.",
+        "nicknameInUse": "Þetta gælunafn er þegar í notkun í þessu herbergi.",
+        "membersOnly": "Þetta herbergi er eingöngu fyrir meðlimi. Þú verður að vera meðlimur til að ganga í.",
+        "bannedFromRoom": "Þér hefur verið bannað úr þessu herbergi.",
+        "roomFull": "Þetta herbergi er fullt.",
+        "registeredNicknameRequired": "Þetta herbergi krefst skráðs gælunafns þíns.",
+        "roomNotFound": "Herbergi fannst ekki.",
         "nonAnonWarningTitle": "Taka þátt í ónafnlausri rás?",
         "nonAnonWarningMessage": "Allir í „{{room}}“ geta séð raunverulegt vistfang þitt (XMPP/Jabber-auðkennið þitt). Taka samt þátt?",
         "nonAnonWarningConfirm": "Taka samt þátt",
@@ -209,6 +233,7 @@
         "notJoinedNoHistory": "Þú ert ekki í þessu herbergi",
         "joinToLoadHistory": "Gangt inn til að hlaða skilaboðum",
         "notificationSettings": "Tilkynningastillingar",
+        "roomActions": "Herbergisaðgerðir",
         "mentionsOnly": "Aðeins tilvísanir",
         "defaultBehavior": "Sjálfgefin hegðun",
         "allMessages": "Öll skilaboð",
@@ -433,6 +458,7 @@
         "attachment": "Viðhengi",
         "removeAttachment": "Fjarlægja viðhengi",
         "reply": "Svara",
+        "copyMessage": "Afrita texta",
         "replyQuoteHiddenEncrypted": "Tilvitnun falin: upprunalega skeytið var dulkóðað",
         "forwardMessage": "Áframsenda skilaboð (væntanlegt)",
         "moreReactions": "Fleiri viðbrögð",
@@ -565,7 +591,12 @@
             "acceptedWithoutVerifying": "Nýr lykill samþykktur. Jafningi er óstaðfestur",
             "acceptFailed": "Ekki tókst að samþykkja nýja lykilinn. Reyndu aftur"
         },
-        "offlinePlaceholder": "Ónettengt. Skilaboð verða send þegar tengingin kemst á aftur"
+        "offlinePlaceholder": "Ónettengt. Skilaboð verða send þegar tengingin kemst á aftur",
+        "loadImage": "Hlaða mynd",
+        "loadVideo": "Hlaða myndband",
+        "loadAudio": "Hlaða hljóð",
+        "loadFilePreview": "Hlaða forskoðun",
+        "showLinkImage": "Sýna mynd"
     },
     "dates": {
         "today": "Í dag",
@@ -581,7 +612,8 @@
             "updates": "Uppfærslur",
             "blocked": "Útilokaðir notendur",
             "storage": "Geymsla",
-            "encryption": "Dulkóðun"
+            "encryption": "Dulkóðun",
+            "privacy": "Friðhelgi"
         },
         "blocked": {
             "title": "Útilokaðir notendur",
@@ -702,6 +734,7 @@
             "pepUnsupportedBanner": "Netþjónninn þinn styður ekki birtingu persónulegra atburða (PEP, XEP-0163), sem OpenPGP-dulritun (XEP-0373) krefst. Ekki er hægt að virkja enda-í-enda dulritun á þessum aðgangi. Hafðu samband við kerfisstjóra netþjónsins.",
             "statusPepUnsupported": "Ekki er hægt að virkja dulritun: netþjónninn styður ekki PEP (XEP-0163), sem OpenPGP (XEP-0373) krefst.",
             "statusRegistrationFailed": "Uppsetning dulritunar mistókst ({{code}}). Sjá nánar í forritaraglugganum.",
+            "notProtectedAtRest": "Engin kerfislyklakippa er tiltæk hér, svo lykilorðsetning lykilsins þíns er geymd ódulkóðuð í skrá á disknum. Lykillinn er ekki varinn í hvíld. Hver sem getur lesið skrár þessa tækis gæti notað hann.",
             "backupLabel": "Lyklaöryggisafrit",
             "backupDescription": "Birta dulritað eintak af lyklinum á XMPP-þjóninn þinn. Verndað með aðgangsorði sem aðeins þú þekkir og aðeins læsilegt af reikningnum þínum (access_model: whitelist). Gerir þér kleift að lesa dulritaðan feril á nýju tæki eftir innskráningu og innslátt aðgangsorðsins.",
             "backupAction": "Afrita á þjón",
@@ -776,6 +809,7 @@
             "identityChoice": {
                 "title": "OpenPGP-auðkenni er nú þegar til fyrir þennan reikning",
                 "body": "Þessi vafri hefur engan staðbundinn lykil, en netþjónninn auglýsir nú þegar lykil fyrir reikninginn þinn. Að búa til nýjan lykil hér myndi þegjandi tvískipta auðkenni þínu: tengiliðir sem dulkóðuðu á núverandi lykilinn gætu ekki afhent skilaboð. Veldu hvernig þú vilt leysa þetta:",
+                "bodyKeyUnrecoverable": "Ekki er lengur hægt að opna OpenPGP-lykil þessa tækis, svo dulkóðun getur ekki hafist. Birta auðkennið þitt verður fyrir engum áhrifum. Endurheimtu það úr afriti á netþjóninum eða með því að flytja inn lykilskrá, eða skiptu því út ef þú getur það ekki. Veldu hvernig þú vilt leysa þetta:",
                 "publishedFingerprintLabel": "Birtur fingrafar",
                 "restoreFromServerTitle": "Endurheimta úr afriti netþjóns",
                 "restoreFromServerBody": "Notaðu öryggisafritslykilorðið sem þú stilltir þegar þú virkjaðir dulkóðun á öðru tæki. Samsvarandi einkalykill er sóttur af netþjóni og opnaður staðbundið.",
@@ -802,19 +836,6 @@
             "importFileSuccess": "Lykill fluttur inn úr skrá",
             "importFileFailed": "Tókst ekki að lesa valda skrá",
             "unsupportedKeyAlgorithm": "Innfluttur lykill notar reiknirit sem er ekki lengur stutt (t.d. DSA eða ElGamal). Notaðu nútíma OpenPGP lykil (Curve25519, Ed25519 eða RSA að minnsta kosti 2048 bita).",
-            "externalExportAction": "Flytja út fyrir ytra OpenPGP-tól",
-            "externalExportDialogTitle": "Flytja út einkalykil fyrir ytra OpenPGP-tól",
-            "externalExportDialogBody": "Býr til staðlaða OpenPGP einkalykilskrá (PRIVATE KEY BLOCK) sem þú getur flutt inn í gpg, OpenKeychain, Kleopatra og önnur tól.",
-            "externalExportProtectedLabel": "Varin með lykilfrasa",
-            "externalExportProtectedDescription": "Mælt með. Veldu lykilfrasa; útflutta skráin er dulkóðuð og ytri tól biðja um hann við innflutning.",
-            "externalExportUnprotectedLabel": "Engin dulkóðun",
-            "externalExportUnprotectedDescription": "Útflutta skráin inniheldur einkalykilinn þinn í læsilegum texta. Notaðu þetta einungis ef markmiðstólið hafnar lyklum sem eru varðir með lykilfrasa.",
-            "externalExportUnprotectedWarning": "Án lykilfrasa getur hver sá sem fær aðgang að útfluttu skránni þóst vera þú og afkóðað fyrri og framtíðar skilaboð. Eyddu skránni um leið og þú hefur flutt hana inn.",
-            "externalExportUnprotectedAcknowledgment": "Ég skil áhættuna og vil flytja út einkalykilinn minn án dulkóðunar.",
-            "externalExportPassphraseLabel": "Lykilfrasi",
-            "externalExportConfirmPassphraseLabel": "Staðfesta lykilfrasa",
-            "externalExportPassphraseMismatch": "Lykilfrasarnir samsvara ekki.",
-            "externalExportSuccess": "Einkalykill fluttur út í skrá",
             "unlockDialogTitle": "Opna enda-til-enda dulkóðun",
             "unlockDialogBody": "Sláðu inn aðgangsorð til að afkóða lykilinn þinn fyrir þessa lotu.",
             "unlockDialogSetupTitle": "Setja upp enda-til-enda dulkóðun",
@@ -826,7 +847,16 @@
             "unlockPassphraseTooShort": "Aðgangsorðið verður að vera að minnsta kosti 8 stafir",
             "lockedBannerBody": "Dulkóðunarlykillinn þinn er læstur. Sláðu inn aðgangsorð til að virkja dulkóðun fyrir þessa lotu.",
             "rotateNotSupportedWeb": "Lyklaskipti eru ekki tiltæk á vefnum. Notaðu skjáborðsforritið."
-        }
+        },
+        "mediaAutoDownload": "Sjálfvirk niðurhal miðla",
+        "mediaAutoDownloadDescription": "Veldu hvenær myndir, myndbönd og skrár hlaðast inn sjálfvirkt.",
+        "mediaAutoDownloadAlways": "Alltaf",
+        "mediaAutoDownloadAlwaysDescription": "Hlaða miðla sjálfvirkt í öllum samskiptum.",
+        "mediaAutoDownloadPrivateOnly": "Aðeins einkamál",
+        "mediaAutoDownloadPrivateOnlyDescription": "Hlaða sjálfvirkt í beinni skilaboðum og einkaherbergjum. Í opinberum rásum, ýttu til að hlaða.",
+        "mediaAutoDownloadNever": "Aldrei",
+        "mediaAutoDownloadNeverDescription": "Aldrei hlaða miðla sjálfvirkt. Ýttu til að hlaða í hvaða samskiptum sem er.",
+        "mediaAutoDownloadStrangerNote": "Miðlar frá einstaklingum sem eru ekki í tengiliðalista þínum þurfa alltaf ýtingu til að hlaðast, óháð því hvað þú velur hér."
     },
     "update": {
         "title": "Uppfærsla tiltæk",
@@ -1036,6 +1066,7 @@
             "description": "Þú hefur ekki stjórnendaréttindi á þessum þjóni. Hafðu samband við stjórnanda þjónsins til að fá aðgang."
         },
         "selectCommand": "Veldu skipun frá hliðarstikunni",
+        "openSections": "Opna stjórnunarhluta",
         "execute": "Keyra",
         "executing": "Keyri...",
         "next": "Næsta",
@@ -1081,7 +1112,13 @@
         "users": {
             "delete": "Eyða notanda",
             "changePassword": "Breyta lykilorði",
-            "endSessions": "Ljúka lotum"
+            "endSessions": "Ljúka lotum",
+            "online": "Á netinu",
+            "offline": "Ótengdur",
+            "onlineNow": "Á netinu núna",
+            "justNow": "rétt í þessu",
+            "truncatedBanner": "Sýnir fyrstu {{shown}} af {{total}} notendum. Þrengdu leitina til að fá færri niðurstöður.",
+            "truncatedBannerNoTotal": "Sýnir fyrstu {{shown}} notendum. Þrengdu leitina til að fá færri niðurstöður."
         },
         "userView": {
             "title": "Notandi",
@@ -1103,6 +1140,28 @@
         "roomList": {
             "title": "Spjallherbergi",
             "noRooms": "Engin herbergi fundust"
+        },
+        "overview": {
+            "title": "Yfirlit netþjóns",
+            "refresh": "Endurnýja",
+            "updatedAt": "Uppfært kl. {{time}}",
+            "empty": "Tölfræði netþjóns er ekki tiltæk.",
+            "retry": "Reyna aftur",
+            "units": {
+                "d": "d",
+                "h": "klst",
+                "m": "mín",
+                "s": "s"
+            },
+            "cards": {
+                "uptime": "Keyrslutími",
+                "version": "Útgáfa netþjóns",
+                "users": "Notendur",
+                "onlineSuffix": "{{n}} tengdir",
+                "onlineSessions": "Virkar setur",
+                "onlineRooms": "Virk herbergi",
+                "vhosts": "Sýndarþjónar"
+            }
         }
     },
     "commandPalette": {

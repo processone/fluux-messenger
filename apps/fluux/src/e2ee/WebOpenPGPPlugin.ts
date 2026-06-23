@@ -37,6 +37,7 @@ import { KeyPickerRequiredError, NoRecoveryAvailableError } from './recoveryErro
 import { clearSessionPassphrase, getSessionPassphrase, setSessionPassphrase } from './webPassphraseStore'
 import { USE_V6_KEYS } from './passphraseGenerator'
 import { detectArmorKind } from './armorDetect'
+import { parseSecretKeysFromBackupPayload } from './backupKeyMaterial'
 
 const PRIVATE_KEY_STORAGE_KEY = 'private-key'
 
@@ -319,11 +320,11 @@ export class WebOpenPGPPlugin extends OpenPGPPluginBase {
   }
 
   protected async backupImport(
-    _accountJid: string,
+    accountJid: string,
     backupMessage: string,
     passphrase: string,
   ): Promise<KeyBundle> {
-    const { readMessage, decrypt, readPrivateKey, encryptKey } = await import('openpgp')
+    const { readMessage, decrypt, encryptKey } = await import('openpgp')
 
     // Decrypt the backup message. Use format:'binary' to handle both
     // Sequoia-generated backups (binary TSK) and legacy web backups
@@ -342,14 +343,11 @@ export class WebOpenPGPPlugin extends OpenPGPPluginBase {
       )
     }
 
-    // Parse the recovered private key — try binary first (Sequoia format),
-    // fall back to armored (legacy web format).
-    let privateKey
-    try {
-      privateKey = await readPrivateKey({ binaryKey: tskBytes })
-    } catch {
-      privateKey = await readPrivateKey({ armoredKey: new TextDecoder().decode(tskBytes) })
-    }
+    // Recover the secret key, accepting a binary TSK, a single armored private
+    // key, or OpenKeychain's public-then-private armored payload. A single-key
+    // backup yields exactly one; take the first.
+    const [parsed] = await parseSecretKeysFromBackupPayload(tskBytes)
+    const privateKey = await this.ensureAccountUserId(parsed, accountJid)
 
     // Store encrypted with the backup passphrase (which becomes the session passphrase)
     const encrypted = await encryptKey({ privateKey, passphrase })
@@ -376,7 +374,7 @@ export class WebOpenPGPPlugin extends OpenPGPPluginBase {
     backupMessage: string,
     passphrase: string,
   ): Promise<PrivateKey[]> {
-    const { readMessage, decrypt, readPrivateKeys } = await import('openpgp')
+    const { readMessage, decrypt } = await import('openpgp')
 
     const message = await readMessage({ armoredMessage: backupMessage })
     let tskBytes: Uint8Array
@@ -396,13 +394,9 @@ export class WebOpenPGPPlugin extends OpenPGPPluginBase {
       )
     }
 
-    try {
-      return await readPrivateKeys({ binaryKeys: tskBytes })
-    } catch {
-      return await readPrivateKeys({
-        armoredKeys: new TextDecoder().decode(tskBytes),
-      })
-    }
+    // The payload is either a binary TSK (Fluux/Sequoia) or armored key blocks
+    // (OpenKeychain: a public block then a private block); branch accordingly.
+    return parseSecretKeysFromBackupPayload(tskBytes)
   }
 
   /**
@@ -496,16 +490,46 @@ export class WebOpenPGPPlugin extends OpenPGPPluginBase {
     return bundles
   }
 
+  /**
+   * Canonicalize an imported key to the XEP-0373 §8.5 trust anchor: a single
+   * `xmpp:<jid>` User ID. A foreign key (GnuPG / OpenKeychain) carries a
+   * `Name <email>` UID, so we re-sign it with just the `xmpp:` UID: adding the
+   * anchor peers verify and dropping the name/email (Fluux publishes no
+   * real-name component). The primary key is preserved, so the fingerprint (and
+   * trust pinning) is unchanged. A key that is already exactly `xmpp:`-only
+   * (e.g. a restored Fluux backup) is returned untouched, so it isn't re-signed.
+   *
+   * NOTE: if key generation ever starts adding a name/email UID, relax this to
+   * keep them rather than stripping to xmpp:-only.
+   */
+  private async ensureAccountUserId(
+    privateKey: PrivateKey,
+    accountJid: string,
+  ): Promise<PrivateKey> {
+    const expected = accountUserId(accountJid)
+    const uids = privateKey.getUserIDs()
+    if (uids.length === 1 && uids[0].toLowerCase() === expected.toLowerCase()) {
+      return privateKey
+    }
+    const { reformatKey } = await import('openpgp')
+    const { privateKey: reformatted } = await reformatKey({
+      privateKey,
+      userIDs: [{ name: expected }],
+      format: 'object',
+    })
+    return reformatted
+  }
+
   protected async backupImportSelected(
-    _accountJid: string,
+    accountJid: string,
     _backupMessage: string,
     passphrase: string,
     selectedFingerprint: string,
   ): Promise<KeyBundle> {
     const { encryptKey } = await import('openpgp')
 
-    const privateKey = this.pendingImportKeys.get(selectedFingerprint)
-    if (!privateKey) {
+    const pending = this.pendingImportKeys.get(selectedFingerprint)
+    if (!pending) {
       this.pendingImportKeys.clear()
       throw new E2EEPluginError(
         'permanent',
@@ -513,6 +537,7 @@ export class WebOpenPGPPlugin extends OpenPGPPluginBase {
         `WebOpenPGPPlugin: no pending import key for fingerprint ${selectedFingerprint}`,
       )
     }
+    const privateKey = await this.ensureAccountUserId(pending, accountJid)
 
     const encrypted = await encryptKey({ privateKey, passphrase })
     const ctx = this.requireCtx()
@@ -548,35 +573,8 @@ export class WebOpenPGPPlugin extends OpenPGPPluginBase {
         'WebOpenPGPPlugin: no identity to export',
       )
     }
-    const armoredMessage = await this.backupEncrypt(ctx.account.jid, passphrase)
-    triggerBrowserDownload(armoredMessage, keyExportFilename('openpgp-backup', ctx.account.jid))
-    return true
-  }
-
-  async exportPrivateKeyToFile(passphrase: string | null): Promise<boolean> {
-    const ctx = this.requireCtx()
-    await this.requireUnlocked()
-    if (!this.ownBundle || !this.ownPrivateKey) {
-      throw new E2EEPluginError(
-        'permanent',
-        'no-identity',
-        'WebOpenPGPPlugin: no identity to export',
-      )
-    }
-    // openpgp.js carries the secret key material on the in-memory
-    // PrivateKey. For protected export we wrap it with the user-chosen
-    // passphrase via encryptKey(); for unprotected we serialize the
-    // already-decrypted key directly. Either way the output is a
-    // standard armored PRIVATE KEY BLOCK that external tools can ingest.
-    let armoredKey: string
-    if (passphrase && passphrase.length > 0) {
-      const { encryptKey } = await import('openpgp')
-      const encrypted = await encryptKey({ privateKey: this.ownPrivateKey, passphrase })
-      armoredKey = encrypted.armor()
-    } else {
-      armoredKey = this.ownPrivateKey.armor()
-    }
-    triggerBrowserDownload(armoredKey, keyExportFilename('openpgp-private-key', ctx.account.jid))
+    const armoredMessage = await this.buildExportArmor(passphrase)
+    triggerBrowserDownload(armoredMessage, keyExportFilename(ctx.account.jid))
     return true
   }
 
@@ -642,6 +640,12 @@ export class WebOpenPGPPlugin extends OpenPGPPluginBase {
       // below routes through restoreSecretKey → doInstallKey, which already
       // notifies, so only this happy path needs an explicit call.)
       this.requireCtx().notifyKeyUnlocked?.()
+      // The key is usable now — re-run the trust-state seal check so a deferred
+      // `awaiting-key` verdict resolves to `sealed`. `init()` returns early
+      // (no subscriptions) when the key was locked, so `activateSubscriptions()`
+      // above runs it for that case; this explicit call covers re-unlock where
+      // subscriptions were already active.
+      void this.verifyTrustStateOnInit()
       return { recovered: false }
     } catch (err) {
       if (!isRecoverableLocalFailure(err)) {
@@ -663,8 +667,8 @@ export class WebOpenPGPPlugin extends OpenPGPPluginBase {
         throw new KeyPickerRequiredError(result.candidates, result.backupContext)
       }
       // restoreSecretKey installed + published the recovered key and set the
-      // session passphrase. Activate subscriptions and report recovery.
-      this.activateSubscriptions()
+      // session passphrase. Report recovery.
+      // restoreSecretKey() -> doInstallKey() already re-verifies the trust state.
       return { recovered: true }
     }
   }

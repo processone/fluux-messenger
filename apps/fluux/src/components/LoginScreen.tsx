@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react'
 import { TextInput } from './ui/TextInput'
 import { useTranslation } from 'react-i18next'
 import { detectRenderLoop } from '@/utils/renderLoopDetector'
-import { useConnectionStatus, useConnectionActions, deleteFastToken } from '@fluux/sdk'
+import { useConnectionStatus, useConnectionActions, deleteFastToken, classifyConnectionError } from '@fluux/sdk'
 import { Loader2, KeyRound, Eye, EyeOff, ChevronDown, ChevronRight } from 'lucide-react'
 import { saveSession } from '@/hooks/useSessionPersistence'
 import { getResource } from '@/utils/xmppResource'
@@ -13,16 +13,11 @@ import { useWindowDrag } from '@/hooks'
 import { isOpenpgpEnabled } from '@/stores/encryptionSettingsStore'
 import { getReconnectIntent } from '@/utils/reconnectIntent'
 import { validateBareJid } from '@/utils/jidValidation'
+import { LoginErrorPanel } from './LoginErrorPanel'
 
 const STORAGE_KEY_JID = 'xmpp-last-jid'
 const STORAGE_KEY_SERVER = 'xmpp-last-server'
 const STORAGE_KEY_REMEMBER = 'xmpp-remember-me'
-
-/** Check if a connection error is an authentication failure (bad credentials) */
-function isAuthError(error: string): boolean {
-  const lower = error.toLowerCase()
-  return lower.includes('not-authorized') || lower.includes('authentication failed')
-}
 
 /**
  * Kick off the Argon2id secret-key unlock on the Rust side so the KDF
@@ -223,7 +218,7 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
 
     // Clear FAST token on auth failure (web) — prevents stale token from
     // triggering auto-connect loops on next tab open
-    if (isAuthError(error)) {
+    if (classifyConnectionError(error) === 'auth') {
       const savedJid = localStorage.getItem(STORAGE_KEY_JID)
       if (savedJid) {
         deleteFastToken(savedJid)
@@ -232,7 +227,7 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
 
     // Reveal server field on connection errors that aren't auth failures,
     // so the user can manually specify a server address
-    if (!isAuthError(error)) {
+    if (classifyConnectionError(error) !== 'auth') {
       setShowServerField(true)
     }
   }, [error, loadedFromKeychain, isDesktopApp])
@@ -438,7 +433,7 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
                 }}
                 disabled={isLoading}
                 className="absolute end-2 top-1/2 -translate-y-1/2 p-1 text-fluux-muted hover:text-fluux-text
-                           disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                           disabled:opacity-50 disabled:cursor-not-allowed transition-colors tap-target"
                 aria-label={showPassword ? t('login.hidePassword') : t('login.showPassword')}
               >
                 {showPassword ? (
@@ -523,9 +518,7 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
 
           {/* Error Message */}
           {error && (
-            <div className="p-3 bg-fluux-red/20 border border-fluux-red/50 rounded text-fluux-red text-sm">
-              {error}
-            </div>
+            <LoginErrorPanel kind={classifyConnectionError(error)} rawError={error} />
           )}
 
           {/* Submit Button */}

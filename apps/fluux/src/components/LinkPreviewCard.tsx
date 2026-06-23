@@ -3,8 +3,10 @@
  */
 
 import { useEffect, useRef, useState } from 'react'
-import { ExternalLink } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
+import { ExternalLink, Image as ImageIcon } from 'lucide-react'
 import type { LinkPreview } from '@fluux/sdk'
+import { useDeferredMedia } from '@/hooks/useDeferredMedia'
 
 /**
  * Preview images are often served with `cache-control: max-age=0` (e.g. GitHub's
@@ -18,12 +20,16 @@ const MAX_IMAGE_ATTEMPTS = 2
 interface LinkPreviewCardProps {
   preview: LinkPreview
   onLoad?: () => void
+  /** When true (the local user's own message), bypass media-autoload deferral. */
+  isOwnMessage?: boolean
 }
 
-export function LinkPreviewCard({ preview, onLoad }: LinkPreviewCardProps) {
+export function LinkPreviewCard({ preview, onLoad, isOwnMessage }: LinkPreviewCardProps) {
   const [attempt, setAttempt] = useState(0)
   const [imagePhase, setImagePhase] = useState<'showing' | 'waiting' | 'gone'>('showing')
   const retryTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const { t } = useTranslation()
+  const { shouldLoad: showImage, approve: approveImage } = useDeferredMedia(preview.image ?? '', isOwnMessage)
 
   useEffect(() => () => {
     if (retryTimer.current) clearTimeout(retryTimer.current)
@@ -71,7 +77,7 @@ export function LinkPreviewCard({ preview, onLoad }: LinkPreviewCardProps) {
       className="block mt-2 max-w-md border border-fluux-border rounded-lg overflow-hidden bg-fluux-bg/60 hover:bg-fluux-hover/60 transition-colors"
     >
       {/* Image preview - retried once on error, hidden entirely when it keeps failing */}
-      {preview.image && imagePhase !== 'gone' && (
+      {preview.image && showImage && imagePhase !== 'gone' && (
         <div className="aspect-video bg-fluux-bg/80 overflow-hidden">
           {imagePhase === 'showing' && (
             <img
@@ -84,6 +90,21 @@ export function LinkPreviewCard({ preview, onLoad }: LinkPreviewCardProps) {
               onLoad={onLoad}
               onError={handleImageError}
             />
+          )}
+        </div>
+      )}
+      {preview.image && !showImage && (
+        <div
+          role="button"
+          tabIndex={0}
+          onClick={(e) => { e.preventDefault(); e.stopPropagation(); approveImage() }}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); approveImage() } }}
+          className="aspect-video bg-fluux-hover/60 hover:bg-fluux-hover flex flex-col items-center justify-center gap-1.5 px-4 text-center text-fluux-muted transition-colors cursor-pointer"
+        >
+          <ImageIcon className="size-6" aria-hidden="true" />
+          <span className="text-sm font-medium">{t('chat.showLinkImage')}</span>
+          {preview.title && (
+            <span className="text-xs line-clamp-2">{preview.title}</span>
           )}
         </div>
       )}

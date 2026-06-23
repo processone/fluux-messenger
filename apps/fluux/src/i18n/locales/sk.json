@@ -40,7 +40,21 @@
         "hidePassword": "Skryť heslo",
         "madeBy": "Vytvoril",
         "ejabberdCreator": ", spoločnosť za",
-        "poweredBy": "Poháňané"
+        "poweredBy": "Poháňané",
+        "errors": {
+            "tlsCertTitle": "Nepodarilo sa overiť bezpečnostný certifikát servera",
+            "tlsOtherTitle": "Bezpečné pripojenie zlyhalo",
+            "tlsOtherBody": "Nepodarilo sa nadviazať šifrované pripojenie k serveru. Konfigurácia TLS servera nemusí byť podporovaná. Skontrolujte adresu servera alebo kontaktujte správcu servera.",
+            "unreachableTitle": "Server nie je dostupný",
+            "timeoutBody": "Server včas neodpovedal. Skontrolujte sieť a adresu servera, a skúste to znova.",
+            "refusedBody": "Server odmietol pripojenie. Skontrolujte adresu a port servera, a skúste to znova.",
+            "cert": {
+                "expired": "Platnosť certifikátu servera vypršala. Kontaktujte správcu servera. Ak je adresa nesprávna, upravte pole servera nižšie.",
+                "nameMismatch": "Certifikát servera bol vydaný pre iné meno hostiteľa. Skontrolujte adresu servera nižšie alebo kontaktujte správcu servera.",
+                "untrusted": "Certifikát servera je podpísaný sám sebou alebo vydaný neznámou autoritou, preto mu nemožno dôverovať. Skontrolujte adresu servera alebo kontaktujte správcu servera.",
+                "generic": "Bezpečnostný certifikát servera sa nepodarilo overiť. Skontrolujte adresu servera nižšie alebo kontaktujte správcu servera."
+            }
+        }
     },
     "sidebar": {
         "messages": "Správy",
@@ -202,6 +216,16 @@
         "invalidRoomAddress": "Neplatná adresa miestnosti (mala by byť miestnosť@conference.server)",
         "joinRoomHint": "Zadajte úplnú adresu miestnosti pre pripojenie k verejnej chatovacej miestnosti.",
         "failedToJoinRoom": "Nepodarilo sa pripojiť k miestnosti",
+        "passwordProtected": "Táto miestnosť je chránená heslom",
+        "roomPassword": "Heslo",
+        "passwordRequired": "Táto miestnosť je chránená heslom. Zadajte heslo pre vstup.",
+        "incorrectPassword": "Nesprávne heslo.",
+        "nicknameInUse": "Táto prezývka sa v tejto miestnosti už používa.",
+        "membersOnly": "Táto miestnosť je len pre členov. Musíte byť členom, aby ste mohli vstúpiť.",
+        "bannedFromRoom": "Boli ste zablokovaní z tejto miestnosti.",
+        "roomFull": "Táto miestnosť je plná.",
+        "registeredNicknameRequired": "Táto miestnosť vyžaduje vašu registrovanú prezývku.",
+        "roomNotFound": "Miestnosť sa nenašla.",
         "nonAnonWarningTitle": "Pripojiť sa k neanonymnému kanálu?",
         "nonAnonWarningMessage": "Každý v „{{room}}“ uvidí vašu skutočnú adresu (vaše XMPP/Jabber ID). Napriek tomu sa pripojiť?",
         "nonAnonWarningConfirm": "Napriek tomu sa pripojiť",
@@ -210,6 +234,7 @@
         "notJoinedNoHistory": "Nie ste v tejto miestnosti",
         "joinToLoadHistory": "Pripojte sa pre načítanie správ",
         "notificationSettings": "Nastavenia oznámení",
+        "roomActions": "Akcie miestnosti",
         "mentionsOnly": "Len zmienky",
         "defaultBehavior": "Predvolené správanie",
         "allMessages": "Všetky správy",
@@ -434,6 +459,7 @@
         "attachment": "Príloha",
         "removeAttachment": "Odstrániť prílohu",
         "reply": "Odpovedať",
+        "copyMessage": "Kopírovať text",
         "replyQuoteHiddenEncrypted": "Citácia skrytá: originál bol šifrovaný",
         "forwardMessage": "Preposlať správu (už čoskoro)",
         "moreReactions": "Viac reakcií",
@@ -566,7 +592,12 @@
             "acceptedWithoutVerifying": "Nový kľúč prijatý. Kontakt nie je overený",
             "acceptFailed": "Nepodarilo sa prijať nový kľúč. Skúste znova"
         },
-        "offlinePlaceholder": "Offline. Správy sa odošlú po opätovnom pripojení"
+        "offlinePlaceholder": "Offline. Správy sa odošlú po opätovnom pripojení",
+        "loadImage": "Načítať obrázok",
+        "loadVideo": "Načítať video",
+        "loadAudio": "Načítať zvuk",
+        "loadFilePreview": "Načítať náhľad",
+        "showLinkImage": "Zobraziť obrázok"
     },
     "dates": {
         "today": "Dnes",
@@ -582,7 +613,8 @@
             "updates": "Aktualizácie",
             "blocked": "Blokovaní používatelia",
             "storage": "Úložisko",
-            "encryption": "Šifrovanie"
+            "encryption": "Šifrovanie",
+            "privacy": "Súkromie"
         },
         "blocked": {
             "title": "Blokovaní používatelia",
@@ -703,6 +735,7 @@
             "pepUnsupportedBanner": "Váš server nepodporuje publikovanie osobných udalostí (PEP, XEP-0163), ktoré šifrovanie OpenPGP (XEP-0373) vyžaduje. Šifrovanie typu end-to-end nie je možné na tomto účte zapnúť. Kontaktujte správcu servera.",
             "statusPepUnsupported": "Šifrovanie nie je možné zapnúť: server nepodporuje PEP (XEP-0163), ktorý OpenPGP (XEP-0373) vyžaduje.",
             "statusRegistrationFailed": "Nastavenie šifrovania zlyhalo ({{code}}). Podrobnosti nájdete v konzole vývojára.",
+            "notProtectedAtRest": "Nie je tu k dispozícii žiadny systémový zväzok kľúčov, takže prístupová fráza vášho kľúča je uložená nezašifrovaná v súbore na disku. Kľúč nie je chránený v pokoji. Ktokoľvek, kto dokáže čítať súbory tohto zariadenia, by ho mohol použiť.",
             "backupLabel": "Záloha kľúča",
             "backupDescription": "Zverejnite šifrovanú kópiu svojho kľúča na svojom XMPP serveri. Chránená heslom, ktoré poznáte len vy, a čitateľná iba vaším účtom (access_model: whitelist). Umožňuje čítať šifrovanú históriu na novom zariadení po prihlásení a zadaní hesla.",
             "backupAction": "Uložiť na server",
@@ -777,6 +810,7 @@
             "identityChoice": {
                 "title": "Pre tento účet už existuje identita OpenPGP",
                 "body": "Tento prehliadač nemá miestny kľúč, ale server už oznamuje kľúč pre váš účet. Vygenerovanie nového kľúča tu by ticho rozdelilo vašu identitu: korešpondenti, ktorí šifrovali existujúcim kľúčom, by nemohli doručovať správy. Vyberte, ako to vyriešiť:",
+                "bodyKeyUnrecoverable": "Kľúč OpenPGP tohto zariadenia už nie je možné odomknúť, takže šifrovanie sa nedá spustiť. Vaša zverejnená identita nie je dotknutá. Obnovte ju zo zálohy na serveri alebo importom súboru s kľúčom, alebo ju nahraďte, ak to nie je možné. Vyberte, ako to chcete vyriešiť:",
                 "publishedFingerprintLabel": "Publikovaný odtlačok",
                 "restoreFromServerTitle": "Obnoviť zo zálohy servera",
                 "restoreFromServerBody": "Použite prístupovú frázu zálohy, ktorú ste nastavili pri povolení šifrovania na inom zariadení. Príslušný súkromný kľúč sa načíta zo servera a lokálne sa odomkne.",
@@ -803,19 +837,6 @@
             "importFileSuccess": "Kľúč bol importovaný zo súboru",
             "importFileFailed": "Nepodarilo sa načítať vybraný súbor",
             "unsupportedKeyAlgorithm": "Importovaný kľúč používa algoritmus, ktorý už nie je podporovaný (napr. DSA alebo ElGamal). Použite moderný kľúč OpenPGP (Curve25519, Ed25519 alebo RSA s aspoň 2048 bitmi).",
-            "externalExportAction": "Exportovať pre externý nástroj OpenPGP",
-            "externalExportDialogTitle": "Exportovať súkromný kľúč pre externý nástroj OpenPGP",
-            "externalExportDialogBody": "Vytvorí štandardný súbor súkromného kľúča OpenPGP (PRIVATE KEY BLOCK), ktorý môžete importovať do gpg, OpenKeychain, Kleopatry a ďalších nástrojov.",
-            "externalExportProtectedLabel": "Chránené prístupovou frázou",
-            "externalExportProtectedDescription": "Odporúčané. Zvoľte prístupovú frázu; exportovaný súbor sa zašifruje a externé nástroje si ju vyžiadajú pri importe.",
-            "externalExportUnprotectedLabel": "Bez šifrovania",
-            "externalExportUnprotectedDescription": "Exportovaný súbor obsahuje váš súkromný kľúč v otvorenej podobe. Použite len vtedy, ak cieľový nástroj odmieta kľúče chránené prístupovou frázou.",
-            "externalExportUnprotectedWarning": "Bez prístupovej frázy môže ktokoľvek s prístupom k exportovanému súboru vystupovať vo vašom mene a dešifrovať vaše minulé i budúce správy. Súbor zmažte hneď po importe.",
-            "externalExportUnprotectedAcknowledgment": "Rozumiem rizikám a chcem exportovať svoj súkromný kľúč bez šifrovania.",
-            "externalExportPassphraseLabel": "Prístupová fráza",
-            "externalExportConfirmPassphraseLabel": "Potvrďte prístupovú frázu",
-            "externalExportPassphraseMismatch": "Prístupové frázy sa nezhodujú.",
-            "externalExportSuccess": "Súkromný kľúč bol exportovaný do súboru",
             "unlockDialogTitle": "Odomknúť end-to-end šifrovanie",
             "unlockDialogBody": "Zadaj heslo na dešifrovanie kľúča pre toto sedenie.",
             "unlockDialogSetupTitle": "Nastaviť end-to-end šifrovanie",
@@ -827,7 +848,16 @@
             "unlockPassphraseTooShort": "Heslo musí mať aspoň 8 znakov",
             "lockedBannerBody": "Šifrovací kľúč je uzamknutý. Zadaj heslo na aktiváciu šifrovania pre toto sedenie.",
             "rotateNotSupportedWeb": "Rotácia kľúča nie je na webe k dispozícii. Použi desktopovú aplikáciu."
-        }
+        },
+        "mediaAutoDownload": "Automatické sťahovanie médií",
+        "mediaAutoDownloadDescription": "Vyberte, kedy sa obrázky, videá a súbory načítavajú automaticky.",
+        "mediaAutoDownloadAlways": "Vždy",
+        "mediaAutoDownloadAlwaysDescription": "Načítavať médiá automaticky v každom rozhovore.",
+        "mediaAutoDownloadPrivateOnly": "Len súkromné",
+        "mediaAutoDownloadPrivateOnlyDescription": "Načítavať automaticky v priamych správach a súkromných miestnostiach. V verejných kanáloch klepnite pre načítanie.",
+        "mediaAutoDownloadNever": "Nikdy",
+        "mediaAutoDownloadNeverDescription": "Nikdy nenačítavať médiá automaticky. Klepnite pre načítanie v akomkoľvek rozhovore.",
+        "mediaAutoDownloadStrangerNote": "Médiá od ľudí, ktorí nie sú vo vašich kontaktoch, vždy vyžadujú klepnutie na načítanie, bez ohľadu na vaše nastavenie."
     },
     "update": {
         "title": "Dostupná aktualizácia",
@@ -1037,6 +1067,7 @@
             "description": "Nemáte oprávnenia správcu na tomto serveri. Kontaktujte správcu servera pre prístup."
         },
         "selectCommand": "Vyberte príkaz z bočného panela",
+        "openSections": "Otvoriť sekcie administrácie",
         "execute": "Vykonať",
         "executing": "Vykonáva sa...",
         "next": "Ďalej",
@@ -1082,7 +1113,13 @@
         "users": {
             "delete": "Vymazať používateľa",
             "changePassword": "Zmeniť heslo",
-            "endSessions": "Ukončiť relácie"
+            "endSessions": "Ukončiť relácie",
+            "online": "Online",
+            "offline": "Offline",
+            "onlineNow": "Online teraz",
+            "justNow": "práve teraz",
+            "truncatedBanner": "Zobrazuje sa prvých {{shown}} z {{total}} používateľov. Spresnite hľadanie pre zúženie výsledkov.",
+            "truncatedBannerNoTotal": "Zobrazuje sa prvých {{shown}} používateľov. Spresnite hľadanie pre zúženie výsledkov."
         },
         "userView": {
             "title": "Používateľ",
@@ -1104,6 +1141,28 @@
         "roomList": {
             "title": "Chatovacie miestnosti",
             "noRooms": "Žiadne miestnosti sa nenašli"
+        },
+        "overview": {
+            "title": "Prehľad servera",
+            "refresh": "Obnoviť",
+            "updatedAt": "Aktualizované o {{time}}",
+            "empty": "Štatistiky servera nie sú dostupné.",
+            "retry": "Skúsiť znova",
+            "units": {
+                "d": "d",
+                "h": "h",
+                "m": "min",
+                "s": "s"
+            },
+            "cards": {
+                "uptime": "Doba prevádzky",
+                "version": "Verzia servera",
+                "users": "Používatelia",
+                "onlineSuffix": "{{n}} online",
+                "onlineSessions": "Online relácie",
+                "onlineRooms": "Aktívne miestnosti",
+                "vhosts": "Virtuálne hostiteľské servery"
+            }
         }
     },
     "commandPalette": {

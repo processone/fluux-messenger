@@ -596,5 +596,26 @@ describe('Connection race conditions', () => {
       expect(hasActiveClient(xmppClient)).toBe(true)
       expect(getMachineState(xmppClient)).toMatchObject({ connected: expect.anything() })
     })
+
+    it('coalesces a display-active keepalive wake kick concurrent with handleAwake into a single reconnect', async () => {
+      await connectAndGoOnline(xmppClient, mockXmppClientInstance)
+
+      // Socket dies → machine goes reconnecting; first attempt in flight.
+      mockXmppClientInstance._emit('disconnect', { clean: false })
+      await vi.advanceTimersByTimeAsync(1000)
+      await vi.advanceTimersByTimeAsync(30_000) // first attempt fails → reconnecting.waiting
+
+      mockClientFactory.mockClear()
+
+      // Fire both wake paths within the same tick: the OS deferred-wake path and
+      // the native keepalive wake kick (long sleptMs), both display-active.
+      void (xmppClient as any).notifySystemState('awake', SM_SESSION_TIMEOUT_MS + 60_000)
+      ;(xmppClient.connection as any).handleKeepaliveTick(true, SM_SESSION_TIMEOUT_MS + 60_000)
+
+      await vi.advanceTimersByTimeAsync(2000)
+
+      // Only a single new client is created despite two concurrent wake signals.
+      expect(mockClientFactory.mock.calls.length).toBeLessThanOrEqual(1)
+    })
   })
 })

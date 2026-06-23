@@ -106,6 +106,7 @@ import { PubSub } from './modules/PubSub'
 import { Blocking } from './modules/Blocking'
 import { Ignore } from './modules/Ignore'
 import { ConversationSync, type SyncedConversation } from './modules/ConversationSync'
+import { Mds } from './modules/Mds'
 import { WebPush } from './modules/WebPush'
 import { EntityTime } from './modules/EntityTime'
 import { LastActivity } from './modules/LastActivity'
@@ -219,6 +220,7 @@ type RetryOutcome =
 export class XMPPClient {
   protected currentJid: string | null = null
   private storageAdapter?: StorageAdapter
+  private shouldAutoReconnect?: () => boolean
   private e2eeStorageBackend: StorageBackend = new InMemoryStorageBackend()
   private proxyAdapter?: ProxyAdapter
   private privacyOptions?: PrivacyOptions
@@ -308,6 +310,12 @@ export class XMPPClient {
    * Persists 1:1 conversation lists (active + archived) via PEP (XEP-0223 private storage).
    */
   public conversationSync!: ConversationSync
+
+  /**
+   * MDS module (XEP-0490: Message Displayed Synchronization).
+   * Publishes/fetches per-conversation last-displayed stanza-ids via PEP.
+   */
+  public mds!: Mds
 
   /**
    * Web Push module (p1:push).
@@ -482,6 +490,7 @@ export class XMPPClient {
 
     // Store storage adapter for session persistence
     this.storageAdapter = config.storageAdapter
+    this.shouldAutoReconnect = config.shouldAutoReconnect
     this.proxyAdapter = config.proxyAdapter
     // Store privacy options for avatar fetching behavior
     this.privacyOptions = config.privacyOptions
@@ -657,6 +666,7 @@ export class XMPPClient {
       registerMAMCollector: (queryId: string, collector: (stanza: Element) => void) => this.registerMAMCollector(queryId, collector),
       privacyOptions: this.privacyOptions,
       getE2EEManager: () => this.e2ee,
+      shouldAutoReconnect: this.shouldAutoReconnect,
     }
 
     this.connection = new Connection(moduleDeps)
@@ -673,6 +683,7 @@ export class XMPPClient {
     this.blocking = new Blocking(moduleDeps)
     this.ignore = new Ignore(moduleDeps)
     this.conversationSync = new ConversationSync(moduleDeps)
+    this.mds = new Mds(moduleDeps)
     this.webPush = new WebPush(moduleDeps)
     this.entityTime = new EntityTime(moduleDeps)
     this.lastActivity = new LastActivity(moduleDeps)
@@ -1105,12 +1116,17 @@ export class XMPPClient {
   /**
    * Handle a keepalive tick from an external clock (e.g., Rust native timer).
    *
-   * The SDK routes the tick internally: nudges a stalled reconnect loop,
-   * runs a health check when connected, or no-ops otherwise. Apps should
-   * call this on every tick without inspecting connection status.
+   * The SDK routes the tick internally based on connection state and the
+   * display-power signal: nudges a stalled reconnect loop, runs a health
+   * check when connected, or no-ops. When `displayActive` is `false` the
+   * tick does no network work and only informs the state machine.
+   *
+   * @param displayActive Primary-display power state (undefined = legacy
+   *   payload, treated as active / fail-open).
+   * @param sleptMs Real wall-clock elapsed reported by the native loop.
    */
-  handleKeepaliveTick(): void {
-    this.connection.handleKeepaliveTick()
+  handleKeepaliveTick(displayActive?: boolean, sleptMs?: number): void {
+    this.connection.handleKeepaliveTick(displayActive, sleptMs)
   }
 
   /**
@@ -1825,6 +1841,20 @@ export class XMPPClient {
     chatBindings: StoreBindings['chat'],
   ): void {
     const actorJid = getBareJid(placeholder.from)
+    // Diagnostic (race investigation): a deferred reaction/retraction can only
+    // attach to its target if that target is in the loaded set when this runs.
+    // retryPendingDecrypts is a one-shot pass (launch / key-unlock); nothing
+    // re-runs it when a target enters the store later via scroll/MAM. Record
+    // whether target + placeholder were present so a "resolved only after
+    // relaunch" report can be confirmed against the actual presence at apply
+    // time. Domains only — no message content.
+    const targetPresent = !!chatBindings.getMessage(conversationId, modification.targetId)
+    const placeholderPresent = !!chatBindings.getMessage(conversationId, placeholder.id)
+    logInfo(
+      `E2EE deferred modification: type=${modification.type} conv=${getDomain(conversationId)} ` +
+      `targetPresent=${targetPresent} placeholderPresent=${placeholderPresent}` +
+      (targetPresent ? '' : ' — target not loaded, signal cannot attach until a later pass'),
+    )
     if (modification.type === 'reactions') {
       chatBindings.updateReactions(conversationId, modification.targetId, actorJid, modification.emojis)
     } else {

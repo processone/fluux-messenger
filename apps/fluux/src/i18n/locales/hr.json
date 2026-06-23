@@ -40,7 +40,21 @@
         "hidePassword": "Sakrij lozinku",
         "madeBy": "Izradio",
         "ejabberdCreator": ", tvrtka iza",
-        "poweredBy": "Pokreće"
+        "poweredBy": "Pokreće",
+        "errors": {
+            "tlsCertTitle": "Nije moguće provjeriti sigurnosni certifikat poslužitelja",
+            "tlsOtherTitle": "Sigurna veza nije uspjela",
+            "tlsOtherBody": "Nije moguće uspostaviti kriptiranu vezu s poslužiteljem. TLS konfiguracija poslužitelja možda nije podržana. Provjerite adresu poslužitelja ili kontaktirajte administratora poslužitelja.",
+            "unreachableTitle": "Nije moguće dosegnuti poslužitelj",
+            "timeoutBody": "Poslužitelj nije odgovorio na vrijeme. Provjerite mrežu i adresu poslužitelja, zatim pokušajte ponovo.",
+            "refusedBody": "Poslužitelj je odbio vezu. Provjerite adresu i port poslužitelja, zatim pokušajte ponovo.",
+            "cert": {
+                "expired": "Certifikat poslužitelja je istekao. Kontaktirajte administratora poslužitelja. Ako je adresa pogrešna, uredite polje poslužitelja ispod.",
+                "nameMismatch": "Certifikat poslužitelja izdan je za drugi naziv hosta. Provjerite adresu poslužitelja ispod ili kontaktirajte administratora poslužitelja.",
+                "untrusted": "Certifikat poslužitelja je samopotpisan ili izdan od nepoznatog tijela, pa mu se ne može vjerovati. Provjerite adresu poslužitelja ili kontaktirajte administratora poslužitelja.",
+                "generic": "Nije moguće provjeriti sigurnosni certifikat poslužitelja. Provjerite adresu poslužitelja ispod ili kontaktirajte administratora poslužitelja."
+            }
+        }
     },
     "sidebar": {
         "messages": "Poruke",
@@ -201,6 +215,16 @@
         "invalidRoomAddress": "Nevažeća adresa sobe (trebala bi biti soba@conference.poslužitelj)",
         "joinRoomHint": "Unesite punu adresu sobe za pridruživanje javnoj sobi za razgovor.",
         "failedToJoinRoom": "Pridruživanje sobi nije uspjelo",
+        "passwordProtected": "Ova soba je zaštićena lozinkom",
+        "roomPassword": "Lozinka",
+        "passwordRequired": "Ova soba je zaštićena lozinkom. Unesite lozinku za pridruživanje.",
+        "incorrectPassword": "Pogrešna lozinka.",
+        "nicknameInUse": "Taj nadimak je već u upotrebi u ovoj sobi.",
+        "membersOnly": "Ova soba je samo za članove. Morate biti član da biste se pridružili.",
+        "bannedFromRoom": "Zabranjeno vam je pristup ovoj sobi.",
+        "roomFull": "Ova soba je puna.",
+        "registeredNicknameRequired": "Ova soba zahtijeva vaš registrirani nadimak.",
+        "roomNotFound": "Soba nije pronađena.",
         "nonAnonWarningTitle": "Pridružiti se ne-anonimnom kanalu?",
         "nonAnonWarningMessage": "Svi u „{{room}}“ mogu vidjeti vašu stvarnu adresu (vaš XMPP/Jabber ID). Svejedno se pridružiti?",
         "nonAnonWarningConfirm": "Svejedno se pridruži",
@@ -209,6 +233,7 @@
         "notJoinedNoHistory": "Niste u ovoj sobi",
         "joinToLoadHistory": "Pridružite se za učitavanje poruka",
         "notificationSettings": "Postavke obavijesti",
+        "roomActions": "Radnje sobe",
         "mentionsOnly": "Samo spominjanja",
         "defaultBehavior": "Zadano ponašanje",
         "allMessages": "Sve poruke",
@@ -433,6 +458,7 @@
         "attachment": "Privitak",
         "removeAttachment": "Ukloni privitak",
         "reply": "Odgovori",
+        "copyMessage": "Kopiraj tekst",
         "replyQuoteHiddenEncrypted": "Citat skriven: izvornik je bio šifriran",
         "forwardMessage": "Proslijedi poruku (uskoro dolazi)",
         "moreReactions": "Više reakcija",
@@ -565,7 +591,12 @@
             "acceptedWithoutVerifying": "Novi ključ prihvaćen. Sugovornik nije provjeren",
             "acceptFailed": "Nije moguće prihvatiti novi ključ. Pokušajte ponovno"
         },
-        "offlinePlaceholder": "Izvanmrežno. Poruke će biti poslane nakon ponovnog povezivanja"
+        "offlinePlaceholder": "Izvanmrežno. Poruke će biti poslane nakon ponovnog povezivanja",
+        "loadImage": "Učitaj sliku",
+        "loadVideo": "Učitaj video",
+        "loadAudio": "Učitaj zvuk",
+        "loadFilePreview": "Učitaj pretpregled",
+        "showLinkImage": "Prikaži sliku"
     },
     "dates": {
         "today": "Danas",
@@ -581,7 +612,8 @@
             "updates": "Ažuriranja",
             "blocked": "Blokirani korisnici",
             "storage": "Pohrana",
-            "encryption": "Šifriranje"
+            "encryption": "Šifriranje",
+            "privacy": "Privatnost"
         },
         "blocked": {
             "title": "Blokirani korisnici",
@@ -702,6 +734,7 @@
             "pepUnsupportedBanner": "Vaš poslužitelj ne podržava objavu osobnih događaja (PEP, XEP-0163), koju OpenPGP šifriranje (XEP-0373) zahtijeva. Šifriranje s kraja na kraj ne može se uključiti na ovom računu. Obratite se administratoru poslužitelja.",
             "statusPepUnsupported": "Šifriranje se ne može uključiti: poslužitelj ne podržava PEP (XEP-0163), koji OpenPGP (XEP-0373) zahtijeva.",
             "statusRegistrationFailed": "Postavljanje šifriranja nije uspjelo ({{code}}). Detalje potražite u programskoj konzoli.",
+            "notProtectedAtRest": "Ovdje nije dostupan sustavski svežanj ključeva, pa se zaporka vašeg ključa pohranjuje nešifrirano u datoteci na disku. Ključ nije zaštićen u mirovanju. Svatko tko može čitati datoteke ovog uređaja mogao bi ga upotrijebiti.",
             "backupLabel": "Sigurnosna kopija ključa",
             "backupDescription": "Objavite šifriranu kopiju ključa na svom XMPP poslužitelju. Zaštićena lozinkom koju znate samo vi, čitljiva samo vašem računu (access_model: whitelist). Omogućuje čitanje šifrirane povijesti na novom uređaju nakon prijave i unosa lozinke.",
             "backupAction": "Spremi na poslužitelj",
@@ -776,6 +809,7 @@
             "identityChoice": {
                 "title": "Za ovaj račun već postoji OpenPGP identitet",
                 "body": "Ovaj preglednik nema lokalni ključ, ali poslužitelj već oglašava ključ za vaš račun. Generiranje novog ključa ovdje tiho bi razdvojilo vaš identitet: korespondenti koji su šifrirali postojećim ključem ne bi mogli isporučiti poruke. Odaberite kako to riješiti:",
+                "bodyKeyUnrecoverable": "OpenPGP ključ ovog uređaja više se ne može otključati, pa se šifriranje ne može pokrenuti. Vaš objavljeni identitet nije pogođen. Oporavite ga vraćanjem sigurnosne kopije s poslužitelja ili uvozom datoteke ključa, ili ga zamijenite ako ne možete. Odaberite kako želite to riješiti:",
                 "publishedFingerprintLabel": "Objavljeni otisak",
                 "restoreFromServerTitle": "Vrati iz sigurnosne kopije poslužitelja",
                 "restoreFromServerBody": "Upotrijebite lozinku sigurnosne kopije koju ste postavili pri omogućavanju šifriranja na drugom uređaju. Odgovarajući privatni ključ dohvaća se s poslužitelja i otključava lokalno.",
@@ -802,19 +836,6 @@
             "importFileSuccess": "Ključ je uvezen iz datoteke",
             "importFileFailed": "Nije moguće pročitati odabranu datoteku",
             "unsupportedKeyAlgorithm": "Uvezeni ključ koristi algoritam koji više nije podržan (npr. DSA ili ElGamal). Koristite moderan OpenPGP ključ (Curve25519, Ed25519 ili RSA od najmanje 2048 bita).",
-            "externalExportAction": "Izvezi za vanjski OpenPGP alat",
-            "externalExportDialogTitle": "Izvoz privatnog ključa za vanjski OpenPGP alat",
-            "externalExportDialogBody": "Stvara standardnu datoteku privatnog ključa OpenPGP (PRIVATE KEY BLOCK) koju možete uvesti u gpg, OpenKeychain, Kleopatra i druge alate.",
-            "externalExportProtectedLabel": "Zaštićeno tajnom frazom",
-            "externalExportProtectedDescription": "Preporučeno. Odaberite tajnu frazu; izvezena datoteka bit će šifrirana, a vanjski alati zatražit će je pri uvozu.",
-            "externalExportUnprotectedLabel": "Bez šifriranja",
-            "externalExportUnprotectedDescription": "Izvezena datoteka sadrži vaš privatni ključ u čistom tekstu. Koristite samo ako ciljni alat odbija ključeve zaštićene tajnom frazom.",
-            "externalExportUnprotectedWarning": "Bez tajne fraze svatko tko ima pristup izvezenoj datoteci može se predstavljati kao vi i dešifrirati vaše prošle i buduće poruke. Izbrišite datoteku čim je uvezete.",
-            "externalExportUnprotectedAcknowledgment": "Razumijem rizike i želim izvesti svoj privatni ključ nešifriran.",
-            "externalExportPassphraseLabel": "Tajna fraza",
-            "externalExportConfirmPassphraseLabel": "Potvrdi tajnu frazu",
-            "externalExportPassphraseMismatch": "Tajne fraze se ne podudaraju.",
-            "externalExportSuccess": "Privatni ključ izvezen u datoteku",
             "unlockDialogTitle": "Otključaj end-to-end enkripciju",
             "unlockDialogBody": "Unesi lozinku kako bi dešifrirao/la svoj ključ za ovu sesiju.",
             "unlockDialogSetupTitle": "Postavi end-to-end enkripciju",
@@ -826,7 +847,16 @@
             "unlockPassphraseTooShort": "Lozinka mora imati najmanje 8 znakova",
             "lockedBannerBody": "Tvoj ključ za enkripciju je zaključan. Unesi lozinku za aktivaciju enkripcije za ovu sesiju.",
             "rotateNotSupportedWeb": "Rotacija ključa nije dostupna na webu. Koristi aplikaciju za stolna računala."
-        }
+        },
+        "mediaAutoDownload": "Automatsko preuzimanje medija",
+        "mediaAutoDownloadDescription": "Odaberite kada se slike, videozapisi i datoteke učitavaju automatski.",
+        "mediaAutoDownloadAlways": "Uvijek",
+        "mediaAutoDownloadAlwaysDescription": "Učitavaj medije automatski u svim razgovorima.",
+        "mediaAutoDownloadPrivateOnly": "Samo privatno",
+        "mediaAutoDownloadPrivateOnlyDescription": "Učitavaj automatski u izravnim porukama i privatnim sobama. U javnim kanalima, dodirnite za učitavanje.",
+        "mediaAutoDownloadNever": "Nikad",
+        "mediaAutoDownloadNeverDescription": "Nikad ne učitavaj medije automatski. Dodirnite za učitavanje u bilo kojem razgovoru.",
+        "mediaAutoDownloadStrangerNote": "Mediji od osoba koje nisu u vašim kontaktima uvijek zahtijevaju dodir za učitavanje, bez obzira na vaš odabir ovdje."
     },
     "update": {
         "title": "Dostupno ažuriranje",
@@ -1036,6 +1066,7 @@
             "description": "Nemate administratorske ovlasti na ovom poslužitelju. Kontaktirajte administratora poslužitelja za pristup."
         },
         "selectCommand": "Odaberite naredbu iz bočne trake",
+        "openSections": "Otvori odjeljke administracije",
         "execute": "Izvrši",
         "executing": "Izvršavanje...",
         "next": "Dalje",
@@ -1081,7 +1112,13 @@
         "users": {
             "delete": "Obriši korisnika",
             "changePassword": "Promijeni lozinku",
-            "endSessions": "Završi sesije"
+            "endSessions": "Završi sesije",
+            "online": "Online",
+            "offline": "Offline",
+            "onlineNow": "Online sada",
+            "justNow": "upravo sada",
+            "truncatedBanner": "Prikazuje se prvih {{shown}} od {{total}} korisnika. Precizite pretragu za uže rezultate.",
+            "truncatedBannerNoTotal": "Prikazuje se prvih {{shown}} korisnika. Precizite pretragu za uže rezultate."
         },
         "userView": {
             "title": "Korisnik",
@@ -1103,6 +1140,28 @@
         "roomList": {
             "title": "Sobe za razgovor",
             "noRooms": "Sobe nisu pronađene"
+        },
+        "overview": {
+            "title": "Pregled poslužitelja",
+            "refresh": "Osvježi",
+            "updatedAt": "Ažurirano u {{time}}",
+            "empty": "Statistika poslužitelja nije dostupna.",
+            "retry": "Pokušaj ponovno",
+            "units": {
+                "d": "d",
+                "h": "h",
+                "m": "min",
+                "s": "s"
+            },
+            "cards": {
+                "uptime": "Vrijeme rada",
+                "version": "Verzija poslužitelja",
+                "users": "Korisnici",
+                "onlineSuffix": "{{n}} na mreži",
+                "onlineSessions": "Online sesije",
+                "onlineRooms": "Aktivne sobe",
+                "vhosts": "Virtualni poslužitelji"
+            }
         }
     },
     "commandPalette": {

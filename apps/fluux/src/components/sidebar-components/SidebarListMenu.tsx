@@ -19,7 +19,7 @@ import {
   type ReactNode,
   type RefObject,
 } from 'react'
-import { useClickOutside } from '@/hooks'
+import { useClickOutside, useMenuViewportClamp } from '@/hooks'
 
 // ============================================================================
 // Types
@@ -85,6 +85,8 @@ export function SidebarListMenuProvider<T>({
   const longPressTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
   const longPressTriggered = useRef(false)
   const pendingItemRef = useRef<T | null>(null)
+  // Original (unadjusted) anchor, kept separate so re-clamps measure from the true point.
+  const clickPosition = useRef<MenuPosition>({ x: 0, y: 0 })
 
   // Close menu
   const close = useCallback(() => {
@@ -105,10 +107,14 @@ export function SidebarListMenuProvider<T>({
 
   // Open menu for an item
   const openMenu = (item: T, pos: MenuPosition) => {
+    clickPosition.current = pos
     setTargetItem(item)
     setPosition(pos)
     setIsOpen(true)
   }
+
+  // Keep the menu within the viewport once it has rendered (shared with useContextMenu).
+  useMenuViewportClamp(isOpen, menuRef, clickPosition, position, setPosition)
 
   // Create handlers for an item
   const getItemMenuProps = (item: T): ItemMenuProps => {
@@ -217,16 +223,18 @@ interface MenuButtonProps {
   icon: ReactNode
   label: string
   variant?: 'default' | 'danger'
+  /** Extra classes appended to the row, e.g. `py-3` for a comfortable touch target. */
+  className?: string
 }
 
-export function MenuButton({ onClick, icon, label, variant = 'default' }: MenuButtonProps) {
-  const baseClasses = 'w-full px-3 py-2 flex items-center gap-3 text-start transition-colors'
+export function MenuButton({ onClick, icon, label, variant = 'default', className = '' }: MenuButtonProps) {
+  const baseClasses = 'w-full px-3 py-2 touch:py-3 flex items-center gap-3 text-start transition-colors'
   const variantClasses = variant === 'danger'
     ? 'text-fluux-red hover:bg-fluux-red hover:text-white'
     : 'text-fluux-text hover:bg-fluux-brand hover:text-fluux-text-on-accent'
 
   return (
-    <button onClick={onClick} className={`${baseClasses} ${variantClasses}`}>
+    <button onClick={onClick} className={`${baseClasses} ${variantClasses} ${className}`}>
       {icon}
       <span>{label}</span>
     </button>

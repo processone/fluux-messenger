@@ -744,11 +744,9 @@ export const createMockStores = (): MockStoreBindings => ({
     setIsDiscovering: vi.fn(),
     setIsExecuting: vi.fn(),
     getCurrentSession: vi.fn().mockReturnValue(null),
-    setEntityCounts: vi.fn(),
     setMucServiceJid: vi.fn(),
+    setServerStats: vi.fn(),
     getMucServiceJid: vi.fn().mockReturnValue(null),
-    setMucServiceSupportsMAM: vi.fn(),
-    getMucServiceSupportsMAM: vi.fn().mockReturnValue(null),
     setVhosts: vi.fn(),
     setSelectedVhost: vi.fn(),
     selectedVhost: null,
@@ -835,7 +833,6 @@ export const createMockXMPPClientForHooks = () => ({
   admin: {
     executeAdminCommand: vi.fn(),
     cancelAdminCommand: vi.fn(),
-    fetchEntityCounts: vi.fn(),
     fetchVhosts: vi.fn(),
     fetchUserList: vi.fn(),
     discoverMucService: vi.fn(),
@@ -978,6 +975,7 @@ export const createMockStoreRefs = (): MockStoreRefs => ({
     updateReactions: vi.fn(),
     updateMessage: vi.fn(),
     triggerAnimation: vi.fn(),
+    applyRemoteDisplayed: vi.fn(),
   } as unknown as MockStoreRefs['chat'],
   roster: {
     setContacts: vi.fn(),
@@ -1008,6 +1006,8 @@ export const createMockStoreRefs = (): MockStoreRefs => ({
     triggerAnimation: vi.fn(),
     mergeRoomMembers: vi.fn(),
     getRoom: vi.fn().mockReturnValue(undefined),
+    rooms: new Map(),
+    applyRemoteDisplayed: vi.fn(),
   } as unknown as MockStoreRefs['room'],
   events: {
     addSubscriptionRequest: vi.fn(),

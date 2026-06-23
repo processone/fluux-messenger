@@ -23,13 +23,34 @@ describe('useMessageHoverState', () => {
     container.appendChild(toolbar)
     document.body.appendChild(container)
     scrollRef = { current: container }
+    // These tests exercise the mouse hover toolbar, so default to a hovering
+    // pointer (the shared test-setup stub reports matches:false for every query,
+    // which would otherwise read as a touch device and suppress hover).
+    mockHoverCapability(true)
   })
 
   afterEach(() => {
     vi.useRealTimers()
     window.getSelection()?.removeAllRanges()
     container.remove()
+    // Drop any matchMedia stub so the next test falls back to the default
+    // (matchMedia absent → hover assumed, the desktop-oriented behaviour).
+    Reflect.deleteProperty(window, 'matchMedia')
   })
+
+  /** Stub matchMedia so `(hover: hover) and (pointer: fine)` reports `hasHover`. */
+  function mockHoverCapability(hasHover: boolean) {
+    window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+      matches: query.includes('hover: hover') ? hasHover : false,
+      media: query,
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })) as unknown as typeof window.matchMedia
+  }
 
   function setup(resetKey = 'conv-1') {
     return renderHook(
@@ -292,6 +313,39 @@ describe('useMessageHoverState', () => {
 
     addSpy.mockRestore()
     removeSpy.mockRestore()
+  })
+
+  it('never arms hover on a touch device (no hovering pointer)', () => {
+    // Mobile browsers synthesize mouseenter on tap; without a hover guard that
+    // would surface the desktop hover toolbar on touch (the long-press action
+    // sheet is the touch affordance instead).
+    mockHoverCapability(false)
+    const { result } = setup()
+
+    act(() => result.current.handleMessageHover('a'))
+    act(() => vi.advanceTimersByTime(500))
+    expect(result.current.hoveredMessageId).toBeNull()
+  })
+
+  it('does not re-arm hover on a touch device after a deferred mouseup', () => {
+    mockHoverCapability(false)
+    const { result } = setup()
+
+    mouseDown(messageEl)
+    act(() => result.current.handleMessageHover('b'))
+    mouseUp()
+    act(() => vi.advanceTimersByTime(0))
+    act(() => vi.advanceTimersByTime(500))
+    expect(result.current.hoveredMessageId).toBeNull()
+  })
+
+  it('still arms hover when a hovering pointer is present', () => {
+    mockHoverCapability(true)
+    const { result } = setup()
+
+    act(() => result.current.handleMessageHover('a'))
+    act(() => vi.advanceTimersByTime(200))
+    expect(result.current.hoveredMessageId).toBe('a')
   })
 
   it('keeps handler identities stable across re-renders', () => {

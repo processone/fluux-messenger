@@ -40,7 +40,21 @@
         "hidePassword": "Ascunde parola",
         "madeBy": "Realizat de",
         "ejabberdCreator": ", compania din spatele",
-        "poweredBy": "Oferit de"
+        "poweredBy": "Oferit de",
+        "errors": {
+            "tlsCertTitle": "Nu s-a putut verifica certificatul de securitate al serverului",
+            "tlsOtherTitle": "Conexiunea securizată a eșuat",
+            "tlsOtherBody": "Nu s-a putut stabili conexiunea criptată cu serverul. Configurația TLS a serverului poate să nu fie acceptată. Verificați adresa serverului sau contactați administratorul serverului.",
+            "unreachableTitle": "Nu s-a putut ajunge la server",
+            "timeoutBody": "Serverul nu a răspuns la timp. Verificați rețeaua și adresa serverului, apoi încercați din nou.",
+            "refusedBody": "Serverul a refuzat conexiunea. Verificați adresa și portul serverului, apoi încercați din nou.",
+            "cert": {
+                "expired": "Certificatul serverului a expirat. Contactați administratorul serverului. Dacă adresa este greșită, editați câmpul serverului de mai jos.",
+                "nameMismatch": "Certificatul serverului a fost emis pentru un alt nume de gazdă. Verificați adresa serverului de mai jos sau contactați administratorul serverului.",
+                "untrusted": "Certificatul serverului este auto-semnat sau emis de o autoritate necunoscută, deci nu poate fi de încredere. Verificați adresa serverului sau contactați administratorul serverului.",
+                "generic": "Nu s-a putut verifica certificatul de securitate al serverului. Verificați adresa serverului de mai jos sau contactați administratorul serverului."
+            }
+        }
     },
     "sidebar": {
         "messages": "Mesaje",
@@ -203,6 +217,16 @@
         "invalidRoomAddress": "Adresă de cameră invalidă (ar trebui să fie camera@conference.server)",
         "joinRoomHint": "Introdu adresa completă a camerei pentru a intra într-o cameră publică.",
         "failedToJoinRoom": "Intrarea în cameră a eșuat",
+        "passwordProtected": "Această cameră este protejată cu parolă",
+        "roomPassword": "Parolă",
+        "passwordRequired": "Această cameră este protejată cu parolă. Introduceți parola pentru a vă alătura.",
+        "incorrectPassword": "Parolă incorectă.",
+        "nicknameInUse": "Acel pseudonim este deja folosit în această cameră.",
+        "membersOnly": "Această cameră este doar pentru membri. Trebuie să fii membru pentru a te alătura.",
+        "bannedFromRoom": "Ai fost banat din această cameră.",
+        "roomFull": "Această cameră este plină.",
+        "registeredNicknameRequired": "Această cameră necesită pseudonimul tău înregistrat.",
+        "roomNotFound": "Camera nu a fost găsită.",
         "nonAnonWarningTitle": "Intrați într-un canal ne-anonim?",
         "nonAnonWarningMessage": "Toți cei din „{{room}}” vă pot vedea adresa reală (ID-ul dvs. XMPP/Jabber). Intrați oricum?",
         "nonAnonWarningConfirm": "Intră oricum",
@@ -211,6 +235,7 @@
         "notJoinedNoHistory": "Nu ești în această cameră",
         "joinToLoadHistory": "Intră pentru a încărca mesajele",
         "notificationSettings": "Setări de notificare",
+        "roomActions": "Acțiuni cameră",
         "mentionsOnly": "Doar mențiuni",
         "defaultBehavior": "Comportament implicit",
         "allMessages": "Toate mesajele",
@@ -435,6 +460,7 @@
         "attachment": "Atașament",
         "removeAttachment": "Elimină atașamentul",
         "reply": "Răspunde",
+        "copyMessage": "Copiază textul",
         "replyQuoteHiddenEncrypted": "Citat ascuns: originalul era criptat",
         "forwardMessage": "Redirecționează mesajul (în curând)",
         "moreReactions": "Mai multe reacții",
@@ -567,7 +593,12 @@
             "acceptedWithoutVerifying": "Cheie nouă acceptată. Contactul nu este verificat",
             "acceptFailed": "Nu s-a putut accepta noua cheie. Încearcă din nou"
         },
-        "offlinePlaceholder": "Offline. Mesajele vor fi trimise la reconectare"
+        "offlinePlaceholder": "Offline. Mesajele vor fi trimise la reconectare",
+        "loadImage": "Încarcă imaginea",
+        "loadVideo": "Încarcă videoclipul",
+        "loadAudio": "Încarcă sunetul",
+        "loadFilePreview": "Încarcă previzualizarea",
+        "showLinkImage": "Afișează imaginea"
     },
     "dates": {
         "today": "Astăzi",
@@ -583,7 +614,8 @@
             "updates": "Actualizări",
             "blocked": "Utilizatori blocați",
             "storage": "Stocare",
-            "encryption": "Criptare"
+            "encryption": "Criptare",
+            "privacy": "Confidențialitate"
         },
         "blocked": {
             "title": "Utilizatori blocați",
@@ -704,6 +736,7 @@
             "pepUnsupportedBanner": "Serverul dumneavoastră nu acceptă publicarea de evenimente personale (PEP, XEP-0163), necesară pentru criptarea OpenPGP (XEP-0373). Criptarea end-to-end nu poate fi activată pe acest cont. Contactați administratorul serverului.",
             "statusPepUnsupported": "Criptarea nu poate fi activată: serverul nu acceptă PEP (XEP-0163), necesar pentru OpenPGP (XEP-0373).",
             "statusRegistrationFailed": "Configurarea criptării a eșuat ({{code}}). Consultați consola dezvoltatorului pentru detalii.",
+            "notProtectedAtRest": "Aici nu există niciun inel de chei al sistemului, așa că fraza de acces a cheii tale este stocată necriptată într-un fișier pe disc. Cheia nu este protejată în repaus. Oricine poate citi fișierele acestui dispozitiv ar putea-o folosi.",
             "backupLabel": "Copie de rezervă a cheii",
             "backupDescription": "Publicați o copie criptată a cheii dvs. pe serverul XMPP. Protejată de o frază de acces pe care doar dvs. o cunoașteți și citibilă doar de contul dvs. (access_model: whitelist). Vă permite să citiți istoricul criptat pe un dispozitiv nou după autentificare și introducerea frazei.",
             "backupAction": "Salvează pe server",
@@ -778,6 +811,7 @@
             "identityChoice": {
                 "title": "Există deja o identitate OpenPGP pentru acest cont",
                 "body": "Acest browser nu are nicio cheie locală, dar serverul anunță deja o cheie pentru contul tău. Generarea unei chei noi aici ar bifurca în tăcere identitatea ta: corespondenții care au criptat pentru cheia existentă nu ar putea livra mesaje. Alege cum vrei să rezolvi acest lucru:",
+                "bodyKeyUnrecoverable": "Cheia OpenPGP a acestui dispozitiv nu mai poate fi deblocată, așa că criptarea nu poate porni. Identitatea ta publicată nu este afectată. Recuperează-o restaurând copia de rezervă de pe server sau importând un fișier de cheie, ori înlocuiește-o dacă nu poți. Alege cum vrei să rezolvi:",
                 "publishedFingerprintLabel": "Amprenta publicată",
                 "restoreFromServerTitle": "Restaurează din backup-ul serverului",
                 "restoreFromServerBody": "Folosește parola de backup pe care ai setat-o când ai activat criptarea pe alt dispozitiv. Cheia privată corespunzătoare este preluată de pe server și deblocată local.",
@@ -804,19 +838,6 @@
             "importFileSuccess": "Cheia a fost importată din fișier",
             "importFileFailed": "Fișierul selectat nu a putut fi citit",
             "unsupportedKeyAlgorithm": "Cheia importată folosește un algoritm care nu mai este suportat (de exemplu DSA sau ElGamal). Folosiți o cheie OpenPGP modernă (Curve25519, Ed25519 sau RSA de cel puțin 2048 biți).",
-            "externalExportAction": "Exportă pentru un instrument OpenPGP extern",
-            "externalExportDialogTitle": "Exportă cheia privată pentru un instrument OpenPGP extern",
-            "externalExportDialogBody": "Generează un fișier standard de cheie privată OpenPGP (PRIVATE KEY BLOCK) pe care îl poți importa în gpg, OpenKeychain, Kleopatra și alte instrumente.",
-            "externalExportProtectedLabel": "Protejată cu o frază de acces",
-            "externalExportProtectedDescription": "Recomandat. Alege o frază de acces; fișierul exportat este criptat, iar instrumentele externe ți-o vor cere la import.",
-            "externalExportUnprotectedLabel": "Fără criptare",
-            "externalExportUnprotectedDescription": "Fișierul exportat conține cheia ta privată în clar. Folosește doar dacă instrumentul țintă refuză cheile protejate cu frază de acces.",
-            "externalExportUnprotectedWarning": "Fără frază de acces, oricine are acces la fișierul exportat se poate da drept tine și îți poate decripta mesajele trecute și viitoare. Șterge fișierul imediat după ce l-ai importat.",
-            "externalExportUnprotectedAcknowledgment": "Înțeleg riscurile și vreau să-mi export cheia privată necriptată.",
-            "externalExportPassphraseLabel": "Frază de acces",
-            "externalExportConfirmPassphraseLabel": "Confirmă fraza de acces",
-            "externalExportPassphraseMismatch": "Frazele de acces nu corespund.",
-            "externalExportSuccess": "Cheie privată exportată în fișier",
             "unlockDialogTitle": "Deblochează criptarea end-to-end",
             "unlockDialogBody": "Introdu parola pentru a decripta cheia ta pentru această sesiune.",
             "unlockDialogSetupTitle": "Configurează criptarea end-to-end",
@@ -828,7 +849,16 @@
             "unlockPassphraseTooShort": "Parola trebuie să aibă cel puțin 8 caractere",
             "lockedBannerBody": "Cheia de criptare este blocată. Introdu parola pentru a activa criptarea pentru această sesiune.",
             "rotateNotSupportedWeb": "Rotația cheii nu este disponibilă pe web. Folosește aplicația desktop."
-        }
+        },
+        "mediaAutoDownload": "Descărcare automată a conținutului media",
+        "mediaAutoDownloadDescription": "Alegeți când imaginile, videoclipurile și fișierele se încarcă automat.",
+        "mediaAutoDownloadAlways": "Întotdeauna",
+        "mediaAutoDownloadAlwaysDescription": "Încarcă conținutul media automat în fiecare conversație.",
+        "mediaAutoDownloadPrivateOnly": "Numai privat",
+        "mediaAutoDownloadPrivateOnlyDescription": "Încarcă automat în mesajele directe și camerele private. În canalele publice, atingeți pentru a încărca.",
+        "mediaAutoDownloadNever": "Niciodată",
+        "mediaAutoDownloadNeverDescription": "Nu încărcați niciodată conținut media automat. Atingeți pentru a încărca în orice conversație.",
+        "mediaAutoDownloadStrangerNote": "Conținutul media de la persoane care nu sunt în contactele dvs. necesită întotdeauna o atingere pentru a se încărca, indiferent de ce alegeți aici."
     },
     "update": {
         "title": "Actualizare disponibilă",
@@ -1038,6 +1068,7 @@
             "description": "Nu ai privilegii de administrator pe acest server. Contactează administratorul serverului pentru acces."
         },
         "selectCommand": "Selectează o comandă din bara laterală",
+        "openSections": "Deschide secțiunile de administrare",
         "execute": "Execută",
         "executing": "Se execută...",
         "next": "Următorul",
@@ -1083,7 +1114,13 @@
         "users": {
             "delete": "Șterge utilizatorul",
             "changePassword": "Schimbă parola",
-            "endSessions": "Închide sesiunile"
+            "endSessions": "Închide sesiunile",
+            "online": "Online",
+            "offline": "Offline",
+            "onlineNow": "Online acum",
+            "justNow": "chiar acum",
+            "truncatedBanner": "Se afișează primii {{shown}} din {{total}} utilizatori. Rafinați căutarea pentru a reduce rezultatele.",
+            "truncatedBannerNoTotal": "Se afișează primii {{shown}} utilizatori. Rafinați căutarea pentru a reduce rezultatele."
         },
         "userView": {
             "title": "Utilizator",
@@ -1105,6 +1142,28 @@
         "roomList": {
             "title": "Camere de discuții",
             "noRooms": "Nicio cameră găsită"
+        },
+        "overview": {
+            "title": "Prezentare generală server",
+            "refresh": "Reîmprospătează",
+            "updatedAt": "Actualizat la {{time}}",
+            "empty": "Statisticile serverului nu sunt disponibile.",
+            "retry": "Reîncearcă",
+            "units": {
+                "d": "z",
+                "h": "h",
+                "m": "min",
+                "s": "s"
+            },
+            "cards": {
+                "uptime": "Timp de funcționare",
+                "version": "Versiune server",
+                "users": "Utilizatori",
+                "onlineSuffix": "{{n}} online",
+                "onlineSessions": "Sesiuni online",
+                "onlineRooms": "Camere active",
+                "vhosts": "Gazde virtuale"
+            }
         }
     },
     "commandPalette": {

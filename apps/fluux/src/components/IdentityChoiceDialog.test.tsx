@@ -39,6 +39,26 @@ describe('IdentityChoiceDialog', () => {
     expect(screen.getByRole('button', { name: 'common.cancel' })).toBeInTheDocument()
   })
 
+  it('shows the no-local-key body by default', () => {
+    render(<IdentityChoiceDialog {...baseProps} />)
+    expect(
+      screen.getByText('settings.encryption.identityChoice.body'),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByText('settings.encryption.identityChoice.bodyKeyUnrecoverable'),
+    ).not.toBeInTheDocument()
+  })
+
+  it('shows the dedicated body when the local key is unrecoverable', () => {
+    render(<IdentityChoiceDialog {...baseProps} reason="local-key-unrecoverable" />)
+    expect(
+      screen.getByText('settings.encryption.identityChoice.bodyKeyUnrecoverable'),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByText('settings.encryption.identityChoice.body'),
+    ).not.toBeInTheDocument()
+  })
+
   it('disables the server-restore choice when no backup is available', () => {
     render(<IdentityChoiceDialog {...baseProps} hasServerBackup={false} />)
     // The container button hosting the title text is the disable target.

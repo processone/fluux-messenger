@@ -311,8 +311,10 @@ export type {
   AdminUser,
   AdminRoom,
   EntityListState,
-  EntityCounts,
   AdminCategory,
+  ServerStats,
+  LastActivityResult,
+  LastActivityEntry,
 
   // XEP-0313: Message Archive Management
   MAMQueryOptions,
@@ -407,11 +409,13 @@ export {
 export type { SigncryptEnvelope } from './core/e2ee'
 export type {
   AccountInfo,
+  ArchiveDecryptItem,
   BareJID,
   CapabilityCacheOptions,
   ConversationHandle,
   ConversationTarget,
   DecryptResult,
+  DecryptStatus,
   DeviceIdentifier,
   DiscoFeature,
   DiscoResult,
@@ -427,6 +431,7 @@ export type {
   PEPItem,
   PeerSupport,
   PinnedStrategy,
+  PluginConfiguration,
   PluginContext,
   PluginStorage,
   ProtocolFeatures,
@@ -639,6 +644,17 @@ export type { FallbackProcessingResult, FallbackProcessingOptions } from './util
 // RFC 6120: XMPP Stanza Error parsing
 export { parseXMPPError, formatXMPPError } from './utils/xmppError'
 export type { XMPPStanzaError, XMPPErrorType } from './utils/xmppError'
+
+// Per-key latest-wins coalescing buffer (pure, no timers)
+export { createKeyedCoalescer } from './utils/keyedCoalescer'
+export type { KeyedCoalescer, CoalescedEntry } from './utils/keyedCoalescer'
+
+// Transport error classification and humanization
+export { classifyConnectionError, extractTransportErrorClass, humanizeTransportError } from './core/modules/transportErrors'
+export type { ConnectionErrorKind } from './core/modules/transportErrors'
+
+// MUC join failure error (rejected by client.muc.joinResult)
+export { RoomJoinError } from './core/errors'
 
 // XEP-0045: MUC Permission Utilities
 export { canSetAffiliation, canSetRole, canKick, canBan, canModerate, getAvailableAffiliations, getAvailableRoles } from './utils/mucPermissions'

@@ -2,7 +2,7 @@
   "name": "fluux",
   "private": true,
   "license": "AGPL-3.0-or-later",
-  "version": "0.16.1",
+  "version": "0.16.2",
   "type": "module",
   "workspaces": [
     "packages/*",
@@ -14,6 +14,7 @@
     "build:sdk": "npm run build -w @fluux/sdk",
     "build:app": "npm run build -w @xmpp/fluux",
     "test": "npm run test:run --workspaces --if-present",
+    "test:parallel": "node scripts/test-parallel.mjs",
     "test:coverage": "npm run test:coverage --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "lint": "npm run lint --workspaces --if-present",
@@ -45,7 +46,6 @@
     "@tauri-apps/plugin-deep-link": "^2.4.7"
   },
   "overrides": {
-    "serialize-javascript": "7.0.5",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "zod-validation-error": "4.0.2",

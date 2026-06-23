@@ -1,0 +1,156 @@
+import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { roomStore } from './roomStore'
+import type { Room, RoomMessage } from '../core/types/room'
+import { getLocalPart } from '../core/jid'
+import { _resetStorageScopeForTesting } from '../utils/storageScope'
+
+// Mock localStorage (required because roomStore uses persist middleware)
+const localStorageMock = (() => {
+  let store: Record<string, string> = {}
+  return {
+    getItem: vi.fn((key: string) => store[key] || null),
+    setItem: vi.fn((key: string, value: string) => {
+      store[key] = value
+    }),
+    removeItem: vi.fn((key: string) => {
+      delete store[key]
+    }),
+    clear: vi.fn(() => {
+      store = {}
+    }),
+  }
+})()
+
+Object.defineProperty(globalThis, 'localStorage', {
+  value: localStorageMock,
+  writable: true,
+})
+
+// Mock messageCache (required because roomStore imports it)
+vi.mock('../utils/messageCache', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../utils/messageCache')>()
+  return {
+    ...actual,
+    isMessageCacheAvailable: vi.fn().mockReturnValue(true),
+    saveRoomMessage: vi.fn().mockResolvedValue(undefined),
+    saveRoomMessages: vi.fn().mockResolvedValue(undefined),
+    getRoomMessages: vi.fn().mockResolvedValue([]),
+    updateRoomMessage: vi.fn().mockResolvedValue(undefined),
+    deleteRoomMessages: vi.fn().mockResolvedValue(undefined),
+  }
+})
+
+const ROOM = 'room@conference.example'
+
+function rmsg(id: string, stanzaId: string, t: number): RoomMessage {
+  return {
+    type: 'groupchat',
+    id,
+    stanzaId,
+    roomJid: ROOM,
+    from: `${ROOM}/alice`,
+    nick: 'alice',
+    body: id,
+    timestamp: new Date(t),
+    isOutgoing: false,
+  } as RoomMessage
+}
+
+/**
+ * Seed a room into the store using the real addRoom idiom (mirrors the
+ * activateWith helper in roomStore.test.ts). addRoom populates rooms,
+ * roomEntities, roomMeta, and roomRuntime from a single Room object.
+ * An optional lastSeenMessageId is patched into roomMeta afterwards.
+ */
+function seedRoom(jid: string, messages: RoomMessage[], lastSeenMessageId?: string) {
+  const room: Room = {
+    jid,
+    name: getLocalPart(jid),
+    nickname: 'testuser',
+    joined: true,
+    isBookmarked: false,
+    occupants: new Map(),
+    messages,
+    unreadCount: 0,
+    mentionsCount: 0,
+    typingUsers: new Set(),
+  }
+  roomStore.getState().addRoom(room)
+  if (lastSeenMessageId !== undefined) {
+    roomStore.setState((s) => {
+      const meta = new Map(s.roomMeta)
+      const existing = meta.get(jid)!
+      meta.set(jid, { ...existing, lastSeenMessageId })
+      return { roomMeta: meta }
+    })
+  }
+}
+
+describe('roomStore.applyRemoteDisplayed', () => {
+  beforeEach(() => {
+    _resetStorageScopeForTesting()
+    roomStore.setState({
+      rooms: new Map(),
+      roomEntities: new Map(),
+      roomMeta: new Map(),
+      roomRuntime: new Map(),
+      activeRoomJid: null,
+      drafts: new Map(),
+      mamQueryStates: new Map(),
+      roomGaps: new Map(),
+    })
+    vi.clearAllMocks()
+  })
+
+  it('advances lastSeenMessageId forward to the local id of the matching stanza-id', () => {
+    seedRoom(ROOM, [rmsg('m1', 's1', 1), rmsg('m2', 's2', 2), rmsg('m3', 's3', 3)], 'm1')
+    roomStore.getState().applyRemoteDisplayed(ROOM, 's3')
+    expect(roomStore.getState().roomMeta.get(ROOM)?.lastSeenMessageId).toBe('m3')
+  })
+
+  it('never regresses lastSeenMessageId (incoming marker behind current)', () => {
+    seedRoom(ROOM, [rmsg('m1', 's1', 1), rmsg('m2', 's2', 2), rmsg('m3', 's3', 3)], 'm3')
+    roomStore.getState().applyRemoteDisplayed(ROOM, 's1')
+    expect(roomStore.getState().roomMeta.get(ROOM)?.lastSeenMessageId).toBe('m3')
+  })
+
+  it('stores a pending high-water mark when the stanza-id is not yet loaded', () => {
+    seedRoom(ROOM, [rmsg('m1', 's1', 1)], 'm1')
+    roomStore.getState().applyRemoteDisplayed(ROOM, 's-future')
+    const meta = roomStore.getState().roomMeta.get(ROOM)
+    expect(meta?.pendingRemoteDisplayedStanzaId).toBe('s-future')
+    expect(meta?.lastSeenMessageId).toBe('m1')
+  })
+
+  it('clears a stale pending marker when the message is loaded but position already past it', () => {
+    seedRoom(ROOM, [rmsg('m1', 's1', 1), rmsg('m2', 's2', 2)], 'm2')
+    // Simulate a stale pending set on the room
+    const meta = roomStore.getState().roomMeta.get(ROOM)!
+    roomStore.setState((s) => {
+      const m = new Map(s.roomMeta)
+      m.set(ROOM, { ...meta, pendingRemoteDisplayedStanzaId: 's1' })
+      return { roomMeta: m }
+    })
+    roomStore.getState().applyRemoteDisplayed(ROOM, 's1')
+    const after = roomStore.getState().roomMeta.get(ROOM)
+    expect(after?.pendingRemoteDisplayedStanzaId).toBe(undefined)
+    expect(after?.lastSeenMessageId).toBe('m2')
+  })
+
+  it('resolves a pending room marker once the message arrives via room MAM merge', () => {
+    seedRoom(ROOM, [rmsg('m1', 's1', 1)], 'm1')
+    roomStore.getState().applyRemoteDisplayed(ROOM, 's5') // not loaded → pending
+
+    roomStore.getState().mergeRoomMAMMessages(
+      ROOM,
+      [rmsg('m2', 's2', 2), rmsg('m5', 's5', 5)],
+      {}, // RSMResponse — all fields optional, empty is valid
+      true,
+      'forward'
+    )
+
+    const meta = roomStore.getState().roomMeta.get(ROOM)
+    expect(meta?.lastSeenMessageId).toBe('m5')
+    expect(meta?.pendingRemoteDisplayedStanzaId).toBe(undefined)
+  })
+})

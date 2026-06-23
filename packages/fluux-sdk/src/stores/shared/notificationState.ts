@@ -58,10 +58,14 @@ export interface NotificationMessage {
   isMention?: boolean
 }
 
-/** Context about the entity's current visibility. */
+/** Context about the entity's current visibility and unread state. */
 export interface EntityContext {
   isActive: boolean
   windowVisible: boolean
+  /** Current unread count for the entity; used to decide notify-worthiness. */
+  unreadCount?: number
+  /** ID of the last message the user has seen; suppresses re-notify of seen content. */
+  lastSeenMessageId?: string
 }
 
 /** Options for message-received notification handling. */
@@ -163,13 +167,25 @@ export function onMessageReceived(
  * Scans messages to find the first unseen message (after lastSeenMessageId)
  * and sets the marker, then marks as read.
  *
- * The marker is placed at the first incoming (non-outgoing, non-delayed) message
- * after the lastSeenMessageId position.
+ * The marker is placed at the first incoming message after the lastSeenMessageId
+ * position. Whether a delayed message qualifies depends on `treatDelayedAsNew`,
+ * mirroring `onMessageReceived`:
+ * - 1:1 chats pass `true` — `isDelayed` means "delivered while offline" = new.
+ * - Rooms pass `false` (default) — `isDelayed` means "MUC history replay" = not
+ *   new, so the marker skips it (otherwise joining a room scrolls into the middle
+ *   of replayed history instead of to the bottom).
  */
 export function onActivate(
   state: EntityNotificationState,
-  messages: NotificationMessage[]
+  messages: NotificationMessage[],
+  options?: { treatDelayedAsNew?: boolean }
 ): EntityNotificationState {
+  const { treatDelayedAsNew = false } = options ?? {}
+  // A message qualifies as a "new" marker candidate when it's incoming and either
+  // we treat delayed messages as new (1:1) or it isn't a delayed/history message.
+  const isNewCandidate = (msg: NotificationMessage) =>
+    !msg.isOutgoing && (treatDelayedAsNew || !msg.isDelayed)
+
   let firstNewMessageId: string | undefined = undefined
   let updatedLastSeenMessageId = state.lastSeenMessageId
 
@@ -181,7 +197,7 @@ export function onActivate(
       // Scan forward from lastSeenMessageId to find first unseen incoming message
       for (let i = lastSeenIdx + 1; i < messages.length; i++) {
         const msg = messages[i]
-        if (!msg.isOutgoing) {
+        if (isNewCandidate(msg)) {
           firstNewMessageId = msg.id
           break
         }
@@ -203,18 +219,18 @@ export function onActivate(
 
       if (hasUsableLastReadAt) {
         const firstNew = messages.find(
-          (msg) => msg.timestamp > fallbackReadAt && !msg.isOutgoing
+          (msg) => msg.timestamp > fallbackReadAt && isNewCandidate(msg)
         )
         if (firstNew) {
           firstNewMessageId = firstNew.id
         }
       } else if (state.unreadCount > 0) {
         // No usable lastReadAt — use unreadCount to place marker at the Nth
-        // message from the end (counting only incoming, non-delayed messages).
+        // message from the end (counting only incoming new-candidate messages).
         let remaining = state.unreadCount
         for (let i = messages.length - 1; i >= 0; i--) {
           const m = messages[i]
-          if (!m.isOutgoing) {
+          if (isNewCandidate(m)) {
             remaining--
             if (remaining === 0) {
               firstNewMessageId = m.id
@@ -223,9 +239,9 @@ export function onActivate(
           }
         }
         // If we ran out of messages before exhausting unreadCount,
-        // place marker at the first incoming message.
+        // place marker at the first incoming new-candidate message.
         if (remaining > 0) {
-          const firstIncoming = messages.find((m) => !m.isOutgoing)
+          const firstIncoming = messages.find(isNewCandidate)
           if (firstIncoming) {
             firstNewMessageId = firstIncoming.id
           }
@@ -245,7 +261,7 @@ export function onActivate(
       ? state.lastReadAt
       : new Date(state.lastReadAt as unknown as string)
     const firstNew = messages.find(
-      (msg) => msg.timestamp > lastReadAt && !msg.isOutgoing
+      (msg) => msg.timestamp > lastReadAt && isNewCandidate(msg)
     )
     if (firstNew) {
       firstNewMessageId = firstNew.id
@@ -256,7 +272,7 @@ export function onActivate(
     let remaining = state.unreadCount
     for (let i = messages.length - 1; i >= 0; i--) {
       const m = messages[i]
-      if (!m.isOutgoing) {
+      if (isNewCandidate(m)) {
         remaining--
         if (remaining === 0) {
           firstNewMessageId = m.id
@@ -265,7 +281,7 @@ export function onActivate(
       }
     }
     if (remaining > 0) {
-      const firstIncoming = messages.find((m) => !m.isOutgoing)
+      const firstIncoming = messages.find(isNewCandidate)
       if (firstIncoming) {
         firstNewMessageId = firstIncoming.id
       }
@@ -417,24 +433,33 @@ export function onMessageSeen(
 // Should-Notify Functions
 // ---------------------------------------------------------------------------
 
-/** Freshness threshold: messages older than 5 minutes never trigger notifications. */
-const FRESHNESS_THRESHOLD_MS = 5 * 60 * 1000
-
 /**
  * Should a conversation message trigger a notification?
  *
- * Returns true for incoming, non-delayed, fresh messages when the user
- * can't see the conversation (not active, or window hidden).
+ * Notify-worthiness mirrors unread-worthiness: notify for an incoming message the
+ * user has not yet seen, when they can't currently see it (not active, or window
+ * hidden). Delivery mechanism (isDelayed) and message age are intentionally NOT
+ * discriminators — an offline/replayed message delivered on reconnect is "new to me".
+ * The unseen check (unreadCount + lastSeenMessageId) keeps MAM history backfill and
+ * re-synced duplicates silent and is self-limiting (lastSeenMessageId only advances).
  */
 export function shouldNotifyConversation(
   msg: NotificationMessage,
   ctx: EntityContext
 ): boolean {
-  if (msg.isOutgoing || msg.isDelayed) return false
-  if (Date.now() - msg.timestamp.getTime() > FRESHNESS_THRESHOLD_MS) return false
+  if (msg.isOutgoing) return false
   if (ctx.isActive && ctx.windowVisible) return false
+  if ((ctx.unreadCount ?? 0) <= 0) return false
+  if (msg.id === ctx.lastSeenMessageId) return false
   return true
 }
+
+/**
+ * Room freshness threshold: MUC messages older than 5 minutes never trigger
+ * notifications. Rooms (unlike conversations) still gate on age to suppress
+ * history replay; conversations use the unseen check instead.
+ */
+const ROOM_FRESHNESS_THRESHOLD_MS = 5 * 60 * 1000
 
 /**
  * Should a room message trigger a notification?
@@ -450,7 +475,7 @@ export function shouldNotifyRoom(
 ): { shouldNotify: boolean; isMention: boolean } {
   const isMention = msg.isMention ?? false
   if (msg.isOutgoing || msg.isDelayed) return { shouldNotify: false, isMention }
-  if (Date.now() - msg.timestamp.getTime() > FRESHNESS_THRESHOLD_MS) return { shouldNotify: false, isMention }
+  if (Date.now() - msg.timestamp.getTime() > ROOM_FRESHNESS_THRESHOLD_MS) return { shouldNotify: false, isMention }
   if (ctx.isActive && ctx.windowVisible) return { shouldNotify: false, isMention }
 
   return { shouldNotify: isMention || notifyAll, isMention }

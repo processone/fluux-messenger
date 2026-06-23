@@ -353,6 +353,45 @@ describe('MessageList FAB badge and scroll behavior', () => {
       }
     })
 
+    it('should scroll straight to bottom in one click when the marker is already visible', () => {
+      const messages = createTestMessages(10)
+      const firstNewMessageId = 'msg-5'
+
+      render(
+        <MessageList
+          messages={messages}
+          conversationId="conv-1"
+          clearFirstNewMessageId={vi.fn()}
+          firstNewMessageId={firstNewMessageId}
+          renderMessage={(msg) => <div key={msg.id}>{msg.body}</div>}
+        />
+      )
+
+      // Marker is at offsetTop 800; the user is positioned just above it (633),
+      // so the marker is already within the viewport — NOT further down. This is
+      // the on-open state (init auto-scrolls to the marker). A single click must
+      // reach the bottom, with no wasted "scroll to marker" step.
+      const scrollCtx = setupScrollContainer({ scrollHeight: 2000, clientHeight: 500, initialScrollTop: 633 })
+      if (!scrollCtx) return
+
+      const markerElement = scrollCtx.container.querySelector('[data-message-id="msg-5"]') as HTMLElement
+      if (markerElement) {
+        Object.defineProperty(markerElement, 'offsetTop', { value: 800, configurable: true })
+      }
+
+      // Make the FAB visible by dispatching a scroll event at the current position.
+      act(() => { scrollCtx.container.dispatchEvent(new Event('scroll')) })
+
+      const fab = scrollCtx.container.parentElement?.querySelector('button[aria-label="chat.scrollToBottom"]') as HTMLButtonElement
+      expect(fab).toBeTruthy()
+
+      act(() => { fireEvent.click(fab) })
+
+      expect(scrollCtx.scrollToSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ top: 2000, behavior: 'smooth' })
+      )
+    })
+
     it('should scroll to bottom on second click after scrolling to marker', () => {
       const messages = createTestMessages(10)
       const firstNewMessageId = 'msg-5'
@@ -367,7 +406,10 @@ describe('MessageList FAB badge and scroll behavior', () => {
         />
       )
 
-      const scrollCtx = setupScrollContainer({ scrollHeight: 2000, clientHeight: 500 })
+      // Start above the marker (scrollTop 0, marker at offsetTop 800) so the marker
+      // is genuinely further down. The scrollTo spy updates scrollTop, so the second
+      // click sees the post-first-click position — just like the real DOM.
+      const scrollCtx = setupScrollContainer({ scrollHeight: 2000, clientHeight: 500, initialScrollTop: 0 })
       if (!scrollCtx) return
 
       const markerElement = scrollCtx.container.querySelector('[data-message-id="msg-5"]') as HTMLElement
@@ -375,16 +417,19 @@ describe('MessageList FAB badge and scroll behavior', () => {
         Object.defineProperty(markerElement, 'offsetTop', { value: 800, configurable: true })
       }
 
-      simulateScrollUp(scrollCtx.container)
+      // Make the FAB visible at the current (top) position.
+      act(() => { scrollCtx.container.dispatchEvent(new Event('scroll')) })
 
       const fab = scrollCtx.container.parentElement?.querySelector('button[aria-label="chat.scrollToBottom"]') as HTMLButtonElement
       if (!fab) return
 
-      // First click - goes to marker
+      // First click - goes to marker (marker is below the viewport)
       act(() => { fireEvent.click(fab) })
+      const firstCallTop = scrollCtx.scrollToSpy.mock.calls[0]?.[0]?.top
+      expect(firstCallTop).not.toBe(2000)
       scrollCtx.scrollToSpy.mockClear()
 
-      // Second click - should go to bottom
+      // Second click - marker is now within the viewport, so go to bottom
       act(() => { fireEvent.click(fab) })
 
       expect(scrollCtx.scrollToSpy).toHaveBeenCalledWith(

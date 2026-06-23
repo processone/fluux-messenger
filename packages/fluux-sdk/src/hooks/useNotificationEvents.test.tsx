@@ -277,14 +277,14 @@ describe('useNotificationEvents', () => {
     })
   })
 
-  describe('conversation message freshness checks', () => {
-    it('should not notify for old conversation messages even if isDelayed is not set', () => {
+  describe('conversation unseen-gate (no age gate)', () => {
+    it('should notify for an old conversation message that is still unread (no age gate)', () => {
       const onConversationMessage = vi.fn()
       const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000)
 
       renderHook(() => useNotificationEvents({ onConversationMessage }))
 
-      // Add a conversation with an old message
+      // Add a conversation with an old but unread message
       act(() => {
         mockConversations.set('user@example.com', {
           id: 'user@example.com',
@@ -302,8 +302,9 @@ describe('useNotificationEvents', () => {
         triggerChatStoreUpdate()
       })
 
-      // Should NOT have notified because the message is too old
-      expect(onConversationMessage).not.toHaveBeenCalled()
+      // Should notify: message age is not a discriminator for 1:1 conversations —
+      // an offline-delivered message delivered on reconnect is "new to me"
+      expect(onConversationMessage).toHaveBeenCalledOnce()
     })
 
     it('should notify for fresh conversation messages', () => {
@@ -548,7 +549,7 @@ describe('useNotificationEvents', () => {
   })
 
   describe('window visibility', () => {
-    it('should notify when window is not visible and conversation is active', () => {
+    it('should NOT notify when window is not visible but conversation has no unread messages', () => {
       const onConversationMessage = vi.fn()
       const now = new Date()
       mockWindowVisible = false
@@ -561,12 +562,12 @@ describe('useNotificationEvents', () => {
         triggerChatStoreUpdate()
       })
 
-      // Add a conversation with a fresh message (the active one)
+      // Add a conversation with a fresh message (the active one) but unreadCount: 0
       act(() => {
         mockConversations.set('user@example.com', {
           id: 'user@example.com',
           name: 'Test User',
-          unreadCount: 0, // Active conversation, no unread
+          unreadCount: 0, // No unread — user has already seen this
           lastMessage: {
             id: 'msg1',
             conversationId: 'user@example.com',
@@ -579,7 +580,42 @@ describe('useNotificationEvents', () => {
         triggerChatStoreUpdate()
       })
 
-      // Should notify because window is not visible
+      // Should NOT notify because unreadCount is 0 (user has already seen this message)
+      expect(onConversationMessage).not.toHaveBeenCalled()
+    })
+
+    it('should notify when window is not visible and conversation has unread messages', () => {
+      const onConversationMessage = vi.fn()
+      const now = new Date()
+      mockWindowVisible = false
+      mockActiveConversationId = 'user@example.com'
+
+      renderHook(() => useNotificationEvents({ onConversationMessage }))
+
+      // First trigger with no conversations
+      act(() => {
+        triggerChatStoreUpdate()
+      })
+
+      // Add a conversation with a fresh message and unreadCount > 0
+      act(() => {
+        mockConversations.set('user@example.com', {
+          id: 'user@example.com',
+          name: 'Test User',
+          unreadCount: 1, // Has unread messages — user hasn't seen this yet
+          lastMessage: {
+            id: 'msg1',
+            conversationId: 'user@example.com',
+            from: 'user@example.com',
+            body: 'New message while tab is hidden',
+            timestamp: now,
+            isOutgoing: false,
+          },
+        })
+        triggerChatStoreUpdate()
+      })
+
+      // Should notify because window is not visible and there are unread messages
       expect(onConversationMessage).toHaveBeenCalledOnce()
     })
 
@@ -616,6 +652,82 @@ describe('useNotificationEvents', () => {
 
       // Should NOT notify because window is visible and conversation is active
       expect(onConversationMessage).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('conversation reconnect delivery', () => {
+    it('notifies for a delayed, unseen incoming message', () => {
+      const onConversationMessage = vi.fn()
+      renderHook(() => useNotificationEvents({ onConversationMessage }))
+
+      act(() => {
+        mockConversations.set('alice@example.com', {
+          id: 'alice@example.com',
+          name: 'Alice',
+          unreadCount: 1,
+          lastSeenMessageId: undefined,
+          lastMessage: {
+            id: 'm1',
+            timestamp: new Date(),
+            isOutgoing: false,
+            isDelayed: true,
+            from: 'alice@example.com',
+          },
+        })
+        triggerChatStoreUpdate()
+      })
+
+      expect(onConversationMessage).toHaveBeenCalledTimes(1)
+    })
+
+    it('does not notify when the latest message is already seen', () => {
+      const onConversationMessage = vi.fn()
+      renderHook(() => useNotificationEvents({ onConversationMessage }))
+
+      act(() => {
+        mockConversations.set('bob@example.com', {
+          id: 'bob@example.com',
+          name: 'Bob',
+          unreadCount: 0,
+          lastSeenMessageId: 'm1',
+          lastMessage: {
+            id: 'm1',
+            timestamp: new Date(),
+            isOutgoing: false,
+            isDelayed: true,
+            from: 'bob@example.com',
+          },
+        })
+        triggerChatStoreUpdate()
+      })
+
+      expect(onConversationMessage).not.toHaveBeenCalled()
+    })
+
+    it('does not notify twice for the same message id', () => {
+      const onConversationMessage = vi.fn()
+      renderHook(() => useNotificationEvents({ onConversationMessage }))
+
+      const conv = {
+        id: 'carol@example.com',
+        name: 'Carol',
+        unreadCount: 1,
+        lastSeenMessageId: undefined,
+        lastMessage: {
+          id: 'm9',
+          timestamp: new Date(),
+          isOutgoing: false,
+          isDelayed: false,
+          from: 'carol@example.com',
+        },
+      }
+      act(() => {
+        mockConversations.set('carol@example.com', conv)
+        triggerChatStoreUpdate()
+        triggerChatStoreUpdate() // same lastMessage id → no second notification
+      })
+
+      expect(onConversationMessage).toHaveBeenCalledTimes(1)
     })
   })
 })

@@ -221,6 +221,15 @@ export function createStoreBindings(
     stores.chat.triggerAnimation(conversationId, animation)
   })
 
+  on('read:displayed-synced', ({ conversationId, stanzaId }) => {
+    const stores = getStores()
+    if (stores.room.rooms.has(conversationId)) {
+      stores.room.applyRemoteDisplayed(conversationId, stanzaId)
+    } else {
+      stores.chat.applyRemoteDisplayed(conversationId, stanzaId)
+    }
+  })
+
   on('chat:mam-loading', ({ conversationId, isLoading }) => {
     const stores = getStores()
     stores.chat.setMAMLoading(conversationId, isLoading)
@@ -548,11 +557,6 @@ export function createStoreBindings(
     stores.admin.setIsExecuting(isExecuting)
   })
 
-  on('admin:entity-counts', ({ counts }) => {
-    const stores = getStores()
-    stores.admin.setEntityCounts(counts)
-  })
-
   on('admin:vhosts', ({ vhosts }) => {
     const stores = getStores()
     stores.admin.setVhosts(vhosts)
@@ -568,9 +572,9 @@ export function createStoreBindings(
     stores.admin.setMucServiceJid(mucServiceJid)
   })
 
-  on('admin:muc-service-mam', ({ supportsMAM }) => {
+  on('admin:server-stats', ({ stats }) => {
     const stores = getStores()
-    stores.admin.setMucServiceSupportsMAM(supportsMAM)
+    stores.admin.setServerStats(stats)
   })
 
   // ============================================================================

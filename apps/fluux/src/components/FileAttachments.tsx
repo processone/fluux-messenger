@@ -1,10 +1,12 @@
 import { useState, memo } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Music, Film, FileText, Archive, File, Download, BookOpen, Loader2, ImageOff, FileX } from 'lucide-react'
+import { Music, Film, FileText, Archive, File, Download, BookOpen, Loader2, ImageOff, FileX, Image as ImageIcon } from 'lucide-react'
 import { Tooltip } from './Tooltip'
 import { ImageLightbox } from './ImageLightbox'
 import { ImageContextMenu } from './ImageContextMenu'
-import { formatBytes, useAttachmentUrl } from '@/hooks'
+import { formatBytes, useAttachmentUrl, useCachedMediaUrl } from '@/hooks'
+import { DeferredMediaPlaceholder } from './DeferredMediaPlaceholder'
+import { useDeferredMedia } from '@/hooks/useDeferredMedia'
 import { useContextMenu } from '@/hooks/useContextMenu'
 import { isPdfMimeType, isDocumentMimeType, isArchiveMimeType, isEbookMimeType, getFileTypeLabel } from '@/utils/thumbnail'
 import type { FileAttachment } from '@fluux/sdk'
@@ -24,6 +26,8 @@ interface AttachmentProps {
   attachment: FileAttachment
   /** Called when image/video loads - useful for scroll adjustment */
   onLoad?: () => void
+  /** When true (the local user's own message), bypass media-autoload deferral. */
+  isOwnMessage?: boolean
 }
 
 /**
@@ -31,7 +35,7 @@ interface AttachmentProps {
  * Falls back to main URL when no thumbnail is provided (e.g., from other XMPP clients)
  * Uses direct media URLs for browser/WebView loading.
  */
-export const ImageAttachment = memo(function ImageAttachment({ attachment, onLoad }: AttachmentProps) {
+export const ImageAttachment = memo(function ImageAttachment({ attachment, onLoad, isOwnMessage }: AttachmentProps) {
   const { t } = useTranslation()
   const isImage = attachment.mediaType?.startsWith('image/') ?? false
   const [lightboxOpen, setLightboxOpen] = useState(false)
@@ -50,14 +54,30 @@ export const ImageAttachment = memo(function ImageAttachment({ attachment, onLoa
   // Check if this URL previously failed - initialize state from cache
   const [loadError, setLoadError] = useState(() => failedUrlCache.has(originalImageSrc))
 
+  // Media-autoload gating: defer fetch unless policy allows or user tapped
+  const { shouldLoad, approve } = useDeferredMedia(originalImageSrc, isOwnMessage)
+
   // Fetch + decrypt if encrypted (XEP-0454), or proxy through the platform
   // cache for plaintext. Branches internal to the hook; renderer is
   // unaware.
   const { url: proxiedImageSrc, isLoading, error } = useAttachmentUrl(
     originalImageSrc,
     originalEncryption,
-    isImage,
+    isImage && shouldLoad,
   )
+
+  // When deferred, peek the local cache (network-free). A hit means the bytes
+  // were already fetched once under consent, so displaying them leaks nothing.
+  const { cachedUrl, isPeeking } = useCachedMediaUrl(
+    originalImageSrc,
+    originalEncryption,
+    isImage && !shouldLoad,
+  )
+
+  // Source actually rendered: the consent-gated fetch result, or the cache hit.
+  const effectiveSrc = shouldLoad ? proxiedImageSrc : cachedUrl
+  // True when shown purely from cache without consent — gates lightbox fetch.
+  const displayedFromCacheOnly = !shouldLoad && Boolean(cachedUrl)
 
   // Early return after hooks
   if (!isImage) {
@@ -85,8 +105,24 @@ export const ImageAttachment = memo(function ImageAttachment({ attachment, onLoa
     ? Math.max(200, Math.round(340 - (aspectRatio - 3) * 20))
     : DEFAULT_MAX_WIDTH
 
-  // Show loading placeholder while fetching
-  if (isLoading) {
+  // Show tap-to-load placeholder only when deferred AND nothing is cached.
+  if (isImage && !shouldLoad && !cachedUrl && !isPeeking) {
+    return (
+      <DeferredMediaPlaceholder
+        variant="box"
+        icon={ImageIcon}
+        label={t('chat.loadImage')}
+        name={attachment.name}
+        sizeLabel={attachment.size ? formatBytes(attachment.size) : undefined}
+        aspectRatio={aspectRatio}
+        maxWidthPx={maxWidthPx}
+        onLoad={approve}
+      />
+    )
+  }
+
+  // Show loading placeholder while fetching (consent path) or peeking the cache.
+  if ((shouldLoad && isLoading) || (!shouldLoad && isPeeking)) {
     return (
       <div
         className="pt-2 rounded-lg bg-fluux-hover/60 flex items-center justify-center"
@@ -103,7 +139,7 @@ export const ImageAttachment = memo(function ImageAttachment({ attachment, onLoa
   // blob reclaim) must not collapse to a compact card, or every row below it
   // shifts — and a burst of such invalidations feeds the message-list
   // ResizeObserver scroll-correction loop on WebKitGTK.
-  if (error || !proxiedImageSrc || loadError) {
+  if (error || !effectiveSrc || loadError) {
     return (
       <a
         href={attachment.url}
@@ -148,7 +184,7 @@ export const ImageAttachment = memo(function ImageAttachment({ attachment, onLoa
         tabIndex={-1}
       >
         <img
-          src={proxiedImageSrc}
+          src={effectiveSrc}
           alt={attachment.name || 'Image attachment'}
           width={width}
           height={height}
@@ -167,18 +203,19 @@ export const ImageAttachment = memo(function ImageAttachment({ attachment, onLoa
       </button>
       <ImageContextMenu
         originalUrl={attachment.url}
-        proxiedUrl={proxiedImageSrc}
+        proxiedUrl={effectiveSrc}
         filename={attachment.name}
         menu={imageMenu}
       />
       {lightboxOpen && (
         <ImageLightbox
           src={attachment.url}
-          placeholderSrc={proxiedImageSrc ?? undefined}
+          placeholderSrc={effectiveSrc ?? undefined}
           alt={attachment.name || 'Image attachment'}
           downloadUrl={attachment.url}
           encryption={attachment.encryption}
           filename={attachment.name}
+          allowFetch={!displayedFromCacheOnly}
           onClose={() => setLightboxOpen(false)}
         />
       )}
@@ -190,12 +227,15 @@ export const ImageAttachment = memo(function ImageAttachment({ attachment, onLoa
  * Video attachment with inline player and info bar
  * Uses direct media URLs for browser/WebView loading.
  */
-export const VideoAttachment = memo(function VideoAttachment({ attachment, onLoad }: AttachmentProps) {
+export const VideoAttachment = memo(function VideoAttachment({ attachment, onLoad, isOwnMessage }: AttachmentProps) {
   const { t } = useTranslation()
   const isVideo = attachment.mediaType?.startsWith('video/') ?? false
 
   // Check if this URL previously failed - initialize state from cache
   const [loadError, setLoadError] = useState(() => failedUrlCache.has(attachment.url))
+
+  // Media-autoload gating: defer fetch unless policy allows or user tapped
+  const { shouldLoad, approve } = useDeferredMedia(attachment.url, isOwnMessage)
 
   // Resolve URL for video playback (only when it's a video). Both main
   // file and poster/thumbnail go through useAttachmentUrl so the
@@ -203,12 +243,12 @@ export const VideoAttachment = memo(function VideoAttachment({ attachment, onLoa
   const { url: proxiedVideoUrl, isLoading, error } = useAttachmentUrl(
     attachment.url,
     attachment.encryption,
-    isVideo,
+    isVideo && shouldLoad,
   )
   const { url: proxiedPosterUrl } = useAttachmentUrl(
     attachment.thumbnail?.uri,
     attachment.thumbnail?.encryption,
-    isVideo && !!attachment.thumbnail?.uri,
+    isVideo && shouldLoad && !!attachment.thumbnail?.uri,
   )
 
   // Early return after hooks
@@ -228,6 +268,22 @@ export const VideoAttachment = memo(function VideoAttachment({ attachment, onLoa
   // Shared container style: stable dimensions + layout containment to isolate
   // video control visibility changes from affecting parent layout measurements
   const containerStyle = { aspectRatio, contain: 'layout' as const }
+
+  // Show tap-to-load placeholder when media autoload is deferred
+  if (isVideo && !shouldLoad) {
+    return (
+      <DeferredMediaPlaceholder
+        variant="box"
+        icon={Film}
+        label={t('chat.loadVideo')}
+        name={attachment.name}
+        sizeLabel={attachment.size ? formatBytes(attachment.size) : undefined}
+        aspectRatio={aspectRatio}
+        maxWidthPx={448}
+        onLoad={approve}
+      />
+    )
+  }
 
   // Show loading state
   if (isLoading) {
@@ -322,24 +378,41 @@ export const VideoAttachment = memo(function VideoAttachment({ attachment, onLoa
  * Audio attachment with inline player
  * Uses direct media URLs for browser/WebView loading.
  */
-export function AudioAttachment({ attachment }: AttachmentProps) {
+export function AudioAttachment({ attachment, isOwnMessage }: AttachmentProps) {
   const { t } = useTranslation()
   const isAudio = (attachment.mediaType?.startsWith('audio/') ?? false) && !attachment.thumbnail
 
   // Check if this URL previously failed - initialize state from cache
   const [loadError, setLoadError] = useState(() => failedUrlCache.has(attachment.url))
 
+  // Media-autoload gating: defer fetch unless policy allows or user tapped
+  const { shouldLoad, approve } = useDeferredMedia(attachment.url, isOwnMessage)
+
   // Resolve URL for audio playback (only when it's audio). Encrypted
   // audio is transparently fetched + decrypted.
   const { url: proxiedAudioUrl, isLoading, error } = useAttachmentUrl(
     attachment.url,
     attachment.encryption,
-    isAudio,
+    isAudio && shouldLoad,
   )
 
   // Early return after hooks
   if (!isAudio) {
     return null
+  }
+
+  // Show tap-to-load placeholder when media autoload is deferred
+  if (isAudio && !shouldLoad) {
+    return (
+      <DeferredMediaPlaceholder
+        variant="card"
+        icon={Music}
+        label={t('chat.loadAudio')}
+        name={attachment.name}
+        sizeLabel={attachment.size ? formatBytes(attachment.size) : undefined}
+        onLoad={approve}
+      />
+    )
   }
 
   const hasError = error || !proxiedAudioUrl || loadError

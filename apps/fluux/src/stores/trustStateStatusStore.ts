@@ -6,6 +6,7 @@ import { create } from 'zustand'
  * - `uninitialized` — fresh install, no trust state to protect yet.
  * - `sealed`        — signed blob matches current stores.
  * - `pending-seal`  — stores populated but no blob yet (migration).
+ * - `awaiting-key`  — the secret key was not usable, so the seal could not be checked; no verdict yet.
  * - `compromised`   — blob absent/invalid/stale when stores non-empty.
  *
  * Not persisted: the check runs on every plugin init after the key
@@ -15,6 +16,7 @@ export type TrustStateStatus =
   | 'uninitialized'
   | 'sealed'
   | 'pending-seal'
+  | 'awaiting-key'
   | 'compromised'
 
 interface TrustStateStatusState {

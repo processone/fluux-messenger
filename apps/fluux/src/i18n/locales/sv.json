@@ -40,7 +40,21 @@
         "hidePassword": "Dölj lösenord",
         "madeBy": "Skapat av",
         "ejabberdCreator": ", företaget bakom",
-        "poweredBy": "Drivs av"
+        "poweredBy": "Drivs av",
+        "errors": {
+            "tlsCertTitle": "Det gick inte att verifiera serverns säkerhetscertifikat",
+            "tlsOtherTitle": "Säker anslutning misslyckades",
+            "tlsOtherBody": "Den krypterade anslutningen till servern kunde inte upprättas. Serverns TLS-konfiguration kanske inte stöds. Kontrollera serveradressen eller kontakta serveradministratören.",
+            "unreachableTitle": "Det gick inte att nå servern",
+            "timeoutBody": "Servern svarade inte i tid. Kontrollera nätverket och serveradressen, och försök igen.",
+            "refusedBody": "Servern nekade anslutningen. Kontrollera serveradressen och -porten, och försök igen.",
+            "cert": {
+                "expired": "Serverns certifikat har löpt ut. Kontakta serveradministratören. Om adressen är fel, redigera serverfältet nedan.",
+                "nameMismatch": "Serverns certifikat har utfärdats för ett annat värdnamn. Kontrollera serveradressen nedan eller kontakta serveradministratören.",
+                "untrusted": "Serverns certifikat är självsignerat eller utfärdat av en okänd instans, så det kan inte betraktas som tillförlitligt. Kontrollera serveradressen eller kontakta serveradministratören.",
+                "generic": "Det gick inte att verifiera serverns säkerhetscertifikat. Kontrollera serveradressen nedan eller kontakta serveradministratören."
+            }
+        }
     },
     "sidebar": {
         "messages": "Meddelanden",
@@ -201,6 +215,16 @@
         "invalidRoomAddress": "Ogiltig rumsadress (ska vara rum@conference.server)",
         "joinRoomHint": "Ange hela rumsadressen för att gå med i ett offentligt chattrum.",
         "failedToJoinRoom": "Kunde inte gå med i rummet",
+        "passwordProtected": "Det här rummet är lösenordsskyddat",
+        "roomPassword": "Lösenord",
+        "passwordRequired": "Det här rummet är lösenordsskyddat. Ange lösenordet för att gå med.",
+        "incorrectPassword": "Fel lösenord.",
+        "nicknameInUse": "Det smeknamnet används redan i det här rummet.",
+        "membersOnly": "Det här rummet är endast för medlemmar. Du måste vara medlem för att gå med.",
+        "bannedFromRoom": "Du har blivit utestängd från det här rummet.",
+        "roomFull": "Det här rummet är fullt.",
+        "registeredNicknameRequired": "Det här rummet kräver ditt registrerade smeknamn.",
+        "roomNotFound": "Rummet hittades inte.",
         "nonAnonWarningTitle": "Gå med i ett icke-anonymt rum?",
         "nonAnonWarningMessage": "Alla i ”{{room}}” kan se din riktiga adress (ditt XMPP/Jabber-ID). Gå med ändå?",
         "nonAnonWarningConfirm": "Gå med ändå",
@@ -209,6 +233,7 @@
         "notJoinedNoHistory": "Du är inte i detta rum",
         "joinToLoadHistory": "Gå med för att ladda meddelanden",
         "notificationSettings": "Aviseringsinställningar",
+        "roomActions": "Rumsåtgärder",
         "mentionsOnly": "Endast omnämnanden",
         "defaultBehavior": "Standardbeteende",
         "allMessages": "Alla meddelanden",
@@ -433,6 +458,7 @@
         "attachment": "Bilaga",
         "removeAttachment": "Ta bort bilaga",
         "reply": "Svara",
+        "copyMessage": "Kopiera text",
         "replyQuoteHiddenEncrypted": "Citat dolt: originalet var krypterat",
         "forwardMessage": "Vidarebefordra meddelande (kommer snart)",
         "moreReactions": "Fler reaktioner",
@@ -565,7 +591,12 @@
             "acceptedWithoutVerifying": "Ny nyckel accepterad. Motparten är overifierad",
             "acceptFailed": "Kunde inte acceptera den nya nyckeln. Försök igen"
         },
-        "offlinePlaceholder": "Offline. Meddelanden skickas när anslutningen återupprättats"
+        "offlinePlaceholder": "Offline. Meddelanden skickas när anslutningen återupprättats",
+        "loadImage": "Läs in bild",
+        "loadVideo": "Läs in video",
+        "loadAudio": "Läs in ljud",
+        "loadFilePreview": "Läs in förhandsgranskning",
+        "showLinkImage": "Visa bild"
     },
     "dates": {
         "today": "Idag",
@@ -581,7 +612,8 @@
             "updates": "Uppdateringar",
             "blocked": "Blockerade användare",
             "storage": "Lagring",
-            "encryption": "Kryptering"
+            "encryption": "Kryptering",
+            "privacy": "Sekretess"
         },
         "blocked": {
             "title": "Blockerade användare",
@@ -702,6 +734,7 @@
             "pepUnsupportedBanner": "Din server stöder inte personal eventing (PEP, XEP-0163), som OpenPGP-kryptering (XEP-0373) kräver. End-to-end-kryptering kan inte aktiveras på det här kontot. Kontakta din serveradministratör.",
             "statusPepUnsupported": "Kryptering kan inte aktiveras: servern stöder inte PEP (XEP-0163), som OpenPGP (XEP-0373) kräver.",
             "statusRegistrationFailed": "Konfigurationen av kryptering misslyckades ({{code}}). Se utvecklarkonsolen för detaljer.",
+            "notProtectedAtRest": "Det finns ingen systemnyckelring tillgänglig här, så nyckelns lösenfras lagras okrypterad i en fil på disken. Nyckeln är inte skyddad i vila. Alla som kan läsa enhetens filer kan använda den.",
             "backupLabel": "Nyckelsäkerhetskopia",
             "backupDescription": "Publicera en krypterad kopia av din nyckel på din XMPP-server. Skyddad av en lösenfras som bara du känner till och endast läsbar av ditt konto (access_model: whitelist). Låter dig läsa krypterad historik på en ny enhet efter inloggning och inmatning av lösenfrasen.",
             "backupAction": "Säkerhetskopiera till server",
@@ -776,6 +809,7 @@
             "identityChoice": {
                 "title": "En OpenPGP-identitet finns redan för detta konto",
                 "body": "Denna webbläsare har ingen lokal nyckel, men servern annonserar redan en nyckel för ditt konto. Att generera en ny nyckel här skulle tyst förgrena din identitet: korrespondenter som krypterade till den befintliga nyckeln skulle inte kunna leverera meddelanden. Välj hur du vill lösa detta:",
+                "bodyKeyUnrecoverable": "OpenPGP-nyckeln på den här enheten kan inte längre låsas upp, så kryptering kan inte startas. Din publicerade identitet påverkas inte. Återställ den från din serversäkerhetskopia eller genom att importera en nyckelfil, eller ersätt den om du inte kan. Välj hur du vill lösa detta:",
                 "publishedFingerprintLabel": "Publicerat fingeravtryck",
                 "restoreFromServerTitle": "Återställ från serverbackup",
                 "restoreFromServerBody": "Använd backup-lösenfrasen som du ställde in när du aktiverade kryptering på en annan enhet. Motsvarande privata nyckel hämtas från servern och låses upp lokalt.",
@@ -802,19 +836,6 @@
             "importFileSuccess": "Nyckel importerad från fil",
             "importFileFailed": "Det gick inte att läsa den valda filen",
             "unsupportedKeyAlgorithm": "Den importerade nyckeln använder en algoritm som inte längre stöds (t.ex. DSA eller ElGamal). Använd en modern OpenPGP-nyckel (Curve25519, Ed25519 eller RSA på minst 2048 bitar).",
-            "externalExportAction": "Exportera till ett externt OpenPGP-verktyg",
-            "externalExportDialogTitle": "Exportera privat nyckel till ett externt OpenPGP-verktyg",
-            "externalExportDialogBody": "Skapar en standardiserad OpenPGP-fil med privat nyckel (PRIVATE KEY BLOCK) som du kan importera till gpg, OpenKeychain, Kleopatra och andra verktyg.",
-            "externalExportProtectedLabel": "Skyddad med en lösenfras",
-            "externalExportProtectedDescription": "Rekommenderas. Välj en lösenfras; den exporterade filen krypteras och externa verktyg frågar efter den vid import.",
-            "externalExportUnprotectedLabel": "Ingen kryptering",
-            "externalExportUnprotectedDescription": "Den exporterade filen innehåller din privata nyckel i klartext. Använd endast om målverktyget vägrar nycklar som är skyddade med lösenfras.",
-            "externalExportUnprotectedWarning": "Utan lösenfras kan alla med åtkomst till den exporterade filen utge sig för att vara du och dekryptera dina tidigare och framtida meddelanden. Ta bort filen så snart du har importerat den.",
-            "externalExportUnprotectedAcknowledgment": "Jag förstår riskerna och vill exportera min privata nyckel okrypterad.",
-            "externalExportPassphraseLabel": "Lösenfras",
-            "externalExportConfirmPassphraseLabel": "Bekräfta lösenfras",
-            "externalExportPassphraseMismatch": "Lösenfraserna stämmer inte överens.",
-            "externalExportSuccess": "Privat nyckel exporterad till fil",
             "unlockDialogTitle": "Lås upp ände-till-ände-kryptering",
             "unlockDialogBody": "Ange din lösenfras för att dekryptera din nyckel för den här sessionen.",
             "unlockDialogSetupTitle": "Konfigurera ände-till-ände-kryptering",
@@ -826,7 +847,16 @@
             "unlockPassphraseTooShort": "Lösenfrasen måste vara minst 8 tecken",
             "lockedBannerBody": "Din krypteringsnyckel är låst. Ange lösenfrasen för att aktivera kryptering för den här sessionen.",
             "rotateNotSupportedWeb": "Nyckelrotering är inte tillgänglig på webben. Använd skrivbordsappen."
-        }
+        },
+        "mediaAutoDownload": "Ladda ned media automatiskt",
+        "mediaAutoDownloadDescription": "Välj när bilder, videor och filer läses in automatiskt.",
+        "mediaAutoDownloadAlways": "Alltid",
+        "mediaAutoDownloadAlwaysDescription": "Läs in media automatiskt i alla konversationer.",
+        "mediaAutoDownloadPrivateOnly": "Bara privat",
+        "mediaAutoDownloadPrivateOnlyDescription": "Läs in automatiskt i direktmeddelanden och privata rum. I offentliga kanaler, tryck för att läsa in.",
+        "mediaAutoDownloadNever": "Aldrig",
+        "mediaAutoDownloadNeverDescription": "Läs aldrig in media automatiskt. Tryck för att läsa in i valfri konversation.",
+        "mediaAutoDownloadStrangerNote": "Media från personer som inte finns i dina kontakter kräver alltid ett tryck för att läsas in, oavsett vad du väljer här."
     },
     "update": {
         "title": "Uppdatering tillgänglig",
@@ -1036,6 +1066,7 @@
             "description": "Du har inte administratörsbehörighet på denna server. Kontakta din serveradministratör för åtkomst."
         },
         "selectCommand": "Välj ett kommando från sidofältet",
+        "openSections": "Öppna administrationssektioner",
         "execute": "Utför",
         "executing": "Utför...",
         "next": "Nästa",
@@ -1081,7 +1112,13 @@
         "users": {
             "delete": "Ta bort användare",
             "changePassword": "Ändra lösenord",
-            "endSessions": "Avsluta sessioner"
+            "endSessions": "Avsluta sessioner",
+            "online": "Online",
+            "offline": "Offline",
+            "onlineNow": "Online nu",
+            "justNow": "just nu",
+            "truncatedBanner": "Visar de första {{shown}} av {{total}} användare. Förfina din sökning för att begränsa resultaten.",
+            "truncatedBannerNoTotal": "Visar de första {{shown}} användare. Förfina din sökning för att begränsa resultaten."
         },
         "userView": {
             "title": "Användare",
@@ -1103,6 +1140,28 @@
         "roomList": {
             "title": "Chattrum",
             "noRooms": "Inga rum hittades"
+        },
+        "overview": {
+            "title": "Serveröversikt",
+            "refresh": "Uppdatera",
+            "updatedAt": "Uppdaterad kl. {{time}}",
+            "empty": "Serverstatistik är inte tillgänglig.",
+            "retry": "Försök igen",
+            "units": {
+                "d": "d",
+                "h": "tim",
+                "m": "min",
+                "s": "s"
+            },
+            "cards": {
+                "uptime": "Drifttid",
+                "version": "Serverversion",
+                "users": "Användare",
+                "onlineSuffix": "{{n}} online",
+                "onlineSessions": "Aktiva sessioner",
+                "onlineRooms": "Aktiva rum",
+                "vhosts": "Virtuella värdar"
+            }
         }
     },
     "commandPalette": {

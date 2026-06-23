@@ -81,6 +81,13 @@ export interface XMPPProviderProps {
    * ```
    */
   client?: XMPPClient
+  /**
+   * Predicate evaluated live at every reconnect funnel to decide whether the
+   * client may auto-reconnect. The app wires this to
+   * `() => getReconnectIntent() === 'active'` so the SDK stays headless — it
+   * knows "allowed?", not the localStorage flag. Omitted → always allowed.
+   */
+  shouldAutoReconnect?: () => boolean
 }
 
 /**
@@ -142,6 +149,7 @@ export function XMPPProvider({
   storageAdapter = sessionStorageAdapter,
   proxyAdapter,
   client,
+  shouldAutoReconnect,
 }: XMPPProviderProps) {
   const clientRef = useRef<XMPPClient | null>(null)
 
@@ -154,7 +162,7 @@ export function XMPPProvider({
     if (client) {
       clientRef.current = client
     } else {
-      const config: XMPPClientConfig = { debug, storageAdapter, proxyAdapter }
+      const config: XMPPClientConfig = { debug, storageAdapter, proxyAdapter, shouldAutoReconnect }
       clientRef.current = new XMPPClient(config)
     }
   }

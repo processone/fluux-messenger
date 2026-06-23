@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { selectSelfOccupant, stableNickSet, resolveRoomSender, resolveReplyAvatar, resolveSenderColor } from './roomSenderResolution'
+import { selectSelfOccupant, stableNickSet, resolveRoomSender, resolveReplyAvatar, resolveSenderColor, resolveNickColor } from './roomSenderResolution'
 import { getConsistentTextColor } from '../Avatar'
 import type { RoomOccupant, Room, RoomMessage } from '@fluux/sdk'
 
@@ -81,6 +81,20 @@ describe('resolveRoomSender', () => {
     const r = room({ occupants: new Map([['me', self]]) })
     const s = resolveRoomSender(msg({ isOutgoing: true }), r, new Map(), self)
     expect(s.canModerate).toBe(false)
+  })
+  it('canModerate is false when the room does not support moderation (XEP-0425, supportsModeration === false)', () => {
+    const self = { nick: 'me', role: 'moderator', affiliation: 'member' } as any
+    const alice = { nick: 'alice', role: 'participant', affiliation: 'none' } as any
+    const r = room({ occupants: new Map([['alice', alice], ['me', self]]), supportsModeration: false })
+    const s = resolveRoomSender(msg({}), r, new Map(), self)
+    expect(s.canModerate).toBe(false)
+  })
+  it('canModerate stays true when supportsModeration is undefined (disco unresolved — optimistic)', () => {
+    const self = { nick: 'me', role: 'moderator', affiliation: 'member' } as any
+    const alice = { nick: 'alice', role: 'participant', affiliation: 'none' } as any
+    const r = room({ occupants: new Map([['alice', alice], ['me', self]]) })
+    const s = resolveRoomSender(msg({}), r, new Map(), self)
+    expect(s.canModerate).toBe(true)
   })
   it('counterpartPresent is false for a private message when the counterpart is absent', () => {
     const s = resolveRoomSender(msg({ isPrivate: true, whisperWith: 'alice' }), room({}), new Map(), undefined)
@@ -164,5 +178,26 @@ describe('resolveSenderColor', () => {
   })
   it('falls back to the nick-hash color when the contact has no pre-calculated colors', () => {
     expect(resolveSenderColor('alice', { jid: 'alice@x' } as any, false)).toBe(getConsistentTextColor('alice', false))
+  })
+})
+
+describe('resolveNickColor', () => {
+  // Regression: an inline @mention pill colored from the bare nick hash disagreed
+  // with the mentioned person's name color, which uses the roster contact's
+  // XEP-0392 color. Both must share resolveSenderColor for the same nick→JID→contact.
+  const contact = { jid: 'alice@x', colorLight: '#7b4500', colorDark: '#ffa54c' } as any
+  it('uses the contact color when the nick maps to a JID via the live occupant', () => {
+    const r = room({
+      occupants: new Map([['alice', occ('alice', { jid: 'alice@x/res' })]]),
+    })
+    expect(resolveNickColor('alice', r, new Map([['alice@x', contact]]), true)).toBe('#ffa54c')
+  })
+  it('uses the contact color when the JID comes from nickToJidCache', () => {
+    const r = room({ occupants: new Map(), nickToJidCache: new Map([['alice', 'alice@x']]) })
+    expect(resolveNickColor('alice', r, new Map([['alice@x', contact]]), false)).toBe('#7b4500')
+  })
+  it('falls back to the nick-hash color for an unknown nick (no JID / not a contact)', () => {
+    const r = room({ occupants: new Map(), nickToJidCache: new Map() })
+    expect(resolveNickColor('ghost', r, new Map(), true)).toBe(getConsistentTextColor('ghost', true))
   })
 })

@@ -139,8 +139,44 @@ export interface SecurityContext {
   fingerprint?: string
 }
 
+/**
+ * Outcome discriminant for a decrypt attempt. Stateless protocols (OpenPGP)
+ * only ever produce `ok` (or throw); stateful ratcheting protocols (OMEMO,
+ * MLS) need the richer set:
+ *
+ * - `ok`              — plaintext recovered; surface it to the user.
+ * - `control-message` — decrypt succeeded and advanced the session, but there
+ *                       is no user-visible content (a key-transport / empty
+ *                       ratchet-advance message). {@link DecryptResult.plaintext}
+ *                       is absent. The host consumes it silently — it must NOT
+ *                       synthesize a placeholder body.
+ * - `broken-session`  — the session is desynchronized (e.g. a ratchet step was
+ *                       missed); decrypt cannot succeed until the session is
+ *                       repaired. The host triggers {@link E2EEPlugin.repairSession}
+ *                       and surfaces a could-not-decrypt placeholder rather than
+ *                       stashing for a plain retry (a retry alone won't fix it).
+ * - `unverifiable`    — plaintext was recovered but the sender's identity could
+ *                       not be authenticated. {@link DecryptResult.securityContext}
+ *                       carries the (untrusted/rejected) trust; the host shows
+ *                       the content with the reduced trust state.
+ */
+export type DecryptStatus = 'ok' | 'control-message' | 'broken-session' | 'unverifiable'
+
 export interface DecryptResult {
-  plaintext: Uint8Array
+  /**
+   * Recovered plaintext bytes. Optional because ratcheting protocols emit
+   * control / key-transport messages that advance session state but carry no
+   * user-visible body — see {@link DecryptStatus} `control-message`. When
+   * `status` is `ok` (or omitted) this MUST be present; for `control-message`
+   * and `broken-session` it is absent.
+   */
+  plaintext?: Uint8Array
+  /**
+   * What kind of result this is. Omitted is equivalent to `'ok'` so existing
+   * stateless plugins (OpenPGP, the dummy plugin) need no change — they return
+   * `plaintext` and the host treats it as a normal decrypt.
+   */
+  status?: DecryptStatus
   senderDevice: DeviceIdentifier
   securityContext: SecurityContext
   /**
@@ -223,6 +259,27 @@ export interface InboundDecryptContext {
  * - `archive` — the stanza was retrieved via XEP-0313 MAM replay.
  */
 export type InboundSource = 'live' | 'archive'
+
+/**
+ * One archived message to decrypt as part of a batch — see
+ * {@link E2EEPlugin.decryptArchiveBatch}. Bundles the extracted payload with
+ * its optional per-message context (stanza id, archive timestamp) so a
+ * ratcheting plugin can decrypt a whole MAM page against frozen session state
+ * in a single call instead of re-deriving state once per message.
+ */
+export interface ArchiveDecryptItem {
+  payload: EncryptedPayload
+  context?: InboundDecryptContext
+}
+
+/**
+ * Admin-tunable, plugin-internal settings forwarded verbatim through
+ * {@link E2EEPlugin.configure}. The host does not interpret the contents —
+ * each plugin documents and validates its own keys (e.g. signed-prekey
+ * rotation cadence, stale-device policy, device-list refresh interval). Opaque
+ * by design so the host needs no knowledge of any protocol's options.
+ */
+export type PluginConfiguration = Record<string, unknown>
 
 /**
  * Notification a plugin emits after re-evaluating a previously-delivered
@@ -475,6 +532,48 @@ export interface E2EEPlugin {
     payload: EncryptedPayload,
     context?: InboundDecryptContext,
   ): Promise<DecryptResult>
+
+  /**
+   * Optional: decrypt a whole page of archived messages in one call.
+   *
+   * MAM catch-up replays many messages at once. Calling
+   * {@link E2EEPlugin.decryptArchive} once per message forces a ratcheting
+   * plugin to load and re-freeze its session state on every message; a batch
+   * lets it freeze once and walk the page. The returned array MUST be aligned
+   * to `items` by index — element `i` is the result for `items[i]`. A plugin
+   * that cannot decrypt a particular item should still occupy its slot (e.g.
+   * with a `broken-session` / `unverifiable` {@link DecryptResult}) rather than
+   * shifting later results.
+   *
+   * Plugins without batch needs omit this — the host falls back to looping
+   * {@link E2EEPlugin.decryptArchive} (then {@link E2EEPlugin.decrypt}), which
+   * is semantically identical for stateless protocols.
+   */
+  decryptArchiveBatch?(handle: ConversationHandle, items: ArchiveDecryptItem[]): Promise<DecryptResult[]>
+
+  /**
+   * Optional: rebuild a desynchronized session with `peer`.
+   *
+   * Ratcheting protocols can lose session sync (a dropped message, a device
+   * reset, key material that no longer lines up). When {@link E2EEPlugin.decrypt}
+   * reports {@link DecryptStatus} `broken-session`, the host calls this to let
+   * the plugin re-handshake — typically by discarding the broken session and
+   * sending an empty/key-transport message to re-establish the ratchet. The
+   * call should be idempotent and safe to invoke repeatedly. Stateless
+   * protocols (OpenPGP) have no session to repair and omit this.
+   */
+  repairSession?(handle: ConversationHandle, peer: BareJID): Promise<void>
+
+  /**
+   * Optional: apply admin-tunable, plugin-internal settings.
+   *
+   * The host forwards {@link PluginConfiguration} verbatim without interpreting
+   * it (e.g. signed-prekey rotation cadence, stale-device ignoring,
+   * device-list refresh policy). Plugins validate their own keys and ignore
+   * unknown ones. Safe to call more than once; later calls supersede earlier
+   * ones. Plugins with no tunables omit this.
+   */
+  configure?(options: PluginConfiguration): Promise<void>
 
   /** List verification methods this protocol supports (may be empty). */
   getVerificationMethods(): VerificationMethod[]

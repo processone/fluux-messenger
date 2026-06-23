@@ -34,15 +34,22 @@
 //! older install — stay on the classic Iterated+Salted S2K + CFB path.
 //! Argon2 is only defined for v6 per RFC 9580 §3.7.
 //!
-//! ## Keychain unavailable — filesystem fallback
+//! ## Keychain unavailable — filesystem fallback (platform-dependent)
 //!
-//! When the keychain is genuinely unreachable — Linux box with no secret
-//! service running, an intentionally locked macOS login keychain, or a
-//! corrupted credential store — we fall through to writing the base64
-//! passphrase into a 0600-permissioned file next to the key file. This is
-//! the design-documented fallback ("Keychain not enabled/working ...
-//! fallback to the web approach"). Callers learn which path was taken via
-//! [`PassphraseBacking`] so the UI can nudge the user in a future slice.
+//! On platforms WITHOUT a guaranteed OS keychain — a Linux box with no
+//! secret service running, or a corrupted credential store — we fall through
+//! to writing the base64 passphrase into a 0600-permissioned file next to the
+//! key file ("Keychain not enabled/working ... fallback to the web
+//! approach"). Callers learn which path was taken via [`PassphraseBacking`]
+//! so the UI can warn the user that the key is not protected at rest.
+//!
+//! On **macOS** a keychain always exists, so this cleartext fallback is
+//! DISABLED: a keychain failure (including an intentionally locked login
+//! keychain) is surfaced as a hard error rather than silently downgrading to
+//! a colocated cleartext passphrase, which would defeat at-rest protection.
+//! Symmetrically, on a keychain *error* (as opposed to a genuine "no entry")
+//! we only fall through to `.pass` where that fallback is allowed; on macOS
+//! the error propagates so we never trust a possibly-stale cleartext file.
 //!
 //! ## Concurrency
 //!
@@ -59,7 +66,7 @@ use sequoia_openpgp::{
     packet::{key, Key, Packet},
     parse::Parse,
     serialize::SerializeInto,
-    types::{AEADAlgorithm, SymmetricAlgorithm},
+    types::{AEADAlgorithm, HashAlgorithm, SymmetricAlgorithm},
 };
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -83,7 +90,10 @@ pub enum PassphraseBacking {
     /// Passphrase lives in the OS keychain. Preferred path.
     Keychain,
     /// Passphrase lives in `<app_data>/openpgp/<jid>.pass` on disk,
-    /// 0600 on Unix. Used when the keychain call failed.
+    /// 0600 on Unix. Used on platforms without a guaranteed OS keychain
+    /// (e.g. Linux without a secret service). The key is NOT protected at
+    /// rest in this mode — the UI warns the user. Never reached on macOS,
+    /// where the cleartext fallback is disabled.
     FilesystemFallback,
 }
 
@@ -104,6 +114,24 @@ pub struct KeyStorage {
     /// passphrase file. Intended for unit tests: unit tests on macOS would
     /// otherwise pop a keychain authorization dialog.
     use_keychain: bool,
+    /// Whether the cleartext `.pass` filesystem fallback may be written/read.
+    /// `true` on platforms without a guaranteed OS keychain (Linux without a
+    /// secret service) and for the test harness. `false` on macOS, where a
+    /// keychain always exists: colocating a cleartext passphrase next to the
+    /// encrypted key would silently defeat at-rest protection, so a keychain
+    /// failure is surfaced as a hard error instead of a cleartext downgrade.
+    allow_file_fallback: bool,
+    /// Test seam: force the keychain read to return an error (a transient
+    /// gnome-keyring/KWallet/D-Bus failure) so the fall-through behaviour can
+    /// be exercised without touching the real OS keychain.
+    #[cfg(test)]
+    simulate_keychain_error: bool,
+    /// Argon2id cost override for the v6 at-rest KDF. `None` (production)
+    /// uses the RFC 9106 §4 second-option policy with a serial fallback;
+    /// `Some(_)` forces exactly those parameters. Set only by the test
+    /// constructors, which choose deliberately cheap costs so the suite
+    /// isn't dominated by a memory-hard KDF unrelated to what's under test.
+    argon2_override: Option<Argon2Params>,
 }
 
 impl KeyStorage {
@@ -113,17 +141,75 @@ impl KeyStorage {
         Self {
             base_dir,
             use_keychain: true,
+            // macOS always has a keychain, so refuse the cleartext fallback
+            // there. Other desktops (Linux without a secret service) keep it.
+            allow_file_fallback: !cfg!(target_os = "macos"),
+            #[cfg(test)]
+            simulate_keychain_error: false,
+            argon2_override: None,
         }
     }
 
     /// Test-only constructor that skips the keychain (CI would otherwise
     /// fail on machines without a configured keychain, and developer
-    /// machines would pop up a macOS authorization dialog).
+    /// machines would pop up a macOS authorization dialog). Also forces the
+    /// cheap Argon2 cost so the ~200 crypto unit tests aren't dominated by a
+    /// memory-hard KDF; production cost is covered by the two tests that use
+    /// [`for_testing_production_kdf`].
     #[cfg(test)]
     pub fn for_testing(base_dir: PathBuf) -> Self {
         Self {
             base_dir,
             use_keychain: false,
+            allow_file_fallback: true,
+            simulate_keychain_error: false,
+            argon2_override: Some(Argon2Params::CHEAP_FOR_TESTS),
+        }
+    }
+
+    /// Test-only constructor that disables BOTH the keychain and the
+    /// cleartext `.pass` fallback — i.e. the macOS production posture, where
+    /// there is nowhere to put a passphrase if the keychain is unavailable.
+    /// Lets the security property ("never write cleartext when fallback is
+    /// disallowed") be unit-tested on any platform.
+    #[cfg(test)]
+    pub fn for_testing_no_fallback(base_dir: PathBuf) -> Self {
+        Self {
+            base_dir,
+            use_keychain: false,
+            allow_file_fallback: false,
+            simulate_keychain_error: false,
+            argon2_override: Some(Argon2Params::CHEAP_FOR_TESTS),
+        }
+    }
+
+    /// Test-only constructor that simulates a keychain that ERRORS (locked /
+    /// access-denied / D-Bus hiccup) rather than being absent. `keep_fallback`
+    /// chooses the platform posture: `true` = Linux (cleartext `.pass`
+    /// allowed, so a keychain error must fall through to it); `false` = macOS
+    /// (fallback disallowed, so a keychain error must propagate).
+    #[cfg(test)]
+    pub fn for_testing_keychain_error(base_dir: PathBuf, keep_fallback: bool) -> Self {
+        Self {
+            base_dir,
+            use_keychain: true,
+            allow_file_fallback: keep_fallback,
+            simulate_keychain_error: true,
+            argon2_override: Some(Argon2Params::CHEAP_FOR_TESTS),
+        }
+    }
+
+    /// Test-only constructor with the **production** Argon2 cost (no cheap
+    /// override) but still keychain-free. Used only by the tests that assert
+    /// the real RFC 9106 §4 parameters reach disk.
+    #[cfg(test)]
+    pub fn for_testing_production_kdf(base_dir: PathBuf) -> Self {
+        Self {
+            base_dir,
+            use_keychain: false,
+            allow_file_fallback: true,
+            simulate_keychain_error: false,
+            argon2_override: None,
         }
     }
 
@@ -150,7 +236,16 @@ impl KeyStorage {
         if !key_path.exists() {
             return Ok(None);
         }
-        let (passphrase, backing) = self.read_passphrase(jid)?;
+        // A key file exists, so the passphrase store must yield a value.
+        // `read_passphrase` returns `Ok(None)` only when nothing is stored —
+        // with a key present on disk that's a genuine corruption (the
+        // passphrase was wiped behind our back), which we surface loudly.
+        let (passphrase, backing) = self.read_passphrase(jid)?.ok_or_else(|| {
+            anyhow!(
+                "passphrase for account '{jid}' is not in the keychain or on disk — \
+                 key material cannot be decrypted"
+            )
+        })?;
         let armored =
             fs::read(&key_path).with_context(|| format!("read {}", key_path.display()))?;
         let encrypted_cert = Cert::from_bytes(&armored)
@@ -161,14 +256,33 @@ impl KeyStorage {
         Ok(Some(PersistedKey { cert, backing }))
     }
 
-    /// Persist `cert` for `jid`. Generates a random passphrase, stores it
-    /// (keychain preferred, file fallback), and writes the encrypted TSK
-    /// to disk. Any previously-stored key for the same JID is overwritten.
+    /// Persist `cert` for `jid`. Reuses the account's existing passphrase
+    /// when one is already stored (keychain preferred, file fallback);
+    /// otherwise mints and stores a fresh random one. Then writes the
+    /// encrypted TSK to disk, overwriting any previous key for the same JID.
+    ///
+    /// Reusing the passphrase on re-saves is what keeps the keychain and the
+    /// on-disk TSK from desyncing: a re-save never rotates the passphrase, so
+    /// a failure while writing the new TSK leaves the prior (passphrase, key)
+    /// pair intact and still decryptable.
     pub fn save(&self, jid: &str, cert: &Cert) -> Result<PassphraseBacking> {
-        let passphrase = random_passphrase()?;
-        let backing = self.write_passphrase(jid, &passphrase)?;
+        // Reuse the existing passphrase when one is already stored. A re-save
+        // (subkey rotation, re-encryption, restore) then never touches the
+        // passphrase store, so a failure while writing the new TSK can't
+        // desync the keychain from the on-disk key — the prior passphrase
+        // still decrypts whatever TSK is on disk. Only a brand-new key mints
+        // and persists a fresh passphrase; a failure there strands nothing,
+        // because there is no prior key to lose.
+        let (passphrase, backing) = match self.read_passphrase(jid)? {
+            Some((existing, backing)) => (existing, backing),
+            None => {
+                let minted = random_passphrase()?;
+                let backing = self.write_passphrase(jid, &minted)?;
+                (minted, backing)
+            }
+        };
         let password = Password::from(passphrase);
-        let encrypted = encrypt_cert_secrets(cert.clone(), &password)?;
+        let encrypted = encrypt_cert_secrets(cert.clone(), &password, self.argon2_override)?;
         let armored = encrypted
             .as_tsk()
             .armored()
@@ -222,34 +336,74 @@ impl KeyStorage {
 
     // -- passphrase plumbing --
 
+    /// Read the keychain entry for `jid`, distinguishing a genuine `NoEntry`
+    /// (`Ok(None)`) from a real keychain failure (`Err`). The test seam lets
+    /// the error path be exercised without touching the real OS keychain.
+    fn read_keychain(&self, jid: &str) -> Result<Option<Vec<u8>>> {
+        #[cfg(test)]
+        if self.simulate_keychain_error {
+            return Err(anyhow!("simulated keychain failure"));
+        }
+        read_keychain_passphrase(jid)
+    }
+
     /// Read the per-account passphrase. Tries the keychain first; falls
-    /// through to the on-disk `.pass` file. Errors if neither has a value
-    /// but a key file exists — that combination means the passphrase was
-    /// wiped behind our back and we can't recover the key.
-    fn read_passphrase(&self, jid: &str) -> Result<(Vec<u8>, PassphraseBacking)> {
+    /// through to the on-disk `.pass` file where that fallback is allowed.
+    ///
+    /// Returns `Ok(None)` when no passphrase is stored anywhere — the caller
+    /// decides what that means (fresh account on `save`, corruption on
+    /// `load`). Returns `Err` for a genuine keychain *failure* (locked,
+    /// access denied, ambiguous): a real error must NOT be silently treated
+    /// as "no passphrase" and papered over with the on-disk fallback, since
+    /// that fallback may hold a stale value for a different key.
+    fn read_passphrase(&self, jid: &str) -> Result<Option<(Vec<u8>, PassphraseBacking)>> {
         if self.use_keychain {
-            if let Some(bytes) = read_keychain_passphrase(jid) {
-                return Ok((bytes, PassphraseBacking::Keychain));
+            match self.read_keychain(jid) {
+                Ok(Some(bytes)) => {
+                    return Ok(Some((bytes, PassphraseBacking::Keychain)))
+                }
+                // Genuinely no keychain entry — fall through to the file
+                // fallback where allowed.
+                Ok(None) => {}
+                Err(e) => {
+                    // A real keychain error (locked / access-denied / D-Bus
+                    // hiccup). Where there is NO cleartext fallback (macOS),
+                    // this is fatal — we must not silently trust a stale
+                    // `.pass`. But where the fallback is the legitimate store
+                    // (Linux without a secret service), a transient keychain
+                    // error must NOT brick a user whose passphrase is validly
+                    // on disk: fall through to the `.pass` file instead of
+                    // hard-failing. `write_passphrase` scrubs `.pass` on every
+                    // successful keychain write, so a surviving `.pass` only
+                    // exists when the keychain has never worked — in which
+                    // case it is the correct source.
+                    if !self.allow_file_fallback {
+                        return Err(e);
+                    }
+                }
             }
+        }
+        if !self.allow_file_fallback {
+            return Ok(None);
         }
         let path = self.passphrase_fallback_path(jid)?;
         if !path.exists() {
-            return Err(anyhow!(
-                "passphrase for account '{jid}' is not in the keychain or on disk — \
-                 key material cannot be decrypted"
-            ));
+            return Ok(None);
         }
         let encoded = fs::read_to_string(&path)
             .with_context(|| format!("read fallback passphrase {}", path.display()))?;
         let bytes = B64
             .decode(encoded.trim())
             .context("fallback passphrase file is not valid base64")?;
-        Ok((bytes, PassphraseBacking::FilesystemFallback))
+        Ok(Some((bytes, PassphraseBacking::FilesystemFallback)))
     }
 
-    /// Write the passphrase — try keychain, fall through to file on any
-    /// keychain error. On successful keychain write we scrub any stale
-    /// on-disk fallback so there's a single source of truth.
+    /// Write the passphrase — try keychain, fall through to the cleartext
+    /// `.pass` file only where that fallback is allowed. On successful
+    /// keychain write we scrub any stale on-disk fallback so there's a single
+    /// source of truth. When the keychain is unavailable AND the file
+    /// fallback is disallowed (macOS), we surface a hard error rather than
+    /// writing the passphrase next to the key in cleartext.
     fn write_passphrase(&self, jid: &str, passphrase: &[u8]) -> Result<PassphraseBacking> {
         if self.use_keychain && write_keychain_passphrase(jid, passphrase) {
             // Clear a stale fallback file so a future `read_passphrase`
@@ -259,6 +413,13 @@ impl KeyStorage {
                 let _ = fs::remove_file(path);
             }
             return Ok(PassphraseBacking::Keychain);
+        }
+        if !self.allow_file_fallback {
+            return Err(anyhow!(
+                "failed to store the passphrase for account '{jid}' in the OS keychain, \
+                 and the cleartext filesystem fallback is disabled on this platform — \
+                 refusing to write key-protecting material to disk in cleartext"
+            ));
         }
         let path = self.passphrase_fallback_path(jid)?;
         let encoded = B64.encode(passphrase);
@@ -291,14 +452,23 @@ fn keyring_account(jid: &str) -> String {
 }
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-fn read_keychain_passphrase(jid: &str) -> Option<Vec<u8>> {
-    let entry = Entry::new(KEYRING_SERVICE, &keyring_account(jid)).ok()?;
+fn read_keychain_passphrase(jid: &str) -> Result<Option<Vec<u8>>> {
+    let entry = Entry::new(KEYRING_SERVICE, &keyring_account(jid))
+        .context("open keychain entry for passphrase")?;
     let encoded = match entry.get_password() {
         Ok(s) => s,
-        Err(keyring::Error::NoEntry) => return None,
-        Err(_) => return None,
+        // Genuinely absent — a legitimate "no passphrase stored" signal.
+        Err(keyring::Error::NoEntry) => return Ok(None),
+        // A real keychain failure (locked, access denied, ambiguous item).
+        // Surface it: silently mapping this to "absent" would let the
+        // caller fall back to a possibly-stale cleartext file and decrypt
+        // the key with the wrong passphrase (the "unexpected EOF" bug).
+        Err(e) => return Err(anyhow!("read keychain passphrase for '{jid}': {e}")),
     };
-    B64.decode(encoded.trim()).ok()
+    let bytes = B64
+        .decode(encoded.trim())
+        .context("keychain passphrase is not valid base64")?;
+    Ok(Some(bytes))
 }
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -323,8 +493,8 @@ fn delete_keychain_entry(jid: &str) {
 // the module still compiles (even though mobile isn't a Tauri target
 // today — safety against drift).
 #[cfg(any(target_os = "android", target_os = "ios"))]
-fn read_keychain_passphrase(_: &str) -> Option<Vec<u8>> {
-    None
+fn read_keychain_passphrase(_: &str) -> Result<Option<Vec<u8>>> {
+    Ok(None)
 }
 #[cfg(any(target_os = "android", target_os = "ios"))]
 fn write_keychain_passphrase(_: &str, _: &[u8]) -> bool {
@@ -367,6 +537,14 @@ impl Argon2Params {
     /// Serial fallback: if `p > 1` isn't accepted by the runtime, drop
     /// to `p = 1` and bump `t` so the defender does comparable work.
     pub const SERIAL_FALLBACK: Argon2Params = Argon2Params { t: 4, p: 1, m: 16 };
+
+    /// Deliberately minimal cost for unit tests only: `m = 2^10 KiB = 1 MiB`,
+    /// `t = 1`, `p = 1`. Still exercises the full Argon2id S2K + AES-256-OCB
+    /// wrap/unwrap round-trip, but ~200× cheaper than the production cost, so
+    /// the OpenPGP suite isn't bottlenecked on a memory-hard KDF. Never used
+    /// outside `#[cfg(test)]`.
+    #[cfg(test)]
+    pub const CHEAP_FOR_TESTS: Argon2Params = Argon2Params { t: 1, p: 1, m: 10 };
 }
 
 /// Records which Argon2 variant actually produced usable ciphertext the
@@ -422,15 +600,27 @@ fn make_argon2_s2k(params: Argon2Params) -> Result<S2K> {
 /// [`sequoia_openpgp::Profile::RFC9580`], but may still be loaded once
 /// from a pre-v6 install — fall back to the default Iterated+Salted S2K
 /// + CFB path. Argon2 S2K is not valid on v4 keys.
-fn encrypt_cert_secrets(cert: Cert, password: &Password) -> Result<Cert> {
+fn encrypt_cert_secrets(
+    cert: Cert,
+    password: &Password,
+    override_params: Option<Argon2Params>,
+) -> Result<Cert> {
     let mut packets: Vec<Packet> = Vec::new();
     for packet in cert.into_tsk().into_packets() {
         match packet {
             Packet::SecretKey(key) => {
-                packets.push(Packet::SecretKey(encrypt_key_secret(key, password)?));
+                packets.push(Packet::SecretKey(encrypt_key_secret(
+                    key,
+                    password,
+                    override_params,
+                )?));
             }
             Packet::SecretSubkey(key) => {
-                packets.push(Packet::SecretSubkey(encrypt_key_secret(key, password)?));
+                packets.push(Packet::SecretSubkey(encrypt_key_secret(
+                    key,
+                    password,
+                    override_params,
+                )?));
             }
             other => packets.push(other),
         }
@@ -443,12 +633,20 @@ fn encrypt_cert_secrets(cert: Cert, password: &Password) -> Result<Cert> {
 fn encrypt_key_secret<R>(
     key: Key<key::SecretParts, R>,
     password: &Password,
+    override_params: Option<Argon2Params>,
 ) -> Result<Key<key::SecretParts, R>>
 where
     R: key::KeyRole,
 {
     if key.version() >= 6 {
-        encrypt_v6_with_argon2(key, password)
+        encrypt_v6_with_argon2(key, password, override_params)
+    } else if override_params.is_some() {
+        // Test override: v4 keys take the classic Iterated+Salted S2K branch,
+        // whose sequoia default is the maximum OpenPGP iteration count
+        // (~65 MiB of SHA-256), run per packet on every save and load.
+        // Substitute a minimal count so the suite isn't dominated by the
+        // at-rest KDF. Production v4 keeps the default below.
+        encrypt_v4_with_cheap_s2k(key, password)
     } else {
         // RFC 9580 §3.7 restricts Argon2 to v6. Keep classic S2K for any
         // lingering v4 key — we don't generate v4 keys any more, but a
@@ -456,6 +654,27 @@ where
         key.encrypt_secret(password)
             .context("encrypt v4 secret key with default S2K")
     }
+}
+
+/// Test-only fast path for v4 secret packets. Mirrors the classic CFB +
+/// Iterated S2K protection that sequoia's default `encrypt_secret` produces,
+/// but with the minimal iteration count (the default is the maximum the
+/// format allows). Only reached when a [`KeyStorage`] carries an Argon2
+/// override — i.e. from the test constructors.
+fn encrypt_v4_with_cheap_s2k<R>(
+    key: Key<key::SecretParts, R>,
+    password: &Password,
+) -> Result<Key<key::SecretParts, R>>
+where
+    R: key::KeyRole,
+{
+    let s2k = S2K::new_iterated(HashAlgorithm::SHA256, 1024).context("build cheap test S2K")?;
+    let (pub_key, mut secret) = key.take_secret();
+    secret
+        .encrypt_in_place_with(&pub_key, s2k, SymmetricAlgorithm::AES256, None, password)
+        .context("encrypt v4 secret with cheap test S2K")?;
+    let (out, _) = pub_key.add_secret(secret);
+    Ok(out)
 }
 
 /// Try to wrap a v6 secret packet with Argon2id+OCB under our primary
@@ -466,10 +685,19 @@ where
 fn encrypt_v6_with_argon2<R>(
     key: Key<key::SecretParts, R>,
     password: &Password,
+    override_params: Option<Argon2Params>,
 ) -> Result<Key<key::SecretParts, R>>
 where
     R: key::KeyRole,
 {
+    // Test-only override: wrap with exactly the supplied (cheap) parameters,
+    // bypassing the production primary→fallback selection and its
+    // process-global variant recording (only meaningful for the real KDF
+    // policy). Production callers pass `None`.
+    if let Some(params) = override_params {
+        return attempt_argon2_encrypt(key, password, params);
+    }
+
     let primary_err =
         match attempt_argon2_encrypt(key.clone(), password, Argon2Params::RFC9106_SECOND_OPTION) {
             Ok(out) => {
@@ -734,6 +962,176 @@ mod tests {
     }
 
     #[test]
+    fn resave_reuses_existing_passphrase() {
+        // A re-save (subkey rotation / re-encryption) must NOT rotate the
+        // stored passphrase. The data-loss bug was: save() minted a fresh
+        // passphrase, committed it to the keychain, then failed before the
+        // new TSK landed — leaving the keychain holding a passphrase for a
+        // TSK that never existed, so the prior key on disk could never be
+        // decrypted again. Reusing the existing passphrase makes a failed
+        // re-save a no-op for the passphrase store, so the prior key stays
+        // decryptable.
+        let dir = fresh_tmp_dir();
+        let storage = KeyStorage::for_testing(dir.clone());
+        let cert = generate_cert("alice@example.com");
+        storage.save("alice@example.com", &cert).unwrap();
+
+        let pass_path = storage
+            .passphrase_fallback_path("alice@example.com")
+            .unwrap();
+        let pass_before = fs::read(&pass_path).unwrap();
+
+        // Re-save the same identity (simulates rotate / re-encrypt).
+        let rotated = generate_cert("alice@example.com");
+        storage.save("alice@example.com", &rotated).unwrap();
+
+        let pass_after = fs::read(&pass_path).unwrap();
+        assert_eq!(
+            pass_before, pass_after,
+            "re-save must reuse the existing passphrase, not rotate it"
+        );
+
+        // The re-saved cert must still decrypt under the reused passphrase.
+        let loaded = storage.load("alice@example.com").unwrap().unwrap();
+        assert_eq!(
+            loaded.cert.fingerprint().to_hex(),
+            rotated.fingerprint().to_hex()
+        );
+    }
+
+    #[test]
+    fn failed_resave_keeps_prior_key_decryptable() {
+        // The core regression guard against losing the passphrase. If a
+        // re-save fails partway (here the TSK write is sabotaged), the
+        // PREVIOUSLY saved key must remain fully decryptable. The original
+        // bug minted + committed a fresh passphrase BEFORE writing the TSK,
+        // so a failed write left the keychain holding a passphrase for a key
+        // that never landed and overwrote the only copy of the prior one —
+        // permanently bricking the on-disk key. Reusing the existing
+        // passphrase makes a failed re-save a no-op for the passphrase store,
+        // so the prior (passphrase, key) pair survives intact.
+        let dir = fresh_tmp_dir();
+        let storage = KeyStorage::for_testing(dir.clone());
+        let original = generate_cert("alice@example.com");
+        let original_fp = original.fingerprint().to_hex();
+        storage.save("alice@example.com", &original).unwrap();
+
+        // Capture the passphrase store as it stands after the good save.
+        let pass_path = storage
+            .passphrase_fallback_path("alice@example.com")
+            .unwrap();
+        let pass_before = fs::read(&pass_path).unwrap();
+
+        // Sabotage the next TSK write: `atomic_write` writes "<path>.tmp"
+        // first, so making that path a directory forces the write to fail
+        // before the real key file is ever touched.
+        let key_path = storage.key_file_path("alice@example.com").unwrap();
+        let mut tmp = key_path.as_os_str().to_os_string();
+        tmp.push(".tmp");
+        let tmp = PathBuf::from(tmp);
+        fs::create_dir(&tmp).unwrap();
+
+        // Attempt a re-save (e.g. a subkey rotation) — it must fail.
+        let rotated = generate_cert("alice@example.com");
+        let result = storage.save("alice@example.com", &rotated);
+        assert!(result.is_err(), "the sabotaged re-save must fail");
+
+        // Remove the saboteur so it can't interfere with the load below.
+        fs::remove_dir(&tmp).unwrap();
+
+        // The passphrase store must be byte-for-byte unchanged: a failed
+        // re-save may not have rotated or scrubbed the working passphrase.
+        let pass_after = fs::read(&pass_path).unwrap();
+        assert_eq!(
+            pass_before, pass_after,
+            "a failed re-save must not touch the passphrase store"
+        );
+
+        // And the ORIGINAL key must still load and decrypt.
+        let loaded = storage
+            .load("alice@example.com")
+            .expect("load must succeed after a failed re-save")
+            .expect("the original key must still be present");
+        assert_eq!(
+            loaded.cert.fingerprint().to_hex(),
+            original_fp,
+            "the prior key must remain decryptable after a failed re-save"
+        );
+    }
+
+    #[test]
+    fn linux_keychain_error_falls_through_to_pass_file() {
+        // Regression guard (audit H2): on Linux without a secret service the
+        // passphrase lives in `.pass`. A *transient* keychain error (locked
+        // gnome-keyring/KWallet, D-Bus hiccup) must NOT brick a recoverable
+        // key — `read_passphrase` must fall through to the valid `.pass` file
+        // rather than propagating the error.
+        let dir = fresh_tmp_dir();
+        // Set up a key whose passphrase is in `.pass` (keychain-free harness).
+        let setup = KeyStorage::for_testing(dir.clone());
+        let cert = generate_cert("alice@example.com");
+        let fp = cert.fingerprint().to_hex();
+        setup.save("alice@example.com", &cert).unwrap();
+
+        // Now read with a keychain-enabled storage whose keychain ERRORS,
+        // but with the cleartext fallback allowed (Linux posture).
+        let linux = KeyStorage::for_testing_keychain_error(dir.clone(), true);
+        let loaded = linux
+            .load("alice@example.com")
+            .expect("a transient keychain error must fall through to .pass")
+            .expect("the key must still be present");
+        assert_eq!(loaded.cert.fingerprint().to_hex(), fp);
+        assert_eq!(loaded.backing, PassphraseBacking::FilesystemFallback);
+    }
+
+    #[test]
+    fn macos_keychain_error_does_not_fall_through_to_cleartext() {
+        // The flip side of H2: where the cleartext fallback is disallowed
+        // (macOS), a keychain error must PROPAGATE — never silently trust a
+        // possibly-stale `.pass` file. Even with a `.pass` present on disk,
+        // the load must fail loudly.
+        let dir = fresh_tmp_dir();
+        let setup = KeyStorage::for_testing(dir.clone());
+        let cert = generate_cert("alice@example.com");
+        setup.save("alice@example.com", &cert).unwrap();
+
+        let macos = KeyStorage::for_testing_keychain_error(dir.clone(), false);
+        macos
+            .load("alice@example.com")
+            .expect_err("a keychain error must propagate when fallback is disallowed");
+    }
+
+    #[test]
+    fn save_refuses_cleartext_fallback_when_disallowed() {
+        // Security: where the cleartext `.pass` fallback is disabled (macOS,
+        // where a keychain always exists), a save that cannot reach the
+        // keychain must ERROR rather than write the passphrase to a file
+        // next to the encrypted key — colocated cleartext defeats at-rest
+        // protection.
+        let dir = fresh_tmp_dir();
+        let storage = KeyStorage::for_testing_no_fallback(dir.clone());
+        let cert = generate_cert("alice@example.com");
+
+        let err = storage
+            .save("alice@example.com", &cert)
+            .expect_err("save must refuse to write a cleartext passphrase fallback");
+        let msg = format!("{err:#}");
+        assert!(
+            msg.contains("cleartext") || msg.contains("keychain"),
+            "expected a keychain/cleartext refusal error, got: {msg}"
+        );
+
+        // Crucially, no `.pass` file may have been written.
+        let pass_path = storage
+            .passphrase_fallback_path("alice@example.com")
+            .unwrap();
+        assert!(
+            !pass_path.exists(),
+            "no cleartext .pass file may be written when fallback is disallowed"
+        );
+    }
+
+    #[test]
     fn missing_passphrase_with_present_key_errors() {
         // Simulates a corruption scenario where the `.pass` file was
         // deleted but the `.tsk.asc` file remains. Must surface loudly.
@@ -911,7 +1309,7 @@ mod tests {
     #[test]
     fn persisted_tsk_uses_argon2id_with_rfc9106_second_option() {
         let dir = fresh_tmp_dir();
-        let storage = KeyStorage::for_testing(dir.clone());
+        let storage = KeyStorage::for_testing_production_kdf(dir.clone());
         let cert = generate_cert("alice@example.com");
         storage.save("alice@example.com", &cert).unwrap();
 
@@ -949,6 +1347,76 @@ mod tests {
                 SymmetricAlgorithm::AES256,
                 "symmetric cipher must be AES-256"
             );
+        }
+    }
+
+    /// The fast path that keeps the ~200 OpenPGP unit tests cheap:
+    /// `KeyStorage::for_testing()` must wrap secret packets with the
+    /// minimal Argon2 cost parameters, NOT the 64 MiB RFC 9106 production
+    /// cost. Without this, every save/load runs a memory-hard KDF that has
+    /// nothing to do with the behaviour under test, costing tens of seconds
+    /// per test. Production cost is asserted separately by
+    /// `persisted_tsk_uses_argon2id_with_rfc9106_second_option`.
+    #[test]
+    fn for_testing_storage_uses_cheap_argon2_params() {
+        let dir = fresh_tmp_dir();
+        let storage = KeyStorage::for_testing(dir.clone());
+        let cert = generate_cert("alice@example.com");
+        storage.save("alice@example.com", &cert).unwrap();
+
+        let tsk_path = dir
+            .join("openpgp")
+            .join(format!("{}.tsk.asc", sanitize_jid("alice@example.com")));
+        let parts = inspect_on_disk_s2k(&tsk_path);
+        assert!(
+            !parts.is_empty(),
+            "expected at least one encrypted secret packet"
+        );
+        for (s2k, _aead, _symm) in parts {
+            match s2k {
+                S2K::Argon2 { t, p, m, .. } => {
+                    assert_eq!(
+                        (t, p, m),
+                        (1, 1, 10),
+                        "for_testing must use cheap Argon2 (m=2^10 KiB = 1 MiB, t=1, p=1)"
+                    );
+                }
+                other => panic!("expected Argon2 S2K on v6 secret, got {other:?}"),
+            }
+        }
+    }
+
+    /// The same fast path for v4 keys: with `USE_V6_KEYS = false` the openpgp
+    /// tests generate v4 certs, which take the classic Iterated+Salted S2K
+    /// branch (not Argon2). Sequoia's default there is the *maximum* OpenPGP
+    /// iteration count (~65 MiB of SHA-256 per packet), so `for_testing` must
+    /// substitute a minimal count or the v4 save/load tests dominate the suite.
+    #[test]
+    fn for_testing_storage_uses_cheap_classic_s2k_for_v4() {
+        let dir = fresh_tmp_dir();
+        let storage = KeyStorage::for_testing(dir.clone());
+        let cert = generate_v4_cert("legacy@example.com");
+        storage.save("legacy@example.com", &cert).unwrap();
+
+        let tsk_path = dir
+            .join("openpgp")
+            .join(format!("{}.tsk.asc", sanitize_jid("legacy@example.com")));
+        let parts = inspect_on_disk_s2k(&tsk_path);
+        assert!(
+            !parts.is_empty(),
+            "expected at least one encrypted secret packet"
+        );
+        for (s2k, _aead, _symm) in parts {
+            match s2k {
+                S2K::Iterated { hash_bytes, .. } => {
+                    assert!(
+                        hash_bytes <= 100_000,
+                        "for_testing v4 must use a cheap Iterated S2K; got hash_bytes={hash_bytes} \
+                         (sequoia's default is 0x3e00000 = 65_011_712)"
+                    );
+                }
+                other => panic!("expected Iterated S2K on v4 secret, got {other:?}"),
+            }
         }
     }
 
@@ -1043,7 +1511,7 @@ mod tests {
     #[test]
     fn argon2_variant_records_primary_choice_after_first_encrypt() {
         let dir = fresh_tmp_dir();
-        let storage = KeyStorage::for_testing(dir);
+        let storage = KeyStorage::for_testing_production_kdf(dir);
         let cert = generate_cert("alice@example.com");
         storage.save("alice@example.com", &cert).unwrap();
 

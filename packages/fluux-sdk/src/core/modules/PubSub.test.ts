@@ -198,6 +198,139 @@ describe('PubSub Module', () => {
     })
   })
 
+  describe('bookmarks (XEP-0402 live sync)', () => {
+    const bookmarkEvent = (from: string, itemsChildren: Array<Record<string, unknown>>) =>
+      createMockElement('message', { from, to: 'user@example.com' }, [
+        {
+          name: 'event',
+          attrs: { xmlns: 'http://jabber.org/protocol/pubsub#event' },
+          children: [
+            { name: 'items', attrs: { node: 'urn:xmpp:bookmarks:1' }, children: itemsChildren },
+          ],
+        },
+      ])
+
+    it('emits room:bookmark when our own account pushes a bookmark notification', async () => {
+      await connectClient()
+
+      mockXmppClientInstance._emit('stanza', bookmarkEvent('user@example.com', [
+        {
+          name: 'item',
+          attrs: { id: 'room@conference.example.com' },
+          children: [
+            {
+              name: 'conference',
+              attrs: { xmlns: 'urn:xmpp:bookmarks:1', name: 'My Room', autojoin: 'true' },
+              children: [{ name: 'nick', text: 'mynick' }],
+            },
+          ],
+        },
+      ]))
+
+      expect(emitSDKSpy).toHaveBeenCalledWith('room:bookmark', {
+        roomJid: 'room@conference.example.com',
+        bookmark: { name: 'My Room', nick: 'mynick', autojoin: true, password: undefined, notifyAll: false },
+      })
+    })
+
+    it('emits room:bookmark-removed on an incoming bookmark retraction', async () => {
+      await connectClient()
+
+      mockXmppClientInstance._emit('stanza', bookmarkEvent('user@example.com', [
+        { name: 'retract', attrs: { id: 'room@conference.example.com' } },
+      ]))
+
+      expect(emitSDKSpy).toHaveBeenCalledWith('room:bookmark-removed', { roomJid: 'room@conference.example.com' })
+    })
+
+    it('ignores a bookmark notification spoofed from another account', async () => {
+      await connectClient()
+
+      mockXmppClientInstance._emit('stanza', bookmarkEvent('attacker@evil.com', [
+        {
+          name: 'item',
+          attrs: { id: 'evil@conference.example.com' },
+          children: [{ name: 'conference', attrs: { xmlns: 'urn:xmpp:bookmarks:1', name: 'Evil' } }],
+        },
+      ]))
+
+      expect(emitSDKSpy).not.toHaveBeenCalledWith('room:bookmark', expect.anything())
+    })
+  })
+
+  describe('MDS incoming notify (XEP-0490)', () => {
+    const mdsEvent = (from: string, itemsChildren: Array<Record<string, unknown>>) =>
+      createMockElement('message', { from, to: 'user@example.com' }, [
+        {
+          name: 'event',
+          attrs: { xmlns: 'http://jabber.org/protocol/pubsub#event' },
+          children: [
+            { name: 'items', attrs: { node: 'urn:xmpp:mds:displayed:0' }, children: itemsChildren },
+          ],
+        },
+      ])
+
+    it('emits read:displayed-synced for own MDS node notifications', async () => {
+      await connectClient()
+
+      mockXmppClientInstance._emit('stanza', mdsEvent('user@example.com', [
+        {
+          name: 'item',
+          attrs: { id: 'juliet@capulet.example' },
+          children: [
+            {
+              name: 'displayed',
+              attrs: { xmlns: 'urn:xmpp:chat-markers:0', id: 'stanza-99' },
+            },
+          ],
+        },
+      ]))
+
+      expect(emitSDKSpy).toHaveBeenCalledWith('read:displayed-synced', {
+        conversationId: 'juliet@capulet.example',
+        stanzaId: 'stanza-99',
+      })
+    })
+
+    it('ignores MDS notifications that are not from our own bare JID', async () => {
+      await connectClient()
+
+      mockXmppClientInstance._emit('stanza', mdsEvent('attacker@evil.example', [
+        {
+          name: 'item',
+          attrs: { id: 'juliet@capulet.example' },
+          children: [
+            {
+              name: 'displayed',
+              attrs: { xmlns: 'urn:xmpp:chat-markers:0', id: 'stanza-99' },
+            },
+          ],
+        },
+      ]))
+
+      expect(emitSDKSpy).not.toHaveBeenCalledWith('read:displayed-synced', expect.anything())
+    })
+
+    it('returns true (handled) for MDS PubSub event messages', async () => {
+      await connectClient()
+
+      const result = xmppClient.pubsub.handle(mdsEvent('user@example.com', [
+        {
+          name: 'item',
+          attrs: { id: 'juliet@capulet.example' },
+          children: [
+            {
+              name: 'displayed',
+              attrs: { xmlns: 'urn:xmpp:chat-markers:0', id: 'stanza-99' },
+            },
+          ],
+        },
+      ]))
+
+      expect(result).toBe(true)
+    })
+  })
+
   describe('stanza handling', () => {
     it('should return true (handled) for PubSub event messages', async () => {
       await connectClient()

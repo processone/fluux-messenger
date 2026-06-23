@@ -8,6 +8,7 @@ import { X, Download, Loader2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { FileEncryption } from '@fluux/sdk'
 import { useAttachmentUrl } from '@/hooks'
+import { useCachedMediaUrl } from '@/hooks/useCachedMediaUrl'
 import { useContextMenu } from '@/hooks/useContextMenu'
 import { downloadFile } from '@/utils/download'
 import { ImageContextMenu } from './ImageContextMenu'
@@ -25,13 +26,16 @@ interface ImageLightboxProps {
   encryption?: FileEncryption
   /** Optional preview URL (e.g. already-proxied thumbnail) shown while the full-size image loads */
   placeholderSrc?: string
+  /** When false, never fetch the full-res image — show cached full-res or the placeholder only. */
+  allowFetch?: boolean
   /** Close handler */
   onClose: () => void
 }
 
-export function ImageLightbox({ src, alt, downloadUrl, filename, encryption, placeholderSrc, onClose }: ImageLightboxProps) {
+export function ImageLightbox({ src, alt, downloadUrl, filename, encryption, placeholderSrc, allowFetch = true, onClose }: ImageLightboxProps) {
   const { t } = useTranslation()
-  const { url: proxiedSrc, isLoading } = useAttachmentUrl(src, encryption)
+  const { url: proxiedSrc, isLoading } = useAttachmentUrl(src, encryption, allowFetch)
+  const { cachedUrl: cachedFullRes } = useCachedMediaUrl(src, encryption, !allowFetch)
   const imageMenu = useContextMenu()
 
   useEffect(() => {
@@ -42,7 +46,7 @@ export function ImageLightbox({ src, alt, downloadUrl, filename, encryption, pla
     return () => document.removeEventListener('keydown', handleKeyDown)
   }, [onClose])
 
-  const displaySrc = proxiedSrc ?? placeholderSrc
+  const displaySrc = proxiedSrc ?? cachedFullRes ?? placeholderSrc
 
   return createPortal(
     <div
@@ -61,7 +65,7 @@ export function ImageLightbox({ src, alt, downloadUrl, filename, encryption, pla
         <button
           type="button"
           onClick={() =>
-            void downloadFile(proxiedSrc ?? downloadUrl, filename || 'image', {
+            void downloadFile(proxiedSrc ?? cachedFullRes ?? downloadUrl, filename || 'image', {
               errorMessage: t('common.downloadFailed'),
             })
           }
@@ -101,7 +105,7 @@ export function ImageLightbox({ src, alt, downloadUrl, filename, encryption, pla
 
       <ImageContextMenu
         originalUrl={src}
-        proxiedUrl={proxiedSrc ?? downloadUrl}
+        proxiedUrl={proxiedSrc ?? cachedFullRes ?? downloadUrl}
         filename={filename}
         menu={imageMenu}
       />

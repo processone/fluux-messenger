@@ -44,6 +44,11 @@ vi.mock('@/hooks', () => ({
     dragRegionProps: { 'data-tauri-drag-region': true },
   }),
   useClickOutside: vi.fn(),
+  useAnchoredMenu: () => ({
+    triggerRef: { current: null },
+    menuRef: { current: null },
+    position: { x: 0, y: 0 },
+  }),
 }))
 
 // Mock Avatar component

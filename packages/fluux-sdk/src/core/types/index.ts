@@ -138,8 +138,10 @@ export type {
   AdminUser,
   AdminRoom,
   EntityListState,
-  EntityCounts,
   AdminCategory,
+  ServerStats,
+  LastActivityResult,
+  LastActivityEntry,
 } from './admin'
 
 // Client types

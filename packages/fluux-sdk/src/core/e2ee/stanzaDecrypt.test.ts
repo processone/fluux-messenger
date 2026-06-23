@@ -886,3 +886,123 @@ describe('decryptStanzaInPlace — failure logging routes through the manager lo
     expect(warn!.message).not.toContain('eve@')
   })
 })
+
+// ---------------------------------------------------------------------------
+// Ratcheting status: control-message (silent consume) + broken-session (repair)
+// ---------------------------------------------------------------------------
+
+/** Returns a `control-message` result: decrypt advanced the session but there
+ *  is no user-visible plaintext (a key-transport / ratchet-advance message). */
+class ControlMessagePlugin extends FakeE2EEPlugin {
+  constructor() {
+    super(undefined)
+  }
+  override async decrypt(): Promise<DecryptResult> {
+    return {
+      status: 'control-message',
+      senderDevice: { jid: 'peer@example.com', deviceId: 'dev' },
+      securityContext: { protocolId: TEST_PROTOCOL_ID, trust: 'tofu' },
+    }
+  }
+}
+
+/** Returns a `broken-session` result and records repairSession invocations. */
+class BrokenSessionPlugin extends FakeE2EEPlugin {
+  public repairCalls: { peer: string }[] = []
+  constructor() {
+    super(undefined)
+  }
+  override async decrypt(): Promise<DecryptResult> {
+    return {
+      status: 'broken-session',
+      senderDevice: { jid: 'peer@example.com', deviceId: 'dev' },
+      securityContext: { protocolId: TEST_PROTOCOL_ID, trust: 'untrusted', notes: ['ratchet gap'] },
+    }
+  }
+  async repairSession(_h: ConversationHandle, peer: string): Promise<void> {
+    this.repairCalls.push({ peer })
+  }
+}
+
+function bodilessStanza(): Element {
+  return xml(
+    'message',
+    { from: 'peer@example.com/resource', id: 'mc', type: 'chat' },
+    xml('enc', { xmlns: TEST_NAMESPACE }),
+  ) as Element
+}
+
+describe('stanzaDecrypt — control-message status', () => {
+  it('consumes a bodiless control message silently (no placeholder body)', async () => {
+    const manager = await makeManager(new ControlMessagePlugin())
+    const stanza = bodilessStanza()
+
+    const result = await decryptStanzaInPlace(stanza, manager, 'peer@example.com')
+
+    expect(result.attempted).toBe(true)
+    // No plaintext → no body is synthesized for a control message.
+    expect(stanza.getChild('body')).toBeUndefined()
+    // The encrypted child is still stripped so it isn't re-claimed.
+    expect(stanza.getChild('enc')).toBeUndefined()
+    // Not a failure → nothing stashed for deferred retry.
+    expect(result.encryptedPayloadXml).toBeUndefined()
+    expect(result.securityContext?.trust).toBe('tofu')
+  })
+
+  it('does not overwrite an existing fallback body with a placeholder', async () => {
+    const manager = await makeManager(new ControlMessagePlugin())
+    const stanza = buildStanza() // carries a '[Encrypted message]' hint body
+
+    await decryptStanzaInPlace(stanza, manager, 'peer@example.com')
+
+    // Control message leaves the sender hint as-is — it is neither replaced
+    // with plaintext nor with a could-not-decrypt placeholder.
+    expect(stanza.getChild('body')?.text()).toBe('[Encrypted message]')
+  })
+})
+
+describe('stanzaDecrypt — broken-session status', () => {
+  it('shows a could-not-decrypt placeholder and triggers session repair', async () => {
+    const plugin = new BrokenSessionPlugin()
+    const manager = await makeManager(plugin)
+    const stanza = buildStanza()
+
+    const result = await decryptStanzaInPlace(stanza, manager, 'peer@example.com')
+    // repairSession is fire-and-forget; let the microtask/selectStrategy settle.
+    await new Promise((r) => setTimeout(r, 0))
+
+    expect(result.attempted).toBe(true)
+    expect(stanza.getChild('body')?.text()).toBe(COULD_NOT_DECRYPT_BODY)
+    expect(result.securityContext?.trust).toBe('untrusted')
+    expect(result.securityContext?.notes?.[0]).toContain('session needs repair')
+    // Not stashed for a plain retry — repair is the recovery path.
+    expect(result.encryptedPayloadXml).toBeUndefined()
+    expect(plugin.repairCalls).toEqual([{ peer: 'peer@example.com' }])
+  })
+
+  it('does not stash a broken-session message for deferred retry', async () => {
+    const manager = await makeManager(new BrokenSessionPlugin())
+    const stanza = buildStanza()
+
+    await decryptStanzaInPlace(stanza, manager, 'peer@example.com')
+
+    expect(readStashedEncryptedPayload(stanza)).toBeUndefined()
+  })
+
+  it('logs the broken-session disposition (not retryable, not rejected)', async () => {
+    const { logger, calls } = makeSpyLogger()
+    const manager = new E2EEManager({
+      storage: new InMemoryStorageBackend(),
+      xmpp: stubXmppPrimitives(),
+      account: { jid: 'me@example.com' },
+      logger,
+    })
+    await manager.register(new BrokenSessionPlugin())
+    const stanza = buildStanza()
+
+    await decryptStanzaInPlace(stanza, manager, 'peer@example.com')
+
+    const warn = calls.find((c) => c.level === 'warn' && c.message.includes('decrypt failed'))
+    expect(warn?.message).toContain('broken session')
+  })
+})

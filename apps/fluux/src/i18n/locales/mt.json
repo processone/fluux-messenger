@@ -40,7 +40,21 @@
         "hidePassword": "Aħbi password",
         "madeBy": "Magħmul minn",
         "ejabberdCreator": ", il-kumpanija wara",
-        "poweredBy": "Ipprovdut minn"
+        "poweredBy": "Ipprovdut minn",
+        "errors": {
+            "tlsCertTitle": "Ma setax jiġi vverifikat iċ-ċertifikat tas-sigurtà tal-server",
+            "tlsOtherTitle": "Il-konnessjoni sigura falliet",
+            "tlsOtherBody": "Ma setgħetx tiġi stabbilita konnessjoni kriptata mal-server. Il-konfigurazzjoni TLS tal-server jista' ma tkunx appoġġjata. Iċċekkja l-indirizz tal-server jew ikkuntattja l-amministratur tal-server.",
+            "unreachableTitle": "Ma setax jintlaħaq il-server",
+            "timeoutBody": "Il-server ma wieġibx fil-ħin. Iċċekkja n-netwerk u l-indirizz tal-server, imbagħad erġa' pprova.",
+            "refusedBody": "Il-server irrifjuta l-konnessjoni. Iċċekkja l-indirizz u l-port tal-server, imbagħad erġa' pprova.",
+            "cert": {
+                "expired": "Iċ-ċertifikat tal-server skada. Ikkuntattja l-amministratur tal-server. Jekk l-indirizz huwa żbaljat, editja l-qasam tal-server hawn taħt.",
+                "nameMismatch": "Iċ-ċertifikat tal-server inħareġ għal isem host differenti. Iċċekkja l-indirizz tal-server hawn taħt jew ikkuntattja l-amministratur tal-server.",
+                "untrusted": "Iċ-ċertifikat tal-server huwa ffirmat waħdu jew maħruġ minn awtorità mhux magħrufa, għalhekk ma jistax jiġi fdat. Iċċekkja l-indirizz tal-server jew ikkuntattja l-amministratur tal-server.",
+                "generic": "Ma setax jiġi vverifikat iċ-ċertifikat tas-sigurtà tal-server. Iċċekkja l-indirizz tal-server hawn taħt jew ikkuntattja l-amministratur tal-server."
+            }
+        }
     },
     "sidebar": {
         "messages": "Messaġġi",
@@ -203,6 +217,16 @@
         "invalidRoomAddress": "Indirizz tal-kamra mhux validu (għandu jkun kamra@conference.server)",
         "joinRoomHint": "Daħħal l-indirizz sħiħ tal-kamra biex tidħol f'kamra ta' chat pubblika.",
         "failedToJoinRoom": "Ma rnexxiex tidħol fil-kamra",
+        "passwordProtected": "Din il-kamra hija protetta b'password",
+        "roomPassword": "Password",
+        "passwordRequired": "Din il-kamra hija protetta b'password. Daħħal il-password biex tingħaqad.",
+        "incorrectPassword": "Password żbaljata.",
+        "nicknameInUse": "Dak il-laqam diġà jintuża f'din il-kamra.",
+        "membersOnly": "Din il-kamra hija biss għall-membri. Trid tkun membru biex tingħaqad.",
+        "bannedFromRoom": "Ġejt imbarrat minn din il-kamra.",
+        "roomFull": "Din il-kamra hija mimlija.",
+        "registeredNicknameRequired": "Din il-kamra teħtieġ il-laqam irreġistrat tiegħek.",
+        "roomNotFound": "Il-kamra ma nstabitx.",
         "nonAnonWarningTitle": "Tingħaqad ma' kanal mhux anonimu?",
         "nonAnonWarningMessage": "Kulħadd fi “{{room}}” jista’ jara l-indirizz veru tiegħek (l-ID XMPP/Jabber tiegħek). Tingħaqad xorta?",
         "nonAnonWarningConfirm": "Ingħaqad xorta",
@@ -211,6 +235,7 @@
         "notJoinedNoHistory": "M'intix f'din il-kamra",
         "joinToLoadHistory": "Idħol biex tgħabbi l-messaġġi",
         "notificationSettings": "Settings tan-notifiki",
+        "roomActions": "Azzjonijiet tal-kamra",
         "mentionsOnly": "Mentions biss",
         "defaultBehavior": "Imġiba default",
         "allMessages": "Il-messaġġi kollha",
@@ -435,6 +460,7 @@
         "attachment": "Mehmuż",
         "removeAttachment": "Neħħi attachment",
         "reply": "Wieġeb",
+        "copyMessage": "Ikkopja t-test",
         "replyQuoteHiddenEncrypted": "Kwotazzjoni moħbija: l-oriġinal kien ikkriptat",
         "forwardMessage": "Ibgħat 'il quddiem (dalwaqt)",
         "moreReactions": "Aktar reazzjonijiet",
@@ -567,7 +593,12 @@
             "acceptedWithoutVerifying": "Iċ-ċavetta l-ġdida ġiet aċċettata. Il-parti l-oħra mhix ivverifikata",
             "acceptFailed": "Ma stajtx taċċetta ċ-ċavetta l-ġdida. Erġa' pprova"
         },
-        "offlinePlaceholder": "Offline. Il-messaġġi jintbagħtu meta terġa' tikkonnettja"
+        "offlinePlaceholder": "Offline. Il-messaġġi jintbagħtu meta terġa' tikkonnettja",
+        "loadImage": "Itgħabba l-immaġni",
+        "loadVideo": "Itgħabba l-vidjo",
+        "loadAudio": "Itgħabba l-awdjo",
+        "loadFilePreview": "Itgħabba l-anteprima",
+        "showLinkImage": "Uri l-immaġni"
     },
     "dates": {
         "today": "Illum",
@@ -583,7 +614,8 @@
             "updates": "Aġġornamenti",
             "blocked": "Utenti Imblokkati",
             "storage": "Ħażna",
-            "encryption": "Kriptaġġ"
+            "encryption": "Kriptaġġ",
+            "privacy": "Privatezza"
         },
         "blocked": {
             "title": "Utenti Imblokkati",
@@ -704,6 +736,7 @@
             "pepUnsupportedBanner": "Is-server tiegħek ma jappoġġjax il-pubblikazzjoni ta' avvenimenti personali (PEP, XEP-0163), meħtieġa mill-kriptaġġ OpenPGP (XEP-0373). Il-kriptaġġ minn tarf sa tarf ma jistax jiġi attivat f'dan il-kont. Ikkuntattja lill-amministratur tas-server.",
             "statusPepUnsupported": "Il-kriptaġġ ma jistax jiġi attivat: is-server ma jappoġġjax PEP (XEP-0163), meħtieġ minn OpenPGP (XEP-0373).",
             "statusRegistrationFailed": "Il-konfigurazzjoni tal-kriptaġġ falliet ({{code}}). Iċċekkja l-console tal-iżviluppatur għad-dettalji.",
+            "notProtectedAtRest": "M'hawn l-ebda keychain tas-sistema disponibbli hawn, għalhekk il-frażi tal-password taċ-ċavetta tiegħek tinħażen mhux kriptata f'fajl fuq id-disk. Iċ-ċavetta mhix protetta waqt il-mistrieħ. Kull min jista' jaqra l-fajls ta' dan l-apparat jista' jużaha.",
             "backupLabel": "Backup taċ-ċavetta",
             "backupDescription": "Ippubblika kopja kriptata taċ-ċavetta tiegħek fuq is-server XMPP tiegħek. Imħarsa minn frażi sigrieta li int biss tafha, u tinqara biss mill-kont tiegħek (access_model: whitelist). Tippermettilek taqra l-istorja kriptata fuq tagħmir ġdid wara li tidħol u ddaħħal il-frażi.",
             "backupAction": "Issejvja fuq is-server",
@@ -778,6 +811,7 @@
             "identityChoice": {
                 "title": "Diġà teżisti identità OpenPGP għal dan il-kont",
                 "body": "Dan il-brawżer m'għandu l-ebda ċavetta lokali, iżda s-server diġà jħabbar ċavetta għall-kont tiegħek. Iġġenerar ċavetta ġdida hawn jaqsam fil-kwiet l-identità tiegħek: korrispondenti li ċifraw fuq iċ-ċavetta eżistenti ma jistgħux iwasslu messaġġi. Agħżel kif tixtieq tirrisolvi dan:",
+                "bodyKeyUnrecoverable": "Iċ-ċavetta OpenPGP ta' dan l-apparat ma tistax tinfetaħ aktar, għalhekk il-kriptaġġ ma jistax jibda. L-identità ppubblikata tiegħek mhix affettwata. Irkupraha billi tirrestawra l-backup tas-server jew billi timporta fajl taċ-ċavetta, jew ibdilha jekk ma tistax. Agħżel kif trid issolvi dan:",
                 "publishedFingerprintLabel": "Marka tas-swaba' ppubblikata",
                 "restoreFromServerTitle": "Restawra mill-backup tas-server",
                 "restoreFromServerBody": "Uża l-passfrażi tal-backup li ssettjajt meta ppermettejt il-kriptaġġ fuq apparat ieħor. Iċ-ċavetta privata korrispondenti tinġabar mis-server u tinfetaħ lokalment.",
@@ -804,19 +838,6 @@
             "importFileSuccess": "Ċavetta importata minn fajl",
             "importFileFailed": "Ma setax jinqara l-fajl magħżul",
             "unsupportedKeyAlgorithm": "Iċ-ċavetta importata tuża algoritmu li m'għadux appoġġjat (eż. DSA jew ElGamal). Uża ċavetta OpenPGP moderna (Curve25519, Ed25519 jew RSA ta' mill-inqas 2048 bit).",
-            "externalExportAction": "Esporta għal għodda OpenPGP esterna",
-            "externalExportDialogTitle": "Esporta ċ-ċavetta privata għal għodda OpenPGP esterna",
-            "externalExportDialogBody": "Tipproduċi fajl standard taċ-ċavetta privata OpenPGP (PRIVATE KEY BLOCK) li tista' timporta f'gpg, OpenKeychain, Kleopatra u għodod oħra.",
-            "externalExportProtectedLabel": "Protetta b'frażi tal-aċċess",
-            "externalExportProtectedDescription": "Rakkomandat. Agħżel frażi tal-aċċess; il-fajl esportat ikun ikkriptat u l-għodod esterni jitolbuha meta jimportawh.",
-            "externalExportUnprotectedLabel": "Mingħajr kriptaġġ",
-            "externalExportUnprotectedDescription": "Il-fajl esportat fih iċ-ċavetta privata tiegħek f'test ċar. Uża biss jekk l-għodda mira tirrifjuta ċwievet protetti bi frażi tal-aċċess.",
-            "externalExportUnprotectedWarning": "Mingħajr frażi tal-aċċess, kull min għandu aċċess għall-fajl esportat jista' jimpersonak u jiddekripta l-messaġġi tal-imgħoddi u tal-futur tiegħek. Ħassar il-fajl hekk kif timportah.",
-            "externalExportUnprotectedAcknowledgment": "Nifhem ir-riskji u rrid nesporta ċ-ċavetta privata tiegħi mingħajr kriptaġġ.",
-            "externalExportPassphraseLabel": "Frażi tal-aċċess",
-            "externalExportConfirmPassphraseLabel": "Ikkonferma l-frażi tal-aċċess",
-            "externalExportPassphraseMismatch": "Il-frażijiet tal-aċċess ma jaqblux.",
-            "externalExportSuccess": "Iċ-ċavetta privata ġiet esportata fil-fajl",
             "unlockDialogTitle": "Iftaħ il-kriptaġġ minn tarf għal tarf",
             "unlockDialogBody": "Daħħal il-passphrase tiegħek biex tiddeċifra ċ-ċavetta tiegħek għal din is-sessjoni.",
             "unlockDialogSetupTitle": "Issettja l-kriptaġġ minn tarf għal tarf",
@@ -828,7 +849,16 @@
             "unlockPassphraseTooShort": "Il-passphrase għandu jkollu mill-inqas 8 karattri",
             "lockedBannerBody": "Iċ-ċavetta tal-kriptaġġ tiegħek hija msakkar. Daħħal il-passphrase biex tattiva l-kriptaġġ għal din is-sessjoni.",
             "rotateNotSupportedWeb": "Ir-rotazzjoni taċ-ċavetta mhix disponibbli fuq il-web. Uża l-applikazzjoni tal-desktop."
-        }
+        },
+        "mediaAutoDownload": "Tniżżil awtomatiku tal-midja",
+        "mediaAutoDownloadDescription": "Agħżel meta l-immagini, il-vidjows u l-fajls jitgħabbew awtomatikament.",
+        "mediaAutoDownloadAlways": "Dejjem",
+        "mediaAutoDownloadAlwaysDescription": "Itgħabba l-midja awtomatikament f'kull konversazzjoni.",
+        "mediaAutoDownloadPrivateOnly": "Privat biss",
+        "mediaAutoDownloadPrivateOnlyDescription": "Itgħabba awtomatikament fil-messaġġi diretti u l-kmamar privati. Fil-kanali pubbliċi, agħfas biex tgħabba.",
+        "mediaAutoDownloadNever": "Qatt",
+        "mediaAutoDownloadNeverDescription": "Qatt titgħabba l-midja awtomatikament. Agħfas biex tgħabba f'kull konversazzjoni.",
+        "mediaAutoDownloadStrangerNote": "Il-midja minn persuni li mhumiex fil-kuntatti tiegħek dejjem teħtieġ taps biex titgħabba, irrispettivament minn dak li tagħżel hawn."
     },
     "update": {
         "title": "Aġġornament Disponibbli",
@@ -1038,6 +1068,7 @@
             "description": "M'għandekx privileġġi ta' amministratur fuq dan is-server. Ikkuntattja l-amministratur tas-server tiegħek għal aċċess."
         },
         "selectCommand": "Agħżel kmand mis-sidebar",
+        "openSections": "Iftaħ it-taqsimiet tal-amministrazzjoni",
         "execute": "Eżegwixxi",
         "executing": "Qed jeżegwixxi...",
         "next": "Li jmiss",
@@ -1083,7 +1114,13 @@
         "users": {
             "delete": "Ħassar utent",
             "changePassword": "Ibdel password",
-            "endSessions": "Temm sessjonijiet"
+            "endSessions": "Temm sessjonijiet",
+            "online": "Online",
+            "offline": "Offline",
+            "onlineNow": "Online issa",
+            "justNow": "bħalissa",
+            "truncatedBanner": "Qed jintwerew l-ewwel {{shown}} minn {{total}} utenti. Irfina t-tfittxija tiegħek biex tnaqqas ir-riżultati.",
+            "truncatedBannerNoTotal": "Qed jintwerew l-ewwel {{shown}} utenti. Irfina t-tfittxija tiegħek biex tnaqqas ir-riżultati."
         },
         "userView": {
             "title": "Utent",
@@ -1105,6 +1142,28 @@
         "roomList": {
             "title": "Kmamar ta' Chat",
             "noRooms": "Ma nstabux kmamar"
+        },
+        "overview": {
+            "title": "Ħarsa ġenerali tas-server",
+            "refresh": "Aġġorna",
+            "updatedAt": "Aġġornat fil-{{time}}",
+            "empty": "L-istatistika tas-server mhix disponibbli.",
+            "retry": "Erġa' pprova",
+            "units": {
+                "d": "j",
+                "h": "s",
+                "m": "min",
+                "s": "s"
+            },
+            "cards": {
+                "uptime": "Ħin tax-xogħol",
+                "version": "Verżjoni tas-server",
+                "users": "Utenti",
+                "onlineSuffix": "{{n}} online",
+                "onlineSessions": "Sessjonijiet online",
+                "onlineRooms": "Kmamar attivi",
+                "vhosts": "Hosts virtwali"
+            }
         }
     },
     "commandPalette": {

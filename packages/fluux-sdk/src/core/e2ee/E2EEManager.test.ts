@@ -1109,3 +1109,152 @@ describe('E2EEManager — deferred decrypt support', () => {
     expect(cb).toHaveBeenCalledWith('openpgp')
   })
 })
+
+/** Archived stanza child that FakePlugin(xmlns) will claim. */
+function archiveChild(xmlns: string): XMLElementData {
+  return { name: 'enc', attrs: { xmlns }, children: [] }
+}
+
+describe('E2EEManager — decryptArchiveBatch', () => {
+  const target: ConversationTarget = { kind: 'direct', peer: 'bob@example.com' }
+
+  it('hands a same-plugin page to decryptArchiveBatch in one call', async () => {
+    const mgr = makeManager()
+    const plugin = new FakePlugin(strongDescriptor, 'urn:test:strong')
+    const batch = vi.fn(async (_h: ConversationHandle, items: { payload: EncryptedPayload }[]) =>
+      items.map((_, i) => ({
+        plaintext: new Uint8Array([i]),
+        senderDevice: { jid: 'bob@example.com', deviceId: 'd1' },
+        securityContext: { protocolId: strongDescriptor.id, trust: 'tofu' as const },
+      })),
+    )
+    ;(plugin as E2EEPlugin).decryptArchiveBatch = batch
+    await mgr.register(plugin)
+
+    const children = [archiveChild('urn:test:strong'), archiveChild('urn:test:strong')]
+    const results = await mgr.decryptArchiveBatch(children, target)
+
+    expect(batch).toHaveBeenCalledTimes(1)
+    expect(batch.mock.calls[0][1]).toHaveLength(2)
+    expect(results.map((r) => r?.plaintext?.[0])).toEqual([0, 1])
+    expect(plugin.closedHandles).toBe(1) // one shared handle for the page
+  })
+
+  it('forwards per-item context positionally to the batch', async () => {
+    const mgr = makeManager()
+    const plugin = new FakePlugin(strongDescriptor, 'urn:test:strong')
+    const batch = vi.fn(async (_h: ConversationHandle, items: { context?: { messageId?: string } }[]) =>
+      items.map(() => ({
+        plaintext: new Uint8Array([1]),
+        senderDevice: { jid: 'bob@example.com', deviceId: 'd1' },
+        securityContext: { protocolId: strongDescriptor.id, trust: 'tofu' as const },
+      })),
+    )
+    ;(plugin as E2EEPlugin).decryptArchiveBatch = batch
+    await mgr.register(plugin)
+
+    const children = [archiveChild('urn:test:strong'), archiveChild('urn:test:strong')]
+    await mgr.decryptArchiveBatch(children, target, [{ messageId: 'm0' }, undefined])
+
+    const items = batch.mock.calls[0][1]
+    expect(items[0].context).toEqual({ messageId: 'm0' })
+    expect(items[1].context).toBeUndefined()
+  })
+
+  it('falls back to per-item decryptArchive when the plugin has no batch hook', async () => {
+    const mgr = makeManager()
+    const plugin = new FakePlugin(strongDescriptor, 'urn:test:strong')
+    await mgr.register(plugin)
+
+    const children = [archiveChild('urn:test:strong'), archiveChild('urn:test:strong')]
+    const results = await mgr.decryptArchiveBatch(children, target)
+
+    // FakePlugin has no decryptArchive → host falls back to decrypt() (0x42).
+    expect(results.map((r) => r?.plaintext?.[0])).toEqual([0x42, 0x42])
+  })
+
+  it('keeps index alignment with a null slot for an unclaimed item (no batch fast-path)', async () => {
+    const mgr = makeManager()
+    const plugin = new FakePlugin(strongDescriptor, 'urn:test:strong')
+    const batch = vi.fn()
+    ;(plugin as E2EEPlugin).decryptArchiveBatch = batch as never
+    await mgr.register(plugin)
+
+    const children = [archiveChild('urn:test:strong'), archiveChild('urn:unclaimed')]
+    const results = await mgr.decryptArchiveBatch(children, target)
+
+    expect(batch).not.toHaveBeenCalled() // not all items claimed → no fast path
+    expect(results[0]?.plaintext?.[0]).toBe(0x42)
+    expect(results[1]).toBeNull()
+  })
+})
+
+describe('E2EEManager — repairSession', () => {
+  const target: ConversationTarget = { kind: 'direct', peer: 'bob@example.com' }
+
+  it('invokes the plugin repairSession with the handle and peer', async () => {
+    const mgr = makeManager()
+    const plugin = new FakePlugin(strongDescriptor, 'urn:test:strong')
+    const repair = vi.fn(async (_h: ConversationHandle, _peer: BareJID) => {})
+    ;(plugin as E2EEPlugin).repairSession = repair
+    await mgr.register(plugin)
+
+    const ok = await mgr.repairSession(target)
+
+    expect(ok).toBe(true)
+    expect(repair).toHaveBeenCalledTimes(1)
+    expect(repair.mock.calls[0][1]).toBe('bob@example.com')
+    expect(plugin.closedHandles).toBe(1)
+  })
+
+  it('returns false when the selected plugin is stateless (no repairSession)', async () => {
+    const mgr = makeManager()
+    await mgr.register(new FakePlugin(strongDescriptor, 'urn:test:strong'))
+    expect(await mgr.repairSession(target)).toBe(false)
+  })
+
+  it('returns false when no plugin supports the conversation', async () => {
+    const mgr = makeManager()
+    expect(await mgr.repairSession(target)).toBe(false)
+  })
+
+  it('swallows a throwing repairSession and returns false', async () => {
+    const { logger, calls } = makeSpyLogger()
+    const mgr = makeManagerWithLogger(logger)
+    const plugin = new FakePlugin(strongDescriptor, 'urn:test:strong')
+    ;(plugin as E2EEPlugin).repairSession = vi.fn(async () => {
+      throw new Error('desync')
+    })
+    await mgr.register(plugin)
+
+    expect(await mgr.repairSession(target)).toBe(false)
+    expect(calls.some((c) => c.level === 'warn' && c.message.includes('repairSession failed'))).toBe(true)
+    expect(plugin.closedHandles).toBe(1) // handle still closed on failure
+  })
+})
+
+describe('E2EEManager — configure', () => {
+  it('forwards options verbatim to the plugin configure hook', async () => {
+    const mgr = makeManager()
+    const plugin = new FakePlugin(weakDescriptor, 'urn:test:weak')
+    const configure = vi.fn(async () => {})
+    ;(plugin as E2EEPlugin).configure = configure
+    await mgr.register(plugin)
+
+    const opts = { rotationCadence: 'daily', staleDeviceDays: 30 }
+    await mgr.configure('openpgp', opts)
+
+    expect(configure).toHaveBeenCalledWith(opts)
+  })
+
+  it('resolves silently when the plugin has no configure hook', async () => {
+    const mgr = makeManager()
+    await mgr.register(new FakePlugin(weakDescriptor, 'urn:test:weak'))
+    await expect(mgr.configure('openpgp', { x: 1 })).resolves.toBeUndefined()
+  })
+
+  it('throws when no plugin is registered under the id', async () => {
+    const mgr = makeManager()
+    await expect(mgr.configure('omemo:2', {})).rejects.toThrow(/no plugin registered/)
+  })
+})

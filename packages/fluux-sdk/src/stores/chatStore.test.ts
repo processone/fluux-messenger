@@ -710,6 +710,37 @@ describe('chatStore', () => {
       const after = chatStore.getState().conversationMeta.get('alice@example.com')
       expect(after?.lastMessage?.id).toBe(last.id)
     })
+
+    it('heals the preview when the deferred-decrypted message is the preview but a bodiless placeholder trails it', () => {
+      // Regression: an encrypted message becomes the preview, then an encrypted
+      // reaction arrives and is stored as a trailing bodiless placeholder. On
+      // unlock the real message decrypts via updateMessage, but it is no longer
+      // the *positionally* last array element (the placeholder trails it), so the
+      // old `isLastMessage` gate refused to refresh the sidebar — it stayed stuck
+      // on "[OpenPGP-encrypted message]". updateMessage must heal by identity:
+      // the updated message IS the current preview.
+      chatStore.getState().addConversation(createConversation('alice@example.com'))
+      const encrypted: Message = {
+        ...createMessage('alice@example.com', '[OpenPGP-encrypted message]', false),
+        encryptedPayload: '<message><openpgp>real</openpgp></message>',
+      }
+      chatStore.getState().addMessage(encrypted)
+      chatStore.getState().addMessage(bodilessPlaceholder('alice@example.com'))
+
+      // Sanity: the encrypted message is the stored preview, placeholder trails it.
+      expect(chatStore.getState().conversationMeta.get('alice@example.com')?.lastMessage?.id).toBe(encrypted.id)
+
+      // Deferred decrypt resolves the real message (not positionally last).
+      chatStore.getState().updateMessage('alice@example.com', encrypted.id, {
+        body: 'Decrypted content',
+        encryptedPayload: undefined,
+      })
+
+      const preview = chatStore.getState().conversationMeta.get('alice@example.com')?.lastMessage
+      expect(preview?.id).toBe(encrypted.id)
+      expect(preview?.body).toBe('Decrypted content')
+      expect(preview?.encryptedPayload).toBeUndefined()
+    })
   })
 
   describe('clearMessageStanzaId', () => {

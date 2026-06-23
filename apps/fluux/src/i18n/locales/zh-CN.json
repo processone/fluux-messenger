@@ -40,7 +40,21 @@
         "hidePassword": "隐藏密码",
         "madeBy": "开发者是",
         "ejabberdCreator": "，本公司还开发了",
-        "poweredBy": "采用"
+        "poweredBy": "采用",
+        "errors": {
+            "tlsCertTitle": "无法验证服务器的安全证书",
+            "tlsOtherTitle": "安全连接失败",
+            "tlsOtherBody": "无法建立与服务器的加密连接。服务器的 TLS 配置可能不受支持。请检查服务器地址，或联系服务器管理员。",
+            "unreachableTitle": "无法连接到服务器",
+            "timeoutBody": "服务器未及时响应。请检查网络和服务器地址，然后重试。",
+            "refusedBody": "服务器拒绝了连接。请检查服务器地址和端口，然后重试。",
+            "cert": {
+                "expired": "服务器证书已过期。请联系服务器管理员。如果地址有误，请在下方编辑服务器字段。",
+                "nameMismatch": "服务器证书是为其他主机名颁发的。请检查下方的服务器地址，或联系服务器管理员。",
+                "untrusted": "服务器证书是自签名的，或由未知机构颁发，因此无法信任。请检查服务器地址，或联系服务器管理员。",
+                "generic": "无法验证服务器的安全证书。请检查下方的服务器地址，或联系服务器管理员。"
+            }
+        }
     },
     "sidebar": {
         "messages": "消息",
@@ -201,6 +215,16 @@
         "invalidRoomAddress": "房间地址无效（应为 room@conference.server）",
         "joinRoomHint": "输入完整房间地址即可加入公开聊天室。",
         "failedToJoinRoom": "无法加入房间",
+        "passwordProtected": "此房间受密码保护",
+        "roomPassword": "密码",
+        "passwordRequired": "此房间受密码保护，请输入密码以加入。",
+        "incorrectPassword": "密码错误。",
+        "nicknameInUse": "该昵称已在此房间中被使用。",
+        "membersOnly": "此房间仅限成员加入，您需要成为成员才能加入。",
+        "bannedFromRoom": "您已被封禁，无法进入此房间。",
+        "roomFull": "此房间已满。",
+        "registeredNicknameRequired": "此房间需要您的注册昵称。",
+        "roomNotFound": "未找到房间。",
         "nonAnonWarningTitle": "加入非匿名聊天室？",
         "nonAnonWarningMessage": "“{{room}}”中的所有人都能看到您的真实地址（您的 XMPP/Jabber ID）。仍要加入吗？",
         "nonAnonWarningConfirm": "仍要加入",
@@ -209,6 +233,7 @@
         "notJoinedNoHistory": "您不在此房间中",
         "joinToLoadHistory": "加入即可加载消息",
         "notificationSettings": "通知设置",
+        "roomActions": "房间操作",
         "mentionsOnly": "仅提及",
         "defaultBehavior": "默认行为",
         "allMessages": "所有消息",
@@ -433,6 +458,7 @@
         "attachment": "附件",
         "removeAttachment": "移除附件",
         "reply": "回复",
+        "copyMessage": "复制文本",
         "replyQuoteHiddenEncrypted": "引用已隐藏：原始消息已加密",
         "forwardMessage": "转发消息（即将推出）",
         "moreReactions": "更多回应",
@@ -565,7 +591,12 @@
             "acceptedWithoutVerifying": "新密钥已接受。对方未经验证",
             "acceptFailed": "无法接受新密钥。请重试"
         },
-        "offlinePlaceholder": "离线。消息将在重新连接后发送"
+        "offlinePlaceholder": "离线。消息将在重新连接后发送",
+        "loadImage": "加载图片",
+        "loadVideo": "加载视频",
+        "loadAudio": "加载音频",
+        "loadFilePreview": "加载预览",
+        "showLinkImage": "显示图片"
     },
     "dates": {
         "today": "今天",
@@ -581,7 +612,8 @@
             "updates": "更新",
             "blocked": "已屏蔽用户",
             "storage": "存储",
-            "encryption": "加密"
+            "encryption": "加密",
+            "privacy": "隐私"
         },
         "blocked": {
             "title": "已屏蔽用户",
@@ -702,6 +734,7 @@
             "pepUnsupportedBanner": "您的服务器不支持个人事件发布（PEP，XEP-0163），而 OpenPGP 加密（XEP-0373）需要该功能。此账号无法启用端到端加密。请联系服务器管理员。",
             "statusPepUnsupported": "无法启用加密：服务器不支持 OpenPGP（XEP-0373）所需的 PEP（XEP-0163）。",
             "statusRegistrationFailed": "加密设置失败（{{code}}）。详情请查看开发者控制台。",
+            "notProtectedAtRest": "此处没有可用的系统密钥串，因此您密钥的口令以未加密的方式存储在磁盘上的文件中。该密钥在静态时未受保护。任何能读取此设备文件的人都可能使用它。",
             "backupLabel": "密钥备份",
             "backupDescription": "将已加密的密钥副本发布到您的 XMPP 服务器上。该密钥由仅您知晓的密码短语保护，且仅您的账号可读取（访问模式：白名单）。登录并输入密码短语后，您可以在新设备上读取加密历史记录。",
             "backupAction": "备份到服务器",
@@ -776,6 +809,7 @@
             "identityChoice": {
                 "title": "此账户已存在 OpenPGP 身份",
                 "body": "此浏览器没有本地密钥，但服务器已为您的账户公布了密钥。在此生成新密钥会悄悄分叉您的身份：已对现有密钥进行加密的联系人将无法投递消息。请选择如何解决：",
+                "bodyKeyUnrecoverable": "此设备的 OpenPGP 密钥已无法解锁，因此无法启动加密。您已发布的身份不受影响。可通过恢复服务器备份或导入密钥文件来找回它，若无法找回则替换它。请选择您想如何解决：",
                 "publishedFingerprintLabel": "已发布指纹",
                 "restoreFromServerTitle": "从服务器备份恢复",
                 "restoreFromServerBody": "使用您在另一台设备上启用加密时设置的备份密码短语。相应的私钥将从服务器获取并在本地解锁。",
@@ -802,19 +836,6 @@
             "importFileSuccess": "密钥已从文件导入",
             "importFileFailed": "无法读取所选文件",
             "unsupportedKeyAlgorithm": "导入的密钥使用了不再支持的算法（例如 DSA 或 ElGamal）。请使用现代 OpenPGP 密钥（Curve25519、Ed25519 或至少 2048 位的 RSA）。",
-            "externalExportAction": "导出供外部 OpenPGP 工具使用",
-            "externalExportDialogTitle": "为外部 OpenPGP 工具导出私钥",
-            "externalExportDialogBody": "生成标准的 OpenPGP 私钥文件(PRIVATE KEY BLOCK),可导入 gpg、OpenKeychain、Kleopatra 等工具。",
-            "externalExportProtectedLabel": "使用密码短语保护",
-            "externalExportProtectedDescription": "推荐。选择一个密码短语;导出的文件将被加密,外部工具在导入时会要求输入该密码短语。",
-            "externalExportUnprotectedLabel": "不加密",
-            "externalExportUnprotectedDescription": "导出的文件以明文形式包含你的私钥。仅在目标工具拒绝使用密码短语保护的密钥时才使用。",
-            "externalExportUnprotectedWarning": "如果没有密码短语,任何能访问导出文件的人都可以冒充你的身份,并解密你过去和未来的消息。导入完成后请立即删除该文件。",
-            "externalExportUnprotectedAcknowledgment": "我了解风险,并希望以不加密的方式导出我的私钥。",
-            "externalExportPassphraseLabel": "密码短语",
-            "externalExportConfirmPassphraseLabel": "确认密码短语",
-            "externalExportPassphraseMismatch": "两次输入的密码短语不一致。",
-            "externalExportSuccess": "私钥已导出到文件",
             "unlockDialogTitle": "解锁端到端加密",
             "unlockDialogBody": "请输入您的密码短语以解密此会话的加密密钥。",
             "unlockDialogSetupTitle": "设置端到端加密",
@@ -826,7 +847,16 @@
             "unlockPassphraseTooShort": "密码短语必须至少包含 8 个字符",
             "lockedBannerBody": "您的加密密钥已被锁定。请输入您的密码短语以启用此会话的加密。",
             "rotateNotSupportedWeb": "网页端不支持密钥轮换。请使用桌面应用。"
-        }
+        },
+        "mediaAutoDownload": "自动下载媒体",
+        "mediaAutoDownloadDescription": "选择图片、视频和文件何时自动加载。",
+        "mediaAutoDownloadAlways": "总是",
+        "mediaAutoDownloadAlwaysDescription": "在所有对话中自动加载媒体。",
+        "mediaAutoDownloadPrivateOnly": "仅限私密",
+        "mediaAutoDownloadPrivateOnlyDescription": "在私信和私密房间中自动加载。在公共频道中，点击以加载。",
+        "mediaAutoDownloadNever": "从不",
+        "mediaAutoDownloadNeverDescription": "从不自动加载媒体。在任意对话中点击以加载。",
+        "mediaAutoDownloadStrangerNote": "不在您联系人列表中的人发送的媒体始终需要点击才能加载，无论您在此选择什么。"
     },
     "update": {
         "title": "更新可用",
@@ -1036,6 +1066,7 @@
             "description": "您在此服务器上没有管理员权限。请联系您的服务器管理员以获取访问权限。"
         },
         "selectCommand": "从侧边栏选择命令",
+        "openSections": "打开管理部分",
         "execute": "执行",
         "executing": "正在执行…",
         "next": "下一个",
@@ -1081,7 +1112,13 @@
         "users": {
             "delete": "删除用户",
             "changePassword": "更改密码",
-            "endSessions": "结束会话"
+            "endSessions": "结束会话",
+            "online": "在线",
+            "offline": "离线",
+            "onlineNow": "当前在线",
+            "justNow": "刚刚",
+            "truncatedBanner": "显示前 {{shown}} 名用户，共 {{total}} 名。请细化搜索以缩小结果范围。",
+            "truncatedBannerNoTotal": "显示前 {{shown}} 名用户。请细化搜索以缩小结果范围。"
         },
         "userView": {
             "title": "用户",
@@ -1103,6 +1140,28 @@
         "roomList": {
             "title": "聊天室",
             "noRooms": "未找到房间"
+        },
+        "overview": {
+            "title": "服务器概览",
+            "refresh": "刷新",
+            "updatedAt": "更新于 {{time}}",
+            "empty": "服务器统计信息不可用。",
+            "retry": "重试",
+            "units": {
+                "d": "天",
+                "h": "时",
+                "m": "分",
+                "s": "秒"
+            },
+            "cards": {
+                "uptime": "运行时间",
+                "version": "服务器版本",
+                "users": "用户",
+                "onlineSuffix": "{{n}} 在线",
+                "onlineSessions": "在线会话",
+                "onlineRooms": "活跃房间",
+                "vhosts": "虚拟主机"
+            }
         }
     },
     "commandPalette": {

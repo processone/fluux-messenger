@@ -2,6 +2,8 @@ import { useTranslation } from 'react-i18next'
 import { FileText, Download, Loader2 } from 'lucide-react'
 import { useTextPreview, formatBytes } from '@/hooks'
 import { canPreviewAsText, getFileTypeLabel } from '@/utils/thumbnail'
+import { DeferredMediaPlaceholder } from './DeferredMediaPlaceholder'
+import { useDeferredMedia } from '@/hooks/useDeferredMedia'
 import type { FileAttachment } from '@fluux/sdk'
 
 interface TextFilePreviewProps {
@@ -10,22 +12,35 @@ interface TextFilePreviewProps {
   isSelected?: boolean
   /** Whether the parent message is hovered (for gradient adaptation) */
   isHovered?: boolean
+  /** When true (the local user's own message), bypass media-autoload deferral. */
+  isOwnMessage?: boolean
 }
 
 /**
  * Renders an inline text file preview with the file content displayed
  * in a code block, plus a download card below.
  */
-export function TextFilePreview({ attachment, isSelected = false, isHovered = false }: TextFilePreviewProps) {
+export function TextFilePreview({ attachment, isSelected = false, isHovered = false, isOwnMessage }: TextFilePreviewProps) {
   const { t } = useTranslation()
   const canPreview = canPreviewAsText(attachment.mediaType, attachment.name)
-  const { content, isLoading, error, isTruncated } = useTextPreview(
-    attachment.url,
-    canPreview
-  )
+  const { shouldLoad, approve } = useDeferredMedia(attachment.url, isOwnMessage)
+  const { content, isLoading, error, isTruncated } = useTextPreview(attachment.url, canPreview && shouldLoad)
 
   // Don't render anything if this isn't a text file
   if (!canPreview) return null
+
+  if (!shouldLoad) {
+    return (
+      <DeferredMediaPlaceholder
+        variant="card"
+        icon={FileText}
+        label={t('chat.loadFilePreview')}
+        name={attachment.name}
+        sizeLabel={attachment.size ? formatBytes(attachment.size) : undefined}
+        onLoad={approve}
+      />
+    )
+  }
 
   return (
     <div className="mt-2 max-w-md">

@@ -1,5 +1,6 @@
-import { useCallback, useMemo } from 'react'
+import { useCallback, useMemo, useRef } from 'react'
 import { adminStore } from '../stores'
+import { LastActivityQueue } from '../core/admin/lastActivityQueue'
 import { useAdminStore } from '../react/storeHooks'
 import { useXMPPContext } from '../provider'
 import type { AdminCommand, AdminCommandCategory, AdminCategory, RSMRequest } from '../core/types'
@@ -134,10 +135,11 @@ export function useAdmin() {
 
   // Entity list state
   const activeCategory = useAdminStore((s) => s.activeCategory)
-  const entityCounts = useAdminStore((s) => s.entityCounts)
   const userList = useAdminStore((s) => s.userList)
   const roomList = useAdminStore((s) => s.roomList)
   const mucServiceJid = useAdminStore((s) => s.mucServiceJid)
+  const serverStats = useAdminStore((s) => s.serverStats)
+  const isLoadingStats = useAdminStore((s) => s.isLoadingStats)
 
   // Group commands by category
   const commandsByCategory = useMemo(() => {
@@ -297,9 +299,15 @@ export function useAdmin() {
     adminStore.getState().setActiveCategory(category)
   }, [])
 
-  // Fetch entity counts for sidebar badges
-  const fetchEntityCounts = useCallback(async () => {
-    return client.admin.fetchEntityCounts()
+  // Fetch structured server vital-signs for the overview dashboard.
+  const fetchServerStats = useCallback(async () => {
+    const store = adminStore.getState()
+    store.setIsLoadingStats(true)
+    try {
+      return await client.admin.fetchServerStats(store.selectedVhost || undefined)
+    } finally {
+      adminStore.getState().setIsLoadingStats(false)
+    }
   }, [client])
 
   // Fetch available virtual hosts
@@ -350,16 +358,10 @@ export function useAdmin() {
     return fetchUsers({ after: pagination.last })
   }, [fetchUsers])
 
-  // Search users
-  const searchUsers = useCallback(
-    async (query: string) => {
-      const store = adminStore.getState()
-      store.setUserList({ searchQuery: query })
-      // Reset and fetch - search will be applied server-side if supported
-      return fetchUsers()
-    },
-    [fetchUsers]
-  )
+  // Search is fully client-side over the cached full set (see AdminView filter).
+  const searchUsers = useCallback((query: string) => {
+    adminStore.getState().setUserList({ searchQuery: query })
+  }, [])
 
   // Reset user list
   const resetUserList = useCallback(() => {
@@ -430,6 +432,65 @@ export function useAdmin() {
     )
   }, [commands])
 
+  // Queue ref for lazy last-activity fetches (constructed once, survives re-renders).
+  const lastActivityQueueRef = useRef<LastActivityQueue | null>(null)
+
+  // Fetch the entire user directory, then stamp a point-in-time online snapshot.
+  const fetchAllUsers = useCallback(async () => {
+    const store = adminStore.getState()
+    store.setUserList({ isLoading: true, error: null })
+    try {
+      const vhost = store.selectedVhost || undefined
+      const { users, truncated } = await client.admin.fetchAllUsers(vhost)
+
+      // Online snapshot (only when the command is advertised). When unavailable,
+      // leave isOnline undefined so the row hides the dot rather than showing gray.
+      let stamped = users
+      if (hasCommand('get-online-users-list')) {
+        const online = await client.admin.fetchOnlineUserJids(vhost)
+        adminStore.getState().setOnlineJids(online)
+        stamped = users.map((u) => ({ ...u, isOnline: online.has(u.jid) }))
+      } else {
+        adminStore.getState().setOnlineJids(new Set())
+      }
+
+      adminStore.getState().setUserList({
+        items: stamped,
+        pagination: {},
+        isLoading: false,
+        hasFetched: true,
+      })
+      adminStore.getState().setUsersTruncated(truncated)
+    } catch (error) {
+      adminStore.getState().setUserList({
+        isLoading: false,
+        error: error instanceof Error ? error.message : 'Failed to fetch users',
+        hasFetched: true,
+      })
+      throw error
+    }
+  }, [client, hasCommand])
+
+  // Lazily fetch a single user's last activity, behind a bounded queue.
+  const requestLastActivity = useCallback((jid: string) => {
+    const store = adminStore.getState()
+    if (!store.lastActivitySupported) return
+    if (store.onlineJids.has(jid)) return        // online overrides last-login
+    if (store.lastActivity.has(jid)) return       // already loading/loaded
+
+    if (!lastActivityQueueRef.current) {
+      lastActivityQueueRef.current = new LastActivityQueue({
+        fetch: (j) => client.admin.fetchLastActivity(j),
+        onResult: (j, seconds) =>
+          adminStore.getState().setLastActivity(j, { state: 'loaded', seconds }),
+        onUnsupported: () => adminStore.getState().setLastActivitySupported(false),
+      })
+    }
+
+    store.setLastActivity(jid, { state: 'loading', seconds: null })
+    lastActivityQueueRef.current.enqueue(jid)
+  }, [client])
+
   // Memoize actions object to prevent re-renders when only state changes
   const actions = useMemo(
     () => ({
@@ -446,11 +507,13 @@ export function useAdmin() {
       canManageUser,
       setSelectedVhost,
       setActiveCategory,
-      fetchEntityCounts,
+      fetchServerStats,
       fetchVhosts,
       fetchUsers,
+      fetchAllUsers,
       loadMoreUsers,
       searchUsers,
+      requestLastActivity,
       resetUserList,
       discoverMucService,
       fetchRooms,
@@ -473,11 +536,13 @@ export function useAdmin() {
       canManageUser,
       setSelectedVhost,
       setActiveCategory,
-      fetchEntityCounts,
+      fetchServerStats,
       fetchVhosts,
       fetchUsers,
+      fetchAllUsers,
       loadMoreUsers,
       searchUsers,
+      requestLastActivity,
       resetUserList,
       discoverMucService,
       fetchRooms,
@@ -508,10 +573,11 @@ export function useAdmin() {
 
       // Entity list state
       activeCategory,
-      entityCounts,
       userList,
       roomList,
       mucServiceJid,
+      serverStats,
+      isLoadingStats,
 
       // Computed
       hasCommands: commands.length > 0,
@@ -540,10 +606,11 @@ export function useAdmin() {
       vhosts,
       selectedVhost,
       activeCategory,
-      entityCounts,
       userList,
       roomList,
       mucServiceJid,
+      serverStats,
+      isLoadingStats,
       actions,
     ]
   )

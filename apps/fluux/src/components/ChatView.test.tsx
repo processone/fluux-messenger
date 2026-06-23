@@ -1,3 +1,10 @@
+/**
+ * @vitest-environment jsdom
+ *
+ * Pinned to jsdom: this file checks inline color/gradient styles whose serialization
+ * differs between DOM environments (jsdom normalizes #hex to rgb(); happy-dom, the
+ * default env, keeps the literal). These assertions/snapshots only hold under jsdom.
+ */
 import React from 'react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
@@ -176,6 +183,11 @@ vi.mock('@fluux/sdk/react', () => ({
 // Mock app hooks
 vi.mock('@/hooks', () => ({
   useClickOutside: () => {},
+  useAnchoredMenu: () => ({
+    triggerRef: { current: null },
+    menuRef: { current: null },
+    position: { x: 0, y: 0 },
+  }),
   useWindowDrag: () => ({ titleBarClass: '', dragRegionProps: {} }),
   useFileUpload: () => ({
     uploadFile: vi.fn(),
@@ -314,6 +326,7 @@ vi.mock('lucide-react', () => ({
   Forward: () => <span data-testid="icon-forward">Forward</span>,
   MoreHorizontal: () => <span data-testid="icon-more">More</span>,
   Reply: () => <span data-testid="icon-reply">Reply</span>,
+  Copy: () => <span data-testid="icon-copy">Copy</span>,
   Upload: () => <span data-testid="icon-upload">Upload</span>,
   Trash2: () => <span data-testid="icon-trash">Trash</span>,
   Loader2: () => <span data-testid="icon-loader">Loading</span>,
@@ -321,6 +334,10 @@ vi.mock('lucide-react', () => ({
   ChevronDown: () => <span data-testid="icon-chevron-down">Down</span>,
   Lock: () => <span data-testid="icon-lock">Lock</span>,
   ShieldCheck: () => <span data-testid="icon-shield-check">ShieldCheck</span>,
+  Archive: () => <span data-testid="icon-archive">Archive</span>,
+  ArchiveRestore: () => <span data-testid="icon-archive-restore">Unarchive</span>,
+  User: () => <span data-testid="icon-user">User</span>,
+  MoreVertical: () => <span data-testid="icon-more-vertical">More</span>,
 }))
 
 // Create hoisted mock for MessageComposer (React 19: ref is a regular prop)

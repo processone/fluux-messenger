@@ -40,7 +40,21 @@
         "hidePassword": "Wachtwoord verbergen",
         "madeBy": "Gemaakt door",
         "ejabberdCreator": ", het bedrijf achter",
-        "poweredBy": "Mogelijk gemaakt door"
+        "poweredBy": "Mogelijk gemaakt door",
+        "errors": {
+            "tlsCertTitle": "Het beveiligingscertificaat van de server kon niet worden geverifieerd",
+            "tlsOtherTitle": "Beveiligde verbinding mislukt",
+            "tlsOtherBody": "De versleutelde verbinding met de server kon niet tot stand worden gebracht. De TLS-configuratie van de server wordt mogelijk niet ondersteund. Controleer het serveradres of neem contact op met de serverbeheerder.",
+            "unreachableTitle": "De server is niet bereikbaar",
+            "timeoutBody": "De server heeft niet op tijd gereageerd. Controleer uw netwerk en het serveradres, en probeer het opnieuw.",
+            "refusedBody": "De server heeft de verbinding geweigerd. Controleer het serveradres en de poort, en probeer het opnieuw.",
+            "cert": {
+                "expired": "Het certificaat van de server is verlopen. Neem contact op met de serverbeheerder. Als het adres onjuist is, bewerk dan het serverveld hieronder.",
+                "nameMismatch": "Het certificaat van de server is uitgegeven voor een andere hostnaam. Controleer het serveradres hieronder of neem contact op met de serverbeheerder.",
+                "untrusted": "Het certificaat van de server is zelfondertekend of uitgegeven door een onbekende autoriteit, zodat het niet vertrouwd kan worden. Controleer het serveradres of neem contact op met de serverbeheerder.",
+                "generic": "Het beveiligingscertificaat van de server kon niet worden geverifieerd. Controleer het serveradres hieronder of neem contact op met de serverbeheerder."
+            }
+        }
     },
     "sidebar": {
         "messages": "Berichten",
@@ -201,6 +215,16 @@
         "invalidRoomAddress": "Ongeldig groepsadres (moet groep@conference.server zijn)",
         "joinRoomHint": "Voer het volledige groepsadres in om een publieke chatgroep te joinen.",
         "failedToJoinRoom": "Groep joinen mislukt",
+        "passwordProtected": "Deze ruimte is beveiligd met een wachtwoord",
+        "roomPassword": "Wachtwoord",
+        "passwordRequired": "Deze ruimte is beveiligd met een wachtwoord. Voer het wachtwoord in om deel te nemen.",
+        "incorrectPassword": "Onjuist wachtwoord.",
+        "nicknameInUse": "Die bijnaam is al in gebruik in deze ruimte.",
+        "membersOnly": "Deze ruimte is alleen voor leden. Je moet lid zijn om deel te nemen.",
+        "bannedFromRoom": "Je bent verbannen uit deze ruimte.",
+        "roomFull": "Deze ruimte is vol.",
+        "registeredNicknameRequired": "Deze ruimte vereist je geregistreerde bijnaam.",
+        "roomNotFound": "Ruimte niet gevonden.",
         "nonAnonWarningTitle": "Deelnemen aan een niet-anoniem kanaal?",
         "nonAnonWarningMessage": "Iedereen in “{{room}}” kan je echte adres (je XMPP/Jabber-ID) zien. Toch deelnemen?",
         "nonAnonWarningConfirm": "Toch deelnemen",
@@ -209,6 +233,7 @@
         "notJoinedNoHistory": "Je zit niet in deze groep",
         "joinToLoadHistory": "Join om berichten te laden",
         "notificationSettings": "Meldingsinstellingen",
+        "roomActions": "Kameraacties",
         "mentionsOnly": "Alleen vermeldingen",
         "defaultBehavior": "Standaardgedrag",
         "allMessages": "Alle berichten",
@@ -433,6 +458,7 @@
         "attachment": "Bijlage",
         "removeAttachment": "Bijlage verwijderen",
         "reply": "Beantwoorden",
+        "copyMessage": "Tekst kopiëren",
         "replyQuoteHiddenEncrypted": "Citaat verborgen: origineel was versleuteld",
         "forwardMessage": "Bericht doorsturen (binnenkort)",
         "moreReactions": "Meer reacties",
@@ -565,7 +591,12 @@
             "acceptedWithoutVerifying": "Nieuwe sleutel geaccepteerd. Contact is niet geverifieerd",
             "acceptFailed": "Kon de nieuwe sleutel niet accepteren. Probeer opnieuw"
         },
-        "offlinePlaceholder": "Offline. Berichten worden verzonden zodra de verbinding is hersteld"
+        "offlinePlaceholder": "Offline. Berichten worden verzonden zodra de verbinding is hersteld",
+        "loadImage": "Afbeelding laden",
+        "loadVideo": "Video laden",
+        "loadAudio": "Audio laden",
+        "loadFilePreview": "Voorbeeld laden",
+        "showLinkImage": "Afbeelding tonen"
     },
     "dates": {
         "today": "Vandaag",
@@ -581,7 +612,8 @@
             "updates": "Updates",
             "blocked": "Geblokkeerde gebruikers",
             "storage": "Opslag",
-            "encryption": "Versleuteling"
+            "encryption": "Versleuteling",
+            "privacy": "Privacy"
         },
         "blocked": {
             "title": "Geblokkeerde gebruikers",
@@ -702,6 +734,7 @@
             "pepUnsupportedBanner": "Je server ondersteunt geen personal eventing (PEP, XEP-0163), wat vereist is voor OpenPGP-versleuteling (XEP-0373). End-to-end-versleuteling kan voor dit account niet worden ingeschakeld. Neem contact op met je serverbeheerder.",
             "statusPepUnsupported": "Versleuteling kan niet worden ingeschakeld: je server ondersteunt geen PEP (XEP-0163), vereist door OpenPGP (XEP-0373).",
             "statusRegistrationFailed": "Het instellen van versleuteling is mislukt ({{code}}). Raadpleeg de ontwikkelaarsconsole voor details.",
+            "notProtectedAtRest": "Er is hier geen systeemsleutelbos beschikbaar, dus de wachtwoordzin van je sleutel wordt onversleuteld in een bestand op schijf opgeslagen. De sleutel is niet beschermd in rust. Iedereen die de bestanden van dit apparaat kan lezen, kan hem gebruiken.",
             "backupLabel": "Sleutelback-up",
             "backupDescription": "Publiceer een versleutelde kopie van je sleutel op je XMPP-server. Beschermd door een wachtwoordzin die alleen jij kent en alleen leesbaar door je account (access_model: whitelist). Je kunt versleutelde geschiedenis op een nieuw apparaat lezen na inloggen en het invoeren van de wachtwoordzin.",
             "backupAction": "Naar server back-uppen",
@@ -776,6 +809,7 @@
             "identityChoice": {
                 "title": "Er bestaat al een OpenPGP-identiteit voor dit account",
                 "body": "Deze browser heeft geen lokale sleutel, maar de server adverteert al een sleutel voor je account. Een nieuwe sleutel hier genereren zou je identiteit stilletjes splitsen: correspondenten die naar de bestaande sleutel hebben versleuteld zouden geen berichten kunnen afleveren. Kies hoe je dit wilt oplossen:",
+                "bodyKeyUnrecoverable": "De OpenPGP-sleutel van dit apparaat kan niet meer worden ontgrendeld, dus versleuteling kan niet starten. Je gepubliceerde identiteit blijft ongewijzigd. Herstel deze via je serverback-up of door een sleutelbestand te importeren, of vervang deze als dat niet lukt. Kies hoe je dit wilt oplossen:",
                 "publishedFingerprintLabel": "Gepubliceerde vingerafdruk",
                 "restoreFromServerTitle": "Herstellen vanuit server-back-up",
                 "restoreFromServerBody": "Gebruik de back-up-wachtzin die je hebt ingesteld bij het inschakelen van versleuteling op een ander apparaat. De bijbehorende privésleutel wordt opgehaald van de server en lokaal ontgrendeld.",
@@ -802,19 +836,6 @@
             "importFileSuccess": "Sleutel geïmporteerd uit bestand",
             "importFileFailed": "Het geselecteerde bestand kon niet worden gelezen",
             "unsupportedKeyAlgorithm": "De geïmporteerde sleutel gebruikt een algoritme dat niet langer wordt ondersteund (bijvoorbeeld DSA of ElGamal). Gebruik een moderne OpenPGP-sleutel (Curve25519, Ed25519 of RSA van ten minste 2048 bits).",
-            "externalExportAction": "Exporteren voor een externe OpenPGP-tool",
-            "externalExportDialogTitle": "Privésleutel exporteren voor een externe OpenPGP-tool",
-            "externalExportDialogBody": "Maakt een standaard OpenPGP-bestand met een privésleutel (PRIVATE KEY BLOCK) dat je kunt importeren in gpg, OpenKeychain, Kleopatra en andere tools.",
-            "externalExportProtectedLabel": "Beschermd met een wachtwoordzin",
-            "externalExportProtectedDescription": "Aanbevolen. Kies een wachtwoordzin; het geëxporteerde bestand wordt versleuteld en externe tools zullen erom vragen bij het importeren.",
-            "externalExportUnprotectedLabel": "Geen versleuteling",
-            "externalExportUnprotectedDescription": "Het geëxporteerde bestand bevat je privésleutel in onversleutelde vorm. Gebruik dit alleen als de doeltool sleutels met een wachtwoordzin weigert.",
-            "externalExportUnprotectedWarning": "Zonder wachtwoordzin kan iedereen met toegang tot het geëxporteerde bestand zich als jou voordoen en je eerdere en toekomstige berichten ontsleutelen. Verwijder het bestand zodra je het hebt geïmporteerd.",
-            "externalExportUnprotectedAcknowledgment": "Ik begrijp de risico's en wil mijn privésleutel onversleuteld exporteren.",
-            "externalExportPassphraseLabel": "Wachtwoordzin",
-            "externalExportConfirmPassphraseLabel": "Bevestig de wachtwoordzin",
-            "externalExportPassphraseMismatch": "De wachtwoordzinnen komen niet overeen.",
-            "externalExportSuccess": "Privésleutel geëxporteerd naar bestand",
             "unlockDialogTitle": "End-to-end-versleuteling ontgrendelen",
             "unlockDialogBody": "Voer je wachtwoordzin in om je sleutel voor deze sessie te ontsleutelen.",
             "unlockDialogSetupTitle": "End-to-end-versleuteling instellen",
@@ -826,7 +847,16 @@
             "unlockPassphraseTooShort": "De wachtwoordzin moet minimaal 8 tekens bevatten",
             "lockedBannerBody": "Je versleutelingssleutel is vergrendeld. Voer je wachtwoordzin in om versleuteling voor deze sessie te activeren.",
             "rotateNotSupportedWeb": "Sleutelrotatie is niet beschikbaar op het web. Gebruik de desktopapp."
-        }
+        },
+        "mediaAutoDownload": "Media automatisch downloaden",
+        "mediaAutoDownloadDescription": "Kies wanneer afbeeldingen, video's en bestanden automatisch worden geladen.",
+        "mediaAutoDownloadAlways": "Altijd",
+        "mediaAutoDownloadAlwaysDescription": "Media automatisch laden in elk gesprek.",
+        "mediaAutoDownloadPrivateOnly": "Alleen privé",
+        "mediaAutoDownloadPrivateOnlyDescription": "Automatisch laden in directe berichten en privéruimtes. In openbare kanalen, tik om te laden.",
+        "mediaAutoDownloadNever": "Nooit",
+        "mediaAutoDownloadNeverDescription": "Laad nooit automatisch media. Tik om te laden in elk gesprek.",
+        "mediaAutoDownloadStrangerNote": "Media van mensen die niet in uw contacten staan, vereist altijd een tik om te laden, ongeacht wat u hier kiest."
     },
     "update": {
         "title": "Update beschikbaar",
@@ -1036,6 +1066,7 @@
             "description": "Je hebt geen beheerdersrechten op deze server. Neem contact op met je serverbeheerder voor toegang."
         },
         "selectCommand": "Selecteer een commando uit de zijbalk",
+        "openSections": "Beheerssecties openen",
         "execute": "Uitvoeren",
         "executing": "Uitvoeren...",
         "next": "Volgende",
@@ -1081,7 +1112,13 @@
         "users": {
             "delete": "Gebruiker verwijderen",
             "changePassword": "Wachtwoord wijzigen",
-            "endSessions": "Sessies beeindigen"
+            "endSessions": "Sessies beeindigen",
+            "online": "Online",
+            "offline": "Offline",
+            "onlineNow": "Nu online",
+            "justNow": "zojuist",
+            "truncatedBanner": "De eerste {{shown}} van {{total}} gebruikers worden weergegeven. Verfijn uw zoekopdracht om de resultaten te beperken.",
+            "truncatedBannerNoTotal": "De eerste {{shown}} gebruikers worden weergegeven. Verfijn uw zoekopdracht om de resultaten te beperken."
         },
         "userView": {
             "title": "Gebruiker",
@@ -1103,6 +1140,28 @@
         "roomList": {
             "title": "Chatgroepen",
             "noRooms": "Geen groepen gevonden"
+        },
+        "overview": {
+            "title": "Serveroverzicht",
+            "refresh": "Vernieuwen",
+            "updatedAt": "Bijgewerkt om {{time}}",
+            "empty": "Serverstatistieken zijn niet beschikbaar.",
+            "retry": "Opnieuw",
+            "units": {
+                "d": "d",
+                "h": "u",
+                "m": "min",
+                "s": "s"
+            },
+            "cards": {
+                "uptime": "Bedrijfstijd",
+                "version": "Serverversie",
+                "users": "Gebruikers",
+                "onlineSuffix": "{{n}} online",
+                "onlineSessions": "Online sessies",
+                "onlineRooms": "Actieve groepen",
+                "vhosts": "Virtuele hosts"
+            }
         }
     },
     "commandPalette": {

@@ -38,10 +38,10 @@ function makeState(overrides: Partial<EntityNotificationState> = {}): EntityNoti
   }
 }
 
-const ACTIVE_VISIBLE: EntityContext = { isActive: true, windowVisible: true }
-const ACTIVE_HIDDEN: EntityContext = { isActive: true, windowVisible: false }
-const INACTIVE_VISIBLE: EntityContext = { isActive: false, windowVisible: true }
-const INACTIVE_HIDDEN: EntityContext = { isActive: false, windowVisible: false }
+const ACTIVE_VISIBLE: EntityContext = { isActive: true, windowVisible: true, unreadCount: 1 }
+const ACTIVE_HIDDEN: EntityContext = { isActive: true, windowVisible: false, unreadCount: 1 }
+const INACTIVE_VISIBLE: EntityContext = { isActive: false, windowVisible: true, unreadCount: 1 }
+const INACTIVE_HIDDEN: EntityContext = { isActive: false, windowVisible: false, unreadCount: 1 }
 
 // ---------------------------------------------------------------------------
 // onMessageReceived
@@ -221,7 +221,7 @@ describe('onActivate', () => {
       makeMsg({ id: 'c', timestamp: new Date('2025-01-15T10:00:00Z') }),
     ]
     const state = makeState({ lastSeenMessageId: 'a' })
-    const result = onActivate(state, msgs)
+    const result = onActivate(state, msgs, { treatDelayedAsNew: true })
     // Delayed messages are valid new messages (offline delivery in 1:1 chats)
     expect(result.firstNewMessageId).toBe('b')
   })
@@ -336,7 +336,7 @@ describe('onActivate', () => {
         unreadCount: 2,
         lastReadAt: new Date('2025-01-15T09:30:00Z'),
       })
-      const result = onActivate(state, msgs)
+      const result = onActivate(state, msgs, { treatDelayedAsNew: true })
       expect(result.firstNewMessageId).toBe('delayed-1')
     })
   })
@@ -378,7 +378,7 @@ describe('onActivate', () => {
         makeMsg({ id: 'new-2', timestamp: new Date('2025-01-15T10:30:00Z'), isDelayed: true }),
       ]
       const state = makeState({ unreadCount: 2 })
-      const result = onActivate(state, msgs)
+      const result = onActivate(state, msgs, { treatDelayedAsNew: true })
       expect(result.firstNewMessageId).toBe('new-1')
     })
 
@@ -394,6 +394,73 @@ describe('onActivate', () => {
         makeMsg({ id: 'out-2', timestamp: new Date('2025-01-15T09:30:00Z'), isOutgoing: true }),
       ]
       const state = makeState({ unreadCount: 1 })
+      const result = onActivate(state, msgs)
+      expect(result.firstNewMessageId).toBeUndefined()
+    })
+  })
+
+  describe('room mode (treatDelayedAsNew=false): delayed = history replay, not new', () => {
+    // For rooms, isDelayed means "MUC history replay" (not a new message), so the
+    // marker must skip delayed messages — otherwise joining a room scrolls the user
+    // into the middle of replayed history instead of to the bottom.
+
+    it('forward scan skips delayed history after lastSeenMessageId', () => {
+      const msgs: NotificationMessage[] = [
+        makeMsg({ id: 'a', timestamp: new Date('2025-01-15T09:00:00Z') }),
+        makeMsg({ id: 'b', timestamp: new Date('2025-01-15T09:30:00Z'), isDelayed: true }),
+        makeMsg({ id: 'c', timestamp: new Date('2025-01-15T10:00:00Z'), isDelayed: true }),
+      ]
+      const state = makeState({ lastSeenMessageId: 'a' })
+      // Only delayed (history) messages follow → no marker → scroll to bottom
+      const result = onActivate(state, msgs, { treatDelayedAsNew: false })
+      expect(result.firstNewMessageId).toBeUndefined()
+    })
+
+    it('forward scan lands on the first non-delayed (live) message', () => {
+      const msgs: NotificationMessage[] = [
+        makeMsg({ id: 'a', timestamp: new Date('2025-01-15T09:00:00Z') }),
+        makeMsg({ id: 'b', timestamp: new Date('2025-01-15T09:30:00Z'), isDelayed: true }),
+        makeMsg({ id: 'c', timestamp: new Date('2025-01-15T10:00:00Z') }),
+      ]
+      const state = makeState({ lastSeenMessageId: 'a' })
+      const result = onActivate(state, msgs, { treatDelayedAsNew: false })
+      expect(result.firstNewMessageId).toBe('c')
+    })
+
+    it('lastReadAt fallback skips delayed history', () => {
+      const msgs: NotificationMessage[] = [
+        makeMsg({ id: 'old-1', timestamp: new Date('2025-01-15T09:00:00Z') }),
+        makeMsg({ id: 'delayed-1', timestamp: new Date('2025-01-15T10:00:00Z'), isDelayed: true }),
+        makeMsg({ id: 'delayed-2', timestamp: new Date('2025-01-15T10:30:00Z'), isDelayed: true }),
+      ]
+      const state = makeState({
+        lastSeenMessageId: 'very-old-msg',
+        unreadCount: 2,
+        lastReadAt: new Date('2025-01-15T09:30:00Z'),
+      })
+      const result = onActivate(state, msgs, { treatDelayedAsNew: false })
+      expect(result.firstNewMessageId).toBeUndefined()
+    })
+
+    it('brand-new room with pure history replay (all delayed) sets no marker', () => {
+      // Joining a room with no prior read state: the server replays history as
+      // delayed messages. None are "new", so there must be no marker → bottom.
+      const msgs: NotificationMessage[] = [
+        makeMsg({ id: 'h-1', timestamp: new Date('2025-01-15T09:00:00Z'), isDelayed: true }),
+        makeMsg({ id: 'h-2', timestamp: new Date('2025-01-15T10:00:00Z'), isDelayed: true }),
+        makeMsg({ id: 'h-3', timestamp: new Date('2025-01-15T10:30:00Z'), isDelayed: true }),
+      ]
+      const state = makeState({ unreadCount: 2 })
+      const result = onActivate(state, msgs, { treatDelayedAsNew: false })
+      expect(result.firstNewMessageId).toBeUndefined()
+    })
+
+    it('defaults to room-safe (skips delayed) when no option is passed', () => {
+      const msgs: NotificationMessage[] = [
+        makeMsg({ id: 'a', timestamp: new Date('2025-01-15T09:00:00Z') }),
+        makeMsg({ id: 'b', timestamp: new Date('2025-01-15T09:30:00Z'), isDelayed: true }),
+      ]
+      const state = makeState({ lastSeenMessageId: 'a' })
       const result = onActivate(state, msgs)
       expect(result.firstNewMessageId).toBeUndefined()
     })
@@ -590,7 +657,7 @@ describe('onMessageSeen', () => {
 // ---------------------------------------------------------------------------
 
 describe('shouldNotifyConversation', () => {
-  it('returns true for incoming message when user cannot see it', () => {
+  it('returns true for incoming unseen message when user cannot see it', () => {
     const msg = makeMsg()
     expect(shouldNotifyConversation(msg, INACTIVE_VISIBLE)).toBe(true)
     expect(shouldNotifyConversation(msg, INACTIVE_HIDDEN)).toBe(true)
@@ -605,18 +672,38 @@ describe('shouldNotifyConversation', () => {
     expect(shouldNotifyConversation(makeMsg({ isOutgoing: true }), INACTIVE_HIDDEN)).toBe(false)
   })
 
-  it('returns false for delayed messages', () => {
-    expect(shouldNotifyConversation(makeMsg({ isDelayed: true }), INACTIVE_HIDDEN)).toBe(false)
+  it('returns true for a delayed but unseen message (reconnect offline delivery)', () => {
+    expect(shouldNotifyConversation(makeMsg({ isDelayed: true }), INACTIVE_HIDDEN)).toBe(true)
   })
 
-  it('returns false for stale messages (>5 minutes old)', () => {
-    const staleTimestamp = new Date(Date.now() - 6 * 60 * 1000)
-    expect(shouldNotifyConversation(makeMsg({ timestamp: staleTimestamp }), INACTIVE_HIDDEN)).toBe(false)
+  it('returns true for an old but unseen message (freshness is not a gate)', () => {
+    const hoursAgo = new Date(Date.now() - 3 * 60 * 60 * 1000)
+    expect(
+      shouldNotifyConversation(makeMsg({ timestamp: hoursAgo, isDelayed: true }), INACTIVE_HIDDEN),
+    ).toBe(true)
   })
 
-  it('returns true for fresh messages (<5 minutes old)', () => {
-    const freshTimestamp = new Date(Date.now() - 60 * 1000)
-    expect(shouldNotifyConversation(makeMsg({ timestamp: freshTimestamp }), INACTIVE_HIDDEN)).toBe(true)
+  it('returns false when there is nothing unseen (unreadCount 0)', () => {
+    expect(
+      shouldNotifyConversation(makeMsg(), { isActive: false, windowVisible: false, unreadCount: 0 }),
+    ).toBe(false)
+  })
+
+  it('returns false when lastMessage is the already-seen message', () => {
+    expect(
+      shouldNotifyConversation(makeMsg({ id: 'm5' }), {
+        isActive: false,
+        windowVisible: false,
+        unreadCount: 1,
+        lastSeenMessageId: 'm5',
+      }),
+    ).toBe(false)
+  })
+
+  it('returns false when context omits unreadCount (defensive default)', () => {
+    expect(
+      shouldNotifyConversation(makeMsg(), { isActive: false, windowVisible: false }),
+    ).toBe(false)
   })
 })
 

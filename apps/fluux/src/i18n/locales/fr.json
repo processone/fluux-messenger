@@ -40,7 +40,21 @@
         "hidePassword": "Masquer le mot de passe",
         "madeBy": "Créé par",
         "ejabberdCreator": ", la société qui développe",
-        "poweredBy": "Propulsé par"
+        "poweredBy": "Propulsé par",
+        "errors": {
+            "tlsCertTitle": "Impossible de vérifier le certificat de sécurité du serveur",
+            "tlsOtherTitle": "Échec de la connexion sécurisée",
+            "tlsOtherBody": "La connexion chiffrée au serveur n'a pas pu être établie. La configuration TLS du serveur n'est peut-être pas prise en charge. Vérifiez l'adresse du serveur ou contactez l'administrateur du serveur.",
+            "unreachableTitle": "Impossible de joindre le serveur",
+            "timeoutBody": "Le serveur n'a pas répondu à temps. Vérifiez votre réseau et l'adresse du serveur, puis réessayez.",
+            "refusedBody": "Le serveur a refusé la connexion. Vérifiez l'adresse et le port du serveur, puis réessayez.",
+            "cert": {
+                "expired": "Le certificat du serveur a expiré. Contactez l'administrateur du serveur. Si l'adresse est incorrecte, modifiez le champ serveur ci-dessous.",
+                "nameMismatch": "Le certificat du serveur a été émis pour un nom d'hôte différent. Vérifiez l'adresse du serveur ci-dessous ou contactez l'administrateur du serveur.",
+                "untrusted": "Le certificat du serveur est auto-signé ou émis par une autorité inconnue, il ne peut donc pas être approuvé. Vérifiez l'adresse du serveur ou contactez l'administrateur du serveur.",
+                "generic": "Le certificat de sécurité du serveur n'a pas pu être vérifié. Vérifiez l'adresse du serveur ci-dessous ou contactez l'administrateur du serveur."
+            }
+        }
     },
     "sidebar": {
         "messages": "Messages",
@@ -202,6 +216,16 @@
         "invalidRoomAddress": "Adresse de salon invalide (doit être salon@conference.serveur)",
         "joinRoomHint": "Entrez l'adresse complète du salon pour rejoindre une discussion publique.",
         "failedToJoinRoom": "Échec de la connexion au salon",
+        "passwordProtected": "Ce salon est protégé par un mot de passe",
+        "roomPassword": "Mot de passe",
+        "passwordRequired": "Ce salon est protégé par un mot de passe. Saisissez-le pour rejoindre.",
+        "incorrectPassword": "Mot de passe incorrect.",
+        "nicknameInUse": "Ce surnom est déjà utilisé dans ce salon.",
+        "membersOnly": "Ce salon est réservé aux membres. Vous devez en être membre pour le rejoindre.",
+        "bannedFromRoom": "Vous avez été banni de ce salon.",
+        "roomFull": "Ce salon est complet.",
+        "registeredNicknameRequired": "Ce salon exige votre surnom enregistré.",
+        "roomNotFound": "Salon introuvable.",
         "nonAnonWarningTitle": "Rejoindre un salon non anonyme ?",
         "nonAnonWarningMessage": "Tout le monde dans « {{room}} » peut voir votre adresse réelle (votre identifiant XMPP/Jabber). Rejoindre quand même ?",
         "nonAnonWarningConfirm": "Rejoindre quand même",
@@ -210,6 +234,7 @@
         "notJoinedNoHistory": "Vous n'êtes pas dans ce salon",
         "joinToLoadHistory": "Rejoindre pour charger les messages",
         "notificationSettings": "Paramètres de notification",
+        "roomActions": "Actions du salon",
         "mentionsOnly": "Mentions uniquement",
         "defaultBehavior": "Comportement par défaut",
         "allMessages": "Tous les messages",
@@ -434,6 +459,7 @@
         "attachment": "Pièce jointe",
         "removeAttachment": "Supprimer la pièce jointe",
         "reply": "Répondre",
+        "copyMessage": "Copier le texte",
         "replyQuoteHiddenEncrypted": "Citation masquée: le message d'origine était chiffré",
         "forwardMessage": "Transférer le message (bientôt disponible)",
         "moreReactions": "Plus de réactions",
@@ -566,7 +592,12 @@
             "acceptedWithoutVerifying": "Nouvelle clé acceptée. Correspondant non vérifié",
             "acceptFailed": "Impossible d'accepter la nouvelle clé. Réessayez"
         },
-        "offlinePlaceholder": "Hors ligne. Vos messages partiront à la reconnexion"
+        "offlinePlaceholder": "Hors ligne. Vos messages partiront à la reconnexion",
+        "loadImage": "Charger l'image",
+        "loadVideo": "Charger la vidéo",
+        "loadAudio": "Charger l'audio",
+        "loadFilePreview": "Charger l'aperçu",
+        "showLinkImage": "Afficher l'image"
     },
     "dates": {
         "today": "Aujourd'hui",
@@ -582,7 +613,8 @@
             "updates": "Mises à jour",
             "blocked": "Utilisateurs bloqués",
             "storage": "Stockage",
-            "encryption": "Chiffrement"
+            "encryption": "Chiffrement",
+            "privacy": "Confidentialité"
         },
         "blocked": {
             "title": "Utilisateurs bloqués",
@@ -703,6 +735,7 @@
             "pepUnsupportedBanner": "Votre serveur ne prend pas en charge la publication d'événements personnels (PEP, XEP-0163), requise par le chiffrement OpenPGP (XEP-0373). Le chiffrement de bout en bout ne peut pas être activé sur ce compte. Contactez l'administrateur de votre serveur.",
             "statusPepUnsupported": "Impossible d'activer le chiffrement : votre serveur ne prend pas en charge PEP (XEP-0163), requis par OpenPGP (XEP-0373).",
             "statusRegistrationFailed": "Échec de l'activation du chiffrement ({{code}}). Consultez la console développeur pour les détails.",
+            "notProtectedAtRest": "Aucun trousseau système n'est disponible ici ; la phrase secrète de votre clé est donc stockée en clair dans un fichier sur le disque. La clé n'est pas protégée au repos. Quiconque peut lire les fichiers de cet appareil pourrait l'utiliser.",
             "backupLabel": "Sauvegarde de la clé",
             "backupDescription": "Publie une copie chiffrée de votre clé sur votre serveur XMPP. Protégée par une phrase secrète que vous seul connaissez, lisible uniquement par votre compte (access model : whitelist). Permet de lire l'historique chiffré sur un nouvel appareil après connexion et saisie de la phrase.",
             "backupAction": "Sauvegarder sur le serveur",
@@ -777,6 +810,7 @@
             "identityChoice": {
                 "title": "Une identité OpenPGP existe déjà pour ce compte",
                 "body": "Ce navigateur n'a pas de clé locale, mais le serveur annonce déjà une clé pour votre compte. Générer une nouvelle clé ici ferait silencieusement bifurquer votre identité: les correspondants qui chiffraient vers la clé existante ne pourraient plus vous joindre. Choisissez comment résoudre ce conflit :",
+                "bodyKeyUnrecoverable": "La clé OpenPGP de cet appareil ne peut plus être déverrouillée, le chiffrement ne peut donc pas démarrer. Votre identité publiée n'est pas affectée. Récupérez-la en restaurant votre sauvegarde sur le serveur ou en important un fichier de clé, ou remplacez-la si c'est impossible. Choisissez comment résoudre ce problème :",
                 "publishedFingerprintLabel": "Empreinte publiée",
                 "restoreFromServerTitle": "Restaurer depuis la sauvegarde serveur",
                 "restoreFromServerBody": "Utilisez la phrase de passe de sauvegarde que vous avez définie en activant le chiffrement sur un autre appareil. La clé privée correspondante est récupérée depuis le serveur et déverrouillée localement.",
@@ -803,19 +837,6 @@
             "importFileSuccess": "Clé importée depuis le fichier",
             "importFileFailed": "Impossible de lire le fichier sélectionné",
             "unsupportedKeyAlgorithm": "La clé importée utilise un algorithme qui n'est plus pris en charge (par exemple DSA ou ElGamal). Utilisez une clé OpenPGP moderne (Curve25519, Ed25519, ou RSA d'au moins 2048 bits).",
-            "externalExportAction": "Exporter pour un outil OpenPGP externe",
-            "externalExportDialogTitle": "Exporter la clé privée pour un outil OpenPGP externe",
-            "externalExportDialogBody": "Produit un fichier de clé privée OpenPGP standard (PRIVATE KEY BLOCK) que vous pouvez importer dans gpg, OpenKeychain, Kleopatra et d'autres outils.",
-            "externalExportProtectedLabel": "Protégée par une phrase de passe",
-            "externalExportProtectedDescription": "Recommandé. Choisissez une phrase de passe ; le fichier exporté est chiffré et les outils externes la demanderont à l'import.",
-            "externalExportUnprotectedLabel": "Sans chiffrement",
-            "externalExportUnprotectedDescription": "Le fichier exporté contient votre clé privée en clair. À n'utiliser que si l'outil cible refuse les clés protégées par phrase de passe.",
-            "externalExportUnprotectedWarning": "Sans phrase de passe, toute personne ayant accès au fichier exporté peut usurper votre identité et déchiffrer vos messages passés et futurs. Supprimez le fichier dès que vous l'avez importé.",
-            "externalExportUnprotectedAcknowledgment": "Je comprends les risques et je veux exporter ma clé privée sans chiffrement.",
-            "externalExportPassphraseLabel": "Phrase de passe",
-            "externalExportConfirmPassphraseLabel": "Confirmer la phrase de passe",
-            "externalExportPassphraseMismatch": "Les phrases de passe ne correspondent pas.",
-            "externalExportSuccess": "Clé privée exportée dans un fichier",
             "unlockDialogTitle": "Déverrouiller le chiffrement de bout en bout",
             "unlockDialogBody": "Saisissez votre phrase de passe pour déchiffrer votre clé pour cette session.",
             "unlockDialogSetupTitle": "Configurer le chiffrement de bout en bout",
@@ -827,7 +848,16 @@
             "unlockPassphraseTooShort": "La phrase de passe doit comporter au moins 8 caractères",
             "lockedBannerBody": "Votre clé de chiffrement est verrouillée. Saisissez votre phrase de passe pour activer le chiffrement pour cette session.",
             "rotateNotSupportedWeb": "La rotation de clé n'est pas disponible sur le web. Utilisez l'application de bureau."
-        }
+        },
+        "mediaAutoDownload": "Téléchargement automatique des médias",
+        "mediaAutoDownloadDescription": "Choisissez quand les images, vidéos et fichiers se chargent automatiquement.",
+        "mediaAutoDownloadAlways": "Toujours",
+        "mediaAutoDownloadAlwaysDescription": "Charger les médias automatiquement dans toutes les conversations.",
+        "mediaAutoDownloadPrivateOnly": "Privé uniquement",
+        "mediaAutoDownloadPrivateOnlyDescription": "Charger automatiquement dans les messages directs et les salons privés. Dans les salons publics, touchez pour charger.",
+        "mediaAutoDownloadNever": "Jamais",
+        "mediaAutoDownloadNeverDescription": "Ne jamais charger les médias automatiquement. Touchez pour charger dans toute conversation.",
+        "mediaAutoDownloadStrangerNote": "Les médias des personnes absentes de vos contacts nécessitent toujours une action pour se charger, quel que soit ce réglage."
     },
     "update": {
         "title": "Mise à jour disponible",
@@ -1037,6 +1067,7 @@
             "description": "Vous n'avez pas les privilèges administrateur sur ce serveur. Contactez l'administrateur du serveur pour obtenir l'accès."
         },
         "selectCommand": "Sélectionnez une commande dans la barre latérale",
+        "openSections": "Ouvrir les sections d'administration",
         "execute": "Exécuter",
         "executing": "Exécution...",
         "next": "Suivant",
@@ -1082,7 +1113,13 @@
         "users": {
             "delete": "Supprimer l'utilisateur",
             "changePassword": "Changer le mot de passe",
-            "endSessions": "Terminer les sessions"
+            "endSessions": "Terminer les sessions",
+            "online": "En ligne",
+            "offline": "Hors ligne",
+            "onlineNow": "En ligne maintenant",
+            "justNow": "à l'instant",
+            "truncatedBanner": "Affichage des {{shown}} premiers utilisateurs sur {{total}}. Affinez votre recherche pour réduire les résultats.",
+            "truncatedBannerNoTotal": "Affichage des {{shown}} premiers utilisateurs. Affinez votre recherche pour réduire les résultats."
         },
         "userView": {
             "title": "Utilisateur",
@@ -1104,6 +1141,28 @@
         "roomList": {
             "title": "Salons de discussion",
             "noRooms": "Aucun salon trouvé"
+        },
+        "overview": {
+            "title": "Vue d'ensemble du serveur",
+            "refresh": "Actualiser",
+            "updatedAt": "Mis à jour à {{time}}",
+            "empty": "Les statistiques du serveur sont indisponibles.",
+            "retry": "Réessayer",
+            "units": {
+                "d": "j",
+                "h": "h",
+                "m": "min",
+                "s": "s"
+            },
+            "cards": {
+                "uptime": "Disponibilité",
+                "version": "Version du serveur",
+                "users": "Utilisateurs",
+                "onlineSuffix": "{{n}} en ligne",
+                "onlineSessions": "Sessions en ligne",
+                "onlineRooms": "Salons actifs",
+                "vhosts": "Hôtes virtuels"
+            }
         }
     },
     "commandPalette": {

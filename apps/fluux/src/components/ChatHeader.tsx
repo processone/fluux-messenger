@@ -9,12 +9,14 @@ import { useTranslation } from 'react-i18next'
 import type { ContactIdentity } from '@fluux/sdk'
 import { useRosterStore, useContactTime, useLastActivity } from '@fluux/sdk/react'
 import { Avatar } from './Avatar'
-import { useWindowDrag } from '@/hooks'
+import { useWindowDrag, useAnchoredMenu } from '@/hooks'
 import { getTranslatedStatusText } from '@/utils/statusText'
 import { Tooltip } from './Tooltip'
-import { ArrowLeft, Clock, Hash, Lock, LockOpen, Loader2, Search, ShieldAlert, ShieldCheck, ShieldOff, ShieldX } from 'lucide-react'
+import { Archive, ArchiveRestore, ArrowLeft, Clock, Hash, Lock, LockOpen, Loader2, Search, ShieldAlert, ShieldCheck, ShieldOff, ShieldX, User } from 'lucide-react'
 import type { ConversationEncryptionState } from '@/hooks/useConversationEncryptionState'
 import { useWebUnlockDialogStore } from '@/stores/webUnlockDialogStore'
+import { HeaderOverflowKebab, type OverflowEntry } from './header/HeaderOverflowKebab'
+import { inlineClass, kebabClass } from './header/headerOverflow'
 
 export interface ChatHeaderProps {
   name: string
@@ -29,6 +31,12 @@ export interface ChatHeaderProps {
   onEnableEncryptionClick?: () => void
   /** Open the contact profile / management screen. 1:1 chats only. */
   onShowProfile?: () => void
+  /** Whether the conversation is archived — selects the menu's Archive vs Unarchive item. 1:1 chats only. */
+  isArchived?: boolean
+  /** Archive the conversation from the overflow menu. 1:1 chats only. */
+  onArchive?: () => void
+  /** Unarchive the conversation from the overflow menu. 1:1 chats only. */
+  onUnarchive?: () => void
 }
 
 export function ChatHeader({
@@ -43,6 +51,9 @@ export function ChatHeader({
   onDisableEncryptionClick,
   onEnableEncryptionClick,
   onShowProfile,
+  isArchived,
+  onArchive,
+  onUnarchive,
 }: ChatHeaderProps) {
   const { t } = useTranslation()
   const isGroupChat = type === 'groupchat'
@@ -55,13 +66,38 @@ export function ChatHeader({
   const contactTime = useContactTime(!isGroupChat ? jid : null)
   useLastActivity(!isGroupChat ? jid : null)
 
+  // 1:1 overflow entries: search (collapses on narrow widths) + profile/archive
+  // (always in the kebab). Group chats expose none of these.
+  const overflowEntries: OverflowEntry[] = []
+  if (onSearchInConversation) {
+    overflowEntries.push({ kind: 'action', key: 'search', label: t('chat.searchInConversation', 'Search in conversation'), icon: Search, onSelect: onSearchInConversation, kebabClassName: kebabClass('search') })
+  }
+  if (!isGroupChat) {
+    if (onShowProfile) {
+      overflowEntries.push({ kind: 'action', key: 'profile', label: t('sidebar.viewProfile'), icon: User, onSelect: onShowProfile })
+    }
+    if (isArchived && onUnarchive) {
+      overflowEntries.push({ kind: 'action', key: 'unarchive', label: t('conversations.unarchive'), icon: ArchiveRestore, onSelect: onUnarchive })
+    } else if (!isArchived && onArchive) {
+      overflowEntries.push({ kind: 'action', key: 'archive', label: t('conversations.archive'), icon: Archive, onSelect: onArchive })
+    }
+  }
+
+  // When the kebab holds an always-shown entry (profile/archive on a 1:1), it must
+  // stay visible at every width. When its only entry is the tier-collapsible search
+  // (e.g. a group chat), the trigger should hide once search goes inline — otherwise
+  // a wide header shows a kebab whose single row is container-query-hidden, i.e. an
+  // empty menu. kebabClass('search') matches search's reveal threshold.
+  const hasAlwaysShownEntry = overflowEntries.some((e) => !e.kebabClassName)
+  const kebabWrapperClass = hasAlwaysShownEntry ? undefined : kebabClass('search')
+
   return (
-    <header className={`h-14 ${titleBarClass} px-4 flex items-center border-b border-fluux-bg shadow-sm gap-3`} {...dragRegionProps}>
+    <header className={`@container h-14 ${titleBarClass} px-4 flex items-center border-b border-fluux-bg shadow-sm gap-3`} {...dragRegionProps}>
       {/* Back button - mobile only */}
       {onBack && (
         <button
           onClick={onBack}
-          className="p-1 -ms-1 rounded hover:bg-fluux-hover md:hidden"
+          className="p-1 -ms-1 rounded hover:bg-fluux-hover md:hidden tap-target"
           aria-label={t('conversations.backToConversations')}
         >
           <ArrowLeft className="size-5 text-fluux-muted rtl-mirror" />
@@ -139,16 +175,24 @@ export function ChatHeader({
         />
       )}
 
-      {/* Search in conversation */}
+      {/* Search in conversation — inline copy (collapses on narrow widths) */}
       {onSearchInConversation && (
-        <button
-          onClick={onSearchInConversation}
-          className="p-1.5 rounded hover:bg-fluux-hover text-fluux-muted hover:text-fluux-text transition-colors"
-          title={t('chat.searchInConversation', 'Search in conversation')}
-        >
-          <Search className="size-4" />
-        </button>
+        <div className={inlineClass('search')}>
+          <button
+            onClick={onSearchInConversation}
+            className="p-1.5 rounded hover:bg-fluux-hover text-fluux-muted hover:text-fluux-text transition-colors tap-target"
+            aria-label={t('chat.searchInConversation', 'Search in conversation')}
+            title={t('chat.searchInConversation', 'Search in conversation')}
+          >
+            <Search className="size-4" />
+          </button>
+        </div>
       )}
+
+      {/* Overflow (kebab) menu */}
+      <div className={kebabWrapperClass}>
+        <HeaderOverflowKebab ariaLabel={t('contacts.actionsMenu')} entries={overflowEntries} />
+      </div>
     </header>
   )
 }
@@ -160,7 +204,7 @@ function formatFingerprint(fp: string): string {
 function KeyLockedIcon({ fingerprint }: { fingerprint?: string }) {
   const { t } = useTranslation()
   const openWebUnlockDialog = useWebUnlockDialogStore((s) => s.openWebUnlockDialog)
-  const btnClass = 'p-1.5 rounded transition-colors'
+  const btnClass = 'p-1.5 rounded transition-colors tap-target'
   const tooltip = (
     <div>
       <div>{t('chat.encryption.keyLockedTooltip')}</div>
@@ -199,7 +243,8 @@ function EncryptionIcon({
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
-  const btnClass = 'p-1.5 rounded transition-colors'
+  const menu = useAnchoredMenu(open)
+  const btnClass = 'p-1.5 rounded transition-colors tap-target'
 
   useEffect(() => {
     if (!open) return
@@ -248,6 +293,7 @@ function EncryptionIcon({
       <div ref={containerRef} className="relative">
         <Tooltip content={t('chat.encryption.rejectedTooltip')} position="bottom" disabled={open}>
           <button
+            ref={menu.triggerRef}
             type="button"
             onClick={() => setOpen((v) => !v)}
             className={`${btnClass} text-red-500 hover:text-red-600 cursor-pointer`}
@@ -258,7 +304,10 @@ function EncryptionIcon({
           </button>
         </Tooltip>
         {open && (
-          <div className="absolute right-0 top-full mt-1 w-72 rounded-lg border border-fluux-hover bg-fluux-bg shadow-lg z-50 py-2 px-3 overflow-hidden">
+          <div
+            ref={menu.menuRef}
+            style={{ left: menu.position.x, top: menu.position.y }}
+            className="fixed w-72 max-w-[calc(100vw-1rem)] rounded-lg border border-fluux-hover bg-fluux-bg shadow-lg z-50 py-2 px-3 overflow-hidden">
             <div className="text-sm font-medium text-red-600 dark:text-red-400 mb-1.5">
               {t('chat.encryption.rejectedTitle')}
             </div>
@@ -288,6 +337,7 @@ function EncryptionIcon({
       <div ref={containerRef} className="relative">
         <Tooltip content={t('chat.encryption.plaintextForcedTooltip')} position="bottom" disabled={open}>
           <button
+            ref={menu.triggerRef}
             type="button"
             onClick={() => setOpen((v) => !v)}
             className={`${btnClass} text-fluux-muted hover:text-fluux-text cursor-pointer`}
@@ -298,7 +348,10 @@ function EncryptionIcon({
           </button>
         </Tooltip>
         {open && (
-          <div className="absolute right-0 top-full mt-1 w-56 rounded-lg border border-fluux-hover bg-fluux-bg shadow-lg z-50 py-1 overflow-hidden">
+          <div
+            ref={menu.menuRef}
+            style={{ left: menu.position.x, top: menu.position.y }}
+            className="fixed w-56 max-w-[calc(100vw-1rem)] rounded-lg border border-fluux-hover bg-fluux-bg shadow-lg z-50 py-1 overflow-hidden">
             {onEnableClick && (
               <button
                 type="button"
@@ -375,6 +428,7 @@ function EncryptionIcon({
         disabled={open}
       >
         <button
+          ref={menu.triggerRef}
           type="button"
           onClick={() => setOpen((v) => !v)}
           className={`${btnClass} ${colorClass} cursor-pointer`}
@@ -385,7 +439,10 @@ function EncryptionIcon({
         </button>
       </Tooltip>
       {open && (
-        <div className="absolute right-0 top-full mt-1 w-56 rounded-lg border border-fluux-hover bg-fluux-bg shadow-lg z-50 py-1 overflow-hidden">
+        <div
+          ref={menu.menuRef}
+          style={{ left: menu.position.x, top: menu.position.y }}
+          className="fixed w-56 max-w-[calc(100vw-1rem)] rounded-lg border border-fluux-hover bg-fluux-bg shadow-lg z-50 py-1 overflow-hidden">
           {onVerifyClick && (
             <button
               type="button"

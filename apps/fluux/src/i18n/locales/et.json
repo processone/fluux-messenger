@@ -40,7 +40,21 @@
         "hidePassword": "Peida parool",
         "madeBy": "Tegi",
         "ejabberdCreator": ", ettevõte, mis lõi",
-        "poweredBy": "Töötab"
+        "poweredBy": "Töötab",
+        "errors": {
+            "tlsCertTitle": "Serveri turvasertifikaati ei õnnestunud kontrollida",
+            "tlsOtherTitle": "Turvaline ühendus ebaõnnestus",
+            "tlsOtherBody": "Serveriga ei õnnestunud luua krüpteeritud ühendust. Serveri TLS-konfiguratsioon ei pruugi olla toetatud. Kontrolli serveri aadressi või võta ühendust serveri administraatoriga.",
+            "unreachableTitle": "Serverile ei õnnestunud jõuda",
+            "timeoutBody": "Server ei vastanud õigel ajal. Kontrolli oma võrku ja serveri aadressi, seejärel proovi uuesti.",
+            "refusedBody": "Server lükkas ühenduse tagasi. Kontrolli serveri aadressi ja porti, seejärel proovi uuesti.",
+            "cert": {
+                "expired": "Serveri sertifikaat on aegunud. Võta ühendust serveri administraatoriga. Kui aadress on vale, muuda allpool olevat serverivälja.",
+                "nameMismatch": "Serveri sertifikaat on väljastatud teisele hosti nimele. Kontrolli allpool olevat serveri aadressi või võta ühendust serveri administraatoriga.",
+                "untrusted": "Serveri sertifikaat on iseallkirjastatud või väljastatud tundmatu asutuse poolt, seega ei saa seda usaldada. Kontrolli serveri aadressi või võta ühendust serveri administraatoriga.",
+                "generic": "Serveri turvasertifikaati ei õnnestunud kontrollida. Kontrolli allpool olevat serveri aadressi või võta ühendust serveri administraatoriga."
+            }
+        }
     },
     "sidebar": {
         "messages": "Sõnumid",
@@ -203,6 +217,16 @@
         "invalidRoomAddress": "Vigane toa aadress (peaks olema tuba@conference.server)",
         "joinRoomHint": "Sisesta täielik toa aadress, et liituda avaliku vestlustoaga.",
         "failedToJoinRoom": "Toaga liitumine ebaõnnestus",
+        "passwordProtected": "See tuba on parooliga kaitstud",
+        "roomPassword": "Parool",
+        "passwordRequired": "See tuba on parooliga kaitstud. Liitumiseks sisestage parool.",
+        "incorrectPassword": "Vale parool.",
+        "nicknameInUse": "See hüüdnimi on selles toas juba kasutusel.",
+        "membersOnly": "See tuba on ainult liikmetele. Liitumiseks peate olema liige.",
+        "bannedFromRoom": "Teid on sellest toast keelustatud.",
+        "roomFull": "See tuba on täis.",
+        "registeredNicknameRequired": "See tuba nõuab teie registreeritud hüüdnime.",
+        "roomNotFound": "Tuba ei leitud.",
         "nonAnonWarningTitle": "Kas liituda mitteanonüümse kanaliga?",
         "nonAnonWarningMessage": "Kõik kanalis „{{room}}“ näevad sinu tegelikku aadressi (sinu XMPP/Jabberi ID-d). Kas liituda siiski?",
         "nonAnonWarningConfirm": "Liitu siiski",
@@ -211,6 +235,7 @@
         "notJoinedNoHistory": "Sa pole selles toas",
         "joinToLoadHistory": "Liitu sõnumite laadimiseks",
         "notificationSettings": "Teavituste seaded",
+        "roomActions": "Ruumi toimingud",
         "mentionsOnly": "Ainult mainimised",
         "defaultBehavior": "Vaikekäitumine",
         "allMessages": "Kõik sõnumid",
@@ -435,6 +460,7 @@
         "attachment": "Manus",
         "removeAttachment": "Eemalda manus",
         "reply": "Vasta",
+        "copyMessage": "Kopeeri tekst",
         "replyQuoteHiddenEncrypted": "Tsitaat peidetud: originaal oli krüpteeritud",
         "forwardMessage": "Edasta sõnum (tulemas)",
         "moreReactions": "Rohkem reaktsioone",
@@ -567,7 +593,12 @@
             "acceptedWithoutVerifying": "Uus võti vastu võetud. Kontakt on kinnitamata",
             "acceptFailed": "Uue võtme vastuvõtmine ebaõnnestus. Proovi uuesti"
         },
-        "offlinePlaceholder": "Võrguühenduseta. Sõnumid saadetakse pärast taasühendamist"
+        "offlinePlaceholder": "Võrguühenduseta. Sõnumid saadetakse pärast taasühendamist",
+        "loadImage": "Laadi pilt",
+        "loadVideo": "Laadi video",
+        "loadAudio": "Laadi heli",
+        "loadFilePreview": "Laadi eelvaade",
+        "showLinkImage": "Kuva pilt"
     },
     "dates": {
         "today": "Täna",
@@ -583,7 +614,8 @@
             "updates": "Värskendused",
             "blocked": "Blokeeritud kasutajad",
             "storage": "Salvestusruum",
-            "encryption": "Krüpteerimine"
+            "encryption": "Krüpteerimine",
+            "privacy": "Privaatsus"
         },
         "blocked": {
             "title": "Blokeeritud kasutajad",
@@ -704,6 +736,7 @@
             "pepUnsupportedBanner": "Teie server ei toeta isiklike sündmuste avaldamist (PEP, XEP-0163), mida OpenPGP-krüpteerimine (XEP-0373) nõuab. Otsast lõpuni krüpteerimist ei saa sellel kontol sisse lülitada. Võtke ühendust serveri administraatoriga.",
             "statusPepUnsupported": "Krüpteerimist ei saa sisse lülitada: server ei toeta PEP-i (XEP-0163), mida OpenPGP (XEP-0373) nõuab.",
             "statusRegistrationFailed": "Krüpteerimise seadistamine ebaõnnestus ({{code}}). Üksikasjad leiate arendaja konsoolist.",
+            "notProtectedAtRest": "Siin pole süsteemi võtmehoidlat saadaval, seega salvestatakse teie võtme paroolifraas krüptimata failina kettale. Võti pole puhkeolekus kaitstud. Igaüks, kes saab lugeda selle seadme faile, võib seda kasutada.",
             "backupLabel": "Võtme varukoopia",
             "backupDescription": "Avalda võtme krüpteeritud koopia oma XMPP serveris. Kaitstud paroolifraasiga, mida tead ainult sina, ja loetav ainult sinu kontolt (access_model: whitelist). Võimaldab lugeda krüpteeritud ajalugu uues seadmes pärast sisselogimist ja paroolifraasi sisestamist.",
             "backupAction": "Salvesta serverisse",
@@ -778,6 +811,7 @@
             "identityChoice": {
                 "title": "Sellele kontole on juba olemas OpenPGP identiteet",
                 "body": "Sellel brauseril pole kohalikku võtit, kuid server reklaamib juba teie konto jaoks võtit. Uue võtme genereerimine siin lõhestaks vaikselt teie identiteedi: kontaktid, kes krüpteerisid olemasoleva võtmega, ei saaks sõnumeid kohale toimetada. Valige, kuidas seda lahendada:",
+                "bodyKeyUnrecoverable": "Selle seadme OpenPGP-võtit ei saa enam avada, seega ei saa krüptimist käivitada. Teie avaldatud identiteeti see ei mõjuta. Taastage see serveri varukoopiast või võtmefaili importides, või asendage see, kui te ei saa. Valige, kuidas soovite selle lahendada:",
                 "publishedFingerprintLabel": "Avaldatud sõrmejälg",
                 "restoreFromServerTitle": "Taastamine serveri varundusest",
                 "restoreFromServerBody": "Kasutage varunduse paroolifraasi, mille seadsite krüptimise lubamisel teisel seadmel. Vastav privaatvõti tuuakse serverist ja avatakse kohalikult.",
@@ -804,19 +838,6 @@
             "importFileSuccess": "Võti imporditi failist",
             "importFileFailed": "Valitud faili ei õnnestunud lugeda",
             "unsupportedKeyAlgorithm": "Imporditud võti kasutab algoritmi, mida enam ei toetata (nt DSA või ElGamal). Kasutage kaasaegset OpenPGP võtit (Curve25519, Ed25519 või vähemalt 2048-bitine RSA).",
-            "externalExportAction": "Ekspordi välisesse OpenPGP tööriista",
-            "externalExportDialogTitle": "Ekspordi privaatvõti välisesse OpenPGP tööriista",
-            "externalExportDialogBody": "Loob standardse OpenPGP privaatvõtme faili (PRIVATE KEY BLOCK), mille saad importida tööriistadesse gpg, OpenKeychain, Kleopatra ja teistesse.",
-            "externalExportProtectedLabel": "Kaitstud paroolifraasiga",
-            "externalExportProtectedDescription": "Soovitatav. Vali paroolifraas; eksporditud fail krüpteeritakse ja välised tööriistad küsivad seda importimisel.",
-            "externalExportUnprotectedLabel": "Krüpteerimata",
-            "externalExportUnprotectedDescription": "Eksporditud fail sisaldab sinu privaatvõtit avatekstina. Kasuta ainult juhul, kui sihttööriist keeldub paroolifraasiga kaitstud võtmetest.",
-            "externalExportUnprotectedWarning": "Ilma paroolifraasita võib igaüks, kellel on juurdepääs eksporditud failile, esineda sinu nimel ja dekrüpteerida sinu varasemad ja tulevased sõnumid. Kustuta fail kohe pärast importimist.",
-            "externalExportUnprotectedAcknowledgment": "Saan ohtudest aru ja soovin oma privaatvõtme krüpteerimata eksportida.",
-            "externalExportPassphraseLabel": "Paroolifraas",
-            "externalExportConfirmPassphraseLabel": "Kinnita paroolifraas",
-            "externalExportPassphraseMismatch": "Paroolifraasid ei kattu.",
-            "externalExportSuccess": "Privaatvõti eksporditi faili",
             "unlockDialogTitle": "Ava otsast lõpuni krüpteerimine",
             "unlockDialogBody": "Sisesta parool oma võtme dekrüpteerimiseks selle seansi jaoks.",
             "unlockDialogSetupTitle": "Seadista otsast lõpuni krüpteerimine",
@@ -828,7 +849,16 @@
             "unlockPassphraseTooShort": "Parool peab olema vähemalt 8 märki pikk",
             "lockedBannerBody": "Sinu krüpteerimisvõti on lukustatud. Sisesta parool krüpteerimise aktiveerimiseks selle seansi jaoks.",
             "rotateNotSupportedWeb": "Võtme rotatsioon ei ole veebis saadaval. Kasuta lauaarvutirakendust."
-        }
+        },
+        "mediaAutoDownload": "Meedia automaatne allalaadimine",
+        "mediaAutoDownloadDescription": "Valige, millal pildid, videod ja failid automaatselt laaditakse.",
+        "mediaAutoDownloadAlways": "Alati",
+        "mediaAutoDownloadAlwaysDescription": "Laadi meedia automaatselt igas vestluses.",
+        "mediaAutoDownloadPrivateOnly": "Ainult privaatne",
+        "mediaAutoDownloadPrivateOnlyDescription": "Laadi automaatselt otssõnumites ja privaatsetes tubades. Avalikes kanalites, puudutage laadimiseks.",
+        "mediaAutoDownloadNever": "Mitte kunagi",
+        "mediaAutoDownloadNeverDescription": "Ära kunagi laadi meediat automaatselt. Puudutage laadimiseks mis tahes vestluses.",
+        "mediaAutoDownloadStrangerNote": "Inimestelt pärinev meedia, keda pole teie kontaktide hulgas, vajab laadimiseks alati puudutust, olenemata sellest, mida siin valite."
     },
     "update": {
         "title": "Värskendus saadaval",
@@ -1038,6 +1068,7 @@
             "description": "Sul pole selles serveris halduri õigusi. Võta ligipääsu saamiseks ühendust serveri halduriga."
         },
         "selectCommand": "Vali käsk külgribalt",
+        "openSections": "Ava administreerimise jaotised",
         "execute": "Käivita",
         "executing": "Käivitamine...",
         "next": "Järgmine",
@@ -1083,7 +1114,13 @@
         "users": {
             "delete": "Kustuta kasutaja",
             "changePassword": "Muuda parooli",
-            "endSessions": "Lõpeta seansid"
+            "endSessions": "Lõpeta seansid",
+            "online": "Online",
+            "offline": "Offline",
+            "onlineNow": "Praegu online",
+            "justNow": "just nüüd",
+            "truncatedBanner": "Kuvatakse esimesed {{shown}} kasutajat {{total}}-st. Täpsustage otsingut tulemuste kitsendamiseks.",
+            "truncatedBannerNoTotal": "Kuvatakse esimesed {{shown}} kasutajat. Täpsustage otsingut tulemuste kitsendamiseks."
         },
         "userView": {
             "title": "Kasutaja",
@@ -1105,6 +1142,28 @@
         "roomList": {
             "title": "Vestlustoad",
             "noRooms": "Tube ei leitud"
+        },
+        "overview": {
+            "title": "Serveri ülevaade",
+            "refresh": "Värskenda",
+            "updatedAt": "Uuendatud kell {{time}}",
+            "empty": "Serveri statistika pole saadaval.",
+            "retry": "Proovi uuesti",
+            "units": {
+                "d": "p",
+                "h": "t",
+                "m": "min",
+                "s": "s"
+            },
+            "cards": {
+                "uptime": "Tööaeg",
+                "version": "Serveri versioon",
+                "users": "Kasutajad",
+                "onlineSuffix": "{{n}} võrgus",
+                "onlineSessions": "Aktiivsed seansid",
+                "onlineRooms": "Aktiivsed toad",
+                "vhosts": "Virtuaalsed hostid"
+            }
         }
     },
     "commandPalette": {

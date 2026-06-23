@@ -136,6 +136,11 @@
   --fluux-text-on-accent: #ffffff;
   --fluux-text-accent: var(--fluux-bg-accent);
   --fluux-text-link: var(--fluux-color-blue);
+  /* Own-message ("you") name. The raw brand accent (hsl 235 86% 65%) only
+     reaches ~2.8:1 on the dark message background, so a dedicated brand-indigo
+     value is used, tuned to clear WCAG AA on both the resting and hover message
+     backgrounds. Dark default here; .light overrides below. */
+  --fluux-text-self: #a5b4fc;
 
   /* Status (named by purpose, not color) */
   --fluux-status-success: var(--fluux-color-green);
@@ -309,6 +314,11 @@
   --fluux-color-blue-rgb: 9, 105, 218;
   --fluux-color-gray: #9ca3af;
 
+  /* Own-message ("you") name — brand-indigo darkened for WCAG AA on the white
+     message background and its hover state (the raw accent only reached ~4.6:1
+     at rest and failed on hover). */
+  --fluux-text-self: #4f46e5;
+
   /* Private (whisper) — deeper violet for contrast on light backgrounds */
   --fluux-private: hsl(270, 70%, 48%);
   --fluux-private-soft: hsla(270, 70%, 55%, 0.12);
@@ -397,12 +407,14 @@ html, body {
   /* Disable iOS/Safari text-size auto-adjust when rotating */
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
-  /* Prevent double-tap zoom on touch devices; pinch-zoom already disabled via viewport meta */
+  /* Remove the 300ms tap delay (double-tap-to-zoom) on touch; pinch-zoom stays
+     available via the viewport meta for accessibility. */
   touch-action: manipulation;
 }
 
 #root {
   height: 100%;
+  background-color: var(--fluux-bg);
   /* Ensure the app content area is never treated as a window drag region.
      The title bar sets -webkit-app-region:drag on its element; without this
      counter-rule, WRY/WebKit can sometimes propagate the drag behavior to
@@ -430,7 +442,57 @@ html, body {
 /* Use on bottom-aligned bars (composer, action bars) so their background */
 /* extends into the home-indicator zone while content stays above it. */
 .pb-safe {
-  padding-bottom: calc(1rem + env(safe-area-inset-bottom));
+  padding-bottom: 1rem;
+}
+
+/* Compact safe-area variants for persistent chrome such as the sidebar rail
+   and account panel. They preserve each component's normal bottom rhythm while
+   letting the surface color fill the gesture area. */
+.pb-safe-2 {
+  padding-bottom: 0.5rem;
+}
+
+.pb-safe-3 {
+  padding-bottom: 0.75rem;
+}
+
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+  .pb-safe {
+    padding-bottom: calc(1rem + env(safe-area-inset-bottom));
+  }
+
+  .pb-safe-2 {
+    padding-bottom: calc(0.5rem + env(safe-area-inset-bottom));
+  }
+
+  .pb-safe-3 {
+    padding-bottom: calc(0.75rem + env(safe-area-inset-bottom));
+  }
+}
+
+/* Utility: guarantee a comfortable >=44px touch hit area for icon-only or */
+/* compact buttons WITHOUT enlarging the glyph or changing desktop density. */
+/* The rule is inert on hovering/fine-pointer devices (mouse): only on touch */
+/* (coarse pointer / no hover) does the minimum box grow and the icon centre. */
+/* Apply to small icon buttons (modal close, header actions, menu rows, etc.). */
+@media (hover: none), (pointer: coarse) {
+  .tap-target {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 2.75rem;
+    min-height: 2.75rem;
+  }
+}
+
+/* Tablet occupant drawer: below lg the OccupantPanel is an overlay that slides */
+/* in from the inline-end edge (RTL-aware). The animation is scoped below lg — */
+/* at lg+ the panel is an in-flow column and must not animate or transform. */
+@keyframes drawer-in-end { from { transform: translateX(100%); } to { transform: translateX(0); } }
+@keyframes drawer-in-end-rtl { from { transform: translateX(-100%); } to { transform: translateX(0); } }
+@media (max-width: 1023px) {
+  .animate-drawer-in { animation: drawer-in-end 220ms cubic-bezier(0.32, 0.72, 0, 1); }
+  [dir="rtl"] .animate-drawer-in { animation: drawer-in-end-rtl 220ms cubic-bezier(0.32, 0.72, 0, 1); }
 }
 
 /* Allow native rubber band effect within scrollable elements (macOS) */

@@ -153,36 +153,45 @@ test('06 — Code Block (dark)', async ({ page }) => {
   await capture(page, '06-code-block-dark')
 })
 
-test('07 — Admin User List (dark)', async ({ page }) => {
+test('07 — Admin Server Overview (dark)', async ({ page }) => {
   await waitForDemoReady(page)
-  await navigateTo(page, 'admin')
-  // Click the Users category to show the user list
-  await page.getByText('Users').first().click()
-  await page.waitForTimeout(500)
-  // In demo mode fetchUsers() has no real server, so re-seed the user list data
+
+  // Vital-signs values shown on the overview cards. Defined once and re-applied
+  // after the view mounts (the overview's mount fetch would otherwise overwrite
+  // them with the raw DemoClient seed values).
+  const SERVER_STATS = {
+    registeredUsers: 1284,
+    onlineUsers: 47,
+    onlineRooms: 23,
+    uptimeSeconds: 2001600, // 23d 4h
+    version: 'ejabberd 25.07',
+    vhostCount: 3,
+    fetchedAt: Date.UTC(2026, 5, 20, 9, 24), // fixed → stable "updated at" time
+  }
+
+  // Ensure admin access + a stats category so the overview is reachable.
   await page.evaluate(() => {
     const adminStore = (window as any).__adminStore
-    if (adminStore) {
-      adminStore.getState().setUserList({
-        items: [
-          { jid: 'emma@fluux.chat', username: 'emma', isOnline: true },
-          { jid: 'james@fluux.chat', username: 'james', isOnline: true },
-          { jid: 'sophia@fluux.chat', username: 'sophia', isOnline: true },
-          { jid: 'olivia@fluux.chat', username: 'olivia', isOnline: true },
-          { jid: 'mia@fluux.chat', username: 'mia', isOnline: false },
-          { jid: 'liam@fluux.chat', username: 'liam', isOnline: true },
-          { jid: 'ava@fluux.chat', username: 'ava', isOnline: true },
-          { jid: 'alex@fluux.chat', username: 'alex', isOnline: false },
-        ],
-        isLoading: false,
-        error: null,
-        searchQuery: '',
-        hasFetched: true,
-        pagination: { count: 8 },
-      })
-    }
+    if (!adminStore) return
+    const s = adminStore.getState()
+    s.setIsAdmin(true)
+    s.setCommands([
+      { node: 'http://jabber.org/protocol/admin#get-registered-users-num', name: 'Get registered users number', category: 'stats' },
+      { node: 'http://jabber.org/protocol/admin#get-online-users-num', name: 'Get online users number', category: 'stats' },
+      { node: 'api-commands/stats', name: 'Stats', category: 'stats' },
+    ])
   })
-  await page.waitForTimeout(500)
+
+  await navigateTo(page, 'admin')
+  // Open the Server Overview (Statistics category)
+  await page.getByText('Statistics').first().click()
+  // Let the overview mount and its initial fetch settle before we seed final values
+  await page.waitForTimeout(800)
+  await page.evaluate((stats) => {
+    const adminStore = (window as any).__adminStore
+    if (adminStore) adminStore.getState().setServerStats(stats)
+  }, SERVER_STATS)
+  await page.waitForTimeout(400)
   await capture(page, '07-admin-dark')
 })
 

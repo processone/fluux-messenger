@@ -54,6 +54,28 @@ void i18n.use(initReactI18next).init({
         status: {
           reconnecting: 'Reconnecting...',
         },
+        // Admin server overview (ServerOverview component tests)
+        admin: {
+          overview: {
+            title: 'Server overview',
+            refresh: 'Refresh',
+            updatedAt: 'Updated at {{time}}',
+            advanced: 'Advanced',
+            advancedHint: 'Run a raw server command',
+            empty: 'Server statistics are unavailable.',
+            retry: 'Retry',
+            units: { d: 'd', h: 'h', m: 'm', s: 's' },
+            cards: {
+              uptime: 'Uptime',
+              version: 'Server version',
+              users: 'Users',
+              onlineSuffix: '{{n}} online',
+              onlineSessions: 'Online sessions',
+              onlineRooms: 'Active rooms',
+              vhosts: 'Virtual hosts',
+            },
+          },
+        },
       },
     },
   },
@@ -148,6 +170,7 @@ vi.mock('@fluux/sdk', async (importOriginal) => {
         markAsRead: vi.fn(),
         clearFirstNewMessageId: vi.fn(),
         isArchived: () => false,
+        applyRemoteDisplayed: vi.fn(),
       }),
       subscribe: vi.fn(() => vi.fn()),
     },
@@ -375,9 +398,18 @@ vi.mock('@fluux/sdk/react', () => ({
     const state = {
       mucServiceJid: null,
       setActiveCategory: vi.fn(),
+      onlineJids: new Set<string>(),
+      lastActivity: new Map(),
+      lastActivitySupported: true,
+      usersTruncated: false,
     }
     return selector ? selector(state) : state
   }),
+  useAdmin: vi.fn(() => ({
+    requestLastActivity: vi.fn(),
+    fetchAllUsers: vi.fn(),
+    usersTruncated: false,
+  })),
   useBlockingStore: vi.fn((selector) => {
     const state = {
       blockedJids: [],

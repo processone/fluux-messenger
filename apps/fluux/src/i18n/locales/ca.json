@@ -40,7 +40,21 @@
         "hidePassword": "Amaga el mot de pas",
         "madeBy": "Fet per",
         "ejabberdCreator": ", l'empresa darrere de",
-        "poweredBy": "Funciona amb"
+        "poweredBy": "Funciona amb",
+        "errors": {
+            "tlsCertTitle": "No s'ha pogut verificar el certificat de seguretat del servidor",
+            "tlsOtherTitle": "Ha fallat la connexió segura",
+            "tlsOtherBody": "No s'ha pogut establir la connexió xifrada amb el servidor. La configuració TLS del servidor pot no ser compatible. Comproveu l'adreça del servidor o contacteu amb l'administrador.",
+            "unreachableTitle": "No s'ha pogut connectar amb el servidor",
+            "timeoutBody": "El servidor no ha respost a temps. Comproveu la xarxa i l'adreça del servidor, i torneu-ho a intentar.",
+            "refusedBody": "El servidor ha rebutjat la connexió. Comproveu l'adreça i el port del servidor, i torneu-ho a intentar.",
+            "cert": {
+                "expired": "El certificat del servidor ha caducat. Contacteu amb l'administrador del servidor. Si l'adreça és incorrecta, editeu el camp del servidor a continuació.",
+                "nameMismatch": "El certificat del servidor s'ha emès per a un nom d'amfitrió diferent. Comproveu l'adreça del servidor a continuació o contacteu amb l'administrador.",
+                "untrusted": "El certificat del servidor és autofirmat o emès per una autoritat desconeguda, de manera que no es pot confiar. Comproveu l'adreça del servidor o contacteu amb l'administrador.",
+                "generic": "No s'ha pogut verificar el certificat de seguretat del servidor. Comproveu l'adreça del servidor a continuació o contacteu amb l'administrador."
+            }
+        }
     },
     "sidebar": {
         "messages": "Missatges",
@@ -203,6 +217,16 @@
         "invalidRoomAddress": "Adreça de sala no vàlida (ha de ser sala@conferencia.servidor)",
         "joinRoomHint": "Introdueix l'adreça completa de la sala per unir-te a un xat públic.",
         "failedToJoinRoom": "No s'ha pogut unir a la sala",
+        "passwordProtected": "Aquesta sala està protegida per contrasenya",
+        "roomPassword": "Contrasenya",
+        "passwordRequired": "Aquesta sala està protegida per contrasenya. Introduïu-la per unir-vos.",
+        "incorrectPassword": "Contrasenya incorrecta.",
+        "nicknameInUse": "Aquest àlies ja s'utilitza en aquesta sala.",
+        "membersOnly": "Aquesta sala és només per a membres. Heu de ser membre per unir-vos.",
+        "bannedFromRoom": "Heu estat expulsat d'aquesta sala.",
+        "roomFull": "Aquesta sala és plena.",
+        "registeredNicknameRequired": "Aquesta sala requereix el vostre àlies registrat.",
+        "roomNotFound": "Sala no trobada.",
         "nonAnonWarningTitle": "Voleu unir-vos a un canal no anònim?",
         "nonAnonWarningMessage": "Tothom a «{{room}}» pot veure la vostra adreça real (el vostre identificador XMPP/Jabber). Voleu unir-vos igualment?",
         "nonAnonWarningConfirm": "Uneix-m'hi igualment",
@@ -211,6 +235,7 @@
         "notJoinedNoHistory": "No ets a aquesta sala",
         "joinToLoadHistory": "Uneix-te per carregar els missatges",
         "notificationSettings": "Configuració de notificacions",
+        "roomActions": "Accions de la sala",
         "mentionsOnly": "Només mencions",
         "defaultBehavior": "Comportament per defecte",
         "allMessages": "Tots els missatges",
@@ -435,6 +460,7 @@
         "attachment": "Adjunt",
         "removeAttachment": "Elimina l'adjunt",
         "reply": "Respon",
+        "copyMessage": "Copia el text",
         "replyQuoteHiddenEncrypted": "Cita amagada: l'original estava xifrat",
         "forwardMessage": "Reenvia el missatge (properament)",
         "moreReactions": "Més reaccions",
@@ -567,7 +593,12 @@
             "acceptedWithoutVerifying": "Clau nova acceptada. El contacte no està verificat",
             "acceptFailed": "No s'ha pogut acceptar la clau nova. Torna-ho a provar"
         },
-        "offlinePlaceholder": "Fora de línia. Els missatges s’enviaran en reconnectar"
+        "offlinePlaceholder": "Fora de línia. Els missatges s’enviaran en reconnectar",
+        "loadImage": "Carrega la imatge",
+        "loadVideo": "Carrega el vídeo",
+        "loadAudio": "Carrega l'àudio",
+        "loadFilePreview": "Carrega la previsualització",
+        "showLinkImage": "Mostra la imatge"
     },
     "dates": {
         "today": "Avui",
@@ -583,7 +614,8 @@
             "updates": "Actualitzacions",
             "blocked": "Usuaris blocats",
             "storage": "Emmagatzematge",
-            "encryption": "Xifratge"
+            "encryption": "Xifratge",
+            "privacy": "Privadesa"
         },
         "blocked": {
             "title": "Usuaris blocats",
@@ -704,6 +736,7 @@
             "pepUnsupportedBanner": "El teu servidor no admet la publicació d'esdeveniments personals (PEP, XEP-0163), necessària per al xifratge OpenPGP (XEP-0373). El xifratge d'extrem a extrem no es pot activar en aquest compte. Contacta amb l'administrador del servidor.",
             "statusPepUnsupported": "No es pot activar el xifratge: el servidor no admet PEP (XEP-0163), requerit per OpenPGP (XEP-0373).",
             "statusRegistrationFailed": "La configuració del xifratge ha fallat ({{code}}). Consulta la consola del desenvolupador per als detalls.",
+            "notProtectedAtRest": "Aquí no hi ha cap clauer del sistema disponible, de manera que la frase de contrasenya de la teva clau es desa sense xifrar en un fitxer al disc. La clau no està protegida en repòs. Qualsevol que pugui llegir els fitxers d'aquest dispositiu podria utilitzar-la.",
             "backupLabel": "Còpia de seguretat de la clau",
             "backupDescription": "Publica una còpia xifrada de la teva clau al teu servidor XMPP. Protegida per una frase de pas que només tu coneixes, i només llegible pel teu compte (access_model: whitelist). Et permet llegir l'historial xifrat en un nou dispositiu després d'iniciar sessió i introduir la frase de pas.",
             "backupAction": "Desa al servidor",
@@ -778,6 +811,7 @@
             "identityChoice": {
                 "title": "Ja existeix una identitat OpenPGP per a aquest compte",
                 "body": "Aquest navegador no té cap clau local, però el servidor ja anuncia una clau per al vostre compte. Generar una nova clau aquí bifurcaria silenciosament la vostra identitat: els corresponsals que xifraven a la clau existent no podrien lliurar missatges. Trieu com voleu resoldre-ho:",
+                "bodyKeyUnrecoverable": "La clau OpenPGP d'aquest dispositiu ja no es pot desbloquejar, així que el xifratge no pot començar. La teva identitat publicada no es veu afectada. Recupera-la restaurant la còpia de seguretat del servidor o important un fitxer de clau, o substitueix-la si no pots. Tria com vols resoldre-ho:",
                 "publishedFingerprintLabel": "Empremta publicada",
                 "restoreFromServerTitle": "Restaurar des de la còpia de seguretat del servidor",
                 "restoreFromServerBody": "Utilitzeu la contrasenya de còpia de seguretat que vau definir en activar el xifratge en un altre dispositiu. La clau privada corresponent es recupera del servidor i es desbloqueja localment.",
@@ -804,19 +838,6 @@
             "importFileSuccess": "Clau importada des del fitxer",
             "importFileFailed": "No s'ha pogut llegir el fitxer seleccionat",
             "unsupportedKeyAlgorithm": "La clau importada utilitza un algoritme que ja no és compatible (per exemple DSA o ElGamal). Utilitzeu una clau OpenPGP moderna (Curve25519, Ed25519 o RSA d'almenys 2048 bits).",
-            "externalExportAction": "Exporta per a una eina OpenPGP externa",
-            "externalExportDialogTitle": "Exporta la clau privada per a una eina OpenPGP externa",
-            "externalExportDialogBody": "Genera un fitxer de clau privada OpenPGP estàndard (PRIVATE KEY BLOCK) que podeu importar a gpg, OpenKeychain, Kleopatra i altres eines.",
-            "externalExportProtectedLabel": "Protegida amb una frase de pas",
-            "externalExportProtectedDescription": "Recomanat. Trieu una frase de pas; el fitxer exportat es xifra i les eines externes us la demanaran en importar-lo.",
-            "externalExportUnprotectedLabel": "Sense xifratge",
-            "externalExportUnprotectedDescription": "El fitxer exportat conté la vostra clau privada en text clar. Utilitzeu-ho només si l'eina de destinació rebutja les claus protegides amb frase de pas.",
-            "externalExportUnprotectedWarning": "Sense frase de pas, qualsevol persona amb accés al fitxer exportat pot suplantar-vos i desxifrar els vostres missatges passats i futurs. Esborreu el fitxer tan bon punt l'hàgiu importat.",
-            "externalExportUnprotectedAcknowledgment": "Entenc els riscos i vull exportar la meva clau privada sense xifratge.",
-            "externalExportPassphraseLabel": "Frase de pas",
-            "externalExportConfirmPassphraseLabel": "Confirma la frase de pas",
-            "externalExportPassphraseMismatch": "Les frases de pas no coincideixen.",
-            "externalExportSuccess": "Clau privada exportada al fitxer",
             "unlockDialogTitle": "Desbloqueja el xifratge extrem a extrem",
             "unlockDialogBody": "Introdueix la contrasenya per desxifrar la teva clau per a aquesta sessió.",
             "unlockDialogSetupTitle": "Configura el xifratge extrem a extrem",
@@ -828,7 +849,16 @@
             "unlockPassphraseTooShort": "La contrasenya ha de tenir almenys 8 caràcters",
             "lockedBannerBody": "La teva clau de xifratge està bloquejada. Introdueix la contrasenya per activar el xifratge per a aquesta sessió.",
             "rotateNotSupportedWeb": "La rotació de claus no està disponible al web. Utilitza l'aplicació d'escriptori."
-        }
+        },
+        "mediaAutoDownload": "Descàrrega automàtica de multimèdia",
+        "mediaAutoDownloadDescription": "Trieu quan es carreguen automàticament les imatges, els vídeos i els fitxers.",
+        "mediaAutoDownloadAlways": "Sempre",
+        "mediaAutoDownloadAlwaysDescription": "Carrega els multimèdia automàticament en totes les converses.",
+        "mediaAutoDownloadPrivateOnly": "Només privat",
+        "mediaAutoDownloadPrivateOnlyDescription": "Carrega automàticament als missatges directes i les sales privades. Als canals públics, toca per carregar.",
+        "mediaAutoDownloadNever": "Mai",
+        "mediaAutoDownloadNeverDescription": "No carrega mai els multimèdia automàticament. Toca per carregar en qualsevol conversa.",
+        "mediaAutoDownloadStrangerNote": "Els multimèdia de persones que no són als vostres contactes sempre requereixen un toc per carregar-se, sigui quin sigui el que trieu aquí."
     },
     "update": {
         "title": "Actualització disponible",
@@ -1038,6 +1068,7 @@
             "description": "No tens privilegis d'administrador en aquest servidor. Contacta amb l'administrador del servidor per obtenir accés."
         },
         "selectCommand": "Selecciona una comanda de la barra lateral",
+        "openSections": "Obrir les seccions d'administració",
         "execute": "Executa",
         "executing": "Executant...",
         "next": "Següent",
@@ -1083,7 +1114,13 @@
         "users": {
             "delete": "Elimina l'usuari",
             "changePassword": "Canvia el mot de pas",
-            "endSessions": "Finalitza sessions"
+            "endSessions": "Finalitza sessions",
+            "online": "En línia",
+            "offline": "Fora de línia",
+            "onlineNow": "En línia ara",
+            "justNow": "ara mateix",
+            "truncatedBanner": "Es mostren els primers {{shown}} de {{total}} usuaris. Refineu la cerca per reduir els resultats.",
+            "truncatedBannerNoTotal": "Es mostren els primers {{shown}} usuaris. Refineu la cerca per reduir els resultats."
         },
         "userView": {
             "title": "Usuari",
@@ -1105,6 +1142,28 @@
         "roomList": {
             "title": "Sales de xat",
             "noRooms": "No s'han trobat sales"
+        },
+        "overview": {
+            "title": "Resum del servidor",
+            "refresh": "Actualitza",
+            "updatedAt": "Actualitzat a les {{time}}",
+            "empty": "Les estadístiques del servidor no estan disponibles.",
+            "retry": "Torna-ho a provar",
+            "units": {
+                "d": "d",
+                "h": "h",
+                "m": "min",
+                "s": "s"
+            },
+            "cards": {
+                "uptime": "Temps actiu",
+                "version": "Versió del servidor",
+                "users": "Usuaris",
+                "onlineSuffix": "{{n}} en línia",
+                "onlineSessions": "Sessions en línia",
+                "onlineRooms": "Sales actives",
+                "vhosts": "Amfitrions virtuals"
+            }
         }
     },
     "commandPalette": {

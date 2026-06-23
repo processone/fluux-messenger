@@ -23,6 +23,9 @@ import { findLastEditableMessage, findLastEditableMessageId } from '@/utils/mess
 import { isEncryptedSource } from '@/utils/replyEncryption'
 import { useExpandedMessagesStore } from '@/stores/expandedMessagesStore'
 import { ConfirmDialog } from './ConfirmDialog'
+import { MediaAutoloadProvider } from '@/contexts'
+import { computeMediaAutoload } from '@/utils/mediaAutoload'
+import { useSettingsStore } from '@/stores/settingsStore'
 
 interface ChatViewProps {
   onBack?: () => void
@@ -42,10 +45,11 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
   const { t } = useTranslation()
   // Use useChatActive instead of useChat to avoid subscribing to the conversation list.
   // This prevents re-renders during background MAM sync of other conversations.
-  const { activeConversation, activeMessages, activeTypingUsers, sendMessage, sendReaction, sendCorrection, retractMessage, retryMessage, sendChatState, isArchived, unarchiveConversation, setDraft, getDraft, clearDraft, activeAnimation, sendEasterEgg, clearAnimation, clearFirstNewMessageId, updateLastSeenMessageId, activeMAMState, fetchOlderHistory, continueChatCatchUp, targetMessageId, clearTargetMessageId } = useChatActive()
+  const { activeConversation, activeMessages, activeTypingUsers, sendMessage, sendReaction, sendCorrection, retractMessage, retryMessage, sendChatState, isArchived, archiveConversation, unarchiveConversation, setDraft, getDraft, clearDraft, activeAnimation, sendEasterEgg, clearAnimation, clearFirstNewMessageId, updateLastSeenMessageId, activeMAMState, fetchOlderHistory, continueChatCatchUp, targetMessageId, clearTargetMessageId } = useChatActive()
   // Use useContactIdentities instead of useRoster() to avoid re-renders on
   // presence changes. ChatView only needs contact names and avatars for display.
   const contactsByJid = useContactIdentities()
+  const mediaPolicy = useSettingsStore((s) => s.mediaAutoDownload)
   // NOTE: Use focused selectors instead of useConnection() hook to avoid
   // re-renders when unrelated connection state changes (error, reconnectAttempt, etc.)
   const jid = useConnectionStore((s) => s.jid)
@@ -327,6 +331,16 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
     ? contactsByJid.get(activeConversation.id)
     : undefined
 
+  // 1:1 media trust: a peer absent from the roster contacts map is a stranger
+  // (matches the SDK's roster.hasContact stranger definition). Strangers never
+  // auto-load, regardless of policy. ChatView only renders type==='chat'
+  // conversations; were a non-1:1 peer ever to reach here it would be absent
+  // from the contacts map and so fail safe to 'direct-stranger' (deferred).
+  const mediaAutoLoad = computeMediaAutoload(
+    mediaPolicy,
+    contactsByJid.has(activeConversation.id) ? 'direct-contact' : 'direct-stranger',
+  )
+
   return (
     <div
       className="flex flex-col h-full min-h-0 relative"
@@ -357,6 +371,17 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
         onShowProfile={
           activeConversation.type === 'chat' && onShowProfile
             ? () => onShowProfile(activeConversation.id)
+            : undefined
+        }
+        isArchived={activeConversation.type === 'chat' ? isArchived(activeConversation.id) : undefined}
+        onArchive={
+          activeConversation.type === 'chat'
+            ? () => archiveConversation(activeConversation.id)
+            : undefined
+        }
+        onUnarchive={
+          activeConversation.type === 'chat'
+            ? () => unarchiveConversation(activeConversation.id)
             : undefined
         }
       />
@@ -417,36 +442,37 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
             onClose={find.close}
           />
         )}
-        <ChatMessageList
-          messages={activeMessages}
-          contactsByJid={contactsByJid}
-          typingUsers={activeTypingUsers}
-          scrollerRef={scrollRef}
-          isAtBottomRef={isAtBottomRef}
-          conversationId={activeConversation.id}
-          conversationType={activeConversation.type}
-          sendReaction={sendReaction}
-          myBareJid={myBareJid}
-          ownAvatar={ownAvatar}
-          ownNickname={ownNickname}
-          onReply={handleReply}
-          onEdit={setEditingMessage}
-          lastOutgoingMessageId={lastOutgoingMessageId}
-          lastMessageId={lastMessageId}
-          isComposing={isComposing}
-          activeReactionPickerMessageId={activeReactionPickerMessageId}
-          onReactionPickerChange={handleReactionPickerChange}
-          retractMessage={retractMessage}
-          retryMessage={retryMessage}
-          selectedMessageId={selectedMessageId}
-          hasKeyboardSelection={hasKeyboardSelection}
-          showToolbarForSelection={showToolbarForSelection}
-          firstNewMessageId={activeConversation.firstNewMessageId}
-          targetMessageId={targetMessageId}
-          clearTargetMessageId={clearTargetMessageId}
-          clearFirstNewMessageId={handleClearFirstNewMessageId}
-          onMessageSeen={handleMessageSeen}
-          isDarkMode={resolvedMode === 'dark'}
+        <MediaAutoloadProvider autoLoad={mediaAutoLoad}>
+          <ChatMessageList
+            messages={activeMessages}
+            contactsByJid={contactsByJid}
+            typingUsers={activeTypingUsers}
+            scrollerRef={scrollRef}
+            isAtBottomRef={isAtBottomRef}
+            conversationId={activeConversation.id}
+            conversationType={activeConversation.type}
+            sendReaction={sendReaction}
+            myBareJid={myBareJid}
+            ownAvatar={ownAvatar}
+            ownNickname={ownNickname}
+            onReply={handleReply}
+            onEdit={setEditingMessage}
+            lastOutgoingMessageId={lastOutgoingMessageId}
+            lastMessageId={lastMessageId}
+            isComposing={isComposing}
+            activeReactionPickerMessageId={activeReactionPickerMessageId}
+            onReactionPickerChange={handleReactionPickerChange}
+            retractMessage={retractMessage}
+            retryMessage={retryMessage}
+            selectedMessageId={selectedMessageId}
+            hasKeyboardSelection={hasKeyboardSelection}
+            showToolbarForSelection={showToolbarForSelection}
+            firstNewMessageId={activeConversation.firstNewMessageId}
+            targetMessageId={targetMessageId}
+            clearTargetMessageId={clearTargetMessageId}
+            clearFirstNewMessageId={handleClearFirstNewMessageId}
+            onMessageSeen={handleMessageSeen}
+            isDarkMode={resolvedMode === 'dark'}
           onScrollToTop={fetchOlderHistory}
           isLoadingOlder={activeMAMState?.isLoading ?? false}
           isHistoryComplete={activeMAMState?.isHistoryComplete ?? false}
@@ -458,7 +484,8 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
           highlightTerms={find.highlightTerms}
           currentMatchId={find.currentMatchId}
           lastSentMessageId={lastSentMessageId}
-        />
+          />
+        </MediaAutoloadProvider>
       </div>
 
       {/* Input */}
@@ -760,9 +787,9 @@ const ChatMessageBubble = memo(function ChatMessageBubble({
     ? (ownNickname || message.from.split('@')[0])
     : (senderContact?.name || message.from.split('@')[0])
 
-  // Get sender color: accent for own messages, contact's pre-calculated color, or fallback to generation
+  // Get sender color: dedicated AA-safe self color for own messages, contact's pre-calculated color, or fallback to generation
   const senderColor = message.isOutgoing
-    ? 'var(--fluux-text-accent)'
+    ? 'var(--fluux-text-self)'
     : senderContact
       ? (isDarkMode ? senderContact.colorDark : senderContact.colorLight) || getConsistentTextColor(message.from.split('/')[0], isDarkMode)
       : getConsistentTextColor(message.from.split('/')[0], isDarkMode)
@@ -796,8 +823,8 @@ const ChatMessageBubble = memo(function ChatMessageBubble({
       return fallbackId ? fallbackId.split('@')[0] : 'Unknown'
     },
     (originalMsg, fallbackId, dark) => {
-      // Own messages: use accent color
-      if (originalMsg?.isOutgoing) return 'var(--fluux-text-accent)'
+      // Own messages: use the dedicated AA-safe self color
+      if (originalMsg?.isOutgoing) return 'var(--fluux-text-self)'
       const senderId = originalMsg?.from.split('/')[0] || fallbackId?.split('/')[0]
       if (!senderId) return 'var(--fluux-brand)'
       const contact = contactsByJid.get(senderId)

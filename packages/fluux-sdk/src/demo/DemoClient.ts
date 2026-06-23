@@ -52,17 +52,22 @@ const NS_BLOCKING = 'urn:xmpp:blocking'
 const NS_MAM = 'urn:xmpp:mam:2'
 const NS_COMMANDS = 'http://jabber.org/protocol/commands'
 const NS_DATA_FORMS = 'jabber:x:data'
+const NS_VERSION = 'jabber:iq:version'
+const NS_LAST = 'jabber:iq:last'
 
 /** Minimal Element-like object returned by mock IQ responses. */
 interface MockElement {
   name: string
   attrs: Record<string, string>
-  text?: string
+  /** Text content as a property (legacy mock shape). */
+  _text?: string
   children: MockElement[]
   getChild: (name: string, xmlns?: string) => MockElement | undefined
   getChildren: (name: string) => MockElement[]
   getChildText: (name: string) => string | null
   getText: () => string
+  /** Text content as a method — matches ltx/@xmpp Element.text() used by parseDataForm/version parsing. */
+  text: () => string
   toString: () => string
 }
 
@@ -206,6 +211,18 @@ export class DemoClient extends XMPPClient {
       return this.buildDiscoItemsResponse()
     }
 
+    // --- Server version (XEP-0092) ---
+    // fetchServerVersion() queries jabber:iq:version on the domain.
+    if (xmlns === NS_VERSION) {
+      return this.buildVersionResponse()
+    }
+
+    // --- Last activity (XEP-0012) ---
+    // The admin user list lazily queries jabber:iq:last per offline row.
+    if (xmlns === NS_LAST) {
+      return this.buildLastActivityResponse(to)
+    }
+
     // --- vCard-temp (XEP-0054) ---
 
     const vcardChild = stanza?.children?.find?.(
@@ -260,7 +277,7 @@ export class DemoClient extends XMPPClient {
       (c: any) => c.name === 'command' && c.attrs?.xmlns === NS_COMMANDS
     )
     if (commandChild) {
-      return this.buildCommandResponse()
+      return this.buildAdminCommandResponse(commandChild)
     }
 
     // Fallback: return empty stub so callers using .getChild() etc.
@@ -630,6 +647,13 @@ export class DemoClient extends XMPPClient {
       this.emitSDK('room:joined', { roomJid, joined: true })
       this.emitSDK('room:self-occupant', { roomJid, occupant: selfOccupant })
 
+      // Settle the joinResult() deferred created by the real MUC.joinRoom():
+      // we emit join events directly rather than routing a status-110
+      // self-presence through muc.handle(), so the success path that normally
+      // settles it never runs. Without this, awaiting joinResult() (e.g. in
+      // JoinRoomModal) would hang forever in demo mode.
+      this.muc.confirmSimulatedJoin(roomJid)
+
       // Populate occupants: restore seeded occupants or create minimal list
       const occupants = seededOccupants ?? [selfOccupant]
       this.emitSDK('room:occupants-batch', { roomJid, occupants })
@@ -661,7 +685,7 @@ export class DemoClient extends XMPPClient {
     return {
       name,
       attrs,
-      text,
+      _text: text,
       children,
       getChild: (childName: string, xmlns?: string) =>
         children.find(c => c.name === childName && (!xmlns || c.attrs.xmlns === xmlns)),
@@ -669,9 +693,12 @@ export class DemoClient extends XMPPClient {
         children.filter(c => c.name === childName),
       getChildText: (childName: string) => {
         const child = children.find(c => c.name === childName)
-        return child?.text ?? null
+        return child?._text ?? null
       },
       getText: () => text ?? '',
+      // ltx/@xmpp Element exposes text() as a method; parseDataForm and the
+      // XEP-0092 version parser both call .text(), so mirror that shape.
+      text: () => text ?? '',
       toString: () => `<${name}/>`,
     }
   }
@@ -884,7 +911,7 @@ export class DemoClient extends XMPPClient {
     ])
   }
 
-  /** Build an ad-hoc command completed response (XEP-0050). */
+  /** Build a generic ad-hoc command completed response (XEP-0050) fallback. */
   private buildCommandResponse(): MockElement {
     return this.mockElement('iq', { type: 'result' }, [
       this.mockElement('command', {
@@ -892,6 +919,173 @@ export class DemoClient extends XMPPClient {
         status: 'completed',
       }, [
         this.mockElement('note', { type: 'info' }, [], 'Demo mode — command simulated'),
+      ]),
+    ])
+  }
+
+  // -------------------------------------------------------------------------
+  // Private helpers — admin / server-overview seed data (dev-only)
+  // -------------------------------------------------------------------------
+
+  /** Build a XEP-0092 (jabber:iq:version) response for the demo server. */
+  private buildVersionResponse(): MockElement {
+    return this.mockElement('iq', { type: 'result' }, [
+      this.mockElement('query', { xmlns: NS_VERSION }, [
+        this.mockElement('name', {}, [], 'ejabberd'),
+        this.mockElement('version', {}, [], '26.01 (demo)'),
+        this.mockElement('os', {}, [], 'Demo OS'),
+      ]),
+    ])
+  }
+
+  /**
+   * Deterministic ~30-user directory for the friendly admin user list.
+   * Includes the demo personas plus filler accounts, with a stable
+   * online/offline split so the list, presence dots, and last-login column
+   * all show a realistic spread without a server.
+   */
+  private demoAdminUsers(): { jid: string; online: boolean }[] {
+    const domain = this.selfJid.split('@')[1] || 'fluux.chat'
+    const names = [
+      'you', 'emma', 'james', 'sophia', 'olivia', 'mia', 'liam', 'ava', 'alex',
+      'noah', 'isabella', 'ethan', 'charlotte', 'lucas', 'amelia', 'mason', 'harper',
+      'logan', 'evelyn', 'jackson', 'abigail', 'aiden', 'emily', 'elijah', 'elizabeth',
+      'grayson', 'sofia', 'carter', 'avery', 'jack',
+    ]
+    // Stable split: roughly two thirds online (offline every third index).
+    return names.map((n, i) => ({ jid: `${n}@${domain}`, online: i % 3 !== 0 }))
+  }
+
+  /**
+   * Deterministic seconds-since-last-logout for a JID, spread across buckets
+   * from minutes to ~1.4 years so the last-login column shows variety.
+   */
+  private demoLastActivitySeconds(jid: string): number {
+    let hash = 0
+    for (let i = 0; i < jid.length; i++) {
+      hash = (hash * 31 + jid.charCodeAt(i)) >>> 0
+    }
+    const buckets = [90, 1800, 7200, 86400 * 2, 86400 * 9, 86400 * 40, 86400 * 200, 86400 * 500]
+    return buckets[hash % buckets.length]
+  }
+
+  /**
+   * Build a completed XEP-0133 command response whose result form carries a
+   * single multi-value JID field (e.g. registereduserjids / onlineuserjids).
+   * No RSM `<set>` is included, so the full-fetch loop terminates after one page.
+   */
+  private buildUserListResponse(jids: string[], fieldVar: string): MockElement {
+    const valueChildren = jids.map((j) => this.mockElement('value', {}, [], j))
+    return this.mockElement('iq', { type: 'result' }, [
+      this.mockElement('command', { xmlns: NS_COMMANDS, status: 'completed' }, [
+        this.mockElement('x', { xmlns: NS_DATA_FORMS, type: 'result' }, [
+          this.mockElement('field', { var: fieldVar }, valueChildren),
+        ]),
+      ]),
+    ])
+  }
+
+  /** Build a XEP-0012 (jabber:iq:last) response with a deterministic interval. */
+  private buildLastActivityResponse(jid?: string): MockElement {
+    const seconds = jid ? this.demoLastActivitySeconds(jid) : 0
+    return this.mockElement('iq', { type: 'result' }, [
+      this.mockElement('query', { xmlns: NS_LAST, seconds: String(seconds) }),
+    ])
+  }
+
+  /**
+   * Dispatch an ad-hoc / api command IQ to a seeded response so
+   * fetchServerStats() can populate all six overview cards.
+   *
+   * Handles the two-step api-commands (stats, muc_online_rooms_count): the
+   * first `execute` returns status="executing" with a form; the follow-up
+   * `complete` returns the result form.
+   */
+  private buildAdminCommandResponse(commandChild: any): MockElement {
+    const node = (commandChild?.attrs?.node as string | undefined) ?? ''
+    const action = (commandChild?.attrs?.action as string | undefined) ?? 'execute'
+
+    // --- XEP-0133 single-step stat commands ---
+    if (node.endsWith('#get-registered-users-num')) {
+      return this.buildStatFormResponse('registeredusersnum', String(this.demoAdminUsers().length))
+    }
+    if (node.endsWith('#get-online-users-num')) {
+      const onlineCount = this.demoAdminUsers().filter((u) => u.online).length
+      return this.buildStatFormResponse('onlineusersnum', String(onlineCount))
+    }
+
+    // --- XEP-0133 user-directory commands (drive the friendly user list) ---
+    if (node.endsWith('#get-registered-users-list')) {
+      return this.buildUserListResponse(
+        this.demoAdminUsers().map((u) => u.jid),
+        'registereduserjids'
+      )
+    }
+    if (node.endsWith('#get-online-users-list')) {
+      return this.buildUserListResponse(
+        this.demoAdminUsers().filter((u) => u.online).map((u) => u.jid),
+        'onlineuserjids'
+      )
+    }
+
+    // --- ejabberd two-step api-commands ---
+    // muc_online_rooms_count: execute → form requiring `service`; complete → count.
+    if (node === 'api-commands/muc_online_rooms_count') {
+      if (action === 'execute') {
+        return this.buildExecutingFormResponse(node, 'muc-rooms-sess', 'service')
+      }
+      return this.buildStatFormResponse('count', '5')
+    }
+    // stats: execute → form requiring `name`; complete → numeric stat value.
+    if (node === 'api-commands/stats') {
+      if (action === 'execute') {
+        return this.buildExecutingFormResponse(node, 'stats-sess', 'name')
+      }
+      // 259200 seconds = 3 days uptime
+      return this.buildStatFormResponse('stat', '259200')
+    }
+
+    // Anything else: generic "command simulated" completed note.
+    return this.buildCommandResponse()
+  }
+
+  /**
+   * Build a completed command response carrying a single result field
+   * (`<field var=...><value>...</value></field>`) inside a result form.
+   */
+  private buildStatFormResponse(fieldVar: string, value: string): MockElement {
+    return this.mockElement('iq', { type: 'result' }, [
+      this.mockElement('command', { xmlns: NS_COMMANDS, status: 'completed' }, [
+        this.mockElement('x', { xmlns: NS_DATA_FORMS, type: 'result' }, [
+          this.buildFormField(fieldVar, value),
+        ]),
+      ]),
+    ])
+  }
+
+  /**
+   * Build an executing (multi-step) command response with a form that
+   * requires a single field, so executeApiCommand() submits the override
+   * value and then issues the `complete` step.
+   */
+  private buildExecutingFormResponse(
+    node: string,
+    sessionId: string,
+    fieldVar: string
+  ): MockElement {
+    return this.mockElement('iq', { type: 'result' }, [
+      this.mockElement('command', {
+        xmlns: NS_COMMANDS,
+        node,
+        status: 'executing',
+        sessionid: sessionId,
+      }, [
+        this.mockElement('actions', { execute: 'complete' }, [
+          this.mockElement('complete', {}),
+        ]),
+        this.mockElement('x', { xmlns: NS_DATA_FORMS, type: 'form' }, [
+          this.buildFormField(fieldVar, ''),
+        ]),
       ]),
     ])
   }

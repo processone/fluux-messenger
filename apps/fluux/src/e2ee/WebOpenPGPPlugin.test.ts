@@ -47,6 +47,9 @@ class TestableWebOpenPGPPlugin extends WebOpenPGPPlugin {
   callBackupEncrypt(jid: string, passphrase: string) {
     return this.backupEncrypt(jid, passphrase)
   }
+  callBuildExportArmor(passphrase: string) {
+    return this.buildExportArmor(passphrase)
+  }
   callBackupImport(jid: string, msg: string, passphrase: string) {
     return this.backupImport(jid, msg, passphrase)
   }
@@ -858,6 +861,170 @@ describe('WebOpenPGPPlugin', () => {
       await expect(
         dest.callBackupImport('alice@example.com', backupMessage, 'wrong-passphrase'),
       ).rejects.toMatchObject({ code: 'wrong-passphrase' })
+    })
+  })
+
+  describe('file export header', () => {
+    it('exported armor carries Passphrase-Format: xep0373 and round-trips', async () => {
+      const source = new TestableWebOpenPGPPlugin()
+      const sourceCtx = makeCtx('alice@example.com').ctx
+      setSessionPassphrase('source-session-pp')
+      await source.init(sourceCtx)
+      const original = await source.callEnsureKeyMaterial('alice@example.com')
+
+      const exported = await source.callBuildExportArmor('correct horse battery staple eight words ok')
+      expect(exported).toContain('-----BEGIN PGP MESSAGE-----')
+      expect(exported).toMatch(/Passphrase-Format: xep0373/)
+
+      // The header must not break import: a fresh plugin recovers the key.
+      clearSessionPassphrase()
+      const dest = new TestableWebOpenPGPPlugin()
+      const destCtx = makeCtx('alice@example.com').ctx
+      await dest.init(destCtx)
+      const restored = await dest.callBackupImport(
+        'alice@example.com',
+        exported,
+        'correct horse battery staple eight words ok',
+      )
+      expect(restored.fingerprint).toBe(original.fingerprint)
+    })
+
+    it('backupEncrypt output (PEP/server backup) carries NO Passphrase-Format header', async () => {
+      const source = new TestableWebOpenPGPPlugin()
+      const sourceCtx = makeCtx('alice@example.com').ctx
+      setSessionPassphrase('source-session-pp')
+      await source.init(sourceCtx)
+      await source.callEnsureKeyMaterial('alice@example.com')
+
+      const raw = await source.callBackupEncrypt('alice@example.com', 'some passphrase here ok eight')
+      expect(raw).toContain('-----BEGIN PGP MESSAGE-----')
+      expect(raw).not.toContain('Passphrase-Format')
+    })
+  })
+
+  describe('key version handling', () => {
+    // XEP-0373 §6.1 mandates accepting "v4 (or higher)" packets, and the whole
+    // stack (Sequoia generate/rotate/storage, fingerprint-length handling) is
+    // built for v6, so v6 keys MUST import, not be rejected. We generate v4
+    // today (USE_V6_KEYS=false) only for peer interop; that governs generation,
+    // not what we accept. Guard against regressing to a v6 rejection.
+    it('imports an OpenPGP v6 key (the stack is v6-capable)', async () => {
+      const openpgp = await import('openpgp')
+      const { privateKey: v6 } = await openpgp.generateKey({
+        type: 'curve25519',
+        userIDs: [{ name: 'xmpp:v6@example.com' }],
+        format: 'object',
+        config: { v6Keys: true },
+      })
+      expect(v6.keyPacket.version).toBe(6) // guard: we really generated a v6 key
+
+      const backup = (await openpgp.encrypt({
+        message: await openpgp.createMessage({ binary: v6.write() as Uint8Array }),
+        passwords: ['pw'],
+      })) as string
+
+      const dest = new TestableWebOpenPGPPlugin()
+      const { ctx } = makeCtx('v6@example.com')
+      await dest.init(ctx)
+
+      const bundles = await dest.callBackupImportAll('v6@example.com', backup, 'pw')
+      expect(bundles.map((b) => b.fingerprint)).toContain(v6.getFingerprint())
+    })
+
+    it('accepts a v4 imported key', async () => {
+      const openpgp = await import('openpgp')
+      const { privateKey: v4 } = await openpgp.generateKey({
+        type: 'ecc',
+        curve: 'curve25519Legacy',
+        userIDs: [{ name: 'xmpp:v4@example.com' }],
+        format: 'object',
+      })
+      expect(v4.keyPacket.version).toBe(4)
+
+      const backup = (await openpgp.encrypt({
+        message: await openpgp.createMessage({ binary: v4.write() as Uint8Array }),
+        passwords: ['pw'],
+      })) as string
+
+      const dest = new TestableWebOpenPGPPlugin()
+      const { ctx } = makeCtx('v4@example.com')
+      await dest.init(ctx)
+
+      const bundles = await dest.callBackupImportAll('v4@example.com', backup, 'pw')
+      expect(bundles.map((b) => b.fingerprint)).toContain(v4.getFingerprint())
+    })
+  })
+
+  describe('import adds the XEP-0373 xmpp: User ID', () => {
+    // XEP-0373 §8.5 requires the key to carry an `xmpp:<jid>` User ID (the trust
+    // anchor peers verify). A foreign key (GnuPG/OpenKeychain) has only a
+    // `Name <email>` UID, so import must self-sign the `xmpp:` UID onto it,
+    // keeping the primary-key fingerprint so trust pinning still works.
+    it('self-signs an xmpp:<jid> UID onto an imported key that lacks one', async () => {
+      const openpgp = await import('openpgp')
+      const { privateKey: foreign } = await openpgp.generateKey({
+        type: 'ecc',
+        curve: 'curve25519Legacy',
+        userIDs: [{ name: 'Imported User', email: 'imported@example.org' }],
+        format: 'object',
+      })
+      const fp = foreign.getFingerprint()
+      expect(foreign.getUserIDs().some((u) => u.startsWith('xmpp:'))).toBe(false)
+
+      const backup = (await openpgp.encrypt({
+        message: await openpgp.createMessage({ binary: foreign.write() as Uint8Array }),
+        passwords: ['pw'],
+      })) as string
+
+      const dest = new TestableWebOpenPGPPlugin()
+      const { ctx } = makeCtx('imported@example.com')
+      await dest.init(ctx)
+
+      const bundles = await dest.callBackupImportAll('imported@example.com', backup, 'pw')
+      const installed = await dest.callBackupImportSelected(
+        'imported@example.com',
+        backup,
+        'pw',
+        bundles[0].fingerprint,
+      )
+
+      // Fingerprint preserved (trust pinning); canonicalized to xmpp:-only,
+      // so the foreign name/email UID is dropped.
+      expect(installed.fingerprint).toBe(fp)
+      const info = await dest.callValidateCert(installed.publicArmored)
+      expect(info.userIds).toEqual(['xmpp:imported@example.com'])
+    })
+
+    it('leaves a key that already has the xmpp: UID unchanged', async () => {
+      const openpgp = await import('openpgp')
+      const { privateKey: own } = await openpgp.generateKey({
+        type: 'ecc',
+        curve: 'curve25519Legacy',
+        userIDs: [{ name: 'xmpp:already@example.com' }],
+        format: 'object',
+      })
+      const fp = own.getFingerprint()
+
+      const backup = (await openpgp.encrypt({
+        message: await openpgp.createMessage({ binary: own.write() as Uint8Array }),
+        passwords: ['pw'],
+      })) as string
+
+      const dest = new TestableWebOpenPGPPlugin()
+      const { ctx } = makeCtx('already@example.com')
+      await dest.init(ctx)
+
+      const bundles = await dest.callBackupImportAll('already@example.com', backup, 'pw')
+      const installed = await dest.callBackupImportSelected(
+        'already@example.com',
+        backup,
+        'pw',
+        bundles[0].fingerprint,
+      )
+
+      expect(installed.fingerprint).toBe(fp)
+      const info = await dest.callValidateCert(installed.publicArmored)
+      expect(info.userIds).toEqual(['xmpp:already@example.com'])
     })
   })
 
@@ -1942,7 +2109,7 @@ describe('WebOpenPGPPlugin', () => {
       const claim = bob.plugin.tryClaimInbound(payload.stanzaElement)!
       const decrypted = await bob.plugin.decrypt(bobHandle, claim)
 
-      expect(decodeBody(decrypted.plaintext)).toBe('hello bob')
+      expect(decodeBody(decrypted.plaintext!)).toBe('hello bob')
       expect(decrypted.securityContext.trust).toBe('tofu')
       expect(decrypted.securityContext.notes).toBeUndefined()
     })
@@ -2054,7 +2221,7 @@ describe('WebOpenPGPPlugin', () => {
       const claim = bob.plugin.tryClaimInbound(payload.stanzaElement)!
       const decrypted = await bob.plugin.decrypt(bobHandle, claim, { messageId: 'm-no-key' })
 
-      expect(decodeBody(decrypted.plaintext)).toBe('from alice')
+      expect(decodeBody(decrypted.plaintext!)).toBe('from alice')
       expect(decrypted.securityContext.trust).toBe('untrusted')
       expect(decrypted.securityContext.notes?.join(' ')).toMatch(/not cached/)
     })

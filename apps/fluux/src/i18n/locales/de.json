@@ -40,7 +40,21 @@
         "hidePassword": "Passwort ausblenden",
         "madeBy": "Erstellt von",
         "ejabberdCreator": ", dem Unternehmen hinter",
-        "poweredBy": "Betrieben von"
+        "poweredBy": "Betrieben von",
+        "errors": {
+            "tlsCertTitle": "Das Sicherheitszertifikat des Servers konnte nicht überprüft werden",
+            "tlsOtherTitle": "Sichere Verbindung fehlgeschlagen",
+            "tlsOtherBody": "Die verschlüsselte Verbindung zum Server konnte nicht hergestellt werden. Die TLS-Konfiguration des Servers wird möglicherweise nicht unterstützt. Prüfe die Serveradresse oder wende dich an den Serveradministrator.",
+            "unreachableTitle": "Der Server ist nicht erreichbar",
+            "timeoutBody": "Der Server hat nicht rechtzeitig geantwortet. Prüfe dein Netzwerk und die Serveradresse, und versuche es erneut.",
+            "refusedBody": "Der Server hat die Verbindung abgelehnt. Prüfe die Serveradresse und den Port, und versuche es erneut.",
+            "cert": {
+                "expired": "Das Zertifikat des Servers ist abgelaufen. Wende dich an den Serveradministrator. Wenn die Adresse falsch ist, bearbeite das Serverfeld unten.",
+                "nameMismatch": "Das Zertifikat des Servers wurde für einen anderen Hostnamen ausgestellt. Prüfe die Serveradresse unten oder wende dich an den Serveradministrator.",
+                "untrusted": "Das Sicherheitszertifikat des Servers ist selbstsigniert oder stammt von einer unbekannten Zertifizierungsstelle, daher kann ihm nicht vertraut werden. Überprüfe die Serveradresse, oder wende dich an den Serveradministrator.",
+                "generic": "Das Sicherheitszertifikat des Servers konnte nicht überprüft werden. Prüfe die Serveradresse unten oder wende dich an den Serveradministrator."
+            }
+        }
     },
     "sidebar": {
         "messages": "Nachrichten",
@@ -203,6 +217,16 @@
         "invalidRoomAddress": "Ungültige Raumadresse (sollte raum@konferenz.server sein)",
         "joinRoomHint": "Geben Sie die vollständige Raumadresse ein, um einem öffentlichen Chatraum beizutreten.",
         "failedToJoinRoom": "Raum konnte nicht betreten werden",
+        "passwordProtected": "Dieser Raum ist passwortgeschützt",
+        "roomPassword": "Passwort",
+        "passwordRequired": "Dieser Raum ist passwortgeschützt. Gib das Passwort ein, um beizutreten.",
+        "incorrectPassword": "Falsches Passwort.",
+        "nicknameInUse": "Dieser Spitzname wird in diesem Raum bereits verwendet.",
+        "membersOnly": "Dieser Raum ist nur für Mitglieder. Du musst Mitglied sein, um beizutreten.",
+        "bannedFromRoom": "Du wurdest aus diesem Raum verbannt.",
+        "roomFull": "Dieser Raum ist voll.",
+        "registeredNicknameRequired": "Dieser Raum erfordert deinen registrierten Spitznamen.",
+        "roomNotFound": "Raum nicht gefunden.",
         "nonAnonWarningTitle": "Nicht anonymem Kanal beitreten?",
         "nonAnonWarningMessage": "Alle in „{{room}}“ können deine echte Adresse (deine XMPP-/Jabber-ID) sehen. Trotzdem beitreten?",
         "nonAnonWarningConfirm": "Trotzdem beitreten",
@@ -211,6 +235,7 @@
         "notJoinedNoHistory": "Sie sind nicht in diesem Raum",
         "joinToLoadHistory": "Beitreten um Nachrichten zu laden",
         "notificationSettings": "Benachrichtigungseinstellungen",
+        "roomActions": "Raumaktionen",
         "mentionsOnly": "Nur Erwähnungen",
         "defaultBehavior": "Standardverhalten",
         "allMessages": "Alle Nachrichten",
@@ -435,6 +460,7 @@
         "attachment": "Anhang",
         "removeAttachment": "Anhang entfernen",
         "reply": "Antworten",
+        "copyMessage": "Text kopieren",
         "replyQuoteHiddenEncrypted": "Zitat ausgeblendet: Original war verschlüsselt",
         "forwardMessage": "Nachricht weiterleiten (bald verfügbar)",
         "moreReactions": "Mehr Reaktionen",
@@ -567,7 +593,12 @@
             "acceptedWithoutVerifying": "Neuer Schlüssel akzeptiert. Kontakt ist nicht verifiziert",
             "acceptFailed": "Der neue Schlüssel konnte nicht akzeptiert werden. Versuche es erneut"
         },
-        "offlinePlaceholder": "Offline. Nachrichten werden bei erneuter Verbindung gesendet"
+        "offlinePlaceholder": "Offline. Nachrichten werden bei erneuter Verbindung gesendet",
+        "loadImage": "Bild laden",
+        "loadVideo": "Video laden",
+        "loadAudio": "Audio laden",
+        "loadFilePreview": "Vorschau laden",
+        "showLinkImage": "Bild anzeigen"
     },
     "dates": {
         "today": "Heute",
@@ -583,7 +614,8 @@
             "updates": "Aktualisierungen",
             "blocked": "Blockierte Benutzer",
             "storage": "Speicher",
-            "encryption": "Verschlüsselung"
+            "encryption": "Verschlüsselung",
+            "privacy": "Datenschutz"
         },
         "blocked": {
             "title": "Blockierte Benutzer",
@@ -704,6 +736,7 @@
             "pepUnsupportedBanner": "Dein Server unterstützt kein Personal Eventing (PEP, XEP-0163), das für die OpenPGP-Verschlüsselung (XEP-0373) erforderlich ist. Ende-zu-Ende-Verschlüsselung kann für dieses Konto nicht aktiviert werden. Wende dich an den Serveradministrator.",
             "statusPepUnsupported": "Verschlüsselung kann nicht aktiviert werden: Der Server unterstützt kein PEP (XEP-0163), das für OpenPGP (XEP-0373) erforderlich ist.",
             "statusRegistrationFailed": "Einrichtung der Verschlüsselung fehlgeschlagen ({{code}}). Details in der Entwicklerkonsole.",
+            "notProtectedAtRest": "Hier ist kein System-Schlüsselbund verfügbar, daher wird die Passphrase Ihres Schlüssels unverschlüsselt in einer Datei auf der Festplatte gespeichert. Der Schlüssel ist im Ruhezustand nicht geschützt. Jeder, der die Dateien dieses Geräts lesen kann, könnte ihn verwenden.",
             "backupLabel": "Schlüssel-Backup",
             "backupDescription": "Veröffentliche eine verschlüsselte Kopie deines Schlüssels auf deinem XMPP-Server. Geschützt durch eine nur dir bekannte Passphrase und nur von deinem Konto lesbar (access_model: whitelist). Ermöglicht es, den verschlüsselten Verlauf auf einem neuen Gerät zu lesen, nachdem du dich angemeldet und die Passphrase eingegeben hast.",
             "backupAction": "Auf Server sichern",
@@ -778,6 +811,7 @@
             "identityChoice": {
                 "title": "Für dieses Konto existiert bereits eine OpenPGP-Identität",
                 "body": "Dieser Browser hat keinen lokalen Schlüssel, aber der Server kündigt bereits einen Schlüssel für Ihr Konto an. Das Generieren eines neuen Schlüssels hier würde Ihre Identität stillschweigend aufspalten: Korrespondenten, die mit dem vorhandenen Schlüssel verschlüsselt haben, könnten keine Nachrichten mehr zustellen. Wählen Sie, wie Sie dies lösen möchten:",
+                "bodyKeyUnrecoverable": "Der OpenPGP-Schlüssel dieses Geräts kann nicht mehr entsperrt werden, daher kann die Verschlüsselung nicht gestartet werden. Ihre veröffentlichte Identität ist nicht betroffen. Stellen Sie sie über Ihr Server-Backup oder eine Schlüsseldatei wiederher, oder ersetzen Sie sie, falls das nicht möglich ist. Wählen Sie, wie Sie dies lösen möchten:",
                 "publishedFingerprintLabel": "Veröffentlichter Fingerabdruck",
                 "restoreFromServerTitle": "Aus Server-Backup wiederherstellen",
                 "restoreFromServerBody": "Verwenden Sie die Backup-Passphrase, die Sie beim Aktivieren der Verschlüsselung auf einem anderen Gerät festgelegt haben. Der passende private Schlüssel wird vom Server abgerufen und lokal entsperrt.",
@@ -804,19 +838,6 @@
             "importFileSuccess": "Schlüssel aus Datei importiert",
             "importFileFailed": "Die ausgewählte Datei konnte nicht gelesen werden",
             "unsupportedKeyAlgorithm": "Der importierte Schlüssel verwendet einen Algorithmus, der nicht mehr unterstützt wird (z. B. DSA oder ElGamal). Verwenden Sie einen modernen OpenPGP-Schlüssel (Curve25519, Ed25519 oder RSA mit mindestens 2048 Bit).",
-            "externalExportAction": "Für externes OpenPGP-Werkzeug exportieren",
-            "externalExportDialogTitle": "Privaten Schlüssel für externes OpenPGP-Werkzeug exportieren",
-            "externalExportDialogBody": "Erzeugt eine standardkonforme OpenPGP-Datei mit privatem Schlüssel (PRIVATE KEY BLOCK), die Sie in gpg, OpenKeychain, Kleopatra und andere Werkzeuge importieren können.",
-            "externalExportProtectedLabel": "Durch eine Passphrase geschützt",
-            "externalExportProtectedDescription": "Empfohlen. Wählen Sie eine Passphrase; die exportierte Datei ist verschlüsselt und externe Werkzeuge fragen beim Import danach.",
-            "externalExportUnprotectedLabel": "Keine Verschlüsselung",
-            "externalExportUnprotectedDescription": "Die exportierte Datei enthält Ihren privaten Schlüssel im Klartext. Verwenden Sie dies nur, wenn das Zielwerkzeug passphrase-geschützte Schlüssel ablehnt.",
-            "externalExportUnprotectedWarning": "Ohne Passphrase kann jede Person mit Zugriff auf die exportierte Datei Ihre Identität annehmen und Ihre vergangenen wie zukünftigen Nachrichten entschlüsseln. Löschen Sie die Datei unmittelbar nach dem Import.",
-            "externalExportUnprotectedAcknowledgment": "Ich verstehe die Risiken und möchte meinen privaten Schlüssel unverschlüsselt exportieren.",
-            "externalExportPassphraseLabel": "Passphrase",
-            "externalExportConfirmPassphraseLabel": "Passphrase bestätigen",
-            "externalExportPassphraseMismatch": "Die Passphrasen stimmen nicht überein.",
-            "externalExportSuccess": "Privater Schlüssel in Datei exportiert",
             "unlockDialogTitle": "Ende-zu-Ende-Verschlüsselung entsperren",
             "unlockDialogBody": "Gib deine Passphrase ein, um deinen Schlüssel für diese Sitzung zu entschlüsseln.",
             "unlockDialogSetupTitle": "Ende-zu-Ende-Verschlüsselung einrichten",
@@ -828,7 +849,16 @@
             "unlockPassphraseTooShort": "Die Passphrase muss mindestens 8 Zeichen lang sein",
             "lockedBannerBody": "Dein Verschlüsselungsschlüssel ist gesperrt. Gib deine Passphrase ein, um die Verschlüsselung für diese Sitzung zu aktivieren.",
             "rotateNotSupportedWeb": "Schlüsselrotation ist im Web nicht verfügbar. Verwende die Desktop-App."
-        }
+        },
+        "mediaAutoDownload": "Medien automatisch herunterladen",
+        "mediaAutoDownloadDescription": "Legen Sie fest, wann Bilder, Videos und Dateien automatisch geladen werden.",
+        "mediaAutoDownloadAlways": "Immer",
+        "mediaAutoDownloadAlwaysDescription": "Medien in jeder Unterhaltung automatisch laden.",
+        "mediaAutoDownloadPrivateOnly": "Nur privat",
+        "mediaAutoDownloadPrivateOnlyDescription": "In Direktnachrichten und privaten Räumen automatisch laden. In öffentlichen Kanälen zum Laden tippen.",
+        "mediaAutoDownloadNever": "Nie",
+        "mediaAutoDownloadNeverDescription": "Medien niemals automatisch laden. Zum Laden in einer beliebigen Unterhaltung tippen.",
+        "mediaAutoDownloadStrangerNote": "Medien von Personen, die nicht in Ihren Kontakten sind, erfordern immer einen Tipp zum Laden, unabhängig von Ihrer Auswahl hier."
     },
     "update": {
         "title": "Update verfügbar",
@@ -1038,6 +1068,7 @@
             "description": "Sie haben keine Administratorrechte auf diesem Server. Kontaktieren Sie Ihren Server-Administrator für Zugang."
         },
         "selectCommand": "Wählen Sie einen Befehl aus der Seitenleiste",
+        "openSections": "Administrationsbereiche öffnen",
         "execute": "Ausführen",
         "executing": "Wird ausgeführt...",
         "next": "Weiter",
@@ -1083,7 +1114,13 @@
         "users": {
             "delete": "Benutzer löschen",
             "changePassword": "Passwort ändern",
-            "endSessions": "Sitzungen beenden"
+            "endSessions": "Sitzungen beenden",
+            "online": "Online",
+            "offline": "Offline",
+            "onlineNow": "Jetzt online",
+            "justNow": "gerade eben",
+            "truncatedBanner": "Die ersten {{shown}} von {{total}} Benutzern werden angezeigt. Verfeinern Sie Ihre Suche, um die Ergebnisse einzugrenzen.",
+            "truncatedBannerNoTotal": "Die ersten {{shown}} Benutzer werden angezeigt. Verfeinern Sie Ihre Suche, um die Ergebnisse einzugrenzen."
         },
         "userView": {
             "title": "Benutzer",
@@ -1105,6 +1142,28 @@
         "roomList": {
             "title": "Chaträume",
             "noRooms": "Keine Räume gefunden"
+        },
+        "overview": {
+            "title": "Serverübersicht",
+            "refresh": "Aktualisieren",
+            "updatedAt": "Aktualisiert um {{time}}",
+            "empty": "Serverstatistiken sind nicht verfügbar.",
+            "retry": "Erneut versuchen",
+            "units": {
+                "d": "T",
+                "h": "Std",
+                "m": "Min",
+                "s": "s"
+            },
+            "cards": {
+                "uptime": "Betriebszeit",
+                "version": "Serverversion",
+                "users": "Benutzer",
+                "onlineSuffix": "{{n}} online",
+                "onlineSessions": "Online-Sitzungen",
+                "onlineRooms": "Aktive Räume",
+                "vhosts": "Virtuelle Hosts"
+            }
         }
     },
     "commandPalette": {

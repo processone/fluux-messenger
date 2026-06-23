@@ -677,7 +677,8 @@ export function OccupantPanel({
             <Tooltip content={t('rooms.closePanel')} position="left">
               <button
                 onClick={onClose}
-                className="p-1 rounded hover:bg-fluux-hover text-fluux-muted hover:text-fluux-text transition-colors"
+                aria-label={t('rooms.closePanel')}
+                className="p-1 rounded hover:bg-fluux-hover text-fluux-muted hover:text-fluux-text transition-colors tap-target"
               >
                 <X className="size-4" />
               </button>

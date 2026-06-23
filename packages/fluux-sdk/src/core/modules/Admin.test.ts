@@ -15,6 +15,7 @@ import {
   type MockXmppClient,
   type MockStoreBindings,
 } from '../test-utils'
+import { MAX_USERS, USER_PAGE_SIZE } from './Admin'
 
 let mockXmppClientInstance: MockXmppClient
 
@@ -778,6 +779,155 @@ describe('XMPPClient Admin', () => {
     })
   })
 
+  describe('fetchOnlineUserJids', () => {
+    function wrapInIqResponse(commandEl: ReturnType<typeof createAdminMockElement>) {
+      return {
+        name: 'iq',
+        attrs: { type: 'result' },
+        getChild: (name: string, xmlns?: string) => {
+          if (name === 'command' && xmlns === 'http://jabber.org/protocol/commands') {
+            return commandEl
+          }
+          return undefined
+        },
+      }
+    }
+
+    it('fetchOnlineUserJids returns a Set of bared online JIDs', async () => {
+      await connectClient()
+      const cmd = createAdminMockElement(
+        'command',
+        { xmlns: 'http://jabber.org/protocol/commands', status: 'completed',
+          node: 'http://jabber.org/protocol/admin#get-online-users-list' },
+        [{
+          name: 'x',
+          attrs: { xmlns: 'jabber:x:data', type: 'result' },
+          getChildren: (name: string) =>
+            name === 'field'
+              ? [{
+                  name: 'field',
+                  attrs: { var: 'onlineuserjids' },
+                  getChild: () => undefined,
+                  getChildren: (n: string) =>
+                    n === 'value'
+                      ? [
+                          { name: 'value', text: () => 'alice@x.com/phone' },
+                          { name: 'value', text: () => 'alice@x.com/desktop' },
+                          { name: 'value', text: () => 'bob@x.com' },
+                        ]
+                      : [],
+                }]
+              : [],
+          getChild: () => undefined,
+        }]
+      )
+      mockXmppClientInstance.iqCaller.request.mockResolvedValue(wrapInIqResponse(cmd))
+
+      const set = await xmppClient.admin.fetchOnlineUserJids()
+
+      expect(set).toBeInstanceOf(Set)
+      expect([...set].sort()).toEqual(['alice@x.com', 'bob@x.com'])
+    })
+
+    it('fetchOnlineUserJids returns an empty Set when the command fails', async () => {
+      await connectClient()
+      mockXmppClientInstance.iqCaller.request.mockRejectedValue(new Error('forbidden'))
+
+      const set = await xmppClient.admin.fetchOnlineUserJids()
+      expect(set.size).toBe(0)
+    })
+  })
+
+  describe('fetchAllUsers', () => {
+    // Build a completed get-registered-users-list command with the given jids and
+    // an optional RSM <last> cursor (so fetchAllUsers knows whether to keep paging).
+    function completedUsersCommand(jids: string[], lastCursor?: string) {
+      const children: any[] = [
+        {
+          name: 'x',
+          attrs: { xmlns: 'jabber:x:data', type: 'result' },
+          getChildren: (name: string) =>
+            name === 'field'
+              ? [{
+                  name: 'field',
+                  attrs: { var: 'registereduserjids' },
+                  getChild: () => undefined,
+                  getChildren: (n: string) =>
+                    n === 'value' ? jids.map((j) => ({ name: 'value', text: () => j })) : [],
+                }]
+              : [],
+          getChild: () => undefined,
+        },
+      ]
+      if (lastCursor !== undefined) {
+        children.push({
+          name: 'set',
+          attrs: { xmlns: 'http://jabber.org/protocol/rsm' },
+          getChild: (n: string) =>
+            n === 'last' ? { getText: () => lastCursor, attrs: {} } : undefined,
+          getChildren: () => [],
+        })
+      }
+      return createAdminMockElement(
+        'command',
+        { xmlns: 'http://jabber.org/protocol/commands', status: 'completed',
+          node: 'http://jabber.org/protocol/admin#get-registered-users-list' },
+        children
+      )
+    }
+
+    function wrapInIqResponse(commandEl: ReturnType<typeof createAdminMockElement>) {
+      return {
+        name: 'iq',
+        attrs: { type: 'result' },
+        getChild: (name: string, xmlns?: string) => {
+          if (name === 'command' && xmlns === 'http://jabber.org/protocol/commands') {
+            return commandEl
+          }
+          return undefined
+        },
+      }
+    }
+
+    it('fetchAllUsers accumulates across pages until no cursor remains', async () => {
+      await connectClient()
+      mockXmppClientInstance.iqCaller.request
+        .mockResolvedValueOnce(wrapInIqResponse(completedUsersCommand(['a@x.com', 'b@x.com'], 'b@x.com')))
+        .mockResolvedValueOnce(wrapInIqResponse(completedUsersCommand(['c@x.com'], undefined)))
+
+      const result = await xmppClient.admin.fetchAllUsers()
+
+      expect(result.users.map((u) => u.jid)).toEqual(['a@x.com', 'b@x.com', 'c@x.com'])
+      expect(result.truncated).toBe(false)
+    })
+
+    it('fetchAllUsers caps at MAX_USERS and reports truncated', async () => {
+      await connectClient()
+      // A single page that already exceeds the cap (server ignored RSM max).
+      const huge = Array.from({ length: MAX_USERS + 25 }, (_, i) => `u${i}@x.com`)
+      mockXmppClientInstance.iqCaller.request
+        .mockResolvedValue(wrapInIqResponse(completedUsersCommand(huge, 'cursor')))
+
+      const result = await xmppClient.admin.fetchAllUsers()
+
+      expect(result.users).toHaveLength(MAX_USERS)
+      expect(result.truncated).toBe(true)
+    })
+
+    it('fetchAllUsers stops on full final page with no cursor', async () => {
+      await connectClient()
+      const jids = Array.from({ length: USER_PAGE_SIZE }, (_, i) => `u${i}@x.com`)
+      mockXmppClientInstance.iqCaller.request
+        .mockResolvedValue(wrapInIqResponse(completedUsersCommand(jids)))
+
+      const result = await xmppClient.admin.fetchAllUsers()
+
+      expect(result.users).toHaveLength(USER_PAGE_SIZE)
+      expect(result.truncated).toBe(false)
+      expect(mockXmppClientInstance.iqCaller.request).toHaveBeenCalledTimes(1)
+    })
+  })
+
   describe('fetchRoomList', () => {
     it('should use provided MUC service JID', async () => {
       await connectClient()
@@ -867,6 +1017,352 @@ describe('XMPPClient Admin', () => {
       vi.spyOn(xmppClient.admin, 'discoverMucService').mockResolvedValue(null)
 
       await expect(xmppClient.admin.fetchRoomList()).rejects.toThrow('MUC service not available')
+    })
+  })
+
+  describe('executeApiCommand overrides', () => {
+    // Wrap a <command> element in an IQ response exposing getChild('command', NS).
+    function wrapInIqResponse(commandEl: ReturnType<typeof createAdminMockElement>) {
+      return {
+        name: 'iq',
+        attrs: { type: 'result' },
+        getChild: (name: string, xmlns?: string) => {
+          if (name === 'command' && xmlns === 'http://jabber.org/protocol/commands') {
+            return commandEl
+          }
+          return undefined
+        },
+      }
+    }
+
+    // Build a data-form <x> element whose `field` carries the given var/value,
+    // matching the getChildren/getChild semantics parseDataForm relies on.
+    function formWithField(
+      formType: string,
+      fieldVar: string,
+      fieldValue: string | null
+    ): AdminMockChild {
+      const valueChildren: AdminMockChild[] =
+        fieldValue != null ? [{ name: 'value', text: () => fieldValue }] : []
+      return {
+        name: 'x',
+        attrs: { xmlns: 'jabber:x:data', type: formType },
+        getChildren: (name: string) => {
+          if (name === 'field') {
+            return [{
+              name: 'field',
+              attrs: { var: fieldVar, type: 'text-single' },
+              getChild: () => undefined,
+              getChildren: (n: string) => (n === 'value' ? valueChildren : []),
+            }]
+          }
+          return []
+        },
+        getChild: () => undefined,
+      }
+    }
+
+    it('submits overridden field values for two-step api-commands', async () => {
+      await connectClient()
+
+      // execute → returns a form requiring `name` (default value 'registeredusers')
+      const executing = createAdminMockElement('command', {
+        xmlns: 'http://jabber.org/protocol/commands',
+        node: 'api-commands/stats',
+        status: 'executing',
+        sessionid: 'sess-1',
+      }, [formWithField('form', 'name', 'registeredusers')])
+
+      // complete → returns the stat value
+      const completed = createAdminMockElement('command', {
+        xmlns: 'http://jabber.org/protocol/commands',
+        node: 'api-commands/stats',
+        status: 'completed',
+      }, [formWithField('result', 'stat', '42')])
+
+      mockXmppClientInstance.iqCaller.request
+        .mockResolvedValueOnce(wrapInIqResponse(executing))
+        .mockResolvedValueOnce(wrapInIqResponse(completed))
+
+      await (xmppClient.admin as any).executeApiCommand('stats', { name: 'uptimeseconds' })
+
+      // Capture the second (complete) request and read the submitted `name` value.
+      // The mocked xml() returns { name, attrs, children }, so traverse children:
+      // iq > command > x(submit) > field(var=name) > value > 'uptimeseconds'
+      const completeReq = mockXmppClientInstance.iqCaller.request.mock.calls[1][0] as any
+      const submitForm = completeReq.children?.[0]?.children?.[0]
+      const nameField = submitForm?.children?.find((c: any) => c.attrs?.var === 'name')
+      expect(nameField?.children?.[0]?.children?.[0]).toBe('uptimeseconds')
+    })
+  })
+
+  describe('fetchLastActivity', () => {
+    it('fetchLastActivity parses seconds on success', async () => {
+      await connectClient()
+      mockXmppClientInstance.iqCaller.request.mockResolvedValue({
+        name: 'iq',
+        attrs: { type: 'result' },
+        getChild: (n: string, xmlns?: string) =>
+          n === 'query' && xmlns === 'jabber:iq:last'
+            ? { attrs: { seconds: '3600' } }
+            : undefined,
+      })
+
+      const res = await xmppClient.admin.fetchLastActivity('bob@x.com')
+      expect(res).toEqual({ seconds: 3600, unsupported: false })
+    })
+
+    it('fetchLastActivity reports unsupported on feature-not-implemented', async () => {
+      await connectClient()
+      const err: any = new Error('not implemented')
+      err.condition = 'feature-not-implemented'
+      mockXmppClientInstance.iqCaller.request.mockRejectedValue(err)
+
+      const res = await xmppClient.admin.fetchLastActivity('bob@x.com')
+      expect(res).toEqual({ seconds: null, unsupported: true })
+    })
+
+    it('fetchLastActivity returns per-user null on other errors', async () => {
+      await connectClient()
+      const err: any = new Error('item not found')
+      err.condition = 'item-not-found'
+      mockXmppClientInstance.iqCaller.request.mockRejectedValue(err)
+
+      const res = await xmppClient.admin.fetchLastActivity('ghost@x.com')
+      expect(res).toEqual({ seconds: null, unsupported: false })
+    })
+  })
+
+  describe('fetchServerStats', () => {
+    // Wrap a <command> element in an IQ response exposing getChild('command', NS).
+    function wrapCommand(commandEl: ReturnType<typeof createAdminMockElement>) {
+      return {
+        name: 'iq',
+        attrs: { type: 'result' },
+        getChild: (name: string, xmlns?: string) => {
+          if (name === 'command' && xmlns === 'http://jabber.org/protocol/commands') {
+            return commandEl
+          }
+          return undefined
+        },
+      }
+    }
+
+    // Build a result-form <x> carrying a single <field var><value/></field>.
+    function resultForm(fieldVar: string, fieldValue: string): AdminMockChild {
+      return {
+        name: 'x',
+        attrs: { xmlns: 'jabber:x:data', type: 'result' },
+        getChildren: (name: string) => {
+          if (name === 'field') {
+            return [{
+              name: 'field',
+              attrs: { var: fieldVar, type: 'text-single' },
+              getChild: () => undefined,
+              getChildren: (n: string) => (n === 'value'
+                ? [{ name: 'value', text: () => fieldValue }]
+                : []),
+            }]
+          }
+          return []
+        },
+        getChild: () => undefined,
+      }
+    }
+
+    // Build a result-form <x> carrying one multi-value <field var> (jid-multi).
+    function multiResultForm(fieldVar: string, values: string[]): AdminMockChild {
+      return {
+        name: 'x',
+        attrs: { xmlns: 'jabber:x:data', type: 'result' },
+        getChildren: (name: string) => {
+          if (name === 'field') {
+            return [{
+              name: 'field',
+              attrs: { var: fieldVar, type: 'jid-multi' },
+              getChild: () => undefined,
+              getChildren: (n: string) => (n === 'value'
+                ? values.map((v) => ({ name: 'value', text: () => v }))
+                : []),
+            }]
+          }
+          return []
+        },
+        getChild: () => undefined,
+      }
+    }
+
+    // Build an executing-step form <x> requiring `fieldVar` (two-step commands).
+    function executingForm(fieldVar: string, defaultValue: string): AdminMockChild {
+      return {
+        name: 'x',
+        attrs: { xmlns: 'jabber:x:data', type: 'form' },
+        getChildren: (name: string) => {
+          if (name === 'field') {
+            return [{
+              name: 'field',
+              attrs: { var: fieldVar, type: 'text-single' },
+              getChild: () => undefined,
+              getChildren: (n: string) => (n === 'value'
+                ? [{ name: 'value', text: () => defaultValue }]
+                : []),
+            }]
+          }
+          return []
+        },
+        getChild: () => undefined,
+      }
+    }
+
+    // A single-step (status=completed) api/simple command response.
+    function completedCommand(node: string, form: AdminMockChild) {
+      return wrapCommand(createAdminMockElement('command', {
+        xmlns: 'http://jabber.org/protocol/commands',
+        node,
+        status: 'completed',
+      }, [form]))
+    }
+
+    // An executing (status=executing) api command response (two-step, step 1).
+    function executingCommand(node: string, form: AdminMockChild) {
+      return wrapCommand(createAdminMockElement('command', {
+        xmlns: 'http://jabber.org/protocol/commands',
+        node,
+        status: 'executing',
+        sessionid: `sess-${node}`,
+      }, [form]))
+    }
+
+    // XEP-0092 jabber:iq:version response on the domain.
+    function versionResponse() {
+      const query = createAdminMockElement('query', { xmlns: 'jabber:iq:version' }, [
+        { name: 'name', text: () => 'ejabberd' },
+        { name: 'version', text: () => '26.01' },
+      ])
+      return {
+        name: 'iq',
+        attrs: { type: 'result' },
+        getChild: (name: string, xmlns?: string) =>
+          (name === 'query' && xmlns === 'jabber:iq:version') ? query : undefined,
+      }
+    }
+
+    // disco#items response with no extra vhosts (vhostCount falls back to 1).
+    function emptyDiscoItems() {
+      const query = createAdminMockElement('query', {
+        xmlns: 'http://jabber.org/protocol/disco#items',
+      }, [])
+      return {
+        name: 'iq',
+        attrs: { type: 'result' },
+        getChild: (name: string, xmlns?: string) =>
+          (name === 'query' && xmlns === 'http://jabber.org/protocol/disco#items') ? query : undefined,
+      }
+    }
+
+    /**
+     * Dispatch outgoing IQs to the right response by inspecting the request
+     * stanza (more robust than fixed call-order across two-step commands and
+     * fetchVhosts' internal disco queries). The mocked xml() returns
+     * { name, attrs, children }, so the first child is the command/query.
+     * `reject` lets a test simulate a failing command.
+     */
+    function installDispatcher(reject?: (node: string | undefined) => boolean) {
+      mockXmppClientInstance.iqCaller.request.mockImplementation((iq: any) => {
+        const child = iq.children?.[0]
+        const node: string | undefined = child?.attrs?.node
+        const action: string | undefined = child?.attrs?.action
+        const xmlns: string | undefined = child?.attrs?.xmlns
+
+        // disco#items (fetchVhosts) → no extra vhosts
+        if (child?.name === 'query' && xmlns === 'http://jabber.org/protocol/disco#items') {
+          return Promise.resolve(emptyDiscoItems())
+        }
+        // jabber:iq:version → version string
+        if (child?.name === 'query' && xmlns === 'jabber:iq:version') {
+          return Promise.resolve(versionResponse())
+        }
+
+        if (child?.name === 'command' && node) {
+          if (reject?.(node)) {
+            return Promise.reject(new Error(`command ${node} failed`))
+          }
+          if (node.endsWith('#get-registered-users-num')) {
+            return Promise.resolve(completedCommand(node, resultForm('registeredusersnum', '15')))
+          }
+          if (node.endsWith('#get-online-users-num')) {
+            return Promise.resolve(completedCommand(node, resultForm('onlineusersnum', '7')))
+          }
+          if (node.endsWith('#get-online-users-list')) {
+            // 3 sessions across 2 distinct bare JIDs (alice has two devices).
+            return Promise.resolve(completedCommand(node, multiResultForm('onlineuserjids', [
+              'alice@example.com/phone',
+              'alice@example.com/desktop',
+              'bob@example.com',
+            ])))
+          }
+          if (node === 'api-commands/muc_online_rooms_count') {
+            return action === 'complete'
+              ? Promise.resolve(completedCommand(node, resultForm('count', '10')))
+              : Promise.resolve(executingCommand(node, executingForm('service', 'conference.example.com')))
+          }
+          if (node === 'api-commands/stats') {
+            return action === 'complete'
+              ? Promise.resolve(completedCommand(node, resultForm('stat', '86400')))
+              : Promise.resolve(executingCommand(node, executingForm('name', 'registeredusers')))
+          }
+        }
+
+        return Promise.resolve(createAdminMockElement('iq', { type: 'result' }, []))
+      })
+    }
+
+    it('aggregates vital signs into a structured object and emits admin:server-stats', async () => {
+      await connectClient()
+      installDispatcher()
+
+      const stats = await xmppClient.admin.fetchServerStats()
+
+      expect(stats.registeredUsers).toBe(15)
+      expect(stats.onlineSessions).toBe(7)
+      expect(stats.onlineUsers).toBe(2) // 3 sessions deduped to 2 distinct bare JIDs
+      expect(stats.onlineRooms).toBe(10)
+      expect(stats.uptimeSeconds).toBe(86400)
+      expect(stats.version).toContain('ejabberd')
+      expect(stats.vhostCount).toBe(1)
+      expect(typeof stats.fetchedAt).toBe('number')
+      expect(emitSDKSpy).toHaveBeenCalledWith('admin:server-stats', { stats })
+    })
+
+    it('submits service=global when counting online rooms', async () => {
+      await connectClient()
+      installDispatcher()
+
+      await xmppClient.admin.fetchServerStats()
+
+      // Find the muc_online_rooms_count complete request and assert service override.
+      const calls = mockXmppClientInstance.iqCaller.request.mock.calls
+      const completeReq = calls
+        .map((c: any[]) => c[0])
+        .find((iq: any) =>
+          iq.children?.[0]?.attrs?.node === 'api-commands/muc_online_rooms_count' &&
+          iq.children?.[0]?.attrs?.action === 'complete')
+      const submitForm = completeReq?.children?.[0]?.children?.[0]
+      const serviceField = submitForm?.children?.find((c: any) => c.attrs?.var === 'service')
+      expect(serviceField?.children?.[0]?.children?.[0]).toBe('global')
+    })
+
+    it('omits metrics whose command fails, without throwing', async () => {
+      await connectClient()
+      installDispatcher((node) => !!node?.endsWith('#get-registered-users-num'))
+
+      const stats = await xmppClient.admin.fetchServerStats()
+
+      expect(stats.registeredUsers).toBeUndefined()
+      // Others still present
+      expect(stats.onlineSessions).toBe(7)
+      expect(stats.onlineUsers).toBe(2)
+      expect(stats.fetchedAt).toBeGreaterThan(0)
     })
   })
 })

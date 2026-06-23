@@ -40,7 +40,21 @@
         "hidePassword": "Skjul adgangskode",
         "madeBy": "Lavet af",
         "ejabberdCreator": ", virksomheden bag",
-        "poweredBy": "Drevet af"
+        "poweredBy": "Drevet af",
+        "errors": {
+            "tlsCertTitle": "Serverens sikkerhedscertifikat kunne ikke bekræftes",
+            "tlsOtherTitle": "Sikker forbindelse mislykkedes",
+            "tlsOtherBody": "Den krypterede forbindelse til serveren kunne ikke oprettes. Serverens TLS-konfiguration er muligvis ikke understøttet. Kontroller serveradressen, eller kontakt serveradministratoren.",
+            "unreachableTitle": "Serveren er ikke tilgængelig",
+            "timeoutBody": "Serveren svarede ikke i tide. Kontroller netværket og serveradressen, og prøv igen.",
+            "refusedBody": "Serveren afviste forbindelsen. Kontroller serveradressen og -porten, og prøv igen.",
+            "cert": {
+                "expired": "Serverens certifikat er udløbet. Kontakt serveradministratoren. Hvis adressen er forkert, skal du redigere serverfeltet nedenfor.",
+                "nameMismatch": "Serverens certifikat er udstedt til et andet værtsnavn. Kontroller serveradressen nedenfor, eller kontakt serveradministratoren.",
+                "untrusted": "Serverens certifikat er selvsigneret eller udstedt af en ukendt myndighed, så det kan ikke stoles på. Kontroller serveradressen, eller kontakt serveradministratoren.",
+                "generic": "Serverens sikkerhedscertifikat kunne ikke bekræftes. Kontroller serveradressen nedenfor, eller kontakt serveradministratoren."
+            }
+        }
     },
     "sidebar": {
         "messages": "Beskeder",
@@ -201,6 +215,16 @@
         "invalidRoomAddress": "Ugyldig rumadresse (skal være rum@conference.server)",
         "joinRoomHint": "Indtast den fulde rumadresse for at deltage i et offentligt chatrum.",
         "failedToJoinRoom": "Kunne ikke deltage i rum",
+        "passwordProtected": "Dette rum er beskyttet med adgangskode",
+        "roomPassword": "Adgangskode",
+        "passwordRequired": "Dette rum er beskyttet med adgangskode. Indtast adgangskoden for at deltage.",
+        "incorrectPassword": "Forkert adgangskode.",
+        "nicknameInUse": "Det kaldenavn er allerede i brug i dette rum.",
+        "membersOnly": "Dette rum er kun for medlemmer. Du skal være medlem for at deltage.",
+        "bannedFromRoom": "Du er blevet udelukket fra dette rum.",
+        "roomFull": "Dette rum er fuldt.",
+        "registeredNicknameRequired": "Dette rum kræver dit registrerede kaldenavn.",
+        "roomNotFound": "Rum ikke fundet.",
         "nonAnonWarningTitle": "Deltag i ikke-anonymt rum?",
         "nonAnonWarningMessage": "Alle i “{{room}}” kan se din rigtige adresse (dit XMPP/Jabber-id). Deltag alligevel?",
         "nonAnonWarningConfirm": "Deltag alligevel",
@@ -209,6 +233,7 @@
         "notJoinedNoHistory": "Du er ikke i dette rum",
         "joinToLoadHistory": "Deltag for at indlæse beskeder",
         "notificationSettings": "Notifikationsindstillinger",
+        "roomActions": "Rumshandlinger",
         "mentionsOnly": "Kun omtaler",
         "defaultBehavior": "Standardadfærd",
         "allMessages": "Alle beskeder",
@@ -433,6 +458,7 @@
         "attachment": "Vedhæftning",
         "removeAttachment": "Fjern vedhæftning",
         "reply": "Svar",
+        "copyMessage": "Kopiér tekst",
         "replyQuoteHiddenEncrypted": "Citat skjult: originalen var krypteret",
         "forwardMessage": "Videresend besked (kommer snart)",
         "moreReactions": "Flere reaktioner",
@@ -565,7 +591,12 @@
             "acceptedWithoutVerifying": "Ny nøgle accepteret. Kontakten er ikke verificeret",
             "acceptFailed": "Kunne ikke acceptere den nye nøgle. Prøv igen"
         },
-        "offlinePlaceholder": "Offline. Beskeder sendes, når forbindelsen er genoprettet"
+        "offlinePlaceholder": "Offline. Beskeder sendes, når forbindelsen er genoprettet",
+        "loadImage": "Indlæs billede",
+        "loadVideo": "Indlæs video",
+        "loadAudio": "Indlæs lyd",
+        "loadFilePreview": "Indlæs forhåndsvisning",
+        "showLinkImage": "Vis billede"
     },
     "dates": {
         "today": "I dag",
@@ -581,7 +612,8 @@
             "updates": "Opdateringer",
             "blocked": "Blokerede brugere",
             "storage": "Lagring",
-            "encryption": "Kryptering"
+            "encryption": "Kryptering",
+            "privacy": "Privatliv"
         },
         "blocked": {
             "title": "Blokerede brugere",
@@ -702,6 +734,7 @@
             "pepUnsupportedBanner": "Din server understøtter ikke personal eventing (PEP, XEP-0163), som OpenPGP-kryptering (XEP-0373) kræver. End-to-end-kryptering kan ikke aktiveres på denne konto. Kontakt din serveradministrator.",
             "statusPepUnsupported": "Kryptering kan ikke aktiveres: serveren understøtter ikke PEP (XEP-0163), som OpenPGP (XEP-0373) kræver.",
             "statusRegistrationFailed": "Opsætning af kryptering mislykkedes ({{code}}). Se udviklerkonsollen for detaljer.",
+            "notProtectedAtRest": "Der er ingen systemnøglering tilgængelig her, så din nøgles adgangssætning gemmes ukrypteret i en fil på disken. Nøglen er ikke beskyttet i hvile. Enhver, der kan læse denne enheds filer, kan bruge den.",
             "backupLabel": "Nøglesikkerhedskopi",
             "backupDescription": "Udgiv en krypteret kopi af din nøgle på din XMPP-server. Beskyttet med en adgangssætning, kun du kender, og kun læsbar af din konto (access_model: whitelist). Lader dig læse krypteret historik på en ny enhed efter login og indtastning af adgangssætningen.",
             "backupAction": "Sikkerhedskopier til server",
@@ -776,6 +809,7 @@
             "identityChoice": {
                 "title": "Der findes allerede en OpenPGP-identitet for denne konto",
                 "body": "Denne browser har ingen lokal nøgle, men serveren annoncerer allerede en nøgle for din konto. Hvis du genererer en ny nøgle her, vil din identitet stille blive forgrenet: korrespondenter, der krypterede til den eksisterende nøgle, vil ikke kunne levere beskeder. Vælg, hvordan du vil løse dette:",
+                "bodyKeyUnrecoverable": "OpenPGP-nøglen på denne enhed kan ikke længere låses op, så kryptering kan ikke startes. Din offentliggjorte identitet er upåvirket. Gendan den fra din serversikkerhedskopi eller ved at importere en nøglefil, eller erstat den, hvis du ikke kan. Vælg, hvordan du vil løse dette:",
                 "publishedFingerprintLabel": "Publiceret fingeraftryk",
                 "restoreFromServerTitle": "Gendan fra serverbackup",
                 "restoreFromServerBody": "Brug backup-adgangskoden, du angav, da du aktiverede kryptering på en anden enhed. Den tilsvarende private nøgle hentes fra serveren og låses op lokalt.",
@@ -802,19 +836,6 @@
             "importFileSuccess": "Nøgle importeret fra fil",
             "importFileFailed": "Kunne ikke læse den valgte fil",
             "unsupportedKeyAlgorithm": "Den importerede nøgle bruger en algoritme, der ikke længere understøttes (f.eks. DSA eller ElGamal). Brug en moderne OpenPGP-nøgle (Curve25519, Ed25519 eller RSA på mindst 2048 bit).",
-            "externalExportAction": "Eksportér til et eksternt OpenPGP-værktøj",
-            "externalExportDialogTitle": "Eksportér privat nøgle til et eksternt OpenPGP-værktøj",
-            "externalExportDialogBody": "Genererer en standard OpenPGP-fil med privat nøgle (PRIVATE KEY BLOCK), som du kan importere i gpg, OpenKeychain, Kleopatra og andre værktøjer.",
-            "externalExportProtectedLabel": "Beskyttet med en adgangskode",
-            "externalExportProtectedDescription": "Anbefales. Vælg en adgangskode; den eksporterede fil bliver krypteret, og eksterne værktøjer vil bede om den ved import.",
-            "externalExportUnprotectedLabel": "Ingen kryptering",
-            "externalExportUnprotectedDescription": "Den eksporterede fil indeholder din private nøgle i klartekst. Brug kun, hvis målværktøjet afviser nøgler beskyttet med en adgangskode.",
-            "externalExportUnprotectedWarning": "Uden adgangskode kan enhver med adgang til den eksporterede fil udgive sig for at være dig og dekryptere dine tidligere og fremtidige beskeder. Slet filen, så snart du har importeret den.",
-            "externalExportUnprotectedAcknowledgment": "Jeg forstår risiciene og ønsker at eksportere min private nøgle ukrypteret.",
-            "externalExportPassphraseLabel": "Adgangskode",
-            "externalExportConfirmPassphraseLabel": "Bekræft adgangskode",
-            "externalExportPassphraseMismatch": "Adgangskoderne stemmer ikke overens.",
-            "externalExportSuccess": "Privat nøgle eksporteret til fil",
             "unlockDialogTitle": "Lås end-to-end-kryptering op",
             "unlockDialogBody": "Indtast din adgangskode for at dekryptere din nøgle til denne session.",
             "unlockDialogSetupTitle": "Konfigurer end-to-end-kryptering",
@@ -826,7 +847,16 @@
             "unlockPassphraseTooShort": "Adgangskoden skal være mindst 8 tegn",
             "lockedBannerBody": "Din krypteringsnøgle er låst. Indtast din adgangskode for at aktivere kryptering for denne session.",
             "rotateNotSupportedWeb": "Nøglerotation er ikke tilgængelig på webbet. Brug desktopappen."
-        }
+        },
+        "mediaAutoDownload": "Automatisk download af medier",
+        "mediaAutoDownloadDescription": "Vælg hvornår billeder, videoer og filer indlæses automatisk.",
+        "mediaAutoDownloadAlways": "Altid",
+        "mediaAutoDownloadAlwaysDescription": "Indlæs medier automatisk i alle samtaler.",
+        "mediaAutoDownloadPrivateOnly": "Kun privat",
+        "mediaAutoDownloadPrivateOnlyDescription": "Indlæs automatisk i direkte beskeder og private rum. I offentlige kanaler, tryk for at indlæse.",
+        "mediaAutoDownloadNever": "Aldrig",
+        "mediaAutoDownloadNeverDescription": "Indlæs aldrig medier automatisk. Tryk for at indlæse i enhver samtale.",
+        "mediaAutoDownloadStrangerNote": "Medier fra personer, der ikke er i dine kontakter, kræver altid et tryk for at indlæse, uanset hvad du vælger her."
     },
     "update": {
         "title": "Opdatering tilgængelig",
@@ -1036,6 +1066,7 @@
             "description": "Du har ikke administratorrettigheder på denne server. Kontakt din serveradministrator for adgang."
         },
         "selectCommand": "Vælg en kommando fra sidebjælken",
+        "openSections": "Åbn administrationsafsnit",
         "execute": "Udfør",
         "executing": "Udfører...",
         "next": "Næste",
@@ -1081,7 +1112,13 @@
         "users": {
             "delete": "Slet bruger",
             "changePassword": "Skift adgangskode",
-            "endSessions": "Afslut sessioner"
+            "endSessions": "Afslut sessioner",
+            "online": "Online",
+            "offline": "Offline",
+            "onlineNow": "Online nu",
+            "justNow": "lige nu",
+            "truncatedBanner": "Viser de første {{shown}} af {{total}} brugere. Præciser din søgning for at indsnævre resultaterne.",
+            "truncatedBannerNoTotal": "Viser de første {{shown}} brugere. Præciser din søgning for at indsnævre resultaterne."
         },
         "userView": {
             "title": "Bruger",
@@ -1103,6 +1140,28 @@
         "roomList": {
             "title": "Chatrum",
             "noRooms": "Ingen rum fundet"
+        },
+        "overview": {
+            "title": "Serveroversigt",
+            "refresh": "Opdater",
+            "updatedAt": "Opdateret kl. {{time}}",
+            "empty": "Serverstatistik er ikke tilgængelig.",
+            "retry": "Prøv igen",
+            "units": {
+                "d": "d",
+                "h": "t",
+                "m": "min",
+                "s": "s"
+            },
+            "cards": {
+                "uptime": "Oppetid",
+                "version": "Serverversion",
+                "users": "Brugere",
+                "onlineSuffix": "{{n}} online",
+                "onlineSessions": "Onlinesessioner",
+                "onlineRooms": "Aktive rum",
+                "vhosts": "Virtuelle værter"
+            }
         }
     },
     "commandPalette": {

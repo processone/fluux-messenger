@@ -40,7 +40,21 @@
         "hidePassword": "Jelszó elrejtése",
         "madeBy": "Készítette:",
         "ejabberdCreator": ", az alkotója:",
-        "poweredBy": "Hajtja:"
+        "poweredBy": "Hajtja:",
+        "errors": {
+            "tlsCertTitle": "A szerver biztonsági tanúsítványa nem ellenőrizhető",
+            "tlsOtherTitle": "A biztonságos kapcsolat sikertelen",
+            "tlsOtherBody": "A szerverrel nem sikerült titkosított kapcsolatot létrehozni. Lehet, hogy a szerver TLS-konfigurációja nem támogatott. Ellenőrizze a szerver címét, vagy vegye fel a kapcsolatot a szerver adminisztrátorával.",
+            "unreachableTitle": "A szerver nem érhető el",
+            "timeoutBody": "A szerver nem válaszolt időben. Ellenőrizze a hálózatot és a szerver címét, majd próbálja újra.",
+            "refusedBody": "A szerver elutasította a kapcsolatot. Ellenőrizze a szerver címét és portját, majd próbálja újra.",
+            "cert": {
+                "expired": "A szerver tanúsítványa lejárt. Vegye fel a kapcsolatot a szerver adminisztrátorával. Ha a cím hibás, szerkessze az alábbi szerver mezőt.",
+                "nameMismatch": "A szerver tanúsítványát más gazdagépnévre állították ki. Ellenőrizze az alábbi szerver címét, vagy vegye fel a kapcsolatot a szerver adminisztrátorával.",
+                "untrusted": "A szerver tanúsítványa önaláírt vagy ismeretlen hatóság által kiállított, ezért nem megbízható. Ellenőrizze a szerver címét, vagy vegye fel a kapcsolatot a szerver adminisztrátorával.",
+                "generic": "A szerver biztonsági tanúsítványa nem ellenőrizhető. Ellenőrizze az alábbi szerver címét, vagy vegye fel a kapcsolatot a szerver adminisztrátorával."
+            }
+        }
     },
     "sidebar": {
         "messages": "Üzenetek",
@@ -201,6 +215,16 @@
         "invalidRoomAddress": "Érvénytelen szobacím (helyes: szoba@conference.szerver)",
         "joinRoomHint": "Adja meg a teljes szobacímet egy nyilvános csevegőszobához való csatlakozáshoz.",
         "failedToJoinRoom": "Nem sikerült csatlakozni a szobához",
+        "passwordProtected": "Ez a szoba jelszóval védett",
+        "roomPassword": "Jelszó",
+        "passwordRequired": "Ez a szoba jelszóval védett. A csatlakozáshoz add meg a jelszót.",
+        "incorrectPassword": "Hibás jelszó.",
+        "nicknameInUse": "Ez a becenév már használatban van ebben a szobában.",
+        "membersOnly": "Ez a szoba csak tagok számára nyitott. Csatlakozáshoz tagnak kell lenned.",
+        "bannedFromRoom": "Kitiltottak ebből a szobából.",
+        "roomFull": "Ez a szoba megtelt.",
+        "registeredNicknameRequired": "Ez a szoba a regisztrált becenevedet igényli.",
+        "roomNotFound": "A szoba nem található.",
         "nonAnonWarningTitle": "Csatlakozik egy nem névtelen csatornához?",
         "nonAnonWarningMessage": "A(z) „{{room}}” minden résztvevője láthatja a valódi címedet (az XMPP/Jabber-azonosítódat). Mégis csatlakozik?",
         "nonAnonWarningConfirm": "Csatlakozás mindenképp",
@@ -209,6 +233,7 @@
         "notJoinedNoHistory": "Ön nem tagja ennek a szobának",
         "joinToLoadHistory": "Csatlakozzon az üzenetek betöltéséhez",
         "notificationSettings": "Értesítési beállítások",
+        "roomActions": "Szoba műveletek",
         "mentionsOnly": "Csak említések",
         "defaultBehavior": "Alapértelmezett viselkedés",
         "allMessages": "Minden üzenet",
@@ -433,6 +458,7 @@
         "attachment": "Melléklet",
         "removeAttachment": "Melléklet eltávolítása",
         "reply": "Válasz",
+        "copyMessage": "Szöveg másolása",
         "replyQuoteHiddenEncrypted": "Idézet elrejtve: az eredeti titkosított volt",
         "forwardMessage": "Üzenet továbbítása (hamarosan)",
         "moreReactions": "További reakciók",
@@ -565,7 +591,12 @@
             "acceptedWithoutVerifying": "Új kulcs elfogadva. A partner nincs ellenőrizve",
             "acceptFailed": "Nem sikerült elfogadni az új kulcsot. Próbálja újra"
         },
-        "offlinePlaceholder": "Offline. Az üzenetek újracsatlakozáskor lesznek elküldve"
+        "offlinePlaceholder": "Offline. Az üzenetek újracsatlakozáskor lesznek elküldve",
+        "loadImage": "Kép betöltése",
+        "loadVideo": "Videó betöltése",
+        "loadAudio": "Hang betöltése",
+        "loadFilePreview": "Előnézet betöltése",
+        "showLinkImage": "Kép megjelenítése"
     },
     "dates": {
         "today": "Ma",
@@ -581,7 +612,8 @@
             "updates": "Frissítések",
             "blocked": "Letiltott felhasználók",
             "storage": "Tárhely",
-            "encryption": "Titkosítás"
+            "encryption": "Titkosítás",
+            "privacy": "Adatvédelem"
         },
         "blocked": {
             "title": "Letiltott felhasználók",
@@ -702,6 +734,7 @@
             "pepUnsupportedBanner": "A szervered nem támogatja a személyes események közzétételét (PEP, XEP-0163), amelyet az OpenPGP-titkosítás (XEP-0373) megkövetel. A végpontok közötti titkosítás nem kapcsolható be ezen a fiókon. Fordulj a szerver rendszergazdájához.",
             "statusPepUnsupported": "A titkosítás nem kapcsolható be: a szerver nem támogatja a PEP-et (XEP-0163), amelyet az OpenPGP (XEP-0373) megkövetel.",
             "statusRegistrationFailed": "A titkosítás beállítása sikertelen ({{code}}). Részletek a fejlesztői konzolon.",
+            "notProtectedAtRest": "Itt nem érhető el rendszerkulcstartó, ezért a kulcs jelmondata titkosítatlanul, fájlban tárolódik a lemezen. A kulcs nyugalmi állapotban nincs védve. Bárki, aki el tudja olvasni az eszköz fájljait, használhatja.",
             "backupLabel": "Kulcs biztonsági mentése",
             "backupDescription": "Tegyen közzé egy titkosított másolatot a kulcsáról az XMPP-kiszolgálón. Egy csak Ön által ismert jelmondat védi, és csak az Ön fiókja olvashatja (access_model: whitelist). Lehetővé teszi a titkosított előzmények olvasását új eszközön bejelentkezés és a jelmondat megadása után.",
             "backupAction": "Mentés a kiszolgálóra",
@@ -776,6 +809,7 @@
             "identityChoice": {
                 "title": "Ehhez a fiókhoz már létezik OpenPGP-identitás",
                 "body": "Ennek a böngészőnek nincs helyi kulcsa, de a szerver már egy kulcsot hirdet a fiókjához. Új kulcs generálása itt csendben elágaztatná az identitását: a meglévő kulcshoz titkosító partnerek nem tudnának üzeneteket kézbesíteni. Válassza ki, hogyan szeretné megoldani ezt:",
+                "bodyKeyUnrecoverable": "Ennek az eszköznek az OpenPGP-kulcsa már nem oldható fel, ezért a titkosítás nem indítható el. A közzétett identitását ez nem érinti. Állítsa vissza a kiszolgálón lévő biztonsági mentésből vagy egy kulcsfájl importálásával, vagy cserélje le, ha nem tudja. Válassza ki, hogyan szeretné megoldani:",
                 "publishedFingerprintLabel": "Közzétett ujjlenyomat",
                 "restoreFromServerTitle": "Visszaállítás a szerver biztonsági mentéséből",
                 "restoreFromServerBody": "Használja azt a biztonsági mentési jelszót, amelyet a titkosítás engedélyezésekor egy másik eszközön beállított. A megfelelő privát kulcs letöltődik a szerverről, és helyileg fel lesz oldva.",
@@ -802,19 +836,6 @@
             "importFileSuccess": "A kulcs fájlból lett importálva",
             "importFileFailed": "A kiválasztott fájl nem olvasható",
             "unsupportedKeyAlgorithm": "Az importált kulcs olyan algoritmust használ, amely már nem támogatott (pl. DSA vagy ElGamal). Használjon modern OpenPGP kulcsot (Curve25519, Ed25519 vagy legalább 2048 bites RSA).",
-            "externalExportAction": "Exportálás külső OpenPGP eszközhöz",
-            "externalExportDialogTitle": "Privát kulcs exportálása külső OpenPGP eszközhöz",
-            "externalExportDialogBody": "Szabványos OpenPGP privát kulcs fájlt (PRIVATE KEY BLOCK) hoz létre, amelyet importálhat a gpg, OpenKeychain, Kleopatra és más eszközökbe.",
-            "externalExportProtectedLabel": "Jelmondattal védve",
-            "externalExportProtectedDescription": "Ajánlott. Válasszon jelmondatot; az exportált fájl titkosítva lesz, és a külső eszközök importáláskor kérni fogják.",
-            "externalExportUnprotectedLabel": "Titkosítás nélkül",
-            "externalExportUnprotectedDescription": "Az exportált fájl a privát kulcsot olvasható szövegként tartalmazza. Csak akkor használja, ha a célalkalmazás elutasítja a jelmondattal védett kulcsokat.",
-            "externalExportUnprotectedWarning": "Jelmondat nélkül bárki, aki hozzáfér az exportált fájlhoz, kiadhatja magát Önnek és visszafejtheti múltbeli és jövőbeli üzeneteit. Importálás után azonnal törölje a fájlt.",
-            "externalExportUnprotectedAcknowledgment": "Megértettem a kockázatokat, és titkosítás nélkül szeretném exportálni a privát kulcsomat.",
-            "externalExportPassphraseLabel": "Jelmondat",
-            "externalExportConfirmPassphraseLabel": "Jelmondat megerősítése",
-            "externalExportPassphraseMismatch": "A jelmondatok nem egyeznek.",
-            "externalExportSuccess": "A privát kulcs exportálva fájlba",
             "unlockDialogTitle": "Végpontok közötti titkosítás feloldása",
             "unlockDialogBody": "Add meg a jelszavad a kulcsod visszafejtéséhez erre a munkamenetre.",
             "unlockDialogSetupTitle": "Végpontok közötti titkosítás beállítása",
@@ -826,7 +847,16 @@
             "unlockPassphraseTooShort": "A jelszónak legalább 8 karakterből kell állnia",
             "lockedBannerBody": "A titkosítási kulcs zárolva van. Add meg a jelszavad a titkosítás aktiválásához erre a munkamenetre.",
             "rotateNotSupportedWeb": "A kulcsrotáció nem elérhető weben. Használd az asztali alkalmazást."
-        }
+        },
+        "mediaAutoDownload": "Médiatartalmak automatikus letöltése",
+        "mediaAutoDownloadDescription": "Válassza meg, mikor töltődjön be automatikusan a kép, videó és a fájl.",
+        "mediaAutoDownloadAlways": "Mindig",
+        "mediaAutoDownloadAlwaysDescription": "Médiatartalmak automatikus betöltése minden beszélgetésben.",
+        "mediaAutoDownloadPrivateOnly": "Csak privát",
+        "mediaAutoDownloadPrivateOnlyDescription": "Automatikus betöltés közvetlen üzenetekben és privát szobákban. Nyilvános csatornákon érintse meg a betöltéshez.",
+        "mediaAutoDownloadNever": "Soha",
+        "mediaAutoDownloadNeverDescription": "Soha ne töltődjön be médiatartalom automatikusan. Érintse meg a betöltéshez bármelyik beszélgetésben.",
+        "mediaAutoDownloadStrangerNote": "A névjegyei közt nem szereplő személyek médiái mindig érintést igényelnek a betöltéshez, függetlenül attól, mit választ itt."
     },
     "update": {
         "title": "Frissítés elérhető",
@@ -1036,6 +1066,7 @@
             "description": "Önnek nincs adminisztrátori jogosultsága ezen a szerveren. Vegye fel a kapcsolatot a szerver adminisztrátorával a hozzáférésért."
         },
         "selectCommand": "Válasszon egy parancsot az oldalsávból",
+        "openSections": "Adminisztrációs szakaszok megnyitása",
         "execute": "Végrehajtás",
         "executing": "Végrehajtás...",
         "next": "Következő",
@@ -1081,7 +1112,13 @@
         "users": {
             "delete": "Felhasználó törlése",
             "changePassword": "Jelszó módosítása",
-            "endSessions": "Munkamenetek befejezése"
+            "endSessions": "Munkamenetek befejezése",
+            "online": "Online",
+            "offline": "Offline",
+            "onlineNow": "Online most",
+            "justNow": "éppen most",
+            "truncatedBanner": "Az első {{shown}} felhasználó látható {{total}}-ből. Szűkítse le a keresést a találatok csökkentéséhez.",
+            "truncatedBannerNoTotal": "Az első {{shown}} felhasználó látható. Szűkítse le a keresést a találatok csökkentéséhez."
         },
         "userView": {
             "title": "Felhasználó",
@@ -1103,6 +1140,28 @@
         "roomList": {
             "title": "Csevegőszobák",
             "noRooms": "Nem található szoba"
+        },
+        "overview": {
+            "title": "Kiszolgáló áttekintése",
+            "refresh": "Frissítés",
+            "updatedAt": "Frissítve: {{time}}",
+            "empty": "A kiszolgáló statisztikái nem érhetők el.",
+            "retry": "Újra",
+            "units": {
+                "d": "n",
+                "h": "ó",
+                "m": "p",
+                "s": "mp"
+            },
+            "cards": {
+                "uptime": "Üzemidő",
+                "version": "Kiszolgáló verziója",
+                "users": "Felhasználók",
+                "onlineSuffix": "{{n}} online",
+                "onlineSessions": "Online munkamenetek",
+                "onlineRooms": "Aktív szobák",
+                "vhosts": "Virtuális gazdagépek"
+            }
         }
     },
     "commandPalette": {
