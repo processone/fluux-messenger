@@ -87,6 +87,18 @@ vi.mock('@/utils/presence', () => ({
   getTranslatedShowText: (show: string | undefined) => show || 'online',
 }))
 
+// Render ALL items: jsdom gives the scroll container 0 height and the test-setup
+// ResizeObserver is a no-op, so the real virtualizer would window down to overscan and
+// these "is X present?" assertions would break. The mock returns every item.
+vi.mock('@tanstack/react-virtual', () => ({
+  useVirtualizer: (opts: { count: number }) => ({
+    getTotalSize: () => opts.count * 44,
+    getVirtualItems: () =>
+      Array.from({ length: opts.count }, (_, index) => ({ index, key: index, start: index * 44, size: 44 })),
+    measureElement: () => {},
+  }),
+}))
+
 // Helper to create a test room
 const createRoom = (overrides: Partial<Room> = {}): Room => ({
   jid: 'room@conference.example.com',
