@@ -1841,6 +1841,20 @@ export class XMPPClient {
     chatBindings: StoreBindings['chat'],
   ): void {
     const actorJid = getBareJid(placeholder.from)
+    // Diagnostic (race investigation): a deferred reaction/retraction can only
+    // attach to its target if that target is in the loaded set when this runs.
+    // retryPendingDecrypts is a one-shot pass (launch / key-unlock); nothing
+    // re-runs it when a target enters the store later via scroll/MAM. Record
+    // whether target + placeholder were present so a "resolved only after
+    // relaunch" report can be confirmed against the actual presence at apply
+    // time. Domains only — no message content.
+    const targetPresent = !!chatBindings.getMessage(conversationId, modification.targetId)
+    const placeholderPresent = !!chatBindings.getMessage(conversationId, placeholder.id)
+    logInfo(
+      `E2EE deferred modification: type=${modification.type} conv=${getDomain(conversationId)} ` +
+      `targetPresent=${targetPresent} placeholderPresent=${placeholderPresent}` +
+      (targetPresent ? '' : ' — target not loaded, signal cannot attach until a later pass'),
+    )
     if (modification.type === 'reactions') {
       chatBindings.updateReactions(conversationId, modification.targetId, actorJid, modification.emojis)
     } else {
