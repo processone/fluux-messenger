@@ -359,7 +359,11 @@ export async function peekWebEncryptedMediaCache(httpsUrl: string): Promise<stri
   if (cached) return cached
 
   if (typeof caches === 'undefined') return null
-  const webCacheKey = `decrypted:${httpsUrl}`
+  // Key the dedicated decrypted-media cache with the plain https URL. The
+  // Cache API rejects put()/match() requests whose scheme is not http(s), so a
+  // synthetic prefix like `decrypted:` would make put() throw — a separate
+  // cache name (WEB_DECRYPTED_CACHE_NAME) already isolates it from plaintext.
+  const webCacheKey = httpsUrl
   const cache = await caches.open(WEB_DECRYPTED_CACHE_NAME)
   const cachedResponse = await cache.match(webCacheKey)
   if (cachedResponse) {
@@ -410,7 +414,9 @@ async function doResolveWebEncrypted(
   const peeked = await peekWebEncryptedMediaCache(httpsUrl)
   if (peeked) return peeked
 
-  const webCacheKey = `decrypted:${httpsUrl}`
+  // Plain https key: the Cache API rejects non-http(s) request schemes, so the
+  // key cannot carry a synthetic prefix. See peekWebEncryptedMediaCache.
+  const webCacheKey = httpsUrl
   const cache = await caches.open(WEB_DECRYPTED_CACHE_NAME)
 
   const response = await fetch(httpsUrl)
