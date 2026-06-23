@@ -222,6 +222,24 @@ describe('usePlatformState', () => {
     ;(window as any).__TAURI_INTERNALS__ = tauriIpc
   })
 
+  // Wait for an effect to register a Tauri listener. The hook subscribes via an
+  // async dynamic import (`import('@tauri-apps/api/event').then(({ listen }) =>
+  // listen(name, …))`) whose resolution runs on the REAL microtask queue — the
+  // faked clock does not drive it. A fixed-iteration flush loop can therefore
+  // exhaust before that real-async chain resolves under CI load (the old source
+  // of flake). vi.waitFor retries on real (unmocked) "safe" timers, so each
+  // attempt gets real wall-clock time for the import to land; we still flush the
+  // faked timer + microtask queues inside the callback so the registration can
+  // advance whichever queue a step happens to land on.
+  const waitForListener = async (name: string) => {
+    await vi.waitFor(async () => {
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0)
+      })
+      expect(tauriListeners.has(name)).toBe(true)
+    })
+  }
+
   describe('activity detection', () => {
     it('should notify SDK when activity detected', async () => {
       renderHook(() => usePlatformState())
@@ -411,12 +429,7 @@ describe('usePlatformState', () => {
       renderHook(() => usePlatformState())
 
       // A display-off tick lands first, recording displayActive=false.
-      for (let i = 0; i < 30 && !tauriListeners.has('xmpp-keepalive'); i++) {
-        await act(async () => {
-          await vi.advanceTimersByTimeAsync(0)
-          await Promise.resolve()
-        })
-      }
+      await waitForListener('xmpp-keepalive')
       const ka = tauriListeners.get('xmpp-keepalive')
       await act(async () => {
         ka?.({ payload: { displayActive: false, sleptMs: 30_000 } })
@@ -596,17 +609,6 @@ describe('usePlatformState', () => {
     })
   })
 
-  // Wait for an effect to register a Tauri listener (the hook subscribes via
-  // an async dynamic import — flush micro + faked-macro tasks until present).
-  const waitForListener = async (name: string) => {
-    for (let i = 0; i < 30 && !tauriListeners.has(name); i++) {
-      await act(async () => {
-        await vi.advanceTimersByTimeAsync(0)
-        await Promise.resolve()
-      })
-    }
-  }
-
   describe('Effect 2 OS-wake demotion (reload-only)', () => {
     beforeEach(() => {
       installTauriIpc()
@@ -696,15 +698,9 @@ describe('usePlatformState', () => {
 
   describe('Effect 5 keepalive gate', () => {
     const fireKeepalive = async (payload: unknown) => {
-      // The hook registers the listener via `await import(...).then(...)`, whose
-      // resolution interleaves microtasks and the (faked) timer/macrotask queue.
-      // Poll until the listener is registered, flushing both each iteration.
-      for (let i = 0; i < 30 && !tauriListeners.has('xmpp-keepalive'); i++) {
-        await act(async () => {
-          await vi.advanceTimersByTimeAsync(0)
-          await Promise.resolve()
-        })
-      }
+      // Effect 5 registers the listener via an async dynamic import; wait for it
+      // on the real clock (see waitForListener — robust under CI load).
+      await waitForListener('xmpp-keepalive')
       const handler = tauriListeners.get('xmpp-keepalive')
       expect(handler).toBeDefined()
       await act(async () => {
