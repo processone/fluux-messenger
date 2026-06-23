@@ -480,47 +480,49 @@ git commit -m "chore(perf): record virtualization spike results + remove harness
 
 ## Phase 2.1+ — Integration (rooms-first, behind the flag)
 
-> **Expanded into bite-sized steps once Task 5's gate fixes the implementation.** The exact `scrollTop`/offset edits in `useMessageListScroll.ts` (a 1388-line imperative hook) depend on whether the adapter is `@tanstack` or custom, and on the spike's tuning findings; writing them before the gate would be speculative. Each task below lists its files, the interface it consumes/produces, the concrete change, and its verification — enough to expand into TDD/verify steps at execution time. Tasks 6–10 are gated by Task 5; Task 11 is the bake/flip.
+> **Spike outcome (2026-06-23):** the `@tanstack` mechanism is validated (windowing + scroll tracking + anchor convergence; see the spec's "Spike results"). **Foundations landed** (commit `02881872`): the adapter is decoupled from item kinds (accepts `{ key }[]`), and `buildMessageListItems` produces the full `header/date/message/footer` item list + shifted `indexById`.
+>
+> **Verification reality:** the headless preview **cannot** faithfully exercise virtualized scroll (throttled rAF, no auto `scroll` on programmatic `scrollTop`). So Tasks 6–9 are structurally unit-testable (render-all mock + pure helpers), but their **real behavior must be verified on a real engine** — open `/spike.html`-style flows or the flagged build in macOS `tauri:dev` and the Linux/WebKitGTK build. Land behind the OFF flag; flip only after the real-engine pass (Task 11).
 
 ### Task 6: Windowed render in `MessageList` behind the flag
 
-**Files:** Modify `apps/fluux/src/components/conversation/MessageList.tsx` (the render at lines ~262–319: `contentWrapperRef` wrapper + `groupedMessages.map` → `message-row`s).
-**Consumes:** `isFeatureEnabled` (Task 3), `flattenMessageItems` (Task 1), `useTanstackMessageVirtualizer` (Task 4), `MessageWidthProvider` (existing).
-**Change:** when `isFeatureEnabled('enableMessageVirtualization')`, render the spacer + windowed `getVirtualItems()` rows (each `className="message-row" data-message-id` with `ref={measureElement}`, `translateY(start)`); else render the current full-mount path unchanged. Extract the per-row JSX (date header vs `MessageBubble` row) into a `renderItem(item)` shared by both paths.
-**Verify:** existing `MessageList` tests pass with the flag OFF (default). With a `vi.mock('@tanstack/react-virtual')` render-all mock + flag ON, the same structural assertions pass. Demo node-count (Task 10 guard) with flag ON: ≤ ~60 rows on a 1000-msg room.
+- [x] **6a — Adapter decouple + `buildMessageListItems`** (done, `02881872`).
+- [ ] **6b — Carry group context on the message item.** `renderMessage(msg, idx, groupMessages, showNewMarker, onMediaLoad)` needs the per-group index + array, which flattening drops. Extend `MessageListItem`'s `message` kind in `messageVirtualizer.ts` with `indexInGroup: number; groupMessages: T[]`, and set them in `flattenMessageItems.ts` (the `forEach` already has `i` and `group.messages`). Extend `flattenMessageItems.test.ts` to assert both. (TDD; pure.)
+- [ ] **6c — Precompute the gap-marker id.** The current per-group `showGapMarker` (MessageList ~300–307) reduces to "the first chronological message with `timestamp > forwardGapTimestamp`". In `MessageList`, `const gapMarkerMessageId = useMemo(...)` scanning `groupedMessages` in order; `undefined` when `!forwardGapTimestamp || !onCatchUpHistory`.
+- [ ] **6d — `renderItem(item: RenderItem<T>)` in `MessageList`.** Faithful extraction of the current JSX by kind: `header` → the `HistoryStartMarker`/load-earlier block (~264–286); `date` → `<div data-date-separator><DateSeparator/></div>`; `message` → the `message-row` (`data-message-id/stanza-id/origin-id`, `lastSentMessageId` animation) with `HistoryGapMarker` when `item.message.id === gapMarkerMessageId`, `NewMessageMarker` when `item.isFirstNew`, then `renderMessage(item.message, item.indexInGroup, item.groupMessages, item.isFirstNew, handleMediaLoad)`; `footer` → `extraContent` + the typing-indicator div.
+- [ ] **6e — Flag-gated render.** `const virtualized = isFeatureEnabled('enableMessageVirtualization') && !staticMode`. Build items + call `useTanstackMessageVirtualizer` **unconditionally** (hooks rule), feeding `items: []` when not virtualized (inert). When virtualized, the content wrapper becomes the spacer (`height: getTotalSize()`, relative) and renders `getVirtualItems().map(v => <div key data-index ref={measureElement} style={absolute, translateY(start)}>{renderItem(items[v.index])}</div>)`; else the current full-mount path (now also routed through `renderItem` for DRY).
+- [ ] **6f — Verify.** Flag OFF (default): the existing `MessageList` tests pass unchanged. Flag ON with `vi.mock('@tanstack/react-virtual')` render-all: a structural test asserts header + dated rows + footer render with correct `data-message-id`s. **Real scroll behavior → real-engine pass (Task 11), behind the flag.**
 
 ### Task 7: Rebind `useMessageListScroll` to the interface
 
-**Files:** Modify `apps/fluux/src/components/conversation/useMessageListScroll.ts`.
-**Consumes:** the `MessageVirtualizer` instance (passed in as an optional option; when absent — flag OFF — the hook keeps its current DOM-reading behavior), `messageScrollAlignment` (Task 2).
-**Change (exact current sites):**
-- Prepend restore (`useLayoutEffect`, lines ~1032–1208): replace `anchorElement.offsetTop` with `virtualizer.getOffsetForMessageId(saved.anchorMessageId)` and compute `scrollTop` via `prependAnchorScrollTop(...)`; add the 2-step correction (immediate + post-measure rAF), reusing the existing 15-frame re-assert.
-- Marker scroll (lines ~825–862), target scroll (lines ~932–968), `scrollToBottom` two-step (lines ~434–447): `await virtualizer.ensureMessageMounted(id)` then `markerScrollTop(virtualizer.getOffsetForMessageId(id), clientHeight)`.
-- `findBottomAnchor` (lines ~55–78) and `findAnchorElement` (lines ~462–518): source offsets from the mounted window / `getVirtualItems` start offsets rather than a full `querySelectorAll`.
-**Verify:** the existing `MessageList.scroll.test.tsx` adapted to inject a fake `MessageVirtualizer`; assert the computed `scrollTop` values come from the alignment module. Two-platform manual: prepend, jump, marker, switch-restore all pixel-correct.
+- [ ] **7a — Optional `virtualizer?: MessageVirtualizer` option.** When absent (flag OFF), every site below keeps its current DOM-reading branch — zero behavior change. When present, use the interface.
+- [ ] **7b — Prepend restore** (`useLayoutEffect`, ~1032–1208): `virtualizer.getOffsetForMessageId(saved.anchorMessageId)` → `prependAnchorScrollTop(...)` for the immediate restore, then the **post-measure correction** in the existing 15-frame re-assert (the spike showed it converges in ~1 step; re-read the offset each frame until stable).
+- [ ] **7c — Jump sites** — marker scroll (~825–862), target scroll (~932–968), `scrollToBottom` two-step (~434–447), and find-on-page scroll-to-match: `await virtualizer.ensureMessageMounted(id)` → `markerScrollTop(virtualizer.getOffsetForMessageId(id), clientHeight)`.
+- [ ] **7d — Anchor capture** — `findBottomAnchor` (~55–78) and `findAnchorElement` (~462–518): read offsets from `virtualizer.getVirtualItems()` start offsets (the visible rows are mounted) instead of a full `querySelectorAll`.
+- [ ] **7e — Verify.** Adapt `MessageList.scroll.test.tsx` to inject a fake `MessageVirtualizer`; assert computed `scrollTop` values come from `messageScrollAlignment`. **Real prepend/jump/switch pixel-accuracy → real-engine pass.**
 
 ### Task 8: Read-marker re-observe in `useViewportObserver`
 
-**Files:** Modify `apps/fluux/src/hooks/useViewportObserver.ts`.
-**Change:** re-run `observe()` over the currently-mounted `.message-row` set whenever the window changes (the mounted set is the dependency). The bottom-most-visible computation already runs over mounted rows; unmounted rows are off-viewport so they are correctly never "seen".
-**Verify:** existing read-marker tests pass; manual — `lastSeenMessageId` advances as you scroll a virtualized big room, and the unread marker clears correctly.
+- [ ] **8a** Read `useViewportObserver.ts`; make it re-run `observe()` over the currently-mounted `.message-row` set whenever the window changes (add the mounted set / a window-version as a dependency). Bottom-most-visible already runs over mounted rows; unmounted rows are off-viewport so they are correctly never "seen".
+- [ ] **8b — Verify.** Existing read-marker tests pass. Real-engine: `lastSeenMessageId` advances while scrolling a virtualized big room; the unread marker clears.
 
 ### Task 9: Store-backed copy in `useMessageCopyFormatter`
 
-**Files:** Modify `apps/fluux/src/hooks/useMessageCopyFormatter.ts` (already resolves `startMessage`/`endMessage` via `.closest('[data-message-id]')` and `setData('text/plain', output)` at lines ~50–154).
-**Consumes:** the active conversation's in-memory message array + the existing per-message formatter.
-**Change:** when the selection spans message ids whose intermediate rows are not in the DOM, reconstruct `output` from `messages.slice(indexOf(startId), indexOf(endId)+1)` formatted with the same logic, instead of walking the (incomplete) DOM. Single-message and within-window selections keep the existing DOM path.
-**Verify (TDD-able):** a pure helper `buildCopyText({ startId, endId, messages })` with a unit test (ids + array → expected text). Manual: select from a visible top row through scroll to a visible bottom row spanning unmounted middle, copy, paste → full range present.
+- [ ] **9a — Pure helper `buildCopyText({ startId, endId, messages, format })`** (new, TDD): `messages.slice(indexOf(startId), indexOf(endId)+1)` joined via the existing per-message formatter. Unit test: ids + array → expected text.
+- [ ] **9b** In `useMessageCopyFormatter` (resolves `startMessage`/`endMessage` via `.closest('[data-message-id]')`, ~50–154): when the span covers message ids whose intermediate rows are absent from the DOM, build the output via `buildCopyText` from the in-memory array; single-message / within-window selections keep the existing DOM path.
+- [ ] **9c — Verify.** Helper unit test green. Real-engine: select top→bottom across an unmounted middle, copy, paste → full range present.
 
 ### Task 10: Node-count guard + perf-harness assertion
 
-**Files:** Modify `apps/fluux/src/demo/perfHarness.ts` (extend `measureSwitch` to also assert/report mounted `.message-row` count), `packages/fluux-sdk/src/stores/RENDER_PERF_TESTS.md` (document the guard: "switch into a 1000-msg room mounts ≤ ~60 `.message-row` with the flag ON").
-**Verify:** in the demo with the flag ON, `await __perf.measureSwitch('stress-0@conference.fluux.chat')` reports `messageRows ≤ ~60` (vs ~1000 baseline) — the same measurement style that proved the occupant panel (32 / 501).
+- [ ] **10a** Extend `apps/fluux/src/demo/perfHarness.ts` `measureSwitch` to report mounted `.message-row` count.
+- [ ] **10b** Document the guard in `packages/fluux-sdk/src/stores/RENDER_PERF_TESTS.md`: "with the flag ON, switching into a 1000-msg room mounts ≤ ~60 `.message-row`".
+- [ ] **10c — Verify** (real engine, flag ON): `await __perf.measureSwitch('stress-0@conference.fluux.chat')` → `messageRows ≤ ~60` (vs ~1000) — the measurement style that proved the occupant panel (32 / 501).
 
-### Task 11: Two-platform bake, flip the flag, remove the old path
+### Task 11: Two-platform real-engine pass, flip the flag, remove the old path
 
-**Change:** after Tasks 6–10 verify green on macOS **and** Linux, flip `enableMessageVirtualization` default ON; after a bake period, delete the non-virtualized render branch in `MessageList` and the flag.
-**Verify:** full app suite green; demo node-count guard green by default; the Linux 3 s switch freeze confirmed gone (the confirmatory measurement); all six behaviors regression-free on both engines.
+- [ ] **11a** With the flag ON, run all six behaviors on **macOS (WKWebView/`tauri:dev`)** and **Linux/WebKitGTK**: stick-to-bottom, prepend-anchor (no jump), jump/reply/marker, read marker, multi-message copy, switch-restore — plus confirm the **3 s switch freeze is gone** on Linux and node count is bounded.
+- [ ] **11b** Flip `enableMessageVirtualization` default ON.
+- [ ] **11c** After a bake period, delete the non-virtualized branch in `MessageList`, the flag, and the `/spike.html` harness; full app suite green.
 
 ---
 
