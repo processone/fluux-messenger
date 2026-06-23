@@ -133,7 +133,7 @@ export function MessageList<T extends BaseMessage>({
   // Deduplicate messages by ID (safety net for any race conditions in store).
   // Only real ids participate: `id` is typed string but demo echoes / persisted
   // state can miss it, and two distinct id-less messages are not duplicates.
-  const deduplicatedMessages = (() => {
+  const deduplicatedMessages = useMemo(() => {
     const seen = new Set<string>()
     return messages.filter((msg) => {
       if (!msg.id) {
@@ -145,7 +145,7 @@ export function MessageList<T extends BaseMessage>({
       seen.add(msg.id)
       return true
     })
-  })()
+  }, [messages])
 
   // Derive badge count from the marker position so FAB badge and marker are
   // always consistent. The store's unreadCount is 0 for active conversations.
@@ -156,8 +156,10 @@ export function MessageList<T extends BaseMessage>({
     return deduplicatedMessages.length - idx
   }, [firstNewMessageId, deduplicatedMessages])
 
-  // Group messages by date for rendering with separators
-  const groupedMessages = groupMessagesByDate(deduplicatedMessages)
+  // Group messages by date for rendering with separators. Memoized so the virtualizer
+  // (and the legacy map) receive a stable array when messages are unchanged — an unstable
+  // ref here amplifies the @tanstack measure-settling into a render burst.
+  const groupedMessages = useMemo(() => groupMessagesByDate(deduplicatedMessages), [deduplicatedMessages])
 
   // Compute derived values for scroll hook
   const firstMessageId = deduplicatedMessages[0]?.id
