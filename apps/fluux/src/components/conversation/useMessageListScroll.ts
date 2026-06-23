@@ -154,6 +154,7 @@ export function useMessageListScroll({
   typingUsersCount,
   lastMessageReactionsKey,
   staticMode = false,
+  virtualizer,
 }: UseMessageListScrollOptions): UseMessageListScrollResult {
 
   // ==========================================================================
@@ -260,9 +261,9 @@ export function useMessageListScroll({
   //    values they need are read through latestRef (updated each render via
   //    effect), never closed over.
 
-  const latestRef = useRef({ staticMode, externalScrollerRef, isAtBottomRef, conversationId })
+  const latestRef = useRef({ staticMode, externalScrollerRef, isAtBottomRef, conversationId, virtualizer })
   useEffect(() => {
-    latestRef.current = { staticMode, externalScrollerRef, isAtBottomRef, conversationId }
+    latestRef.current = { staticMode, externalScrollerRef, isAtBottomRef, conversationId, virtualizer }
   })
 
   const stableSettersRef = useRef<{
@@ -437,6 +438,9 @@ export function useMessageListScroll({
 
     // Two-step behavior: first click scrolls to new message marker, second to bottom
     if (firstNewMessageId && !hasScrolledToMarkerRef.current) {
+      // When virtualized, ensure the marker row is mounted (best-effort; falls back to
+      // scroll-to-bottom below if it isn't mounted yet on this single-shot click).
+      void latestRef.current.virtualizer?.ensureMessageMounted(firstNewMessageId)
       const escapedId = CSS.escape(firstNewMessageId)
       const messageElement = scroller.querySelector(`[data-message-id="${escapedId}"]`)
 
@@ -861,6 +865,9 @@ export function useMessageListScroll({
           }
         }
 
+        // When virtualized, bring the (possibly unmounted) marker row into the window
+        // first; the retries below then find it once it mounts.
+        void latestRef.current.virtualizer?.ensureMessageMounted(firstNewMessageId)
         // Try immediately, then with increasing delays to handle async rendering
         requestAnimationFrame(scrollToMarker)
         setTimeout(scrollToMarker, 50)
@@ -972,6 +979,8 @@ export function useMessageListScroll({
       }
     }
 
+    // When virtualized, bring the (possibly unmounted) target row into the window first.
+    void latestRef.current.virtualizer?.ensureMessageMounted(targetMessageId)
     // Try with increasing delays to handle async rendering
     rafId = requestAnimationFrame(scrollToTarget)
     timeouts.push(setTimeout(scrollToTarget, 50))
@@ -1155,14 +1164,26 @@ export function useMessageListScroll({
       if (framesRemaining <= 0 || !scrollerRef.current) return
       framesRemaining--
 
+      // When virtualized, re-read the anchor's now-measured offset and re-anchor each
+      // frame — the 2-step convergence (@tanstack's estimated offset settles after the
+      // new rows measure; the spike showed this converges in ~1 step). Flag-OFF holds
+      // the fixed target (unchanged behavior).
+      let target = targetScrollTop
+      if (latestRef.current.virtualizer && saved.anchorMessageId) {
+        const el = scrollerRef.current.querySelector(
+          `[data-message-id="${CSS.escape(saved.anchorMessageId)}"]`,
+        ) as HTMLElement | null
+        if (el) target = el.offsetTop - saved.anchorOffsetFromTop
+      }
+
       const currentScrollTop = scrollerRef.current.scrollTop
-      if (Math.abs(currentScrollTop - targetScrollTop) > 5) {
+      if (Math.abs(currentScrollTop - target) > 5) {
         debugLog('PREPEND REASSERT (momentum override detected)', {
-          target: targetScrollTop,
+          target,
           current: currentScrollTop,
           framesRemaining,
         })
-        scrollerRef.current.scrollTop = targetScrollTop
+        scrollerRef.current.scrollTop = target
       }
       requestAnimationFrame(assertPosition)
     }

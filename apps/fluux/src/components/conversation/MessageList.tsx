@@ -373,7 +373,9 @@ export function MessageList<T extends BaseMessage>({
               key={virtualItems[v.index].key}
               data-index={v.index}
               ref={virtualizer.measureElement}
-              style={{ position: 'absolute', top: 0, left: 0, width: '100%', transform: `translateY(${v.start}px)` }}
+              // `top` (not transform) so each row's offsetTop reflects its real position —
+              // the scroll hook's offset math (anchor/jump/restore) depends on offsetTop.
+              style={{ position: 'absolute', top: v.start, left: 0, width: '100%' }}
             >
               {renderItem(virtualItems[v.index])}
             </div>
