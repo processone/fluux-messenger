@@ -1,9 +1,11 @@
 import { useCallback } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
-import type { MessageListItem, MessageVirtualizer } from './messageVirtualizer'
+import type { MessageVirtualizer } from './messageVirtualizer'
 
-interface Args<T extends { id: string }> {
-  items: MessageListItem<T>[]
+interface Args {
+  /** Only the stable `key` per row is needed — the adapter is agnostic to item kind
+   *  (date/message/header/footer all window uniformly). The caller renders by kind. */
+  items: readonly { key: string }[]
   indexById: Map<string, number>
   scrollRef: React.RefObject<HTMLElement | null>
   estimateSize?: number
@@ -17,9 +19,9 @@ interface Args<T extends { id: string }> {
  * `getItemKey = items[i].key` (the message id) binds the measurement cache to the message,
  * not the index, so it survives MAM prepend (which shifts every index).
  */
-export function useTanstackMessageVirtualizer<T extends { id: string }>({
+export function useTanstackMessageVirtualizer({
   items, indexById, scrollRef, estimateSize = 64,
-}: Args<T>): MessageVirtualizer {
+}: Args): MessageVirtualizer {
   const virtualizer = useVirtualizer<HTMLElement, Element>({
     count: items.length,
     getScrollElement: () => scrollRef.current,
