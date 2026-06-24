@@ -9,7 +9,7 @@
  * nor sent at all once the counterpart has left.
  */
 import { describe, it, expect } from 'vitest'
-import { resolveWhisperTarget, whisperTargetPresent, decideWhisperSend } from './whisperTarget'
+import { resolveWhisperTarget, whisperTargetPresent, decideWhisperSend, decideChatStateRoute } from './whisperTarget'
 
 const occ = (nick: string, occupantId?: string) => ({ nick, occupantId })
 const occupantsOf = (...list: { nick: string; occupantId?: string }[]) =>
@@ -89,5 +89,19 @@ describe('decideWhisperSend (send-time guard)', () => {
   it('refuses present-but-empty before checking presence (empty wins)', () => {
     const decision = decideWhisperSend({ nick: 'bob', occupantId: 'occ-1' }, '', occupantsOf())
     expect(decision).toEqual({ ok: false, reason: 'empty', nick: 'bob' })
+  })
+})
+
+describe('decideChatStateRoute', () => {
+  it('suppresses typing when notifications are disabled', () => {
+    expect(decideChatStateRoute({ nick: 'bob' }, false)).toEqual({ target: 'none' })
+  })
+
+  it('routes to the room when not whispering', () => {
+    expect(decideChatStateRoute(null, true)).toEqual({ target: 'room' })
+  })
+
+  it('routes privately to the whisper target', () => {
+    expect(decideChatStateRoute({ nick: 'bob' }, true)).toEqual({ target: 'whisper', nick: 'bob' })
   })
 })

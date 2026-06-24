@@ -1,11 +1,11 @@
 import React, { useState, useRef, useEffect, useCallback, useImperativeHandle, useMemo, memo, type RefObject } from 'react'
 import { useTranslation } from 'react-i18next'
 import { detectRenderLoop } from '@/utils/renderLoopDetector'
-import { useRoomActive, useRoomEntity, useRoomOccupantCount, useContactIdentities, getBareJid, generateConsistentColorHexSync, useReferencedMessage, isMessageFromIgnoredUser, isReplyToIgnoredUser, canKick, canBan, getAvailableAffiliations, getAvailableRoles, getMyReactions, type RoomMessage, type Room, type RoomOccupant, type MentionReference, type ChatStateNotification, type ContactIdentity, type FileAttachment, type RoomAffiliation, type RoomRole, type PollData } from '@fluux/sdk'
+import { useRoomActive, useRoomEntity, useRoomOccupantCount, useContactIdentities, getBareJid, generateConsistentColorHexSync, useReferencedMessage, isMessageFromIgnoredUser, isReplyToIgnoredUser, canKick, canBan, getAvailableAffiliations, getAvailableRoles, getMyReactions, WhisperCounterpartGoneError, type RoomMessage, type Room, type RoomOccupant, type MentionReference, type ChatStateNotification, type ContactIdentity, type FileAttachment, type RoomAffiliation, type RoomRole, type PollData } from '@fluux/sdk'
 import { useConnectionStore, useIgnoreStore, useRoomStore } from '@fluux/sdk/react'
 import { ignoreStore, roomStore, type IgnoredUser } from '@fluux/sdk/stores'
 import { useMentionAutocomplete, useFileUpload, useLinkPreview, useTypeToFocus, useMessageCopy, useMode, useMessageSelection, useMessageHoverState, useDragAndDrop, useConversationDraft, useTimeFormat, useContextMenu, useWhisperCounterpartPresent, isSmallScreen } from '@/hooks'
-import { MessageBubble, MessageList, shouldShowAvatar, whisperThreadPosition, whisperCounterpartPresent, resolveWhisperTarget, decideWhisperSend, buildReplyContext, canClosePoll, PollBanner, type WhisperThreadPosition, type WhisperTarget } from './conversation'
+import { MessageBubble, MessageList, shouldShowAvatar, whisperThreadPosition, whisperCounterpartPresent, resolveWhisperTarget, decideWhisperSend, decideChatStateRoute, buildReplyContext, canClosePoll, PollBanner, type WhisperThreadPosition, type WhisperTarget } from './conversation'
 import { FindOnPageBar } from './conversation/FindOnPageBar'
 import { useFindOnPage, type FindOnPageHandle } from '@/hooks/useFindOnPage'
 import { Avatar } from './Avatar'
@@ -78,7 +78,7 @@ const EMPTY_OCCUPANTS: Map<string, RoomOccupant> = new Map()
 export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = false, onShowOccupantsChange, onStartChat, onShowProfile, findOnPageRef, onSearchInConversation }: RoomViewProps) {
   detectRenderLoop('RoomView')
   const { t } = useTranslation()
-  const { activeRoom, activeMessages, activeTypingUsers, sendMessage, sendWhisper, sendReaction, sendPoll, votePoll, closePoll, sendCorrection, retractMessage, moderateMessage, sendChatState, setRoomNotifyAll, activeAnimation, sendEasterEgg, clearAnimation, clearFirstNewMessageId, updateLastSeenMessageId, joinRoom, joinResult, setRoomAvatar, clearRoomAvatar, fetchOlderHistory, continueRoomCatchUp, activeMAMState, submitRoomConfig, setSubject, destroyRoom, setAffiliation, setRole, targetMessageId, clearTargetMessageId } = useRoomActive()
+  const { activeRoom, activeMessages, activeTypingUsers, sendMessage, sendWhisper, sendReaction, sendPoll, votePoll, closePoll, sendCorrection, retractMessage, moderateMessage, sendChatState, sendWhisperChatState, setRoomNotifyAll, activeAnimation, sendEasterEgg, clearAnimation, clearFirstNewMessageId, updateLastSeenMessageId, joinRoom, joinResult, setRoomAvatar, clearRoomAvatar, fetchOlderHistory, continueRoomCatchUp, activeMAMState, submitRoomConfig, setSubject, destroyRoom, setAffiliation, setRole, targetMessageId, clearTargetMessageId } = useRoomActive()
   const mediaPolicy = useSettingsStore((s) => s.mediaAutoDownload)
 
   // NOTE: Use focused selectors instead of useConnection() hook to avoid
@@ -570,6 +570,7 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
             sendCorrection={sendCorrection}
             retractMessage={retractMessage}
             sendChatState={sendChatState}
+            sendWhisperChatState={sendWhisperChatState}
             sendEasterEgg={sendEasterEgg}
             sendPoll={sendPoll}
             onMessageSent={scrollToBottom}
@@ -1212,6 +1213,7 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
   isCurrentMatch,
 }: RoomMessageBubbleWrapperProps) {
   const { t } = useTranslation()
+  const addToast = useToastStore((s) => s.addToast)
 
   // Moderation confirmation state
   const [showModerateConfirm, setShowModerateConfirm] = useState(false)
@@ -1263,7 +1265,13 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
       ? myReactions.filter(e => e !== emoji)
       : [...myReactions, emoji]
 
-    void sendReaction(roomJid, message.id, newReactions)
+    sendReaction(roomJid, message.id, newReactions).catch((e) => {
+      if (e instanceof WhisperCounterpartGoneError) {
+        addToast('info', t('rooms.whisperCounterpartGone', { nick: e.nick }))
+        return
+      }
+      throw e
+    })
   }
 
   // Handle poll vote — uses SDK vote() which enforces single/multi-vote rules
@@ -1547,6 +1555,7 @@ interface RoomMessageInputProps {
   sendCorrection: (roomJid: string, messageId: string, newBody: string, attachment?: FileAttachment) => Promise<void>
   retractMessage: (roomJid: string, messageId: string) => Promise<void>
   sendChatState: (roomJid: string, state: ChatStateNotification) => Promise<void>
+  sendWhisperChatState: (roomJid: string, nick: string, state: ChatStateNotification) => Promise<void>
   sendEasterEgg: (roomJid: string, animation: string) => Promise<void>
   sendPoll: (roomJid: string, title: string, options: string[], settings?: Partial<import('@fluux/sdk').PollSettings>, description?: string, deadline?: string, customEmojis?: string[]) => Promise<string>
   onMessageSent?: () => void
@@ -1578,6 +1587,7 @@ export const RoomMessageInput = memo(function RoomMessageInput({
   sendCorrection,
   retractMessage,
   sendChatState,
+  sendWhisperChatState,
   sendEasterEgg,
   sendPoll,
   onMessageSent,
@@ -1738,13 +1748,29 @@ export const RoomMessageInput = memo(function RoomMessageInput({
 
   // Handle correction
   const handleCorrection = async (messageId: string, newBody: string, attachment?: import('@fluux/sdk').FileAttachment): Promise<boolean> => {
-    await sendCorrection(roomJid, messageId, newBody, attachment)
-    return true
+    try {
+      await sendCorrection(roomJid, messageId, newBody, attachment)
+      return true
+    } catch (e) {
+      if (e instanceof WhisperCounterpartGoneError) {
+        addToast('info', t('rooms.whisperCounterpartGone', { nick: e.nick }))
+        return false
+      }
+      throw e
+    }
   }
 
   // Handle retraction (when edit removes all content)
   const handleRetract = async (messageId: string): Promise<void> => {
-    await retractMessage(roomJid, messageId)
+    try {
+      await retractMessage(roomJid, messageId)
+    } catch (e) {
+      if (e instanceof WhisperCounterpartGoneError) {
+        addToast('info', t('rooms.whisperCounterpartGone', { nick: e.nick }))
+        return
+      }
+      throw e
+    }
   }
 
   // Handle send
@@ -1808,6 +1834,7 @@ export const RoomMessageInput = memo(function RoomMessageInput({
     // Clear draft immediately so sidebar updates
     clearDraft(roomJid)
 
+    // Whisper sends return early above, so a private URL never reaches link-preview generation (no room broadcast).
     // Process link preview in background (don't block on it)
     if (processLinkPreview && sendText) {
       processLinkPreview(messageId, sendText, roomJid, 'groupchat').catch(console.error)
@@ -1829,9 +1856,9 @@ export const RoomMessageInput = memo(function RoomMessageInput({
 
   // Handle typing state
   const handleTypingState = (state: 'composing' | 'paused') => {
-    if (shouldSendTypingNotifications) {
-      void sendChatState(roomJid, state)
-    }
+    const route = decideChatStateRoute(whisperTarget ?? null, shouldSendTypingNotifications)
+    if (route.target === 'whisper') void sendWhisperChatState(roomJid, route.nick, state)
+    else if (route.target === 'room') void sendChatState(roomJid, state)
   }
 
   // Clear references when text is cleared

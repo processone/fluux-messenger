@@ -68,3 +68,21 @@ export function decideWhisperSend(
   }
   return { ok: true, nick: target.nick, body }
 }
+
+/**
+ * Where a composer chat-state (typing indicator) should go. While a whisper is
+ * being composed it must be addressed privately to the target (XEP-0045 §7.5),
+ * never broadcast to the room. `none` suppresses the state entirely.
+ */
+export type ChatStateRoute =
+  | { target: 'whisper'; nick: string }
+  | { target: 'room' }
+  | { target: 'none' }
+
+export function decideChatStateRoute(
+  whisperTarget: WhisperTarget | null,
+  shouldSendTypingNotifications: boolean,
+): ChatStateRoute {
+  if (!shouldSendTypingNotifications) return { target: 'none' }
+  return whisperTarget ? { target: 'whisper', nick: whisperTarget.nick } : { target: 'room' }
+}

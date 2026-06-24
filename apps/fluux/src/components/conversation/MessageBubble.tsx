@@ -27,6 +27,7 @@ import { PollCard } from './PollCard'
 import { PollClosedCard } from './PollClosedCard'
 import { Tooltip } from '../Tooltip'
 import { MessageActionSheet } from './MessageActionSheet'
+import { computeMessageActions } from './messageActionCapabilities'
 
 export interface MessageBubbleProps {
   // Core message data (using BaseMessage interface)
@@ -340,8 +341,23 @@ export const MessageBubble = memo(function MessageBubble({
   )
   const displayTrust = resolveDisplayTrust(message.securityContext, verifiedFingerprint)
 
+  const inThread = !!whisperThread
+  const counterpartGone = inThread && counterpartPresent === false
+
   // Whether reactions are enabled for this message (room has stable occupant identity)
   const reactionsEnabled = onReaction !== undefined
+
+  const actions = computeMessageActions({
+    isOutgoing: message.isOutgoing,
+    isPrivate: inThread,
+    isLastOutgoing,
+    isLastMessage,
+    inThread,
+    counterpartGone,
+    isIrcGateway: isIrcGateway ?? false,
+    canModerate: canModerate === true,
+    reactionsEnabled,
+  })
 
   // Wrap setShowReactionPicker to notify parent
   const setShowReactionPicker = (isOpen: boolean) => {
@@ -349,8 +365,9 @@ export const MessageBubble = memo(function MessageBubble({
     onReactionPickerChange?.(isOpen)
   }
 
-  const handleReaction = reactionsEnabled ? (emoji: string) => {
-    onReaction(emoji)
+  // actions.canReact implies reactionsEnabled (i.e. onReaction !== undefined).
+  const handleReaction = actions.canReact ? (emoji: string) => {
+    onReaction!(emoji)
     setShowReactionPicker(false)
   } : undefined
 
@@ -382,22 +399,17 @@ export const MessageBubble = memo(function MessageBubble({
 
   // Whisper thread (XEP-0045 §7.5): a same-counterpart private run renders as one
   // bounded "private with X" container; the strip on the first row carries the label.
-  const inThread = !!whisperThread
   const threadStart = whisperThread === 'start' || whisperThread === 'solo'
   const threadEnd = whisperThread === 'end' || whisperThread === 'solo'
-  // Counterpart left the room: the thread becomes read-only (can't reply privately).
-  const counterpartGone = inThread && counterpartPresent === false
   const outerRowClass = inThread
     ? `group flex gap-4 -mx-4 px-4 transition-colors ${threadStart ? 'pt-3' : ''} ${threadEnd ? 'pb-1.5' : ''}`
     : `group flex gap-4 ${hoverClass} -mx-4 px-4 py-0.5 transition-colors ${showAvatar ? 'pt-4' : ''}`
 
   // Action capabilities — shared by the hover toolbar (MessageToolbar) and the
   // touch action sheet (MessageActionSheet) so the two surfaces stay in lock-step.
-  const canReply = (!isLastMessage || inThread) && !counterpartGone
-  const canEdit = message.isOutgoing && isLastOutgoing && !isIrcGateway
-  const canDelete = (message.isOutgoing || canModerate === true) && !isIrcGateway
+  const { canReply, canEdit, canDelete } = actions
   const canCopyBody = !!message.body && !message.isRetracted && !message.encryptedPayload && !message.unsupportedEncryption
-  const hasMessageActions = !message.isRetracted && (reactionsEnabled || canReply || canEdit || canDelete || canCopyBody)
+  const hasMessageActions = !message.isRetracted && (actions.canReact || canReply || canEdit || canDelete || canCopyBody)
 
   // Long-press (touch) → open the action sheet; scrolling (touchmove) or lifting
   // before the threshold cancels it. longPressFired suppresses the click that a

@@ -33,6 +33,7 @@ import {
 import { dataToElement } from '../e2ee/stanzaAdapter'
 import type { E2EEManager } from '../e2ee'
 import { E2EEEncryptionRequiredError } from '../e2ee'
+import { WhisperCounterpartGoneError } from '../errors'
 import {
   decryptStanzaInPlace,
   deriveConversationContext,
@@ -248,10 +249,39 @@ export class Chat extends BaseModule {
       return { handled: false }
     }
 
-    // Whisper short-circuit: handle before the public sub-feature handlers
-    // (chat states, reactions, corrections, retractions, moderation), which
-    // are out of scope for whispers in v1.
+    // Whisper sub-features (XEP-0045 §7.5). A whisper carrying <reactions>/<retract>/
+    // <replace> is an operation on the EXISTING whisper thread, not a new whisper.
+    // A whisper's bareFrom/bareTo is the room JID, so the room-scoped handlers
+    // resolve the right conversation when type is forced to 'groupchat' (the wire
+    // type is 'chat' only per the private-message convention). Order matters:
+    // check operations before the new-body fall-through.
     if (isWhisper) {
+      const whisperReactionsEl = stanza.getChild('reactions', NS_REACTIONS)
+      if (whisperReactionsEl) {
+        this.handleIncomingReaction(stanza, whisperReactionsEl, from!, bareFrom, bareTo, 'groupchat', isSentCarbon)
+        return { handled: true }
+      }
+
+      const whisperRetractEl = stanza.getChild('retract', NS_RETRACT)
+      if (whisperRetractEl?.attrs.id) {
+        // Consume even if it matches no stored message — the body is just the
+        // XEP-0428 fallback notice, never shown as a new whisper.
+        this.handleIncomingRetraction(
+          whisperRetractEl.attrs.id, from!, bareFrom, bareTo, 'groupchat', isSentCarbon,
+          stanza.getChild('occupant-id', NS_OCCUPANT_ID)?.attrs.id,
+        )
+        return { handled: true }
+      }
+
+      const whisperReplaceEl = stanza.getChild('replace', NS_CORRECTION)
+      if (whisperReplaceEl?.attrs.id && body && this.handleIncomingCorrection(
+        stanza, whisperReplaceEl.attrs.id, from!, bareFrom, bareTo, body, 'groupchat', isSentCarbon,
+      )) {
+        return { handled: true }
+      }
+
+      // Genuine new whisper (body or media), or a correction that matched no stored
+      // message (e.g. evicted) — show the (corrected) text as a whisper.
       if (body || stanza.getChild('x', NS_OOB)) {
         // from is non-null here: isWhisper guards !!from
         const whisper = this.processRoomWhisper(stanza, from!, bareFrom, body || '', isSentCarbon)
@@ -260,7 +290,7 @@ export class Chat extends BaseModule {
         }
         return { handled: true, message: whisper }
       }
-      // Bodyless whisper (e.g. a stray chat-state): claim and drop in v1.
+      // Bodyless whisper (e.g. a stray chat-state): claim and drop.
       return { handled: true }
     }
 
@@ -1119,6 +1149,21 @@ export class Chat extends BaseModule {
   }
 
   /**
+   * Send a chat state (XEP-0085) privately to a single room occupant — the typing
+   * indicator for a whisper (XEP-0045 §7.5). Unlike sendChatState('groupchat'),
+   * which broadcasts to the room, this addresses room/nick with the muc#user marker
+   * and a no-store hint, so the room never sees that you are whispering.
+   */
+  async sendWhisperChatState(roomJid: string, nick: string, state: ChatStateNotification): Promise<void> {
+    const message = xml('message', { to: `${roomJid}/${nick}`, type: 'chat' },
+      xml(state, { xmlns: NS_CHATSTATES }),
+      xml('x', { xmlns: NS_MUC_USER }),
+      xml('no-store', { xmlns: NS_HINTS }),
+    )
+    await this.deps.sendStanza(message)
+  }
+
+  /**
    * Send or update reactions on a message (XEP-0444).
    *
    * Reactions allow users to respond to messages with emoji without sending
@@ -1143,11 +1188,16 @@ export class Chat extends BaseModule {
    * ```
    */
   async sendReaction(to: string, messageId: string, emojis: string[], type: 'chat' | 'groupchat' = 'chat'): Promise<void> {
-    const recipient = type === 'chat' ? getBareJid(to) : to
+    // XEP-0045 §7.5: a reaction on a whisper is addressed privately to the one
+    // occupant; whispers are <no-store> so the reference is the origin-id.
+    const whisper = type === 'groupchat' ? this.resolveWhisperRouting(to, messageId) : null
+    const isWhisper = whisper !== null
+    const recipient = isWhisper ? whisper.recipient : (type === 'chat' ? getBareJid(to) : to)
+    const wireType: 'chat' | 'groupchat' = isWhisper ? 'chat' : type
 
     // For MUC, prefer stanzaId (server-assigned, stable) over client-generated id
     // Other clients (e.g. Gajim) reference messages by stanzaId in reactions
-    const referenceId = this.getMessageReferenceId(to, messageId, type)
+    const referenceId = isWhisper ? whisper.referenceId : this.getMessageReferenceId(to, messageId, type)
 
     const reactionElements = emojis.map(emoji => xml('reaction', {}, emoji))
 
@@ -1189,11 +1239,14 @@ export class Chat extends BaseModule {
         outerBody: 'remove',
         storeHint: 'store',
       })
+    } else if (isWhisper) {
+      // Whisper reaction: muc#user marker + no-store (kept off the room archive).
+      children.push(xml('x', { xmlns: NS_MUC_USER }), xml('no-store', { xmlns: NS_HINTS }))
     } else {
       children.push(xml('store', { xmlns: NS_HINTS }))
     }
 
-    const message = xml('message', { to: recipient, type, id: reactionStanzaId }, ...children)
+    const message = xml('message', { to: recipient, type: wireType, id: reactionStanzaId }, ...children)
     await this.deps.sendStanza(message)
 
     // SDK events only - bindings call store methods
@@ -1235,7 +1288,13 @@ export class Chat extends BaseModule {
    * - Corrected messages are marked with `isEdited: true`
    */
   async sendCorrection(to: string, originalMessageId: string, newBody: string, type: 'chat' | 'groupchat' = 'chat', attachment?: FileAttachment): Promise<void> {
-    const recipient = type === 'chat' ? getBareJid(to) : to
+    // XEP-0045 §7.5: if the target is a whisper, address the correction privately
+    // to the one occupant (type=chat to room/nick + muc#user + no-store) instead of
+    // broadcasting to the room. Throws WhisperCounterpartGoneError if they have left.
+    const whisper = type === 'groupchat' ? this.resolveWhisperRouting(to, originalMessageId) : null
+    const isWhisper = whisper !== null
+    const recipient = isWhisper ? whisper.recipient : (type === 'chat' ? getBareJid(to) : to)
+    const wireType: 'chat' | 'groupchat' = isWhisper ? 'chat' : type
 
     // XEP-0308 (Last Message Correction) has NO group-chat carve-out — unlike
     // XEP-0461 replies, XEP-0444 reactions and XEP-0424 retractions, which all
@@ -1246,7 +1305,7 @@ export class Chat extends BaseModule {
     const original = type === 'groupchat'
       ? this.deps.stores?.room.getMessage(to, originalMessageId)
       : this.deps.stores?.chat.getMessage(to, originalMessageId)
-    const referenceId = original?.originId ?? originalMessageId
+    const referenceId = isWhisper ? whisper.referenceId : (original?.originId ?? originalMessageId)
 
     // Build the body text, preserving user text when there's an attachment
     let bodyText = newBody
@@ -1310,6 +1369,10 @@ export class Chat extends BaseModule {
     const correctionStanzaId = generateUUID()
     children.push(createOriginIdElement(correctionStanzaId))
 
+    if (isWhisper) {
+      children.push(xml('x', { xmlns: NS_MUC_USER }), xml('no-store', { xmlns: NS_HINTS }))
+    }
+
     // Encrypt the corrected body for 1:1 chats. Without this an edit on
     // an encrypted conversation would push the plaintext correction to
     // the server. E2EE peers handle <replace> natively. MUC encryption
@@ -1326,7 +1389,7 @@ export class Chat extends BaseModule {
       throw new E2EEEncryptionRequiredError({ kind: 'direct', peer: recipient })
     }
 
-    await this.deps.sendStanza(xml('message', { to: recipient, type, id: correctionStanzaId }, ...children))
+    await this.deps.sendStanza(xml('message', { to: recipient, type: wireType, id: correctionStanzaId }, ...children))
 
     // SDK events only - bindings call store methods. Reuses the original
     // message fetched above for the correction reference.
@@ -1366,10 +1429,15 @@ export class Chat extends BaseModule {
    * - A fallback message is included for clients that don't support XEP-0424
    */
   async sendRetraction(to: string, originalMessageId: string, type: 'chat' | 'groupchat' = 'chat'): Promise<void> {
-    const recipient = type === 'chat' ? getBareJid(to) : to
+    // XEP-0045 §7.5: a retraction of a whisper is addressed privately to the one
+    // occupant; whispers are <no-store> so the reference is the origin-id.
+    const whisper = type === 'groupchat' ? this.resolveWhisperRouting(to, originalMessageId) : null
+    const isWhisper = whisper !== null
+    const recipient = isWhisper ? whisper.recipient : (type === 'chat' ? getBareJid(to) : to)
+    const wireType: 'chat' | 'groupchat' = isWhisper ? 'chat' : type
 
     // For MUC, prefer stanzaId (server-assigned, stable) for the retraction reference
-    const referenceId = this.getMessageReferenceId(to, originalMessageId, type)
+    const referenceId = isWhisper ? whisper.referenceId : this.getMessageReferenceId(to, originalMessageId, type)
 
     // XEP-0424: Message Retraction with fallback for non-supporting clients
     const fallbackBody = 'This person attempted to retract a previous message, but it\'s unsupported by your client.'
@@ -1382,6 +1450,10 @@ export class Chat extends BaseModule {
       xml('fallback', { xmlns: NS_FALLBACK, for: NS_RETRACT }),
       createOriginIdElement(retractionStanzaId),
     ]
+
+    if (isWhisper) {
+      children.push(xml('x', { xmlns: NS_MUC_USER }), xml('no-store', { xmlns: NS_HINTS }))
+    }
 
     // Encrypt the retract element for 1:1 chats. On success the helper hides
     // the retraction (the English notice is replaced by the generic encrypted
@@ -1397,7 +1469,7 @@ export class Chat extends BaseModule {
     }
 
     await this.deps.sendStanza(
-      xml('message', { to: recipient, type, id: retractionStanzaId }, ...children),
+      xml('message', { to: recipient, type: wireType, id: retractionStanzaId }, ...children),
     )
 
     // SDK events only - optimistic update via bindings
@@ -1695,6 +1767,38 @@ export class Chat extends BaseModule {
       if (bareFrom === myBareJid) return
       this.deps.emitSDK('chat:typing', { conversationId: bareFrom, jid: bareFrom, isTyping })
     }
+  }
+
+  /**
+   * XEP-0045 §7.5: when an operation (correction/reaction/retraction) targets a
+   * stored whisper, address it privately to the one occupant — never broadcast to
+   * the room. Returns the private routing derived from the stored message, or null
+   * when the target is a normal public/1:1 message (caller keeps its existing path).
+   *
+   * The current nick is re-resolved from the counterpart's stable occupant-id
+   * (XEP-0421) so the operation survives a rename. If the counterpart has left
+   * (occupant-id gone, or nick gone in rooms without occupant-id), it throws
+   * WhisperCounterpartGoneError — it must NEVER fall back to the room-broadcast path.
+   */
+  private resolveWhisperRouting(
+    roomJid: string,
+    messageId: string,
+  ): { recipient: string; referenceId: string; nick: string } | null {
+    const msg = this.deps.stores?.room.getMessage(roomJid, messageId)
+    if (!msg?.isPrivate || !msg.whisperWith) return null
+
+    const occupants = this.deps.stores?.room.getRoom(roomJid)?.occupants
+    let nick: string | null = null
+    if (msg.whisperWithOccupantId && occupants) {
+      for (const [occNick, occ] of occupants) {
+        if (occ.occupantId === msg.whisperWithOccupantId) { nick = occNick; break }
+      }
+    } else if (occupants?.has(msg.whisperWith)) {
+      nick = msg.whisperWith
+    }
+    if (!nick) throw new WhisperCounterpartGoneError(roomJid, msg.whisperWith)
+
+    return { recipient: `${roomJid}/${nick}`, referenceId: msg.originId ?? messageId, nick }
   }
 
   /**
