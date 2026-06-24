@@ -24,7 +24,7 @@ import { DemoTutorialProvider } from './demo/tutorial/DemoTutorialProvider'
 import { buildDemoData, buildDemoAnimation } from './demo/demoData'
 import { getDiscoverableRooms } from './demo/rooms'
 import { parseStressParam, installPerfHarness } from './demo/perfHarness'
-import { installDemoLoadOlder } from './demo/demoLoadOlder'
+import { installDemoLoadOlder, seedStressConversation } from './demo/demoLoadOlder'
 import App from './App'
 import i18n from './i18n'
 import './index.css'
@@ -62,6 +62,9 @@ if (stressScenario) {
   // Defer so the first paint happens before the load starts.
   setTimeout(() => {
     demoClient.runStressScenario(stressScenario)
+    // Also seed an immediately-virtualized 1:1 (stress-contact@...) so MAM scroll-up /
+    // prepend-anchor restore can be tested in chats too, not just rooms.
+    seedStressConversation(stressScenario.messagesPerRoom ?? 150)
     if (stressScenario.activate) {
       // After seeding finishes, navigate into the first seeded room to surface the
       // switch-mount cost. Room JIDs are `stress-<i>@conference.<domain>` (see
