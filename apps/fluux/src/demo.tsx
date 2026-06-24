@@ -78,8 +78,11 @@ if (stressScenario) {
   }, 500)
 }
 
-if (params.get('perf') === '1') {
-  void installPerfHarness()
+const perfParam = params.get('perf')
+if (perfParam !== null && perfParam !== '0' && perfParam !== 'false') {
+  // ?perf=1 installs the cheap detector-tally harness + Phase 0 scenario drivers.
+  // ?perf=scan additionally loads react-scan for per-component attribution.
+  void installPerfHarness({ scan: perfParam === 'scan' || params.get('scan') === '1' })
 }
 
 // Seed E2EE state so the encryption badge is visible on Ava's conversation.

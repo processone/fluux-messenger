@@ -1,9 +1,16 @@
 import { useChatActive, useRoster, type PresenceStatus } from '@fluux/sdk'
 import { useConnectionStore } from '@fluux/sdk/react'
+import { detectRenderLoop } from '@/utils/renderLoopDetector'
 import { Avatar } from './Avatar'
 import { UserInfoPopover } from './conversation/UserInfoPopover'
 
 export function MemberList() {
+  // Counted before the hooks + early-return below: MemberList is always mounted in
+  // ChatLayout and holds a full useRoster() subscription, so it re-renders on every
+  // roster/presence change even in 1:1 chats where it renders null. The tally must
+  // include those invisible renders (the waste Phase 0 measures).
+  detectRenderLoop('MemberList')
+
   // useChatActive subscribes only to the active conversation, not the full conversation
   // list / typingStates / drafts that useChat() pulls in. MemberList is always mounted
   // in ChatLayout, so over-subscription here re-renders the right sidebar on every

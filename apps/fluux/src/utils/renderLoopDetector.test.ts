@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 // test-setup.ts globally mocks this module to no-ops for component tests.
 // Here we exercise the REAL implementation via importActual.
-const { detectRenderLoop, notifyUserInput, resetRenderLoopDetector, __setClock } =
+const { detectRenderLoop, notifyUserInput, resetRenderLoopDetector, getRenderTally, resetRenderTally, __setClock } =
   await vi.importActual<typeof import('./renderLoopDetector')>('./renderLoopDetector')
 
 const WARNING_RE = /has rendered 30 times/
@@ -89,5 +89,35 @@ describe('renderLoopDetector — EWMA sustained-rate', () => {
 
   it('never throws for a sustained sub-threshold rate (it is WARN-only)', () => {
     expect(() => drive('NoThrowComp', 150, 6000)).not.toThrow()
+  })
+})
+
+describe('renderLoopDetector — cumulative render tally (perf baseline)', () => {
+  beforeEach(() => resetRenderLoopDetector())
+  afterEach(() => { resetRenderLoopDetector(); vi.restoreAllMocks() })
+
+  it('counts every render and never self-resets across the 1s window (unlike getRenderStats)', () => {
+    // Advance the clock 400ms per render across 5 renders -> spans 2s, so the
+    // per-window counter would reset ~twice; the cumulative tally must still read 5.
+    let t = 5_000_000
+    __setClock(() => t)
+    for (let i = 0; i < 5; i++) { detectRenderLoop('TallyComp'); t += 400 }
+    expect(getRenderTally()['TallyComp']).toBe(5)
+  })
+
+  it('keeps counting during the post-throw cooldown (incremented before the early-return)', () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    expect(() => { for (let i = 0; i < 250; i++) detectRenderLoop('TallyLoop') }).toThrow()
+    const after = getRenderTally()['TallyLoop']
+    detectRenderLoop('TallyLoop') // cooldown makes the loop-check early-return...
+    expect(getRenderTally()['TallyLoop']).toBe(after + 1) // ...but the tally still ticks
+  })
+
+  it('resetRenderTally clears the tally', () => {
+    detectRenderLoop('X'); detectRenderLoop('X')
+    expect(getRenderTally()['X']).toBe(2)
+    resetRenderTally()
+    expect(getRenderTally()['X']).toBeUndefined()
   })
 })

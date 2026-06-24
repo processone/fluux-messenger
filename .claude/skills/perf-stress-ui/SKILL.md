@@ -45,9 +45,33 @@ then fails (`[UNLOADABLE_DEPENDENCY]`, blank page). Fix: `ln -s <main-checkout>/
 NOT ignore a symlink, and it shows in `git status`). `@fluux/sdk` is aliased to
 `packages/fluux-sdk/src`, so you ARE testing the worktree's source.
 
+**Running app tests:** run from `apps/fluux` (`cd apps/fluux && npx vitest run src/...`) or
+via the workspace `npm test`. `npx vitest run apps/fluux/...` from the repo ROOT loads the
+root config WITHOUT the app's `@` alias, so any test importing `@/...` deep (e.g. `Avatar`
+→ `@/constants/ui`) fails to resolve — and it fails for UNTOUCHED tests too, so don't
+mistake it for a regression. Relative-import tests (e.g. `renderLoopDetector.test.ts`) pass
+either way.
+
 ## 2. Measure
 - **Preferred:** `await window.__perf.measure('label', () => window.__demoClient.runStressScenario({ kind:'room-join', rooms:15, messagesPerRoom:150, mode:'live' }))`
   → per-component render table (react-scan).
+- **Sidebar/list baseline (the Codex render-perf plan).** `?perf=1` installs scenario
+  drivers: `await __perf.baseline()` runs all 5 (rosterStorm, presenceFlap,
+  chatMessageInactive, roomMessageInactive, toggleModal) and prints a per-component tally
+  for ChatLayout/Sidebar/ConversationList/ContactList/MemberList/ChatView/RoomView;
+  `await __perf.scenario('presenceFlap', { times:30, stepMs:16 })` runs one. `__perf.tally()`
+  reads the cumulative `renderLoopDetector` count (`__perf.resetTally()` clears it) — unlike
+  `getRenderStats()` (resetting 1s window) it survives a flood >1s. Captured baseline +
+  interpretation: `docs/2026-06-24-render-perf-phase0-baseline.md`. THREE traps:
+  - **react-scan is now opt-in** (`?perf=scan`) because Compiler+StrictMode over the full
+    tree saturates the renderer; `?perf=1` uses the cheap detector tally instead.
+  - **Space events or React 18 batches them.** A synchronous emit burst coalesces into ONE
+    render and hides per-event cost; drivers space by `stepMs` (default 16ms ≈ 1 frame), and
+    Codex's criteria are per-event so keep `stepMs>0` (`stepMs:0` = the coalesced case).
+  - **Sidebar tabs mount one list at a time** — `ConversationList`@`#/messages`,
+    `ContactList`@`#/contacts`, `RoomsList`@`#/rooms`. Run a scenario under the right tab;
+    `MemberList`/`Sidebar` are always mounted (MemberList renders `null` off-groupchat but
+    still tallies — that invisible churn is the point of measuring it).
 - **Switch-mount cost (node count = the platform-independent metric).** The WebKitGTK freeze is
   layout of a huge DOM; node count is its proxy and is measurable on ANY platform (the wall-clock
   freeze only reproduces on Linux). Two helpers on `window.__perf`:

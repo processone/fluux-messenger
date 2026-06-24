@@ -35,6 +35,14 @@ interface ComponentState {
 
 const componentStates = new Map<string, ComponentState>()
 
+// Cumulative, never-resetting render tally per component. Orthogonal to the
+// per-window renderCount above (which zeroes every TIME_WINDOW_MS and therefore
+// cannot measure the magnitude of a flood spanning >1s — getRenderStats reads a
+// post-reset remnant). The perf harness resets this once per scenario via
+// resetRenderTally(), fires a load, then reads getRenderTally() for reliable
+// cumulative counts. Dev-only signal; bounded by the number of distinct components.
+const renderTally = new Map<string, number>()
+
 // Track Zustand selector values for debugging
 interface SelectorEntry {
   componentName: string
@@ -130,6 +138,11 @@ function getCapturedStack(): string | undefined {
  * ```
  */
 export function detectRenderLoop(componentName: string): void {
+  // Cumulative tally (never resets on its own) — the perf-baseline signal.
+  // Counted before the cooldown early-return so EVERY render is tallied. See
+  // getRenderTally / resetRenderTally.
+  renderTally.set(componentName, (renderTally.get(componentName) ?? 0) + 1)
+
   const state = getComponentState(componentName)
 
   // Don't check during cooldown period
@@ -358,6 +371,7 @@ export function logRenderSummary(): void {
  */
 export function resetRenderLoopDetector(): void {
   componentStates.clear()
+  renderTally.clear()
   wakeGraceUntil = 0
   syncGraceUntil = 0
   interactionGraceUntil = 0
@@ -394,6 +408,24 @@ export function startSyncGracePeriod(): void {
   syncGraceUntil = nowFn() + SYNC_GRACE_PERIOD_MS
   // Also suppress warnings during sync
   wakeGraceUntil = Math.max(wakeGraceUntil, syncGraceUntil)
+}
+
+/**
+ * Cumulative render counts per component since the last resetRenderTally().
+ * Unlike getRenderStats (a self-resetting 1s window), this never resets on its
+ * own, so it reliably captures the magnitude of a flood that spans multiple
+ * seconds — the metric the perf harness baselines against.
+ *
+ * NOTE: React StrictMode double-invokes renders in dev; divide by 2 for the
+ * logical render count.
+ */
+export function getRenderTally(): Record<string, number> {
+  return Object.fromEntries(renderTally)
+}
+
+/** Reset the cumulative render tally. Call at the start of a perf measurement. */
+export function resetRenderTally(): void {
+  renderTally.clear()
 }
 
 /**
