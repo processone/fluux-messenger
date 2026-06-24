@@ -371,5 +371,40 @@ describe('MUC Whispers', () => {
       expect(noStore).toBeDefined()
       expect(noStore.attrs.xmlns).toBe('urn:xmpp:hints')
     })
+
+    it('sendReaction on a public room message still broadcasts to the room (no regression)', async () => {
+      await connectClient()
+      vi.mocked(mockStores.room.getRoom).mockReturnValue(roomWithBob())
+      vi.mocked(mockStores.room.getMessage).mockReturnValue({
+        type: 'groupchat', id: 'm-1', originId: 'm-1', roomJid: ROOM,
+        from: `${ROOM}/me`, nick: 'me', body: 'hi', timestamp: new Date(), isOutgoing: true,
+      } as any)
+
+      await xmppClient.chat.sendReaction(ROOM, 'm-1', ['👍'], 'groupchat')
+
+      const sent = mockXmppClientInstance.send.mock.calls[0][0]
+      expect(sent.attrs.to).toBe(ROOM)
+      expect(sent.attrs.type).toBe('groupchat')
+      expect(sent.children.find((c: any) => c.name === 'no-store')).toBeUndefined()
+      expect(sent.children.find((c: any) => c.name === 'x')).toBeUndefined()
+      expect(sent.children.find((c: any) => c.name === 'store')).toBeDefined()
+    })
+
+    it('sendRetraction on a public room message still broadcasts to the room (no regression)', async () => {
+      await connectClient()
+      vi.mocked(mockStores.room.getRoom).mockReturnValue(roomWithBob())
+      vi.mocked(mockStores.room.getMessage).mockReturnValue({
+        type: 'groupchat', id: 'm-1', originId: 'm-1', roomJid: ROOM,
+        from: `${ROOM}/me`, nick: 'me', body: 'hi', timestamp: new Date(), isOutgoing: true,
+      } as any)
+
+      await xmppClient.chat.sendRetraction(ROOM, 'm-1', 'groupchat')
+
+      const sent = mockXmppClientInstance.send.mock.calls[0][0]
+      expect(sent.attrs.to).toBe(ROOM)
+      expect(sent.attrs.type).toBe('groupchat')
+      expect(sent.children.find((c: any) => c.name === 'no-store')).toBeUndefined()
+      expect(sent.children.find((c: any) => c.name === 'x')).toBeUndefined()
+    })
   })
 })
