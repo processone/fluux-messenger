@@ -334,5 +334,24 @@ describe('MUC Whispers', () => {
 
       expect(mockXmppClientInstance.send.mock.calls[0][0].attrs.to).toBe(`${ROOM}/bobby`)
     })
+
+    it('sendReaction on a whisper addresses room/nick privately with no-store (not the room)', async () => {
+      await connectClient()
+      vi.mocked(mockStores.room.getRoom).mockReturnValue(roomWithBob())
+      vi.mocked(mockStores.room.getMessage).mockReturnValue(storedWhisper() as any)
+
+      await xmppClient.chat.sendReaction(ROOM, 'w-1', ['👍'], 'groupchat')
+
+      const sent = mockXmppClientInstance.send.mock.calls[0][0]
+      expect(sent.attrs.to).toBe(`${ROOM}/bob`)
+      expect(sent.attrs.type).toBe('chat')
+      const reactions = sent.children.find((c: any) => c.name === 'reactions')
+      expect(reactions.attrs.id).toBe('w-1')
+      expect(sent.children.find((c: any) => c.name === 'x' && c.attrs.xmlns === 'http://jabber.org/protocol/muc#user')).toBeDefined()
+      const noStore = sent.children.find((c: any) => c.name === 'no-store')
+      expect(noStore).toBeDefined()
+      expect(noStore.attrs.xmlns).toBe('urn:xmpp:hints')
+      expect(sent.children.find((c: any) => c.name === 'store')).toBeUndefined()
+    })
   })
 })

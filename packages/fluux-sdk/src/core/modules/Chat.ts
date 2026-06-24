@@ -1144,11 +1144,16 @@ export class Chat extends BaseModule {
    * ```
    */
   async sendReaction(to: string, messageId: string, emojis: string[], type: 'chat' | 'groupchat' = 'chat'): Promise<void> {
-    const recipient = type === 'chat' ? getBareJid(to) : to
+    // XEP-0045 §7.5: a reaction on a whisper is addressed privately to the one
+    // occupant; whispers are <no-store> so the reference is the origin-id.
+    const whisper = type === 'groupchat' ? this.resolveWhisperRouting(to, messageId) : null
+    const isWhisper = whisper !== null
+    const recipient = isWhisper ? whisper.recipient : (type === 'chat' ? getBareJid(to) : to)
+    const wireType: 'chat' | 'groupchat' = isWhisper ? 'chat' : type
 
     // For MUC, prefer stanzaId (server-assigned, stable) over client-generated id
     // Other clients (e.g. Gajim) reference messages by stanzaId in reactions
-    const referenceId = this.getMessageReferenceId(to, messageId, type)
+    const referenceId = isWhisper ? whisper.referenceId : this.getMessageReferenceId(to, messageId, type)
 
     const reactionElements = emojis.map(emoji => xml('reaction', {}, emoji))
 
@@ -1190,11 +1195,14 @@ export class Chat extends BaseModule {
         outerBody: 'remove',
         storeHint: 'store',
       })
+    } else if (isWhisper) {
+      // Whisper reaction: muc#user marker + no-store (kept off the room archive).
+      children.push(xml('x', { xmlns: NS_MUC_USER }), xml('no-store', { xmlns: NS_HINTS }))
     } else {
       children.push(xml('store', { xmlns: NS_HINTS }))
     }
 
-    const message = xml('message', { to: recipient, type, id: reactionStanzaId }, ...children)
+    const message = xml('message', { to: recipient, type: wireType, id: reactionStanzaId }, ...children)
     await this.deps.sendStanza(message)
 
     // SDK events only - bindings call store methods
