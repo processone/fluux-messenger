@@ -483,5 +483,49 @@ describe('MUC Whispers', () => {
       }))
       expect(emitSDKSpy).not.toHaveBeenCalledWith('room:whisper', expect.anything())
     })
+
+    it('incoming whisper retraction with no matching message is consumed, not shown as a new whisper', async () => {
+      await connectClient()
+      vi.mocked(mockStores.room.getRoom).mockReturnValue(createMockRoom(ROOM, { joined: true, nickname: 'me' }))
+      // getMessage is left at its fresh default (returns undefined) — no match.
+
+      const stanza = createMockElement('message', {
+        from: `${ROOM}/bob`, to: 'user@example.com', type: 'chat', id: 'rt-x',
+      }, [
+        { name: 'body', text: 'This person attempted to retract a previous message...' },
+        { name: 'retract', attrs: { xmlns: 'urn:xmpp:message-retract:1', id: 'nonexistent' } },
+        { name: 'x', attrs: { xmlns: 'http://jabber.org/protocol/muc#user' } },
+        { name: 'occupant-id', attrs: { xmlns: 'urn:xmpp:occupant-id:0', id: 'occ-bob' } },
+      ])
+      mockXmppClientInstance._emit('stanza', stanza)
+
+      // The body is the XEP-0428 fallback notice; it must NOT surface as a new whisper,
+      // and with no match there is nothing to update.
+      expect(emitSDKSpy).not.toHaveBeenCalledWith('room:whisper', expect.anything())
+      expect(emitSDKSpy).not.toHaveBeenCalledWith('room:message-updated', expect.anything())
+    })
+
+    it('incoming whisper correction with no matching message falls through to a new whisper', async () => {
+      await connectClient()
+      vi.mocked(mockStores.room.getRoom).mockReturnValue(createMockRoom(ROOM, { joined: true, nickname: 'me' }))
+      // getMessage is left at its fresh default (returns undefined) — handleIncomingCorrection returns false.
+
+      const stanza = createMockElement('message', {
+        from: `${ROOM}/bob`, to: 'user@example.com', type: 'chat', id: 'corr-x',
+      }, [
+        { name: 'body', text: 'corrected but orphaned' },
+        { name: 'replace', attrs: { xmlns: 'urn:xmpp:message-correct:0', id: 'nonexistent' } },
+        { name: 'x', attrs: { xmlns: 'http://jabber.org/protocol/muc#user' } },
+        { name: 'occupant-id', attrs: { xmlns: 'urn:xmpp:occupant-id:0', id: 'occ-bob' } },
+      ])
+      mockXmppClientInstance._emit('stanza', stanza)
+
+      // No stored original to correct, so the corrected text is shown as a new whisper.
+      expect(emitSDKSpy).toHaveBeenCalledWith('room:whisper', expect.objectContaining({
+        roomJid: ROOM,
+        message: expect.objectContaining({ body: 'corrected but orphaned', isPrivate: true }),
+      }))
+      expect(emitSDKSpy).not.toHaveBeenCalledWith('room:message-updated', expect.anything())
+    })
   })
 })
