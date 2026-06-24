@@ -41,6 +41,7 @@
         "madeBy": "Made by",
         "ejabberdCreator": ", the company behind",
         "poweredBy": "Powered by",
+        "advancedMode": "Advanced mode",
         "errors": {
             "tlsCertTitle": "Couldn't verify the server's security certificate",
             "tlsOtherTitle": "Secure connection failed",
@@ -613,7 +614,15 @@
             "blocked": "Blocked Users",
             "storage": "Storage",
             "encryption": "Encryption",
-            "privacy": "Privacy"
+            "privacy": "Privacy",
+            "advanced": "Advanced"
+        },
+        "advanced": {
+            "title": "Advanced",
+            "warning": "These options are for advanced users. Changing them can break connectivity or weaken security.",
+            "empty": "Advanced options will appear here.",
+            "disableDescription": "Turn advanced mode back off to hide this section.",
+            "disable": "Disable advanced mode"
         },
         "encryption": {
             "experimental": "Experimental",

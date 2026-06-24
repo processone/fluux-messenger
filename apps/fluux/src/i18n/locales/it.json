@@ -54,7 +54,8 @@
                 "untrusted": "Il certificato del server è auto-firmato o emesso da un'autorità sconosciuta, quindi non può essere considerato affidabile. Controlla l'indirizzo del server o contatta l'amministratore del server.",
                 "generic": "Impossibile verificare il certificato di sicurezza del server. Controlla l'indirizzo del server in basso o contatta l'amministratore del server."
             }
-        }
+        },
+        "advancedMode": "Modalità avanzata"
     },
     "sidebar": {
         "messages": "Messaggi",
@@ -615,7 +616,8 @@
             "blocked": "Utenti bloccati",
             "storage": "Archiviazione",
             "encryption": "Crittografia",
-            "privacy": "Privacy"
+            "privacy": "Privacy",
+            "advanced": "Avanzate"
         },
         "blocked": {
             "title": "Utenti bloccati",
@@ -858,7 +860,14 @@
         "mediaAutoDownloadPrivateOnlyDescription": "Carica automaticamente nei messaggi diretti e nelle stanze private. Nei canali pubblici, tocca per caricare.",
         "mediaAutoDownloadNever": "Mai",
         "mediaAutoDownloadNeverDescription": "Non caricare mai i media automaticamente. Tocca per caricare in qualsiasi conversazione.",
-        "mediaAutoDownloadStrangerNote": "I media di persone che non sono nei tuoi contatti richiedono sempre un tocco per caricarsi, indipendentemente da ciò che scegli qui."
+        "mediaAutoDownloadStrangerNote": "I media di persone che non sono nei tuoi contatti richiedono sempre un tocco per caricarsi, indipendentemente da ciò che scegli qui.",
+        "advanced": {
+            "title": "Avanzate",
+            "warning": "Queste opzioni sono per utenti esperti. Modificarle può compromettere la connessione o indebolire la sicurezza.",
+            "empty": "Le opzioni avanzate appariranno qui.",
+            "disableDescription": "Disattiva la modalità avanzata per nascondere questa sezione.",
+            "disable": "Disattiva la modalità avanzata"
+        }
     },
     "update": {
         "title": "Aggiornamento disponibile",

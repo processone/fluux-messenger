@@ -14,6 +14,7 @@ import { isOpenpgpEnabled } from '@/stores/encryptionSettingsStore'
 import { getReconnectIntent } from '@/utils/reconnectIntent'
 import { validateBareJid } from '@/utils/jidValidation'
 import { LoginErrorPanel } from './LoginErrorPanel'
+import { useAdvancedModeStore } from '@/stores/advancedModeStore'
 
 const STORAGE_KEY_JID = 'xmpp-last-jid'
 const STORAGE_KEY_SERVER = 'xmpp-last-server'
@@ -113,6 +114,11 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
   // Prevent double-execution in React StrictMode
   const hasLoadedCredentials = useRef(false)
   const hasAutoConnected = useRef(false)
+
+  // Advanced mode: a discreet opt-in checkbox below the form unlocks the
+  // advanced settings category (and, later, advanced login options).
+  const advancedMode = useAdvancedModeStore((s) => s.advancedMode)
+  const setAdvancedMode = useAdvancedModeStore((s) => s.setAdvancedMode)
 
   // Check if running in Tauri and load credentials
   useEffect(() => {
@@ -541,6 +547,23 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
             )}
           </button>
         </form>
+
+        {/* Advanced mode toggle - discreet opt-in below the form. Reveals the
+            advanced settings category (and, later, advanced login options). */}
+        <div className="flex items-center justify-center gap-2 mt-4">
+          <input
+            id="advanced-mode"
+            type="checkbox"
+            checked={advancedMode}
+            onChange={(e) => setAdvancedMode(e.target.checked)}
+            className="size-3.5 rounded border border-fluux-border bg-fluux-bg
+                       checked:bg-fluux-brand checked:border-fluux-brand
+                       focus:ring-fluux-brand focus:ring-offset-0"
+          />
+          <label htmlFor="advanced-mode" className="text-xs text-fluux-muted select-none">
+            {t('login.advancedMode')}
+          </label>
+        </div>
 
         {/* Footer */}
         <div className="text-center text-fluux-muted text-sm mt-6 space-y-1">

@@ -54,7 +54,8 @@
                 "untrusted": "El certificat del servidor és autofirmat o emès per una autoritat desconeguda, de manera que no es pot confiar. Comproveu l'adreça del servidor o contacteu amb l'administrador.",
                 "generic": "No s'ha pogut verificar el certificat de seguretat del servidor. Comproveu l'adreça del servidor a continuació o contacteu amb l'administrador."
             }
-        }
+        },
+        "advancedMode": "Mode avançat"
     },
     "sidebar": {
         "messages": "Missatges",
@@ -615,7 +616,8 @@
             "blocked": "Usuaris blocats",
             "storage": "Emmagatzematge",
             "encryption": "Xifratge",
-            "privacy": "Privadesa"
+            "privacy": "Privadesa",
+            "advanced": "Avançat"
         },
         "blocked": {
             "title": "Usuaris blocats",
@@ -858,7 +860,14 @@
         "mediaAutoDownloadPrivateOnlyDescription": "Carrega automàticament als missatges directes i les sales privades. Als canals públics, toca per carregar.",
         "mediaAutoDownloadNever": "Mai",
         "mediaAutoDownloadNeverDescription": "No carrega mai els multimèdia automàticament. Toca per carregar en qualsevol conversa.",
-        "mediaAutoDownloadStrangerNote": "Els multimèdia de persones que no són als vostres contactes sempre requereixen un toc per carregar-se, sigui quin sigui el que trieu aquí."
+        "mediaAutoDownloadStrangerNote": "Els multimèdia de persones que no són als vostres contactes sempre requereixen un toc per carregar-se, sigui quin sigui el que trieu aquí.",
+        "advanced": {
+            "title": "Avançat",
+            "warning": "Aquestes opcions són per a usuaris avançats. Canviar-les pot interrompre la connexió o afeblir la seguretat.",
+            "empty": "Les opcions avançades apareixeran aquí.",
+            "disableDescription": "Desactiva el mode avançat per amagar aquesta secció.",
+            "disable": "Desactiva el mode avançat"
+        }
     },
     "update": {
         "title": "Actualització disponible",

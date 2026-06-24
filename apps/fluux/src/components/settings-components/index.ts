@@ -7,6 +7,7 @@ export { BlockedUsersSettings } from './BlockedUsersSettings'
 export { StorageSettings } from './StorageSettings'
 export { EncryptionSettings } from './EncryptionSettings'
 export { PrivacySettings } from './PrivacySettings'
+export { AdvancedSettings } from './AdvancedSettings'
 export { SettingsSidebar } from './SettingsSidebar'
 export {
   type SettingsCategory,

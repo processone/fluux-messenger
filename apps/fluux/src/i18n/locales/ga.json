@@ -54,7 +54,8 @@
                 "untrusted": "Tá deimhniú an fhreastalaí féin-shínithe nó eisíodh é ag údarás anaithnid, mar sin ní féidir muinín a chur ann. Seiceáil seoladh an fhreastalaí nó déan teagmháil le riarachán an fhreastalaí.",
                 "generic": "Níorbh fhéidir deimhniú slándála an fhreastalaí a fhíorú. Seiceáil seoladh an fhreastalaí thíos nó déan teagmháil le riarachán an fhreastalaí."
             }
-        }
+        },
+        "advancedMode": "Mód ardleibhéil"
     },
     "sidebar": {
         "messages": "Teachtaireachtaí",
@@ -613,7 +614,8 @@
             "blocked": "Úsáideoirí Coiscthe",
             "storage": "Stóráil",
             "encryption": "Criptiúchán",
-            "privacy": "Príobháideacht"
+            "privacy": "Príobháideacht",
+            "advanced": "Ardleibhéal"
         },
         "blocked": {
             "title": "Úsáideoirí Coiscthe",
@@ -856,7 +858,14 @@
         "mediaAutoDownloadPrivateOnlyDescription": "Luchtaigh go huathoibríoch i dteachtaireachtaí díreacha agus seomraí príobháideacha. I gcainéil phoiblí, buail chun luchtú.",
         "mediaAutoDownloadNever": "Riamh",
         "mediaAutoDownloadNeverDescription": "Ná luchtaigh meán go huathoibríoch choíche. Buail chun luchtú in aon chomhrá.",
-        "mediaAutoDownloadStrangerNote": "Meán ó dhaoine nach bhfuil i do chonarthaí éilíonn buille i gcónaí chun luchtú, cibé rud a roghnaíonn tú anseo."
+        "mediaAutoDownloadStrangerNote": "Meán ó dhaoine nach bhfuil i do chonarthaí éilíonn buille i gcónaí chun luchtú, cibé rud a roghnaíonn tú anseo.",
+        "advanced": {
+            "title": "Ardleibhéal",
+            "warning": "Tá na roghanna seo dírithe ar úsáideoirí ardleibhéil. Féadann a n-athrú an nasc a bhriseadh nó an tslándáil a lagú.",
+            "empty": "Taispeánfar na roghanna ardleibhéil anseo.",
+            "disableDescription": "Díchumasaigh an mód ardleibhéil chun an chuid seo a fholú.",
+            "disable": "Díchumasaigh an mód ardleibhéil"
+        }
     },
     "update": {
         "title": "Nuashonrú ar Fáil",

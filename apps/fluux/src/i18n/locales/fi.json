@@ -54,7 +54,8 @@
                 "untrusted": "Palvelimen sertifikaatti on itse allekirjoitettu tai tuntemattoman viranomaisen myöntämä, joten siihen ei voi luottaa. Tarkista palvelimen osoite tai ota yhteyttä palvelimen ylläpitäjään.",
                 "generic": "Palvelimen turvasertifikaattia ei voitu varmentaa. Tarkista alla oleva palvelimen osoite tai ota yhteyttä palvelimen ylläpitäjään."
             }
-        }
+        },
+        "advancedMode": "Edistynyt tila"
     },
     "sidebar": {
         "messages": "Viestit",
@@ -613,7 +614,8 @@
             "blocked": "Estetyt käyttäjät",
             "storage": "Tallennustila",
             "encryption": "Salaus",
-            "privacy": "Yksityisyys"
+            "privacy": "Yksityisyys",
+            "advanced": "Lisäasetukset"
         },
         "blocked": {
             "title": "Estetyt käyttäjät",
@@ -856,7 +858,14 @@
         "mediaAutoDownloadPrivateOnlyDescription": "Lataa automaattisesti suoraviesteissä ja yksityisissä huoneissa. Julkisissa kanavissa, napauta ladataksesi.",
         "mediaAutoDownloadNever": "Ei koskaan",
         "mediaAutoDownloadNeverDescription": "Älä koskaan lataa mediaa automaattisesti. Napauta ladataksesi missä tahansa keskustelussa.",
-        "mediaAutoDownloadStrangerNote": "Henkilöiltä, jotka eivät ole yhteystiedoissasi, peräisin oleva media vaatii aina napautuksen lataamiseen, riippumatta tästä valinnasta."
+        "mediaAutoDownloadStrangerNote": "Henkilöiltä, jotka eivät ole yhteystiedoissasi, peräisin oleva media vaatii aina napautuksen lataamiseen, riippumatta tästä valinnasta.",
+        "advanced": {
+            "title": "Lisäasetukset",
+            "warning": "Nämä asetukset on tarkoitettu kokeneille käyttäjille. Niiden muuttaminen voi katkaista yhteyden tai heikentää tietoturvaa.",
+            "empty": "Lisäasetukset näkyvät tässä.",
+            "disableDescription": "Poista edistynyt tila käytöstä piilottaaksesi tämän osion.",
+            "disable": "Poista edistynyt tila käytöstä"
+        }
     },
     "update": {
         "title": "Päivitys saatavilla",

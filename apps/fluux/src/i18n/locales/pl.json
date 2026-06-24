@@ -54,7 +54,8 @@
                 "untrusted": "Certyfikat serwera jest samopodpisany lub wystawiony przez nieznany urząd certyfikacji, dlatego nie można mu zaufać. Sprawdź adres serwera lub skontaktuj się z administratorem serwera.",
                 "generic": "Nie można zweryfikować certyfikatu zabezpieczeń serwera. Sprawdź adres serwera poniżej lub skontaktuj się z administratorem serwera."
             }
-        }
+        },
+        "advancedMode": "Tryb zaawansowany"
     },
     "sidebar": {
         "messages": "Wiadomości",
@@ -615,7 +616,8 @@
             "blocked": "Zablokowani użytkownicy",
             "storage": "Pamięć",
             "encryption": "Szyfrowanie",
-            "privacy": "Prywatność"
+            "privacy": "Prywatność",
+            "advanced": "Zaawansowane"
         },
         "blocked": {
             "title": "Zablokowani użytkownicy",
@@ -858,7 +860,14 @@
         "mediaAutoDownloadPrivateOnlyDescription": "Ładuj automatycznie w wiadomościach bezpośrednich i prywatnych pokojach. W kanałach publicznych, dotknij, aby załadować.",
         "mediaAutoDownloadNever": "Nigdy",
         "mediaAutoDownloadNeverDescription": "Nigdy nie ładuj multimediów automatycznie. Dotknij, aby załadować w dowolnej rozmowie.",
-        "mediaAutoDownloadStrangerNote": "Multimedia od osób spoza kontaktów zawsze wymagają dotknięcia, aby się załadować, niezależnie od wybranego tu ustawienia."
+        "mediaAutoDownloadStrangerNote": "Multimedia od osób spoza kontaktów zawsze wymagają dotknięcia, aby się załadować, niezależnie od wybranego tu ustawienia.",
+        "advanced": {
+            "title": "Zaawansowane",
+            "warning": "Te opcje są przeznaczone dla zaawansowanych użytkowników. Ich zmiana może zakłócić połączenie lub osłabić bezpieczeństwo.",
+            "empty": "Opcje zaawansowane pojawią się tutaj.",
+            "disableDescription": "Wyłącz tryb zaawansowany, aby ukryć tę sekcję.",
+            "disable": "Wyłącz tryb zaawansowany"
+        }
     },
     "update": {
         "title": "Dostępna aktualizacja",

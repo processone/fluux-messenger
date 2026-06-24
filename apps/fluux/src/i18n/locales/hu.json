@@ -54,7 +54,8 @@
                 "untrusted": "A szerver tanúsítványa önaláírt vagy ismeretlen hatóság által kiállított, ezért nem megbízható. Ellenőrizze a szerver címét, vagy vegye fel a kapcsolatot a szerver adminisztrátorával.",
                 "generic": "A szerver biztonsági tanúsítványa nem ellenőrizhető. Ellenőrizze az alábbi szerver címét, vagy vegye fel a kapcsolatot a szerver adminisztrátorával."
             }
-        }
+        },
+        "advancedMode": "Speciális mód"
     },
     "sidebar": {
         "messages": "Üzenetek",
@@ -613,7 +614,8 @@
             "blocked": "Letiltott felhasználók",
             "storage": "Tárhely",
             "encryption": "Titkosítás",
-            "privacy": "Adatvédelem"
+            "privacy": "Adatvédelem",
+            "advanced": "Speciális"
         },
         "blocked": {
             "title": "Letiltott felhasználók",
@@ -856,7 +858,14 @@
         "mediaAutoDownloadPrivateOnlyDescription": "Automatikus betöltés közvetlen üzenetekben és privát szobákban. Nyilvános csatornákon érintse meg a betöltéshez.",
         "mediaAutoDownloadNever": "Soha",
         "mediaAutoDownloadNeverDescription": "Soha ne töltődjön be médiatartalom automatikusan. Érintse meg a betöltéshez bármelyik beszélgetésben.",
-        "mediaAutoDownloadStrangerNote": "A névjegyei közt nem szereplő személyek médiái mindig érintést igényelnek a betöltéshez, függetlenül attól, mit választ itt."
+        "mediaAutoDownloadStrangerNote": "A névjegyei közt nem szereplő személyek médiái mindig érintést igényelnek a betöltéshez, függetlenül attól, mit választ itt.",
+        "advanced": {
+            "title": "Speciális",
+            "warning": "Ezek a beállítások haladó felhasználóknak szólnak. Módosításuk megszakíthatja a kapcsolatot vagy gyengítheti a biztonságot.",
+            "empty": "A speciális beállítások itt jelennek meg.",
+            "disableDescription": "Kapcsolja ki a speciális módot a szakasz elrejtéséhez.",
+            "disable": "Speciális mód kikapcsolása"
+        }
     },
     "update": {
         "title": "Frissítés elérhető",

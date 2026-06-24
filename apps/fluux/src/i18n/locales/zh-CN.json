@@ -54,7 +54,8 @@
                 "untrusted": "服务器证书是自签名的，或由未知机构颁发，因此无法信任。请检查服务器地址，或联系服务器管理员。",
                 "generic": "无法验证服务器的安全证书。请检查下方的服务器地址，或联系服务器管理员。"
             }
-        }
+        },
+        "advancedMode": "高级模式"
     },
     "sidebar": {
         "messages": "消息",
@@ -613,7 +614,8 @@
             "blocked": "已屏蔽用户",
             "storage": "存储",
             "encryption": "加密",
-            "privacy": "隐私"
+            "privacy": "隐私",
+            "advanced": "高级"
         },
         "blocked": {
             "title": "已屏蔽用户",
@@ -856,7 +858,14 @@
         "mediaAutoDownloadPrivateOnlyDescription": "在私信和私密房间中自动加载。在公共频道中，点击以加载。",
         "mediaAutoDownloadNever": "从不",
         "mediaAutoDownloadNeverDescription": "从不自动加载媒体。在任意对话中点击以加载。",
-        "mediaAutoDownloadStrangerNote": "不在您联系人列表中的人发送的媒体始终需要点击才能加载，无论您在此选择什么。"
+        "mediaAutoDownloadStrangerNote": "不在您联系人列表中的人发送的媒体始终需要点击才能加载，无论您在此选择什么。",
+        "advanced": {
+            "title": "高级",
+            "warning": "这些选项面向高级用户。更改它们可能会中断连接或削弱安全性。",
+            "empty": "高级选项将显示在此处。",
+            "disableDescription": "关闭高级模式以隐藏此部分。",
+            "disable": "关闭高级模式"
+        }
     },
     "update": {
         "title": "更新可用",
