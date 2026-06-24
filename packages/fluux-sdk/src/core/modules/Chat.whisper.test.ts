@@ -14,6 +14,7 @@ import {
   type MockXmppClient,
   type MockStoreBindings,
 } from '../test-utils'
+import { WhisperCounterpartGoneError } from '../errors'
 
 let mockXmppClientInstance: MockXmppClient
 
@@ -256,6 +257,82 @@ describe('MUC Whispers', () => {
       expect(mockStores.room.getRoom).toHaveBeenCalledWith('contact@example.com')
       expect(emitSDKSpy).toHaveBeenCalledWith('chat:message', expect.anything())
       expect(emitSDKSpy).not.toHaveBeenCalledWith('room:whisper', expect.anything())
+    })
+  })
+
+  describe('whisper operations (send)', () => {
+    const ROOM = 'room@conference.example.com'
+
+    function roomWithBob(occupants: Map<string, any> = new Map([
+      ['bob', { nick: 'bob', affiliation: 'member', role: 'participant', occupantId: 'occ-bob' }],
+    ])) {
+      return createMockRoom(ROOM, { joined: true, nickname: 'me', occupants })
+    }
+
+    function storedWhisper(overrides: Record<string, unknown> = {}) {
+      return {
+        type: 'groupchat', id: 'w-1', originId: 'w-1', roomJid: ROOM,
+        from: `${ROOM}/me`, nick: 'me', body: 'secret', timestamp: new Date(),
+        isOutgoing: true, isPrivate: true, whisperWith: 'bob', whisperWithOccupantId: 'occ-bob',
+        ...overrides,
+      }
+    }
+
+    it('sendCorrection on a whisper addresses room/nick privately (type=chat, muc#user, no-store, origin-id)', async () => {
+      await connectClient()
+      vi.mocked(mockStores.room.getRoom).mockReturnValue(roomWithBob())
+      vi.mocked(mockStores.room.getMessage).mockReturnValue(storedWhisper() as any)
+
+      await xmppClient.chat.sendCorrection(ROOM, 'w-1', 'fixed secret', 'groupchat')
+
+      const sent = mockXmppClientInstance.send.mock.calls[0][0]
+      expect(sent.attrs.to).toBe(`${ROOM}/bob`)
+      expect(sent.attrs.type).toBe('chat')
+      const replace = sent.children.find((c: any) => c.name === 'replace')
+      expect(replace.attrs.id).toBe('w-1')
+      expect(sent.children.find((c: any) => c.name === 'x' && c.attrs.xmlns === 'http://jabber.org/protocol/muc#user')).toBeDefined()
+      const noStore = sent.children.find((c: any) => c.name === 'no-store')
+      expect(noStore).toBeDefined()
+      expect(noStore.attrs.xmlns).toBe('urn:xmpp:hints')
+    })
+
+    it('sendCorrection on a public room message still broadcasts to the room (no regression)', async () => {
+      await connectClient()
+      vi.mocked(mockStores.room.getRoom).mockReturnValue(roomWithBob())
+      vi.mocked(mockStores.room.getMessage).mockReturnValue({
+        type: 'groupchat', id: 'm-1', originId: 'm-1', roomJid: ROOM, from: `${ROOM}/me`,
+        nick: 'me', body: 'hi', timestamp: new Date(), isOutgoing: true,
+      } as any)
+
+      await xmppClient.chat.sendCorrection(ROOM, 'm-1', 'hi fixed', 'groupchat')
+
+      const sent = mockXmppClientInstance.send.mock.calls[0][0]
+      expect(sent.attrs.to).toBe(ROOM)
+      expect(sent.attrs.type).toBe('groupchat')
+      expect(sent.children.find((c: any) => c.name === 'no-store')).toBeUndefined()
+    })
+
+    it('throws WhisperCounterpartGoneError and sends nothing when the counterpart has left', async () => {
+      await connectClient()
+      vi.mocked(mockStores.room.getRoom).mockReturnValue(roomWithBob(new Map()))
+      vi.mocked(mockStores.room.getMessage).mockReturnValue(storedWhisper() as any)
+
+      await expect(
+        xmppClient.chat.sendCorrection(ROOM, 'w-1', 'x', 'groupchat'),
+      ).rejects.toThrow(WhisperCounterpartGoneError)
+      expect(mockXmppClientInstance.send).not.toHaveBeenCalled()
+    })
+
+    it('re-resolves the current nick from occupant-id after a rename', async () => {
+      await connectClient()
+      vi.mocked(mockStores.room.getRoom).mockReturnValue(roomWithBob(new Map([
+        ['bobby', { nick: 'bobby', affiliation: 'member', role: 'participant', occupantId: 'occ-bob' }],
+      ])))
+      vi.mocked(mockStores.room.getMessage).mockReturnValue(storedWhisper() as any)
+
+      await xmppClient.chat.sendCorrection(ROOM, 'w-1', 'fixed', 'groupchat')
+
+      expect(mockXmppClientInstance.send.mock.calls[0][0].attrs.to).toBe(`${ROOM}/bobby`)
     })
   })
 })

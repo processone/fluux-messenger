@@ -654,7 +654,7 @@ export { classifyConnectionError, extractTransportErrorClass, humanizeTransportE
 export type { ConnectionErrorKind } from './core/modules/transportErrors'
 
 // MUC join failure error (rejected by client.muc.joinResult)
-export { RoomJoinError } from './core/errors'
+export { RoomJoinError, WhisperCounterpartGoneError } from './core/errors'
 
 // XEP-0045: MUC Permission Utilities
 export { canSetAffiliation, canSetRole, canKick, canBan, canModerate, getAvailableAffiliations, getAvailableRoles } from './utils/mucPermissions'

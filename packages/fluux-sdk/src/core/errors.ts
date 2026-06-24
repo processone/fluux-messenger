@@ -31,3 +31,22 @@ export class RoomJoinError extends Error {
     Object.setPrototypeOf(this, RoomJoinError.prototype)
   }
 }
+
+/**
+ * Thrown by the whisper operation send path (correction/reaction/retraction)
+ * when the target occupant is no longer present in the room — left, or the nick
+ * has been recycled by a different occupant-id. The operation must NEVER fall
+ * back to a public room broadcast, so the send path throws this instead.
+ */
+export class WhisperCounterpartGoneError extends Error {
+  readonly roomJid: string
+  readonly nick: string
+
+  constructor(roomJid: string, nick: string) {
+    super(`Whisper counterpart "${nick}" is no longer present in ${roomJid}`)
+    this.name = 'WhisperCounterpartGoneError'
+    this.roomJid = roomJid
+    this.nick = nick
+    Object.setPrototypeOf(this, WhisperCounterpartGoneError.prototype)
+  }
+}

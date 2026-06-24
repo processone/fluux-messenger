@@ -33,6 +33,7 @@ import {
 import { dataToElement } from '../e2ee/stanzaAdapter'
 import type { E2EEManager } from '../e2ee'
 import { E2EEEncryptionRequiredError } from '../e2ee'
+import { WhisperCounterpartGoneError } from '../errors'
 import {
   decryptStanzaInPlace,
   deriveConversationContext,
@@ -1235,7 +1236,13 @@ export class Chat extends BaseModule {
    * - Corrected messages are marked with `isEdited: true`
    */
   async sendCorrection(to: string, originalMessageId: string, newBody: string, type: 'chat' | 'groupchat' = 'chat', attachment?: FileAttachment): Promise<void> {
-    const recipient = type === 'chat' ? getBareJid(to) : to
+    // XEP-0045 §7.5: if the target is a whisper, address the correction privately
+    // to the one occupant (type=chat to room/nick + muc#user + no-store) instead of
+    // broadcasting to the room. Throws WhisperCounterpartGoneError if they have left.
+    const whisper = type === 'groupchat' ? this.resolveWhisperRouting(to, originalMessageId) : null
+    const isWhisper = whisper !== null
+    const recipient = isWhisper ? whisper.recipient : (type === 'chat' ? getBareJid(to) : to)
+    const wireType: 'chat' | 'groupchat' = isWhisper ? 'chat' : type
 
     // XEP-0308 (Last Message Correction) has NO group-chat carve-out — unlike
     // XEP-0461 replies, XEP-0444 reactions and XEP-0424 retractions, which all
@@ -1246,7 +1253,7 @@ export class Chat extends BaseModule {
     const original = type === 'groupchat'
       ? this.deps.stores?.room.getMessage(to, originalMessageId)
       : this.deps.stores?.chat.getMessage(to, originalMessageId)
-    const referenceId = original?.originId ?? originalMessageId
+    const referenceId = isWhisper ? whisper.referenceId : (original?.originId ?? originalMessageId)
 
     // Build the body text, preserving user text when there's an attachment
     let bodyText = newBody
@@ -1310,6 +1317,10 @@ export class Chat extends BaseModule {
     const correctionStanzaId = generateUUID()
     children.push(createOriginIdElement(correctionStanzaId))
 
+    if (isWhisper) {
+      children.push(xml('x', { xmlns: NS_MUC_USER }), xml('no-store', { xmlns: NS_HINTS }))
+    }
+
     // Encrypt the corrected body for 1:1 chats. Without this an edit on
     // an encrypted conversation would push the plaintext correction to
     // the server. E2EE peers handle <replace> natively. MUC encryption
@@ -1326,7 +1337,7 @@ export class Chat extends BaseModule {
       throw new E2EEEncryptionRequiredError({ kind: 'direct', peer: recipient })
     }
 
-    await this.deps.sendStanza(xml('message', { to: recipient, type, id: correctionStanzaId }, ...children))
+    await this.deps.sendStanza(xml('message', { to: recipient, type: wireType, id: correctionStanzaId }, ...children))
 
     // SDK events only - bindings call store methods. Reuses the original
     // message fetched above for the correction reference.
@@ -1695,6 +1706,38 @@ export class Chat extends BaseModule {
       if (bareFrom === myBareJid) return
       this.deps.emitSDK('chat:typing', { conversationId: bareFrom, jid: bareFrom, isTyping })
     }
+  }
+
+  /**
+   * XEP-0045 §7.5: when an operation (correction/reaction/retraction) targets a
+   * stored whisper, address it privately to the one occupant — never broadcast to
+   * the room. Returns the private routing derived from the stored message, or null
+   * when the target is a normal public/1:1 message (caller keeps its existing path).
+   *
+   * The current nick is re-resolved from the counterpart's stable occupant-id
+   * (XEP-0421) so the operation survives a rename. If the counterpart has left
+   * (occupant-id gone, or nick gone in rooms without occupant-id), it throws
+   * WhisperCounterpartGoneError — it must NEVER fall back to the room-broadcast path.
+   */
+  private resolveWhisperRouting(
+    roomJid: string,
+    messageId: string,
+  ): { recipient: string; referenceId: string; nick: string } | null {
+    const msg = this.deps.stores?.room.getMessage(roomJid, messageId)
+    if (!msg?.isPrivate || !msg.whisperWith) return null
+
+    const occupants = this.deps.stores?.room.getRoom(roomJid)?.occupants
+    let nick: string | null = null
+    if (msg.whisperWithOccupantId && occupants) {
+      for (const [occNick, occ] of occupants) {
+        if (occ.occupantId === msg.whisperWithOccupantId) { nick = occNick; break }
+      }
+    } else if (occupants?.has(msg.whisperWith)) {
+      nick = msg.whisperWith
+    }
+    if (!nick) throw new WhisperCounterpartGoneError(roomJid, msg.whisperWith)
+
+    return { recipient: `${roomJid}/${nick}`, referenceId: msg.originId ?? messageId, nick }
   }
 
   /**
