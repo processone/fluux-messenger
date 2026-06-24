@@ -8,6 +8,11 @@
  * - Container height changes (e.g., composer resize)
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+
+// Asserts the non-virtualized scroll machinery (offsetTop/scrollHeight reads on the
+// fully-mounted DOM — still shipping until the old path is removed). Force the flag OFF;
+// virtualized scroll is verified via the scroll-hook unit tests + the real-engine pass.
+vi.mock('@/utils/featureFlags', () => ({ isFeatureEnabled: () => false }))
 import { render, screen, act } from '@testing-library/react'
 import { MessageList } from './MessageList'
 import type { BaseMessage } from '@fluux/sdk'

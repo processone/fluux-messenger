@@ -14,6 +14,10 @@
  * (two distinct messages with `id: undefined` are not duplicates).
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+
+// Asserts the non-virtualized message list (still shipping until the old path is removed);
+// the virtualized render is covered by MessageList.virtualized.test.tsx + unit tests.
+vi.mock('@/utils/featureFlags', () => ({ isFeatureEnabled: () => false }))
 import { render } from '@testing-library/react'
 import { MessageList } from './MessageList'
 import type { BaseMessage } from '@fluux/sdk'
