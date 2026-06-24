@@ -597,6 +597,46 @@ describe('MessageBubble', () => {
       expect(screen.getByText('rooms.whisperThread')).toBeInTheDocument()
       expect(screen.getByText('rooms.whisperThread').closest('button')).toBeNull()
     })
+
+    // Action gating (XEP-0045 §7.5 parity): edit/delete/react are wired through
+    // computeMessageActions. These guard the wiring so a future refactor can't
+    // re-expose a private-message action (or leak moderation onto a whisper).
+    it('shows edit, delete, and react on an own whisper while the counterpart is present', () => {
+      render(<MessageBubble {...whisperProps({
+        message: createTestMessage({ isOutgoing: true }),
+        isLastOutgoing: true,
+        isLastMessage: true,
+      })} />)
+
+      expect(screen.getByRole('button', { name: 'chat.editMessage' })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'chat.moreReactions' })).toBeInTheDocument()
+      // Delete lives behind the more-options button, enabled only when delete is allowed.
+      expect(screen.getByRole('button', { name: 'chat.moreOptions' })).toBeEnabled()
+    })
+
+    it('shows react but hides edit and delete on an incoming whisper', () => {
+      render(<MessageBubble {...whisperProps({
+        message: createTestMessage({ isOutgoing: false }),
+      })} />)
+
+      expect(screen.getByRole('button', { name: 'chat.moreReactions' })).toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'chat.editMessage' })).not.toBeInTheDocument()
+      // No moderation-delete on a whisper: more-options is present but disabled.
+      expect(screen.getByRole('button', { name: 'chat.moreOptions' })).toBeDisabled()
+    })
+
+    it('disables edit, delete, and react on a whisper once the counterpart has left', () => {
+      render(<MessageBubble {...whisperProps({
+        message: createTestMessage({ isOutgoing: true }),
+        isLastOutgoing: true,
+        isLastMessage: true,
+        counterpartPresent: false,
+      })} />)
+
+      expect(screen.queryByRole('button', { name: 'chat.editMessage' })).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'chat.moreReactions' })).not.toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'chat.moreOptions' })).toBeDisabled()
+    })
   })
 })
 
