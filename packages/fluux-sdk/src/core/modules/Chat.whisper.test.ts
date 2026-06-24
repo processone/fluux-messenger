@@ -406,6 +406,19 @@ describe('MUC Whispers', () => {
       expect(sent.children.find((c: any) => c.name === 'no-store')).toBeUndefined()
       expect(sent.children.find((c: any) => c.name === 'x')).toBeUndefined()
     })
+
+    it('sendWhisperChatState sends a private chat-state to room/nick (muc#user, no-store)', async () => {
+      await connectClient()
+
+      await xmppClient.chat.sendWhisperChatState(ROOM, 'bob', 'composing')
+
+      const sent = mockXmppClientInstance.send.mock.calls[0][0]
+      expect(sent.attrs.to).toBe(`${ROOM}/bob`)
+      expect(sent.attrs.type).toBe('chat')
+      expect(sent.children.find((c: any) => c.name === 'composing')).toBeDefined()
+      expect(sent.children.find((c: any) => c.name === 'x' && c.attrs.xmlns === 'http://jabber.org/protocol/muc#user')).toBeDefined()
+      expect(sent.children.find((c: any) => c.name === 'no-store')).toBeDefined()
+    })
   })
 
   describe('whisper operations (receive)', () => {

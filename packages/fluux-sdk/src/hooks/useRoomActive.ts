@@ -252,6 +252,13 @@ export function useRoomActive() {
     [client]
   )
 
+  const sendWhisperChatState = useCallback(
+    async (roomJid: string, nick: string, state: ChatStateNotification) => {
+      await client.chat.sendWhisperChatState(roomJid, nick, state)
+    },
+    [client]
+  )
+
   const sendEasterEgg = useCallback(
     async (roomJid: string, animation: string) => {
       await client.chat.sendEasterEgg(roomJid, 'groupchat', animation)
@@ -441,6 +448,7 @@ export function useRoomActive() {
       retractMessage,
       moderateMessage,
       sendChatState,
+      sendWhisperChatState,
       setRoomNotifyAll,
       sendEasterEgg,
       clearAnimation,
@@ -478,6 +486,7 @@ export function useRoomActive() {
       retractMessage,
       moderateMessage,
       sendChatState,
+      sendWhisperChatState,
       setRoomNotifyAll,
       sendEasterEgg,
       clearAnimation,

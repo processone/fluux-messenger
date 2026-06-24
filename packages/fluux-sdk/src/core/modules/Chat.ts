@@ -1149,6 +1149,21 @@ export class Chat extends BaseModule {
   }
 
   /**
+   * Send a chat state (XEP-0085) privately to a single room occupant — the typing
+   * indicator for a whisper (XEP-0045 §7.5). Unlike sendChatState('groupchat'),
+   * which broadcasts to the room, this addresses room/nick with the muc#user marker
+   * and a no-store hint, so the room never sees that you are whispering.
+   */
+  async sendWhisperChatState(roomJid: string, nick: string, state: ChatStateNotification): Promise<void> {
+    const message = xml('message', { to: `${roomJid}/${nick}`, type: 'chat' },
+      xml(state, { xmlns: NS_CHATSTATES }),
+      xml('x', { xmlns: NS_MUC_USER }),
+      xml('no-store', { xmlns: NS_HINTS }),
+    )
+    await this.deps.sendStanza(message)
+  }
+
+  /**
    * Send or update reactions on a message (XEP-0444).
    *
    * Reactions allow users to respond to messages with emoji without sending
