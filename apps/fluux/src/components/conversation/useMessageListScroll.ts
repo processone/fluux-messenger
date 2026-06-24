@@ -1098,22 +1098,44 @@ export function useMessageListScroll({
     let usedMethod = 'none'
 
     if (saved.anchorMessageId) {
-      const anchorElement = scroller.querySelector(
-        `[data-message-id="${saved.anchorMessageId}"]`
-      ) as HTMLElement | null
+      // Virtualized: read the anchor's offset from the virtualizer. It is valid even when
+      // the anchor row has been WINDOWED OUT of the DOM — which is exactly what prepend
+      // does: react-virtual re-centers its window on the just-inserted rows at the
+      // unchanged scrollTop, so the anchor (now far below) is unmounted. The DOM
+      // querySelector below returns null there and forces the distance-from-bottom
+      // fallback, which lands the viewport on the newly-loaded older rows (the bug).
+      const virtualOffset =
+        latestRef.current.virtualizer?.getOffsetForMessageId(saved.anchorMessageId) ?? null
 
-      if (anchorElement) {
-        // Position the anchor element at the same offset from viewport top as before
-        newScrollTop = anchorElement.offsetTop - saved.anchorOffsetFromTop
-        usedMethod = 'element-based'
+      if (virtualOffset != null) {
+        newScrollTop = virtualOffset - saved.anchorOffsetFromTop
+        usedMethod = 'virtualizer-offset'
 
-        debugLog('PREPEND RESTORE (element-based)', {
+        debugLog('PREPEND RESTORE (virtualizer offset)', {
           anchorMessageId: saved.anchorMessageId,
-          anchorOffsetTop: anchorElement.offsetTop,
+          virtualOffset,
           savedOffsetFromTop: saved.anchorOffsetFromTop,
           newScrollTop,
           maxScrollTop,
         })
+      } else {
+        const anchorElement = scroller.querySelector(
+          `[data-message-id="${saved.anchorMessageId}"]`
+        ) as HTMLElement | null
+
+        if (anchorElement) {
+          // Position the anchor element at the same offset from viewport top as before
+          newScrollTop = anchorElement.offsetTop - saved.anchorOffsetFromTop
+          usedMethod = 'element-based'
+
+          debugLog('PREPEND RESTORE (element-based)', {
+            anchorMessageId: saved.anchorMessageId,
+            anchorOffsetTop: anchorElement.offsetTop,
+            savedOffsetFromTop: saved.anchorOffsetFromTop,
+            newScrollTop,
+            maxScrollTop,
+          })
+        }
       }
     }
 
@@ -1182,16 +1204,14 @@ export function useMessageListScroll({
       if (framesRemaining <= 0 || !scrollerRef.current) return
       framesRemaining--
 
-      // When virtualized, re-read the anchor's now-measured offset and re-anchor each
-      // frame — the 2-step convergence (@tanstack's estimated offset settles after the
-      // new rows measure; the spike showed this converges in ~1 step). Flag-OFF holds
-      // the fixed target (unchanged behavior).
+      // When virtualized, re-read the anchor's offset from the virtualizer each frame and
+      // re-anchor — it is valid even while the anchor is windowed out, and it tracks the
+      // @tanstack estimate -> measured convergence as the just-prepended rows settle.
+      // Flag-OFF holds the fixed target (unchanged behavior).
       let target = targetScrollTop
       if (latestRef.current.virtualizer && saved.anchorMessageId) {
-        const el = scrollerRef.current.querySelector(
-          `[data-message-id="${CSS.escape(saved.anchorMessageId)}"]`,
-        ) as HTMLElement | null
-        if (el) target = el.offsetTop - saved.anchorOffsetFromTop
+        const virtualOffset = latestRef.current.virtualizer.getOffsetForMessageId(saved.anchorMessageId)
+        if (virtualOffset != null) target = virtualOffset - saved.anchorOffsetFromTop
       }
 
       const currentScrollTop = scrollerRef.current.scrollTop
