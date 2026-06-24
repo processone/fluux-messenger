@@ -249,10 +249,39 @@ export class Chat extends BaseModule {
       return { handled: false }
     }
 
-    // Whisper short-circuit: handle before the public sub-feature handlers
-    // (chat states, reactions, corrections, retractions, moderation), which
-    // are out of scope for whispers in v1.
+    // Whisper sub-features (XEP-0045 §7.5). A whisper carrying <reactions>/<retract>/
+    // <replace> is an operation on the EXISTING whisper thread, not a new whisper.
+    // A whisper's bareFrom/bareTo is the room JID, so the room-scoped handlers
+    // resolve the right conversation when type is forced to 'groupchat' (the wire
+    // type is 'chat' only per the private-message convention). Order matters:
+    // check operations before the new-body fall-through.
     if (isWhisper) {
+      const whisperReactionsEl = stanza.getChild('reactions', NS_REACTIONS)
+      if (whisperReactionsEl) {
+        this.handleIncomingReaction(stanza, whisperReactionsEl, from!, bareFrom, bareTo, 'groupchat', isSentCarbon)
+        return { handled: true }
+      }
+
+      const whisperRetractEl = stanza.getChild('retract', NS_RETRACT)
+      if (whisperRetractEl?.attrs.id) {
+        // Consume even if it matches no stored message — the body is just the
+        // XEP-0428 fallback notice, never shown as a new whisper.
+        this.handleIncomingRetraction(
+          whisperRetractEl.attrs.id, from!, bareFrom, bareTo, 'groupchat', isSentCarbon,
+          stanza.getChild('occupant-id', NS_OCCUPANT_ID)?.attrs.id,
+        )
+        return { handled: true }
+      }
+
+      const whisperReplaceEl = stanza.getChild('replace', NS_CORRECTION)
+      if (whisperReplaceEl?.attrs.id && body && this.handleIncomingCorrection(
+        stanza, whisperReplaceEl.attrs.id, from!, bareFrom, bareTo, body, 'groupchat', isSentCarbon,
+      )) {
+        return { handled: true }
+      }
+
+      // Genuine new whisper (body or media), or a correction that matched no stored
+      // message (e.g. evicted) — show the (corrected) text as a whisper.
       if (body || stanza.getChild('x', NS_OOB)) {
         // from is non-null here: isWhisper guards !!from
         const whisper = this.processRoomWhisper(stanza, from!, bareFrom, body || '', isSentCarbon)
@@ -261,7 +290,7 @@ export class Chat extends BaseModule {
         }
         return { handled: true, message: whisper }
       }
-      // Bodyless whisper (e.g. a stray chat-state): claim and drop in v1.
+      // Bodyless whisper (e.g. a stray chat-state): claim and drop.
       return { handled: true }
     }
 

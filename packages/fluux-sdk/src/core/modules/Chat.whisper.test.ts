@@ -407,4 +407,81 @@ describe('MUC Whispers', () => {
       expect(sent.children.find((c: any) => c.name === 'x')).toBeUndefined()
     })
   })
+
+  describe('whisper operations (receive)', () => {
+    const ROOM = 'room@conference.example.com'
+
+    beforeEach(() => {
+      vi.mocked(mockStores.room.getRoom).mockReturnValue(
+        createMockRoom(ROOM, { joined: true, nickname: 'me' }),
+      )
+    })
+
+    it('incoming whisper reaction updates the whisper thread, not a new whisper', async () => {
+      await connectClient()
+      vi.mocked(mockStores.room.getRoom).mockReturnValue(createMockRoom(ROOM, { joined: true, nickname: 'me' }))
+
+      const stanza = createMockElement('message', {
+        from: `${ROOM}/bob`, to: 'user@example.com', type: 'chat', id: 'r-1',
+      }, [
+        { name: 'reactions', attrs: { xmlns: 'urn:xmpp:reactions:0', id: 'w-1' }, children: [{ name: 'reaction', text: '👍' }] },
+        { name: 'x', attrs: { xmlns: 'http://jabber.org/protocol/muc#user' } },
+        { name: 'occupant-id', attrs: { xmlns: 'urn:xmpp:occupant-id:0', id: 'occ-bob' } },
+      ])
+      mockXmppClientInstance._emit('stanza', stanza)
+
+      expect(emitSDKSpy).toHaveBeenCalledWith('room:reactions', expect.objectContaining({
+        roomJid: ROOM, messageId: 'w-1', reactorNick: 'bob', emojis: ['👍'],
+      }))
+      expect(emitSDKSpy).not.toHaveBeenCalledWith('room:whisper', expect.anything())
+    })
+
+    it('incoming whisper correction updates the existing whisper (not a new whisper)', async () => {
+      await connectClient()
+      vi.mocked(mockStores.room.getRoom).mockReturnValue(createMockRoom(ROOM, { joined: true, nickname: 'me' }))
+      vi.mocked(mockStores.room.getMessage).mockReturnValue({
+        id: 'bw-1', originId: 'bw-1', from: `${ROOM}/bob`, nick: 'bob', body: 'old',
+        isPrivate: true, whisperWith: 'bob', occupantId: 'occ-bob', timestamp: new Date(),
+      } as any)
+
+      const stanza = createMockElement('message', {
+        from: `${ROOM}/bob`, to: 'user@example.com', type: 'chat', id: 'corr-1',
+      }, [
+        { name: 'body', text: 'new text' },
+        { name: 'replace', attrs: { xmlns: 'urn:xmpp:message-correct:0', id: 'bw-1' } },
+        { name: 'x', attrs: { xmlns: 'http://jabber.org/protocol/muc#user' } },
+        { name: 'occupant-id', attrs: { xmlns: 'urn:xmpp:occupant-id:0', id: 'occ-bob' } },
+      ])
+      mockXmppClientInstance._emit('stanza', stanza)
+
+      expect(emitSDKSpy).toHaveBeenCalledWith('room:message-updated', expect.objectContaining({
+        roomJid: ROOM, messageId: 'bw-1', updates: expect.objectContaining({ body: 'new text', isEdited: true }),
+      }))
+      expect(emitSDKSpy).not.toHaveBeenCalledWith('room:whisper', expect.anything())
+    })
+
+    it('incoming whisper retraction marks the whisper retracted (not a new whisper)', async () => {
+      await connectClient()
+      vi.mocked(mockStores.room.getRoom).mockReturnValue(createMockRoom(ROOM, { joined: true, nickname: 'me' }))
+      vi.mocked(mockStores.room.getMessage).mockReturnValue({
+        id: 'bw-1', from: `${ROOM}/bob`, nick: 'bob', occupantId: 'occ-bob',
+        isPrivate: true, whisperWith: 'bob', timestamp: new Date(),
+      } as any)
+
+      const stanza = createMockElement('message', {
+        from: `${ROOM}/bob`, to: 'user@example.com', type: 'chat', id: 'rt-1',
+      }, [
+        { name: 'body', text: 'This person attempted to retract a previous message...' },
+        { name: 'retract', attrs: { xmlns: 'urn:xmpp:message-retract:1', id: 'bw-1' } },
+        { name: 'x', attrs: { xmlns: 'http://jabber.org/protocol/muc#user' } },
+        { name: 'occupant-id', attrs: { xmlns: 'urn:xmpp:occupant-id:0', id: 'occ-bob' } },
+      ])
+      mockXmppClientInstance._emit('stanza', stanza)
+
+      expect(emitSDKSpy).toHaveBeenCalledWith('room:message-updated', expect.objectContaining({
+        roomJid: ROOM, messageId: 'bw-1', updates: expect.objectContaining({ isRetracted: true }),
+      }))
+      expect(emitSDKSpy).not.toHaveBeenCalledWith('room:whisper', expect.anything())
+    })
+  })
 })
