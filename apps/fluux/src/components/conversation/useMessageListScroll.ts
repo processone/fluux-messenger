@@ -336,6 +336,16 @@ export function useMessageListScroll({
 
       const runCorrectionBody = (currentScroller: HTMLDivElement) => {
         const newHeight = currentScroller.scrollHeight
+
+        // When virtualized, the content wrapper IS the @tanstack spacer, whose height
+        // churns on every row measurement; a stick-to-bottom correction here feeds back
+        // into the virtualizer and loops. Stick-to-bottom is handled by the new-message /
+        // typing / reactions effects + the virtualizer instead.
+        if (latestRef.current.virtualizer) {
+          lastHeight = newHeight
+          return
+        }
+
         const currentScrollTop = currentScroller.scrollTop
 
         // Skip during prepend that's actively in progress (not yet restored)
@@ -384,6 +394,10 @@ export function useMessageListScroll({
       }
 
       const observer = new ResizeObserver(() => {
+        // When virtualized, skip entirely: the wrapper is the @tanstack spacer whose
+        // height churns on every row measurement, and correcting scroll here loops back
+        // into the virtualizer (re-measure → spacer change → RO → scroll → re-render).
+        if (latestRef.current.virtualizer) return
         // Diagnostic only: surface a runaway fire rate. WebKitGTK can oscillate
         // a <video controls> height continuously, firing this hundreds of times
         // a second — a pure main-thread loop the React render-loop detector
