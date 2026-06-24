@@ -120,14 +120,6 @@ export function useProxiedUrl(originalUrl: string | undefined, enabled: boolean 
 }
 
 /**
- * Preload a URL by triggering browser prefetch.
- * Returns the sanitized URL for consistent caching.
- */
-export async function preloadUrl(url: string): Promise<string | null> {
-  return sanitizeMediaUrl(url)
-}
-
-/**
  * Clear the in-memory media URL cache.
  * Call on disconnect/logout.
  */

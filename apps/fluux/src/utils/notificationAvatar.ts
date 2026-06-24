@@ -93,11 +93,3 @@ function getExtensionFromMimeType(mimeType: string): string {
   }
   return mimeToExt[mimeType] || 'png'
 }
-
-/**
- * Clear cached avatar file paths.
- * Call this on logout or when avatars might have changed.
- */
-export function clearAvatarFileCache(): void {
-  avatarFileCache.clear()
-}

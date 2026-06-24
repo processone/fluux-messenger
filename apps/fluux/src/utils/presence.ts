@@ -20,18 +20,6 @@ export function getShowColor(show: PresenceShow | null | undefined, forceOffline
   return 'bg-fluux-muted'
 }
 
-/**
- * Map PresenceShow to readable text.
- * 'xa' (extended away) is shown as 'Away' like 'chat' is shown as 'Online'.
- */
-export function getShowText(show: PresenceShow | null | undefined, forceOffline = false): string {
-  if (forceOffline) return 'Offline'
-  if (show === null || show === undefined || show === 'chat') return 'Online'
-  if (show === 'away' || show === 'xa') return 'Away'
-  if (show === 'dnd') return 'Do Not Disturb'
-  return 'Unknown'
-}
-
 // Use simplified type for translation function to avoid complex i18next type issues
 type TranslateFn = (key: string) => string
 

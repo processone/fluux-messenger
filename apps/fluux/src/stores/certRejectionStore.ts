@@ -114,10 +114,6 @@ export function clearCertRejections(jid: string): void {
   useCertRejectionStore.getState().clearRejections(jid)
 }
 
-export function getCertRejections(jid: string): CertRejection[] | null {
-  return useCertRejectionStore.getState().rejectionsByJid[jid] ?? null
-}
-
 export function rehydrateCertRejections(): void {
   useCertRejectionStore.getState().rehydrate()
 }
