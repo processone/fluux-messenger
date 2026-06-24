@@ -1385,10 +1385,15 @@ export class Chat extends BaseModule {
    * - A fallback message is included for clients that don't support XEP-0424
    */
   async sendRetraction(to: string, originalMessageId: string, type: 'chat' | 'groupchat' = 'chat'): Promise<void> {
-    const recipient = type === 'chat' ? getBareJid(to) : to
+    // XEP-0045 §7.5: a retraction of a whisper is addressed privately to the one
+    // occupant; whispers are <no-store> so the reference is the origin-id.
+    const whisper = type === 'groupchat' ? this.resolveWhisperRouting(to, originalMessageId) : null
+    const isWhisper = whisper !== null
+    const recipient = isWhisper ? whisper.recipient : (type === 'chat' ? getBareJid(to) : to)
+    const wireType: 'chat' | 'groupchat' = isWhisper ? 'chat' : type
 
     // For MUC, prefer stanzaId (server-assigned, stable) for the retraction reference
-    const referenceId = this.getMessageReferenceId(to, originalMessageId, type)
+    const referenceId = isWhisper ? whisper.referenceId : this.getMessageReferenceId(to, originalMessageId, type)
 
     // XEP-0424: Message Retraction with fallback for non-supporting clients
     const fallbackBody = 'This person attempted to retract a previous message, but it\'s unsupported by your client.'
@@ -1401,6 +1406,10 @@ export class Chat extends BaseModule {
       xml('fallback', { xmlns: NS_FALLBACK, for: NS_RETRACT }),
       createOriginIdElement(retractionStanzaId),
     ]
+
+    if (isWhisper) {
+      children.push(xml('x', { xmlns: NS_MUC_USER }), xml('no-store', { xmlns: NS_HINTS }))
+    }
 
     // Encrypt the retract element for 1:1 chats. On success the helper hides
     // the retraction (the English notice is replaced by the generic encrypted
@@ -1416,7 +1425,7 @@ export class Chat extends BaseModule {
     }
 
     await this.deps.sendStanza(
-      xml('message', { to: recipient, type, id: retractionStanzaId }, ...children),
+      xml('message', { to: recipient, type: wireType, id: retractionStanzaId }, ...children),
     )
 
     // SDK events only - optimistic update via bindings
