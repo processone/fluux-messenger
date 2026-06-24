@@ -5,7 +5,8 @@
  *  - the mounted-DOM path (`useMessageCopyFormatter`), which reads metadata from
  *    `data-message-*` attributes, and
  *  - the store-backed path, which reconstructs the metadata from the in-memory
- *    message array when a virtualized selection spans unmounted rows.
+ *    message array for the virtualized list (whose windowed DOM lacks the date
+ *    separators the DOM path reads).
  *
  * Output mirrors the long-standing inline formatter: messages grouped by date,
  * each date preceded by a "— Weekday, Month D, YYYY —" header (blank line between

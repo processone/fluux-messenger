@@ -8,10 +8,19 @@
  * Two collection paths feed the same pure formatter (`buildCopyText`):
  *  - DOM path (default / non-virtualized): read each mounted row's `data-message-*`
  *    attributes for the rows the selection intersects.
- *  - Store-backed path (virtualized callers pass `messages` + `formatForCopy`): when
- *    the selection spans rows that have been unmounted from the DOM (only the visible
- *    window is mounted), reconstruct the full span from the in-memory array so no
- *    message is silently dropped.
+ *  - Store-backed path (virtualized callers pass `messages` + `formatForCopy`):
+ *    reconstruct the selected range from the in-memory array. This is needed because
+ *    the virtualized DOM flattens date separators into separate windowed items, so the
+ *    pure-DOM date walk below can't find them; sourcing from the array keeps the
+ *    dates/names faithful.
+ *
+ * NOTE (verified on Blink, DOM-spec, same on WebKit): a selection can only ever be
+ * WITHIN the mounted window. Virtualized rows are removed from the DOM as they scroll
+ * out, and removing a node relocates any live Range boundary to the parent — so the
+ * browser COLLAPSES a selection the instant it would span an unmounted row. There is
+ * therefore no "spanning unmounted rows" case to recover; copying across rows that are
+ * far off-screen is not achievable with DOM virtualization (a known limitation vs the
+ * old full-mount behavior).
  */
 
 import { useEffect, useRef, useState } from 'react'
@@ -33,9 +42,9 @@ interface UseMessageCopyFormatterOptions<T extends { id: string }> {
   formatForCopy?: (message: T) => CopyMessageMeta
 }
 
-/** Resolve the message-row id a selection boundary falls within. Works for a row that
- *  was unmounted mid-scroll too: the virtualized row's subtree stays intact while the
- *  Range references it, so `closest()` still finds the `data-message-id` ancestor. */
+/** Resolve the message-row id a selection boundary falls within. The boundary is always
+ *  on a mounted row (a selection can't span unmounted virtualized rows — the browser
+ *  collapses it; see the file header), so `closest()` finds the `data-message-id`. */
 function rowIdAtBoundary(node: Node): string | null {
   const el = node.nodeType === Node.TEXT_NODE ? node.parentElement : (node as Element | null)
   return el?.closest?.('[data-message-id]')?.getAttribute('data-message-id') ?? null
@@ -125,9 +134,10 @@ export function useMessageCopyFormatter<T extends { id: string } = { id: string 
         e.clipboardData?.setData('text/plain', text)
       }
 
-      // Store-backed path (virtualized): reconstruct the full span from the in-memory
-      // array, so messages whose rows are unmounted are not dropped. The array is the
-      // source of truth for ordering AND for the rows the DOM no longer has.
+      // Store-backed path (virtualized): reconstruct the selected range from the
+      // in-memory array (the source of truth for ordering AND dates/names), because the
+      // virtualized DOM lacks the date separators the DOM path reads. Endpoints are
+      // always mounted (a selection can't span unmounted rows — see the file header).
       const msgs = messagesRef.current
       const format = formatForCopyRef.current
       if (msgs && format) {

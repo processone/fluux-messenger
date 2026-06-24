@@ -633,8 +633,8 @@ export const ChatMessageList = memo(function ChatMessageList({
   }
 
   // Clipboard metadata for a message, faithful to ChatMessageBubble's senderName so a
-  // virtualized copy spanning unmounted rows reconstructs identically (see MessageList
-  // formatMessageForCopy). Called only at copy time, so its per-render cost is nil.
+  // virtualized multi-message copy reconstructs identically from the array (see
+  // MessageList formatMessageForCopy). Called only at copy time, so per-render cost is nil.
   const formatMessageForCopy = (msg: Message): CopyMessageMeta => ({
     id: msg.id,
     from: msg.isOutgoing

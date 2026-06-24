@@ -974,8 +974,8 @@ export const RoomMessageList = memo(function RoomMessageList({
   // sees `room` (a fresh Map ref every presence stanza), so it stops re-rendering on
   // unrelated presence churn.
   // Clipboard metadata for a message, faithful to the row's resolvedSenderName so a
-  // virtualized copy spanning unmounted rows reconstructs identically (see MessageList
-  // formatMessageForCopy). Called only at copy time, so its per-render cost is nil.
+  // virtualized multi-message copy reconstructs identically from the array (see
+  // MessageList formatMessageForCopy). Called only at copy time, so per-render cost is nil.
   const formatMessageForCopy = (msg: RoomMessage): CopyMessageMeta => ({
     id: msg.id,
     from: resolveRoomSender(msg, room, contactsByJid, selfOccupant).resolvedSenderName,

@@ -94,8 +94,9 @@ export interface MessageListProps<T extends BaseMessage> {
   /**
    * Maps a message to its clipboard metadata, faithful to the rendered bubble (the
    * caller resolves the display name / time the same way it builds each row). Only
-   * consumed on the virtualized path: it lets a copy that spans unmounted rows be
-   * reconstructed from the in-memory array instead of dropping the off-screen middle.
+   * consumed on the virtualized path: a multi-message copy is reconstructed from the
+   * in-memory array so the rows carry correct dates/names (the virtualized DOM splits
+   * date separators into separate windowed items the pure-DOM copy can't follow).
    */
   formatMessageForCopy?: (message: T) => CopyMessageMeta
 }

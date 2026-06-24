@@ -226,10 +226,14 @@ describe('useMessageCopyFormatter', () => {
     expect(output).toMatch(/January 15, 2024/)
   })
 
-  // Virtualization: a selection can span rows that have been unmounted from the DOM
-  // (only the visible window + overscan is mounted). The middle messages must come
-  // from the in-memory array, not be silently dropped.
-  it('reconstructs unmounted middle messages from the in-memory array when the selection spans off-screen rows', async () => {
+  // Virtualization: the windowed DOM is incomplete (it lacks date separators and any
+  // rows outside the window), so a multi-message copy must source its content from the
+  // in-memory array, not the DOM. Proven here by mounting only the endpoints and leaving
+  // the middle rows out of the DOM: a DOM-only path would drop them; the array path keeps
+  // them. (A real selection is always within the contiguous mounted window — the browser
+  // collapses a selection that would span an unmounted row — but the array-vs-DOM sourcing
+  // is exactly what this asserts.)
+  it('sources a multi-message copy from the in-memory array, not the incomplete virtualized DOM', async () => {
     type Meta = { id: string; from: string; time: string; body: string; date: string }
     const messages: Meta[] = Array.from({ length: 5 }, (_, i) => ({
       id: `m${i + 1}`, from: `U${i + 1}`, time: `14:0${i}`, body: `Body ${i + 1}`, date: '2024-01-15',
