@@ -206,4 +206,19 @@ describe('message-row memo bailout (render-perf regression guard)', () => {
       expect(bubbleRenders[id]).toBe(initial[id])
     }
   })
+
+  it('RoomMessageList: starting to type (isComposing toggling) does not re-render existing rows', () => {
+    // Same decoupling as the 1:1 path: composing state hides hover toolbars via
+    // a container CSS class, not a per-row prop, so a typing burst must not
+    // re-render (and relayout) the whole room message list.
+    const msgs = roomMessages(5)
+    const { rerender } = render(<RoomMessageList messages={msgs} {...ROOM_PROPS} />)
+    const initial = { ...bubbleRenders }
+    expect(Object.keys(initial).sort()).toEqual(['r0', 'r1', 'r2', 'r3', 'r4'])
+
+    rerender(<RoomMessageList messages={msgs} {...{ ...ROOM_PROPS, isComposing: true }} />)
+    for (const id of Object.keys(initial)) {
+      expect(bubbleRenders[id]).toBe(initial[id])
+    }
+  })
 })
