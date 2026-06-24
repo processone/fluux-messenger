@@ -26,6 +26,7 @@
 - [Screenshots](#screenshots)
 - [Features](#features)
 - [Quick Start](#quick-start)
+- [Command-Line Options](#command-line-options)
 - [Technology Stack](#technology-stack)
 - [Support & Community](#support-and-community)
 - [Frequently Asked Questions](#frequently-asked-questions)
@@ -169,6 +170,21 @@ See the [Developer Guide](docs/DEVELOPER.md) for instructions on building and ru
 </details>
 
 Need help? Check out our [support options](#support-and-community) below.
+
+## Command-Line Options
+
+The desktop app accepts a few command-line flags. Run `fluux-messenger --help` to list them:
+
+| Flag | Description |
+|------|-------------|
+| `-v`, `--verbose` | Enable verbose logging to stderr (no XMPP traffic) |
+| `--verbose=xmpp` | Enable verbose logging including XMPP packet content |
+| `--log-file=PATH` | Override the log file directory (default: platform log dir) |
+| `-c`, `--clear-storage` | Clear local storage (localStorage, sessionStorage, IndexedDB) on startup |
+| `--dangerous-insecure-tls` | Disable TLS certificate verification. **Insecure**, for development and testing only. |
+| `-h`, `--help` | Show the help message |
+
+> **Warning:** `--dangerous-insecure-tls` turns off TLS certificate validation for the connection to your XMPP server, which exposes it to man-in-the-middle attacks. Use it only for local development or testing (for example, against a server with a self-signed certificate), never in production.
 
 ## Technology Stack
 
