@@ -340,28 +340,6 @@ export async function getAllAvatarHashes(
 }
 
 /**
- * Delete a JID → hash mapping
- */
-export async function deleteAvatarHash(jid: string): Promise<void> {
-  try {
-    const db = await getDB()
-    await new Promise<void>((resolve, reject) => {
-      const transaction = db.transaction(HASH_STORE_NAME, 'readwrite')
-      const store = transaction.objectStore(HASH_STORE_NAME)
-      const request = store.delete(jid)
-
-      request.onerror = () => reject(request.error)
-      request.onsuccess = () => resolve()
-    })
-  } catch (error) {
-    // Only log if IndexedDB is available (skip in test environments)
-    if (isIndexedDBAvailable()) {
-      console.warn('Failed to delete avatar hash mapping:', error)
-    }
-  }
-}
-
-/**
  * Clear all avatar hash mappings
  */
 export async function clearAllAvatarHashes(): Promise<void> {
@@ -707,36 +685,4 @@ export async function clearAllAvatarData(): Promise<void> {
     clearAllNoAvatarEntries(),
     clearAllPepForbiddenDomains(),
   ])
-}
-
-/**
- * Clear expired no-avatar entries
- *
- * @param ttlMs - Time-to-live in milliseconds (default: 24 hours)
- */
-export async function clearExpiredNoAvatarEntries(ttlMs: number = NO_AVATAR_TTL_MS): Promise<void> {
-  const cutoff = Date.now() - ttlMs
-
-  try {
-    const db = await getDB()
-    const transaction = db.transaction(NO_AVATAR_STORE_NAME, 'readwrite')
-    const store = transaction.objectStore(NO_AVATAR_STORE_NAME)
-
-    const request = store.openCursor()
-    request.onsuccess = () => {
-      const cursor = request.result
-      if (cursor) {
-        const entry = cursor.value as NoAvatarEntry
-        if (entry.timestamp < cutoff) {
-          cursor.delete()
-        }
-        cursor.continue()
-      }
-    }
-  } catch (error) {
-    // Only log if IndexedDB is available (skip in test environments)
-    if (isIndexedDBAvailable()) {
-      console.warn('Failed to clear expired no-avatar entries:', error)
-    }
-  }
 }

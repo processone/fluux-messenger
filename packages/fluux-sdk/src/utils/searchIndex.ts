@@ -717,23 +717,6 @@ export async function clearSearchIndex(): Promise<void> {
 }
 
 /**
- * Destroy the search index (close and delete the database).
- * Call on logout or account switch.
- */
-export async function destroySearchIndex(): Promise<void> {
-  if (dbPromise) {
-    try {
-      const db = await dbPromise
-      db.close()
-    } catch {
-      // Ignore close errors
-    }
-    dbPromise = null
-    dbNameForPromise = null
-  }
-}
-
-/**
  * Close the current database connection without deleting data.
  * @internal Used for testing cleanup.
  */
