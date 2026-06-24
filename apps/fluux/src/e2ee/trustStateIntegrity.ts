@@ -179,8 +179,3 @@ export async function clearCompromisedAndReseal(
   lastKnownPayload = null
   setTrustStateStatus('sealed')
 }
-
-export function resetTrustStateIntegrity(): void {
-  lastKnownPayload = null
-  setTrustStateStatus('uninitialized')
-}

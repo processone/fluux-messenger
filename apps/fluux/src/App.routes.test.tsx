@@ -35,6 +35,8 @@ vi.mock('@fluux/sdk', () => ({
       disconnect: vi.fn().mockResolvedValue(undefined),
     },
   })),
+  // Consumed at module load by e2ee/verificationSync.ts (VERIFICATIONS_NODE).
+  NS_FLUUX_VERIFICATIONS: 'urn:xmpp:fluux:verifications:0',
 }))
 
 // Mock session persistence

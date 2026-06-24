@@ -361,23 +361,6 @@ export function Avatar({
 }
 
 /**
- * Hook to get avatar props for a contact
- */
-export function useContactAvatarProps(contact: {
-  jid: string
-  name?: string
-  avatar?: string
-  presence?: PresenceStatus
-}): Partial<AvatarProps> {
-  return {
-    identifier: contact.jid,
-    name: contact.name || contact.jid,
-    avatarUrl: contact.avatar,
-    presence: contact.presence,
-  }
-}
-
-/**
  * Typing indicator overlay component for use with Avatar
  */
 export function TypingIndicator() {

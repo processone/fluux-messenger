@@ -34,7 +34,7 @@
  */
 
 import type { PluginContext, XMLElementData } from '@fluux/sdk'
-import { buildScopedStorageKey } from '@fluux/sdk'
+import { buildScopedStorageKey, NS_FLUUX_VERIFICATIONS } from '@fluux/sdk'
 import { fingerprintsEqual } from './fingerprintCompare'
 
 /** Encrypt `plaintext` to `recipientPublicArmored`. Returns armored ciphertext. */
@@ -61,7 +61,8 @@ export type DecryptFn = (
   signaturePresent: boolean
 }>
 
-export const VERIFICATIONS_NODE = 'urn:xmpp:fluux:verifications:0'
+/** PEP node id for verification sync — the canonical value lives in the SDK. */
+export const VERIFICATIONS_NODE = NS_FLUUX_VERIFICATIONS
 const VERIFICATIONS_XMLNS = VERIFICATIONS_NODE
 
 /** localStorage base key holding the highest snapshot version applied/published. */

@@ -162,14 +162,6 @@ export function clearSession(options: ClearSessionOptions = {}): void {
 }
 
 /**
- * Saves profile data (avatar hash, nickname) to sessionStorage.
- */
-export function saveProfile(ownAvatarHash: string | null, ownNickname: string | null, jid?: string | null): void {
-  const data: ProfileData = { ownAvatarHash, ownNickname }
-  setScopedSessionItem(PROFILE_KEY, JSON.stringify(data), jid)
-}
-
-/**
  * Gets stored profile data.
  */
 export function getSavedProfile(jid?: string | null): ProfileData | null {

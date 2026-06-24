@@ -622,6 +622,8 @@ export {
   NS_P1_PUSH_WEBPUSH,
   // Custom: Fluux conversation list sync
   NS_CONVERSATIONS,
+  // Custom: Fluux cross-device peer-verification sync (PEP node id)
+  NS_FLUUX_VERIFICATIONS,
 } from './core/namespaces'
 
 // =============================================================================

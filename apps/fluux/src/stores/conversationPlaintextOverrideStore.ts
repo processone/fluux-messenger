@@ -68,10 +68,6 @@ export const useConversationPlaintextOverrideStore = create<ConversationPlaintex
   }),
 )
 
-export function isConversationForcedPlaintext(jid: string): boolean {
-  return jid in useConversationPlaintextOverrideStore.getState().plaintextJids
-}
-
 export function rehydratePlaintextOverrides(): void {
   useConversationPlaintextOverrideStore.getState().rehydrate()
 }
