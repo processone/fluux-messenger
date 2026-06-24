@@ -16,7 +16,7 @@ import { RoomMessageInput } from './RoomView'
 const STABLE: ComponentProps<typeof RoomMessageInput> = {
   roomJid: 'room@conf.example.com',
   sendMessage: vi.fn(), sendCorrection: vi.fn(), retractMessage: vi.fn(),
-  sendChatState: vi.fn(), sendEasterEgg: vi.fn(), sendPoll: vi.fn(),
+  sendChatState: vi.fn(), sendWhisperChatState: vi.fn(), sendEasterEgg: vi.fn(), sendPoll: vi.fn(),
   replyingTo: null, onCancelReply: vi.fn(), editingMessage: null, onCancelEdit: vi.fn(),
   isConnected: true, sendWhisper: vi.fn(), whisperTarget: null,
 }

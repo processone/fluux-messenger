@@ -24,8 +24,8 @@ export type { MessageBubbleProps } from './MessageBubble'
 export { groupMessagesByDate, shouldShowAvatar, whisperThreadPosition, whisperCounterpartPresent, scrollToMessage, isActionMessage, canClosePoll } from './messageGrouping'
 export type { MessageGroup, WhisperThreadPosition } from './messageGrouping'
 
-export { resolveWhisperTarget, whisperTargetPresent, decideWhisperSend } from './whisperTarget'
-export type { WhisperTarget, WhisperSendDecision } from './whisperTarget'
+export { resolveWhisperTarget, whisperTargetPresent, decideWhisperSend, decideChatStateRoute } from './whisperTarget'
+export type { WhisperTarget, WhisperSendDecision, ChatStateRoute } from './whisperTarget'
 
 export { MessageList } from './MessageList'
 export type { MessageListProps } from './MessageList'
