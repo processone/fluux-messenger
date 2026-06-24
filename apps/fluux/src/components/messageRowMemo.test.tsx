@@ -177,6 +177,24 @@ describe('message-row memo bailout (render-perf regression guard)', () => {
     }
   })
 
+  it('ChatMessageList: starting to type (isComposing toggling) does not re-render existing rows', () => {
+    // `isComposing` flips true on the first keystroke and false ~1.5s after the
+    // last. It used to be threaded into every row's `hideToolbar`, so each
+    // typing burst re-rendered (and relayouted) the whole list. Hiding hover
+    // toolbars while composing is now a container CSS concern, so the rows must
+    // NOT re-render when composing state changes.
+    const msgs = chatMessages(5)
+    const { rerender } = render(<ChatMessageList messages={msgs} {...CHAT_PROPS} />)
+    const initial = { ...bubbleRenders }
+    expect(Object.keys(initial).sort()).toEqual(['c0', 'c1', 'c2', 'c3', 'c4'])
+
+    // Same messages array — only composing state changed.
+    rerender(<ChatMessageList messages={msgs} {...{ ...CHAT_PROPS, isComposing: true }} />)
+    for (const id of Object.keys(initial)) {
+      expect(bubbleRenders[id]).toBe(initial[id])
+    }
+  })
+
   it('RoomMessageList: appending a message does not re-render existing rows', () => {
     const msgs = roomMessages(5)
     const { rerender } = render(<RoomMessageList messages={msgs} {...ROOM_PROPS} />)

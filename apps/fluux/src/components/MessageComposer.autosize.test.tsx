@@ -131,4 +131,89 @@ describe('MessageComposer autosize', () => {
     unmount()
     expect(roDisconnected).toBeGreaterThan(0)
   })
+
+  // --- Per-keystroke forced-layout avoidance --------------------------------
+  // resizeToContent ran on every keystroke and unconditionally (a) reset the
+  // textarea to height:auto and (b) called onInputResize. The auto-reset
+  // changes the composer's box, relayouting the flex column — including the
+  // entire non-virtualized message list — and onInputResize then reads the
+  // list's scrollHeight, forcing a second full layout. In a long conversation
+  // every keystroke therefore paid a full message-list reflow (~30ms measured
+  // at ~900 messages). The composer must not disturb layout when the typed
+  // text does not change the composer's height.
+  const renderWithResize = (value: string, onInputResize: () => void) =>
+    render(
+      <MessageComposer
+        placeholder="Type a message"
+        onSend={vi.fn().mockResolvedValue(true)}
+        value={value}
+        onValueChange={() => {}}
+        onInputResize={onInputResize}
+      />
+    )
+
+  it('does not fire onInputResize on an append that leaves the height unchanged', () => {
+    const onInputResize = vi.fn()
+    mockScrollHeight = 48
+    const { rerender } = renderWithResize('Hello', onInputResize)
+    onInputResize.mockClear() // ignore the mount-time sizing call
+
+    // Append one character on the same line — height is unchanged.
+    rerender(
+      <MessageComposer
+        placeholder="Type a message"
+        onSend={vi.fn().mockResolvedValue(true)}
+        value="Hello!"
+        onValueChange={() => {}}
+        onInputResize={onInputResize}
+      />
+    )
+
+    expect(onInputResize).not.toHaveBeenCalled()
+  })
+
+  it('fires onInputResize and grows when an append wraps to a new line', () => {
+    const onInputResize = vi.fn()
+    mockScrollHeight = 48
+    const { container, rerender } = renderWithResize('Hello', onInputResize)
+    onInputResize.mockClear()
+
+    mockScrollHeight = 72 // content now needs a second line
+    rerender(
+      <MessageComposer
+        placeholder="Type a message"
+        onSend={vi.fn().mockResolvedValue(true)}
+        value="Hello world that now wraps onto a second line"
+        onValueChange={() => {}}
+        onInputResize={onInputResize}
+      />
+    )
+
+    const textarea = container.querySelector('textarea') as HTMLTextAreaElement
+    expect(textarea.style.height).toBe('72px')
+    expect(onInputResize).toHaveBeenCalled()
+  })
+
+  it('shrinks (and fires onInputResize) when text is deleted back to one line', () => {
+    const onInputResize = vi.fn()
+    mockScrollHeight = 72
+    const { container, rerender } = renderWithResize('two\nlines', onInputResize)
+    const textarea = container.querySelector('textarea') as HTMLTextAreaElement
+    expect(textarea.style.height).toBe('72px')
+    onInputResize.mockClear()
+
+    mockScrollHeight = 48 // deleted back to one line
+    rerender(
+      <MessageComposer
+        placeholder="Type a message"
+        onSend={vi.fn().mockResolvedValue(true)}
+        value="two"
+        onValueChange={() => {}}
+        onInputResize={onInputResize}
+      />
+    )
+
+    expect(textarea.style.height).toBe('48px')
+    expect(onInputResize).toHaveBeenCalled()
+  })
 })
