@@ -38,4 +38,11 @@ describe('computeMessageActions', () => {
     expect(a.canEdit).toBe(false)
     expect(a.canDelete).toBe(false)
   })
+
+  it('own whisper with counterpart present: delete (retract) allowed', () => {
+    const a = computeMessageActions({ ...base, isPrivate: true, inThread: true })
+    expect(a.canDelete).toBe(true)
+    expect(a.canEdit).toBe(true)
+    expect(a.canReact).toBe(true)
+  })
 })

@@ -1834,6 +1834,7 @@ export const RoomMessageInput = memo(function RoomMessageInput({
     // Clear draft immediately so sidebar updates
     clearDraft(roomJid)
 
+    // Whisper sends return early above, so a private URL never reaches link-preview generation (no room broadcast).
     // Process link preview in background (don't block on it)
     if (processLinkPreview && sendText) {
       processLinkPreview(messageId, sendText, roomJid, 'groupchat').catch(console.error)
