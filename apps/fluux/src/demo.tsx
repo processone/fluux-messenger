@@ -24,6 +24,7 @@ import { DemoTutorialProvider } from './demo/tutorial/DemoTutorialProvider'
 import { buildDemoData, buildDemoAnimation } from './demo/demoData'
 import { getDiscoverableRooms } from './demo/rooms'
 import { parseStressParam, installPerfHarness } from './demo/perfHarness'
+import { installDemoLoadOlder } from './demo/demoLoadOlder'
 import App from './App'
 import i18n from './i18n'
 import './index.css'
@@ -52,6 +53,9 @@ const demoAnimation = buildDemoAnimation()
 const demoClient = new DemoClient()
 demoClient.populateDemo(demoData)
 demoClient.setDiscoverableRooms(getDiscoverableRooms())
+// Make MAM scroll-up ("load older") prepend synthetic older messages in demo mode, so the
+// prepend-anchor scroll restore can be exercised without a server.
+installDemoLoadOlder(demoClient)
 
 const stressScenario = parseStressParam(params)
 if (stressScenario) {
