@@ -109,6 +109,20 @@ Intercept the `copy` event on the scroll container. The selection's two endpoint
 
 This is a pure function (`{ startId, endId, messages } → text`) and is unit-tested as such.
 
+> **Verified correction (2026-06-24, Blink; DOM-spec, so same on WebKit).** The premise
+> above — that a selection can *span* unmounted rows — is **false**. Removing a node from
+> the DOM relocates any live Range boundary to the parent (per the DOM spec's node-remove
+> steps), so the browser **collapses** a selection the instant a selected row scrolls out
+> and unmounts (measured: a 92-char selection → 0, `isCollapsed`, both boundaries on the
+> spacer). You therefore **cannot** select across off-screen virtualized rows, and the
+> `messages.slice(startId..endId)` "spanning" reconstruction never triggers. What ships:
+> the store-backed path reconstructs the **within-window** selection from the array so the
+> virtualized rows carry correct dates/names (the windowed DOM splits date separators into
+> separate items the DOM walk can't follow). Copying a very large range in one gesture is a
+> **known limitation** of DOM virtualization vs the old full-mount path (and vs the #540
+> `content-visibility` attempt, which kept rows in the DOM). A virtualization-friendly bulk
+> copy (a select-mode, or ⌘A → copy the loaded range from the array) is a follow-up.
+
 ## Alignment module
 
 A pure, DOM-free, unit-tested module `messageScrollAlignment.ts` centralizes the scroll math (today scattered as inline magic numbers):

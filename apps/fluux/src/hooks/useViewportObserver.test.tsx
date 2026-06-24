@@ -628,6 +628,111 @@ describe('useViewportObserver', () => {
   })
 
   // ========================================================================
+  // MutationObserver — rows removed (virtualized window churn)
+  // ========================================================================
+
+  it('unobserves removed message elements via MutationObserver', () => {
+    const scrollContainerRef = createScrollContainer(['msg-1', 'msg-2'])
+
+    renderHook(() =>
+      useViewportObserver({
+        scrollContainerRef,
+        conversationId: 'conv-1',
+        onMessageSeen: vi.fn(),
+        enabled: true,
+      }),
+    )
+
+    const io = ioInstances[0]
+    // A row scrolls out of the virtualized window and is unmounted from the DOM.
+    const removed = scrollContainerRef.current.querySelector('[data-message-id="msg-1"]')!
+
+    act(() => {
+      moCallback(
+        [{ addedNodes: [], removedNodes: [removed], type: 'childList' } as unknown as MutationRecord],
+        {} as MutationObserver,
+      )
+    })
+
+    // Without this, the IntersectionObserver keeps a growing set of detached rows as
+    // the user scrolls a large virtualized room — the very leak virtualization fixes.
+    expect(io.unobserve).toHaveBeenCalledWith(removed)
+  })
+
+  it('unobserves nested message elements removed via MutationObserver', () => {
+    const scrollContainerRef = createScrollContainer(['msg-1'])
+
+    renderHook(() =>
+      useViewportObserver({
+        scrollContainerRef,
+        conversationId: 'conv-1',
+        onMessageSeen: vi.fn(),
+        enabled: true,
+      }),
+    )
+
+    const io = ioInstances[0]
+
+    // A windowed wrapper div containing a message row mounts, then unmounts.
+    const wrapper = document.createElement('div')
+    const nested = document.createElement('div')
+    nested.dataset.messageId = 'msg-2'
+    wrapper.appendChild(nested)
+
+    act(() => {
+      moCallback(
+        [{ addedNodes: [wrapper], removedNodes: [], type: 'childList' } as unknown as MutationRecord],
+        {} as MutationObserver,
+      )
+    })
+    expect(io.observe).toHaveBeenCalledWith(nested)
+
+    act(() => {
+      moCallback(
+        [{ addedNodes: [], removedNodes: [wrapper], type: 'childList' } as unknown as MutationRecord],
+        {} as MutationObserver,
+      )
+    })
+    expect(io.unobserve).toHaveBeenCalledWith(nested)
+  })
+
+  it('does not report a removed row as bottom-most after it leaves the window', () => {
+    const onMessageSeen = vi.fn()
+    const scrollContainerRef = createScrollContainer(['msg-1', 'msg-2'])
+
+    renderHook(() =>
+      useViewportObserver({
+        scrollContainerRef,
+        conversationId: 'conv-1',
+        onMessageSeen,
+        enabled: true,
+      }),
+    )
+
+    const el1 = scrollContainerRef.current.querySelector('[data-message-id="msg-1"]')!
+    const el2 = scrollContainerRef.current.querySelector('[data-message-id="msg-2"]')!
+    const entryFor = (target: Element, isIntersecting: boolean, bottom: number) => {
+      target.getBoundingClientRect = () => ({ bottom, top: bottom - 40, left: 0, right: 300, width: 300, height: 40, x: 0, y: bottom - 40, toJSON: () => ({}) }) as DOMRect
+      return { target, isIntersecting, boundingClientRect: { bottom } as DOMRectReadOnly, intersectionRatio: isIntersecting ? 0.6 : 0, intersectionRect: {} as DOMRectReadOnly, rootBounds: null, time: performance.now() } as IntersectionObserverEntry
+    }
+
+    // Both visible; msg-2 (bottom 300) is bottom-most.
+    act(() => { ioCallback([entryFor(el1, true, 100), entryFor(el2, true, 300)], {} as IntersectionObserver) })
+    expect(onMessageSeen).toHaveBeenLastCalledWith('msg-2')
+    act(() => { vi.advanceTimersByTime(300) })
+
+    // msg-2's row is unmounted (removed) WITHOUT an intervening IO "not intersecting".
+    // Its stale entry must be pruned so a scroll-driven recompute reports the real
+    // bottom-most remaining row (msg-1), not the detached msg-2.
+    act(() => {
+      moCallback([{ addedNodes: [], removedNodes: [el2], type: 'childList' } as unknown as MutationRecord], {} as MutationObserver)
+    })
+    act(() => { scrollContainerRef.current.dispatchEvent(new Event('scroll')) })
+
+    expect(onMessageSeen).toHaveBeenLastCalledWith('msg-1')
+  })
+
+  // ========================================================================
   // Visible entries tracking (leave/enter cycles)
   // ========================================================================
 

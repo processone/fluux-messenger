@@ -27,6 +27,7 @@ import { groupMessagesByDate, shouldShowAvatar } from './messageGrouping'
 import { useMessageListScroll } from './useMessageListScroll'
 import { MessageWidthProvider } from './messageWidthContext'
 import { isFeatureEnabled } from '@/utils/featureFlags'
+import type { CopyMessageMeta } from '@/utils/buildCopyText'
 import { buildMessageListItems, type RenderItem } from './messageListItems'
 import { useTanstackMessageVirtualizer } from './tanstackMessageVirtualizer'
 import { Loader2, ChevronUp, ChevronDown } from 'lucide-react'
@@ -90,6 +91,14 @@ export interface MessageListProps<T extends BaseMessage> {
   onCatchUpHistory?: () => void
   /** If true, show loading indicator on the gap marker */
   isCatchingUp?: boolean
+  /**
+   * Maps a message to its clipboard metadata, faithful to the rendered bubble (the
+   * caller resolves the display name / time the same way it builds each row). Only
+   * consumed on the virtualized path: a multi-message copy is reconstructed from the
+   * in-memory array so the rows carry correct dates/names (the virtualized DOM splits
+   * date separators into separate windowed items the pure-DOM copy can't follow).
+   */
+  formatMessageForCopy?: (message: T) => CopyMessageMeta
 }
 
 // ============================================================================
@@ -121,6 +130,7 @@ export function MessageList<T extends BaseMessage>({
   forwardGapTimestamp,
   onCatchUpHistory,
   isCatchingUp,
+  formatMessageForCopy,
 }: MessageListProps<T>) {
   // Detect render loops before they freeze the UI
   detectRenderLoop('MessageList')
@@ -271,7 +281,15 @@ export function MessageList<T extends BaseMessage>({
   // COPY FORMATTING (ensures date is always included)
   // --------------------------------------------------------------------------
 
-  useMessageCopyFormatter({ containerRef: scrollContainerRef })
+  // Store-backed copy is virtualized-only: when off-screen rows are unmounted, a
+  // spanning selection is reconstructed from `deduplicatedMessages` via the caller's
+  // faithful formatter. Passing `undefined` on the flag-OFF path keeps the legacy
+  // pure-DOM copy behavior byte-for-byte unchanged.
+  useMessageCopyFormatter({
+    containerRef: scrollContainerRef,
+    messages: virtualized ? deduplicatedMessages : undefined,
+    formatForCopy: virtualized ? formatMessageForCopy : undefined,
+  })
 
   // --------------------------------------------------------------------------
   // RENDER: Message list (always render scroll container to preserve position)

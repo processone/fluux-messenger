@@ -22,6 +22,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render } from '@testing-library/react'
 
+// Row-render-count guard for the non-virtualized full-mount path (still shipping until
+// the old path is removed). Force the flag OFF so all rows mount and the counts are
+// comparable; virtualization mounts only the window, a separate concern.
+vi.mock('@/utils/featureFlags', () => ({ isFeatureEnabled: () => false }))
+
 // Count inner MessageBubble renders by message id. RoomMessageBubbleWrapper renders
 // <MessageBubble message={message} .../>, so the id is available on the mock's props.
 const bubbleRenders: Record<string, number> = {}

@@ -161,30 +161,35 @@ export function useViewportObserver({
     const messageElements = scrollContainer.querySelectorAll('[data-message-id]')
     messageElements.forEach((el) => observer.observe(el))
 
-    // Re-observe when new messages are added (MutationObserver)
+    // Track which rows the message list mounts/unmounts. With virtualization, only the
+    // visible window + overscan is mounted: rows scroll in (added) and out (removed) as
+    // the user scrolls, so the observer must follow the window, not assume rows persist.
     const mutationObserver = new MutationObserver((mutations) => {
-      let changed = false
       for (const mutation of mutations) {
+        // Newly mounted rows start being observed; the IO fires automatically for any
+        // that are already visible (e.g. when the user is pinned to the bottom).
         for (const node of mutation.addedNodes) {
           if (node instanceof HTMLElement) {
-            // Check if the node itself has data-message-id
+            if (node.dataset.messageId) observer.observe(node)
+            node.querySelectorAll('[data-message-id]').forEach((el) => observer.observe(el))
+          }
+        }
+        // Unmounted rows stop being observed and are pruned from the visible set. Without
+        // this the IO's observed set and visibleEntries grow unbounded as a large room is
+        // scrolled, and a detached row could linger as a stale "bottom-most visible"
+        // candidate (its mocked/last rect still comparing > 0).
+        for (const node of mutation.removedNodes) {
+          if (node instanceof HTMLElement) {
             if (node.dataset.messageId) {
-              observer.observe(node)
-              changed = true
+              observer.unobserve(node)
+              visibleEntries.delete(node)
             }
-            // Check children for message elements
-            const children = node.querySelectorAll('[data-message-id]')
-            children.forEach((el) => {
-              observer.observe(el)
-              changed = true
+            node.querySelectorAll('[data-message-id]').forEach((el) => {
+              observer.unobserve(el)
+              visibleEntries.delete(el)
             })
           }
         }
-      }
-      // If new messages were added and user is at bottom, the IO callback
-      // will fire automatically for newly visible elements
-      if (changed) {
-        // No additional action needed — IntersectionObserver handles it
       }
     })
 

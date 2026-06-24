@@ -17,6 +17,11 @@
  * of the inner MessageBubble, keyed by message id.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+
+// Row-render-count guard for the non-virtualized full-mount path (still shipping until
+// the old path is removed). Force the flag OFF so all rows mount and the counts are
+// comparable; virtualization mounts only the window, a separate concern.
+vi.mock('@/utils/featureFlags', () => ({ isFeatureEnabled: () => false }))
 import { render } from '@testing-library/react'
 
 // Count inner MessageBubble renders by message id. Both ChatMessageBubble and

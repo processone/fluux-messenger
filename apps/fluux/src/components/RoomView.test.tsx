@@ -7,6 +7,10 @@
  */
 import React from 'react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+
+// Asserts the non-virtualized message list (still shipping until the old path is removed);
+// the virtualized render is covered by MessageList.virtualized.test.tsx + unit tests.
+vi.mock('@/utils/featureFlags', () => ({ isFeatureEnabled: () => false }))
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { RoomView } from './RoomView'
 import type { RoomMessage, Room, RoomOccupant, Contact } from '@fluux/sdk'
