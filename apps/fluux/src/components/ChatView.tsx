@@ -421,7 +421,11 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
       <div
         ref={mainContentRef as React.RefObject<HTMLDivElement>}
         tabIndex={0}
-        className="focus-zone flex-1 flex flex-col min-h-0 p-1 relative"
+        // `composer-active` hides the per-message hover toolbars while typing via
+        // CSS (index.css), instead of threading `isComposing` into every row's
+        // `hideToolbar` prop — which re-rendered (and relayouted) the whole
+        // non-virtualized list on each typing burst.
+        className={`focus-zone flex-1 flex flex-col min-h-0 p-1 relative${isComposing ? ' composer-active' : ''}`}
         onKeyDown={handleMessageListKeyDown}
         onMouseMove={(e) => {
           // Find which message is being hovered (for keyboard nav starting point)
@@ -459,7 +463,6 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
             onEdit={setEditingMessage}
             lastOutgoingMessageId={lastOutgoingMessageId}
             lastMessageId={lastMessageId}
-            isComposing={isComposing}
             activeReactionPickerMessageId={activeReactionPickerMessageId}
             onReactionPickerChange={handleReactionPickerChange}
             retractMessage={retractMessage}
@@ -552,7 +555,6 @@ export const ChatMessageList = memo(function ChatMessageList({
   onEdit,
   lastOutgoingMessageId,
   lastMessageId,
-  isComposing,
   activeReactionPickerMessageId,
   onReactionPickerChange,
   retractMessage,
@@ -592,7 +594,6 @@ export const ChatMessageList = memo(function ChatMessageList({
   onEdit: (message: Message) => void
   lastOutgoingMessageId: string | null
   lastMessageId: string | null
-  isComposing: boolean
   activeReactionPickerMessageId: string | null
   onReactionPickerChange: (messageId: string, isOpen: boolean) => void
   retractMessage: (conversationId: string, messageId: string) => Promise<void>
@@ -647,7 +648,7 @@ export const ChatMessageList = memo(function ChatMessageList({
       onEdit={onEdit}
       isLastOutgoing={msg.id === lastOutgoingMessageId}
       isLastMessage={msg.id === lastMessageId}
-      hideToolbar={isComposing || (activeReactionPickerMessageId !== null && activeReactionPickerMessageId !== msg.id)}
+      hideToolbar={activeReactionPickerMessageId !== null && activeReactionPickerMessageId !== msg.id}
       onReactionPickerChange={onReactionPickerChange}
       retractMessage={retractMessage}
       retryMessage={retryMessage}

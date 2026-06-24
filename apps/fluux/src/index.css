@@ -562,6 +562,18 @@ html, body {
   outline-offset: -2px !important;
 }
 
+/*
+ * Hide the per-message floating hover toolbars while the user is composing.
+ * Driven by the `composer-active` class toggled on the message area (ChatView),
+ * so starting/stopping typing does NOT re-render every message row. The 1:1
+ * toolbar uses controlled hover (an opacity utility class), which this beats on
+ * specificity. See ChatView.tsx and messageRowMemo.test.tsx.
+ */
+.composer-active [data-message-toolbar] {
+  opacity: 0;
+  pointer-events: none;
+}
+
 /* Font size slider styling */
 input[type="range"] {
   -webkit-appearance: none;

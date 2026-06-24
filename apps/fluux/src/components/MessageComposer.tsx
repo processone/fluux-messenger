@@ -311,25 +311,58 @@ export function MessageComposer({
   // below doesn't re-subscribe on parent re-renders.
   const onInputResizeRef = useRef(onInputResize)
   onInputResizeRef.current = onInputResize
-  const resizeToContent = useCallback(() => {
+  // Autosize bookkeeping. The previous textarea value and the height we last
+  // set let us skip the layout-disturbing work on keystrokes that cannot
+  // change the composer's height (the common case). Resetting to height:auto
+  // is what dirties the flex column — and therefore relayouts the entire,
+  // non-virtualized message list — so a plain append must avoid it. See
+  // MessageComposer.autosize.test.tsx for the regression guard.
+  const prevValueRef = useRef('')
+  const lastSetHeightRef = useRef(0)
+  const countLines = (s: string) => {
+    let n = 1
+    for (let i = 0; i < s.length; i++) if (s.charCodeAt(i) === 10) n++
+    return n
+  }
+  const resizeToContent = useCallback((forceRemeasure = false) => {
     const textarea = inputRef.current
     if (!textarea) return
 
-    // Save scroll position before resizing
-    const savedScrollTop = textarea.scrollTop
-
-    textarea.style.height = 'auto'
     // This value must match the CSS line-height in .message-input (index.css)
     const lineHeight = 24
     const minHeight = lineHeight
     const maxHeight = lineHeight * 8
+
+    const value = textarea.value
+    const prev = prevValueRef.current
+    prevValueRef.current = value
+
+    // A shrink is only possible when characters or whole lines were removed,
+    // and never below the single-line minimum. `forceRemeasure` (a width
+    // change) can re-wrap in either direction, so it always remeasures.
+    const couldShrink = value.length < prev.length || countLines(value) < countLines(prev)
+    const mayShrink = forceRemeasure || (couldShrink && lastSetHeightRef.current > minHeight)
+
+    const savedScrollTop = textarea.scrollTop
+    // Only collapse to `auto` when a shrink is possible. With overflow-y:auto,
+    // scrollHeight reflects the full content height even without the reset, so
+    // growth is still detected — without dirtying the surrounding layout.
+    if (mayShrink) textarea.style.height = 'auto'
     const scrollHeight = textarea.scrollHeight
     const newHeight = Math.min(Math.max(scrollHeight, minHeight), maxHeight)
-    textarea.style.height = `${newHeight}px`
 
-    // Restore scroll position after height change
-    // The browser will naturally keep the cursor visible during typing,
-    // but resizing can reset scroll. Only restore if we're at max height.
+    // Fast path: a non-shrinking edit that leaves the height unchanged touched
+    // nothing, so there is no height to write, no scroll to restore, and no
+    // listener to notify. This is what keeps continuous typing off the
+    // message-list reflow path.
+    if (!mayShrink && newHeight === lastSetHeightRef.current) return
+
+    textarea.style.height = `${newHeight}px`
+    lastSetHeightRef.current = newHeight
+
+    // Restore scroll position after height change. The browser keeps the cursor
+    // visible during typing, but resizing can reset scroll. Only restore if
+    // we're at max height.
     if (scrollHeight > maxHeight) {
       textarea.scrollTop = savedScrollTop
     }
@@ -357,7 +390,7 @@ export function MessageComposer({
       const width = entries[0]?.contentRect.width
       if (width === undefined || width === lastWidth) return
       lastWidth = width
-      resizeToContent()
+      resizeToContent(true)
     })
     observer.observe(textarea)
     return () => observer.disconnect()
