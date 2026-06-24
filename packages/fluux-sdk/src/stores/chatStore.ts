@@ -16,10 +16,11 @@ import { connectionStore } from './connectionStore'
 import { buildScopedStorageKey } from '../utils/storageScope'
 
 // Maximum messages to keep in memory per conversation (display buffer)
-// This is a memory/performance tradeoff - higher values allow smoother scrolling
-// but use more RAM. 1000 is enough for typical usage with lazy loading.
-// All messages are stored in IndexedDB regardless of this limit.
-const MAX_MESSAGES_PER_CONVERSATION = 1000
+// Purely an in-memory bound (messages live in IndexedDB, not localStorage). Before view
+// virtualization this mainly capped DOM nodes; now the message list windows its DOM
+// regardless of array size, so the limit is raised to allow real scroll-back — at the old
+// 1000 a prepend at the cap trimmed the just-loaded older batch straight back off.
+const MAX_MESSAGES_PER_CONVERSATION = 5000
 const STORAGE_KEY_BASE = 'xmpp-chat-storage'
 
 /**

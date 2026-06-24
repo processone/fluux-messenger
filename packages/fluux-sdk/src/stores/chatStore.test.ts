@@ -1144,11 +1144,11 @@ describe('chatStore', () => {
     })
 
     it('should store messages in memory (display buffer) without localStorage limit', () => {
-      // Messages are stored in memory for display, with a high limit (1000)
+      // Messages are stored in memory for display, with a high limit (5000)
       // This test verifies we can store more than the old 100 message limit
       chatStore.getState().addConversation(createConversation('alice@example.com'))
 
-      // Add 500 messages (was limited to 100 before, now can go up to 1000)
+      // Add 500 messages (was limited to 100 before, now can go up to 5000)
       for (let i = 0; i < 500; i++) {
         chatStore.getState().addMessage(createMessage('alice@example.com', `Message ${i}`))
       }
@@ -2271,16 +2271,17 @@ describe('chatStore', () => {
       it('should trim messages to MAX_MESSAGES_PER_CONVERSATION', () => {
         chatStore.getState().addConversation(createConversation('alice@example.com'))
 
-        // Create 1100 MAM messages (more than MAX_MESSAGES_PER_CONVERSATION which is 1000)
+        // Create 5100 MAM messages (more than MAX_MESSAGES_PER_CONVERSATION which is 5000)
+        const total = 5100
         const mamMessages: Message[] = []
-        for (let i = 0; i < 1100; i++) {
+        for (let i = 0; i < total; i++) {
           mamMessages.push({
             type: 'chat',
             id: `mam-msg-${i}`,
             conversationId: 'alice@example.com',
             from: 'alice@example.com',
             body: `Message ${i}`,
-            timestamp: new Date(Date.now() - (1100 - i) * 60000), // Ordered by time
+            timestamp: new Date(Date.now() - (total - i) * 60000), // Ordered by time
             isOutgoing: false,
             stanzaId: `stanza-${i}`,
           })
@@ -2289,18 +2290,18 @@ describe('chatStore', () => {
         chatStore.getState().mergeMAMMessages(
           'alice@example.com',
           mamMessages,
-          { count: 1100 },
+          { count: total },
           true,
           'backward'
         )
 
-        // Should be trimmed to MAX_MESSAGES (1000) - this is the display buffer limit
+        // Should be trimmed to MAX_MESSAGES (5000) - this is the display buffer limit
         // All messages are still stored in IndexedDB
         const messages = chatStore.getState().messages.get('alice@example.com')
-        expect(messages?.length).toBeLessThanOrEqual(1000)
+        expect(messages?.length).toBeLessThanOrEqual(5000)
 
         // Should keep the most recent messages
-        expect(messages?.[messages.length - 1].body).toBe('Message 1099')
+        expect(messages?.[messages.length - 1].body).toBe(`Message ${total - 1}`)
       })
 
       it('should create conversation messages array if it does not exist', () => {

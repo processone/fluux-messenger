@@ -32,8 +32,14 @@ import { buildScopedStorageKey } from '../utils/storageScope'
 /**
  * Maximum messages to keep in memory per room.
  * Older messages are still available in IndexedDB and can be loaded on demand.
+ *
+ * This is purely an in-memory bound (messages live in IndexedDB, not localStorage).
+ * Before view virtualization it mainly capped DOM nodes; now the message list windows
+ * its DOM regardless of array size, so the limit is raised to allow real scroll-back —
+ * at the old 1000 a `prependOlderMessages` at the cap trimmed the just-loaded older
+ * batch straight back off (load-older became a no-op past 1000).
  */
-const MAX_MESSAGES_PER_ROOM = 1000
+const MAX_MESSAGES_PER_ROOM = 5000
 
 /**
  * Carry a previously-resolved avatar across a presence update.
