@@ -54,7 +54,8 @@
                 "untrusted": "Het certificaat van de server is zelfondertekend of uitgegeven door een onbekende autoriteit, zodat het niet vertrouwd kan worden. Controleer het serveradres of neem contact op met de serverbeheerder.",
                 "generic": "Het beveiligingscertificaat van de server kon niet worden geverifieerd. Controleer het serveradres hieronder of neem contact op met de serverbeheerder."
             }
-        }
+        },
+        "advancedMode": "Geavanceerde modus"
     },
     "sidebar": {
         "messages": "Berichten",
@@ -613,7 +614,8 @@
             "blocked": "Geblokkeerde gebruikers",
             "storage": "Opslag",
             "encryption": "Versleuteling",
-            "privacy": "Privacy"
+            "privacy": "Privacy",
+            "advanced": "Geavanceerd"
         },
         "blocked": {
             "title": "Geblokkeerde gebruikers",
@@ -856,7 +858,14 @@
         "mediaAutoDownloadPrivateOnlyDescription": "Automatisch laden in directe berichten en privéruimtes. In openbare kanalen, tik om te laden.",
         "mediaAutoDownloadNever": "Nooit",
         "mediaAutoDownloadNeverDescription": "Laad nooit automatisch media. Tik om te laden in elk gesprek.",
-        "mediaAutoDownloadStrangerNote": "Media van mensen die niet in uw contacten staan, vereist altijd een tik om te laden, ongeacht wat u hier kiest."
+        "mediaAutoDownloadStrangerNote": "Media van mensen die niet in uw contacten staan, vereist altijd een tik om te laden, ongeacht wat u hier kiest.",
+        "advanced": {
+            "title": "Geavanceerd",
+            "warning": "Deze opties zijn voor gevorderde gebruikers. Ze wijzigen kan de verbinding verstoren of de beveiliging verzwakken.",
+            "empty": "Geavanceerde opties verschijnen hier.",
+            "disableDescription": "Schakel de geavanceerde modus uit om dit gedeelte te verbergen.",
+            "disable": "Geavanceerde modus uitschakelen"
+        }
     },
     "update": {
         "title": "Update beschikbaar",

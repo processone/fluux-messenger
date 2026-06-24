@@ -54,7 +54,8 @@
                 "untrusted": "Certifikát servera je podpísaný sám sebou alebo vydaný neznámou autoritou, preto mu nemožno dôverovať. Skontrolujte adresu servera alebo kontaktujte správcu servera.",
                 "generic": "Bezpečnostný certifikát servera sa nepodarilo overiť. Skontrolujte adresu servera nižšie alebo kontaktujte správcu servera."
             }
-        }
+        },
+        "advancedMode": "Pokročilý režim"
     },
     "sidebar": {
         "messages": "Správy",
@@ -614,7 +615,8 @@
             "blocked": "Blokovaní používatelia",
             "storage": "Úložisko",
             "encryption": "Šifrovanie",
-            "privacy": "Súkromie"
+            "privacy": "Súkromie",
+            "advanced": "Pokročilé"
         },
         "blocked": {
             "title": "Blokovaní používatelia",
@@ -857,7 +859,14 @@
         "mediaAutoDownloadPrivateOnlyDescription": "Načítavať automaticky v priamych správach a súkromných miestnostiach. V verejných kanáloch klepnite pre načítanie.",
         "mediaAutoDownloadNever": "Nikdy",
         "mediaAutoDownloadNeverDescription": "Nikdy nenačítavať médiá automaticky. Klepnite pre načítanie v akomkoľvek rozhovore.",
-        "mediaAutoDownloadStrangerNote": "Médiá od ľudí, ktorí nie sú vo vašich kontaktoch, vždy vyžadujú klepnutie na načítanie, bez ohľadu na vaše nastavenie."
+        "mediaAutoDownloadStrangerNote": "Médiá od ľudí, ktorí nie sú vo vašich kontaktoch, vždy vyžadujú klepnutie na načítanie, bez ohľadu na vaše nastavenie.",
+        "advanced": {
+            "title": "Pokročilé",
+            "warning": "Tieto možnosti sú určené pre pokročilých používateľov. Ich zmena môže narušiť pripojenie alebo oslabiť zabezpečenie.",
+            "empty": "Pokročilé možnosti sa zobrazia tu.",
+            "disableDescription": "Vypnite pokročilý režim, ak chcete túto sekciu skryť.",
+            "disable": "Vypnúť pokročilý režim"
+        }
     },
     "update": {
         "title": "Dostupná aktualizácia",

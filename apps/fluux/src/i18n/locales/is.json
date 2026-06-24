@@ -54,7 +54,8 @@
                 "untrusted": "Vistunarskírteini þjónsins er sjálfundirritað eða gefið út af óþekktum aðila, þar af leiðandi er ekki hægt að treysta því. Athugaðu þjónsföng eða hafðu samband við kerfisstjóra þjónsins.",
                 "generic": "Ekki tókst að staðfesta öryggisvistunarskírteini þjónsins. Athugaðu þjónsföng hér að neðan eða hafðu samband við kerfisstjóra þjónsins."
             }
-        }
+        },
+        "advancedMode": "Ítarlegur hamur"
     },
     "sidebar": {
         "messages": "Skilaboð",
@@ -613,7 +614,8 @@
             "blocked": "Útilokaðir notendur",
             "storage": "Geymsla",
             "encryption": "Dulkóðun",
-            "privacy": "Friðhelgi"
+            "privacy": "Friðhelgi",
+            "advanced": "Ítarlegt"
         },
         "blocked": {
             "title": "Útilokaðir notendur",
@@ -856,7 +858,14 @@
         "mediaAutoDownloadPrivateOnlyDescription": "Hlaða sjálfvirkt í beinni skilaboðum og einkaherbergjum. Í opinberum rásum, ýttu til að hlaða.",
         "mediaAutoDownloadNever": "Aldrei",
         "mediaAutoDownloadNeverDescription": "Aldrei hlaða miðla sjálfvirkt. Ýttu til að hlaða í hvaða samskiptum sem er.",
-        "mediaAutoDownloadStrangerNote": "Miðlar frá einstaklingum sem eru ekki í tengiliðalista þínum þurfa alltaf ýtingu til að hlaðast, óháð því hvað þú velur hér."
+        "mediaAutoDownloadStrangerNote": "Miðlar frá einstaklingum sem eru ekki í tengiliðalista þínum þurfa alltaf ýtingu til að hlaðast, óháð því hvað þú velur hér.",
+        "advanced": {
+            "title": "Ítarlegt",
+            "warning": "Þessir valkostir eru fyrir lengra komna notendur. Að breyta þeim getur rofið tenginguna eða veikt öryggi.",
+            "empty": "Ítarlegir valkostir birtast hér.",
+            "disableDescription": "Slökktu á ítarlegum ham til að fela þennan hluta.",
+            "disable": "Slökkva á ítarlegum ham"
+        }
     },
     "update": {
         "title": "Uppfærsla tiltæk",

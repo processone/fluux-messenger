@@ -54,7 +54,8 @@
                 "untrusted": "Potrdilo strežnika je samopodpisano ali izdano s strani neznane ustanove, zato mu ni mogoče zaupati. Preverite naslov strežnika ali se obrnite na skrbnika strežnika.",
                 "generic": "Varnostnega potrdila strežnika ni mogoče preveriti. Preverite naslov strežnika spodaj ali se obrnite na skrbnika strežnika."
             }
-        }
+        },
+        "advancedMode": "Napredni način"
     },
     "sidebar": {
         "messages": "Sporočila",
@@ -615,7 +616,8 @@
             "blocked": "Blokirani uporabniki",
             "storage": "Shramba",
             "encryption": "Šifriranje",
-            "privacy": "Zasebnost"
+            "privacy": "Zasebnost",
+            "advanced": "Napredno"
         },
         "blocked": {
             "title": "Blokirani uporabniki",
@@ -858,7 +860,14 @@
         "mediaAutoDownloadPrivateOnlyDescription": "Naloži samodejno v neposrednih sporočilih in zasebnih sobah. V javnih kanalih tapnite za nalaganje.",
         "mediaAutoDownloadNever": "Nikoli",
         "mediaAutoDownloadNeverDescription": "Nikoli ne naloži predstavnosti samodejno. Tapnite za nalaganje v katerem koli pogovoru.",
-        "mediaAutoDownloadStrangerNote": "Predstavnost od oseb, ki niso v vaših stikih, vedno zahteva tap za nalaganje, ne glede na vašo izbiro tukaj."
+        "mediaAutoDownloadStrangerNote": "Predstavnost od oseb, ki niso v vaših stikih, vedno zahteva tap za nalaganje, ne glede na vašo izbiro tukaj.",
+        "advanced": {
+            "title": "Napredno",
+            "warning": "Te možnosti so namenjene naprednim uporabnikom. Njihova sprememba lahko prekine povezavo ali oslabi varnost.",
+            "empty": "Napredne možnosti bodo prikazane tukaj.",
+            "disableDescription": "Izklopite napredni način, da skrijete ta razdelek.",
+            "disable": "Izklopi napredni način"
+        }
     },
     "update": {
         "title": "Na voljo posodobitev",

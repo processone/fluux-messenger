@@ -54,7 +54,8 @@
                 "untrusted": "Das Sicherheitszertifikat des Servers ist selbstsigniert oder stammt von einer unbekannten Zertifizierungsstelle, daher kann ihm nicht vertraut werden. Überprüfe die Serveradresse, oder wende dich an den Serveradministrator.",
                 "generic": "Das Sicherheitszertifikat des Servers konnte nicht überprüft werden. Prüfe die Serveradresse unten oder wende dich an den Serveradministrator."
             }
-        }
+        },
+        "advancedMode": "Erweiterter Modus"
     },
     "sidebar": {
         "messages": "Nachrichten",
@@ -615,7 +616,8 @@
             "blocked": "Blockierte Benutzer",
             "storage": "Speicher",
             "encryption": "Verschlüsselung",
-            "privacy": "Datenschutz"
+            "privacy": "Datenschutz",
+            "advanced": "Erweitert"
         },
         "blocked": {
             "title": "Blockierte Benutzer",
@@ -858,7 +860,14 @@
         "mediaAutoDownloadPrivateOnlyDescription": "In Direktnachrichten und privaten Räumen automatisch laden. In öffentlichen Kanälen zum Laden tippen.",
         "mediaAutoDownloadNever": "Nie",
         "mediaAutoDownloadNeverDescription": "Medien niemals automatisch laden. Zum Laden in einer beliebigen Unterhaltung tippen.",
-        "mediaAutoDownloadStrangerNote": "Medien von Personen, die nicht in Ihren Kontakten sind, erfordern immer einen Tipp zum Laden, unabhängig von Ihrer Auswahl hier."
+        "mediaAutoDownloadStrangerNote": "Medien von Personen, die nicht in Ihren Kontakten sind, erfordern immer einen Tipp zum Laden, unabhängig von Ihrer Auswahl hier.",
+        "advanced": {
+            "title": "Erweitert",
+            "warning": "Diese Optionen sind für erfahrene Benutzer. Ihre Änderung kann die Verbindung beeinträchtigen oder die Sicherheit schwächen.",
+            "empty": "Erweiterte Optionen werden hier angezeigt.",
+            "disableDescription": "Deaktivieren Sie den erweiterten Modus, um diesen Bereich auszublenden.",
+            "disable": "Erweiterten Modus deaktivieren"
+        }
     },
     "update": {
         "title": "Update verfügbar",

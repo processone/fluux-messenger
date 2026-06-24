@@ -54,7 +54,8 @@
                 "untrusted": "O certificado do servidor é auto-assinado ou emitido por uma autoridade desconhecida, pelo que não é de confiança. Verifique o endereço do servidor ou contacte o administrador do servidor.",
                 "generic": "Não foi possível verificar o certificado de segurança do servidor. Verifique o endereço do servidor abaixo ou contacte o administrador do servidor."
             }
-        }
+        },
+        "advancedMode": "Modo avançado"
     },
     "sidebar": {
         "messages": "Mensagens",
@@ -615,7 +616,8 @@
             "blocked": "Utilizadores bloqueados",
             "storage": "Armazenamento",
             "encryption": "Criptografia",
-            "privacy": "Privacidade"
+            "privacy": "Privacidade",
+            "advanced": "Avançado"
         },
         "blocked": {
             "title": "Utilizadores bloqueados",
@@ -858,7 +860,14 @@
         "mediaAutoDownloadPrivateOnlyDescription": "Carregar automaticamente em mensagens diretas e salas privadas. Nos canais públicos, toque para carregar.",
         "mediaAutoDownloadNever": "Nunca",
         "mediaAutoDownloadNeverDescription": "Nunca carregar ficheiros multimédia automaticamente. Toque para carregar em qualquer conversa.",
-        "mediaAutoDownloadStrangerNote": "Os ficheiros multimédia de pessoas que não estão nos seus contactos necessitam sempre de um toque para carregar, independentemente do que escolher aqui."
+        "mediaAutoDownloadStrangerNote": "Os ficheiros multimédia de pessoas que não estão nos seus contactos necessitam sempre de um toque para carregar, independentemente do que escolher aqui.",
+        "advanced": {
+            "title": "Avançado",
+            "warning": "Estas opções destinam-se a utilizadores avançados. Alterá-las pode afetar a ligação ou enfraquecer a segurança.",
+            "empty": "As opções avançadas aparecerão aqui.",
+            "disableDescription": "Desative o modo avançado para ocultar esta secção.",
+            "disable": "Desativar o modo avançado"
+        }
     },
     "update": {
         "title": "Atualização disponível",

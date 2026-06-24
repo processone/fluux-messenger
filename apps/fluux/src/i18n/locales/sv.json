@@ -54,7 +54,8 @@
                 "untrusted": "Serverns certifikat är självsignerat eller utfärdat av en okänd instans, så det kan inte betraktas som tillförlitligt. Kontrollera serveradressen eller kontakta serveradministratören.",
                 "generic": "Det gick inte att verifiera serverns säkerhetscertifikat. Kontrollera serveradressen nedan eller kontakta serveradministratören."
             }
-        }
+        },
+        "advancedMode": "Avancerat läge"
     },
     "sidebar": {
         "messages": "Meddelanden",
@@ -613,7 +614,8 @@
             "blocked": "Blockerade användare",
             "storage": "Lagring",
             "encryption": "Kryptering",
-            "privacy": "Sekretess"
+            "privacy": "Sekretess",
+            "advanced": "Avancerat"
         },
         "blocked": {
             "title": "Blockerade användare",
@@ -856,7 +858,14 @@
         "mediaAutoDownloadPrivateOnlyDescription": "Läs in automatiskt i direktmeddelanden och privata rum. I offentliga kanaler, tryck för att läsa in.",
         "mediaAutoDownloadNever": "Aldrig",
         "mediaAutoDownloadNeverDescription": "Läs aldrig in media automatiskt. Tryck för att läsa in i valfri konversation.",
-        "mediaAutoDownloadStrangerNote": "Media från personer som inte finns i dina kontakter kräver alltid ett tryck för att läsas in, oavsett vad du väljer här."
+        "mediaAutoDownloadStrangerNote": "Media från personer som inte finns i dina kontakter kräver alltid ett tryck för att läsas in, oavsett vad du väljer här.",
+        "advanced": {
+            "title": "Avancerat",
+            "warning": "Dessa inställningar är för avancerade användare. Att ändra dem kan bryta anslutningen eller försvaga säkerheten.",
+            "empty": "Avancerade inställningar visas här.",
+            "disableDescription": "Stäng av avancerat läge för att dölja det här avsnittet.",
+            "disable": "Stäng av avancerat läge"
+        }
     },
     "update": {
         "title": "Uppdatering tillgänglig",

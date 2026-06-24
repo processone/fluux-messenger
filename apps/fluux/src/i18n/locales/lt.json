@@ -54,7 +54,8 @@
                 "untrusted": "Serverio sertifikatas yra pasirašytas paties arba išduotas nežinomos institucijos, todėl jo negalima pasitikėti. Patikrinkite serverio adresą arba susisiekite su serverio administratoriumi.",
                 "generic": "Nepavyko patikrinti serverio saugos sertifikato. Patikrinkite serverio adresą žemiau arba susisiekite su serverio administratoriumi."
             }
-        }
+        },
+        "advancedMode": "Išplėstinis režimas"
     },
     "sidebar": {
         "messages": "Žinutės",
@@ -613,7 +614,8 @@
             "blocked": "Užblokuoti vartotojai",
             "storage": "Saugykla",
             "encryption": "Šifravimas",
-            "privacy": "Privatumas"
+            "privacy": "Privatumas",
+            "advanced": "Išplėstiniai"
         },
         "blocked": {
             "title": "Užblokuoti vartotojai",
@@ -856,7 +858,14 @@
         "mediaAutoDownloadPrivateOnlyDescription": "Įkelti automatiškai tiesioginėse žinutėse ir privačiuose kambariuose. Viešuose kanaluose palieskite, kad įkeltumėte.",
         "mediaAutoDownloadNever": "Niekada",
         "mediaAutoDownloadNeverDescription": "Niekada neįkelti medijos automatiškai. Palieskite, kad įkeltumėte bet kuriame pokalbyje.",
-        "mediaAutoDownloadStrangerNote": "Žmonių, kurių nėra jūsų kontaktuose, medija visada reikalauja palietimo, kad įsikeltų, nepaisant čia pasirinktos parinkties."
+        "mediaAutoDownloadStrangerNote": "Žmonių, kurių nėra jūsų kontaktuose, medija visada reikalauja palietimo, kad įsikeltų, nepaisant čia pasirinktos parinkties.",
+        "advanced": {
+            "title": "Išplėstiniai",
+            "warning": "Šios parinktys skirtos pažengusiems naudotojams. Jas pakeitus gali nutrūkti ryšys arba susilpnėti sauga.",
+            "empty": "Išplėstinės parinktys bus rodomos čia.",
+            "disableDescription": "Išjunkite išplėstinį režimą, kad paslėptumėte šį skyrių.",
+            "disable": "Išjungti išplėstinį režimą"
+        }
     },
     "update": {
         "title": "Pasiekiamas atnaujinimas",

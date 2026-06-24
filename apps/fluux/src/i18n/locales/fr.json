@@ -41,6 +41,7 @@
         "madeBy": "Créé par",
         "ejabberdCreator": ", la société qui développe",
         "poweredBy": "Propulsé par",
+        "advancedMode": "Mode avancé",
         "errors": {
             "tlsCertTitle": "Impossible de vérifier le certificat de sécurité du serveur",
             "tlsOtherTitle": "Échec de la connexion sécurisée",
@@ -614,7 +615,15 @@
             "blocked": "Utilisateurs bloqués",
             "storage": "Stockage",
             "encryption": "Chiffrement",
-            "privacy": "Confidentialité"
+            "privacy": "Confidentialité",
+            "advanced": "Avancé"
+        },
+        "advanced": {
+            "title": "Avancé",
+            "warning": "Ces options sont réservées aux utilisateurs avertis. Les modifier peut empêcher la connexion ou affaiblir la sécurité.",
+            "empty": "Les options avancées apparaîtront ici.",
+            "disableDescription": "Désactivez le mode avancé pour masquer cette section.",
+            "disable": "Désactiver le mode avancé"
         },
         "blocked": {
             "title": "Utilisateurs bloqués",

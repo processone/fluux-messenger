@@ -54,7 +54,8 @@
                 "untrusted": "Serveri sertifikaat on iseallkirjastatud või väljastatud tundmatu asutuse poolt, seega ei saa seda usaldada. Kontrolli serveri aadressi või võta ühendust serveri administraatoriga.",
                 "generic": "Serveri turvasertifikaati ei õnnestunud kontrollida. Kontrolli allpool olevat serveri aadressi või võta ühendust serveri administraatoriga."
             }
-        }
+        },
+        "advancedMode": "Täpsem režiim"
     },
     "sidebar": {
         "messages": "Sõnumid",
@@ -615,7 +616,8 @@
             "blocked": "Blokeeritud kasutajad",
             "storage": "Salvestusruum",
             "encryption": "Krüpteerimine",
-            "privacy": "Privaatsus"
+            "privacy": "Privaatsus",
+            "advanced": "Täpsem"
         },
         "blocked": {
             "title": "Blokeeritud kasutajad",
@@ -858,7 +860,14 @@
         "mediaAutoDownloadPrivateOnlyDescription": "Laadi automaatselt otssõnumites ja privaatsetes tubades. Avalikes kanalites, puudutage laadimiseks.",
         "mediaAutoDownloadNever": "Mitte kunagi",
         "mediaAutoDownloadNeverDescription": "Ära kunagi laadi meediat automaatselt. Puudutage laadimiseks mis tahes vestluses.",
-        "mediaAutoDownloadStrangerNote": "Inimestelt pärinev meedia, keda pole teie kontaktide hulgas, vajab laadimiseks alati puudutust, olenemata sellest, mida siin valite."
+        "mediaAutoDownloadStrangerNote": "Inimestelt pärinev meedia, keda pole teie kontaktide hulgas, vajab laadimiseks alati puudutust, olenemata sellest, mida siin valite.",
+        "advanced": {
+            "title": "Täpsem",
+            "warning": "Need valikud on mõeldud kogenud kasutajatele. Nende muutmine võib ühenduse katkestada või turvalisust nõrgendada.",
+            "empty": "Täpsemad valikud kuvatakse siin.",
+            "disableDescription": "Peida see jaotis, lülitades täpsema režiimi välja.",
+            "disable": "Lülita täpsem režiim välja"
+        }
     },
     "update": {
         "title": "Värskendus saadaval",

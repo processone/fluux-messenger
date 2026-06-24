@@ -54,7 +54,8 @@
                 "untrusted": "Certifikat poslužitelja je samopotpisan ili izdan od nepoznatog tijela, pa mu se ne može vjerovati. Provjerite adresu poslužitelja ili kontaktirajte administratora poslužitelja.",
                 "generic": "Nije moguće provjeriti sigurnosni certifikat poslužitelja. Provjerite adresu poslužitelja ispod ili kontaktirajte administratora poslužitelja."
             }
-        }
+        },
+        "advancedMode": "Napredni način"
     },
     "sidebar": {
         "messages": "Poruke",
@@ -613,7 +614,8 @@
             "blocked": "Blokirani korisnici",
             "storage": "Pohrana",
             "encryption": "Šifriranje",
-            "privacy": "Privatnost"
+            "privacy": "Privatnost",
+            "advanced": "Napredno"
         },
         "blocked": {
             "title": "Blokirani korisnici",
@@ -856,7 +858,14 @@
         "mediaAutoDownloadPrivateOnlyDescription": "Učitavaj automatski u izravnim porukama i privatnim sobama. U javnim kanalima, dodirnite za učitavanje.",
         "mediaAutoDownloadNever": "Nikad",
         "mediaAutoDownloadNeverDescription": "Nikad ne učitavaj medije automatski. Dodirnite za učitavanje u bilo kojem razgovoru.",
-        "mediaAutoDownloadStrangerNote": "Mediji od osoba koje nisu u vašim kontaktima uvijek zahtijevaju dodir za učitavanje, bez obzira na vaš odabir ovdje."
+        "mediaAutoDownloadStrangerNote": "Mediji od osoba koje nisu u vašim kontaktima uvijek zahtijevaju dodir za učitavanje, bez obzira na vaš odabir ovdje.",
+        "advanced": {
+            "title": "Napredno",
+            "warning": "Ove su opcije namijenjene naprednim korisnicima. Njihova promjena može narušiti vezu ili oslabiti sigurnost.",
+            "empty": "Napredne će se opcije pojaviti ovdje.",
+            "disableDescription": "Isključite napredni način kako biste sakrili ovaj odjeljak.",
+            "disable": "Isključi napredni način"
+        }
     },
     "update": {
         "title": "Dostupno ažuriranje",

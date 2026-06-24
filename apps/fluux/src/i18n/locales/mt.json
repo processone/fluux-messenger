@@ -54,7 +54,8 @@
                 "untrusted": "Iċ-ċertifikat tal-server huwa ffirmat waħdu jew maħruġ minn awtorità mhux magħrufa, għalhekk ma jistax jiġi fdat. Iċċekkja l-indirizz tal-server jew ikkuntattja l-amministratur tal-server.",
                 "generic": "Ma setax jiġi vverifikat iċ-ċertifikat tas-sigurtà tal-server. Iċċekkja l-indirizz tal-server hawn taħt jew ikkuntattja l-amministratur tal-server."
             }
-        }
+        },
+        "advancedMode": "Modalità avvanzata"
     },
     "sidebar": {
         "messages": "Messaġġi",
@@ -615,7 +616,8 @@
             "blocked": "Utenti Imblokkati",
             "storage": "Ħażna",
             "encryption": "Kriptaġġ",
-            "privacy": "Privatezza"
+            "privacy": "Privatezza",
+            "advanced": "Avvanzat"
         },
         "blocked": {
             "title": "Utenti Imblokkati",
@@ -858,7 +860,14 @@
         "mediaAutoDownloadPrivateOnlyDescription": "Itgħabba awtomatikament fil-messaġġi diretti u l-kmamar privati. Fil-kanali pubbliċi, agħfas biex tgħabba.",
         "mediaAutoDownloadNever": "Qatt",
         "mediaAutoDownloadNeverDescription": "Qatt titgħabba l-midja awtomatikament. Agħfas biex tgħabba f'kull konversazzjoni.",
-        "mediaAutoDownloadStrangerNote": "Il-midja minn persuni li mhumiex fil-kuntatti tiegħek dejjem teħtieġ taps biex titgħabba, irrispettivament minn dak li tagħżel hawn."
+        "mediaAutoDownloadStrangerNote": "Il-midja minn persuni li mhumiex fil-kuntatti tiegħek dejjem teħtieġ taps biex titgħabba, irrispettivament minn dak li tagħżel hawn.",
+        "advanced": {
+            "title": "Avvanzat",
+            "warning": "Dawn l-għażliet huma għal utenti avvanzati. Il-bidla tagħhom tista' tkisser il-konnessjoni jew iddgħajjef is-sigurtà.",
+            "empty": "L-għażliet avvanzati se jidhru hawn.",
+            "disableDescription": "Itfi l-modalità avvanzata biex taħbi din it-taqsima.",
+            "disable": "Itfi l-modalità avvanzata"
+        }
     },
     "update": {
         "title": "Aġġornament Disponibbli",

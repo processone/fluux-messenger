@@ -54,7 +54,8 @@
                 "untrusted": "Servera sertifikāts ir pašparakstīts vai izsniegts no nezināmas iestādes, tāpēc tam nevar uzticēties. Pārbaudiet servera adresi vai sazinieties ar servera administratoru.",
                 "generic": "Neizdevās pārbaudīt servera drošības sertifikātu. Pārbaudiet servera adresi zemāk vai sazinieties ar servera administratoru."
             }
-        }
+        },
+        "advancedMode": "Papildu režīms"
     },
     "sidebar": {
         "messages": "Ziņojumi",
@@ -614,7 +615,8 @@
             "blocked": "Bloķētie lietotāji",
             "storage": "Krātuve",
             "encryption": "Šifrēšana",
-            "privacy": "Privātums"
+            "privacy": "Privātums",
+            "advanced": "Papildu"
         },
         "blocked": {
             "title": "Bloķētie lietotāji",
@@ -857,7 +859,14 @@
         "mediaAutoDownloadPrivateOnlyDescription": "Ielādēt automātiski tiešajās ziņās un privātajās istabās. Publiskajos kanālos, pieskarieties, lai ielādētu.",
         "mediaAutoDownloadNever": "Nekad",
         "mediaAutoDownloadNeverDescription": "Nekad neielādēt multividi automātiski. Pieskarieties, lai ielādētu jebkurā sarunā.",
-        "mediaAutoDownloadStrangerNote": "Multivide no cilvēkiem, kas nav jūsu kontaktos, vienmēr prasa pieskārienu ielādēšanai, neatkarīgi no šeit izvēlētā."
+        "mediaAutoDownloadStrangerNote": "Multivide no cilvēkiem, kas nav jūsu kontaktos, vienmēr prasa pieskārienu ielādēšanai, neatkarīgi no šeit izvēlētā.",
+        "advanced": {
+            "title": "Papildu",
+            "warning": "Šīs opcijas ir paredzētas pieredzējušiem lietotājiem. To maiņa var pārtraukt savienojumu vai vājināt drošību.",
+            "empty": "Papildu opcijas tiks parādītas šeit.",
+            "disableDescription": "Atspējojiet papildu režīmu, lai paslēptu šo sadaļu.",
+            "disable": "Atspējot papildu režīmu"
+        }
     },
     "update": {
         "title": "Pieejams atjauninājums",

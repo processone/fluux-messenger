@@ -54,7 +54,8 @@
                 "untrusted": "Serverens sertifikat er selvsignert eller utstedt av en ukjent myndighet, så det kan ikke stoles på. Sjekk serveradressen eller kontakt serveradministratoren.",
                 "generic": "Serverens sikkerhetssertifikat kunne ikke bekreftes. Sjekk serveradressen nedenfor eller kontakt serveradministratoren."
             }
-        }
+        },
+        "advancedMode": "Avansert modus"
     },
     "sidebar": {
         "messages": "Meldinger",
@@ -613,7 +614,8 @@
             "blocked": "Blokkerte brukere",
             "storage": "Lagring",
             "encryption": "Kryptering",
-            "privacy": "Personvern"
+            "privacy": "Personvern",
+            "advanced": "Avansert"
         },
         "blocked": {
             "title": "Blokkerte brukere",
@@ -856,7 +858,14 @@
         "mediaAutoDownloadPrivateOnlyDescription": "Last inn automatisk i direktemeldinger og private rom. I offentlige kanaler, trykk for å laste inn.",
         "mediaAutoDownloadNever": "Aldri",
         "mediaAutoDownloadNeverDescription": "Last aldri inn medier automatisk. Trykk for å laste inn i en hvilken som helst samtale.",
-        "mediaAutoDownloadStrangerNote": "Medier fra personer som ikke er i kontaktlisten din krever alltid et trykk for å lastes inn, uavhengig av hva du velger her."
+        "mediaAutoDownloadStrangerNote": "Medier fra personer som ikke er i kontaktlisten din krever alltid et trykk for å lastes inn, uavhengig av hva du velger her.",
+        "advanced": {
+            "title": "Avansert",
+            "warning": "Disse innstillingene er for avanserte brukere. Å endre dem kan bryte tilkoblingen eller svekke sikkerheten.",
+            "empty": "Avanserte innstillinger vises her.",
+            "disableDescription": "Slå av avansert modus for å skjule denne delen.",
+            "disable": "Slå av avansert modus"
+        }
     },
     "update": {
         "title": "Oppdatering tilgjengelig",

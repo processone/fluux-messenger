@@ -54,7 +54,8 @@
                 "untrusted": "El certificado del servidor está autofirmado o emitido por una autoridad desconocida, por lo que no se puede confiar en él. Comprueba la dirección del servidor o contacta con el administrador del servidor.",
                 "generic": "No se pudo verificar el certificado de seguridad del servidor. Comprueba la dirección del servidor a continuación o contacta con el administrador del servidor."
             }
-        }
+        },
+        "advancedMode": "Modo avanzado"
     },
     "sidebar": {
         "messages": "Mensajes",
@@ -615,7 +616,8 @@
             "blocked": "Usuarios Bloqueados",
             "storage": "Almacenamiento",
             "encryption": "Cifrado",
-            "privacy": "Privacidad"
+            "privacy": "Privacidad",
+            "advanced": "Avanzado"
         },
         "blocked": {
             "title": "Usuarios Bloqueados",
@@ -858,7 +860,14 @@
         "mediaAutoDownloadPrivateOnlyDescription": "Cargar automáticamente en mensajes directos y salas privadas. En canales públicos, toca para cargar.",
         "mediaAutoDownloadNever": "Nunca",
         "mediaAutoDownloadNeverDescription": "No cargar nunca multimedia automáticamente. Toca para cargar en cualquier conversación.",
-        "mediaAutoDownloadStrangerNote": "El multimedia de personas que no están en tus contactos siempre requiere un toque para cargarse, independientemente de lo que elijas aquí."
+        "mediaAutoDownloadStrangerNote": "El multimedia de personas que no están en tus contactos siempre requiere un toque para cargarse, independientemente de lo que elijas aquí.",
+        "advanced": {
+            "title": "Avanzado",
+            "warning": "Estas opciones son para usuarios avanzados. Cambiarlas puede afectar la conexión o debilitar la seguridad.",
+            "empty": "Las opciones avanzadas aparecerán aquí.",
+            "disableDescription": "Desactiva el modo avanzado para ocultar esta sección.",
+            "disable": "Desactivar el modo avanzado"
+        }
     },
     "update": {
         "title": "Actualizacion Disponible",

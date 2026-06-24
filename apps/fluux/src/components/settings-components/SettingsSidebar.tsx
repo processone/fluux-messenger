@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next'
 import { getVisibleCategories, type SettingsCategory } from './types'
+import { useAdvancedModeStore } from '@/stores/advancedModeStore'
 
 interface SettingsSidebarProps {
   activeCategory: SettingsCategory
@@ -8,6 +9,9 @@ interface SettingsSidebarProps {
 
 export function SettingsSidebar({ activeCategory, onCategoryChange }: SettingsSidebarProps) {
   const { t } = useTranslation()
+  // Subscribe so the list re-renders when advanced mode is toggled; the actual
+  // filtering is done inside getVisibleCategories via isAdvancedMode().
+  useAdvancedModeStore((s) => s.advancedMode)
   const categories = getVisibleCategories()
 
   return (

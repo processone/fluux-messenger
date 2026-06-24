@@ -54,7 +54,8 @@
                 "untrusted": "Certificatul serverului este auto-semnat sau emis de o autoritate necunoscută, deci nu poate fi de încredere. Verificați adresa serverului sau contactați administratorul serverului.",
                 "generic": "Nu s-a putut verifica certificatul de securitate al serverului. Verificați adresa serverului de mai jos sau contactați administratorul serverului."
             }
-        }
+        },
+        "advancedMode": "Mod avansat"
     },
     "sidebar": {
         "messages": "Mesaje",
@@ -615,7 +616,8 @@
             "blocked": "Utilizatori blocați",
             "storage": "Stocare",
             "encryption": "Criptare",
-            "privacy": "Confidențialitate"
+            "privacy": "Confidențialitate",
+            "advanced": "Avansat"
         },
         "blocked": {
             "title": "Utilizatori blocați",
@@ -858,7 +860,14 @@
         "mediaAutoDownloadPrivateOnlyDescription": "Încarcă automat în mesajele directe și camerele private. În canalele publice, atingeți pentru a încărca.",
         "mediaAutoDownloadNever": "Niciodată",
         "mediaAutoDownloadNeverDescription": "Nu încărcați niciodată conținut media automat. Atingeți pentru a încărca în orice conversație.",
-        "mediaAutoDownloadStrangerNote": "Conținutul media de la persoane care nu sunt în contactele dvs. necesită întotdeauna o atingere pentru a se încărca, indiferent de ce alegeți aici."
+        "mediaAutoDownloadStrangerNote": "Conținutul media de la persoane care nu sunt în contactele dvs. necesită întotdeauna o atingere pentru a se încărca, indiferent de ce alegeți aici.",
+        "advanced": {
+            "title": "Avansat",
+            "warning": "Aceste opțiuni sunt pentru utilizatori avansați. Modificarea lor poate afecta conexiunea sau slăbi securitatea.",
+            "empty": "Opțiunile avansate vor apărea aici.",
+            "disableDescription": "Dezactivați modul avansat pentru a ascunde această secțiune.",
+            "disable": "Dezactivați modul avansat"
+        }
     },
     "update": {
         "title": "Actualizare disponibilă",

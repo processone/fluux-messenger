@@ -54,7 +54,8 @@
                 "untrusted": "Serverens certifikat er selvsigneret eller udstedt af en ukendt myndighed, så det kan ikke stoles på. Kontroller serveradressen, eller kontakt serveradministratoren.",
                 "generic": "Serverens sikkerhedscertifikat kunne ikke bekræftes. Kontroller serveradressen nedenfor, eller kontakt serveradministratoren."
             }
-        }
+        },
+        "advancedMode": "Avanceret tilstand"
     },
     "sidebar": {
         "messages": "Beskeder",
@@ -613,7 +614,8 @@
             "blocked": "Blokerede brugere",
             "storage": "Lagring",
             "encryption": "Kryptering",
-            "privacy": "Privatliv"
+            "privacy": "Privatliv",
+            "advanced": "Avanceret"
         },
         "blocked": {
             "title": "Blokerede brugere",
@@ -856,7 +858,14 @@
         "mediaAutoDownloadPrivateOnlyDescription": "Indlæs automatisk i direkte beskeder og private rum. I offentlige kanaler, tryk for at indlæse.",
         "mediaAutoDownloadNever": "Aldrig",
         "mediaAutoDownloadNeverDescription": "Indlæs aldrig medier automatisk. Tryk for at indlæse i enhver samtale.",
-        "mediaAutoDownloadStrangerNote": "Medier fra personer, der ikke er i dine kontakter, kræver altid et tryk for at indlæse, uanset hvad du vælger her."
+        "mediaAutoDownloadStrangerNote": "Medier fra personer, der ikke er i dine kontakter, kræver altid et tryk for at indlæse, uanset hvad du vælger her.",
+        "advanced": {
+            "title": "Avanceret",
+            "warning": "Disse indstillinger er til avancerede brugere. Ændring af dem kan afbryde forbindelsen eller svække sikkerheden.",
+            "empty": "Avancerede indstillinger vises her.",
+            "disableDescription": "Deaktivér avanceret tilstand for at skjule dette afsnit.",
+            "disable": "Deaktivér avanceret tilstand"
+        }
     },
     "update": {
         "title": "Opdatering tilgængelig",
