@@ -226,6 +226,48 @@ describe('useMessageCopyFormatter', () => {
     expect(output).toMatch(/January 15, 2024/)
   })
 
+  // Virtualization: a selection can span rows that have been unmounted from the DOM
+  // (only the visible window + overscan is mounted). The middle messages must come
+  // from the in-memory array, not be silently dropped.
+  it('reconstructs unmounted middle messages from the in-memory array when the selection spans off-screen rows', async () => {
+    type Meta = { id: string; from: string; time: string; body: string; date: string }
+    const messages: Meta[] = Array.from({ length: 5 }, (_, i) => ({
+      id: `m${i + 1}`, from: `U${i + 1}`, time: `14:0${i}`, body: `Body ${i + 1}`, date: '2024-01-15',
+    }))
+    const formatForCopy = (m: Meta) => ({ id: m.id, from: m.from, time: m.time, body: m.body, date: m.date })
+
+    renderHook(() => useMessageCopyFormatter({ containerRef, messages, formatForCopy }))
+    await act(async () => { await new Promise((r) => setTimeout(r, 10)) })
+
+    // Only the first and last rows are mounted (the virtualized window); m2-m4 unmounted.
+    const group = document.createElement('div')
+    group.appendChild(createDateSeparator('2024-01-15'))
+    const first = createMessageElement('m1', 'U1', '14:00', 'Body 1')
+    const last = createMessageElement('m5', 'U5', '14:04', 'Body 5')
+    group.appendChild(first)
+    group.appendChild(last)
+    container.appendChild(group)
+
+    // Select from inside m1's text to inside m5's text (both endpoints mounted).
+    const selection = window.getSelection()!
+    selection.removeAllRanges()
+    const range = document.createRange()
+    range.setStart(first.querySelector('span')!.firstChild!, 0)
+    range.setEnd(last.querySelector('span')!.firstChild!, 1)
+    selection.addRange(range)
+
+    const preventDefault = vi.fn()
+    const setData = vi.fn()
+    container.dispatchEvent(createMockClipboardEvent(setData, preventDefault))
+
+    expect(preventDefault).toHaveBeenCalled()
+    const output: string = setData.mock.calls[0][1]
+    // Every message in the span is present, including the unmounted middle.
+    for (const body of ['Body 1', 'Body 2', 'Body 3', 'Body 4', 'Body 5']) {
+      expect(output).toContain(body)
+    }
+  })
+
   it('should clean up event listener on unmount', async () => {
     const removeEventListenerSpy = vi.spyOn(container, 'removeEventListener')
 

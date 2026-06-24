@@ -11,6 +11,7 @@ import { useFindOnPage, type FindOnPageHandle } from '@/hooks/useFindOnPage'
 import { Avatar } from './Avatar'
 import { selectSelfOccupant, stableNickSet, resolveRoomSender, resolveReplyAvatar, resolveSenderColor, resolveNickColor } from './conversation/roomSenderResolution'
 import { format } from 'date-fns'
+import type { CopyMessageMeta } from '@/utils/buildCopyText'
 import { Shield, Crown, Upload, Loader2, LogIn, AlertCircle, Users, MessageCircle, EyeOff, User, Settings, Ear, X } from 'lucide-react'
 import { ChristmasAnimation } from './ChristmasAnimation'
 import { TextInput, TextArea } from './ui/TextInput'
@@ -972,6 +973,17 @@ export const RoomMessageList = memo(function RoomMessageList({
   // props only for X's rows; every other row's shallow memo bails. The row no longer
   // sees `room` (a fresh Map ref every presence stanza), so it stops re-rendering on
   // unrelated presence churn.
+  // Clipboard metadata for a message, faithful to the row's resolvedSenderName so a
+  // virtualized copy spanning unmounted rows reconstructs identically (see MessageList
+  // formatMessageForCopy). Called only at copy time, so its per-render cost is nil.
+  const formatMessageForCopy = (msg: RoomMessage): CopyMessageMeta => ({
+    id: msg.id,
+    from: resolveRoomSender(msg, room, contactsByJid, selfOccupant).resolvedSenderName,
+    time: formatTime(msg.timestamp),
+    body: msg.body || '',
+    date: format(msg.timestamp, 'yyyy-MM-dd'),
+  })
+
   const renderMessage = (msg: RoomMessage, idx: number, groupMessages: RoomMessage[]) => {
     const sender = resolveRoomSender(msg, room, contactsByJid, selfOccupant)
 
@@ -1072,6 +1084,7 @@ export const RoomMessageList = memo(function RoomMessageList({
       isLoadingOlder={isLoadingOlder}
       isHistoryComplete={isHistoryComplete}
       renderMessage={renderMessage}
+      formatMessageForCopy={formatMessageForCopy}
       lastSentMessageId={lastSentMessageId}
       forwardGapTimestamp={forwardGapTimestamp}
       onCatchUpHistory={onCatchUpHistory}

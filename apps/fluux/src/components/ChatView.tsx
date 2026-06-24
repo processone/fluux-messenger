@@ -1,6 +1,8 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo, useImperativeHandle, memo, type RefObject } from 'react'
 import { useTranslation } from 'react-i18next'
+import { format } from 'date-fns'
 import { detectRenderLoop } from '@/utils/renderLoopDetector'
+import type { CopyMessageMeta } from '@/utils/buildCopyText'
 import { useChatActive, useContactIdentities, useReferencedMessage, getBareJid, getLocalPart, getMyReactions, useXMPPContext, type Message, type ContactIdentity } from '@fluux/sdk'
 import { useVerifiedPeerKeysStore } from '@/stores/verifiedPeerKeysStore'
 import { useToastStore } from '@/stores/toastStore'
@@ -630,6 +632,19 @@ export const ChatMessageList = memo(function ChatMessageList({
     return contactsByJid.get(bareJid)?.name || bareJid.split('@')[0]
   }
 
+  // Clipboard metadata for a message, faithful to ChatMessageBubble's senderName so a
+  // virtualized copy spanning unmounted rows reconstructs identically (see MessageList
+  // formatMessageForCopy). Called only at copy time, so its per-render cost is nil.
+  const formatMessageForCopy = (msg: Message): CopyMessageMeta => ({
+    id: msg.id,
+    from: msg.isOutgoing
+      ? (ownNickname || msg.from.split('@')[0])
+      : (contactsByJid.get(msg.from.split('/')[0])?.name || msg.from.split('@')[0]),
+    time: formatTime(msg.timestamp),
+    body: msg.body || '',
+    date: format(msg.timestamp, 'yyyy-MM-dd'),
+  })
+
   // Render function for messages
   // The onMediaLoad parameter is provided by MessageList from useMessageListScroll hook
   const renderMessage = (msg: Message, idx: number, groupMessages: Message[], _showNewMarker: boolean, onMediaLoad: () => void) => (
@@ -681,6 +696,7 @@ export const ChatMessageList = memo(function ChatMessageList({
       typingUsers={typingUsers}
       formatTypingUser={formatTypingUser}
       renderMessage={renderMessage}
+      formatMessageForCopy={formatMessageForCopy}
       lastSentMessageId={lastSentMessageId}
       onScrollToTop={onScrollToTop}
       isLoadingOlder={isLoadingOlder}
