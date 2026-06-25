@@ -25,6 +25,7 @@ function createMockState(overrides: Partial<RosterState> = {}): RosterState {
     reset: () => {},
     onlineContacts: () => [],
     sortedContacts: () => [],
+    contactSidebarEntries: () => [],
     ...overrides,
   }
 }

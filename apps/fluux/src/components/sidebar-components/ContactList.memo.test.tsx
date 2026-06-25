@@ -54,21 +54,30 @@ vi.mock('@/utils/statusText', () => ({ getTranslatedStatusText: () => '' }))
 
 vi.mock('@/utils/renderLoopDetector', () => ({ detectRenderLoop: () => {} }))
 
+// ContactList now subscribes to the group-encoded sidebar entries and each ContactItem
+// self-subscribes to its own contact by jid. The mocks drive both.
 const removeContact = vi.fn()
 const renameContact = vi.fn(async () => {})
-let mockContacts: Contact[] = []
+let mockEntries: string[] = []
+let mockContacts = new Map<string, Contact>()
 
 vi.mock('@fluux/sdk', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@fluux/sdk')>()
   return {
     ...actual,
-    useRoster: () => ({ sortedContacts: mockContacts, removeContact, renameContact }),
+    useContactIdentities: () => new Map(),
+    useRosterActions: () => ({ removeContact, renameContact }),
     useAdminPermissions: () => ({ isAdmin: false, hasUserCommands: false, canManageUser: () => false }),
+    rosterStore: { getState: () => ({ contacts: mockContacts }) },
   }
 })
 
 vi.mock('@fluux/sdk/react', () => ({
   useConnectionStore: (selector: (s: { status: string }) => unknown) => selector({ status: 'online' }),
+  // Serves both the parent's `contactSidebarEntries()` selector and each row's
+  // `contacts.get(jid)` selector.
+  useRosterStore: (selector: (s: { contactSidebarEntries: () => string[]; contacts: Map<string, Contact> }) => unknown) =>
+    selector({ contactSidebarEntries: () => mockEntries, contacts: mockContacts }),
 }))
 
 const makeContact = (jid: string, over: Partial<Contact> = {}): Contact => ({
@@ -79,33 +88,36 @@ const makeContact = (jid: string, over: Partial<Contact> = {}): Contact => ({
   ...over,
 }) as Contact
 
-describe('ContactList row memoization', () => {
+describe('ContactList id-only subscription', () => {
   beforeEach(() => { avatarRenders.count = 0 })
 
-  it('re-renders only the changed contact row when a single contact updates', () => {
+  it('renders one row per contact from the sidebar entries', () => {
     const alice = makeContact('alice@example.com')
     const bob = makeContact('bob@example.com')
-    const carol = makeContact('carol@example.com')
-    mockContacts = [alice, bob, carol]
+    const carol = makeContact('carol@example.com', { presence: 'offline' })
+    mockContacts = new Map([[alice.jid, alice], [bob.jid, bob], [carol.jid, carol]])
+    mockEntries = ['online alice@example.com', 'online bob@example.com', 'offline carol@example.com']
 
-    // Stable props that must NOT break the row memo across the re-render.
+    render(<ContactList onSelectContact={() => {}} />)
+
+    expect(avatarRenders.count).toBe(3)
+  })
+
+  it('memoizes rows: re-rendering the parent with unchanged entries re-renders no row', () => {
+    const alice = makeContact('alice@example.com')
+    const bob = makeContact('bob@example.com')
+    mockContacts = new Map([[alice.jid, alice], [bob.jid, bob]])
+    mockEntries = ['online alice@example.com', 'online bob@example.com']
+
     const onSelectContact = () => {}
     const { rerender } = render(<ContactList onSelectContact={onSelectContact} />)
-
-    expect(avatarRenders.count).toBeGreaterThan(0)
-    const perRowCost = avatarRenders.count / 3 // avatars per row at mount (3 online contacts)
     const afterMount = avatarRenders.count
+    expect(afterMount).toBe(2)
 
-    // Mirror rosterStore.updatePresence: a NEW contacts array where only bob's object is
-    // replaced (alice & carol keep their refs); bob stays "online-ish" (away ≠ offline) so
-    // group membership is unchanged — only his row's data differs.
-    const bobAway = makeContact('bob@example.com', { presence: 'away' })
-    mockContacts = [alice, bobAway, carol]
+    // Each row gets a stable jid + stable handlers, so a parent re-render must NOT
+    // cascade into the memoized rows (in production only the row whose own contact
+    // changed re-renders, via its per-jid store subscription).
     rerender(<ContactList onSelectContact={onSelectContact} />)
-
-    const delta = avatarRenders.count - afterMount
-    // Only bob's row should re-render — one row's worth, NOT all three.
-    expect(delta).toBeGreaterThan(0)
-    expect(delta).toBeLessThanOrEqual(perRowCost)
+    expect(avatarRenders.count).toBe(afterMount)
   })
 })
