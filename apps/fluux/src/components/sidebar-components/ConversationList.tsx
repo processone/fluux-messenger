@@ -1,20 +1,17 @@
-import React, { useState, useRef, useEffect, memo, useCallback } from 'react'
+import React, { useState, useRef, useEffect, memo } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useShallow } from 'zustand/react/shallow'
 import { useListKeyboardNav, useRouteSync } from '@/hooks'
 import { detectRenderLoop, trackSelectorChange } from '@/utils/renderLoopDetector'
 import {
-  useChat,
-  useRoster,
   chatStore,
   roomStore,
   generateConsistentColorHexSync,
   isPreviewableMessage,
   type Conversation,
-  type Contact,
-  type Room,
 } from '@fluux/sdk'
 import { formatLocalizedPreview } from '@/utils/messagePreviewText'
-import { useChatStore, useConnectionStore } from '@fluux/sdk/react'
+import { useChatStore, useConnectionStore, useRosterStore, useRoomStore } from '@fluux/sdk/react'
 import { Avatar, TypingIndicator } from '../Avatar'
 import { Tooltip } from '../Tooltip'
 import { useSidebarZone, ContactTooltipContent } from './types'
@@ -40,51 +37,33 @@ import {
 export function ConversationList() {
   detectRenderLoop('ConversationList')
   const { t } = useTranslation()
-  const {
-    conversations,
-    activeConversationId,
-    setActiveConversation,
-    deleteConversation,
-    archiveConversation,
-  } = useChat()
-  // Direct store access — avoids subscribing to all room state (activeRoom, activeMessages,
-  // allRooms, roomsWithUnreadCount, etc.) that useRoom() would pull in. During sync,
-  // rapid room updates would cause 500+ renders/second through useRoom().
-  const setActiveRoom = useCallback(async (roomJid: string | null) => {
-    await roomStore.getState().activateRoom(roomJid)
-  }, [])
-  const getRoom = useCallback(
-    (roomJid: string) => roomStore.getState().rooms.get(roomJid),
-    []
-  )
-  const { contacts } = useRoster()
+  // Subscribe ONLY to the sidebar-ordered conversation ids. This re-renders the
+  // list on reorder / membership change, NOT on per-conversation metadata churn
+  // (unread, last message) or presence churn — each ConversationItem subscribes to
+  // its OWN conversation / contact / room by id. (Mirrors RoomsList.)
+  const conversationIds = useChatStore(useShallow((s) => s.conversationSidebarIds()))
+  const activeConversationId = useChatStore((s) => s.activeConversationId)
+  const deleteConversation = useChatStore((s) => s.deleteConversation)
+  const archiveConversation = useChatStore((s) => s.archiveConversation)
   const { navigateToMessages } = useRouteSync()
   const listRef = useRef<HTMLDivElement>(null)
   const zoneRef = useSidebarZone()
 
-  // Diagnostic: track every selector-derived value per render. Dev-only.
-  // Note: typingStates / drafts are NOT subscribed at the list level — each
-  // ConversationItem subscribes to its own entry to avoid re-rendering the
-  // full list on every typing / draft change during background sync.
-  trackSelectorChange('ConversationList', 'conversations', conversations)
+  trackSelectorChange('ConversationList', 'conversationIds', conversationIds)
   trackSelectorChange('ConversationList', 'activeConversationId', activeConversationId)
-  trackSelectorChange('ConversationList', 'contacts', contacts)
-
-  // Create maps for quick lookup
-  const contactMap = new Map(contacts.map(c => [c.jid, c]))
 
   // Identity-stable click handler. useCallback is unreliable here: the React
   // Compiler leaves JSX-only callbacks as fresh closures, which breaks
   // ConversationItem's React.memo and re-renders the whole list on every update.
   // A lazy-init ref + "latest" ref keeps the handler stable for the list's life.
-  const latestNavRef = useRef({ setActiveRoom, setActiveConversation, navigateToMessages })
-  latestNavRef.current = { setActiveRoom, setActiveConversation, navigateToMessages }
+  const latestNavRef = useRef({ navigateToMessages })
+  latestNavRef.current = { navigateToMessages }
   const clickRef = useRef<((convId: string) => void) | null>(null)
   if (!clickRef.current) {
     clickRef.current = (convId: string) => {
       const L = latestNavRef.current
       const hasActive = !!chatStore.getState().activeConversationId
-      void L.setActiveRoom(null)
+      void roomStore.getState().activateRoom(null)
       void chatStore.getState().activateConversation(convId)
       L.navigateToMessages(convId, { replace: hasActive })
     }
@@ -95,18 +74,18 @@ export function ConversationList() {
   // Alt+Arrow navigation is owned by the global handler in useKeyboardShortcuts
   // (goToPreviousItem / goToNextItem). The list reacts via `activeItemId` so the
   // active conversation is scrolled into view regardless of where focus lives.
-  const { selectedIndex, isKeyboardNav, getItemProps, getItemAttribute, getContainerProps } = useListKeyboardNav({
-    items: conversations,
-    onSelect: (conv) => handleConversationClick(conv.id),
+  const { selectedIndex, isKeyboardNav, getItemProps, getItemAttribute, getContainerProps } = useListKeyboardNav<string>({
+    items: conversationIds,
+    onSelect: (id) => handleConversationClick(id),
     listRef,
-    getItemId: (conv) => conv.id,
+    getItemId: (id) => id,
     itemAttribute: 'data-conv-id',
     zoneRef,
     enableBounce: true,
     activeItemId: activeConversationId,
   })
 
-  if (conversations.length === 0) {
+  if (conversationIds.length === 0) {
     return (
       <div className="px-3 py-4 text-fluux-muted text-sm text-center">
         {t('conversations.noConversations')}
@@ -117,13 +96,11 @@ export function ConversationList() {
   return (
     <SidebarListMenuProvider<Conversation>>
       <div ref={listRef} className="px-2 space-y-0.5" {...getContainerProps()}>
-        {conversations.map((conv, index) => (
+        {conversationIds.map((id, index) => (
           <ConversationItem
-            key={conv.id}
-            conversation={conv}
-            contact={conv.type === 'chat' ? contactMap.get(conv.id) : undefined}
-            room={conv.type === 'groupchat' ? getRoom(conv.id) : undefined}
-            isActive={conv.id === activeConversationId}
+            key={id}
+            conversationId={id}
+            isActive={id === activeConversationId}
             isSelected={index === selectedIndex}
             isKeyboardNav={isKeyboardNav}
             onClick={handleConversationClick}
@@ -146,54 +123,41 @@ export function ConversationList() {
 
 export function ArchiveList() {
   const { t } = useTranslation()
-  const {
-    archivedConversations,
-    activeConversationId,
-    setActiveConversation,
-    deleteConversation,
-    unarchiveConversation,
-  } = useChat()
-  const setActiveRoom = useCallback(async (roomJid: string | null) => {
-    await roomStore.getState().activateRoom(roomJid)
-  }, [])
-  const getRoom = useCallback(
-    (roomJid: string) => roomStore.getState().rooms.get(roomJid),
-    []
-  )
-  const { contacts } = useRoster()
+  const archivedIds = useChatStore(useShallow((s) => s.archivedConversationSidebarIds()))
+  const activeConversationId = useChatStore((s) => s.activeConversationId)
+  const deleteConversation = useChatStore((s) => s.deleteConversation)
+  const unarchiveConversation = useChatStore((s) => s.unarchiveConversation)
   const { navigateToArchive } = useRouteSync()
   const listRef = useRef<HTMLDivElement>(null)
   const zoneRef = useSidebarZone()
 
-  const contactMap = new Map(contacts.map(c => [c.jid, c]))
-
   // Identity-stable click handler (see ConversationList for rationale).
-  const latestNavRef = useRef({ setActiveRoom, setActiveConversation, navigateToArchive })
-  latestNavRef.current = { setActiveRoom, setActiveConversation, navigateToArchive }
+  const latestNavRef = useRef({ navigateToArchive })
+  latestNavRef.current = { navigateToArchive }
   const clickRef = useRef<((convId: string) => void) | null>(null)
   if (!clickRef.current) {
     clickRef.current = (convId: string) => {
       const L = latestNavRef.current
       const hasActive = !!chatStore.getState().activeConversationId
-      void L.setActiveRoom(null)
+      void roomStore.getState().activateRoom(null)
       void chatStore.getState().activateConversation(convId)
       L.navigateToArchive(convId, { replace: hasActive })
     }
   }
   const handleConversationClick = clickRef.current
 
-  const { selectedIndex, isKeyboardNav, getItemProps, getItemAttribute, getContainerProps } = useListKeyboardNav({
-    items: archivedConversations,
-    onSelect: (conv) => handleConversationClick(conv.id),
+  const { selectedIndex, isKeyboardNav, getItemProps, getItemAttribute, getContainerProps } = useListKeyboardNav<string>({
+    items: archivedIds,
+    onSelect: (id) => handleConversationClick(id),
     listRef,
-    getItemId: (conv) => conv.id,
+    getItemId: (id) => id,
     itemAttribute: 'data-conv-id',
     zoneRef,
     enableBounce: true,
     activeItemId: activeConversationId,
   })
 
-  if (archivedConversations.length === 0) {
+  if (archivedIds.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-fluux-muted px-4 text-center">
         <Archive className="size-12 mb-3 opacity-50" />
@@ -205,13 +169,11 @@ export function ArchiveList() {
   return (
     <SidebarListMenuProvider<Conversation>>
       <div ref={listRef} className="px-2 space-y-0.5" {...getContainerProps()}>
-        {archivedConversations.map((conv, index) => (
+        {archivedIds.map((id, index) => (
           <ConversationItem
-            key={conv.id}
-            conversation={conv}
-            contact={conv.type === 'chat' ? contactMap.get(conv.id) : undefined}
-            room={conv.type === 'groupchat' ? getRoom(conv.id) : undefined}
-            isActive={conv.id === activeConversationId}
+            key={id}
+            conversationId={id}
+            isActive={id === activeConversationId}
             isSelected={index === selectedIndex}
             isKeyboardNav={isKeyboardNav}
             onClick={handleConversationClick}
@@ -235,9 +197,7 @@ export function ArchiveList() {
 // ============================================================================
 
 interface ConversationItemProps {
-  conversation: Conversation
-  contact?: Contact
-  room?: Room
+  conversationId: string
   isActive: boolean
   isSelected?: boolean
   isKeyboardNav?: boolean
@@ -249,9 +209,7 @@ interface ConversationItemProps {
 }
 
 export const ConversationItem = memo(function ConversationItem({
-  conversation,
-  contact,
-  room,
+  conversationId,
   isActive,
   isSelected,
   isKeyboardNav,
@@ -268,26 +226,35 @@ export const ConversationItem = memo(function ConversationItem({
   const currentLang = i18n.language.split('-')[0]
   const timeFormat = useSettingsStore((s) => s.timeFormat)
 
-  // Per-item subscriptions: each item only re-renders when ITS typing/draft
-  // changes, not when any conversation's state changes.
-  const typingCount = useChatStore((s) => s.typingStates.get(conversation.id)?.size ?? 0)
+  // Per-item subscriptions: each row re-renders only when ITS conversation /
+  // contact / room / typing / draft changes — not when any OTHER conversation
+  // updates or any contact's presence changes. The combined `conversations` map is
+  // updated incrementally, so get(id) is a stable reference until THIS conversation
+  // changes; contacts.get / getRoom are likewise stable per entry. (For a 1:1 the
+  // room lookup is undefined; for a group chat the contact lookup is undefined.)
+  const conversation = useChatStore((s) => s.conversations.get(conversationId))
+  const contact = useRosterStore((s) => s.contacts.get(conversationId))
+  const room = useRoomStore((s) => s.getRoom(conversationId))
+  const typingCount = useChatStore((s) => s.typingStates.get(conversationId)?.size ?? 0)
   const isTyping = typingCount > 0
-  const draft = useChatStore((s) => s.drafts.get(conversation.id))
+  const draft = useChatStore((s) => s.drafts.get(conversationId))
 
-  const isGroupChat = conversation.type === 'groupchat'
   // Room avatars render as a raw <img> (no Avatar fallback). A dead blob: URL
   // (WebKit reclaim across sleep) would otherwise show a broken-image glyph;
   // fall back to the Hash icon instead. Reset when the URL changes.
   const [roomAvatarBroken, setRoomAvatarBroken] = useState(false)
   useEffect(() => { setRoomAvatarBroken(false) }, [room?.avatar])
+
+  if (!conversation) return null
+  const isGroupChat = conversation.type === 'groupchat'
   const menuProps = getItemMenuProps(conversation)
   // While the long-press / context menu is open, highlight the targeted cell so
   // the user can clearly see which conversation the action will apply to.
-  const isMenuTarget = isOpen && targetItem?.id === conversation.id
+  const isMenuTarget = isOpen && targetItem?.id === conversationId
 
   const handleClick = () => {
     if (isOpen || longPressTriggered.current) return
-    onClick(conversation.id)
+    onClick(conversationId)
   }
 
   return (

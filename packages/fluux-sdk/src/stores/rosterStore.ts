@@ -25,6 +25,7 @@ function calculateContactColors(jid: string): { colorLight: string; colorDark: s
  * constant instead of creating a new [] instance each time.
  */
 const EMPTY_CONTACT_ARRAY: Contact[] = []
+const EMPTY_CONTACT_ENTRIES: string[] = []
 
 // Selector memoization caches.
 // sortedContacts() and onlineContacts() are called on every Zustand subscription check.
@@ -97,6 +98,15 @@ interface RosterState {
   // Computed
   onlineContacts: () => Contact[]
   sortedContacts: () => Contact[]
+  /**
+   * Sidebar-ordered contact entries, each encoded as `<group> <jid>` where group is
+   * `online` (any non-offline presence) | `offline` | `errored`, sorted by name within
+   * each group. Referentially stable under useShallow when grouping/order is unchanged,
+   * so ContactList subscribes to this instead of the full Contact objects: a presence
+   * flap that stays in the same group (e.g. online<->away) does NOT re-render the list,
+   * and each ContactItem self-subscribes to its own contact by jid.
+   */
+  contactSidebarEntries: () => string[]
 }
 
 /**
@@ -353,6 +363,28 @@ export const rosterStore = createStore<RosterState>((set, get) => ({
       })
     _cachedSortedContacts = result.length > 0 ? result : EMPTY_CONTACT_ARRAY
     return _cachedSortedContacts
+  },
+
+  contactSidebarEntries: () => {
+    const contacts = get().contacts
+    if (contacts.size === 0) return EMPTY_CONTACT_ENTRIES
+    const online: Contact[] = []
+    const offline: Contact[] = []
+    const errored: Contact[] = []
+    for (const c of contacts.values()) {
+      if (c.presenceError) errored.push(c)
+      else if (c.presence !== 'offline') online.push(c)
+      else offline.push(c)
+    }
+    const byName = (a: Contact, b: Contact) => a.name.localeCompare(b.name)
+    online.sort(byName)
+    offline.sort(byName)
+    errored.sort(byName)
+    return [
+      ...online.map((c) => `online ${c.jid}`),
+      ...offline.map((c) => `offline ${c.jid}`),
+      ...errored.map((c) => `errored ${c.jid}`),
+    ]
   },
 }))
 

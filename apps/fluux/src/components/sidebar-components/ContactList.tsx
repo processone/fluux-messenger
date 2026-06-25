@@ -1,8 +1,9 @@
 import React, { useState, useRef, memo } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useShallow } from 'zustand/react/shallow'
 import { useContextMenu, useTypeToFocus, useListKeyboardNav } from '@/hooks'
-import { useRoster, useAdminPermissions, type Contact } from '@fluux/sdk'
-import { useConnectionStore } from '@fluux/sdk/react'
+import { useContactIdentities, useRosterActions, useAdminPermissions, rosterStore, type Contact } from '@fluux/sdk'
+import { useConnectionStore, useRosterStore } from '@fluux/sdk/react'
 import { Avatar } from '../Avatar'
 import { RenameContactModal } from '../RenameContactModal'
 import { Tooltip } from '../Tooltip'
@@ -22,7 +23,13 @@ interface ContactListProps {
 export function ContactList({ onStartChat, onSelectContact, onManageUser, activeContactJid }: ContactListProps) {
   detectRenderLoop('ContactList')
   const { t } = useTranslation()
-  const { sortedContacts, removeContact, renameContact } = useRoster()
+  // Subscribe to the group-encoded, sidebar-ordered contact entries (presence-stable
+  // under useShallow: a flap that stays in the same group does NOT re-render the list)
+  // and to identity-only data for search (also presence-stable). Each ContactItem
+  // self-subscribes to its own contact by jid. (Mirrors RoomsList / ConversationList.)
+  const entries = useRosterStore(useShallow((s) => s.contactSidebarEntries()))
+  const identities = useContactIdentities()
+  const { removeContact, renameContact } = useRosterActions()
   const connectionStatus = useConnectionStore((s) => s.status)
   const forceOffline = connectionStatus !== 'online'
   const [searchQuery, setSearchQuery] = useState('')
@@ -33,33 +40,38 @@ export function ContactList({ onStartChat, onSelectContact, onManageUser, active
   // Type-to-focus: focus search input when user starts typing anywhere
   useTypeToFocus(searchInputRef)
 
-  // Filter contacts based on search query
-  const filteredContacts = (() => {
-    if (!searchQuery.trim()) {
-      return sortedContacts
-    }
-    const query = searchQuery.toLowerCase()
-    return sortedContacts.filter(contact => {
-      const username = contact.jid.split('@')[0].toLowerCase()
-      return contact.name.toLowerCase().includes(query) || username.includes(query)
-    })
-  })()
+  // Search matches name (from identity-only data, presence-stable) or the local part.
+  const query = searchQuery.trim().toLowerCase()
+  const matchesQuery = (jid: string) => {
+    if (!query) return true
+    const name = identities.get(jid)?.name.toLowerCase() ?? ''
+    return name.includes(query) || jid.split('@')[0].toLowerCase().includes(query)
+  }
 
-  const getDisplayPresence = (contact: Contact) => (forceOffline ? 'offline' : contact.presence)
-
-  // Flat list of contacts in display order (online, offline, errored)
-  const errored = filteredContacts.filter(c => c.presenceError)
-  const online = filteredContacts.filter(c => !c.presenceError && getDisplayPresence(c) !== 'offline')
-  const offline = filteredContacts.filter(c => !c.presenceError && getDisplayPresence(c) === 'offline')
-  const flatContactList = [...online, ...offline, ...errored]
-
-  // Map from jid to flat index for quick lookup
-  const jidToIndex = new Map(flatContactList.map((c, i) => [c.jid, i]))
+  // Decode entries into display sections (jids). When disconnected (forceOffline),
+  // every non-errored contact shows in the offline section. flatJids is the flat
+  // top-to-bottom order used for keyboard navigation.
+  const online: string[] = []
+  const offline: string[] = []
+  const errored: string[] = []
+  const flatJids: string[] = []
+  for (const entry of entries) {
+    const sep = entry.indexOf(' ')
+    const group = entry.slice(0, sep)
+    const jid = entry.slice(sep + 1)
+    if (!matchesQuery(jid)) continue
+    flatJids.push(jid)
+    if (group === 'errored') errored.push(jid)
+    else if (forceOffline || group === 'offline') offline.push(jid)
+    else online.push(jid)
+  }
+  const jidToIndex = new Map(flatJids.map((jid, i) => [jid, i]))
 
   // Reference-STABLE row callbacks for the memoized ContactItem. Their identity must stay
-  // fixed across re-renders or the memo no-ops and the WHOLE roster re-renders row by row
-  // on every presence stanza (rosterStore replaces the contacts Map each time). Same
-  // lazy-init + "latest" ref pattern as RoomsList (compiler-proof; useCallback is stripped).
+  // fixed across re-renders or the memo no-ops and the WHOLE roster re-renders row by row.
+  // Same lazy-init + "latest" ref pattern as RoomsList (compiler-proof; useCallback is
+  // stripped). onSelect / onStartChat take the Contact (ContactItem self-subscribes and
+  // passes its own); the rest take a jid.
   const latestRef = useRef({ onSelectContact, onStartChat, removeContact, renameContact, onManageUser })
   latestRef.current = { onSelectContact, onStartChat, removeContact, renameContact, onManageUser }
   const rowHandlersRef = useRef<{
@@ -79,19 +91,22 @@ export function ContactList({ onStartChat, onSelectContact, onManageUser, active
     }
   }
   const rowHandlers = rowHandlersRef.current
-  // Manage handler is exposed only when the capability exists (parent passed onManageUser);
-  // ContactItem keys its "Manage" menu item off this being defined. `onManageUser` is a
-  // stable prop so this derived value stays referentially stable across renders.
   const onManageUserStable = onManageUser ? rowHandlers.onManageUser : undefined
 
-  // Keyboard navigation using the hook
-  // Plain arrows: just highlight, Alt+arrows: navigate AND open contact profile
-  const { selectedIndex, isKeyboardNav, getItemProps, getContainerProps } = useListKeyboardNav({
-    items: flatContactList,
-    onSelect: rowHandlers.onSelect,
+  // Keyboard navigation works over the flat jid list; onSelect resolves jid -> contact.
+  const selectByJidRef = useRef<((jid: string) => void) | null>(null)
+  if (!selectByJidRef.current) {
+    selectByJidRef.current = (jid: string) => {
+      const c = rosterStore.getState().contacts.get(jid)
+      if (c) rowHandlers.onSelect(c)
+    }
+  }
+  const { selectedIndex, isKeyboardNav, getItemProps, getContainerProps } = useListKeyboardNav<string>({
+    items: flatJids,
+    onSelect: selectByJidRef.current,
     listRef,
     searchInputRef,
-    getItemId: (contact) => contact.jid,
+    getItemId: (jid) => jid,
     itemAttribute: 'data-contact-jid',
     zoneRef,
     enableBounce: true,
@@ -101,7 +116,7 @@ export function ContactList({ onStartChat, onSelectContact, onManageUser, active
   // Active contact gets the marker-bar treatment (parity with Messages/Rooms).
   // Keyboard-nav highlight is a separate, transient state that can coexist with active.
   const activeJid = activeContactJid ?? null
-  const selectedJid = selectedIndex >= 0 ? (flatContactList[selectedIndex]?.jid ?? null) : null
+  const selectedJid = selectedIndex >= 0 ? (flatJids[selectedIndex] ?? null) : null
 
   return (
     <div className="flex flex-col h-full">
@@ -126,11 +141,11 @@ export function ContactList({ onStartChat, onSelectContact, onManageUser, active
 
       {/* Contact list */}
       <div ref={listRef} className="flex-1 overflow-y-auto px-2 pb-2" {...getContainerProps()}>
-        {sortedContacts.length === 0 ? (
+        {entries.length === 0 ? (
           <div className="px-1 py-4 text-fluux-muted text-sm text-center">
             {t('contacts.noContacts')}
           </div>
-        ) : filteredContacts.length === 0 ? (
+        ) : flatJids.length === 0 ? (
           <div className="px-1 py-4 text-fluux-muted text-sm text-center">
             {t('contacts.noContactsFound')}
           </div>
@@ -139,7 +154,7 @@ export function ContactList({ onStartChat, onSelectContact, onManageUser, active
             {online.length > 0 && (
               <ContactGroup
                 title={`${t('contacts.online')} — ${online.length}`}
-                contacts={online}
+                jids={online}
                 activeJid={activeJid}
                 selectedJid={selectedJid}
                 isKeyboardNav={isKeyboardNav}
@@ -156,7 +171,7 @@ export function ContactList({ onStartChat, onSelectContact, onManageUser, active
             {offline.length > 0 && (
               <ContactGroup
                 title={`${t('contacts.offline')} — ${offline.length}`}
-                contacts={offline}
+                jids={offline}
                 activeJid={activeJid}
                 selectedJid={selectedJid}
                 isKeyboardNav={isKeyboardNav}
@@ -173,7 +188,7 @@ export function ContactList({ onStartChat, onSelectContact, onManageUser, active
             {errored.length > 0 && (
               <ContactGroup
                 title={`${t('contacts.error')} — ${errored.length}`}
-                contacts={errored}
+                jids={errored}
                 activeJid={activeJid}
                 selectedJid={selectedJid}
                 isKeyboardNav={isKeyboardNav}
@@ -196,7 +211,7 @@ export function ContactList({ onStartChat, onSelectContact, onManageUser, active
 
 interface ContactGroupProps {
   title: string
-  contacts: Contact[]
+  jids: string[]
   activeJid: string | null
   selectedJid: string | null
   isKeyboardNav: boolean
@@ -216,7 +231,7 @@ interface ContactGroupProps {
 
 function ContactGroup({
   title,
-  contacts,
+  jids,
   activeJid,
   selectedJid,
   isKeyboardNav,
@@ -235,15 +250,15 @@ function ContactGroup({
         {title}
       </h3>
       <div className="space-y-0.5">
-        {contacts.map((contact) => {
-          const flatIndex = jidToIndex.get(contact.jid) ?? -1
+        {jids.map((jid) => {
+          const flatIndex = jidToIndex.get(jid) ?? -1
           const itemProps = getItemProps(flatIndex)
           return (
             <ContactItem
-              key={contact.jid}
-              contact={contact}
-              isActive={contact.jid === activeJid}
-              isSelected={contact.jid === selectedJid}
+              key={jid}
+              jid={jid}
+              isActive={jid === activeJid}
+              isSelected={jid === selectedJid}
               isKeyboardNav={isKeyboardNav}
               onSelect={onSelect}
               onStartChat={onStartChat}
@@ -262,7 +277,7 @@ function ContactGroup({
 }
 
 interface ContactItemProps {
-  contact: Contact
+  jid: string
   isActive?: boolean
   isSelected?: boolean
   isKeyboardNav?: boolean
@@ -277,7 +292,7 @@ interface ContactItemProps {
 }
 
 const ContactItem = memo(function ContactItem({
-  contact,
+  jid,
   isActive,
   isSelected,
   isKeyboardNav,
@@ -298,9 +313,14 @@ const ContactItem = memo(function ContactItem({
   // gets its own subscription, so narrower selectors mean fewer rows
   // re-render on unrelated admin store updates.
   const { isAdmin, hasUserCommands, canManageUser } = useAdminPermissions()
+  // Per-row subscription: this row re-renders only when ITS contact changes
+  // (presence, avatar, name), not when any other contact's presence flaps.
+  const contact = useRosterStore((s) => s.contacts.get(jid))
+
+  if (!contact) return null
 
   // Check if admin can manage this specific user (based on vhost rights)
-  const showManageOption = isAdmin && hasUserCommands && onManageUser && canManageUser(contact.jid)
+  const showManageOption = isAdmin && hasUserCommands && onManageUser && canManageUser(jid)
 
   // Handle single-click to select contact (shows profile view)
   const handleClick = () => {
@@ -315,7 +335,7 @@ const ContactItem = memo(function ContactItem({
 
   const handleRemove = () => {
     menu.close()
-    onRemove(contact.jid)
+    onRemove(jid)
   }
 
   const handleRename = () => {
@@ -325,7 +345,7 @@ const ContactItem = memo(function ContactItem({
 
   const handleManage = () => {
     menu.close()
-    onManageUser?.(contact.jid)
+    onManageUser?.(jid)
   }
 
   return (

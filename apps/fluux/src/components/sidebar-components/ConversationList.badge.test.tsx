@@ -41,11 +41,27 @@ vi.mock('@/stores/settingsStore', () => ({
     selector({ timeFormat: '24h' }),
 }))
 
+// ConversationItem self-subscribes to its conversation / contact / room by id, so
+// the mock returns the conversation under test via conversations.get(id).
+const h = vi.hoisted(() => ({ conversation: null as Conversation | null }))
+
 vi.mock('@fluux/sdk/react', () => ({
   useConnectionStore: (selector: (s: { status: string }) => unknown) =>
     selector({ status: 'online' }),
-  useChatStore: (selector: (s: { typingStates: Map<string, Set<string>>; drafts: Map<string, string> }) => unknown) =>
-    selector({ typingStates: new Map(), drafts: new Map() }),
+  useChatStore: (selector: (s: {
+    conversations: Map<string, Conversation>
+    typingStates: Map<string, Set<string>>
+    drafts: Map<string, string>
+  }) => unknown) =>
+    selector({
+      conversations: new Map(h.conversation ? [[h.conversation.id, h.conversation]] : []),
+      typingStates: new Map(),
+      drafts: new Map(),
+    }),
+  useRosterStore: (selector: (s: { contacts: Map<string, unknown> }) => unknown) =>
+    selector({ contacts: new Map() }),
+  useRoomStore: (selector: (s: { getRoom: (jid: string) => undefined }) => unknown) =>
+    selector({ getRoom: () => undefined }),
 }))
 
 const makeConversation = (over: Partial<Conversation> = {}): Conversation => ({
@@ -62,14 +78,16 @@ const makeConversation = (over: Partial<Conversation> = {}): Conversation => ({
   ...over,
 }) as Conversation
 
-const renderItem = (conversation: Conversation) =>
-  render(
+const renderItem = (conversation: Conversation) => {
+  h.conversation = conversation
+  return render(
     <ConversationItem
-      conversation={conversation}
+      conversationId={conversation.id}
       isActive={false}
       onClick={() => {}}
     />
   )
+}
 
 describe('ConversationItem unread badge placement', () => {
   it('anchors the unread badge to the avatar as an absolute overlay', () => {
