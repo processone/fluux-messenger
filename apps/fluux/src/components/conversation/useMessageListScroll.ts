@@ -50,6 +50,26 @@ const PREPEND_COOLDOWN_MS = 500 // time to keep prepend flag after restore (prev
 const MEDIA_LOAD_DEBOUNCE_MS = 150 // debounce time for batching image load events
 
 // ============================================================================
+// KINETIC SCROLL
+// ============================================================================
+
+/**
+ * Cancel an in-flight or boundary-parked kinetic (momentum) scroll on `el`.
+ *
+ * Toggling overflow to hidden and forcing a reflow cancels WebKit's momentum animation; the
+ * caller restores the scroll position immediately after. Used by the MAM-prepend restore so a
+ * fast scroll-up fling's residual velocity can't resume into the freshly prepended content and
+ * overshoot the anchor (blank window / jump to bottom on Tauri WebKitGTK). `overflowY = ''`
+ * yields the property back to the element's CSS class (overflow-y-auto). No-op for programmatic
+ * scrolls, which carry no momentum — so it cannot be exercised by the Playwright/preview harness.
+ */
+export function cancelKineticScroll(el: HTMLElement): void {
+  el.style.overflowY = 'hidden'
+  void el.offsetHeight // force reflow so the overflow change (and momentum cancel) takes effect
+  el.style.overflowY = ''
+}
+
+// ============================================================================
 // ANCHOR HELPERS (content-stable scroll restoration)
 // ============================================================================
 
@@ -1253,6 +1273,16 @@ export function useMessageListScroll({
       scrollTopBefore: scroller.scrollTop,
       maxScrollTop,
     })
+
+    // Cancel any parked kinetic (momentum) scroll BEFORE positioning. On a fast scroll-up
+    // fling the user reaches the top boundary with residual velocity that WebKit parks and
+    // then resumes once we prepend older messages — overshooting the restored anchor and
+    // landing in an unmounted region (blank window) or driving scrollTop out of bounds (jump
+    // to bottom). Toggling overflow off, forcing a reflow, and turning it back on cancels
+    // WebKit's momentum animation. This runs inside the useLayoutEffect (pre-paint), so there
+    // is no visible scrollbar flash. Programmatic scrolls carry no momentum, so this is inert
+    // in the Playwright/preview harness — the fix is only observable on real hardware.
+    cancelKineticScroll(scroller)
 
     // Set via the virtualizer's own scroll path so @tanstack's internal state stays
     // consistent and it does not re-process this as an external scroll event.
