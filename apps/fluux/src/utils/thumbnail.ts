@@ -46,6 +46,8 @@ const MIME_TYPE_MAP: Record<string, string> = {
   'svg': 'image/svg+xml',
   // Documents
   'pdf': 'application/pdf',
+  // DjVu is a document format whose official IANA type starts with image/ but browsers cannot render it
+  'djvu': 'application/x-djvu', 'djv': 'application/x-djvu',
   'doc': 'application/msword',
   'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   'xls': 'application/vnd.ms-excel',
@@ -99,10 +101,24 @@ const MIME_TYPE_MAP: Record<string, string> = {
 }
 
 /**
+ * image/* MIME types whose official IANA registration starts with "image/" but which
+ * browsers cannot render as images. Remap them to application/ so they show as file cards.
+ */
+const NON_RENDERABLE_IMAGE_TYPES: Record<string, string> = {
+  'image/vnd.djvu': 'application/x-djvu',
+  'image/x-djvu': 'application/x-djvu',
+}
+
+/**
  * Get effective MIME type for a file.
  * Uses browser-detected type if valid, otherwise falls back to extension lookup.
  */
 export function getEffectiveMimeType(file: File): string {
+  // Remap image/ types that browsers cannot actually render (e.g. DjVu)
+  if (file.type && NON_RENDERABLE_IMAGE_TYPES[file.type]) {
+    return NON_RENDERABLE_IMAGE_TYPES[file.type]
+  }
+
   // Browser detected type takes priority if it's specific (not application/octet-stream)
   if (file.type && file.type !== 'application/octet-stream' && !file.type.startsWith('application/')) {
     return file.type
