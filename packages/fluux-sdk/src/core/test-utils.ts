@@ -735,6 +735,7 @@ export const createMockStores = (): MockStoreBindings => ({
     loadMessagesFromCache: vi.fn().mockResolvedValue([]),
     loadPreviewFromCache: vi.fn().mockResolvedValue(null),
     mergeRoomMembers: vi.fn(),
+    updateMemberAffiliation: vi.fn(),
   },
   admin: {
     setIsAdmin: vi.fn(),
@@ -1005,6 +1006,7 @@ export const createMockStoreRefs = (): MockStoreRefs => ({
     removeBookmark: vi.fn(),
     triggerAnimation: vi.fn(),
     mergeRoomMembers: vi.fn(),
+    updateMemberAffiliation: vi.fn(),
     getRoom: vi.fn().mockReturnValue(undefined),
     rooms: new Map(),
     applyRemoteDisplayed: vi.fn(),

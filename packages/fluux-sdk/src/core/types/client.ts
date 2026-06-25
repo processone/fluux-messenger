@@ -9,7 +9,7 @@ import type { Element } from '@xmpp/client'
 import type { ConnectionStatus, ConnectionMethod } from './connection'
 import type { Message, Conversation } from './chat'
 import type { PresenceStatus, PresenceShow, Contact, VCardInfo } from './roster'
-import type { Room, RoomOccupant, RoomMessage, RoomMember } from './room'
+import type { Room, RoomOccupant, RoomMessage, RoomMember, RoomAffiliation } from './room'
 import type { SystemNotificationType } from './events'
 import type { ServerInfo } from './discovery'
 import type { HttpUploadService } from './upload'
@@ -210,6 +210,8 @@ export interface StoreBindings {
     loadPreviewFromCache: (roomJid: string) => Promise<RoomMessage | null>
     // XEP-0045: Merge affiliated members (for offline member display, avatar resolution, mentions)
     mergeRoomMembers: (roomJid: string, members: RoomMember[], contactAvatarLookup?: (jid: string) => string | null) => void
+    // XEP-0045: Apply a single affiliation change to the cached member list (none/outcast remove, owner/admin/member upsert)
+    updateMemberAffiliation: (roomJid: string, userJid: string, affiliation: RoomAffiliation) => void
   }
   admin: {
     setIsAdmin: (isAdmin: boolean) => void

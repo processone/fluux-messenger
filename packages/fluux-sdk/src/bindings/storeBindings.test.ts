@@ -440,6 +440,20 @@ describe('createStoreBindings', () => {
       expect(avatarLookup('alice@example.com')).toBe('blob:avatar-data')
       expect(avatarLookup('unknown@example.com')).toBeNull()
     })
+
+    it('should handle room:affiliation-changed by updating the cached member list', () => {
+      mockClient.emit('room:affiliation-changed', {
+        roomJid: 'room@conference.example.com',
+        userJid: 'xram@zinid.ru',
+        affiliation: 'none',
+      })
+
+      expect(mockStores.room.updateMemberAffiliation).toHaveBeenCalledWith(
+        'room@conference.example.com',
+        'xram@zinid.ru',
+        'none'
+      )
+    })
   })
 
   describe('roster events', () => {

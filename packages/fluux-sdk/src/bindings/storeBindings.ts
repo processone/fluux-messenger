@@ -407,6 +407,11 @@ export function createStoreBindings(
     })
   })
 
+  on('room:affiliation-changed', ({ roomJid, userJid, affiliation }) => {
+    const stores = getStores()
+    stores.room.updateMemberAffiliation(roomJid, userJid, affiliation)
+  })
+
   // ============================================================================
   // Roster Events
   // ============================================================================
