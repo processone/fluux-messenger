@@ -191,7 +191,7 @@ export function MessageList<T extends BaseMessage>({
   const scrollContainerRef = useRef<HTMLDivElement>(null)
 
   // --------------------------------------------------------------------------
-  // VIRTUALIZATION (behind the enableMessageVirtualization flag, default OFF)
+  // VIRTUALIZATION (behind the enableMessageVirtualization flag, default ON)
   // --------------------------------------------------------------------------
 
   const showLoading = !!(isLoading && loadingState)
