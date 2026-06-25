@@ -225,6 +225,7 @@ export function createDefaultStoreBindings(options: DefaultStoreBindingsOptions 
       loadMessagesFromCache: roomStore.getState().loadMessagesFromCache,
       loadPreviewFromCache: roomStore.getState().loadPreviewFromCache,
       mergeRoomMembers: roomStore.getState().mergeRoomMembers,
+      updateMemberAffiliation: roomStore.getState().updateMemberAffiliation,
     },
     admin: {
       setIsAdmin: adminStore.getState().setIsAdmin,

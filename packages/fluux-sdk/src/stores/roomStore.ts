@@ -7,6 +7,7 @@ import type {
   RoomRuntime,
   RoomOccupant,
   RoomAffiliation,
+  RoomMember,
   RoomMessage,
   MAMQueryState,
   RSMResponse,
@@ -351,6 +352,12 @@ export interface RoomState {
   updateOccupantAvatars: (roomJid: string, updates: Array<{ nick: string; avatar: string | null; avatarHash: string | null }>) => void
   setSelfOccupant: (roomJid: string, occupant: RoomOccupant) => void
   mergeRoomMembers: (roomJid: string, members: Array<{ jid: string; nick?: string; affiliation: RoomAffiliation }>, contactAvatarLookup?: (jid: string) => string | null) => void
+  /**
+   * Apply a single affiliation change to the cached `affiliatedMembers` list (XEP-0045 admin set).
+   * owner/admin/member upsert the member; none/outcast remove them. Keeps the occupant
+   * sidebar's offline-member list in sync after a change without a full member re-query.
+   */
+  updateMemberAffiliation: (roomJid: string, userJid: string, affiliation: RoomAffiliation) => void
   getRoom: (roomJid: string) => Room | undefined
   switchAccount: (jid: string | null) => void
   reset: () => void
@@ -995,6 +1002,43 @@ export const roomStore = createStore<RoomState>()(
           affiliatedMembers: members,
           ...(cacheChanged && { nickToJidCache, nickToAvatarCache }),
         })
+      }
+
+      return { rooms: newRooms, roomRuntime: newRuntime }
+    })
+  },
+
+  updateMemberAffiliation: (roomJid, userJid, affiliation) => {
+    set((state) => {
+      const existing = state.rooms.get(roomJid)
+      if (!existing) return state
+
+      const current = existing.affiliatedMembers ?? []
+      // owner/admin/member are the tiers shown as offline members; none/outcast are not.
+      const isAffiliated =
+        affiliation === 'owner' || affiliation === 'admin' || affiliation === 'member'
+
+      let next: RoomMember[]
+      if (isAffiliated) {
+        const idx = current.findIndex((m) => m.jid === userJid)
+        if (idx >= 0) {
+          if (current[idx].affiliation === affiliation) return state // no change
+          next = current.map((m) => (m.jid === userJid ? { ...m, affiliation } : m))
+        } else {
+          next = [...current, { jid: userJid, affiliation }]
+        }
+      } else {
+        next = current.filter((m) => m.jid !== userJid)
+        if (next.length === current.length) return state // nothing to remove
+      }
+
+      const newRooms = new Map(state.rooms)
+      newRooms.set(roomJid, { ...existing, affiliatedMembers: next })
+
+      const newRuntime = new Map(state.roomRuntime)
+      const existingRuntime = newRuntime.get(roomJid)
+      if (existingRuntime) {
+        newRuntime.set(roomJid, { ...existingRuntime, affiliatedMembers: next })
       }
 
       return { rooms: newRooms, roomRuntime: newRuntime }

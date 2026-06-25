@@ -3504,6 +3504,100 @@ describe('roomStore', () => {
     })
   })
 
+  describe('updateMemberAffiliation', () => {
+    const roomJid = 'room@conference.example.com'
+
+    beforeEach(() => {
+      roomStore.getState().addRoom(createRoom(roomJid, { joined: true }))
+    })
+
+    function seedMembers() {
+      roomStore.getState().mergeRoomMembers(roomJid, [
+        { jid: 'alice@example.com', nick: 'Alice', affiliation: 'owner' as const },
+        { jid: 'bob@example.com', nick: 'Bob', affiliation: 'member' as const },
+      ])
+    }
+
+    it("removes a member from affiliatedMembers when affiliation is set to 'none'", () => {
+      seedMembers()
+
+      roomStore.getState().updateMemberAffiliation(roomJid, 'bob@example.com', 'none')
+
+      const room = roomStore.getState().rooms.get(roomJid)
+      expect(room?.affiliatedMembers?.map((m) => m.jid)).toEqual(['alice@example.com'])
+    })
+
+    it('removes the last affiliated member (empty-list edge case)', () => {
+      roomStore.getState().mergeRoomMembers(roomJid, [
+        { jid: 'bob@example.com', nick: 'Bob', affiliation: 'member' as const },
+      ])
+
+      roomStore.getState().updateMemberAffiliation(roomJid, 'bob@example.com', 'none')
+
+      const room = roomStore.getState().rooms.get(roomJid)
+      expect(room?.affiliatedMembers).toEqual([])
+    })
+
+    it("removes a member when affiliation is set to 'outcast' (banned, not an offline member)", () => {
+      seedMembers()
+
+      roomStore.getState().updateMemberAffiliation(roomJid, 'alice@example.com', 'outcast')
+
+      const room = roomStore.getState().rooms.get(roomJid)
+      expect(room?.affiliatedMembers?.map((m) => m.jid)).toEqual(['bob@example.com'])
+    })
+
+    it('updates an existing member affiliation in place (member → admin)', () => {
+      seedMembers()
+
+      roomStore.getState().updateMemberAffiliation(roomJid, 'bob@example.com', 'admin')
+
+      const room = roomStore.getState().rooms.get(roomJid)
+      const bob = room?.affiliatedMembers?.find((m) => m.jid === 'bob@example.com')
+      expect(bob?.affiliation).toBe('admin')
+      expect(room?.affiliatedMembers).toHaveLength(2)
+    })
+
+    it('adds an offline user promoted to an affiliation when not already in the list', () => {
+      seedMembers()
+
+      roomStore.getState().updateMemberAffiliation(roomJid, 'carol@example.com', 'member')
+
+      const room = roomStore.getState().rooms.get(roomJid)
+      const carol = room?.affiliatedMembers?.find((m) => m.jid === 'carol@example.com')
+      expect(carol).toEqual({ jid: 'carol@example.com', affiliation: 'member' })
+      expect(room?.affiliatedMembers).toHaveLength(3)
+    })
+
+    it("is a no-op when removing a user not in the list", () => {
+      seedMembers()
+
+      roomStore.getState().updateMemberAffiliation(roomJid, 'dave@example.com', 'none')
+
+      const room = roomStore.getState().rooms.get(roomJid)
+      expect(room?.affiliatedMembers?.map((m) => m.jid)).toEqual([
+        'alice@example.com',
+        'bob@example.com',
+      ])
+    })
+
+    it('updates roomRuntime alongside the rooms map', () => {
+      seedMembers()
+
+      roomStore.getState().updateMemberAffiliation(roomJid, 'bob@example.com', 'none')
+
+      const runtime = roomStore.getState().roomRuntime.get(roomJid)
+      expect(runtime?.affiliatedMembers?.map((m) => m.jid)).toEqual(['alice@example.com'])
+    })
+
+    it('does nothing for a non-existent room', () => {
+      // Should not throw
+      roomStore
+        .getState()
+        .updateMemberAffiliation('nonexistent@conference.example.com', 'alice@example.com', 'none')
+    })
+  })
+
   describe('updateMessage', () => {
     it('should update message found by client id', () => {
       const roomJid = 'room@conference.example.com'
