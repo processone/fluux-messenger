@@ -21,8 +21,9 @@ import { buildScopedStorageKey } from '../utils/storageScope'
 // regardless of array size, so the limit is raised to allow real scroll-back — at the old
 // 1000 a prepend at the cap trimmed the just-loaded older batch straight back off.
 // FUTURE: the goal is to remove this cap entirely (unlimited scroll-back — "go back anywhere
-// in time"). Pair removal with the adaptive size estimate so getTotalSize/scrollbar stay
-// sane on huge arrays; Phase-1 conversation-switch eviction bounds RAM. 5000 is interim.
+// in time"). Removal needs an estimate strategy that keeps getTotalSize/scrollbar accurate on
+// a huge mostly-estimated array (a running-average estimate was tried but collapsed — see
+// tanstackMessageVirtualizer); Phase-1 conversation-switch eviction bounds RAM. 5000 is interim.
 const MAX_MESSAGES_PER_CONVERSATION = 5000
 const STORAGE_KEY_BASE = 'xmpp-chat-storage'
 

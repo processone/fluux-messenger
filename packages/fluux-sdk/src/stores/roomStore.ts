@@ -40,8 +40,9 @@ import { buildScopedStorageKey } from '../utils/storageScope'
  * batch straight back off (load-older became a no-op past 1000).
  *
  * FUTURE: the goal is to remove this cap entirely (unlimited scroll-back — "go back anywhere
- * in time"). Pair removal with the adaptive size estimate so getTotalSize/scrollbar stay sane
- * on huge arrays; Phase-1 conversation-switch eviction bounds RAM. 5000 is an interim step.
+ * in time"). Removal needs an estimate strategy that keeps getTotalSize/scrollbar accurate on
+ * a huge mostly-estimated array (a running-average estimate was tried but collapsed — see
+ * tanstackMessageVirtualizer); Phase-1 conversation-switch eviction bounds RAM. 5000 is interim.
  */
 const MAX_MESSAGES_PER_ROOM = 5000
 

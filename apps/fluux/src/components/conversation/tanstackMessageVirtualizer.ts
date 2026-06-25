@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react'
+import { useCallback } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import type { MessageVirtualizer } from './messageVirtualizer'
 
@@ -22,28 +22,19 @@ interface Args {
 export function useTanstackMessageVirtualizer({
   items, indexById, scrollRef, estimateSize = 64,
 }: Args): MessageVirtualizer {
-  // Adaptive row-height estimate: seeded at `estimateSize`, then tracks a running average
-  // of measured (mounted) rows. A constant estimate makes a large mostly-UNMEASURED array
-  // drift — and MAM prepend is the worst case: it inserts rows above the viewport that are
-  // never mounted (so never measured), so getTotalSize and the anchor offset are off by the
-  // estimate error of every prepended row. An average that matches real rows keeps both close.
-  const avgSizeRef = useRef(estimateSize)
+  // NOTE: a measured running-average `estimateSize` was tried (to tighten the MAM-prepend
+  // immediate restore, whose prepended rows are unmeasured) but REMOVED — it fed back at the
+  // bottom (the trailing footer/empty items drag the average down each render) and collapsed
+  // getTotalSize, which made scroll-to-bottom (`scrollTop = scrollHeight`) land in the middle
+  // of the conversation. A constant estimate keeps getTotalSize stable; the prepend restore
+  // stays accurate via getOffsetForMessageId + the scroll hook's per-frame re-assert, which
+  // re-reads the offset as the prepended rows measure.
   const virtualizer = useVirtualizer<HTMLElement, Element>({
     count: items.length,
     getScrollElement: () => scrollRef.current,
-    estimateSize: () => avgSizeRef.current,
+    estimateSize: () => estimateSize,
     getItemKey: (index) => items[index].key,
     overscan: 12,
-  })
-
-  // Recompute the running average from the measured sizes of the mounted window after each
-  // commit. Ref-only (no setState) so it never itself triggers a render; the updated estimate
-  // applies to unmeasured rows on the next natural render (scroll / items change / prepend).
-  useEffect(() => {
-    const mounted = virtualizer.getVirtualItems()
-    if (mounted.length === 0) return
-    const avg = mounted.reduce((sum, it) => sum + it.size, 0) / mounted.length
-    if (avg > 0) avgSizeRef.current = Math.round(avgSizeRef.current * 0.7 + avg * 0.3)
   })
 
   const getOffsetForMessageId = useCallback((id: string): number | null => {
