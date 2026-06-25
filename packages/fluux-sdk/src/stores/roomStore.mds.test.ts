@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { roomStore } from './roomStore'
+import { roomSelectors } from './roomSelectors'
 import type { Room, RoomMessage } from '../core/types/room'
 import { getLocalPart } from '../core/jid'
 import { _resetStorageScopeForTesting } from '../utils/storageScope'
@@ -152,5 +153,39 @@ describe('roomStore.applyRemoteDisplayed', () => {
     const meta = roomStore.getState().roomMeta.get(ROOM)
     expect(meta?.lastSeenMessageId).toBe('m5')
     expect(meta?.pendingRemoteDisplayedStanzaId).toBe(undefined)
+  })
+})
+
+describe('roomStore.activateRoom — XEP-0490 divider sync', () => {
+  beforeEach(() => {
+    _resetStorageScopeForTesting()
+    roomStore.setState({
+      rooms: new Map(),
+      roomEntities: new Map(),
+      roomMeta: new Map(),
+      roomRuntime: new Map(),
+      activeRoomJid: null,
+      drafts: new Map(),
+      mamQueryStates: new Map(),
+      roomGaps: new Map(),
+      firstNewMessageMarkers: new Map(),
+    })
+    vi.clearAllMocks()
+  })
+
+  it('folds a pending remote room marker into lastSeenMessageId before deriving the divider', async () => {
+    seedRoom(ROOM, [rmsg('m1', 's1', 1), rmsg('m2', 's2', 2), rmsg('m3', 's3', 3), rmsg('m4', 's4', 4)], 'm2')
+    // A remote device read up to s4, seeded as pending before messages loaded.
+    roomStore.setState((s) => {
+      const m = new Map(s.roomMeta)
+      const existing = m.get(ROOM)!
+      m.set(ROOM, { ...existing, pendingRemoteDisplayedStanzaId: 's4' })
+      return { roomMeta: m }
+    })
+
+    await roomStore.getState().activateRoom(ROOM)
+
+    expect(roomStore.getState().roomMeta.get(ROOM)?.lastSeenMessageId).toBe('m4')
+    expect(roomSelectors.firstNewMessageIdFor(ROOM)(roomStore.getState())).toBeUndefined()
   })
 })

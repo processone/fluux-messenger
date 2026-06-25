@@ -1448,6 +1448,11 @@ export const roomStore = createStore<RoomState>()(
       await get().loadMessagesFromCache(roomJid, { limit: 100 })
       // A newer activation started while the cache read was in flight
       if (token !== activationToken) return
+      // XEP-0490: fold any pending remote read position into lastSeenMessageId
+      // BEFORE setActiveRoom derives the new-message divider (parity with
+      // chatStore.activateConversation). Forward-only against the loaded messages.
+      const pending = get().roomMeta.get(roomJid)?.pendingRemoteDisplayedStanzaId
+      if (pending) get().applyRemoteDisplayed(roomJid, pending)
     }
     get().setActiveRoom(roomJid)
   },
