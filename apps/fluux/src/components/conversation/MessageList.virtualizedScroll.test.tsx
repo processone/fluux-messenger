@@ -136,3 +136,98 @@ describe('MessageList — virtualized scroll integration (ensureMessageMounted)'
     expect(scrollTopSets).toContain(1000)
   })
 })
+
+/**
+ * Bottom-stick under virtualization. Scroll-to-bottom sets `scrollTop = scrollHeight`, but the
+ * bottom rows then mount and measure TALLER than the fixed estimate, so getTotalSize (=
+ * scrollHeight) keeps growing AFTER the assignment. A one-shot assignment (or single rAF retry)
+ * leaves the last message below the fold — the reported "not perfectly at the bottom, last
+ * message hidden". The content ResizeObserver that re-pins on growth for the non-virtualized
+ * path is disabled under virtualization, so the hook must re-assert across frames instead.
+ *
+ * The harness flushes ONE settle frame at the estimated height, THEN grows scrollHeight — so a
+ * single deferred retry (which fires on that first frame) cannot reach the grown height; only a
+ * multi-frame re-assert can. (jsdom has no layout, so pixel convergence is a real-engine check;
+ * here we pin that growth after the initial scroll is followed.)
+ */
+describe('MessageList — virtualized bottom-stick re-asserts as rows measure', () => {
+  let realRaf: typeof requestAnimationFrame
+  let rafQueue: FrameRequestCallback[]
+  const flush = (frames: number) => {
+    for (let i = 0; i < frames; i++) rafQueue.splice(0).forEach((cb) => cb(0))
+  }
+
+  beforeEach(() => {
+    localStorage.setItem('fluux:flags:enableMessageVirtualization', 'true')
+    HTMLElement.prototype.scrollTo = vi.fn()
+    rafQueue = []
+    realRaf = globalThis.requestAnimationFrame
+    globalThis.requestAnimationFrame = ((cb: FrameRequestCallback) => {
+      rafQueue.push(cb)
+      return rafQueue.length
+    }) as typeof requestAnimationFrame
+  })
+  afterEach(() => {
+    globalThis.requestAnimationFrame = realRaf
+    localStorage.clear()
+  })
+
+  function instrumentScroller(scroller: HTMLElement, initialHeight: number) {
+    let scrollHeightVal = initialHeight
+    let scrollTopVal = 0
+    const scrollTopSets: number[] = []
+    Object.defineProperty(scroller, 'scrollHeight', { get: () => scrollHeightVal, configurable: true })
+    Object.defineProperty(scroller, 'clientHeight', { value: 500, configurable: true })
+    Object.defineProperty(scroller, 'scrollTop', {
+      get: () => scrollTopVal,
+      set: (v: number) => {
+        scrollTopVal = v
+        scrollTopSets.push(v)
+      },
+      configurable: true,
+    })
+    return { scrollTopSets, grow: (h: number) => { scrollHeightVal = h } }
+  }
+
+  const props = { renderMessage: (m: BaseMessage) => <div>{m.body}</div> }
+
+  it('re-pins to the bottom as scrollHeight grows after a fresh-conversation scroll-to-bottom', () => {
+    const { container, rerender } = render(
+      <MessageList messages={makeMessages(50)} conversationId="conv-A" {...props} />,
+    )
+    const scroller = container.querySelector('[data-message-list]') as HTMLElement
+    const { scrollTopSets, grow } = instrumentScroller(scroller, 2000)
+    rafQueue.length = 0 // drop the initial conv-A render's frames
+
+    // Enter a fresh conversation -> scroll to the (estimated) bottom.
+    rerender(<MessageList messages={makeMessages(50)} conversationId="conv-B" {...props} />)
+    expect(scrollTopSets).toContain(2000)
+
+    // One settle frame at the estimate, THEN the bottom rows measure taller -> height grows.
+    scrollTopSets.length = 0
+    flush(1)
+    grow(3000)
+    flush(14)
+    expect(scrollTopSets).toContain(3000)
+  })
+
+  it('re-pins to the bottom as a new message row measures taller than the estimate', () => {
+    const { container, rerender } = render(
+      <MessageList messages={makeMessages(50)} conversationId="conv-1" {...props} />,
+    )
+    const scroller = container.querySelector('[data-message-list]') as HTMLElement
+    const { scrollTopSets, grow } = instrumentScroller(scroller, 2000)
+    rafQueue.length = 0
+
+    // A new message arrives while at the bottom -> scroll to the (estimated) bottom.
+    scrollTopSets.length = 0
+    rerender(<MessageList messages={makeMessages(51)} conversationId="conv-1" {...props} />)
+    expect(scrollTopSets).toContain(2000)
+
+    scrollTopSets.length = 0
+    flush(1)
+    grow(3000)
+    flush(14)
+    expect(scrollTopSets).toContain(3000)
+  })
+})

@@ -92,6 +92,34 @@ function restoreToAnchor(scroller: HTMLElement, anchor: ScrollAnchor): boolean {
   return true
 }
 
+/**
+ * Re-assert scroll-to-bottom across several frames (virtualized path only).
+ *
+ * Under virtualization the bottom rows mount and measure AFTER the scroll, so getTotalSize
+ * (= scrollHeight) keeps growing past the initial `scrollTop = scrollHeight` assignment when a
+ * row turns out taller than the fixed estimate — a one-shot assignment leaves the last message
+ * below the fold ("not perfectly at the bottom"). The content ResizeObserver that re-pins on
+ * growth for the non-virtualized path is disabled under virtualization (correcting the @tanstack
+ * spacer there feeds back into the virtualizer), so we re-pin here instead: bounded to ~250ms
+ * and gated on isAtBottom so a user scroll-up mid-settle cancels it. This is the bottom analog
+ * of the prepend momentum re-assert, which re-reads its target each frame as the estimate ->
+ * measured convergence settles.
+ */
+function reassertScrollToBottom(
+  scrollerRef: React.RefObject<HTMLDivElement | null>,
+  isAtBottomRef: React.MutableRefObject<boolean>,
+) {
+  let framesRemaining = 15 // ~250ms at 60fps
+  const step = () => {
+    const scroller = scrollerRef.current
+    if (framesRemaining <= 0 || !scroller || !isAtBottomRef.current) return
+    framesRemaining--
+    scroller.scrollTop = scroller.scrollHeight
+    requestAnimationFrame(step)
+  }
+  requestAnimationFrame(step)
+}
+
 // ============================================================================
 // TYPES
 // ============================================================================
@@ -908,18 +936,25 @@ export function useMessageListScroll({
         // which triggers when messageCount changes.
         void scroller.offsetHeight  // Force layout calculation
         scroller.scrollTop = scroller.scrollHeight
-
-        requestAnimationFrame(() => {
-          if (scrollerRef.current) {
-            scrollerRef.current.scrollTop = scrollerRef.current.scrollHeight
-            debugLog('CONVERSATION SWITCH: scrolled to bottom (deferred)', {
-              scrollTop: scrollerRef.current.scrollTop,
-              scrollHeight: scrollerRef.current.scrollHeight,
-            })
-          }
-        })
-
         isAtBottomRef.current = true
+
+        if (latestRef.current.virtualizer) {
+          // Virtualized: the bottom rows measure taller than the estimate AFTER this assignment,
+          // so getTotalSize grows and a one-shot scroll leaves the last message hidden. Re-assert
+          // across frames (the content ResizeObserver that handles this for flag-OFF is disabled
+          // under virtualization).
+          reassertScrollToBottom(scrollerRef, isAtBottomRef)
+        } else {
+          requestAnimationFrame(() => {
+            if (scrollerRef.current) {
+              scrollerRef.current.scrollTop = scrollerRef.current.scrollHeight
+              debugLog('CONVERSATION SWITCH: scrolled to bottom (deferred)', {
+                scrollTop: scrollerRef.current.scrollTop,
+                scrollHeight: scrollerRef.current.scrollHeight,
+              })
+            }
+          })
+        }
       }
     }
 
@@ -1299,6 +1334,8 @@ export function useMessageListScroll({
         scrollTopBefore: scroller.scrollTop,
       })
       scroller.scrollTop = scroller.scrollHeight
+      // Virtualized: re-pin as the new row measures past the estimate (see reassertScrollToBottom).
+      if (latestRef.current.virtualizer) reassertScrollToBottom(scrollerRef, isAtBottomRef)
     } else if (isNewMessage) {
       debugLog('NEW MSG NO SCROLL (not at bottom)', {
         messageCount,
@@ -1334,12 +1371,16 @@ export function useMessageListScroll({
   useLayoutEffect(() => {
     if (isAtBottomRef.current && scrollerRef.current) {
       scrollerRef.current.scrollTop = scrollerRef.current.scrollHeight
+      // Virtualized: the typing-indicator row measures past the estimate after this assignment.
+      if (latestRef.current.virtualizer) reassertScrollToBottom(scrollerRef, isAtBottomRef)
     }
   }, [typingUsersCount, isAtBottomRef])
 
   useLayoutEffect(() => {
     if (isAtBottomRef.current && scrollerRef.current) {
       scrollerRef.current.scrollTop = scrollerRef.current.scrollHeight
+      // Virtualized: a reaction added to the last row grows it past the estimate.
+      if (latestRef.current.virtualizer) reassertScrollToBottom(scrollerRef, isAtBottomRef)
     }
   }, [lastMessageReactionsKey, isAtBottomRef])
 
