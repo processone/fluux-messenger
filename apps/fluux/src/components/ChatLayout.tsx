@@ -37,19 +37,15 @@ import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
 import { useDeepLink } from '@/hooks/useDeepLink'
 import { saveViewState, getSavedViewState, type ViewStateData } from '@/hooks/useSessionPersistence'
 import { useWindowDrag } from '@/hooks'
-import { LayoutProvider, useModals } from '@/contexts'
+import { useModalStore } from '@/stores/modalStore'
 import { Server, ShieldOff, MessageCircle, Hash, Users, Archive, Bell, Search, Settings, type LucideIcon } from 'lucide-react'
 
 /**
- * ChatLayout wrapper that provides LayoutContext to all children.
- * The actual layout logic is in ChatLayoutContent.
+ * ChatLayout wrapper. The actual layout logic is in ChatLayoutContent; modal state
+ * now lives in the global modalStore, so no context provider is needed.
  */
 export function ChatLayout() {
-  return (
-    <LayoutProvider>
-      <ChatLayoutContent />
-    </LayoutProvider>
-  )
+  return <ChatLayoutContent />
 }
 
 /**
@@ -119,7 +115,16 @@ function ChatLayoutContent() {
   }, [])
 
   // Modal management from context
-  const { state: modalState, actions: modalActions } = useModals()
+  // Fine-grained modal subscriptions via the store: this component re-renders only
+  // when one of the modals it renders/handles toggles. Actions are stable store
+  // methods, so they never trigger a re-render.
+  const showCommandPalette = useModalStore((s) => s.commandPalette)
+  const showShortcutHelp = useModalStore((s) => s.shortcutHelp)
+  const showPresenceMenu = useModalStore((s) => s.presenceMenu)
+  const showQuickChat = useModalStore((s) => s.quickChat)
+  const modalOpen = useModalStore((s) => s.open)
+  const modalClose = useModalStore((s) => s.close)
+  const modalToggle = useModalStore((s) => s.toggle)
 
   // NOTE: Subscribe directly to stores instead of using useChat()/useRoom() hooks.
   // Those hooks subscribe to activeMessages which changes frequently during MAM loading,
@@ -172,10 +177,6 @@ function ChatLayoutContent() {
     store.setActiveCategory('users')
     return domain
   }
-  // Modal state from useModals() hook via LayoutContext
-  // showShortcutHelp and showCommandPalette are used in this component
-  // quickChat, addContact, and presenceMenu are only used by Sidebar (which gets them from context)
-  const { shortcutHelp: showShortcutHelp, commandPalette: showCommandPalette } = modalState
 
   // Selected contact JID from directory (for profile view)
   // Store only the JID, derive contact from store so presence updates in real-time
@@ -486,12 +487,12 @@ function ChatLayoutContent() {
 
   // Toggle shortcut help overlay
   const toggleShortcutHelp = () => {
-    modalActions.toggle('shortcutHelp')
+    modalToggle('shortcutHelp')
   }
 
   // Toggle command palette (Cmd-K opens and closes)
   const toggleCommandPalette = () => {
-    modalActions.toggle('commandPalette')
+    modalToggle('commandPalette')
   }
 
   // Handle sidebar view changes - delegates to useViewNavigation hook
@@ -513,19 +514,19 @@ function ChatLayoutContent() {
   // Handle creating quick chat from keyboard shortcut
   const handleCreateQuickChat = () => {
     navigateToRooms()
-    modalActions.open('quickChat')
+    modalOpen('quickChat')
   }
 
   // Handle adding contact from command palette
   const handleAddContact = () => {
     navigateToContacts()
-    modalActions.open('addContact')
+    modalOpen('addContact')
   }
 
   // Global keyboard shortcuts with escape hierarchy
   // Handle toggling presence menu from keyboard shortcut
   const handleTogglePresenceMenu = () => {
-    modalActions.toggle('presenceMenu')
+    modalToggle('presenceMenu')
   }
 
   // Handle fully quitting desktop app (Linux/Windows)
@@ -588,13 +589,13 @@ function ChatLayoutContent() {
     onFindPrev: () => findOnPageRef.current?.goToPrev(),
     escapeHierarchy: {
       isCommandPaletteOpen: showCommandPalette,
-      onCloseCommandPalette: () => modalActions.close('commandPalette'),
+      onCloseCommandPalette: () => modalClose('commandPalette'),
       isShortcutHelpOpen: showShortcutHelp,
-      onCloseShortcutHelp: () => modalActions.close('shortcutHelp'),
-      isPresenceMenuOpen: modalState.presenceMenu,
-      onClosePresenceMenu: () => modalActions.close('presenceMenu'),
-      isQuickChatOpen: modalState.quickChat,
-      onCloseQuickChat: () => modalActions.close('quickChat'),
+      onCloseShortcutHelp: () => modalClose('shortcutHelp'),
+      isPresenceMenuOpen: showPresenceMenu,
+      onClosePresenceMenu: () => modalClose('presenceMenu'),
+      isQuickChatOpen: showQuickChat,
+      onCloseQuickChat: () => modalClose('quickChat'),
       isConsoleOpen: consoleOpen,
       onCloseConsole: toggleConsole,
       isContactProfileOpen: selectedContact !== null,
@@ -836,14 +837,14 @@ function ChatLayoutContent() {
       {showShortcutHelp && (
         <ShortcutHelp
           shortcuts={shortcuts}
-          onClose={() => modalActions.close('shortcutHelp')}
+          onClose={() => modalClose('shortcutHelp')}
         />
       )}
 
       {/* Command Palette */}
       <CommandPalette
         isOpen={showCommandPalette}
-        onClose={() => modalActions.close('commandPalette')}
+        onClose={() => modalClose('commandPalette')}
         onSidebarViewChange={handleSidebarViewChange}
         onOpenSettings={() => navigateToSettings()}
         onToggleConsole={toggleConsole}
