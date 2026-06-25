@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { renderHook } from '@testing-library/react'
 import { useKeyboardShortcuts } from './useKeyboardShortcuts'
+import { useModalStore } from '../stores/modalStore'
 
 // Mock settingsStore
 const mockSettingsState = {
@@ -121,6 +122,8 @@ describe('useKeyboardShortcuts', () => {
     mockState.archivedConversations = new Set()
     mockSettingsState.themeMode = 'system'
     mockSettingsState.setThemeMode = vi.fn((mode: string) => { mockSettingsState.themeMode = mode as 'light' | 'dark' | 'system' })
+    // Modals live in the real modalStore now — reset them so tests start clean.
+    useModalStore.setState({ commandPalette: false, shortcutHelp: false, presenceMenu: false, quickChat: false, addContact: false, joinRoom: false })
   })
 
   const createDefaultOptions = () => ({
@@ -316,15 +319,10 @@ describe('useKeyboardShortcuts', () => {
   })
 
   describe('Escape Hierarchy', () => {
+    // Modals are driven via the modalStore now (handleEscape reads it directly);
+    // escapeHierarchy carries only the non-modal escape targets. Tests open modals
+    // with useModalStore.setState and assert on the store.
     const createEscapeHierarchy = (overrides = {}) => ({
-      isCommandPaletteOpen: false,
-      onCloseCommandPalette: vi.fn(),
-      isShortcutHelpOpen: false,
-      onCloseShortcutHelp: vi.fn(),
-      isPresenceMenuOpen: false,
-      onClosePresenceMenu: vi.fn(),
-      isQuickChatOpen: false,
-      onCloseQuickChat: vi.fn(),
       isConsoleOpen: false,
       onCloseConsole: vi.fn(),
       isContactProfileOpen: false,
@@ -333,66 +331,44 @@ describe('useKeyboardShortcuts', () => {
     })
 
     it('should close Command Palette first (highest priority)', () => {
-      const escapeHierarchy = createEscapeHierarchy({
-        isCommandPaletteOpen: true,
-        isShortcutHelpOpen: true,
-        isConsoleOpen: true,
-      })
+      useModalStore.setState({ commandPalette: true, shortcutHelp: true })
+      const escapeHierarchy = createEscapeHierarchy({ isConsoleOpen: true })
 
       const { result } = renderHook(() =>
-        useKeyboardShortcuts({
-          ...createDefaultOptions(),
-          escapeHierarchy,
-        })
+        useKeyboardShortcuts({ ...createDefaultOptions(), escapeHierarchy })
       )
 
-      const escapeShortcut = result.current.find(s => s.key === 'Escape')
-      expect(escapeShortcut).toBeDefined()
-      escapeShortcut!.action()
+      result.current.find(s => s.key === 'Escape')!.action()
 
-      expect(escapeHierarchy.onCloseCommandPalette).toHaveBeenCalledTimes(1)
-      expect(escapeHierarchy.onCloseShortcutHelp).not.toHaveBeenCalled()
+      expect(useModalStore.getState().commandPalette).toBe(false)
+      expect(useModalStore.getState().shortcutHelp).toBe(true)
       expect(escapeHierarchy.onCloseConsole).not.toHaveBeenCalled()
     })
 
     it('should close Shortcut Help when Command Palette is closed', () => {
-      const escapeHierarchy = createEscapeHierarchy({
-        isCommandPaletteOpen: false,
-        isShortcutHelpOpen: true,
-        isQuickChatOpen: true,
-      })
+      useModalStore.setState({ shortcutHelp: true, quickChat: true })
 
       const { result } = renderHook(() =>
-        useKeyboardShortcuts({
-          ...createDefaultOptions(),
-          escapeHierarchy,
-        })
+        useKeyboardShortcuts({ ...createDefaultOptions(), escapeHierarchy: createEscapeHierarchy() })
       )
 
-      const escapeShortcut = result.current.find(s => s.key === 'Escape')
-      escapeShortcut!.action()
+      result.current.find(s => s.key === 'Escape')!.action()
 
-      expect(escapeHierarchy.onCloseShortcutHelp).toHaveBeenCalledTimes(1)
-      expect(escapeHierarchy.onCloseQuickChat).not.toHaveBeenCalled()
+      expect(useModalStore.getState().shortcutHelp).toBe(false)
+      expect(useModalStore.getState().quickChat).toBe(true)
     })
 
     it('should close Quick Chat when higher priority items are closed', () => {
-      const escapeHierarchy = createEscapeHierarchy({
-        isQuickChatOpen: true,
-        isConsoleOpen: true,
-      })
+      useModalStore.setState({ quickChat: true })
+      const escapeHierarchy = createEscapeHierarchy({ isConsoleOpen: true })
 
       const { result } = renderHook(() =>
-        useKeyboardShortcuts({
-          ...createDefaultOptions(),
-          escapeHierarchy,
-        })
+        useKeyboardShortcuts({ ...createDefaultOptions(), escapeHierarchy })
       )
 
-      const escapeShortcut = result.current.find(s => s.key === 'Escape')
-      escapeShortcut!.action()
+      result.current.find(s => s.key === 'Escape')!.action()
 
-      expect(escapeHierarchy.onCloseQuickChat).toHaveBeenCalledTimes(1)
+      expect(useModalStore.getState().quickChat).toBe(false)
       expect(escapeHierarchy.onCloseConsole).not.toHaveBeenCalled()
     })
 
@@ -508,93 +484,45 @@ describe('useKeyboardShortcuts', () => {
     })
 
     it('should close only one item per escape press', () => {
-      const escapeHierarchy = createEscapeHierarchy({
-        isCommandPaletteOpen: true,
-        isShortcutHelpOpen: true,
-        isQuickChatOpen: true,
-        isConsoleOpen: true,
-        isContactProfileOpen: true,
-      })
+      useModalStore.setState({ commandPalette: true, shortcutHelp: true, quickChat: true })
+      const escapeHierarchy = createEscapeHierarchy({ isConsoleOpen: true, isContactProfileOpen: true })
 
       const { result } = renderHook(() =>
-        useKeyboardShortcuts({
-          ...createDefaultOptions(),
-          escapeHierarchy,
-        })
+        useKeyboardShortcuts({ ...createDefaultOptions(), escapeHierarchy })
       )
 
-      const escapeShortcut = result.current.find(s => s.key === 'Escape')
-      escapeShortcut!.action()
+      result.current.find(s => s.key === 'Escape')!.action()
 
-      // Only Command Palette should be closed (highest priority)
-      expect(escapeHierarchy.onCloseCommandPalette).toHaveBeenCalledTimes(1)
-      expect(escapeHierarchy.onCloseShortcutHelp).not.toHaveBeenCalled()
-      expect(escapeHierarchy.onCloseQuickChat).not.toHaveBeenCalled()
+      // Only Command Palette should be closed (highest priority).
+      expect(useModalStore.getState().commandPalette).toBe(false)
+      expect(useModalStore.getState().shortcutHelp).toBe(true)
+      expect(useModalStore.getState().quickChat).toBe(true)
       expect(escapeHierarchy.onCloseConsole).not.toHaveBeenCalled()
       expect(escapeHierarchy.onCloseContactProfile).not.toHaveBeenCalled()
     })
 
     it('should follow correct priority order through multiple escapes', () => {
-      const closeHandlers = {
-        onCloseCommandPalette: vi.fn(),
-        onCloseShortcutHelp: vi.fn(),
-        onClosePresenceMenu: vi.fn(),
-        onCloseQuickChat: vi.fn(),
-        onCloseConsole: vi.fn(),
-        onCloseContactProfile: vi.fn(),
-      }
+      // handleEscape reads the modalStore fresh each press and close() mutates it,
+      // so no rerender is needed between presses.
+      useModalStore.setState({ commandPalette: true, shortcutHelp: true, quickChat: true })
+      const escapeHierarchy = createEscapeHierarchy({ isConsoleOpen: true })
 
-      let state = {
-        isCommandPaletteOpen: true,
-        isShortcutHelpOpen: true,
-        isPresenceMenuOpen: false,
-        isQuickChatOpen: true,
-        isConsoleOpen: true,
-        isContactProfileOpen: false,
-        ...closeHandlers,
-      }
-
-      const { result, rerender } = renderHook(
-        (props) => useKeyboardShortcuts(props),
-        {
-          initialProps: {
-            ...createDefaultOptions(),
-            escapeHierarchy: state,
-          },
-        }
+      const { result } = renderHook(() =>
+        useKeyboardShortcuts({ ...createDefaultOptions(), escapeHierarchy })
       )
+      const escape = () => result.current.find(s => s.key === 'Escape')!.action()
 
-      // First escape: close Command Palette
-      let escapeShortcut = result.current.find(s => s.key === 'Escape')
-      escapeShortcut!.action()
-      expect(closeHandlers.onCloseCommandPalette).toHaveBeenCalledTimes(1)
+      escape() // Command Palette
+      expect(useModalStore.getState().commandPalette).toBe(false)
 
-      // Update state and rerender
-      state = { ...state, isCommandPaletteOpen: false }
-      rerender({ ...createDefaultOptions(), escapeHierarchy: state })
+      escape() // Shortcut Help
+      expect(useModalStore.getState().shortcutHelp).toBe(false)
 
-      // Second escape: close Shortcut Help
-      escapeShortcut = result.current.find(s => s.key === 'Escape')
-      escapeShortcut!.action()
-      expect(closeHandlers.onCloseShortcutHelp).toHaveBeenCalledTimes(1)
+      escape() // Quick Chat
+      expect(useModalStore.getState().quickChat).toBe(false)
 
-      // Update state and rerender
-      state = { ...state, isShortcutHelpOpen: false }
-      rerender({ ...createDefaultOptions(), escapeHierarchy: state })
-
-      // Third escape: close Quick Chat
-      escapeShortcut = result.current.find(s => s.key === 'Escape')
-      escapeShortcut!.action()
-      expect(closeHandlers.onCloseQuickChat).toHaveBeenCalledTimes(1)
-
-      // Update state and rerender
-      state = { ...state, isQuickChatOpen: false }
-      rerender({ ...createDefaultOptions(), escapeHierarchy: state })
-
-      // Fourth escape: close Console
-      escapeShortcut = result.current.find(s => s.key === 'Escape')
-      escapeShortcut!.action()
-      expect(closeHandlers.onCloseConsole).toHaveBeenCalledTimes(1)
+      escape() // Console (non-modal, lower priority)
+      expect(escapeHierarchy.onCloseConsole).toHaveBeenCalledTimes(1)
     })
   })
 
@@ -857,36 +785,17 @@ describe('useKeyboardShortcuts', () => {
       expect(options.onOpenCommandPalette).toHaveBeenCalledTimes(1)
     })
 
-    it('should close command palette when Cmd-K pressed while open (toggle)', () => {
+    it('should delegate Cmd-K to onOpenCommandPalette (the store toggle) even when open', () => {
+      // Cmd-K no longer branches on open-state: it always calls onOpenCommandPalette,
+      // which ChatLayout wires to the store toggle (open if closed, close if open).
       const options = createDefaultOptions()
-      const escapeHierarchy = {
-        isCommandPaletteOpen: true,
-        onCloseCommandPalette: vi.fn(),
-        isShortcutHelpOpen: false,
-        onCloseShortcutHelp: vi.fn(),
-        isPresenceMenuOpen: false,
-        onClosePresenceMenu: vi.fn(),
-        isQuickChatOpen: false,
-        onCloseQuickChat: vi.fn(),
-        isConsoleOpen: false,
-        onCloseConsole: vi.fn(),
-        isContactProfileOpen: false,
-        onCloseContactProfile: vi.fn(),
-      }
+      useModalStore.setState({ commandPalette: true })
 
-      const { result } = renderHook(() =>
-        useKeyboardShortcuts({ ...options, escapeHierarchy })
-      )
+      const { result } = renderHook(() => useKeyboardShortcuts(options))
 
-      const cmdKShortcut = result.current.find(
-        s => s.key === 'k' && s.modifiers?.includes('meta')
-      )
-      expect(cmdKShortcut).toBeDefined()
+      result.current.find(s => s.key === 'k' && s.modifiers?.includes('meta'))!.action()
 
-      cmdKShortcut!.action()
-      // Should close, not open
-      expect(escapeHierarchy.onCloseCommandPalette).toHaveBeenCalledTimes(1)
-      expect(options.onOpenCommandPalette).not.toHaveBeenCalled()
+      expect(options.onOpenCommandPalette).toHaveBeenCalledTimes(1)
     })
 
     it('should trigger Cmd-K even when focused in an input field', async () => {

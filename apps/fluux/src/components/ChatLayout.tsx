@@ -99,6 +99,54 @@ function ViewLoadingFallback() {
   )
 }
 
+/**
+ * Renders the modals ChatLayout owns (command palette + shortcut-help overlay) and
+ * subscribes to their open state itself. As a sibling of the layout body, a modal
+ * toggle re-renders ONLY this host, not the sidebar column (Sidebar /
+ * ConversationList / MemberList). See docs/2026-06-24-render-perf-phase0-baseline.md.
+ */
+function ModalHost({
+  shortcuts,
+  onSidebarViewChange,
+  onOpenSettings,
+  onToggleConsole,
+  onToggleShortcutHelp,
+  onCreateQuickChat,
+  onAddContact,
+  onStartConversation,
+}: {
+  shortcuts: ReturnType<typeof useKeyboardShortcuts>
+  onSidebarViewChange: (view: SidebarView) => void
+  onOpenSettings: () => void
+  onToggleConsole: () => void
+  onToggleShortcutHelp: () => void
+  onCreateQuickChat: () => void
+  onAddContact: () => void
+  onStartConversation: (jid: string) => void
+}) {
+  const showShortcutHelp = useModalStore((s) => s.shortcutHelp)
+  const showCommandPalette = useModalStore((s) => s.commandPalette)
+  const modalClose = useModalStore((s) => s.close)
+  return (
+    <>
+      {showShortcutHelp && (
+        <ShortcutHelp shortcuts={shortcuts} onClose={() => modalClose('shortcutHelp')} />
+      )}
+      <CommandPalette
+        isOpen={showCommandPalette}
+        onClose={() => modalClose('commandPalette')}
+        onSidebarViewChange={onSidebarViewChange}
+        onOpenSettings={onOpenSettings}
+        onToggleConsole={onToggleConsole}
+        onToggleShortcutHelp={onToggleShortcutHelp}
+        onCreateQuickChat={onCreateQuickChat}
+        onAddContact={onAddContact}
+        onStartConversation={onStartConversation}
+      />
+    </>
+  )
+}
+
 function ChatLayoutContent() {
   // Detect render loops before they freeze the UI
   detectRenderLoop('ChatLayout')
@@ -115,15 +163,10 @@ function ChatLayoutContent() {
   }, [])
 
   // Modal management from context
-  // Fine-grained modal subscriptions via the store: this component re-renders only
-  // when one of the modals it renders/handles toggles. Actions are stable store
-  // methods, so they never trigger a re-render.
-  const showCommandPalette = useModalStore((s) => s.commandPalette)
-  const showShortcutHelp = useModalStore((s) => s.shortcutHelp)
-  const showPresenceMenu = useModalStore((s) => s.presenceMenu)
-  const showQuickChat = useModalStore((s) => s.quickChat)
+  // Only stable action subscriptions remain — ChatLayout no longer reads any modal
+  // OPEN state reactively (ModalHost renders the modals; Escape reads the store
+  // directly), so a modal toggle does not re-render ChatLayout or its children.
   const modalOpen = useModalStore((s) => s.open)
-  const modalClose = useModalStore((s) => s.close)
   const modalToggle = useModalStore((s) => s.toggle)
 
   // NOTE: Subscribe directly to stores instead of using useChat()/useRoom() hooks.
@@ -587,15 +630,10 @@ function ChatLayoutContent() {
     },
     onFindNext: () => findOnPageRef.current?.goToNext(),
     onFindPrev: () => findOnPageRef.current?.goToPrev(),
+    // Modals (command palette, shortcut help, presence menu, quick chat) are handled
+    // inside handleEscape via the modalStore — only the non-modal escape targets are
+    // passed here, so ChatLayout doesn't subscribe to modal state for Escape.
     escapeHierarchy: {
-      isCommandPaletteOpen: showCommandPalette,
-      onCloseCommandPalette: () => modalClose('commandPalette'),
-      isShortcutHelpOpen: showShortcutHelp,
-      onCloseShortcutHelp: () => modalClose('shortcutHelp'),
-      isPresenceMenuOpen: showPresenceMenu,
-      onClosePresenceMenu: () => modalClose('presenceMenu'),
-      isQuickChatOpen: showQuickChat,
-      onCloseQuickChat: () => modalClose('quickChat'),
       isConsoleOpen: consoleOpen,
       onCloseConsole: toggleConsole,
       isContactProfileOpen: selectedContact !== null,
@@ -833,18 +871,10 @@ function ChatLayoutContent() {
         <XmppConsole />
       </Suspense>
 
-      {/* Keyboard Shortcuts Help Overlay */}
-      {showShortcutHelp && (
-        <ShortcutHelp
-          shortcuts={shortcuts}
-          onClose={() => modalClose('shortcutHelp')}
-        />
-      )}
-
-      {/* Command Palette */}
-      <CommandPalette
-        isOpen={showCommandPalette}
-        onClose={() => modalClose('commandPalette')}
+      {/* Command palette + shortcut-help overlay. ModalHost owns their open-state
+          subscription, so a toggle re-renders only the host, not the sidebar column. */}
+      <ModalHost
+        shortcuts={shortcuts}
         onSidebarViewChange={handleSidebarViewChange}
         onOpenSettings={() => navigateToSettings()}
         onToggleConsole={toggleConsole}

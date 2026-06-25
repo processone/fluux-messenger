@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import { useModalStore } from '@/stores/modalStore'
 import { chatStore, roomStore } from '@fluux/sdk'
 import { useSettingsStore } from '../stores/settingsStore'
 
@@ -33,15 +34,11 @@ interface UseKeyboardShortcutsOptions {
   /** Navigate to previous find-on-page match */
   onFindPrev?: () => void
   // Escape hierarchy state and handlers
+  // Modals (command palette, shortcut help, presence menu, quick chat) are closed
+  // by reading the modalStore directly in handleEscape — they are NOT passed here,
+  // so ChatLayout no longer has to subscribe to modal state just to drive Escape.
+  // Only the non-modal escape targets are passed in.
   escapeHierarchy?: {
-    isCommandPaletteOpen: boolean
-    onCloseCommandPalette: () => void
-    isShortcutHelpOpen: boolean
-    onCloseShortcutHelp: () => void
-    isPresenceMenuOpen: boolean
-    onClosePresenceMenu: () => void
-    isQuickChatOpen: boolean
-    onCloseQuickChat: () => void
     isConsoleOpen: boolean
     onCloseConsole: () => void
     isContactProfileOpen: boolean
@@ -285,42 +282,27 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions): Shor
 
   // Handle escape key with hierarchy (closes innermost context first)
   const handleEscape = () => {
+    // Priority order: modals first, then panels, then focus states.
+    // 1-4. Modals (highest priority) — read non-reactively from the store so the
+    // components that own these modals don't subscribe reactively just to drive
+    // Escape (that subscription is what re-rendered the sidebar column on a modal
+    // toggle). Same four modals, same priority as before.
+    const modals = useModalStore.getState()
+    if (modals.commandPalette) { modals.close('commandPalette'); return true }
+    if (modals.shortcutHelp) { modals.close('shortcutHelp'); return true }
+    if (modals.presenceMenu) { modals.close('presenceMenu'); return true }
+    if (modals.quickChat) { modals.close('quickChat'); return true }
+
     const esc = escapeHierarchy
-    if (!esc) return false
-
-    // Priority order: modals first, then panels, then focus states
-    // 1. Command Palette (highest priority - topmost modal)
-    if (esc.isCommandPaletteOpen) {
-      esc.onCloseCommandPalette()
-      return true
-    }
-
-    // 2. Shortcut Help modal
-    if (esc.isShortcutHelpOpen) {
-      esc.onCloseShortcutHelp()
-      return true
-    }
-
-    // 3. Presence Menu
-    if (esc.isPresenceMenuOpen) {
-      esc.onClosePresenceMenu()
-      return true
-    }
-
-    // 4. Quick Chat modal
-    if (esc.isQuickChatOpen) {
-      esc.onCloseQuickChat()
-      return true
-    }
 
     // 5. Console panel
-    if (esc.isConsoleOpen) {
+    if (esc?.isConsoleOpen) {
       esc.onCloseConsole()
       return true
     }
 
     // 6. Contact Profile view
-    if (esc.isContactProfileOpen) {
+    if (esc?.isContactProfileOpen) {
       esc.onCloseContactProfile()
       return true
     }
@@ -498,14 +480,8 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions): Shor
       modifiers: ['alt'],
       description: 'shortcuts.changeStatus',
       category: 'actions',
-      action: () => {
-        // Toggle presence menu - close if open, open if closed
-        if (escapeHierarchy?.isPresenceMenuOpen) {
-          escapeHierarchy.onClosePresenceMenu()
-        } else {
-          onOpenPresenceMenu()
-        }
-      },
+      // onOpenPresenceMenu toggles via the store (open if closed, close if open).
+      action: onOpenPresenceMenu,
     },
     {
       key: 'n',
@@ -519,14 +495,8 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions): Shor
       modifiers: ['meta'],
       description: 'shortcuts.goTo',
       category: 'general',
-      action: () => {
-        // Toggle command palette - close if open, open if closed
-        if (escapeHierarchy?.isCommandPaletteOpen) {
-          escapeHierarchy.onCloseCommandPalette()
-        } else {
-          onOpenCommandPalette()
-        }
-      },
+      // onOpenCommandPalette toggles via the store (open if closed, close if open).
+      action: onOpenCommandPalette,
     },
     ...(quitShortcut ? [quitShortcut] : []),
     {
@@ -541,9 +511,6 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions): Shor
   const shortcutsRef = useRef<ShortcutDefinition[]>(shortcuts)
   shortcutsRef.current = shortcuts
 
-  const isCommandPaletteOpenRef = useRef(escapeHierarchy?.isCommandPaletteOpen ?? false)
-  isCommandPaletteOpenRef.current = escapeHierarchy?.isCommandPaletteOpen ?? false
-
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       // Don't trigger shortcuts when typing in input fields (except for specific ones)
@@ -552,8 +519,9 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions): Shor
                           target.tagName === 'TEXTAREA' ||
                           target.isContentEditable
 
-      // Skip navigation shortcuts when command palette is open (it handles its own keyboard nav)
-      const isCommandPaletteOpen = isCommandPaletteOpenRef.current
+      // Skip navigation shortcuts when command palette is open (it handles its own
+      // keyboard nav). Read non-reactively from the store at keypress time.
+      const isCommandPaletteOpen = useModalStore.getState().commandPalette
 
       for (const shortcut of shortcutsRef.current) {
         // Skip display-only shortcuts - let browser/system handle them
