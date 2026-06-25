@@ -483,4 +483,73 @@ test.describe('Virtualization scroll invariants', () => {
     expect(rowCount, `mounted [data-index] count ${rowCount} ≥ 60 — windowing not bounding the DOM`).toBeLessThan(60)
   })
 
+  // ── 7: Scroll-up load-older must not blank the viewport ─────────────────────
+
+  test('invariant-7: scroll-up load-older keeps the viewport populated (no blank window)', async ({ page }) => {
+    // General "viewport not blank after load-older" contract (DOM-visibility, sampled
+    // per frame).
+    //
+    // CAVEAT: the specific @tanstack scrollOffset-desync bug that motivated this — the
+    // mounted window stuck at the old (top) rows while scrollTop sits at the restored
+    // offset, blanking the viewport — does NOT reproduce in Playwright. chromium/webkit
+    // fire the native 'scroll' event promptly, so the virtualizer re-windows on its own;
+    // the blank only persists on engines that don't (Tauri WebKitGTK + the headless
+    // preview browser). That engine-specific case is pinned deterministically by
+    // tanstackMessageVirtualizer.test.ts (asserts the adapter dispatches the sync event).
+    //
+    // This invariant still guards blank-after-load regressions that DO manifest in these
+    // engines (e.g. broken restore math placing the window far from scrollTop) and
+    // documents the expected non-blank contract. invariant-1, by contrast, only checks the
+    // anchor OFFSET MATH (getOffsetForMessageId), which stays correct even while blank.
+    await loadDemo(page)
+    await navigateToStressRoom(page)
+
+    // Position near the top so load-older triggers with content above and below.
+    await setScrollTop(page, 120)
+    await page.waitForTimeout(300)
+    const spacerBefore = await getSpacerHeight(page)
+
+    // Trigger the scroll-up load-older path (scrollTop→0 + wheel-up).
+    await scrollToTopAndLoad(page)
+
+    // Wait for the prepend to land (spacer grows by ~one batch).
+    await page.waitForFunction(
+      (before) => {
+        const sp = document.querySelector('[data-virtualizer-spacer]') as HTMLElement | null
+        return sp ? sp.offsetHeight > before + 100 : false
+      },
+      spacerBefore,
+      { timeout: 5_000 },
+    )
+
+    // SAMPLE the number of message rows intersecting the viewport band every rAF for
+    // ~1.2s after the prepend. A desync blanks the viewport (count 0) for one or more
+    // frames before any native scroll event re-syncs the window — sampling catches a
+    // TRANSIENT blank that a single settled read would miss. We assert the viewport is
+    // never blank on any frame.
+    const minVisibleInBand = await page.evaluate(() => new Promise<number>((resolve) => {
+      const s = document.querySelector('[data-message-list]') as HTMLElement | null
+      if (!s) { resolve(-1); return }
+      let min = Infinity
+      const t0 = performance.now()
+      const tick = () => {
+        const sr = s.getBoundingClientRect()
+        let n = 0
+        for (const el of s.querySelectorAll('[data-message-id]')) {
+          const r = (el as HTMLElement).getBoundingClientRect()
+          if (r.bottom > sr.top && r.top < sr.bottom) n++
+        }
+        if (n < min) min = n
+        if (performance.now() - t0 < 1200) requestAnimationFrame(tick)
+        else resolve(min)
+      }
+      requestAnimationFrame(tick)
+    }))
+    expect(
+      minVisibleInBand,
+      'viewport went BLANK on at least one frame after scroll-up load-older — virtualizer ' +
+        'window desynced from scrollTop (mounted rows fell outside the visible band)',
+    ).toBeGreaterThan(0)
+  })
+
 })
