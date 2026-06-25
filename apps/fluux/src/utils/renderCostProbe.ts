@@ -43,6 +43,42 @@ export interface RenderCostProbeOptions {
   cooldownMs?: number
 }
 
+/**
+ * App-backgrounding state sampled when a measurement completes. The caller reads
+ * these from the DOM (`document.hidden`, `document.hasFocus()`) and tracks
+ * `lastBoundaryAt` as the most recent `performance.now()` of any backgrounding
+ * transition (`visibilitychange`, window `blur`, or window `focus`).
+ */
+export interface IdleWindowSample {
+  /** performance.now() of the most recent visibility/focus/blur transition. */
+  lastBoundaryAt: number
+  /** document.hidden at sample time (tab hidden, minimized). */
+  isHidden: boolean
+  /** document.hasFocus() at sample time (window holds OS focus). */
+  hasFocus: boolean
+}
+
+/**
+ * True when a render's measurement window `[renderStart, sample]` overlapped a
+ * period where the app was backgrounded, so the render→commit wall clock counts
+ * throttled / suspended idle time (App Nap, window occlusion, OS sleep) rather
+ * than render work. Such samples are meaningless and must be discarded.
+ *
+ * Three ways the window can be tainted:
+ * - the page is hidden at sample time (tab switch / minimize), or
+ * - the window is unfocused at sample time (another app is in front), or
+ * - a visibility/focus/blur transition landed at/after `renderStart` — e.g. the
+ *   user blurred mid-render and refocused (focus is back by sample time, so the
+ *   boundary timestamp is the only remaining signal).
+ *
+ * `visibilitychange` alone is insufficient: switching apps on desktop blurs the
+ * window WITHOUT hiding the page, so it fires `blur`/`focus` but not
+ * `visibilitychange` and leaves `document.hidden` false.
+ */
+export function spansIdleWindow(renderStart: number, sample: IdleWindowSample): boolean {
+  return sample.isHidden || !sample.hasFocus || sample.lastBoundaryAt >= renderStart
+}
+
 // A list render over ~200ms is well past the frame budget and worth attributing;
 // normal updates (typing, a single new message) stay far below it.
 const DEFAULT_THRESHOLD_MS = 200
