@@ -230,4 +230,48 @@ describe('MessageList — virtualized bottom-stick re-asserts as rows measure', 
     flush(14)
     expect(scrollTopSets).toContain(3000)
   })
+
+  it('scrolls to the bottom on a SENT (outgoing) message even when the user had scrolled up', () => {
+    // When you send a message you expect to see it, wherever you were reading. An incoming
+    // message while scrolled up must NOT yank you down, but your own outgoing message must.
+    const { container, rerender } = render(
+      <MessageList messages={makeMessages(50)} conversationId="conv-send" {...props} />,
+    )
+    const scroller = container.querySelector('[data-message-list]') as HTMLElement
+    const { scrollTopSets } = instrumentScroller(scroller, 5000)
+    rafQueue.length = 0
+
+    // User scrolls far up -> isAtBottom flips false (incoming would no longer auto-follow).
+    scroller.scrollTop = 1000
+    scroller.dispatchEvent(new Event('scroll', { bubbles: true }))
+    scrollTopSets.length = 0
+
+    // The user SENDS a message (last message is outgoing) -> must scroll to the bottom.
+    const sent: BaseMessage = {
+      id: 'sent-1', from: 'me@example.com', body: 'my reply',
+      timestamp: new Date(2024, 0, 1, 13, 0), isOutgoing: true, type: 'chat',
+    }
+    rerender(<MessageList messages={[...makeMessages(50), sent]} conversationId="conv-send" {...props} />)
+    expect(scrollTopSets).toContain(5000)
+  })
+
+  it('keeps following incoming messages within the wider at-bottom tolerance (100px from bottom)', () => {
+    // A tall last message that measured slightly short used to leave the view >50px from the
+    // bottom, flipping "at bottom" false so the next incoming message stopped following. The
+    // wider tolerance keeps a near-bottom view (100px) following.
+    const { container, rerender } = render(
+      <MessageList messages={makeMessages(50)} conversationId="conv-tol" {...props} />,
+    )
+    const scroller = container.querySelector('[data-message-list]') as HTMLElement
+    const { scrollTopSets } = instrumentScroller(scroller, 5000)
+    rafQueue.length = 0
+
+    // Sit 100px above the real bottom (between the old 50px threshold and the new one).
+    scroller.scrollTop = 5000 - 500 - 100
+    scroller.dispatchEvent(new Event('scroll', { bubbles: true }))
+    scrollTopSets.length = 0
+
+    rerender(<MessageList messages={makeMessages(51)} conversationId="conv-tol" {...props} />)
+    expect(scrollTopSets).toContain(5000)
+  })
 })
