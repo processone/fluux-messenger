@@ -17,25 +17,35 @@
  * Diagnostic only: never changes behaviour.
  */
 import { useLayoutEffect, useRef } from 'react'
-import { createRenderCostProbe, type RenderCostProbe } from '@/utils/renderCostProbe'
+import { createRenderCostProbe, spansIdleWindow, type RenderCostProbe } from '@/utils/renderCostProbe'
 
-// Timestamp (performance.now) of the last page visibility transition. When a
-// render's measurement window contains one, the render→commit gap is wall-clock
-// idle (tab hidden, or the laptop slept mid-render) rather than render work —
-// producing absurd "render cost" values (e.g. ~18min for 50 rows after an OS
-// sleep). We discard those, mirroring stallSentinel's document.hidden guard.
-let lastVisibilityChangeAt = Number.NEGATIVE_INFINITY
-let visibilityTrackingStarted = false
-function ensureVisibilityTracking(): void {
-  if (visibilityTrackingStarted || typeof document === 'undefined') return
-  visibilityTrackingStarted = true
-  document.addEventListener('visibilitychange', () => {
-    lastVisibilityChangeAt = performance.now()
-  })
+// Timestamp (performance.now) of the last backgrounding transition — page
+// visibility OR window focus. When a render's measurement window contains one
+// (or the app is backgrounded at sample time), the render→commit gap is
+// wall-clock idle (tab hidden, app switched away, or the laptop slept mid-render)
+// rather than render work — producing absurd "render cost" values (e.g. ~18min
+// for 50 rows after an OS sleep, or ~10s after an app switch). We discard those,
+// mirroring stallSentinel's document.hidden guard.
+//
+// focus/blur matters because switching apps on desktop (Tauri/WebKit) blurs the
+// window WITHOUT hiding the page: no visibilitychange fires and document.hidden
+// stays false, yet the OS throttles/App-Naps the unfocused window. Tracking only
+// visibilitychange would miss this — the common cause of bogus warnings.
+let lastBackgroundBoundaryAt = Number.NEGATIVE_INFINITY
+let backgroundTrackingStarted = false
+function ensureBackgroundTracking(): void {
+  if (backgroundTrackingStarted || typeof document === 'undefined') return
+  backgroundTrackingStarted = true
+  const mark = () => {
+    lastBackgroundBoundaryAt = performance.now()
+  }
+  document.addEventListener('visibilitychange', mark)
+  window.addEventListener('focus', mark)
+  window.addEventListener('blur', mark)
 }
 
 export function useRenderCostProbe(label: string, getContext: () => string): void {
-  ensureVisibilityTracking()
+  ensureBackgroundTracking()
 
   // Read at render-body call time — before this component's children render.
   const renderStart = performance.now()
@@ -53,9 +63,14 @@ export function useRenderCostProbe(label: string, getContext: () => string): voi
       const layoutPaintMs = painted - commitDone
       const totalMs = reactMs + layoutPaintMs
 
-      // A visibility transition at/after renderStart means this window spanned a
-      // hidden/sleep period — the measured cost is idle wall clock, not render work.
-      const spannedHidden = lastVisibilityChangeAt >= renderStart || document.hidden
+      // A backgrounding transition at/after renderStart — or being hidden/unfocused
+      // at sample time — means this window spanned a hidden/blurred/sleep period:
+      // the measured cost is idle wall clock, not render work.
+      const spannedHidden = spansIdleWindow(renderStart, {
+        lastBoundaryAt: lastBackgroundBoundaryAt,
+        isHidden: document.hidden,
+        hasFocus: typeof document.hasFocus === 'function' ? document.hasFocus() : true,
+      })
 
       if (probeRef.current?.record(totalMs, painted, spannedHidden)) {
         console.warn(

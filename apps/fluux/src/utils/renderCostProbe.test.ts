@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { createRenderCostProbe } from './renderCostProbe'
+import { createRenderCostProbe, spansIdleWindow } from './renderCostProbe'
 
 describe('createRenderCostProbe', () => {
   it('does not report renders below the threshold', () => {
@@ -39,5 +39,47 @@ describe('createRenderCostProbe', () => {
     // A bogus spanned render must not block the next genuine slow render.
     expect(probe.record(300, 1000, true)).toBe(false)
     expect(probe.record(300, 1000, false)).toBe(true)
+  })
+})
+
+describe('spansIdleWindow', () => {
+  // A focused, visible app with no backgrounding transition during the window —
+  // the only case where the wall-clock measurement reflects real render work.
+  it('keeps a sample when focused, visible, and no recent boundary', () => {
+    expect(
+      spansIdleWindow(1000, { lastBoundaryAt: 500, isHidden: false, hasFocus: true }),
+    ).toBe(false)
+  })
+
+  it('discards a sample taken while the page is hidden (tab switch / minimize)', () => {
+    expect(
+      spansIdleWindow(1000, { lastBoundaryAt: 500, isHidden: true, hasFocus: true }),
+    ).toBe(true)
+  })
+
+  // App switch on desktop: the window loses OS focus but stays visible, so
+  // document.hidden is false and no visibilitychange fires. The OS throttles /
+  // App-Naps the unfocused window, so the render→commit wall clock is idle time.
+  it('discards a sample taken while the window is unfocused (app switch)', () => {
+    expect(
+      spansIdleWindow(1000, { lastBoundaryAt: 500, isHidden: false, hasFocus: false }),
+    ).toBe(true)
+  })
+
+  // Blurred then refocused within the window: by sample time focus is back and the
+  // page was never hidden, so the focus/blur boundary timestamp is the only signal.
+  it('discards a sample whose window contained a focus/blur boundary at or after renderStart', () => {
+    expect(
+      spansIdleWindow(1000, { lastBoundaryAt: 1000, isHidden: false, hasFocus: true }),
+    ).toBe(true)
+    expect(
+      spansIdleWindow(1000, { lastBoundaryAt: 4000, isHidden: false, hasFocus: true }),
+    ).toBe(true)
+  })
+
+  it('ignores a boundary that landed strictly before the render started', () => {
+    expect(
+      spansIdleWindow(1000, { lastBoundaryAt: 999, isHidden: false, hasFocus: true }),
+    ).toBe(false)
   })
 })
