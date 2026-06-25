@@ -247,8 +247,6 @@ export interface RoomMetadata {
   lastReadAt?: Date
   /** ID of the last message the user saw in the viewport (persisted, only advances forward) */
   lastSeenMessageId?: string
-  /** ID of the first unread message (calculated when switching to room) */
-  firstNewMessageId?: string
   /**
    * XEP-0490: a remote device reported reading up to this stanza-id, but the
    * message is not yet in the loaded room cache. Resolved to lastSeenMessageId

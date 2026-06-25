@@ -79,7 +79,7 @@ const EMPTY_OCCUPANTS: Map<string, RoomOccupant> = new Map()
 export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = false, onShowOccupantsChange, onStartChat, onShowProfile, findOnPageRef, onSearchInConversation }: RoomViewProps) {
   detectRenderLoop('RoomView')
   const { t } = useTranslation()
-  const { activeRoom, activeMessages, activeTypingUsers, sendMessage, sendWhisper, sendReaction, sendPoll, votePoll, closePoll, sendCorrection, retractMessage, moderateMessage, sendChatState, sendWhisperChatState, setRoomNotifyAll, activeAnimation, sendEasterEgg, clearAnimation, clearFirstNewMessageId, updateLastSeenMessageId, joinRoom, joinResult, setRoomAvatar, clearRoomAvatar, fetchOlderHistory, continueRoomCatchUp, activeMAMState, submitRoomConfig, setSubject, destroyRoom, setAffiliation, setRole, targetMessageId, clearTargetMessageId } = useRoomActive()
+  const { activeRoom, activeMessages, activeTypingUsers, sendMessage, sendWhisper, sendReaction, sendPoll, votePoll, closePoll, sendCorrection, retractMessage, moderateMessage, sendChatState, sendWhisperChatState, setRoomNotifyAll, activeAnimation, sendEasterEgg, clearAnimation, clearFirstNewMessageId, updateLastSeenMessageId, joinRoom, joinResult, setRoomAvatar, clearRoomAvatar, fetchOlderHistory, continueRoomCatchUp, activeMAMState, submitRoomConfig, setSubject, destroyRoom, setAffiliation, setRole, targetMessageId, clearTargetMessageId, firstNewMessageId } = useRoomActive()
   const mediaPolicy = useSettingsStore((s) => s.mediaAutoDownload)
 
   // NOTE: Use focused selectors instead of useConnection() hook to avoid
@@ -538,7 +538,7 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
             selectedMessageId={selectedMessageId}
             hasKeyboardSelection={hasKeyboardSelection}
             showToolbarForSelection={showToolbarForSelection}
-            firstNewMessageId={activeRoom.firstNewMessageId}
+            firstNewMessageId={firstNewMessageId}
             targetMessageId={targetMessageId}
             clearTargetMessageId={clearTargetMessageId}
             clearFirstNewMessageId={handleClearFirstNewMessageId}

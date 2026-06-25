@@ -63,6 +63,11 @@ export function useRoomActive() {
     return s.roomMeta.get(s.activeRoomJid)
   })
 
+  const activeFirstNewMessageId = useRoomStore((s) => {
+    if (!s.activeRoomJid) return undefined
+    return s.firstNewMessageMarkers.get(s.activeRoomJid)
+  })
+
   const activeRoomRuntime = useRoomStore((s) => {
     if (!s.activeRoomJid) return undefined
     return s.roomRuntime.get(s.activeRoomJid)
@@ -520,6 +525,7 @@ export function useRoomActive() {
       activeAnimation,
       targetMessageId,
       activeMAMState,
+      firstNewMessageId: activeFirstNewMessageId,
 
       // Actions (spread memoized actions)
       ...actions,
@@ -532,6 +538,7 @@ export function useRoomActive() {
       activeAnimation,
       targetMessageId,
       activeMAMState,
+      activeFirstNewMessageId,
       actions,
     ]
   )

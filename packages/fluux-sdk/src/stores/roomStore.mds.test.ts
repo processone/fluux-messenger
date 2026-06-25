@@ -188,3 +188,37 @@ describe('roomStore.activateRoom — XEP-0490 divider sync', () => {
     expect(roomSelectors.firstNewMessageIdFor(ROOM)(roomStore.getState())).toBeUndefined()
   })
 })
+
+describe('roomStore — new-message divider is session-only', () => {
+  beforeEach(() => {
+    _resetStorageScopeForTesting()
+    roomStore.setState({
+      rooms: new Map(),
+      roomEntities: new Map(),
+      roomMeta: new Map(),
+      roomRuntime: new Map(),
+      activeRoomJid: null,
+      drafts: new Map(),
+      mamQueryStates: new Map(),
+      roomGaps: new Map(),
+      firstNewMessageMarkers: new Map(),
+    })
+    vi.clearAllMocks()
+  })
+
+  it('parks the divider in firstNewMessageMarkers, not in roomMeta', () => {
+    seedRoom(ROOM, [rmsg('m1', 's1', 1), rmsg('m2', 's2', 2), rmsg('m3', 's3', 3)], 'm1')
+    roomStore.setState((s) => {
+      const m = new Map(s.roomMeta)
+      const existing = m.get(ROOM)!
+      m.set(ROOM, { ...existing, unreadCount: 2 })
+      return { roomMeta: m }
+    })
+
+    roomStore.getState().setActiveRoom(ROOM)
+
+    expect(roomStore.getState().firstNewMessageMarkers.get(ROOM)).toBe('m2')
+    expect(roomSelectors.firstNewMessageIdFor(ROOM)(roomStore.getState())).toBe('m2')
+    expect('firstNewMessageId' in (roomStore.getState().roomMeta.get(ROOM) as object)).toBe(false)
+  })
+})

@@ -3924,7 +3924,7 @@ describe('setActiveRoom new-message marker — delayed = MUC/MAM history replay'
       return { roomMeta: meta }
     })
     roomStore.getState().setActiveRoom(ROOM)
-    return roomStore.getState().roomMeta.get(ROOM)?.firstNewMessageId
+    return roomStore.getState().firstNewMessageMarkers.get(ROOM)
   }
 
   it('sets no marker when only delayed history follows lastSeen (MAM/MUC join)', () => {
