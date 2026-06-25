@@ -239,6 +239,10 @@ export function useMessageListScroll({
   const lastLoadTimeRef = useRef(0)
   const lastRestoreTimeRef = useRef(0) // Track when we last restored position
   const scrolledAwayFromTopRef = useRef(false)
+  // Timestamp of the last DELIBERATE user scroll (FAB click / wheel). The prepend re-assert
+  // loop yields to a deliberate scroll recorded after it starts, but keeps re-pinning the
+  // anchor through a content-shrink clamp (which records no such intent).
+  const userScrollIntentAtRef = useRef(0)
 
   // Media load batching (for images, videos, link previews)
   // When multiple media elements load in quick succession, we batch them and apply
@@ -484,6 +488,11 @@ export function useMessageListScroll({
   const scrollToBottom = useCallback(() => {
     const scroller = scrollerRef.current
     if (!scroller) return
+
+    // FAB / scroll-to-bottom is a deliberate user action — record it so the prepend re-assert
+    // loop yields instead of fighting it back to the anchor (it can fire while the loop runs:
+    // entering at the top triggers a load-older, then the user clicks the FAB).
+    userScrollIntentAtRef.current = Date.now()
 
     // Two-step behavior: scroll to the new message marker only when it exists AND
     // is still further down than the current viewport (not yet visible). Otherwise —
@@ -853,6 +862,10 @@ export function useMessageListScroll({
   }
 
   const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
+    // A wheel is a deliberate user scroll — record it so the prepend re-assert loop yields if
+    // the user keeps scrolling after a load (rather than fighting a content-shrink clamp). The
+    // wheel that triggers the load itself is recorded BEFORE the loop starts, so it won't bail.
+    userScrollIntentAtRef.current = Date.now()
     const { scrollTop } = e.currentTarget
     if (scrollTop === 0 && e.deltaY < 0 && !staticMode) triggerLoadOlder()
     if (scrollTop === 0 && e.deltaY > 0) scrolledAwayFromTopRef.current = true
@@ -1351,13 +1364,24 @@ export function useMessageListScroll({
     const anchorForAssert = saved.anchorMessageId
     const offsetForAssert = saved.anchorOffsetFromTop
     // Hard stop after 60 frames (≈1 second). No early-stable exit: ResizeObserver
-    // callbacks can arrive late (beyond 5-frame window), and the external-scroll
-    // detection (> 200px) handles FAB/keyboard interrupts.
+    // callbacks can arrive late (beyond a 5-frame window). A big one-frame drift is
+    // re-pinned once (clamp recovery) and only treated as a genuine external scroll —
+    // FAB / keyboard / user fling — if it persists the next frame.
     const MAX_FRAMES = 60
     let framesLeft = MAX_FRAMES
     let prevTarget = boundedScrollTop
+    // Snapshot the loop start. A deliberate user scroll (FAB / wheel) recorded AFTER this means
+    // the user took over → yield. A content-shrink clamp records no intent, so the loop keeps
+    // re-pinning the anchor through it (clamp recovery — the "jump to bottom" fix).
+    const assertStartedAt = Date.now()
     const runMeasureAssert = () => {
       if (framesLeft-- <= 0) return
+      // Deliberate user scroll (FAB / wheel) since the loop started → the user took over;
+      // stop re-pinning and yield. A content-shrink clamp does NOT set this, so we keep going.
+      if (userScrollIntentAtRef.current > assertStartedAt) {
+        debugLog('PREPEND ASSERT CANCELLED (user scroll intent)', { scrollTop: scrollerRef.current?.scrollTop })
+        return
+      }
       const virt = virtualizerRef.current
       const s = scrollerRef.current
       if (virt && s) {
@@ -1370,12 +1394,12 @@ export function useMessageListScroll({
             debugLog('PREPEND MEASURE ASSERT', { newTarget, prevTarget, delta: newTarget - prevTarget })
             virt.scrollToOffset(newTarget)
             prevTarget = newTarget
-          } else if (Math.abs(scrollDrift) > 200) {
-            // Large external scroll (FAB click, keyboard nav, etc.) — stop immediately
-            debugLog('PREPEND ASSERT CANCELLED (external scroll)', { scrollTop: s.scrollTop, prevTarget })
-            return
           } else if (Math.abs(scrollDrift) > 5) {
-            // Small momentum/browser override — correct once, keep watching
+            // scrollTop diverged from the (stable) anchor target — a content-shrink clamp
+            // pinned us to the bottom, or the browser nudged us. Re-pin the anchor. We do NOT
+            // bail on a big drift here: that previously mistook the clamp for a user scroll and
+            // left the view stuck at the bottom (the reported "jump to bottom"). Genuine user
+            // scrolls are handled by the intent check at the top of the loop instead.
             virt.scrollToOffset(newTarget)
           }
         }
