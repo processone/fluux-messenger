@@ -9,6 +9,7 @@
  */
 import { describe, it, expect, beforeEach } from 'vitest'
 import { chatStore } from './chatStore'
+import { chatSelectors } from './chatSelectors'
 import type { Message } from '../core/types/chat'
 
 // Mock localStorage (required by chatStore's persist middleware)
@@ -180,5 +181,33 @@ describe('chatStore.applyRemoteDisplayed', () => {
     const meta = chatStore.getState().conversationMeta.get(cid)
     expect(meta?.lastSeenMessageId).toBe('m5')
     expect(meta?.pendingRemoteDisplayedStanzaId).toBe(undefined)
+  })
+})
+
+describe('chatStore.activateConversation — XEP-0490 divider sync', () => {
+  beforeEach(() => chatStore.getState().reset())
+
+  it('folds a pending remote read marker into lastSeenMessageId before deriving the divider', async () => {
+    const cid = 'juliet@capulet.example'
+    const messages = [msg('m1', 's1'), msg('m2', 's2'), msg('m3', 's3'), msg('m4', 's4')]
+    seedMessages(cid, messages)
+
+    // Local read is stale at m2; a remote device read up to s4, seeded as pending
+    // before the messages were loaded (the fresh-session MDS seed ordering).
+    chatStore.setState((state) => {
+      const newMeta = new Map(state.conversationMeta)
+      newMeta.set(cid, { unreadCount: 0, lastSeenMessageId: 'm2', pendingRemoteDisplayedStanzaId: 's4' })
+      const newConvs = new Map(state.conversations)
+      newConvs.set(cid, { id: cid, name: cid, type: 'chat', unreadCount: 0, lastSeenMessageId: 'm2', pendingRemoteDisplayedStanzaId: 's4' })
+      return { conversationMeta: newMeta, conversations: newConvs }
+    })
+
+    await chatStore.getState().activateConversation(cid)
+
+    // The pending marker is resolved at activation, advancing the read position.
+    expect(chatStore.getState().conversationMeta.get(cid)?.lastSeenMessageId).toBe('m4')
+    // So the divider reflects the synced read (m4 is the last message → nothing new),
+    // NOT the stale 'm3' it would show if the marker resolved after onActivate.
+    expect(chatSelectors.firstNewMessageIdFor(cid)(chatStore.getState())).toBeUndefined()
   })
 })

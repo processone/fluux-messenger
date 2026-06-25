@@ -607,6 +607,14 @@ export const chatStore = createStore<ChatState>()(
           await get().loadMessagesFromCache(id, { limit: 100 })
           // A newer activation started while the cache read was in flight
           if (token !== activationToken) return
+          // XEP-0490: fold any pending remote read position into lastSeenMessageId
+          // BEFORE setActiveConversation derives the new-message divider. The fresh
+          // session MDS seed runs before messages load, so the marker is stashed as
+          // pendingRemoteDisplayedStanzaId; resolve it now (forward-only, against the
+          // just-loaded messages) so the divider reflects reads synced from other
+          // devices instead of the stale local position.
+          const pending = get().conversationMeta.get(id)?.pendingRemoteDisplayedStanzaId
+          if (pending) get().applyRemoteDisplayed(id, pending)
         }
         get().setActiveConversation(id)
       },
