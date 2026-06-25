@@ -209,6 +209,35 @@ describe('chatStore — new-message divider is session-only', () => {
     expect('firstNewMessageId' in (chatStore.getState().conversationMeta.get(cid) as object)).toBe(false)
   })
 
+  it('deactivating a conversation deletes its marker (switching to another conversation)', () => {
+    const cidA = 'juliet@capulet.example'
+    const cidB = 'romeo@montague.example'
+
+    // Seed conversation A with one read message and one unread message.
+    seedMessages(cidA, [msg('a1', 'sa1'), msg('a2', 'sa2')])
+    chatStore.setState((state) => {
+      const newMeta = new Map(state.conversationMeta)
+      newMeta.set(cidA, { unreadCount: 1, lastSeenMessageId: 'a1' })
+      const newConvs = new Map(state.conversations)
+      newConvs.set(cidA, { id: cidA, name: cidA, type: 'chat', unreadCount: 1, lastSeenMessageId: 'a1' })
+      // Seed conversation B with no unread so its activation sets no marker.
+      newMeta.set(cidB, { unreadCount: 0 })
+      newConvs.set(cidB, { id: cidB, name: cidB, type: 'chat', unreadCount: 0 })
+      return { conversationMeta: newMeta, conversations: newConvs }
+    })
+    seedMessages(cidB, [msg('b1', 'sb1')])
+
+    // Activate A — should park the divider at a2.
+    chatStore.getState().setActiveConversation(cidA)
+    expect(chatStore.getState().firstNewMessageMarkers.get(cidA)).toBe('a2')
+
+    // Switching to B must delete A's marker (the deactivate branch).
+    chatStore.getState().setActiveConversation(cidB)
+    expect(chatStore.getState().firstNewMessageMarkers.get(cidA)).toBeUndefined()
+    // B has no unread, so it should not gain a marker either.
+    expect(chatStore.getState().firstNewMessageMarkers.get(cidB)).toBeUndefined()
+  })
+
   it('never writes the divider to persisted storage', () => {
     const cid = 'juliet@capulet.example'
     seedMessages(cid, [msg('m1', 's1'), msg('m2', 's2')])

@@ -102,6 +102,7 @@ vi.mock('@fluux/sdk', () => ({
     clearAnimation: mockClearAnimation,
     clearFirstNewMessageId: mockClearFirstNewMessageId,
     updateLastSeenMessageId: vi.fn(),
+    firstNewMessageId: undefined,
     supportsMAM: mockSupportsMAM,
     activeMAMState: mockActiveMAMState,
     fetchHistory: mockFetchHistory,

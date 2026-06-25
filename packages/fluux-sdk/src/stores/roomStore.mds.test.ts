@@ -99,6 +99,7 @@ describe('roomStore.applyRemoteDisplayed', () => {
       drafts: new Map(),
       mamQueryStates: new Map(),
       roomGaps: new Map(),
+      firstNewMessageMarkers: new Map(),
     })
     vi.clearAllMocks()
   })
@@ -168,6 +169,7 @@ describe('roomStore.activateRoom — XEP-0490 divider sync', () => {
       drafts: new Map(),
       mamQueryStates: new Map(),
       roomGaps: new Map(),
+      firstNewMessageMarkers: new Map(),
     })
     vi.clearAllMocks()
   })
@@ -220,5 +222,31 @@ describe('roomStore — new-message divider is session-only', () => {
     expect(roomStore.getState().firstNewMessageMarkers.get(ROOM)).toBe('m2')
     expect(roomSelectors.firstNewMessageIdFor(ROOM)(roomStore.getState())).toBe('m2')
     expect('firstNewMessageId' in (roomStore.getState().roomMeta.get(ROOM) as object)).toBe(false)
+  })
+
+  it('deactivating a room deletes its marker (switching to another room)', () => {
+    const ROOM_B = 'other@conference.example'
+
+    // Seed room A with one read message and two unread so activation sets a divider at m2.
+    seedRoom(ROOM, [rmsg('m1', 's1', 1), rmsg('m2', 's2', 2), rmsg('m3', 's3', 3)], 'm1')
+    roomStore.setState((s) => {
+      const m = new Map(s.roomMeta)
+      const existing = m.get(ROOM)!
+      m.set(ROOM, { ...existing, unreadCount: 2 })
+      return { roomMeta: m }
+    })
+
+    // Seed room B with no unread so switching to it sets no marker.
+    seedRoom(ROOM_B, [rmsg('b1', 'sb1', 10)], 'b1')
+
+    // Activate ROOM — divider should be placed at m2.
+    roomStore.getState().setActiveRoom(ROOM)
+    expect(roomStore.getState().firstNewMessageMarkers.get(ROOM)).toBe('m2')
+
+    // Switch to ROOM_B — must delete ROOM's marker (the deactivate branch).
+    roomStore.getState().setActiveRoom(ROOM_B)
+    expect(roomStore.getState().firstNewMessageMarkers.get(ROOM)).toBeUndefined()
+    // ROOM_B has no unread, so it should not gain a marker.
+    expect(roomStore.getState().firstNewMessageMarkers.get(ROOM_B)).toBeUndefined()
   })
 })
