@@ -255,6 +255,26 @@ describe('MessageList — virtualized bottom-stick re-asserts as rows measure', 
     expect(scrollTopSets).toContain(5000)
   })
 
+  it('does NOT yank a scrolled-up reader to the bottom on an INCOMING message', () => {
+    // The counterpart to scroll-on-send: widening the scroll trigger must not break the rule
+    // that an incoming message leaves a reader who scrolled up where they are.
+    const { container, rerender } = render(
+      <MessageList messages={makeMessages(50)} conversationId="conv-noyank" {...props} />,
+    )
+    const scroller = container.querySelector('[data-message-list]') as HTMLElement
+    const { scrollTopSets } = instrumentScroller(scroller, 5000)
+    rafQueue.length = 0
+
+    // Reading history, far from the bottom -> isAtBottom false.
+    scroller.scrollTop = 1000
+    scroller.dispatchEvent(new Event('scroll', { bubbles: true }))
+    scrollTopSets.length = 0
+
+    // An INCOMING message arrives (last message not outgoing) -> must NOT scroll to the bottom.
+    rerender(<MessageList messages={makeMessages(51)} conversationId="conv-noyank" {...props} />)
+    expect(scrollTopSets).not.toContain(5000)
+  })
+
   it('keeps following incoming messages within the wider at-bottom tolerance (100px from bottom)', () => {
     // A tall last message that measured slightly short used to leave the view >50px from the
     // bottom, flipping "at bottom" false so the next incoming message stopped following. The
