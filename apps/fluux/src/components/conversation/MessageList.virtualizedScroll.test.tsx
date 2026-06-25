@@ -294,4 +294,30 @@ describe('MessageList — virtualized bottom-stick re-asserts as rows measure', 
     rerender(<MessageList messages={makeMessages(51)} conversationId="conv-tol" {...props} />)
     expect(scrollTopSets).toContain(5000)
   })
+
+  it('restores a scrolled-up position on conversation switch instead of jumping to the bottom (virtualized)', () => {
+    // Returning to a conversation you'd scrolled up in must restore that position, not
+    // scroll-to-bottom. The flag-OFF suite covers this; this pins it with the virtualizer wired.
+    const { container, rerender } = render(
+      <MessageList messages={makeMessages(50)} conversationId="conv-r1" {...props} />,
+    )
+    const scroller = container.querySelector('[data-message-list]') as HTMLElement
+    const { scrollTopSets } = instrumentScroller(scroller, 5000)
+    rafQueue.length = 0
+
+    // Scroll up to 200 and let the scroll handler record the position + anchor.
+    scroller.scrollTop = 200
+    scroller.dispatchEvent(new Event('scroll', { bubbles: true }))
+
+    // Switch away (saves conv-r1's position) then back (should restore it).
+    rerender(<MessageList messages={makeMessages(50)} conversationId="conv-r2" {...props} />)
+    scrollTopSets.length = 0
+    rerender(<MessageList messages={makeMessages(50)} conversationId="conv-r1" {...props} />)
+
+    // Restored to the saved scroll position (200), not scrolled to the bottom (5000). Under
+    // virtualization the anchor is typically windowed out, so the saved-pixel fallback is what
+    // runs — pinning it guards against a refactor that regresses restore into a scroll-to-bottom.
+    expect(scrollTopSets).toContain(200)
+    expect(scrollTopSets).not.toContain(5000)
+  })
 })
