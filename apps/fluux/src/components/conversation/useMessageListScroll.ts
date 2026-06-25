@@ -29,7 +29,7 @@ const DEBUG = false
 
 function debugLog(action: string, data?: Record<string, unknown>) {
   if (DEBUG) {
-    console.log(`[Scroll] ${action}`, data ?? '')
+    console.warn(`[Scroll] ${action}`, data ?? '')
   }
 }
 
@@ -185,6 +185,13 @@ export function useMessageListScroll({
   // Track scroll position - always create internal ref to follow rules of hooks
   const internalIsAtBottomRef = useRef(true)
   const isAtBottomRef = externalIsAtBottomRef || internalIsAtBottomRef
+
+  // Virtualizer ref updated synchronously in the render body (before any effects).
+  // This ensures useLayoutEffect sees the CURRENT render's virtualizer (with updated
+  // indexById after prepend), not the stale one from latestRef (which is updated in
+  // useEffect = after paint, too late for the prepend restore useLayoutEffect).
+  const virtualizerRef = useRef<MessageVirtualizer | undefined>(undefined)
+  virtualizerRef.current = virtualizer
 
   // Track conversation
   const prevConversationRef = useRef<string | null>(null)
@@ -485,6 +492,15 @@ export function useMessageListScroll({
       }
     }
 
+    // Virtualized path: scrollToIndex(last, 'end') lands on the exact last item using
+    // measured heights, not the estimated spacer height used by scrollTo({top:scrollHeight}).
+    // latestRef is current here (FAB click fires after renders + useEffect run).
+    const virtFab = latestRef.current.virtualizer
+    if (virtFab && virtFab.itemCount > 0) {
+      virtFab.scrollToIndex(virtFab.itemCount - 1, { align: 'end' })
+      return
+    }
+
     scroller.scrollTo({ top: scroller.scrollHeight, behavior: 'smooth' })
   }, [firstNewMessageId])
 
@@ -503,6 +519,50 @@ export function useMessageListScroll({
     if (!scroller) return null
 
     const scrollTop = scroller.scrollTop
+    const virt = virtualizerRef.current
+
+    // Virtualized path: DOM order ≠ visual order (items are absolutely positioned and
+    // the DOM retains the previous render's window until React re-renders). Instead,
+    // find the topmost visible message using the virtualizer's sorted item list.
+    //
+    // Special case: at scrollTop=0, the anchor is always firstMessageId (the topmost
+    // message in the list). This is reliable even when the old virtualizer window
+    // (from the previous scrollTop) hasn't been replaced yet.
+    if (virt) {
+      if (scrollTop === 0 && firstMessageId) {
+        const virtOffset = virt.getOffsetForMessageId(firstMessageId) ?? 0
+        const result = { id: firstMessageId, offsetFromTop: virtOffset }
+        debugLog('FIND ANCHOR: scrollTop=0, using firstMessageId', result)
+        return result
+      }
+
+      // For non-zero scrollTop, use getVirtualItems() (current window in visual order)
+      // to find the first item at or near the viewport top.
+      const virtualItems = virt.getVirtualItems()
+      for (const vi of virtualItems) {
+        const viewportOffset = vi.start - scrollTop
+        if (viewportOffset >= -vi.size / 2) {
+          // Find the [data-message-id] inside this virtualizer row wrapper
+          const wrapper = scroller.querySelector(`[data-index="${vi.index}"]`)
+          const messageEl = wrapper?.querySelector('[data-message-id]') as HTMLElement | null
+          if (!messageEl) continue  // skip non-message items (header, separator, footer)
+          const result = { id: messageEl.dataset.messageId!, offsetFromTop: viewportOffset }
+          debugLog('FIND ANCHOR: virtualizer item', { ...result, viIndex: vi.index, viStart: vi.start, scrollTop })
+          return result
+        }
+      }
+
+      // Nothing found in current window (edge case: window hasn't settled yet)
+      if (firstMessageId) {
+        const virtOffset = virt.getOffsetForMessageId(firstMessageId) ?? 0
+        const result = { id: firstMessageId, offsetFromTop: virtOffset - scrollTop }
+        debugLog('FIND ANCHOR: fallback to firstMessageId', result)
+        return result
+      }
+      return null
+    }
+
+    // Non-virtualized path: iterate DOM elements in order (they ARE in visual order)
     const messages = scroller.querySelectorAll('[data-message-id]')
 
     if (messages.length === 0) {
@@ -511,19 +571,6 @@ export function useMessageListScroll({
     }
 
     const scrollerRect = scroller.getBoundingClientRect()
-
-    // In the virtualized path, element.offsetTop is measured relative to the [data-index]
-    // wrapper (position:absolute), which gives 0 for all message rows — NOT the viewport
-    // offset we need. Use getOffsetForMessageId (virtualizer's accurate cumulative offset)
-    // instead when a virtualizer is present.
-    const getViewportOffset = (el: HTMLElement) => {
-      const id = el.dataset.messageId
-      if (id) {
-        const virtOffset = latestRef.current.virtualizer?.getOffsetForMessageId(id)
-        if (virtOffset != null) return virtOffset - scrollTop
-      }
-      return el.offsetTop - scrollTop
-    }
 
     for (const msg of messages) {
       const element = msg as HTMLElement
@@ -534,7 +581,7 @@ export function useMessageListScroll({
       if (offsetFromViewportTop >= -rect.height / 2) {
         const result = {
           id: element.dataset.messageId!,
-          offsetFromTop: getViewportOffset(element),
+          offsetFromTop: element.offsetTop - scrollTop,
         }
         debugLog('FIND ANCHOR: found', {
           id: result.id,
@@ -547,14 +594,12 @@ export function useMessageListScroll({
       }
     }
 
-    // Fallback: if no message matched criteria, use the first message
-    // This can happen during rapid scrolling when scrollTop is 0 but
-    // the first message has negative offsetFromViewportTop
+    // Fallback: use the first message
     const firstMsg = messages[0] as HTMLElement
     if (firstMsg) {
       const result = {
         id: firstMsg.dataset.messageId!,
-        offsetFromTop: getViewportOffset(firstMsg),
+        offsetFromTop: firstMsg.offsetTop - scrollTop,
       }
       debugLog('FIND ANCHOR: using first message as fallback', {
         id: result.id,
@@ -1130,14 +1175,14 @@ export function useMessageListScroll({
     let usedMethod = 'none'
 
     if (saved.anchorMessageId) {
-      // Virtualized: read the anchor's offset from the virtualizer. It is valid even when
-      // the anchor row has been WINDOWED OUT of the DOM — which is exactly what prepend
-      // does: react-virtual re-centers its window on the just-inserted rows at the
-      // unchanged scrollTop, so the anchor (now far below) is unmounted. The DOM
-      // querySelector below returns null there and forces the distance-from-bottom
-      // fallback, which lands the viewport on the newly-loaded older rows (the bug).
+      // Virtualized: read the anchor's offset from the CURRENT render's virtualizer
+      // (virtualizerRef, updated synchronously in the render body). Using
+      // latestRef.current.virtualizer here would give the STALE pre-prepend indexById
+      // because latestRef is updated in useEffect (after paint) — too late for this
+      // useLayoutEffect (before paint). The current virtualizer has the new indexById
+      // with post-prepend indices, giving the correct anchor offset.
       const virtualOffset =
-        latestRef.current.virtualizer?.getOffsetForMessageId(saved.anchorMessageId) ?? null
+        virtualizerRef.current?.getOffsetForMessageId(saved.anchorMessageId) ?? null
 
       if (virtualOffset != null) {
         newScrollTop = virtualOffset - saved.anchorOffsetFromTop
@@ -1212,7 +1257,9 @@ export function useMessageListScroll({
     // Set via the virtualizer's own scroll path so @tanstack's internal state stays
     // consistent and it does not re-process this as an external scroll event.
     // For the non-virtualized path, write scrollTop directly as before.
-    const virtRestore = latestRef.current.virtualizer
+    // Use virtualizerRef (updated in render body) NOT latestRef (updated in useEffect,
+    // which runs after paint — too late for this useLayoutEffect).
+    const virtRestore = virtualizerRef.current
     if (virtRestore) {
       virtRestore.scrollToOffset(boundedScrollTop)
     } else {
@@ -1234,63 +1281,78 @@ export function useMessageListScroll({
       scrollHeightAfter: scroller.scrollHeight,
     })
 
-    // Single rAF re-assert: cancels any trackpad-momentum event already queued when the
-    // restore fired. The 15-frame loop was replaced here because writing scrollTop 15×
-    // creates a @tanstack feedback loop (each write moves the window → rows re-measure →
-    // offsets shift → next frame's target drifts). One re-assert is enough; the virtualizer
-    // scroll path marks the event as "internal" so subsequent scroll events are ignored.
-    const targetScrollTop = boundedScrollTop
-    requestAnimationFrame(() => {
-      const s = scrollerRef.current
-      if (!s) return
-      if (Math.abs(s.scrollTop - targetScrollTop) > 5) {
-        debugLog('PREPEND REASSERT (momentum override)', {
-          target: targetScrollTop,
-          current: s.scrollTop,
-        })
-        const v = latestRef.current.virtualizer
-        if (v) {
-          v.scrollToOffset(targetScrollTop)
-        } else {
-          s.scrollTop = targetScrollTop
-        }
-      }
-    })
-
     // Mark as restored but keep the ref for a cooldown period
-    // This prevents ResizeObserver from interfering
     saved.restored = true
     saved.restoredAt = Date.now()
-    lastRestoreTimeRef.current = Date.now() // Track restore time to prevent rapid re-loading
+    lastRestoreTimeRef.current = Date.now()
 
-    // POST-PAINT VERIFICATION: Check if scroll position changed after paint
-    // This helps detect if something else (ResizeObserver, another effect) is interfering
-    const expectedScrollTop = actualScrollTop
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        // Double rAF to ensure we're after paint
-        if (scrollerRef.current) {
-          const postPaintScrollTop = scrollerRef.current.scrollTop
-          const postPaintScrollHeight = scrollerRef.current.scrollHeight
-          if (Math.abs(postPaintScrollTop - expectedScrollTop) > 5) {
-            debugLog('PREPEND POSITION CHANGED POST-PAINT!', {
-              expected: expectedScrollTop,
-              actual: postPaintScrollTop,
-              diff: postPaintScrollTop - expectedScrollTop,
-              scrollHeight: postPaintScrollHeight,
-              clientHeight: scrollerRef.current.clientHeight,
-              // Check if viewport shows content
-              viewportStart: postPaintScrollTop,
-              viewportEnd: postPaintScrollTop + scrollerRef.current.clientHeight,
-            })
-          } else {
-            debugLog('PREPEND POSITION STABLE POST-PAINT', {
-              scrollTop: postPaintScrollTop,
-            })
+    // Measurement-aware re-assert loop: tanstack's estimated sizes for prepended rows
+    // may differ from actual heights. As ResizeObserver reports measurements,
+    // getOffsetForMessageId(anchor) shifts upward. Re-apply the anchor-based target
+    // on each frame until it stabilises (max 20 frames ≈ 333ms at 60fps).
+    //
+    // Runs entirely in rAF — NOT in useLayoutEffect — to avoid the scroll→rerender→
+    // scrollTop-override oscillation (PR #646). The initial scroll was momentum-corrected
+    // by frame 0; subsequent frames track measurement drift only.
+    // Measurement-aware re-assert: tanstack estimated 64px per prepended row; actual
+    // heights may differ. ResizeObserver fires asynchronously — often AFTER the first
+    // rAF. Run unconditionally for 20 frames (≈333ms) so we track every measurement
+    // update and keep the anchor at its correct viewport offset.
+    //
+    // Runs in rAF only (not useLayoutEffect) to avoid the scroll→rerender→override
+    // oscillation from PR #646.
+    // Measurement-aware re-assert: tanstack estimated 64px per prepended row; actual
+    // heights may differ. ResizeObserver fires asynchronously — often AFTER the first
+    // rAF. Run for up to 20 frames (≈333ms) so every measurement update is tracked.
+    //
+    // Runs in rAF only (not useLayoutEffect) to avoid the scroll→rerender→override
+    // oscillation from PR #646.
+    //
+    // Large external scrolls (FAB, keyboard, conversation switch) are detected as
+    // |scrollTop − prevTarget| > 200px and cancel the loop immediately.
+    // Measurement-aware re-assert: tanstack estimated 64px per prepended row; actual
+    // heights may differ. ResizeObserver fires asynchronously over many frames. Keep
+    // tracking until stable for STABLE_FRAMES consecutive frames (max MAX_FRAMES total).
+    //
+    // Runs in rAF only (not useLayoutEffect) to avoid the scroll→rerender→override
+    // oscillation from PR #646.
+    //
+    // Large external scrolls (FAB click, keyboard nav) cancel the loop immediately.
+    const anchorForAssert = saved.anchorMessageId
+    const offsetForAssert = saved.anchorOffsetFromTop
+    // Hard stop after 60 frames (≈1 second). No early-stable exit: ResizeObserver
+    // callbacks can arrive late (beyond 5-frame window), and the external-scroll
+    // detection (> 200px) handles FAB/keyboard interrupts.
+    const MAX_FRAMES = 60
+    let framesLeft = MAX_FRAMES
+    let prevTarget = boundedScrollTop
+    const runMeasureAssert = () => {
+      if (framesLeft-- <= 0) return
+      const virt = virtualizerRef.current
+      const s = scrollerRef.current
+      if (virt && s) {
+        const currentOffset = virt.getOffsetForMessageId(anchorForAssert)
+        if (currentOffset != null) {
+          const newTarget = Math.max(0, Math.round(currentOffset - offsetForAssert))
+          const scrollDrift = s.scrollTop - newTarget
+          if (Math.abs(newTarget - prevTarget) > 2) {
+            // Measurements shifted since last frame — update scroll to match
+            debugLog('PREPEND MEASURE ASSERT', { newTarget, prevTarget, delta: newTarget - prevTarget })
+            virt.scrollToOffset(newTarget)
+            prevTarget = newTarget
+          } else if (Math.abs(scrollDrift) > 200) {
+            // Large external scroll (FAB click, keyboard nav, etc.) — stop immediately
+            debugLog('PREPEND ASSERT CANCELLED (external scroll)', { scrollTop: s.scrollTop, prevTarget })
+            return
+          } else if (Math.abs(scrollDrift) > 5) {
+            // Small momentum/browser override — correct once, keep watching
+            virt.scrollToOffset(newTarget)
           }
         }
-      })
-    })
+      }
+      requestAnimationFrame(runMeasureAssert)
+    }
+    requestAnimationFrame(runMeasureAssert)
 
     // Clear after cooldown
     setTimeout(() => {

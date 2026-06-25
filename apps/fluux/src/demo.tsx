@@ -12,7 +12,7 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { HashRouter } from 'react-router-dom'
 import { XMPPProvider, DemoClient, E2EEManager, InMemoryStorageBackend } from '@fluux/sdk'
-import { adminStore, ignoreStore } from '@fluux/sdk/stores'
+import { adminStore, ignoreStore, roomStore } from '@fluux/sdk/stores'
 import { DemoOpenPGPPlugin, DEMO_AVA_FINGERPRINT } from './demo/DemoOpenPGPPlugin'
 import { ThemeProvider } from './providers/ThemeProvider'
 import { useThemeStore } from './stores/themeStore'
@@ -42,8 +42,9 @@ for (const key of Object.keys(localStorage)) {
     localStorage.removeItem(key)
   }
 }
-// Query-param seam: ?virt=1 re-sets the virtualization flag AFTER the clear above,
-// so Playwright tests can load demo with virtualization ON without a full page reload.
+// Query-param seam: ?virt=1 re-sets the virtualization flag AFTER the clear above.
+// The production default is ON, but demo.tsx clears all fluux:* keys on init, so the
+// Playwright harness passes ?virt=1 to explicitly re-enable it in the cleared environment.
 if (params.get('virt') === '1') {
   localStorage.setItem('fluux:flags:enableMessageVirtualization', 'true')
 }
@@ -117,6 +118,7 @@ setSessionPassphrase('demo')
 // Expose demo client and stores for automation (screenshot scripts, testing)
 ;(window as any).__demoClient = demoClient
 ;(window as any).__adminStore = adminStore
+;(window as any).__roomStore = roomStore
 ;(window as any).__themeStore = useThemeStore
 ;(window as any).__i18n = i18n
 

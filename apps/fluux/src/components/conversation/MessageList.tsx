@@ -220,6 +220,13 @@ export function MessageList<T extends BaseMessage>({
   const virtualizer = useTanstackMessageVirtualizer({ items: virtualItems, indexById, scrollRef: scrollContainerRef })
   const activeVirtualizer = virtualized ? virtualizer : undefined
 
+  // Dev-only: expose virtualizer offset lookup for Playwright test assertions (invariant-1).
+  // Allows tests to check anchor position without requiring the row to be in the DOM window.
+  if (import.meta.env.DEV && activeVirtualizer) {
+    ;(window as unknown as Record<string, unknown>).__fluuxGetVirtOffset =
+      (id: string) => activeVirtualizer.getOffsetForMessageId(id)
+  }
+
   // Gap marker position: the first chronological message past the forward-catch-up
   // boundary (the per-group computation in the legacy render reduces to this).
   const gapMarkerMessageId = useMemo(() => {
@@ -265,6 +272,13 @@ export function MessageList<T extends BaseMessage>({
   const setScrollContainerRef = (element: HTMLDivElement | null) => {
     (scrollContainerRef as React.MutableRefObject<HTMLDivElement | null>).current = element
     setScrollContainerRefFromHook(element)
+  }
+
+  // Dev-only: expose the full load-earlier trigger (saves anchor + calls onScrollToTop)
+  // so tests can fire it without scrolling to 0, which would change findAnchorElement's
+  // anchor to firstMessageId instead of the actual top-visible message at that scrollTop.
+  if (import.meta.env.DEV) {
+    ;(window as unknown as Record<string, unknown>).__fluuxTriggerLoadOlder = handleLoadEarlier
   }
 
   // --------------------------------------------------------------------------
@@ -392,6 +406,7 @@ export function MessageList<T extends BaseMessage>({
         /* Virtualized: the wrapper is the spacer; only the visible window mounts. */
         <div
           ref={contentWrapperRef}
+          data-virtualizer-spacer
           style={{ height: virtualizer.getTotalSize(), position: 'relative', width: '100%' }}
         >
           {virtualizer.getVirtualItems().map((v) => (
