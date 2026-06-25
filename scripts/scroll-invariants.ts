@@ -83,14 +83,16 @@ async function getMountedRowCount(page: Page): Promise<number> {
   return page.evaluate(() => document.querySelectorAll('[data-index]').length)
 }
 
-/** Get the set of visible message IDs (message-row elements in the DOM). */
-async function getMessageIdCount(page: Page): Promise<number> {
-  return page.evaluate(() =>
-    new Set(Array.from(document.querySelectorAll('[data-message-id]'))
-      .map((el) => (el as HTMLElement).dataset.messageId)
-      .filter(Boolean)
-    ).size
-  )
+/**
+ * Total height of the virtualizer's spacer div = getTotalSize() = N * estimateSize
+ * (for unmeasured rows). Increases by ~BATCH * estimateSize on each successful load-older.
+ * This is reliable regardless of which rows are currently in the virtualizer window.
+ */
+async function getSpacerHeight(page: Page): Promise<number> {
+  return page.evaluate(() => {
+    const spacer = document.querySelector('[data-message-list] > div:first-child') as HTMLElement | null
+    return spacer ? spacer.offsetHeight : 0
+  })
 }
 
 /**
@@ -222,38 +224,37 @@ test.describe('Virtualization scroll invariants', () => {
 
   // ── 2: No runaway pagination ───────────────────────────────────────────────
 
-  test('invariant-2: one load-older trigger loads exactly one batch, viewport not stuck at top', async ({ page }) => {
+  test('invariant-2: one load-older trigger loads exactly one batch, restore moves scrollTop off top', async ({ page }) => {
     await loadDemo(page)
     await navigateToStressRoom(page)
 
-    // Scroll to middle first (so we have a non-zero scrollTop reference)
-    await setScrollTop(page, 2000)
-    await page.waitForTimeout(200)
+    // Measure virtualizer spacer height BEFORE load (= getTotalSize = N * estimateSize).
+    // This is reliable regardless of which rows are in the window — it covers ALL items.
+    const spacerBefore = await getSpacerHeight(page)
+    expect(spacerBefore, 'spacer height is 0 — virtualizer spacer not found').toBeGreaterThan(0)
 
-    const countBefore = await getMessageIdCount(page)
-
-    // Trigger exactly one load-older by scrolling to top
+    // Trigger load-older by scrolling to top (handleScroll at scrollTop=0 calls triggerLoadOlder)
     await scrollToTopAndLoad(page)
 
-    // Wait for the 80ms network round-trip + render + restore (generously)
+    // Wait for 80ms mock network delay + store update + React re-render + useLayoutEffect restore
     await page.waitForTimeout(1200)
 
-    const countAfter = await getMessageIdCount(page)
-    const added = countAfter - countBefore
+    const spacerAfter = await getSpacerHeight(page)
+    // BATCH=50 messages, estimateSize=64px → expect ~3200px increase. Allow ±50% for date
+    // separators and header/footer items that may or may not be added.
+    const heightGain = spacerAfter - spacerBefore
+    expect(heightGain, `spacer grew by only ${heightGain}px — load-older may not have fired (expected ~3200)`).toBeGreaterThan(1500)
+    expect(heightGain, `spacer grew by ${heightGain}px — possible runaway (>2 batches)`).toBeLessThan(7000)
 
-    // The batch is BATCH=50 from demoLoadOlder.ts. Allow ±5 for dedup / header items.
-    expect(added, `added ${added} messages — expected 1 batch (~50). Zero means load never fired.`).toBeGreaterThanOrEqual(40)
-    expect(added, `added ${added} messages — possible runaway (> 2 batches of 50)`).toBeLessThanOrEqual(110)
-
-    // Wait another second to confirm count is stable (no runaway re-trigger)
+    // Wait another second idle — confirm spacer height is stable (no runaway re-trigger)
     await page.waitForTimeout(1500)
-    const countFinal = await getMessageIdCount(page)
-    const secondBatch = countFinal - countAfter
-    expect(secondBatch, `count kept growing by ${secondBatch} during idle — runaway pagination`).toBeLessThan(30)
+    const spacerFinal = await getSpacerHeight(page)
+    const secondGain = spacerFinal - spacerAfter
+    expect(secondGain, `spacer kept growing by ${secondGain}px during idle — runaway load-older`).toBeLessThan(1500)
 
-    // Assert scrollTop is NOT 0 (the restore must have moved us away from the top)
+    // After restore, scrollTop must NOT be at 0 (restore moved us to the prepend position)
     const scrollTop = await getScrollTop(page)
-    expect(scrollTop, 'scrollTop still 0 after prepend restore — restore never fired or was overridden').toBeGreaterThan(5)
+    expect(scrollTop, 'scrollTop still 0 after prepend restore — restore never fired').toBeGreaterThan(5)
   })
 
   // ── 3: Scroll-to-bottom FAB is never blank ────────────────────────────────

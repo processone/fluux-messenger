@@ -58,8 +58,11 @@ export function useTanstackMessageVirtualizer({
     getVirtualItems: () =>
       virtualizer.getVirtualItems().map((v) => ({ index: v.index, start: v.start, size: v.size, key: String(v.key) })),
     getTotalSize: () => virtualizer.getTotalSize(),
+    itemCount: items.length,
     getOffsetForMessageId,
     ensureMessageMounted,
     measureElement: virtualizer.measureElement,
+    scrollToOffset: (offset, opts) => virtualizer.scrollToOffset(offset, opts),
+    scrollToIndex: (index, opts) => virtualizer.scrollToIndex(index, opts),
   }
 }
