@@ -97,6 +97,46 @@ jobs:
           fi
           echo "No unstable Zustand selector patterns found."
 
+  e2e-scroll:
+    name: Scroll invariants (e2e)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      # The Playwright webServer runs `npm run dev` (vite), which imports @fluux/sdk.
+      # The dev build is required because the harness relies on import.meta.env.DEV
+      # test seams (__fluuxGetVirtOffset / __fluuxTriggerLoadOlder) that are stripped
+      # from production builds.
+      - name: Build SDK
+        run: npm run build:sdk
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium webkit
+
+      # CI=true is set by GitHub Actions → the config enables retries(2), forbidOnly,
+      # and the github + html reporters. Blocks the PR if any invariant regresses.
+      - name: Run scroll invariants (chromium + webkit)
+        run: npm run test:scroll
+
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-scroll-report
+          path: playwright-report/
+          retention-days: 7
+
   rust:
     name: Rust
     runs-on: ubuntu-latest

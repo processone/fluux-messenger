@@ -16,6 +16,7 @@
     "test": "npm run test:run --workspaces --if-present",
     "test:parallel": "node scripts/test-parallel.mjs",
     "test:coverage": "npm run test:coverage --workspaces --if-present",
+    "test:scroll": "npx playwright test --config playwright.scroll.config.ts",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "lint": "npm run lint --workspaces --if-present",
     "clean": "npm run clean --workspaces --if-present",

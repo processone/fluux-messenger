@@ -303,50 +303,8 @@ test.describe('Virtualization scroll invariants', () => {
   // ── 2: No runaway pagination ───────────────────────────────────────────────
 
   test('invariant-2: one load-older trigger loads exactly one batch, restore moves scrollTop off top', async ({ page }) => {
-    // Capture ALL scroll hook debug output for diagnosis
-    const scrollLogs: string[] = []
-    page.on('console', (msg) => {
-      const text = msg.text()
-      if (text.includes('[Scroll]') || text.includes('RenderCostProbe') || text.includes('INVARIANT')) {
-        scrollLogs.push(`[${msg.type()}] ${text}`)
-      }
-    })
-
     await loadDemo(page)
-
-    // Check store state before navigation to understand message count
-    const storeState = await page.evaluate((jid) => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const w = window as any
-      const rooms = w.__roomStore?.getState?.()?.rooms
-      const room = rooms?.get?.(jid)
-      return {
-        roomExists: !!room,
-        messageCount: room?.messages?.length ?? -1,
-        isHistoryComplete: room?.isHistoryComplete ?? 'N/A',
-        supportsMAM: room?.supportsMAM ?? 'N/A',
-      }
-    }, STRESS_ROOM_JID)
-    console.log('STORE STATE BEFORE NAV:', JSON.stringify(storeState))
-
     await navigateToStressRoom(page)
-
-    // Check runtime message count AFTER navigation to understand what the virtualizer sees
-    const runtimeState = await page.evaluate((jid) => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const w = window as any
-      const rs = w.__roomStore?.getState?.()
-      const roomRuntime = rs?.roomRuntime?.get?.(jid)
-      const room = rs?.rooms?.get?.(jid)
-      return {
-        activeRoomJid: rs?.activeRoomJid,
-        runtimeMsgCount: roomRuntime?.messages?.length ?? -1,
-        roomMsgCount: room?.messages?.length ?? -1,
-        mamIsLoading: rs?.mamQueryStates?.get?.(jid)?.isLoading ?? 'N/A',
-        mamIsComplete: rs?.mamQueryStates?.get?.(jid)?.isHistoryComplete ?? 'N/A',
-      }
-    }, STRESS_ROOM_JID)
-    console.log('RUNTIME STATE AFTER NAV:', JSON.stringify(runtimeState))
 
     // Wait for: (1) the loadMessagesFromCache IIFE that fires on activateRoom to complete so
     // the store is stable; (2) the initial render to settle. With messages:80, IndexedDB reads
@@ -383,25 +341,6 @@ test.describe('Virtualization scroll invariants', () => {
     const spacerFinal = await getSpacerHeight(page)
     const secondGain = spacerFinal - spacerAfter
     expect(secondGain, `spacer kept growing by ${secondGain}px during idle — runaway load-older`).toBeLessThan(1500)
-
-    // DEBUG: check state at this point
-    const scrollDebug = await page.evaluate((jid) => {
-      const s = document.querySelector('[data-message-list]') as HTMLElement | null
-      const sp = document.querySelector('[data-virtualizer-spacer]') as HTMLElement | null
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const rs = (window as any).__roomStore?.getState?.()
-      return {
-        scrollTop: s?.scrollTop ?? -1,
-        spacer: sp?.offsetHeight ?? -1,
-        mamIsLoading: rs?.mamQueryStates?.get?.(jid)?.isLoading ?? 'N/A',
-        runtimeMsgCount: rs?.roomRuntime?.get?.(jid)?.messages?.length ?? -1,
-        roomMsgCount: rs?.rooms?.get?.(jid)?.messages?.length ?? -1,
-      }
-    }, STRESS_ROOM_JID)
-    console.warn('INVARIANT-2 DEBUG (final):', JSON.stringify(scrollDebug))
-
-    // Dump scroll hook logs for diagnosis
-    console.log('=== SCROLL HOOK LOGS ===\n' + scrollLogs.join('\n'))
 
     // After restore, scrollTop must NOT be at 0 (restore moved us to the prepend position)
     const scrollTop = await getScrollTop(page)
@@ -475,8 +414,11 @@ test.describe('Virtualization scroll invariants', () => {
       })
     }, [STRESS_ROOM_JID, newMsgId])
 
-    // Wait for React to render + @tanstack to re-window + rows to measure
-    await page.waitForTimeout(500)
+    // Wait for the new row to MOUNT (removes the main flake: asserting before React has
+    // rendered + @tanstack re-windowed), then a short settle for the bottom-stick scroll
+    // -follow + measurement to land before checking visibility.
+    await page.waitForSelector(`[data-message-id="${newMsgId}"]`, { timeout: 5_000 })
+    await page.waitForTimeout(300)
 
     // The new message should be visible
     const isVisible = await page.evaluate((msgId) => {
