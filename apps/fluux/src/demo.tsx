@@ -42,6 +42,11 @@ for (const key of Object.keys(localStorage)) {
     localStorage.removeItem(key)
   }
 }
+// Query-param seam: ?virt=1 re-sets the virtualization flag AFTER the clear above,
+// so Playwright tests can load demo with virtualization ON without a full page reload.
+if (params.get('virt') === '1') {
+  localStorage.setItem('fluux:flags:enableMessageVirtualization', 'true')
+}
 // Clear IndexedDB caches (async, best-effort)
 indexedDB.deleteDatabase('fluux-message-cache')
 indexedDB.deleteDatabase('fluux-avatar-cache')
