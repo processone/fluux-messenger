@@ -4,22 +4,22 @@ import { isFeatureEnabled } from './featureFlags'
 describe('isFeatureEnabled', () => {
   beforeEach(() => localStorage.clear())
 
-  it('enableMessageVirtualization defaults to true (ON) when unset', () => {
-    expect(isFeatureEnabled('enableMessageVirtualization')).toBe(true)
-  })
-
-  it('is disabled only when the stored value is exactly "false"', () => {
-    localStorage.setItem('fluux:flags:enableMessageVirtualization', 'false')
+  it('enableMessageVirtualization defaults to false (OFF) when unset', () => {
     expect(isFeatureEnabled('enableMessageVirtualization')).toBe(false)
   })
 
-  it('an explicit "true" keeps it enabled', () => {
+  it('an explicit "true" enables it (opt-in)', () => {
     localStorage.setItem('fluux:flags:enableMessageVirtualization', 'true')
     expect(isFeatureEnabled('enableMessageVirtualization')).toBe(true)
   })
 
-  it('any other stored value falls back to the default (ON)', () => {
+  it('an explicit "false" keeps it disabled', () => {
+    localStorage.setItem('fluux:flags:enableMessageVirtualization', 'false')
+    expect(isFeatureEnabled('enableMessageVirtualization')).toBe(false)
+  })
+
+  it('any other stored value falls back to the default (OFF)', () => {
     localStorage.setItem('fluux:flags:enableMessageVirtualization', '1')
-    expect(isFeatureEnabled('enableMessageVirtualization')).toBe(true)
+    expect(isFeatureEnabled('enableMessageVirtualization')).toBe(false)
   })
 })
