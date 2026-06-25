@@ -229,7 +229,7 @@ export const chatSelectors = {
    * Get firstNewMessageId for a specific conversation (for new message marker).
    */
   firstNewMessageIdFor: (conversationId: string) => (state: ChatState): string | undefined => {
-    return state.conversations.get(conversationId)?.firstNewMessageId
+    return state.firstNewMessageMarkers.get(conversationId)
   },
 
   // ============================================================

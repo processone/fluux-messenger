@@ -168,7 +168,6 @@ describe('roomStore.activateRoom — XEP-0490 divider sync', () => {
       drafts: new Map(),
       mamQueryStates: new Map(),
       roomGaps: new Map(),
-      firstNewMessageMarkers: new Map(),
     })
     vi.clearAllMocks()
   })

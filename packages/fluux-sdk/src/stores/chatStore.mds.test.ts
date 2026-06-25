@@ -184,6 +184,51 @@ describe('chatStore.applyRemoteDisplayed', () => {
   })
 })
 
+describe('chatStore — new-message divider is session-only', () => {
+  beforeEach(() => chatStore.getState().reset())
+
+  it('parks the divider in firstNewMessageMarkers, not in conversationMeta', () => {
+    const cid = 'juliet@capulet.example'
+    // m1 outgoing-read baseline, then two incoming unread messages.
+    const messages = [msg('m1', 's1'), msg('m2', 's2'), msg('m3', 's3')]
+    seedMessages(cid, messages)
+    chatStore.setState((state) => {
+      const newMeta = new Map(state.conversationMeta)
+      newMeta.set(cid, { unreadCount: 2, lastSeenMessageId: 'm1' })
+      const newConvs = new Map(state.conversations)
+      newConvs.set(cid, { id: cid, name: cid, type: 'chat', unreadCount: 2, lastSeenMessageId: 'm1' })
+      return { conversationMeta: newMeta, conversations: newConvs }
+    })
+
+    chatStore.getState().setActiveConversation(cid)
+
+    // Divider derived at m2 (first unread after m1) and stored in the session map.
+    expect(chatStore.getState().firstNewMessageMarkers.get(cid)).toBe('m2')
+    expect(chatSelectors.firstNewMessageIdFor(cid)(chatStore.getState())).toBe('m2')
+    // The metadata entry carries NO divider field.
+    expect('firstNewMessageId' in (chatStore.getState().conversationMeta.get(cid) as object)).toBe(false)
+  })
+
+  it('never writes the divider to persisted storage', () => {
+    const cid = 'juliet@capulet.example'
+    seedMessages(cid, [msg('m1', 's1'), msg('m2', 's2')])
+    chatStore.setState((state) => {
+      const newMeta = new Map(state.conversationMeta)
+      newMeta.set(cid, { unreadCount: 1, lastSeenMessageId: 'm1' })
+      const newConvs = new Map(state.conversations)
+      newConvs.set(cid, { id: cid, name: cid, type: 'chat', unreadCount: 1, lastSeenMessageId: 'm1' })
+      return { conversationMeta: newMeta, conversations: newConvs }
+    })
+    chatStore.getState().setActiveConversation(cid)
+    expect(chatStore.getState().firstNewMessageMarkers.get(cid)).toBe('m2')
+
+    // Whatever the persist middleware wrote must not mention the divider.
+    const dump = JSON.stringify(localStorage)
+    expect(dump.includes('firstNewMessageId')).toBe(false)
+    expect(dump.includes('firstNewMessageMarkers')).toBe(false)
+  })
+})
+
 describe('chatStore.activateConversation — XEP-0490 divider sync', () => {
   beforeEach(() => chatStore.getState().reset())
 

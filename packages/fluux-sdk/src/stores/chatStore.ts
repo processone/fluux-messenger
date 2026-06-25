@@ -117,6 +117,9 @@ interface ChatState {
   conversationGaps: Map<string, GapInterval>
   // Target message to scroll to after navigation (ephemeral, not persisted)
   targetMessageId: string | null
+  // Session-only new-message divider per conversation (jid -> messageId). Derived
+  // at activation from lastSeenMessageId; never persisted (absent from serializeState).
+  firstNewMessageMarkers: Map<string, string>
 
   // Computed
   activeConversation: () => Conversation | null
@@ -339,7 +342,6 @@ function deserializeState(persisted: PersistedState): Pick<ChatState, 'conversat
         lastMessage: conv.lastMessage,
         lastReadAt: conv.lastReadAt,
         lastSeenMessageId: conv.lastSeenMessageId,
-        firstNewMessageId: conv.firstNewMessageId,
       })
     }
   }
@@ -386,7 +388,7 @@ function deserializeState(persisted: PersistedState): Pick<ChatState, 'conversat
   }
 }
 
-function createEmptyChatState(): Pick<ChatState, 'conversationEntities' | 'conversationMeta' | 'conversations' | 'messages' | 'activeConversationId' | 'archivedConversations' | 'typingStates' | 'activeAnimation' | 'drafts' | 'mamQueryStates' | 'conversationGaps' | 'targetMessageId'> {
+function createEmptyChatState(): Pick<ChatState, 'conversationEntities' | 'conversationMeta' | 'conversations' | 'messages' | 'activeConversationId' | 'archivedConversations' | 'typingStates' | 'activeAnimation' | 'drafts' | 'mamQueryStates' | 'conversationGaps' | 'targetMessageId' | 'firstNewMessageMarkers'> {
   return {
     conversationEntities: new Map(),
     conversationMeta: new Map(),
@@ -400,6 +402,7 @@ function createEmptyChatState(): Pick<ChatState, 'conversationEntities' | 'conve
     mamQueryStates: new Map(),
     conversationGaps: new Map(),
     targetMessageId: null,
+    firstNewMessageMarkers: new Map(),
   }
 }
 
@@ -409,7 +412,7 @@ function createEmptyChatState(): Pick<ChatState, 'conversationEntities' | 'conve
  * Legacy versions stored chat data under a single unscoped key. For safety, we only migrate
  * conversation lists (active + archived classification) and intentionally skip drafts/messages.
  */
-function migrateLegacyConversationListsToScoped(jid: string | null): Pick<ChatState, 'conversationEntities' | 'conversationMeta' | 'conversations' | 'messages' | 'activeConversationId' | 'archivedConversations' | 'typingStates' | 'activeAnimation' | 'drafts' | 'mamQueryStates' | 'conversationGaps' | 'targetMessageId'> | null {
+function migrateLegacyConversationListsToScoped(jid: string | null): Pick<ChatState, 'conversationEntities' | 'conversationMeta' | 'conversations' | 'messages' | 'activeConversationId' | 'archivedConversations' | 'typingStates' | 'activeAnimation' | 'drafts' | 'mamQueryStates' | 'conversationGaps' | 'targetMessageId' | 'firstNewMessageMarkers'> | null {
   if (!jid) return null
 
   const legacyKey = getLegacyStorageKey()
@@ -448,7 +451,7 @@ function migrateLegacyConversationListsToScoped(jid: string | null): Pick<ChatSt
   }
 }
 
-function loadScopedChatState(jid: string | null): Pick<ChatState, 'conversationEntities' | 'conversationMeta' | 'conversations' | 'messages' | 'activeConversationId' | 'archivedConversations' | 'typingStates' | 'activeAnimation' | 'drafts' | 'mamQueryStates' | 'conversationGaps' | 'targetMessageId'> {
+function loadScopedChatState(jid: string | null): Pick<ChatState, 'conversationEntities' | 'conversationMeta' | 'conversations' | 'messages' | 'activeConversationId' | 'archivedConversations' | 'typingStates' | 'activeAnimation' | 'drafts' | 'mamQueryStates' | 'conversationGaps' | 'targetMessageId' | 'firstNewMessageMarkers'> {
   const baseState = createEmptyChatState()
   const scopedStorageKey = getScopedStorageKey(jid)
 
@@ -525,17 +528,7 @@ export const chatStore = createStore<ChatState>()(
         // rehydrated by activateConversation on return. Meta / lastMessage are
         // preserved, so the sidebar preview and unread badge are unaffected.
         if (prevId && prevId !== id) {
-          const prevMeta = get().conversationMeta.get(prevId)
-          const hadMarker = !!prevMeta?.firstNewMessageId
-          const clearedFirstNewMessageId = hadMarker
-            ? notifState.onDeactivate({
-                unreadCount: prevMeta!.unreadCount,
-                mentionsCount: 0,
-                lastReadAt: prevMeta!.lastReadAt,
-                lastSeenMessageId: prevMeta!.lastSeenMessageId,
-                firstNewMessageId: prevMeta!.firstNewMessageId,
-              }).firstNewMessageId
-            : undefined
+          const hadMarker = get().firstNewMessageMarkers.has(prevId)
 
           set((state) => {
             const newMessages = new Map(state.messages)
@@ -543,14 +536,9 @@ export const chatStore = createStore<ChatState>()(
             if (!hadMarker) {
               return { messages: newMessages }
             }
-            const newMeta = new Map(state.conversationMeta)
-            if (prevMeta) newMeta.set(prevId, { ...prevMeta, firstNewMessageId: clearedFirstNewMessageId })
-            const newConversations = new Map(state.conversations)
-            const prevConv = newConversations.get(prevId)
-            if (prevConv) {
-              newConversations.set(prevId, { ...prevConv, firstNewMessageId: clearedFirstNewMessageId })
-            }
-            return { messages: newMessages, conversationMeta: newMeta, conversations: newConversations }
+            const newMarkers = new Map(state.firstNewMessageMarkers)
+            newMarkers.delete(prevId)
+            return { messages: newMessages, firstNewMessageMarkers: newMarkers }
           })
         }
 
@@ -564,7 +552,7 @@ export const chatStore = createStore<ChatState>()(
               mentionsCount: 0,
               lastReadAt: meta?.lastReadAt ?? conv.lastReadAt,
               lastSeenMessageId: meta?.lastSeenMessageId ?? conv.lastSeenMessageId,
-              firstNewMessageId: meta?.firstNewMessageId ?? conv.firstNewMessageId,
+              firstNewMessageId: undefined,
             }
 
             const messages = get().messages.get(id) || []
@@ -576,11 +564,10 @@ export const chatStore = createStore<ChatState>()(
 
             set((state) => {
               const newMetaEntry = {
-                ...(meta ?? { unreadCount: 0, lastReadAt: undefined, lastSeenMessageId: undefined, firstNewMessageId: undefined }),
+                ...(meta ?? { unreadCount: 0, lastReadAt: undefined, lastSeenMessageId: undefined }),
                 unreadCount: activated.unreadCount,
                 lastReadAt: activated.lastReadAt,
                 lastSeenMessageId: activated.lastSeenMessageId,
-                firstNewMessageId: activated.firstNewMessageId,
               }
               const newMeta = new Map(state.conversationMeta)
               newMeta.set(id, newMetaEntry)
@@ -590,9 +577,11 @@ export const chatStore = createStore<ChatState>()(
                 unreadCount: activated.unreadCount,
                 lastReadAt: activated.lastReadAt,
                 lastSeenMessageId: activated.lastSeenMessageId,
-                firstNewMessageId: activated.firstNewMessageId,
               })
-              return { conversationMeta: newMeta, conversations: newConversations, activeConversationId: id }
+              const newMarkers = new Map(state.firstNewMessageMarkers)
+              if (activated.firstNewMessageId) newMarkers.set(id, activated.firstNewMessageId)
+              else newMarkers.delete(id)
+              return { conversationMeta: newMeta, conversations: newConversations, activeConversationId: id, firstNewMessageMarkers: newMarkers }
             })
             return
           }
@@ -633,7 +622,6 @@ export const chatStore = createStore<ChatState>()(
             lastMessage: conv.lastMessage,
             lastReadAt: conv.lastReadAt,
             lastSeenMessageId: conv.lastSeenMessageId,
-            firstNewMessageId: conv.firstNewMessageId,
           }
 
           const newEntities = new Map(state.conversationEntities)
@@ -759,7 +747,7 @@ export const chatStore = createStore<ChatState>()(
                 mentionsCount: 0,
                 lastReadAt: meta.lastReadAt,
                 lastSeenMessageId: meta.lastSeenMessageId,
-                firstNewMessageId: meta.firstNewMessageId,
+                firstNewMessageId: state.firstNewMessageMarkers.get(msg.conversationId),
               },
               msg,
               { isActive, windowVisible },
@@ -781,7 +769,6 @@ export const chatStore = createStore<ChatState>()(
               lastReadAt: notif.lastReadAt,
               lastMessage: previewMessage,
               lastSeenMessageId: notif.lastSeenMessageId,
-              firstNewMessageId: notif.firstNewMessageId,
             })
 
             // Update combined map for backward compatibility
@@ -792,8 +779,13 @@ export const chatStore = createStore<ChatState>()(
               lastReadAt: notif.lastReadAt,
               lastMessage: previewMessage,
               lastSeenMessageId: notif.lastSeenMessageId,
-              firstNewMessageId: notif.firstNewMessageId,
             })
+
+            // Session-only divider: onMessageReceived only sets it for the active,
+            // window-hidden case; otherwise it is preserved. Mirror that into the map.
+            const newMarkers = new Map(state.firstNewMessageMarkers)
+            if (notif.firstNewMessageId) newMarkers.set(msg.conversationId, notif.firstNewMessageId)
+            else newMarkers.delete(msg.conversationId)
 
             // Auto-unarchive conversation when new incoming message arrives
             // (outgoing messages should not trigger unarchive)
@@ -806,11 +798,12 @@ export const chatStore = createStore<ChatState>()(
                   conversationMeta: newMeta,
                   conversations: newConversations,
                   archivedConversations: newArchived,
+                  firstNewMessageMarkers: newMarkers,
                 }
               }
             }
 
-            return { messages: newMessages, conversationMeta: newMeta, conversations: newConversations }
+            return { messages: newMessages, conversationMeta: newMeta, conversations: newConversations, firstNewMessageMarkers: newMarkers }
           }
 
           return { messages: newMessages }
@@ -830,7 +823,7 @@ export const chatStore = createStore<ChatState>()(
             mentionsCount: 0,
             lastReadAt: meta?.lastReadAt ?? conv.lastReadAt,
             lastSeenMessageId: meta?.lastSeenMessageId ?? conv.lastSeenMessageId,
-            firstNewMessageId: meta?.firstNewMessageId ?? conv.firstNewMessageId,
+            firstNewMessageId: state.firstNewMessageMarkers.get(conversationId),
           }
 
           const messages = state.messages.get(conversationId) || []
@@ -851,7 +844,7 @@ export const chatStore = createStore<ChatState>()(
           }
 
           const newMetaEntry = {
-            ...(meta ?? { unreadCount: 0, lastReadAt: undefined, lastSeenMessageId: undefined, firstNewMessageId: undefined }),
+            ...(meta ?? { unreadCount: 0, lastReadAt: undefined, lastSeenMessageId: undefined }),
             unreadCount: updated.unreadCount,
             lastReadAt: updated.lastReadAt,
           }
@@ -867,28 +860,10 @@ export const chatStore = createStore<ChatState>()(
 
       clearFirstNewMessageId: (conversationId) => {
         set((state) => {
-          const meta = state.conversationMeta.get(conversationId)
-          const conv = state.conversations.get(conversationId)
-          if (!meta || !meta.firstNewMessageId) return state
-
-          const cleared = notifState.onClearMarker({
-            unreadCount: meta.unreadCount,
-            mentionsCount: 0,
-            lastReadAt: meta.lastReadAt,
-            lastSeenMessageId: meta.lastSeenMessageId,
-            firstNewMessageId: meta.firstNewMessageId,
-          })
-
-          const newMeta = new Map(state.conversationMeta)
-          newMeta.set(conversationId, { ...meta, firstNewMessageId: cleared.firstNewMessageId })
-
-          if (conv) {
-            const newConversations = new Map(state.conversations)
-            newConversations.set(conversationId, { ...conv, firstNewMessageId: cleared.firstNewMessageId })
-            return { conversationMeta: newMeta, conversations: newConversations }
-          }
-
-          return { conversationMeta: newMeta }
+          if (!state.firstNewMessageMarkers.has(conversationId)) return state
+          const newMarkers = new Map(state.firstNewMessageMarkers)
+          newMarkers.delete(conversationId)
+          return { firstNewMessageMarkers: newMarkers }
         })
       },
 
@@ -905,7 +880,7 @@ export const chatStore = createStore<ChatState>()(
               mentionsCount: 0,
               lastReadAt: meta.lastReadAt,
               lastSeenMessageId: meta.lastSeenMessageId,
-              firstNewMessageId: meta.firstNewMessageId,
+              firstNewMessageId: state.firstNewMessageMarkers.get(conversationId),
             },
             messageId,
             messages
@@ -960,7 +935,7 @@ export const chatStore = createStore<ChatState>()(
               mentionsCount: 0,
               lastReadAt: meta.lastReadAt,
               lastSeenMessageId: meta.lastSeenMessageId,
-              firstNewMessageId: meta.firstNewMessageId,
+              firstNewMessageId: state.firstNewMessageMarkers.get(conversationId),
             },
             match.id,
             messages

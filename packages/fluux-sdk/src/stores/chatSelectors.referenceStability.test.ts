@@ -12,7 +12,6 @@ function createConversation(id: string, options: Partial<Conversation> = {}): Co
     lastMessage: options.lastMessage,
     lastReadAt: options.lastReadAt,
     lastSeenMessageId: options.lastSeenMessageId,
-    firstNewMessageId: options.firstNewMessageId,
   }
 }
 

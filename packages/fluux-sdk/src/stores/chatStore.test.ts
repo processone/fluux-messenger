@@ -1013,8 +1013,7 @@ describe('chatStore', () => {
       }).not.toThrow()
 
       // Should have set the new messages marker since the message is after lastReadAt
-      const conv = chatStore.getState().conversations.get('alice@example.com')
-      expect(conv?.firstNewMessageId).toBe('msg1')
+      expect(chatStore.getState().firstNewMessageMarkers.get('alice@example.com')).toBe('msg1')
     })
   })
 
