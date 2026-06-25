@@ -324,7 +324,7 @@ export const roomSelectors = {
    * Get firstNewMessageId for a specific room (for new message marker).
    */
   firstNewMessageIdFor: (roomJid: string) => (state: RoomState): string | undefined => {
-    return state.rooms.get(roomJid)?.firstNewMessageId
+    return state.firstNewMessageMarkers.get(roomJid)
   },
 
   /**

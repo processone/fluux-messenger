@@ -47,7 +47,7 @@ export function useChatActive() {
 
   // Use focused selectors from separated entity/meta maps to avoid re-renders
   // when unrelated conversations change. Entity fields (id, name, type) are stable;
-  // metadata fields (firstNewMessageId) change rarely compared to lastMessage/unreadCount.
+  // the new-message divider comes from the session-only firstNewMessageMarkers map.
   const activeConvName = useChatStore((s) => {
     if (!s.activeConversationId) return null
     return s.conversationEntities.get(s.activeConversationId)?.name ?? null
@@ -58,7 +58,7 @@ export function useChatActive() {
   })
   const activeFirstNewMessageId = useChatStore((s) => {
     if (!s.activeConversationId) return undefined
-    return s.conversationMeta.get(s.activeConversationId)?.firstNewMessageId
+    return s.firstNewMessageMarkers.get(s.activeConversationId)
   })
 
   // Reconstruct a stable activeConversation object from individual primitive fields.
@@ -70,14 +70,13 @@ export function useChatActive() {
       id: activeConversationId,
       name: activeConvName,
       type: activeConvType,
-      firstNewMessageId: activeFirstNewMessageId,
       // Not used by active view components — sidebar uses useChat() for these
       unreadCount: 0,
       lastMessage: undefined,
       lastReadAt: undefined,
       lastSeenMessageId: undefined,
     }
-  }, [activeConversationId, activeConvName, activeConvType, activeFirstNewMessageId])
+  }, [activeConversationId, activeConvName, activeConvType])
 
   // Don't use useShallow for messages - when messages are prepended, we need React to re-render
   const activeMessages = useChatStore((s) => {
@@ -417,6 +416,7 @@ export function useChatActive() {
     () => ({
       activeConversationId,
       activeConversation,
+      firstNewMessageId: activeFirstNewMessageId,
       activeMessages,
       activeTypingUsers,
       activeAnimation,
@@ -426,7 +426,7 @@ export function useChatActive() {
       ...actions,
     }),
     [
-      activeConversationId, activeConversation, activeMessages,
+      activeConversationId, activeConversation, activeFirstNewMessageId, activeMessages,
       activeTypingUsers, activeAnimation, targetMessageId, supportsMAM, activeMAMState,
       actions,
     ]

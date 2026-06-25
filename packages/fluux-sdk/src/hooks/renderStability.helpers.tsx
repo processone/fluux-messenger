@@ -39,7 +39,6 @@ export function createConversation(id: string, options: Partial<Conversation> = 
     lastMessage: options.lastMessage,
     lastReadAt: options.lastReadAt,
     lastSeenMessageId: options.lastSeenMessageId,
-    firstNewMessageId: options.firstNewMessageId,
   }
 }
 

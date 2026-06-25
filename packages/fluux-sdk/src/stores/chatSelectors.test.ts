@@ -18,6 +18,7 @@ function createMockState(overrides: Partial<ChatState> = {}): ChatState {
     activeAnimation: null,
     drafts: new Map(),
     mamQueryStates: new Map(),
+    firstNewMessageMarkers: new Map(),
     // Actions are not needed for selector tests
     activeConversation: () => null,
     activeMessages: () => [],
@@ -353,11 +354,9 @@ describe('chatSelectors', () => {
   })
 
   describe('firstNewMessageIdFor', () => {
-    it('should return firstNewMessageId for conversation', () => {
-      const conversations = new Map([
-        ['user@example.com', createMockConversation('user@example.com', { firstNewMessageId: 'msg-123' })],
-      ])
-      const state = createMockState({ conversations })
+    it('should return firstNewMessageId from the session-only markers map', () => {
+      const firstNewMessageMarkers = new Map([['user@example.com', 'msg-123']])
+      const state = createMockState({ firstNewMessageMarkers })
       expect(chatSelectors.firstNewMessageIdFor('user@example.com')(state)).toBe('msg-123')
     })
   })

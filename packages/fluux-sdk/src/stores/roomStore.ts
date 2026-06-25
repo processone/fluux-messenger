@@ -332,6 +332,9 @@ export interface RoomState {
   acknowledgedNonAnonymousRooms: Set<string>
   // Target message to scroll to after navigation (ephemeral)
   targetMessageId: string | null
+  // Session-only new-message divider per room (jid -> messageId). Derived at
+  // activation from lastSeenMessageId; never persisted.
+  firstNewMessageMarkers: Map<string, string>
 
   // Actions
   addRoom: (room: Room) => void
@@ -474,7 +477,7 @@ function createEmptyRoomState(
   dismissedPollIds: Map<string, Set<string>> = new Map(),
   roomGaps: Map<string, GapInterval> = new Map(),
   acknowledgedNonAnonymousRooms: Set<string> = new Set(),
-): Pick<RoomState, 'rooms' | 'roomEntities' | 'roomMeta' | 'roomRuntime' | 'activeRoomJid' | 'activeAnimation' | 'drafts' | 'votedPollIds' | 'dismissedPollIds' | 'mamQueryStates' | 'roomGaps' | 'acknowledgedNonAnonymousRooms' | 'targetMessageId'> {
+): Pick<RoomState, 'rooms' | 'roomEntities' | 'roomMeta' | 'roomRuntime' | 'activeRoomJid' | 'activeAnimation' | 'drafts' | 'votedPollIds' | 'dismissedPollIds' | 'mamQueryStates' | 'roomGaps' | 'acknowledgedNonAnonymousRooms' | 'targetMessageId' | 'firstNewMessageMarkers'> {
   return {
     rooms: new Map(),
     roomEntities: new Map(),
@@ -489,6 +492,7 @@ function createEmptyRoomState(
     roomGaps,
     acknowledgedNonAnonymousRooms,
     targetMessageId: null,
+    firstNewMessageMarkers: new Map(),
   }
 }
 
@@ -530,7 +534,6 @@ export const roomStore = createStore<RoomState>()(
         notifyAllPersistent: room.notifyAllPersistent,
         lastReadAt: room.lastReadAt,
         lastSeenMessageId: room.lastSeenMessageId,
-        firstNewMessageId: room.firstNewMessageId,
         lastMessage: room.messages?.length > 0 ? findLastNonIgnoredMessage(room.messages, room.jid, room.nickToJidCache) : undefined,
         lastInteractedAt: room.lastInteractedAt,
       }
@@ -579,7 +582,7 @@ export const roomStore = createStore<RoomState>()(
 
       // Update metadata fields if any changed
       const metaFields = ['unreadCount', 'mentionsCount', 'typingUsers', 'notifyAll',
-        'notifyAllPersistent', 'lastReadAt', 'firstNewMessageId', 'lastInteractedAt'] as const
+        'notifyAllPersistent', 'lastReadAt', 'lastInteractedAt'] as const
       const hasMetaUpdate = metaFields.some((f) => f in update)
 
       // Update runtime fields if any changed
@@ -630,7 +633,6 @@ export const roomStore = createStore<RoomState>()(
             notifyAll: updatedRoom.notifyAll,
             notifyAllPersistent: updatedRoom.notifyAllPersistent,
             lastReadAt: updatedRoom.lastReadAt,
-            firstNewMessageId: updatedRoom.firstNewMessageId,
             lastInteractedAt: updatedRoom.lastInteractedAt,
           })
         }
@@ -1060,7 +1062,7 @@ export const roomStore = createStore<RoomState>()(
         mentionsCount: existingMeta?.mentionsCount ?? existing.mentionsCount,
         lastReadAt: existingMeta?.lastReadAt ?? existing.lastReadAt,
         lastSeenMessageId: existingMeta?.lastSeenMessageId ?? existing.lastSeenMessageId,
-        firstNewMessageId: existingMeta?.firstNewMessageId ?? existing.firstNewMessageId,
+        firstNewMessageId: state.firstNewMessageMarkers.get(roomJid),
       }
 
       const updated = notifState.onMessageReceived(
@@ -1095,7 +1097,6 @@ export const roomStore = createStore<RoomState>()(
         unreadCount: updated.unreadCount,
         mentionsCount: updated.mentionsCount,
         lastReadAt: updated.lastReadAt,
-        firstNewMessageId: updated.firstNewMessageId,
         lastMessage,
         lastInteractedAt: newLastInteractedAt,
       })
@@ -1115,13 +1116,17 @@ export const roomStore = createStore<RoomState>()(
           unreadCount: updated.unreadCount,
           mentionsCount: updated.mentionsCount,
           lastReadAt: updated.lastReadAt,
-          firstNewMessageId: updated.firstNewMessageId,
           lastMessage,
           lastInteractedAt: newLastInteractedAt,
         })
       }
 
-      return { rooms: newRooms, roomRuntime: newRuntime, roomMeta: newMeta }
+      // Session-only divider (parity with chatStore.addMessage).
+      const newMarkers = new Map(state.firstNewMessageMarkers)
+      if (updated.firstNewMessageId) newMarkers.set(roomJid, updated.firstNewMessageId)
+      else newMarkers.delete(roomJid)
+
+      return { rooms: newRooms, roomRuntime: newRuntime, roomMeta: newMeta, firstNewMessageMarkers: newMarkers }
     })
   },
 
@@ -1310,7 +1315,7 @@ export const roomStore = createStore<RoomState>()(
         mentionsCount: meta?.mentionsCount ?? existing.mentionsCount,
         lastReadAt: meta?.lastReadAt ?? existing.lastReadAt,
         lastSeenMessageId: meta?.lastSeenMessageId ?? existing.lastSeenMessageId,
-        firstNewMessageId: meta?.firstNewMessageId ?? existing.firstNewMessageId,
+        firstNewMessageId: state.firstNewMessageMarkers.get(roomJid),
       }
 
       const runtime = state.roomRuntime.get(roomJid)
@@ -1352,17 +1357,7 @@ export const roomStore = createStore<RoomState>()(
     // (no longer every visited room holds up to MAX_MESSAGES_PER_ROOM) and shrinks
     // the DOM mounted on the next switch into a large room.
     if (prevJid && prevJid !== roomJid) {
-      const prevMeta = get().roomMeta.get(prevJid)
-      const hadMarker = !!prevMeta?.firstNewMessageId
-      const clearedFirstNewMessageId = hadMarker
-        ? notifState.onDeactivate({
-            unreadCount: prevMeta!.unreadCount,
-            mentionsCount: prevMeta!.mentionsCount,
-            lastReadAt: prevMeta!.lastReadAt,
-            lastSeenMessageId: prevMeta!.lastSeenMessageId,
-            firstNewMessageId: prevMeta!.firstNewMessageId,
-          }).firstNewMessageId
-        : undefined
+      const hadMarker = get().firstNewMessageMarkers.has(prevJid)
 
       set((state) => {
         // Evict from the runtime mirror (messages live here).
@@ -1372,21 +1367,17 @@ export const roomStore = createStore<RoomState>()(
           newRuntime.set(prevJid, { ...prevRuntime, messages: [] })
         }
 
-        // Evict from the combined map mirror; carry the (possibly cleared) marker.
+        // Evict from the combined map mirror.
         const newRooms = new Map(state.rooms)
         const prevRoom = newRooms.get(prevJid)
         if (prevRoom) {
-          const updatedPrevRoom = { ...prevRoom, messages: [] }
-          if (hadMarker) updatedPrevRoom.firstNewMessageId = clearedFirstNewMessageId
-          newRooms.set(prevJid, updatedPrevRoom)
+          newRooms.set(prevJid, { ...prevRoom, messages: [] })
         }
 
-        const newMeta = new Map(state.roomMeta)
-        if (prevMeta && hadMarker) {
-          newMeta.set(prevJid, { ...prevMeta, firstNewMessageId: clearedFirstNewMessageId })
-        }
+        const newMarkers = new Map(state.firstNewMessageMarkers)
+        if (hadMarker) newMarkers.delete(prevJid)
 
-        return { roomRuntime: newRuntime, rooms: newRooms, roomMeta: newMeta }
+        return { roomRuntime: newRuntime, rooms: newRooms, firstNewMessageMarkers: newMarkers }
       })
     }
 
@@ -1399,7 +1390,7 @@ export const roomStore = createStore<RoomState>()(
           mentionsCount: meta?.mentionsCount ?? room.mentionsCount,
           lastReadAt: meta?.lastReadAt ?? room.lastReadAt,
           lastSeenMessageId: meta?.lastSeenMessageId ?? room.lastSeenMessageId,
-          firstNewMessageId: meta?.firstNewMessageId ?? room.firstNewMessageId,
+          firstNewMessageId: get().firstNewMessageMarkers.get(roomJid),
         }
 
         const runtime = get().roomRuntime.get(roomJid)
@@ -1418,7 +1409,6 @@ export const roomStore = createStore<RoomState>()(
             mentionsCount: activated.mentionsCount,
             lastReadAt: activated.lastReadAt,
             lastSeenMessageId: activated.lastSeenMessageId,
-            firstNewMessageId: activated.firstNewMessageId,
             lastInteractedAt: newLastInteractedAt,
           }
           const newMeta = new Map(state.roomMeta)
@@ -1430,10 +1420,12 @@ export const roomStore = createStore<RoomState>()(
             mentionsCount: activated.mentionsCount,
             lastReadAt: activated.lastReadAt,
             lastSeenMessageId: activated.lastSeenMessageId,
-            firstNewMessageId: activated.firstNewMessageId,
             lastInteractedAt: newLastInteractedAt,
           })
-          return { roomMeta: newMeta, rooms: newRooms, activeRoomJid: roomJid }
+          const newMarkers = new Map(state.firstNewMessageMarkers)
+          if (activated.firstNewMessageId) newMarkers.set(roomJid, activated.firstNewMessageId)
+          else newMarkers.delete(roomJid)
+          return { roomMeta: newMeta, rooms: newRooms, activeRoomJid: roomJid, firstNewMessageMarkers: newMarkers }
         })
         return
       }
@@ -1448,6 +1440,11 @@ export const roomStore = createStore<RoomState>()(
       await get().loadMessagesFromCache(roomJid, { limit: 100 })
       // A newer activation started while the cache read was in flight
       if (token !== activationToken) return
+      // XEP-0490: fold any pending remote read position into lastSeenMessageId
+      // BEFORE setActiveRoom derives the new-message divider (parity with
+      // chatStore.activateConversation). Forward-only against the loaded messages.
+      const pending = get().roomMeta.get(roomJid)?.pendingRemoteDisplayedStanzaId
+      if (pending) get().applyRemoteDisplayed(roomJid, pending)
     }
     get().setActiveRoom(roomJid)
   },
@@ -1456,29 +1453,10 @@ export const roomStore = createStore<RoomState>()(
 
   clearFirstNewMessageId: (roomJid) => {
     set((state) => {
-      const existing = state.rooms.get(roomJid)
-      const meta = state.roomMeta.get(roomJid)
-      const hasFirstNewMessage = meta?.firstNewMessageId ?? existing?.firstNewMessageId
-      if (!existing || !hasFirstNewMessage) return state
-
-      const notifInput: notifState.EntityNotificationState = {
-        unreadCount: meta?.unreadCount ?? existing.unreadCount,
-        mentionsCount: meta?.mentionsCount ?? existing.mentionsCount,
-        lastReadAt: meta?.lastReadAt ?? existing.lastReadAt,
-        lastSeenMessageId: meta?.lastSeenMessageId ?? existing.lastSeenMessageId,
-        firstNewMessageId: meta?.firstNewMessageId ?? existing.firstNewMessageId,
-      }
-      const cleared = notifState.onClearMarker(notifInput)
-
-      const newRooms = new Map(state.rooms)
-      newRooms.set(roomJid, { ...existing, firstNewMessageId: cleared.firstNewMessageId })
-
-      const newMeta = new Map(state.roomMeta)
-      if (meta) {
-        newMeta.set(roomJid, { ...meta, firstNewMessageId: cleared.firstNewMessageId })
-      }
-
-      return { rooms: newRooms, roomMeta: newMeta }
+      if (!state.firstNewMessageMarkers.has(roomJid)) return state
+      const newMarkers = new Map(state.firstNewMessageMarkers)
+      newMarkers.delete(roomJid)
+      return { firstNewMessageMarkers: newMarkers }
     })
   },
 
@@ -1496,7 +1474,7 @@ export const roomStore = createStore<RoomState>()(
         mentionsCount: meta?.mentionsCount ?? existing.mentionsCount,
         lastReadAt: meta?.lastReadAt ?? existing.lastReadAt,
         lastSeenMessageId: meta?.lastSeenMessageId ?? existing.lastSeenMessageId,
-        firstNewMessageId: meta?.firstNewMessageId ?? existing.firstNewMessageId,
+        firstNewMessageId: state.firstNewMessageMarkers.get(roomJid),
       }
       const updated = notifState.onMessageSeen(notifInput, messageId, messages)
       if (updated === notifInput) return state
@@ -1542,7 +1520,7 @@ export const roomStore = createStore<RoomState>()(
           mentionsCount: meta.mentionsCount,
           lastReadAt: meta.lastReadAt,
           lastSeenMessageId: meta.lastSeenMessageId,
-          firstNewMessageId: meta.firstNewMessageId,
+          firstNewMessageId: state.firstNewMessageMarkers.get(roomJid),
         },
         match.id,
         messages

@@ -9,6 +9,7 @@
  */
 import { describe, it, expect, beforeEach } from 'vitest'
 import { chatStore } from './chatStore'
+import { chatSelectors } from './chatSelectors'
 import type { Message } from '../core/types/chat'
 
 // Mock localStorage (required by chatStore's persist middleware)
@@ -180,5 +181,107 @@ describe('chatStore.applyRemoteDisplayed', () => {
     const meta = chatStore.getState().conversationMeta.get(cid)
     expect(meta?.lastSeenMessageId).toBe('m5')
     expect(meta?.pendingRemoteDisplayedStanzaId).toBe(undefined)
+  })
+})
+
+describe('chatStore — new-message divider is session-only', () => {
+  beforeEach(() => chatStore.getState().reset())
+
+  it('parks the divider in firstNewMessageMarkers, not in conversationMeta', () => {
+    const cid = 'juliet@capulet.example'
+    // m1 outgoing-read baseline, then two incoming unread messages.
+    const messages = [msg('m1', 's1'), msg('m2', 's2'), msg('m3', 's3')]
+    seedMessages(cid, messages)
+    chatStore.setState((state) => {
+      const newMeta = new Map(state.conversationMeta)
+      newMeta.set(cid, { unreadCount: 2, lastSeenMessageId: 'm1' })
+      const newConvs = new Map(state.conversations)
+      newConvs.set(cid, { id: cid, name: cid, type: 'chat', unreadCount: 2, lastSeenMessageId: 'm1' })
+      return { conversationMeta: newMeta, conversations: newConvs }
+    })
+
+    chatStore.getState().setActiveConversation(cid)
+
+    // Divider derived at m2 (first unread after m1) and stored in the session map.
+    expect(chatStore.getState().firstNewMessageMarkers.get(cid)).toBe('m2')
+    expect(chatSelectors.firstNewMessageIdFor(cid)(chatStore.getState())).toBe('m2')
+    // The metadata entry carries NO divider field.
+    expect('firstNewMessageId' in (chatStore.getState().conversationMeta.get(cid) as object)).toBe(false)
+  })
+
+  it('deactivating a conversation deletes its marker (switching to another conversation)', () => {
+    const cidA = 'juliet@capulet.example'
+    const cidB = 'romeo@montague.example'
+
+    // Seed conversation A with one read message and one unread message.
+    seedMessages(cidA, [msg('a1', 'sa1'), msg('a2', 'sa2')])
+    chatStore.setState((state) => {
+      const newMeta = new Map(state.conversationMeta)
+      newMeta.set(cidA, { unreadCount: 1, lastSeenMessageId: 'a1' })
+      const newConvs = new Map(state.conversations)
+      newConvs.set(cidA, { id: cidA, name: cidA, type: 'chat', unreadCount: 1, lastSeenMessageId: 'a1' })
+      // Seed conversation B with no unread so its activation sets no marker.
+      newMeta.set(cidB, { unreadCount: 0 })
+      newConvs.set(cidB, { id: cidB, name: cidB, type: 'chat', unreadCount: 0 })
+      return { conversationMeta: newMeta, conversations: newConvs }
+    })
+    seedMessages(cidB, [msg('b1', 'sb1')])
+
+    // Activate A — should park the divider at a2.
+    chatStore.getState().setActiveConversation(cidA)
+    expect(chatStore.getState().firstNewMessageMarkers.get(cidA)).toBe('a2')
+
+    // Switching to B must delete A's marker (the deactivate branch).
+    chatStore.getState().setActiveConversation(cidB)
+    expect(chatStore.getState().firstNewMessageMarkers.get(cidA)).toBeUndefined()
+    // B has no unread, so it should not gain a marker either.
+    expect(chatStore.getState().firstNewMessageMarkers.get(cidB)).toBeUndefined()
+  })
+
+  it('never writes the divider to persisted storage', () => {
+    const cid = 'juliet@capulet.example'
+    seedMessages(cid, [msg('m1', 's1'), msg('m2', 's2')])
+    chatStore.setState((state) => {
+      const newMeta = new Map(state.conversationMeta)
+      newMeta.set(cid, { unreadCount: 1, lastSeenMessageId: 'm1' })
+      const newConvs = new Map(state.conversations)
+      newConvs.set(cid, { id: cid, name: cid, type: 'chat', unreadCount: 1, lastSeenMessageId: 'm1' })
+      return { conversationMeta: newMeta, conversations: newConvs }
+    })
+    chatStore.getState().setActiveConversation(cid)
+    expect(chatStore.getState().firstNewMessageMarkers.get(cid)).toBe('m2')
+
+    // Whatever the persist middleware wrote must not mention the divider.
+    const dump = JSON.stringify(localStorage)
+    expect(dump.includes('firstNewMessageId')).toBe(false)
+    expect(dump.includes('firstNewMessageMarkers')).toBe(false)
+  })
+})
+
+describe('chatStore.activateConversation — XEP-0490 divider sync', () => {
+  beforeEach(() => chatStore.getState().reset())
+
+  it('folds a pending remote read marker into lastSeenMessageId before deriving the divider', async () => {
+    const cid = 'juliet@capulet.example'
+    const messages = [msg('m1', 's1'), msg('m2', 's2'), msg('m3', 's3'), msg('m4', 's4')]
+    seedMessages(cid, messages)
+
+    // Local read is stale at m2; a remote device read up to s4, seeded as pending
+    // before the messages were loaded (the fresh-session MDS seed ordering).
+    chatStore.setState((state) => {
+      const newMeta = new Map(state.conversationMeta)
+      newMeta.set(cid, { unreadCount: 0, lastSeenMessageId: 'm2', pendingRemoteDisplayedStanzaId: 's4' })
+      const newConvs = new Map(state.conversations)
+      newConvs.set(cid, { id: cid, name: cid, type: 'chat', unreadCount: 0, lastSeenMessageId: 'm2', pendingRemoteDisplayedStanzaId: 's4' })
+      return { conversationMeta: newMeta, conversations: newConvs }
+    })
+
+    await chatStore.getState().activateConversation(cid)
+
+    // The pending marker is resolved at activation, advancing the read position.
+    expect(chatStore.getState().conversationMeta.get(cid)?.lastSeenMessageId).toBe('m4')
+    // So the divider reflects the synced read (m4 is the last message → nothing new),
+    // NOT the stale 'm3' it would show if the marker resolved after onActivate.
+    expect(chatSelectors.firstNewMessageIdFor(cid)(chatStore.getState())).toBeUndefined()
   })
 })

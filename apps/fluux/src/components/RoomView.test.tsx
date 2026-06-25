@@ -145,6 +145,7 @@ vi.mock('@fluux/sdk', () => ({
     sendEasterEgg: vi.fn(),
     clearAnimation: mockClearAnimation,
     clearFirstNewMessageId: mockClearFirstNewMessageId,
+    firstNewMessageId: undefined,
     joinRoom: mockJoinRoom,
     joinResult: mockJoinResult,
     setRoomAvatar: mockSetRoomAvatar,
