@@ -33,6 +33,30 @@ const STORAGE_KEY_BASE = 'xmpp-chat-storage'
  * constant instead of creating a new [] instances each time.
  */
 const EMPTY_MESSAGE_ARRAY: Message[] = []
+const EMPTY_CONVERSATION_IDS: string[] = []
+
+/**
+ * Conversation ids (active or archived) sorted by last activity, most recent
+ * first. Powers the sidebar's id-only subscription: the list re-renders only on
+ * reorder/membership change, not on per-conversation metadata churn. Returns a
+ * referentially-stable empty array so useShallow consumers never re-render when
+ * the list is empty.
+ */
+function conversationIdsByActivity(
+  conversations: Map<string, Conversation>,
+  archivedConversations: Set<string>,
+  archived: boolean,
+): string[] {
+  const entries: Array<[string, number]> = []
+  for (const [id, c] of conversations) {
+    if (archivedConversations.has(id) !== archived) continue
+    const ts = c.lastMessage?.timestamp
+    entries.push([id, ts instanceof Date ? ts.getTime() : ts ? new Date(ts).getTime() : 0])
+  }
+  if (entries.length === 0) return EMPTY_CONVERSATION_IDS
+  entries.sort((a, b) => b[1] - a[1])
+  return entries.map((e) => e[0])
+}
 
 // Monotonic token so a slow cache read from a superseded activateConversation
 // call can't overwrite a newer activation when it finally resolves
@@ -127,6 +151,16 @@ interface ChatState {
   isArchived: (id: string) => boolean
   /** Get all non-archived conversations (visible in sidebar) */
   activeConversations: () => Conversation[]
+  /**
+   * Active (non-archived) conversation ids, sorted by last activity (most recent
+   * first). Referentially stable under useShallow when order/membership is
+   * unchanged — the sidebar subscribes to this instead of the full conversation
+   * objects, so presence churn and per-conversation metadata updates don't
+   * re-render the whole list (each row self-subscribes by id).
+   */
+  conversationSidebarIds: () => string[]
+  /** Archived conversation ids, sorted by last activity (most recent first). */
+  archivedConversationSidebarIds: () => string[]
 
   // Actions
   setActiveConversation: (id: string | null) => void
@@ -515,6 +549,15 @@ export const chatStore = createStore<ChatState>()(
           }
         }
         return result
+      },
+
+      conversationSidebarIds: () => {
+        const { conversations, archivedConversations } = get()
+        return conversationIdsByActivity(conversations, archivedConversations, false)
+      },
+      archivedConversationSidebarIds: () => {
+        const { conversations, archivedConversations } = get()
+        return conversationIdsByActivity(conversations, archivedConversations, true)
       },
 
       setActiveConversation: (id) => {
