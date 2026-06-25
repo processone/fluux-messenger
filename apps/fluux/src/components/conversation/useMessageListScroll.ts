@@ -1249,15 +1249,20 @@ export function useMessageListScroll({
       if (framesRemaining <= 0 || !scrollerRef.current) return
       framesRemaining--
 
-      // When virtualized, re-read the anchor's offset from the virtualizer each frame and
-      // re-anchor — it is valid even while the anchor is windowed out, and it tracks the
-      // @tanstack estimate -> measured convergence as the just-prepended rows settle.
-      // Flag-OFF holds the fixed target (unchanged behavior).
-      let target = targetScrollTop
-      if (latestRef.current.virtualizer && saved.anchorMessageId) {
-        const virtualOffset = latestRef.current.virtualizer.getOffsetForMessageId(saved.anchorMessageId)
-        if (virtualOffset != null) target = virtualOffset - saved.anchorOffsetFromTop
-      }
+      // Hold the FIXED target captured by the initial restore (flag-ON and OFF alike).
+      // We used to re-read getOffsetForMessageId(anchor) every frame here, to "track the
+      // estimate -> measured convergence" of the just-prepended rows. A real-engine trace
+      // proved that is an UNSTABLE positive-feedback loop under virtualization: writing
+      // scrollTop moves the @tanstack window, which mounts/measures a different set of rows,
+      // which shifts the anchor's computed start-offset — so the re-read target swings
+      // ~1000px/frame for ~200ms even though getTotalSize is already stable, and when a swing
+      // reaches the top it re-fires load-older (runaway pagination + render loop). The trace
+      // showed getTotalSize settles within ~1 frame of the prepend, so there is no
+      // convergence left to track; holding the initial target eliminates the oscillation.
+      // (The initial restore at line ~1152 still uses getOffsetForMessageId so it lands on
+      // the right row — PR #641; only the per-frame re-read is removed. Any residual sub-row
+      // drift is bounded and belongs to estimateSize accuracy, not a per-frame re-read.)
+      const target = targetScrollTop
 
       const currentScrollTop = scrollerRef.current.scrollTop
       if (Math.abs(currentScrollTop - target) > 5) {
