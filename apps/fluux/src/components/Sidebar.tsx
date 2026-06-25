@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, type RefObject } from 'react'
 import { useTranslation } from 'react-i18next'
 import { detectRenderLoop, trackSelectorChange } from '@/utils/renderLoopDetector'
 import { useClickOutside, useWindowDrag, useRouteSync } from '@/hooks'
-import { useModals } from '@/contexts'
+import { useModalStore } from '@/stores/modalStore'
 import {
   useXMPP,
   type Contact,
@@ -118,11 +118,14 @@ export function Sidebar({ onSelectContact, onStartChat, onManageUser, adminCateg
   trackSelectorChange('Sidebar', 'totalNotifiableUnreadCount', totalNotifiableUnreadCount)
   const { titleBarClass, dragRegionProps } = useWindowDrag()
 
-  // Modal state from context - shared with ChatLayout
-  const { state: modalState, actions: modalActions } = useModals()
-  const showQuickChat = modalState.quickChat
-  const showAddContact = modalState.addContact
-  const showPresenceMenu = modalState.presenceMenu
+  // Per-modal subscriptions: the Sidebar owns these three modals and re-renders
+  // only when one of THEM toggles, not when ChatLayout's modals (command palette,
+  // shortcut help) open/close. Actions are stable store methods.
+  const showQuickChat = useModalStore((s) => s.quickChat)
+  const showAddContact = useModalStore((s) => s.addContact)
+  const showPresenceMenu = useModalStore((s) => s.presenceMenu)
+  const modalOpen = useModalStore((s) => s.open)
+  const modalClose = useModalStore((s) => s.close)
 
   // Local UI state (not shared)
   const [showCreateRoom, setShowCreateRoom] = useState(false)
@@ -330,7 +333,7 @@ export function Sidebar({ onSelectContact, onStartChat, onManageUser, adminCateg
               {showContactDropdown && (
                 <div className="absolute end-0 mt-1 w-52 bg-fluux-bg rounded-lg shadow-xl border border-fluux-hover py-1 z-50">
                   <button
-                    onClick={() => { setShowContactDropdown(false); modalActions.open('addContact') }}
+                    onClick={() => { setShowContactDropdown(false); modalOpen('addContact') }}
                     className="w-full px-3 py-2 text-start text-sm hover:bg-fluux-hover flex items-center gap-2"
                   >
                     <UserPlus className="size-4 text-fluux-muted" />
@@ -362,7 +365,7 @@ export function Sidebar({ onSelectContact, onStartChat, onManageUser, adminCateg
               {showRoomDropdown && (
                 <div className="absolute end-0 mt-1 w-52 bg-fluux-bg rounded-lg shadow-xl border border-fluux-hover py-1 z-50">
                   <button
-                    onClick={() => { setShowRoomDropdown(false); modalActions.open('quickChat') }}
+                    onClick={() => { setShowRoomDropdown(false); modalOpen('quickChat') }}
                     className="w-full px-3 py-2 text-start text-sm hover:bg-fluux-hover flex items-center gap-2"
                   >
                     <Zap className="size-4 text-amber-500" />
@@ -460,8 +463,8 @@ export function Sidebar({ onSelectContact, onStartChat, onManageUser, adminCateg
               <div
                 role="button"
                 tabIndex={0}
-                onClick={() => { modalActions.close('presenceMenu'); navigateToSettings('profile') }}
-                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); modalActions.close('presenceMenu'); navigateToSettings('profile') } }}
+                onClick={() => { modalClose('presenceMenu'); navigateToSettings('profile') }}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); modalClose('presenceMenu'); navigateToSettings('profile') } }}
                 className="flex-shrink-0 me-1 rounded-full hover:ring-2 hover:ring-fluux-muted/30 transition-all cursor-pointer"
               >
                 <Avatar
@@ -478,13 +481,13 @@ export function Sidebar({ onSelectContact, onStartChat, onManageUser, adminCateg
               <Tooltip content={t('sidebar.viewProfile')} position="top">
                 <button
                   type="button"
-                  onClick={() => { modalActions.close('presenceMenu'); navigateToSettings('profile') }}
+                  onClick={() => { modalClose('presenceMenu'); navigateToSettings('profile') }}
                   className="block w-full text-start text-sm font-medium text-fluux-text truncate cursor-pointer hover:underline"
                 >
                   {ownNickname || jid?.split('@')[0]}
                 </button>
               </Tooltip>
-              <StatusOrPresence isOpen={showPresenceMenu} onOpenChange={(open) => open ? modalActions.open('presenceMenu') : modalActions.close('presenceMenu')} />
+              <StatusOrPresence isOpen={showPresenceMenu} onOpenChange={(open) => open ? modalOpen('presenceMenu') : modalClose('presenceMenu')} />
             </div>
             {/* Menu button — always available, including while reconnecting,
                 so logout stays reachable. Cancelling the reconnection lives
@@ -514,7 +517,7 @@ export function Sidebar({ onSelectContact, onStartChat, onManageUser, adminCateg
 
       {/* Add Contact Modal */}
       {showAddContact && (
-        <AddContactModal onClose={() => modalActions.close('addContact')} />
+        <AddContactModal onClose={() => modalClose('addContact')} />
       )}
 
       {/* Create Room Modal */}
@@ -524,7 +527,7 @@ export function Sidebar({ onSelectContact, onStartChat, onManageUser, adminCateg
 
       {/* Quick Chat Modal */}
       {showQuickChat && (
-        <CreateQuickChatModal onClose={() => modalActions.close('quickChat')} />
+        <CreateQuickChatModal onClose={() => modalClose('quickChat')} />
       )}
 
       {/* Join Room Modal */}

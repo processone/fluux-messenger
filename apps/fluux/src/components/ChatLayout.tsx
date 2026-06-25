@@ -37,19 +37,15 @@ import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
 import { useDeepLink } from '@/hooks/useDeepLink'
 import { saveViewState, getSavedViewState, type ViewStateData } from '@/hooks/useSessionPersistence'
 import { useWindowDrag } from '@/hooks'
-import { LayoutProvider, useModals } from '@/contexts'
+import { useModalStore } from '@/stores/modalStore'
 import { Server, ShieldOff, MessageCircle, Hash, Users, Archive, Bell, Search, Settings, type LucideIcon } from 'lucide-react'
 
 /**
- * ChatLayout wrapper that provides LayoutContext to all children.
- * The actual layout logic is in ChatLayoutContent.
+ * ChatLayout wrapper. The actual layout logic is in ChatLayoutContent; modal state
+ * now lives in the global modalStore, so no context provider is needed.
  */
 export function ChatLayout() {
-  return (
-    <LayoutProvider>
-      <ChatLayoutContent />
-    </LayoutProvider>
-  )
+  return <ChatLayoutContent />
 }
 
 /**
@@ -103,6 +99,54 @@ function ViewLoadingFallback() {
   )
 }
 
+/**
+ * Renders the modals ChatLayout owns (command palette + shortcut-help overlay) and
+ * subscribes to their open state itself. As a sibling of the layout body, a modal
+ * toggle re-renders ONLY this host, not the sidebar column (Sidebar /
+ * ConversationList / MemberList). See docs/2026-06-24-render-perf-phase0-baseline.md.
+ */
+function ModalHost({
+  shortcuts,
+  onSidebarViewChange,
+  onOpenSettings,
+  onToggleConsole,
+  onToggleShortcutHelp,
+  onCreateQuickChat,
+  onAddContact,
+  onStartConversation,
+}: {
+  shortcuts: ReturnType<typeof useKeyboardShortcuts>
+  onSidebarViewChange: (view: SidebarView) => void
+  onOpenSettings: () => void
+  onToggleConsole: () => void
+  onToggleShortcutHelp: () => void
+  onCreateQuickChat: () => void
+  onAddContact: () => void
+  onStartConversation: (jid: string) => void
+}) {
+  const showShortcutHelp = useModalStore((s) => s.shortcutHelp)
+  const showCommandPalette = useModalStore((s) => s.commandPalette)
+  const modalClose = useModalStore((s) => s.close)
+  return (
+    <>
+      {showShortcutHelp && (
+        <ShortcutHelp shortcuts={shortcuts} onClose={() => modalClose('shortcutHelp')} />
+      )}
+      <CommandPalette
+        isOpen={showCommandPalette}
+        onClose={() => modalClose('commandPalette')}
+        onSidebarViewChange={onSidebarViewChange}
+        onOpenSettings={onOpenSettings}
+        onToggleConsole={onToggleConsole}
+        onToggleShortcutHelp={onToggleShortcutHelp}
+        onCreateQuickChat={onCreateQuickChat}
+        onAddContact={onAddContact}
+        onStartConversation={onStartConversation}
+      />
+    </>
+  )
+}
+
 function ChatLayoutContent() {
   // Detect render loops before they freeze the UI
   detectRenderLoop('ChatLayout')
@@ -119,7 +163,11 @@ function ChatLayoutContent() {
   }, [])
 
   // Modal management from context
-  const { state: modalState, actions: modalActions } = useModals()
+  // Only stable action subscriptions remain — ChatLayout no longer reads any modal
+  // OPEN state reactively (ModalHost renders the modals; Escape reads the store
+  // directly), so a modal toggle does not re-render ChatLayout or its children.
+  const modalOpen = useModalStore((s) => s.open)
+  const modalToggle = useModalStore((s) => s.toggle)
 
   // NOTE: Subscribe directly to stores instead of using useChat()/useRoom() hooks.
   // Those hooks subscribe to activeMessages which changes frequently during MAM loading,
@@ -172,10 +220,6 @@ function ChatLayoutContent() {
     store.setActiveCategory('users')
     return domain
   }
-  // Modal state from useModals() hook via LayoutContext
-  // showShortcutHelp and showCommandPalette are used in this component
-  // quickChat, addContact, and presenceMenu are only used by Sidebar (which gets them from context)
-  const { shortcutHelp: showShortcutHelp, commandPalette: showCommandPalette } = modalState
 
   // Selected contact JID from directory (for profile view)
   // Store only the JID, derive contact from store so presence updates in real-time
@@ -486,12 +530,12 @@ function ChatLayoutContent() {
 
   // Toggle shortcut help overlay
   const toggleShortcutHelp = () => {
-    modalActions.toggle('shortcutHelp')
+    modalToggle('shortcutHelp')
   }
 
   // Toggle command palette (Cmd-K opens and closes)
   const toggleCommandPalette = () => {
-    modalActions.toggle('commandPalette')
+    modalToggle('commandPalette')
   }
 
   // Handle sidebar view changes - delegates to useViewNavigation hook
@@ -513,19 +557,19 @@ function ChatLayoutContent() {
   // Handle creating quick chat from keyboard shortcut
   const handleCreateQuickChat = () => {
     navigateToRooms()
-    modalActions.open('quickChat')
+    modalOpen('quickChat')
   }
 
   // Handle adding contact from command palette
   const handleAddContact = () => {
     navigateToContacts()
-    modalActions.open('addContact')
+    modalOpen('addContact')
   }
 
   // Global keyboard shortcuts with escape hierarchy
   // Handle toggling presence menu from keyboard shortcut
   const handleTogglePresenceMenu = () => {
-    modalActions.toggle('presenceMenu')
+    modalToggle('presenceMenu')
   }
 
   // Handle fully quitting desktop app (Linux/Windows)
@@ -586,15 +630,10 @@ function ChatLayoutContent() {
     },
     onFindNext: () => findOnPageRef.current?.goToNext(),
     onFindPrev: () => findOnPageRef.current?.goToPrev(),
+    // Modals (command palette, shortcut help, presence menu, quick chat) are handled
+    // inside handleEscape via the modalStore — only the non-modal escape targets are
+    // passed here, so ChatLayout doesn't subscribe to modal state for Escape.
     escapeHierarchy: {
-      isCommandPaletteOpen: showCommandPalette,
-      onCloseCommandPalette: () => modalActions.close('commandPalette'),
-      isShortcutHelpOpen: showShortcutHelp,
-      onCloseShortcutHelp: () => modalActions.close('shortcutHelp'),
-      isPresenceMenuOpen: modalState.presenceMenu,
-      onClosePresenceMenu: () => modalActions.close('presenceMenu'),
-      isQuickChatOpen: modalState.quickChat,
-      onCloseQuickChat: () => modalActions.close('quickChat'),
       isConsoleOpen: consoleOpen,
       onCloseConsole: toggleConsole,
       isContactProfileOpen: selectedContact !== null,
@@ -832,18 +871,10 @@ function ChatLayoutContent() {
         <XmppConsole />
       </Suspense>
 
-      {/* Keyboard Shortcuts Help Overlay */}
-      {showShortcutHelp && (
-        <ShortcutHelp
-          shortcuts={shortcuts}
-          onClose={() => modalActions.close('shortcutHelp')}
-        />
-      )}
-
-      {/* Command Palette */}
-      <CommandPalette
-        isOpen={showCommandPalette}
-        onClose={() => modalActions.close('commandPalette')}
+      {/* Command palette + shortcut-help overlay. ModalHost owns their open-state
+          subscription, so a toggle re-renders only the host, not the sidebar column. */}
+      <ModalHost
+        shortcuts={shortcuts}
         onSidebarViewChange={handleSidebarViewChange}
         onOpenSettings={() => navigateToSettings()}
         onToggleConsole={toggleConsole}

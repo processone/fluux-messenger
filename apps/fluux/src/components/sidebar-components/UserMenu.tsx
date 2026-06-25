@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useClickOutside, useIsMobileWeb, useAnchoredMenu } from '@/hooks'
-import { useModals } from '@/contexts'
+import { useModalStore } from '@/stores/modalStore'
 import { useConsole } from '@fluux/sdk'
 import { AboutModal } from '../AboutModal'
 import { ChangelogModal } from '../ChangelogModal'
@@ -33,7 +33,9 @@ export function UserMenu({ onLogout }: UserMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null)
   const menu = useAnchoredMenu(isOpen, { direction: 'up' })
   const { toggle: toggleConsole, isOpen: consoleOpen } = useConsole()
-  const { actions: modalActions } = useModals()
+  // Action-only consumer: subscribes to the stable `open` store method, so it
+  // never re-renders on modal state changes.
+  const modalOpen = useModalStore((s) => s.open)
   const isMobile = useIsMobileWeb()
 
   // Close menu when clicking outside
@@ -102,7 +104,7 @@ export function UserMenu({ onLogout }: UserMenuProps) {
             {!isMobile && (
               <button
                 onClick={() => {
-                  modalActions.open('shortcutHelp')
+                  modalOpen('shortcutHelp')
                   setIsOpen(false)
                 }}
                 className="w-full px-3 py-2 flex items-center gap-3 text-start text-fluux-text hover:bg-fluux-brand hover:text-fluux-text-on-accent transition-colors"

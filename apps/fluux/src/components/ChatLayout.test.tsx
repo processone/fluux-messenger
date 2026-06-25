@@ -488,25 +488,6 @@ vi.mock('./ToastContainer', () => ({
   ToastContainer: () => null,
 }))
 
-vi.mock('@/contexts', () => ({
-  LayoutProvider: ({ children }: { children: unknown }) => children,
-  useModals: () => ({
-    state: {
-      shortcutHelp: false,
-      commandPalette: false,
-      quickChat: false,
-      addContact: false,
-      presenceMenu: false,
-      joinRoom: false,
-    },
-    actions: {
-      open: vi.fn(),
-      close: vi.fn(),
-      toggle: vi.fn(),
-    },
-  }),
-}))
-
 describe('ChatLayout - Tab Memory', () => {
   beforeEach(() => {
     vi.clearAllMocks()

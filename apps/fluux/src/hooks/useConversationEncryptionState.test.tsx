@@ -15,6 +15,7 @@ vi.mock('@fluux/sdk', async (importOriginal) => {
   return {
     ...actual,
     useConnection: vi.fn(),
+    useConnectionStatus: vi.fn(),
     useXMPPContext: vi.fn(),
   }
 })
@@ -28,11 +29,12 @@ vi.mock('@/hooks/useWebKeyLocked', () => ({
   useWebKeyLocked: vi.fn(() => false),
 }))
 
-import { useConnection, useXMPPContext } from '@fluux/sdk'
+import { useConnection, useConnectionStatus, useXMPPContext } from '@fluux/sdk'
 import { useEncryptionSettingsStore } from '@/stores/encryptionSettingsStore'
 import { useWebKeyLocked } from '@/hooks/useWebKeyLocked'
 
 const mockedUseConnection = useConnection as unknown as ReturnType<typeof vi.fn>
+const mockedUseConnectionStatus = useConnectionStatus as unknown as ReturnType<typeof vi.fn>
 const mockedUseXMPPContext = useXMPPContext as unknown as ReturnType<typeof vi.fn>
 const mockedUseEncryptionSettingsStore =
   useEncryptionSettingsStore as unknown as ReturnType<typeof vi.fn>
@@ -48,7 +50,9 @@ function wireMocks(opts: {
   openpgpEnabled?: boolean
   plugin?: FakePlugin | null
 }) {
-  mockedUseConnection.mockReturnValue({ status: opts.online === false ? 'offline' : 'online' })
+  const conn = { status: opts.online === false ? 'offline' : 'online' }
+  mockedUseConnection.mockReturnValue(conn)
+  mockedUseConnectionStatus.mockReturnValue(conn)
   mockedUseXMPPContext.mockReturnValue({
     client: {
       e2ee: opts.plugin === undefined
@@ -80,6 +84,17 @@ describe('useConversationEncryptionState', () => {
   })
   afterEach(() => {
     vi.restoreAllMocks()
+  })
+
+  it('subscribes to connection via the narrow useConnectionStatus, not the broad useConnection', () => {
+    // Perf guard (Phase 1.1): this hook is mounted per active conversation and reads
+    // only `status`. useConnection subscribes to ~16 connection fields, so unrelated
+    // churn (ownAvatar, reconnectAttempt, serverInfo, ...) would re-render the chip.
+    // useConnectionStatus subscribes to status/jid/error only.
+    wireMocks({ plugin: makePlugin() })
+    renderHook(() => useConversationEncryptionState('bob@example.com', 'chat'))
+    expect(mockedUseConnectionStatus).toHaveBeenCalled()
+    expect(mockedUseConnection).not.toHaveBeenCalled()
   })
 
   it("stays 'disabled' when the master toggle is off", () => {

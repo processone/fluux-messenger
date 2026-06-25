@@ -1,5 +1,4 @@
 export { useAutoUpdate, type UpdateState } from './useAutoUpdate'
-export { useModalManager, type ModalName, type ModalState, type ModalActions, type UseModalManagerReturn } from './useModalManager'
 export { useRouteSync, getViewPath, type RouteState, type RouteActions, type NavigateOptions } from './useRouteSync'
 export { useConversationDraft, type DraftOperations, type UseConversationDraftOptions } from './useConversationDraft'
 export { useMode } from './useMode'

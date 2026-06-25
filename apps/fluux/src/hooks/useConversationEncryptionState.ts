@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useConnection, useXMPPContext } from '@fluux/sdk'
+import { useConnectionStatus, useXMPPContext } from '@fluux/sdk'
 import { useEncryptionSettingsStore } from '@/stores/encryptionSettingsStore'
 import { useVerifiedPeerKeysStore } from '@/stores/verifiedPeerKeysStore'
 import { useKeyChangeAlertsStore } from '@/stores/keyChangeAlertsStore'
@@ -100,7 +100,11 @@ export function useConversationEncryptionState(
   peerJid: string | null,
   conversationType: 'chat' | 'groupchat',
 ): ConversationEncryptionState {
-  const { status } = useConnection()
+  // Subscribe via the narrow useConnectionStatus (status/jid/error) rather than
+  // useConnection (~16 fields). This hook is mounted per active conversation and
+  // reads only `status`, so the broad subscription re-rendered the encryption chip
+  // on unrelated connection churn (ownAvatar, reconnectAttempt, serverInfo, ...).
+  const { status } = useConnectionStatus()
   const { client } = useXMPPContext()
   const openpgpEnabled = useEncryptionSettingsStore((s) => s.openpgpEnabled)
   // Changes when a plugin finishes registering. Makes the probe effect re-run

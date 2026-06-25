@@ -1,20 +1,29 @@
 import { useChatActive, useRoster, type PresenceStatus } from '@fluux/sdk'
 import { useConnectionStore } from '@fluux/sdk/react'
+import { detectRenderLoop } from '@/utils/renderLoopDetector'
 import { Avatar } from './Avatar'
 import { UserInfoPopover } from './conversation/UserInfoPopover'
 
 export function MemberList() {
-  // useChatActive subscribes only to the active conversation, not the full conversation
-  // list / typingStates / drafts that useChat() pulls in. MemberList is always mounted
-  // in ChatLayout, so over-subscription here re-renders the right sidebar on every
-  // chat store update during sync.
+  detectRenderLoop('MemberList')
+
+  // Gate the roster subscription. MemberList is always mounted in ChatLayout but only
+  // an active group chat shows members. useChatActive subscribes to the active
+  // conversation alone, so this gate does NOT re-render on roster/presence churn.
+  // The useRoster() subscription lives in MemberListBody, mounted only for a group
+  // chat — confining presence-driven re-renders to when the list is actually visible
+  // (pre-fix it re-rendered 30-100x while rendering null; see
+  // docs/2026-06-24-render-perf-phase0-baseline.md).
   const { activeConversation } = useChatActive()
+  if (!activeConversation || activeConversation.type !== 'groupchat') return null
+
+  return <MemberListBody />
+}
+
+function MemberListBody() {
   const { sortedContacts } = useRoster()
   const connectionStatus = useConnectionStore((s) => s.status)
   const forceOffline = connectionStatus !== 'online'
-
-  // Only show for group chats
-  if (!activeConversation || activeConversation.type !== 'groupchat') return null
 
   // TODO: For MUC, this should show room participants, not the roster
   // For now, show roster contacts as a placeholder
