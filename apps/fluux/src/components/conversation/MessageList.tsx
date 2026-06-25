@@ -256,6 +256,7 @@ export function MessageList<T extends BaseMessage>({
     isHistoryComplete,
     typingUsersCount: typingUsers.length,
     lastMessageReactionsKey,
+    lastMessageIsOutgoing: lastMessage?.isOutgoing ?? false,
     staticMode,
     virtualizer: activeVirtualizer,
   })

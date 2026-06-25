@@ -37,7 +37,12 @@ function debugLog(action: string, data?: Record<string, unknown>) {
 // CONSTANTS
 // ============================================================================
 
-const AT_BOTTOM_THRESHOLD = 50 // pixels from bottom to consider "at bottom"
+// Pixels from the bottom still considered "at bottom" (auto-follow new messages). Generous
+// on purpose: a tall last message can measure taller than the estimate and leave the view a
+// little short of the real bottom; too tight a threshold would flip "at bottom" false and stop
+// following. Still well under FAB_THRESHOLD so the scroll-to-bottom button only shows when the
+// user has genuinely scrolled up.
+const AT_BOTTOM_THRESHOLD = 150
 const FAB_THRESHOLD = 300 // pixels from bottom to show "scroll to bottom" button
 const LOAD_COOLDOWN_MS = 500 // minimum time between load triggers
 const SAVE_THROTTLE_MS = 100 // minimum time between position saves
@@ -92,6 +97,34 @@ function restoreToAnchor(scroller: HTMLElement, anchor: ScrollAnchor): boolean {
   return true
 }
 
+/**
+ * Re-assert scroll-to-bottom across several frames (virtualized path only).
+ *
+ * Under virtualization the bottom rows mount and measure AFTER the scroll, so getTotalSize
+ * (= scrollHeight) keeps growing past the initial `scrollTop = scrollHeight` assignment when a
+ * row turns out taller than the fixed estimate — a one-shot assignment leaves the last message
+ * below the fold ("not perfectly at the bottom"). The content ResizeObserver that re-pins on
+ * growth for the non-virtualized path is disabled under virtualization (correcting the @tanstack
+ * spacer there feeds back into the virtualizer), so we re-pin here instead: bounded to ~250ms
+ * and gated on isAtBottom so a user scroll-up mid-settle cancels it. This is the bottom analog
+ * of the prepend momentum re-assert, which re-reads its target each frame as the estimate ->
+ * measured convergence settles.
+ */
+function reassertScrollToBottom(
+  scrollerRef: React.RefObject<HTMLDivElement | null>,
+  isAtBottomRef: React.MutableRefObject<boolean>,
+) {
+  let framesRemaining = 15 // ~250ms at 60fps
+  const step = () => {
+    const scroller = scrollerRef.current
+    if (framesRemaining <= 0 || !scroller || !isAtBottomRef.current) return
+    framesRemaining--
+    scroller.scrollTop = scroller.scrollHeight
+    requestAnimationFrame(step)
+  }
+  requestAnimationFrame(step)
+}
+
 // ============================================================================
 // TYPES
 // ============================================================================
@@ -111,6 +144,10 @@ export interface UseMessageListScrollOptions {
   isHistoryComplete?: boolean
   typingUsersCount: number
   lastMessageReactionsKey: string
+  /** Whether the newest message is the local user's own (outgoing). When a NEW such message
+   *  appears we scroll to the bottom regardless of position — you always want to see what you
+   *  just sent — whereas an incoming message only auto-follows when already near the bottom. */
+  lastMessageIsOutgoing?: boolean
   /** When true, disables all auto-scroll behaviors (conversation switch scroll,
    *  ResizeObserver auto-scroll, new message scroll-to-bottom, target message scroll).
    *  Used by read-only preview views (search context, activity context) that manage
@@ -153,6 +190,7 @@ export function useMessageListScroll({
   isHistoryComplete,
   typingUsersCount,
   lastMessageReactionsKey,
+  lastMessageIsOutgoing = false,
   staticMode = false,
   virtualizer,
 }: UseMessageListScrollOptions): UseMessageListScrollResult {
@@ -908,18 +946,25 @@ export function useMessageListScroll({
         // which triggers when messageCount changes.
         void scroller.offsetHeight  // Force layout calculation
         scroller.scrollTop = scroller.scrollHeight
-
-        requestAnimationFrame(() => {
-          if (scrollerRef.current) {
-            scrollerRef.current.scrollTop = scrollerRef.current.scrollHeight
-            debugLog('CONVERSATION SWITCH: scrolled to bottom (deferred)', {
-              scrollTop: scrollerRef.current.scrollTop,
-              scrollHeight: scrollerRef.current.scrollHeight,
-            })
-          }
-        })
-
         isAtBottomRef.current = true
+
+        if (latestRef.current.virtualizer) {
+          // Virtualized: the bottom rows measure taller than the estimate AFTER this assignment,
+          // so getTotalSize grows and a one-shot scroll leaves the last message hidden. Re-assert
+          // across frames (the content ResizeObserver that handles this for flag-OFF is disabled
+          // under virtualization).
+          reassertScrollToBottom(scrollerRef, isAtBottomRef)
+        } else {
+          requestAnimationFrame(() => {
+            if (scrollerRef.current) {
+              scrollerRef.current.scrollTop = scrollerRef.current.scrollHeight
+              debugLog('CONVERSATION SWITCH: scrolled to bottom (deferred)', {
+                scrollTop: scrollerRef.current.scrollTop,
+                scrollHeight: scrollerRef.current.scrollHeight,
+              })
+            }
+          })
+        }
       }
     }
 
@@ -1291,14 +1336,22 @@ export function useMessageListScroll({
     }
 
     const isNewMessage = messageCount > prevMessageCountRef.current
-    if (isNewMessage && isAtBottomRef.current) {
+    // Scroll to the bottom when a new message arrives AND either we're already near the bottom
+    // (auto-follow) OR the message is the user's own send — you always want to see what you
+    // just sent, even from a scrolled-up position. An incoming message while scrolled up does
+    // NOT yank the reader down.
+    if (isNewMessage && (isAtBottomRef.current || lastMessageIsOutgoing)) {
       debugLog('NEW MSG SCROLL TO BOTTOM', {
         messageCount,
         prevCount: prevMessageCountRef.current,
         isAtBottom: isAtBottomRef.current,
+        outgoing: lastMessageIsOutgoing,
         scrollTopBefore: scroller.scrollTop,
       })
       scroller.scrollTop = scroller.scrollHeight
+      isAtBottomRef.current = true // a send from a scrolled-up position lands us at the bottom
+      // Virtualized: re-pin as the new row measures past the estimate (see reassertScrollToBottom).
+      if (latestRef.current.virtualizer) reassertScrollToBottom(scrollerRef, isAtBottomRef)
     } else if (isNewMessage) {
       debugLog('NEW MSG NO SCROLL (not at bottom)', {
         messageCount,
@@ -1308,7 +1361,7 @@ export function useMessageListScroll({
     }
 
     prevMessageCountRef.current = messageCount
-  }, [messageCount, isAtBottomRef, staticMode])
+  }, [messageCount, isAtBottomRef, staticMode, lastMessageIsOutgoing])
 
   // ==========================================================================
   // EFFECT: Reset marker scroll tracking when firstNewMessageId changes
@@ -1334,12 +1387,16 @@ export function useMessageListScroll({
   useLayoutEffect(() => {
     if (isAtBottomRef.current && scrollerRef.current) {
       scrollerRef.current.scrollTop = scrollerRef.current.scrollHeight
+      // Virtualized: the typing-indicator row measures past the estimate after this assignment.
+      if (latestRef.current.virtualizer) reassertScrollToBottom(scrollerRef, isAtBottomRef)
     }
   }, [typingUsersCount, isAtBottomRef])
 
   useLayoutEffect(() => {
     if (isAtBottomRef.current && scrollerRef.current) {
       scrollerRef.current.scrollTop = scrollerRef.current.scrollHeight
+      // Virtualized: a reaction added to the last row grows it past the estimate.
+      if (latestRef.current.virtualizer) reassertScrollToBottom(scrollerRef, isAtBottomRef)
     }
   }, [lastMessageReactionsKey, isAtBottomRef])
 
