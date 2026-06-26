@@ -3,7 +3,7 @@
 - Status: Draft for review
 - Date: 2026-06-26
 - Scope: App-wide visual identity for `apps/fluux` (the reference client). SDK is unaffected.
-- Decision on file: "Signature & crafted" direction chosen; **Aurora** selected over Atelier (warm editorial) and Vivid (consumer bubbles).
+- Decision on file: "Signature & crafted" direction chosen; **Aurora** selected over Atelier (warm editorial) and Vivid (consumer bubbles). The **Expressive** register is the default and the focus of the initial build.
 
 ## 1. Goal / north star
 
@@ -64,6 +64,8 @@ Cool-warm off-white (not flat white), preserving the current "chrome is grey, ch
 | `--fluux-base-80` | `#5C6685` | text-muted |
 | `--fluux-base-90` | `#1B2233` | text-normal |
 | `--fluux-base-100` | `#0E1426` | highest-contrast text |
+
+In light mode the identity is carried by the accent, the gradient mark, the sender hues, and the type — not by glow (light surfaces don't glow). Light reads clean and accent-led; the luminous quality is a dark-mode signature. Sender-hue names and body text are tuned to clear WCAG AA on the white chat surface. The cool-grey chrome (`base-10/20`) is intentionally tinted toward the navy identity; warmth is tunable if it reads too cold on real screens.
 
 ### 3.3 Accent + luminous companions
 
@@ -196,12 +198,19 @@ Each PR: `npm run typecheck` + `npm test` clean (no stderr), render-count guards
 - No new heavy dependencies. Inter Tight self-hosted (no Google Fonts at runtime, matching the existing privacy stance). Icons stay on the current set.
 - **Bubbles are out of scope** — the flat, grouped grammar is the chosen direction.
 - Maintain WCAG AA for all text including the sender palette (values above are tuned per mode); keep focus rings; honor reduced motion.
+- Enterprise **Professional** register (solid accents, no glow) + a neutral **Slate** built-in theme are a future option, not part of the initial build. Aurora's structure — dark navy, flat grouped grammar, density, theming — is already enterprise-appropriate; **Expressive** ships as the default.
 
-## 9. Open questions
+## 9. Decisions & open items
 
-1. Density default — confirm comfortable-by-default + compact toggle.
-2. Light `base-10/20` cool-grey — verify it doesn't read too blue once built; tune after P0.
-3. Brand mark — is there a real Fluux logomark to replace the gradient placeholder in the rail?
+Resolved during brainstorming:
+- **Register**: Expressive is the default and the focus. The Professional preset + neutral theme remain a future option (see §8).
+- **Density**: comfortable by default, with a compact toggle in Appearance (§6).
+- **Brand mark**: no logomark yet — the gradient mark in the rail is an intentional placeholder.
+- **Light mode**: validated at app scale; identity holds, contrast clears AA (see §3.2).
+
+Open (tune during the build, not blockers):
+- Light-mode chrome cool-grey — confirm it doesn't read too blue on real screens; adjust after P0.
+- Final accent saturation, light vs dark — confirm on hardware.
 
 ## 10. References
 
