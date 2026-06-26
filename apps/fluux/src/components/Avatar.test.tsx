@@ -5,7 +5,7 @@
  * differs between DOM environments (jsdom normalizes #hex to rgb(); happy-dom, the
  * default env, keeps the literal). These assertions/snapshots only hold under jsdom.
  */
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, test } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import { Avatar, getConsistentTextColor } from './Avatar'
 
@@ -191,6 +191,18 @@ describe('Avatar', () => {
       expect(container.firstChild).toHaveClass('cursor-pointer')
     })
   })
+})
+
+test('Avatar defaults to a circle', () => {
+  const { container } = render(<Avatar identifier="emma@fluux.chat" name="Emma" />)
+  expect((container.firstChild as HTMLElement).className).toContain('rounded-full')
+})
+
+test('Avatar shape="square" renders a rounded square', () => {
+  const { container } = render(<Avatar identifier="team@conference.fluux.chat" name="Team" shape="square" />)
+  const root = container.firstChild as HTMLElement
+  expect(root.className).toContain('rounded-xl')
+  expect(root.className).not.toContain('rounded-full')
 })
 
 describe('getConsistentTextColor', () => {

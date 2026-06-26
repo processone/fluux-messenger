@@ -93,6 +93,12 @@ export interface AvatarProps {
    * based on connection status to avoid per-Avatar store subscriptions.
    */
   forceOffline?: boolean
+
+  /**
+   * Avatar shape. People are circular; rooms/groups are rounded squares.
+   * @default 'circle'
+   */
+  shape?: 'circle' | 'square'
 }
 
 /**
@@ -234,6 +240,7 @@ export function Avatar({
   overlay,
   fallbackColor,
   forceOffline = false,
+  shape = 'circle',
 }: AvatarProps) {
   // Generate consistent background color from identifier, or use custom fallbackColor
   const backgroundColor = fallbackColor
@@ -245,6 +252,8 @@ export function Avatar({
 
   // Get size classes
   const sizeClasses = SIZES[size]
+
+  const radiusClass = shape === 'square' ? 'rounded-xl' : 'rounded-full'
 
   // Determine presence color
   // Uses CSS custom properties for smooth color transitions between states
@@ -301,7 +310,7 @@ export function Avatar({
   // Container classes
   const containerClasses = [
     sizeClasses.container,
-    'rounded-full relative flex-shrink-0',
+    `${radiusClass} relative flex-shrink-0`,
     isClickable ? 'cursor-pointer' : 'cursor-default',
     className,
   ].filter(Boolean).join(' ')
@@ -330,7 +339,7 @@ export function Avatar({
           ref={imgRef}
           src={staticFrame && !hovered ? staticFrame : avatarUrl}
           alt={displayName}
-          className="w-full h-full rounded-full object-cover"
+          className={`w-full h-full ${radiusClass} object-cover`}
           draggable={false}
           onError={() => setImgError(true)}
           onLoad={(e) => { if (e.currentTarget.naturalWidth === 0) setImgError(true) }}
@@ -338,7 +347,7 @@ export function Avatar({
       ) : (
         // Letter fallback with consistent color
         <div
-          className="w-full h-full rounded-full flex items-center justify-center"
+          className={`w-full h-full ${radiusClass} flex items-center justify-center`}
           style={{ backgroundColor }}
         >
           <span className={`${sizeClasses.text} font-semibold text-white select-none`}>
