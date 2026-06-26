@@ -509,6 +509,11 @@ export const SearchContextMessageList = memo(function SearchContextMessageList({
 
   return (
     <MessageList
+      // Remount per previewed message so shared scroll-hook refs don't bleed between previews.
+      // Keyed on the preview identity (conversation + anchor message), not conversationId alone,
+      // since different results within one conversation must each get a fresh view. (staticMode
+      // here disables virtualization, so there is no virtualizer cache to leak.)
+      key={`${conversationId}:${highlightedMessageId}`}
       messages={messages}
       conversationId={conversationId}
       scrollerRef={scrollerRef}

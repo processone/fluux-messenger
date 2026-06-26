@@ -684,6 +684,11 @@ export const ChatMessageList = memo(function ChatMessageList({
 
   return (
     <MessageListComponent
+      // Remount the message view (fresh virtualizer + scroll refs) per conversation so no
+      // imperative scroll state — the @tanstack virtualizer's measurement/offset cache above
+      // all — bleeds between conversations. Restoration survives via scrollStateManager (an
+      // external singleton keyed by conversation id).
+      key={conversationId}
       messages={messages}
       conversationId={conversationId}
       firstNewMessageId={firstNewMessageId}
