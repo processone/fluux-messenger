@@ -1,6 +1,6 @@
 import { getBareJid, getPresenceFromShow, canModerate, canBan } from '@fluux/sdk'
 import { whisperCounterpartPresent } from './'
-import { getConsistentTextColor } from '../Avatar'
+import { auroraSenderColor } from '@/utils/senderColor'
 import type { Room, RoomMessage, RoomRole, RoomAffiliation, ContactIdentity, RoomOccupant } from '@fluux/sdk'
 
 export interface ResolvedRoomSender {
@@ -94,25 +94,26 @@ export function resolveReplyAvatar(
 }
 
 /**
- * Sender color for a room message: the roster contact's pre-calculated
- * XEP-0392 color (hashed from the bare JID) when known, otherwise the
- * nick-hash color. Shared by the main message and the reply quote so the
- * same sender always gets the same color in both places.
+ * Sender color for a room message: Aurora-tuned per-person color consistent
+ * for all senders. The roster contact's pre-calculated color is intentionally
+ * not used — one system for everyone keeps rooms visually coherent.
+ * Shared by the main message and the reply quote so the same sender always
+ * gets the same color in both places.
  */
 export function resolveSenderColor(
   identifier: string,
-  contact: Pick<ContactIdentity, 'colorLight' | 'colorDark'> | undefined,
+  _contact: Pick<ContactIdentity, 'colorLight' | 'colorDark'> | undefined,
   isDarkMode: boolean,
 ): string {
-  const contactColor = contact ? (isDarkMode ? contact.colorDark : contact.colorLight) : undefined
-  return contactColor || getConsistentTextColor(identifier, isDarkMode)
+  // Aurora: one consistent, AA-tuned per-person color for all senders — the
+  // roster's precomputed contact color is intentionally not used for names.
+  return auroraSenderColor(identifier, isDarkMode)
 }
 
 /**
  * Display color for an arbitrary room nick (e.g. an inline @mention), using the
- * SAME resolution as the sender-name color: a roster contact's pre-calculated
- * XEP-0392 color when the nick maps to a known bare JID, otherwise the nick-hash
- * color. Keeps a mention pill consistent with the mentioned person's name color.
+ * same Aurora-tuned per-person color as the sender-name color. Keeps a mention
+ * pill consistent with the mentioned person's name color.
  * Mirrors the senderBareJid resolution in resolveRoomSender (occupant JID, then
  * nickToJidCache) minus the occupant-id fallback, which only applies to the sender.
  */

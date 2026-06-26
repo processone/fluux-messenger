@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { selectSelfOccupant, stableNickSet, resolveRoomSender, resolveReplyAvatar, resolveSenderColor, resolveNickColor } from './roomSenderResolution'
-import { getConsistentTextColor } from '../Avatar'
+import { auroraSenderColor } from '@/utils/senderColor'
 import type { RoomOccupant, Room, RoomMessage } from '@fluux/sdk'
 
 const occ = (nick: string, extra: Partial<RoomOccupant> = {}): RoomOccupant =>
@@ -164,40 +164,40 @@ describe('resolveReplyAvatar', () => {
 })
 
 describe('resolveSenderColor', () => {
-  // Regression: the reply quote colored stepforward green (nick hash) while the
-  // main message was purple (contact color hashed from the bare JID). Both paths
-  // must prefer the contact's pre-calculated color and share this helper.
+  // Aurora: one consistent, AA-tuned per-person color for all senders — the
+  // roster's precomputed contact color is intentionally not used for names.
+  // Both the main message and the reply quote use auroraSenderColor so the
+  // same sender always gets the same color in both places.
   const contact = { jid: 'alice@x', colorLight: '#7b4500', colorDark: '#ffa54c' } as any
-  it('prefers the contact pre-calculated color for the active theme', () => {
-    expect(resolveSenderColor('alice', contact, true)).toBe('#ffa54c')
-    expect(resolveSenderColor('alice', contact, false)).toBe('#7b4500')
+  it('returns auroraSenderColor regardless of contact — consistent system for all senders', () => {
+    expect(resolveSenderColor('alice', contact, true)).toBe(auroraSenderColor('alice', true))
+    expect(resolveSenderColor('alice', contact, false)).toBe(auroraSenderColor('alice', false))
   })
-  it('falls back to the nick-hash color when there is no contact', () => {
-    expect(resolveSenderColor('alice', undefined, true)).toBe(getConsistentTextColor('alice', true))
-    expect(resolveSenderColor('alice', undefined, false)).toBe(getConsistentTextColor('alice', false))
+  it('returns auroraSenderColor when there is no contact', () => {
+    expect(resolveSenderColor('alice', undefined, true)).toBe(auroraSenderColor('alice', true))
+    expect(resolveSenderColor('alice', undefined, false)).toBe(auroraSenderColor('alice', false))
   })
-  it('falls back to the nick-hash color when the contact has no pre-calculated colors', () => {
-    expect(resolveSenderColor('alice', { jid: 'alice@x' } as any, false)).toBe(getConsistentTextColor('alice', false))
+  it('returns auroraSenderColor when the contact has no pre-calculated colors', () => {
+    expect(resolveSenderColor('alice', { jid: 'alice@x' } as any, false)).toBe(auroraSenderColor('alice', false))
   })
 })
 
 describe('resolveNickColor', () => {
-  // Regression: an inline @mention pill colored from the bare nick hash disagreed
-  // with the mentioned person's name color, which uses the roster contact's
-  // XEP-0392 color. Both must share resolveSenderColor for the same nick→JID→contact.
+  // Aurora: resolveNickColor delegates to resolveSenderColor which now always
+  // returns auroraSenderColor — consistent for all senders regardless of roster.
   const contact = { jid: 'alice@x', colorLight: '#7b4500', colorDark: '#ffa54c' } as any
-  it('uses the contact color when the nick maps to a JID via the live occupant', () => {
+  it('returns auroraSenderColor(nick) when the nick maps to a JID via the live occupant', () => {
     const r = room({
       occupants: new Map([['alice', occ('alice', { jid: 'alice@x/res' })]]),
     })
-    expect(resolveNickColor('alice', r, new Map([['alice@x', contact]]), true)).toBe('#ffa54c')
+    expect(resolveNickColor('alice', r, new Map([['alice@x', contact]]), true)).toBe(auroraSenderColor('alice', true))
   })
-  it('uses the contact color when the JID comes from nickToJidCache', () => {
+  it('returns auroraSenderColor(nick) when the JID comes from nickToJidCache', () => {
     const r = room({ occupants: new Map(), nickToJidCache: new Map([['alice', 'alice@x']]) })
-    expect(resolveNickColor('alice', r, new Map([['alice@x', contact]]), false)).toBe('#7b4500')
+    expect(resolveNickColor('alice', r, new Map([['alice@x', contact]]), false)).toBe(auroraSenderColor('alice', false))
   })
-  it('falls back to the nick-hash color for an unknown nick (no JID / not a contact)', () => {
+  it('returns auroraSenderColor(nick) for an unknown nick (no JID / not a contact)', () => {
     const r = room({ occupants: new Map(), nickToJidCache: new Map() })
-    expect(resolveNickColor('ghost', r, new Map(), true)).toBe(getConsistentTextColor('ghost', true))
+    expect(resolveNickColor('ghost', r, new Map(), true)).toBe(auroraSenderColor('ghost', true))
   })
 })

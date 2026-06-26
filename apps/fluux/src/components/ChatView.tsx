@@ -28,6 +28,7 @@ import { ConfirmDialog } from './ConfirmDialog'
 import { MediaAutoloadProvider } from '@/contexts'
 import { computeMediaAutoload } from '@/utils/mediaAutoload'
 import { useSettingsStore } from '@/stores/settingsStore'
+import { auroraSenderColor } from '@/utils/senderColor'
 
 interface ChatViewProps {
   onBack?: () => void
@@ -809,12 +810,11 @@ const ChatMessageBubble = memo(function ChatMessageBubble({
     ? (ownNickname || message.from.split('@')[0])
     : (senderContact?.name || message.from.split('@')[0])
 
-  // Get sender color: dedicated AA-safe self color for own messages, contact's pre-calculated color, or fallback to generation
+  // Get sender color: dedicated AA-safe self color for own messages, else the
+  // Aurora-tuned per-person color (consistent for known + unknown senders).
   const senderColor = message.isOutgoing
     ? 'var(--fluux-text-self)'
-    : senderContact
-      ? (isDarkMode ? senderContact.colorDark : senderContact.colorLight) || getConsistentTextColor(message.from.split('/')[0], isDarkMode)
-      : getConsistentTextColor(message.from.split('/')[0], isDarkMode)
+    : auroraSenderColor(message.from.split('/')[0], isDarkMode ?? true)
 
   // Get my current reactions to this message (1:1 chat — always uses bare JID)
   const myReactions = getMyReactions(message.reactions, undefined, myBareJid, false)
