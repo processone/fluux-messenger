@@ -72,8 +72,8 @@ vi.mock('./hooks/useTauriCloseHandler', () => ({
   useTauriCloseHandler: vi.fn(),
 }))
 
-vi.mock('./hooks/useTauriTrayRestore', () => ({
-  useTauriTrayRestore: vi.fn(),
+vi.mock('./hooks/useTauriFocusRestore', () => ({
+  useTauriFocusRestore: vi.fn(),
 }))
 
 vi.mock('./hooks/useIgnoreSync', () => ({

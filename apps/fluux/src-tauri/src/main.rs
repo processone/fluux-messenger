@@ -2020,13 +2020,22 @@ fn main() {
                 let main_window = app.get_webview_window("main").unwrap();
                 let window = main_window.clone();
                 let app_handle = app.handle().clone();
-                main_window.on_window_event(move |event| {
-                    if let WindowEvent::CloseRequested { api, .. } = event {
+                main_window.on_window_event(move |event| match event {
+                    WindowEvent::CloseRequested { api, .. } => {
                         api.prevent_close();
                         // Save window state before hiding
                         let _ = app_handle.save_window_state(StateFlags::SIZE | StateFlags::POSITION | StateFlags::MAXIMIZED | StateFlags::FULLSCREEN);
                         let _ = window.hide();
                     }
+                    // Alt-tabbing or clicking the taskbar focuses the top-level
+                    // window, but WebView2 does not move keyboard focus into the
+                    // webview child — so shortcuts (F12, Ctrl+K, …) and typing
+                    // stay dead until the user clicks. Ask the JS side to grab
+                    // webview input focus (controller.MoveFocus). (#654)
+                    WindowEvent::Focused(true) => {
+                        let _ = window.emit("window-focus-restore", ());
+                    }
+                    _ => {}
                 });
             }
 
