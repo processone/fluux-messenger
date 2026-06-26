@@ -18,13 +18,15 @@ export function MessageSelectionBar({ count, onCopy, onClear }: Props) {
     <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-40 flex items-center gap-2 px-3 py-2 rounded-full bg-fluux-bg border border-fluux-border shadow-lg">
       <span className="text-sm text-fluux-text">{t('chat.selection.count', { num: count })}</span>
       <button
+        type="button"
         onClick={onCopy}
         className="flex items-center gap-1 px-2.5 py-1 text-sm rounded-full text-fluux-text hover:bg-fluux-hover transition-colors"
       >
-        <Copy className="size-4" />
+        <Copy className="size-4" aria-hidden="true" />
         {t('chat.selection.copy')}
       </button>
       <button
+        type="button"
         onClick={onClear}
         className="px-2.5 py-1 text-sm rounded-full text-fluux-muted hover:text-fluux-text hover:bg-fluux-hover transition-colors"
       >
