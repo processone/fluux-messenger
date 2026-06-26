@@ -450,6 +450,12 @@
         "unmuteMessageReactions": "Poista tämän viestin reaktioiden mykistys"
     },
     "chat": {
+        "selection": {
+            "count": "{{num}} valittu",
+            "copy": "Kopioi",
+            "done": "Valmis",
+            "copied": "Kopioitu leikepöydälle"
+        },
         "me": "Minä",
         "you": "Sinä",
         "messageTo": "Viesti käyttäjälle {{name}}",

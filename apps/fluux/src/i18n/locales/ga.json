@@ -450,6 +450,12 @@
         "unmuteMessageReactions": "Díbhalbhaigh imoibriúcháin ar an teachtaireacht seo"
     },
     "chat": {
+        "selection": {
+            "count": "{{num}} roghnaithe",
+            "copy": "Cóipeáil",
+            "done": "Déanta",
+            "copied": "Cóipeáilte chuig an ngearrthaisce"
+        },
         "me": "Mise",
         "you": "Tusa",
         "messageTo": "Teachtaireacht chuig {{name}}",

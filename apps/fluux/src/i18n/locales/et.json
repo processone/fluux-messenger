@@ -452,6 +452,12 @@
         "unmuteMessageReactions": "Lülita selle sõnumi reaktsioonid sisse"
     },
     "chat": {
+        "selection": {
+            "count": "{{num}} valitud",
+            "copy": "Kopeeri",
+            "done": "Valmis",
+            "copied": "Kopeeritud lõikelauale"
+        },
         "me": "Mina",
         "you": "Sina",
         "messageTo": "Sõnum kasutajale {{name}}",

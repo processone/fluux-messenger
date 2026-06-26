@@ -450,6 +450,12 @@
         "unmuteMessageReactions": "Įjungti reakcijas į šią žinutę"
     },
     "chat": {
+        "selection": {
+            "count": "Pasirinkta: {{num}}",
+            "copy": "Kopijuoti",
+            "done": "Atlikta",
+            "copied": "Nukopijuota į iškarpinę"
+        },
         "me": "Aš",
         "you": "Jūs",
         "messageTo": "Žinutė {{name}}",

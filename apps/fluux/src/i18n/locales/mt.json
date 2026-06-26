@@ -452,6 +452,12 @@
         "unmuteMessageReactions": "Ixgħel ir-reazzjonijiet fuq dan il-messaġġ"
     },
     "chat": {
+        "selection": {
+            "count": "{{num}} magħżula",
+            "copy": "Ikkopja",
+            "done": "Lest",
+            "copied": "Ikkupjat fil-clipboard"
+        },
         "me": "Jien",
         "you": "Int",
         "messageTo": "Messaġġ lil {{name}}",

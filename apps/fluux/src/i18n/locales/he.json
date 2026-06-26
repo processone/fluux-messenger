@@ -450,6 +450,12 @@
         "unmuteMessageReactions": "בטל השתקת תגובות על הודעה זו"
     },
     "chat": {
+        "selection": {
+            "count": "{{num}} נבחרו",
+            "copy": "העתק",
+            "done": "סיום",
+            "copied": "הועתק ללוח"
+        },
         "me": "אני",
         "you": "את/ה",
         "messageTo": "הודעה ל-{{name}}",

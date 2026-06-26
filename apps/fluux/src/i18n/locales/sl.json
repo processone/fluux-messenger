@@ -452,6 +452,12 @@
         "unmuteMessageReactions": "Vklopi odzive na to sporočilo"
     },
     "chat": {
+        "selection": {
+            "count": "Izbrano: {{num}}",
+            "copy": "Kopiraj",
+            "done": "Končano",
+            "copied": "Kopirano v odložišče"
+        },
         "me": "Jaz",
         "you": "Vi",
         "messageTo": "Sporočilo za {{name}}",

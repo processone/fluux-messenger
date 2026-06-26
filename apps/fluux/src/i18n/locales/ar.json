@@ -450,6 +450,12 @@
         "unmuteMessageReactions": "إلغاء كتم التفاعلات على هذه الرسالة"
     },
     "chat": {
+        "selection": {
+            "count": "{{num}} محدد",
+            "copy": "نسخ",
+            "done": "تم",
+            "copied": "تم النسخ إلى الحافظة"
+        },
         "me": "أنا",
         "you": "أنت",
         "messageTo": "رسالة إلى {{name}}",

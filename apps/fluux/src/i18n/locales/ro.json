@@ -452,6 +452,12 @@
         "unmuteMessageReactions": "Activează reacțiile la acest mesaj"
     },
     "chat": {
+        "selection": {
+            "count": "{{num}} selectate",
+            "copy": "Copiază",
+            "done": "Gata",
+            "copied": "Copiat în clipboard"
+        },
         "me": "Eu",
         "you": "Tu",
         "messageTo": "Mesaj către {{name}}",

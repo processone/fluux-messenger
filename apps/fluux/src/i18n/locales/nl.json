@@ -450,6 +450,12 @@
         "unmuteMessageReactions": "Reacties op dit bericht inschakelen"
     },
     "chat": {
+        "selection": {
+            "count": "{{num}} geselecteerd",
+            "copy": "Kopiëren",
+            "done": "Klaar",
+            "copied": "Gekopieerd naar klembord"
+        },
         "me": "Ik",
         "you": "Jij",
         "messageTo": "Bericht aan {{name}}",

@@ -451,6 +451,12 @@
         "unmuteMessageReactions": "Réactiver les réactions de ce message"
     },
     "chat": {
+        "selection": {
+            "count": "{{num}} sélectionnés",
+            "copy": "Copier",
+            "done": "Terminé",
+            "copied": "Copié dans le presse-papiers"
+        },
         "me": "Moi",
         "you": "Vous",
         "messageTo": "Envoyer à {{name}}",

@@ -450,6 +450,12 @@
         "unmuteMessageReactions": "Slå reaktioner på denne besked til"
     },
     "chat": {
+        "selection": {
+            "count": "{{num}} valgt",
+            "copy": "Kopiér",
+            "done": "Færdig",
+            "copied": "Kopieret til udklipsholder"
+        },
         "me": "Mig",
         "you": "Dig",
         "messageTo": "Besked til {{name}}",
