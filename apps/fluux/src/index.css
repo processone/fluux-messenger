@@ -175,11 +175,21 @@
   --fluux-bg-active: var(--fluux-base-50);
   --fluux-bg-accent: hsl(var(--fluux-accent-h), var(--fluux-accent-s), var(--fluux-accent-l));
   --fluux-bg-accent-hover: hsl(var(--fluux-accent-h), var(--fluux-accent-s), calc(var(--fluux-accent-l) - 8%));
+  /* Floating / elevated surfaces (FAB, raised controls) — lifted above the
+     canvas so the control reads as a distinct shape. Pairs with the visible
+     border below and a drop shadow; on the light canvas (white) the border +
+     shadow carry the separation. */
+  --fluux-bg-float: var(--fluux-base-50);
+  --fluux-bg-float-hover: var(--fluux-base-60);
 
   /* Text */
   --fluux-text-normal: var(--fluux-base-90);
   --fluux-text-muted: var(--fluux-base-80);
-  --fluux-text-faint: var(--fluux-base-70);
+  /* Faintest informational tier (e.g. timestamps). Decoupled from base-70 and
+     lifted to clear WCAG AA on the message rows it renders on — the raw ramp
+     value reached only ~3.2:1 on the hover row. Still lighter than text-muted,
+     so the tier distinction holds. .light overrides below. */
+  --fluux-text-faint: #7885A3;
   --fluux-text-on-accent: #ffffff;
   --fluux-text-accent: var(--fluux-bg-accent);
   --fluux-text-link: var(--fluux-color-blue);
@@ -202,7 +212,11 @@
   --fluux-interactive-accent-hover: var(--fluux-bg-accent-hover);
 
   /* Borders & dividers */
-  --fluux-border-color: rgba(0, 0, 0, 0.1);
+  /* Light-alpha on the dark canvas: a black border on a dark surface is
+     invisible (~1.0:1). White at low alpha gives a readable hairline (~1.6:1)
+     that defines edges for the FAB, inputs, modals, tooltips and dividers.
+     The .light override flips this back to black-alpha. */
+  --fluux-border-color: rgba(255, 255, 255, 0.16);
   --fluux-border-color-strong: var(--fluux-base-40);
   --fluux-divider-color: var(--fluux-base-05);
 
@@ -219,8 +233,11 @@
   --fluux-scrollbar-thumb-sidebar: var(--fluux-base-30);
   --fluux-scrollbar-thumb-sidebar-hover: var(--fluux-base-50);
 
-  /* Focus ring */
-  --fluux-focus-ring: hsla(var(--fluux-accent-h), var(--fluux-accent-s), var(--fluux-accent-l), 0.5);
+  /* Focus ring — drives the universal `.user-interacted *:focus` outline, so this
+     one token governs keyboard-focus visibility app-wide. Solid accent: at 0.5
+     alpha it was only ~1.9:1 and failed the WCAG 1.4.11 non-text minimum (3:1);
+     solid clears 3:1 on every surface in both modes. */
+  --fluux-focus-ring: hsl(var(--fluux-accent-h), var(--fluux-accent-s), var(--fluux-accent-l));
 
   /* Shadows */
   --fluux-shadow-color: rgba(0, 0, 0, 0.3);
@@ -364,10 +381,28 @@
   --fluux-color-blue-rgb: 9, 105, 218;
   --fluux-color-gray: #9ca3af;
 
+  /* Status colors as text/icon labels (toasts, settings status, edit/encryption
+     labels) fail WCAG AA at full brightness on the light surfaces (Pattern C:
+     green ~2.6:1, yellow ~1.6:1, red ~3.8:1). Darkened to clear AA as text; used
+     as fills (toast border, danger button, presence dots) they only gain
+     contrast against white. Syntax-highlight greens reference --fluux-color-*
+     directly and are unaffected. */
+  --fluux-status-success: #197740;
+  --fluux-status-warning: #89600A;
+  --fluux-status-error: #C8252A;
+
   /* Own-message ("you") name — brand-indigo darkened for WCAG AA on the white
      message background and its hover state (the raw accent only reached ~4.6:1
      at rest and failed on hover). */
-  --fluux-text-self: #4F5BD8;
+  --fluux-text-self: #4753D6;
+
+  /* Link text darkened so it clears WCAG AA on the message hover/active rows
+     (the shared --fluux-color-blue only reached ~4.2:1 there). Overrides just the
+     link token; other blue uses (status-info, syntax) keep --fluux-color-blue. */
+  --fluux-text-link: #0860C6;
+
+  /* Faint tier (timestamps) — AA-legible value for the light canvas. */
+  --fluux-text-faint: #5D6781;
 
   /* Private (whisper) — deeper violet for contrast on light backgrounds */
   --fluux-private: hsl(270, 70%, 48%);
@@ -378,7 +413,12 @@
   /* Semantic overrides where cascade from foundation isn't sufficient */
   --fluux-bg-secondary: #DDE2F0;
   --fluux-sidebar-item-active: hsla(var(--fluux-accent-h), var(--fluux-accent-s), var(--fluux-accent-l), 0.14);
-  --fluux-border-color: rgba(0, 0, 0, 0.15);
+  /* Black-alpha hairline on the light canvas, bumped for a clearer edge (~1.5:1). */
+  --fluux-border-color: rgba(0, 0, 0, 0.18);
+  /* Floating surface on the light (white) canvas: stays white, the border +
+     shadow provide the separation; hover tints to the tertiary gray. */
+  --fluux-bg-float: var(--fluux-base-00);
+  --fluux-bg-float-hover: var(--fluux-base-20);
   --fluux-selection-bg: hsla(var(--fluux-accent-h), var(--fluux-accent-s), var(--fluux-accent-l), 0.15);
   --fluux-search-highlight-bg: hsla(var(--fluux-accent-h), var(--fluux-accent-s), var(--fluux-accent-l), 0.25);
   --fluux-scrollbar-thumb: #c4c9ce;
@@ -387,12 +427,15 @@
   /* ── Aurora identity (light) ── */
   --fluux-accent-2: #11A88C;
   --fluux-grad: linear-gradient(135deg, #11A88C, #5B6CF0, #7C6CF0);
-  --fluux-sender-1: #1E84D8;
-  --fluux-sender-2: #119E73;
-  --fluux-sender-3: #B5790E;
-  --fluux-sender-4: #D8527A;
-  --fluux-sender-5: #6E54D8;
-  --fluux-sender-6: #128C86;
+  /* Sender palette darkened so MUC names clear WCAG AA on white and on the
+     hover/active message rows (Pattern C: the prior values reached only ~2.8-4.4
+     and were unreadable in light mode). */
+  --fluux-sender-1: #1766A7;
+  --fluux-sender-2: #0C7051;
+  --fluux-sender-3: #86590A;
+  --fluux-sender-4: #B92A54;
+  --fluux-sender-5: #654AD6;
+  --fluux-sender-6: #0E6F6A;
   --fluux-glass-bg: rgba(255, 255, 255, 0.72);
   --fluux-shadow-overlay: 0 20px 50px rgba(20, 27, 48, 0.18);
 

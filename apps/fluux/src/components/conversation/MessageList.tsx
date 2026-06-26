@@ -535,7 +535,7 @@ export function MessageList<T extends BaseMessage>({
           <button
             onClick={scrollToBottom}
             data-fab="scroll-to-bottom"
-            className="size-10 rounded-full bg-fluux-bg border border-fluux-border shadow-lg flex items-center justify-center text-fluux-muted hover:text-fluux-text hover:bg-fluux-hover transition-colors duration-200 hover:scale-105 active:scale-95"
+            className="size-10 rounded-full bg-fluux-float border border-fluux-border shadow-lg flex items-center justify-center text-fluux-muted hover:text-fluux-text hover:bg-fluux-float-hover transition-colors duration-200 hover:scale-105 active:scale-95"
             aria-label={t('chat.scrollToBottom')}
             tabIndex={showScrollToBottom ? 0 : -1}
           >
