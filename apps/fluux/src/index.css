@@ -121,12 +121,6 @@
   /* ── Aurora identity additions ── */
   --fluux-accent-2: #38E0C4;
   --fluux-grad: linear-gradient(135deg, #38E0C4, #7C8CFF, #A78BFA);
-  --fluux-sender-1: #9FD4FF;
-  --fluux-sender-2: #6FE3B0;
-  --fluux-sender-3: #FFCB73;
-  --fluux-sender-4: #FF9DB0;
-  --fluux-sender-5: #C2ABFF;
-  --fluux-sender-6: #67D4D0;
   --fluux-glass-bg: rgba(20, 27, 48, 0.74);
   --fluux-glass-blur: 12px;
   --fluux-shadow-overlay: 0 24px 70px rgba(0, 0, 0, 0.55);
@@ -439,15 +433,6 @@
   /* ── Aurora identity (light) ── */
   --fluux-accent-2: #11A88C;
   --fluux-grad: linear-gradient(135deg, #11A88C, #5B6CF0, #7C6CF0);
-  /* Sender palette darkened so MUC names clear WCAG AA on white and on the
-     hover/active message rows (Pattern C: the prior values reached only ~2.8-4.4
-     and were unreadable in light mode). */
-  --fluux-sender-1: #1766A7;
-  --fluux-sender-2: #0C7051;
-  --fluux-sender-3: #86590A;
-  --fluux-sender-4: #B92A54;
-  --fluux-sender-5: #654AD6;
-  --fluux-sender-6: #0E6F6A;
   --fluux-glass-bg: rgba(255, 255, 255, 0.72);
   --fluux-shadow-overlay: 0 20px 50px rgba(20, 27, 48, 0.18);
 
@@ -769,6 +754,17 @@ input[type="range"]::-moz-range-thumb {
 .message-highlight {
   animation: message-highlight 1.5s ease-out;
   border-radius: 0.5rem;
+}
+
+/* Own-message accent edge — a quiet luminous spine on outgoing messages
+   (Aurora). Decorative; the own-name color (--fluux-text-self) carries identity,
+   so this isn't contrast-bound. Tint kept subtle so body text AA holds. */
+.message-own-edge {
+  border-inline-start: 2px solid var(--fluux-bg-accent);
+  background: hsla(var(--fluux-accent-h), var(--fluux-accent-s), var(--fluux-accent-l), 0.08);
+  border-radius: 0 var(--fluux-radius-m) var(--fluux-radius-m) 0;
+  padding-inline: 0.5rem;
+  margin-inline-start: -0.5rem;
 }
 
 /* Persistent highlight for search context view */

@@ -10,7 +10,6 @@ import { useConversationPlaintextOverrideStore } from '@/stores/conversationPlai
 import { VerifyPeerDialog } from './VerifyPeerDialog'
 import { KeyChangeBanner } from './KeyChangeBanner'
 import { useConnectionStore } from '@fluux/sdk/react'
-import { getConsistentTextColor } from './Avatar'
 import { useFileUpload, useLinkPreview, useTypeToFocus, useMessageCopy, useMode, useMessageSelection, useMessageHoverState, useDragAndDrop, useConversationDraft, useTimeFormat } from '@/hooks'
 import { Upload, Loader2 } from 'lucide-react'
 import { MessageBubble, MessageList as MessageListComponent, shouldShowAvatar, buildReplyContext } from './conversation'
@@ -28,6 +27,7 @@ import { ConfirmDialog } from './ConfirmDialog'
 import { MediaAutoloadProvider } from '@/contexts'
 import { computeMediaAutoload } from '@/utils/mediaAutoload'
 import { useSettingsStore } from '@/stores/settingsStore'
+import { auroraSenderColor } from '@/utils/senderColor'
 
 interface ChatViewProps {
   onBack?: () => void
@@ -645,6 +645,14 @@ export const ChatMessageList = memo(function ChatMessageList({
     date: format(msg.timestamp, 'yyyy-MM-dd'),
   })
 
+  // Stable mention-color resolver: uses auroraSenderColor so 1:1 @mention pills
+  // match the sender name color in the same conversation. Dep is isDarkMode only —
+  // a fresh inline arrow each render would break the messageRowMemo bailout.
+  const resolveMentionColor = useCallback(
+    (id: string) => auroraSenderColor(id, isDarkMode ?? true),
+    [isDarkMode],
+  )
+
   // Render function for messages
   // The onMediaLoad parameter is provided by MessageList from useMessageListScroll hook
   const renderMessage = (msg: Message, idx: number, groupMessages: Message[], _showNewMarker: boolean, onMediaLoad: () => void) => (
@@ -679,6 +687,7 @@ export const ChatMessageList = memo(function ChatMessageList({
       timeFormat={effectiveTimeFormat}
       highlightTerms={highlightTerms}
       isCurrentMatch={msg.id === currentMatchId}
+      resolveMentionColor={resolveMentionColor}
     />
   )
 
@@ -761,6 +770,8 @@ interface ChatMessageBubbleProps {
   highlightTerms?: string[]
   // Whether this message is the current find-on-page match
   isCurrentMatch?: boolean
+  // Stable color resolver for @mention pills (auroraSenderColor keyed on isDarkMode)
+  resolveMentionColor?: (id: string) => string | undefined
 }
 
 const ChatMessageBubble = memo(function ChatMessageBubble({
@@ -794,6 +805,7 @@ const ChatMessageBubble = memo(function ChatMessageBubble({
   timeFormat,
   highlightTerms,
   isCurrentMatch,
+  resolveMentionColor,
 }: ChatMessageBubbleProps) {
   const { t } = useTranslation()
 
@@ -809,12 +821,11 @@ const ChatMessageBubble = memo(function ChatMessageBubble({
     ? (ownNickname || message.from.split('@')[0])
     : (senderContact?.name || message.from.split('@')[0])
 
-  // Get sender color: dedicated AA-safe self color for own messages, contact's pre-calculated color, or fallback to generation
+  // Get sender color: dedicated AA-safe self color for own messages, else the
+  // Aurora-tuned per-person color (consistent for known + unknown senders).
   const senderColor = message.isOutgoing
     ? 'var(--fluux-text-self)'
-    : senderContact
-      ? (isDarkMode ? senderContact.colorDark : senderContact.colorLight) || getConsistentTextColor(message.from.split('/')[0], isDarkMode)
-      : getConsistentTextColor(message.from.split('/')[0], isDarkMode)
+    : auroraSenderColor(message.from.split('/')[0], isDarkMode ?? true)
 
   // Get my current reactions to this message (1:1 chat — always uses bare JID)
   const myReactions = getMyReactions(message.reactions, undefined, myBareJid, false)
@@ -849,11 +860,7 @@ const ChatMessageBubble = memo(function ChatMessageBubble({
       if (originalMsg?.isOutgoing) return 'var(--fluux-text-self)'
       const senderId = originalMsg?.from.split('/')[0] || fallbackId?.split('/')[0]
       if (!senderId) return 'var(--fluux-brand)'
-      const contact = contactsByJid.get(senderId)
-      if (contact) {
-        return (dark ? contact.colorDark : contact.colorLight) || getConsistentTextColor(senderId, dark)
-      }
-      return getConsistentTextColor(senderId, dark)
+      return auroraSenderColor(senderId, dark ?? true)
     },
     (originalMsg, fallbackId) => {
       const senderId = originalMsg?.from.split('/')[0] || fallbackId?.split('/')[0]
@@ -919,6 +926,7 @@ const ChatMessageBubble = memo(function ChatMessageBubble({
         timeFormat={timeFormat}
         highlightTerms={highlightTerms}
         isCurrentMatch={isCurrentMatch}
+        resolveMentionColor={resolveMentionColor}
       />
       {showDeleteConfirm && (
         <ConfirmDialog

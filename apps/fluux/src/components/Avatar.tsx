@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, type ReactNode } from 'react'
 import { generateConsistentColorHexSync, type PresenceStatus, type PresenceShow } from '@fluux/sdk'
 import { APP_OFFLINE_PRESENCE_COLOR, PRESENCE_COLORS } from '@/constants/ui'
+import { ensureContrastWithWhite } from '@/utils/contrastColor'
 
 /**
  * Avatar sizes and their corresponding Tailwind classes
@@ -113,72 +114,6 @@ function getPresenceStatusFromShow(show: PresenceShow | undefined): PresenceStat
     case 'dnd': return 'dnd'
     default: return 'online'
   }
-}
-
-/**
- * Parse a hex color string to RGB values.
- */
-function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
-  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex)
-  return result ? {
-    r: parseInt(result[1], 16),
-    g: parseInt(result[2], 16),
-    b: parseInt(result[3], 16)
-  } : null
-}
-
-/**
- * Calculate relative luminance of a color (0-1 scale).
- * Used for contrast calculations per WCAG.
- */
-function getLuminance(r: number, g: number, b: number): number {
-  const [rs, gs, bs] = [r, g, b].map(c => {
-    const s = c / 255
-    return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4)
-  })
-  return 0.2126 * rs + 0.7152 * gs + 0.0722 * bs
-}
-
-/**
- * Darken a color by a given factor (0-1).
- */
-function darkenColor(r: number, g: number, b: number, factor: number): string {
-  const darken = (c: number) => Math.round(c * (1 - factor))
-  return `#${darken(r).toString(16).padStart(2, '0')}${darken(g).toString(16).padStart(2, '0')}${darken(b).toString(16).padStart(2, '0')}`
-}
-
-/**
- * Ensure a color has enough contrast with white text.
- * If the color is too light, darken it until it has sufficient contrast.
- * This is applied at the end of color generation for avatar backgrounds.
- */
-function ensureContrastWithWhite(hex: string): string {
-  const rgb = hexToRgb(hex)
-  if (!rgb) return hex
-
-  const luminance = getLuminance(rgb.r, rgb.g, rgb.b)
-  // White has luminance of 1.0
-  // WCAG AA requires contrast ratio of 4.5:1 for normal text
-  // Contrast ratio = (L1 + 0.05) / (L2 + 0.05)
-  // For white (L=1) over background: (1 + 0.05) / (L + 0.05) >= 4.5
-  // Solving: L <= (1.05 / 4.5) - 0.05 = 0.183
-  const maxLuminance = 0.183
-
-  if (luminance <= maxLuminance) {
-    return hex // Already has enough contrast
-  }
-
-  // Darken the color progressively until it has enough contrast
-  let { r, g, b } = rgb
-  let factor = 0.1
-  while (getLuminance(r, g, b) > maxLuminance && factor < 0.9) {
-    r = Math.round(rgb.r * (1 - factor))
-    g = Math.round(rgb.g * (1 - factor))
-    b = Math.round(rgb.b * (1 - factor))
-    factor += 0.1
-  }
-
-  return darkenColor(rgb.r, rgb.g, rgb.b, factor - 0.1)
 }
 
 /**
