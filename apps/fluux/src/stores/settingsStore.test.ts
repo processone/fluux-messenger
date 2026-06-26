@@ -8,7 +8,7 @@ describe('settingsStore', () => {
     vi.mocked(localStorage.getItem).mockClear()
     vi.mocked(localStorage.setItem).mockClear()
     vi.mocked(localStorage.getItem).mockReturnValue(null)
-    useSettingsStore.setState({ themeMode: 'system', timeFormat: 'auto', fontSize: 100, mediaAutoDownload: 'private-only' })
+    useSettingsStore.setState({ themeMode: 'system', timeFormat: 'auto', fontSize: 100, mediaAutoDownload: 'private-only', motionPreference: 'system' })
   })
 
   describe('initial state', () => {
@@ -112,6 +112,27 @@ describe('settingsStore', () => {
       for (const v of ['always', 'private-only', 'never'] as const) {
         setMediaAutoDownload(v)
         expect(useSettingsStore.getState().mediaAutoDownload).toBe(v)
+      }
+    })
+  })
+
+  describe('motionPreference', () => {
+    it('defaults to system when localStorage is empty', () => {
+      useSettingsStore.setState({ motionPreference: 'system' })
+      expect(useSettingsStore.getState().motionPreference).toBe('system')
+    })
+
+    it('setMotionPreference persists to localStorage', () => {
+      useSettingsStore.getState().setMotionPreference('reduced')
+      expect(localStorage.setItem).toHaveBeenCalledWith('fluux-motion', 'reduced')
+      expect(useSettingsStore.getState().motionPreference).toBe('reduced')
+    })
+
+    it('accepts all three values', () => {
+      const { setMotionPreference } = useSettingsStore.getState()
+      for (const v of ['system', 'full', 'reduced'] as const) {
+        setMotionPreference(v)
+        expect(useSettingsStore.getState().motionPreference).toBe(v)
       }
     })
   })

@@ -435,6 +435,35 @@ html {
   scroll-behavior: smooth;
 }
 
+/* ============================================================
+   REDUCED MOTION
+   Driven by data-motion on <html> (set from the user's motion
+   setting in useTheme). Before JS runs — or when the setting
+   follows the OS — prefers-reduced-motion applies instead.
+   An explicit data-motion="full" opt-in overrides the OS query.
+   ============================================================ */
+[data-motion="reduced"],
+[data-motion="reduced"] *,
+[data-motion="reduced"] *::before,
+[data-motion="reduced"] *::after {
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important;
+  scroll-behavior: auto !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root:not([data-motion="full"]),
+  :root:not([data-motion="full"]) *,
+  :root:not([data-motion="full"]) *::before,
+  :root:not([data-motion="full"]) *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
 /* Ensure full height layout - fixes macOS fullscreen white space issue */
 /* Set background color on html to prevent white flash when resizing window */
 html, body {
