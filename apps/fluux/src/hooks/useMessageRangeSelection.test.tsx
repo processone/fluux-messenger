@@ -104,4 +104,38 @@ describe('useMessageRangeSelection', () => {
     expect(result.current.isSelecting).toBe(false)
     expect(result.current.selectionCount).toBe(0)
   })
+
+  it('plain mousedown clears an active range', () => {
+    const { result } = setup()
+    act(() => result.current.selectAll())
+    expect(result.current.isSelecting).toBe(true)
+    act(() => {
+      container
+        .querySelector('[data-message-id="b"]')!
+        .dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+    })
+    expect(result.current.isSelecting).toBe(false)
+    expect(result.current.selectionCount).toBe(0)
+  })
+
+  it('Escape clears the selection when focus is within the list', () => {
+    const { result } = setup()
+    container.focus()
+    act(() => result.current.selectAll())
+    act(() => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+    })
+    expect(result.current.isSelecting).toBe(false)
+  })
+
+  it('Cmd+C copies the selection via the keyboard when selecting', async () => {
+    const { result } = setup()
+    container.focus()
+    act(() => result.current.selectAll())
+    await act(async () => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'c', metaKey: true, bubbles: true }))
+    })
+    expect(writeText).toHaveBeenCalledTimes(1)
+    expect(writeText.mock.calls[0][0]).toContain('one')
+  })
 })
