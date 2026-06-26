@@ -191,18 +191,20 @@ describe('Avatar', () => {
       expect(container.firstChild).toHaveClass('cursor-pointer')
     })
   })
-})
 
-test('Avatar defaults to a circle', () => {
-  const { container } = render(<Avatar identifier="emma@fluux.chat" name="Emma" />)
-  expect((container.firstChild as HTMLElement).className).toContain('rounded-full')
-})
+  describe('Shape', () => {
+    test('Avatar defaults to a circle', () => {
+      const { container } = render(<Avatar identifier="emma@fluux.chat" name="Emma" />)
+      expect((container.firstChild as HTMLElement).className).toContain('rounded-full')
+    })
 
-test('Avatar shape="square" renders a rounded square', () => {
-  const { container } = render(<Avatar identifier="team@conference.fluux.chat" name="Team" shape="square" />)
-  const root = container.firstChild as HTMLElement
-  expect(root.className).toContain('rounded-xl')
-  expect(root.className).not.toContain('rounded-full')
+    test('Avatar shape="square" renders a rounded square', () => {
+      const { container } = render(<Avatar identifier="team@conference.fluux.chat" name="Team" shape="square" />)
+      const root = container.firstChild as HTMLElement
+      expect(root.className).toContain('rounded-xl')
+      expect(root.className).not.toContain('rounded-full')
+    })
+  })
 })
 
 describe('getConsistentTextColor', () => {

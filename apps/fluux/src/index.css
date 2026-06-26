@@ -98,9 +98,10 @@
   --fluux-base-100: #F4F6FC;
 
   /* Accent (HSL components for composability) */
+  /* --fluux-accent-l tuned so white text on the accent fill clears WCAG AA */
   --fluux-accent-h: 231;
   --fluux-accent-s: 100%;
-  --fluux-accent-l: 71%;
+  --fluux-accent-l: 64%;
 
   /* ── Aurora identity additions ── */
   --fluux-accent-2: #38E0C4;
@@ -335,7 +336,7 @@
   --fluux-base-40: #E4E8F3;
   --fluux-base-50: #DDE2F0;
   --fluux-base-60: #C2C9DC;
-  --fluux-base-70: #8A93AD;
+  --fluux-base-70: #79839E;
   --fluux-base-80: #5C6685;
   --fluux-base-90: #1B2233;
   --fluux-base-100: #0E1426;
@@ -360,7 +361,7 @@
   --fluux-private-hover: hsla(270, 70%, 55%, 0.18);
 
   /* Semantic overrides where cascade from foundation isn't sufficient */
-  --fluux-bg-secondary: #d8dadf;
+  --fluux-bg-secondary: #DDE2F0;
   --fluux-sidebar-item-active: hsla(var(--fluux-accent-h), var(--fluux-accent-s), var(--fluux-accent-l), 0.14);
   --fluux-border-color: rgba(0, 0, 0, 0.15);
   --fluux-selection-bg: hsla(var(--fluux-accent-h), var(--fluux-accent-s), var(--fluux-accent-l), 0.15);
