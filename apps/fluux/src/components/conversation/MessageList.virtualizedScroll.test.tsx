@@ -23,6 +23,10 @@ import type { BaseMessage } from '@fluux/sdk'
 
 const ensureMessageMounted = vi.fn((_id: string) => Promise.resolve())
 const getOffsetForMessageId = vi.fn((_id: string): number | null => 0)
+// Records every offset pushed through the virtualizer's scrollToOffset (the re-window
+// path). A direct scrollTop write does NOT go through here, so this distinguishes a
+// virtualizer-aware restore (re-windows before paint) from a raw scrollTop write (blank).
+const scrollToOffsetCalls: number[] = []
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (key: string) => key, i18n: { language: 'en' } }),
@@ -44,6 +48,7 @@ vi.mock('./tanstackMessageVirtualizer', () => ({
     // scrollToIndex with align='end' simulates "last item pinned to bottom" by setting
     // scrollTop = scrollHeight, matching the test expectations for bottom-stick behavior.
     scrollToOffset: (offset: number) => {
+      scrollToOffsetCalls.push(offset)
       const el = args.scrollRef.current
       if (el) el.scrollTop = offset
     },
@@ -186,6 +191,7 @@ describe('MessageList — virtualized bottom-stick re-asserts as rows measure', 
     localStorage.setItem('fluux:flags:enableMessageVirtualization', 'true')
     HTMLElement.prototype.scrollTo = vi.fn()
     rafQueue = []
+    scrollToOffsetCalls.length = 0
     realRaf = globalThis.requestAnimationFrame
     globalThis.requestAnimationFrame = ((cb: FrameRequestCallback) => {
       rafQueue.push(cb)
@@ -348,6 +354,71 @@ describe('MessageList — virtualized bottom-stick re-asserts as rows measure', 
     // virtualization the anchor is typically windowed out, so the saved-pixel fallback is what
     // runs — pinning it guards against a refactor that regresses restore into a scroll-to-bottom.
     expect(scrollTopSets).toContain(200)
+    expect(scrollTopSets).not.toContain(5000)
+  })
+
+  it('re-windows the virtualizer (scrollToOffset) on switch-back restore, not just a raw scrollTop write', () => {
+    // The blank-screen-until-scroll bug: a direct `scroller.scrollTop = saved` leaves
+    // @tanstack's scrollOffset stale (it syncs only from the scroll event / rAF poll),
+    // so on a fresh switch the mounted window keeps the top rows and the restored region
+    // renders BLANK until the user scrolls. The restore must route the offset through the
+    // virtualizer (scrollToOffset) so it re-windows before paint — same as the MAM-prepend
+    // restore and scroll-to-bottom. jsdom has no layout (the blank can't be observed), so
+    // this pins the re-window CONTRACT: scrollToOffset is called with the restored offset.
+    // (Both restore sub-paths — content-stable anchor and saved-pixel fallback — must
+    // re-window; in production the anchor row is usually windowed out so the pixel path runs.)
+    const { container, rerender } = render(
+      <MessageList messages={makeMessages(50)} conversationId="conv-rw1" {...props} />,
+    )
+    const scroller = container.querySelector('[data-message-list]') as HTMLElement
+    const { scrollTopSets } = instrumentScroller(scroller, 5000)
+    rafQueue.length = 0
+
+    // Scroll up to 200 and let the scroll handler record the position + anchor.
+    scroller.scrollTop = 200
+    scroller.dispatchEvent(new Event('scroll', { bubbles: true }))
+
+    // Switch away (saves conv-rw1's position) then back (should restore it).
+    rerender(<MessageList messages={makeMessages(50)} conversationId="conv-rw2" {...props} />)
+    scrollToOffsetCalls.length = 0
+    scrollTopSets.length = 0
+    rerender(<MessageList messages={makeMessages(50)} conversationId="conv-rw1" {...props} />)
+
+    // The restore re-windowed the virtualizer at the saved offset rather than only writing
+    // scrollTop. Without the fix scrollToOffset is never called and the viewport goes blank.
+    expect(scrollToOffsetCalls).toContain(200)
+  })
+
+  it('restores (re-windowed) when a message arrived in the conversation while it was hidden', () => {
+    // User report: receiving a message in a NON-focused conversation breaks THAT hidden
+    // conversation's saved position (seen on return). Hidden conversations are unmounted
+    // (only the active view mounts), so the message just appends to the store array; the
+    // saved scroll state is untouched. Returning therefore hits the SAME restore-position
+    // path — but with a changed messageCount, which is the natural way to land there. The
+    // restore must still re-window the virtualizer to the saved offset, not go blank or
+    // jump to the bottom on the newly-arrived message.
+    const { container, rerender } = render(
+      <MessageList messages={makeMessages(50)} conversationId="conv-hidden" {...props} />,
+    )
+    const scroller = container.querySelector('[data-message-list]') as HTMLElement
+    const { scrollTopSets } = instrumentScroller(scroller, 5000)
+    rafQueue.length = 0
+
+    // Scroll up to 200 in the conversation and record the position + anchor.
+    scroller.scrollTop = 200
+    scroller.dispatchEvent(new Event('scroll', { bubbles: true }))
+
+    // Switch away (conversation is now hidden / unmounted from the user's view).
+    rerender(<MessageList messages={makeMessages(50)} conversationId="conv-other" {...props} />)
+    scrollToOffsetCalls.length = 0
+    scrollTopSets.length = 0
+
+    // Return to it AFTER a message arrived while it was hidden (51 messages now). The new
+    // message is appended at the bottom, so the saved scrolled-up position is still valid.
+    rerender(<MessageList messages={makeMessages(51)} conversationId="conv-hidden" {...props} />)
+
+    // Restored (and re-windowed) to the saved offset, not yanked to the new message at bottom.
+    expect(scrollToOffsetCalls).toContain(200)
     expect(scrollTopSets).not.toContain(5000)
   })
 })
