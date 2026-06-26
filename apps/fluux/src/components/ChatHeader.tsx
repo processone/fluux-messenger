@@ -106,7 +106,7 @@ export function ChatHeader({
 
       {/* Avatar / Icon */}
       {isGroupChat ? (
-        <div className="size-9 bg-fluux-bg rounded-full flex items-center justify-center flex-shrink-0">
+        <div className="size-9 bg-fluux-bg rounded-xl flex items-center justify-center flex-shrink-0">
           <Hash className="size-5 text-fluux-muted" />
         </div>
       ) : (

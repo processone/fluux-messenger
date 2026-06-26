@@ -17,7 +17,7 @@ export function RoomListItem({
                  transition-colors text-start"
     >
       {/* Room icon */}
-      <div className="flex-shrink-0 size-8 rounded-lg bg-fluux-bg flex items-center justify-center">
+      <div className="flex-shrink-0 size-8 rounded-xl bg-fluux-bg flex items-center justify-center">
         <Hash className="size-4 text-fluux-muted" />
       </div>
 

@@ -292,14 +292,14 @@ export const ConversationItem = memo(function ConversationItem({
               <img
                 src={room.avatar}
                 alt={conversation.name}
-                className="size-8 rounded-full object-cover"
+                className="size-8 rounded-xl object-cover"
                 draggable={false}
                 onError={() => setRoomAvatarBroken(true)}
                 onLoad={(e) => { if (e.currentTarget.naturalWidth === 0) setRoomAvatarBroken(true) }}
               />
             ) : (
               <Hash
-                className="size-8 p-1.5 rounded-full text-white"
+                className="size-8 p-1.5 rounded-xl text-white"
                 style={{ backgroundColor: generateConsistentColorHexSync(conversation.id, { saturation: 60, lightness: 45 }) }}
               />
             )

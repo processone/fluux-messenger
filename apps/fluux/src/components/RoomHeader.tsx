@@ -116,10 +116,11 @@ export function RoomHeader({
           name={room.name}
           avatarUrl={room.avatar}
           size="header"
+          shape="square"
         />
       ) : (
         <div
-          className="size-9 rounded-full flex items-center justify-center flex-shrink-0"
+          className="size-9 rounded-xl flex items-center justify-center flex-shrink-0"
           style={{ backgroundColor: generateConsistentColorHexSync(room.jid, { saturation: 60, lightness: 45 }) }}
         >
           <Hash className="size-5 text-white" />
