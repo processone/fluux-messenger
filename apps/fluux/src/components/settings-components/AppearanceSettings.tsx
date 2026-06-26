@@ -15,9 +15,9 @@ const themeOptions: { value: ThemeMode; labelKey: string; icon: typeof Sun; desc
 ]
 
 const motionOptions: { value: MotionPreference; labelKey: string; icon: typeof Sun; descriptionKey: string }[] = [
-  { value: 'system', labelKey: 'settings.system', icon: Monitor, descriptionKey: 'settings.motionSystemDescription' },
   { value: 'full', labelKey: 'settings.motionFull', icon: Sparkles, descriptionKey: 'settings.motionFullDescription' },
   { value: 'reduced', labelKey: 'settings.motionReduced', icon: CircleSlash, descriptionKey: 'settings.motionReducedDescription' },
+  { value: 'system', labelKey: 'settings.system', icon: Monitor, descriptionKey: 'settings.motionSystemDescription' },
 ]
 
 const FONT_SIZE_MIN = 75
