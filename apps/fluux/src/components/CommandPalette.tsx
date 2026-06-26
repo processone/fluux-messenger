@@ -537,7 +537,7 @@ function CommandPaletteContent({
           ) : (
             groupedItems.map((group) => (
               <div key={group.type}>
-                <div className="px-4 py-1.5 text-xs font-semibold text-fluux-muted uppercase tracking-wide">
+                <div className="px-4 py-1.5 text-xs font-semibold text-fluux-muted uppercase tracking-wide font-display">
                   {group.label}
                 </div>
                 {group.items.map((item) => {

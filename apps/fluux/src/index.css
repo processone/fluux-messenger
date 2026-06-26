@@ -13,6 +13,13 @@
   [role="button"]:not([aria-disabled="true"]) {
     cursor: pointer;
   }
+
+  /* Headings (view titles, headers, section labels) use the Inter Tight display
+     face. Preflight resets headings to inherit, so this sets the default; an
+     explicit font-* utility on a heading still wins (utilities layer > base). */
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--fluux-font-display);
+  }
 }
 
 /* Inter font - self-hosted for privacy (no Google Fonts connection) */
