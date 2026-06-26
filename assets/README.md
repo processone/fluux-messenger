@@ -4,7 +4,9 @@ Media used by the repository's README and docs.
 
 ## Files
 
-- `readme/fm-logo.png` - Logo shown at the top of the root `README.md`.
+- `readme/fluux-logo.svg` - Logo lockup shown at the top of the root `README.md`
+  (Aurora bubble glyph plus the `fluux` wordmark in Nunito 700, text converted to
+  outlines so it needs no font). `readme/fluux-logo.png` is a 2x raster fallback.
 - `readme/fluux-demo.mp4` - Compact demo reel embedded in the README. See
   [docs/DEMO_MODE.md](../docs/DEMO_MODE.md) for how to refresh it.
 

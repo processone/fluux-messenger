@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="assets/readme/fm-logo.png" width="300" alt="Fluux Messenger Logo"/>
+<img src="assets/readme/fluux-logo.svg" width="320" alt="Fluux Messenger Logo"/>
 
 # Fluux Messenger
 
