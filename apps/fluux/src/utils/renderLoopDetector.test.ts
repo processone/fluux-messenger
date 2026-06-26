@@ -37,6 +37,26 @@ describe('renderLoopDetector — interaction grace', () => {
       for (let i = 0; i < 250; i++) detectRenderLoop('LoopComp')
     }).toThrow(/Render loop detected/)
   })
+
+  // Scroll arms the SAME interaction grace as keystrokes (a fast scroll re-windows the
+  // virtualized MessageList ~once per frame — legitimate input-driven churn). The grace
+  // is a rolling window: once the user stops scrolling it expires, so a genuine
+  // post-scroll loop is still reported.
+  it('suppresses warnings during a scroll burst but resumes after the grace window expires', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    let t = 5_000_000
+    __setClock(() => t)
+
+    notifyUserInput() // a scroll event just happened — arms the interaction grace
+    for (let i = 0; i < 30; i++) detectRenderLoop('ScrollComp') // burst within the grace window
+    expect(warn).not.toHaveBeenCalledWith(expect.stringMatching(WARNING_RE))
+
+    // Scrolling stopped: advance past the grace window (and the 1s render window so the
+    // per-component counter resets). A sustained loop now keeps rendering on its own.
+    t += 1600
+    for (let i = 0; i < 30; i++) detectRenderLoop('ScrollComp')
+    expect(warn).toHaveBeenCalledWith(expect.stringMatching(WARNING_RE))
+  })
 })
 
 const SUSTAINED_RE = /Sustained render rate/
