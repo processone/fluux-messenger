@@ -224,6 +224,8 @@ describe('MessageBubble', () => {
       const quote = screen.getByText('Original message').closest('button')!
       expect(quote).toHaveStyle({ borderColor: 'rgb(0, 255, 0)' })
       expect(within(quote).getByText('Bob')).toHaveStyle({ color: 'rgb(0, 255, 0)' })
+      // the leading reply arrow also follows the sender hue
+      expect(quote.querySelector('svg')).toHaveStyle({ color: 'rgb(0, 255, 0)' })
     })
 
     it('re-renders the quote when only replyContext.senderColor changes', () => {

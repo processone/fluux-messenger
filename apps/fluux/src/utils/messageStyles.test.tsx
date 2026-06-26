@@ -247,6 +247,18 @@ describe('renderStyledMessage', () => {
       expect(quote?.classList.contains('blockquote-decorated')).toBe(true)
     })
 
+    it('renders quote text upright (not italic) and muted', () => {
+      const container = renderText('> Top level\n>> Nested level')
+      const outer = container.querySelector('blockquote.blockquote-decorated')!
+      const nested = container.querySelector('blockquote.blockquote-nested')!
+      // Community feedback: quotes must not be italic. Guard both levels.
+      expect(outer.classList.contains('italic')).toBe(false)
+      expect(nested.classList.contains('italic')).toBe(false)
+      // ...while keeping the muted treatment.
+      expect(outer.classList.contains('text-fluux-muted')).toBe(true)
+      expect(nested.classList.contains('text-fluux-muted')).toBe(true)
+    })
+
     it('treats spaced "> >" markers as nested depth (no raw > leaks)', () => {
       const container = renderText('> Top level\n> > Spaced nested')
       const outer = container.querySelector('blockquote.blockquote-decorated')
