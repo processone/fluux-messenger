@@ -27,6 +27,10 @@ const getOffsetForMessageId = vi.fn((_id: string): number | null => 0)
 // path). A direct scrollTop write does NOT go through here, so this distinguishes a
 // virtualizer-aware restore (re-windows before paint) from a raw scrollTop write (blank).
 const scrollToOffsetCalls: number[] = []
+// Records the align of every scrollToIndex. A bottom re-pin goes through
+// scrollToIndex(last,'end') (re-windows the virtualizer); a raw scrollTop write does not.
+// Lets a test prove the composer-resize correction routes through the virtualizer.
+const scrollToIndexCalls: Array<string | undefined> = []
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (key: string) => key, i18n: { language: 'en' } }),
@@ -64,6 +68,7 @@ vi.mock('./tanstackMessageVirtualizer', () => ({
       if (el) el.scrollTop = offset
     },
     scrollToIndex: (_index: number, opts?: { align?: string }) => {
+      scrollToIndexCalls.push(opts?.align)
       const el = args.scrollRef.current
       if (!el) return
       if (opts?.align === 'end') {
@@ -431,5 +436,60 @@ describe('MessageList — virtualized bottom-stick re-asserts as rows measure', 
     // Restored (and re-windowed) to the saved offset, not yanked to the new message at bottom.
     expect(scrollToOffsetCalls).toContain(200)
     expect(scrollTopSets).not.toContain(5000)
+  })
+
+  it('re-windows the virtualizer when the composer grows (attachment / whisper / reply banner) while at bottom', () => {
+    // A composer banner appearing (file attachment preview, whisper marker, reply/edit
+    // preview) shrinks the message scroller. The composer-resize correction must re-pin to
+    // the bottom THROUGH the virtualizer (scrollToIndex(last,'end')) so the mounted window
+    // re-windows — a raw `scrollTop = scrollHeight` write leaves @tanstack's offset stale and
+    // the newly-revealed region blank, the same class of bug fixed for conversation-switch and
+    // MAM-prepend restores. jsdom has no layout, so this pins the re-window CONTRACT.
+    const realRO = globalThis.ResizeObserver
+    const observers: Array<{ targets: Element[]; fire: (height: number) => void }> = []
+    globalThis.ResizeObserver = class {
+      private cb: ResizeObserverCallback
+      targets: Element[] = []
+      constructor(cb: ResizeObserverCallback) {
+        this.cb = cb
+        observers.push({ targets: this.targets, fire: (height: number) =>
+          this.cb([{ contentRect: { height } } as ResizeObserverEntry], this as unknown as ResizeObserver) })
+      }
+      observe(t: Element) { this.targets.push(t) }
+      unobserve() {}
+      disconnect() {}
+    } as unknown as typeof ResizeObserver
+
+    try {
+      const { container } = render(
+        <MessageList messages={makeMessages(50)} conversationId="conv-grow" {...props} />,
+      )
+      const scroller = container.querySelector('[data-message-list]') as HTMLElement
+      const { grow } = instrumentScroller(scroller, 5000)
+      void grow
+
+      // Sit at the bottom and let the scroll handler record isAtBottom = true.
+      scroller.scrollTop = 4500 // scrollHeight 5000 - clientHeight 500
+      scroller.dispatchEvent(new Event('scroll', { bubbles: true }))
+      flush(2)
+
+      // The correction observer is the LAST one watching the scroller (MessageWidthProvider's
+      // width observer is created first; the scroll-correction observer last).
+      const correction = [...observers].reverse().find((o) => o.targets.includes(scroller))
+      expect(correction).toBeTruthy()
+
+      scrollToIndexCalls.length = 0
+
+      // Establish the baseline height, then shrink it (composer banner appeared).
+      correction!.fire(500)
+      flush(1)
+      correction!.fire(400)
+      flush(1)
+
+      // The correction re-pinned through the virtualizer (re-window), not a raw scrollTop write.
+      expect(scrollToIndexCalls).toContain('end')
+    } finally {
+      globalThis.ResizeObserver = realRO
+    }
   })
 })
