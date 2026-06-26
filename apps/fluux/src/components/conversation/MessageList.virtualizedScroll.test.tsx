@@ -216,12 +216,12 @@ describe('MessageList — virtualized bottom-stick re-asserts as rows measure', 
 
   const props = { renderMessage: (m: BaseMessage) => <div>{m.body}</div> }
 
-  // TODO: The ResizeObserver bottom-stick correction is intentionally disabled when the
-  // virtualizer is active (to prevent oscillation from spacer-height churn). A follow-up
-  // needs to implement a totalSize-change → scrollToIndex(last,'end') re-pin so that rows
-  // measuring taller than the estimate after an initial scroll-to-bottom don't leave the
-  // last message partially clipped. Tracked: post-0.16.0 virtualizer bottom-stick gap.
-  it.skip('re-pins to the bottom as scrollHeight grows after a fresh-conversation scroll-to-bottom', () => {
+  // The ResizeObserver bottom-stick correction is intentionally disabled when the virtualizer
+  // is active (to prevent oscillation from spacer-height churn). Instead the scroll hook runs a
+  // measurement-aware rAF re-assert loop: as rows mount and measure taller/shorter than the
+  // fixed estimate, scrollHeight changes, and the loop re-calls scrollToIndex(last,'end') so the
+  // last message isn't left clipped (taller) or floating above empty space (shorter).
+  it('re-pins to the bottom as scrollHeight grows after a fresh-conversation scroll-to-bottom', () => {
     const { container, rerender } = render(
       <MessageList messages={makeMessages(50)} conversationId="conv-A" {...props} />,
     )
@@ -241,7 +241,7 @@ describe('MessageList — virtualized bottom-stick re-asserts as rows measure', 
     expect(scrollTopSets).toContain(3000)
   })
 
-  it.skip('re-pins to the bottom as a new message row measures taller than the estimate', () => {
+  it('re-pins to the bottom as a new message row measures taller than the estimate', () => {
     const { container, rerender } = render(
       <MessageList messages={makeMessages(50)} conversationId="conv-1" {...props} />,
     )

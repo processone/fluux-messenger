@@ -48,6 +48,11 @@ const LOAD_COOLDOWN_MS = 500 // minimum time between load triggers
 const SAVE_THROTTLE_MS = 100 // minimum time between position saves
 const PREPEND_COOLDOWN_MS = 500 // time to keep prepend flag after restore (prevents re-trigger)
 const MEDIA_LOAD_DEBOUNCE_MS = 150 // debounce time for batching image load events
+// Frames to keep re-pinning a virtualized list to the bottom after a scroll-to-bottom. Rows
+// start at the fixed estimateSize and re-measure asynchronously over several frames (taller →
+// scrollHeight grows and clips the last message; shorter → it floats above empty space), so a
+// one-shot scrollToIndex isn't enough. ~1s at 60fps comfortably covers the measurement settle.
+const BOTTOM_REASSERT_FRAMES = 60
 
 // ============================================================================
 // KINETIC SCROLL
@@ -538,6 +543,49 @@ export function useMessageListScroll({
     scrollerRef.current?.scrollTo({ top: 0, behavior: 'smooth' })
   }, [])
 
+  // Pin a VIRTUALIZED list to the bottom and keep it pinned as rows measure.
+  //
+  // scrollToIndex(last, 'end') uses the virtualizer's current (estimated) layout. Rows then
+  // mount and re-measure over the next several frames; scrollHeight grows (rows taller than the
+  // estimate → last message clipped below the fold) or shrinks (shorter → empty space below the
+  // content). The content ResizeObserver that re-pins for the non-virtualized path is disabled
+  // under virtualization (its feedback loops with the @tanstack spacer churn — PR #646), so we
+  // re-assert across frames here instead.
+  //
+  // Runs entirely in rAF (NOT useLayoutEffect) to avoid the scroll→rerender→scrollTop-override
+  // oscillation. Re-pins only when scrollHeight actually changed since the previous frame, and
+  // yields the moment the user takes over (deliberate scroll intent, or simply scrolling away
+  // from the bottom). No-op for the non-virtualized path — callers keep their direct scrollTop.
+  const pinVirtualizedBottom = useCallback(() => {
+    const virt = virtualizerRef.current
+    const scroller = scrollerRef.current
+    if (!virt || !scroller || virt.itemCount === 0) return
+
+    // Immediate pin (pre-paint when called from a layout effect).
+    virt.scrollToIndex(virt.itemCount - 1, { align: 'end' })
+
+    const startedAt = Date.now()
+    let framesLeft = BOTTOM_REASSERT_FRAMES
+    let lastHeight = scroller.scrollHeight
+    const step = () => {
+      if (framesLeft-- <= 0) return
+      const s = scrollerRef.current
+      const v = virtualizerRef.current
+      if (!s || !v || v.itemCount === 0) return
+      // User took over (FAB/wheel intent recorded after we started, or they scrolled away from
+      // the bottom) → stop fighting them. Programmatic growth doesn't move scrollTop, so it never
+      // flips isAtBottom; only a genuine user scroll up does.
+      if (userScrollIntentAtRef.current > startedAt || !isAtBottomRef.current) return
+      const h = s.scrollHeight
+      if (h !== lastHeight) {
+        lastHeight = h
+        v.scrollToIndex(v.itemCount - 1, { align: 'end' })
+      }
+      requestAnimationFrame(step)
+    }
+    requestAnimationFrame(step)
+  }, [isAtBottomRef])
+
   // ==========================================================================
   // LOAD OLDER MESSAGES
   // ==========================================================================
@@ -1014,9 +1062,9 @@ export function useMessageListScroll({
           // Virtualizer-native bottom: uses actual measured heights, not the estimated
           // spacer height. This is the root cause of the "blank FAB" bug — estimated
           // scrollHeight undershoots when bottom rows are taller than estimateSize.
-          if (virtSwitch.itemCount > 0) {
-            virtSwitch.scrollToIndex(virtSwitch.itemCount - 1, { align: 'end' })
-          }
+          // pinVirtualizedBottom re-asserts across frames as those rows measure, so the
+          // last message isn't left clipped (taller) or floating above empty space (shorter).
+          pinVirtualizedBottom()
         } else {
           void scroller.offsetHeight  // Force layout calculation
           scroller.scrollTop = scroller.scrollHeight
@@ -1050,7 +1098,7 @@ export function useMessageListScroll({
         }
       }
     }
-  }, [conversationId, messageCount, firstNewMessageId, targetMessageId, isAtBottomRef, staticMode])
+  }, [conversationId, messageCount, firstNewMessageId, targetMessageId, isAtBottomRef, staticMode, pinVirtualizedBottom])
 
   // ==========================================================================
   // EFFECT: Scroll to target message (from activity log click, etc.)
@@ -1452,7 +1500,7 @@ export function useMessageListScroll({
       isAtBottomRef.current = true // a send from a scrolled-up position lands us at the bottom
       const virtNewMsg = latestRef.current.virtualizer
       if (virtNewMsg) {
-        if (virtNewMsg.itemCount > 0) virtNewMsg.scrollToIndex(virtNewMsg.itemCount - 1, { align: 'end' })
+        pinVirtualizedBottom()
       } else {
         scroller.scrollTop = scroller.scrollHeight
       }
@@ -1465,7 +1513,7 @@ export function useMessageListScroll({
     }
 
     prevMessageCountRef.current = messageCount
-  }, [messageCount, isAtBottomRef, staticMode, lastMessageIsOutgoing])
+  }, [messageCount, isAtBottomRef, staticMode, lastMessageIsOutgoing, pinVirtualizedBottom])
 
   // ==========================================================================
   // EFFECT: Reset marker scroll tracking when firstNewMessageId changes
@@ -1493,22 +1541,22 @@ export function useMessageListScroll({
     const virtTyping = latestRef.current.virtualizer
     const s = scrollerRef.current
     if (virtTyping) {
-      if (virtTyping.itemCount > 0) virtTyping.scrollToIndex(virtTyping.itemCount - 1, { align: 'end' })
+      pinVirtualizedBottom()
     } else if (s) {
       s.scrollTop = s.scrollHeight
     }
-  }, [typingUsersCount, isAtBottomRef])
+  }, [typingUsersCount, isAtBottomRef, pinVirtualizedBottom])
 
   useLayoutEffect(() => {
     if (!isAtBottomRef.current) return
     const virtReaction = latestRef.current.virtualizer
     const s = scrollerRef.current
     if (virtReaction) {
-      if (virtReaction.itemCount > 0) virtReaction.scrollToIndex(virtReaction.itemCount - 1, { align: 'end' })
+      pinVirtualizedBottom()
     } else if (s) {
       s.scrollTop = s.scrollHeight
     }
-  }, [lastMessageReactionsKey, isAtBottomRef])
+  }, [lastMessageReactionsKey, isAtBottomRef, pinVirtualizedBottom])
 
   // ==========================================================================
   // EFFECT: Container resize (composer grows/shrinks)
