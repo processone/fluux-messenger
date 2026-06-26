@@ -16,4 +16,8 @@ The app icon source lives with the Tauri icon pipeline, not here:
 - `apps/fluux/src-tauri/icons/icon-source-maskable.svg` - Maskable variant.
 
 Generated PNG/ICO/ICNS icons sit alongside those sources in
-`apps/fluux/src-tauri/icons/`.
+`apps/fluux/src-tauri/icons/` (plus the PWA icons in `apps/fluux/public/`).
+
+To regenerate every platform variant after editing the SVG sources, run
+`apps/fluux/src-tauri/icons/generate.sh` (needs `rsvg-convert`, ImageMagick,
+and `iconutil`).
