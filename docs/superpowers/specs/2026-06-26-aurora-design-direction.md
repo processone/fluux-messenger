@@ -117,6 +117,16 @@ Reuse existing keyframes (typing dots, reaction-burst, FAB spring, message-send,
 
 ## 4. Component specs
 
+### 4.0 App shell (persistent layout)
+The window keeps a fixed four-region shell. Aurora restyles each region but **does not change the structure** — no region is removed.
+
+1. **Icon rail** (~52px) — switches views (Messages / Rooms / Contacts / Notifications / Search) + account. Always visible.
+2. **Conversation / room list** (~220–280px) — *the left sidebar*. Lists conversations or rooms for the active view. **Always visible on desktop; not removable.**
+3. **Conversation** — header + message thread + composer.
+4. **Contextual panel** (~200–300px) — occupant/members list in rooms, profile in contacts. The **only** collapsible region: an in-flow column at `lg+`, a slide-in drawer below `lg` (existing `animate-drawer-in`).
+
+Note: the inline room mockup shown during brainstorming compressed away region 2 to fit the 680px preview width. It is retained in the real layout — rooms are rail + room list + conversation + occupant panel.
+
 ### 4.1 Icon rail
 Brand mark on top (gradient rounded square, 30px — placeholder until a real logomark exists), nav icons 19px, active = accent-soft pill + `--fluux-text-self`-bright icon; settings + account avatar pinned to the bottom. Width 52–56.
 
