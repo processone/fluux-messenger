@@ -1,4 +1,4 @@
-import { useCallback } from 'react'
+import { useCallback, useRef } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import type { MessageVirtualizer } from './messageVirtualizer'
 
@@ -103,6 +103,25 @@ export function useTanstackMessageVirtualizer({
   // of the conversation. A constant estimate keeps getTotalSize stable; the prepend restore
   // stays accurate via getOffsetForMessageId + the scroll hook's per-frame re-assert, which
   // re-reads the offset as the prepended rows measure.
+  // @tanstack hands its offset callback to `observeElementOffset` on (re)mount; we stash it so a
+  // PROGRAMMATIC scroll (scrollToOffset) can re-window by pushing the new offset straight into it
+  // with isScrolling=false — a non-sync notify that routes through the adapter's plain rerender()
+  // instead of flushSync. A synthetic `scroll` DOM event would instead drive isScrolling=true →
+  // flushSync, which explodes ("flushSync from inside a lifecycle method") when scrollToOffset is
+  // called from the MAM-prepend restore useLayoutEffect, spamming a render-loop storm. See scrollToOffset.
+  const offsetCbRef = useRef<((offset: number, isScrolling: boolean) => void) | null>(null)
+  const observeOffset = useCallback(
+    (instance: { scrollElement: HTMLElement | null }, cb: (offset: number, isScrolling: boolean) => void) => {
+      offsetCbRef.current = cb
+      const cleanup = observeElementOffsetWithRaf(instance, cb)
+      return () => {
+        offsetCbRef.current = null
+        cleanup?.()
+      }
+    },
+    [],
+  )
+
   const virtualizer = useVirtualizer<HTMLElement, Element>({
     count: items.length,
     getScrollElement: () => scrollRef.current,
@@ -111,7 +130,7 @@ export function useTanstackMessageVirtualizer({
     overscan: 12,
     // rAF-polled offset observer so the window keeps advancing during WebKit inertial momentum,
     // when the desktop webview withholds `scroll` events (the "looping rows" bug). See the fn doc.
-    observeElementOffset: observeElementOffsetWithRaf,
+    observeElementOffset: observeOffset,
   })
 
   const getOffsetForMessageId = useCallback((id: string): number | null => {
@@ -141,16 +160,18 @@ export function useTanstackMessageVirtualizer({
     measureElement: virtualizer.measureElement,
     scrollToOffset: (offset, opts) => {
       virtualizer.scrollToOffset(offset, opts)
-      // @tanstack updates its reactive scrollOffset ONLY from the scroll element's
-      // 'scroll' DOM event (observeElementOffset). scrollToOffset sets the DOM
-      // scrollTop (via _scrollToOffset) but leaves scrollOffset stale until that
-      // event fires. The MAM-prepend restore calls this from a useLayoutEffect
-      // right after a count change; the browser's pending scroll event does not
-      // re-window before paint, so the mounted window keeps the old (top) rows and
-      // the viewport renders BLANK until the user scrolls again. Dispatch the event
-      // synchronously so the virtualizer re-reads scrollTop and re-windows to match
-      // — the same sync a real user scroll performs.
-      scrollRef.current?.dispatchEvent(new Event('scroll'))
+      // @tanstack updates its reactive scrollOffset ONLY from the scroll element's 'scroll' DOM
+      // event (observeElementOffset). scrollToOffset sets the DOM scrollTop (via _scrollToOffset)
+      // but leaves scrollOffset stale until that event fires. The MAM-prepend restore calls this
+      // from a useLayoutEffect right after a count change; the browser's pending scroll event does
+      // not re-window before paint, so the mounted window keeps the old (top) rows and the viewport
+      // renders BLANK until the user scrolls again. Push the restored offset straight into
+      // @tanstack's offset callback with isScrolling=false: this updates scrollOffset and
+      // recalculates the window synchronously (re-windowed before paint, same as the old synthetic
+      // scroll dispatch) BUT routes through the adapter's plain rerender() rather than flushSync.
+      // A synthetic `scroll` event would hardcode isScrolling=true → flushSync → "flushSync from
+      // inside a lifecycle method" + a render-loop storm when called during the layout-effect commit.
+      offsetCbRef.current?.(offset, false)
     },
     scrollToIndex: (index, opts) => virtualizer.scrollToIndex(index, opts),
   }
