@@ -280,6 +280,62 @@ describe('setupRoomSideEffects', () => {
     })
   })
 
+  describe('re-entry of a caught-up resident room', () => {
+    // Re-entering a room you're still joined to (no reconnect) should be a no-op for
+    // side effects: the messages are already resident (activateRoom's own cache load
+    // ran on the way in) and MAM was already caught up this session. Reloading the
+    // cache here churns the message array AFTER the list has mounted and scrolled,
+    // which knocks the restored scroll position off (lands mid-list). See the
+    // activeRoomJid subscriber guard in roomSideEffects.ts.
+    it('does not reload cache or query MAM when activating a joined, resident, caught-up room', async () => {
+      // Distinct jid + jid-scoped assertions: sibling tests leave their Step-2
+      // fetchMAMForRoom async in flight (they only await the Step-1 load), which can
+      // fire loadMessagesFromCache/queryRoomMAM on the shared store during this test.
+      const ROOM = 'reentry@conference.example.com'
+      const liveMessage = {
+        type: 'groupchat' as const,
+        id: 'live-1',
+        roomJid: ROOM,
+        from: `${ROOM}/alice`,
+        nick: 'alice',
+        body: 'hi',
+        timestamp: new Date('2026-02-04T12:00:00Z'),
+        isOutgoing: false,
+      }
+      // Joined room with messages already resident (as activateRoom leaves it on the
+      // way in). SM resumption marks every joined room caught up for the session
+      // without a reconnect — exactly the "joined, did not reconnect" case.
+      roomStore.getState().addRoom({
+        jid: ROOM,
+        name: 'Test Room',
+        nickname: 'me',
+        joined: true,
+        supportsMAM: true,
+        occupants: new Map(),
+        messages: [liveMessage],
+        unreadCount: 0,
+        mentionsCount: 0,
+        typingUsers: new Set(),
+        isBookmarked: true,
+      })
+
+      cleanup = setupRoomSideEffects(mockClient)
+      simulateSmResumption(mockClient) // seeds fetchInitiated for joined rooms; no MAM
+
+      const loadSpy = vi.spyOn(roomStore.getState(), 'loadMessagesFromCache')
+
+      // Activating it now is a no-op: caught up this session AND still resident.
+      roomStore.getState().setActiveRoom(ROOM)
+
+      await new Promise((resolve) => setTimeout(resolve, 50))
+      expect(loadSpy).not.toHaveBeenCalledWith(ROOM, expect.anything())
+      expect(mockClient.chat.queryRoomMAM).not.toHaveBeenCalledWith(
+        expect.objectContaining({ roomJid: ROOM })
+      )
+      loadSpy.mockRestore()
+    })
+  })
+
   describe('reconnection', () => {
     it('should trigger MAM catchup on reconnection for active room', async () => {
       roomStore.getState().addRoom({
