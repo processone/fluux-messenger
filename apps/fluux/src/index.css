@@ -85,6 +85,19 @@
   --fluux-accent-s: 100%;
   --fluux-accent-l: 71%;
 
+  /* ── Aurora identity additions ── */
+  --fluux-accent-2: #38E0C4;
+  --fluux-grad: linear-gradient(135deg, #38E0C4, #7C8CFF, #A78BFA);
+  --fluux-sender-1: #9FD4FF;
+  --fluux-sender-2: #6FE3B0;
+  --fluux-sender-3: #FFCB73;
+  --fluux-sender-4: #FF9DB0;
+  --fluux-sender-5: #C2ABFF;
+  --fluux-sender-6: #67D4D0;
+  --fluux-glass-bg: rgba(20, 27, 48, 0.74);
+  --fluux-glass-blur: 12px;
+  --fluux-shadow-overlay: 0 24px 70px rgba(0, 0, 0, 0.55);
+
   /* Named palette colors */
   --fluux-color-red: #da373c;
   --fluux-color-green: #23a559;
@@ -136,7 +149,7 @@
   --fluux-text-on-accent: #ffffff;
   --fluux-text-accent: var(--fluux-bg-accent);
   --fluux-text-link: var(--fluux-color-blue);
-  /* Own-message ("you") name. The raw brand accent (hsl 235 86% 65%) only
+  /* Own-message ("you") name. The raw brand accent (hsl(231 100% 71%)) only
      reaches ~2.8:1 on the dark message background, so a dedicated brand-indigo
      value is used, tuned to clear WCAG AA on both the resting and hover message
      backgrounds. Dark default here; .light overrides below. */
@@ -336,6 +349,18 @@
   --fluux-search-highlight-bg: hsla(var(--fluux-accent-h), var(--fluux-accent-s), var(--fluux-accent-l), 0.25);
   --fluux-scrollbar-thumb: #c4c9ce;
   --fluux-scrollbar-thumb-hover: #a8adb3;
+
+  /* ── Aurora identity (light) ── */
+  --fluux-accent-2: #11A88C;
+  --fluux-grad: linear-gradient(135deg, #11A88C, #5B6CF0, #7C6CF0);
+  --fluux-sender-1: #1E84D8;
+  --fluux-sender-2: #119E73;
+  --fluux-sender-3: #B5790E;
+  --fluux-sender-4: #D8527A;
+  --fluux-sender-5: #6E54D8;
+  --fluux-sender-6: #128C86;
+  --fluux-glass-bg: rgba(255, 255, 255, 0.72);
+  --fluux-shadow-overlay: 0 20px 50px rgba(20, 27, 48, 0.18);
 
   /* emoji-mart theming */
   --em-rgb-background: 227, 229, 232;
