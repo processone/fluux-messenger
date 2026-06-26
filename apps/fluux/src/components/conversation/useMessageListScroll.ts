@@ -1050,7 +1050,14 @@ export function useMessageListScroll({
             const viewportHeight = markerScroller.clientHeight
             const targetScrollTop = Math.max(0, elementTop - viewportHeight / 3)
 
-            markerScroller.scrollTop = targetScrollTop
+            // Route through the virtualizer (scrollToOffset) so @tanstack's reactive
+            // scrollOffset is updated. A raw `scrollTop` write is reverted to the top when
+            // the virtualizer re-windows as rows measure (it re-applies its stale offset),
+            // which left the marker stranded below the fold — the same fix the
+            // restore-position and bottom-pin paths already use.
+            const v = latestRef.current.virtualizer
+            if (v) v.scrollToOffset(targetScrollTop)
+            else markerScroller.scrollTop = targetScrollTop
 
             // Update isAtBottom based on actual position after scrolling
             const distFromBottom = markerScroller.scrollHeight - targetScrollTop - viewportHeight
