@@ -10,31 +10,34 @@ import { monokaiTheme } from './monokai'
 import { rosePineTheme } from './rose-pine'
 import { kanagawaTheme } from './kanagawa'
 import { githubTheme } from './github'
+import { indigoTheme } from './indigo'
 
 /**
- * The default Fluux theme — its variables are defined in index.css (:root / .light).
+ * Aurora — the default Fluux theme. Its variables live in index.css (:root /
+ * .light); the id stays 'fluux' for back-compat with persisted selections.
  * This entry exists so the theme picker can show it alongside custom themes.
  */
 export const fluuxTheme: ThemeDefinition = {
   id: 'fluux',
-  name: 'Fluux',
+  name: 'Aurora',
   author: 'Fluux',
   version: '1.0.0',
-  description: 'Default Fluux color palette',
+  description: 'Aurora — the default Fluux identity: luminous periwinkle on deep ink',
   variables: {
-    // No overrides — the :root / .light CSS defaults are used
+    // No overrides — the :root / .light CSS defaults (Aurora) are used
     dark: {},
     light: {},
   },
   swatches: {
-    dark: ['#1e1f22', '#2b2d31', '#5865f2', '#00a8fc', '#23a559'],
-    light: ['#e3e5e8', '#ebedef', '#5865f2', '#0969da', '#23a559'],
+    dark: ['#0B1020', '#0E1326', '#7C8CFF', '#38E0C4', '#A78BFA'],
+    light: ['#E7EAF4', '#EEF0F8', '#5B6CF0', '#11A88C', '#A78BFA'],
   },
 }
 
 /** All built-in themes, ordered for the theme picker */
 export const builtinThemes: ThemeDefinition[] = [
   fluuxTheme,
+  indigoTheme,
   draculaTheme,
   nordTheme,
   gruvboxTheme,
