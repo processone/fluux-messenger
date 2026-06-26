@@ -296,18 +296,21 @@
   color-scheme: light;
 
   /* Foundation overrides (light ramp — 00 = lightest, 100 = darkest) */
-  --fluux-base-00: #ffffff;
-  --fluux-base-05: #f2f3f5;
-  --fluux-base-10: #e3e5e8;
-  --fluux-base-20: #ebedef;
-  --fluux-base-30: #ffffff;
-  --fluux-base-40: #dcdee3;
-  --fluux-base-50: #d0d3d8;
-  --fluux-base-60: #b5bac1;
-  --fluux-base-70: #80848e;
-  --fluux-base-80: #4a4d54;
-  --fluux-base-90: #2e3338;
-  --fluux-base-100: #1e1f22;
+  --fluux-base-00: #FFFFFF;
+  --fluux-base-05: #F4F6FC;
+  --fluux-base-10: #E7EAF4;
+  --fluux-base-20: #EEF0F8;
+  --fluux-base-30: #FFFFFF;
+  --fluux-base-40: #E4E8F3;
+  --fluux-base-50: #DDE2F0;
+  --fluux-base-60: #C2C9DC;
+  --fluux-base-70: #8A93AD;
+  --fluux-base-80: #5C6685;
+  --fluux-base-90: #1B2233;
+  --fluux-base-100: #0E1426;
+
+  /* Accent darkened for AA on light surfaces (white text on accent fills) */
+  --fluux-accent-l: 60%;
 
   /* Palette overrides for light context */
   --fluux-color-blue: #0969da;
@@ -317,7 +320,7 @@
   /* Own-message ("you") name — brand-indigo darkened for WCAG AA on the white
      message background and its hover state (the raw accent only reached ~4.6:1
      at rest and failed on hover). */
-  --fluux-text-self: #4f46e5;
+  --fluux-text-self: #4F5BD8;
 
   /* Private (whisper) — deeper violet for contrast on light backgrounds */
   --fluux-private: hsl(270, 70%, 48%);
