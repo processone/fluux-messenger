@@ -550,35 +550,26 @@ html, body {
   -webkit-overflow-scrolling: touch;
 }
 
-/* Blockquote with decorative quotation marks — distinguishes quotes from reply indicators */
+/* First-level quote — a recessed card with an accent edge and a single opening
+   mark (Aurora). Nested levels use a plain accent line (.blockquote-nested). */
 .blockquote-decorated {
   position: relative;
-  padding-left: 1.25rem;
-  padding-right: 0.5rem;
-  padding-top: 0.2rem;
-  padding-bottom: 0.5rem;
-  margin-block: 0.125rem;
+  border-left: 2px solid var(--fluux-brand);
+  background: var(--fluux-bg-secondary);
+  border-radius: 0 var(--fluux-radius-m) var(--fluux-radius-m) 0;
+  padding: 0.4rem 0.7rem 0.45rem 2.1rem;
+  margin-block: 0.25rem;
 }
 .blockquote-decorated::before {
   content: '\201C';
   position: absolute;
-  left: 0;
-  top: -0.15rem;
-  font-size: 1.75rem;
+  left: 0.55rem;
+  top: 0.15rem;
+  font-size: 1.4rem;
   line-height: 1;
   color: var(--fluux-brand);
-  opacity: 0.6;
+  opacity: 0.55;
   font-family: Georgia, 'Times New Roman', serif;
-}
-.blockquote-decorated::after {
-  content: '\201D';
-  font-size: 1.75rem;
-  line-height: 0;
-  color: var(--fluux-brand);
-  opacity: 0.6;
-  font-family: Georgia, 'Times New Roman', serif;
-  vertical-align: -0.4rem;
-  margin-left: 0.1rem;
 }
 /* Nested blockquote level — indented with a thin left border, no extra quote marks */
 .blockquote-nested {

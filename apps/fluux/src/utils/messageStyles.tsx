@@ -519,7 +519,7 @@ function renderQuoteTree(
   return (
     <blockquote
       key={`quote-${baseIdx}`}
-      className={isDecorated ? 'blockquote-decorated text-fluux-muted italic' : 'blockquote-nested text-fluux-muted italic'}
+      className={isDecorated ? 'blockquote-decorated text-fluux-muted' : 'blockquote-nested text-fluux-muted'}
     >
       {children}
     </blockquote>
