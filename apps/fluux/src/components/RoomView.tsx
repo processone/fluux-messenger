@@ -10,6 +10,7 @@ import { FindOnPageBar } from './conversation/FindOnPageBar'
 import { useFindOnPage, type FindOnPageHandle } from '@/hooks/useFindOnPage'
 import { Avatar } from './Avatar'
 import { selectSelfOccupant, stableNickSet, resolveRoomSender, resolveReplyAvatar, resolveSenderColor, resolveNickColor } from './conversation/roomSenderResolution'
+import { selectRoomInitialLoading } from './conversation/roomLoadingState'
 import { format } from 'date-fns'
 import type { CopyMessageMeta } from '@/utils/buildCopyText'
 import { Shield, Crown, Upload, Loader2, LogIn, AlertCircle, Users, MessageCircle, EyeOff, User, Settings, Ear, X } from 'lucide-react'
@@ -931,13 +932,22 @@ export const RoomMessageList = memo(function RoomMessageList({
     [room.occupants, room.nickname],
   )
 
-  // Loading state: only show when joining room (SDK auto-loads cache in background)
-  // No "loading messages" spinner - cache loads instantly, messages appear immediately
-  const isInitialLoading = room.isJoining && !room.joined
+  // Loading state covers two phases: joining (waiting for self-presence) and the
+  // first MAM catch-up after join when nothing is cached yet. Without the second
+  // phase the spinner vanished on join and the view showed "No messages" while
+  // history was still loading (see selectRoomInitialLoading).
+  const isInitialLoading = selectRoomInitialLoading({
+    isJoining: room.isJoining ?? false,
+    joined: room.joined ?? false,
+    isCatchingUp: isCatchingUp ?? false,
+    messageCount: messages.length,
+  })
+  // Label matches the phase: still joining vs. joined and loading history.
+  const isJoiningPhase = (room.isJoining ?? false) && !(room.joined ?? false)
   const loadingState = isInitialLoading ? (
     <div className="flex-1 flex flex-col items-center justify-center gap-3 text-fluux-muted">
       <Loader2 className="size-8 animate-spin text-fluux-brand" />
-      <p>{t('rooms.joining')}</p>
+      <p>{isJoiningPhase ? t('rooms.joining') : t('chat.loadingMessages')}</p>
     </div>
   ) : null
 
