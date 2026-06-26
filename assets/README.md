@@ -1,28 +1,19 @@
 # Assets
 
-Source design files for the application.
+Media used by the repository's README and docs.
 
 ## Files
 
-- `chat_icon.svg` - Vector source for app icons
+- `readme/fm-logo.png` - Logo shown at the top of the root `README.md`.
+- `readme/fluux-demo.mp4` - Compact demo reel embedded in the README. See
+  [docs/DEMO_MODE.md](../docs/DEMO_MODE.md) for how to refresh it.
 
-## Regenerating Icons
+## App icons
 
-To regenerate all app icons from the SVG source:
+The app icon source lives with the Tauri icon pipeline, not here:
 
-```bash
-# Export SVG to 1024x1024 PNG first (using Inkscape, or any vector editor)
-# Then run from the repository root:
+- `apps/fluux/src-tauri/icons/icon-source.svg` - Vector source (Aurora design).
+- `apps/fluux/src-tauri/icons/icon-source-maskable.svg` - Maskable variant.
 
-SOURCE="path/to/exported.png"
-WEB_PUBLIC="apps/web-client/public"
-TAURI_ICONS="apps/web-client/src-tauri/icons"
-
-# Web client
-magick "$SOURCE" -resize 32x32 "$WEB_PUBLIC/favicon.png"
-magick "$SOURCE" -resize 512x512 "$WEB_PUBLIC/icon-512.png"
-
-# Tauri (see full script in project documentation)
-magick "$SOURCE" -resize 512x512 "$TAURI_ICONS/icon.png"
-# ... etc
-```
+Generated PNG/ICO/ICNS icons sit alongside those sources in
+`apps/fluux/src-tauri/icons/`.
