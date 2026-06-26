@@ -183,9 +183,10 @@ test('07 — Admin Server Overview (dark)', async ({ page }) => {
   })
 
   await navigateTo(page, 'admin')
-  // Open the Server Overview (Statistics category)
-  await page.getByText('Statistics').first().click()
-  // Let the overview mount and its initial fetch settle before we seed final values
+  // Entering the admin panel as an admin auto-lands on the Server Overview
+  // (the 'stats' category) — there is no separate "Statistics" menu entry to
+  // click anymore. Let the overview mount and its initial fetch settle before
+  // we seed final values.
   await page.waitForTimeout(800)
   await page.evaluate((stats) => {
     const adminStore = (window as any).__adminStore
