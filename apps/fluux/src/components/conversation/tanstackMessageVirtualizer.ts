@@ -2,6 +2,80 @@ import { useCallback } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import type { MessageVirtualizer } from './messageVirtualizer'
 
+// Frames the offset must hold steady before we declare scrolling settled and stop polling
+// (~100ms at 60fps — close to @tanstack's default 150ms isScrollingResetDelay).
+const OFFSET_POLL_IDLE_FRAMES = 6
+
+/**
+ * Drop-in replacement for @tanstack/react-virtual's `observeElementOffset` that re-windows from a
+ * requestAnimationFrame poll of `scrollTop`, not only from the element's `scroll` event.
+ *
+ * WHY: the default observer updates the virtualizer's offset (and thus the mounted window) ONLY
+ * when the scroll element fires a `scroll` event. WebKit — the Tauri desktop webview — coalesces
+ * or withholds `scroll` events during INERTIAL ("kinetic") momentum scrolling: the layer scrolls
+ * on the compositor while JS sees no event. With the default observer the mounted window then
+ * freezes mid-fling, so the same rows render as the user scrolls (the "looping images" report).
+ * Chromium fires `scroll` promptly during inertia, so it never shows the bug — and the headless
+ * preview/Playwright harness can't reproduce momentum at all.
+ *
+ * HOW: keep the `scroll` listener (so the Chromium path is unchanged) but, once a gesture starts
+ * (scroll / wheel / touch), poll `scrollTop` every frame and push each change into the virtualizer.
+ * The poll stops after the offset is stable for OFFSET_POLL_IDLE_FRAMES, so it runs only during an
+ * active scroll. It is strictly READ-ONLY (never writes scrollTop) so it cannot feed back into the
+ * scroll-correction loops. Same `(instance, cb) => cleanup` contract as the @tanstack default.
+ */
+export function observeElementOffsetWithRaf(
+  instance: { scrollElement: HTMLElement | null },
+  cb: (offset: number, isScrolling: boolean) => void,
+): void | (() => void) {
+  const el = instance.scrollElement
+  if (!el) return
+
+  let rafId: number | null = null
+  let lastOffset = el.scrollTop
+  let idleFrames = 0
+
+  const tick = () => {
+    const offset = el.scrollTop
+    if (offset !== lastOffset) {
+      lastOffset = offset
+      idleFrames = 0
+      cb(offset, true)
+    } else if (++idleFrames >= OFFSET_POLL_IDLE_FRAMES) {
+      rafId = null
+      cb(offset, false) // scrolling settled — resume measurement adjustments
+      return
+    }
+    rafId = requestAnimationFrame(tick)
+  }
+
+  const startPolling = () => {
+    if (rafId === null) {
+      idleFrames = 0
+      rafId = requestAnimationFrame(tick)
+    }
+  }
+
+  const onScroll = () => {
+    lastOffset = el.scrollTop
+    cb(lastOffset, true)
+    startPolling()
+  }
+
+  el.addEventListener('scroll', onScroll, { passive: true })
+  // Momentum initiators: WebKit may suppress the `scroll` event during the inertial phase, so
+  // begin polling the moment the gesture starts rather than waiting for a `scroll` that won't come.
+  el.addEventListener('wheel', startPolling, { passive: true })
+  el.addEventListener('touchmove', startPolling, { passive: true })
+
+  return () => {
+    el.removeEventListener('scroll', onScroll)
+    el.removeEventListener('wheel', startPolling)
+    el.removeEventListener('touchmove', startPolling)
+    if (rafId !== null) cancelAnimationFrame(rafId)
+  }
+}
+
 interface Args {
   /** Only the stable `key` per row is needed — the adapter is agnostic to item kind
    *  (date/message/header/footer all window uniformly). The caller renders by kind. */
@@ -35,6 +109,9 @@ export function useTanstackMessageVirtualizer({
     estimateSize: () => estimateSize,
     getItemKey: (index) => items[index].key,
     overscan: 12,
+    // rAF-polled offset observer so the window keeps advancing during WebKit inertial momentum,
+    // when the desktop webview withholds `scroll` events (the "looping rows" bug). See the fn doc.
+    observeElementOffset: observeElementOffsetWithRaf,
   })
 
   const getOffsetForMessageId = useCallback((id: string): number | null => {
