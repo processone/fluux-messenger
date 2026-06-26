@@ -587,6 +587,21 @@ export function useMessageListScroll({
     requestAnimationFrame(step)
   }, [isAtBottomRef])
 
+  // Re-pin the list to the bottom after a layout change that grows the content or shrinks the
+  // scroller while the user is following along: typing indicator, reactions on the last message,
+  // or a composer banner appearing/disappearing (attachment preview, whisper marker, reply/edit
+  // preview). Routes through the virtualizer when active so the mounted window re-windows before
+  // paint (a raw scrollTop write leaves @tanstack's offset stale → blank/clipped); otherwise a
+  // direct scrollTop write. Callers must have already confirmed the user is at/near the bottom.
+  const reassertBottom = useCallback(() => {
+    if (virtualizerRef.current) {
+      pinVirtualizedBottom()
+    } else {
+      const s = scrollerRef.current
+      if (s) s.scrollTop = s.scrollHeight
+    }
+  }, [pinVirtualizedBottom])
+
   // ==========================================================================
   // LOAD OLDER MESSAGES
   // ==========================================================================
@@ -1555,25 +1570,13 @@ export function useMessageListScroll({
   // on conversation switch (stale "not at bottom" state gets persisted).
   useLayoutEffect(() => {
     if (!isAtBottomRef.current) return
-    const virtTyping = latestRef.current.virtualizer
-    const s = scrollerRef.current
-    if (virtTyping) {
-      pinVirtualizedBottom()
-    } else if (s) {
-      s.scrollTop = s.scrollHeight
-    }
-  }, [typingUsersCount, isAtBottomRef, pinVirtualizedBottom])
+    reassertBottom()
+  }, [typingUsersCount, isAtBottomRef, reassertBottom])
 
   useLayoutEffect(() => {
     if (!isAtBottomRef.current) return
-    const virtReaction = latestRef.current.virtualizer
-    const s = scrollerRef.current
-    if (virtReaction) {
-      pinVirtualizedBottom()
-    } else if (s) {
-      s.scrollTop = s.scrollHeight
-    }
-  }, [lastMessageReactionsKey, isAtBottomRef, pinVirtualizedBottom])
+    reassertBottom()
+  }, [lastMessageReactionsKey, isAtBottomRef, reassertBottom])
 
   // ==========================================================================
   // EFFECT: Container resize (composer grows/shrinks)
@@ -1606,7 +1609,9 @@ export function useMessageListScroll({
       const shrunk = lastHeight - newHeight
       if (shrunk > 0 && scrollerRef.current) {
         const wasNear = getDistanceFromBottom(scrollerRef.current) <= shrunk + AT_BOTTOM_THRESHOLD
-        if (wasNear) scrollerRef.current.scrollTop = scrollerRef.current.scrollHeight
+        // Route through reassertBottom so the virtualized path re-windows (scrollToIndex) rather
+        // than a raw scrollTop write that would leave the mounted window stale → blank/clipped.
+        if (wasNear) reassertBottom()
       }
 
       lastHeight = newHeight
@@ -1637,7 +1642,9 @@ export function useMessageListScroll({
       observer.disconnect()
       if (rafId !== null) cancelAnimationFrame(rafId)
     }
-  }, [conversationId])
+    // reassertBottom is stable (depends only on the stable pinVirtualizedBottom), so listing it
+    // re-creates the observer only on conversation change, same as conversationId alone.
+  }, [conversationId, reassertBottom])
 
   // ==========================================================================
   // EFFECT: Keyboard shortcuts
