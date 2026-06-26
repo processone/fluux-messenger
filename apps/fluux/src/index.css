@@ -67,23 +67,23 @@
   /* ── Tier 1: Foundation ── */
 
   /* Neutral ramp (00 = darkest, 100 = lightest) */
-  --fluux-base-00: #111214;
-  --fluux-base-05: #1a1b1e;
-  --fluux-base-10: #1e1f22;
-  --fluux-base-20: #2b2d31;
-  --fluux-base-30: #313338;
-  --fluux-base-40: #35373c;
-  --fluux-base-50: #404249;
-  --fluux-base-60: #4e5058;
-  --fluux-base-70: #6d6f78;
-  --fluux-base-80: #949ba4;
-  --fluux-base-90: #dbdee1;
-  --fluux-base-100: #f2f3f5;
+  --fluux-base-00: #090D18;
+  --fluux-base-05: #0A0F1E;
+  --fluux-base-10: #0B1020;
+  --fluux-base-20: #0E1326;
+  --fluux-base-30: #0F1528;
+  --fluux-base-40: #141B30;
+  --fluux-base-50: #1A2238;
+  --fluux-base-60: #2A3553;
+  --fluux-base-70: #5E6B8A;
+  --fluux-base-80: #97A4C4;
+  --fluux-base-90: #E9EDF7;
+  --fluux-base-100: #F4F6FC;
 
   /* Accent (HSL components for composability) */
-  --fluux-accent-h: 235;
-  --fluux-accent-s: 86%;
-  --fluux-accent-l: 65%;
+  --fluux-accent-h: 231;
+  --fluux-accent-s: 100%;
+  --fluux-accent-l: 71%;
 
   /* Named palette colors */
   --fluux-color-red: #da373c;
@@ -140,7 +140,7 @@
      reaches ~2.8:1 on the dark message background, so a dedicated brand-indigo
      value is used, tuned to clear WCAG AA on both the resting and hover message
      backgrounds. Dark default here; .light overrides below. */
-  --fluux-text-self: #a5b4fc;
+  --fluux-text-self: #A9B4FF;
 
   /* Status (named by purpose, not color) */
   --fluux-status-success: var(--fluux-color-green);
