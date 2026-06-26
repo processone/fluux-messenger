@@ -168,7 +168,7 @@ describe('MessageBubble', () => {
       expect(screen.getByText('Original message')).toBeInTheDocument()
     })
 
-    it('renders avatar in reply context when avatarUrl is provided', () => {
+    it('does not render an avatar in the reply context (avatar-less design)', () => {
       const props = createDefaultProps({
         replyContext: {
           senderName: 'Bob',
@@ -181,10 +181,11 @@ describe('MessageBubble', () => {
       })
       render(<MessageBubble {...props} />)
 
-      // When avatarUrl is provided, an img element with that src should be rendered
-      const avatarImg = screen.getByRole('img', { name: 'Bob' })
-      expect(avatarImg).toBeInTheDocument()
-      expect(avatarImg).toHaveAttribute('src', 'https://example.com/bob-avatar.jpg')
+      // The reply chip is avatar-less even when an avatar URL is available;
+      // identity is carried by the colored edge + nick text.
+      expect(screen.queryByRole('img', { name: 'Bob' })).not.toBeInTheDocument()
+      expect(screen.getByText('Bob')).toBeInTheDocument()
+      expect(screen.getByText('Original message')).toBeInTheDocument()
     })
 
     it('does not render avatar in reply context when avatarUrl is undefined', () => {
@@ -205,11 +206,10 @@ describe('MessageBubble', () => {
       expect(avatarImg).not.toBeInTheDocument()
     })
 
-    // Regression: the quote's letter avatar auto-generated its color from the
-    // identifier (nick hash) while the main message avatar followed senderColor
-    // (contact color) — same sender, two different hues. The quote avatar must
-    // follow replyContext.senderColor like the quote's border and nick text do.
-    it('uses replyContext.senderColor as the quote letter avatar background', () => {
+    // The reply chip is avatar-less: identity is carried by the colored edge and
+    // the nick text, both following replyContext.senderColor (the contact color),
+    // so the reply matches the sender's color in the thread.
+    it('uses replyContext.senderColor for the quote edge and name', () => {
       const props = createDefaultProps({
         replyContext: {
           senderName: 'Bob',
@@ -222,8 +222,10 @@ describe('MessageBubble', () => {
       render(<MessageBubble {...props} />)
 
       const quote = screen.getByText('Original message').closest('button')!
-      const letter = within(quote).getByText('B')
-      expect(letter.parentElement).toHaveStyle({ backgroundColor: 'rgb(0, 255, 0)' })
+      expect(quote).toHaveStyle({ borderColor: 'rgb(0, 255, 0)' })
+      expect(within(quote).getByText('Bob')).toHaveStyle({ color: 'rgb(0, 255, 0)' })
+      // the leading reply arrow also follows the sender hue
+      expect(quote.querySelector('svg')).toHaveStyle({ color: 'rgb(0, 255, 0)' })
     })
 
     it('re-renders the quote when only replyContext.senderColor changes', () => {
@@ -243,7 +245,7 @@ describe('MessageBubble', () => {
       rerender(<MessageBubble {...props} replyContext={{ ...base, senderColor: 'rgb(255, 0, 255)' }} />)
 
       const quote = screen.getByText('Original message').closest('button')!
-      expect(within(quote).getByText('B').parentElement).toHaveStyle({ backgroundColor: 'rgb(255, 0, 255)' })
+      expect(quote).toHaveStyle({ borderColor: 'rgb(255, 0, 255)' })
       expect(within(quote).getByText('Bob')).toHaveStyle({ color: 'rgb(255, 0, 255)' })
     })
 

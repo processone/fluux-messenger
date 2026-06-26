@@ -579,19 +579,13 @@ export const MessageBubble = memo(function MessageBubble({
         {!message.isRetracted && replyContext && (
           <button
             onClick={() => scrollToMessage(replyContext.messageId)}
-            className="flex items-start gap-1.5 pb-1 ps-2 border-s-2 text-start min-w-0 hover:bg-fluux-hover/50 rounded-e transition-colors cursor-pointer select-none"
+            className="flex items-start gap-1.5 py-1 pe-2 ps-2 border-s-2 text-start min-w-0 bg-fluux-bg-secondary hover:bg-fluux-hover/50 rounded-e transition-colors cursor-pointer select-none"
             style={{ borderColor: replyContext.senderColor }}
           >
-            <div className="flex flex-col items-center flex-shrink-0 gap-0.5">
-              <Avatar
-                identifier={replyContext.avatarIdentifier}
-                name={replyContext.senderName}
-                avatarUrl={replyContext.avatarUrl}
-                fallbackColor={replyContext.senderColor}
-                size="xs"
-              />
-              <CornerUpRight className="rtl-mirror size-3 text-fluux-muted" />
-            </div>
+            <CornerUpRight
+              className="rtl-mirror size-3.5 flex-shrink-0 mt-0.5"
+              style={{ color: replyContext.senderColor }}
+            />
             <div className="text-sm text-fluux-muted min-w-0 flex-1">
               <span
                 className="font-medium"
