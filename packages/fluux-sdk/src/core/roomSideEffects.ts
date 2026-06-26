@@ -171,8 +171,22 @@ export function setupRoomSideEffects(
 
       // Run async operations outside the synchronous subscriber
       void (async () => {
-        // Step 1: Always load from IndexedDB cache (deduplication is handled by loadMessagesFromCache).
-        // This is a fallback for cases where the hook's cache load didn't run (e.g., reconnection).
+        // Re-entry of a room we're still joined to (no reconnect): nothing to do.
+        // It was already caught up this session (fetchInitiated) AND its messages are
+        // still resident (activateRoom's own cache load ran before this subscriber
+        // fired on the way back in). Reloading the cache here would rebuild the
+        // message array AFTER the list mounted and scrolled, knocking the restored
+        // scroll position off (lands mid-list). Live delivery keeps the resident set
+        // current, so there is genuinely nothing to fetch.
+        const residentCount = roomStore.getState().rooms.get(activeRoomJid)?.messages.length ?? 0
+        if (fetchInitiated.has(activeRoomJid) && residentCount > 0) {
+          if (debug) console.log('[SideEffects] Room: re-entry of caught-up resident room, skipping cache reload + MAM', activeRoomJid)
+          return
+        }
+
+        // Step 1: Load from IndexedDB cache (deduplication is handled by loadMessagesFromCache).
+        // Covers paths that set the active room WITHOUT a cache load (e.g. CommandPalette's
+        // setActiveRoom, session restore) and the first activation / post-reconnect catch-up.
         if (debug) console.log('[SideEffects] Room: Loading from cache')
         await roomStore.getState().loadMessagesFromCache(activeRoomJid, { limit: MAM_CACHE_LOAD_LIMIT })
 
