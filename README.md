@@ -1,7 +1,5 @@
 <div align="center">
 
-<img src="assets/readme/fluux-logo.svg" width="320" alt="Fluux Messenger Logo"/>
-
 # Fluux Messenger
 
 [![Release](https://img.shields.io/github/v/release/processone/fluux-messenger?logo=github)](https://github.com/processone/fluux-messenger/releases)
