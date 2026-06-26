@@ -28,6 +28,19 @@ export function EmojiPicker({ onSelect, onClose }: EmojiPickerProps) {
   // the emoji grid (especially inside the mobile reaction bottom sheet).
   const hasHover = useHasHover()
 
+  // Callers pass fresh inline onSelect/onClose closures every render. Read them
+  // through refs so the mount effect below does NOT depend on their identity —
+  // otherwise a parent re-render while the picker is open (background presence/
+  // typing/MAM churn re-rendering the message bubble) would tear down and
+  // rebuild the emoji-mart web component, which reads as a flicker ("menu
+  // disappears and reappears") and swallows the in-flight emoji click.
+  const onSelectRef = useRef(onSelect)
+  const onCloseRef = useRef(onClose)
+  useEffect(() => {
+    onSelectRef.current = onSelect
+    onCloseRef.current = onClose
+  })
+
   useEffect(() => {
     if (!containerRef.current) return
 
@@ -35,7 +48,7 @@ export function EmojiPicker({ onSelect, onClose }: EmojiPickerProps) {
     const picker = new Picker({
       data,
       theme,
-      onEmojiSelect: (emoji: { native: string }) => onSelect(emoji.native),
+      onEmojiSelect: (emoji: { native: string }) => onSelectRef.current(emoji.native),
       searchPosition: 'sticky',
       previewPosition: 'none',
       skinTonePosition: 'search',
@@ -54,20 +67,21 @@ export function EmojiPicker({ onSelect, onClose }: EmojiPickerProps) {
       // Clean up: remove the picker element
       container.replaceChildren()
     }
-    // Re-create picker when theme, locale, or hover capability changes
-  }, [theme, i18n.language, onSelect, hasHover])
+    // Re-create picker only when theme, locale, or hover capability changes —
+    // never on callback identity (see the ref indirection above).
+  }, [theme, i18n.language, hasHover])
 
   // Close on Escape key
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         e.stopPropagation()
-        onClose()
+        onCloseRef.current()
       }
     }
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [onClose])
+  }, [])
 
   return <div ref={containerRef} />
 }
