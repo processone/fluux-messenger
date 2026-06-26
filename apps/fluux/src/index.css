@@ -366,6 +366,16 @@
   --fluux-color-blue-rgb: 9, 105, 218;
   --fluux-color-gray: #9ca3af;
 
+  /* Status colors as text/icon labels (toasts, settings status, edit/encryption
+     labels) fail WCAG AA at full brightness on the light surfaces (Pattern C:
+     green ~2.6:1, yellow ~1.6:1, red ~3.8:1). Darkened to clear AA as text; used
+     as fills (toast border, danger button, presence dots) they only gain
+     contrast against white. Syntax-highlight greens reference --fluux-color-*
+     directly and are unaffected. */
+  --fluux-status-success: #197740;
+  --fluux-status-warning: #89600A;
+  --fluux-status-error: #C8252A;
+
   /* Own-message ("you") name — brand-indigo darkened for WCAG AA on the white
      message background and its hover state (the raw accent only reached ~4.6:1
      at rest and failed on hover). */
@@ -394,12 +404,15 @@
   /* ── Aurora identity (light) ── */
   --fluux-accent-2: #11A88C;
   --fluux-grad: linear-gradient(135deg, #11A88C, #5B6CF0, #7C6CF0);
-  --fluux-sender-1: #1E84D8;
-  --fluux-sender-2: #119E73;
-  --fluux-sender-3: #B5790E;
-  --fluux-sender-4: #D8527A;
-  --fluux-sender-5: #6E54D8;
-  --fluux-sender-6: #128C86;
+  /* Sender palette darkened so MUC names clear WCAG AA on white and on the
+     hover/active message rows (Pattern C: the prior values reached only ~2.8-4.4
+     and were unreadable in light mode). */
+  --fluux-sender-1: #1766A7;
+  --fluux-sender-2: #0C7051;
+  --fluux-sender-3: #86590A;
+  --fluux-sender-4: #B92A54;
+  --fluux-sender-5: #654AD6;
+  --fluux-sender-6: #0E6F6A;
   --fluux-glass-bg: rgba(255, 255, 255, 0.72);
   --fluux-shadow-overlay: 0 20px 50px rgba(20, 27, 48, 0.18);
 

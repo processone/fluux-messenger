@@ -108,5 +108,26 @@ describe('Aurora theme contrast invariants', () => {
       const r = contrast('var(--fluux-text-on-accent)', 'var(--fluux-bg-accent)', vars)
       expect(r).toBeGreaterThanOrEqual(4.5)
     })
+
+    // Pattern C — MUC sender names are informational text. They render in the
+    // message list on the chat surface AND on the hover/active row, so they must
+    // clear AA against the darkest of those (bg-hover) in both modes.
+    for (let i = 1; i <= 6; i++) {
+      it(`[${mode}] sender-${i} clears WCAG AA on the hover row`, () => {
+        const r = contrast(`var(--fluux-sender-${i})`, 'var(--fluux-bg-hover)', vars)
+        expect(r).toBeGreaterThanOrEqual(4.5)
+      })
+    }
+  }
+
+  // Pattern C — status colors are used as text/icon labels on light surfaces
+  // (settings cards, toasts, edit/encryption labels). The light theme's bright
+  // green/yellow/red fail AA as text; assert the (darkened) light overrides.
+  // Dark-mode status-as-text needs a separate text/fill token split (follow-up).
+  for (const key of ['success', 'warning', 'error'] as const) {
+    it(`[light] status-${key} clears WCAG AA as text on a card surface`, () => {
+      const r = contrast(`var(--fluux-status-${key})`, 'var(--fluux-bg-primary)', light)
+      expect(r).toBeGreaterThanOrEqual(4.5)
+    })
   }
 })
