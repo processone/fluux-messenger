@@ -62,7 +62,7 @@ export function HeaderSubmenuButton({ ariaLabel, tooltip, icon: Icon, active, gr
                 role="menuitem"
                 disabled={item.disabled}
                 onClick={() => { setOpen(false); item.onSelect() }}
-                className={`w-full flex items-center gap-3 px-3 py-2 text-start transition-colors hover:bg-fluux-hover disabled:opacity-50 disabled:cursor-not-allowed ${item.danger ? 'text-fluux-red' : 'text-fluux-text'}`}
+                className={`w-full flex items-center gap-3 px-3 py-2 text-start transition-colors hover:bg-fluux-hover disabled:opacity-50 disabled:cursor-not-allowed ${item.danger ? 'text-fluux-error' : 'text-fluux-text'}`}
               >
                 <ItemIcon className="size-4 flex-shrink-0 text-fluux-muted" />
                 <span className="flex-1">

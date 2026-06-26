@@ -164,7 +164,7 @@ export function OwnProfileHero({
               type="button"
               onClick={handleClearAvatar}
               disabled={!isConnected || clearing === 'avatar'}
-              className="text-xs text-fluux-muted hover:text-fluux-red disabled:opacity-50 disabled:cursor-not-allowed"
+              className="text-xs text-fluux-muted hover:text-fluux-error disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {clearing === 'avatar' ? t('profile.removingAvatar') : t('profile.removeAvatar')}
             </button>
@@ -186,7 +186,7 @@ export function OwnProfileHero({
                 className="text-xl font-bold text-fluux-text bg-fluux-bg rounded px-3 py-1 w-full
                            border border-fluux-brand focus:outline-none disabled:opacity-50"
               />
-              {error && <p className="text-xs text-fluux-red">{error}</p>}
+              {error && <p className="text-xs text-fluux-error">{error}</p>}
               {saving && <p className="text-xs text-fluux-muted">{t('common.saving')}</p>}
             </div>
           ) : (
@@ -210,7 +210,7 @@ export function OwnProfileHero({
                       type="button"
                       onClick={handleClearNickname}
                       disabled={!isConnected || clearing === 'nickname'}
-                      className="p-1 text-fluux-muted hover:text-fluux-red rounded disabled:opacity-50 disabled:cursor-not-allowed tap-target"
+                      className="p-1 text-fluux-muted hover:text-fluux-error rounded disabled:opacity-50 disabled:cursor-not-allowed tap-target"
                       aria-label={t('profile.resetToUsername')}
                     >
                       <Trash2 className="size-4" />

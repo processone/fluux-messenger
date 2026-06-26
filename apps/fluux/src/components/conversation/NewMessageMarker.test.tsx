@@ -37,6 +37,6 @@ describe('NewMessageMarker', () => {
     render(<NewMessageMarker />)
 
     const text = screen.getByText('New Messages')
-    expect(text).toHaveClass('text-xs', 'font-semibold', 'text-fluux-red')
+    expect(text).toHaveClass('text-xs', 'font-semibold', 'text-fluux-error')
   })
 })

@@ -391,7 +391,7 @@ export function BrowseRoomsModal({ onClose }: BrowseRoomsModalProps) {
         {/* Error message */}
         {error && (
           <div className="px-4 py-2 bg-fluux-red/10 border-b border-fluux-hover flex-shrink-0">
-            <p className="text-sm text-fluux-red">{error}</p>
+            <p className="text-sm text-fluux-error">{error}</p>
           </div>
         )}
 

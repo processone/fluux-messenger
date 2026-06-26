@@ -10,7 +10,7 @@ export function NewMessageMarker() {
   return (
     <div className="flex items-center gap-4 h-12">
       <div className="flex-1 h-px bg-fluux-red" />
-      <span className="text-xs font-semibold text-fluux-red">
+      <span className="text-xs font-semibold text-fluux-error">
         {t('chat.newMessages')}
       </span>
       <div className="flex-1 h-px bg-fluux-red" />

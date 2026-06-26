@@ -109,6 +109,16 @@ describe('Aurora theme contrast invariants', () => {
       expect(r).toBeGreaterThanOrEqual(4.5)
     })
 
+    // --fluux-status-error doubles as a fill (danger button, toast border,
+    // presence dnd dot) with white text on it. It must stay dark enough that
+    // white clears AA — the constraint that pulls against error-as-text wanting
+    // to be lighter, which is why the two are split (status-error fill vs
+    // text-error text). See the dark text-error assertion in the Pattern B loop.
+    it(`[${mode}] white text clears WCAG AA on the error fill`, () => {
+      const r = contrast('#ffffff', 'var(--fluux-status-error)', vars)
+      expect(r).toBeGreaterThanOrEqual(4.5)
+    })
+
     // Pattern E — the focus ring is a non-text UI indicator and must clear the
     // WCAG 1.4.11 non-text contrast minimum (3:1) against the surfaces it rings.
     // It drives the universal `.user-interacted *:focus` outline, so this one
@@ -122,7 +132,11 @@ describe('Aurora theme contrast invariants', () => {
     // against the darkest of those (the hover row), not just the resting surface.
     // Links and the own-name dipped below AA on the light-mode hover/active rows;
     // text-faint (the timestamp tier) failed in both modes at its old value.
-    for (const token of ['text-link', 'text-self', 'text-faint'] as const) {
+    // text-error (delivery-failure text/icons) is its own token, split from the
+    // status-error fill: as text it must be light enough to clear AA on the dark
+    // rows, where the fill-tuned status-error reached only ~3.74:1 (the audit's
+    // deferred dark-mode error-as-text item).
+    for (const token of ['text-link', 'text-self', 'text-faint', 'text-error'] as const) {
       it(`[${mode}] ${token} clears WCAG AA on the hover row`, () => {
         const r = contrast(`var(--fluux-${token})`, 'var(--fluux-bg-hover)', vars)
         expect(r).toBeGreaterThanOrEqual(4.5)
@@ -143,7 +157,8 @@ describe('Aurora theme contrast invariants', () => {
   // Pattern C — status colors are used as text/icon labels on light surfaces
   // (settings cards, toasts, edit/encryption labels). The light theme's bright
   // green/yellow/red fail AA as text; assert the (darkened) light overrides.
-  // Dark-mode status-as-text needs a separate text/fill token split (follow-up).
+  // (Error-as-text on the dark chat surface is handled by the dedicated
+  // --fluux-text-error token, asserted in the Pattern B loop above.)
   for (const key of ['success', 'warning', 'error'] as const) {
     it(`[light] status-${key} clears WCAG AA as text on a card surface`, () => {
       const r = contrast(`var(--fluux-status-${key})`, 'var(--fluux-bg-primary)', light)

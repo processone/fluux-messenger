@@ -93,7 +93,7 @@ export function ContactProfileHero({
                 disabled={saving}
                 className="text-xl font-bold text-fluux-text bg-fluux-bg rounded px-3 py-1 w-full border border-fluux-brand focus:outline-none disabled:opacity-50"
               />
-              {error && <p className="text-xs text-fluux-red">{error}</p>}
+              {error && <p className="text-xs text-fluux-error">{error}</p>}
               {saving && <p className="text-xs text-fluux-muted">{t('common.saving')}</p>}
             </div>
           ) : (

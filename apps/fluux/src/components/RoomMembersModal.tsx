@@ -442,7 +442,7 @@ function AffiliationDropdown({
                 setIsOpen(false)
               }}
               className={`w-full px-3 py-1.5 text-start text-sm hover:bg-fluux-hover transition-colors
-                ${aff === 'outcast' ? 'text-fluux-red' : 'text-fluux-text'}`}
+                ${aff === 'outcast' ? 'text-fluux-error' : 'text-fluux-text'}`}
             >
               {getLabel(aff)}
             </button>

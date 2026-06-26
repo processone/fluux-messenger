@@ -23,7 +23,7 @@ function certBodyKey(sub: string | null): string {
 }
 
 const plainBoxClass =
-  'p-3 bg-fluux-red/20 border border-fluux-red/50 rounded text-fluux-red text-sm'
+  'p-3 bg-fluux-red/20 border border-fluux-red/50 rounded text-fluux-error text-sm'
 
 /**
  * Renders a connection error. For recognized transport/TLS kinds it shows a
@@ -61,7 +61,7 @@ export function LoginErrorPanel({ kind, rawError }: LoginErrorPanelProps) {
       <Icon className="size-4 shrink-0 mt-0.5" aria-hidden="true" />
       <div className="space-y-1">
         <p className="font-medium">{title}</p>
-        <p className="text-fluux-red/90">{body}</p>
+        <p className="text-fluux-error/90">{body}</p>
       </div>
     </div>
   )

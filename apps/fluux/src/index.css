@@ -198,6 +198,13 @@
      value is used, tuned to clear WCAG AA on both the resting and hover message
      backgrounds. Dark default here; .light overrides below. */
   --fluux-text-self: #A9B4FF;
+  /* Error as text/icon (delivery failures, inline error labels). Split from the
+     --fluux-status-error fill: that value is tuned dark so white text on it
+     (danger button, toast border, dnd dot) clears AA, which leaves it at only
+     ~3.74:1 as red text on the dark message rows. This lighter red clears WCAG
+     AA as text on the chat/hover surfaces. Dark default here; .light overrides
+     below. (Aurora audit follow-up — the deferred dark error-as-text item.) */
+  --fluux-text-error: #EB5C63;
 
   /* Status (named by purpose, not color) */
   --fluux-status-success: var(--fluux-color-green);
@@ -400,6 +407,11 @@
      (the shared --fluux-color-blue only reached ~4.2:1 there). Overrides just the
      link token; other blue uses (status-info, syntax) keep --fluux-color-blue. */
   --fluux-text-link: #0860C6;
+
+  /* Error as text/icon — darkened so it clears WCAG AA on the white message
+     surface and its hover row (light status-error #C8252A reached only ~4.56:1
+     on the hover row). Separate from the status-error fill (see dark default). */
+  --fluux-text-error: #BE2227;
 
   /* Faint tier (timestamps) — AA-legible value for the light canvas. */
   --fluux-text-faint: #5D6781;

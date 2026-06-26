@@ -143,7 +143,7 @@ export function BlockedUsersSettings() {
             </button>
           </div>
           {blockError && (
-            <p className="text-sm text-fluux-red">{blockError}</p>
+            <p className="text-sm text-fluux-error">{blockError}</p>
           )}
         </div>
       ) : (
@@ -229,7 +229,7 @@ export function BlockedUsersSettings() {
           ) : (
             <button
               onClick={() => setShowUnblockAllConfirm(true)}
-              className="text-sm text-fluux-red hover:text-fluux-red/80 transition-colors"
+              className="text-sm text-fluux-error hover:text-fluux-error/80 transition-colors"
             >
               {t('settings.blocked.unblockAll')} ({blockedJids.length})
             </button>

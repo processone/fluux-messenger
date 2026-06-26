@@ -178,7 +178,7 @@ export function JoinRoomModal({ onClose }: JoinRoomModalProps) {
         )}
 
         {error && (
-          <p className="text-sm text-fluux-red">{error}</p>
+          <p className="text-sm text-fluux-error">{error}</p>
         )}
         <p className="text-xs text-fluux-muted">
           {t('rooms.joinRoomHint')}

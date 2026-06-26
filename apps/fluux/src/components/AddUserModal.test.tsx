@@ -136,7 +136,7 @@ function AddUserModal({ vhost, onSubmit, onClose }: AddUserModalProps) {
           </div>
 
           {error && (
-            <p className="text-sm text-fluux-red" data-testid="error-message">{error}</p>
+            <p className="text-sm text-fluux-error" data-testid="error-message">{error}</p>
           )}
 
           <div className="flex gap-2 pt-2">

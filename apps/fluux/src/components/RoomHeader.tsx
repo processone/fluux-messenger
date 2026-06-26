@@ -224,7 +224,7 @@ export function RoomHeader({
 
       {/* Room avatar error message */}
       {avatarError && (
-        <div className="absolute top-full inset-x-0 mt-1 mx-4 p-2 bg-fluux-red/20 border border-fluux-red/50 rounded text-fluux-red text-sm flex items-center justify-between z-40">
+        <div className="absolute top-full inset-x-0 mt-1 mx-4 p-2 bg-fluux-red/20 border border-fluux-red/50 rounded text-fluux-error text-sm flex items-center justify-between z-40">
           <span>{avatarError}</span>
           <button onClick={() => setAvatarError(null)} className="p-1 hover:bg-fluux-red/20 rounded">
             <X className="size-4" />

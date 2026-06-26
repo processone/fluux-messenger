@@ -402,7 +402,7 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
                          ${showJidError ? 'border-fluux-red' : 'border-fluux-border'}`}
             />
             {showJidError && (
-              <p id="jid-error" className="text-xs text-fluux-red mt-1">
+              <p id="jid-error" className="text-xs text-fluux-error mt-1">
                 {t('login.jidInvalid')}
               </p>
             )}

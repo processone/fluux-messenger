@@ -11,7 +11,7 @@ const iconMap: Record<ToastType, typeof CheckCircle2> = {
 
 const colorMap: Record<ToastType, { border: string; icon: string }> = {
   success: { border: 'border-s-fluux-green', icon: 'text-fluux-green' },
-  error: { border: 'border-s-fluux-red', icon: 'text-fluux-red' },
+  error: { border: 'border-s-fluux-red', icon: 'text-fluux-error' },
   info: { border: 'border-s-fluux-brand', icon: 'text-fluux-brand' },
 }
 

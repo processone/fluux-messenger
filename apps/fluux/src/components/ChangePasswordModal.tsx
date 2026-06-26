@@ -87,7 +87,7 @@ export function ChangePasswordModal({ onClose }: ChangePasswordModalProps) {
         </div>
 
         {error && (
-          <p className="text-sm text-fluux-red">{error}</p>
+          <p className="text-sm text-fluux-error">{error}</p>
         )}
 
         {/* Footer */}

@@ -658,7 +658,7 @@ function AddUserModal({ vhost, onSubmit, onClose }: AddUserModalProps) {
         </div>
 
         {error && (
-          <p className="text-sm text-fluux-red">{error}</p>
+          <p className="text-sm text-fluux-error">{error}</p>
         )}
 
         {/* Buttons */}

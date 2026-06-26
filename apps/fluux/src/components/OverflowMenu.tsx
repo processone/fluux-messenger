@@ -88,7 +88,7 @@ export function OverflowMenu({
                 setIsOpen(false)
                 onClick()
               }}
-              className={`w-full flex items-center gap-2 px-3 py-2.5 text-start text-sm transition-colors hover:bg-fluux-active disabled:opacity-50 disabled:cursor-not-allowed ${danger ? 'text-fluux-red' : 'text-fluux-text'}`}
+              className={`w-full flex items-center gap-2 px-3 py-2.5 text-start text-sm transition-colors hover:bg-fluux-active disabled:opacity-50 disabled:cursor-not-allowed ${danger ? 'text-fluux-error' : 'text-fluux-text'}`}
             >
               <Icon className="size-4 flex-shrink-0" />
               <span>{label}</span>

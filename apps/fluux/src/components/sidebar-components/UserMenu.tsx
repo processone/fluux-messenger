@@ -147,7 +147,7 @@ export function UserMenu({ onLogout }: UserMenuProps) {
                 setShowLogoutConfirm(true)
                 setIsOpen(false)
               }}
-              className="w-full px-3 py-2 flex items-center gap-3 text-start text-fluux-red hover:bg-fluux-red hover:text-white transition-colors"
+              className="w-full px-3 py-2 flex items-center gap-3 text-start text-fluux-error hover:bg-fluux-red hover:text-white transition-colors"
             >
               <LogOut className="size-4" />
               <span>{t('menu.logOut')}</span>
