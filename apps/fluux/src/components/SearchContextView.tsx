@@ -30,7 +30,7 @@ import { useConnectionStore } from '@fluux/sdk/react'
 import { MessageBubble, MessageList, shouldShowAvatar, buildReplyContext } from './conversation'
 import { useNavigateToTarget } from '@/hooks/useNavigateToTarget'
 import { useWindowDrag, useTimeFormat, useMode } from '@/hooks'
-import { getConsistentTextColor } from './Avatar'
+import { auroraSenderColor } from '@/utils/senderColor'
 import { ArrowLeft, ExternalLink, Search } from 'lucide-react'
 
 /** Number of messages to load on each side of the target */
@@ -411,7 +411,7 @@ export const SearchContextMessageList = memo(function SearchContextMessageList({
       const roomMsg = msg as RoomMessage
       senderName = roomMsg.nick
       avatarIdentifier = `${roomMsg.roomJid}/${roomMsg.nick}`
-      senderColor = getConsistentTextColor(avatarIdentifier, isDarkMode)
+      senderColor = auroraSenderColor(roomMsg.nick, isDarkMode ?? true)
 
       // Check if it's own message
       if (roomMsg.isOutgoing) {
@@ -426,9 +426,7 @@ export const SearchContextMessageList = memo(function SearchContextMessageList({
         : (contact?.name || msg.from.split('@')[0])
       senderColor = msg.isOutgoing
         ? 'var(--fluux-text-self)'
-        : contact
-          ? (isDarkMode ? contact.colorDark : contact.colorLight) || getConsistentTextColor(msg.from.split('/')[0], isDarkMode)
-          : getConsistentTextColor(msg.from.split('/')[0], isDarkMode)
+        : auroraSenderColor(msg.from.split('/')[0], isDarkMode ?? true)
       avatarUrl = msg.isOutgoing ? (ownAvatar || undefined) : contact?.avatar
       avatarIdentifier = msg.from.split('/')[0]
       senderJid = msg.from.split('/')[0]
@@ -450,9 +448,7 @@ export const SearchContextMessageList = memo(function SearchContextMessageList({
         if (originalMsg?.isOutgoing) return 'var(--fluux-text-self)'
         const senderId = originalMsg?.from.split('/')[0] || fallbackId?.split('/')[0]
         if (!senderId) return 'var(--fluux-brand)'
-        const contact = contactsByJid.get(senderId)
-        if (contact) return (dark ? contact.colorDark : contact.colorLight) || getConsistentTextColor(senderId, dark)
-        return getConsistentTextColor(senderId, dark)
+        return auroraSenderColor(senderId, dark ?? true)
       },
       (originalMsg, fallbackId) => {
         const senderId = originalMsg?.from.split('/')[0] || fallbackId?.split('/')[0]
