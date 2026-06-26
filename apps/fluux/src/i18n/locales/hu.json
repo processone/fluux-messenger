@@ -450,6 +450,12 @@
         "unmuteMessageReactions": "Reakciók bekapcsolása ezen az üzeneten"
     },
     "chat": {
+        "selection": {
+            "count": "{{num}} kijelölve",
+            "copy": "Másolás",
+            "done": "Kész",
+            "copied": "Vágólapra másolva"
+        },
         "me": "Én",
         "you": "Ön",
         "messageTo": "Üzenet neki: {{name}}",

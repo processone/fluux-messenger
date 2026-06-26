@@ -881,3 +881,11 @@ input[type="range"]::-moz-range-thumb {
     pointer-events: none;
   }
 }
+
+/* Bulk-copy selection highlight. Decoupled from native text selection (which cannot span
+   virtualized/unmounted rows); driven by the `copy-selected` class on `.message-row`
+   (MessageList). Uses the Aurora selection token so it adapts across themes. */
+.message-row.copy-selected {
+    background-color: var(--fluux-selection-bg);
+    border-radius: 0.5rem;
+}

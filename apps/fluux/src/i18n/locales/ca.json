@@ -452,6 +452,12 @@
         "unmuteMessageReactions": "Activar reaccions en aquest missatge"
     },
     "chat": {
+        "selection": {
+            "count": "{{num}} seleccionats",
+            "copy": "Copia",
+            "done": "Fet",
+            "copied": "Copiat al porta-retalls"
+        },
         "me": "Jo",
         "you": "Tu",
         "messageTo": "Missatge a {{name}}",

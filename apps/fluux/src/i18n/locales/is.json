@@ -450,6 +450,12 @@
         "unmuteMessageReactions": "Virkja viðbrögð við þessu skilaboði"
     },
     "chat": {
+        "selection": {
+            "count": "{{num}} valin",
+            "copy": "Afrita",
+            "done": "Lokið",
+            "copied": "Afritað á klippiborð"
+        },
         "me": "Ég",
         "you": "Þú",
         "messageTo": "Skilaboð til {{name}}",

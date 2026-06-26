@@ -30,6 +30,15 @@ vi.mock('react-i18next', () => ({
 // Mock hooks used by MessageList
 vi.mock('@/hooks', () => ({
   useMessageCopyFormatter: vi.fn(),
+  useMessageRangeSelection: vi.fn(() => ({
+    copySelectedIds: new Set<string>(),
+    selectionCount: 0,
+    isSelecting: false,
+    selectAll: vi.fn(),
+    extendTo: vi.fn(),
+    clearSelection: vi.fn(),
+    copySelected: vi.fn(),
+  })),
 }))
 
 // Import scrollStateManager to reset between tests

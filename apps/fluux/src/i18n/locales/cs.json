@@ -452,6 +452,12 @@
         "unmuteMessageReactions": "Zapnout reakce na tuto zprávu"
     },
     "chat": {
+        "selection": {
+            "count": "Vybráno: {{num}}",
+            "copy": "Kopírovat",
+            "done": "Hotovo",
+            "copied": "Zkopírováno do schránky"
+        },
         "me": "Já",
         "you": "Vy",
         "messageTo": "Zpráva pro {{name}}",

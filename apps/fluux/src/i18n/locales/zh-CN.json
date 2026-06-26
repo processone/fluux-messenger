@@ -450,6 +450,12 @@
         "unmuteMessageReactions": "取消静音此消息的回应"
     },
     "chat": {
+        "selection": {
+            "count": "已选择 {{num}} 条",
+            "copy": "复制",
+            "done": "完成",
+            "copied": "已复制到剪贴板"
+        },
         "me": "我",
         "you": "您",
         "messageTo": "发送消息至 {{name}}",

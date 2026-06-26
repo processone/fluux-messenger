@@ -27,7 +27,18 @@ const getOffsetForMessageId = vi.fn((_id: string): number | null => 0)
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (key: string) => key, i18n: { language: 'en' } }),
 }))
-vi.mock('@/hooks', () => ({ useMessageCopyFormatter: vi.fn() }))
+vi.mock('@/hooks', () => ({
+  useMessageCopyFormatter: vi.fn(),
+  useMessageRangeSelection: vi.fn(() => ({
+    copySelectedIds: new Set<string>(),
+    selectionCount: 0,
+    isSelecting: false,
+    selectAll: vi.fn(),
+    extendTo: vi.fn(),
+    clearSelection: vi.fn(),
+    copySelected: vi.fn(),
+  })),
+}))
 
 // Inject a fake MessageVirtualizer (render-all window) with spies, so the
 // MessageList -> useMessageListScroll -> virtualizer wiring is observable in jsdom.

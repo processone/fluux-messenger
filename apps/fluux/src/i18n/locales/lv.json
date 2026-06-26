@@ -451,6 +451,12 @@
         "unmuteMessageReactions": "Ieslēgt reakcijas uz šo ziņojumu"
     },
     "chat": {
+        "selection": {
+            "count": "Atlasīti: {{num}}",
+            "copy": "Kopēt",
+            "done": "Gatavs",
+            "copied": "Nokopēts starpliktuvē"
+        },
         "me": "Es",
         "you": "Jūs",
         "messageTo": "Ziņojums {{name}}",

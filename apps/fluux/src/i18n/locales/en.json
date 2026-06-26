@@ -450,6 +450,12 @@
         "unmuteMessageReactions": "Unmute reactions on this message"
     },
     "chat": {
+        "selection": {
+            "count": "{{num}} selected",
+            "copy": "Copy",
+            "done": "Done",
+            "copied": "Copied to clipboard"
+        },
         "me": "Me",
         "you": "You",
         "messageTo": "Message {{name}}",
