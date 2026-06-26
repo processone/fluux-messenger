@@ -21,7 +21,7 @@ import { useSessionPersistence, getSession } from './hooks/useSessionPersistence
 import { useTabCoordination } from './hooks/useTabCoordination'
 import { useFullscreen } from './hooks/useFullscreen'
 import { useTauriCloseHandler } from './hooks/useTauriCloseHandler'
-import { useTauriTrayRestore } from './hooks/useTauriTrayRestore'
+import { useTauriFocusRestore } from './hooks/useTauriFocusRestore'
 import { useAutoUpdate } from './hooks'
 import { useIgnoreSync } from './hooks/useIgnoreSync'
 import { useExternalLinkHandler } from './hooks/useExternalLinkHandler'
@@ -69,7 +69,7 @@ function App() {
     void client.disconnect()
   })
   useTauriCloseHandler()
-  useTauriTrayRestore()
+  useTauriFocusRestore()
   useIgnoreSync()
   useExternalLinkHandler()
   // Must stay mounted even during the full-screen auto-reconnect spinner:
