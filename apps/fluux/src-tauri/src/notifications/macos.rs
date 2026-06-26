@@ -5,7 +5,7 @@ use core::ptr::NonNull;
 use objc2::rc::Retained;
 use objc2::runtime::{Bool, NSObject, NSObjectProtocol, ProtocolObject};
 use objc2::{define_class, msg_send, AnyThread};
-use objc2_foundation::{NSError, NSString};
+use objc2_foundation::{NSBundle, NSError, NSString};
 use objc2_user_notifications::{
     UNAuthorizationOptions, UNAuthorizationStatus, UNMutableNotificationContent, UNNotification,
     UNNotificationPresentationOptions, UNNotificationRequest, UNNotificationResponse,
@@ -33,9 +33,25 @@ static LISTENER_READY: AtomicBool = AtomicBool::new(false);
 /// `setDelegate:` stores it as a weak reference, so we must own it here.
 static DELEGATE: OnceLock<Retained<NotificationDelegate>> = OnceLock::new();
 
-/// The system notification center. Always valid inside a bundled app.
-fn current_center() -> Retained<UNUserNotificationCenter> {
-    UNUserNotificationCenter::currentNotificationCenter()
+/// Whether the process is running from a proper `.app` bundle. The notification
+/// APIs require it: `+[UNUserNotificationCenter currentNotificationCenter]`
+/// raises `NSInternalInconsistencyException` — which unwinds across the ObjC→Rust
+/// FFI boundary and `abort()`s the process — when `NSBundle.mainBundle` has no
+/// bundle identifier. That is the case when the raw executable is launched
+/// directly instead of via the `.app` wrapper, e.g. under `tauri dev`
+/// (`target/debug/fluux`).
+fn is_bundled() -> bool {
+    NSBundle::mainBundle().bundleIdentifier().is_some()
+}
+
+/// The system notification center, or `None` when the process is not running
+/// from an app bundle (see [`is_bundled`]). Callers degrade to "no native
+/// notifications" rather than crashing on startup.
+fn current_center() -> Option<Retained<UNUserNotificationCenter>> {
+    if !is_bundled() {
+        return None;
+    }
+    Some(UNUserNotificationCenter::currentNotificationCenter())
 }
 
 /// Encode a nav target into a notification identifier. The identifier survives
@@ -105,9 +121,12 @@ impl NotificationDelegate {
 }
 
 fn set_delegate() {
+    let Some(center) = current_center() else {
+        return;
+    };
     let delegate = NotificationDelegate::new();
     let proto = ProtocolObject::from_ref(&*delegate);
-    current_center().setDelegate(Some(proto));
+    center.setDelegate(Some(proto));
     // Keep the delegate alive for the app's lifetime (weak property).
     let _ = DELEGATE.set(delegate);
 }
@@ -152,6 +171,14 @@ fn handle_activation(identifier: &str) {
 
 pub fn setup(app: &AppHandle) {
     let _ = APP_HANDLE.set(app.clone());
+    if !is_bundled() {
+        // Common under `tauri dev` (raw `target/debug/fluux`): the notification
+        // APIs would abort, so skip them and run without native notifications.
+        tracing::warn!(
+            "not running from an app bundle; native notifications disabled"
+        );
+        return;
+    }
     set_delegate();
     // Surface the OS prompt early without blocking the main thread. The live
     // status is read later via `authorization_state()`, so the async result of
@@ -160,6 +187,9 @@ pub fn setup(app: &AppHandle) {
 }
 
 pub fn post(n: NativeNotification) -> Result<(), String> {
+    let Some(center) = current_center() else {
+        return Err("native notifications unavailable (app not bundled)".to_string());
+    };
     let content = UNMutableNotificationContent::new();
     content.setTitle(&NSString::from_str(&n.title));
     content.setBody(&NSString::from_str(&n.body));
@@ -203,7 +233,7 @@ pub fn post(n: NativeNotification) -> Result<(), String> {
             tracing::warn!(error = ?err, "native notification could not be scheduled");
         }
     });
-    current_center().addNotificationRequest_withCompletionHandler(&request, Some(&handler));
+    center.addNotificationRequest_withCompletionHandler(&request, Some(&handler));
     Ok(())
 }
 
@@ -229,6 +259,9 @@ fn map_status(status: UNAuthorizationStatus) -> AuthState {
 /// wraps it in `spawn_blocking`).
 pub fn authorization_state() -> AuthState {
     use block2::RcBlock;
+    let Some(center) = current_center() else {
+        return AuthState::NotDetermined;
+    };
     let (tx, rx) = mpsc::channel::<AuthState>();
     let handler = RcBlock::new(move |settings: NonNull<UNNotificationSettings>| {
         // SAFETY: the system passes a valid, non-null settings object that is
@@ -236,7 +269,7 @@ pub fn authorization_state() -> AuthState {
         let status = unsafe { settings.as_ref().authorizationStatus() };
         let _ = tx.send(map_status(status));
     });
-    current_center().getNotificationSettingsWithCompletionHandler(&handler);
+    center.getNotificationSettingsWithCompletionHandler(&handler);
     rx.recv_timeout(Duration::from_secs(2))
         .unwrap_or(AuthState::NotDetermined)
 }
@@ -245,11 +278,14 @@ pub fn authorization_state() -> AuthState {
 /// OS prompt early; the result is read later via `authorization_state()`.
 fn prime_authorization() {
     use block2::RcBlock;
+    let Some(center) = current_center() else {
+        return;
+    };
     let options = UNAuthorizationOptions::Alert
         | UNAuthorizationOptions::Sound
         | UNAuthorizationOptions::Badge;
     let handler = RcBlock::new(|_granted: Bool, _err: *mut NSError| {});
-    current_center().requestAuthorizationWithOptions_completionHandler(options, &handler);
+    center.requestAuthorizationWithOptions_completionHandler(options, &handler);
 }
 
 /// Request authorization and wait for the user's decision, returning the real
@@ -259,6 +295,9 @@ fn prime_authorization() {
 /// it in `spawn_blocking`).
 pub fn request_authorization() -> AuthState {
     use block2::RcBlock;
+    let Some(center) = current_center() else {
+        return AuthState::NotDetermined;
+    };
     let options = UNAuthorizationOptions::Alert
         | UNAuthorizationOptions::Sound
         | UNAuthorizationOptions::Badge;
@@ -270,7 +309,7 @@ pub fn request_authorization() -> AuthState {
             AuthState::Denied
         });
     });
-    current_center().requestAuthorizationWithOptions_completionHandler(options, &handler);
+    center.requestAuthorizationWithOptions_completionHandler(options, &handler);
     // The prompt is user-driven; allow ample time before falling back.
     rx.recv_timeout(Duration::from_secs(300))
         .unwrap_or(AuthState::NotDetermined)
