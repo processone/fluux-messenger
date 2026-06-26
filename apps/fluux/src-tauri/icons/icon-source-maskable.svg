@@ -5,8 +5,17 @@
       <stop offset="0.52" stop-color="#7C8CFF"/>
       <stop offset="1" stop-color="#A78BFA"/>
     </linearGradient>
+    <linearGradient id="bubble" x1="262" y1="315" x2="262" y2="672" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#EAF0FF"/>
+    </linearGradient>
+    <filter id="depth" x="-20%" y="-20%" width="140%" height="150%">
+      <feDropShadow dx="0" dy="16" stdDeviation="22" flood-color="#1A1145" flood-opacity="0.25"/>
+    </filter>
   </defs>
   <rect x="0" y="0" width="1024" height="1024" fill="url(#aurora)"/>
-  <rect x="297" y="348" width="430" height="307" rx="113" fill="#FFFFFF"/>
-  <path d="M410 645 L338 778 L543 645 Z" fill="#FFFFFF"/>
+  <g filter="url(#depth)" fill="url(#bubble)">
+    <rect x="262" y="315" width="500" height="357" rx="132"/>
+    <path d="M405 665 L332 808 L548 665 Z"/>
+  </g>
 </svg>
