@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback, Suspense, lazy, type ReactNode, type RefObject, type Ref, useImperativeHandle } from 'react'
 import { useTranslation } from 'react-i18next'
 import { detectRenderLoop, notifyUserInput } from '@/utils/renderLoopDetector'
-import { Send, Smile, Paperclip, Reply, X, Pencil, Loader2, Image, FileText, Trash2, BarChart3, Plus, Lock, ShieldCheck } from 'lucide-react'
+import { Send, Smile, Paperclip, Reply, X, Pencil, Loader2, Image, FileText, Trash2, BarChart3, Plus, Lock, ShieldCheck, ShieldAlert } from 'lucide-react'
 import { useClickOutside, useSlashCommands } from '@/hooks'
 import { Tooltip } from './Tooltip'
 import { TextArea } from './ui/TextInput'
@@ -155,6 +155,13 @@ interface MessageComposerProps {
    * (private message). Hidden when an encryption badge is shown (encryption wins).
    */
   sendBadge?: ReactNode
+  /**
+   * Open the verify/trust UI for the current peer. Wired by the 1:1 wrapper
+   * (the same handler the header's EncryptionIcon uses). When set, the leading
+   * lock and the key-change escalation are interactive; when absent they are
+   * non-interactive reminders. Rooms never set this (group E2EE is disabled).
+   */
+  onEncryptionClick?: () => void
 }
 
 export function MessageComposer({
@@ -189,6 +196,7 @@ export function MessageComposer({
   onEditLastMessage,
   encryptionState,
   sendBadge,
+  onEncryptionClick,
   ref,
 }: MessageComposerProps & { ref?: Ref<MessageComposerHandle> }) {
   detectRenderLoop('MessageComposer')
@@ -655,6 +663,19 @@ export function MessageComposer({
     onCancelEdit?.()
   }
 
+  // Aurora encryption reminder. Calm by default (teal lock/shield), escalates to
+  // amber only on a real key change ('blocked'). Everything else shows nothing.
+  const enc = encryptionState
+  const lockInfo: { Icon: typeof Lock; color: string; label: string } | null =
+    enc?.kind === 'encrypted'
+      ? enc.trust === 'verified'
+        ? { Icon: ShieldCheck, color: 'var(--fluux-accent-2)', label: t('chat.encryption.verifiedTooltip') }
+        : { Icon: Lock, color: 'var(--fluux-accent-2)', label: t('chat.encryption.openpgpTooltip') }
+      : enc?.kind === 'blocked'
+        ? { Icon: ShieldAlert, color: 'var(--fluux-status-warning)', label: t('chat.encryption.blockedTooltip') }
+        : null
+  const keyChanged = enc?.kind === 'blocked'
+
   return (
     <form onSubmit={handleSubmit} className="px-4 pt-2 pb-safe relative">
       {/* Custom content above input (e.g., mention autocomplete) */}
@@ -807,6 +828,24 @@ export function MessageComposer({
         </div>
       )}
 
+      {/* Key-change escalation (amber) — docked in the card, calls out the one moment that matters */}
+      {keyChanged && (
+        <button
+          type="button"
+          data-encryption-escalation
+          onClick={onEncryptionClick}
+          disabled={!onEncryptionClick}
+          className="w-full text-start px-3 py-2 flex items-center gap-2 border-s-2 border-b border-fluux-border"
+          style={{ borderInlineStartColor: 'var(--fluux-status-warning)' }}
+          title={t('chat.encryption.blockedTooltip')}
+        >
+          <ShieldAlert className="size-4 flex-shrink-0" style={{ color: 'var(--fluux-status-warning)' }} />
+          <span className="text-xs font-medium" style={{ color: 'var(--fluux-status-warning)' }}>
+            {t('chat.encryption.blocked')}
+          </span>
+        </button>
+      )}
+
       <div className="flex items-center">
         {/* Hidden file input */}
         <input
@@ -873,6 +912,25 @@ export function MessageComposer({
             </div>
           )}
         </div>
+
+        {/* Leading encryption lock — calm teal reminder, escalates to amber ShieldAlert on blocked */}
+        {lockInfo && (
+          onEncryptionClick ? (
+            <button
+              type="button"
+              data-encryption-lock
+              onClick={onEncryptionClick}
+              aria-label={lockInfo.label}
+              className="p-1.5 flex-shrink-0 rounded-lg hover:bg-fluux-bg transition-colors"
+            >
+              <lockInfo.Icon className="size-4" style={{ color: lockInfo.color }} />
+            </button>
+          ) : (
+            <span data-encryption-lock aria-label={lockInfo.label} className="p-1.5 flex-shrink-0">
+              <lockInfo.Icon className="size-4" style={{ color: lockInfo.color }} />
+            </span>
+          )
+        )}
 
         {/* Text input - either custom or default */}
         {renderInput ? (

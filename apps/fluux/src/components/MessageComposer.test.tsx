@@ -1402,4 +1402,37 @@ describe('MessageComposer', () => {
       expect(send.querySelector('[data-testid="whisper-badge"]')).not.toBeNull()
     })
   })
+
+  describe('Aurora encryption lock', () => {
+    const base = { placeholder: 'Type a message', onSend: vi.fn().mockResolvedValue(true) }
+
+    it('shows no lock when not encrypted', () => {
+      const { container } = render(<MessageComposer {...base} encryptionState={{ kind: 'disabled' }} />)
+      expect(container.querySelector('[data-encryption-lock]')).toBeNull()
+    })
+
+    it('shows a teal lock when encrypted but unverified', () => {
+      const { container } = render(<MessageComposer {...base} encryptionState={{ kind: 'encrypted', fingerprint: 'a', trust: 'unverified' }} />)
+      const lock = container.querySelector('[data-encryption-lock]')!
+      expect(lock).not.toBeNull()
+      expect(lock.querySelector('.lucide-lock')).not.toBeNull()
+    })
+
+    it('shows a shield-check when verified', () => {
+      const { container } = render(<MessageComposer {...base} encryptionState={{ kind: 'encrypted', fingerprint: 'a', trust: 'verified' }} />)
+      expect(container.querySelector('[data-encryption-lock] .lucide-shield-check')).not.toBeNull()
+    })
+
+    it('shows the amber escalation row when the key changed (blocked)', () => {
+      const { container } = render(<MessageComposer {...base} encryptionState={{ kind: 'blocked', pinnedFingerprint: 'a', advertisedFingerprint: 'b' }} />)
+      expect(container.querySelector('[data-encryption-escalation]')).not.toBeNull()
+    })
+
+    it('calls onEncryptionClick when the lock is activated', () => {
+      const onEncryptionClick = vi.fn()
+      const { container } = render(<MessageComposer {...base} onEncryptionClick={onEncryptionClick} encryptionState={{ kind: 'encrypted', fingerprint: 'a', trust: 'unverified' }} />)
+      fireEvent.click(container.querySelector('[data-encryption-lock]')!)
+      expect(onEncryptionClick).toHaveBeenCalledTimes(1)
+    })
+  })
 })
