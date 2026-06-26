@@ -69,7 +69,7 @@ import type {
   RoomMAMSearchOptions,
   MAMPagingSearchOptions,
 } from '../types'
-import { parseMessageContent, parseOgpFastening, applyRetraction, applyCorrection, parseStanzaId } from './messagingUtils'
+import { parseMessageContent, parseOgpFastening, applyRetraction, applyCorrection, parseStanzaId, hasRenderableContent } from './messagingUtils'
 import { getDomain } from '../jid'
 import { logInfo, logError as logErr } from '../logger'
 import {
@@ -1857,6 +1857,17 @@ export class MAM extends BaseModule {
       ...(authoredAt && { authoredAt }),
     })
 
+    // The raw-<body> gate above passes any non-empty body, but XEP-0428 fallback
+    // stripping can leave processedBody='' (e.g. a reply quote with no new text).
+    // Drop it rather than store a blank row.
+    if (!hasRenderableContent({
+      processedBody: parsed.processedBody,
+      attachment: parsed.attachment,
+      hasEncryptedContent,
+    })) {
+      return null
+    }
+
     // Use stanza-id from message element, or fall back to MAM archive ID (they're equivalent)
     const stanzaId = parsed.stanzaId || archiveId
 
@@ -1933,6 +1944,20 @@ export class MAM extends BaseModule {
       expectedStanzaIdBy: roomJid,
       ...(roomAuthoredAt && { authoredAt: roomAuthoredAt }),
     })
+
+    // The raw-<body> gate above passes any non-empty body, but XEP-0428 fallback
+    // stripping can leave processedBody='' (e.g. a reply quote with no new text).
+    // Such an entry has nothing to render — dropping it here keeps a blank row out
+    // of the archive (the "empty Cynthia row" reported from the XSF room).
+    if (!hasRenderableContent({
+      processedBody: parsed.processedBody,
+      attachment: parsed.attachment,
+      hasPoll,
+      hasPollClosed,
+      hasEncryptedContent,
+    })) {
+      return null
+    }
 
     // Use stanza-id from message element, or fall back to MAM archive ID (they're equivalent)
     const stanzaId = parsed.stanzaId || archiveId

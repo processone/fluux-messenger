@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { applyRetraction, applyCorrection, parseOobData, parseMessageContent, parseOriginId, parseStanzaId, createOriginIdElement } from './messagingUtils'
+import { applyRetraction, applyCorrection, parseOobData, parseMessageContent, parseOriginId, parseStanzaId, createOriginIdElement, hasRenderableContent } from './messagingUtils'
 import { createMockElement } from '../test-utils'
 
 describe('messagingUtils', () => {
@@ -835,6 +835,36 @@ describe('messagingUtils', () => {
       const result = parseMessageContent({ messageEl, body })
 
       expect(result.processedBody).toBe('Check this video!')
+    })
+  })
+
+  describe('hasRenderableContent', () => {
+    it('returns true when processedBody has text', () => {
+      expect(hasRenderableContent({ processedBody: 'hello' })).toBe(true)
+    })
+
+    it('returns false when processedBody is empty and there is no other content', () => {
+      expect(hasRenderableContent({ processedBody: '' })).toBe(false)
+    })
+
+    it('returns false when processedBody is only whitespace', () => {
+      expect(hasRenderableContent({ processedBody: '   \n  ' })).toBe(false)
+    })
+
+    it('returns true for an empty body with an attachment (file-only message)', () => {
+      expect(hasRenderableContent({ processedBody: '', attachment: { url: 'https://x/y.png' } })).toBe(true)
+    })
+
+    it('returns true for an empty body that carries a poll', () => {
+      expect(hasRenderableContent({ processedBody: '', hasPoll: true })).toBe(true)
+    })
+
+    it('returns true for an empty body that carries a poll-closed result', () => {
+      expect(hasRenderableContent({ processedBody: '', hasPollClosed: true })).toBe(true)
+    })
+
+    it('returns true for an empty body that carries encrypted content (placeholder)', () => {
+      expect(hasRenderableContent({ processedBody: '', hasEncryptedContent: true })).toBe(true)
     })
   })
 })

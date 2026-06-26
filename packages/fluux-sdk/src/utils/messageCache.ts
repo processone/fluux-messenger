@@ -10,6 +10,7 @@
 import { openDB, type IDBPDatabase, type DBSchema } from 'idb'
 import type { Message, RoomMessage } from '../core/types'
 import { getStorageScopeJid } from './storageScope'
+import { isRenderableStoredMessage } from './messageRenderability'
 
 const DB_NAME = 'fluux-message-cache'
 // v3: add a SPARSE index on `encryptedPayload` so deferred decryption can list
@@ -456,7 +457,14 @@ export async function getMessages(
       const stored = cursor.value
       // Double-check conversationId matches (IDB compound index quirk)
       if (stored.conversationId === conversationId) {
-        results.push(deserializeMessage(stored))
+        const message = deserializeMessage(stored)
+        // Skip legacy blank rows (empty body, no attachment/poll/encryption/
+        // retraction) that older builds persisted before the parse-time guard.
+        // They have nothing to render and must not fill the limit or anchor a
+        // catch-up cursor as the newest message. See isRenderableStoredMessage.
+        if (isRenderableStoredMessage(message)) {
+          results.push(message)
+        }
       }
       cursor = await cursor.continue()
     }
@@ -705,7 +713,12 @@ export async function getRoomMessages(
     while (cursor && (!limit || results.length < limit)) {
       const stored = cursor.value
       if (stored.roomJid === roomJid) {
-        results.push(deserializeRoomMessage(stored))
+        const message = deserializeRoomMessage(stored)
+        // Skip legacy blank rows (see getMessages / isRenderableStoredMessage):
+        // the "empty Cynthia row" lived in a room archive exactly like this.
+        if (isRenderableStoredMessage(message)) {
+          results.push(message)
+        }
       }
       cursor = await cursor.continue()
     }

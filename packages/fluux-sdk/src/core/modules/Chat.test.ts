@@ -935,6 +935,37 @@ describe('XMPPClient Message', () => {
       })
     })
 
+    it('should NOT store a reply whose body is entirely a fallback (no new text)', async () => {
+      await connectClient()
+
+      // "> Alice: Hello there!" is 21 chars and the fallback covers all of it,
+      // so processedBody strips to '' — there is no new text. With no attachment
+      // or other payload, the message has nothing to render and must be dropped
+      // rather than stored as a blank bubble.
+      const messageStanza = createMockElement('message', {
+        from: 'contact@example.com/resource',
+        to: 'user@example.com',
+        type: 'chat',
+        id: 'msg-empty-reply',
+      }, [
+        { name: 'body', text: '> Alice: Hello there!' },
+        { name: 'reply', attrs: { xmlns: 'urn:xmpp:reply:0', id: 'orig-empty', to: 'alice@example.com' } },
+        {
+          name: 'fallback',
+          attrs: { xmlns: 'urn:xmpp:fallback:0', for: 'urn:xmpp:reply:0' },
+          children: [
+            { name: 'body', attrs: { xmlns: 'urn:xmpp:fallback:0', start: '0', end: '21' } },
+          ],
+        },
+      ])
+
+      mockXmppClientInstance._emit('stanza', messageStanza)
+
+      expect(emitSDKSpy).not.toHaveBeenCalledWith('chat:message', expect.objectContaining({
+        message: expect.objectContaining({ id: 'msg-empty-reply' }),
+      }))
+    })
+
     it('should extract fallback body without author prefix', async () => {
       await connectClient()
 

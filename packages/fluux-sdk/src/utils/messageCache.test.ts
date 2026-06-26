@@ -3,6 +3,7 @@ import 'fake-indexeddb/auto'
 import { IDBFactory } from 'fake-indexeddb'
 import type { Message, RoomMessage } from '../core/types'
 import { _resetStorageScopeForTesting, setStorageScopeJid } from './storageScope'
+import { selectCatchUpQuery } from './mamCatchUpUtils'
 
 // Must import after fake-indexeddb/auto
 import * as messageCache from './messageCache'
@@ -191,6 +192,26 @@ describe('messageCache', () => {
       it('should return empty array for non-existent conversation', async () => {
         const retrieved = await messageCache.getMessages('nonexistent@example.com')
         expect(retrieved).toEqual([])
+      })
+
+      it('skips legacy blank rows (empty body, no payload) left by older builds', async () => {
+        await messageCache.saveMessages([
+          createMockMessage(conversationId, { id: 'real-1', body: 'hello', timestamp: new Date('2024-02-01T10:00:00Z') }),
+          // The stale artifact: empty body, nothing renderable.
+          createMockMessage(conversationId, { id: 'blank-1', body: '', timestamp: new Date('2024-02-01T11:00:00Z') }),
+        ])
+
+        const retrieved = await messageCache.getMessages(conversationId)
+        expect(retrieved.map((m) => m.id)).toEqual(['real-1'])
+      })
+
+      it('keeps an empty-body retraction tombstone', async () => {
+        await messageCache.saveMessages([
+          createMockMessage(conversationId, { id: 'tomb-1', body: '', isRetracted: true, timestamp: new Date('2024-02-02T10:00:00Z') }),
+        ])
+
+        const retrieved = await messageCache.getMessages(conversationId)
+        expect(retrieved.map((m) => m.id)).toEqual(['tomb-1'])
       })
 
       it('should respect limit option', async () => {
@@ -422,6 +443,18 @@ describe('messageCache', () => {
         const retrieved = await messageCache.getRoomMessages(roomJid, { before: cutoff, limit: 1 })
         expect(retrieved.length).toBe(1)
         expect(retrieved[0].timestamp < cutoff).toBe(true)
+      })
+
+      it('skips a legacy blank room row so it cannot render or seed the catch-up cursor', async () => {
+        // Mirrors the reported XSF case: the newest cached row is an empty-body
+        // leftover. It must be filtered so the newest returned row is the real one.
+        await messageCache.saveRoomMessages([
+          createMockRoomMessage(roomJid, { id: 'room-real', body: 'real text', timestamp: new Date('2024-02-01T10:00:00Z') }),
+          createMockRoomMessage(roomJid, { id: 'room-blank', body: '', timestamp: new Date('2024-02-01T11:00:00Z') }),
+        ])
+
+        const retrieved = await messageCache.getRoomMessages(roomJid)
+        expect(retrieved.map((m) => m.id)).toEqual(['room-real'])
       })
     })
 
@@ -775,6 +808,36 @@ describe('messageCache', () => {
     it('should handle getMessage for non-existent ID', async () => {
       const message = await messageCache.getMessage('nonexistent-id')
       expect(message).toBeNull()
+    })
+  })
+
+  // The reported bug: the room's MAM catch-up `start` is derived from the newest
+  // cached message (selectCatchUpQuery). When the newest cached row was a blank
+  // leftover, the cursor anchored on it. This composes the two real units —
+  // getRoomMessages (read-side prune) feeding selectCatchUpQuery (cursor) — to
+  // prove the blank row can no longer poison the cursor.
+  describe('catch-up cursor composition (blank row must not anchor the cursor)', () => {
+    const cursorRoomJid = 'cursor-room@conference.example.com'
+    // The real value seen in the trace: blank row is the NEWEST by timestamp.
+    const realTs = new Date('2026-06-25T17:00:00.000Z')
+    const blankTs = new Date('2026-06-25T17:15:14.214Z')
+    // Session connected well after both, so both count as pre-session history.
+    const sessionStartTime = new Date('2026-06-25T22:00:00.000Z').getTime()
+
+    it('anchors the catch-up cursor on the newest renderable row, not the blank one', async () => {
+      await messageCache.saveRoomMessages([
+        createMockRoomMessage(cursorRoomJid, { id: 'cursor-real', body: 'real text', timestamp: realTs }),
+        createMockRoomMessage(cursorRoomJid, { id: 'cursor-blank', body: '', timestamp: blankTs }),
+      ])
+
+      const cached = await messageCache.getRoomMessages(cursorRoomJid)
+      const query = selectCatchUpQuery(cached, { sessionStartTime })
+
+      // Forward query, anchored exactly as if only the real row existed...
+      expect(query.before).toBeUndefined()
+      expect(query).toEqual(selectCatchUpQuery([{ timestamp: realTs }], { sessionStartTime }))
+      // ...and NOT on the blank row's (newer) timestamp.
+      expect(query).not.toEqual(selectCatchUpQuery([{ timestamp: blankTs }], { sessionStartTime }))
     })
   })
 })
