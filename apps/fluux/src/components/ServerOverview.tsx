@@ -76,7 +76,7 @@ export function ServerOverview() {
                   <span className="text-xs font-medium">{t(card.labelKey)}</span>
                   {card.target && <ChevronRight className="size-4 ms-auto rtl-mirror" />}
                 </div>
-                <div className="text-2xl font-semibold text-fluux-text break-words" title={String(value)}>
+                <div className="text-2xl font-semibold text-fluux-text break-words font-display" title={String(value)}>
                   {card.format(value, durationUnits)}
                 </div>
                 {card.secondaryLabelKey && secondary != null && (
