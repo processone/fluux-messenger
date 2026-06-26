@@ -660,9 +660,10 @@ export function MessageComposer({
       {/* Custom content above input (e.g., mention autocomplete) */}
       {aboveInput}
 
+      <div className="composer-card bg-fluux-hover">
       {/* Edit indicator */}
       {editingMessage && (
-        <div className={`bg-fluux-hover rounded-t-lg px-3 py-2 flex items-start gap-2 border-s-2 ${willDeleteMessage ? 'border-red-500' : 'border-green-500'}`}>
+        <div className={`px-3 py-2 flex items-start gap-2 border-s-2 border-b border-fluux-border ${willDeleteMessage ? 'border-s-red-500' : 'border-s-green-500'}`}>
           {willDeleteMessage ? (
             <Trash2 className="size-4 text-red-500 flex-shrink-0 mt-0.5" />
           ) : (
@@ -711,7 +712,7 @@ export function MessageComposer({
 
       {/* Reply preview */}
       {replyingTo && !editingMessage && (
-        <div className="bg-fluux-hover rounded-t-lg px-3 py-2 flex items-start gap-2 border-s-2 border-fluux-brand">
+        <div className="px-3 py-2 flex items-start gap-2 border-s-2 border-b border-fluux-border border-s-fluux-brand">
           <Reply className="rtl-mirror size-4 text-fluux-brand flex-shrink-0 mt-0.5" />
           <div className="flex-1 min-w-0">
             <p className="text-xs font-medium text-fluux-brand">
@@ -740,7 +741,7 @@ export function MessageComposer({
 
       {/* Pending attachment preview */}
       {pendingAttachment && !editingMessage && (
-        <div className={`bg-fluux-hover ${replyingTo ? '' : 'rounded-t-lg'} px-3 py-2 flex items-center gap-3 border-s-2 border-fluux-brand`}>
+        <div className="px-3 py-2 flex items-center gap-3 border-s-2 border-b border-fluux-border border-s-fluux-brand">
           {/* Thumbnail preview for images/videos */}
           {pendingAttachment.previewUrl && pendingAttachment.file.type.startsWith('image/') ? (
             <img
@@ -793,7 +794,7 @@ export function MessageComposer({
 
       {/* Upload error banner */}
       {uploadState?.error && (
-        <div className={`bg-fluux-red/10 ${(replyingTo || editingMessage || pendingAttachment) ? '' : 'rounded-t-lg'} px-3 py-2 flex items-center gap-2`}>
+        <div className="bg-fluux-red/10 px-3 py-2 flex items-center gap-2 border-b border-fluux-border">
           <p className="text-xs text-fluux-error flex-1">{uploadState.error}</p>
           <button
             type="button"
@@ -806,7 +807,7 @@ export function MessageComposer({
         </div>
       )}
 
-      <div className={`bg-fluux-hover ${(replyingTo || editingMessage || pendingAttachment || uploadState?.error) ? 'rounded-b-lg' : 'rounded-lg'} flex items-center`}>
+      <div className="flex items-center">
         {/* Hidden file input */}
         <input
           ref={fileInputRef}
@@ -937,6 +938,7 @@ export function MessageComposer({
             ) : sendBadge}
           </button>
         </Tooltip>
+      </div>
       </div>
     </form>
   )

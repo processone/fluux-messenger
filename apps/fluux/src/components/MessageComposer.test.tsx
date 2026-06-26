@@ -1078,6 +1078,25 @@ describe('MessageComposer', () => {
     })
   })
 
+  describe('Aurora card', () => {
+    it('wraps context and input in a single .composer-card', () => {
+      const { container } = render(
+        <MessageComposer
+          placeholder="Type a message"
+          onSend={vi.fn().mockResolvedValue(true)}
+          replyingTo={{ id: '1', from: 'emma@x.com', senderName: 'Emma', body: 'hi' }}
+          onCancelReply={vi.fn()}
+        />
+      )
+      const card = container.querySelector('.composer-card')
+      expect(card).not.toBeNull()
+      // The reply preview lives INSIDE the card (docked), not as a sibling above it.
+      expect(card!.textContent).toContain('Emma')
+      // The textarea also lives inside the same card.
+      expect(card!.querySelector('textarea')).not.toBeNull()
+    })
+  })
+
   describe('clipboard paste image handling', () => {
     it('should call onFileSelect when pasting an image from clipboard (items)', () => {
       const onSend = vi.fn().mockResolvedValue(true)

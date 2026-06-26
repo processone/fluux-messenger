@@ -685,6 +685,23 @@ html, body {
 }
 
 /*
+ * Aurora composer card. The bar that wraps the context sections + input row.
+ * Background is applied as a utility (bg-fluux-hover) on the element; this class
+ * owns the hairline border, radius, and the signature accent focus-edge. The
+ * focus-edge is pure :focus-within (no React focus state) so it never touches
+ * the typing render path. No overflow:hidden here — the attach/emoji popups are
+ * absolutely positioned above the card and must not be clipped.
+ */
+.composer-card {
+  border: 1px solid var(--fluux-border);
+  border-radius: var(--fluux-radius-l);
+}
+.composer-card:focus-within {
+  border-color: var(--fluux-brand);
+  box-shadow: 0 0 0 3px hsla(var(--fluux-accent-h), var(--fluux-accent-s), var(--fluux-accent-l), 0.22);
+}
+
+/*
  * Hide the per-message floating hover toolbars while the user is composing.
  * Driven by the `composer-active` class toggled on the message area (ChatView),
  * so starting/stopping typing does NOT re-render every message row. The 1:1
