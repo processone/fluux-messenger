@@ -21,6 +21,8 @@ export default {
           'surface': 'var(--fluux-bg-tertiary)',
           'hover': 'var(--fluux-bg-hover)',
           'active': 'var(--fluux-bg-active)',
+          'float': 'var(--fluux-bg-float)',
+          'float-hover': 'var(--fluux-bg-float-hover)',
           'sidebar-item-active': 'var(--fluux-sidebar-item-active)',
           'sidebar-item-active-accent': 'var(--fluux-sidebar-item-active-accent)',
           'selection': 'var(--fluux-selection-bg)',

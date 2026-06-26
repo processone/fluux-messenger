@@ -167,6 +167,12 @@
   --fluux-bg-active: var(--fluux-base-50);
   --fluux-bg-accent: hsl(var(--fluux-accent-h), var(--fluux-accent-s), var(--fluux-accent-l));
   --fluux-bg-accent-hover: hsl(var(--fluux-accent-h), var(--fluux-accent-s), calc(var(--fluux-accent-l) - 8%));
+  /* Floating / elevated surfaces (FAB, raised controls) — lifted above the
+     canvas so the control reads as a distinct shape. Pairs with the visible
+     border below and a drop shadow; on the light canvas (white) the border +
+     shadow carry the separation. */
+  --fluux-bg-float: var(--fluux-base-50);
+  --fluux-bg-float-hover: var(--fluux-base-60);
 
   /* Text */
   --fluux-text-normal: var(--fluux-base-90);
@@ -194,7 +200,11 @@
   --fluux-interactive-accent-hover: var(--fluux-bg-accent-hover);
 
   /* Borders & dividers */
-  --fluux-border-color: rgba(0, 0, 0, 0.1);
+  /* Light-alpha on the dark canvas: a black border on a dark surface is
+     invisible (~1.0:1). White at low alpha gives a readable hairline (~1.6:1)
+     that defines edges for the FAB, inputs, modals, tooltips and dividers.
+     The .light override flips this back to black-alpha. */
+  --fluux-border-color: rgba(255, 255, 255, 0.16);
   --fluux-border-color-strong: var(--fluux-base-40);
   --fluux-divider-color: var(--fluux-base-05);
 
@@ -370,7 +380,12 @@
   /* Semantic overrides where cascade from foundation isn't sufficient */
   --fluux-bg-secondary: #DDE2F0;
   --fluux-sidebar-item-active: hsla(var(--fluux-accent-h), var(--fluux-accent-s), var(--fluux-accent-l), 0.14);
-  --fluux-border-color: rgba(0, 0, 0, 0.15);
+  /* Black-alpha hairline on the light canvas, bumped for a clearer edge (~1.5:1). */
+  --fluux-border-color: rgba(0, 0, 0, 0.18);
+  /* Floating surface on the light (white) canvas: stays white, the border +
+     shadow provide the separation; hover tints to the tertiary gray. */
+  --fluux-bg-float: var(--fluux-base-00);
+  --fluux-bg-float-hover: var(--fluux-base-20);
   --fluux-selection-bg: hsla(var(--fluux-accent-h), var(--fluux-accent-s), var(--fluux-accent-l), 0.15);
   --fluux-search-highlight-bg: hsla(var(--fluux-accent-h), var(--fluux-accent-s), var(--fluux-accent-l), 0.25);
   --fluux-scrollbar-thumb: #c4c9ce;
