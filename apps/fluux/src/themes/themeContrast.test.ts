@@ -109,6 +109,17 @@ describe('Aurora theme contrast invariants', () => {
       expect(r).toBeGreaterThanOrEqual(4.5)
     })
 
+    // Pattern B — informational text that renders on message rows must clear AA
+    // against the darkest of those (the hover row), not just the resting surface.
+    // Links and the own-name dipped below AA on the light-mode hover/active rows;
+    // text-faint (the timestamp tier) failed in both modes at its old value.
+    for (const token of ['text-link', 'text-self', 'text-faint'] as const) {
+      it(`[${mode}] ${token} clears WCAG AA on the hover row`, () => {
+        const r = contrast(`var(--fluux-${token})`, 'var(--fluux-bg-hover)', vars)
+        expect(r).toBeGreaterThanOrEqual(4.5)
+      })
+    }
+
     // Pattern C — MUC sender names are informational text. They render in the
     // message list on the chat surface AND on the hover/active row, so they must
     // clear AA against the darkest of those (bg-hover) in both modes.

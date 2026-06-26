@@ -177,7 +177,11 @@
   /* Text */
   --fluux-text-normal: var(--fluux-base-90);
   --fluux-text-muted: var(--fluux-base-80);
-  --fluux-text-faint: var(--fluux-base-70);
+  /* Faintest informational tier (e.g. timestamps). Decoupled from base-70 and
+     lifted to clear WCAG AA on the message rows it renders on — the raw ramp
+     value reached only ~3.2:1 on the hover row. Still lighter than text-muted,
+     so the tier distinction holds. .light overrides below. */
+  --fluux-text-faint: #7885A3;
   --fluux-text-on-accent: #ffffff;
   --fluux-text-accent: var(--fluux-bg-accent);
   --fluux-text-link: var(--fluux-color-blue);
@@ -379,7 +383,15 @@
   /* Own-message ("you") name — brand-indigo darkened for WCAG AA on the white
      message background and its hover state (the raw accent only reached ~4.6:1
      at rest and failed on hover). */
-  --fluux-text-self: #4F5BD8;
+  --fluux-text-self: #4753D6;
+
+  /* Link text darkened so it clears WCAG AA on the message hover/active rows
+     (the shared --fluux-color-blue only reached ~4.2:1 there). Overrides just the
+     link token; other blue uses (status-info, syntax) keep --fluux-color-blue. */
+  --fluux-text-link: #0860C6;
+
+  /* Faint tier (timestamps) — AA-legible value for the light canvas. */
+  --fluux-text-faint: #5D6781;
 
   /* Private (whisper) — deeper violet for contrast on light backgrounds */
   --fluux-private: hsl(270, 70%, 48%);
