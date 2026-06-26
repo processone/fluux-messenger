@@ -403,6 +403,67 @@ describe('setupBackgroundSyncSideEffects', () => {
       )
     })
 
+    it('retries pending decrypts after conversation catch-up completes (catch-up-tail race)', async () => {
+      // A message fetched and stashed during the long catch-up TAIL — after the
+      // one-shot key-unlock retry already ran its snapshot — would otherwise stay
+      // "could not be decrypted" until the next launch. Re-running retryPendingDecrypts
+      // when catch-up settles decrypts it in the same session.
+      ;(mockClient.mam.catchUpAllConversations as ReturnType<typeof vi.fn>).mockResolvedValue(undefined)
+
+      connectionStore.getState().setServerInfo({
+        identities: [],
+        domain: 'example.com',
+        features: [NS_MAM],
+      })
+
+      connectionStore.getState().setStatus('disconnected')
+      cleanup = setupBackgroundSyncSideEffects(mockClient)
+
+      simulateFreshSession(mockClient)
+
+      await vi.waitFor(() => {
+        expect(mockClient.mam.catchUpAllConversations).toHaveBeenCalledTimes(1)
+      })
+      await vi.waitFor(() => {
+        expect(mockClient.retryPendingDecrypts).toHaveBeenCalled()
+      })
+    })
+
+    it('retries pending decrypts again after room catch-up completes', async () => {
+      connectionStore.getState().setServerInfo({
+        identities: [],
+        domain: 'example.com',
+        features: [NS_MAM],
+      })
+
+      connectionStore.getState().setStatus('disconnected')
+      cleanup = setupBackgroundSyncSideEffects(mockClient)
+
+      simulateFreshSession(mockClient)
+
+      // Conversation catch-up settles first and triggers its own retry.
+      await vi.waitFor(() => {
+        expect(mockClient.mam.catchUpAllConversations).toHaveBeenCalledTimes(1)
+      })
+      await vi.waitFor(() => {
+        expect(mockClient.retryPendingDecrypts).toHaveBeenCalled()
+      })
+      const afterConversation =
+        (mockClient.retryPendingDecrypts as ReturnType<typeof vi.fn>).mock.calls.length
+
+      // Room catch-up runs after the 10s delay; its completion must trigger another
+      // retry so room messages stashed during that later pass also self-heal in-session.
+      await vi.advanceTimersByTimeAsync(10_000)
+      await vi.waitFor(() => {
+        expect(mockClient.mam.catchUpAllRooms).toHaveBeenCalledTimes(1)
+      })
+      await vi.waitFor(() => {
+        expect(
+          (mockClient.retryPendingDecrypts as ReturnType<typeof vi.fn>).mock.calls.length,
+        ).toBeGreaterThan(afterConversation)
+      })
+    })
+
     it('should cancel room catch-up timer on disconnect', async () => {
       connectionStore.getState().setServerInfo({
         identities: [],

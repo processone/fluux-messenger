@@ -203,6 +203,15 @@ export function setupBackgroundSyncSideEffects(
       } catch {
         // Silently ignore — best-effort sync
       }
+      // Re-decrypt anything stashed during this catch-up. retryPendingDecrypts is
+      // a one-shot snapshot driven by KEY-availability events (key-unlock / plugin
+      // registration). When the key is restored WHILE catch-up is still streaming,
+      // its single pass only covers what was stashed at that instant; messages
+      // fetched in the catch-up TAIL stay "could not be decrypted" until the next
+      // launch. Firing a (coalesced) retry once catch-up settles closes that window
+      // in-session. Cheap when nothing is pending (sparse encryptedPayload index)
+      // and a no-op without a registered plugin. Runs even if a stage above threw.
+      void client.retryPendingDecrypts()
     })()
 
     // Stage 4: Room catch-up + member discovery (delayed to let rooms finish joining and discover MAM)
@@ -215,6 +224,11 @@ export function setupBackgroundSyncSideEffects(
         } catch {
           // Silently ignore MAM catch-up errors
         }
+        // Same rationale as the 1:1 catch-up retry above: room messages stashed
+        // during this delayed pass (encrypted MUC history fetched after a mid-sync
+        // key unlock) would otherwise wait until the next launch. Re-run once room
+        // catch-up settles. Coalesced with any in-flight pass.
+        void client.retryPendingDecrypts()
         // Record every room covered by this pass (MAM-ready now, plus the active
         // room handled by roomSideEffects) so the late-MAM watcher only retries
         // rooms whose support resolves AFTER this point (issue D).
