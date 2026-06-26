@@ -1066,6 +1066,10 @@ export const RoomMessageList = memo(function RoomMessageList({
 
   return (
     <MessageList
+      // Remount the message view (fresh virtualizer + scroll refs) per room so no imperative
+      // scroll state — the @tanstack virtualizer's measurement/offset cache above all — bleeds
+      // between rooms. Restoration survives via scrollStateManager (keyed by room jid).
+      key={room.jid}
       messages={messages}
       conversationId={room.jid}
       firstNewMessageId={firstNewMessageId}
