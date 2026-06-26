@@ -14,7 +14,7 @@
 import { useMemo, useRef, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { BaseMessage } from '@fluux/sdk'
-import { useMessageCopyFormatter } from '@/hooks'
+import { useMessageCopyFormatter, useMessageRangeSelection } from '@/hooks'
 import { useViewportObserver } from '@/hooks/useViewportObserver'
 import { useRenderCostProbe } from '@/hooks/useRenderCostProbe'
 import { detectRenderLoop } from '@/utils/renderLoopDetector'
@@ -32,6 +32,7 @@ import { buildMessageListItems, type RenderItem } from './messageListItems'
 import { useTanstackMessageVirtualizer } from './tanstackMessageVirtualizer'
 import { Loader2, ChevronUp, ChevronDown } from 'lucide-react'
 import { Tooltip } from '../Tooltip'
+import { MessageSelectionBar } from './MessageSelectionBar'
 
 // ============================================================================
 // TYPES
@@ -306,6 +307,21 @@ export function MessageList<T extends BaseMessage>({
     formatForCopy: virtualized ? formatMessageForCopy : undefined,
   })
 
+  // Virtualization-friendly bulk copy: Cmd/Ctrl+A selects the whole loaded conversation,
+  // Shift-click defines a range; copy reconstructs from the in-memory array via the caller's
+  // formatter. Decoupled from DOM text selection (which can't span unmounted rows).
+  const { copySelectedIds, selectionCount, copySelected, clearSelection } =
+    useMessageRangeSelection({
+      containerRef: scrollContainerRef,
+      messages: deduplicatedMessages,
+      formatForCopy: formatMessageForCopy,
+      conversationId,
+      enabled: !staticMode,
+    })
+
+  const rowClass = (id: string) =>
+    copySelectedIds.has(id) ? 'message-row copy-selected' : 'message-row'
+
   // --------------------------------------------------------------------------
   // RENDER: Message list (always render scroll container to preserve position)
   // --------------------------------------------------------------------------
@@ -349,7 +365,7 @@ export function MessageList<T extends BaseMessage>({
         const msg = item.message
         return (
           <div
-            className="message-row"
+            className={rowClass(msg.id)}
             data-message-id={msg.id}
             data-stanza-id={msg.stanzaId}
             data-origin-id={msg.originId}
@@ -478,7 +494,7 @@ export function MessageList<T extends BaseMessage>({
                 return (
                   <div
                     key={rowKey}
-                    className="message-row"
+                    className={rowClass(msg.id)}
                     data-message-id={msg.id}
                     data-stanza-id={msg.stanzaId}
                     data-origin-id={msg.originId}
@@ -532,6 +548,7 @@ export function MessageList<T extends BaseMessage>({
           </button>
         </Tooltip>
       </div>
+      <MessageSelectionBar count={selectionCount} onCopy={copySelected} onClear={clearSelection} />
     </div>
     </MessageWidthProvider>
   )

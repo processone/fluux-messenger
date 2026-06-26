@@ -32,6 +32,15 @@ vi.mock('react-i18next', () => ({
 
 vi.mock('@/hooks', () => ({
   useMessageCopyFormatter: vi.fn(),
+  useMessageRangeSelection: vi.fn(() => ({
+    copySelectedIds: new Set<string>(),
+    selectionCount: 0,
+    isSelecting: false,
+    selectAll: vi.fn(),
+    extendTo: vi.fn(),
+    clearSelection: vi.fn(),
+    copySelected: vi.fn(),
+  })),
 }))
 
 class MockResizeObserver {
