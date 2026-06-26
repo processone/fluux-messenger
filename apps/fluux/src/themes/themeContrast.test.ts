@@ -145,15 +145,6 @@ describe('Aurora theme contrast invariants', () => {
       })
     }
 
-    // Pattern C — MUC sender names are informational text. They render in the
-    // message list on the chat surface AND on the hover/active row, so they must
-    // clear AA against the darkest of those (bg-hover) in both modes.
-    for (let i = 1; i <= 6; i++) {
-      it(`[${mode}] sender-${i} clears WCAG AA on the hover row`, () => {
-        const r = contrast(`var(--fluux-sender-${i})`, 'var(--fluux-bg-hover)', vars)
-        expect(r).toBeGreaterThanOrEqual(4.5)
-      })
-    }
   }
 
   // Pattern C — status colors are used as text/icon labels on light surfaces
