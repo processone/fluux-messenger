@@ -519,6 +519,94 @@ describe('MAM E2EE wiring', () => {
     expect(msg.body).toBe('')
   })
 
+  it('drops a room archive message whose body is entirely a fallback (no renderable content)', async () => {
+    // The mirror of the bodiless-OMEMO case above: a message that carries a
+    // non-empty raw <body> but whose body is ENTIRELY a XEP-0428 fallback
+    // (here a XEP-0461 reply quote with no new text) strips to processedBody=''.
+    // The raw-<body> gate let it through and stored a blank bubble — the
+    // "empty Cynthia row" reported from the XSF room. With no attachment, poll
+    // or encrypted content, it has nothing to render and must be dropped.
+    const ROOM = 'room@conference.example.com'
+    const forwardedMessage = xml(
+      'message',
+      { from: ROOM + '/cynthia', to: ME, type: 'groupchat', id: 'mam-room-empty-fallback' },
+      xml('body', {}, '> a quote with no new text'),
+      xml('reply', { xmlns: 'urn:xmpp:reply:0', id: 'orig-1', to: ROOM + '/bob' }),
+      // <body/> with no start/end → the entire body is fallback for the reply.
+      xml('fallback', { xmlns: 'urn:xmpp:fallback:0', for: 'urn:xmpp:reply:0' },
+        xml('body', {}),
+      ),
+    )
+    const archiveEntry = buildMAMResult({ archiveId: 'arch-room-empty-fallback', forwardedMessage })
+
+    const resultPromise = harness.mam.queryRoomArchive({ roomJid: ROOM, max: 10 })
+    await harness.iqPending()
+    const entries = [...harness.collectors.entries()]
+    if (entries.length === 0) throw new Error('No collector registered')
+    const [queryId, collector] = entries[0]
+    archiveEntry.getChild('result', 'urn:xmpp:mam:2')!.attrs.queryid = queryId
+    collector(archiveEntry)
+    harness.resolveNextIQ(
+      xml('iq', {}, xml('fin', { xmlns: 'urn:xmpp:mam:2', complete: 'true' })),
+    )
+    const result = await resultPromise
+
+    expect(result.messages).toHaveLength(0)
+  })
+
+  it('keeps a room archive reply that has real text after the fallback quote', async () => {
+    // Positive control for the guard above: a normal reply (quote fallback +
+    // new text) must still surface, with only the quoted prefix stripped.
+    const ROOM = 'room@conference.example.com'
+    const fullBody = '> earlier message\nthanks, that works!'
+    const quoteEnd = fullBody.indexOf('thanks')
+    const forwardedMessage = xml(
+      'message',
+      { from: ROOM + '/cynthia', to: ME, type: 'groupchat', id: 'mam-room-reply-with-text' },
+      xml('body', {}, fullBody),
+      xml('reply', { xmlns: 'urn:xmpp:reply:0', id: 'orig-2', to: ROOM + '/bob' }),
+      xml('fallback', { xmlns: 'urn:xmpp:fallback:0', for: 'urn:xmpp:reply:0' },
+        xml('body', { start: '0', end: String(quoteEnd) }),
+      ),
+    )
+    const archiveEntry = buildMAMResult({ archiveId: 'arch-room-reply-with-text', forwardedMessage })
+
+    const resultPromise = harness.mam.queryRoomArchive({ roomJid: ROOM, max: 10 })
+    await harness.iqPending()
+    const entries = [...harness.collectors.entries()]
+    if (entries.length === 0) throw new Error('No collector registered')
+    const [queryId, collector] = entries[0]
+    archiveEntry.getChild('result', 'urn:xmpp:mam:2')!.attrs.queryid = queryId
+    collector(archiveEntry)
+    harness.resolveNextIQ(
+      xml('iq', {}, xml('fin', { xmlns: 'urn:xmpp:mam:2', complete: 'true' })),
+    )
+    const result = await resultPromise
+
+    expect(result.messages).toHaveLength(1)
+    expect(result.messages[0].body).toBe('thanks, that works!')
+    expect(result.messages[0].replyTo).toBeDefined()
+  })
+
+  it('drops a 1:1 archive message whose body is entirely a fallback (no renderable content)', async () => {
+    // Same gate as the room path, for 1:1 archive: a reply whose body is ALL
+    // fallback strips to processedBody='' and must not surface as a blank row.
+    const forwardedMessage = xml(
+      'message',
+      { from: PEER + '/res', to: ME, type: 'chat', id: 'mam-chat-empty-fallback' },
+      xml('body', {}, '> a quote with no new text'),
+      xml('reply', { xmlns: 'urn:xmpp:reply:0', id: 'orig-c1', to: PEER }),
+      xml('fallback', { xmlns: 'urn:xmpp:fallback:0', for: 'urn:xmpp:reply:0' },
+        xml('body', {}),
+      ),
+    )
+    const archiveEntry = buildMAMResult({ archiveId: 'arch-chat-empty-fallback', forwardedMessage })
+
+    const messages = await runQueryWithEntry(harness, PEER, archiveEntry)
+
+    expect(messages).toHaveLength(0)
+  })
+
   describe('no E2EE manager (archive replayed before E2EE init)', () => {
     let noMgrHarness: TestHarness
 

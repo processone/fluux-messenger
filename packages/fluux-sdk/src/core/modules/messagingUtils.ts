@@ -430,6 +430,38 @@ export function parseMessageContent(options: ParseMessageContentOptions): Parsed
 }
 
 /**
+ * Whether a parsed message carries anything renderable.
+ *
+ * The upstream body-presence gates accept a message when its raw `<body>` is
+ * non-empty. But XEP-0428 fallback processing can strip that body to nothing —
+ * e.g. a XEP-0461 reply whose body is entirely the quoted fallback with no new
+ * text. Such a message has empty `processedBody` and, unless it also carries an
+ * attachment, poll, or encrypted payload, would render as a blank bubble. This
+ * is the post-parse complement to the raw-body gate: callers drop a message
+ * with no renderable content instead of storing an empty row.
+ *
+ * `processedBody` is checked after trimming so a whitespace-only remainder
+ * counts as empty. Encrypted-but-bodiless entries are kept on purpose — the UI
+ * renders a placeholder from `encryptedPayload`/`unsupportedEncryption`
+ * (see issue #135).
+ */
+export function hasRenderableContent(content: {
+  processedBody: string
+  attachment?: unknown
+  hasPoll?: boolean
+  hasPollClosed?: boolean
+  hasEncryptedContent?: boolean
+}): boolean {
+  return (
+    content.processedBody.trim().length > 0 ||
+    content.attachment != null ||
+    content.hasPoll === true ||
+    content.hasPollClosed === true ||
+    content.hasEncryptedContent === true
+  )
+}
+
+/**
  * Result of applying a retraction to a message.
  */
 export interface RetractionResult {

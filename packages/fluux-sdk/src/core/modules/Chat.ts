@@ -60,7 +60,7 @@ import type {
   RoomMAMResult,
   PollClosedData,
 } from '../types'
-import { parseMessageContent, parseOgpFastening, applyRetraction, applyCorrection, createOriginIdElement, parseStanzaId } from './messagingUtils'
+import { parseMessageContent, parseOgpFastening, applyRetraction, applyCorrection, createOriginIdElement, parseStanzaId, hasRenderableContent } from './messagingUtils'
 import { checkForMention } from '../mentionDetection'
 import { parsePollElement, parsePollClosedElement } from '../poll'
 import { logWarn } from '../logger'
@@ -2067,6 +2067,18 @@ export class Chat extends BaseModule {
     const securityContext = this.readMessageSecurityContext(stanza)
     const encryptedPayload = readStashedEncryptedPayload(stanza)
     const unsupportedEncryption = readStashedUnsupportedEncryption(stanza)
+
+    // A non-empty <body> that XEP-0428 fallback stripping reduces to '' (e.g. a
+    // reply quote with no new text) would store a blank bubble. Drop it unless it
+    // carries an attachment or encrypted payload to render.
+    if (!hasRenderableContent({
+      processedBody: parsed.processedBody,
+      attachment: parsed.attachment,
+      hasEncryptedContent: !!encryptedPayload || !!unsupportedEncryption,
+    })) {
+      return null
+    }
+
     const message: Message = {
       type: 'chat',
       id: messageId,
@@ -2141,6 +2153,20 @@ export class Chat extends BaseModule {
     const securityContext = this.readMessageSecurityContext(stanza)
     const encryptedPayload = readStashedEncryptedPayload(stanza)
     const unsupportedEncryption = readStashedUnsupportedEncryption(stanza)
+
+    // A non-empty <body> that XEP-0428 fallback stripping reduces to '' (e.g. a
+    // reply quote with no new text) would store a blank bubble. Drop it unless it
+    // carries an attachment, poll, or encrypted payload to render.
+    if (!hasRenderableContent({
+      processedBody: parsed.processedBody,
+      attachment: parsed.attachment,
+      hasPoll: !!stanza.getChild('poll', NS_POLL),
+      hasPollClosed: !!stanza.getChild('poll-closed', NS_POLL),
+      hasEncryptedContent: !!encryptedPayload || !!unsupportedEncryption,
+    })) {
+      return null
+    }
+
     const message: RoomMessage = {
       type: 'groupchat',
       id: messageId,

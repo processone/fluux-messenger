@@ -317,6 +317,71 @@ describe('Message Routing', () => {
         })
       }))
     })
+
+    it('should NOT store a live groupchat reply whose body is entirely a fallback', async () => {
+      await connectClient()
+
+      const mockRoom = createMockRoom('room@conference.example.com', {
+        joined: true,
+        nickname: 'myname',
+      })
+      vi.mocked(mockStores.room.getRoom).mockReturnValue(mockRoom)
+
+      // XEP-0461 reply quoting an earlier message with no new text: the whole-body
+      // XEP-0428 fallback strips processedBody to '' — nothing to render. The
+      // live room path must drop it, not store a blank bubble (the reported bug).
+      const messageStanza = createMockElement('message', {
+        from: 'room@conference.example.com/otherperson',
+        to: 'user@example.com',
+        type: 'groupchat',
+        id: 'room-empty-reply',
+      }, [
+        { name: 'body', text: '> quoted line' },
+        { name: 'reply', attrs: { xmlns: 'urn:xmpp:reply:0', id: 'orig-r', to: 'room@conference.example.com/bob' } },
+        {
+          name: 'fallback',
+          attrs: { xmlns: 'urn:xmpp:fallback:0', for: 'urn:xmpp:reply:0' },
+          // <body/> with no start/end → entire body is fallback.
+          children: [{ name: 'body', attrs: { xmlns: 'urn:xmpp:fallback:0' } }],
+        },
+      ])
+
+      mockXmppClientInstance._emit('stanza', messageStanza)
+
+      expect(emitSDKSpy).not.toHaveBeenCalledWith('room:message', expect.objectContaining({
+        message: expect.objectContaining({ id: 'room-empty-reply' }),
+      }))
+    })
+
+    it('still stores a live groupchat message that has no body but carries an OOB attachment', async () => {
+      // Guard must not over-drop: a media-only share (empty body + attachment)
+      // has something to render and must survive.
+      await connectClient()
+
+      const mockRoom = createMockRoom('room@conference.example.com', {
+        joined: true,
+        nickname: 'myname',
+      })
+      vi.mocked(mockStores.room.getRoom).mockReturnValue(mockRoom)
+
+      const messageStanza = createMockElement('message', {
+        from: 'room@conference.example.com/otherperson',
+        to: 'user@example.com',
+        type: 'groupchat',
+        id: 'room-file-only',
+      }, [
+        { name: 'x', attrs: { xmlns: 'jabber:x:oob' }, children: [{ name: 'url', text: 'https://upload.example.com/pic.png' }] },
+      ])
+
+      mockXmppClientInstance._emit('stanza', messageStanza)
+
+      expect(emitSDKSpy).toHaveBeenCalledWith('room:message', expect.objectContaining({
+        message: expect.objectContaining({
+          id: 'room-file-only',
+          attachment: expect.objectContaining({ url: 'https://upload.example.com/pic.png' }),
+        }),
+      }))
+    })
   })
 
   describe('Message type discrimination', () => {
