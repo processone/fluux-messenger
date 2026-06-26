@@ -755,16 +755,16 @@ describe('buildReplyContext', () => {
   })
 })
 
-describe('Own-message edge', () => {
-  it('applies the own-edge class to outgoing messages', () => {
+describe('Own-message tint', () => {
+  it('applies the own-tint class to outgoing messages', () => {
     const props = createDefaultProps({ message: createTestMessage({ isOutgoing: true }) })
     const { container } = render(<MessageBubble {...props} />)
-    expect(container.querySelector('.message-own-edge')).toBeInTheDocument()
+    expect(container.querySelector('.message-own-tint')).toBeInTheDocument()
   })
 
-  it('does not apply the own-edge class to incoming messages', () => {
+  it('does not apply the own-tint class to incoming messages', () => {
     const props = createDefaultProps({ message: createTestMessage({ isOutgoing: false }) })
     const { container } = render(<MessageBubble {...props} />)
-    expect(container.querySelector('.message-own-edge')).not.toBeInTheDocument()
+    expect(container.querySelector('.message-own-tint')).not.toBeInTheDocument()
   })
 })
