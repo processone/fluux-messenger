@@ -31,7 +31,13 @@ vi.mock('@tanstack/react-virtual', () => ({
       getTotalSize: () => opts.count * 40,
       getOffsetForIndex: (index: number) => [index * 40, 'start'] as const,
       measureElement: () => {},
-      scrollToIndex: () => {},
+      // Mirror real @tanstack: scrollToIndex resolves an offset and sets the DOM scrollTop
+      // (via _scrollToOffset → scrollToFn) but does NOT update its reactive scrollOffset. The
+      // adapter must read the landed scrollTop back and re-window through the offset callback.
+      scrollToIndex: (index: number) => {
+        const el = opts.getScrollElement()
+        if (el) el.scrollTop = index * 40
+      },
       scrollToOffset: scrollToOffsetSpy,
     }
   },
@@ -93,6 +99,42 @@ describe('useTanstackMessageVirtualizer', () => {
     expect(
       scrollEvents.length,
       'scrollToOffset must NOT dispatch a synthetic scroll event (flushSync-in-commit risk)',
+    ).toBe(0)
+  })
+
+  it('scrollToIndex re-windows via @tanstack\'s offset callback with isScrolling=false (bottom-stick on WebKit)', () => {
+    // Same scrollOffset-desync as scrollToOffset, on the stick-to-bottom path. @tanstack's
+    // scrollToIndex (used by pinVirtualizedBottom for both send and receive, the FAB, and
+    // ensureMessageMounted) sets the DOM scrollTop via _scrollToOffset but leaves its reactive
+    // scrollOffset stale until the native 'scroll' event fires. On Tauri WebKit that event is
+    // withheld/coalesced for a programmatic scroll, so the mounted window never re-syncs and a
+    // just-appended bottom row (the new message) is never windowed in → the view does NOT stick
+    // to the bottom. The adapter must read the landed scrollTop and push it straight into the
+    // offset callback (isScrolling=false, non-sync), exactly as scrollToOffset does. Not
+    // reproducible in Playwright (chromium/webkit fire the native event), so this is the guard.
+    offsetNotifySpy.mockClear()
+    const el = document.createElement('div')
+    const dispatchSpy = vi.spyOn(el, 'dispatchEvent')
+    const { items, indexById } = makeItems(['a', 'b', 'c'])
+    const { result } = renderHook(() => {
+      const scrollRef = useRef<HTMLElement | null>(el)
+      return useTanstackMessageVirtualizer({ items, indexById, scrollRef })
+    })
+
+    result.current.scrollToIndex(2, { align: 'end' })
+
+    // 1. @tanstack's scrollToIndex set the DOM scrollTop (mock: index * 40 = 80).
+    expect(el.scrollTop).toBe(80)
+    // 2. The window is re-synced through the offset callback with isScrolling=false (non-sync).
+    expect(
+      offsetNotifySpy,
+      'scrollToIndex must re-window via the offset callback with isScrolling=false',
+    ).toHaveBeenCalledWith(80, false)
+    // 3. It must NOT dispatch a synthetic scroll event (flushSync-in-commit risk).
+    const scrollEvents = dispatchSpy.mock.calls.filter(([e]) => (e as Event).type === 'scroll')
+    expect(
+      scrollEvents.length,
+      'scrollToIndex must NOT dispatch a synthetic scroll event (flushSync-in-commit risk)',
     ).toBe(0)
   })
 })

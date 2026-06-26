@@ -173,6 +173,20 @@ export function useTanstackMessageVirtualizer({
       // inside a lifecycle method" + a render-loop storm when called during the layout-effect commit.
       offsetCbRef.current?.(offset, false)
     },
-    scrollToIndex: (index, opts) => virtualizer.scrollToIndex(index, opts),
+    scrollToIndex: (index, opts) => {
+      virtualizer.scrollToIndex(index, opts)
+      // Same scrollOffset-desync guard as scrollToOffset above, on the stick-to-bottom path.
+      // @tanstack's scrollToIndex sets the DOM scrollTop (via _scrollToOffset → scrollToFn) but
+      // leaves its reactive scrollOffset stale until the scroll element's native 'scroll' event
+      // fires. On Tauri WebKit that event is withheld/coalesced for a programmatic scroll, so the
+      // mounted window never re-windows and a just-appended bottom row (new message — send OR
+      // receive, via pinVirtualizedBottom) is never windowed in: the view fails to stick to the
+      // bottom. Push the landed scrollTop straight into @tanstack's offset callback with
+      // isScrolling=false (non-sync, plain rerender — NOT a synthetic scroll event, which would
+      // flushSync mid-commit) to re-window before paint. Chromium fires the native event promptly
+      // so this is a redundant no-op there; the bug is WebKit-only (not reproducible in Playwright).
+      const el = scrollRef.current
+      if (el) offsetCbRef.current?.(el.scrollTop, false)
+    },
   }
 }
