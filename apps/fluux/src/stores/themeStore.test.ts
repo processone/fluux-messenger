@@ -250,9 +250,18 @@ describe('themeStore', () => {
 
   describe('getAccentPresets', () => {
     it('should return default presets for themes without custom presets', () => {
-      // fluux has no accentPresets defined
+      // nord defines no accentPresets, so it falls back to the universal set
+      useThemeStore.getState().setActiveTheme('nord')
       const presets = useThemeStore.getState().getAccentPresets()
       expect(presets).toBe(DEFAULT_ACCENT_PRESETS)
+    })
+
+    it('returns the default Aurora theme\'s curated presets', () => {
+      useThemeStore.getState().setActiveTheme('fluux')
+      const presets = useThemeStore.getState().getAccentPresets()
+      expect(presets).not.toBe(DEFAULT_ACCENT_PRESETS)
+      expect(presets.length).toBe(10)
+      expect(presets[0].name).toBe('Periwinkle')
     })
 
     it('should return theme-specific presets when available', () => {
