@@ -978,21 +978,31 @@ export function useMessageListScroll({
       if (action === 'restore-position') {
         const savedAnchor = scrollStateManager.getSavedAnchor(conversationId)
         const maxScrollTop = scroller.scrollHeight - scroller.clientHeight
+        const virtRestore = virtualizerRef.current
         // Prefer the content-stable anchor (survives memory eviction + cache
         // re-hydration); fall back to the legacy pixel scrollTop (bounds-checked),
         // then to bottom when neither is usable (e.g. scrolled up beyond the
         // re-hydrated window so the anchor message isn't loaded).
+        //
+        // VIRTUALIZED: a direct `scroller.scrollTop = …` leaves @tanstack's scrollOffset
+        // stale (it syncs only from the scroll event / rAF poll), so on a fresh switch the
+        // mounted window keeps the TOP rows and the restored region renders BLANK until the
+        // user scrolls. Route the restored offset through the virtualizer so it re-windows
+        // before paint — the same fix as the MAM-prepend restore and scroll-to-bottom paths.
         if (savedAnchor && restoreToAnchor(scroller, savedAnchor)) {
           isAtBottomRef.current = (scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight) < AT_BOTTOM_THRESHOLD
+          if (virtRestore) virtRestore.scrollToOffset(scroller.scrollTop)
           debugLog('RESTORE via anchor', { savedAnchor })
         } else if (savedPos !== null && savedPos <= maxScrollTop && maxScrollTop > 0) {
-          scroller.scrollTop = savedPos
+          if (virtRestore) virtRestore.scrollToOffset(savedPos)
+          else scroller.scrollTop = savedPos
           isAtBottomRef.current = false
         } else {
           debugLog('RESTORE out of bounds / anchor missing, scrolling to bottom', {
             savedPos, maxScrollTop, scrollHeight: scroller.scrollHeight,
           })
-          scroller.scrollTop = scroller.scrollHeight
+          if (virtRestore) pinVirtualizedBottom()
+          else scroller.scrollTop = scroller.scrollHeight
           isAtBottomRef.current = true
         }
         scrollStateManager.clearSavedScrollState(conversationId)
