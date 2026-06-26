@@ -1440,4 +1440,33 @@ describe('MessageComposer', () => {
       expect(onEncryptionClick).toHaveBeenCalledTimes(1)
     })
   })
+
+  describe('Aurora reply-chip color', () => {
+    it('colors the reply chip with the replied-person color', () => {
+      render(
+        <MessageComposer
+          placeholder="Type a message"
+          onSend={vi.fn().mockResolvedValue(true)}
+          replyingTo={{ id: '1', from: 'emma@x.com', senderName: 'Emma', body: 'hi', senderColor: 'rgb(154, 212, 255)' }}
+          onCancelReply={vi.fn()}
+        />
+      )
+      // The "Replying to Emma" line is colored with the provided sender color.
+      const name = screen.getByText(/Replying to/i)
+      expect(name.getAttribute('style')).toContain('rgb(154, 212, 255)')
+    })
+
+    it('falls back to the brand color when no senderColor is given', () => {
+      render(
+        <MessageComposer
+          placeholder="Type a message"
+          onSend={vi.fn().mockResolvedValue(true)}
+          replyingTo={{ id: '1', from: 'emma@x.com', senderName: 'Emma', body: 'hi' }}
+          onCancelReply={vi.fn()}
+        />
+      )
+      const name = screen.getByText(/Replying to/i)
+      expect(name.getAttribute('style')).toContain('var(--fluux-brand)')
+    })
+  })
 })

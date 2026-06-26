@@ -545,6 +545,7 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
             ? handleOpenVerify
             : undefined
         }
+        isDarkMode={resolvedMode === 'dark'}
       />
 
       {/* Easter egg animation */}
@@ -997,6 +998,7 @@ export const MessageInput = memo(function MessageInput({
   onMessageIdSent,
   encryptionState,
   onEncryptionClick,
+  isDarkMode,
 }: {
   composerRef: React.RefObject<MessageComposerHandle | null>
   textareaRef?: React.RefObject<HTMLTextAreaElement | null>
@@ -1036,6 +1038,8 @@ export const MessageInput = memo(function MessageInput({
   encryptionState: ConversationEncryptionState
   /** Open the verify/trust UI for the current peer. Passed through to MessageComposer's leading lock. */
   onEncryptionClick?: () => void
+  /** Whether the app is in dark mode — used to compute the per-person reply-chip color. */
+  isDarkMode?: boolean
 }) {
   const { t } = useTranslation()
   const openWebUnlockDialog = useWebUnlockDialogStore((s) => s.openWebUnlockDialog)
@@ -1055,6 +1059,7 @@ export const MessageInput = memo(function MessageInput({
         from: replyingTo.from,
         senderName: contactsByJid.get(replyingTo.from.split('/')[0])?.name || replyingTo.from.split('@')[0],
         body: replyingTo.body,
+        senderColor: auroraSenderColor(replyingTo.from.split('/')[0], isDarkMode ?? true),
       }
     : null
 

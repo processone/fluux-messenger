@@ -31,6 +31,7 @@ import { MediaAutoloadProvider } from '@/contexts'
 import { computeMediaAutoload } from '@/utils/mediaAutoload'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { getRoomJoinErrorMessage } from '@/utils/roomJoinError'
+import { auroraSenderColor } from '@/utils/senderColor'
 
 // Generate hat colors from URI using XEP-0392 consistent color
 function getHatColors(hat: { uri: string; hue?: number }) {
@@ -597,6 +598,7 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
             whisperTarget={whisperTarget}
             onClearWhisper={handleClearWhisperTarget}
             sendWhisper={sendWhisper}
+            isDarkMode={resolvedMode === 'dark'}
           />
         ) : (
           <RoomJoinPrompt
@@ -1596,6 +1598,8 @@ interface RoomMessageInputProps {
   whisperTarget?: WhisperTarget | null
   onClearWhisper?: () => void
   sendWhisper: (roomJid: string, nick: string, body: string) => Promise<string>
+  /** Whether the app is in dark mode -- used to compute the per-person reply-chip color. */
+  isDarkMode?: boolean
 }
 
 export const RoomMessageInput = memo(function RoomMessageInput({
@@ -1628,6 +1632,7 @@ export const RoomMessageInput = memo(function RoomMessageInput({
   whisperTarget,
   onClearWhisper,
   sendWhisper,
+  isDarkMode,
   ref,
 }: RoomMessageInputProps & { ref?: React.Ref<MessageComposerHandle> }) {
   detectRenderLoop('RoomMessageInput')
@@ -1752,6 +1757,7 @@ export const RoomMessageInput = memo(function RoomMessageInput({
         from: replyingTo.from,
         senderName: replyingTo.nick,
         body: replyingTo.body,
+        senderColor: auroraSenderColor(replyingTo.nick, isDarkMode ?? true),
       }
     : null
 
@@ -2081,10 +2087,10 @@ export const RoomMessageInput = memo(function RoomMessageInput({
         />
       )}
       {whisperTarget && (
-        <div className={`flex items-center justify-between gap-2 px-3 py-1.5 mb-1 rounded text-sm ${
+        <div className={`flex items-center justify-between gap-2 px-4 py-1.5 mb-1 rounded text-sm border-s-2 ${
           whisperCounterpartGone
-            ? 'bg-fluux-muted/10 text-fluux-muted'
-            : 'bg-fluux-private-soft text-fluux-private'
+            ? 'bg-fluux-muted/10 text-fluux-muted border-fluux-muted/40'
+            : 'bg-fluux-private-soft text-fluux-private border-fluux-private'
         }`}>
           <span className="inline-flex items-center gap-1.5 min-w-0">
             {whisperCounterpartGone

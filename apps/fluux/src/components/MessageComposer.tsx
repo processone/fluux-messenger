@@ -45,6 +45,8 @@ export interface ReplyInfo {
   body: string
   // Full data for constructing reply
   from: string
+  /** Per-person Aurora color (auroraSenderColor of the replied sender); falls back to the brand accent. */
+  senderColor?: string
 }
 
 export interface EditInfo {
@@ -732,11 +734,14 @@ export function MessageComposer({
       )}
 
       {/* Reply preview */}
-      {replyingTo && !editingMessage && (
-        <div className="px-3 py-2 flex items-start gap-2 border-s-2 border-b border-fluux-border border-s-fluux-brand">
-          <Reply className="rtl-mirror size-4 text-fluux-brand flex-shrink-0 mt-0.5" />
+      {replyingTo && !editingMessage && (() => {
+        const replyColor = replyingTo.senderColor || 'var(--fluux-brand)'
+        return (
+        <div className="px-3 py-2 flex items-start gap-2 border-s-2 border-b border-fluux-border"
+             style={{ borderInlineStartColor: replyColor }}>
+          <Reply className="rtl-mirror size-4 flex-shrink-0 mt-0.5" style={{ color: replyColor }} />
           <div className="flex-1 min-w-0">
-            <p className="text-xs font-medium text-fluux-brand">
+            <p className="text-xs font-medium" style={{ color: replyColor }}>
               Replying to {replyingTo.senderName}
             </p>
             {replyQuoteHidden ? (
@@ -758,7 +763,8 @@ export function MessageComposer({
             <X className="size-4" />
           </button>
         </div>
-      )}
+        )
+      })()}
 
       {/* Pending attachment preview */}
       {pendingAttachment && !editingMessage && (
