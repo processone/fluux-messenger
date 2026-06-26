@@ -1068,3 +1068,38 @@ test('29 — Blog Hero v0.16.1', async ({ page }) => {
     Buffer.from(compositeB64, 'base64')
   )
 })
+
+// ── Message Identity: sender colors, own-edge, new-message divider ────────
+// Captures the Aurora message-identity slice (Task 7).
+// Design Review has 4 distinct senders (Olivia, Emma, Mia, own/outgoing),
+// so each sender name renders in a distinct Aurora-tuned hue.
+// Outgoing messages show the subtle accent left-edge (.message-own-edge).
+// Note: the new-messages divider is only visible when the room has unread
+// messages on entry. In demo mode (unreadCount=0) the divider is not shown;
+// the scene focuses on per-sender colors and the own-message edge instead.
+
+test('30 — Message Identity — sender colors + own-edge (dark)', async ({ page }) => {
+  await waitForDemoReady(page)
+  await navigateTo(page, 'rooms')
+  await selectItem(page, 'Design Review')
+  // Scroll to the top of the thread so multiple distinct senders are visible
+  // with their colored names, and at least one own (outgoing) message is in frame.
+  await page.evaluate(() => {
+    const list = document.querySelector('[data-testid="message-list"], .message-list, [class*="messageList"]')
+    if (list) list.scrollTop = 0
+  })
+  await page.waitForTimeout(600)
+  await capture(page, '30-message-identity-dark')
+})
+
+test('30b — Message Identity — sender colors + own-edge (light)', async ({ page }) => {
+  await waitForDemoReady(page, 'light')
+  await navigateTo(page, 'rooms')
+  await selectItem(page, 'Design Review')
+  await page.evaluate(() => {
+    const list = document.querySelector('[data-testid="message-list"], .message-list, [class*="messageList"]')
+    if (list) list.scrollTop = 0
+  })
+  await page.waitForTimeout(600)
+  await capture(page, '30-message-identity-light')
+})

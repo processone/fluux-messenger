@@ -165,6 +165,8 @@ vi.mock('@fluux/sdk', () => ({
   useXMPPContext: () => ({
     client: { e2ee: null },
   }),
+  // Used by auroraSenderColor (imported by ChatMessageBubble)
+  generateConsistentColorHexSync: () => '#4a90d9',
 }))
 
 // Mock React store hooks (from @fluux/sdk/react)
