@@ -72,6 +72,14 @@
   src: url('/fonts/InterTight-SemiBold.woff2') format('woff2');
 }
 
+@font-face {
+  font-family: 'Inter Tight';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('/fonts/InterTight-Bold.woff2') format('woff2');
+}
+
 /* ============================================================
    THEME DESIGN TOKENS — 3-Tier Architecture
    ============================================================
