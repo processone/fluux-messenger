@@ -60,6 +60,7 @@ export default {
       fontFamily: {
         sans: ['var(--fluux-font-ui)'],
         mono: ['var(--fluux-font-mono)'],
+        display: ['var(--fluux-font-display)'],
       },
       keyframes: {
         'tooltip-in': {

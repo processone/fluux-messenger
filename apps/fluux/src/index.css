@@ -48,6 +48,23 @@
   src: url('/fonts/Inter-Bold.woff2') format('woff2');
 }
 
+/* Inter Tight — display font, self-hosted */
+@font-face {
+  font-family: 'Inter Tight';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('/fonts/InterTight-Medium.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Inter Tight';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('/fonts/InterTight-SemiBold.woff2') format('woff2');
+}
+
 /* ============================================================
    THEME DESIGN TOKENS — 3-Tier Architecture
    ============================================================
@@ -123,6 +140,7 @@
 
   /* Typography primitives */
   --fluux-font-ui: 'Inter', system-ui, sans-serif;
+  --fluux-font-display: 'Inter Tight', 'Inter', system-ui, sans-serif;
   --fluux-font-mono: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
 
   /* Radius */
