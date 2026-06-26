@@ -159,6 +159,7 @@ export function useTheme() {
   const mode = useSettingsStore((s) => s.themeMode)
   const setMode = useSettingsStore((s) => s.setThemeMode)
   const fontSize = useSettingsStore((s) => s.fontSize)
+  const motionPreference = useSettingsStore((s) => s.motionPreference)
 
   const activeThemeId = useThemeStore((s) => s.activeThemeId)
   const getActiveTheme = useThemeStore((s) => s.getActiveTheme)
@@ -244,6 +245,24 @@ export function useTheme() {
   useEffect(() => {
     document.documentElement.style.fontSize = `${fontSize}%`
   }, [fontSize])
+
+  // Apply motion preference. Sets data-motion="full"|"reduced" on <html>; CSS
+  // gates animations/transitions on data-motion="reduced". In 'system' mode we
+  // resolve from the OS prefers-reduced-motion and follow live changes.
+  useEffect(() => {
+    const root = document.documentElement
+    const resolveMotion = (): 'full' | 'reduced' => {
+      if (motionPreference === 'reduced') return 'reduced'
+      if (motionPreference === 'full') return 'full'
+      return window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'reduced' : 'full'
+    }
+    const apply = () => { root.dataset.motion = resolveMotion() }
+    apply()
+    if (motionPreference !== 'system') return
+    const mq = window.matchMedia('(prefers-reduced-motion: reduce)')
+    mq.addEventListener('change', apply)
+    return () => mq.removeEventListener('change', apply)
+  }, [motionPreference])
 
   // Sync CSS snippets
   useEffect(() => {

@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Sun, Moon, Monitor, Upload, Trash2, Pencil, Plus, RotateCcw } from 'lucide-react'
-import { useSettingsStore, type ThemeMode } from '@/stores/settingsStore'
+import { Sun, Moon, Monitor, Upload, Trash2, Pencil, Plus, RotateCcw, Sparkles, CircleSlash } from 'lucide-react'
+import { useSettingsStore, type ThemeMode, type MotionPreference } from '@/stores/settingsStore'
 import { useThemeStore } from '@/stores/themeStore'
 import type { ThemeDefinition, AccentPreset } from '@/themes/types'
 import { getBuiltinTheme } from '@/themes/builtins'
@@ -12,6 +12,12 @@ const themeOptions: { value: ThemeMode; labelKey: string; icon: typeof Sun; desc
   { value: 'dark', labelKey: 'settings.dark', icon: Moon, descriptionKey: 'settings.darkDescription' },
   { value: 'light', labelKey: 'settings.light', icon: Sun, descriptionKey: 'settings.lightDescription' },
   { value: 'system', labelKey: 'settings.system', icon: Monitor, descriptionKey: 'settings.systemDescription' },
+]
+
+const motionOptions: { value: MotionPreference; labelKey: string; icon: typeof Sun; descriptionKey: string }[] = [
+  { value: 'system', labelKey: 'settings.system', icon: Monitor, descriptionKey: 'settings.motionSystemDescription' },
+  { value: 'full', labelKey: 'settings.motionFull', icon: Sparkles, descriptionKey: 'settings.motionFullDescription' },
+  { value: 'reduced', labelKey: 'settings.motionReduced', icon: CircleSlash, descriptionKey: 'settings.motionReducedDescription' },
 ]
 
 const FONT_SIZE_MIN = 75
@@ -190,6 +196,8 @@ export function AppearanceSettings() {
   const setThemeMode = useSettingsStore((s) => s.setThemeMode)
   const fontSize = useSettingsStore((s) => s.fontSize)
   const setFontSize = useSettingsStore((s) => s.setFontSize)
+  const motionPreference = useSettingsStore((s) => s.motionPreference)
+  const setMotionPreference = useSettingsStore((s) => s.setMotionPreference)
 
   const activeThemeId = useThemeStore((s) => s.activeThemeId)
   const setActiveTheme = useThemeStore((s) => s.setActiveTheme)
@@ -268,6 +276,36 @@ export function AppearanceSettings() {
           </div>
           <p className="text-xs text-fluux-muted mt-2">
             {t(themeOptions.find(o => o.value === themeMode)?.descriptionKey || '')}
+          </p>
+        </div>
+
+        {/* Motion */}
+        <div className="space-y-3">
+          <label className="text-sm font-medium text-fluux-text">{t('settings.motion')}</label>
+          <div className="grid grid-cols-3 gap-3">
+            {motionOptions.map((option) => {
+              const Icon = option.icon
+              const isSelected = motionPreference === option.value
+              return (
+                <button
+                  key={option.value}
+                  onClick={() => setMotionPreference(option.value)}
+                  className={`flex flex-col items-center gap-2 p-4 rounded-lg border-2 transition-all
+                    ${isSelected
+                      ? 'border-fluux-brand bg-fluux-brand/10'
+                      : 'border-fluux-hover bg-fluux-bg hover:border-fluux-muted'
+                    }`}
+                >
+                  <Icon className={`size-6 ${isSelected ? 'text-fluux-brand' : 'text-fluux-muted'}`} />
+                  <span className={`text-sm font-medium ${isSelected ? 'text-fluux-text' : 'text-fluux-muted'}`}>
+                    {t(option.labelKey)}
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+          <p className="text-xs text-fluux-muted mt-2">
+            {t(motionOptions.find(o => o.value === motionPreference)?.descriptionKey || '')}
           </p>
         </div>
 

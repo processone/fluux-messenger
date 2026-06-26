@@ -3,6 +3,8 @@ import { create } from 'zustand'
 export type ThemeMode = 'light' | 'dark' | 'system'
 export type TimeFormat = '12h' | '24h' | 'auto'
 export type MediaAutoDownload = 'always' | 'private-only' | 'never'
+/** Motion preference: follow the OS, force full animations, or reduce them. */
+export type MotionPreference = 'system' | 'full' | 'reduced'
 
 /** Font size as percentage of default (100 = normal). Range: 75–150. */
 export type FontSize = number
@@ -16,12 +18,15 @@ interface SettingsState {
   setFontSize: (size: FontSize) => void
   mediaAutoDownload: MediaAutoDownload
   setMediaAutoDownload: (value: MediaAutoDownload) => void
+  motionPreference: MotionPreference
+  setMotionPreference: (value: MotionPreference) => void
 }
 
 const THEME_KEY = 'fluux-theme'
 const TIME_FORMAT_KEY = 'fluux-time-format'
 const FONT_SIZE_KEY = 'fluux-font-size'
 const MEDIA_AUTO_DOWNLOAD_KEY = 'fluux-media-autodownload'
+const MOTION_KEY = 'fluux-motion'
 
 /**
  * Get initial theme mode from localStorage, default to 'system'
@@ -84,6 +89,22 @@ function getInitialFontSize(): FontSize {
   return 100
 }
 
+/**
+ * Get initial motion preference from localStorage, default to 'system'
+ * (follow the OS prefers-reduced-motion setting).
+ */
+function getInitialMotion(): MotionPreference {
+  try {
+    const stored = localStorage.getItem(MOTION_KEY)
+    if (stored === 'system' || stored === 'full' || stored === 'reduced') {
+      return stored
+    }
+  } catch {
+    // localStorage not available
+  }
+  return 'system'
+}
+
 export const useSettingsStore = create<SettingsState>((set) => ({
   themeMode: getInitialMode(),
 
@@ -130,5 +151,16 @@ export const useSettingsStore = create<SettingsState>((set) => ({
       // localStorage not available
     }
     set({ mediaAutoDownload: value })
+  },
+
+  motionPreference: getInitialMotion(),
+
+  setMotionPreference: (value) => {
+    try {
+      localStorage.setItem(MOTION_KEY, value)
+    } catch {
+      // localStorage not available
+    }
+    set({ motionPreference: value })
   },
 }))
