@@ -324,6 +324,15 @@ vi.mock('@/hooks', () => ({
   }),
   useTypeToFocus: () => {},
   useMessageCopy: () => ({ handleCopy: vi.fn() }),
+  useMessageRangeSelection: vi.fn(() => ({
+    copySelectedIds: new Set<string>(),
+    selectionCount: 0,
+    isSelecting: false,
+    selectAll: vi.fn(),
+    extendTo: vi.fn(),
+    clearSelection: vi.fn(),
+    copySelected: vi.fn(),
+  })),
   useMode: () => ({ resolvedMode: 'dark', isDark: true }),
   useTimeFormat: () => ({ formatTime: () => '14:30', timeFormat: '24h', effectiveTimeFormat: '24h' }),
   useMessageScroll: () => ({
