@@ -5,6 +5,13 @@ import { VitePWA } from 'vite-plugin-pwa'
 import { execSync } from 'child_process'
 import { readFileSync, rmSync } from 'fs'
 import { resolve } from 'path'
+import { createRequire } from 'module'
+
+// Resolve packages via Node's module resolution (walks up parent dirs) instead of
+// a hardcoded ../../node_modules path. The latter assumes apps/fluux sits directly
+// under the repo root and breaks in git worktrees (apps/fluux lives under
+// .claude/worktrees/<name>/), where ../../node_modules does not exist.
+const localRequire = createRequire(resolve(__dirname, 'package.json'))
 
 // Get git commit hash at build time
 function getGitCommit(): string {
@@ -106,7 +113,7 @@ export default defineConfig({
       // The sasl-scram-sha-1 package uses create-hash/create-hmac (browserify-era crypto)
       // which need buffer and stream polyfills. Without this, servers that only offer
       // SCRAM-SHA-1 (no PLAIN) cannot authenticate.
-      '@xmpp/sasl-scram-sha-1': resolve(__dirname, '../../node_modules/@xmpp/sasl-scram-sha-1/index.js'),
+      '@xmpp/sasl-scram-sha-1': localRequire.resolve('@xmpp/sasl-scram-sha-1'),
       // Node.js polyfills needed by SCRAM-SHA-1's crypto dependencies (cipher-base, safe-buffer)
       buffer: 'buffer/',
       stream: 'stream-browserify',
