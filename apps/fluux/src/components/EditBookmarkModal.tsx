@@ -104,7 +104,7 @@ export function EditBookmarkModal({
         </div>
 
         {error && (
-          <p className="text-sm text-fluux-red">{error}</p>
+          <p className="text-sm text-fluux-error">{error}</p>
         )}
 
         {/* Actions */}

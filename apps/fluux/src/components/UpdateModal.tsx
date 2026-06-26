@@ -63,7 +63,7 @@ export function UpdateModal({ state, onDownload, onRelaunch, onDismiss }: Update
               {state.downloaded ? (
                 <CheckCircle className="size-6 text-fluux-green" />
               ) : state.error ? (
-                <AlertCircle className="size-6 text-fluux-red" />
+                <AlertCircle className="size-6 text-fluux-error" />
               ) : (
                 <Download className="size-6 text-fluux-brand" />
               )}
@@ -108,7 +108,7 @@ export function UpdateModal({ state, onDownload, onRelaunch, onDismiss }: Update
           {/* Error message */}
           {state.error && (
             <div className="mb-4 p-3 rounded bg-fluux-red/10 border border-fluux-red/20">
-              <p className="text-sm text-fluux-red">{state.error}</p>
+              <p className="text-sm text-fluux-error">{state.error}</p>
             </div>
           )}
 

@@ -82,7 +82,7 @@ function ThemeCard({
               onRemove()
             }
           }}
-          className="absolute -top-1.5 -end-1.5 p-0.5 rounded-full bg-fluux-surface text-fluux-muted hover:text-fluux-red hover:bg-fluux-hover transition-colors cursor-pointer"
+          className="absolute -top-1.5 -end-1.5 p-0.5 rounded-full bg-fluux-surface text-fluux-muted hover:text-fluux-error hover:bg-fluux-hover transition-colors cursor-pointer"
           title="Remove"
         >
           <Trash2 className="size-3" />
@@ -426,7 +426,7 @@ export function AppearanceSettings() {
                     </button>
                     <button
                       onClick={() => removeSnippet(snippet.id)}
-                      className="p-1 text-fluux-muted hover:text-fluux-red transition-colors"
+                      className="p-1 text-fluux-muted hover:text-fluux-error transition-colors"
                       title={t('settings.removeTheme')}
                     >
                       <Trash2 className="size-3.5" />

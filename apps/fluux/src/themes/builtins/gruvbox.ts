@@ -33,6 +33,9 @@ export const gruvboxTheme: ThemeDefinition = {
       '--fluux-color-purple': '#d3869b',
       '--fluux-color-gray': '#928374',
       '--fluux-color-red-rgb': '251, 73, 52',
+      // Error as text/icon — lightened from --fluux-color-red so it clears WCAG
+      // AA on this theme's chat surface (status-error stays the fill).
+      '--fluux-text-error': '#fc7d6e',
       '--fluux-color-green-rgb': '184, 187, 38',
       '--fluux-color-yellow-rgb': '250, 189, 47',
       '--fluux-color-blue-rgb': '131, 165, 152',
@@ -74,6 +77,8 @@ export const gruvboxTheme: ThemeDefinition = {
       '--fluux-color-purple': '#8f3f71',
       '--fluux-color-gray': '#928374',
       '--fluux-color-red-rgb': '157, 0, 6',
+      // Error as text/icon — darkened for WCAG AA on the light chat surface.
+      '--fluux-text-error': '#9d0006',
       '--fluux-color-green-rgb': '121, 116, 14',
       '--fluux-color-yellow-rgb': '181, 118, 20',
       '--fluux-color-blue-rgb': '7, 102, 120',

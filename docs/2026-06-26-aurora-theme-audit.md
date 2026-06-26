@@ -115,13 +115,15 @@ Plus a focus-visibility inconsistency (E) and minor observations (F).
 
 - **MUC sender names are unreadable for several colors in light mode** — 5 of 6 sender tokens fall below AA on the white chat surface; sender-2/3 dip below **3:1** on the sidebar. Sender names are the primary way to attribute messages in a room. ([ChatView sender assignment](apps/fluux/src/components/ChatView.tsx:811), tokens [index.css:390](apps/fluux/src/index.css:390))
 - **Status colors as text/icons fail in light mode** — green status text ~2.5–3.2:1, yellow ~1.5–1.9:1 (effectively invisible). The light theme already darkens `blue`/`gray` for this reason ([index.css:363](apps/fluux/src/index.css:363)) but **not green/yellow/red**.
-- **`status-error` as text dips below AA in dark** (3.97 on chat-bg) — the red used for "delivery failed", new-message marker, etc.
+- **`status-error` as text dips below AA in dark** (3.97 on chat-bg) — the red used for "delivery failed", new-message marker, etc. *(Resolved — follow-up: see below.)*
 - **`white` on `status-warning` fill = 1.89 (FAIL)** in both modes — safe today only because warning isn't used as a text-bearing fill; flag before any "warning button/badge" is added.
 
 **Proposed fix (batch C):**
 - **Darken the light-mode sender palette** further (the one darkening pass wasn't enough) so all six clear 4.5:1 on white *and* on `base-20`.
 - **Add light-mode overrides for `status-success` / `status-warning` / `status-error`** (darker variants), mirroring what's already done for blue/gray — so status text/icons stay legible.
 - Nudge `status-error` for dark-mode text use, or pair it with a non-color cue where it labels (icon + text).
+
+**Resolved (follow-up to this audit):** A single red token cannot satisfy both jobs — as a *fill* it must stay dark enough for white text to clear AA (white on `#da373c` = 4.57), but as *text* on the dark chat surface it must be lighter to clear AA (it reached only ~3.74-3.97). So the two were split: `--fluux-status-error` keeps serving fills, and a new `--fluux-text-error` is tuned to clear AA as text on the chat surface in both modes. The `text-fluux-red` / `text-red-500` error-text consumers (delivery-failed, new-message marker, etc.) now point at `text-fluux-error`; `bg-fluux-red` fills are unchanged. Every builtin theme that overrides `--fluux-color-red` also tunes `--fluux-text-error`, and [`themeContrast.test.ts`](apps/fluux/src/themes/themeContrast.test.ts) guards the AA contract per theme. See [docs/THEMES.md](docs/THEMES.md) Tier 2 for theme-author guidance.
 
 ---
 

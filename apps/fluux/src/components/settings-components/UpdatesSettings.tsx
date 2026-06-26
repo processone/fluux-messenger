@@ -91,7 +91,7 @@ export function UpdatesSettings() {
 
         {/* Error message */}
         {update.error && (
-          <p className="text-xs text-fluux-red">{t(update.error)}</p>
+          <p className="text-xs text-fluux-error">{t(update.error)}</p>
         )}
       </div>
     </section>

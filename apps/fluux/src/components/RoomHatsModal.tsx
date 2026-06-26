@@ -386,7 +386,7 @@ export function RoomHatsModal({ room, onClose }: RoomHatsModalProps) {
                     ) : (
                       <button
                         onClick={() => setConfirmDelete(hat)}
-                        className="p-1 text-fluux-muted hover:text-fluux-red transition-colors"
+                        className="p-1 text-fluux-muted hover:text-fluux-error transition-colors"
                         title={t('rooms.destroyHat')}
                       >
                         <Trash2 className="size-3.5" />
@@ -426,7 +426,7 @@ export function RoomHatsModal({ room, onClose }: RoomHatsModalProps) {
                     ) : (
                       <button
                         onClick={() => void handleUnassign(a)}
-                        className="text-xs text-fluux-muted hover:text-fluux-red transition-colors"
+                        className="text-xs text-fluux-muted hover:text-fluux-error transition-colors"
                       >
                         {t('rooms.unassignHat')}
                       </button>

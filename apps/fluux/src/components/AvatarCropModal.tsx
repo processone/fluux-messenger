@@ -555,7 +555,7 @@ export function AvatarCropModal({ isOpen, onClose, onSave }: AvatarCropModalProp
 
           {/* Error message */}
           {error && (
-            <p className="mt-3 text-sm text-fluux-red text-center">{error}</p>
+            <p className="mt-3 text-sm text-fluux-error text-center">{error}</p>
           )}
         </div>
 

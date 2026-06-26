@@ -184,7 +184,8 @@ These map foundation tokens to purposes. They cascade from Tier 1, so you rarely
 | `--fluux-text-link`             | `color-blue`          | Hyperlinks                      |
 | `--fluux-status-success`        | `color-green`         | Success indicators              |
 | `--fluux-status-warning`        | `color-yellow`        | Warning indicators              |
-| `--fluux-status-error`          | `color-red`           | Error indicators, unread badges |
+| `--fluux-status-error`          | `color-red`           | Error *fill* (danger button, toast border, DND dot, unread badge) — white text sits on it |
+| `--fluux-text-error`            | Tuned red (not `color-red`) | Error *text/icons* (delivery-failed, validation, new-message marker) |
 | `--fluux-status-info`           | `color-blue`          | Informational indicators        |
 | `--fluux-border-color`          | `rgba(0,0,0,0.1)`     | Subtle dividers                 |
 | `--fluux-scrollbar-thumb`       | `base-05`             | Scrollbar thumb color           |
@@ -195,6 +196,7 @@ These map foundation tokens to purposes. They cascade from Tier 1, so you rarely
 | `--fluux-search-highlight-text` | `text-normal`         | Search match text color         |
 
 **When to override semantic variables:** When the automatic cascade from your base ramp doesn't produce the right result. Common cases:
+- `--fluux-text-error` — **set this whenever you override `--fluux-color-red`.** Red has to pull in two directions: as a *fill* (`--fluux-status-error`, danger button, toast border, DND dot) it must stay dark enough for white text on it to clear WCAG AA, but as *text/icons* on your dark chat surface that same red is usually too dark to clear AA. They are deliberately separate tokens. Keep `--fluux-color-red` for the fill, and set `--fluux-text-error` to a red that clears AA (>=4.5:1) as text on `--fluux-chat-bg` — lighter than the fill in dark mode, darker in light mode. The `themeContrast.test.ts` guard asserts this for every builtin theme. (Themes that leave `--fluux-color-red` at the Aurora default inherit the Aurora `--fluux-text-error` automatically.)
 - `--fluux-bg-secondary` — if your ramp spacing makes `base-05` too similar to `base-10`
 - `--fluux-border-color` — light themes often need `rgba(0,0,0,0.12-0.15)` instead of `0.1`
 - `--fluux-scrollbar-thumb` — if your ramp makes the default too subtle or too prominent

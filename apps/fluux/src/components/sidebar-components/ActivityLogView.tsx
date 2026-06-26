@@ -78,7 +78,7 @@ function getResolutionIcon(resolution: string) {
 function getResolutionColor(resolution: string) {
   switch (resolution) {
     case 'accepted': return 'text-fluux-green'
-    case 'rejected': return 'text-fluux-red'
+    case 'rejected': return 'text-fluux-error'
     case 'dismissed': return 'text-fluux-muted'
     default: return ''
   }

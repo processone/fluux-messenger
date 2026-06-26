@@ -33,6 +33,9 @@ export const kanagawaTheme: ThemeDefinition = {
       '--fluux-color-purple': '#957FB8', // oniViolet
       '--fluux-color-gray': '#727169',   // fujiGray
       '--fluux-color-red-rgb': '228, 104, 118',
+      // Error as text/icon — lightened from --fluux-color-red so it clears WCAG
+      // AA on this theme's chat surface (status-error stays the fill).
+      '--fluux-text-error': '#e56e7c',
       '--fluux-color-green-rgb': '152, 187, 108',
       '--fluux-color-yellow-rgb': '230, 195, 132',
       '--fluux-color-blue-rgb': '126, 156, 216',
@@ -76,6 +79,8 @@ export const kanagawaTheme: ThemeDefinition = {
       '--fluux-color-purple': '#624c83', // lotusViolet4
       '--fluux-color-gray': '#8a8980',   // lotusGray3
       '--fluux-color-red-rgb': '200, 64, 83',
+      // Error as text/icon — darkened for WCAG AA on the light chat surface.
+      '--fluux-text-error': '#9b2d3c',
       '--fluux-color-green-rgb': '111, 137, 78',
       '--fluux-color-yellow-rgb': '222, 152, 0',
       '--fluux-color-blue-rgb': '77, 105, 155',

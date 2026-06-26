@@ -535,7 +535,7 @@ const RoomItem = memo(function RoomItem({
           {room.joined && (
             <button
               onClick={() => { menu.close(); onLeave(roomJid) }}
-              className="w-full px-3 py-2 flex items-center gap-3 text-start text-fluux-red hover:bg-fluux-red hover:text-white transition-colors"
+              className="w-full px-3 py-2 flex items-center gap-3 text-start text-fluux-error hover:bg-fluux-red hover:text-white transition-colors"
             >
               <LogOut className="size-4" />
               <span>{t('rooms.leaveRoom')}</span>
@@ -546,7 +546,7 @@ const RoomItem = memo(function RoomItem({
           {room.isBookmarked && (
             <button
               onClick={() => { menu.close(); onRemoveBookmark(roomJid) }}
-              className="w-full px-3 py-2 flex items-center gap-3 text-start text-fluux-red hover:bg-fluux-red hover:text-white transition-colors"
+              className="w-full px-3 py-2 flex items-center gap-3 text-start text-fluux-error hover:bg-fluux-red hover:text-white transition-colors"
             >
               <BookmarkX className="size-4" />
               <span>{t('rooms.removeBookmark')}</span>

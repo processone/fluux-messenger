@@ -163,7 +163,7 @@ function SystemNotificationItem({ notification, onDismiss }: SystemNotificationI
       case 'resource-conflict':
         return { bgColor: 'bg-fluux-yellow/20', borderColor: 'border-fluux-yellow', iconColor: 'text-fluux-yellow' }
       case 'auth-error':
-        return { bgColor: 'bg-fluux-red/20', borderColor: 'border-fluux-red', iconColor: 'text-fluux-red' }
+        return { bgColor: 'bg-fluux-red/20', borderColor: 'border-fluux-red', iconColor: 'text-fluux-error' }
       default:
         return { bgColor: 'bg-fluux-brand/20', borderColor: 'border-fluux-brand', iconColor: 'text-fluux-brand' }
     }

@@ -48,7 +48,7 @@ function ItemRow({ item, onPick }: { item: HeaderActionItem; onPick: () => void 
       role="menuitem"
       disabled={item.disabled}
       onClick={onPick}
-      className={`${ROW} ${item.danger ? 'text-fluux-red' : 'text-fluux-text'}`}
+      className={`${ROW} ${item.danger ? 'text-fluux-error' : 'text-fluux-text'}`}
     >
       <Icon className="size-4 flex-shrink-0 text-fluux-muted" />
       <span className="flex-1">

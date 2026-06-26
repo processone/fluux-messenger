@@ -665,7 +665,7 @@ export const MessageBubble = memo(function MessageBubble({
         {/* Delivery error indicator */}
         {message.deliveryError && (
           <div className="flex flex-col gap-1 pt-1">
-            <div className="flex items-center gap-1.5 text-red-500">
+            <div className="flex items-center gap-1.5 text-fluux-error">
               <AlertCircle className="size-3.5 flex-shrink-0" />
               <span className="text-xs font-medium">{t('chat.deliveryFailed')}</span>
               <span className="text-xs text-fluux-muted">—</span>

@@ -33,6 +33,9 @@ export const monokaiTheme: ThemeDefinition = {
       '--fluux-color-purple': '#ae81ff', // purple
       '--fluux-color-gray': '#75715e',
       '--fluux-color-red-rgb': '249, 38, 114',
+      // Error as text/icon — lightened from --fluux-color-red so it clears WCAG
+      // AA on this theme's chat surface (status-error stays the fill).
+      '--fluux-text-error': '#fc80ad',
       '--fluux-color-green-rgb': '166, 226, 46',
       '--fluux-color-yellow-rgb': '230, 219, 116',
       '--fluux-color-blue-rgb': '102, 217, 239',
@@ -74,6 +77,8 @@ export const monokaiTheme: ThemeDefinition = {
       '--fluux-color-purple': '#7540c9',
       '--fluux-color-gray': '#8f8a7a',
       '--fluux-color-red-rgb': '196, 24, 84',
+      // Error as text/icon — darkened for WCAG AA on the light chat surface.
+      '--fluux-text-error': '#ab1549',
       '--fluux-color-green-rgb': '95, 140, 12',
       '--fluux-color-yellow-rgb': '158, 142, 16',
       '--fluux-color-blue-rgb': '15, 141, 166',

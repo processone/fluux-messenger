@@ -143,7 +143,7 @@ export function VCardSection() {
                     <button
                       type="button"
                       onClick={() => void handleSave(key, '')}
-                      className="p-0.5 text-fluux-muted hover:text-fluux-red rounded"
+                      className="p-0.5 text-fluux-muted hover:text-fluux-error rounded"
                       aria-label={t('common.remove')}
                     >
                       <Trash2 className="size-3.5" />
@@ -183,7 +183,7 @@ export function VCardSection() {
         </div>
       )}
 
-      {error && <p className="text-xs text-fluux-red px-3">{error}</p>}
+      {error && <p className="text-xs text-fluux-error px-3">{error}</p>}
 
       {availableFields.length > 0 && !editingField && (
         <div ref={addFieldRef} className="relative">

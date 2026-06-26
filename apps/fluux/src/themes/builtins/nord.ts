@@ -33,6 +33,9 @@ export const nordTheme: ThemeDefinition = {
       '--fluux-color-purple': '#b48ead',
       '--fluux-color-gray': '#7b88a1',
       '--fluux-color-red-rgb': '191, 97, 106',
+      // Error as text/icon — lightened from --fluux-color-red so it clears WCAG
+      // AA on this theme's chat surface (status-error stays the fill).
+      '--fluux-text-error': '#ebadb3',
       '--fluux-color-green-rgb': '163, 190, 140',
       '--fluux-color-yellow-rgb': '235, 203, 139',
       '--fluux-color-blue-rgb': '129, 161, 193',
@@ -74,6 +77,8 @@ export const nordTheme: ThemeDefinition = {
       '--fluux-color-purple': '#9e6e93',
       '--fluux-color-gray': '#8892a8',
       '--fluux-color-red-rgb': '191, 97, 106',
+      // Error as text/icon — darkened for WCAG AA on the light chat surface.
+      '--fluux-text-error': '#a0414a',
       '--fluux-color-green-rgb': '123, 158, 96',
       '--fluux-color-yellow-rgb': '199, 151, 58',
       '--fluux-color-blue-rgb': '94, 129, 172',

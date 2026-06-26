@@ -221,7 +221,7 @@ export function OccupantModerationModal({
         {/* Danger zone: Kick & Ban */}
         {(showKick || showBan) && (
           <div className="border-t border-fluux-hover pt-4">
-            <h3 className="text-xs font-semibold text-fluux-red uppercase mb-2">{t('rooms.dangerZone')}</h3>
+            <h3 className="text-xs font-semibold text-fluux-error uppercase mb-2">{t('rooms.dangerZone')}</h3>
 
             {confirmingAction ? (
               <div className="space-y-2">
@@ -266,7 +266,7 @@ export function OccupantModerationModal({
                     disabled={loading}
                     onClick={() => setConfirmingAction('kick')}
                     className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md
-                      text-fluux-red hover:bg-fluux-red hover:text-white
+                      text-fluux-error hover:bg-fluux-red hover:text-white
                       disabled:opacity-50 transition-colors"
                   >
                     <UserMinus className="size-4" />
@@ -278,7 +278,7 @@ export function OccupantModerationModal({
                     disabled={loading}
                     onClick={() => setConfirmingAction('ban')}
                     className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md
-                      text-fluux-red hover:bg-fluux-red hover:text-white
+                      text-fluux-error hover:bg-fluux-red hover:text-white
                       disabled:opacity-50 transition-colors"
                   >
                     <Ban className="size-4" />

@@ -142,7 +142,7 @@ export function SecurityTab({
               <button
                 type="button"
                 onClick={onRequestRevoke}
-                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-fluux-red/10 hover:bg-fluux-red/20 text-fluux-red border border-fluux-red rounded-lg transition-colors text-sm min-h-[44px]"
+                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-fluux-red/10 hover:bg-fluux-red/20 text-fluux-error border border-fluux-red rounded-lg transition-colors text-sm min-h-[44px]"
               >
                 <ShieldOff className="size-4" />
                 {t('contacts.encryption.removeVerification')}

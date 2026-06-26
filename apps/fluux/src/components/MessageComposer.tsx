@@ -690,7 +690,7 @@ export function MessageComposer({
                   <button
                     type="button"
                     onClick={() => setEditAttachmentRemoved(true)}
-                    className="p-0.5 text-fluux-muted hover:text-fluux-red transition-colors flex-shrink-0"
+                    className="p-0.5 text-fluux-muted hover:text-fluux-error transition-colors flex-shrink-0"
                     aria-label={t('chat.removeAttachment')}
                   >
                     <X className="size-3" />
@@ -782,7 +782,7 @@ export function MessageComposer({
             <button
               type="button"
               onClick={onRemovePendingAttachment}
-              className="p-1 text-fluux-muted hover:text-fluux-red transition-colors flex-shrink-0"
+              className="p-1 text-fluux-muted hover:text-fluux-error transition-colors flex-shrink-0"
               aria-label={t('chat.removeAttachment')}
             >
               <X className="size-4" />
@@ -794,11 +794,11 @@ export function MessageComposer({
       {/* Upload error banner */}
       {uploadState?.error && (
         <div className={`bg-fluux-red/10 ${(replyingTo || editingMessage || pendingAttachment) ? '' : 'rounded-t-lg'} px-3 py-2 flex items-center gap-2`}>
-          <p className="text-xs text-fluux-red flex-1">{uploadState.error}</p>
+          <p className="text-xs text-fluux-error flex-1">{uploadState.error}</p>
           <button
             type="button"
             onClick={uploadState.clearError}
-            className="p-0.5 text-fluux-red/60 hover:text-fluux-red transition-colors flex-shrink-0"
+            className="p-0.5 text-fluux-error/60 hover:text-fluux-error transition-colors flex-shrink-0"
             aria-label={t('sidebar.dismiss')}
           >
             <X className="size-3.5" />

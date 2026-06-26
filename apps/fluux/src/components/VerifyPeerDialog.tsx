@@ -181,7 +181,7 @@ export function VerifyPeerDialog({
               )}
             </div>
             {inputMismatch ? (
-              <p className="text-xs text-fluux-red mb-4">
+              <p className="text-xs text-fluux-error mb-4">
                 {t('chat.verifyPeer.theirCodeMismatch', { name: peerName })}
               </p>
             ) : (
@@ -254,7 +254,7 @@ export function VerifyPeerDialog({
             {alreadyVerified && onRevoke && (
               <button
                 onClick={onRevoke}
-                className="flex items-center gap-1.5 px-4 py-2 text-sm text-fluux-red border border-fluux-red/50 hover:bg-fluux-red/10 rounded-lg transition-colors"
+                className="flex items-center gap-1.5 px-4 py-2 text-sm text-fluux-error border border-fluux-red/50 hover:bg-fluux-red/10 rounded-lg transition-colors"
               >
                 <ShieldOff className="size-3.5" />
                 {t('chat.verifyPeer.revokeAction')}

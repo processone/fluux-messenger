@@ -439,7 +439,7 @@ const ContactItem = memo(function ContactItem({
           <div className="my-1 border-t border-fluux-hover" />
           <button
             onClick={handleRemove}
-            className="w-full px-3 py-2 flex items-center gap-3 text-start text-fluux-red hover:bg-fluux-red hover:text-white transition-colors"
+            className="w-full px-3 py-2 flex items-center gap-3 text-start text-fluux-error hover:bg-fluux-red hover:text-white transition-colors"
           >
             <Trash2 className="size-4" />
             <span>{t('contacts.removeContact')}</span>

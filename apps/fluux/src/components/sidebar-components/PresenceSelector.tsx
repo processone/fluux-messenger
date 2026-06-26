@@ -262,7 +262,7 @@ export function StatusDisplay({ status }: StatusDisplayProps) {
             type="button"
             onClick={() => client.cancelReconnect()}
             aria-label={t('status.cancelReconnection')}
-            className="p-0.5 text-fluux-muted hover:text-fluux-red rounded hover:bg-fluux-hover flex-shrink-0"
+            className="p-0.5 text-fluux-muted hover:text-fluux-error rounded hover:bg-fluux-hover flex-shrink-0"
           >
             <X className="size-3" />
           </button>
@@ -290,7 +290,7 @@ export function StatusDisplay({ status }: StatusDisplayProps) {
   }
 
   if (status === 'error') {
-    return <p className="text-xs text-fluux-red truncate">{t('status.connectionError')}</p>
+    return <p className="text-xs text-fluux-error truncate">{t('status.connectionError')}</p>
   }
 
   return <p className="text-xs text-fluux-muted truncate">{t('status.disconnected')}</p>

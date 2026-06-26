@@ -37,6 +37,10 @@ export const indigoTheme: ThemeDefinition = {
       // Companion + own-message name
       '--fluux-accent-2': '#00a8fc',
       '--fluux-text-self': '#a5b4fc',
+      // Error as text/icon — Aurora's default text-error is too dark on this
+      // theme's lighter grey chat surface, so lighten it for WCAG AA. (Light
+      // mode inherits Aurora's value, which clears AA on the white surface.)
+      '--fluux-text-error': '#e77c7f',
       // Unread badge stays red (classic behavior)
       '--fluux-badge-bg': 'var(--fluux-status-error)',
     },
