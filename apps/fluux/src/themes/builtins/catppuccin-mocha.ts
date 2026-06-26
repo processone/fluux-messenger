@@ -55,6 +55,9 @@ export const catppuccinMochaTheme: ThemeDefinition = {
       '--fluux-color-purple': '#cba6f7', // mauve
       '--fluux-color-gray': '#7f849c',
       '--fluux-color-red-rgb': '243, 139, 168',
+      // Error as text/icon — lightened from --fluux-color-red so it clears WCAG
+      // AA on this theme's chat surface (status-error stays the fill).
+      '--fluux-text-error': '#f5a0b8',
       '--fluux-color-green-rgb': '166, 227, 161',
       '--fluux-color-yellow-rgb': '249, 226, 175',
       '--fluux-color-blue-rgb': '137, 180, 250',
@@ -96,6 +99,8 @@ export const catppuccinMochaTheme: ThemeDefinition = {
       '--fluux-color-purple': '#8839ef',
       '--fluux-color-gray': '#8c8fa1',
       '--fluux-color-red-rgb': '210, 15, 57',
+      // Error as text/icon — darkened for WCAG AA on the light chat surface.
+      '--fluux-text-error': '#ae0c2f',
       '--fluux-color-green-rgb': '64, 160, 43',
       '--fluux-color-yellow-rgb': '223, 142, 29',
       '--fluux-color-blue-rgb': '30, 102, 245',

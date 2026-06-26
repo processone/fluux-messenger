@@ -33,6 +33,9 @@ export const tokyoNightTheme: ThemeDefinition = {
       '--fluux-color-purple': '#bb9af7',
       '--fluux-color-gray': '#545c7e',
       '--fluux-color-red-rgb': '247, 118, 142',
+      // Error as text/icon — lightened from --fluux-color-red so it clears WCAG
+      // AA on this theme's chat surface (status-error stays the fill).
+      '--fluux-text-error': '#f66782',
       '--fluux-color-green-rgb': '158, 206, 106',
       '--fluux-color-yellow-rgb': '224, 175, 104',
       '--fluux-color-blue-rgb': '122, 162, 247',
@@ -74,6 +77,8 @@ export const tokyoNightTheme: ThemeDefinition = {
       '--fluux-color-purple': '#7847bd',
       '--fluux-color-gray': '#8990b3',
       '--fluux-color-red-rgb': '245, 42, 101',
+      // Error as text/icon — darkened for WCAG AA on the light chat surface.
+      '--fluux-text-error': '#8c072d',
       '--fluux-color-green-rgb': '88, 117, 57',
       '--fluux-color-yellow-rgb': '140, 108, 62',
       '--fluux-color-blue-rgb': '46, 125, 233',

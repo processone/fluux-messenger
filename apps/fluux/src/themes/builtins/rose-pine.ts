@@ -33,6 +33,9 @@ export const rosePineTheme: ThemeDefinition = {
       '--fluux-color-purple': '#c4a7e7', // iris
       '--fluux-color-gray': '#6e6a86',   // muted
       '--fluux-color-red-rgb': '235, 111, 146',
+      // Error as text/icon — lightened from --fluux-color-red so it clears WCAG
+      // AA on this theme's chat surface (status-error stays the fill).
+      '--fluux-text-error': '#e95e85',
       '--fluux-color-green-rgb': '49, 116, 143',
       '--fluux-color-yellow-rgb': '246, 193, 119',
       '--fluux-color-blue-rgb': '156, 207, 216',
@@ -76,6 +79,8 @@ export const rosePineTheme: ThemeDefinition = {
       '--fluux-color-purple': '#907aa9', // iris
       '--fluux-color-gray': '#9893a5',   // muted
       '--fluux-color-red-rgb': '180, 99, 122',
+      // Error as text/icon — darkened for WCAG AA on the light chat surface.
+      '--fluux-text-error': '#9b2d3c',
       '--fluux-color-green-rgb': '40, 105, 131',
       '--fluux-color-yellow-rgb': '234, 157, 52',
       '--fluux-color-blue-rgb': '86, 148, 159',

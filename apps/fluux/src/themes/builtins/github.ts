@@ -35,6 +35,9 @@ export const githubTheme: ThemeDefinition = {
       '--fluux-color-purple': '#8957e5',
       '--fluux-color-gray': '#7d8590',
       '--fluux-color-red-rgb': '218, 54, 51',
+      // Error as text/icon — lightened from --fluux-color-red so it clears WCAG
+      // AA on this theme's chat surface (status-error stays the fill).
+      '--fluux-text-error': '#e05552',
       '--fluux-color-green-rgb': '35, 134, 54',
       '--fluux-color-yellow-rgb': '158, 106, 3',
       '--fluux-color-blue-rgb': '68, 147, 248',
@@ -78,6 +81,8 @@ export const githubTheme: ThemeDefinition = {
       '--fluux-color-purple': '#8250df',
       '--fluux-color-gray': '#59636e',
       '--fluux-color-red-rgb': '207, 34, 46',
+      // Error as text/icon — darkened for WCAG AA on the light chat surface.
+      '--fluux-text-error': '#c4202c',
       '--fluux-color-green-rgb': '26, 127, 55',
       '--fluux-color-yellow-rgb': '154, 103, 0',
       '--fluux-color-blue-rgb': '9, 105, 218',

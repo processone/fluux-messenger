@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'fs'
 import { fileURLToPath } from 'url'
 import { dirname, resolve } from 'path'
+import { builtinThemes } from './builtins'
+import type { ThemeDefinition } from './types'
 
 /**
  * Aurora theme contrast guard.
@@ -164,5 +166,32 @@ describe('Aurora theme contrast invariants', () => {
       const r = contrast(`var(--fluux-status-${key})`, 'var(--fluux-bg-primary)', light)
       expect(r).toBeGreaterThanOrEqual(4.5)
     })
+  }
+})
+
+// Per-theme error-text guard. Every builtin theme overrides --fluux-color-red
+// (so the bg-fluux-red fills follow its palette); the split means it must also
+// tune --fluux-text-error so error TEXT stays legible. Themes that inherit the
+// Aurora red (fluux, indigo) inherit its text-error too. Each theme's effective
+// tokens = the index.css defaults overlaid with the theme's overrides.
+//
+// Surface = the resting chat surface (--fluux-chat-bg / base-30), where error
+// text is read. The hover row (base-40) is an unusually light mid-tone on a few
+// themes (e.g. Solarized), where no vivid red can also clear AA; rather than
+// force a near-white error color, the hover state is left ungated and the
+// resting surface is the contract. (Light mode clears AA on both anyway.)
+function themeTokens(theme: ThemeDefinition, mode: 'dark' | 'light'): Record<string, string> {
+  const base = mode === 'dark' ? dark : light
+  return { ...base, ...(theme.variables[mode] ?? {}) }
+}
+
+describe('Builtin theme error-text contrast', () => {
+  for (const theme of builtinThemes) {
+    for (const mode of ['dark', 'light'] as const) {
+      it(`[${theme.id}/${mode}] text-error clears WCAG AA on the chat surface`, () => {
+        const r = contrast('var(--fluux-text-error)', 'var(--fluux-chat-bg)', themeTokens(theme, mode))
+        expect(r).toBeGreaterThanOrEqual(4.5)
+      })
+    }
   }
 })

@@ -33,6 +33,9 @@ export const solarizedTheme: ThemeDefinition = {
       '--fluux-color-purple': '#6c71c4',
       '--fluux-color-gray': '#657b83',
       '--fluux-color-red-rgb': '220, 50, 47',
+      // Error as text/icon — lightened from --fluux-color-red so it clears WCAG
+      // AA on this theme's chat surface (status-error stays the fill).
+      '--fluux-text-error': '#eb8b89',
       '--fluux-color-green-rgb': '133, 153, 0',
       '--fluux-color-yellow-rgb': '181, 137, 0',
       '--fluux-color-blue-rgb': '38, 139, 210',
@@ -82,6 +85,8 @@ export const solarizedTheme: ThemeDefinition = {
       '--fluux-color-purple': '#6c71c4',
       '--fluux-color-gray': '#839496',
       '--fluux-color-red-rgb': '220, 50, 47',
+      // Error as text/icon — darkened for WCAG AA on the light chat surface.
+      '--fluux-text-error': '#a71f1c',
       '--fluux-color-green-rgb': '113, 140, 0',
       '--fluux-color-yellow-rgb': '160, 120, 0',
       '--fluux-color-blue-rgb': '38, 139, 210',

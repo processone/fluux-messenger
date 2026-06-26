@@ -33,6 +33,9 @@ export const oneDarkTheme: ThemeDefinition = {
       '--fluux-color-purple': '#c678dd',
       '--fluux-color-gray': '#5c6370',
       '--fluux-color-red-rgb': '224, 108, 117',
+      // Error as text/icon — lightened from --fluux-color-red so it clears WCAG
+      // AA on this theme's chat surface (status-error stays the fill).
+      '--fluux-text-error': '#e5838a',
       '--fluux-color-green-rgb': '152, 195, 121',
       '--fluux-color-yellow-rgb': '229, 192, 123',
       '--fluux-color-blue-rgb': '97, 175, 239',
@@ -74,6 +77,8 @@ export const oneDarkTheme: ThemeDefinition = {
       '--fluux-color-purple': '#a626a4',
       '--fluux-color-gray': '#a0a1a7',
       '--fluux-color-red-rgb': '228, 86, 73',
+      // Error as text/icon — darkened for WCAG AA on the light chat surface.
+      '--fluux-text-error': '#b4281b',
       '--fluux-color-green-rgb': '80, 161, 79',
       '--fluux-color-yellow-rgb': '193, 132, 1',
       '--fluux-color-blue-rgb': '64, 120, 242',

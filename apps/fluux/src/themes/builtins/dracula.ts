@@ -33,6 +33,9 @@ export const draculaTheme: ThemeDefinition = {
       '--fluux-color-purple': '#bd93f9',
       '--fluux-color-gray': '#6272a4',
       '--fluux-color-red-rgb': '255, 85, 85',
+      // Error as text/icon — lightened from --fluux-color-red so it clears WCAG
+      // AA on this theme's chat surface (status-error stays the fill).
+      '--fluux-text-error': '#ff8080',
       '--fluux-color-green-rgb': '80, 250, 123',
       '--fluux-color-yellow-rgb': '241, 250, 140',
       '--fluux-color-blue-rgb': '139, 233, 253',
@@ -74,6 +77,8 @@ export const draculaTheme: ThemeDefinition = {
       '--fluux-color-purple': '#7c50c7',
       '--fluux-color-gray': '#6272a4',
       '--fluux-color-red-rgb': '209, 56, 62',
+      // Error as text/icon — darkened for WCAG AA on the light chat surface.
+      '--fluux-text-error': '#a6262b',
       '--fluux-color-green-rgb': '43, 158, 74',
       '--fluux-color-yellow-rgb': '184, 150, 15',
       '--fluux-color-blue-rgb': '15, 143, 168',
