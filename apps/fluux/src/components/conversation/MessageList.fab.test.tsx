@@ -66,6 +66,11 @@ describe('MessageList FAB badge and scroll behavior', () => {
     vi.useFakeTimers()
     MockResizeObserver.instances = []
 
+    // These tests cover FAB badge counts and two-step scroll UX which are agnostic to the
+    // virtualizer. Run with virtualization OFF so the non-virtualized scrollTo path is
+    // exercised and the tests remain focused on FAB behavior, not virtualizer internals.
+    localStorage.setItem('fluux:flags:enableMessageVirtualization', 'false')
+
     // Reset scrollStateManager to prevent state leakage between tests
     scrollStateManager.reset()
 
@@ -84,6 +89,7 @@ describe('MessageList FAB badge and scroll behavior', () => {
     vi.unstubAllGlobals()
     vi.useRealTimers()
     window.requestAnimationFrame = originalRAF
+    localStorage.clear()
   })
 
   /**

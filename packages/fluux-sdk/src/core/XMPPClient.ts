@@ -1,4 +1,5 @@
 import { xml, Client, Element } from '@xmpp/client'
+import * as ltx from 'ltx'
 import { createActor, type Subscription, type Snapshot } from 'xstate'
 import type { EventHook } from './EventHook'
 import type {
@@ -1907,7 +1908,6 @@ export class XMPPClient {
     messageContext: 'chat' | 'room' = 'chat',
   ): Promise<RetryOutcome> {
     try {
-      const ltx = await import('ltx')
       const parsedPayload = ltx.parse(encryptedPayloadXml) as unknown as Element
 
       // Current stashes hold the full original <message> stanza so outer

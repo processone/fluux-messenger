@@ -58,8 +58,23 @@ export function useTanstackMessageVirtualizer({
     getVirtualItems: () =>
       virtualizer.getVirtualItems().map((v) => ({ index: v.index, start: v.start, size: v.size, key: String(v.key) })),
     getTotalSize: () => virtualizer.getTotalSize(),
+    itemCount: items.length,
     getOffsetForMessageId,
     ensureMessageMounted,
     measureElement: virtualizer.measureElement,
+    scrollToOffset: (offset, opts) => {
+      virtualizer.scrollToOffset(offset, opts)
+      // @tanstack updates its reactive scrollOffset ONLY from the scroll element's
+      // 'scroll' DOM event (observeElementOffset). scrollToOffset sets the DOM
+      // scrollTop (via _scrollToOffset) but leaves scrollOffset stale until that
+      // event fires. The MAM-prepend restore calls this from a useLayoutEffect
+      // right after a count change; the browser's pending scroll event does not
+      // re-window before paint, so the mounted window keeps the old (top) rows and
+      // the viewport renders BLANK until the user scrolls again. Dispatch the event
+      // synchronously so the virtualizer re-reads scrollTop and re-windows to match
+      // — the same sync a real user scroll performs.
+      scrollRef.current?.dispatchEvent(new Event('scroll'))
+    },
+    scrollToIndex: (index, opts) => virtualizer.scrollToIndex(index, opts),
   }
 }
