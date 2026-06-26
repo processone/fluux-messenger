@@ -535,7 +535,7 @@ export function OccupantPanel({
     switch (item.type) {
       case 'role-header':
         return (
-          <div className="pt-2 px-4 py-1 flex items-center gap-2 text-xs font-semibold text-fluux-muted uppercase">
+          <div className="px-4 pt-4 pb-1 flex items-center gap-2 text-xs font-semibold text-fluux-muted uppercase">
             {getRoleIcon(item.role)}
             <span>{getRoleLabel(item.role)}</span>
             <span className="text-fluux-muted/60">— {item.count}</span>
@@ -559,7 +559,7 @@ export function OccupantPanel({
         )
       case 'offline-header':
         return (
-          <div className="pt-2 px-4 py-1 flex items-center gap-2 text-xs font-semibold text-fluux-muted uppercase">
+          <div className="px-4 pt-4 pb-1 flex items-center gap-2 text-xs font-semibold text-fluux-muted uppercase">
             <span>{t('rooms.offlineMembers')}</span>
             <span className="text-fluux-muted/60">— {item.count}</span>
           </div>
@@ -598,7 +598,7 @@ export function OccupantPanel({
       }
       case 'ignored-header':
         return (
-          <div className="pt-2 px-4 py-1 flex items-center gap-2 text-xs font-semibold text-fluux-muted uppercase">
+          <div className="px-4 pt-4 pb-1 flex items-center gap-2 text-xs font-semibold text-fluux-muted uppercase">
             <EyeOff className="size-3" />
             <span>{t('rooms.ignoredUsers')}</span>
             <span className="text-fluux-muted/60">— {item.count}</span>
