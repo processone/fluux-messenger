@@ -253,7 +253,7 @@
   --fluux-tooltip-text: var(--fluux-text-normal);
 
   /* Badge (unread count) */
-  --fluux-badge-bg: var(--fluux-status-error);
+  --fluux-badge-bg: var(--fluux-bg-accent);
   --fluux-badge-text: #ffffff;
 
   /* Avatar presence */

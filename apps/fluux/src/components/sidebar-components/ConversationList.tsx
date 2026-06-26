@@ -315,7 +315,7 @@ export const ConversationItem = memo(function ConversationItem({
             />
           )}
           {conversation.unreadCount > 0 && (
-            <span className="absolute -top-1 -end-1 z-10 min-w-4 h-4 px-1 bg-fluux-red text-white text-[10px] font-bold rounded-full flex items-center justify-center">
+            <span className="absolute -top-1 -end-1 z-10 min-w-4 h-4 px-1 bg-fluux-badge text-fluux-badge-text text-[10px] font-bold rounded-full flex items-center justify-center">
               {conversation.unreadCount}
             </span>
           )}

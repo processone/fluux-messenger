@@ -508,7 +508,7 @@ export function MessageList<T extends BaseMessage>({
             tabIndex={showScrollToBottom ? 0 : -1}
           >
             {markerUnreadCount > 0 && (
-              <span className="absolute -top-1.5 -end-1.5 min-w-5 h-5 px-1 rounded-full bg-fluux-red text-white text-xs font-semibold flex items-center justify-center">
+              <span className="absolute -top-1.5 -end-1.5 min-w-5 h-5 px-1 rounded-full bg-fluux-badge text-fluux-badge-text text-xs font-semibold flex items-center justify-center">
                 {markerUnreadCount > 99 ? '99+' : markerUnreadCount}
               </span>
             )}

@@ -38,6 +38,9 @@ export default {
           'private-soft': 'var(--fluux-private-soft)',
           'private-border': 'var(--fluux-private-border)',
           'private-hover': 'var(--fluux-private-hover)',
+          // Badge
+          'badge': 'var(--fluux-badge-bg)',
+          'badge-text': 'var(--fluux-badge-text)',
           // Aurora identity tokens
           'accent-2': 'var(--fluux-accent-2)',
           'sender-1': 'var(--fluux-sender-1)',
