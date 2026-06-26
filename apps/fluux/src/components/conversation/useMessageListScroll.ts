@@ -20,6 +20,7 @@ import { scrollStateManager, type ScrollAnchor } from '@/utils/scrollStateManage
 import { createResizeLoopMonitor } from './resizeLoopMonitor'
 import { createSlowCorrectionMonitor } from './slowCorrectionMonitor'
 import type { MessageVirtualizer } from './messageVirtualizer'
+import { notifyUserInput } from '@/utils/renderLoopDetector'
 
 // ============================================================================
 // DEBUG
@@ -845,6 +846,12 @@ export function useMessageListScroll({
   // ==========================================================================
 
   const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    // Arm the render-loop interaction grace: a fast scroll legitimately re-windows the
+    // virtualized MessageList ~once per frame, which would otherwise trip the loop
+    // *warning*. The rolling window expires shortly after scrolling stops, so a genuine
+    // post-scroll loop is still reported; the hard throw threshold is unaffected.
+    notifyUserInput()
+
     const el = e.currentTarget
     const { scrollTop, scrollHeight, clientHeight } = el
     const distFromBottom = scrollHeight - scrollTop - clientHeight

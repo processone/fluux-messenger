@@ -379,11 +379,14 @@ export function resetRenderLoopDetector(): void {
 }
 
 /**
- * Signal that a user-input event just occurred (e.g. a keystroke in the message
- * composer). Suppresses render-loop *warnings* for a short rolling window so that
- * legitimate per-keystroke re-renders of a controlled input don't read as a loop.
- * The error/throw threshold is NOT affected — a genuine loop triggered while
- * typing still trips the hard break.
+ * Signal that a user-input event just occurred — a keystroke in the message
+ * composer, or a scroll in the message list. Suppresses render-loop *warnings* for
+ * a short rolling window so that legitimate input-driven re-renders don't read as a
+ * loop: a controlled input re-renders ~1-2× per keystroke, and a fast scroll
+ * re-windows the virtualized list ~once per frame. The error/throw threshold is NOT
+ * affected — a genuine loop triggered while typing or scrolling still trips the hard
+ * break, and the rolling window expires once the interaction stops so a sustained
+ * post-interaction loop is still reported.
  */
 export function notifyUserInput(): void {
   interactionGraceUntil = nowFn() + INTERACTION_GRACE_MS
