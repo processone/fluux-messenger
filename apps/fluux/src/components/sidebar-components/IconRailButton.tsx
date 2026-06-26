@@ -30,7 +30,7 @@ export function IconRailButton({
             ? 'bg-fluux-brand text-fluux-text-on-accent'
             : disabled
               ? 'text-fluux-muted/50 cursor-not-allowed'
-              : 'text-fluux-muted hover:bg-white/10 hover:text-fluux-text'
+              : 'text-fluux-muted hover:bg-fluux-hover hover:text-fluux-text'
           }`}
       >
         <Icon className="size-5" />

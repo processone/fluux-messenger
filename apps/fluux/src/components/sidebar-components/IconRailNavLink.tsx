@@ -42,7 +42,7 @@ export function IconRailNavLink({
           focus-visible:ring-2 focus-visible:ring-fluux-brand focus-visible:ring-offset-2 focus-visible:ring-offset-fluux-sidebar
           ${isActive
             ? 'bg-fluux-brand text-fluux-text-on-accent'
-            : 'text-fluux-muted hover:bg-white/10 hover:text-fluux-text'
+            : 'text-fluux-muted hover:bg-fluux-hover hover:text-fluux-text'
           }
         `}
       >
