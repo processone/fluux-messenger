@@ -420,7 +420,11 @@ export function useMessageListScroll({
 
         const { staticMode, isAtBottomRef } = latestRef.current
 
-        // Content grew and we were at bottom -> stay at bottom
+        // Content grew and we were at bottom -> stay at bottom. Route through the shared
+        // reassertBottom (the same helper the new-message / typing / composer-resize sites use)
+        // so there is one place that decides how to land at the bottom. Virtualized is already
+        // excluded above, so this only ever takes the raw-scrollTop branch — but keeping it
+        // funnelled means a future change to the pin logic can't miss this site.
         if (newHeight > lastHeight && isAtBottomRef.current && !staticMode) {
           debugLog('RESIZE SCROLL TO BOTTOM', {
             newHeight,
@@ -428,7 +432,7 @@ export function useMessageListScroll({
             isAtBottom: isAtBottomRef.current,
             scrollTopBefore: currentScrollTop,
           })
-          currentScroller.scrollTop = newHeight
+          reassertBottom()
         } else if (newHeight !== lastHeight) {
           debugLog('RESIZE NO SCROLL', {
             newHeight,
@@ -1530,12 +1534,7 @@ export function useMessageListScroll({
         scrollTopBefore: scroller.scrollTop,
       })
       isAtBottomRef.current = true // a send from a scrolled-up position lands us at the bottom
-      const virtNewMsg = latestRef.current.virtualizer
-      if (virtNewMsg) {
-        pinVirtualizedBottom()
-      } else {
-        scroller.scrollTop = scroller.scrollHeight
-      }
+      reassertBottom()
     } else if (isNewMessage) {
       debugLog('NEW MSG NO SCROLL (not at bottom)', {
         messageCount,
@@ -1545,7 +1544,7 @@ export function useMessageListScroll({
     }
 
     prevMessageCountRef.current = messageCount
-  }, [messageCount, isAtBottomRef, staticMode, lastMessageIsOutgoing, pinVirtualizedBottom])
+  }, [messageCount, isAtBottomRef, staticMode, lastMessageIsOutgoing, reassertBottom])
 
   // ==========================================================================
   // EFFECT: Reset marker scroll tracking when firstNewMessageId changes
@@ -1563,20 +1562,17 @@ export function useMessageListScroll({
   // EFFECT: Typing indicator / reactions change
   // ==========================================================================
 
-  // useLayoutEffect ensures scroll adjustment happens BEFORE browser paint.
-  // With useEffect, the browser paints a frame with the gap visible, and scroll
-  // events can fire in between - potentially setting isAtBottomRef to false,
-  // which breaks auto-scroll for subsequent messages and causes blank screens
-  // on conversation switch (stale "not at bottom" state gets persisted).
+  // Content grew INSIDE the scroller (typing indicator toggled, reactions added to the last
+  // message): the scroller box is unchanged but scrollHeight grew, so a follower must re-pin.
+  // One effect keyed on both signals — the body is identical and both mean "footer/last-row
+  // height changed". useLayoutEffect runs BEFORE paint: with useEffect the browser paints a
+  // frame with the gap visible and a scroll event can fire in between, flipping isAtBottomRef
+  // false — which breaks auto-scroll for subsequent messages and strands a blank screen on
+  // conversation switch (the stale "not at bottom" state gets persisted).
   useLayoutEffect(() => {
     if (!isAtBottomRef.current) return
     reassertBottom()
-  }, [typingUsersCount, isAtBottomRef, reassertBottom])
-
-  useLayoutEffect(() => {
-    if (!isAtBottomRef.current) return
-    reassertBottom()
-  }, [lastMessageReactionsKey, isAtBottomRef, reassertBottom])
+  }, [typingUsersCount, lastMessageReactionsKey, isAtBottomRef, reassertBottom])
 
   // ==========================================================================
   // EFFECT: Container resize (composer grows/shrinks)
