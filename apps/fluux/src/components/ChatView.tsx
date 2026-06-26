@@ -376,7 +376,7 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
         onBack={onBack}
         onSearchInConversation={handleSearchInConversation}
         encryptionState={encryptionState}
-        onEncryptionClick={encryptionState.kind === 'encrypted' ? handleOpenVerify : undefined}
+        onEncryptionClick={encryptionState.kind === 'encrypted' || encryptionState.kind === 'blocked' ? handleOpenVerify : undefined}
         onDisableEncryptionClick={encryptionState.kind === 'encrypted' ? handleDisableEncryption : undefined}
         onEnableEncryptionClick={encryptionState.kind === 'plaintextForced' ? handleEnableEncryption : undefined}
         onShowProfile={

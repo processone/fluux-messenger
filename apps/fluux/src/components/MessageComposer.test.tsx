@@ -1418,6 +1418,11 @@ describe('MessageComposer', () => {
       expect(lock.querySelector('.lucide-lock')).not.toBeNull()
     })
 
+    it('shows a teal lock when trust is tofu-new', () => {
+      const { container } = render(<MessageComposer {...base} encryptionState={{ kind: 'encrypted', fingerprint: 'a', trust: 'tofu-new' }} />)
+      expect(container.querySelector('[data-encryption-lock] .lucide-lock')).not.toBeNull()
+    })
+
     it('shows a shield-check when verified', () => {
       const { container } = render(<MessageComposer {...base} encryptionState={{ kind: 'encrypted', fingerprint: 'a', trust: 'verified' }} />)
       expect(container.querySelector('[data-encryption-lock] .lucide-shield-check')).not.toBeNull()
