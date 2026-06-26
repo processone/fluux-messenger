@@ -48,6 +48,23 @@
   src: url('/fonts/Inter-Bold.woff2') format('woff2');
 }
 
+/* Inter Tight — display font, self-hosted */
+@font-face {
+  font-family: 'Inter Tight';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('/fonts/InterTight-Medium.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Inter Tight';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('/fonts/InterTight-SemiBold.woff2') format('woff2');
+}
+
 /* ============================================================
    THEME DESIGN TOKENS — 3-Tier Architecture
    ============================================================
@@ -67,23 +84,37 @@
   /* ── Tier 1: Foundation ── */
 
   /* Neutral ramp (00 = darkest, 100 = lightest) */
-  --fluux-base-00: #111214;
-  --fluux-base-05: #1a1b1e;
-  --fluux-base-10: #1e1f22;
-  --fluux-base-20: #2b2d31;
-  --fluux-base-30: #313338;
-  --fluux-base-40: #35373c;
-  --fluux-base-50: #404249;
-  --fluux-base-60: #4e5058;
-  --fluux-base-70: #6d6f78;
-  --fluux-base-80: #949ba4;
-  --fluux-base-90: #dbdee1;
-  --fluux-base-100: #f2f3f5;
+  --fluux-base-00: #090D18;
+  --fluux-base-05: #0A0F1E;
+  --fluux-base-10: #0B1020;
+  --fluux-base-20: #0E1326;
+  --fluux-base-30: #0F1528;
+  --fluux-base-40: #141B30;
+  --fluux-base-50: #1A2238;
+  --fluux-base-60: #2A3553;
+  --fluux-base-70: #5E6B8A;
+  --fluux-base-80: #97A4C4;
+  --fluux-base-90: #E9EDF7;
+  --fluux-base-100: #F4F6FC;
 
   /* Accent (HSL components for composability) */
-  --fluux-accent-h: 235;
-  --fluux-accent-s: 86%;
-  --fluux-accent-l: 65%;
+  /* --fluux-accent-l tuned so white text on the accent fill clears WCAG AA */
+  --fluux-accent-h: 231;
+  --fluux-accent-s: 100%;
+  --fluux-accent-l: 64%;
+
+  /* ── Aurora identity additions ── */
+  --fluux-accent-2: #38E0C4;
+  --fluux-grad: linear-gradient(135deg, #38E0C4, #7C8CFF, #A78BFA);
+  --fluux-sender-1: #9FD4FF;
+  --fluux-sender-2: #6FE3B0;
+  --fluux-sender-3: #FFCB73;
+  --fluux-sender-4: #FF9DB0;
+  --fluux-sender-5: #C2ABFF;
+  --fluux-sender-6: #67D4D0;
+  --fluux-glass-bg: rgba(20, 27, 48, 0.74);
+  --fluux-glass-blur: 12px;
+  --fluux-shadow-overlay: 0 24px 70px rgba(0, 0, 0, 0.55);
 
   /* Named palette colors */
   --fluux-color-red: #da373c;
@@ -110,6 +141,7 @@
 
   /* Typography primitives */
   --fluux-font-ui: 'Inter', system-ui, sans-serif;
+  --fluux-font-display: 'Inter Tight', 'Inter', system-ui, sans-serif;
   --fluux-font-mono: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
 
   /* Radius */
@@ -136,11 +168,11 @@
   --fluux-text-on-accent: #ffffff;
   --fluux-text-accent: var(--fluux-bg-accent);
   --fluux-text-link: var(--fluux-color-blue);
-  /* Own-message ("you") name. The raw brand accent (hsl 235 86% 65%) only
+  /* Own-message ("you") name. The raw brand accent (hsl(231 100% 71%)) only
      reaches ~2.8:1 on the dark message background, so a dedicated brand-indigo
      value is used, tuned to clear WCAG AA on both the resting and hover message
      backgrounds. Dark default here; .light overrides below. */
-  --fluux-text-self: #a5b4fc;
+  --fluux-text-self: #A9B4FF;
 
   /* Status (named by purpose, not color) */
   --fluux-status-success: var(--fluux-color-green);
@@ -240,7 +272,7 @@
   --fluux-tooltip-text: var(--fluux-text-normal);
 
   /* Badge (unread count) */
-  --fluux-badge-bg: var(--fluux-status-error);
+  --fluux-badge-bg: var(--fluux-bg-accent);
   --fluux-badge-text: #ffffff;
 
   /* Avatar presence */
@@ -296,18 +328,21 @@
   color-scheme: light;
 
   /* Foundation overrides (light ramp — 00 = lightest, 100 = darkest) */
-  --fluux-base-00: #ffffff;
-  --fluux-base-05: #f2f3f5;
-  --fluux-base-10: #e3e5e8;
-  --fluux-base-20: #ebedef;
-  --fluux-base-30: #ffffff;
-  --fluux-base-40: #dcdee3;
-  --fluux-base-50: #d0d3d8;
-  --fluux-base-60: #b5bac1;
-  --fluux-base-70: #80848e;
-  --fluux-base-80: #4a4d54;
-  --fluux-base-90: #2e3338;
-  --fluux-base-100: #1e1f22;
+  --fluux-base-00: #FFFFFF;
+  --fluux-base-05: #F4F6FC;
+  --fluux-base-10: #E7EAF4;
+  --fluux-base-20: #EEF0F8;
+  --fluux-base-30: #FFFFFF;
+  --fluux-base-40: #E4E8F3;
+  --fluux-base-50: #DDE2F0;
+  --fluux-base-60: #C2C9DC;
+  --fluux-base-70: #79839E;
+  --fluux-base-80: #5C6685;
+  --fluux-base-90: #1B2233;
+  --fluux-base-100: #0E1426;
+
+  /* Accent darkened for AA on light surfaces (white text on accent fills) */
+  --fluux-accent-l: 60%;
 
   /* Palette overrides for light context */
   --fluux-color-blue: #0969da;
@@ -317,7 +352,7 @@
   /* Own-message ("you") name — brand-indigo darkened for WCAG AA on the white
      message background and its hover state (the raw accent only reached ~4.6:1
      at rest and failed on hover). */
-  --fluux-text-self: #4f46e5;
+  --fluux-text-self: #4F5BD8;
 
   /* Private (whisper) — deeper violet for contrast on light backgrounds */
   --fluux-private: hsl(270, 70%, 48%);
@@ -326,13 +361,25 @@
   --fluux-private-hover: hsla(270, 70%, 55%, 0.18);
 
   /* Semantic overrides where cascade from foundation isn't sufficient */
-  --fluux-bg-secondary: #d8dadf;
+  --fluux-bg-secondary: #DDE2F0;
   --fluux-sidebar-item-active: hsla(var(--fluux-accent-h), var(--fluux-accent-s), var(--fluux-accent-l), 0.14);
   --fluux-border-color: rgba(0, 0, 0, 0.15);
   --fluux-selection-bg: hsla(var(--fluux-accent-h), var(--fluux-accent-s), var(--fluux-accent-l), 0.15);
   --fluux-search-highlight-bg: hsla(var(--fluux-accent-h), var(--fluux-accent-s), var(--fluux-accent-l), 0.25);
   --fluux-scrollbar-thumb: #c4c9ce;
   --fluux-scrollbar-thumb-hover: #a8adb3;
+
+  /* ── Aurora identity (light) ── */
+  --fluux-accent-2: #11A88C;
+  --fluux-grad: linear-gradient(135deg, #11A88C, #5B6CF0, #7C6CF0);
+  --fluux-sender-1: #1E84D8;
+  --fluux-sender-2: #119E73;
+  --fluux-sender-3: #B5790E;
+  --fluux-sender-4: #D8527A;
+  --fluux-sender-5: #6E54D8;
+  --fluux-sender-6: #128C86;
+  --fluux-glass-bg: rgba(255, 255, 255, 0.72);
+  --fluux-shadow-overlay: 0 20px 50px rgba(20, 27, 48, 0.18);
 
   /* emoji-mart theming */
   --em-rgb-background: 227, 229, 232;

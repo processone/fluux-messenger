@@ -38,6 +38,17 @@ export default {
           'private-soft': 'var(--fluux-private-soft)',
           'private-border': 'var(--fluux-private-border)',
           'private-hover': 'var(--fluux-private-hover)',
+          // Badge
+          'badge': 'var(--fluux-badge-bg)',
+          'badge-text': 'var(--fluux-badge-text)',
+          // Aurora identity tokens
+          'accent-2': 'var(--fluux-accent-2)',
+          'sender-1': 'var(--fluux-sender-1)',
+          'sender-2': 'var(--fluux-sender-2)',
+          'sender-3': 'var(--fluux-sender-3)',
+          'sender-4': 'var(--fluux-sender-4)',
+          'sender-5': 'var(--fluux-sender-5)',
+          'sender-6': 'var(--fluux-sender-6)',
           // Status (semantic purpose, not color)
           'green': 'var(--fluux-status-success)',
           'yellow': 'var(--fluux-status-warning)',
@@ -49,6 +60,7 @@ export default {
       fontFamily: {
         sans: ['var(--fluux-font-ui)'],
         mono: ['var(--fluux-font-mono)'],
+        display: ['var(--fluux-font-display)'],
       },
       keyframes: {
         'tooltip-in': {

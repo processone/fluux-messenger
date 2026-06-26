@@ -409,14 +409,14 @@ const RoomItem = memo(function RoomItem({
             <img
               src={room.avatar}
               alt={room.name}
-              className="size-8 rounded-full object-cover"
+              className="size-8 rounded-xl object-cover"
               draggable={false}
             />
           ) : isQuickChat ? (
-            <Zap className="size-8 p-1.5 bg-amber-500/20 rounded-full text-amber-500" />
+            <Zap className="size-8 p-1.5 bg-amber-500/20 rounded-xl text-amber-500" />
           ) : (
             <Hash
-              className="size-8 p-1.5 rounded-full text-white"
+              className="size-8 p-1.5 rounded-xl text-white"
               style={{ backgroundColor: generateConsistentColorHexSync(room.jid, { saturation: 60, lightness: 45 }) }}
             />
           )}

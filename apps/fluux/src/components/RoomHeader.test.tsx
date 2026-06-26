@@ -251,8 +251,8 @@ describe('RoomHeader', () => {
         />
       )
 
-      // Hash icon is rendered in a colored div
-      expect(container.querySelector('.rounded-full')).toBeInTheDocument()
+      // Hash icon is rendered in a colored div (rounded-xl for rooms)
+      expect(container.querySelector('.rounded-xl')).toBeInTheDocument()
       expect(screen.queryByTestId('avatar')).not.toBeInTheDocument()
     })
   })
