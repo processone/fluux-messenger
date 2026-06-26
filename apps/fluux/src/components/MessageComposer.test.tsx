@@ -1372,4 +1372,34 @@ describe('MessageComposer', () => {
       expect(onFileSelect).not.toHaveBeenCalled()
     })
   })
+
+  describe('Aurora send button', () => {
+    it('is a filled accent button when there is text, with no encryption badge on it', () => {
+      const { container } = render(
+        <MessageComposer
+          placeholder="Type a message"
+          onSend={vi.fn().mockResolvedValue(true)}
+          encryptionState={{ kind: 'encrypted', fingerprint: 'abc', trust: 'verified' }}
+        />
+      )
+      const textarea = screen.getByPlaceholderText('Type a message')
+      fireEvent.change(textarea, { target: { value: 'hi' } })
+      const send = container.querySelector('button[type="submit"]')!
+      expect(send.className).toContain('bg-fluux-brand')
+      // The encryption badge no longer lives on the send button (moved to the leading lock).
+      expect(send.querySelector('.lucide-shield-check')).toBeNull()
+    })
+
+    it('still renders the whisper sendBadge on the send button', () => {
+      const { container } = render(
+        <MessageComposer
+          placeholder="Type a message"
+          onSend={vi.fn().mockResolvedValue(true)}
+          sendBadge={<span data-testid="whisper-badge" />}
+        />
+      )
+      const send = container.querySelector('button[type="submit"]')!
+      expect(send.querySelector('[data-testid="whisper-badge"]')).not.toBeNull()
+    })
+  })
 })

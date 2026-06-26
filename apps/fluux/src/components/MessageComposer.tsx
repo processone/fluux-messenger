@@ -916,28 +916,19 @@ export function MessageComposer({
           )}
         </div>
 
-        {/* Send button */}
-        <Tooltip
-          content={encryptionState?.kind === 'encrypted'
-            ? t(encryptionState.trust === 'verified' ? 'chat.encryption.verifiedTooltip' : 'chat.encryption.openpgpTooltip')
-            : ''}
-          position="top"
-          disabled={encryptionState?.kind !== 'encrypted'}
+        {/* Send button — filled accent. Encryption state is shown by the leading lock (not here). */}
+        <button
+          type="submit"
+          disabled={(!text.trim() && !pendingAttachment) || sending || disabled || sendDisabled}
+          aria-label={t('chat.send', 'Send')}
+          className="group/send relative m-1 p-2.5 rounded-xl tap-target flex items-center justify-center
+                     bg-fluux-brand text-white hover:bg-fluux-brand-hover
+                     disabled:bg-transparent disabled:text-fluux-muted disabled:cursor-not-allowed
+                     transition-colors"
         >
-          <button
-            type="submit"
-            disabled={(!text.trim() && !pendingAttachment) || sending || disabled || sendDisabled}
-            className="group/send p-3 text-fluux-brand hover:text-fluux-brand-hover
-                       disabled:text-fluux-muted disabled:cursor-not-allowed transition-colors relative"
-          >
-            <Send className="rtl-mirror size-5" />
-            {encryptionState?.kind === 'encrypted' ? (
-              encryptionState.trust === 'verified'
-                ? <ShieldCheck className="absolute bottom-2 end-2 size-2.5 text-green-500 group-disabled/send:text-fluux-muted" />
-                : <Lock className="absolute bottom-2 end-2 size-2.5 text-fluux-muted" />
-            ) : sendBadge}
-          </button>
-        </Tooltip>
+          <Send className="rtl-mirror size-5" />
+          {sendBadge}
+        </button>
       </div>
       </div>
     </form>
