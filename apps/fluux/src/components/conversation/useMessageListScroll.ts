@@ -54,6 +54,15 @@ const MEDIA_LOAD_DEBOUNCE_MS = 150 // debounce time for batching image load even
 // scrollHeight grows and clips the last message; shorter → it floats above empty space), so a
 // one-shot scrollToIndex isn't enough. ~1s at 60fps comfortably covers the measurement settle.
 const BOTTOM_REASSERT_FRAMES = 60
+// While re-pinning, treat the list as not-yet-pinned whenever it sits more than this many pixels
+// above the true bottom. The change-detection guard (re-pin only when scrollHeight moved) can miss
+// the frame where the last row's measurement settles — coalesced height deltas, or a height delta
+// captured into the previous frame's baseline — leaving the view a row short with no further change
+// to react to. WebKit (the desktop WKWebView) hits this intermittently; Chromium masks it via
+// overflow-anchor. Re-asserting on measured distance self-heals it: scrollToIndex(last,'end') is a
+// no-op once truly pinned, so this converges and cannot oscillate. Sub-row tolerance keeps it from
+// firing on harmless subpixel rounding.
+const BOTTOM_PIN_TOLERANCE = 4
 
 // ============================================================================
 // KINETIC SCROLL
@@ -582,7 +591,12 @@ export function useMessageListScroll({
       // flips isAtBottom; only a genuine user scroll up does.
       if (userScrollIntentAtRef.current > startedAt || !isAtBottomRef.current) return
       const h = s.scrollHeight
-      if (h !== lastHeight) {
+      // Re-pin when the layout grew/shrank (the common case) OR when we're still measurably short
+      // of the true bottom. The latter catches the frame the change-detection guard alone misses —
+      // the last row settling taller without a frame-to-frame scrollHeight delta to react to — and
+      // is what left the just-sent message a row below the fold on WebKit. Idempotent at the bottom.
+      const dist = h - s.scrollTop - s.clientHeight
+      if (h !== lastHeight || dist > BOTTOM_PIN_TOLERANCE) {
         lastHeight = h
         v.scrollToIndex(v.itemCount - 1, { align: 'end' })
       }
