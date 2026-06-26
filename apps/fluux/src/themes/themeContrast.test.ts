@@ -109,6 +109,15 @@ describe('Aurora theme contrast invariants', () => {
       expect(r).toBeGreaterThanOrEqual(4.5)
     })
 
+    // Pattern E — the focus ring is a non-text UI indicator and must clear the
+    // WCAG 1.4.11 non-text contrast minimum (3:1) against the surfaces it rings.
+    // It drives the universal `.user-interacted *:focus` outline, so this one
+    // token governs focus visibility app-wide. (Was accent @ 0.5 alpha, ~1.9:1.)
+    it(`[${mode}] focus ring clears 3:1 non-text contrast on the hover surface`, () => {
+      const r = contrast('var(--fluux-focus-ring)', 'var(--fluux-bg-hover)', vars)
+      expect(r).toBeGreaterThanOrEqual(3)
+    })
+
     // Pattern B — informational text that renders on message rows must clear AA
     // against the darkest of those (the hover row), not just the resting surface.
     // Links and the own-name dipped below AA on the light-mode hover/active rows;
