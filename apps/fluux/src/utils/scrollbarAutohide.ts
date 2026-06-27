@@ -21,7 +21,13 @@
 /** How long the thumb lingers after the last scroll event, in milliseconds. */
 export const SCROLL_IDLE_MS = 700
 
-const SCROLLING_ATTR = 'data-scrolling'
+/**
+ * Attribute stamped on the actively-scrolling element. The reveal rules in
+ * index.css key off `[data-scrolling]`; this constant is the single source of
+ * truth for that contract and is asserted against the CSS in
+ * scrollbarStyles.test.ts.
+ */
+export const SCROLLING_ATTR = 'data-scrolling'
 
 const idleTimers = new WeakMap<Element, ReturnType<typeof setTimeout>>()
 
