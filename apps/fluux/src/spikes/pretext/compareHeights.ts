@@ -12,6 +12,16 @@ export interface Sample {
 
 export interface CategoryStat {
   count: number
+  /**
+   * RAW line-count-exact rate for this category: the percentage of samples
+   * whose predicted `lineCount` equals the measured `lineCount`. This counts
+   * line match ONLY and ignores height error entirely.
+   *
+   * Do NOT conflate with `Report.overall.textLineExactPct`, which is stricter:
+   * it additionally requires the absolute height error to be within
+   * `heightTolPx`. A category can report 100% here yet still contribute
+   * failures to the overall metric.
+   */
   lineExactPct: number
   p95AbsErrPx: number
   maxAbsErrPx: number
@@ -56,6 +66,8 @@ export function buildReport(
       count: inCat.length,
       lineExactPct: inCat.length ? (exact.length / inCat.length) * 100 : 0,
       p95AbsErrPx: p95(absErrs),
+      // `absErrs` is always non-empty here (a category exists only because it
+      // has >= 1 sample); the `0` is just a defensive floor for the spread.
       maxAbsErrPx: Math.max(0, ...absErrs),
       worstId,
     }
