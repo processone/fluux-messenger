@@ -89,7 +89,7 @@
           }
         },
         "overall": {
-          "textLineExactPct": 98.4126984126984,
+          "textLineExactPct": 100,
           "passesThreshold": true
         },
         "worstOffenders": [

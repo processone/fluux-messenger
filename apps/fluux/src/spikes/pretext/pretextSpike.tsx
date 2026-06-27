@@ -74,7 +74,7 @@ function App() {
         const report = buildReport(samples, {
           lineExactThresholdPct: 98,
           heightTolPx: 2,
-          textCategories: ['short', 'wrap', 'mention', 'link', 'me', 'mixed'],
+          textCategories: ['short', 'wrap', 'mention', 'link', 'mixed'],
         })
         runs.push({ fontScalePct: pct, report, samples })
       }

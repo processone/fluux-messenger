@@ -33,6 +33,12 @@ const worst = out.runs.flatMap((r) =>
 )
 console.log('\nworst offenders (across scales):', worst.slice(0, 15))
 
+const totalSamples = out.runs.reduce((n, r) => n + Object.values(r.report.byCategory).reduce((m, c) => m + c.count, 0), 0)
+if (out.runs.length === 0 || totalSamples === 0) {
+  console.error('FAIL: no runs / no samples measured (page did not produce data)')
+  process.exit(1)
+}
+
 if (anyFail) {
   console.error('FAIL: pretext below accuracy threshold on Chromium at one or more character scales')
   process.exit(1)
