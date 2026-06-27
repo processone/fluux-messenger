@@ -15,6 +15,7 @@ import { installBeforeInputGuard } from './utils/tauriInputFix'
 import { logStartupCapabilities } from './utils/startupDiagnostics'
 import { startStallSentinel } from './utils/stallSentinel'
 import { registerServiceWorker } from './utils/serviceWorkerUpdate'
+import { sweepExpiredPassphrases } from './e2ee/webPassphraseCache'
 import { getReconnectIntent } from './utils/reconnectIntent'
 import { captureWebLoginPrefill } from './utils/loginPrefillSources'
 import { useLoginPrefillStore } from './stores/loginPrefillStore'
@@ -32,6 +33,9 @@ const proxyAdapter = isTauri && !disableTcpProxy ? tauriProxyAdapter : undefined
 // land without needing to reinstall an installed PWA (see serviceWorkerUpdate.ts).
 if (!isTauri) {
   registerServiceWorker()
+  // Purge any cached passphrases past their 24h expiry as early as possible
+  // (covers reopen-after-24h and stale cross-account records).
+  void sweepExpiredPassphrases()
 }
 
 // Web: capture any login-prefill params from the launch URL (e.g. a shared
