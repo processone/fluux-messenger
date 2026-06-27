@@ -144,10 +144,10 @@ exports[`RoomView > Snapshots > should match snapshot for non-joined room 1`] = 
             style="overflow-anchor: auto;"
           >
             <div
-              class="flex-1 flex flex-col items-center justify-center text-fluux-muted gap-2"
+              class="flex-1 flex flex-col items-center justify-center text-fluux-muted gap-3"
             >
               <div
-                class="flex items-center gap-2 text-amber-600 dark:text-amber-400 mb-2"
+                class="flex items-center gap-2 text-fluux-yellow mb-1"
               >
                 <span
                   data-testid="icon-alert"
@@ -160,7 +160,18 @@ exports[`RoomView > Snapshots > should match snapshot for non-joined room 1`] = 
                   rooms.notJoinedNoHistory
                 </span>
               </div>
-              <p>
+              <div
+                class="size-16 rounded-full bg-fluux-brand/10 border border-fluux-brand/25 flex items-center justify-center"
+              >
+                <span
+                  data-testid="icon-hash"
+                >
+                  Hash
+                </span>
+              </div>
+              <p
+                class="text-sm"
+              >
                 rooms.joinToLoadHistory
               </p>
             </div>
