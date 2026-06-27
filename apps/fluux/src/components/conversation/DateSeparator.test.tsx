@@ -43,7 +43,7 @@ describe('DateSeparator', () => {
     const { container } = render(<DateSeparator date="2024-01-15" />)
 
     const wrapper = container.firstChild as HTMLElement
-    expect(wrapper).toHaveClass('flex', 'items-center', 'gap-3', 'h-12')
+    expect(wrapper).toHaveClass('flex', 'items-center', 'gap-3', 'pt-6', 'pb-2')
   })
 
   it('should style the date text correctly', () => {
