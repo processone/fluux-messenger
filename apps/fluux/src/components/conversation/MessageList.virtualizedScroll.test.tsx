@@ -181,6 +181,44 @@ describe('MessageList — virtualized scroll integration (ensureMessageMounted)'
     expect(getOffsetForMessageId).toHaveBeenCalledWith('msg-0')
     expect(scrollTopSets).toContain(1000)
   })
+
+  it('positions the unread marker from the virtualizer offset on entry, not the windowed-out DOM row', async () => {
+    // Entering an unread conversation, the marker row is typically windowed OUT and the
+    // messages may still be rehydrating from cache, so querySelector(marker).offsetTop is
+    // unreliable (null when unmounted; 0 with no layout). The old code positioned the marker
+    // from that DOM read and fell back to a raw scrollTop=scrollHeight, which the virtualizer
+    // reverts to offset 0 — parking the view at the TOP with the marker stranded below the fold.
+    // The fix resolves the marker offset from the virtualizer (getOffsetForMessageId), which
+    // works for unmounted rows, so the entry scroll lands at the marker.
+    vi.useFakeTimers()
+    try {
+      // Marker (msg-40) sits 1600px down the content; viewport is 600px tall.
+      getOffsetForMessageId.mockImplementation((id) => (id === 'msg-40' ? 1600 : null))
+
+      const { container } = render(
+        <MessageList
+          messages={makeMessages(50)}
+          conversationId={`conv-unread-${Math.random().toString(36).slice(2)}`}
+          firstNewMessageId="msg-40"
+          renderMessage={(m: BaseMessage) => <div>{m.body}</div>}
+        />,
+      )
+      const scroller = container.querySelector('[data-message-list]') as HTMLElement
+      Object.defineProperty(scroller, 'scrollHeight', { get: () => 2000, configurable: true })
+      Object.defineProperty(scroller, 'clientHeight', { value: 600, configurable: true })
+
+      scrollToOffsetCalls.length = 0
+      // Flush the rAF / timeout re-assert window.
+      await vi.advanceTimersByTimeAsync(600)
+
+      // Target = markerOffset - viewportHeight/3 = 1600 - 200 = 1400. The view must land at the
+      // marker (offset well below the fold), NOT at ~0 (the top) as the windowed-out DOM read gave.
+      expect(getOffsetForMessageId).toHaveBeenCalledWith('msg-40')
+      expect(scrollToOffsetCalls.some((o) => o > 1000)).toBe(true)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
 })
 
 /**
