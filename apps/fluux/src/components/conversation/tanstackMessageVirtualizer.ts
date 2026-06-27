@@ -82,7 +82,9 @@ interface Args {
   items: readonly { key: string }[]
   indexById: Map<string, number>
   scrollRef: React.RefObject<HTMLElement | null>
-  estimateSize?: number
+  /** Flat constant (px) or a per-index function. Default: 64. A fresh closure each render would
+   *  invalidate @tanstack's size cache — the adapter wraps it in a stable ref+useCallback. */
+  estimateSize?: number | ((index: number) => number)
 }
 
 /**
@@ -122,10 +124,22 @@ export function useTanstackMessageVirtualizer({
     [],
   )
 
+  // Keep a stable estimateSize callback identity; @tanstack re-reads it, and a fresh closure each
+  // render would invalidate its size cache. The ref always points at the latest caller value.
+  const estimateRef = useRef(estimateSize)
+  estimateRef.current = estimateSize
+  const estimateFn = useCallback(
+    (index: number) => {
+      const e = estimateRef.current
+      return typeof e === 'function' ? e(index) : e
+    },
+    [],
+  )
+
   const virtualizer = useVirtualizer<HTMLElement, Element>({
     count: items.length,
     getScrollElement: () => scrollRef.current,
-    estimateSize: () => estimateSize,
+    estimateSize: estimateFn,
     getItemKey: (index) => items[index].key,
     overscan: 12,
     // rAF-polled offset observer so the window keeps advancing during WebKit inertial momentum,
