@@ -41,6 +41,20 @@ describe('normalizeLoginPrefill', () => {
     }
   })
 
+  it('drops a server URL that embeds credentials but keeps the jid', () => {
+    expect(normalizeLoginPrefill({ jid: 'a@b.com', server: 'https://user:pass@evil.com/x' }))
+      .toEqual({ jid: 'a@b.com' })
+    expect(normalizeLoginPrefill({ jid: 'a@b.com', server: 'wss://user@host/ws' }))
+      .toEqual({ jid: 'a@b.com' })
+  })
+
+  it('accepts a single-label host in an explicit scheme:// URL', () => {
+    // Single-label hosts are rejected only for the bare/host:port shorthand;
+    // an explicit allowlisted scheme is unambiguous, so wss://host/ws is fine.
+    expect(normalizeLoginPrefill({ jid: 'a@b.com', server: 'wss://host/ws' }))
+      .toEqual({ jid: 'a@b.com', server: 'wss://host/ws' })
+  })
+
   it('drops a host:port with a non-numeric or out-of-range port', () => {
     expect(normalizeLoginPrefill({ jid: 'a@b.com', server: 'chat.example.com:notaport' }))
       .toEqual({ jid: 'a@b.com' })

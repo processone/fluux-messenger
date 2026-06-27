@@ -27,8 +27,10 @@ export interface LoginPrefill {
 // schemes (javascript:, file:, data:, blob:, ...) are excluded by omission.
 const ALLOWED_SERVER_PROTOCOLS = new Set(['ws:', 'wss:', 'http:', 'https:', 'tls:', 'tcp:'])
 
-// A dotted hostname: two or more labels of alphanumerics/hyphens. Single-label
-// hosts (e.g. `localhost`) are intentionally not accepted from a link.
+// A dotted hostname for the scheme-less shorthand: two or more labels of
+// alphanumerics/hyphens. Single-label hosts (e.g. `localhost`) are not accepted
+// as a bare domain or `host:port` value (they are ambiguous with a scheme
+// token); use an explicit `scheme://host` URL for a single-label host.
 const HOSTNAME_RE = /^[a-zA-Z0-9-]+(?:\.[a-zA-Z0-9-]+)+$/
 
 function normalizeJid(raw: string | undefined): string | undefined {
@@ -57,7 +59,11 @@ function normalizeServer(raw: string | undefined): string | undefined {
   if (value.includes('://')) {
     try {
       const url = new URL(value)
-      return ALLOWED_SERVER_PROTOCOLS.has(url.protocol) ? value : undefined
+      if (!ALLOWED_SERVER_PROTOCOLS.has(url.protocol)) return undefined
+      // Reject embedded credentials (userinfo): a legitimate XMPP endpoint never
+      // carries them, and they would be stored verbatim as the connection target.
+      if (url.username || url.password) return undefined
+      return value
     } catch {
       return undefined
     }

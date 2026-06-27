@@ -56,12 +56,15 @@ Validation (`normalizeServer`):
 
 - A `scheme://host` URL is accepted only when the scheme is `ws`, `wss`, `http`,
   `https`, `tls`, or `tcp`. Any other scheme (`javascript:`, `file:`, `data:`,
-  `blob:`, ...) is **dropped**.
-- A value without a scheme must be a **dotted hostname** (e.g. `process-one.net`)
-  or `dotted-host:port` with a numeric 1–65535 port. This is what distinguishes a
-  legitimate `chat.example.com:5222` from an opaque dangerous URI like
-  `javascript:alert(1)` (whose part after the colon is not a port). Single-label
-  hosts such as `localhost` are not accepted from a link.
+  `blob:`, ...) is **dropped**. A URL that embeds credentials
+  (`wss://user:pass@host`) is also dropped.
+- A value **without a scheme** must be a **dotted hostname** (e.g.
+  `process-one.net`) or `dotted-host:port` with a numeric 1–65535 port. This is
+  what distinguishes a legitimate `chat.example.com:5222` from an opaque
+  dangerous URI like `javascript:alert(1)` (whose part after the colon is not a
+  port). A single-label host such as `localhost` is **not** accepted in this
+  shorthand form (it is ambiguous with a scheme); use an explicit
+  `wss://localhost/ws` URL if you really need a single-label host.
 - Whitespace is rejected.
 
 When the `server` is dropped, a valid `jid` in the same link still applies.
