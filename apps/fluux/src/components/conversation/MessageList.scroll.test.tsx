@@ -690,6 +690,44 @@ describe('MessageList scroll behavior', () => {
       }
     })
 
+    it('does NOT auto-load older on a passive scroll to the top until the user has scrolled away from it', () => {
+      // On a fresh entry the list briefly renders at scrollTop=0 before the auto-scroll-to-bottom
+      // settles. A passive 'scroll' event at that transient top must NOT trigger load-older — doing
+      // so prepends a batch and clears isAtBottom, breaking bottom-stick for the next message. Only
+      // once the user has genuinely scrolled away from the top (and returned) does it auto-load.
+      const messages = createTestMessages(10)
+      const onScrollToTop = vi.fn()
+
+      render(
+        <MessageList
+          messages={messages}
+          conversationId="conv-1"
+          clearFirstNewMessageId={vi.fn()}
+          onScrollToTop={onScrollToTop}
+          renderMessage={(msg) => <div key={msg.id}>{msg.body}</div>}
+        />
+      )
+
+      const container = document.querySelector('.overflow-y-auto') as HTMLDivElement
+      if (container) {
+        Object.defineProperty(container, 'scrollHeight', { value: 1000, configurable: true })
+        Object.defineProperty(container, 'clientHeight', { value: 500, configurable: true })
+        let top = 0
+        Object.defineProperty(container, 'scrollTop', { get: () => top, configurable: true })
+
+        // Fresh-entry transient top — a passive scroll must be ignored.
+        container.dispatchEvent(new Event('scroll', { bubbles: true }))
+        expect(onScrollToTop).not.toHaveBeenCalled()
+
+        // User scrolls away from the top, then back to it: now it is a genuine gesture.
+        top = 600
+        container.dispatchEvent(new Event('scroll', { bubbles: true }))
+        top = 0
+        container.dispatchEvent(new Event('scroll', { bubbles: true }))
+        expect(onScrollToTop).toHaveBeenCalledTimes(1)
+      }
+    })
+
     it('should NOT call onScrollToTop when isHistoryComplete is true', () => {
       const messages = createTestMessages(10)
       const onScrollToTop = vi.fn()

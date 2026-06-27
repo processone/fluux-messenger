@@ -1068,8 +1068,14 @@ export function useMessageListScroll({
     // Track if user scrolled away from top (allows re-trigger of load)
     if (scrollTop > 50) scrolledAwayFromTopRef.current = true
 
-    // Auto-trigger load when at top (disabled in static mode — preview starts at scrollTop=0)
-    if (scrollTop === 0 && !staticMode) triggerLoadOlder()
+    // Auto-trigger load when at top (disabled in static mode — preview starts at scrollTop=0).
+    // Gate on scrolledAwayFromTop: a PASSIVE scroll reaching the top must only auto-load when the
+    // user genuinely scrolled up to it (was away from the top and returned). On a fresh entry the
+    // list briefly renders at scrollTop=0 before the auto-scroll-to-bottom settles; that transient
+    // must NOT spuriously load older — doing so prepends a batch and clears isAtBottom, breaking
+    // bottom-stick for the next incoming message. A wheel-up (handleWheel) is explicit intent and
+    // is intentionally NOT gated this way.
+    if (scrollTop === 0 && !staticMode && scrolledAwayFromTopRef.current) triggerLoadOlder()
   }
 
   const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
@@ -1602,6 +1608,16 @@ export function useMessageListScroll({
     saved.restored = true
     saved.restoredAt = Date.now()
     lastRestoreTimeRef.current = Date.now()
+
+    // Account for the prepended rows in the new-message baseline. This layout effect runs BEFORE
+    // the new-message effect in the same commit and flips `restored` true, so that effect no
+    // longer takes its `!restored` skip branch. Without syncing the count here it would compare
+    // the post-prepend messageCount against the STALE pre-prepend count, misread the load-older as
+    // a new message, and (in a short conversation, where the top is still within AT_BOTTOM_THRESHOLD
+    // so isAtBottom stays true) pin the view to the bottom — the reported "scroll up to the top
+    // jumps back to the bottom". A genuine new message arriving later still grows the count past
+    // this and scrolls normally.
+    prevMessageCountRef.current = messageCount
 
     // Measurement-aware re-assert loop: tanstack's estimated sizes for prepended rows
     // may differ from actual heights. As ResizeObserver reports measurements,

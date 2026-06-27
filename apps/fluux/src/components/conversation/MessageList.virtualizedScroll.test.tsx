@@ -530,4 +530,43 @@ describe('MessageList — virtualized bottom-stick re-asserts as rows measure', 
       globalThis.ResizeObserver = realRO
     }
   })
+
+  it('does NOT jump to the bottom when loading older messages in a SHORT conversation', () => {
+    // Reported on a short 1:1 ("Elisabeth"): scrolling up to the top snapped back to the bottom.
+    // In a conversation whose content only just exceeds the viewport, the reader is still within
+    // AT_BOTTOM_THRESHOLD (150px) of the bottom, so isAtBottom stays TRUE. Loading older messages
+    // grows messageCount, and the prepend restore sets restored=true synchronously in its layout
+    // effect. The trailing new-message effect then no longer skips (its guard is `!restored`) and,
+    // comparing against the stale pre-prepend count, misreads the load-older as a NEW message —
+    // pinning the (still "at bottom") view to the bottom. A load-older must preserve position.
+    getOffsetForMessageId.mockImplementation((id) => (id === 'msg-0' ? 0 : null))
+    const older: BaseMessage[] = Array.from({ length: 10 }, (_, i) => ({
+      id: `older-${i}`, from: 'user@example.com', body: `Older ${i}`,
+      timestamp: new Date(2024, 0, 1, 11, i), isOutgoing: false, type: 'chat' as const,
+    }))
+    const shortProps = { conversationId: 'conv-short', onScrollToTop: vi.fn(), isHistoryComplete: false, renderMessage: (m: BaseMessage) => <div>{m.body}</div> }
+
+    const { container, getByText, rerender } = render(<MessageList messages={makeMessages(8)} {...shortProps} />)
+    const scroller = container.querySelector('[data-message-list]') as HTMLElement
+    // Short: content (600) only 100px past the 500px viewport -> the reader counts as "at bottom".
+    let scrollTopVal = 0
+    Object.defineProperty(scroller, 'scrollHeight', { get: () => 600, configurable: true })
+    Object.defineProperty(scroller, 'clientHeight', { value: 500, configurable: true })
+    Object.defineProperty(scroller, 'scrollTop', { get: () => scrollTopVal, set: (v: number) => { scrollTopVal = v }, configurable: true })
+
+    // Capture the anchor (msg-0) the way load-older does.
+    fireEvent.click(getByText('chat.loadEarlierMessages'))
+    getOffsetForMessageId.mockClear()
+    scrollToIndexCalls.length = 0
+    scrollToOffsetCalls.length = 0
+    // After prepend msg-0 shifts down to absolutePos=400 (10 older rows at 40px).
+    getOffsetForMessageId.mockImplementation((id) => (id === 'msg-0' ? 400 : null))
+
+    rerender(<MessageList messages={[...older, ...makeMessages(8)]} {...shortProps} />)
+
+    // The restore re-windowed to the anchor (scrollToOffset). The load-older must NOT then be
+    // treated as a new message and pinned to the bottom (scrollToIndex('end')).
+    expect(scrollToOffsetCalls.length).toBeGreaterThan(0) // the prepend restore actually ran
+    expect(scrollToIndexCalls).not.toContain('end')       // ...and did not jump to the bottom
+  })
 })
