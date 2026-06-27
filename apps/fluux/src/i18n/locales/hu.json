@@ -871,6 +871,8 @@
             "unlockAction": "Feloldás",
             "unlockSetupAction": "Beállítás",
             "unlockSkip": "Kihagyás, küldés titkosítás nélkül",
+            "rememberPassphrase": "Jelszó tárolása ezen az eszközön 24 órára",
+            "rememberPassphraseHint": "Titkosítva tárolva. Bárki, aki hozzáfér ehhez az eszközhöz, használhatja, amíg le nem jár.",
             "unlockPassphraseMismatch": "A jelszavak nem egyeznek",
             "unlockPassphraseTooShort": "A jelszónak legalább 8 karakterből kell állnia",
             "lockedBannerBody": "A titkosítási kulcs zárolva van. Add meg a jelszavad a titkosítás aktiválásához erre a munkamenetre.",

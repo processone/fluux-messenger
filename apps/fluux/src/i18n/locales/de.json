@@ -873,6 +873,8 @@
             "unlockAction": "Entsperren",
             "unlockSetupAction": "Einrichten",
             "unlockSkip": "Überspringen, ohne Verschlüsselung senden",
+            "rememberPassphrase": "Passphrase für 24 Stunden auf diesem Gerät speichern",
+            "rememberPassphraseHint": "Verschlüsselt gespeichert. Jede Person mit Zugang zu diesem Gerät kann sie bis zum Ablauf verwenden.",
             "unlockPassphraseMismatch": "Passphrasen stimmen nicht überein",
             "unlockPassphraseTooShort": "Die Passphrase muss mindestens 8 Zeichen lang sein",
             "lockedBannerBody": "Dein Verschlüsselungsschlüssel ist gesperrt. Gib deine Passphrase ein, um die Verschlüsselung für diese Sitzung zu aktivieren.",

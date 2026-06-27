@@ -871,6 +871,8 @@
             "unlockAction": "解锁",
             "unlockSetupAction": "设置",
             "unlockSkip": "跳过，不加密发送",
+            "rememberPassphrase": "在此设备上保存密码短语 24 小时",
+            "rememberPassphraseHint": "以加密方式存储。任何有权访问此设备的人都可以在到期前使用它。",
             "unlockPassphraseMismatch": "密码短语不匹配",
             "unlockPassphraseTooShort": "密码短语必须至少包含 8 个字符",
             "lockedBannerBody": "您的加密密钥已被锁定。请输入您的密码短语以启用此会话的加密。",

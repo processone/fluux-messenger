@@ -871,6 +871,8 @@
             "unlockAction": "إلغاء القفل",
             "unlockSetupAction": "إعداد",
             "unlockSkip": "تخطّ, إرسال بدون تشفير",
+            "rememberPassphrase": "احتفظ بعبارة المرور على هذا الجهاز لمدة 24 ساعة",
+            "rememberPassphraseHint": "مخزّنة بشكل مشفّر. يمكن لأي شخص يصل إلى هذا الجهاز استخدامها حتى انتهاء صلاحيتها.",
             "unlockPassphraseMismatch": "عبارتا المرور غير متطابقتين",
             "unlockPassphraseTooShort": "يجب أن تتكون عبارة المرور من 8 أحرف على الأقل",
             "lockedBannerBody": "مفتاح التشفير مقفل. أدخل عبارة المرور لتفعيل التشفير لهذه الجلسة.",

@@ -871,6 +871,8 @@
             "unlockAction": "Atrakinti",
             "unlockSetupAction": "Nustatyti",
             "unlockSkip": "Praleisti, siųsti be šifravimo",
+            "rememberPassphrase": "Išsaugoti slaptažodį šiame įrenginyje 24 valandas",
+            "rememberPassphraseHint": "Saugoma užšifruota. Kiekvienas, turintis prieigą prie šio įrenginio, galės juo naudotis iki galiojimo pabaigos.",
             "unlockPassphraseMismatch": "Slaptažodžiai nesutampa",
             "unlockPassphraseTooShort": "Slaptažodį turi sudaryti ne mažiau kaip 8 simboliai",
             "lockedBannerBody": "Šifravimo raktas užrakintas. Įveskite slaptažodį, kad įjungtumėte šifravimą šiai sesijai.",

@@ -873,6 +873,8 @@
             "unlockAction": "Desbloquear",
             "unlockSetupAction": "Configurar",
             "unlockSkip": "Ignorar, enviar sem criptografia",
+            "rememberPassphrase": "Guardar a minha frase-passe neste dispositivo durante 24 horas",
+            "rememberPassphraseHint": "Armazenada de forma cifrada. Qualquer pessoa com acesso a este dispositivo pode usá-la até expirar.",
             "unlockPassphraseMismatch": "As frases-passe não coincidem",
             "unlockPassphraseTooShort": "A frase-passe deve ter pelo menos 8 caracteres",
             "lockedBannerBody": "A sua chave de criptografia está bloqueada. Insira a frase-passe para ativar a criptografia para esta sessão.",

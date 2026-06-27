@@ -873,6 +873,8 @@
             "unlockAction": "Desbloqueja",
             "unlockSetupAction": "Configura",
             "unlockSkip": "Ometre, envia sense xifratge",
+            "rememberPassphrase": "Desa la meva contrasenya en aquest dispositiu durant 24 hores",
+            "rememberPassphraseHint": "Emmagatzemada de forma xifrada. Qualsevol persona amb accés a aquest dispositiu podria usar-la fins que expiri.",
             "unlockPassphraseMismatch": "Les contrasenyes no coincideixen",
             "unlockPassphraseTooShort": "La contrasenya ha de tenir almenys 8 caràcters",
             "lockedBannerBody": "La teva clau de xifratge està bloquejada. Introdueix la contrasenya per activar el xifratge per a aquesta sessió.",

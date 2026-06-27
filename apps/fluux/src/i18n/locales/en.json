@@ -776,6 +776,8 @@
             "unlockAction": "Unlock",
             "unlockSetupAction": "Set up",
             "unlockSkip": "Skip, send without encryption",
+            "rememberPassphrase": "Keep my passphrase on this device for 24 hours",
+            "rememberPassphraseHint": "Stored encrypted. Anyone with access to this device could use it until it expires.",
             "unlockPassphraseMismatch": "Passphrases don’t match",
             "unlockPassphraseTooShort": "Passphrase must be at least 8 characters",
             "lockedBannerBody": "Your encryption key is locked. Enter your passphrase to enable encryption for this session.",

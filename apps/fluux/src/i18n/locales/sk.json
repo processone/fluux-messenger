@@ -872,6 +872,8 @@
             "unlockAction": "Odomknúť",
             "unlockSetupAction": "Nastaviť",
             "unlockSkip": "Preskočiť, odoslať bez šifrovania",
+            "rememberPassphrase": "Uložiť heslo na tomto zariadení po dobu 24 hodín",
+            "rememberPassphraseHint": "Uložené v zašifrovanej podobe. Ktokoľvek s prístupom k tomuto zariadeniu ho môže použiť, kým nevyprší platnosť.",
             "unlockPassphraseMismatch": "Heslá sa nezhodujú",
             "unlockPassphraseTooShort": "Heslo musí mať aspoň 8 znakov",
             "lockedBannerBody": "Šifrovací kľúč je uzamknutý. Zadaj heslo na aktiváciu šifrovania pre toto sedenie.",

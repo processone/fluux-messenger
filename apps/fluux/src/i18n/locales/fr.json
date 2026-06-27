@@ -879,6 +879,8 @@
             "unlockAction": "Déverrouiller",
             "unlockSetupAction": "Configurer",
             "unlockSkip": "Ignorer, envoyer sans chiffrement",
+            "rememberPassphrase": "Conserver ma phrase de passe sur cet appareil pendant 24 heures",
+            "rememberPassphraseHint": "Stockée de façon chiffrée. Toute personne ayant accès à cet appareil pourrait l'utiliser jusqu'a son expiration.",
             "unlockPassphraseMismatch": "Les phrases de passe ne correspondent pas",
             "unlockPassphraseTooShort": "La phrase de passe doit comporter au moins 8 caractères",
             "lockedBannerBody": "Votre clé de chiffrement est verrouillée. Saisissez votre phrase de passe pour activer le chiffrement pour cette session.",

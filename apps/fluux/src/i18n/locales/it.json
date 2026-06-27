@@ -873,6 +873,8 @@
             "unlockAction": "Sblocca",
             "unlockSetupAction": "Configura",
             "unlockSkip": "Salta, invia senza crittografia",
+            "rememberPassphrase": "Salva la mia passphrase su questo dispositivo per 24 ore",
+            "rememberPassphraseHint": "Salvata in forma cifrata. Chiunque abbia accesso a questo dispositivo potrebbe usarla fino alla scadenza.",
             "unlockPassphraseMismatch": "Le passphrase non corrispondono",
             "unlockPassphraseTooShort": "La passphrase deve avere almeno 8 caratteri",
             "lockedBannerBody": "La tua chiave di crittografia è bloccata. Inserisci la tua passphrase per attivare la crittografia per questa sessione.",

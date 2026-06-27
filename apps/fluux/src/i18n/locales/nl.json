@@ -871,6 +871,8 @@
             "unlockAction": "Ontgrendelen",
             "unlockSetupAction": "Instellen",
             "unlockSkip": "Overslaan, verzenden zonder versleuteling",
+            "rememberPassphrase": "Mijn wachtwoordzin 24 uur op dit apparaat bewaren",
+            "rememberPassphraseHint": "Versleuteld opgeslagen. Iedereen met toegang tot dit apparaat kan het gebruiken tot het verloopt.",
             "unlockPassphraseMismatch": "Wachtwoordzinnen komen niet overeen",
             "unlockPassphraseTooShort": "De wachtwoordzin moet minimaal 8 tekens bevatten",
             "lockedBannerBody": "Je versleutelingssleutel is vergrendeld. Voer je wachtwoordzin in om versleuteling voor deze sessie te activeren.",
