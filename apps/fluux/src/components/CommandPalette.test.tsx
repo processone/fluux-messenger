@@ -59,6 +59,8 @@ vi.mock('@fluux/sdk', () => ({
   },
   formatMessagePreview: (msg: { body?: string }) => msg?.body || '',
   searchStore: { getState: () => ({ search: mockSearchFn }) },
+  // Entity rows now render <Avatar>, which derives its fallback color from this.
+  generateConsistentColorHexSync: () => '#888888',
 }))
 
 // Mock React store hooks (from @fluux/sdk/react)
@@ -220,6 +222,25 @@ describe('CommandPalette', () => {
       const parentDiv = generalChatJid.closest('.min-w-0')
       const italicElements = parentDiv?.querySelectorAll('.italic')
       expect(italicElements?.length ?? 0).toBe(0)
+    })
+
+    it('renders an entity avatar (consistent-color initial) for conversation rows, not a generic icon', () => {
+      render(<CommandPalette {...defaultProps} />)
+      const aliceRow = screen.getByText('Alice Smith').closest('button')!
+      // Mock data has no avatar image, so the Avatar shows its colored-letter fallback.
+      // There must be no <img> and no lucide icon <svg> — the old generic icon is gone.
+      expect(aliceRow.querySelector('img')).toBeFalsy()
+      expect(aliceRow.querySelector('svg')).toBeFalsy()
+      const avatarBg = aliceRow.querySelector('[style*="background"]')
+      expect(avatarBg?.textContent).toBe('A')
+    })
+
+    it('renders a Hash-glyph avatar fallback for rooms without an avatar image', () => {
+      render(<CommandPalette {...defaultProps} />)
+      const devRoom = screen.getByText('Development').closest('button')!
+      // Rooms render the Avatar with a Hash fallbackIcon (an <svg>) on a colored circle.
+      const avatarBg = devRoom.querySelector('[style*="background"]')
+      expect(avatarBg?.querySelector('svg')).toBeTruthy()
     })
   })
 
