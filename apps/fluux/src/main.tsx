@@ -18,10 +18,6 @@ import { registerServiceWorker } from './utils/serviceWorkerUpdate'
 import { getReconnectIntent } from './utils/reconnectIntent'
 import { captureWebLoginPrefill } from './utils/loginPrefillSources'
 import { useLoginPrefillStore } from './stores/loginPrefillStore'
-import { installScrollbarAutohide } from './utils/scrollbarAutohide'
-
-// Auto-hide scrollbars: paint the thumb only while hovering / scrolling.
-installScrollbarAutohide()
 
 // Check if running in Tauri
 const isTauri = '__TAURI_INTERNALS__' in window

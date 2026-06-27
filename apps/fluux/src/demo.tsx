@@ -29,10 +29,6 @@ import { installDemoLoadOlder, seedStressConversation } from './demo/demoLoadOld
 import App from './App'
 import i18n from './i18n'
 import './index.css'
-import { installScrollbarAutohide } from './utils/scrollbarAutohide'
-
-// Auto-hide scrollbars: paint the thumb only while hovering / scrolling.
-installScrollbarAutohide()
 
 // Parse URL parameters
 const params = new URLSearchParams(window.location.search)

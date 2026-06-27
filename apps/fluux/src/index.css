@@ -518,24 +518,14 @@ em-emoji-picker {
   line-height: inherit;
 }
 
-/* Custom scrollbar styling — thin gutter, auto-hiding thumb.
-   The thumb is transparent at rest and revealed while the container is hovered
-   or actively scrolling (the `[data-scrolling]` stamp comes from
-   scrollbarAutohide.ts). The 6px gutter is always reserved when a container
-   overflows, so revealing the thumb causes no layout shift (important for the
-   virtualized message list).
-
-   WebKit (the engine the desktop app actually runs — WKWebView / WebKitGTK)
-   needs each reveal selector as its OWN rule, never grouped:
-     1. WebKit drops the ENTIRE selector list if any ::-webkit-scrollbar
-        compound in it is one it won't apply — so a grouped
-        `:hover, [data-scrolling]` rule takes the `:hover` reveal down with it.
-     2. WebKit paints the scrollbar on the compositor and does not reliably
-        repaint it when JS toggles an attribute, so `[data-scrolling]` alone is
-        unreliable there. `:hover` IS a native scrollbar state WebKit repaints.
-   Keeping them separate lets the `:hover` reveal work in WebKit while
-   `[data-scrolling]` still adds keyboard/programmatic-scroll reveal in
-   Chromium / the web build. */
+/* Custom scrollbar styling — thin, subtle, always visible.
+   A previous auto-hide attempt (transparent thumb revealed on :hover /
+   [data-scrolling]) did not work in the engine the desktop app actually runs,
+   WebKit (Tauri WKWebView / WebKitGTK): WebKit drops grouped ::-webkit-scrollbar
+   selector lists and does not repaint the scrollbar when JS toggles an
+   attribute, so the thumb stayed invisible and the scrollbar appeared to vanish.
+   A thin (6px) muted thumb that is always present is the reliable cross-engine
+   result; it brightens on hover for affordance. */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
@@ -546,14 +536,13 @@ em-emoji-picker {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: transparent;
+  background: var(--scrollbar-thumb);
   border-radius: 3px;
 }
 
-/* Reveal — each selector is its own rule (see WebKit note above). */
-:hover::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); }
-[data-scrolling]::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); }
-::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-thumb-hover); }
+::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
+}
 
 /* Sidebar list rows. Horizontal padding stays a utility (px-2); the density-
  * varying vertical padding + gap live here so a [data-density] flip needs no
@@ -581,10 +570,8 @@ em-emoji-picker {
 [data-density="compact"] .icon-rail-btn { width: 36px; height: 36px; }
 [data-density="compact"] .icon-rail-btn svg { width: 18px; height: 18px; }
 
-/* Sidebar scrollbar — keeps its own (theme-specific) thumb color when revealed.
-   Un-grouped for the same WebKit reason as the global rules above. */
-.sidebar-scroll:hover::-webkit-scrollbar-thumb { background: var(--fluux-scrollbar-thumb-sidebar); }
-.sidebar-scroll[data-scrolling]::-webkit-scrollbar-thumb { background: var(--fluux-scrollbar-thumb-sidebar); }
+/* Sidebar scrollbar — keeps its own (theme-specific) thumb color. */
+.sidebar-scroll::-webkit-scrollbar-thumb { background: var(--fluux-scrollbar-thumb-sidebar); }
 .sidebar-scroll::-webkit-scrollbar-thumb:hover { background: var(--fluux-scrollbar-thumb-sidebar-hover); }
 
 /* Smooth scrolling */
