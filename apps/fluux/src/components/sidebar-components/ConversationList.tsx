@@ -17,7 +17,8 @@ import { Tooltip } from '../Tooltip'
 import { useSidebarZone, ContactTooltipContent } from './types'
 import { formatConversationTime } from '@/utils/dateFormat'
 import { useSettingsStore } from '@/stores/settingsStore'
-import { Hash, Trash2, Archive, ArchiveRestore } from 'lucide-react'
+import { Hash, Trash2, Archive, ArchiveRestore, MessageCircle } from 'lucide-react'
+import { ListEmpty } from '../ui/ListEmpty'
 import { ConfirmDialog } from '../ConfirmDialog'
 import {
   SidebarListMenuProvider,
@@ -86,11 +87,7 @@ export function ConversationList() {
   })
 
   if (conversationIds.length === 0) {
-    return (
-      <div className="px-3 py-4 text-fluux-muted text-sm text-center">
-        {t('conversations.noConversations')}
-      </div>
-    )
+    return <ListEmpty icon={MessageCircle} title={t('conversations.noConversations')} />
   }
 
   return (
@@ -158,12 +155,7 @@ export function ArchiveList() {
   })
 
   if (archivedIds.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center h-full text-fluux-muted px-4 text-center">
-        <Archive className="size-12 mb-3 opacity-50" />
-        <p>{t('archive.noArchivedConversations')}</p>
-      </div>
-    )
+    return <ListEmpty className="h-full" icon={Archive} title={t('archive.noArchivedConversations')} />
   }
 
   return (

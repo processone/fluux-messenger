@@ -2,6 +2,7 @@ import { useRef, useEffect, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Search, Loader2 } from 'lucide-react'
 import { TextInput } from './ui/TextInput'
+import { ListEmpty } from './ui/ListEmpty'
 
 interface EntityListViewProps<T> {
   title: string
@@ -85,9 +86,7 @@ export function EntityListView<T>({
       {/* List container */}
       <div className="flex-1 min-h-0 overflow-y-auto space-y-1">
         {items.length === 0 && !isLoading ? (
-          <div className="flex flex-col items-center justify-center py-8 text-fluux-muted">
-            <p>{emptyMessage}</p>
-          </div>
+          <ListEmpty title={emptyMessage} />
         ) : (
           <>
             {items.map((item, index) => (
