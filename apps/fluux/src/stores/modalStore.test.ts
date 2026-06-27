@@ -1,5 +1,6 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { useModalStore, MODAL_ESCAPE_PRIORITY } from './modalStore'
+import * as tooltipBus from '../utils/tooltipBus'
 
 const reset = () =>
   useModalStore.setState({
@@ -57,6 +58,35 @@ describe('modalStore', () => {
 
   it('closeTopmost() returns false when no modal is open', () => {
     expect(useModalStore.getState().closeTopmost()).toBe(false)
+  })
+
+  describe('tooltip dismissal on open', () => {
+    it('open() dismisses any lingering tooltips so they cannot float over the modal', () => {
+      const spy = vi.spyOn(tooltipBus, 'dismissAllTooltips')
+      useModalStore.getState().open('commandPalette')
+      expect(spy).toHaveBeenCalledTimes(1)
+      spy.mockRestore()
+    })
+
+    it('toggle() dismisses tooltips when opening, but not when closing', () => {
+      const spy = vi.spyOn(tooltipBus, 'dismissAllTooltips')
+      const { toggle } = useModalStore.getState()
+
+      toggle('shortcutHelp') // closed -> open
+      expect(spy).toHaveBeenCalledTimes(1)
+
+      toggle('shortcutHelp') // open -> closed
+      expect(spy).toHaveBeenCalledTimes(1)
+
+      spy.mockRestore()
+    })
+
+    it('close() does not dismiss tooltips', () => {
+      const spy = vi.spyOn(tooltipBus, 'dismissAllTooltips')
+      useModalStore.getState().close('quickChat')
+      expect(spy).not.toHaveBeenCalled()
+      spy.mockRestore()
+    })
   })
 
   it('action identities are stable across state changes (so action-only consumers never re-render)', () => {
