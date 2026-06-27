@@ -588,6 +588,15 @@ em-emoji-picker {
 .sidebar-row { padding-block: 8px; column-gap: 12px; }
 [data-density="compact"] .sidebar-row { padding-block: 4px; column-gap: 8px; }
 
+/* Command palette result rows + section labels. Same convention as the sidebar:
+ * horizontal padding stays a utility (px-4); the density-varying vertical
+ * padding + gap live here so a [data-density] flip needs no row re-render.
+ * Comfortable matches the previous static py-2 / gap-3. */
+.command-row { padding-block: 8px; column-gap: 12px; }
+[data-density="compact"] .command-row { padding-block: 4px; column-gap: 8px; }
+.command-group-label { padding-block: 6px; }
+[data-density="compact"] .command-group-label { padding-block: 3px; }
+
 /* Message group-start spacing. The vertical gap before a new sender group;
  * tightens in compact. Comfortable keeps the current 16px. */
 .message-group-start { padding-top: 16px; }

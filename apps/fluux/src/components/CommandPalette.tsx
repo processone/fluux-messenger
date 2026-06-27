@@ -4,7 +4,6 @@ import { useTranslation } from 'react-i18next'
 import {
   MessageSquare,
   Hash,
-  User,
   Plus,
   Settings,
   HelpCircle,
@@ -20,7 +19,8 @@ import { detectRenderLoop } from '@/utils/renderLoopDetector'
 import { useChatStore, useConnectionStore } from '@fluux/sdk/react'
 import type { PresenceStatus } from '@fluux/sdk'
 import type { SidebarView } from './Sidebar'
-import { APP_OFFLINE_PRESENCE_COLOR, PRESENCE_COLORS } from '@/constants/ui'
+import { Avatar } from './Avatar'
+import { useSettingsStore } from '@/stores/settingsStore'
 
 // =============================================================================
 // Types
@@ -36,7 +36,12 @@ interface CommandItem {
   sublabel?: string
   lastMessagePreview?: string
   lastMessageBody?: string // Raw body for search matching
-  icon: React.ReactNode
+  /** Icon for non-entity rows (views, actions). Entity rows render an Avatar instead. */
+  icon?: React.ReactNode
+  /** Identifier for the entity avatar's consistent color (raw JID, matches the sidebar). */
+  avatarIdentifier?: string
+  /** Avatar image URL for an entity row (contact or room avatar), when available. */
+  avatarUrl?: string
   action: () => void
   keywords?: string[]
   presence?: PresenceStatus
@@ -196,6 +201,14 @@ function CommandPaletteContent({
   const connectionStatus = useConnectionStore((s) => s.status)
   const forceOffline = connectionStatus !== 'online'
   const { setActiveConversation } = useChatStore()
+  // Narrow read: only re-render on a density change. Drives the entity avatar
+  // size and the action/view icon box; row padding + gap come from CSS keyed on
+  // `[data-density]` (the `.command-row` class) so a flip needs no row work.
+  const densityMode = useSettingsStore((s) => s.densityMode)
+  const isCompact = densityMode === 'compact'
+  const avatarSize = isCompact ? 'xs' : 'sm'
+  const iconBoxClass = isCompact ? 'size-6' : 'size-8'
+  const iconGlyphClass = isCompact ? '[&_svg]:size-4' : '[&_svg]:size-5'
 
   // Navigation callbacks
   const closeAndNavigate = (view: SidebarView) => {
@@ -241,7 +254,8 @@ function CommandPaletteContent({
         sublabel: conv.id,
         lastMessagePreview: preview,
         lastMessageBody: conv.lastMessage?.body,
-        icon: <MessageSquare className="size-4" />,
+        avatarIdentifier: conv.id,
+        avatarUrl: contact?.avatar,
         action: () => selectConversation(conv.id),
         keywords: [getLocalPart(conv.id), 'message', 'chat'],
         presence: contact?.presence ?? 'offline',
@@ -262,7 +276,8 @@ function CommandPaletteContent({
         type: 'contact',
         label: contact.name,
         sublabel: contact.jid,
-        icon: <User className="size-4" />,
+        avatarIdentifier: contact.jid,
+        avatarUrl: contact.avatar,
         action: () => {
           if (hasArchivedConversation) {
             // Open existing archived conversation in archive view
@@ -288,7 +303,8 @@ function CommandPaletteContent({
         sublabel: room.jid,
         lastMessagePreview: preview,
         lastMessageBody: room.lastMessage?.body,
-        icon: <Hash className="size-4" />,
+        avatarIdentifier: room.jid,
+        avatarUrl: room.avatar,
         action: () => selectRoom(room.jid),
         keywords: [getLocalPart(room.jid), 'room', 'muc', 'group'],
       })
@@ -301,7 +317,8 @@ function CommandPaletteContent({
         type: 'room',
         label: room.name || room.jid.split('@')[0],
         sublabel: `${room.jid} (${t('rooms.bookmarked')})`,
-        icon: <Hash className="size-4 opacity-50" />,
+        avatarIdentifier: room.jid,
+        avatarUrl: room.avatar,
         action: () => selectRoom(room.jid),
         keywords: [getLocalPart(room.jid), 'room', 'bookmark'],
       })
@@ -309,11 +326,11 @@ function CommandPaletteContent({
 
     // 5. Views (navigation)
     const views: Array<{ id: string; label: string; icon: React.ReactNode; view: SidebarView; keywords: string[] }> = [
-      { id: 'view-messages', label: t('sidebar.messages'), icon: <MessageSquare className="size-4" />, view: 'messages', keywords: ['messages', 'conversations', 'chat'] },
-      { id: 'view-rooms', label: t('sidebar.rooms'), icon: <Hash className="size-4" />, view: 'rooms', keywords: ['rooms', 'channels', 'muc'] },
-      { id: 'view-connections', label: t('sidebar.connections'), icon: <Users className="size-4" />, view: 'directory', keywords: ['connections', 'contacts', 'roster'] },
-      { id: 'view-archive', label: t('sidebar.archive'), icon: <Archive className="size-4" />, view: 'archive', keywords: ['archive', 'hidden', 'old'] },
-      { id: 'view-events', label: t('sidebar.events'), icon: <Bell className="size-4" />, view: 'events', keywords: ['events', 'notifications', 'requests'] },
+      { id: 'view-messages', label: t('sidebar.messages'), icon: <MessageSquare />, view: 'messages', keywords: ['messages', 'conversations', 'chat'] },
+      { id: 'view-rooms', label: t('sidebar.rooms'), icon: <Hash />, view: 'rooms', keywords: ['rooms', 'channels', 'muc'] },
+      { id: 'view-connections', label: t('sidebar.connections'), icon: <Users />, view: 'directory', keywords: ['connections', 'contacts', 'roster'] },
+      { id: 'view-archive', label: t('sidebar.archive'), icon: <Archive />, view: 'archive', keywords: ['archive', 'hidden', 'old'] },
+      { id: 'view-events', label: t('sidebar.events'), icon: <Bell />, view: 'events', keywords: ['events', 'notifications', 'requests'] },
     ]
 
     for (const v of views) {
@@ -329,12 +346,12 @@ function CommandPaletteContent({
 
     // 6. Actions
     const actions: Array<{ id: string; label: string; icon: React.ReactNode; action: () => void; keywords: string[] }> = [
-      { id: 'action-quick-chat', label: t('rooms.createQuickChat'), icon: <Plus className="size-4" />, action: () => { onCreateQuickChat(); onClose() }, keywords: ['new', 'create', 'quick', 'chat'] },
-      { id: 'action-add-contact', label: t('contacts.addContact'), icon: <Plus className="size-4" />, action: () => { onAddContact(); onClose() }, keywords: ['new', 'add', 'contact', 'friend'] },
-      { id: 'action-join-room', label: t('rooms.joinRoom'), icon: <Plus className="size-4" />, action: () => closeAndNavigate('rooms'), keywords: ['join', 'room', 'muc'] },
-      { id: 'action-settings', label: t('sidebar.settings'), icon: <Settings className="size-4" />, action: () => { onOpenSettings(); onClose() }, keywords: ['settings', 'preferences', 'options'] },
-      { id: 'action-shortcuts', label: t('shortcuts.title'), icon: <HelpCircle className="size-4" />, action: () => { onToggleShortcutHelp(); onClose() }, keywords: ['shortcuts', 'keyboard', 'help'] },
-      { id: 'action-console', label: t('console.title'), icon: <Terminal className="size-4" />, action: () => { onToggleConsole(); onClose() }, keywords: ['console', 'xmpp', 'debug'] },
+      { id: 'action-quick-chat', label: t('rooms.createQuickChat'), icon: <Plus />, action: () => { onCreateQuickChat(); onClose() }, keywords: ['new', 'create', 'quick', 'chat'] },
+      { id: 'action-add-contact', label: t('contacts.addContact'), icon: <Plus />, action: () => { onAddContact(); onClose() }, keywords: ['new', 'add', 'contact', 'friend'] },
+      { id: 'action-join-room', label: t('rooms.joinRoom'), icon: <Plus />, action: () => closeAndNavigate('rooms'), keywords: ['join', 'room', 'muc'] },
+      { id: 'action-settings', label: t('sidebar.settings'), icon: <Settings />, action: () => { onOpenSettings(); onClose() }, keywords: ['settings', 'preferences', 'options'] },
+      { id: 'action-shortcuts', label: t('shortcuts.title'), icon: <HelpCircle />, action: () => { onToggleShortcutHelp(); onClose() }, keywords: ['shortcuts', 'keyboard', 'help'] },
+      { id: 'action-console', label: t('console.title'), icon: <Terminal />, action: () => { onToggleConsole(); onClose() }, keywords: ['console', 'xmpp', 'debug'] },
     ]
 
     for (const a of actions) {
@@ -387,7 +404,7 @@ function CommandPaletteContent({
         id: 'search-gateway',
         type: 'action',
         label: t('commandPalette.searchMessages', { query: searchQuery }),
-        icon: <Search className="size-4" />,
+        icon: <Search />,
         action: () => {
           searchStore.getState().search(searchQuery)
           closeAndNavigate('search')
@@ -512,20 +529,28 @@ function CommandPaletteContent({
         className="relative z-10 fluux-glass rounded-lg w-full max-w-lg mx-4 overflow-hidden"
         onKeyDown={handleKeyDown}
       >
-        {/* Search Input */}
-        <div className="flex items-center gap-3 px-4 py-3 border-b border-fluux-hover">
-          <Search className="size-5 text-fluux-muted flex-shrink-0" />
-          <TextInput
-            ref={inputRef}
-            type="text"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder={t('commandPalette.placeholder')}
-            className="flex-1 bg-transparent text-fluux-text placeholder:text-fluux-muted outline-none text-base"
-          />
-          <kbd className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 text-xs text-fluux-muted bg-fluux-bg rounded border border-fluux-hover">
-            esc
-          </kbd>
+        {/* Search Input — contained, rounded field with a soft brand focus ring.
+            The palette auto-focuses the input, so focus-within is effectively
+            always on while open, giving a clear "type here" affordance. Inset by
+            the header padding so the ring isn't clipped by the dialog's
+            overflow-hidden. */}
+        <div className="p-3 border-b border-fluux-hover">
+          <div className="flex items-center gap-3 px-3 py-2 rounded-lg border border-fluux-hover bg-fluux-bg/40
+            transition-[box-shadow,border-color] duration-150
+            focus-within:border-fluux-brand/60 focus-within:ring-2 focus-within:ring-fluux-brand/25">
+            <Search className="size-5 text-fluux-muted flex-shrink-0" />
+            <TextInput
+              ref={inputRef}
+              type="text"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder={t('commandPalette.placeholder')}
+              className="flex-1 bg-transparent text-fluux-text placeholder:text-fluux-muted outline-none text-base"
+            />
+            <kbd className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 text-xs text-fluux-muted bg-fluux-bg rounded border border-fluux-hover">
+              esc
+            </kbd>
+          </div>
         </div>
 
         {/* Results */}
@@ -537,7 +562,7 @@ function CommandPaletteContent({
           ) : (
             groupedItems.map((group) => (
               <div key={group.type}>
-                <div className="px-4 py-1.5 text-xs font-semibold text-fluux-muted uppercase tracking-wide font-display">
+                <div className="px-4 command-group-label text-xs font-semibold text-fluux-muted uppercase tracking-wide font-display">
                   {group.label}
                 </div>
                 {group.items.map((item) => {
@@ -550,20 +575,35 @@ function CommandPaletteContent({
                       data-selected={isSelected}
                       onClick={item.action}
                       onMouseEnter={() => !ignoreMouseRef.current && !isKeyboardNav && updateSelectedIndex(itemIndex)}
-                      className={`w-full flex items-center gap-3 px-4 py-2 text-start transition-colors
+                      className={`w-full flex items-center command-row px-4 text-start transition-colors
                         focus:outline-none focus-visible:!shadow-none border-s-2
                         ${isSelected
                           ? 'bg-fluux-brand/50 text-fluux-text border-fluux-brand font-medium'
                           : `text-fluux-text border-transparent ${isKeyboardNav ? '' : 'hover:bg-fluux-hover'}`
                         }`}
                     >
-                      <span className={`flex-shrink-0 ${isSelected ? 'text-fluux-brand' : 'text-fluux-muted'}`}>
-                        {item.icon}
-                      </span>
-                      {item.presence && (
-                        <span
-                          className={`size-2 rounded-full flex-shrink-0 ${forceOffline ? APP_OFFLINE_PRESENCE_COLOR : PRESENCE_COLORS[item.presence]}`}
+                      {item.avatarIdentifier !== undefined ? (
+                        <Avatar
+                          size={avatarSize}
+                          identifier={item.avatarIdentifier}
+                          name={item.label}
+                          avatarUrl={item.avatarUrl}
+                          presence={item.presence}
+                          forceOffline={forceOffline}
+                          presenceBorderColor="border-fluux-chat"
+                          fallbackIcon={
+                            item.type === 'room'
+                              ? <Hash className={isCompact ? 'size-3.5' : 'size-4'} />
+                              : undefined
+                          }
                         />
+                      ) : (
+                        <span
+                          className={`flex items-center justify-center flex-shrink-0 ${iconBoxClass} ${iconGlyphClass}
+                            ${isSelected ? 'text-fluux-brand' : 'text-fluux-muted'}`}
+                        >
+                          {item.icon}
+                        </span>
                       )}
                       <div className="flex-1 min-w-0">
                         <div className="truncate">{item.label}</div>
