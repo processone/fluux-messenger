@@ -1019,11 +1019,13 @@
     "emptyState": {
         "messages": {
             "title": "Prywatne rozmowy",
-            "description": "Wybierz rozmowę z paska bocznego lub rozpocznij nową z listy kontaktów."
+            "description": "Wybierz rozmowę z paska bocznego lub rozpocznij nową z listy kontaktów.",
+            "action": "Rozpocznij rozmowę"
         },
         "rooms": {
             "title": "Pokoje czatowe",
-            "description": "Dołącz do pokoju z zakładek lub utwórz nowy czat grupowy, aby rozpocząć rozmowę."
+            "description": "Dołącz do pokoju z zakładek lub utwórz nowy czat grupowy, aby rozpocząć rozmowę.",
+            "action": "Utwórz pokój"
         },
         "directory": {
             "title": "Informacje o kontakcie",

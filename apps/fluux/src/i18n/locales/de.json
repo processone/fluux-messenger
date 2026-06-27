@@ -1019,11 +1019,13 @@
     "emptyState": {
         "messages": {
             "title": "Private Unterhaltungen",
-            "description": "Wählen Sie eine Unterhaltung aus der Seitenleiste oder starten Sie eine neue aus Ihrer Kontaktliste."
+            "description": "Wählen Sie eine Unterhaltung aus der Seitenleiste oder starten Sie eine neue aus Ihrer Kontaktliste.",
+            "action": "Gespräch starten"
         },
         "rooms": {
             "title": "Chaträume",
-            "description": "Treten Sie einem Raum aus Ihren Lesezeichen bei oder erstellen Sie einen neuen Gruppenchat."
+            "description": "Treten Sie einem Raum aus Ihren Lesezeichen bei oder erstellen Sie einen neuen Gruppenchat.",
+            "action": "Raum erstellen"
         },
         "directory": {
             "title": "Kontaktinformationen",

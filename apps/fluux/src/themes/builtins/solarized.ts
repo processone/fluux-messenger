@@ -33,6 +33,10 @@ export const solarizedTheme: ThemeDefinition = {
       '--fluux-color-purple': '#6c71c4',
       '--fluux-color-gray': '#657b83',
       '--fluux-color-red-rgb': '220, 50, 47',
+      // Decouple text-muted from base-80: base-80 (#93a1a1/base1) reaches only
+      // 4.22:1 on this theme's chat surface (#0a4050). Nudge lightness 60->64 to
+      // clear AA on both chat-bg and sidebar-bg (#073642/base02).
+      '--fluux-text-muted': '#9daaaa',
       // Error as text/icon — lightened from --fluux-color-red so it clears WCAG
       // AA on this theme's chat surface (status-error stays the fill).
       '--fluux-text-error': '#eb8b89',
@@ -85,6 +89,15 @@ export const solarizedTheme: ThemeDefinition = {
       '--fluux-color-purple': '#6c71c4',
       '--fluux-color-gray': '#839496',
       '--fluux-color-red-rgb': '220, 50, 47',
+      // Decouple text-normal from base-90: base-90 (#586e75/base01) reaches only
+      // 4.99:1 on chat-bg and 4.05:1 on sidebar-bg (#e6dfcc) -- sub-AA on
+      // sidebar. Override to base-100 (#002b36/base03) which clears both surfaces.
+      '--fluux-text-normal': '#002b36',
+      // Decouple text-muted from base-80: base-80 (#657b83/base00) reaches only
+      // 4.13:1 on chat-bg (#fdf6e3) and fails sidebar-bg (#e6dfcc) at 3.35:1.
+      // Darken lightness 45->37 to clear AA on the harder sidebar surface while
+      // remaining visually secondary vs. the overridden text-normal above.
+      '--fluux-text-muted': '#52646b',
       // Error as text/icon — darkened for WCAG AA on the light chat surface.
       '--fluux-text-error': '#a71f1c',
       '--fluux-color-green-rgb': '113, 140, 0',

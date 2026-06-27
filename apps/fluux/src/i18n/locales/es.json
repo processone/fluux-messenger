@@ -1019,11 +1019,13 @@
     "emptyState": {
         "messages": {
             "title": "Conversaciones Privadas",
-            "description": "Selecciona una conversacion de la barra lateral o crea una desde tu lista de contactos."
+            "description": "Selecciona una conversacion de la barra lateral o crea una desde tu lista de contactos.",
+            "action": "Iniciar una conversación"
         },
         "rooms": {
             "title": "Salas de Chat",
-            "description": "Unete a una sala de tus marcadores o crea un nuevo chat grupal para empezar a chatear."
+            "description": "Unete a una sala de tus marcadores o crea un nuevo chat grupal para empezar a chatear.",
+            "action": "Crear una sala"
         },
         "directory": {
             "title": "Informacion de Contacto",

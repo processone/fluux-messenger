@@ -1018,11 +1018,13 @@
     "emptyState": {
         "messages": {
             "title": "Privātas sarunas",
-            "description": "Izvēlieties sarunu no sānjoslas vai izveidojiet jaunu no kontaktu saraksta."
+            "description": "Izvēlieties sarunu no sānjoslas vai izveidojiet jaunu no kontaktu saraksta.",
+            "action": "Sākt sarunu"
         },
         "rooms": {
             "title": "Tērzēšanas istabas",
-            "description": "Pievienojieties istabai no grāmatzīmēm vai izveidojiet jaunu grupas tērzēšanu."
+            "description": "Pievienojieties istabai no grāmatzīmēm vai izveidojiet jaunu grupas tērzēšanu.",
+            "action": "Izveidot istabu"
         },
         "directory": {
             "title": "Kontakta informācija",

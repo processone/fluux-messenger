@@ -1019,11 +1019,13 @@
     "emptyState": {
         "messages": {
             "title": "Conversații private",
-            "description": "Selectează o conversație din bara laterală sau creează una din lista de contacte."
+            "description": "Selectează o conversație din bara laterală sau creează una din lista de contacte.",
+            "action": "Pornește o conversație"
         },
         "rooms": {
             "title": "Camere de discuții",
-            "description": "Intră într-o cameră din semnele de carte sau creează o nouă conversație de grup."
+            "description": "Intră într-o cameră din semnele de carte sau creează o nouă conversație de grup.",
+            "action": "Creează o cameră"
         },
         "directory": {
             "title": "Informații contact",

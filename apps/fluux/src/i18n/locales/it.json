@@ -1019,11 +1019,13 @@
     "emptyState": {
         "messages": {
             "title": "Conversazioni private",
-            "description": "Seleziona una conversazione dalla barra laterale o creane una dalla lista contatti."
+            "description": "Seleziona una conversazione dalla barra laterale o creane una dalla lista contatti.",
+            "action": "Inizia una conversazione"
         },
         "rooms": {
             "title": "Stanze di chat",
-            "description": "Entra in una stanza dai preferiti o crea una nuova chat di gruppo per iniziare."
+            "description": "Entra in una stanza dai preferiti o crea una nuova chat di gruppo per iniziare.",
+            "action": "Crea una stanza"
         },
         "directory": {
             "title": "Informazioni contatto",

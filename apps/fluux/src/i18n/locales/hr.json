@@ -1017,11 +1017,13 @@
     "emptyState": {
         "messages": {
             "title": "Privatni razgovori",
-            "description": "Odaberite razgovor iz bočne trake ili stvorite novi iz popisa kontakata."
+            "description": "Odaberite razgovor iz bočne trake ili stvorite novi iz popisa kontakata.",
+            "action": "Pokrenite razgovor"
         },
         "rooms": {
             "title": "Sobe za razgovor",
-            "description": "Pridružite se sobi iz vaših oznaka ili stvorite novi grupni razgovor."
+            "description": "Pridružite se sobi iz vaših oznaka ili stvorite novi grupni razgovor.",
+            "action": "Stvorite sobu"
         },
         "directory": {
             "title": "Informacije o kontaktu",

@@ -33,6 +33,10 @@ export const oneDarkTheme: ThemeDefinition = {
       '--fluux-color-purple': '#c678dd',
       '--fluux-color-gray': '#5c6370',
       '--fluux-color-red-rgb': '224, 108, 117',
+      // Decouple text-muted from base-80: base-80 (#828997/mono-2) reaches only
+      // 3.45:1 on chat-bg (#313640) and 3.72:1 on sidebar-bg (#2c313a). Increase
+      // lightness 55->64 to clear AA on both text surfaces.
+      '--fluux-text-muted': '#9ba0ab',
       // Error as text/icon — lightened from --fluux-color-red so it clears WCAG
       // AA on this theme's chat surface (status-error stays the fill).
       '--fluux-text-error': '#e5838a',
@@ -77,6 +81,10 @@ export const oneDarkTheme: ThemeDefinition = {
       '--fluux-color-purple': '#a626a4',
       '--fluux-color-gray': '#a0a1a7',
       '--fluux-color-red-rgb': '228, 86, 73',
+      // Decouple text-muted from base-80: base-80 (#696c77/mono-2) passes
+      // chat-bg (#fafafa) at 5.01:1 but fails sidebar-bg (#eaeaeb) at 4.35:1.
+      // Darken lightness 44->42 to just clear AA on the tighter sidebar surface.
+      '--fluux-text-muted': '#656772',
       // Error as text/icon — darkened for WCAG AA on the light chat surface.
       '--fluux-text-error': '#b4281b',
       '--fluux-color-green-rgb': '80, 161, 79',

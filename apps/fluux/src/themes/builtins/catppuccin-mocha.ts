@@ -55,6 +55,10 @@ export const catppuccinMochaTheme: ThemeDefinition = {
       '--fluux-color-purple': '#cba6f7', // mauve
       '--fluux-color-gray': '#7f849c',
       '--fluux-color-red-rgb': '243, 139, 168',
+      // Decouple text-muted from base-80: base-80 (#a6adc8/subtext0) reaches
+      // only 4.10:1 on chat-bg (#45475a/surface1). Nudge lightness 72->75.5 to
+      // clear AA on both chat-bg and sidebar-bg (#313244/surface0).
+      '--fluux-text-muted': '#b2b8d0',
       // Error as text/icon — lightened from --fluux-color-red so it clears WCAG
       // AA on this theme's chat surface (status-error stays the fill).
       '--fluux-text-error': '#f5a0b8',
@@ -106,6 +110,10 @@ export const catppuccinMochaTheme: ThemeDefinition = {
       '--fluux-status-warning': '#865511',
       '--fluux-status-error': '#c10e34',
       '--fluux-color-red-rgb': '210, 15, 57',
+      // Decouple text-muted from base-80: base-80 (#6c6f85/subtext0) reaches
+      // 4.37:1 on chat-bg (#eff1f5) but fails sidebar-bg (#d4d7e2) at 3.44:1.
+      // Darken lightness 47->38.5 to clear AA on the harder sidebar surface.
+      '--fluux-text-muted': '#585b6c',
       // Error as text/icon — darkened for WCAG AA on the light chat surface.
       '--fluux-text-error': '#ae0c2f',
       '--fluux-color-green-rgb': '64, 160, 43',

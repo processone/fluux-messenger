@@ -1017,11 +1017,13 @@
     "emptyState": {
         "messages": {
             "title": "Comhráite Príobháideacha",
-            "description": "Roghnaigh comhrá ón mbarra taoibh nó cruthaigh ceann ó do liosta teagmhálacha."
+            "description": "Roghnaigh comhrá ón mbarra taoibh nó cruthaigh ceann ó do liosta teagmhálacha.",
+            "action": "Tosaigh comhrá"
         },
         "rooms": {
             "title": "Seomraí Comhrá",
-            "description": "Téigh isteach i seomra ó do leabharmharcanna nó cruthaigh comhrá grúpa nua."
+            "description": "Téigh isteach i seomra ó do leabharmharcanna nó cruthaigh comhrá grúpa nua.",
+            "action": "Cruthaigh seomra"
         },
         "directory": {
             "title": "Faisnéis Teagmhála",

@@ -50,6 +50,15 @@ void i18n.use(initReactI18next).init({
             many: '{{name1}}, {{name2}}, and {{count}} others are typing...',
           },
         },
+        // Empty state primary actions (ChatLayout EmptyState tests)
+        emptyState: {
+          messages: {
+            action: 'Start a conversation',
+          },
+          rooms: {
+            action: 'Create a room',
+          },
+        },
         // Connection status (App auto-reconnect spinner)
         status: {
           reconnecting: 'Reconnecting...',

@@ -33,6 +33,10 @@ export const gruvboxTheme: ThemeDefinition = {
       '--fluux-color-purple': '#d3869b',
       '--fluux-color-gray': '#928374',
       '--fluux-color-red-rgb': '251, 73, 52',
+      // Decouple text-muted from base-80: base-80 (#a89984) reaches only 4.17:1
+      // on this theme's chat surface (same as sidebar: bg1 = #3c3836). Nudge
+      // lightness 59->62.5 to clear AA on both surfaces while staying secondary.
+      '--fluux-text-muted': '#b0a28f',
       // Error as text/icon — lightened from --fluux-color-red so it clears WCAG
       // AA on this theme's chat surface (status-error stays the fill).
       '--fluux-text-error': '#fc7d6e',
@@ -83,6 +87,10 @@ export const gruvboxTheme: ThemeDefinition = {
       '--fluux-status-warning': '#82550e',
       '--fluux-status-error': '#9d0006',
       '--fluux-color-red-rgb': '157, 0, 6',
+      // Decouple text-muted from base-80: base-80 (#665c54) passes chat-bg
+      // (#fbf1c7) at 5.74:1 but fails sidebar-bg (#d5c4a1) at 3.80:1.
+      // Darken lightness 36->31.5 to clear AA on both surfaces.
+      '--fluux-text-muted': '#585048',
       // Error as text/icon — darkened for WCAG AA on the light chat surface.
       '--fluux-text-error': '#9d0006',
       '--fluux-color-green-rgb': '121, 116, 14',

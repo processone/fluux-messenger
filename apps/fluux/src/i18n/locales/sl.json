@@ -1019,11 +1019,13 @@
     "emptyState": {
         "messages": {
             "title": "Zasebni pogovori",
-            "description": "Izberite pogovor iz stranske vrstice ali ustvarite novega iz seznama stikov."
+            "description": "Izberite pogovor iz stranske vrstice ali ustvarite novega iz seznama stikov.",
+            "action": "Začni pogovor"
         },
         "rooms": {
             "title": "Klepetalnice",
-            "description": "Pridružite se sobi iz zaznamkov ali ustvarite nov skupinski klepet."
+            "description": "Pridružite se sobi iz zaznamkov ali ustvarite nov skupinski klepet.",
+            "action": "Ustvari sobo"
         },
         "directory": {
             "title": "Informacije o stiku",

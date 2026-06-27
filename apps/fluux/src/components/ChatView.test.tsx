@@ -354,6 +354,7 @@ vi.mock('lucide-react', () => ({
   ArchiveRestore: () => <span data-testid="icon-archive-restore">Unarchive</span>,
   User: () => <span data-testid="icon-user">User</span>,
   MoreVertical: () => <span data-testid="icon-more-vertical">More</span>,
+  MessageCircle: () => <span data-testid="icon-message-circle">MessageCircle</span>,
 }))
 
 // Create hoisted mock for MessageComposer (React 19: ref is a regular prop)

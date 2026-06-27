@@ -1019,11 +1019,13 @@
     "emptyState": {
         "messages": {
             "title": "Konversazzjonijiet Privati",
-            "description": "Agħżel konversazzjoni mis-sidebar jew oħloq waħda mil-lista tal-kuntatti tiegħek."
+            "description": "Agħżel konversazzjoni mis-sidebar jew oħloq waħda mil-lista tal-kuntatti tiegħek.",
+            "action": "Ibda konversazzjoni"
         },
         "rooms": {
             "title": "Kmamar ta' Chat",
-            "description": "Idħol f'kamra mill-bookmarks tiegħek jew oħloq chat ta' grupp ġdid."
+            "description": "Idħol f'kamra mill-bookmarks tiegħek jew oħloq chat ta' grupp ġdid.",
+            "action": "Oħloq kamra"
         },
         "directory": {
             "title": "Informazzjoni tal-Kuntatt",

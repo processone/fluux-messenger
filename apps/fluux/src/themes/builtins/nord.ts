@@ -33,6 +33,10 @@ export const nordTheme: ThemeDefinition = {
       '--fluux-color-purple': '#b48ead',
       '--fluux-color-gray': '#7b88a1',
       '--fluux-color-red-rgb': '191, 97, 106',
+      // Decouple text-muted from base-80: base-80 (#a5b1c7) reaches only 3.99:1
+      // on this theme's chat surface. Nudge lightness 71->76 to clear AA on both
+      // chat-bg (#434c5e) and sidebar-bg (#3b4252) while staying below text-normal.
+      '--fluux-text-muted': '#b4bed0',
       // Error as text/icon — lightened from --fluux-color-red so it clears WCAG
       // AA on this theme's chat surface (status-error stays the fill).
       '--fluux-text-error': '#ebadb3',

@@ -1017,11 +1017,13 @@
     "emptyState": {
         "messages": {
             "title": "Privatūs pokalbiai",
-            "description": "Pasirinkite pokalbį iš šoninės juostos arba sukurkite naują iš kontaktų sąrašo."
+            "description": "Pasirinkite pokalbį iš šoninės juostos arba sukurkite naują iš kontaktų sąrašo.",
+            "action": "Pradėti pokalbį"
         },
         "rooms": {
             "title": "Pokalbių kambariai",
-            "description": "Prisijunkite prie kambario iš žymių arba sukurkite naują grupinį pokalbį."
+            "description": "Prisijunkite prie kambario iš žymių arba sukurkite naują grupinį pokalbį.",
+            "action": "Sukurti kambarį"
         },
         "directory": {
             "title": "Kontakto informacija",

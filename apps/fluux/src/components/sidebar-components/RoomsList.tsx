@@ -30,6 +30,7 @@ import {
   Loader2,
   Plus,
 } from 'lucide-react'
+import { ListEmpty } from '../ui/ListEmpty'
 
 type SidebarSection = 'quick' | 'joined' | 'bookmarked'
 
@@ -177,23 +178,13 @@ export function RoomsList() {
   if (sidebarEntries.length === 0) {
     return (
       <>
-        <div className="px-3 py-4 text-fluux-muted text-sm text-center">
-          <Hash className="size-12 mx-auto mb-3 opacity-50" />
-          <p className="mb-2">{t('rooms.noRooms')}</p>
-          <p className="text-xs opacity-75 mb-3">
-            {t('rooms.noRoomsHint')}
-          </p>
-          <button
-            onClick={() => setShowCreateRoom(true)}
-            className="inline-flex items-center gap-1 px-3 py-1.5 text-xs text-fluux-brand bg-fluux-brand/10 hover:bg-fluux-brand/20 rounded-lg transition-colors"
-          >
-            <Plus className="size-3" />
-            {t('rooms.createRoom')}
-          </button>
-        </div>
-        {showCreateRoom && (
-          <CreateRoomModal onClose={() => setShowCreateRoom(false)} />
-        )}
+        <ListEmpty
+          icon={Hash}
+          title={t('rooms.noRooms')}
+          description={t('rooms.noRoomsHint')}
+          action={{ label: t('rooms.createRoom'), icon: Plus, onClick: () => setShowCreateRoom(true) }}
+        />
+        {showCreateRoom && <CreateRoomModal onClose={() => setShowCreateRoom(false)} />}
       </>
     )
   }

@@ -17,6 +17,7 @@ const ActivityContextView = lazy(() => import('./ActivityContextView').then(m =>
 import { ShortcutHelp } from './ShortcutHelp'
 import { CommandPalette } from './CommandPalette'
 import { ToastContainer } from './ToastContainer'
+import { CreateRoomModal } from './CreateRoomModal'
 import {
   // Vanilla stores for imperative .getState() access
   chatStore, roomStore, consoleStore, adminStore, rosterStore, searchStore, activityLogStore,
@@ -38,7 +39,7 @@ import { useDeepLink } from '@/hooks/useDeepLink'
 import { saveViewState, getSavedViewState, type ViewStateData } from '@/hooks/useSessionPersistence'
 import { useWindowDrag } from '@/hooks'
 import { useModalStore } from '@/stores/modalStore'
-import { Server, ShieldOff, MessageCircle, Hash, Users, Archive, Bell, Search, Settings, type LucideIcon } from 'lucide-react'
+import { Server, ShieldOff, MessageCircle, Hash, Users, Archive, Bell, Search, Settings, Plus, type LucideIcon } from 'lucide-react'
 
 /**
  * ChatLayout wrapper. The actual layout logic is in ChatLayoutContent; modal state
@@ -221,6 +222,8 @@ function ChatLayoutContent() {
     return domain
   }
 
+  const { t } = useTranslation()
+
   // Selected contact JID from directory (for profile view)
   // Store only the JID, derive contact from store so presence updates in real-time
   // Use focused selector that only re-renders when THIS specific contact changes
@@ -228,6 +231,9 @@ function ChatLayoutContent() {
   const selectedRosterContact = useRosterStore((s) =>
     selectedContactJid ? s.contacts.get(selectedContactJid) ?? null : null
   )
+
+  // Create-room modal state (mirroring RoomsList)
+  const [showCreateRoom, setShowCreateRoom] = useState(false)
 
   // Room occupants panel state (persisted across view switches)
   const [showRoomOccupants, setShowRoomOccupants] = useState(false)
@@ -858,13 +864,25 @@ function ChatLayoutContent() {
               <ActivityContextView onBack={() => activityLogStore.getState().setPreviewEvent(null)} />
             </Suspense>
           ) : (
-            <EmptyState sidebarView={sidebarView} />
+            <EmptyState
+              sidebarView={sidebarView}
+              primaryAction={
+                sidebarView === 'messages'
+                  ? { label: t('emptyState.messages.action'), onClick: () => handleSidebarViewChange('directory') }
+                  : sidebarView === 'rooms'
+                  ? { label: t('emptyState.rooms.action'), onClick: () => setShowCreateRoom(true) }
+                  : undefined
+              }
+            />
           )}
         </main>
 
         {/* Right Sidebar - Members (only for group chats) */}
         <MemberList />
       </div>
+
+      {/* Create room modal (lifted from RoomsList for empty-state action) */}
+      {showCreateRoom && <CreateRoomModal onClose={() => setShowCreateRoom(false)} />}
 
       {/* XMPP Console Panel */}
       <Suspense fallback={null}>
@@ -927,7 +945,7 @@ function FullScreenOccupantPanel({ onClose, onStartChat, onShowProfile }: {
   )
 }
 
-function EmptyState({ sidebarView }: { sidebarView: SidebarView }) {
+function EmptyState({ sidebarView, primaryAction }: { sidebarView: SidebarView; primaryAction?: { label: string; onClick: () => void } }) {
   const { t } = useTranslation()
 
   // Icon matches the icon-rail glyph for each view, using the same lucide set
@@ -997,12 +1015,21 @@ function EmptyState({ sidebarView }: { sidebarView: SidebarView }) {
 
   return (
     <div className="flex-1 flex flex-col items-center justify-center text-fluux-muted px-6 text-center">
-      <div className="size-24 bg-fluux-sidebar rounded-full flex items-center justify-center mb-4">
-        <Icon className="size-12" />
+      <div className="size-24 rounded-full bg-fluux-brand/10 border border-fluux-brand/30 flex items-center justify-center mb-5">
+        <Icon className="size-11 text-fluux-brand" />
       </div>
-      <h2 className="text-xl font-semibold text-fluux-text mb-2">{title}</h2>
+      <h2 className="text-2xl font-semibold font-display text-fluux-text mb-2">{title}</h2>
       <p className="max-w-sm">{description}</p>
-      {hint && <p className="max-w-sm mt-2">{hint}</p>}
+      {hint && <p className="max-w-sm mt-2 text-sm opacity-80">{hint}</p>}
+      {primaryAction && (
+        <button
+          onClick={primaryAction.onClick}
+          className="mt-5 inline-flex items-center gap-2 px-4 py-2 bg-fluux-brand hover:bg-fluux-brand-hover text-fluux-text-on-accent text-sm font-medium rounded-lg transition-colors"
+        >
+          <Plus className="size-4" />
+          {primaryAction.label}
+        </button>
+      )}
     </div>
   )
 }
@@ -1031,12 +1058,16 @@ function AdminEmptyState() {
       <div className="flex-1 flex flex-col items-center justify-center text-fluux-muted p-4">
         {isAdmin ? (
           <>
-            <Server className="size-12 mb-2 opacity-50" />
+            <div className="size-20 rounded-full bg-fluux-brand/10 border border-fluux-brand/30 flex items-center justify-center mb-4">
+              <Server className="size-9 text-fluux-brand" />
+            </div>
             <p>{t('admin.selectCommand')}</p>
           </>
         ) : (
           <>
-            <ShieldOff className="size-12 mb-3 opacity-50" />
+            <div className="size-20 rounded-full bg-fluux-brand/10 border border-fluux-brand/30 flex items-center justify-center mb-4">
+              <ShieldOff className="size-9 text-fluux-brand" />
+            </div>
             <p className="font-medium text-fluux-text mb-1">{t('admin.noAccess.title')}</p>
             <p className="text-center max-w-md">{t('admin.noAccess.description')}</p>
           </>

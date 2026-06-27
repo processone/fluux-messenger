@@ -10,8 +10,9 @@ import { formatConversationTime } from '@/utils/dateFormat'
 import { detectRenderLoop } from '@/utils/renderLoopDetector'
 import { useSettingsStore, type TimeFormat } from '@/stores/settingsStore'
 import { useSidebarZone } from './types'
-import { Search, X, Loader2, ExternalLink, Cloud, Users, MessageSquare, Hash } from 'lucide-react'
+import { Search, SearchX, X, Loader2, ExternalLink, Cloud, Users, MessageSquare, Hash } from 'lucide-react'
 import { TextInput } from '../ui/TextInput'
+import { ListEmpty } from '../ui/ListEmpty'
 
 function getConversationName(conversationId: string): string {
   const room = roomStore.getState().rooms.get(conversationId)
@@ -210,9 +211,7 @@ export function SearchView() {
         )}
 
         {!isSearching && !isInPrefixActive && query && results.length === 0 && mamResults.length === 0 && !isSearchingMAM && (
-          <div className="text-center py-8 text-fluux-muted text-sm">
-            {t('search.noResults', 'No messages found')}
-          </div>
+          <ListEmpty icon={SearchX} title={t('search.noResults', 'No messages found')} />
         )}
 
         {error && (
@@ -313,9 +312,7 @@ export function SearchView() {
         )}
 
         {!query && (
-          <div className="text-center py-8 text-fluux-muted text-sm">
-            {t('search.hint', 'Type to search across all messages')}
-          </div>
+          <ListEmpty icon={Search} title={t('search.hint', 'Type to search across all messages')} />
         )}
       </div>
     </div>

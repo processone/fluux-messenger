@@ -1018,11 +1018,13 @@
     "emptyState": {
         "messages": {
             "title": "Súkromné konverzácie",
-            "description": "Vyberte konverzáciu z bočného panela alebo vytvorte novú zo zoznamu kontaktov."
+            "description": "Vyberte konverzáciu z bočného panela alebo vytvorte novú zo zoznamu kontaktov.",
+            "action": "Začať konverzáciu"
         },
         "rooms": {
             "title": "Chatovacie miestnosti",
-            "description": "Pripojte sa k miestnosti zo záložiek alebo vytvorte nový skupinový chat."
+            "description": "Pripojte sa k miestnosti zo záložiek alebo vytvorte nový skupinový chat.",
+            "action": "Vytvoriť miestnosť"
         },
         "directory": {
             "title": "Informácie o kontakte",

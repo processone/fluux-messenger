@@ -33,6 +33,10 @@ export const monokaiTheme: ThemeDefinition = {
       '--fluux-color-purple': '#ae81ff', // purple
       '--fluux-color-gray': '#75715e',
       '--fluux-color-red-rgb': '249, 38, 114',
+      // Decouple text-muted from base-80: base-80 (#a8a497) reaches only 4.39:1
+      // on chat-bg (#3e3d32/line-highlight). Nudge lightness 63->64.5 to clear
+      // AA on both chat-bg and the darker sidebar-bg (#2e2f2a).
+      '--fluux-text-muted': '#ada99c',
       // Error as text/icon — lightened from --fluux-color-red so it clears WCAG
       // AA on this theme's chat surface (status-error stays the fill).
       '--fluux-text-error': '#fc80ad',

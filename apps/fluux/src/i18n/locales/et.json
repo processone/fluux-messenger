@@ -1019,11 +1019,13 @@
     "emptyState": {
         "messages": {
             "title": "Privaatsed vestlused",
-            "description": "Vali vestlus külgribalt või alusta uut kontaktide nimekirjast."
+            "description": "Vali vestlus külgribalt või alusta uut kontaktide nimekirjast.",
+            "action": "Alusta vestlust"
         },
         "rooms": {
             "title": "Vestlustoad",
-            "description": "Liitu toaga oma järjehoidjatest või loo uus grupivestlus."
+            "description": "Liitu toaga oma järjehoidjatest või loo uus grupivestlus.",
+            "action": "Loo tuba"
         },
         "directory": {
             "title": "Kontakti teave",

@@ -13,7 +13,7 @@ import { selectSelfOccupant, stableNickSet, resolveRoomSender, resolveReplyAvata
 import { selectRoomInitialLoading } from './conversation/roomLoadingState'
 import { format } from 'date-fns'
 import type { CopyMessageMeta } from '@/utils/buildCopyText'
-import { Shield, Crown, Upload, Loader2, LogIn, AlertCircle, Users, MessageCircle, EyeOff, User, Settings, Ear, X } from 'lucide-react'
+import { Shield, Crown, Upload, Loader2, LogIn, AlertCircle, Users, MessageCircle, EyeOff, User, Settings, Ear, X, Hash } from 'lucide-react'
 import { ChristmasAnimation } from './ChristmasAnimation'
 import { TextInput, TextArea } from './ui/TextInput'
 import { MessageComposer, type ReplyInfo, type EditInfo, type MessageComposerHandle, type PendingAttachment, MESSAGE_INPUT_BASE_CLASSES, MESSAGE_INPUT_OVERLAY_CLASSES } from './MessageComposer'
@@ -955,14 +955,17 @@ export const RoomMessageList = memo(function RoomMessageList({
 
   // Empty state: different for joined vs not joined
   const emptyState = (
-    <div className="flex-1 flex flex-col items-center justify-center text-fluux-muted gap-2">
+    <div className="flex-1 flex flex-col items-center justify-center text-fluux-muted gap-3">
       {!isJoined && (
-        <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400 mb-2">
+        <div className="flex items-center gap-2 text-fluux-yellow mb-1">
           <AlertCircle className="size-4" />
           <span className="text-sm">{t('rooms.notJoinedNoHistory')}</span>
         </div>
       )}
-      <p>{isJoined ? t('chat.noMessages') : t('rooms.joinToLoadHistory')}</p>
+      <div className="size-16 rounded-full bg-fluux-brand/10 border border-fluux-brand/25 flex items-center justify-center">
+        <Hash className="size-7 text-fluux-brand" />
+      </div>
+      <p className="text-sm">{isJoined ? t('chat.noMessages') : t('rooms.joinToLoadHistory')}</p>
     </div>
   )
 

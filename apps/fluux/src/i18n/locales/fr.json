@@ -1018,11 +1018,13 @@
     "emptyState": {
         "messages": {
             "title": "Conversations privées",
-            "description": "Sélectionnez une conversation dans la barre latérale ou créez en une depuis votre liste de contacts."
+            "description": "Sélectionnez une conversation dans la barre latérale ou créez en une depuis votre liste de contacts.",
+            "action": "Démarrer une conversation"
         },
         "rooms": {
             "title": "Salons de discussion",
-            "description": "Rejoignez un salon depuis vos favoris ou créez une nouvelle discussion de groupe pour collaborer."
+            "description": "Rejoignez un salon depuis vos favoris ou créez une nouvelle discussion de groupe pour collaborer.",
+            "action": "Créer un salon"
         },
         "directory": {
             "title": "Informations de contact",

@@ -31,7 +31,7 @@ import { useSettingsStore } from '@/stores/settingsStore'
 import type { CopyMessageMeta } from '@/utils/buildCopyText'
 import { buildMessageListItems, type RenderItem } from './messageListItems'
 import { useTanstackMessageVirtualizer } from './tanstackMessageVirtualizer'
-import { Loader2, ChevronUp, ChevronDown } from 'lucide-react'
+import { Loader2, ChevronUp, ChevronDown, MessageCircle } from 'lucide-react'
 import { Tooltip } from '../Tooltip'
 import { MessageSelectionBar } from './MessageSelectionBar'
 
@@ -420,8 +420,11 @@ export function MessageList<T extends BaseMessage>({
         {/* Empty state */}
         {showEmpty && (
           emptyState || (
-            <div className="flex-1 flex items-center justify-center text-fluux-muted h-full">
-              <p>{t('chat.noMessages')}</p>
+            <div className="flex-1 flex flex-col items-center justify-center text-fluux-muted h-full gap-3">
+              <div className="size-16 rounded-full bg-fluux-brand/10 border border-fluux-brand/25 flex items-center justify-center">
+                <MessageCircle className="size-7 text-fluux-brand" />
+              </div>
+              <p className="text-sm">{t('chat.noMessages')}</p>
             </div>
           )
         )}

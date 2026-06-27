@@ -1017,11 +1017,13 @@
     "emptyState": {
         "messages": {
             "title": "Prive-gesprekken",
-            "description": "Selecteer een gesprek uit de zijbalk of start er een vanuit je contactenlijst."
+            "description": "Selecteer een gesprek uit de zijbalk of start er een vanuit je contactenlijst.",
+            "action": "Start een gesprek"
         },
         "rooms": {
             "title": "Chatgroepen",
-            "description": "Join een groep uit je bladwijzers of maak een nieuwe groepschat om te beginnen."
+            "description": "Join een groep uit je bladwijzers of maak een nieuwe groepschat om te beginnen.",
+            "action": "Maak een kamer aan"
         },
         "directory": {
             "title": "Contactinformatie",

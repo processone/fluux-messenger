@@ -11,8 +11,9 @@ import { useSidebarZone, ContactTooltipContent } from './types'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { getTranslatedStatusText } from '@/utils/statusText'
 import { detectRenderLoop } from '@/utils/renderLoopDetector'
-import { MessageCircle, Trash2, Pencil, Server } from 'lucide-react'
+import { MessageCircle, Trash2, Pencil, Server, Users, Search } from 'lucide-react'
 import { TextInput } from '../ui/TextInput'
+import { ListEmpty } from '../ui/ListEmpty'
 
 interface ContactListProps {
   onStartChat?: (contact: Contact) => void
@@ -143,13 +144,9 @@ export function ContactList({ onStartChat, onSelectContact, onManageUser, active
       {/* Contact list */}
       <div ref={listRef} className="flex-1 overflow-y-auto px-2 pb-2" {...getContainerProps()}>
         {entries.length === 0 ? (
-          <div className="px-1 py-4 text-fluux-muted text-sm text-center">
-            {t('contacts.noContacts')}
-          </div>
+          <ListEmpty icon={Users} title={t('contacts.noContacts')} />
         ) : flatJids.length === 0 ? (
-          <div className="px-1 py-4 text-fluux-muted text-sm text-center">
-            {t('contacts.noContactsFound')}
-          </div>
+          <ListEmpty icon={Search} title={t('contacts.noContactsFound')} />
         ) : (
           <>
             {online.length > 0 && (

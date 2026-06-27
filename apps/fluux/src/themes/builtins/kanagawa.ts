@@ -79,6 +79,10 @@ export const kanagawaTheme: ThemeDefinition = {
       '--fluux-color-purple': '#624c83', // lotusViolet4
       '--fluux-color-gray': '#8a8980',   // lotusGray3
       '--fluux-color-red-rgb': '200, 64, 83',
+      // Decouple text-muted from base-80: base-80 (#716e61/lotusGray2) reaches
+      // only 4.26:1 on chat-bg (#f2ecbc) and 3.73:1 on sidebar-bg (#e5ddb0).
+      // Darken lightness 41->35.5 to clear AA on the harder sidebar surface.
+      '--fluux-text-muted': '#625f53',
       // Error as text/icon — darkened for WCAG AA on the light chat surface.
       '--fluux-text-error': '#9b2d3c',
       '--fluux-color-green-rgb': '111, 137, 78',

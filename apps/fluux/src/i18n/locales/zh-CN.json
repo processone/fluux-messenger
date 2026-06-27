@@ -1017,11 +1017,13 @@
     "emptyState": {
         "messages": {
             "title": "私人对话",
-            "description": "从侧边栏选择对话，或从您的联系人列表创建对话。"
+            "description": "从侧边栏选择对话，或从您的联系人列表创建对话。",
+            "action": "开始对话"
         },
         "rooms": {
             "title": "聊天室",
-            "description": "从您的书签加入房间，或创建新群聊，即可开始聊天。"
+            "description": "从您的书签加入房间，或创建新群聊，即可开始聊天。",
+            "action": "创建房间"
         },
         "directory": {
             "title": "联系人信息",
