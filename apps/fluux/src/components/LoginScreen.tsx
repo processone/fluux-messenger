@@ -64,6 +64,19 @@ function resolveServerForConnection(jid: string, server: string): string {
   return getWebsocketUrlForDomain(domain) || domain
 }
 
+/**
+ * Display label for a link-supplied custom server, shown in the calm note.
+ * Returns the URL host when parseable (e.g. `tls://chat.example.com:5223` ->
+ * `chat.example.com:5223`), otherwise the raw value (bare domain, `host:port`).
+ */
+function serverHostLabel(server: string): string {
+  try {
+    return new URL(server).host || server
+  } catch {
+    return server
+  }
+}
+
 interface LoginScreenProps {
   /** Tab coordination: checks if another tab already holds this JID */
   claimConnection?: (jid: string) => Promise<boolean>
@@ -238,11 +251,7 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
       setServer(prefill.server)
       setShowServerField(true)
       setHasManuallySetServer(true) // stop web auto-fill from clobbering the link value
-      try {
-        setLinkServerHost(new URL(prefill.server).host)
-      } catch {
-        setLinkServerHost(null)
-      }
+      setLinkServerHost(serverHostLabel(prefill.server))
     }
     if (prefill.resource) linkResourceRef.current = prefill.resource
     if (prefill.lang) void i18n.changeLanguage(prefill.lang)

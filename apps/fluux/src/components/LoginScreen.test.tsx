@@ -468,6 +468,20 @@ describe('LoginScreen prefill', () => {
         expect(await screen.findByText(/custom\.example\.com/)).toBeTruthy()
     })
 
+    it('reveals the field and shows the note for a native (bare-domain) server', async () => {
+        useLoginPrefillStore.getState().setPrefill({
+            jid: 'alice@example.com',
+            server: 'process-one.net',
+        })
+        const { container } = render(<LoginScreen />)
+        const serverInput = container.querySelector('#server')
+        await waitFor(() =>
+            expect((serverInput as HTMLInputElement).value).toBe('process-one.net')
+        )
+        // host shown in the calm note even though the value is not a URL
+        expect(await screen.findByText(/process-one\.net/)).toBeTruthy()
+    })
+
     it('lets a prefill JID override the localStorage seed', async () => {
         localStorage.setItem('xmpp-last-jid', 'old@example.com')
         useLoginPrefillStore.getState().setPrefill({ jid: 'new@example.com' })

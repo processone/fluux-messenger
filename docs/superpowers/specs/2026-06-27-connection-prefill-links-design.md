@@ -61,9 +61,13 @@ function normalizeLoginPrefill(
 Validation rules:
 
 - **jid** must match `local@domain` (or a bare `domain`). Otherwise dropped.
-- **server** must parse as a `ws://`, `wss://`, or `http(s)://` (BOSH) URL.
-  Anything else (e.g. `javascript:`, `file:`) is rejected and dropped. This is
-  the security gate against a malicious endpoint scheme.
+- **server** accepts the same formats as the manual server field: a
+  `ws`/`wss`/`http`/`https`/`tls`/`tcp` `scheme://host` URL, a bare dotted
+  domain, or `dotted-host:port`. Dangerous schemes (`javascript:`, `file:`,
+  `data:`, ...) and single-label/whitespace values are rejected and dropped.
+  This is the security gate against a malicious endpoint. (Originally restricted
+  to `ws`/`wss`/`http(s)`; broadened so desktop links can carry native-TCP
+  servers — see [docs/URL_SCHEMES.md](../../URL_SCHEMES.md).)
 - **resource** / **lang** are passed through as trimmed strings when present.
 - Returns `null` when nothing usable survives → normal login, no prefill.
 

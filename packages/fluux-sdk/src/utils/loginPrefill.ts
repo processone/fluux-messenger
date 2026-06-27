@@ -8,7 +8,12 @@
 export interface LoginPrefill {
   /** Full JID 'local@domain' or a bare domain. */
   jid?: string
-  /** Advanced server field: a ws/wss/http(s) service URL. */
+  /**
+   * Advanced server field. Accepts the same formats as the manual login
+   * server field (see docs/CONNECTION.md): a `ws`/`wss`/`http`/`https` URL,
+   * a native-proxy `tls://`/`tcp://` URL, a bare domain (SRV), or `host:port`.
+   * Dangerous URI schemes (`javascript:`, `file:`, `data:`, ...) are rejected.
+   */
   server?: string
   /** Optional XMPP resource. */
   resource?: string
@@ -16,8 +21,15 @@ export interface LoginPrefill {
   lang?: string
 }
 
-// Security gate: only these schemes may be set as the connection target.
-const ALLOWED_SERVER_PROTOCOLS = new Set(['ws:', 'wss:', 'http:', 'https:'])
+// Security gate: only these schemes may appear in a `scheme://host` connection
+// target. `ws`/`wss`/`http`/`https` cover WebSocket and BOSH; `tls`/`tcp` are
+// the desktop native-proxy transports (see docs/CONNECTION.md). Dangerous
+// schemes (javascript:, file:, data:, blob:, ...) are excluded by omission.
+const ALLOWED_SERVER_PROTOCOLS = new Set(['ws:', 'wss:', 'http:', 'https:', 'tls:', 'tcp:'])
+
+// A dotted hostname: two or more labels of alphanumerics/hyphens. Single-label
+// hosts (e.g. `localhost`) are intentionally not accepted from a link.
+const HOSTNAME_RE = /^[a-zA-Z0-9-]+(?:\.[a-zA-Z0-9-]+)+$/
 
 function normalizeJid(raw: string | undefined): string | undefined {
   if (!raw) return undefined
@@ -38,12 +50,34 @@ function normalizeJid(raw: string | undefined): string | undefined {
 function normalizeServer(raw: string | undefined): string | undefined {
   const value = raw?.trim()
   if (!value) return undefined
-  try {
-    const url = new URL(value)
-    return ALLOWED_SERVER_PROTOCOLS.has(url.protocol) ? value : undefined
-  } catch {
-    return undefined
+  if (/\s/.test(value)) return undefined
+
+  // Scheme-qualified hierarchical URL (scheme://host...): allowlist the scheme.
+  // This branch also catches file:// and javascript://, which are rejected.
+  if (value.includes('://')) {
+    try {
+      const url = new URL(value)
+      return ALLOWED_SERVER_PROTOCOLS.has(url.protocol) ? value : undefined
+    } catch {
+      return undefined
+    }
   }
+
+  // No scheme: a bare domain or `host:port` shorthand for the native proxy.
+  // Splitting on the first colon distinguishes `host:port` from an opaque URI
+  // like `javascript:alert(1)` (whose "port" is not all digits) — so dangerous
+  // single-colon schemes never slip through here.
+  const colon = value.indexOf(':')
+  if (colon === -1) {
+    return HOSTNAME_RE.test(value) ? value : undefined
+  }
+  const host = value.slice(0, colon)
+  const port = value.slice(colon + 1)
+  if (HOSTNAME_RE.test(host) && /^[0-9]{1,5}$/.test(port)) {
+    const portNum = Number(port)
+    if (portNum >= 1 && portNum <= 65535) return value
+  }
+  return undefined
 }
 
 function normalizeToken(raw: string | undefined): string | undefined {

@@ -31,32 +31,47 @@ that feed that field; CONNECTION.md is about what the field accepts once filled.
 | Field      | Source key | Notes                                                              |
 |------------|------------|-------------------------------------------------------------------|
 | `jid`      | `jid`      | `local@domain`, or a bare `domain` (web only — see Limitations).  |
-| `server`   | `server`   | Explicit service URL. Allowlisted schemes only (see below).       |
+| `server`   | `server`   | Explicit endpoint. Same formats as the manual server field (see below). |
 | `resource` | `resource` | Optional XMPP resource (e.g. `desktop`). Overrides the default.   |
 | `lang`     | `lang`     | Optional UI / `xml:lang` language tag (e.g. `fr`).                |
 
 If neither a usable `jid` nor a usable `server` survives validation, the prefill
 is discarded and the login screen behaves normally.
 
-### Server scheme allowlist (security gate)
+### Accepted `server` formats (security gate)
 
-The `server` value must parse as a URL whose scheme is one of:
+The `server` value accepts the same formats as the manual login server field
+(see [CONNECTION.md](CONNECTION.md)):
 
-```
-ws://    wss://    http://    https://
-```
+| Format            | Example                       | Notes                          |
+|-------------------|-------------------------------|--------------------------------|
+| WebSocket URL     | `wss://chat.example.com/ws`   | Web and desktop.               |
+| BOSH URL          | `https://chat.example.com/http-bind` | Web and desktop.        |
+| `tls://` URL      | `tls://chat.example.com:5223` | Desktop only (native proxy).   |
+| `tcp://` URL      | `tcp://chat.example.com:5222` | Desktop only (native proxy).   |
+| Bare domain       | `process-one.net`             | Desktop only (SRV resolution). |
+| `host:port`       | `chat.example.com:5222`       | Desktop only (native proxy).   |
 
-Any other scheme (`javascript:`, `file:`, `data:`, ...) is **dropped** — a valid
-`jid` in the same link still applies. This prevents a malicious link from pointing
-the password form at a dangerous URL.
+Validation (`normalizeServer`):
 
-> **Limitation (desktop):** This allowlist does **not** include the native-proxy
-> formats `tls://`, `tcp://`, a bare domain, or `host:port` that the manual server
-> field accepts (see [CONNECTION.md](CONNECTION.md)). On desktop, where
-> connections normally use native TCP/TLS, a prefill link can therefore only
-> carry a WebSocket (`wss://`/`ws://`) or BOSH (`https://`) endpoint, not a
-> `tls://host` or bare-domain SRV target. Provisioning a desktop user with a
-> native-TCP server via a link is not currently possible.
+- A `scheme://host` URL is accepted only when the scheme is `ws`, `wss`, `http`,
+  `https`, `tls`, or `tcp`. Any other scheme (`javascript:`, `file:`, `data:`,
+  `blob:`, ...) is **dropped**.
+- A value without a scheme must be a **dotted hostname** (e.g. `process-one.net`)
+  or `dotted-host:port` with a numeric 1–65535 port. This is what distinguishes a
+  legitimate `chat.example.com:5222` from an opaque dangerous URI like
+  `javascript:alert(1)` (whose part after the colon is not a port). Single-label
+  hosts such as `localhost` are not accepted from a link.
+- Whitespace is rejected.
+
+When the `server` is dropped, a valid `jid` in the same link still applies.
+
+> **Platform note:** The native-TCP formats (`tls://`, `tcp://`, bare domain,
+> `host:port`) only connect on **desktop**, where the Rust proxy provides native
+> TCP/TLS. On **web**, only a `wss://`/`ws://` or `https://` (BOSH) endpoint can
+> actually connect — a web link should use one of those. The validator itself is
+> platform-agnostic; it does not reject a desktop-only format on web, it simply
+> won't connect there.
 
 ## Desktop: the `xmpp:` URI scheme
 
@@ -68,14 +83,15 @@ deep-link plugin (`apps/fluux/src-tauri/tauri.conf.json`, `schemes: ["xmpp"]`).
 | URI                                                              | Effect (when logged out)                              |
 |------------------------------------------------------------------|-------------------------------------------------------|
 | `xmpp:alice@example.com`                                         | Prefill JID only; server auto-resolved from domain.   |
-| `xmpp:alice@example.com?connect;server=<url>`                    | Prefill JID + explicit server.                        |
-| `xmpp:alice@example.com?connect;server=<url>;resource=web;lang=fr` | Prefill JID + server + resource + lang.             |
+| `xmpp:alice@example.com?connect;server=<endpoint>`               | Prefill JID + explicit server (any accepted format).  |
+| `xmpp:alice@example.com?connect;server=<endpoint>;resource=web;lang=fr` | Prefill JID + server + resource + lang.        |
 
 - The `connect` action carries the connection hints. Parameters follow RFC 5122's
   `;`-delimited form, and values must be **percent-encoded**:
 
   ```
   xmpp:alice@example.com?connect;server=wss%3A%2F%2Fhost%3A5443%2Fws;resource=desktop
+  xmpp:alice@example.com?connect;server=tls%3A%2F%2Fchat.example.com%3A5223
   ```
 
 - A bare `xmpp:alice@example.com` (no action) still prefills the JID.
@@ -133,9 +149,9 @@ prefill is invalid, so a malformed link cannot survive a reload.
 ## Limitations
 
 - **No password / token transport** by design (would change the security model).
-- **Desktop server formats:** only `wss://`/`ws://`/`https://` endpoints
-  (see the security-gate note above); not `tls://`, `tcp://`, bare domain, or
-  `host:port`.
+- **Web transport:** native-TCP server formats (`tls://`, `tcp://`, bare domain,
+  `host:port`) are accepted by the validator but only connect on desktop; a web
+  link should use a `wss://` or `https://` endpoint (see the platform note above).
 - **Bare-domain JID on desktop:** `parseXmppUri` requires a JID containing `@`, so
   `xmpp:example.com` does not parse and is ignored on desktop. The web path
   accepts a bare domain.
