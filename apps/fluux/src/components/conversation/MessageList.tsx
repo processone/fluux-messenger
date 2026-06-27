@@ -33,6 +33,7 @@ import { buildMessageListItems, type RenderItem } from './messageListItems'
 import { useTanstackMessageVirtualizer } from './tanstackMessageVirtualizer'
 import { useRowMetrics } from './useRowMetrics'
 import { estimateRowHeight } from './rowHeightEstimator'
+import { isScrollDebugEnabled, estimateDebugLog } from '@/utils/scrollDebug'
 import {
   getCachedHeights,
   recordMeasuredHeight,
@@ -296,24 +297,45 @@ export function MessageList<T extends BaseMessage>({
       }
       if (result.size > 0) initialMeasurementsRef.current = result
     }
+    estimateDebugLog('seed', {
+      conversationId,
+      bucket: widthBucketPx,
+      scale: scalePct,
+      seeded: initialMeasurementsRef.current?.size ?? 0,
+      candidates: stored.size,
+      rows: virtualItems.length,
+    })
   }
   const initialMeasurements = initialMeasurementsRef.current
 
   // Write-back: record each row's measured height to the persistent cache.
   // scalePct/conversationId are captured via a ref so the stable callback identity
   // is preserved (no virtualizer re-creation on every render).
-  const onMeasuredParamsRef = useRef({ conversationId, scalePct, rowMetricsRef })
-  onMeasuredParamsRef.current = { conversationId, scalePct, rowMetricsRef }
+  const onMeasuredParamsRef = useRef({ conversationId, scalePct, rowMetricsRef, indexById, virtualItems })
+  onMeasuredParamsRef.current = { conversationId, scalePct, rowMetricsRef, indexById, virtualItems }
   const onMeasured = useMemo(
     () =>
       virtualized
         ? (key: string, size: number) => {
-            const { conversationId: cid, scalePct: scale, rowMetricsRef: metricsRef } = onMeasuredParamsRef.current
+            const { conversationId: cid, scalePct: scale, rowMetricsRef: metricsRef, indexById: idMap, virtualItems: items } = onMeasuredParamsRef.current
             // Real sampled bucket. Persist it alongside the entry so the next mount's seed (which
             // runs before the real width is sampled) can filter by this same bucket and hit.
             const widthBucketPx = Math.round(metricsRef.current.contentWidthPx / 20) * 20
             recordMeasuredHeight(cid, heightCacheKey(key, widthBucketPx, scale), size)
             noteConversationWidthBucket(cid, widthBucketPx)
+            // Estimate-accuracy trace (scroll-debug only): predicted vs first-measured per row.
+            // Gated up front so the predict (which may call pretext) is skipped when debug is off.
+            if (isScrollDebugEnabled()) {
+              const idx = idMap.get(key)
+              const item = idx != null ? items[idx] : undefined
+              const predicted = item ? estimateRowHeight(item, metricsRef.current) : undefined
+              estimateDebugLog('row', key, {
+                kind: item?.kind,
+                predicted,
+                measured: size,
+                delta: predicted != null ? Math.round(size - predicted) : undefined,
+              })
+            }
           }
         : undefined,
     [virtualized],

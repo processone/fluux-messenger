@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef } from 'react'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useRemeasureOnWidthChange } from './messageWidthContext'
 import { predictMessageTextHeight, type FontSpec } from '@/utils/messageHeight/predictMessageTextHeight'
+import { estimateDebugLog } from '@/utils/scrollDebug'
 import type { RowEstimatorContext, RowChrome } from './rowHeightEstimator'
 
 const FALLBACK_FONT: FontSpec = {
@@ -113,6 +114,13 @@ export function useRowMetrics(
     if (footEl) chrome.footer = Math.round(footEl.getBoundingClientRect().height)
 
     ctxRef.current = { fontSpec, contentWidthPx, lineBoxPx, chrome }
+    estimateDebugLog('sample', {
+      fontSizePx: fontSpec.fontSizePx,
+      lineHeightPx: fontSpec.lineHeightPx,
+      contentWidthPx,
+      lineBoxPx,
+      chrome,
+    })
   }, [scrollRef])
 
   // Re-sample after layout settles on width changes (debounced signal) and on settings changes.
