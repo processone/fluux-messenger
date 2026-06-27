@@ -994,7 +994,7 @@ export function MessageComposer({
                      disabled:bg-transparent disabled:text-fluux-muted disabled:cursor-not-allowed
                      transition-colors"
         >
-          <Send className="rtl-mirror size-5" />
+          <Send className="rtl-mirror icon-optical-send size-5" />
           {sendBadge}
         </button>
       </div>

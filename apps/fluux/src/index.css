@@ -7,6 +7,18 @@
   transform: scaleX(-1);
 }
 
+/* Optical centering for the paper-plane send icon. Its bounding box is centered,
+   but the stroke mass leans up-and-right, so it reads as off-center. Nudge it
+   down-and-left via the `translate` property, which composes with the
+   `rtl-mirror` `transform` instead of overriding it. The horizontal nudge flips
+   in RTL because the glyph itself is mirrored there. */
+.icon-optical-send {
+  translate: -1px 1px;
+}
+[dir="rtl"] .icon-optical-send {
+  translate: 1px 1px;
+}
+
 /* Restore pointer cursor on interactive elements (Tailwind Preflight resets to default) */
 @layer base {
   button:not(:disabled),
