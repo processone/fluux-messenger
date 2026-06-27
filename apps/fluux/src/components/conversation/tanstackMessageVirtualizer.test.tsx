@@ -8,6 +8,10 @@ import { useTanstackMessageVirtualizer } from './tanstackMessageVirtualizer'
 const offsetNotifySpy = vi.fn<(offset: number, isScrolling: boolean) => void>()
 const scrollToOffsetSpy = vi.fn()
 
+// Captured config from the last useVirtualizer call — allows tests to inspect what the adapter
+// passes to @tanstack (e.g. estimateSize per index).
+let capturedConfig: { estimateSize: (index: number) => number } | null = null
+
 // Mock the real @tanstack/react-virtual surface the adapter uses (jsdom has no layout):
 // a fixed 40px row height exposes deterministic offsets for every index. The mock also invokes
 // `observeElementOffset(instance, internalCb)` exactly as the real adapter does on mount, so the
@@ -17,11 +21,13 @@ vi.mock('@tanstack/react-virtual', () => ({
     count: number
     getItemKey: (i: number) => string
     getScrollElement: () => HTMLElement | null
+    estimateSize: (index: number) => number
     observeElementOffset?: (
       instance: { scrollElement: HTMLElement | null },
       cb: (offset: number, isScrolling: boolean) => void,
     ) => void | (() => void)
   }) => {
+    capturedConfig = { estimateSize: opts.estimateSize }
     opts.observeElementOffset?.({ scrollElement: opts.getScrollElement() }, offsetNotifySpy)
     return {
       getVirtualItems: () =>
@@ -45,6 +51,26 @@ vi.mock('@tanstack/react-virtual', () => ({
 
 function makeItems(ids: string[]): { items: { key: string }[]; indexById: Map<string, number> } {
   return { items: ids.map((id) => ({ key: id })), indexById: new Map(ids.map((id, i) => [id, i])) }
+}
+
+/**
+ * Renders the adapter hook with the given items and estimateSize and returns the hook result
+ * plus the config captured from the last useVirtualizer call.
+ */
+function renderAdapter({
+  items,
+  estimateSize,
+}: {
+  items: { key: string }[]
+  estimateSize?: number | ((index: number) => number)
+}) {
+  const indexById = new Map(items.map((item, i) => [item.key, i]))
+  capturedConfig = null
+  renderHook(() => {
+    const scrollRef = useRef<HTMLElement | null>(null)
+    return useTanstackMessageVirtualizer({ items, indexById, scrollRef, estimateSize })
+  })
+  return { capturedConfig: capturedConfig! }
 }
 
 describe('useTanstackMessageVirtualizer', () => {
@@ -136,5 +162,26 @@ describe('useTanstackMessageVirtualizer', () => {
       scrollEvents.length,
       'scrollToIndex must NOT dispatch a synthetic scroll event (flushSync-in-commit risk)',
     ).toBe(0)
+  })
+
+  it('uses a per-index estimateSize function for getTotalSize', () => {
+    // The existing @tanstack mock in this file captures the config passed to useVirtualizer.
+    // Render the hook with a function estimate and assert the captured config.estimateSize
+    // returns per-index values (index 0 -> 100, others -> 20).
+    const estimate = (index: number) => (index === 0 ? 100 : 20)
+    const { capturedConfig } = renderAdapter({ items: [{ key: 'a' }, { key: 'b' }], estimateSize: estimate })
+    expect(capturedConfig.estimateSize(0)).toBe(100)
+    expect(capturedConfig.estimateSize(1)).toBe(20)
+  })
+
+  it('uses the default constant estimateSize of 64 when no estimateSize is provided', () => {
+    const { capturedConfig } = renderAdapter({ items: [{ key: 'a' }, { key: 'b' }] })
+    expect(capturedConfig.estimateSize(0)).toBe(64)
+    expect(capturedConfig.estimateSize(1)).toBe(64)
+  })
+
+  it('uses a constant numeric estimateSize when a number is passed', () => {
+    const { capturedConfig } = renderAdapter({ items: [{ key: 'a' }], estimateSize: 120 })
+    expect(capturedConfig.estimateSize(0)).toBe(120)
   })
 })
