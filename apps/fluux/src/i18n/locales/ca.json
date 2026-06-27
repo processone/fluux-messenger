@@ -883,6 +883,8 @@
             "title": "Avançat",
             "warning": "Aquestes opcions són per a usuaris avançats. Canviar-les pot interrompre la connexió o afeblir la seguretat.",
             "empty": "Les opcions avançades apareixeran aquí.",
+            "enable": "Activa el mode avançat",
+            "enableDescription": "El mode avançat desbloqueja opcions expertes com la configuració de servidor personalitzada i la consola XMPP.",
             "disableDescription": "Desactiva el mode avançat per amagar aquesta secció.",
             "disable": "Desactiva el mode avançat"
         }

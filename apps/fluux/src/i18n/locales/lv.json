@@ -882,6 +882,8 @@
             "title": "Papildu",
             "warning": "Šīs opcijas ir paredzētas pieredzējušiem lietotājiem. To maiņa var pārtraukt savienojumu vai vājināt drošību.",
             "empty": "Papildu opcijas tiks parādītas šeit.",
+            "enable": "Iespējot papildu režimu",
+            "enableDescription": "Papildu režims atslēdz ekspertu opcijas, piemēram, pielāgotus servera iestatījumus un XMPP konsoli.",
             "disableDescription": "Atspējojiet papildu režīmu, lai paslēptu šo sadaļu.",
             "disable": "Atspējot papildu režīmu"
         }

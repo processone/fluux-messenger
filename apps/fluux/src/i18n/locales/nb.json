@@ -881,6 +881,8 @@
             "title": "Avansert",
             "warning": "Disse innstillingene er for avanserte brukere. Å endre dem kan bryte tilkoblingen eller svekke sikkerheten.",
             "empty": "Avanserte innstillinger vises her.",
+            "enable": "Slå på avansert modus",
+            "enableDescription": "Avansert modus låser opp ekspertinnstillinger som egendefinerte serverinnstillinger og XMPP-konsollen.",
             "disableDescription": "Slå av avansert modus for å skjule denne delen.",
             "disable": "Slå av avansert modus"
         }

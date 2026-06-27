@@ -883,6 +883,8 @@
             "title": "Zaawansowane",
             "warning": "Te opcje są przeznaczone dla zaawansowanych użytkowników. Ich zmiana może zakłócić połączenie lub osłabić bezpieczeństwo.",
             "empty": "Opcje zaawansowane pojawią się tutaj.",
+            "enable": "Włącz tryb zaawansowany",
+            "enableDescription": "Tryb zaawansowany odblokowuje opcje eksperckie, takie jak niestandardowe ustawienia serwera i konsola XMPP.",
             "disableDescription": "Wyłącz tryb zaawansowany, aby ukryć tę sekcję.",
             "disable": "Wyłącz tryb zaawansowany"
         }

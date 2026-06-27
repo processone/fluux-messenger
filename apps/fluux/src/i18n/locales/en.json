@@ -628,6 +628,8 @@
             "title": "Advanced",
             "warning": "These options are for advanced users. Changing them can break connectivity or weaken security.",
             "empty": "Advanced options will appear here.",
+            "enable": "Enable advanced mode",
+            "enableDescription": "Advanced mode unlocks expert options such as custom server settings and the XMPP console.",
             "disableDescription": "Turn advanced mode back off to hide this section.",
             "disable": "Disable advanced mode"
         },
