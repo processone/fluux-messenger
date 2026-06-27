@@ -19,7 +19,7 @@ export function DateSeparator({ date }: DateSeparatorProps) {
   const currentLang = i18n.language.split('-')[0]
 
   return (
-    <div className="flex items-center gap-3 h-12">
+    <div className="flex items-center gap-3 pt-6 pb-2">
       <span className="text-xs font-semibold text-fluux-muted whitespace-nowrap">
         {formatDateHeader(date, t, currentLang)}
       </span>
