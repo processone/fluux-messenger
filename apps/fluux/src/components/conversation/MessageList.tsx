@@ -33,6 +33,7 @@ import { buildMessageListItems, type RenderItem } from './messageListItems'
 import { useTanstackMessageVirtualizer } from './tanstackMessageVirtualizer'
 import { useRowMetrics } from './useRowMetrics'
 import { estimateRowHeight } from './rowHeightEstimator'
+import { getCachedHeights, recordMeasuredHeight, heightCacheKey } from './messageHeightCache'
 import { Loader2, ChevronUp, ChevronDown, MessageCircle } from 'lucide-react'
 import { Tooltip } from '../Tooltip'
 import { MessageSelectionBar } from './MessageSelectionBar'
@@ -247,7 +248,60 @@ export function MessageList<T extends BaseMessage>({
     [virtualItems, rowMetricsRef],
   )
 
-  const virtualizer = useTanstackMessageVirtualizer({ items: virtualItems, indexById, scrollRef: scrollContainerRef, estimateSize })
+  // --------------------------------------------------------------------------
+  // PERSISTENT HEIGHT CACHE (virtualized path only)
+  // --------------------------------------------------------------------------
+  // Current font scale (a number; e.g. 100, 125). Subscribe so widthBucket changes
+  // when the user adjusts font size — different scale = different heights.
+  const scalePct = useSettingsStore((s) => s.fontSize)
+
+  // Build the initialMeasurements seed from the persistent cache. Only when virtualized —
+  // flag-OFF path is unchanged. Filter to keys that match the current width bucket + scale
+  // so stale entries from a different viewport/font-size are not applied.
+  // Use a ref so it is evaluated once at mount without needing eslint-disable on empty deps.
+  const initialMeasurementsRef = useRef<ReadonlyMap<string, number> | undefined>(undefined)
+  const initialMeasurementsBuiltRef = useRef(false)
+  if (!initialMeasurementsBuiltRef.current && virtualized) {
+    initialMeasurementsBuiltRef.current = true
+    const widthBucketPx = Math.round(rowMetricsRef.current.contentWidthPx / 20) * 20
+    const stored = getCachedHeights(conversationId)
+    if (stored.size > 0) {
+      const suffix = `@${widthBucketPx}@${scalePct}`
+      // Iterate the stored map; for each stored key that matches bucket+scale, extract messageId
+      // (strip `@bucket@scale` suffix) and include it if the messageId is a key in virtualItems.
+      const virtualKeys = new Set(virtualItems.map((item) => item.key))
+      const result = new Map<string, number>()
+      for (const [k, size] of stored) {
+        if (k.endsWith(suffix)) {
+          const messageId = k.slice(0, k.length - suffix.length)
+          if (virtualKeys.has(messageId)) {
+            result.set(messageId, size)
+          }
+        }
+      }
+      if (result.size > 0) initialMeasurementsRef.current = result
+    }
+  }
+  const initialMeasurements = initialMeasurementsRef.current
+
+  // Write-back: record each row's measured height to the persistent cache.
+  // scalePct/conversationId are captured via a ref so the stable callback identity
+  // is preserved (no virtualizer re-creation on every render).
+  const onMeasuredParamsRef = useRef({ conversationId, scalePct, rowMetricsRef })
+  onMeasuredParamsRef.current = { conversationId, scalePct, rowMetricsRef }
+  const onMeasured = useMemo(
+    () =>
+      virtualized
+        ? (key: string, size: number) => {
+            const { conversationId: cid, scalePct: scale, rowMetricsRef: metricsRef } = onMeasuredParamsRef.current
+            const widthBucketPx = Math.round(metricsRef.current.contentWidthPx / 20) * 20
+            recordMeasuredHeight(cid, heightCacheKey(key, widthBucketPx, scale), size)
+          }
+        : undefined,
+    [virtualized],
+  )
+
+  const virtualizer = useTanstackMessageVirtualizer({ items: virtualItems, indexById, scrollRef: scrollContainerRef, estimateSize, initialMeasurements, onMeasured })
   const activeVirtualizer = virtualized ? virtualizer : undefined
 
   // Dev-only: expose virtualizer offset lookup for Playwright test assertions (invariant-1).
