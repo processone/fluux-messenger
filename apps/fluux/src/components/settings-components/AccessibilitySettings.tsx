@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next'
 import { Monitor, Sparkles, CircleSlash } from 'lucide-react'
 import { useSettingsStore, type MotionPreference, type TransparencyMode } from '@/stores/settingsStore'
+import { SettingsSection } from '@/components/ui/SettingsSection'
 
 const motionOptions: { value: MotionPreference; labelKey: string; icon: typeof Monitor; descriptionKey: string }[] = [
   { value: 'full', labelKey: 'settings.motionFull', icon: Sparkles, descriptionKey: 'settings.motionFullDescription' },
@@ -29,11 +30,8 @@ export function AccessibilitySettings() {
 
   return (
     <section className="max-w-md">
-      <h3 className="text-xs font-semibold text-fluux-muted uppercase tracking-wide mb-4">
-        {t('settings.accessibility')}
-      </h3>
-
-      <div className="space-y-6">
+      <SettingsSection title={t('settings.accessibility')}>
+        <div className="space-y-6">
         {/* Animation */}
         <div className="space-y-3">
           <label className="text-sm font-medium text-fluux-text">{t('settings.motion')}</label>
@@ -127,7 +125,8 @@ export function AccessibilitySettings() {
             {t('settings.fontSizeDescription')}
           </p>
         </div>
-      </div>
+        </div>
+      </SettingsSection>
     </section>
   )
 }

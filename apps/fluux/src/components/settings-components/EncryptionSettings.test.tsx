@@ -43,7 +43,7 @@ vi.mock('react-i18next', () => ({
 }))
 
 function toggleButton(): HTMLElement {
-  return screen.getByRole('button', { name: 'settings.encryption.openpgpLabel' })
+  return screen.getByRole('switch', { name: 'settings.encryption.openpgpLabel' })
 }
 
 describe('EncryptionSettings PEP support', () => {

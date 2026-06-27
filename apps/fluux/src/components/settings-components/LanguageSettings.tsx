@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Globe, Clock, ChevronDown } from 'lucide-react'
-import { useMode } from '@/hooks'
+import { Globe, Clock } from 'lucide-react'
 import { useSettingsStore, type TimeFormat } from '@/stores/settingsStore'
+import { Select } from '@/components/ui/Select'
+import { SettingsSection } from '@/components/ui/SettingsSection'
 
 const languages = [
   { code: 'ar', name: 'العربية' },
@@ -49,7 +50,6 @@ const timeFormatOptions: { value: TimeFormat; labelKey: string }[] = [
 export function LanguageSettings() {
   const { t, i18n } = useTranslation()
   const [languageChanged, setLanguageChanged] = useState(false)
-  const { isDark } = useMode()
   const timeFormat = useSettingsStore((s) => s.timeFormat)
   const setTimeFormat = useSettingsStore((s) => s.setTimeFormat)
 
@@ -59,31 +59,21 @@ export function LanguageSettings() {
     setLanguageChanged(true)
   }
 
-  const selectClassName = `w-full appearance-none px-4 py-3 pe-10 rounded-lg border-2 border-fluux-hover
-                           bg-fluux-bg text-fluux-text cursor-pointer
-                           hover:border-fluux-muted focus:border-fluux-brand focus:outline-none
-                           transition-colors ${isDark ? '[color-scheme:dark]' : '[color-scheme:light]'}`
-
   return (
     <section className="max-w-md">
-      <h3 className="text-xs font-semibold text-fluux-muted uppercase tracking-wide mb-4">
-        {t('settings.languageAndRegion')}
-      </h3>
-
-      <div className="space-y-6">
-        {/* Language selection */}
-        <div className="space-y-3">
-          <label htmlFor="language-select" className="flex items-center gap-2">
-            <Globe className="size-4 text-fluux-muted" />
-            <span className="text-sm font-medium text-fluux-text">{t('settings.language')}</span>
-          </label>
-          <div className="relative">
-            <select
+      <SettingsSection title={t('settings.languageAndRegion')}>
+        <div className="space-y-6">
+          {/* Language selection */}
+          <div className="space-y-3">
+            <label htmlFor="language-select" className="flex items-center gap-2">
+              <Globe className="size-4 text-fluux-muted" />
+              <span className="text-sm font-medium text-fluux-text">{t('settings.language')}</span>
+            </label>
+            <Select
               id="language-select"
               name="language"
               value={languages.find(l => i18n.language === l.code || i18n.language.startsWith(l.code))?.code || 'en'}
               onChange={(e) => handleLanguageChange(e.target.value)}
-              className={selectClassName}
             >
               {languages.map((lang) => (
                 <option
@@ -94,29 +84,25 @@ export function LanguageSettings() {
                   {lang.name}
                 </option>
               ))}
-            </select>
-            <ChevronDown className="absolute end-3 top-1/2 -translate-y-1/2 size-5 text-fluux-muted pointer-events-none" />
+            </Select>
+            {languageChanged && (
+              <p className="text-xs text-fluux-muted italic">
+                {t('settings.languageStreamNote')}
+              </p>
+            )}
           </div>
-          {languageChanged && (
-            <p className="text-xs text-fluux-muted italic">
-              {t('settings.languageStreamNote')}
-            </p>
-          )}
-        </div>
 
-        {/* Time format selection */}
-        <div className="space-y-3">
-          <label htmlFor="time-format-select" className="flex items-center gap-2">
-            <Clock className="size-4 text-fluux-muted" />
-            <span className="text-sm font-medium text-fluux-text">{t('settings.timeFormat')}</span>
-          </label>
-          <div className="relative">
-            <select
+          {/* Time format selection */}
+          <div className="space-y-3">
+            <label htmlFor="time-format-select" className="flex items-center gap-2">
+              <Clock className="size-4 text-fluux-muted" />
+              <span className="text-sm font-medium text-fluux-text">{t('settings.timeFormat')}</span>
+            </label>
+            <Select
               id="time-format-select"
               name="timeFormat"
               value={timeFormat}
               onChange={(e) => setTimeFormat(e.target.value as TimeFormat)}
-              className={selectClassName}
             >
               {timeFormatOptions.map((option) => (
                 <option
@@ -127,14 +113,13 @@ export function LanguageSettings() {
                   {t(option.labelKey)}
                 </option>
               ))}
-            </select>
-            <ChevronDown className="absolute end-3 top-1/2 -translate-y-1/2 size-5 text-fluux-muted pointer-events-none" />
+            </Select>
+            <p className="text-xs text-fluux-muted">
+              {t('settings.timeFormatDescription')}
+            </p>
           </div>
-          <p className="text-xs text-fluux-muted">
-            {t('settings.timeFormatDescription')}
-          </p>
         </div>
-      </div>
+      </SettingsSection>
     </section>
   )
 }

@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next'
 import { useSettingsStore, type MediaAutoDownload } from '@/stores/settingsStore'
+import { SettingsSection } from '@/components/ui/SettingsSection'
 
 const mediaOptions: { value: MediaAutoDownload; labelKey: string; descriptionKey: string }[] = [
   { value: 'always', labelKey: 'settings.mediaAutoDownloadAlways', descriptionKey: 'settings.mediaAutoDownloadAlwaysDescription' },
@@ -14,11 +15,8 @@ export function PrivacySettings() {
 
   return (
     <section className="max-w-md">
-      <h3 className="text-xs font-semibold text-fluux-muted uppercase tracking-wide mb-4">
-        {t('settings.categories.privacy')}
-      </h3>
-
-      <div className="space-y-3">
+      <SettingsSection title={t('settings.categories.privacy')}>
+        <div className="space-y-3">
         <label className="text-sm font-medium text-fluux-text">{t('settings.mediaAutoDownload')}</label>
         <p className="text-xs text-fluux-muted">{t('settings.mediaAutoDownloadDescription')}</p>
         <div className="flex flex-col gap-2">
@@ -49,7 +47,8 @@ export function PrivacySettings() {
         <p className="text-xs text-fluux-muted border-t border-fluux-border pt-3 mt-3">
           {t('settings.mediaAutoDownloadStrangerNote')}
         </p>
-      </div>
+        </div>
+      </SettingsSection>
     </section>
   )
 }

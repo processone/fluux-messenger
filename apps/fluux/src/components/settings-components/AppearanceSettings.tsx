@@ -7,6 +7,7 @@ import type { ThemeDefinition, AccentPreset } from '@/themes/types'
 import { getBuiltinTheme } from '@/themes/builtins'
 import { ModalShell } from '@/components/ModalShell'
 import { TextInput, TextArea } from '../ui/TextInput'
+import { SettingsSection } from '@/components/ui/SettingsSection'
 
 const themeOptions: { value: ThemeMode; labelKey: string; icon: typeof Sun; descriptionKey: string }[] = [
   { value: 'dark', labelKey: 'settings.dark', icon: Moon, descriptionKey: 'settings.darkDescription' },
@@ -237,11 +238,8 @@ export function AppearanceSettings() {
 
   return (
     <section className="max-w-md">
-      <h3 className="text-xs font-semibold text-fluux-muted uppercase tracking-wide mb-4">
-        {t('settings.appearance')}
-      </h3>
-
-      <div className="space-y-6">
+      <SettingsSection title={t('settings.appearance')}>
+        <div className="space-y-6">
         {/* 1. Mode */}
         <div className="space-y-3">
           <label className="text-sm font-medium text-fluux-text">{t('settings.mode')}</label>
@@ -358,6 +356,8 @@ export function AppearanceSettings() {
             ))}
           </div>
         </div>
+        </div>
+      </SettingsSection>
 
         {/* 5. CSS Snippets (advanced) */}
         <div className="space-y-3">
@@ -410,7 +410,6 @@ export function AppearanceSettings() {
             {t('settings.addCustomCss')}
           </button>
         </div>
-      </div>
 
       {/* Snippet editor modal */}
       {(showNewSnippet || editingSnippet) && (
