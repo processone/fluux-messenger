@@ -11,6 +11,9 @@ vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (key: string) => key, i18n: { language: 'en' } }),
 }))
 
+// isDark is mutable so the test can flip it to trigger re-renders
+const themeMock = { isDark: true }
+
 vi.mock('@/hooks', () => ({
   useWindowDrag: () => ({ titleBarClass: '', dragRegionProps: {} }),
   useContextMenu: () => ({
@@ -18,12 +21,13 @@ vi.mock('@/hooks', () => ({
     menuRef: { current: null }, triggerHandlers: {},
     handleContextMenu: vi.fn(), handleTouchStart: vi.fn(), handleTouchEnd: vi.fn(),
   }),
+  useTheme: () => ({ isDark: themeMock.isDark, mode: 'dark', resolvedMode: 'dark', setMode: vi.fn(), activeThemeId: 'aurora' }),
 }))
 
 vi.mock('./Avatar', () => ({
-  Avatar: ({ name }: { name: string }) => {
+  Avatar: ({ name, fallbackColor }: { name: string; fallbackColor?: string }) => {
     avatarRenders.count++
-    return <div data-testid="avatar">{name}</div>
+    return <div data-testid="avatar" data-fallback-color={fallbackColor}>{name}</div>
   },
 }))
 
@@ -163,5 +167,32 @@ describe('OccupantPanel per-row memoization', () => {
     // returns a STABLE ref across presence churn (proven in the SDK
     // useRoster.renderStability test) — so in the app these rows bail on presence stanzas.
     expect(avatarRenders.count - afterMount).toBeGreaterThanOrEqual(perRow * 2)
+  })
+
+  // ---- isDark threading guard ----
+
+  it('re-renders ALL rows when isDark flips (theme toggle), while a same-render ref-unchanged occupant bails', () => {
+    // Start with isDark: true (set by the themeMock default)
+    themeMock.isDark = true
+
+    const alice = createOccupant({ nick: 'alice', jid: 'alice@example.com' })
+    const bob = createOccupant({ nick: 'bob', jid: 'bob@example.com' })
+    const contactsByJid = new Map()
+    const onClose = () => {}
+    const room = createRoom(new Map([['alice', alice], ['bob', bob]]))
+
+    const { rerender } = render(<OccupantPanel room={room} contactsByJid={contactsByJid} onClose={onClose} />)
+    const afterMount = avatarRenders.count
+    const perRow = afterMount / 2
+
+    // Flip isDark — all rows carry isDark in their props so occupantRowPropsEqual returns false
+    themeMock.isDark = false
+    rerender(<OccupantPanel room={room} contactsByJid={contactsByJid} onClose={onClose} />)
+
+    // Both rows must have re-rendered (isDark changed for every row)
+    expect(avatarRenders.count - afterMount).toBeGreaterThanOrEqual(perRow * 2)
+
+    // Restore for subsequent tests
+    themeMock.isDark = true
   })
 })

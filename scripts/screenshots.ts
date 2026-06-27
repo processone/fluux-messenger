@@ -1172,6 +1172,47 @@ test('42d — Glass Palette Rose Pine', async ({ page }) => {
   await setTheme(page, 'aurora')
 })
 
+// ── Occupant Panel Scenes (Task 4) ───────────────────────────────────
+// Captures the Aurora Occupant Panel slice across three themes + both modes
+// (Aurora light, gruvbox dark, dracula dark) to verify that:
+//   - occupant names and their fallback avatars share the same per-person hue
+//   - presence dots are ringed with the halo
+//   - section labels sit on hairlines with small-caps styling
+//   - everything is readable in light, dark, and accent themes
+// Uses the same room + panel-open pattern as test 02/12 (Team Chat + Show members).
+
+async function openOccupantPanel(page: Page): Promise<void> {
+  await navigateTo(page, 'rooms')
+  await selectItem(page, 'Team Chat')
+  const membersBtn = page.locator('button[aria-label="Show members"]')
+  if (await membersBtn.isVisible()) {
+    await membersBtn.click()
+    await page.waitForTimeout(500)
+  }
+}
+
+test('5x — Occupant Panel Aurora light', async ({ page }) => {
+  await waitForDemoReady(page, 'light')
+  await openOccupantPanel(page)
+  await capture(page, '5x-occupant-panel-aurora-light')
+})
+
+test('5xb — Occupant Panel Gruvbox', async ({ page }) => {
+  await waitForDemoReady(page)
+  await setTheme(page, 'gruvbox')
+  await openOccupantPanel(page)
+  await capture(page, '5xb-occupant-panel-gruvbox')
+  await setTheme(page, 'aurora')
+})
+
+test('5xc — Occupant Panel Dracula', async ({ page }) => {
+  await waitForDemoReady(page)
+  await setTheme(page, 'dracula')
+  await openOccupantPanel(page)
+  await capture(page, '5xc-occupant-panel-dracula')
+  await setTheme(page, 'aurora')
+})
+
 // ── Accessibility Pane Scenes (Task 3 UI) ──────────────────────────
 // Captures the new Accessibility settings pane (the Transparency control), in
 // Aurora dark and light. NOTE: the settings view is a full-page pane, not one

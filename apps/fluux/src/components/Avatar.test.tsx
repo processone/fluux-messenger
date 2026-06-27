@@ -163,6 +163,22 @@ describe('Avatar', () => {
       expect(pill).toBeInTheDocument()
       expect(pill).not.toHaveClass('bg-slate-500')
     })
+
+    it('adds a colored halo to the presence dot when presenceHalo is set', () => {
+      const { container } = render(
+        <Avatar identifier="alice" name="Alice" presence="online" presenceHalo />
+      )
+      const pill = container.querySelector('.rounded-full.border-2.absolute') as HTMLElement
+      expect(pill.style.boxShadow).toContain('var(--fluux-presence-online)')
+    })
+
+    it('has no presence halo by default', () => {
+      const { container } = render(
+        <Avatar identifier="alice" name="Alice" presence="online" />
+      )
+      const pill = container.querySelector('.rounded-full.border-2.absolute') as HTMLElement
+      expect(pill.style.boxShadow).toBe('')
+    })
   })
 
   describe('Sizes', () => {
@@ -323,6 +339,21 @@ describe('Avatar — animated GIF freeze-on-hover', () => {
     // Let any extraction microtasks flush; the src must stay the live URL.
     await new Promise((r) => setTimeout(r, 0))
     expect(screen.getByRole('img')).toHaveAttribute('src', url)
+  })
+})
+
+describe('Avatar — fallbackTextColor + presenceHalo', () => {
+  it('renders the fallback letter in fallbackTextColor when provided', () => {
+    const { getByText } = render(
+      <Avatar identifier="maya" name="Maya" fallbackColor="#A9B4FF" fallbackTextColor="#000000" />
+    )
+    const letter = getByText('M')
+    expect(letter).toHaveStyle({ color: '#000000' })
+  })
+
+  it('defaults the fallback letter to white (back-compat)', () => {
+    const { getByText } = render(<Avatar identifier="sam" name="Sam" />)
+    expect(getByText('S')).toHaveStyle({ color: '#ffffff' })
   })
 })
 

@@ -4,6 +4,7 @@ import { OccupantPanel } from './OccupantPanel'
 import type { Room, RoomOccupant, Contact } from '@fluux/sdk'
 import { useIgnoreStore } from '@fluux/sdk/react'
 import { ignoreStore, type IgnoreState } from '@fluux/sdk/stores'
+import { auroraSenderColor } from '@/utils/senderColor'
 
 // Mock i18next
 vi.mock('react-i18next', () => ({
@@ -27,12 +28,19 @@ vi.mock('@/hooks', () => ({
     menuRef: { current: null },
     triggerHandlers: {},
   }),
+  useTheme: () => ({
+    isDark: true,
+    mode: 'dark',
+    resolvedMode: 'dark',
+    setMode: vi.fn(),
+    activeThemeId: 'aurora',
+  }),
 }))
 
-// Mock Avatar component
+// Mock Avatar component — exposes fallbackColor and fallbackTextColor as data attrs for assertions
 vi.mock('./Avatar', () => ({
-  Avatar: ({ name, presence }: { name: string; presence?: string }) => (
-    <div data-testid="avatar" data-name={name} data-presence={presence}>
+  Avatar: ({ name, presence, fallbackColor, fallbackTextColor }: { name: string; presence?: string; fallbackColor?: string; fallbackTextColor?: string }) => (
+    <div data-testid="avatar" data-name={name} data-presence={presence} data-fallback-color={fallbackColor} data-fallback-text-color={fallbackTextColor}>
       Avatar: {name}
     </div>
   ),
@@ -243,9 +251,9 @@ describe('OccupantPanel', () => {
         />
       )
 
-      // Check count displays (format: "— 2" and "— 1")
-      expect(screen.getByText('— 2')).toBeInTheDocument()
-      expect(screen.getByText('— 1')).toBeInTheDocument()
+      // Check count displays as standalone accent spans (no em-dash)
+      expect(screen.getByText('2')).toBeInTheDocument()
+      expect(screen.getByText('1')).toBeInTheDocument()
     })
 
     it('sorts occupants by role priority then alphabetically', () => {
@@ -341,6 +349,47 @@ describe('OccupantPanel', () => {
 
       expect(screen.getByText('user@example.com')).toBeInTheDocument()
     })
+
+    it('colors a non-self occupant name with its Aurora sender color', () => {
+      // Use the real auroraSenderColor (not mocked) so the assertion proves byte-for-byte parity
+      // with the message list. useTheme mock returns isDark: true.
+      const expected = auroraSenderColor('Alice', true)
+      const occupants = new Map<string, RoomOccupant>([
+        ['alice@room', createOccupant({ nick: 'Alice' })],
+      ])
+      // room.nickname is 'Me' so Alice is non-self
+      const room = createRoom({ occupants, nickname: 'Me' })
+
+      render(
+        <OccupantPanel
+          room={room}
+          contactsByJid={new Map()}
+          onClose={() => {}}
+        />
+      )
+
+      const name = screen.getByText('Alice')
+      expect(name).toHaveStyle({ color: expected })
+    })
+
+    it('colors the Avatar fallbackColor of a non-self occupant with its Aurora sender color', () => {
+      const expected = auroraSenderColor('Alice', true)
+      const occupants = new Map<string, RoomOccupant>([
+        ['alice@room', createOccupant({ nick: 'Alice' })],
+      ])
+      const room = createRoom({ occupants, nickname: 'Me' })
+
+      render(
+        <OccupantPanel
+          room={room}
+          contactsByJid={new Map()}
+          onClose={() => {}}
+        />
+      )
+
+      const avatar = screen.getByTestId('avatar')
+      expect(avatar).toHaveAttribute('data-fallback-color', expected)
+    })
   })
 
   describe('Affiliation Badges', () => {
@@ -358,8 +407,8 @@ describe('OccupantPanel', () => {
         />
       )
 
-      // Owner badge has Crown icon with amber color
-      const ownerBadge = container.querySelector('.text-amber-600, .dark\\:text-amber-400')
+      // Owner badge has Crown icon with Aurora yellow token
+      const ownerBadge = container.querySelector('.text-fluux-yellow')
       expect(ownerBadge).toBeInTheDocument()
     })
 
@@ -396,8 +445,9 @@ describe('OccupantPanel', () => {
         />
       )
 
-      // Member badge has UserCheck icon with green color
-      const memberBadge = container.querySelector('.text-fluux-green .lucide-user-check')
+      // Member badge has UserCheck icon with muted color (title disambiguates from role-header icon).
+      // The i18n mock returns the key verbatim, so the title is the translation key.
+      const memberBadge = container.querySelector('[title="rooms.affiliationMember"] .lucide-user-check')
       expect(memberBadge).toBeInTheDocument()
     })
 
@@ -419,8 +469,8 @@ describe('OccupantPanel', () => {
       // (user-check icon may appear in role header for 'participant' role)
       expect(container.querySelector('.lucide-crown')).not.toBeInTheDocument()
       expect(container.querySelector('.text-fluux-brand .lucide-shield')).not.toBeInTheDocument()
-      // Check for member badge specifically (green user-check)
-      expect(container.querySelector('.text-fluux-green .lucide-user-check')).not.toBeInTheDocument()
+      // Check for member badge specifically: badge spans carry the affiliation title (headers don't)
+      expect(container.querySelector('[title="rooms.affiliationMember"] .lucide-user-check')).not.toBeInTheDocument()
     })
   })
 
@@ -825,6 +875,44 @@ describe('OccupantPanel', () => {
       const rows = container.querySelectorAll('.px-4.py-1\\.5')
       const anonRow = Array.from(rows).find(row => row.textContent?.includes('AnonUser'))
       expect(anonRow).toHaveClass('opacity-40')
+    })
+  })
+
+  describe('Section Header Chrome', () => {
+    it('renders a hairline section header with the count in the accent and no em-dash', () => {
+      const occupants = new Map<string, RoomOccupant>([
+        ['mod@room', createOccupant({ nick: 'Moderator', role: 'moderator' })],
+      ])
+      const room = createRoom({ occupants })
+
+      const { getByText } = render(
+        <OccupantPanel
+          room={room}
+          contactsByJid={new Map()}
+          onClose={() => {}}
+        />
+      )
+
+      const header = getByText('rooms.moderators').closest('div')!
+      expect(header.className).toMatch(/border-t/)        // hairline rule
+      expect(header.textContent).not.toContain('—')        // no em-dash
+    })
+
+    it('does not use hardcoded amber for the owner affiliation badge', () => {
+      const occupants = new Map<string, RoomOccupant>([
+        ['owner@room', createOccupant({ nick: 'Owner', affiliation: 'owner' })],
+      ])
+      const room = createRoom({ occupants })
+
+      const { container } = render(
+        <OccupantPanel
+          room={room}
+          contactsByJid={new Map()}
+          onClose={() => {}}
+        />
+      )
+
+      expect(container.innerHTML).not.toContain('text-amber-600')
     })
   })
 })

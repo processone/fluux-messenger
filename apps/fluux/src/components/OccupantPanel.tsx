@@ -20,7 +20,9 @@ import { ignoreStore, type IgnoredUser } from '@fluux/sdk/stores'
 import { Avatar } from './Avatar'
 import { Tooltip } from './Tooltip'
 import { MenuButton, MenuDivider } from './sidebar-components/SidebarListMenu'
-import { useContextMenu, useWindowDrag } from '@/hooks'
+import { useContextMenu, useWindowDrag, useTheme } from '@/hooks'
+import { auroraSenderColor } from '@/utils/senderColor'
+import { bestTextColor } from '@/utils/contrastColor'
 import { useToastStore } from '@/stores/toastStore'
 import { getTranslatedShowText } from '@/utils/presence'
 import { detectRenderLoop } from '@/utils/renderLoopDetector'
@@ -47,26 +49,14 @@ const EMPTY_IGNORED_ARRAY: IgnoredUser[] = []
 
 // Affiliation badge — pure mapping from affiliation to a small icon. Module-level so
 // the memoized OccupantRow can use it without recreating a closure per render.
-function getAffiliationBadge(affiliation: string) {
+function getAffiliationBadge(affiliation: string, t: (key: string) => string) {
   switch (affiliation) {
     case 'owner':
-      return (
-        <span className="flex items-center gap-0.5 text-amber-600 dark:text-amber-400">
-          <Crown className="size-3" />
-        </span>
-      )
+      return <span className="flex items-center text-fluux-yellow" title={t('rooms.affiliationOwner')}><Crown className="size-3" /></span>
     case 'admin':
-      return (
-        <span className="flex items-center gap-0.5 text-fluux-brand">
-          <Shield className="size-3" />
-        </span>
-      )
+      return <span className="flex items-center text-fluux-brand" title={t('rooms.affiliationAdmin')}><Shield className="size-3" /></span>
     case 'member':
-      return (
-        <span className="flex items-center gap-0.5 text-fluux-green">
-          <UserCheck className="size-3" />
-        </span>
-      )
+      return <span className="flex items-center text-fluux-muted" title={t('rooms.affiliationMember')}><UserCheck className="size-3" /></span>
     default:
       return null
   }
@@ -78,6 +68,7 @@ interface OccupantRowProps {
   roomNickname: string
   ownAvatar?: string | null
   forceOffline: boolean
+  isDark: boolean
   contactsByJid: Map<string, ContactIdentity>
   ignored: boolean
   onContextMenu: (group: GroupedOccupant, e: React.MouseEvent) => void
@@ -106,6 +97,7 @@ function occupantRowPropsEqual(prev: OccupantRowProps, next: OccupantRowProps): 
     prev.roomNickname === next.roomNickname &&
     prev.ownAvatar === next.ownAvatar &&
     prev.forceOffline === next.forceOffline &&
+    prev.isDark === next.isDark &&
     prev.contactsByJid === next.contactsByJid &&
     prev.ignored === next.ignored &&
     prev.onContextMenu === next.onContextMenu &&
@@ -121,6 +113,7 @@ const OccupantRow = memo(function OccupantRow({
   roomNickname,
   ownAvatar,
   forceOffline,
+  isDark,
   contactsByJid,
   ignored,
   onContextMenu,
@@ -132,6 +125,12 @@ const OccupantRow = memo(function OccupantRow({
   const primaryOccupant = group.connections[0]
   const hasMultipleConnections = group.connections.length > 1
   const isMe = group.connections.some(conn => conn.nick === roomNickname)
+
+  // Per-person hue: same deterministic color the message list uses for this nick,
+  // keyed on primaryNick + isDark. Derived as a plain string — memo still bails for
+  // unchanged rows; when isDark flips all rows correctly re-render.
+  const identityColor = isMe ? undefined : auroraSenderColor(group.primaryNick, isDark)
+  const nameColor = isMe ? 'var(--fluux-text-self)' : identityColor!
 
   // Get occupant avatar from XEP-0398 or fall back to contact avatar
   const occupantAvatar = group.connections.find(c => c.avatar)?.avatar
@@ -185,8 +184,10 @@ const OccupantRow = memo(function OccupantRow({
           avatarUrl={isMe ? (ownAvatar || undefined) : displayAvatar}
           size="sm"
           presence={getPresenceFromShow(group.bestPresence)}
-          presenceBorderColor="border-fluux-sidebar"
-          fallbackColor={isMe ? 'var(--fluux-bg-accent)' : undefined}
+          presenceBorderColor="border-fluux-chat"
+          presenceHalo
+          fallbackColor={isMe ? 'var(--fluux-bg-accent)' : identityColor}
+          fallbackTextColor={isMe ? undefined : bestTextColor(identityColor!)}
           forceOffline={forceOffline}
         />
 
@@ -194,7 +195,7 @@ const OccupantRow = memo(function OccupantRow({
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5 flex-wrap">
             {isMe ? (
-              <span className="truncate text-sm font-semibold text-fluux-text">
+              <span className="truncate text-sm font-semibold" style={{ color: nameColor }}>
                 {group.primaryNick}
                 <span className="text-fluux-muted font-normal"> {t('rooms.you')}</span>
               </span>
@@ -206,7 +207,7 @@ const OccupantRow = memo(function OccupantRow({
                 role={primaryOccupant.role}
                 affiliation={bestAffiliation as RoomAffiliation}
               >
-                <span className="truncate text-sm text-fluux-text">
+                <span className="truncate text-sm" style={{ color: nameColor }}>
                   {group.primaryNick}
                 </span>
               </UserInfoPopover>
@@ -217,7 +218,7 @@ const OccupantRow = memo(function OccupantRow({
                 ×{group.connections.length}
               </span>
             )}
-            {getAffiliationBadge(bestAffiliation)}
+            {getAffiliationBadge(bestAffiliation, t)}
             {/* Ignored indicator */}
             {ignored && (
               <EyeOff className="size-3 text-fluux-muted" />
@@ -288,6 +289,7 @@ export function OccupantPanel({
 }: OccupantPanelProps) {
   detectRenderLoop('OccupantPanel')
   const { t } = useTranslation()
+  const { isDark } = useTheme()
   const connectionStatus = useConnectionStore((s) => s.status)
   const forceOffline = connectionStatus !== 'online'
   const { titleBarClass } = useWindowDrag()
@@ -535,10 +537,10 @@ export function OccupantPanel({
     switch (item.type) {
       case 'role-header':
         return (
-          <div className="px-4 pt-4 pb-1 flex items-center gap-2 text-xs font-semibold text-fluux-muted uppercase">
+          <div className="px-4 pt-3 pb-1 mt-1 border-t border-[color:var(--fluux-surface-divider)] flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.09em] text-fluux-muted">
             {getRoleIcon(item.role)}
-            <span>{getRoleLabel(item.role)}</span>
-            <span className="text-fluux-muted/60">— {item.count}</span>
+            <span style={{ fontFamily: 'var(--fluux-font-display)' }}>{getRoleLabel(item.role)}</span>
+            <span className="text-fluux-brand">{item.count}</span>
           </div>
         )
       case 'occupant':
@@ -549,6 +551,7 @@ export function OccupantPanel({
             roomNickname={room.nickname}
             ownAvatar={ownAvatar}
             forceOffline={forceOffline}
+            isDark={isDark}
             contactsByJid={contactsByJid}
             ignored={isOccupantIgnored(item.group)}
             onContextMenu={rowHandlers.onContextMenu}
@@ -559,9 +562,9 @@ export function OccupantPanel({
         )
       case 'offline-header':
         return (
-          <div className="px-4 pt-4 pb-1 flex items-center gap-2 text-xs font-semibold text-fluux-muted uppercase">
-            <span>{t('rooms.offlineMembers')}</span>
-            <span className="text-fluux-muted/60">— {item.count}</span>
+          <div className="px-4 pt-3 pb-1 mt-1 border-t border-[color:var(--fluux-surface-divider)] flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.09em] text-fluux-muted">
+            <span style={{ fontFamily: 'var(--fluux-font-display)' }}>{t('rooms.offlineMembers')}</span>
+            <span className="text-fluux-brand">{item.count}</span>
           </div>
         )
       case 'offline': {
@@ -581,14 +584,14 @@ export function OccupantPanel({
                 avatarUrl={contact?.avatar}
                 size="sm"
                 presence="offline"
-                presenceBorderColor="border-fluux-sidebar"
+                presenceBorderColor="border-fluux-chat"
               />
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-1.5 flex-wrap">
                   <span className="truncate text-sm text-fluux-text">
                     {displayName}
                   </span>
-                  {getAffiliationBadge(member.affiliation)}
+                  {getAffiliationBadge(member.affiliation, t)}
                 </div>
                 <p className="text-xs text-fluux-muted truncate">{member.jid}</p>
               </div>
@@ -598,10 +601,10 @@ export function OccupantPanel({
       }
       case 'ignored-header':
         return (
-          <div className="px-4 pt-4 pb-1 flex items-center gap-2 text-xs font-semibold text-fluux-muted uppercase">
+          <div className="px-4 pt-3 pb-1 mt-1 border-t border-[color:var(--fluux-surface-divider)] flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.09em] text-fluux-muted">
             <EyeOff className="size-3" />
-            <span>{t('rooms.ignoredUsers')}</span>
-            <span className="text-fluux-muted/60">— {item.count}</span>
+            <span style={{ fontFamily: 'var(--fluux-font-display)' }}>{t('rooms.ignoredUsers')}</span>
+            <span className="text-fluux-brand">{item.count}</span>
           </div>
         )
       case 'ignored': {
@@ -637,7 +640,7 @@ export function OccupantPanel({
                 name={displayName}
                 size="sm"
                 presence="offline"
-                presenceBorderColor="border-fluux-sidebar"
+                presenceBorderColor="border-fluux-chat"
               />
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-1.5 flex-wrap">
@@ -658,7 +661,7 @@ export function OccupantPanel({
   }
 
   return (
-    <div className={`${fullScreen ? 'w-full h-full' : 'w-64 border-s border-fluux-bg'} flex flex-col bg-fluux-sidebar`}>
+    <div className={`${fullScreen ? 'w-full h-full' : 'w-64 border-s border-fluux-bg'} flex flex-col bg-fluux-chat`}>
       {/* Panel header */}
       <div className={`h-14 ${titleBarClass} px-4 flex items-center justify-between border-b border-fluux-bg`}>
         {fullScreen ? (
