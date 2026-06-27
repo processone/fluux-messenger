@@ -44,8 +44,9 @@ describe('AppearanceSettings', () => {
     expect(useSettingsStore.getState().densityMode).toBe('compact')
   })
 
-  it('shows comfortable as selected by default', () => {
+  it('renders the comfortable option as selected by default', () => {
     render(<AppearanceSettings />)
-    expect(useSettingsStore.getState().densityMode).toBe('comfortable')
+    const comfortable = screen.getByRole('button', { name: /settings\.comfortable/i })
+    expect(comfortable.className).toContain('border-fluux-brand')
   })
 })
