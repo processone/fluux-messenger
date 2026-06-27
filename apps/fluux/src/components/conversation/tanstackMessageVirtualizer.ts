@@ -82,7 +82,20 @@ interface Args {
   items: readonly { key: string }[]
   indexById: Map<string, number>
   scrollRef: React.RefObject<HTMLElement | null>
-  estimateSize?: number
+  /** Flat constant (px) or a per-index function. Default: 64. A fresh closure each render would
+   *  invalidate @tanstack's size cache — the adapter wraps it in a stable ref+useCallback. */
+  estimateSize?: number | ((index: number) => number)
+  /**
+   * Pre-seeded measured heights from a previous mount of this conversation.
+   * Keys are item keys (= message ids). Passed as @tanstack's `initialMeasurementsCache` so
+   * resident rows start at their real height rather than snapping from estimates on re-entry.
+   */
+  initialMeasurements?: ReadonlyMap<string, number>
+  /**
+   * Called after each row measurement with its key and measured size (px > 0 only).
+   * Used to write back to the persistent height cache.
+   */
+  onMeasured?: (key: string, size: number) => void
 }
 
 /**
@@ -94,7 +107,7 @@ interface Args {
  * not the index, so it survives MAM prepend (which shifts every index).
  */
 export function useTanstackMessageVirtualizer({
-  items, indexById, scrollRef, estimateSize = 64,
+  items, indexById, scrollRef, estimateSize = 64, initialMeasurements, onMeasured,
 }: Args): MessageVirtualizer {
   // NOTE: a measured running-average `estimateSize` was tried (to tighten the MAM-prepend
   // immediate restore, whose prepended rows are unmeasured) but REMOVED — it fed back at the
@@ -122,15 +135,51 @@ export function useTanstackMessageVirtualizer({
     [],
   )
 
+  // Keep a stable estimateSize callback identity; @tanstack re-reads it, and a fresh closure each
+  // render would invalidate its size cache. The ref always points at the latest caller value.
+  const estimateRef = useRef(estimateSize)
+  estimateRef.current = estimateSize
+  const estimateFn = useCallback(
+    (index: number) => {
+      const e = estimateRef.current
+      return typeof e === 'function' ? e(index) : e
+    },
+    [],
+  )
+
+  // Build @tanstack's `initialMeasurementsCache` once at mount from the caller-supplied map.
+  // VirtualItem shape: { key, index, start, end, size, lane }
+  // start/end/lane can be 0 — @tanstack recomputes layout offsets from scratch; size is all that
+  // matters for the seed. Only build if initialMeasurements is non-empty (additive; empty cache
+  // leaves behavior byte-identical to the pre-feature state).
+  // Use a ref so it is evaluated once (at mount) without needing eslint-disable on empty deps.
+  const initialMeasurementsCacheRef = useRef<Array<{ key: string | number; index: number; start: number; end: number; size: number; lane: number }> | undefined>(undefined)
+  if (initialMeasurementsCacheRef.current === undefined && initialMeasurements && initialMeasurements.size > 0) {
+    const result: Array<{ key: string | number; index: number; start: number; end: number; size: number; lane: number }> = []
+    for (let i = 0; i < items.length; i++) {
+      const key = items[i].key
+      const size = initialMeasurements.get(key)
+      if (size !== undefined && size > 0) {
+        result.push({ key, index: i, start: 0, end: 0, size, lane: 0 })
+      }
+    }
+    if (result.length > 0) initialMeasurementsCacheRef.current = result
+  }
+
+  // Keep a stable ref to onMeasured so the measureElement wrapper never changes identity.
+  const onMeasuredRef = useRef(onMeasured)
+  onMeasuredRef.current = onMeasured
+
   const virtualizer = useVirtualizer<HTMLElement, Element>({
     count: items.length,
     getScrollElement: () => scrollRef.current,
-    estimateSize: () => estimateSize,
+    estimateSize: estimateFn,
     getItemKey: (index) => items[index].key,
     overscan: 12,
     // rAF-polled offset observer so the window keeps advancing during WebKit inertial momentum,
     // when the desktop webview withholds `scroll` events (the "looping rows" bug). See the fn doc.
     observeElementOffset: observeOffset,
+    ...(initialMeasurementsCacheRef.current !== undefined ? { initialMeasurementsCache: initialMeasurementsCacheRef.current } : {}),
   })
 
   const getOffsetForMessageId = useCallback((id: string): number | null => {
@@ -162,7 +211,31 @@ export function useTanstackMessageVirtualizer({
     getOffsetForMessageId,
     getIndexForMessageId,
     ensureMessageMounted,
-    measureElement: virtualizer.measureElement,
+    // Wrap measureElement to intercept the size @tanstack measures and report it to the
+    // persistent height cache via onMeasured. CRITICAL: do NOT read the size back from
+    // `virtualizer.measurementsCache[index]` — @tanstack's measureElement writes the new size into
+    // its private `itemSizeCache` and bumps a version, but `measurementsCache`/`_flatMeasurements`
+    // are only recomputed by the memoized `getMeasurements()` on the NEXT render. Reading
+    // measurementsCache here returns the STALE estimate (e.g. the 64px default), which would seed
+    // the persistent cache with estimates — defeating the feature. Read the LIVE rendered height
+    // from the element itself, which is always current. Use `offsetHeight` (NOT
+    // getBoundingClientRect().height) to match @tanstack's own default measureElement (it returns
+    // `element.offsetHeight` for the vertical, non-ResizeObserver-entry path) — so the seeded value
+    // equals what @tanstack will measure on re-entry and there is no sub-pixel re-snap.
+    // Only sizes > 0 are forwarded (matches recordMeasuredHeight's guard).
+    measureElement: (element: Element | null) => {
+      // Always delegate first so @tanstack's own observe/unobserve + null-cleanup runs.
+      virtualizer.measureElement(element)
+      const onMeasured = onMeasuredRef.current
+      if (!element || !onMeasured) return
+      const index = virtualizer.indexFromElement(element as HTMLElement)
+      if (index < 0) return
+      const key = items[index]?.key
+      const size = (element as HTMLElement).offsetHeight
+      if (key && size > 0) {
+        onMeasured(key, size)
+      }
+    },
     scrollToOffset: (offset, opts) => {
       virtualizer.scrollToOffset(offset, opts)
       // @tanstack updates its reactive scrollOffset ONLY from the scroll element's 'scroll' DOM

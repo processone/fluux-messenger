@@ -1,0 +1,4892 @@
+{
+  "engine": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.7827.55 Safari/537.36",
+  "widths": [
+    320,
+    560,
+    760
+  ],
+  "scales": [
+    90,
+    100,
+    125,
+    150
+  ],
+  "runs": [
+    {
+      "fontScalePct": 90,
+      "report": {
+        "generatedNote": "pretext height spike report",
+        "byCategory": {
+          "short": {
+            "count": 15,
+            "lineExactPct": 100,
+            "p95AbsErrPx": 0.0031250000000007105,
+            "maxAbsErrPx": 0.0031250000000007105,
+            "worstId": "short-1"
+          },
+          "wrap": {
+            "count": 18,
+            "lineExactPct": 100,
+            "p95AbsErrPx": 0.025000000000005684,
+            "maxAbsErrPx": 0.025000000000005684,
+            "worstId": "wrap-2"
+          },
+          "mention": {
+            "count": 9,
+            "lineExactPct": 100,
+            "p95AbsErrPx": 0.006250000000001421,
+            "maxAbsErrPx": 0.006250000000001421,
+            "worstId": "mention-1"
+          },
+          "link": {
+            "count": 9,
+            "lineExactPct": 100,
+            "p95AbsErrPx": 0.009375000000005684,
+            "maxAbsErrPx": 0.009375000000005684,
+            "worstId": "link-1"
+          },
+          "emoji": {
+            "count": 9,
+            "lineExactPct": 100,
+            "p95AbsErrPx": 0.006250000000001421,
+            "maxAbsErrPx": 0.006250000000001421,
+            "worstId": "emoji-3"
+          },
+          "rtl": {
+            "count": 6,
+            "lineExactPct": 100,
+            "p95AbsErrPx": 0.006250000000001421,
+            "maxAbsErrPx": 0.006250000000001421,
+            "worstId": "rtl-2"
+          },
+          "me": {
+            "count": 6,
+            "lineExactPct": 83.33333333333334,
+            "p95AbsErrPx": 19.790625,
+            "maxAbsErrPx": 19.790625,
+            "worstId": "me-2"
+          },
+          "longtoken": {
+            "count": 6,
+            "lineExactPct": 100,
+            "p95AbsErrPx": 0.009375000000005684,
+            "maxAbsErrPx": 0.009375000000005684,
+            "worstId": "longtoken-1"
+          },
+          "code": {
+            "count": 9,
+            "lineExactPct": 77.77777777777779,
+            "p95AbsErrPx": 42.03125,
+            "maxAbsErrPx": 42.03125,
+            "worstId": "code-3"
+          },
+          "mixed": {
+            "count": 6,
+            "lineExactPct": 100,
+            "p95AbsErrPx": 0.006250000000001421,
+            "maxAbsErrPx": 0.006250000000001421,
+            "worstId": "mixed-1"
+          }
+        },
+        "overall": {
+          "textLineExactPct": 100,
+          "passesThreshold": true
+        },
+        "worstOffenders": [
+          {
+            "id": "code-3",
+            "category": "code",
+            "widthPx": 320,
+            "predicted": {
+              "heightPx": 99,
+              "lineCount": 5
+            },
+            "measuredHeightPx": 56.96875,
+            "measuredLineCount": 3
+          },
+          {
+            "id": "code-3",
+            "category": "code",
+            "widthPx": 560,
+            "predicted": {
+              "heightPx": 79.2,
+              "lineCount": 4
+            },
+            "measuredHeightPx": 56.96875,
+            "measuredLineCount": 3
+          },
+          {
+            "id": "me-2",
+            "category": "me",
+            "widthPx": 320,
+            "predicted": {
+              "heightPx": 39.6,
+              "lineCount": 2
+            },
+            "measuredHeightPx": 59.390625,
+            "measuredLineCount": 3
+          },
+          {
+            "id": "code-1",
+            "category": "code",
+            "widthPx": 320,
+            "predicted": {
+              "heightPx": 79.2,
+              "lineCount": 4
+            },
+            "measuredHeightPx": 73.15625,
+            "measuredLineCount": 4
+          },
+          {
+            "id": "code-1",
+            "category": "code",
+            "widthPx": 560,
+            "predicted": {
+              "heightPx": 79.2,
+              "lineCount": 4
+            },
+            "measuredHeightPx": 73.15625,
+            "measuredLineCount": 4
+          },
+          {
+            "id": "code-1",
+            "category": "code",
+            "widthPx": 760,
+            "predicted": {
+              "heightPx": 79.2,
+              "lineCount": 4
+            },
+            "measuredHeightPx": 73.15625,
+            "measuredLineCount": 4
+          },
+          {
+            "id": "code-3",
+            "category": "code",
+            "widthPx": 760,
+            "predicted": {
+              "heightPx": 59.400000000000006,
+              "lineCount": 3
+            },
+            "measuredHeightPx": 56.96875,
+            "measuredLineCount": 3
+          },
+          {
+            "id": "code-2",
+            "category": "code",
+            "widthPx": 320,
+            "predicted": {
+              "heightPx": 19.8,
+              "lineCount": 1
+            },
+            "measuredHeightPx": 20,
+            "measuredLineCount": 1
+          },
+          {
+            "id": "code-2",
+            "category": "code",
+            "widthPx": 560,
+            "predicted": {
+              "heightPx": 19.8,
+              "lineCount": 1
+            },
+            "measuredHeightPx": 20,
+            "measuredLineCount": 1
+          },
+          {
+            "id": "code-2",
+            "category": "code",
+            "widthPx": 760,
+            "predicted": {
+              "heightPx": 19.8,
+              "lineCount": 1
+            },
+            "measuredHeightPx": 20,
+            "measuredLineCount": 1
+          }
+        ]
+      },
+      "samples": [
+        {
+          "id": "short-1",
+          "category": "short",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 19.8,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 19.796875,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "short-2",
+          "category": "short",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 19.8,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 19.796875,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "short-3",
+          "category": "short",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 19.8,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 19.796875,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "wrap-1",
+          "category": "wrap",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 59.400000000000006,
+            "lineCount": 3
+          },
+          "measuredHeightPx": 59.390625,
+          "measuredLineCount": 3
+        },
+        {
+          "id": "wrap-2",
+          "category": "wrap",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 158.4,
+            "lineCount": 8
+          },
+          "measuredHeightPx": 158.375,
+          "measuredLineCount": 8
+        },
+        {
+          "id": "wrap-3",
+          "category": "wrap",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 99,
+            "lineCount": 5
+          },
+          "measuredHeightPx": 98.984375,
+          "measuredLineCount": 5
+        },
+        {
+          "id": "wrap-edge-1",
+          "category": "wrap",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 59.400000000000006,
+            "lineCount": 3
+          },
+          "measuredHeightPx": 59.390625,
+          "measuredLineCount": 3
+        },
+        {
+          "id": "mention-1",
+          "category": "mention",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 39.6,
+            "lineCount": 2
+          },
+          "measuredHeightPx": 39.59375,
+          "measuredLineCount": 2
+        },
+        {
+          "id": "mention-2",
+          "category": "mention",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 39.6,
+            "lineCount": 2
+          },
+          "measuredHeightPx": 39.59375,
+          "measuredLineCount": 2
+        },
+        {
+          "id": "link-1",
+          "category": "link",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 59.400000000000006,
+            "lineCount": 3
+          },
+          "measuredHeightPx": 59.390625,
+          "measuredLineCount": 3
+        },
+        {
+          "id": "link-2",
+          "category": "link",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 39.6,
+            "lineCount": 2
+          },
+          "measuredHeightPx": 39.59375,
+          "measuredLineCount": 2
+        },
+        {
+          "id": "emoji-1",
+          "category": "emoji",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 19.8,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 19.796875,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "emoji-2",
+          "category": "emoji",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 19.8,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 19.796875,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "emoji-3",
+          "category": "emoji",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 39.6,
+            "lineCount": 2
+          },
+          "measuredHeightPx": 39.59375,
+          "measuredLineCount": 2
+        },
+        {
+          "id": "rtl-1",
+          "category": "rtl",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 19.8,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 19.796875,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "rtl-2",
+          "category": "rtl",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 39.6,
+            "lineCount": 2
+          },
+          "measuredHeightPx": 39.59375,
+          "measuredLineCount": 2
+        },
+        {
+          "id": "me-1",
+          "category": "me",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 19.8,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 19.796875,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "me-2",
+          "category": "me",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 39.6,
+            "lineCount": 2
+          },
+          "measuredHeightPx": 59.390625,
+          "measuredLineCount": 3
+        },
+        {
+          "id": "longtoken-1",
+          "category": "longtoken",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 59.400000000000006,
+            "lineCount": 3
+          },
+          "measuredHeightPx": 59.390625,
+          "measuredLineCount": 3
+        },
+        {
+          "id": "longtoken-2",
+          "category": "longtoken",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 59.400000000000006,
+            "lineCount": 3
+          },
+          "measuredHeightPx": 59.390625,
+          "measuredLineCount": 3
+        },
+        {
+          "id": "code-1",
+          "category": "code",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 79.2,
+            "lineCount": 4
+          },
+          "measuredHeightPx": 73.15625,
+          "measuredLineCount": 4
+        },
+        {
+          "id": "code-2",
+          "category": "code",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 19.8,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 20,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "code-3",
+          "category": "code",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 99,
+            "lineCount": 5
+          },
+          "measuredHeightPx": 56.96875,
+          "measuredLineCount": 3
+        },
+        {
+          "id": "mixed-1",
+          "category": "mixed",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 39.6,
+            "lineCount": 2
+          },
+          "measuredHeightPx": 39.59375,
+          "measuredLineCount": 2
+        },
+        {
+          "id": "mixed-2",
+          "category": "mixed",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 39.6,
+            "lineCount": 2
+          },
+          "measuredHeightPx": 39.59375,
+          "measuredLineCount": 2
+        },
+        {
+          "id": "short-4",
+          "category": "short",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 19.8,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 19.796875,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "short-5",
+          "category": "short",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 19.8,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 19.796875,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "wrap-4",
+          "category": "wrap",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 59.400000000000006,
+            "lineCount": 3
+          },
+          "measuredHeightPx": 59.390625,
+          "measuredLineCount": 3
+        },
+        {
+          "id": "wrap-5",
+          "category": "wrap",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 118.80000000000001,
+            "lineCount": 6
+          },
+          "measuredHeightPx": 118.78125,
+          "measuredLineCount": 6
+        },
+        {
+          "id": "mention-3",
+          "category": "mention",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 19.8,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 19.796875,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "link-3",
+          "category": "link",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 39.6,
+            "lineCount": 2
+          },
+          "measuredHeightPx": 39.59375,
+          "measuredLineCount": 2
+        },
+        {
+          "id": "short-1",
+          "category": "short",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 19.8,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 19.796875,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "short-2",
+          "category": "short",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 19.8,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 19.796875,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "short-3",
+          "category": "short",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 19.8,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 19.796875,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "wrap-1",
+          "category": "wrap",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 39.6,
+            "lineCount": 2
+          },
+          "measuredHeightPx": 39.59375,
+          "measuredLineCount": 2
+        },
+        {
+          "id": "wrap-2",
+          "category": "wrap",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 99,
+            "lineCount": 5
+          },
+          "measuredHeightPx": 98.984375,
+          "measuredLineCount": 5
+        },
+        {
+          "id": "wrap-3",
+          "category": "wrap",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 99,
+            "lineCount": 5
+          },
+          "measuredHeightPx": 98.984375,
+          "measuredLineCount": 5
+        },
+        {
+          "id": "wrap-edge-1",
+          "category": "wrap",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 39.6,
+            "lineCount": 2
+          },
+          "measuredHeightPx": 39.59375,
+          "measuredLineCount": 2
+        },
+        {
+          "id": "mention-1",
+          "category": "mention",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 19.8,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 19.796875,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "mention-2",
+          "category": "mention",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 19.8,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 19.796875,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "link-1",
+          "category": "link",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 19.8,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 19.796875,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "link-2",
+          "category": "link",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 39.6,
+            "lineCount": 2
+          },
+          "measuredHeightPx": 39.59375,
+          "measuredLineCount": 2
+        },
+        {
+          "id": "emoji-1",
+          "category": "emoji",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 19.8,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 19.796875,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "emoji-2",
+          "category": "emoji",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 19.8,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 19.796875,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "emoji-3",
+          "category": "emoji",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 39.6,
+            "lineCount": 2
+          },
+          "measuredHeightPx": 39.59375,
+          "measuredLineCount": 2
+        },
+        {
+          "id": "rtl-1",
+          "category": "rtl",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 19.8,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 19.796875,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "rtl-2",
+          "category": "rtl",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 19.8,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 19.796875,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "me-1",
+          "category": "me",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 19.8,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 19.796875,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "me-2",
+          "category": "me",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 39.6,
+            "lineCount": 2
+          },
+          "measuredHeightPx": 39.59375,
+          "measuredLineCount": 2
+        },
+        {
+          "id": "longtoken-1",
+          "category": "longtoken",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 19.8,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 19.796875,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "longtoken-2",
+          "category": "longtoken",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 39.6,
+            "lineCount": 2
+          },
+          "measuredHeightPx": 39.59375,
+          "measuredLineCount": 2
+        },
+        {
+          "id": "code-1",
+          "category": "code",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 79.2,
+            "lineCount": 4
+          },
+          "measuredHeightPx": 73.15625,
+          "measuredLineCount": 4
+        },
+        {
+          "id": "code-2",
+          "category": "code",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 19.8,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 20,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "code-3",
+          "category": "code",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 79.2,
+            "lineCount": 4
+          },
+          "measuredHeightPx": 56.96875,
+          "measuredLineCount": 3
+        },
+        {
+          "id": "mixed-1",
+          "category": "mixed",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 19.8,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 19.796875,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "mixed-2",
+          "category": "mixed",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 39.6,
+            "lineCount": 2
+          },
+          "measuredHeightPx": 39.59375,
+          "measuredLineCount": 2
+        },
+        {
+          "id": "short-4",
+          "category": "short",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 19.8,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 19.796875,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "short-5",
+          "category": "short",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 19.8,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 19.796875,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "wrap-4",
+          "category": "wrap",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 39.6,
+            "lineCount": 2
+          },
+          "measuredHeightPx": 39.59375,
+          "measuredLineCount": 2
+        },
+        {
+          "id": "wrap-5",
+          "category": "wrap",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 59.400000000000006,
+            "lineCount": 3
+          },
+          "measuredHeightPx": 59.390625,
+          "measuredLineCount": 3
+        },
+        {
+          "id": "mention-3",
+          "category": "mention",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 19.8,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 19.796875,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "link-3",
+          "category": "link",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 19.8,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 19.796875,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "short-1",
+          "category": "short",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 19.8,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 19.796875,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "short-2",
+          "category": "short",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 19.8,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 19.796875,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "short-3",
+          "category": "short",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 19.8,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 19.796875,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "wrap-1",
+          "category": "wrap",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 39.6,
+            "lineCount": 2
+          },
+          "measuredHeightPx": 39.59375,
+          "measuredLineCount": 2
+        },
+        {
+          "id": "wrap-2",
+          "category": "wrap",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 79.2,
+            "lineCount": 4
+          },
+          "measuredHeightPx": 79.1875,
+          "measuredLineCount": 4
+        },
+        {
+          "id": "wrap-3",
+          "category": "wrap",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 99,
+            "lineCount": 5
+          },
+          "measuredHeightPx": 98.984375,
+          "measuredLineCount": 5
+        },
+        {
+          "id": "wrap-edge-1",
+          "category": "wrap",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 19.8,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 19.796875,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "mention-1",
+          "category": "mention",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 19.8,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 19.796875,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "mention-2",
+          "category": "mention",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 19.8,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 19.796875,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "link-1",
+          "category": "link",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 19.8,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 19.796875,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "link-2",
+          "category": "link",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 19.8,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 19.796875,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "emoji-1",
+          "category": "emoji",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 19.8,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 19.796875,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "emoji-2",
+          "category": "emoji",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 19.8,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 19.796875,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "emoji-3",
+          "category": "emoji",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 19.8,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 19.796875,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "rtl-1",
+          "category": "rtl",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 19.8,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 19.796875,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "rtl-2",
+          "category": "rtl",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 19.8,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 19.796875,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "me-1",
+          "category": "me",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 19.8,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 19.796875,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "me-2",
+          "category": "me",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 19.8,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 19.796875,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "longtoken-1",
+          "category": "longtoken",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 19.8,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 19.796875,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "longtoken-2",
+          "category": "longtoken",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 19.8,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 19.796875,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "code-1",
+          "category": "code",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 79.2,
+            "lineCount": 4
+          },
+          "measuredHeightPx": 73.15625,
+          "measuredLineCount": 4
+        },
+        {
+          "id": "code-2",
+          "category": "code",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 19.8,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 20,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "code-3",
+          "category": "code",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 59.400000000000006,
+            "lineCount": 3
+          },
+          "measuredHeightPx": 56.96875,
+          "measuredLineCount": 3
+        },
+        {
+          "id": "mixed-1",
+          "category": "mixed",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 19.8,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 19.796875,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "mixed-2",
+          "category": "mixed",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 39.6,
+            "lineCount": 2
+          },
+          "measuredHeightPx": 39.59375,
+          "measuredLineCount": 2
+        },
+        {
+          "id": "short-4",
+          "category": "short",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 19.8,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 19.796875,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "short-5",
+          "category": "short",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 19.8,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 19.796875,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "wrap-4",
+          "category": "wrap",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 39.6,
+            "lineCount": 2
+          },
+          "measuredHeightPx": 39.59375,
+          "measuredLineCount": 2
+        },
+        {
+          "id": "wrap-5",
+          "category": "wrap",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 59.400000000000006,
+            "lineCount": 3
+          },
+          "measuredHeightPx": 59.390625,
+          "measuredLineCount": 3
+        },
+        {
+          "id": "mention-3",
+          "category": "mention",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 19.8,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 19.796875,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "link-3",
+          "category": "link",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 19.8,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 19.796875,
+          "measuredLineCount": 1
+        }
+      ]
+    },
+    {
+      "fontScalePct": 100,
+      "report": {
+        "generatedNote": "pretext height spike report",
+        "byCategory": {
+          "short": {
+            "count": 15,
+            "lineExactPct": 100,
+            "p95AbsErrPx": 0,
+            "maxAbsErrPx": 0,
+            "worstId": "short-1"
+          },
+          "wrap": {
+            "count": 18,
+            "lineExactPct": 100,
+            "p95AbsErrPx": 0,
+            "maxAbsErrPx": 0,
+            "worstId": "wrap-1"
+          },
+          "mention": {
+            "count": 9,
+            "lineExactPct": 100,
+            "p95AbsErrPx": 0,
+            "maxAbsErrPx": 0,
+            "worstId": "mention-1"
+          },
+          "link": {
+            "count": 9,
+            "lineExactPct": 100,
+            "p95AbsErrPx": 0,
+            "maxAbsErrPx": 0,
+            "worstId": "link-1"
+          },
+          "emoji": {
+            "count": 9,
+            "lineExactPct": 100,
+            "p95AbsErrPx": 0,
+            "maxAbsErrPx": 0,
+            "worstId": "emoji-1"
+          },
+          "rtl": {
+            "count": 6,
+            "lineExactPct": 100,
+            "p95AbsErrPx": 0,
+            "maxAbsErrPx": 0,
+            "worstId": "rtl-1"
+          },
+          "me": {
+            "count": 6,
+            "lineExactPct": 100,
+            "p95AbsErrPx": 0,
+            "maxAbsErrPx": 0,
+            "worstId": "me-1"
+          },
+          "longtoken": {
+            "count": 6,
+            "lineExactPct": 100,
+            "p95AbsErrPx": 0,
+            "maxAbsErrPx": 0,
+            "worstId": "longtoken-1"
+          },
+          "code": {
+            "count": 9,
+            "lineExactPct": 66.66666666666666,
+            "p95AbsErrPx": 47,
+            "maxAbsErrPx": 47,
+            "worstId": "code-3"
+          },
+          "mixed": {
+            "count": 6,
+            "lineExactPct": 100,
+            "p95AbsErrPx": 0,
+            "maxAbsErrPx": 0,
+            "worstId": "mixed-1"
+          }
+        },
+        "overall": {
+          "textLineExactPct": 100,
+          "passesThreshold": true
+        },
+        "worstOffenders": [
+          {
+            "id": "code-3",
+            "category": "code",
+            "widthPx": 320,
+            "predicted": {
+              "heightPx": 110,
+              "lineCount": 5
+            },
+            "measuredHeightPx": 63,
+            "measuredLineCount": 3
+          },
+          {
+            "id": "code-3",
+            "category": "code",
+            "widthPx": 560,
+            "predicted": {
+              "heightPx": 88,
+              "lineCount": 4
+            },
+            "measuredHeightPx": 63,
+            "measuredLineCount": 3
+          },
+          {
+            "id": "code-3",
+            "category": "code",
+            "widthPx": 760,
+            "predicted": {
+              "heightPx": 88,
+              "lineCount": 4
+            },
+            "measuredHeightPx": 63,
+            "measuredLineCount": 3
+          },
+          {
+            "id": "code-1",
+            "category": "code",
+            "widthPx": 320,
+            "predicted": {
+              "heightPx": 88,
+              "lineCount": 4
+            },
+            "measuredHeightPx": 81,
+            "measuredLineCount": 4
+          },
+          {
+            "id": "code-1",
+            "category": "code",
+            "widthPx": 560,
+            "predicted": {
+              "heightPx": 88,
+              "lineCount": 4
+            },
+            "measuredHeightPx": 81,
+            "measuredLineCount": 4
+          },
+          {
+            "id": "code-1",
+            "category": "code",
+            "widthPx": 760,
+            "predicted": {
+              "heightPx": 88,
+              "lineCount": 4
+            },
+            "measuredHeightPx": 81,
+            "measuredLineCount": 4
+          },
+          {
+            "id": "short-1",
+            "category": "short",
+            "widthPx": 320,
+            "predicted": {
+              "heightPx": 22,
+              "lineCount": 1
+            },
+            "measuredHeightPx": 22,
+            "measuredLineCount": 1
+          },
+          {
+            "id": "short-2",
+            "category": "short",
+            "widthPx": 320,
+            "predicted": {
+              "heightPx": 22,
+              "lineCount": 1
+            },
+            "measuredHeightPx": 22,
+            "measuredLineCount": 1
+          },
+          {
+            "id": "short-3",
+            "category": "short",
+            "widthPx": 320,
+            "predicted": {
+              "heightPx": 22,
+              "lineCount": 1
+            },
+            "measuredHeightPx": 22,
+            "measuredLineCount": 1
+          },
+          {
+            "id": "wrap-1",
+            "category": "wrap",
+            "widthPx": 320,
+            "predicted": {
+              "heightPx": 88,
+              "lineCount": 4
+            },
+            "measuredHeightPx": 88,
+            "measuredLineCount": 4
+          }
+        ]
+      },
+      "samples": [
+        {
+          "id": "short-1",
+          "category": "short",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 22,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 22,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "short-2",
+          "category": "short",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 22,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 22,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "short-3",
+          "category": "short",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 22,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 22,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "wrap-1",
+          "category": "wrap",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 88,
+            "lineCount": 4
+          },
+          "measuredHeightPx": 88,
+          "measuredLineCount": 4
+        },
+        {
+          "id": "wrap-2",
+          "category": "wrap",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 198,
+            "lineCount": 9
+          },
+          "measuredHeightPx": 198,
+          "measuredLineCount": 9
+        },
+        {
+          "id": "wrap-3",
+          "category": "wrap",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 110,
+            "lineCount": 5
+          },
+          "measuredHeightPx": 110,
+          "measuredLineCount": 5
+        },
+        {
+          "id": "wrap-edge-1",
+          "category": "wrap",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 66,
+            "lineCount": 3
+          },
+          "measuredHeightPx": 66,
+          "measuredLineCount": 3
+        },
+        {
+          "id": "mention-1",
+          "category": "mention",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 44,
+            "lineCount": 2
+          },
+          "measuredHeightPx": 44,
+          "measuredLineCount": 2
+        },
+        {
+          "id": "mention-2",
+          "category": "mention",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 44,
+            "lineCount": 2
+          },
+          "measuredHeightPx": 44,
+          "measuredLineCount": 2
+        },
+        {
+          "id": "link-1",
+          "category": "link",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 66,
+            "lineCount": 3
+          },
+          "measuredHeightPx": 66,
+          "measuredLineCount": 3
+        },
+        {
+          "id": "link-2",
+          "category": "link",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 66,
+            "lineCount": 3
+          },
+          "measuredHeightPx": 66,
+          "measuredLineCount": 3
+        },
+        {
+          "id": "emoji-1",
+          "category": "emoji",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 22,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 22,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "emoji-2",
+          "category": "emoji",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 22,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 22,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "emoji-3",
+          "category": "emoji",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 66,
+            "lineCount": 3
+          },
+          "measuredHeightPx": 66,
+          "measuredLineCount": 3
+        },
+        {
+          "id": "rtl-1",
+          "category": "rtl",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 22,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 22,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "rtl-2",
+          "category": "rtl",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 44,
+            "lineCount": 2
+          },
+          "measuredHeightPx": 44,
+          "measuredLineCount": 2
+        },
+        {
+          "id": "me-1",
+          "category": "me",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 22,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 22,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "me-2",
+          "category": "me",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 66,
+            "lineCount": 3
+          },
+          "measuredHeightPx": 66,
+          "measuredLineCount": 3
+        },
+        {
+          "id": "longtoken-1",
+          "category": "longtoken",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 66,
+            "lineCount": 3
+          },
+          "measuredHeightPx": 66,
+          "measuredLineCount": 3
+        },
+        {
+          "id": "longtoken-2",
+          "category": "longtoken",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 66,
+            "lineCount": 3
+          },
+          "measuredHeightPx": 66,
+          "measuredLineCount": 3
+        },
+        {
+          "id": "code-1",
+          "category": "code",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 88,
+            "lineCount": 4
+          },
+          "measuredHeightPx": 81,
+          "measuredLineCount": 4
+        },
+        {
+          "id": "code-2",
+          "category": "code",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 22,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 22,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "code-3",
+          "category": "code",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 110,
+            "lineCount": 5
+          },
+          "measuredHeightPx": 63,
+          "measuredLineCount": 3
+        },
+        {
+          "id": "mixed-1",
+          "category": "mixed",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 44,
+            "lineCount": 2
+          },
+          "measuredHeightPx": 44,
+          "measuredLineCount": 2
+        },
+        {
+          "id": "mixed-2",
+          "category": "mixed",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 66,
+            "lineCount": 3
+          },
+          "measuredHeightPx": 66,
+          "measuredLineCount": 3
+        },
+        {
+          "id": "short-4",
+          "category": "short",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 22,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 22,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "short-5",
+          "category": "short",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 22,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 22,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "wrap-4",
+          "category": "wrap",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 88,
+            "lineCount": 4
+          },
+          "measuredHeightPx": 88,
+          "measuredLineCount": 4
+        },
+        {
+          "id": "wrap-5",
+          "category": "wrap",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 132,
+            "lineCount": 6
+          },
+          "measuredHeightPx": 132,
+          "measuredLineCount": 6
+        },
+        {
+          "id": "mention-3",
+          "category": "mention",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 22,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 22,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "link-3",
+          "category": "link",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 44,
+            "lineCount": 2
+          },
+          "measuredHeightPx": 44,
+          "measuredLineCount": 2
+        },
+        {
+          "id": "short-1",
+          "category": "short",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 22,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 22,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "short-2",
+          "category": "short",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 22,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 22,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "short-3",
+          "category": "short",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 22,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 22,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "wrap-1",
+          "category": "wrap",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 44,
+            "lineCount": 2
+          },
+          "measuredHeightPx": 44,
+          "measuredLineCount": 2
+        },
+        {
+          "id": "wrap-2",
+          "category": "wrap",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 110,
+            "lineCount": 5
+          },
+          "measuredHeightPx": 110,
+          "measuredLineCount": 5
+        },
+        {
+          "id": "wrap-3",
+          "category": "wrap",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 110,
+            "lineCount": 5
+          },
+          "measuredHeightPx": 110,
+          "measuredLineCount": 5
+        },
+        {
+          "id": "wrap-edge-1",
+          "category": "wrap",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 44,
+            "lineCount": 2
+          },
+          "measuredHeightPx": 44,
+          "measuredLineCount": 2
+        },
+        {
+          "id": "mention-1",
+          "category": "mention",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 22,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 22,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "mention-2",
+          "category": "mention",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 22,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 22,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "link-1",
+          "category": "link",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 22,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 22,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "link-2",
+          "category": "link",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 44,
+            "lineCount": 2
+          },
+          "measuredHeightPx": 44,
+          "measuredLineCount": 2
+        },
+        {
+          "id": "emoji-1",
+          "category": "emoji",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 22,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 22,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "emoji-2",
+          "category": "emoji",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 22,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 22,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "emoji-3",
+          "category": "emoji",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 44,
+            "lineCount": 2
+          },
+          "measuredHeightPx": 44,
+          "measuredLineCount": 2
+        },
+        {
+          "id": "rtl-1",
+          "category": "rtl",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 22,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 22,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "rtl-2",
+          "category": "rtl",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 22,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 22,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "me-1",
+          "category": "me",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 22,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 22,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "me-2",
+          "category": "me",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 44,
+            "lineCount": 2
+          },
+          "measuredHeightPx": 44,
+          "measuredLineCount": 2
+        },
+        {
+          "id": "longtoken-1",
+          "category": "longtoken",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 22,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 22,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "longtoken-2",
+          "category": "longtoken",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 44,
+            "lineCount": 2
+          },
+          "measuredHeightPx": 44,
+          "measuredLineCount": 2
+        },
+        {
+          "id": "code-1",
+          "category": "code",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 88,
+            "lineCount": 4
+          },
+          "measuredHeightPx": 81,
+          "measuredLineCount": 4
+        },
+        {
+          "id": "code-2",
+          "category": "code",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 22,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 22,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "code-3",
+          "category": "code",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 88,
+            "lineCount": 4
+          },
+          "measuredHeightPx": 63,
+          "measuredLineCount": 3
+        },
+        {
+          "id": "mixed-1",
+          "category": "mixed",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 22,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 22,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "mixed-2",
+          "category": "mixed",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 44,
+            "lineCount": 2
+          },
+          "measuredHeightPx": 44,
+          "measuredLineCount": 2
+        },
+        {
+          "id": "short-4",
+          "category": "short",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 22,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 22,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "short-5",
+          "category": "short",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 22,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 22,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "wrap-4",
+          "category": "wrap",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 44,
+            "lineCount": 2
+          },
+          "measuredHeightPx": 44,
+          "measuredLineCount": 2
+        },
+        {
+          "id": "wrap-5",
+          "category": "wrap",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 88,
+            "lineCount": 4
+          },
+          "measuredHeightPx": 88,
+          "measuredLineCount": 4
+        },
+        {
+          "id": "mention-3",
+          "category": "mention",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 22,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 22,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "link-3",
+          "category": "link",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 44,
+            "lineCount": 2
+          },
+          "measuredHeightPx": 44,
+          "measuredLineCount": 2
+        },
+        {
+          "id": "short-1",
+          "category": "short",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 22,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 22,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "short-2",
+          "category": "short",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 22,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 22,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "short-3",
+          "category": "short",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 22,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 22,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "wrap-1",
+          "category": "wrap",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 44,
+            "lineCount": 2
+          },
+          "measuredHeightPx": 44,
+          "measuredLineCount": 2
+        },
+        {
+          "id": "wrap-2",
+          "category": "wrap",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 88,
+            "lineCount": 4
+          },
+          "measuredHeightPx": 88,
+          "measuredLineCount": 4
+        },
+        {
+          "id": "wrap-3",
+          "category": "wrap",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 110,
+            "lineCount": 5
+          },
+          "measuredHeightPx": 110,
+          "measuredLineCount": 5
+        },
+        {
+          "id": "wrap-edge-1",
+          "category": "wrap",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 22,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 22,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "mention-1",
+          "category": "mention",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 22,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 22,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "mention-2",
+          "category": "mention",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 22,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 22,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "link-1",
+          "category": "link",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 22,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 22,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "link-2",
+          "category": "link",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 22,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 22,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "emoji-1",
+          "category": "emoji",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 22,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 22,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "emoji-2",
+          "category": "emoji",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 22,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 22,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "emoji-3",
+          "category": "emoji",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 22,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 22,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "rtl-1",
+          "category": "rtl",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 22,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 22,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "rtl-2",
+          "category": "rtl",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 22,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 22,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "me-1",
+          "category": "me",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 22,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 22,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "me-2",
+          "category": "me",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 22,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 22,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "longtoken-1",
+          "category": "longtoken",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 22,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 22,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "longtoken-2",
+          "category": "longtoken",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 44,
+            "lineCount": 2
+          },
+          "measuredHeightPx": 44,
+          "measuredLineCount": 2
+        },
+        {
+          "id": "code-1",
+          "category": "code",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 88,
+            "lineCount": 4
+          },
+          "measuredHeightPx": 81,
+          "measuredLineCount": 4
+        },
+        {
+          "id": "code-2",
+          "category": "code",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 22,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 22,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "code-3",
+          "category": "code",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 88,
+            "lineCount": 4
+          },
+          "measuredHeightPx": 63,
+          "measuredLineCount": 3
+        },
+        {
+          "id": "mixed-1",
+          "category": "mixed",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 22,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 22,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "mixed-2",
+          "category": "mixed",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 44,
+            "lineCount": 2
+          },
+          "measuredHeightPx": 44,
+          "measuredLineCount": 2
+        },
+        {
+          "id": "short-4",
+          "category": "short",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 22,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 22,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "short-5",
+          "category": "short",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 22,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 22,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "wrap-4",
+          "category": "wrap",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 44,
+            "lineCount": 2
+          },
+          "measuredHeightPx": 44,
+          "measuredLineCount": 2
+        },
+        {
+          "id": "wrap-5",
+          "category": "wrap",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 66,
+            "lineCount": 3
+          },
+          "measuredHeightPx": 66,
+          "measuredLineCount": 3
+        },
+        {
+          "id": "mention-3",
+          "category": "mention",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 22,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 22,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "link-3",
+          "category": "link",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 22,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 22,
+          "measuredLineCount": 1
+        }
+      ]
+    },
+    {
+      "fontScalePct": 125,
+      "report": {
+        "generatedNote": "pretext height spike report",
+        "byCategory": {
+          "short": {
+            "count": 15,
+            "lineExactPct": 100,
+            "p95AbsErrPx": 0,
+            "maxAbsErrPx": 0,
+            "worstId": "short-1"
+          },
+          "wrap": {
+            "count": 18,
+            "lineExactPct": 100,
+            "p95AbsErrPx": 0,
+            "maxAbsErrPx": 0,
+            "worstId": "wrap-1"
+          },
+          "mention": {
+            "count": 9,
+            "lineExactPct": 100,
+            "p95AbsErrPx": 0,
+            "maxAbsErrPx": 0,
+            "worstId": "mention-1"
+          },
+          "link": {
+            "count": 9,
+            "lineExactPct": 100,
+            "p95AbsErrPx": 0,
+            "maxAbsErrPx": 0,
+            "worstId": "link-1"
+          },
+          "emoji": {
+            "count": 9,
+            "lineExactPct": 100,
+            "p95AbsErrPx": 0,
+            "maxAbsErrPx": 0,
+            "worstId": "emoji-1"
+          },
+          "rtl": {
+            "count": 6,
+            "lineExactPct": 100,
+            "p95AbsErrPx": 0,
+            "maxAbsErrPx": 0,
+            "worstId": "rtl-1"
+          },
+          "me": {
+            "count": 6,
+            "lineExactPct": 100,
+            "p95AbsErrPx": 0,
+            "maxAbsErrPx": 0,
+            "worstId": "me-1"
+          },
+          "longtoken": {
+            "count": 6,
+            "lineExactPct": 100,
+            "p95AbsErrPx": 0,
+            "maxAbsErrPx": 0,
+            "worstId": "longtoken-1"
+          },
+          "code": {
+            "count": 9,
+            "lineExactPct": 66.66666666666666,
+            "p95AbsErrPx": 87,
+            "maxAbsErrPx": 87,
+            "worstId": "code-3"
+          },
+          "mixed": {
+            "count": 6,
+            "lineExactPct": 100,
+            "p95AbsErrPx": 0,
+            "maxAbsErrPx": 0,
+            "worstId": "mixed-1"
+          }
+        },
+        "overall": {
+          "textLineExactPct": 100,
+          "passesThreshold": true
+        },
+        "worstOffenders": [
+          {
+            "id": "code-3",
+            "category": "code",
+            "widthPx": 320,
+            "predicted": {
+              "heightPx": 165,
+              "lineCount": 6
+            },
+            "measuredHeightPx": 78,
+            "measuredLineCount": 3
+          },
+          {
+            "id": "code-3",
+            "category": "code",
+            "widthPx": 560,
+            "predicted": {
+              "heightPx": 110,
+              "lineCount": 4
+            },
+            "measuredHeightPx": 78,
+            "measuredLineCount": 3
+          },
+          {
+            "id": "code-3",
+            "category": "code",
+            "widthPx": 760,
+            "predicted": {
+              "heightPx": 110,
+              "lineCount": 4
+            },
+            "measuredHeightPx": 78,
+            "measuredLineCount": 3
+          },
+          {
+            "id": "code-1",
+            "category": "code",
+            "widthPx": 320,
+            "predicted": {
+              "heightPx": 110,
+              "lineCount": 4
+            },
+            "measuredHeightPx": 100.5,
+            "measuredLineCount": 4
+          },
+          {
+            "id": "code-1",
+            "category": "code",
+            "widthPx": 560,
+            "predicted": {
+              "heightPx": 110,
+              "lineCount": 4
+            },
+            "measuredHeightPx": 100.5,
+            "measuredLineCount": 4
+          },
+          {
+            "id": "code-1",
+            "category": "code",
+            "widthPx": 760,
+            "predicted": {
+              "heightPx": 110,
+              "lineCount": 4
+            },
+            "measuredHeightPx": 100.5,
+            "measuredLineCount": 4
+          },
+          {
+            "id": "short-1",
+            "category": "short",
+            "widthPx": 320,
+            "predicted": {
+              "heightPx": 27.5,
+              "lineCount": 1
+            },
+            "measuredHeightPx": 27.5,
+            "measuredLineCount": 1
+          },
+          {
+            "id": "short-2",
+            "category": "short",
+            "widthPx": 320,
+            "predicted": {
+              "heightPx": 27.5,
+              "lineCount": 1
+            },
+            "measuredHeightPx": 27.5,
+            "measuredLineCount": 1
+          },
+          {
+            "id": "short-3",
+            "category": "short",
+            "widthPx": 320,
+            "predicted": {
+              "heightPx": 27.5,
+              "lineCount": 1
+            },
+            "measuredHeightPx": 27.5,
+            "measuredLineCount": 1
+          },
+          {
+            "id": "wrap-1",
+            "category": "wrap",
+            "widthPx": 320,
+            "predicted": {
+              "heightPx": 110,
+              "lineCount": 4
+            },
+            "measuredHeightPx": 110,
+            "measuredLineCount": 4
+          }
+        ]
+      },
+      "samples": [
+        {
+          "id": "short-1",
+          "category": "short",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 27.5,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 27.5,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "short-2",
+          "category": "short",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 27.5,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 27.5,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "short-3",
+          "category": "short",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 27.5,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 27.5,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "wrap-1",
+          "category": "wrap",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 110,
+            "lineCount": 4
+          },
+          "measuredHeightPx": 110,
+          "measuredLineCount": 4
+        },
+        {
+          "id": "wrap-2",
+          "category": "wrap",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 330,
+            "lineCount": 12
+          },
+          "measuredHeightPx": 330,
+          "measuredLineCount": 12
+        },
+        {
+          "id": "wrap-3",
+          "category": "wrap",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 165,
+            "lineCount": 6
+          },
+          "measuredHeightPx": 165,
+          "measuredLineCount": 6
+        },
+        {
+          "id": "wrap-edge-1",
+          "category": "wrap",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 110,
+            "lineCount": 4
+          },
+          "measuredHeightPx": 110,
+          "measuredLineCount": 4
+        },
+        {
+          "id": "mention-1",
+          "category": "mention",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 55,
+            "lineCount": 2
+          },
+          "measuredHeightPx": 55,
+          "measuredLineCount": 2
+        },
+        {
+          "id": "mention-2",
+          "category": "mention",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 82.5,
+            "lineCount": 3
+          },
+          "measuredHeightPx": 82.5,
+          "measuredLineCount": 3
+        },
+        {
+          "id": "link-1",
+          "category": "link",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 82.5,
+            "lineCount": 3
+          },
+          "measuredHeightPx": 82.5,
+          "measuredLineCount": 3
+        },
+        {
+          "id": "link-2",
+          "category": "link",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 82.5,
+            "lineCount": 3
+          },
+          "measuredHeightPx": 82.5,
+          "measuredLineCount": 3
+        },
+        {
+          "id": "emoji-1",
+          "category": "emoji",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 27.5,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 27.5,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "emoji-2",
+          "category": "emoji",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 55,
+            "lineCount": 2
+          },
+          "measuredHeightPx": 55,
+          "measuredLineCount": 2
+        },
+        {
+          "id": "emoji-3",
+          "category": "emoji",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 82.5,
+            "lineCount": 3
+          },
+          "measuredHeightPx": 82.5,
+          "measuredLineCount": 3
+        },
+        {
+          "id": "rtl-1",
+          "category": "rtl",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 27.5,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 27.5,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "rtl-2",
+          "category": "rtl",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 55,
+            "lineCount": 2
+          },
+          "measuredHeightPx": 55,
+          "measuredLineCount": 2
+        },
+        {
+          "id": "me-1",
+          "category": "me",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 27.5,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 27.5,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "me-2",
+          "category": "me",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 82.5,
+            "lineCount": 3
+          },
+          "measuredHeightPx": 82.5,
+          "measuredLineCount": 3
+        },
+        {
+          "id": "longtoken-1",
+          "category": "longtoken",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 110,
+            "lineCount": 4
+          },
+          "measuredHeightPx": 110,
+          "measuredLineCount": 4
+        },
+        {
+          "id": "longtoken-2",
+          "category": "longtoken",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 110,
+            "lineCount": 4
+          },
+          "measuredHeightPx": 110,
+          "measuredLineCount": 4
+        },
+        {
+          "id": "code-1",
+          "category": "code",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 110,
+            "lineCount": 4
+          },
+          "measuredHeightPx": 100.5,
+          "measuredLineCount": 4
+        },
+        {
+          "id": "code-2",
+          "category": "code",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 27.5,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 27.5,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "code-3",
+          "category": "code",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 165,
+            "lineCount": 6
+          },
+          "measuredHeightPx": 78,
+          "measuredLineCount": 3
+        },
+        {
+          "id": "mixed-1",
+          "category": "mixed",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 82.5,
+            "lineCount": 3
+          },
+          "measuredHeightPx": 82.5,
+          "measuredLineCount": 3
+        },
+        {
+          "id": "mixed-2",
+          "category": "mixed",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 110,
+            "lineCount": 4
+          },
+          "measuredHeightPx": 110,
+          "measuredLineCount": 4
+        },
+        {
+          "id": "short-4",
+          "category": "short",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 27.5,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 27.5,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "short-5",
+          "category": "short",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 27.5,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 27.5,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "wrap-4",
+          "category": "wrap",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 110,
+            "lineCount": 4
+          },
+          "measuredHeightPx": 110,
+          "measuredLineCount": 4
+        },
+        {
+          "id": "wrap-5",
+          "category": "wrap",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 220,
+            "lineCount": 8
+          },
+          "measuredHeightPx": 220,
+          "measuredLineCount": 8
+        },
+        {
+          "id": "mention-3",
+          "category": "mention",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 55,
+            "lineCount": 2
+          },
+          "measuredHeightPx": 55,
+          "measuredLineCount": 2
+        },
+        {
+          "id": "link-3",
+          "category": "link",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 82.5,
+            "lineCount": 3
+          },
+          "measuredHeightPx": 82.5,
+          "measuredLineCount": 3
+        },
+        {
+          "id": "short-1",
+          "category": "short",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 27.5,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 27.5,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "short-2",
+          "category": "short",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 27.5,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 27.5,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "short-3",
+          "category": "short",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 27.5,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 27.5,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "wrap-1",
+          "category": "wrap",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 82.5,
+            "lineCount": 3
+          },
+          "measuredHeightPx": 82.5,
+          "measuredLineCount": 3
+        },
+        {
+          "id": "wrap-2",
+          "category": "wrap",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 165,
+            "lineCount": 6
+          },
+          "measuredHeightPx": 165,
+          "measuredLineCount": 6
+        },
+        {
+          "id": "wrap-3",
+          "category": "wrap",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 137.5,
+            "lineCount": 5
+          },
+          "measuredHeightPx": 137.5,
+          "measuredLineCount": 5
+        },
+        {
+          "id": "wrap-edge-1",
+          "category": "wrap",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 55,
+            "lineCount": 2
+          },
+          "measuredHeightPx": 55,
+          "measuredLineCount": 2
+        },
+        {
+          "id": "mention-1",
+          "category": "mention",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 27.5,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 27.5,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "mention-2",
+          "category": "mention",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 55,
+            "lineCount": 2
+          },
+          "measuredHeightPx": 55,
+          "measuredLineCount": 2
+        },
+        {
+          "id": "link-1",
+          "category": "link",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 55,
+            "lineCount": 2
+          },
+          "measuredHeightPx": 55,
+          "measuredLineCount": 2
+        },
+        {
+          "id": "link-2",
+          "category": "link",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 55,
+            "lineCount": 2
+          },
+          "measuredHeightPx": 55,
+          "measuredLineCount": 2
+        },
+        {
+          "id": "emoji-1",
+          "category": "emoji",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 27.5,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 27.5,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "emoji-2",
+          "category": "emoji",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 27.5,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 27.5,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "emoji-3",
+          "category": "emoji",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 55,
+            "lineCount": 2
+          },
+          "measuredHeightPx": 55,
+          "measuredLineCount": 2
+        },
+        {
+          "id": "rtl-1",
+          "category": "rtl",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 27.5,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 27.5,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "rtl-2",
+          "category": "rtl",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 27.5,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 27.5,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "me-1",
+          "category": "me",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 27.5,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 27.5,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "me-2",
+          "category": "me",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 55,
+            "lineCount": 2
+          },
+          "measuredHeightPx": 55,
+          "measuredLineCount": 2
+        },
+        {
+          "id": "longtoken-1",
+          "category": "longtoken",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 82.5,
+            "lineCount": 3
+          },
+          "measuredHeightPx": 82.5,
+          "measuredLineCount": 3
+        },
+        {
+          "id": "longtoken-2",
+          "category": "longtoken",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 55,
+            "lineCount": 2
+          },
+          "measuredHeightPx": 55,
+          "measuredLineCount": 2
+        },
+        {
+          "id": "code-1",
+          "category": "code",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 110,
+            "lineCount": 4
+          },
+          "measuredHeightPx": 100.5,
+          "measuredLineCount": 4
+        },
+        {
+          "id": "code-2",
+          "category": "code",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 27.5,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 27.5,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "code-3",
+          "category": "code",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 110,
+            "lineCount": 4
+          },
+          "measuredHeightPx": 78,
+          "measuredLineCount": 3
+        },
+        {
+          "id": "mixed-1",
+          "category": "mixed",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 55,
+            "lineCount": 2
+          },
+          "measuredHeightPx": 55,
+          "measuredLineCount": 2
+        },
+        {
+          "id": "mixed-2",
+          "category": "mixed",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 55,
+            "lineCount": 2
+          },
+          "measuredHeightPx": 55,
+          "measuredLineCount": 2
+        },
+        {
+          "id": "short-4",
+          "category": "short",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 27.5,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 27.5,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "short-5",
+          "category": "short",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 27.5,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 27.5,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "wrap-4",
+          "category": "wrap",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 82.5,
+            "lineCount": 3
+          },
+          "measuredHeightPx": 82.5,
+          "measuredLineCount": 3
+        },
+        {
+          "id": "wrap-5",
+          "category": "wrap",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 110,
+            "lineCount": 4
+          },
+          "measuredHeightPx": 110,
+          "measuredLineCount": 4
+        },
+        {
+          "id": "mention-3",
+          "category": "mention",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 27.5,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 27.5,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "link-3",
+          "category": "link",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 55,
+            "lineCount": 2
+          },
+          "measuredHeightPx": 55,
+          "measuredLineCount": 2
+        },
+        {
+          "id": "short-1",
+          "category": "short",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 27.5,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 27.5,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "short-2",
+          "category": "short",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 27.5,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 27.5,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "short-3",
+          "category": "short",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 27.5,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 27.5,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "wrap-1",
+          "category": "wrap",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 55,
+            "lineCount": 2
+          },
+          "measuredHeightPx": 55,
+          "measuredLineCount": 2
+        },
+        {
+          "id": "wrap-2",
+          "category": "wrap",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 137.5,
+            "lineCount": 5
+          },
+          "measuredHeightPx": 137.5,
+          "measuredLineCount": 5
+        },
+        {
+          "id": "wrap-3",
+          "category": "wrap",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 137.5,
+            "lineCount": 5
+          },
+          "measuredHeightPx": 137.5,
+          "measuredLineCount": 5
+        },
+        {
+          "id": "wrap-edge-1",
+          "category": "wrap",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 55,
+            "lineCount": 2
+          },
+          "measuredHeightPx": 55,
+          "measuredLineCount": 2
+        },
+        {
+          "id": "mention-1",
+          "category": "mention",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 27.5,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 27.5,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "mention-2",
+          "category": "mention",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 27.5,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 27.5,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "link-1",
+          "category": "link",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 27.5,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 27.5,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "link-2",
+          "category": "link",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 55,
+            "lineCount": 2
+          },
+          "measuredHeightPx": 55,
+          "measuredLineCount": 2
+        },
+        {
+          "id": "emoji-1",
+          "category": "emoji",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 27.5,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 27.5,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "emoji-2",
+          "category": "emoji",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 27.5,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 27.5,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "emoji-3",
+          "category": "emoji",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 55,
+            "lineCount": 2
+          },
+          "measuredHeightPx": 55,
+          "measuredLineCount": 2
+        },
+        {
+          "id": "rtl-1",
+          "category": "rtl",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 27.5,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 27.5,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "rtl-2",
+          "category": "rtl",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 27.5,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 27.5,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "me-1",
+          "category": "me",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 27.5,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 27.5,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "me-2",
+          "category": "me",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 55,
+            "lineCount": 2
+          },
+          "measuredHeightPx": 55,
+          "measuredLineCount": 2
+        },
+        {
+          "id": "longtoken-1",
+          "category": "longtoken",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 27.5,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 27.5,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "longtoken-2",
+          "category": "longtoken",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 55,
+            "lineCount": 2
+          },
+          "measuredHeightPx": 55,
+          "measuredLineCount": 2
+        },
+        {
+          "id": "code-1",
+          "category": "code",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 110,
+            "lineCount": 4
+          },
+          "measuredHeightPx": 100.5,
+          "measuredLineCount": 4
+        },
+        {
+          "id": "code-2",
+          "category": "code",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 27.5,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 27.5,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "code-3",
+          "category": "code",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 110,
+            "lineCount": 4
+          },
+          "measuredHeightPx": 78,
+          "measuredLineCount": 3
+        },
+        {
+          "id": "mixed-1",
+          "category": "mixed",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 27.5,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 27.5,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "mixed-2",
+          "category": "mixed",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 55,
+            "lineCount": 2
+          },
+          "measuredHeightPx": 55,
+          "measuredLineCount": 2
+        },
+        {
+          "id": "short-4",
+          "category": "short",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 27.5,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 27.5,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "short-5",
+          "category": "short",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 27.5,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 27.5,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "wrap-4",
+          "category": "wrap",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 55,
+            "lineCount": 2
+          },
+          "measuredHeightPx": 55,
+          "measuredLineCount": 2
+        },
+        {
+          "id": "wrap-5",
+          "category": "wrap",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 82.5,
+            "lineCount": 3
+          },
+          "measuredHeightPx": 82.5,
+          "measuredLineCount": 3
+        },
+        {
+          "id": "mention-3",
+          "category": "mention",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 27.5,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 27.5,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "link-3",
+          "category": "link",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 27.5,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 27.5,
+          "measuredLineCount": 1
+        }
+      ]
+    },
+    {
+      "fontScalePct": 150,
+      "report": {
+        "generatedNote": "pretext height spike report",
+        "byCategory": {
+          "short": {
+            "count": 15,
+            "lineExactPct": 100,
+            "p95AbsErrPx": 0,
+            "maxAbsErrPx": 0,
+            "worstId": "short-1"
+          },
+          "wrap": {
+            "count": 18,
+            "lineExactPct": 100,
+            "p95AbsErrPx": 0,
+            "maxAbsErrPx": 0,
+            "worstId": "wrap-1"
+          },
+          "mention": {
+            "count": 9,
+            "lineExactPct": 100,
+            "p95AbsErrPx": 0,
+            "maxAbsErrPx": 0,
+            "worstId": "mention-1"
+          },
+          "link": {
+            "count": 9,
+            "lineExactPct": 100,
+            "p95AbsErrPx": 0,
+            "maxAbsErrPx": 0,
+            "worstId": "link-1"
+          },
+          "emoji": {
+            "count": 9,
+            "lineExactPct": 100,
+            "p95AbsErrPx": 0,
+            "maxAbsErrPx": 0,
+            "worstId": "emoji-1"
+          },
+          "rtl": {
+            "count": 6,
+            "lineExactPct": 100,
+            "p95AbsErrPx": 0,
+            "maxAbsErrPx": 0,
+            "worstId": "rtl-1"
+          },
+          "me": {
+            "count": 6,
+            "lineExactPct": 100,
+            "p95AbsErrPx": 0,
+            "maxAbsErrPx": 0,
+            "worstId": "me-1"
+          },
+          "longtoken": {
+            "count": 6,
+            "lineExactPct": 100,
+            "p95AbsErrPx": 0,
+            "maxAbsErrPx": 0,
+            "worstId": "longtoken-1"
+          },
+          "code": {
+            "count": 9,
+            "lineExactPct": 66.66666666666666,
+            "p95AbsErrPx": 138,
+            "maxAbsErrPx": 138,
+            "worstId": "code-3"
+          },
+          "mixed": {
+            "count": 6,
+            "lineExactPct": 100,
+            "p95AbsErrPx": 0,
+            "maxAbsErrPx": 0,
+            "worstId": "mixed-1"
+          }
+        },
+        "overall": {
+          "textLineExactPct": 100,
+          "passesThreshold": true
+        },
+        "worstOffenders": [
+          {
+            "id": "code-3",
+            "category": "code",
+            "widthPx": 320,
+            "predicted": {
+              "heightPx": 231,
+              "lineCount": 7
+            },
+            "measuredHeightPx": 93,
+            "measuredLineCount": 3
+          },
+          {
+            "id": "code-3",
+            "category": "code",
+            "widthPx": 560,
+            "predicted": {
+              "heightPx": 165,
+              "lineCount": 5
+            },
+            "measuredHeightPx": 93,
+            "measuredLineCount": 3
+          },
+          {
+            "id": "code-3",
+            "category": "code",
+            "widthPx": 760,
+            "predicted": {
+              "heightPx": 132,
+              "lineCount": 4
+            },
+            "measuredHeightPx": 93,
+            "measuredLineCount": 3
+          },
+          {
+            "id": "code-1",
+            "category": "code",
+            "widthPx": 320,
+            "predicted": {
+              "heightPx": 132,
+              "lineCount": 4
+            },
+            "measuredHeightPx": 120,
+            "measuredLineCount": 4
+          },
+          {
+            "id": "code-1",
+            "category": "code",
+            "widthPx": 560,
+            "predicted": {
+              "heightPx": 132,
+              "lineCount": 4
+            },
+            "measuredHeightPx": 120,
+            "measuredLineCount": 4
+          },
+          {
+            "id": "code-1",
+            "category": "code",
+            "widthPx": 760,
+            "predicted": {
+              "heightPx": 132,
+              "lineCount": 4
+            },
+            "measuredHeightPx": 120,
+            "measuredLineCount": 4
+          },
+          {
+            "id": "short-1",
+            "category": "short",
+            "widthPx": 320,
+            "predicted": {
+              "heightPx": 33,
+              "lineCount": 1
+            },
+            "measuredHeightPx": 33,
+            "measuredLineCount": 1
+          },
+          {
+            "id": "short-2",
+            "category": "short",
+            "widthPx": 320,
+            "predicted": {
+              "heightPx": 33,
+              "lineCount": 1
+            },
+            "measuredHeightPx": 33,
+            "measuredLineCount": 1
+          },
+          {
+            "id": "short-3",
+            "category": "short",
+            "widthPx": 320,
+            "predicted": {
+              "heightPx": 33,
+              "lineCount": 1
+            },
+            "measuredHeightPx": 33,
+            "measuredLineCount": 1
+          },
+          {
+            "id": "wrap-1",
+            "category": "wrap",
+            "widthPx": 320,
+            "predicted": {
+              "heightPx": 165,
+              "lineCount": 5
+            },
+            "measuredHeightPx": 165,
+            "measuredLineCount": 5
+          }
+        ]
+      },
+      "samples": [
+        {
+          "id": "short-1",
+          "category": "short",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 33,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 33,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "short-2",
+          "category": "short",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 33,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 33,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "short-3",
+          "category": "short",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 33,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 33,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "wrap-1",
+          "category": "wrap",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 165,
+            "lineCount": 5
+          },
+          "measuredHeightPx": 165,
+          "measuredLineCount": 5
+        },
+        {
+          "id": "wrap-2",
+          "category": "wrap",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 495,
+            "lineCount": 15
+          },
+          "measuredHeightPx": 495,
+          "measuredLineCount": 15
+        },
+        {
+          "id": "wrap-3",
+          "category": "wrap",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 198,
+            "lineCount": 6
+          },
+          "measuredHeightPx": 198,
+          "measuredLineCount": 6
+        },
+        {
+          "id": "wrap-edge-1",
+          "category": "wrap",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 132,
+            "lineCount": 4
+          },
+          "measuredHeightPx": 132,
+          "measuredLineCount": 4
+        },
+        {
+          "id": "mention-1",
+          "category": "mention",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 66,
+            "lineCount": 2
+          },
+          "measuredHeightPx": 66,
+          "measuredLineCount": 2
+        },
+        {
+          "id": "mention-2",
+          "category": "mention",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 99,
+            "lineCount": 3
+          },
+          "measuredHeightPx": 99,
+          "measuredLineCount": 3
+        },
+        {
+          "id": "link-1",
+          "category": "link",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 99,
+            "lineCount": 3
+          },
+          "measuredHeightPx": 99,
+          "measuredLineCount": 3
+        },
+        {
+          "id": "link-2",
+          "category": "link",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 132,
+            "lineCount": 4
+          },
+          "measuredHeightPx": 132,
+          "measuredLineCount": 4
+        },
+        {
+          "id": "emoji-1",
+          "category": "emoji",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 33,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 33,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "emoji-2",
+          "category": "emoji",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 66,
+            "lineCount": 2
+          },
+          "measuredHeightPx": 66,
+          "measuredLineCount": 2
+        },
+        {
+          "id": "emoji-3",
+          "category": "emoji",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 132,
+            "lineCount": 4
+          },
+          "measuredHeightPx": 132,
+          "measuredLineCount": 4
+        },
+        {
+          "id": "rtl-1",
+          "category": "rtl",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 66,
+            "lineCount": 2
+          },
+          "measuredHeightPx": 66,
+          "measuredLineCount": 2
+        },
+        {
+          "id": "rtl-2",
+          "category": "rtl",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 99,
+            "lineCount": 3
+          },
+          "measuredHeightPx": 99,
+          "measuredLineCount": 3
+        },
+        {
+          "id": "me-1",
+          "category": "me",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 66,
+            "lineCount": 2
+          },
+          "measuredHeightPx": 66,
+          "measuredLineCount": 2
+        },
+        {
+          "id": "me-2",
+          "category": "me",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 132,
+            "lineCount": 4
+          },
+          "measuredHeightPx": 132,
+          "measuredLineCount": 4
+        },
+        {
+          "id": "longtoken-1",
+          "category": "longtoken",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 132,
+            "lineCount": 4
+          },
+          "measuredHeightPx": 132,
+          "measuredLineCount": 4
+        },
+        {
+          "id": "longtoken-2",
+          "category": "longtoken",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 132,
+            "lineCount": 4
+          },
+          "measuredHeightPx": 132,
+          "measuredLineCount": 4
+        },
+        {
+          "id": "code-1",
+          "category": "code",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 132,
+            "lineCount": 4
+          },
+          "measuredHeightPx": 120,
+          "measuredLineCount": 4
+        },
+        {
+          "id": "code-2",
+          "category": "code",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 33,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 33,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "code-3",
+          "category": "code",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 231,
+            "lineCount": 7
+          },
+          "measuredHeightPx": 93,
+          "measuredLineCount": 3
+        },
+        {
+          "id": "mixed-1",
+          "category": "mixed",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 99,
+            "lineCount": 3
+          },
+          "measuredHeightPx": 99,
+          "measuredLineCount": 3
+        },
+        {
+          "id": "mixed-2",
+          "category": "mixed",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 132,
+            "lineCount": 4
+          },
+          "measuredHeightPx": 132,
+          "measuredLineCount": 4
+        },
+        {
+          "id": "short-4",
+          "category": "short",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 33,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 33,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "short-5",
+          "category": "short",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 33,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 33,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "wrap-4",
+          "category": "wrap",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 198,
+            "lineCount": 6
+          },
+          "measuredHeightPx": 198,
+          "measuredLineCount": 6
+        },
+        {
+          "id": "wrap-5",
+          "category": "wrap",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 297,
+            "lineCount": 9
+          },
+          "measuredHeightPx": 297,
+          "measuredLineCount": 9
+        },
+        {
+          "id": "mention-3",
+          "category": "mention",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 66,
+            "lineCount": 2
+          },
+          "measuredHeightPx": 66,
+          "measuredLineCount": 2
+        },
+        {
+          "id": "link-3",
+          "category": "link",
+          "widthPx": 320,
+          "predicted": {
+            "heightPx": 132,
+            "lineCount": 4
+          },
+          "measuredHeightPx": 132,
+          "measuredLineCount": 4
+        },
+        {
+          "id": "short-1",
+          "category": "short",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 33,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 33,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "short-2",
+          "category": "short",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 33,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 33,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "short-3",
+          "category": "short",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 33,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 33,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "wrap-1",
+          "category": "wrap",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 99,
+            "lineCount": 3
+          },
+          "measuredHeightPx": 99,
+          "measuredLineCount": 3
+        },
+        {
+          "id": "wrap-2",
+          "category": "wrap",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 264,
+            "lineCount": 8
+          },
+          "measuredHeightPx": 264,
+          "measuredLineCount": 8
+        },
+        {
+          "id": "wrap-3",
+          "category": "wrap",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 165,
+            "lineCount": 5
+          },
+          "measuredHeightPx": 165,
+          "measuredLineCount": 5
+        },
+        {
+          "id": "wrap-edge-1",
+          "category": "wrap",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 66,
+            "lineCount": 2
+          },
+          "measuredHeightPx": 66,
+          "measuredLineCount": 2
+        },
+        {
+          "id": "mention-1",
+          "category": "mention",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 66,
+            "lineCount": 2
+          },
+          "measuredHeightPx": 66,
+          "measuredLineCount": 2
+        },
+        {
+          "id": "mention-2",
+          "category": "mention",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 66,
+            "lineCount": 2
+          },
+          "measuredHeightPx": 66,
+          "measuredLineCount": 2
+        },
+        {
+          "id": "link-1",
+          "category": "link",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 99,
+            "lineCount": 3
+          },
+          "measuredHeightPx": 99,
+          "measuredLineCount": 3
+        },
+        {
+          "id": "link-2",
+          "category": "link",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 66,
+            "lineCount": 2
+          },
+          "measuredHeightPx": 66,
+          "measuredLineCount": 2
+        },
+        {
+          "id": "emoji-1",
+          "category": "emoji",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 33,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 33,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "emoji-2",
+          "category": "emoji",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 33,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 33,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "emoji-3",
+          "category": "emoji",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 66,
+            "lineCount": 2
+          },
+          "measuredHeightPx": 66,
+          "measuredLineCount": 2
+        },
+        {
+          "id": "rtl-1",
+          "category": "rtl",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 33,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 33,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "rtl-2",
+          "category": "rtl",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 66,
+            "lineCount": 2
+          },
+          "measuredHeightPx": 66,
+          "measuredLineCount": 2
+        },
+        {
+          "id": "me-1",
+          "category": "me",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 33,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 33,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "me-2",
+          "category": "me",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 66,
+            "lineCount": 2
+          },
+          "measuredHeightPx": 66,
+          "measuredLineCount": 2
+        },
+        {
+          "id": "longtoken-1",
+          "category": "longtoken",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 99,
+            "lineCount": 3
+          },
+          "measuredHeightPx": 99,
+          "measuredLineCount": 3
+        },
+        {
+          "id": "longtoken-2",
+          "category": "longtoken",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 99,
+            "lineCount": 3
+          },
+          "measuredHeightPx": 99,
+          "measuredLineCount": 3
+        },
+        {
+          "id": "code-1",
+          "category": "code",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 132,
+            "lineCount": 4
+          },
+          "measuredHeightPx": 120,
+          "measuredLineCount": 4
+        },
+        {
+          "id": "code-2",
+          "category": "code",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 33,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 33,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "code-3",
+          "category": "code",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 165,
+            "lineCount": 5
+          },
+          "measuredHeightPx": 93,
+          "measuredLineCount": 3
+        },
+        {
+          "id": "mixed-1",
+          "category": "mixed",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 66,
+            "lineCount": 2
+          },
+          "measuredHeightPx": 66,
+          "measuredLineCount": 2
+        },
+        {
+          "id": "mixed-2",
+          "category": "mixed",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 66,
+            "lineCount": 2
+          },
+          "measuredHeightPx": 66,
+          "measuredLineCount": 2
+        },
+        {
+          "id": "short-4",
+          "category": "short",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 33,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 33,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "short-5",
+          "category": "short",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 33,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 33,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "wrap-4",
+          "category": "wrap",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 99,
+            "lineCount": 3
+          },
+          "measuredHeightPx": 99,
+          "measuredLineCount": 3
+        },
+        {
+          "id": "wrap-5",
+          "category": "wrap",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 165,
+            "lineCount": 5
+          },
+          "measuredHeightPx": 165,
+          "measuredLineCount": 5
+        },
+        {
+          "id": "mention-3",
+          "category": "mention",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 33,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 33,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "link-3",
+          "category": "link",
+          "widthPx": 560,
+          "predicted": {
+            "heightPx": 66,
+            "lineCount": 2
+          },
+          "measuredHeightPx": 66,
+          "measuredLineCount": 2
+        },
+        {
+          "id": "short-1",
+          "category": "short",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 33,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 33,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "short-2",
+          "category": "short",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 33,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 33,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "short-3",
+          "category": "short",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 33,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 33,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "wrap-1",
+          "category": "wrap",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 66,
+            "lineCount": 2
+          },
+          "measuredHeightPx": 66,
+          "measuredLineCount": 2
+        },
+        {
+          "id": "wrap-2",
+          "category": "wrap",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 198,
+            "lineCount": 6
+          },
+          "measuredHeightPx": 198,
+          "measuredLineCount": 6
+        },
+        {
+          "id": "wrap-3",
+          "category": "wrap",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 165,
+            "lineCount": 5
+          },
+          "measuredHeightPx": 165,
+          "measuredLineCount": 5
+        },
+        {
+          "id": "wrap-edge-1",
+          "category": "wrap",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 66,
+            "lineCount": 2
+          },
+          "measuredHeightPx": 66,
+          "measuredLineCount": 2
+        },
+        {
+          "id": "mention-1",
+          "category": "mention",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 33,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 33,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "mention-2",
+          "category": "mention",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 66,
+            "lineCount": 2
+          },
+          "measuredHeightPx": 66,
+          "measuredLineCount": 2
+        },
+        {
+          "id": "link-1",
+          "category": "link",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 66,
+            "lineCount": 2
+          },
+          "measuredHeightPx": 66,
+          "measuredLineCount": 2
+        },
+        {
+          "id": "link-2",
+          "category": "link",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 66,
+            "lineCount": 2
+          },
+          "measuredHeightPx": 66,
+          "measuredLineCount": 2
+        },
+        {
+          "id": "emoji-1",
+          "category": "emoji",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 33,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 33,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "emoji-2",
+          "category": "emoji",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 33,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 33,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "emoji-3",
+          "category": "emoji",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 66,
+            "lineCount": 2
+          },
+          "measuredHeightPx": 66,
+          "measuredLineCount": 2
+        },
+        {
+          "id": "rtl-1",
+          "category": "rtl",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 33,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 33,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "rtl-2",
+          "category": "rtl",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 33,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 33,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "me-1",
+          "category": "me",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 33,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 33,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "me-2",
+          "category": "me",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 66,
+            "lineCount": 2
+          },
+          "measuredHeightPx": 66,
+          "measuredLineCount": 2
+        },
+        {
+          "id": "longtoken-1",
+          "category": "longtoken",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 99,
+            "lineCount": 3
+          },
+          "measuredHeightPx": 99,
+          "measuredLineCount": 3
+        },
+        {
+          "id": "longtoken-2",
+          "category": "longtoken",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 66,
+            "lineCount": 2
+          },
+          "measuredHeightPx": 66,
+          "measuredLineCount": 2
+        },
+        {
+          "id": "code-1",
+          "category": "code",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 132,
+            "lineCount": 4
+          },
+          "measuredHeightPx": 120,
+          "measuredLineCount": 4
+        },
+        {
+          "id": "code-2",
+          "category": "code",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 33,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 33,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "code-3",
+          "category": "code",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 132,
+            "lineCount": 4
+          },
+          "measuredHeightPx": 93,
+          "measuredLineCount": 3
+        },
+        {
+          "id": "mixed-1",
+          "category": "mixed",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 33,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 33,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "mixed-2",
+          "category": "mixed",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 66,
+            "lineCount": 2
+          },
+          "measuredHeightPx": 66,
+          "measuredLineCount": 2
+        },
+        {
+          "id": "short-4",
+          "category": "short",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 33,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 33,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "short-5",
+          "category": "short",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 33,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 33,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "wrap-4",
+          "category": "wrap",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 66,
+            "lineCount": 2
+          },
+          "measuredHeightPx": 66,
+          "measuredLineCount": 2
+        },
+        {
+          "id": "wrap-5",
+          "category": "wrap",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 132,
+            "lineCount": 4
+          },
+          "measuredHeightPx": 132,
+          "measuredLineCount": 4
+        },
+        {
+          "id": "mention-3",
+          "category": "mention",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 33,
+            "lineCount": 1
+          },
+          "measuredHeightPx": 33,
+          "measuredLineCount": 1
+        },
+        {
+          "id": "link-3",
+          "category": "link",
+          "widthPx": 760,
+          "predicted": {
+            "heightPx": 66,
+            "lineCount": 2
+          },
+          "measuredHeightPx": 66,
+          "measuredLineCount": 2
+        }
+      ]
+    }
+  ]
+}

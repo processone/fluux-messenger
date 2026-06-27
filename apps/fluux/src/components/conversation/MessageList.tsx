@@ -11,7 +11,7 @@
  *
  * Scroll behavior is handled by useMessageListScroll hook.
  */
-import { useMemo, useRef, useEffect, type ReactNode } from 'react'
+import { useMemo, useRef, useEffect, useCallback, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { BaseMessage } from '@fluux/sdk'
 import { useMessageCopyFormatter, useMessageRangeSelection } from '@/hooks'
@@ -31,6 +31,15 @@ import { useSettingsStore } from '@/stores/settingsStore'
 import type { CopyMessageMeta } from '@/utils/buildCopyText'
 import { buildMessageListItems, type RenderItem } from './messageListItems'
 import { useTanstackMessageVirtualizer } from './tanstackMessageVirtualizer'
+import { useRowMetrics } from './useRowMetrics'
+import { estimateRowHeight } from './rowHeightEstimator'
+import {
+  getCachedHeights,
+  recordMeasuredHeight,
+  heightCacheKey,
+  noteConversationWidthBucket,
+  getConversationWidthBucket,
+} from './messageHeightCache'
 import { Loader2, ChevronUp, ChevronDown, MessageCircle } from 'lucide-react'
 import { Tooltip } from '../Tooltip'
 import { MessageSelectionBar } from './MessageSelectionBar'
@@ -226,7 +235,91 @@ export function MessageList<T extends BaseMessage>({
         : { items: [] as RenderItem<T>[], indexById: new Map<string, number>() },
     [virtualized, hasContent, groupedMessages, firstNewMessageId, showHeader, showFooter],
   )
-  const virtualizer = useTanstackMessageVirtualizer({ items: virtualItems, indexById, scrollRef: scrollContainerRef })
+  // Sample live row metrics for the per-item height estimator. Returns a ref (no re-render);
+  // falls back to ROW_METRICS_FALLBACK under jsdom / before any rows are mounted.
+  const rowMetricsRef = useRowMetrics(scrollContainerRef)
+
+  // Per-index estimate: drives the virtualizer's initial size guess so prepend-restore lands
+  // accurately instead of snapping. Only used when virtualized (passed unconditionally since the
+  // adapter is always constructed; the non-virtualized path ignores it). Guard the index: @tanstack
+  // only probes valid indices in steady state, but a stale window during a count change could probe
+  // out of range, and estimateRowHeight reads item.kind immediately (the signature is not nullable).
+  const estimateSize = useCallback(
+    (index: number) => {
+      const item = virtualItems[index]
+      return item !== undefined
+        ? estimateRowHeight(item, rowMetricsRef.current)
+        : rowMetricsRef.current.chrome.continuation // safe fallback for any out-of-range probe
+    },
+    [virtualItems, rowMetricsRef],
+  )
+
+  // --------------------------------------------------------------------------
+  // PERSISTENT HEIGHT CACHE (virtualized path only)
+  // --------------------------------------------------------------------------
+  // Current font scale (a number; e.g. 100, 125). Subscribe so widthBucket changes
+  // when the user adjusts font size — different scale = different heights.
+  const scalePct = useSettingsStore((s) => s.fontSize)
+
+  // Build the initialMeasurements seed from the persistent cache. Only when virtualized —
+  // flag-OFF path is unchanged. Filter to keys that match the width bucket + scale so stale
+  // entries from a different viewport/font-size are not applied.
+  // Use a ref so it is evaluated once at mount without needing eslint-disable on empty deps.
+  // MOUNT-SCOPED: this builds the seed exactly once per mount and relies on MessageList
+  // remounting on every conversation switch (the cache is the whole point — it survives that
+  // remount). It will NOT rebuild if MessageList is ever reused across conversations without a
+  // remount; that is not the case today.
+  const initialMeasurementsRef = useRef<ReadonlyMap<string, number> | undefined>(undefined)
+  const initialMeasurementsBuiltRef = useRef(false)
+  if (!initialMeasurementsBuiltRef.current && virtualized) {
+    initialMeasurementsBuiltRef.current = true
+    // The mount-time content width is still the 560 fallback here (useRowMetrics samples the real
+    // width in a rAF after layout), so prefer the REAL bucket persisted by a prior write-back. The
+    // common case — re-entering at the same viewport — then hits; a genuine width change falls back
+    // to the mount-time bucket and just re-measures on mount as before.
+    const mountWidthBucketPx = Math.round(rowMetricsRef.current.contentWidthPx / 20) * 20
+    const widthBucketPx = getConversationWidthBucket(conversationId) ?? mountWidthBucketPx
+    const stored = getCachedHeights(conversationId)
+    if (stored.size > 0) {
+      const suffix = `@${widthBucketPx}@${scalePct}`
+      // Iterate the stored map; for each stored key that matches bucket+scale, extract messageId
+      // (strip `@bucket@scale` suffix) and include it if the messageId is a key in virtualItems.
+      const virtualKeys = new Set(virtualItems.map((item) => item.key))
+      const result = new Map<string, number>()
+      for (const [k, size] of stored) {
+        if (k.endsWith(suffix)) {
+          const messageId = k.slice(0, k.length - suffix.length)
+          if (virtualKeys.has(messageId)) {
+            result.set(messageId, size)
+          }
+        }
+      }
+      if (result.size > 0) initialMeasurementsRef.current = result
+    }
+  }
+  const initialMeasurements = initialMeasurementsRef.current
+
+  // Write-back: record each row's measured height to the persistent cache.
+  // scalePct/conversationId are captured via a ref so the stable callback identity
+  // is preserved (no virtualizer re-creation on every render).
+  const onMeasuredParamsRef = useRef({ conversationId, scalePct, rowMetricsRef })
+  onMeasuredParamsRef.current = { conversationId, scalePct, rowMetricsRef }
+  const onMeasured = useMemo(
+    () =>
+      virtualized
+        ? (key: string, size: number) => {
+            const { conversationId: cid, scalePct: scale, rowMetricsRef: metricsRef } = onMeasuredParamsRef.current
+            // Real sampled bucket. Persist it alongside the entry so the next mount's seed (which
+            // runs before the real width is sampled) can filter by this same bucket and hit.
+            const widthBucketPx = Math.round(metricsRef.current.contentWidthPx / 20) * 20
+            recordMeasuredHeight(cid, heightCacheKey(key, widthBucketPx, scale), size)
+            noteConversationWidthBucket(cid, widthBucketPx)
+          }
+        : undefined,
+    [virtualized],
+  )
+
+  const virtualizer = useTanstackMessageVirtualizer({ items: virtualItems, indexById, scrollRef: scrollContainerRef, estimateSize, initialMeasurements, onMeasured })
   const activeVirtualizer = virtualized ? virtualizer : undefined
 
   // Dev-only: expose virtualizer offset lookup for Playwright test assertions (invariant-1).
@@ -347,9 +440,11 @@ export function MessageList<T extends BaseMessage>({
     switch (item.kind) {
       case 'header':
         return isHistoryComplete ? (
-          <HistoryStartMarker />
+          <div data-row-kind="header">
+            <HistoryStartMarker />
+          </div>
         ) : onScrollToTop ? (
-          <div className="flex justify-center py-3">
+          <div data-row-kind="header" className="flex justify-center py-3">
             <button
               onClick={handleLoadEarlier}
               disabled={isLoadingOlder}
@@ -366,7 +461,7 @@ export function MessageList<T extends BaseMessage>({
         ) : null
       case 'date':
         return (
-          <div data-date-separator={item.date}>
+          <div data-row-kind="date" data-date-separator={item.date}>
             <DateSeparator date={item.date} />
           </div>
         )
@@ -390,14 +485,14 @@ export function MessageList<T extends BaseMessage>({
       }
       case 'footer':
         return (
-          <>
+          <div data-row-kind="footer">
             {extraContent}
             <div className="pb-4">
               {typingUsers.length > 0 && (
                 <TypingIndicator typingUsers={typingUsers} formatUser={formatTypingUser} />
               )}
             </div>
-          </>
+          </div>
         )
     }
   }
