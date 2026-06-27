@@ -442,6 +442,45 @@ describe('XMPPClient Admin', () => {
       expect(commands.map(c => c.node)).toContain('api-commands/status')
     })
 
+    it('should NOT flag user as admin when only ejabberd api-commands are available (no XEP-0133 admin namespace)', async () => {
+      await connectClient()
+
+      // Mirrors what a NON-admin (e.g. mrtest@process-one.net) receives: ejabberd
+      // advertises a broad api-commands/ catalog in disco#items regardless of whether
+      // the user may execute them (authorization is enforced at execution time). A
+      // genuine server admin additionally sees the XEP-0133 http://jabber.org/protocol/admin#
+      // namespace, which is the only reliable signal. None of those appear here.
+      const items = [
+        { name: 'item', attrs: { jid: 'example.com', node: 'api-commands/get_vcard', name: 'Get Vcard' } },
+        { name: 'item', attrs: { jid: 'example.com', node: 'api-commands/get_presence', name: 'Get Presence' } },
+        { name: 'item', attrs: { jid: 'example.com', node: 'api-commands/user_info', name: 'User Info' } },
+        // Even destructive-looking api-commands can be listed to a non-admin; presence != executability
+        { name: 'item', attrs: { jid: 'example.com', node: 'api-commands/delete_account', name: 'Delete Account' } },
+        { name: 'item', attrs: { jid: 'example.com', node: 'ping', name: 'Ping' } },
+      ]
+
+      const discoItemsResponse = {
+        name: 'iq',
+        attrs: { type: 'result' },
+        getChild: (name: string, xmlns?: string) => {
+          if (name === 'query' && xmlns === 'http://jabber.org/protocol/disco#items') {
+            return {
+              name: 'query',
+              attrs: { xmlns: 'http://jabber.org/protocol/disco#items' },
+              getChildren: (childName: string) => childName === 'item' ? items : [],
+            }
+          }
+          return undefined
+        },
+      }
+
+      mockXmppClientInstance.iqCaller.request.mockResolvedValue(discoItemsResponse)
+
+      await xmppClient.admin.discoverAdminCommands()
+
+      expect(emitSDKSpy).toHaveBeenCalledWith('admin:is-admin', { isAdmin: false })
+    })
+
     it('should categorize ejabberd api-commands user commands correctly', async () => {
       await connectClient()
 
