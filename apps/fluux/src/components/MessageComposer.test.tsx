@@ -1095,6 +1095,15 @@ describe('MessageComposer', () => {
       // The textarea also lives inside the same card.
       expect(card!.querySelector('textarea')).not.toBeNull()
     })
+
+    it('opts the textarea out of the global focus outline (card edge is the sole affordance)', () => {
+      render(
+        <MessageComposer placeholder="Type a message" onSend={vi.fn().mockResolvedValue(true)} />
+      )
+      // `no-focus-ring` suppresses the universal `.user-interacted *:focus` outline so
+      // the `.composer-card:focus-within` edge is not doubled by an inner textarea ring.
+      expect(screen.getByPlaceholderText('Type a message').className).toContain('no-focus-ring')
+    })
   })
 
   describe('clipboard paste image handling', () => {

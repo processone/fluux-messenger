@@ -33,8 +33,12 @@ const COMPOSING_THROTTLE_MS = 2000
 const PAUSED_TIMEOUT_MS = 5000
 const COMPOSING_UI_TIMEOUT_MS = 1500
 
-// Base textarea classes - exported for custom renderInput implementations to reuse
-export const MESSAGE_INPUT_BASE_CLASSES = 'message-input flex-1 px-2 py-3 bg-transparent resize-none overflow-y-auto'
+// Base textarea classes - exported for custom renderInput implementations to reuse.
+// `no-focus-ring` opts the textarea out of the global `.user-interacted *:focus`
+// outline (index.css): the composer card's own `:focus-within` accent edge is the
+// focus affordance now, so the textarea's inner outline would be a doubled ring.
+// The action buttons keep their outlines for keyboard navigation.
+export const MESSAGE_INPUT_BASE_CLASSES = 'message-input no-focus-ring flex-1 px-2 py-3 bg-transparent resize-none overflow-y-auto'
 export const MESSAGE_INPUT_TEXT_CLASSES = 'text-fluux-text placeholder:text-fluux-muted'
 // For overlay-based inputs (e.g., mention highlighting) - text is transparent, caret visible via style
 export const MESSAGE_INPUT_OVERLAY_CLASSES = 'text-transparent placeholder:text-fluux-muted'
