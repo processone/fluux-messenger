@@ -756,15 +756,16 @@ input[type="range"]::-moz-range-thumb {
   border-radius: 0.5rem;
 }
 
-/* Own-message accent edge — a quiet luminous spine on outgoing messages
-   (Aurora). Decorative; the own-name color (--fluux-text-self) carries identity,
-   so this isn't contrast-bound. Tint kept subtle so body text AA holds. */
-.message-own-edge {
-  border-inline-start: 2px solid var(--fluux-bg-accent);
+/* Own-message tint — a quiet luminous wash on outgoing messages (Aurora).
+   No edge bar: a leading-edge bar reads as "quoted reply" elsewhere, so the
+   tint carries the distinction on its own. Decorative; the own-name color
+   (--fluux-text-self) carries identity, so this isn't contrast-bound. Tint
+   kept subtle so body text AA holds. */
+.message-own-tint {
   background: hsla(var(--fluux-accent-h), var(--fluux-accent-s), var(--fluux-accent-l), 0.08);
-  border-radius: 0 var(--fluux-radius-m) var(--fluux-radius-m) 0;
+  border-radius: var(--fluux-radius-m);
   padding-inline: 0.5rem;
-  margin-inline-start: -0.5rem;
+  margin-inline: -0.5rem;
 }
 
 /* Persistent highlight for search context view */
