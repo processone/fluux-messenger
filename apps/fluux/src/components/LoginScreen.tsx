@@ -131,8 +131,8 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
   const hasLoadedCredentials = useRef(false)
   const hasAutoConnected = useRef(false)
 
-  // Advanced mode: a discreet opt-in checkbox below the form unlocks the
-  // advanced settings category (and, later, advanced login options).
+  // Advanced mode: a corner kebab menu on the login screen provides the toggle
+  // that unlocks advanced surfaces (XMPP console, Advanced settings category).
   const advancedMode = useAdvancedModeStore((s) => s.advancedMode)
   const setAdvancedMode = useAdvancedModeStore((s) => s.setAdvancedMode)
 
