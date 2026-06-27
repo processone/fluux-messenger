@@ -8,6 +8,7 @@ import {
   clearAllCachedPassphrases,
   getRememberPassphrasePreference,
   setRememberPassphrasePreference,
+  sweepExpiredPassphrases,
 } from './webPassphraseCache'
 
 // Fresh in-memory IndexedDB per test so records don't leak across tests.
@@ -73,6 +74,35 @@ describe('webPassphraseCache', () => {
     expect(getRememberPassphrasePreference()).toBe(true)
     setRememberPassphrasePreference(false)
     expect(getRememberPassphrasePreference()).toBe(false)
+  })
+})
+
+describe('sweepExpiredPassphrases', () => {
+  it('deletes expired records and keeps fresh ones', async () => {
+    // Fresh record: 24h default TTL.
+    await cachePassphrase('alice@example.com', 'fresh-secret')
+    // Expired record: negative TTL puts expiresAt in the past.
+    await cachePassphrase('bob@example.com', 'stale-secret', -1000)
+
+    await sweepExpiredPassphrases()
+
+    expect(await loadCachedPassphrase('alice@example.com')).toBe('fresh-secret')
+    expect(await loadCachedPassphrase('bob@example.com')).toBeNull()
+  })
+
+  it('is a safe no-op on an empty database', async () => {
+    await expect(sweepExpiredPassphrases()).resolves.toBeUndefined()
+  })
+
+  it('never throws when indexedDB is unavailable', async () => {
+    const original = globalThis.indexedDB
+    // @ts-expect-error force the failure path
+    globalThis.indexedDB = undefined
+    try {
+      await expect(sweepExpiredPassphrases()).resolves.toBeUndefined()
+    } finally {
+      globalThis.indexedDB = original
+    }
   })
 })
 

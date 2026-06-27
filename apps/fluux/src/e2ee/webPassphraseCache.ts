@@ -142,6 +142,34 @@ export async function clearCachedPassphrase(jid: string): Promise<void> {
   }
 }
 
+/** Delete every cached passphrase whose expiry has passed (best-effort sweep). */
+export async function sweepExpiredPassphrases(): Promise<void> {
+  try {
+    const db = await openDb()
+    try {
+      const now = Date.now()
+      await new Promise<void>((resolve, reject) => {
+        const tx = db.transaction(STORE_NAME, 'readwrite')
+        const req = tx.objectStore(STORE_NAME).openCursor()
+        req.onsuccess = () => {
+          const cursor = req.result
+          if (!cursor) return
+          const record = cursor.value as CacheRecord
+          if (now > record.expiresAt) cursor.delete()
+          cursor.continue()
+        }
+        req.onerror = () => reject(req.error)
+        tx.oncomplete = () => resolve()
+        tx.onerror = () => reject(tx.error)
+      })
+    } finally {
+      db.close()
+    }
+  } catch (err) {
+    console.warn('[Fluux] webPassphraseCache: sweep failed', err)
+  }
+}
+
 /** Remove all cached passphrases (full local-data wipe). */
 export async function clearAllCachedPassphrases(): Promise<void> {
   try {
