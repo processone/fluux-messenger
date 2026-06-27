@@ -111,7 +111,14 @@ export class Admin extends BaseModule {
           return { node, name, category }
         })
 
-      const isAdmin = adminCommands.length > 0
+      // Admin status is signalled ONLY by the XEP-0133 service-administration
+      // namespace (http://jabber.org/protocol/admin#...). ejabberd advertises its
+      // broad api-commands/ catalog in disco#items to every authenticated user
+      // regardless of execution rights, so the mere presence of api-commands does
+      // NOT imply admin privileges. mod_configure (ejabberd) and mod_admin_adhoc
+      // (Prosody) gate the whole admin# namespace behind the admin ACL at disco
+      // time, making it the reliable, portable discriminator.
+      const isAdmin = adminCommands.some((cmd) => cmd.node.startsWith(`${NS_ADMIN}#`))
       this.deps.emitSDK('admin:is-admin', { isAdmin })
       this.deps.emitSDK('admin:commands', { commands: adminCommands })
 
