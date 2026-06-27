@@ -11,7 +11,7 @@
  *
  * Scroll behavior is handled by useMessageListScroll hook.
  */
-import { useMemo, useRef, useEffect, type ReactNode } from 'react'
+import { useMemo, useRef, useEffect, useCallback, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { BaseMessage } from '@fluux/sdk'
 import { useMessageCopyFormatter, useMessageRangeSelection } from '@/hooks'
@@ -31,6 +31,8 @@ import { useSettingsStore } from '@/stores/settingsStore'
 import type { CopyMessageMeta } from '@/utils/buildCopyText'
 import { buildMessageListItems, type RenderItem } from './messageListItems'
 import { useTanstackMessageVirtualizer } from './tanstackMessageVirtualizer'
+import { useRowMetrics } from './useRowMetrics'
+import { estimateRowHeight } from './rowHeightEstimator'
 import { Loader2, ChevronUp, ChevronDown } from 'lucide-react'
 import { Tooltip } from '../Tooltip'
 import { MessageSelectionBar } from './MessageSelectionBar'
@@ -226,7 +228,19 @@ export function MessageList<T extends BaseMessage>({
         : { items: [] as RenderItem<T>[], indexById: new Map<string, number>() },
     [virtualized, hasContent, groupedMessages, firstNewMessageId, showHeader, showFooter],
   )
-  const virtualizer = useTanstackMessageVirtualizer({ items: virtualItems, indexById, scrollRef: scrollContainerRef })
+  // Sample live row metrics for the per-item height estimator. Returns a ref (no re-render);
+  // falls back to ROW_METRICS_FALLBACK under jsdom / before any rows are mounted.
+  const rowMetricsRef = useRowMetrics(scrollContainerRef)
+
+  // Per-index estimate: drives the virtualizer's initial size guess so prepend-restore lands
+  // accurately instead of snapping. Only used when virtualized (passed unconditionally since the
+  // adapter is always constructed; the non-virtualized path ignores it).
+  const estimateSize = useCallback(
+    (index: number) => estimateRowHeight(virtualItems[index], rowMetricsRef.current),
+    [virtualItems, rowMetricsRef],
+  )
+
+  const virtualizer = useTanstackMessageVirtualizer({ items: virtualItems, indexById, scrollRef: scrollContainerRef, estimateSize })
   const activeVirtualizer = virtualized ? virtualizer : undefined
 
   // Dev-only: expose virtualizer offset lookup for Playwright test assertions (invariant-1).
@@ -346,9 +360,11 @@ export function MessageList<T extends BaseMessage>({
     switch (item.kind) {
       case 'header':
         return isHistoryComplete ? (
-          <HistoryStartMarker />
+          <div data-row-kind="header">
+            <HistoryStartMarker />
+          </div>
         ) : onScrollToTop ? (
-          <div className="flex justify-center py-3">
+          <div data-row-kind="header" className="flex justify-center py-3">
             <button
               onClick={handleLoadEarlier}
               disabled={isLoadingOlder}
@@ -365,7 +381,7 @@ export function MessageList<T extends BaseMessage>({
         ) : null
       case 'date':
         return (
-          <div data-date-separator={item.date}>
+          <div data-row-kind="date" data-date-separator={item.date}>
             <DateSeparator date={item.date} />
           </div>
         )
@@ -389,14 +405,14 @@ export function MessageList<T extends BaseMessage>({
       }
       case 'footer':
         return (
-          <>
+          <div data-row-kind="footer">
             {extraContent}
             <div className="pb-4">
               {typingUsers.length > 0 && (
                 <TypingIndicator typingUsers={typingUsers} formatUser={formatTypingUser} />
               )}
             </div>
-          </>
+          </div>
         )
     }
   }
