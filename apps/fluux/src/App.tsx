@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { useConnectionStatus, useXMPPContext, hasFastToken } from '@fluux/sdk'
 import { registerE2EEPlugins } from './e2ee/registerPlugins'
 import { isKeyLocked } from './e2ee/webPassphraseStore'
-import { loadCachedPassphrase, clearCachedPassphrase } from '@/e2ee/webPassphraseCache'
+import { attemptCachedUnlockOrPrompt } from '@/e2ee/silentRestore'
 import { probeRemoteIdentityState } from './e2ee/secretKeyProbe'
 import { isOpenpgpEnabled } from './stores/encryptionSettingsStore'
 import { useToastStore } from './stores/toastStore'
@@ -280,27 +280,15 @@ function App() {
         // Try the opt-in 24h cache first so the user skips re-entry; fall back
         // to the interactive dialog on miss or any failure (e.g. rotated key).
         if (!isTauri && isKeyLocked()) {
-          const cached = accountJid ? await loadCachedPassphrase(accountJid) : null
-          if (cached) {
-            const unlockPlugin = client.e2ee?.getPlugin('openpgp') as
-              | { unlock?: (pp: string) => Promise<{ recovered: boolean }> }
-              | null
-              | undefined
-            if (unlockPlugin?.unlock) {
-              try {
-                await unlockPlugin.unlock(cached)
-                // success: key unlocked silently, dialog stays closed
-              } catch {
-                if (accountJid) await clearCachedPassphrase(accountJid)
-                openWebUnlockDialog()
-              }
-            } else {
-              // no plugin to unlock with: fall back to the dialog rather than strand the user
-              openWebUnlockDialog()
-            }
-          } else {
-            openWebUnlockDialog()
-          }
+          await attemptCachedUnlockOrPrompt({
+            accountJid,
+            getUnlockPlugin: () =>
+              client.e2ee?.getPlugin('openpgp') as
+                | { unlock?: (pp: string) => Promise<{ recovered: boolean }> }
+                | null
+                | undefined,
+            openDialog: openWebUnlockDialog,
+          })
         }
       })
     } else if (status !== 'connecting') {
