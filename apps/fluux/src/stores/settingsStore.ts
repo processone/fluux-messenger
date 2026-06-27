@@ -5,6 +5,8 @@ export type TimeFormat = '12h' | '24h' | 'auto'
 export type MediaAutoDownload = 'always' | 'private-only' | 'never'
 /** Motion preference: follow the OS, force full animations, or reduce them. */
 export type MotionPreference = 'system' | 'full' | 'reduced'
+/** Display density: normal spacing or compact spacing. */
+export type DensityMode = 'comfortable' | 'compact'
 
 /** Font size as percentage of default (100 = normal). Range: 75–150. */
 export type FontSize = number
@@ -20,6 +22,8 @@ interface SettingsState {
   setMediaAutoDownload: (value: MediaAutoDownload) => void
   motionPreference: MotionPreference
   setMotionPreference: (value: MotionPreference) => void
+  densityMode: DensityMode
+  setDensityMode: (mode: DensityMode) => void
 }
 
 const THEME_KEY = 'fluux-theme'
@@ -27,6 +31,7 @@ const TIME_FORMAT_KEY = 'fluux-time-format'
 const FONT_SIZE_KEY = 'fluux-font-size'
 const MEDIA_AUTO_DOWNLOAD_KEY = 'fluux-media-autodownload'
 const MOTION_KEY = 'fluux-motion'
+const DENSITY_KEY = 'fluux-density'
 
 /**
  * Get initial theme mode from localStorage, default to 'system'
@@ -105,6 +110,19 @@ function getInitialMotion(): MotionPreference {
   return 'system'
 }
 
+/**
+ * Get initial display density from localStorage, default to 'comfortable'.
+ */
+function getInitialDensity(): DensityMode {
+  try {
+    const stored = localStorage.getItem(DENSITY_KEY)
+    if (stored === 'comfortable' || stored === 'compact') return stored
+  } catch {
+    // localStorage not available
+  }
+  return 'comfortable'
+}
+
 export const useSettingsStore = create<SettingsState>((set) => ({
   themeMode: getInitialMode(),
 
@@ -162,5 +180,12 @@ export const useSettingsStore = create<SettingsState>((set) => ({
       // localStorage not available
     }
     set({ motionPreference: value })
+  },
+
+  densityMode: getInitialDensity(),
+
+  setDensityMode: (mode) => {
+    try { localStorage.setItem(DENSITY_KEY, mode) } catch { /* localStorage not available */ }
+    set({ densityMode: mode })
   },
 }))

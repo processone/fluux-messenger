@@ -8,7 +8,7 @@ describe('settingsStore', () => {
     vi.mocked(localStorage.getItem).mockClear()
     vi.mocked(localStorage.setItem).mockClear()
     vi.mocked(localStorage.getItem).mockReturnValue(null)
-    useSettingsStore.setState({ themeMode: 'system', timeFormat: 'auto', fontSize: 100, mediaAutoDownload: 'private-only', motionPreference: 'system' })
+    useSettingsStore.setState({ themeMode: 'system', timeFormat: 'auto', fontSize: 100, mediaAutoDownload: 'private-only', motionPreference: 'system', densityMode: 'comfortable' })
   })
 
   describe('initial state', () => {
@@ -133,6 +133,25 @@ describe('settingsStore', () => {
       for (const v of ['system', 'full', 'reduced'] as const) {
         setMotionPreference(v)
         expect(useSettingsStore.getState().motionPreference).toBe(v)
+      }
+    })
+  })
+
+  describe('densityMode', () => {
+    it('defaults densityMode to comfortable and persists on set', () => {
+      localStorage.clear()
+      const { setDensityMode } = useSettingsStore.getState()
+      expect(useSettingsStore.getState().densityMode).toBe('comfortable')
+      setDensityMode('compact')
+      expect(useSettingsStore.getState().densityMode).toBe('compact')
+      expect(localStorage.setItem).toHaveBeenCalledWith('fluux-density', 'compact')
+    })
+
+    it('accepts both density values', () => {
+      const { setDensityMode } = useSettingsStore.getState()
+      for (const v of ['comfortable', 'compact'] as const) {
+        setDensityMode(v)
+        expect(useSettingsStore.getState().densityMode).toBe(v)
       }
     })
   })
