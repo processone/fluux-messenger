@@ -323,6 +323,7 @@ const RoomItem = memo(function RoomItem({
   const menu = useContextMenu()
   const currentLang = i18n.language.split('-')[0]
   const timeFormat = useSettingsStore((s) => s.timeFormat)
+  const densityMode = useSettingsStore((s) => s.densityMode)
   // Per-row subscriptions: this row re-renders only when ITS room (messages,
   // unread, last message, presence) or draft changes — not when any other room
   // updates during a multi-room join / MAM sync.
@@ -330,6 +331,8 @@ const RoomItem = memo(function RoomItem({
   const draft = useRoomStore((s) => s.drafts.get(roomJid))
 
   if (!room) return null
+
+  const avatarBox = densityMode === 'compact' ? 'size-8' : 'size-10'
 
   // Get last message for preview (uses pre-computed lastMessage from metadata for better performance)
   const lastMessage = room.lastMessage ?? null
@@ -378,7 +381,7 @@ const RoomItem = memo(function RoomItem({
           onTouchMove={menu.handleTouchEnd}
           onMouseEnter={onMouseEnter}
           onMouseMove={onMouseMove}
-          className={`w-full relative px-2 py-1.5 rounded border flex items-center gap-3
+          className={`w-full relative px-2 sidebar-row rounded border flex items-center
                    transition-colors cursor-pointer group
                    ${room.isJoining
                      ? isSelected
@@ -409,14 +412,14 @@ const RoomItem = memo(function RoomItem({
             <img
               src={room.avatar}
               alt={room.name}
-              className="size-8 rounded-xl object-cover"
+              className={`${avatarBox} rounded-xl object-cover`}
               draggable={false}
             />
           ) : isQuickChat ? (
-            <Zap className="size-8 p-1.5 bg-amber-500/20 rounded-xl text-amber-500" />
+            <Zap className={`${avatarBox} p-1.5 bg-amber-500/20 rounded-xl text-amber-500`} />
           ) : (
             <Hash
-              className="size-8 p-1.5 rounded-xl text-white"
+              className={`${avatarBox} p-1.5 rounded-xl text-white`}
               style={{ backgroundColor: generateConsistentColorHexSync(room.jid, { saturation: 60, lightness: 45 }) }}
             />
           )}
@@ -429,7 +432,7 @@ const RoomItem = memo(function RoomItem({
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
-            <p dir="auto" className="truncate font-medium">{room.name}</p>
+            <p dir="auto" className={`truncate ${room.unreadCount > 0 ? 'font-semibold text-fluux-text' : 'font-medium'}`}>{room.name}</p>
             {/* Activity dot for unread (non-mention) activity */}
             {room.joined && room.unreadCount > 0 && room.mentionsCount === 0 && (
               <Tooltip content={`${room.unreadCount} unread`} position="top">

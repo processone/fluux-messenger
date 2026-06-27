@@ -8,6 +8,7 @@ import { Avatar } from '../Avatar'
 import { RenameContactModal } from '../RenameContactModal'
 import { Tooltip } from '../Tooltip'
 import { useSidebarZone, ContactTooltipContent } from './types'
+import { useSettingsStore } from '@/stores/settingsStore'
 import { getTranslatedStatusText } from '@/utils/statusText'
 import { detectRenderLoop } from '@/utils/renderLoopDetector'
 import { MessageCircle, Trash2, Pencil, Server } from 'lucide-react'
@@ -316,8 +317,11 @@ const ContactItem = memo(function ContactItem({
   // Per-row subscription: this row re-renders only when ITS contact changes
   // (presence, avatar, name), not when any other contact's presence flaps.
   const contact = useRosterStore((s) => s.contacts.get(jid))
+  const densityMode = useSettingsStore((s) => s.densityMode)
 
   if (!contact) return null
+
+  const avatarSize = densityMode === 'compact' ? 'sm' : 'md'
 
   // Check if admin can manage this specific user (based on vhost rights)
   const showManageOption = isAdmin && hasUserCommands && onManageUser && canManageUser(jid)
@@ -367,7 +371,7 @@ const ContactItem = memo(function ContactItem({
           onTouchMove={menu.handleTouchEnd}
           onMouseEnter={onMouseEnter}
           onMouseMove={onMouseMove}
-          className={`w-full relative px-2 py-1.5 rounded border flex items-center gap-3 text-start
+          className={`w-full relative px-2 sidebar-row rounded border flex items-center text-start
                      transition-colors cursor-pointer ${
                        isActive
                          ? "bg-fluux-sidebar-item-active text-fluux-text border-transparent before:content-[''] before:absolute before:left-0 before:top-1.5 before:bottom-1.5 before:w-[3px] before:rounded-r-full before:bg-fluux-sidebar-item-active-accent"
@@ -383,7 +387,7 @@ const ContactItem = memo(function ContactItem({
             identifier={contact.jid}
             name={contact.name}
             avatarUrl={contact.avatar}
-            size="sm"
+            size={avatarSize}
             presence={forceOffline ? 'offline' : contact.presence}
             forceOffline={forceOffline}
           />

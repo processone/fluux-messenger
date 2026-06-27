@@ -489,6 +489,12 @@
   background: var(--scrollbar-thumb-hover);
 }
 
+/* Sidebar list rows. Horizontal padding stays a utility (px-2); the density-
+ * varying vertical padding + gap live here so a [data-density] flip needs no
+ * row re-render. Comfortable is the default. */
+.sidebar-row { padding-block: 8px; column-gap: 12px; }
+[data-density="compact"] .sidebar-row { padding-block: 4px; column-gap: 8px; }
+
 /* Sidebar scrollbar — more visible on dark sidebar background */
 .sidebar-scroll::-webkit-scrollbar-thumb {
   background: var(--fluux-scrollbar-thumb-sidebar);
