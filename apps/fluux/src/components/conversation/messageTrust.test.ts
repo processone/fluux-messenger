@@ -71,4 +71,29 @@ describe('resolveDisplayTrust', () => {
   it('downgrades a baked verified to tofu when a DIFFERENT key is now verified', () => {
     expect(resolveDisplayTrust(ctx({ trust: 'verified', fingerprint: FP_B }), FP_A)).toBe('tofu')
   })
+
+  // Own outgoing messages are signed by OUR OWN key and the plugin already
+  // baked the correct trust against our own bundle (verified iff the signature
+  // verified and matched our fingerprint). Our own JID is never an entry in the
+  // verified-PEER store, so the peer-verification downgrade must be skipped —
+  // otherwise every own message renders a grey "unverified peer" lock. This is
+  // the bug seen after reload, when MAM-decrypted own messages carry the own
+  // signing fingerprint.
+  describe('own outgoing messages (isOwn)', () => {
+    it('keeps a baked verified own message verified even with no verified-peer entry (MAM reload path)', () => {
+      expect(resolveDisplayTrust(ctx({ trust: 'verified', fingerprint: FP_A }), undefined, true)).toBe('verified')
+    })
+
+    it('keeps a fingerprint-less baked verified own message verified (live send path)', () => {
+      expect(resolveDisplayTrust(ctx({ trust: 'verified' }), undefined, true)).toBe('verified')
+    })
+
+    it('preserves an untrusted own message (own signature did not verify) without greening it', () => {
+      expect(resolveDisplayTrust(ctx({ trust: 'untrusted', fingerprint: FP_A }), undefined, true)).toBe('untrusted')
+    })
+
+    it('still returns undefined for a cleartext own message', () => {
+      expect(resolveDisplayTrust(undefined, undefined, true)).toBeUndefined()
+    })
+  })
 })

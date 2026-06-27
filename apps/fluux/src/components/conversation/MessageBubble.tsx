@@ -340,7 +340,7 @@ export const MessageBubble = memo(function MessageBubble({
   const verifiedFingerprint = useVerifiedPeerKeysStore(
     (s) => s.verifiedFingerprintByJid[getBareJid(message.from)],
   )
-  const displayTrust = resolveDisplayTrust(message.securityContext, verifiedFingerprint)
+  const displayTrust = resolveDisplayTrust(message.securityContext, verifiedFingerprint, message.isOutgoing)
 
   // Density-aware avatar: reads only `densityMode` (narrow selector) so this row
   // only re-renders on a density change, NOT on message append or composing toggle.
