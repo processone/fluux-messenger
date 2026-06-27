@@ -39,7 +39,7 @@ export const SETTINGS_CATEGORIES: SettingsCategoryConfig[] = [
   { id: 'storage', labelKey: 'settings.categories.storage', icon: HardDrive, tauriOnly: true },
   { id: 'encryption', labelKey: 'settings.categories.encryption', icon: Lock },
   { id: 'updates', labelKey: 'settings.categories.updates', icon: Download, updaterOnly: true },
-  { id: 'advanced', labelKey: 'settings.categories.advanced', icon: Wrench, advancedOnly: true },
+  { id: 'advanced', labelKey: 'settings.categories.advanced', icon: Wrench },
 ]
 
 /**
