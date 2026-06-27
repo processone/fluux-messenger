@@ -7,6 +7,10 @@ import { useTanstackMessageVirtualizer } from './tanstackMessageVirtualizer'
 // adapter stashes it so a programmatic scrollToOffset can re-window through it directly.
 const offsetNotifySpy = vi.fn<(offset: number, isScrolling: boolean) => void>()
 const scrollToOffsetSpy = vi.fn()
+const measureElementSpy = vi.fn()
+// Controls what the mocked @tanstack `indexFromElement` returns, so the onMeasured write-back path
+// can be driven with a real (valid or out-of-range) index per test.
+let mockIndexFromElement: (node: HTMLElement) => number = () => -1
 
 // Captured config from the last useVirtualizer call — allows tests to inspect what the adapter
 // passes to @tanstack (e.g. estimateSize per index).
@@ -40,9 +44,14 @@ vi.mock('@tanstack/react-virtual', () => ({
         })),
       getTotalSize: () => opts.count * 40,
       getOffsetForIndex: (index: number) => [index * 40, 'start'] as const,
-      measureElement: () => {},
-      measurementsCache: [] as Array<{ key: string | number; index: number; size: number }>,
-      indexFromElement: () => -1,
+      measureElement: measureElementSpy,
+      // STALE on purpose: real @tanstack does NOT refresh measurementsCache synchronously inside
+      // measureElement (itemSizeCache is updated + a version bump; measurementsCache is recomputed
+      // only on the next getMeasurements/render). The adapter must therefore NOT read its size from
+      // here — it reads the live element height instead. A non-empty stale entry here proves the
+      // adapter is not using it.
+      measurementsCache: [{ key: 'a', index: 0, size: 64 }] as Array<{ key: string | number; index: number; size: number }>,
+      indexFromElement: (node: HTMLElement) => mockIndexFromElement(node),
       // Mirror real @tanstack: scrollToIndex resolves an offset and sets the DOM scrollTop
       // (via _scrollToOffset → scrollToFn) but does NOT update its reactive scrollOffset. The
       // adapter must read the landed scrollTop back and re-window through the offset callback.
@@ -67,18 +76,27 @@ function renderAdapter({
   items,
   estimateSize,
   initialMeasurements,
+  onMeasured,
 }: {
   items: { key: string }[]
   estimateSize?: number | ((index: number) => number)
   initialMeasurements?: ReadonlyMap<string, number>
+  onMeasured?: (key: string, size: number) => void
 }) {
   const indexById = new Map(items.map((item, i) => [item.key, i]))
   capturedConfig = null
-  renderHook(() => {
+  const { result } = renderHook(() => {
     const scrollRef = useRef<HTMLElement | null>(null)
-    return useTanstackMessageVirtualizer({ items, indexById, scrollRef, estimateSize, initialMeasurements })
+    return useTanstackMessageVirtualizer({ items, indexById, scrollRef, estimateSize, initialMeasurements, onMeasured })
   })
-  return { capturedConfig: capturedConfig! }
+  return { capturedConfig: capturedConfig!, result }
+}
+
+/** Build a fake row element whose live rendered height is `height` (no real layout in jsdom). */
+function makeRowElement(height: number): HTMLElement {
+  const el = document.createElement('div')
+  el.getBoundingClientRect = () => ({ height, width: 0, top: 0, left: 0, right: 0, bottom: 0, x: 0, y: 0, toJSON: () => ({}) })
+  return el
 }
 
 describe('useTanstackMessageVirtualizer', () => {
@@ -217,5 +235,64 @@ describe('useTanstackMessageVirtualizer', () => {
   it('omits initialMeasurementsCache when no initialMeasurements are provided', () => {
     const { capturedConfig } = renderAdapter({ items: [{ key: 'a' }] })
     expect(capturedConfig.initialMeasurementsCache).toBeUndefined()
+  })
+
+  describe('onMeasured write-back', () => {
+    it('reports the LIVE element height (not the stale measurementsCache size) keyed by item key', () => {
+      // REGRESSION GUARD: @tanstack's measureElement updates itemSizeCache + a version but does NOT
+      // refresh measurementsCache until the next getMeasurements()/render. The mock's
+      // measurementsCache holds a STALE 64px entry on purpose; the adapter must instead read the
+      // live rendered height (here 84px via getBoundingClientRect). It must also delegate to
+      // @tanstack's own measureElement so observe/unobserve still runs.
+      measureElementSpy.mockClear()
+      const onMeasured = vi.fn<(key: string, size: number) => void>()
+      mockIndexFromElement = () => 1 // valid index → items[1].key === 'b'
+      const { result } = renderAdapter({ items: [{ key: 'a' }, { key: 'b' }], onMeasured })
+
+      const el = makeRowElement(84)
+      result.current.measureElement(el)
+
+      // 1. Delegated to @tanstack's own measureElement (cleanup/observe path preserved).
+      expect(measureElementSpy).toHaveBeenCalledWith(el)
+      // 2. Reported the LIVE 84px height, NOT the stale 64px from measurementsCache.
+      expect(onMeasured).toHaveBeenCalledTimes(1)
+      expect(onMeasured).toHaveBeenCalledWith('b', 84)
+    })
+
+    it('does NOT report when the measured height is 0', () => {
+      measureElementSpy.mockClear()
+      const onMeasured = vi.fn<(key: string, size: number) => void>()
+      mockIndexFromElement = () => 0
+      const { result } = renderAdapter({ items: [{ key: 'a' }], onMeasured })
+
+      result.current.measureElement(makeRowElement(0))
+
+      // Still delegates to @tanstack, but never records a 0 height.
+      expect(measureElementSpy).toHaveBeenCalled()
+      expect(onMeasured).not.toHaveBeenCalled()
+    })
+
+    it('does NOT report when indexFromElement returns a negative index', () => {
+      measureElementSpy.mockClear()
+      const onMeasured = vi.fn<(key: string, size: number) => void>()
+      mockIndexFromElement = () => -1 // @tanstack returns -1 for an unrecognized element
+      const { result } = renderAdapter({ items: [{ key: 'a' }], onMeasured })
+
+      result.current.measureElement(makeRowElement(84))
+
+      expect(measureElementSpy).toHaveBeenCalled()
+      expect(onMeasured).not.toHaveBeenCalled()
+    })
+
+    it('does NOT report when the element is null (unmount-cleanup call) but still delegates', () => {
+      measureElementSpy.mockClear()
+      const onMeasured = vi.fn<(key: string, size: number) => void>()
+      const { result } = renderAdapter({ items: [{ key: 'a' }], onMeasured })
+
+      result.current.measureElement(null)
+
+      expect(measureElementSpy).toHaveBeenCalledWith(null)
+      expect(onMeasured).not.toHaveBeenCalled()
+    })
   })
 })

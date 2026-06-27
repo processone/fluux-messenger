@@ -211,22 +211,26 @@ export function useTanstackMessageVirtualizer({
     getOffsetForMessageId,
     getIndexForMessageId,
     ensureMessageMounted,
-    // Wrap measureElement to intercept sizes measured by @tanstack's ResizeObserver and report
-    // them to the persistent height cache via onMeasured. After @tanstack measures the element it
-    // updates measurementsCache synchronously; we read the entry keyed by the element's index.
+    // Wrap measureElement to intercept the size @tanstack measures and report it to the
+    // persistent height cache via onMeasured. CRITICAL: do NOT read the size back from
+    // `virtualizer.measurementsCache[index]` — @tanstack's measureElement writes the new size into
+    // its private `itemSizeCache` and bumps a version, but `measurementsCache`/`_flatMeasurements`
+    // are only recomputed by the memoized `getMeasurements()` on the NEXT render. Reading
+    // measurementsCache here returns the STALE estimate (e.g. the 64px default), which would seed
+    // the persistent cache with estimates — defeating the feature. Read the LIVE rendered height
+    // from the element itself via getBoundingClientRect, which is always current.
     // Only sizes > 0 are forwarded (matches recordMeasuredHeight's guard).
     measureElement: (element: Element | null) => {
+      // Always delegate first so @tanstack's own observe/unobserve + null-cleanup runs.
       virtualizer.measureElement(element)
-      if (!element || !onMeasuredRef.current) return
+      const onMeasured = onMeasuredRef.current
+      if (!element || !onMeasured) return
       const index = virtualizer.indexFromElement(element as HTMLElement)
-      if (index < 0 || index >= items.length) return
-      // Read the post-measure size from @tanstack's measurementsCache. This is synchronously
-      // updated by measureElement when called from the ResizeObserver path, and available as
-      // `virtualizer.measurementsCache[index].size`. Use getVirtualItems() snapshot to avoid
-      // relying on a private field — but measurementsCache IS public (declared on the class).
-      const cached = virtualizer.measurementsCache[index]
-      if (cached && cached.size > 0) {
-        onMeasuredRef.current(String(items[index].key), cached.size)
+      if (index < 0) return
+      const key = items[index]?.key
+      const size = (element as HTMLElement).getBoundingClientRect().height
+      if (key && size > 0) {
+        onMeasured(key, size)
       }
     },
     scrollToOffset: (offset, opts) => {
