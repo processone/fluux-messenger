@@ -46,9 +46,16 @@ vi.mock('@tanstack/react-virtual', () => ({
 // Adapter mock: captures the args passed by MessageList so we can assert estimateSize.
 // Returns a render-all stub so the structure tests still pass (same behaviour as the
 // @tanstack/react-virtual mock, but at the adapter level).
-let _capturedAdapterArgs: { estimateSize?: unknown; items?: readonly { key: string }[] } = {}
+interface CapturedItem { key: string; kind: string }
+let _capturedAdapterArgs: {
+  estimateSize?: (index: number) => number
+  items?: readonly CapturedItem[]
+} = {}
 vi.mock('./tanstackMessageVirtualizer', () => ({
-  useTanstackMessageVirtualizer: (args: { estimateSize?: unknown; items?: readonly { key: string }[] }) => {
+  useTanstackMessageVirtualizer: (args: {
+    estimateSize?: (index: number) => number
+    items?: readonly CapturedItem[]
+  }) => {
     _capturedAdapterArgs = args
     const items = args.items ?? []
     const stub: MessageVirtualizer = {
@@ -108,7 +115,7 @@ describe('MessageList — virtualized render path (flag ON)', () => {
     expect(screen.getByText('chat.loadEarlierMessages')).toBeInTheDocument()
   })
 
-  it('passes a per-index estimateSize function to the adapter when virtualized', () => {
+  it('passes a per-index estimateSize function to the adapter when virtualized, and it routes date items to the date chrome fallback', () => {
     render(
       <MessageList
         messages={makeMessages(3)}
@@ -116,6 +123,14 @@ describe('MessageList — virtualized render path (flag ON)', () => {
         renderMessage={(msg) => <div>{msg.body}</div>}
       />,
     )
-    expect(typeof _capturedAdapterArgs.estimateSize).toBe('function')
+    const { estimateSize, items } = _capturedAdapterArgs
+    expect(typeof estimateSize).toBe('function')
+
+    // Calling the captured estimate for a DATE item returns the date chrome fallback (48). Date is
+    // pure (no canvas) — unlike a message row whose text path needs canvas — and under jsdom
+    // useRowMetrics returns ROW_METRICS_FALLBACK, whose chrome.date is 48.
+    const dateIndex = (items ?? []).findIndex((it) => it.kind === 'date')
+    expect(dateIndex).toBeGreaterThanOrEqual(0)
+    expect(estimateSize!(dateIndex)).toBe(48)
   })
 })

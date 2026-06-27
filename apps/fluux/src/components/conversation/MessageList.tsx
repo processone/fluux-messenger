@@ -234,9 +234,16 @@ export function MessageList<T extends BaseMessage>({
 
   // Per-index estimate: drives the virtualizer's initial size guess so prepend-restore lands
   // accurately instead of snapping. Only used when virtualized (passed unconditionally since the
-  // adapter is always constructed; the non-virtualized path ignores it).
+  // adapter is always constructed; the non-virtualized path ignores it). Guard the index: @tanstack
+  // only probes valid indices in steady state, but a stale window during a count change could probe
+  // out of range, and estimateRowHeight reads item.kind immediately (the signature is not nullable).
   const estimateSize = useCallback(
-    (index: number) => estimateRowHeight(virtualItems[index], rowMetricsRef.current),
+    (index: number) => {
+      const item = virtualItems[index]
+      return item !== undefined
+        ? estimateRowHeight(item, rowMetricsRef.current)
+        : rowMetricsRef.current.chrome.continuation // safe fallback for any out-of-range probe
+    },
     [virtualItems, rowMetricsRef],
   )
 
