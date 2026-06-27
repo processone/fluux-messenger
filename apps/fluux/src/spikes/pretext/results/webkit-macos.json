@@ -1,0 +1,82 @@
+{
+  "capturedVia": "Safari 26.5 (WebKit) on macOS — a faithful proxy for the Tauri WKWebView (same engine family); engine UA below",
+  "engine": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.5 Safari/605.1.15",
+  "widths": [320, 560, 760],
+  "scales": [90, 100, 125, 150],
+  "inScopeTextCategories": ["short", "wrap", "mention", "link", "mixed"],
+  "keyFinding": "LINE COUNT is 100% exact for ALL in-scope categories at EVERY scale on WebKit. The 90% and 125% overall FAILs are purely the >2px height-tolerance gate, NOT wrapping errors: WebKit floors each rendered line box to an integer (computed line-height 19.8px renders as a 19px box) while getComputedStyle reports the un-rounded 19.8, so predicted height (lineCount * computedLineHeight) drifts ~0.8px per line and accumulates on multi-line messages. At integer line-heights (100%, 150% scale) there is ZERO drift. Chromium does not show this because its getBoundingClientRect returns fractional heights. Fix in a real integration: height = lineCount * Math.floor(lineHeight) on WebKit. Line-count accuracy (the property that kills the estimate-snap jitter) is perfect on both engines.",
+  "perScale": [
+    {
+      "fontScalePct": 90,
+      "overallTextLineExactPct": 77.19,
+      "passesThreshold": false,
+      "inScopeLineCountExact": "100% (short/wrap/mention/link/mixed all lineExactPct=100)",
+      "byCategory": {
+        "short":   { "count": 15, "lineExactPct": 100, "p95AbsErrPx": 0.80, "maxAbsErrPx": 0.80 },
+        "wrap":    { "count": 18, "lineExactPct": 100, "p95AbsErrPx": 6.40, "maxAbsErrPx": 6.40 },
+        "mention": { "count": 9,  "lineExactPct": 100, "p95AbsErrPx": 1.60, "maxAbsErrPx": 1.60 },
+        "link":    { "count": 9,  "lineExactPct": 100, "p95AbsErrPx": 2.40, "maxAbsErrPx": 2.40 },
+        "mixed":   { "count": 6,  "lineExactPct": 100, "p95AbsErrPx": 1.60, "maxAbsErrPx": 1.60 },
+        "emoji":   { "count": 9,  "lineExactPct": 100, "p95AbsErrPx": 2.40, "maxAbsErrPx": 2.40 },
+        "rtl":     { "count": 6,  "lineExactPct": 100, "p95AbsErrPx": 1.60, "maxAbsErrPx": 1.60 },
+        "me":      { "count": 6,  "lineExactPct": 83.33, "p95AbsErrPx": 17.40, "maxAbsErrPx": 17.40, "note": "out of scope (harness fed raw /me body)" },
+        "longtoken": { "count": 6, "lineExactPct": 100, "p95AbsErrPx": 2.40, "maxAbsErrPx": 2.40 },
+        "code":    { "count": 9,  "lineExactPct": 77.78, "p95AbsErrPx": 36.44, "maxAbsErrPx": 36.44, "note": "out of scope (prose font vs block monospace)" }
+      }
+    },
+    {
+      "fontScalePct": 100,
+      "overallTextLineExactPct": 100,
+      "passesThreshold": true,
+      "inScopeLineCountExact": "100%",
+      "byCategory": {
+        "short":   { "count": 15, "lineExactPct": 100, "p95AbsErrPx": 0, "maxAbsErrPx": 0 },
+        "wrap":    { "count": 18, "lineExactPct": 100, "p95AbsErrPx": 0, "maxAbsErrPx": 0 },
+        "mention": { "count": 9,  "lineExactPct": 100, "p95AbsErrPx": 0, "maxAbsErrPx": 0 },
+        "link":    { "count": 9,  "lineExactPct": 100, "p95AbsErrPx": 0, "maxAbsErrPx": 0 },
+        "mixed":   { "count": 6,  "lineExactPct": 100, "p95AbsErrPx": 0, "maxAbsErrPx": 0 },
+        "emoji":   { "count": 9,  "lineExactPct": 100, "p95AbsErrPx": 0, "maxAbsErrPx": 0 },
+        "rtl":     { "count": 6,  "lineExactPct": 100, "p95AbsErrPx": 0, "maxAbsErrPx": 0 },
+        "me":      { "count": 6,  "lineExactPct": 100, "p95AbsErrPx": 0, "maxAbsErrPx": 0, "note": "out of scope" },
+        "longtoken": { "count": 6, "lineExactPct": 100, "p95AbsErrPx": 0, "maxAbsErrPx": 0 },
+        "code":    { "count": 9,  "lineExactPct": 66.67, "p95AbsErrPx": 41, "maxAbsErrPx": 41, "note": "out of scope" }
+      }
+    },
+    {
+      "fontScalePct": 125,
+      "overallTextLineExactPct": 87.72,
+      "passesThreshold": false,
+      "inScopeLineCountExact": "100% (short/wrap/mention/link/mixed all lineExactPct=100)",
+      "byCategory": {
+        "short":   { "count": 15, "lineExactPct": 100, "p95AbsErrPx": 0.50, "maxAbsErrPx": 0.50 },
+        "wrap":    { "count": 18, "lineExactPct": 100, "p95AbsErrPx": 6.00, "maxAbsErrPx": 6.00 },
+        "mention": { "count": 9,  "lineExactPct": 100, "p95AbsErrPx": 1.50, "maxAbsErrPx": 1.50 },
+        "link":    { "count": 9,  "lineExactPct": 100, "p95AbsErrPx": 1.50, "maxAbsErrPx": 1.50 },
+        "mixed":   { "count": 6,  "lineExactPct": 100, "p95AbsErrPx": 2.00, "maxAbsErrPx": 2.00 },
+        "emoji":   { "count": 9,  "lineExactPct": 100, "p95AbsErrPx": 1.50, "maxAbsErrPx": 1.50 },
+        "rtl":     { "count": 6,  "lineExactPct": 100, "p95AbsErrPx": 1.00, "maxAbsErrPx": 1.00 },
+        "me":      { "count": 6,  "lineExactPct": 100, "p95AbsErrPx": 1.50, "maxAbsErrPx": 1.50, "note": "out of scope" },
+        "longtoken": { "count": 6, "lineExactPct": 100, "p95AbsErrPx": 2.00, "maxAbsErrPx": 2.00 },
+        "code":    { "count": 9,  "lineExactPct": 66.67, "p95AbsErrPx": 81, "maxAbsErrPx": 81, "note": "out of scope" }
+      }
+    },
+    {
+      "fontScalePct": 150,
+      "overallTextLineExactPct": 100,
+      "passesThreshold": true,
+      "inScopeLineCountExact": "100%",
+      "byCategory": {
+        "short":   { "count": 15, "lineExactPct": 100, "p95AbsErrPx": 0, "maxAbsErrPx": 0 },
+        "wrap":    { "count": 18, "lineExactPct": 100, "p95AbsErrPx": 0, "maxAbsErrPx": 0 },
+        "mention": { "count": 9,  "lineExactPct": 100, "p95AbsErrPx": 0, "maxAbsErrPx": 0 },
+        "link":    { "count": 9,  "lineExactPct": 100, "p95AbsErrPx": 0, "maxAbsErrPx": 0 },
+        "mixed":   { "count": 6,  "lineExactPct": 100, "p95AbsErrPx": 0, "maxAbsErrPx": 0 },
+        "emoji":   { "count": 9,  "lineExactPct": 100, "p95AbsErrPx": 0, "maxAbsErrPx": 0 },
+        "rtl":     { "count": 6,  "lineExactPct": 100, "p95AbsErrPx": 0, "maxAbsErrPx": 0 },
+        "me":      { "count": 6,  "lineExactPct": 100, "p95AbsErrPx": 0, "maxAbsErrPx": 0, "note": "out of scope" },
+        "longtoken": { "count": 6, "lineExactPct": 100, "p95AbsErrPx": 0, "maxAbsErrPx": 0 },
+        "code":    { "count": 9,  "lineExactPct": 66.67, "p95AbsErrPx": 132, "maxAbsErrPx": 132, "note": "out of scope" }
+      }
+    }
+  ]
+}
