@@ -133,8 +133,8 @@
   /* ── Aurora identity additions ── */
   --fluux-accent-2: #38E0C4;
   --fluux-grad: linear-gradient(135deg, #38E0C4, #7C8CFF, #A78BFA);
-  --fluux-glass-bg: rgba(20, 27, 48, 0.74);
   --fluux-glass-blur: 12px;
+  --fluux-glass-border: rgba(255, 255, 255, 0.12);
   --fluux-shadow-overlay: 0 24px 70px rgba(0, 0, 0, 0.55);
 
   /* Named palette colors */
@@ -464,7 +464,10 @@
      this darker teal clears 3.58:1 (non-text floor is 3:1, target 3.5+). */
   --fluux-text-encryption: #0D8872;
   --fluux-grad: linear-gradient(135deg, #11A88C, #5B6CF0, #7C6CF0);
-  --fluux-glass-bg: rgba(255, 255, 255, 0.72);
+  /* 0.12 (not 0.10) so the hairline clears the >=1.25:1 perceptibility floor on
+     the lightest theme glass surfaces (tokyo-night/kanagawa light were near-miss
+     at 0.10); guarded by glass.test.ts. */
+  --fluux-glass-border: rgba(0, 0, 0, 0.12);
   --fluux-shadow-overlay: 0 20px 50px rgba(20, 27, 48, 0.18);
 
   /* Divider flips to black-alpha on the light canvas. The rail is derived by
@@ -485,6 +488,34 @@
     background-color: var(--fluux-bg-float);
     border: 1px solid var(--fluux-border-color);
     box-shadow: var(--fluux-shadow-overlay);
+  }
+
+  /* Frosted-glass panel surface (modals + command palette). Solid theme-derived
+     fallback by default; frosted where the browser supports backdrop-filter +
+     color-mix (~88% opaque, readability first); [data-transparency="reduced"]
+     reverts to solid. Surface = --fluux-chat-bg: the primary content surface
+     where --fluux-text-normal is contrast-guaranteed (themeContrast asserts AAA)
+     in every theme and BOTH modes. The lighter elevated surfaces (base-40/50) and
+     even the sidebar (base-20) fall below AA for text in some theme/mode, so they
+     are not used here; the frost + border + shadow + scrim carry the elevation.
+     Pair with positioning, radius, padding, and z-index at the call site. */
+  .fluux-glass {
+    background-color: var(--fluux-chat-bg);
+    border: 1px solid var(--fluux-glass-border);
+    box-shadow: var(--fluux-shadow-overlay);
+  }
+  @supports (backdrop-filter: blur(1px)) and (background: color-mix(in srgb, red, blue)) {
+    .fluux-glass {
+      background-color: color-mix(in srgb, var(--fluux-chat-bg), transparent 12%);
+      backdrop-filter: blur(var(--fluux-glass-blur));
+      -webkit-backdrop-filter: blur(var(--fluux-glass-blur));
+    }
+  }
+  /* Reduce-transparency: override back to the solid surface. */
+  [data-transparency="reduced"] .fluux-glass {
+    background-color: var(--fluux-chat-bg);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
   }
 }
 
