@@ -21,15 +21,27 @@ import { fingerprintsEqual } from '@/e2ee/fingerprintCompare'
  * whose signature did not verify (`untrusted` / `rejected`), or a web-of-trust
  * `introduced`, passes through untouched.
  *
+ * Own outgoing messages (`isOwn`) are a special case: they are signed by OUR
+ * OWN key, and the plugin already baked the correct trust against our own
+ * bundle (`verified` iff the signature verified and matched our fingerprint,
+ * `untrusted` otherwise). There is no peer to verify out of band, and our own
+ * JID is never an entry in the verified-PEER store, so running the
+ * peer-verification downgrade below would force every own message to grey
+ * `tofu` — the "unverified peer" lock. For own messages we therefore trust the
+ * baked value verbatim.
+ *
  * @param securityContext - the message's baked security context, if encrypted
  * @param verifiedFingerprint - the fingerprint the user verified for this peer
+ * @param isOwn - whether this is the user's own outgoing message
  * @returns the trust level to render, or `undefined` for cleartext messages
  */
 export function resolveDisplayTrust(
   securityContext: MessageSecurityContext | undefined,
   verifiedFingerprint: string | undefined,
+  isOwn = false,
 ): MessageSecurityContext['trust'] | undefined {
   if (!securityContext) return undefined
+  if (isOwn) return securityContext.trust
   const baked = securityContext.trust
   if (baked === 'tofu' || baked === 'verified') {
     // Legacy fallback: messages decrypted before the signing fingerprint was
