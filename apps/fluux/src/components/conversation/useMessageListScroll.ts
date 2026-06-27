@@ -54,6 +54,18 @@ const MEDIA_LOAD_DEBOUNCE_MS = 150 // debounce time for batching image load even
 // scrollHeight grows and clips the last message; shorter → it floats above empty space), so a
 // one-shot scrollToIndex isn't enough. ~1s at 60fps comfortably covers the measurement settle.
 const BOTTOM_REASSERT_FRAMES = 60
+// Frames to keep re-resolving the unread-marker offset after a conversation switch. On entry the
+// conversation's messages were evicted on leave and rehydrate from cache asynchronously, then the
+// rows measure over several frames, so the marker offset is unresolved at first and sharpens as it
+// settles. ~2s comfortably covers a cache page load + measurement; the loop stops early once the
+// target is stable, and bails immediately on a user scroll or a conversation switch.
+const MARKER_REASSERT_FRAMES = 120
+// Consecutive frames the marker target must hold steady before the re-assert loop stops early.
+const MARKER_STABLE_FRAMES = 8
+// Sub-row tolerance for the marker re-assert: only re-scroll when the resolved target moves more
+// than this (rows measuring jitter the offset by a few px every frame; a 1px threshold would
+// re-scroll — and re-render — every frame and never stabilize).
+const MARKER_DRIFT_PX = 16
 // While re-pinning, treat the list as not-yet-pinned whenever it sits more than this many pixels
 // above the true bottom. The change-detection guard (re-pin only when scrollHeight moved) can miss
 // the frame where the last row's measurement settles — coalesced height deltas, or a height delta
@@ -1040,63 +1052,93 @@ export function useMessageListScroll({
         }
         scrollStateManager.clearSavedScrollState(conversationId)
       } else if (firstNewMessageId) {
-        // Has unread messages - scroll to show the new message marker with context
-        // We defer this because the message elements may not be in DOM yet
+        // Has unread messages — position the first-unread marker ~1/3 down from the top so the
+        // user reads forward from where they left off. Mark NOT at bottom up front (mirrors the
+        // targetMessageId branch) so the content-growth ResizeObserver doesn't auto-pin to the
+        // bottom while we're still aiming for the marker.
         debugLog('CONVERSATION SWITCH: has unread, will scroll to marker', { firstNewMessageId })
+        isAtBottomRef.current = false
 
-        // Immediately scroll to bottom as fallback (content may not be rendered yet)
-        scroller.scrollTop = scroller.scrollHeight
-        isAtBottomRef.current = true  // Start as "at bottom", will update when we scroll to marker
+        const markerId = firstNewMessageId
+        const markerConvId = conversationId
+        // When virtualized, bring the (possibly unmounted) marker row into the window so the
+        // non-virtualized fallback path can find it too; the virtualized path below does not need
+        // it (getOffsetForMessageId resolves unmounted rows).
+        void latestRef.current.virtualizer?.ensureMessageMounted(markerId)
 
-        // Deferred: scroll to the new message marker once it's rendered
-        const scrollToMarker = () => {
-          const markerScroller = scrollerRef.current
-          if (!markerScroller) return
-
-          const escapedId = CSS.escape(firstNewMessageId)
-          const messageElement = markerScroller.querySelector(`[data-message-id="${escapedId}"]`)
-
-          if (messageElement) {
-            // Scroll so the new message marker is visible near the top with context above
-            // We want to show some messages before the marker, so scroll to put the marker
-            // about 1/3 down from the top of the viewport
-            const elementTop = (messageElement as HTMLElement).offsetTop
-            const viewportHeight = markerScroller.clientHeight
-            const targetScrollTop = Math.max(0, elementTop - viewportHeight / 3)
-
-            // Route through the virtualizer (scrollToOffset) so @tanstack's reactive
-            // scrollOffset is updated. A raw `scrollTop` write is reverted to the top when
-            // the virtualizer re-windows as rows measure (it re-applies its stale offset),
-            // which left the marker stranded below the fold — the same fix the
-            // restore-position and bottom-pin paths already use.
-            const v = latestRef.current.virtualizer
-            if (v) v.scrollToOffset(targetScrollTop)
-            else markerScroller.scrollTop = targetScrollTop
-
-            // Update isAtBottom based on actual position after scrolling
-            const distFromBottom = markerScroller.scrollHeight - targetScrollTop - viewportHeight
-            isAtBottomRef.current = distFromBottom < AT_BOTTOM_THRESHOLD
-
-            debugLog('CONVERSATION SWITCH: scrolled to new message marker', {
-              firstNewMessageId,
-              elementTop,
-              targetScrollTop,
-              viewportHeight,
-              isAtBottom: isAtBottomRef.current,
-            })
-          } else {
-            // Element not found yet, try again on next frame
-            debugLog('CONVERSATION SWITCH: marker element not found, retrying', { firstNewMessageId })
+        // Re-assert the marker position across frames. On entry the conversation's messages were
+        // evicted on leave and rehydrate from cache ASYNCHRONOUSLY, and rows then measure over
+        // several frames, so the marker offset is unresolved at first and sharpens as it settles.
+        // The old code read the position from `querySelector(marker).offsetTop` — null for a row
+        // windowed OUT and 0 with no layout — and used a raw `scrollTop = scrollHeight` fallback
+        // that the virtualizer reverts to offset 0, parking the view at the TOP with the marker
+        // stranded below the fold. Resolving via getOffsetForMessageId (works for unmounted rows)
+        // and re-applying each frame lands at the marker once the region mounts. Mirrors
+        // pinVirtualizedBottom's re-assert loop; bails on user scroll or a conversation switch.
+        const startedAt = Date.now()
+        let framesLeft = MARKER_REASSERT_FRAMES
+        let stableFrames = 0
+        let landedTarget = -1
+        let resolved = false
+        const stepToMarker = () => {
+          if (framesLeft-- <= 0) {
+            // Marker never resolved at all (e.g. trimmed from the loaded set) — don't strand the
+            // view at the top; fall back to the bottom.
+            if (!resolved) reassertBottom()
+            return
           }
-        }
+          const s = scrollerRef.current
+          if (!s) return
+          // Conversation switched away while this loop was still running → stop (a stale loop must
+          // never scroll the new conversation). prevConversationRef is set synchronously below.
+          if (prevConversationRef.current !== markerConvId) return
+          // User took over (FAB/wheel) or scrolled away from where we landed → stop fighting them.
+          if (userScrollIntentAtRef.current > startedAt) return
+          if (landedTarget >= 0 && Math.abs(s.scrollTop - landedTarget) > FAB_THRESHOLD) return
 
-        // When virtualized, bring the (possibly unmounted) marker row into the window
-        // first; the retries below then find it once it mounts.
-        void latestRef.current.virtualizer?.ensureMessageMounted(firstNewMessageId)
-        // Try immediately, then with increasing delays to handle async rendering
-        requestAnimationFrame(scrollToMarker)
-        setTimeout(scrollToMarker, 50)
-        setTimeout(scrollToMarker, 150)
+          const viewportHeight = s.clientHeight
+          const v = latestRef.current.virtualizer
+          let offset: number | null = null
+          if (v) {
+            offset = v.getOffsetForMessageId(markerId)
+          } else {
+            const el = s.querySelector(`[data-message-id="${CSS.escape(markerId)}"]`) as HTMLElement | null
+            if (el) offset = el.offsetTop
+          }
+
+          if (offset != null) {
+            resolved = true
+            const target = Math.max(0, offset - viewportHeight / 3)
+            // Marker sits in the top third of the content (vh/3-from-top would be above the content
+            // top, so the only valid scroll target is 0). Scrolling to 0 would spuriously fire
+            // triggerLoadOlder (handleScroll keys load-older on scrollTop===0) and churn — the
+            // regression that consumed the older-message backlog on entry. This is the all/mostly-
+            // unread case; fall back to the bottom (the prior behavior) rather than paginating.
+            if (target <= 0) {
+              isAtBottomRef.current = true
+              reassertBottom()
+              return
+            }
+            if (Math.abs(target - landedTarget) > MARKER_DRIFT_PX) {
+              // Route through the virtualizer (scrollToOffset) so @tanstack's reactive scrollOffset
+              // stays in sync — a raw scrollTop write is reverted to the top on the next re-window.
+              if (v) v.scrollToOffset(target)
+              else s.scrollTop = target
+              landedTarget = target
+              stableFrames = 0
+              const distFromBottom = s.scrollHeight - target - viewportHeight
+              isAtBottomRef.current = distFromBottom < AT_BOTTOM_THRESHOLD
+              debugLog('CONVERSATION SWITCH: scrolled to new message marker', {
+                firstNewMessageId: markerId, target, viewportHeight, isAtBottom: isAtBottomRef.current,
+              })
+            } else if (landedTarget >= 0 && ++stableFrames >= MARKER_STABLE_FRAMES) {
+              // Landed and the target has held steady — stop re-asserting.
+              return
+            }
+          }
+          requestAnimationFrame(stepToMarker)
+        }
+        requestAnimationFrame(stepToMarker)
       } else if (targetMessageId) {
         // Has a target message to scroll to — skip scroll-to-bottom.
         // The targetMessageId effect will handle scrolling.
@@ -1155,7 +1197,7 @@ export function useMessageListScroll({
         }
       }
     }
-  }, [conversationId, messageCount, firstNewMessageId, targetMessageId, isAtBottomRef, staticMode, pinVirtualizedBottom])
+  }, [conversationId, messageCount, firstNewMessageId, targetMessageId, isAtBottomRef, staticMode, pinVirtualizedBottom, reassertBottom])
 
   // ==========================================================================
   // EFFECT: Scroll to target message (from activity log click, etc.)
