@@ -54,7 +54,8 @@ function App() {
       // scaled font. Density is intentionally NOT varied (it changes only chrome).
       for (const pct of SCALES) {
         document.documentElement.style.fontSize = `${pct}%`
-        await nextFrame() // reflow at the new scale
+        void document.documentElement.offsetHeight // force a synchronous style/layout flush at the new scale (WebKit may otherwise defer it past a single frame)
+        await nextFrame() // then let a paint frame settle before measuring
         if (cancelled) return
         const samples: Sample[] = []
         for (const width of WIDTHS) {
