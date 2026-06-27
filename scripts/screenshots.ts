@@ -1238,3 +1238,46 @@ test('43b — Glass Modal Settings Aurora light', async ({ page }) => {
   await page.waitForTimeout(800)
   await capture(page, '43b-glass-modal-aurora-light')
 })
+
+// ── Empty State Scenes ──────────────────────────────────────────────────────
+// Captures the Aurora empty-state redesign: accent-mark hero + display title
+// + primary action (messages empty) and the directory-contact empty.
+// Four themes: Aurora dark + Aurora light + gruvbox + dracula.
+// The no-conversation/messages empty is reached by navigating to messages
+// without selecting any item (demo auto-selects a recent conversation;
+// navigating to 'messages' deselects it and shows the hero empty state).
+// The directory empty shows the contact-directory view with nothing selected.
+
+const emptyStateThemes: { id: string | null; mode: 'dark' | 'light'; label: string }[] = [
+  { id: null, mode: 'dark', label: 'aurora-dark' },
+  { id: null, mode: 'light', label: 'aurora-light' },
+  { id: 'gruvbox', mode: 'dark', label: 'gruvbox' },
+  { id: 'dracula', mode: 'dark', label: 'dracula' },
+]
+
+for (const theme of emptyStateThemes) {
+  test(`6x — Empty messages ${theme.label}`, async ({ page }) => {
+    await waitForDemoReady(page, theme.mode)
+    if (theme.id) {
+      await setTheme(page, theme.id)
+    }
+    // Navigate to messages view — in demo the last-active conversation may be
+    // highlighted but clicking the nav icon deselects and shows the hero empty.
+    await navigateTo(page, 'messages')
+    await capture(page, `6x-empty-messages-${theme.label}`)
+    if (theme.id) await setTheme(page, 'aurora')
+  })
+}
+
+for (const theme of emptyStateThemes) {
+  test(`6x — Empty directory ${theme.label}`, async ({ page }) => {
+    await waitForDemoReady(page, theme.mode)
+    if (theme.id) {
+      await setTheme(page, theme.id)
+    }
+    // Navigate to directory without selecting a contact.
+    await navigateTo(page, 'directory')
+    await capture(page, `6x-empty-directory-${theme.label}`)
+    if (theme.id) await setTheme(page, 'aurora')
+  })
+}

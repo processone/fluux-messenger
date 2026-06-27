@@ -526,9 +526,20 @@ exports[`ChatView > Snapshots > should match snapshot with typing indicator 1`] 
           style="overflow-anchor: auto;"
         >
           <div
-            class="flex-1 flex items-center justify-center text-fluux-muted h-full"
+            class="flex-1 flex flex-col items-center justify-center text-fluux-muted h-full gap-3"
           >
-            <p>
+            <div
+              class="size-16 rounded-full bg-fluux-brand/10 border border-fluux-brand/25 flex items-center justify-center"
+            >
+              <span
+                data-testid="icon-message-circle"
+              >
+                MessageCircle
+              </span>
+            </div>
+            <p
+              class="text-sm"
+            >
               chat.noMessages
             </p>
           </div>
