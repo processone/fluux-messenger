@@ -531,15 +531,11 @@ function CommandPaletteContent({
         className="relative z-10 fluux-glass rounded-lg w-full max-w-lg mx-4 overflow-hidden"
         onKeyDown={handleKeyDown}
       >
-        {/* Search Input — contained, rounded field with a soft brand focus ring.
-            The palette auto-focuses the input, so focus-within is effectively
-            always on while open, giving a clear "type here" affordance. Inset by
-            the header padding so the ring isn't clipped by the dialog's
-            overflow-hidden. */}
+        {/* Search Input — contained, rounded field with a neutral hairline.
+            The palette auto-focuses the input, so the field is the obvious
+            "type here" affordance without needing an accent ring. */}
         <div className="p-3 border-b border-fluux-hover">
-          <div className="flex items-center gap-3 px-3 py-2 rounded-lg border border-fluux-hover bg-fluux-bg/40
-            transition-[box-shadow,border-color] duration-150
-            focus-within:border-fluux-brand/60 focus-within:ring-2 focus-within:ring-fluux-brand/25">
+          <div className="flex items-center gap-3 px-3 py-2 rounded-lg border border-fluux-hover bg-fluux-bg/40">
             <Search className="size-5 text-fluux-muted flex-shrink-0" />
             <TextInput
               ref={inputRef}
