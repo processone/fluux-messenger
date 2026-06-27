@@ -704,6 +704,15 @@ html, body {
     inset 0 0 0 3px hsla(var(--fluux-accent-h), var(--fluux-accent-s), var(--fluux-accent-l), 0.22) !important;
 }
 
+/* XMPP console log: the focus ring is an outline (not an inset box-shadow) so it
+ * sits ABOVE the scrolling entries. An inset ring would be painted under the
+ * rows (the content scrolls on top of it), which is the overlap we want to avoid.
+ * Same 1px accent weight as the focus zones, inset so it stays within the panel. */
+.user-interacted .xmpp-console-log:focus {
+  outline: 1px solid var(--fluux-brand) !important;
+  outline-offset: -1px !important;
+}
+
 /*
  * Aurora composer card. The bar that wraps the context sections + input row.
  * Background is applied as a utility (bg-fluux-hover) on the element; this class

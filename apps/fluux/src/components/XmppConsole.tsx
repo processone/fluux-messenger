@@ -628,7 +628,7 @@ export function XmppConsole() {
         <div
           ref={packetsContainerRef}
           tabIndex={0}
-          className="xmpp-console-log absolute inset-0 overflow-y-auto overflow-x-hidden focus:outline-none focus:ring-2 focus:ring-inset focus:ring-fluux-brand/50"
+          className="xmpp-console-log absolute inset-0 overflow-y-auto overflow-x-hidden"
           onScroll={handleScroll}
           onKeyDown={handleLogKeyDown}
         >
