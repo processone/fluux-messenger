@@ -85,7 +85,7 @@ export const nordTheme: ThemeDefinition = {
       '--fluux-color-purple-rgb': '158, 110, 147',
       // Semantic overrides
       '--fluux-bg-secondary': '#dde2ea',
-      '--fluux-border-color': 'rgba(59, 66, 82, 0.12)',
+      '--fluux-border-color': 'rgba(59, 66, 82, 0.27)',
       '--fluux-selection-bg': 'hsla(213, 32%, 42%, 0.15)',
       '--fluux-scrollbar-thumb': '#c8d0e0',
       '--fluux-scrollbar-thumb-hover': '#a5b1c7',

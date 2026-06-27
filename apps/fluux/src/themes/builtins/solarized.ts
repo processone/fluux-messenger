@@ -93,7 +93,7 @@ export const solarizedTheme: ThemeDefinition = {
       '--fluux-color-purple-rgb': '108, 113, 196',
       // Semantic overrides
       '--fluux-bg-secondary': '#e8e1cd',
-      '--fluux-border-color': 'rgba(88, 110, 117, 0.15)',
+      '--fluux-border-color': 'rgba(88, 110, 117, 0.33)',
       '--fluux-selection-bg': 'hsla(205, 69%, 42%, 0.15)',
       '--fluux-scrollbar-thumb': '#c5bca6',
       '--fluux-scrollbar-thumb-hover': '#b3a992',

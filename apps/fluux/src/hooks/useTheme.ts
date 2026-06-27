@@ -24,7 +24,12 @@ function contrastColorForHsl(h: number, s: number, l: number): '#ffffff' | '#000
     return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4
   }
   const luminance = 0.2126 * f(0) + 0.7152 * f(8) + 0.0722 * f(4)
-  return luminance > 0.36 ? '#000000' : '#ffffff'
+  // Pick whichever of black/white yields the higher WCAG contrast on this fill.
+  // (A fixed luminance threshold mispicks mid-luminance accents — e.g. a frost
+  // blue where black actually beats white — leaving on-accent text below AA.)
+  const contrastWhite = 1.05 / (luminance + 0.05)
+  const contrastBlack = (luminance + 0.05) / 0.05
+  return contrastBlack > contrastWhite ? '#000000' : '#ffffff'
 }
 
 /**

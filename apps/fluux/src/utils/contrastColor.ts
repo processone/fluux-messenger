@@ -49,3 +49,23 @@ export function ensureContrast(hex: string, bgLuminance: number, ratio = 4.5): s
 export function ensureContrastWithWhite(hex: string): string {
   return ensureContrast(hex, 1.0, 4.5)
 }
+
+/**
+ * Lighten `hex` (blend toward white) until it reaches `ratio` contrast against a
+ * background of luminance `bgLuminance`. The dark-surface counterpart of
+ * `ensureContrast`: on a dark background a color clears AA by getting brighter,
+ * not darker. Returns the original if it already passes.
+ */
+export function ensureContrastOnDark(hex: string, bgLuminance: number, ratio = 4.5): string {
+  const rgb = hexToRgb(hex)
+  if (!rgb) return hex
+  let factor = 0
+  let r = rgb.r, g = rgb.g, b = rgb.b
+  while (contrastRatio(getLuminance(r, g, b), bgLuminance) < ratio && factor < 0.92) {
+    factor += 0.08
+    r = Math.round(rgb.r + (255 - rgb.r) * factor)
+    g = Math.round(rgb.g + (255 - rgb.g) * factor)
+    b = Math.round(rgb.b + (255 - rgb.b) * factor)
+  }
+  return toHex(r, g, b)
+}

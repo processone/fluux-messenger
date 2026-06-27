@@ -76,6 +76,12 @@ export const tokyoNightTheme: ThemeDefinition = {
       '--fluux-color-blue': '#2e7de9',
       '--fluux-color-purple': '#7847bd',
       '--fluux-color-gray': '#8990b3',
+      // Status as text/icon labels on cards (bg-primary). The palette colors are
+      // tuned for fills; these darkened, hue-matched shades clear WCAG AA as text
+      // on this theme's light bg-primary (white still clears AA on the error fill).
+      '--fluux-status-success': '#4a6230',
+      '--fluux-status-warning': '#705632',
+      '--fluux-status-error': '#a71d45',
       '--fluux-color-red-rgb': '245, 42, 101',
       // Error as text/icon — darkened for WCAG AA on the light chat surface.
       '--fluux-text-error': '#8c072d',
@@ -85,7 +91,7 @@ export const tokyoNightTheme: ThemeDefinition = {
       '--fluux-color-purple-rgb': '120, 71, 189',
       // Semantic overrides
       '--fluux-bg-secondary': '#c4c8da',
-      '--fluux-border-color': 'rgba(55, 96, 191, 0.12)',
+      '--fluux-border-color': 'rgba(55, 96, 191, 0.34)',
       '--fluux-selection-bg': 'hsla(220, 72%, 52%, 0.15)',
       '--fluux-scrollbar-thumb': '#b4b5b9',
       '--fluux-scrollbar-thumb-hover': '#a0a1a5',

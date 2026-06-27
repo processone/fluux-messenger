@@ -326,9 +326,12 @@
   --fluux-tooltip-bg: var(--fluux-bg-primary);
   --fluux-tooltip-text: var(--fluux-text-normal);
 
-  /* Badge (unread count) */
+  /* Badge (unread count). badge-text tracks the auto on-accent color so it stays
+     readable on light AND dark accents (white badge text was unreadable on the
+     brighter dark-mode accents). A theme overriding --fluux-badge-bg should also
+     set --fluux-badge-text to a color that clears AA on its chosen fill. */
   --fluux-badge-bg: var(--fluux-bg-accent);
-  --fluux-badge-text: #ffffff;
+  --fluux-badge-text: var(--fluux-text-on-accent);
 
   /* Avatar presence */
   --fluux-presence-online: var(--fluux-status-success);

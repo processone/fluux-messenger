@@ -76,6 +76,12 @@ export const gruvboxTheme: ThemeDefinition = {
       '--fluux-color-blue': '#076678',
       '--fluux-color-purple': '#8f3f71',
       '--fluux-color-gray': '#928374',
+      // Status as text/icon labels on cards (bg-primary). The palette colors are
+      // tuned for fills; these darkened, hue-matched shades clear WCAG AA as text
+      // on this theme's light bg-primary (white still clears AA on the error fill).
+      '--fluux-status-success': '#66610c',
+      '--fluux-status-warning': '#82550e',
+      '--fluux-status-error': '#9d0006',
       '--fluux-color-red-rgb': '157, 0, 6',
       // Error as text/icon — darkened for WCAG AA on the light chat surface.
       '--fluux-text-error': '#9d0006',
@@ -85,7 +91,7 @@ export const gruvboxTheme: ThemeDefinition = {
       '--fluux-color-purple-rgb': '143, 63, 113',
       // Semantic overrides
       '--fluux-bg-secondary': '#e8d8a8',
-      '--fluux-border-color': 'rgba(60, 56, 54, 0.15)',
+      '--fluux-border-color': 'rgba(60, 56, 54, 0.25)',
       '--fluux-selection-bg': 'hsla(24, 88%, 35%, 0.15)',
       '--fluux-scrollbar-thumb': '#bdae93',
       '--fluux-scrollbar-thumb-hover': '#a89984',

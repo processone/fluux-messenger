@@ -228,7 +228,7 @@ exports[`ChatView > Snapshots > should match snapshot with messages 1`] = `
                       >
                         <span
                           class="font-medium"
-                          style="color: rgb(74, 144, 217);"
+                          style="color: rgb(161, 197, 235);"
                         >
                           Alice Smith
                         </span>

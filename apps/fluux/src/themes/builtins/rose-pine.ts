@@ -87,7 +87,7 @@ export const rosePineTheme: ThemeDefinition = {
       '--fluux-color-purple-rgb': '144, 122, 169',
       // Semantic overrides
       '--fluux-bg-secondary': '#f4ede8',
-      '--fluux-border-color': 'rgba(87, 82, 121, 0.10)',
+      '--fluux-border-color': 'rgba(87, 82, 121, 0.29)',
       '--fluux-selection-bg': 'hsla(267, 22%, 57%, 0.15)',
       '--fluux-scrollbar-thumb': '#dfdad9',
       '--fluux-scrollbar-thumb-hover': '#cecacd',

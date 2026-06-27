@@ -87,7 +87,7 @@ export const kanagawaTheme: ThemeDefinition = {
       '--fluux-color-purple-rgb': '98, 76, 131',
       // Semantic overrides
       '--fluux-bg-secondary': '#dcd5ac',
-      '--fluux-border-color': 'rgba(84, 84, 100, 0.12)',
+      '--fluux-border-color': 'rgba(84, 84, 100, 0.3)',
       '--fluux-selection-bg': 'hsla(219, 36%, 45%, 0.15)',
       '--fluux-scrollbar-thumb': '#d5cea3',
       '--fluux-scrollbar-thumb-hover': '#c9c297',
