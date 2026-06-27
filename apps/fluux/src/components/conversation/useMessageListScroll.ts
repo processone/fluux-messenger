@@ -254,10 +254,21 @@ export function useMessageListScroll({
   // surfaces a non-converging loop or two overlapping loops fighting over scrollTop on WebKit
   // (frame-coupled, so invisible to the headless harness and the other monitors). Never cancels.
   const reassertMonitorRef = useRef<ReturnType<typeof createReassertLoopMonitor> | null>(null)
-  // In-flight pin-bottom loop (rAF id + monitor handle), so a fresh pin can supersede it instead
-  // of running a second loop that fights the first over scrollTop (the overlap the monitor warns
-  // about). Single-flight: latest call wins with a fresh settle window.
-  const pinLoopRef = useRef<{ raf: number; handle: ReassertLoopHandle } | null>(null)
+  // In-flight scroll re-assert loop (rAF id + monitor handle), SHARED across pin-bottom and the
+  // MAM-prepend re-assert. Starting any re-assert loop supersedes whatever is in-flight, so only
+  // one ever runs: two loops fight over scrollTop (the overlap the monitor warns about), and
+  // pin-bottom vs prepend target opposite positions (bottom vs a history anchor). Single-flight:
+  // latest call wins with a fresh settle window.
+  const reassertLoopRef = useRef<{ raf: number; handle: ReassertLoopHandle } | null>(null)
+  // Supersede any in-flight re-assert loop. Held in a ref (read as `.current()`) so callers in
+  // useCallback / useLayoutEffect don't need it as a dependency — react-hooks treats refs as stable.
+  const supersedeReassertLoopRef = useRef(() => {
+    if (reassertLoopRef.current) {
+      cancelAnimationFrame(reassertLoopRef.current.raf)
+      reassertLoopRef.current.handle.end()
+      reassertLoopRef.current = null
+    }
+  })
 
   // Track scroll position - always create internal ref to follow rules of hooks
   const internalIsAtBottomRef = useRef(true)
@@ -617,18 +628,13 @@ export function useMessageListScroll({
     const scroller = scrollerRef.current
     if (!virt || !scroller || virt.itemCount === 0) return
 
-    // Single-flight: supersede any pin-bottom loop still running from a previous call so two never
-    // run at once and fight over scrollTop (the overlap the reassert monitor warns about, and the
-    // suspected cause of a just-sent message not sticking to the bottom on WebKit). Cancel the
-    // in-flight loop's next frame and end its monitor handle; this call restarts with a fresh
-    // settle window. reassertBottom fires from several sites (new-message, typing, composer/viewport
-    // resize, media load) that can land within the ~1s window, so re-entry is routine.
-    if (pinLoopRef.current) {
-      cancelAnimationFrame(pinLoopRef.current.raf)
-      pinLoopRef.current.handle.end()
-      pinLoopRef.current = null
-      debugLog('PIN superseded in-flight loop')
-    }
+    // Single-flight: supersede any re-assert loop still running (pin-bottom OR prepend) so two
+    // never run at once and fight over scrollTop (the overlap the reassert monitor warns about,
+    // and the suspected cause of a just-sent message not sticking to the bottom on WebKit). This
+    // call restarts with a fresh settle window. reassertBottom fires from several sites
+    // (new-message, typing, composer/viewport resize, media load) that can land within the ~1s
+    // window — and a send can land mid-prepend — so re-entry is routine.
+    supersedeReassertLoopRef.current()
 
     // Immediate pin (pre-paint when called from a layout effect).
     virt.scrollToIndex(virt.itemCount - 1, { align: 'end' })
@@ -643,7 +649,7 @@ export function useMessageListScroll({
     let lastHeight = scroller.scrollHeight
     const finish = () => {
       loop.end()
-      pinLoopRef.current = null
+      reassertLoopRef.current = null
     }
     const step = () => {
       const s = scrollerRef.current
@@ -692,9 +698,9 @@ export function useMessageListScroll({
       }
       const warning = loop.frame(performance.now(), wrote)
       if (warning) console.warn(warning)
-      pinLoopRef.current = { raf: requestAnimationFrame(step), handle: loop }
+      reassertLoopRef.current = { raf: requestAnimationFrame(step), handle: loop }
     }
-    pinLoopRef.current = { raf: requestAnimationFrame(step), handle: loop }
+    reassertLoopRef.current = { raf: requestAnimationFrame(step), handle: loop }
   }, [isAtBottomRef])
 
   // Re-pin the list to the bottom after a layout change that grows the content or shrinks the
@@ -1181,7 +1187,14 @@ export function useMessageListScroll({
         // and re-applying each frame lands at the marker once the region mounts. Mirrors
         // pinVirtualizedBottom's re-assert loop; bails on user scroll or a conversation switch.
         const startedAt = Date.now()
+        // Single-flight (shared with pin-bottom / prepend): the marker positioning loop owns
+        // scrollTop while it runs, so it supersedes any in-flight re-assert and registers itself.
+        supersedeReassertLoopRef.current()
         const markerLoop = (reassertMonitorRef.current ??= createReassertLoopMonitor()).begin('marker', performance.now())
+        const finishMarker = () => {
+          markerLoop.end()
+          reassertLoopRef.current = null
+        }
         let framesLeft = MARKER_REASSERT_FRAMES
         let stableFrames = 0
         let landedTarget = -1
@@ -1191,18 +1204,18 @@ export function useMessageListScroll({
             // Marker never resolved at all (e.g. trimmed from the loaded set) — don't strand the
             // view at the top; fall back to the bottom. End first so the handoff to reassertBottom
             // (which begins a pin-bottom loop) is not miscounted as an overlap.
-            markerLoop.end()
+            finishMarker()
             if (!resolved) reassertBottom()
             return
           }
           const s = scrollerRef.current
-          if (!s) { markerLoop.end(); return }
+          if (!s) { finishMarker(); return }
           // Conversation switched away while this loop was still running → stop (a stale loop must
           // never scroll the new conversation). prevConversationRef is set synchronously below.
-          if (prevConversationRef.current !== markerConvId) { markerLoop.end(); return }
+          if (prevConversationRef.current !== markerConvId) { finishMarker(); return }
           // User took over (FAB/wheel) or scrolled away from where we landed → stop fighting them.
-          if (userScrollIntentAtRef.current > startedAt) { markerLoop.end(); return }
-          if (landedTarget >= 0 && Math.abs(s.scrollTop - landedTarget) > FAB_THRESHOLD) { markerLoop.end(); return }
+          if (userScrollIntentAtRef.current > startedAt) { finishMarker(); return }
+          if (landedTarget >= 0 && Math.abs(s.scrollTop - landedTarget) > FAB_THRESHOLD) { finishMarker(); return }
 
           const viewportHeight = s.clientHeight
           const v = latestRef.current.virtualizer
@@ -1225,7 +1238,7 @@ export function useMessageListScroll({
             // unread case; fall back to the bottom (the prior behavior) rather than paginating.
             if (target <= 0) {
               isAtBottomRef.current = true
-              markerLoop.end()
+              finishMarker()
               reassertBottom()
               return
             }
@@ -1244,15 +1257,15 @@ export function useMessageListScroll({
               })
             } else if (landedTarget >= 0 && ++stableFrames >= MARKER_STABLE_FRAMES) {
               // Landed and the target has held steady — stop re-asserting.
-              markerLoop.end()
+              finishMarker()
               return
             }
           }
           const warning = markerLoop.frame(performance.now(), wrote)
           if (warning) console.warn(warning)
-          requestAnimationFrame(stepToMarker)
+          reassertLoopRef.current = { raf: requestAnimationFrame(stepToMarker), handle: markerLoop }
         }
-        requestAnimationFrame(stepToMarker)
+        reassertLoopRef.current = { raf: requestAnimationFrame(stepToMarker), handle: markerLoop }
       } else if (targetMessageId) {
         // Has a target message to scroll to — skip scroll-to-bottom.
         // The targetMessageId effect will handle scrolling.
@@ -1635,18 +1648,24 @@ export function useMessageListScroll({
     // the user took over → yield. A content-shrink clamp records no intent, so the loop keeps
     // re-pinning the anchor through it (clamp recovery — the "jump to bottom" fix).
     const assertStartedAt = Date.now()
-    // Diagnostic: this loop has no cleanup and no early-stable exit, so a second MAM prepend
-    // (fast scroll-up through history) can start a second 'prepend' loop against a different
-    // anchor while this one is still running — they then fight over scrollTop. The monitor
-    // surfaces that overlap (and a single loop that never settles) in fluux.log on WebKit.
+    // Single-flight (shared with pin-bottom): supersede any re-assert loop still in-flight so two
+    // never run at once. This loop has no early-stable exit, so a second MAM prepend (fast
+    // scroll-up through history) would otherwise start a second 'prepend' loop against a different
+    // anchor while this one runs; and a pin-bottom from a send can land mid-prepend. Both fight
+    // over scrollTop. The latest re-assert wins.
+    supersedeReassertLoopRef.current()
     const assertLoop = (reassertMonitorRef.current ??= createReassertLoopMonitor()).begin('prepend', performance.now())
+    const finishAssert = () => {
+      assertLoop.end()
+      reassertLoopRef.current = null
+    }
     const runMeasureAssert = () => {
-      if (framesLeft-- <= 0) { assertLoop.end(); return }
+      if (framesLeft-- <= 0) { finishAssert(); return }
       // Deliberate user scroll (FAB / wheel) since the loop started → the user took over;
       // stop re-pinning and yield. A content-shrink clamp does NOT set this, so we keep going.
       if (userScrollIntentAtRef.current > assertStartedAt) {
         debugLog('PREPEND ASSERT CANCELLED (user scroll intent)', { scrollTop: scrollerRef.current?.scrollTop })
-        assertLoop.end()
+        finishAssert()
         return
       }
       let wrote = false
@@ -1676,9 +1695,9 @@ export function useMessageListScroll({
       }
       const warning = assertLoop.frame(performance.now(), wrote)
       if (warning) console.warn(warning)
-      requestAnimationFrame(runMeasureAssert)
+      reassertLoopRef.current = { raf: requestAnimationFrame(runMeasureAssert), handle: assertLoop }
     }
-    requestAnimationFrame(runMeasureAssert)
+    reassertLoopRef.current = { raf: requestAnimationFrame(runMeasureAssert), handle: assertLoop }
 
     // Clear after cooldown
     setTimeout(() => {
