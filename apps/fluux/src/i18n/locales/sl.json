@@ -30,6 +30,7 @@
         "serverPlaceholderDesktop": "primer.si ali tls://gostitelj:vrata",
         "serverHint": "Pustite prazno za uporabo domene iz JID",
         "serverHintDesktop": "Pustite prazno za samodejno zaznavo. Podpira domeno, tls://gostitelj:vrata, tcp://gostitelj:vrata",
+        "linkSetServer": "Povezava je nastavila prilagojeni strežnik: {{host}}",
         "rememberMe": "Zapomni si me",
         "storedInKeychain": "(shranjeno v obesku za ključe)",
         "staySignedIn": "(ostani prijavljen)",

@@ -30,6 +30,7 @@
         "serverPlaceholderDesktop": "pavyzdys.lt arba tls://hostas:portas",
         "serverHint": "Palikite tuščią, kad naudotumėte domeną iš JID",
         "serverHintDesktop": "Palikite tuščią automatiniam aptikimui. Palaiko domeną, tls://hostas:portas, tcp://hostas:portas",
+        "linkSetServer": "Nuoroda nustatė pasirinktinį serverį: {{host}}",
         "rememberMe": "Prisiminti mane",
         "storedInKeychain": "(saugoma raktų grandinėje)",
         "staySignedIn": "(likti prisijungus)",

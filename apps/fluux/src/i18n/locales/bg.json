@@ -30,6 +30,7 @@
         "serverPlaceholderDesktop": "example.com или tls://хост:порт",
         "serverHint": "Оставете празно, за да използвате домейна от JID",
         "serverHintDesktop": "Оставете празно за автоматично откриване. Поддържа домейн, tls://хост:порт, tcp://хост:порт",
+        "linkSetServer": "Връзка зададе персонализиран сървър: {{host}}",
         "rememberMe": "Запомни ме",
         "storedInKeychain": "(съхранено в ключодържател)",
         "staySignedIn": "(останете влезли)",

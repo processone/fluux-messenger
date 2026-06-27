@@ -30,6 +30,7 @@
         "serverPlaceholderDesktop": "naide.ee või tls://host:port",
         "serverHint": "Jäta tühjaks, et kasutada domeeni JID-ist",
         "serverHintDesktop": "Jäta tühjaks automaatseks tuvastamiseks. Toetab domeeni, tls://host:port, tcp://host:port",
+        "linkSetServer": "Link määras kohandatud serveri: {{host}}",
         "rememberMe": "Jäta mind meelde",
         "storedInKeychain": "(salvestatud võtmehoidlasse)",
         "staySignedIn": "(jää sisselogituks)",

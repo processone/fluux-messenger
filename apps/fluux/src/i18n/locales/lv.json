@@ -30,6 +30,7 @@
         "serverPlaceholderDesktop": "piemers.com vai tls://serveris:ports",
         "serverHint": "Atstājiet tukšu, lai izmantotu domēnu no JID",
         "serverHintDesktop": "Atstājiet tukšu automātiskai noteikšanai. Atbalsta domēnu, tls://serveris:ports, tcp://serveris:ports",
+        "linkSetServer": "Saite iestatīja pielāgotu serveri: {{host}}",
         "rememberMe": "Atcerēties mani",
         "storedInKeychain": "(saglabāts Keychain)",
         "staySignedIn": "(palikt pieslēgtam)",

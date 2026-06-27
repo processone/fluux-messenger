@@ -30,6 +30,7 @@
         "serverPlaceholderDesktop": "example.com альбо tls://host:port",
         "serverHint": "Пакіньце пустым, каб выкарыстоўваць дамен з JID",
         "serverHintDesktop": "Пакіньце поле пустым для аўтаматычнага вызначэння. Падтрымліваецца дамен, tls://host:port, tcp://host:port",
+        "linkSetServer": "Спасылка задала ўласны сервер: {{host}}",
         "rememberMe": "Запомніць мяне",
         "storedInKeychain": "(захавана ў Keychain)",
         "staySignedIn": "(заставацца ў сістэме)",

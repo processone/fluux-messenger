@@ -30,6 +30,7 @@
         "serverPlaceholderDesktop": "sampla.ie nó tls://óstach:port",
         "serverHint": "Fág folamh chun fearann ón JID a úsáid",
         "serverHintDesktop": "Fág folamh le haghaidh uathbhrath. Tacaíonn le fearann, tls://óstach:port, tcp://óstach:port",
+        "linkSetServer": "Shocraigh nasc freastalaí saincheaptha: {{host}}",
         "rememberMe": "Cuimhnigh orm",
         "storedInKeychain": "(stóráilte i Keychain)",
         "staySignedIn": "(fan logáilte isteach)",

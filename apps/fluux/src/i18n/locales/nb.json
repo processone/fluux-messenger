@@ -30,6 +30,7 @@
         "serverPlaceholderDesktop": "eksempel.no eller tls://vert:port",
         "serverHint": "La stå tom for å bruke domene fra JID",
         "serverHintDesktop": "La stå tom for automatisk oppdagelse. Støtter domene, tls://vert:port, tcp://vert:port",
+        "linkSetServer": "En lenke angav en egendefinert server: {{host}}",
         "rememberMe": "Husk meg",
         "storedInKeychain": "(lagret i nøkkelring)",
         "staySignedIn": "(forbli innlogget)",

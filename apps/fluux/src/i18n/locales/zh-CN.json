@@ -30,6 +30,7 @@
         "serverPlaceholderDesktop": "example.com 或 tls://host:port",
         "serverHint": "留空则使用 JID 中的域",
         "serverHintDesktop": "留空则自动检测。支持域名、tls://host:port、tcp://host:port",
+        "linkSetServer": "链接设置了自定义服务器：{{host}}",
         "rememberMe": "记住我",
         "storedInKeychain": "（存储在密钥链中）",
         "staySignedIn": "（保持登录）",

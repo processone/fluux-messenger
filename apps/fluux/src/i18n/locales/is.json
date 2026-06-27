@@ -30,6 +30,7 @@
         "serverPlaceholderDesktop": "dæmi.is eða tls://hýsill:tengi",
         "serverHint": "Skildu eftir autt til að nota lén úr JID",
         "serverHintDesktop": "Skildu eftir autt fyrir sjálfvirka greiningu. Styður lén, tls://hýsill:tengi, tcp://hýsill:tengi",
+        "linkSetServer": "Tengill stillti sérsniðinn netþjón: {{host}}",
         "rememberMe": "Muna eftir mér",
         "storedInKeychain": "(vistað í lyklakippu)",
         "staySignedIn": "(vera áfram innskráður)",

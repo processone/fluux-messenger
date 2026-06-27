@@ -30,6 +30,7 @@
         "serverPlaceholderDesktop": "príklad.sk alebo tls://hostiteľ:port",
         "serverHint": "Nechajte prázdne pre použitie domény z JID",
         "serverHintDesktop": "Nechajte prázdne pre automatickú detekciu. Podporuje doménu, tls://hostiteľ:port, tcp://hostiteľ:port",
+        "linkSetServer": "Odkaz nastavil vlastný server: {{host}}",
         "rememberMe": "Zapamätať si ma",
         "storedInKeychain": "(uložené v kľúčenke)",
         "staySignedIn": "(zostať prihlásený)",

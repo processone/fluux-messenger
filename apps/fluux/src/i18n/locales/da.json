@@ -30,6 +30,7 @@
         "serverPlaceholderDesktop": "eksempel.dk eller tls://vært:port",
         "serverHint": "Efterlad tom for at bruge domæne fra JID",
         "serverHintDesktop": "Efterlad tom for automatisk opdagelse. Understøtter domæne, tls://vært:port, tcp://vært:port",
+        "linkSetServer": "Et link angav en brugerdefineret server: {{host}}",
         "rememberMe": "Husk mig",
         "storedInKeychain": "(gemt i nøglering)",
         "staySignedIn": "(forbliv logget ind)",

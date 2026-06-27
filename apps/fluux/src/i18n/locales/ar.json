@@ -30,6 +30,7 @@
         "serverPlaceholderDesktop": "example.com أو tls://host:port",
         "serverHint": "اتركه فارغًا لاستخدام النطاق من JID",
         "serverHintDesktop": "اتركه فارغًا للكشف التلقائي. يدعم النطاق، tls://host:port، tcp://host:port",
+        "linkSetServer": "قام رابط بتعيين خادم مخصص: {{host}}",
         "rememberMe": "تذكرني",
         "storedInKeychain": "(محفوظ في سلسلة المفاتيح)",
         "staySignedIn": "(البقاء متصلاً)",

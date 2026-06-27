@@ -30,6 +30,7 @@
         "serverPlaceholderDesktop": "exempel.se eller tls://värd:port",
         "serverHint": "Lämna tomt för att använda domän från JID",
         "serverHintDesktop": "Lämna tomt för automatisk identifiering. Stöder domän, tls://värd:port, tcp://värd:port",
+        "linkSetServer": "En länk angav en anpassad server: {{host}}",
         "rememberMe": "Kom ihåg mig",
         "storedInKeychain": "(lagrat i nyckelringen)",
         "staySignedIn": "(förbli inloggad)",

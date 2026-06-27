@@ -30,6 +30,7 @@
         "serverPlaceholderDesktop": "eżempju.com jew tls://host:port",
         "serverHint": "Ħalli vojt biex tuża d-dominju mill-JID",
         "serverHintDesktop": "Ħalli vojt għal detezzjoni awtomatika. Jappoġġja dominju, tls://host:port, tcp://host:port",
+        "linkSetServer": "Link issettja server personalizzat: {{host}}",
         "rememberMe": "Ftakarni",
         "storedInKeychain": "(maħżun fil-Keychain)",
         "staySignedIn": "(ibqa' konness)",
