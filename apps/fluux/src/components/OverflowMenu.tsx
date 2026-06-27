@@ -32,7 +32,7 @@ interface OverflowMenuProps {
 const DEFAULT_BUTTON_CLASS =
   'p-2 rounded-lg text-fluux-muted hover:text-fluux-text hover:bg-fluux-hover transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center'
 const DEFAULT_MENU_CLASS =
-  'absolute end-0 mt-1 z-50 w-56 bg-fluux-sidebar border border-fluux-hover rounded-lg shadow-lg py-1'
+  'absolute end-0 mt-1 z-50 w-56 fluux-popover rounded-lg py-1'
 
 /**
  * Generic kebab (overflow) menu: a `MoreVertical` trigger that opens a

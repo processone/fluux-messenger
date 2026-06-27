@@ -51,7 +51,7 @@ export function HeaderSubmenuButton({ ariaLabel, tooltip, icon: Icon, active, gr
           ref={menu.menuRef}
           role="menu"
           style={{ left: menu.position.x, top: menu.position.y }}
-          className="fixed w-64 max-w-[calc(100vw-1rem)] bg-fluux-bg border border-fluux-hover rounded-lg shadow-lg z-30 py-1"
+          className="fixed w-64 max-w-[calc(100vw-1rem)] fluux-popover rounded-lg z-30 py-1"
         >
           {group.items.map((item) => {
             const ItemIcon = item.icon

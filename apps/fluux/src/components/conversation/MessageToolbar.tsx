@@ -151,7 +151,7 @@ export const MessageToolbar = memo(function MessageToolbar({
       {/* Visible toolbar */}
       <div
         ref={toolbarRef}
-        className={`flex items-center bg-fluux-bg rounded-md shadow-lg border border-fluux-hover ${interactivityClass}`}
+        className={`flex items-center fluux-popover rounded-md ${interactivityClass}`}
         onMouseEnter={onToolbarMouseEnter}
       >
       {/* Quick reaction emojis (hidden when reactions are disabled) */}
@@ -272,7 +272,7 @@ export const MessageToolbar = memo(function MessageToolbar({
 
         {/* More options dropdown menu */}
         {showMoreMenu && canDelete && (
-          <div className={`absolute end-0 min-w-[160px] bg-fluux-bg rounded-lg shadow-lg border border-fluux-hover z-30 overflow-hidden ${moreMenuDropUpRef.current ? 'bottom-full mb-1' : 'top-full mt-1'}`}>
+          <div className={`absolute end-0 min-w-[160px] fluux-popover rounded-lg z-30 overflow-hidden ${moreMenuDropUpRef.current ? 'bottom-full mb-1' : 'top-full mt-1'}`}>
             <button
               onClick={handleDelete}
               className="w-full px-3 py-2 text-sm text-start text-red-500 hover:bg-fluux-hover transition-colors flex items-center gap-2"

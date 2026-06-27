@@ -197,7 +197,7 @@ export function UserInfoPopover({ contact, jid, occupantJid, role, affiliation, 
       {isOpen && createPortal(
         <div
           ref={popoverRef}
-          className="fixed bg-fluux-sidebar rounded-lg shadow-xl border border-fluux-hover p-3 z-50 min-w-[200px] max-w-[280px]"
+          className="fixed fluux-popover rounded-lg p-3 z-50 min-w-[200px] max-w-[280px]"
           style={{ left: position.x, top: position.top, bottom: position.bottom }}
         >
           {/* JID */}

@@ -481,7 +481,7 @@ const RoomItem = memo(function RoomItem({
       {menu.isOpen && (
         <div
           ref={menu.menuRef}
-          className="fixed bg-fluux-bg rounded-lg shadow-xl border border-fluux-hover py-1 z-50 min-w-48"
+          className="fixed fluux-popover rounded-lg py-1 z-50 min-w-48"
           style={{ left: menu.position.x, top: menu.position.y }}
         >
           {/* Join (only for non-joined rooms) */}

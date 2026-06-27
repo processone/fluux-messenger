@@ -679,7 +679,7 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
         return (
           <div
             ref={nickMenu.menuRef}
-            className="fixed bg-fluux-bg rounded-lg shadow-xl border border-fluux-hover py-1 z-50 min-w-40"
+            className="fixed fluux-popover rounded-lg py-1 z-50 min-w-40"
             style={{ left: nickMenu.position.x, top: nickMenu.position.y }}
           >
             {bareJid && onStartChat && (
@@ -1906,7 +1906,7 @@ export const RoomMessageInput = memo(function RoomMessageInput({
   const mentionDropdown = mentionState.isActive && mentionState.matches.length > 0 ? (
     <div
       className="absolute bottom-full inset-x-0 mb-1 max-h-48 overflow-y-auto
-                 bg-fluux-bg border border-fluux-hover rounded-lg shadow-lg z-30"
+                 fluux-popover rounded-lg z-30"
     >
       {mentionState.matches.map((match, idx) => (
         <button
