@@ -615,6 +615,7 @@
         "categories": {
             "profile": "Профіль",
             "appearance": "Знешні выгляд",
+            "accessibility": "Даступнасць",
             "language": "Мова",
             "notifications": "Апавяшчэнні",
             "updates": "Абнаўленні",
@@ -641,6 +642,13 @@
             "blockFailed": "Не атрымалася заблакаваць карыстальніка"
         },
         "appearance": "Знешні выгляд",
+        "accessibility": "Даступнасць",
+        "transparency": "Празрыстасць",
+        "transparencyFull": "Поўная",
+        "transparencyReduced": "Зменшаная",
+        "transparencyFullDescription": "Матавыя шкляныя панэлі для меню і дыялогаў.",
+        "transparencyReducedDescription": "Суцэльныя панэлі без размыцця або празрыстасці.",
+        "transparencySystemDescription": "Выкарыстоўваць сістэмны параметр зніжэння празрыстасці.",
         "theme": "Тэма",
         "themeDefault": "Тэма па змаўчанні",
         "importTheme": "Імпартаваць тэму",

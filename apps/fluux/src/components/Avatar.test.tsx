@@ -68,6 +68,38 @@ describe('Avatar', () => {
     })
   })
 
+  describe('fallbackIcon prop', () => {
+    it('renders the fallback icon instead of the letter when no avatarUrl', () => {
+      render(
+        <Avatar identifier="team" name="Team" fallbackIcon={<svg data-testid="room-glyph" />} />
+      )
+      expect(screen.getByTestId('room-glyph')).toBeInTheDocument()
+      expect(screen.queryByText('T')).not.toBeInTheDocument()
+    })
+
+    it('keeps the consistent colored background behind the fallback icon', () => {
+      const { container } = render(
+        <Avatar identifier="team" name="Team" fallbackIcon={<svg data-testid="room-glyph" />} />
+      )
+      const bg = container.querySelector('[style*="background"]')
+      expect(bg).toBeTruthy()
+      expect(bg?.querySelector('[data-testid="room-glyph"]')).toBeTruthy()
+    })
+
+    it('ignores fallbackIcon when avatarUrl is provided', () => {
+      render(
+        <Avatar
+          identifier="team"
+          name="Team"
+          avatarUrl="https://example.com/team.jpg"
+          fallbackIcon={<svg data-testid="room-glyph" />}
+        />
+      )
+      expect(screen.getByRole('img')).toBeInTheDocument()
+      expect(screen.queryByTestId('room-glyph')).not.toBeInTheDocument()
+    })
+  })
+
   describe('fallbackColor used directly (matches nickname color)', () => {
     it('uses fallbackColor as-is without contrast adjustment', () => {
       const { container } = render(

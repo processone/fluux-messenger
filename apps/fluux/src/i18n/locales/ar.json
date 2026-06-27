@@ -615,6 +615,7 @@
         "categories": {
             "profile": "الملف الشخصي",
             "appearance": "المظهر",
+            "accessibility": "إمكانية الوصول",
             "language": "اللغة والمنطقة",
             "notifications": "الإشعارات",
             "updates": "التحديثات",
@@ -641,6 +642,13 @@
             "blockFailed": "فشل حظر المستخدم"
         },
         "appearance": "المظهر",
+        "accessibility": "إمكانية الوصول",
+        "transparency": "الشفافية",
+        "transparencyFull": "كاملة",
+        "transparencyReduced": "مخفضة",
+        "transparencyFullDescription": "لوحات زجاجية مثلجة للقوائم والنوافذ.",
+        "transparencyReducedDescription": "لوحات صلبة بدون تعتيم أو شفافية.",
+        "transparencySystemDescription": "اتبع إعداد تقليل الشفافية في نظامك.",
         "theme": "السمة",
         "themeDefault": "السمة الافتراضية",
         "importTheme": "استيراد سمة",

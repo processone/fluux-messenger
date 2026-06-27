@@ -617,6 +617,7 @@
         "categories": {
             "profile": "Profil",
             "appearance": "Wygląd",
+            "accessibility": "Dostępność",
             "language": "Język i region",
             "notifications": "Powiadomienia",
             "updates": "Aktualizacje",
@@ -643,6 +644,13 @@
             "blockFailed": "Nie udało się zablokować użytkownika"
         },
         "appearance": "Wygląd",
+        "accessibility": "Dostępność",
+        "transparency": "Przezroczystość",
+        "transparencyFull": "Pełna",
+        "transparencyReduced": "Zmniejszona",
+        "transparencyFullDescription": "Matowe szklane panele dla menu i okien dialogowych.",
+        "transparencyReducedDescription": "Nieprzezroczyste panele bez rozmycia ani przezroczystości.",
+        "transparencySystemDescription": "Użyj ustawienia systemowego zmniejszonej przezroczystości.",
         "theme": "Motyw",
         "themeDefault": "Motyw domyślny",
         "importTheme": "Importuj motyw",

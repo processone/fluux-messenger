@@ -615,6 +615,7 @@
         "categories": {
             "profile": "Profil",
             "appearance": "Izgled",
+            "accessibility": "Pristupačnost",
             "language": "Jezik i regija",
             "notifications": "Obavijesti",
             "updates": "Ažuriranja",
@@ -641,6 +642,13 @@
             "blockFailed": "Blokiranje korisnika nije uspjelo"
         },
         "appearance": "Izgled",
+        "accessibility": "Pristupačnost",
+        "transparency": "Prozirnost",
+        "transparencyFull": "Puna",
+        "transparencyReduced": "Smanjena",
+        "transparencyFullDescription": "Matirana staklena ploča za izbornike i dijaloge.",
+        "transparencyReducedDescription": "Pune ploče bez zamućenja ili prozirnosti.",
+        "transparencySystemDescription": "Prati sistemsku postavku smanjene prozirnosti.",
         "theme": "Tema",
         "themeDefault": "Zadana tema",
         "importTheme": "Uvezi temu",

@@ -617,6 +617,7 @@
         "categories": {
             "profile": "Profil",
             "appearance": "Aspect",
+            "accessibility": "Accesibilitate",
             "language": "Limbă și regiune",
             "notifications": "Notificări",
             "updates": "Actualizări",
@@ -643,6 +644,13 @@
             "blockFailed": "Blocarea utilizatorului a eșuat"
         },
         "appearance": "Aspect",
+        "accessibility": "Accesibilitate",
+        "transparency": "Transparență",
+        "transparencyFull": "Completă",
+        "transparencyReduced": "Redusă",
+        "transparencyFullDescription": "Panouri de sticlă mată pentru meniuri și ferestre de dialog.",
+        "transparencyReducedDescription": "Panouri solide fără estompare sau transluciditate.",
+        "transparencySystemDescription": "Urmați setarea de reducere a transparenței sistemului.",
         "theme": "Temă",
         "themeDefault": "Temă implicită",
         "importTheme": "Importă temă",

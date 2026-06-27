@@ -138,7 +138,7 @@ export function BackupPassphraseDialog({
   return (
     <div
       data-modal="true"
-      className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+      className="fixed inset-0 modal-scrim flex items-center justify-center z-50"
     >
       <button
         type="button"
@@ -148,7 +148,7 @@ export function BackupPassphraseDialog({
         onClick={onCancel}
         className="absolute inset-0 cursor-default"
       />
-      <div className="relative z-10 bg-fluux-sidebar rounded-lg max-w-md w-full mx-4 shadow-xl max-h-[calc(100vh-2rem)] flex flex-col overflow-hidden">
+      <div className="relative z-10 fluux-glass rounded-lg max-w-md w-full mx-4 max-h-[calc(100vh-2rem)] flex flex-col overflow-hidden">
         <form
           onSubmit={(e) => { e.preventDefault(); void handleConfirm() }}
           className="contents"

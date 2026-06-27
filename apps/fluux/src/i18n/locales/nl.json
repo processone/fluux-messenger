@@ -615,6 +615,7 @@
         "categories": {
             "profile": "Profiel",
             "appearance": "Weergave",
+            "accessibility": "Toegankelijkheid",
             "language": "Taal & Regio",
             "notifications": "Meldingen",
             "updates": "Updates",
@@ -641,6 +642,13 @@
             "blockFailed": "Gebruiker blokkeren mislukt"
         },
         "appearance": "Weergave",
+        "accessibility": "Toegankelijkheid",
+        "transparency": "Transparantie",
+        "transparencyFull": "Volledig",
+        "transparencyReduced": "Verminderd",
+        "transparencyFullDescription": "Matglazen panelen voor menu's en dialoogvensters.",
+        "transparencyReducedDescription": "Ondoorzichtige panelen zonder vervaging of doorschijnendheid.",
+        "transparencySystemDescription": "Volg de systeeminstelling voor verminderde transparantie.",
         "theme": "Thema",
         "themeDefault": "Standaardthema",
         "importTheme": "Thema importeren",

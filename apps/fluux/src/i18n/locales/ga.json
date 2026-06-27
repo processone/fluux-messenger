@@ -615,6 +615,7 @@
         "categories": {
             "profile": "Próifíl",
             "appearance": "Cuma",
+            "accessibility": "Inrochtaineacht",
             "language": "Teanga & Réigiún",
             "notifications": "Fógraí",
             "updates": "Nuashonruithe",
@@ -641,6 +642,13 @@
             "blockFailed": "Theip ar chosc úsáideora"
         },
         "appearance": "Cuma",
+        "accessibility": "Inrochtaineacht",
+        "transparency": "Trédhearcacht",
+        "transparencyFull": "Iomlán",
+        "transparencyReduced": "Laghdaithe",
+        "transparencyFullDescription": "Painéil ghloine frosted do roghchláir agus boscaí dialóige.",
+        "transparencyReducedDescription": "Painéil sholadacha gan doiléiriú ná tréshoilseacht.",
+        "transparencySystemDescription": "Lean socrú laghdaithe trédhearcachta an chórais.",
         "theme": "Téama",
         "themeDefault": "Téama réamhshocraithe",
         "importTheme": "Iompórtáil téama",

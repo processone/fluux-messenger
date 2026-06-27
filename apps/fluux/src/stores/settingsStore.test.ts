@@ -8,7 +8,7 @@ describe('settingsStore', () => {
     vi.mocked(localStorage.getItem).mockClear()
     vi.mocked(localStorage.setItem).mockClear()
     vi.mocked(localStorage.getItem).mockReturnValue(null)
-    useSettingsStore.setState({ themeMode: 'system', timeFormat: 'auto', fontSize: 100, mediaAutoDownload: 'private-only', motionPreference: 'system', densityMode: 'comfortable' })
+    useSettingsStore.setState({ themeMode: 'system', timeFormat: 'auto', fontSize: 100, mediaAutoDownload: 'private-only', motionPreference: 'system', densityMode: 'comfortable', transparencyMode: 'system' })
   })
 
   describe('initial state', () => {
@@ -134,6 +134,15 @@ describe('settingsStore', () => {
         setMotionPreference(v)
         expect(useSettingsStore.getState().motionPreference).toBe(v)
       }
+    })
+  })
+
+  describe('transparencyMode', () => {
+    it('defaults transparencyMode to system and persists on set', () => {
+      expect(useSettingsStore.getState().transparencyMode).toBe('system')
+      useSettingsStore.getState().setTransparencyMode('reduced')
+      expect(useSettingsStore.getState().transparencyMode).toBe('reduced')
+      expect(localStorage.setItem).toHaveBeenCalledWith('fluux-transparency', 'reduced')
     })
   })
 

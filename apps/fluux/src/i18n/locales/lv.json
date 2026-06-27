@@ -616,6 +616,7 @@
         "categories": {
             "profile": "Profils",
             "appearance": "Izskats",
+            "accessibility": "Pieejamība",
             "language": "Valoda un reģions",
             "notifications": "Paziņojumi",
             "updates": "Atjauninājumi",
@@ -642,6 +643,13 @@
             "blockFailed": "Neizdevās bloķēt lietotāju"
         },
         "appearance": "Izskats",
+        "accessibility": "Pieejamība",
+        "transparency": "Caurspīdīgums",
+        "transparencyFull": "Pilns",
+        "transparencyReduced": "Samazināts",
+        "transparencyFullDescription": "Matēta stikla paneļi izvēlnēm un dialogiem.",
+        "transparencyReducedDescription": "Necaurredzami paneļi bez izplūduma vai caurspīdīguma.",
+        "transparencySystemDescription": "Ievērot sistēmas caurspīdīguma samazināšanas iestatījumu.",
         "theme": "Tēma",
         "themeDefault": "Noklusējuma tēma",
         "importTheme": "Importēt tēmu",

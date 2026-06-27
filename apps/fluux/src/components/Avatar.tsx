@@ -89,6 +89,13 @@ export interface AvatarProps {
   fallbackColor?: string
 
   /**
+   * Glyph rendered on the colored background when no avatar image is present,
+   * in place of the first letter. Used for non-person entities such as rooms
+   * (e.g. a Hash icon). Ignored when an avatar image is shown.
+   */
+  fallbackIcon?: ReactNode
+
+  /**
    * When true, forces the presence indicator to show the offline color
    * regardless of actual presence. Parent components should pass this
    * based on connection status to avoid per-Avatar store subscriptions.
@@ -201,6 +208,7 @@ export function Avatar({
   presenceBorderColor = 'border-fluux-sidebar',
   overlay,
   fallbackColor,
+  fallbackIcon,
   forceOffline = false,
   shape = 'circle',
 }: AvatarProps) {
@@ -307,14 +315,18 @@ export function Avatar({
           onLoad={(e) => { if (e.currentTarget.naturalWidth === 0) setImgError(true) }}
         />
       ) : (
-        // Letter fallback with consistent color
+        // Icon or letter fallback with consistent color
         <div
           className={`w-full h-full ${radiusClass} flex items-center justify-center`}
           style={{ backgroundColor }}
         >
-          <span className={`${sizeClasses.text} font-semibold text-white select-none`}>
-            {letter}
-          </span>
+          {fallbackIcon ? (
+            <span className="text-white flex items-center justify-center">{fallbackIcon}</span>
+          ) : (
+            <span className={`${sizeClasses.text} font-semibold text-white select-none`}>
+              {letter}
+            </span>
+          )}
         </div>
       )}
 

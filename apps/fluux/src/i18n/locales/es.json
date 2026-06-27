@@ -617,6 +617,7 @@
         "categories": {
             "profile": "Perfil",
             "appearance": "Apariencia",
+            "accessibility": "Accesibilidad",
             "language": "Idioma y región",
             "notifications": "Notificaciones",
             "updates": "Actualizaciones",
@@ -643,6 +644,13 @@
             "blockFailed": "Error al bloquear usuario"
         },
         "appearance": "Apariencia",
+        "accessibility": "Accesibilidad",
+        "transparency": "Transparencia",
+        "transparencyFull": "Total",
+        "transparencyReduced": "Reducida",
+        "transparencyFullDescription": "Paneles de vidrio esmerilado para menús y diálogos.",
+        "transparencyReducedDescription": "Paneles sólidos sin desenfoque ni translucidez.",
+        "transparencySystemDescription": "Seguir la configuración de transparencia reducida del sistema.",
         "theme": "Tema",
         "themeDefault": "Tema predeterminado",
         "importTheme": "Importar tema",

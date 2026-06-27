@@ -615,6 +615,7 @@
         "categories": {
             "profile": "Профиль",
             "appearance": "Внешний вид",
+            "accessibility": "Доступность",
             "language": "Язык",
             "notifications": "Уведомления",
             "updates": "Обновления",
@@ -641,6 +642,13 @@
             "blockFailed": "Не удалось заблокировать пользователя"
         },
         "appearance": "Внешний вид",
+        "accessibility": "Доступность",
+        "transparency": "Прозрачность",
+        "transparencyFull": "Полная",
+        "transparencyReduced": "Уменьшенная",
+        "transparencyFullDescription": "Матовые стеклянные панели для меню и диалогов.",
+        "transparencyReducedDescription": "Непрозрачные панели без размытия или полупрозрачности.",
+        "transparencySystemDescription": "Использовать системный параметр уменьшения прозрачности.",
         "theme": "Тема",
         "themeDefault": "Тема по умолчанию",
         "importTheme": "Импортировать тему",

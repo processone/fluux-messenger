@@ -1,5 +1,6 @@
 export { ProfileSettings } from './ProfileSettings'
 export { AppearanceSettings } from './AppearanceSettings'
+export { AccessibilitySettings } from './AccessibilitySettings'
 export { LanguageSettings } from './LanguageSettings'
 export { NotificationsSettings } from './NotificationsSettings'
 export { UpdatesSettings } from './UpdatesSettings'

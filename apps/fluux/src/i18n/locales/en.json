@@ -615,6 +615,7 @@
         "categories": {
             "profile": "Profile",
             "appearance": "Appearance",
+            "accessibility": "Accessibility",
             "language": "Language & Region",
             "notifications": "Notifications",
             "updates": "Updates",
@@ -799,6 +800,13 @@
             "blockFailed": "Failed to block user"
         },
         "appearance": "Appearance",
+        "accessibility": "Accessibility",
+        "transparency": "Transparency",
+        "transparencyFull": "Full",
+        "transparencyReduced": "Reduced",
+        "transparencyFullDescription": "Frosted glass panels for menus and dialogs.",
+        "transparencyReducedDescription": "Solid panels, no blur or translucency.",
+        "transparencySystemDescription": "Follow your system reduce-transparency setting.",
         "theme": "Theme",
         "themeDefault": "Default theme",
         "importTheme": "Import theme",

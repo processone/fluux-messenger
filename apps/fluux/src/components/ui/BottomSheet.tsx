@@ -51,7 +51,7 @@ export function BottomSheet({
   return createPortal(
     <div
       data-modal="true"
-      className="fixed inset-0 bg-black/50 flex items-end justify-center z-50"
+      className="fixed inset-0 modal-scrim flex items-end justify-center z-50"
     >
       <button
         type="button"
@@ -64,7 +64,7 @@ export function BottomSheet({
         role="dialog"
         aria-modal="true"
         aria-label={ariaLabel}
-        className={`relative z-10 flex max-h-[90dvh] w-full max-w-lg mx-auto flex-col bg-fluux-sidebar rounded-t-2xl shadow-xl animate-sheet-up ${panelClassName ?? ''}`}
+        className={`relative z-10 flex max-h-[90dvh] w-full max-w-lg mx-auto flex-col fluux-glass rounded-t-2xl animate-sheet-up ${panelClassName ?? ''}`}
       >
         {/* Grab handle — affordance that the sheet is draggable/dismissable */}
         <div className="flex shrink-0 justify-center pt-2 pb-1">

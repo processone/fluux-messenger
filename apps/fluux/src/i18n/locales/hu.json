@@ -615,6 +615,7 @@
         "categories": {
             "profile": "Profil",
             "appearance": "Megjelenés",
+            "accessibility": "Akadálymentesség",
             "language": "Nyelv és régió",
             "notifications": "Értesítések",
             "updates": "Frissítések",
@@ -641,6 +642,13 @@
             "blockFailed": "Nem sikerült letiltani a felhasználót"
         },
         "appearance": "Megjelenés",
+        "accessibility": "Akadálymentesség",
+        "transparency": "Átlátszóság",
+        "transparencyFull": "Teljes",
+        "transparencyReduced": "Csökkentett",
+        "transparencyFullDescription": "Homályos üvegpanelek menükhöz és párbeszédpanelekhez.",
+        "transparencyReducedDescription": "Tömör panelek elmosódás vagy áttetsző hatás nélkül.",
+        "transparencySystemDescription": "A rendszer átlátszóság-csökkentési beállítása szerint.",
         "theme": "Téma",
         "themeDefault": "Alapértelmezett téma",
         "importTheme": "Téma importálása",

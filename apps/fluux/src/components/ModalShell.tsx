@@ -33,7 +33,7 @@ export function ModalShell({
   return (
     <div
       data-modal="true"
-      className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+      className="fixed inset-0 modal-scrim flex items-center justify-center z-50"
     >
       <button
         type="button"
@@ -42,7 +42,7 @@ export function ModalShell({
         onClick={onClose}
         className="absolute inset-0 cursor-default"
       />
-      <div className={`relative z-10 bg-fluux-sidebar rounded-lg shadow-xl w-full ${width} mx-4 ${panelClassName ?? ''}`}>
+      <div className={`relative z-10 fluux-glass rounded-lg w-full ${width} mx-4 ${panelClassName ?? ''}`}>
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-fluux-hover flex-shrink-0">
           <h2 className="text-lg font-semibold text-fluux-text">{title}</h2>
