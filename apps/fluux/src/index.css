@@ -461,10 +461,16 @@
   line-height: inherit;
 }
 
-/* Custom scrollbar styling */
+/* Custom scrollbar styling — thin gutter, auto-hiding thumb.
+   The thumb is transparent at rest and only painted while the container is
+   hovered or actively scrolling (the `[data-scrolling]` stamp comes from
+   scrollbarAutohide.ts). The 6px gutter is always reserved when a container
+   overflows, so revealing the thumb causes no layout shift (important for the
+   virtualized message list). transition is a progressive enhancement — WebKit
+   ignores it on older builds and simply toggles instantly. */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
 }
 
 ::-webkit-scrollbar-track {
@@ -472,20 +478,29 @@
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--scrollbar-thumb);
-  border-radius: 4px;
+  background: transparent;
+  border-radius: 3px;
+  transition: background-color 0.2s ease;
 }
 
-::-webkit-scrollbar-thumb:hover {
+:hover::-webkit-scrollbar-thumb,
+[data-scrolling]::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+}
+
+:hover::-webkit-scrollbar-thumb:hover,
+[data-scrolling]::-webkit-scrollbar-thumb:hover {
   background: var(--scrollbar-thumb-hover);
 }
 
-/* Sidebar scrollbar — more visible on dark sidebar background */
-.sidebar-scroll::-webkit-scrollbar-thumb {
+/* Sidebar scrollbar — keeps its own (theme-specific) thumb color when revealed. */
+.sidebar-scroll:hover::-webkit-scrollbar-thumb,
+.sidebar-scroll[data-scrolling]::-webkit-scrollbar-thumb {
   background: var(--fluux-scrollbar-thumb-sidebar);
 }
 
-.sidebar-scroll::-webkit-scrollbar-thumb:hover {
+.sidebar-scroll:hover::-webkit-scrollbar-thumb:hover,
+.sidebar-scroll[data-scrolling]::-webkit-scrollbar-thumb:hover {
   background: var(--fluux-scrollbar-thumb-sidebar-hover);
 }
 
