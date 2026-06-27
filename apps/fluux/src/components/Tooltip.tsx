@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { useIsMobileWeb } from '../hooks/useIsMobileWeb'
+import { onDismissAllTooltips } from '../utils/tooltipBus'
 
 export type TooltipPosition = 'top' | 'bottom' | 'left' | 'right'
 
@@ -89,6 +90,13 @@ export function Tooltip({
     if (effectiveDisabled) return
     setIsVisible(v => !v)
   }
+
+  // Dismiss on the global tooltip-bus signal (fired when a modal such as the
+  // Cmd-K command palette opens). hideTooltip also cancels a pending show, so a
+  // tooltip whose delay is still counting down won't pop up over the modal.
+  // Always mounted (not gated on isVisible) so pending-but-not-yet-visible
+  // tooltips are caught too.
+  useEffect(() => onDismissAllTooltips(hideTooltip), [hideTooltip])
 
   // Hide tooltip on scroll, window blur, or any pointer down — these events
   // can cause the trigger to move or disappear without firing mouseLeave.

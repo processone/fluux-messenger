@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { render, screen, fireEvent, act } from '@testing-library/react'
 import { Tooltip, SimpleTooltip } from './Tooltip'
+import { dismissAllTooltips } from '../utils/tooltipBus'
 
 describe('Tooltip', () => {
   afterEach(() => {
@@ -80,6 +81,59 @@ describe('Tooltip', () => {
       fireEvent.mouseLeave(trigger)
 
       // Complete the delay
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(250)
+      })
+
+      expect(screen.queryByRole('tooltip')).not.toBeInTheDocument()
+    })
+  })
+
+  describe('global dismiss (tooltip bus)', () => {
+    it('hides a visible tooltip when dismissAllTooltips() fires', async () => {
+      vi.useFakeTimers()
+      render(
+        <Tooltip content="Test tooltip" delay={0}>
+          <button>Hover me</button>
+        </Tooltip>
+      )
+
+      const trigger = screen.getByText('Hover me').parentElement!
+      fireEvent.mouseEnter(trigger)
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0)
+      })
+
+      expect(screen.getByRole('tooltip')).toBeInTheDocument()
+
+      act(() => {
+        dismissAllTooltips()
+      })
+
+      expect(screen.queryByRole('tooltip')).not.toBeInTheDocument()
+    })
+
+    it('cancels a pending tooltip so it never appears over a modal', async () => {
+      vi.useFakeTimers()
+      render(
+        <Tooltip content="Test tooltip" delay={500}>
+          <button>Hover me</button>
+        </Tooltip>
+      )
+
+      const trigger = screen.getByText('Hover me').parentElement!
+      fireEvent.mouseEnter(trigger)
+
+      // Delay still counting down — a modal opens and dismisses tooltips.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(250)
+      })
+      act(() => {
+        dismissAllTooltips()
+      })
+
+      // Complete the original delay: the tooltip must NOT pop up afterwards.
       await act(async () => {
         await vi.advanceTimersByTimeAsync(250)
       })

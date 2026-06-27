@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { dismissAllTooltips } from '../utils/tooltipBus'
 
 /**
  * App-level modal state.
@@ -64,9 +65,19 @@ const ALL_CLOSED = {
 
 export const useModalStore = create<ModalStoreState>((set, get) => ({
   ...ALL_CLOSED,
-  open: (modal) => set({ [modal]: true } as Pick<ModalStoreState, ModalName>),
+  open: (modal) => {
+    // A modal floats above the UI, but hover tooltips portal even higher and
+    // are never dismissed by a keyboard-opened modal — clear them on open so
+    // none linger over the command palette etc.
+    dismissAllTooltips()
+    set({ [modal]: true } as Pick<ModalStoreState, ModalName>)
+  },
   close: (modal) => set({ [modal]: false } as Pick<ModalStoreState, ModalName>),
-  toggle: (modal) => set((s) => ({ [modal]: !s[modal] } as Pick<ModalStoreState, ModalName>)),
+  toggle: (modal) =>
+    set((s) => {
+      if (!s[modal]) dismissAllTooltips()
+      return { [modal]: !s[modal] } as Pick<ModalStoreState, ModalName>
+    }),
   closeAll: () => set({ ...ALL_CLOSED }),
   closeTopmost: () => {
     const s = get()
