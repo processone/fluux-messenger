@@ -321,11 +321,16 @@ test.describe('Virtualization scroll invariants', () => {
     // Trigger load-older by scrolling to top (handleScroll at scrollTop=0 calls triggerLoadOlder)
     await scrollToTopAndLoad(page)
 
-    // Wait for 80ms mock network delay + store update + React re-render + useLayoutEffect restore.
-    // The spacer must grow before we check scrollTop.
+    // Wait for the load-older batch to actually land: 80ms mock network delay + store update +
+    // React re-render + useLayoutEffect restore. The threshold must be well ABOVE the spacer
+    // jitter caused by rows re-measuring as they mount on scroll-to-top (~300px) — otherwise the
+    // wait resolves on that jitter BEFORE the batch merges (the 80ms delay lands after), and the
+    // sample below sees only a partial gain (the flake: "spacer grew by only ~300px"). A real BATCH
+    // is ~3200px (50 × 64px estimate); 1500px cleanly clears the jitter while staying below one
+    // batch, so it fires only once the batch is in.
     await page.waitForFunction((spacer) => {
       const sp = document.querySelector('[data-virtualizer-spacer]') as HTMLElement | null
-      return sp ? sp.offsetHeight > spacer + 100 : false
+      return sp ? sp.offsetHeight > spacer + 1500 : false
     }, spacerBefore, { timeout: 5_000 })
 
     const debugAfter = await getDebugState(page)
