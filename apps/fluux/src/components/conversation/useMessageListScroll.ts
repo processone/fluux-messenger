@@ -632,6 +632,31 @@ export function useMessageListScroll({
     }
   }, [pinVirtualizedBottom])
 
+  // Re-pin to the bottom when the VIEWPORT itself shrinks (or grows) under a list
+  // that is following along — most importantly when the mobile on-screen keyboard
+  // deploys. The keyboard shrinks the scroller's clientHeight WITHOUT changing the
+  // content height, so the content ResizeObserver above never fires and the latest
+  // message slides out of view behind the composer/keyboard. window 'resize' fires
+  // when the layout viewport resizes (Android, resizing webviews); visualViewport
+  // 'resize' covers the overlay-keyboard case (iOS). Reasserts directly (no rAF
+  // coalescing) to match the new-message / typing re-pin sites — a window 'resize'
+  // handler is not a ResizeObserver callback, so a synchronous scroll write here is
+  // safe. Gated on isAtBottomRef so a reader who scrolled up to history is not
+  // yanked back down.
+  useEffect(() => {
+    if (staticMode) return
+    const onViewportResize = () => {
+      if (isAtBottomRef.current) reassertBottom()
+    }
+    window.addEventListener('resize', onViewportResize)
+    const vv = window.visualViewport
+    vv?.addEventListener('resize', onViewportResize)
+    return () => {
+      window.removeEventListener('resize', onViewportResize)
+      vv?.removeEventListener('resize', onViewportResize)
+    }
+  }, [staticMode, isAtBottomRef, reassertBottom])
+
   // ==========================================================================
   // LOAD OLDER MESSAGES
   // ==========================================================================

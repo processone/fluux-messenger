@@ -578,6 +578,84 @@ describe('MessageList scroll behavior', () => {
     })
   })
 
+  describe('viewport resize (keyboard deploy)', () => {
+    // The on-screen keyboard shrinks the SCROLLER viewport without changing content
+    // height, so the content ResizeObserver never fires. A window/visualViewport
+    // resize listener must re-pin to the bottom when the user was following along —
+    // otherwise the latest message slides behind the keyboard/composer.
+    function mountAtBottom(scrollSpy: ReturnType<typeof vi.fn<(v: number) => void>>) {
+      const messages = createTestMessages(5)
+      render(
+        <MessageList
+          messages={messages}
+          conversationId="conv-1"
+          clearFirstNewMessageId={vi.fn()}
+          renderMessage={(msg) => <div key={msg.id}>{msg.body}</div>}
+        />
+      )
+      const container = document.querySelector('.overflow-y-auto') as HTMLDivElement
+      let scrollTopValue = 500 // at bottom: scrollHeight 1000 - clientHeight 500
+      Object.defineProperty(container, 'scrollHeight', { value: 1000, configurable: true })
+      Object.defineProperty(container, 'clientHeight', { value: 500, configurable: true })
+      Object.defineProperty(container, 'scrollTop', {
+        get: () => scrollTopValue,
+        set: (v) => { scrollTopValue = v; scrollSpy(v) },
+        configurable: true,
+      })
+      return { container, setScrollTop: (v: number) => { scrollTopValue = v } }
+    }
+
+    it('re-pins to the bottom on window resize when the user is at the bottom', () => {
+      const scrollSpy = vi.fn()
+      const { container } = mountAtBottom(scrollSpy)
+
+      // Confirm at-bottom state from a scroll event
+      act(() => { container.dispatchEvent(new Event('scroll')) })
+      scrollSpy.mockClear()
+
+      // Keyboard deploys: viewport shrinks -> window resize fires
+      act(() => { window.dispatchEvent(new Event('resize')) })
+
+      expect(scrollSpy).toHaveBeenCalledWith(1000)
+    })
+
+    it('re-pins to the bottom on visualViewport resize when the user is at the bottom', () => {
+      const realVV = window.visualViewport
+      const listeners = new Set<EventListener>()
+      const fakeVV = {
+        addEventListener: (_t: string, cb: EventListener) => listeners.add(cb),
+        removeEventListener: (_t: string, cb: EventListener) => listeners.delete(cb),
+      }
+      Object.defineProperty(window, 'visualViewport', { value: fakeVV, configurable: true })
+      try {
+        const scrollSpy = vi.fn()
+        const { container } = mountAtBottom(scrollSpy)
+        act(() => { container.dispatchEvent(new Event('scroll')) })
+        scrollSpy.mockClear()
+
+        act(() => { listeners.forEach((cb) => cb(new Event('resize'))) })
+
+        expect(scrollSpy).toHaveBeenCalledWith(1000)
+      } finally {
+        Object.defineProperty(window, 'visualViewport', { value: realVV, configurable: true })
+      }
+    })
+
+    it('does NOT re-pin on window resize when the user has scrolled up', () => {
+      const scrollSpy = vi.fn()
+      const { container, setScrollTop } = mountAtBottom(scrollSpy)
+
+      // User scrolled up (distance from bottom > threshold)
+      setScrollTop(200)
+      act(() => { container.dispatchEvent(new Event('scroll')) })
+      scrollSpy.mockClear()
+
+      act(() => { window.dispatchEvent(new Event('resize')) })
+
+      expect(scrollSpy).not.toHaveBeenCalled()
+    })
+  })
+
   describe('scroll-to-top lazy loading', () => {
     it('should call onScrollToTop when scrolling up while at top (wheel event)', () => {
       const messages = createTestMessages(10)
