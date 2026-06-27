@@ -4,14 +4,17 @@ import { Clock } from 'lucide-react'
 /**
  * Displays a marker indicating the beginning of conversation history.
  * Shown when all server-side message history has been loaded (MAM complete).
+ *
+ * Mirrors the leading-aligned DateSeparator layout: the label sits on the
+ * reading-start edge and the rule trails toward the end edge. Relies on flex
+ * flow + logical spacing so it mirrors correctly under RTL.
  */
 export function HistoryStartMarker() {
   const { t } = useTranslation()
 
   return (
     <div className="flex items-center gap-3 py-4 px-2">
-      <div className="flex-1 h-px bg-fluux-hover" />
-      <div className="flex items-center gap-2 text-xs text-fluux-muted">
+      <div className="flex items-center gap-2 text-xs text-fluux-muted whitespace-nowrap">
         <Clock className="size-3.5" />
         <span>{t('chat.historyStart')}</span>
       </div>
