@@ -22,9 +22,11 @@ export function useLoginPrefillDeepLink(): void {
 
     const apply = (urls: string[]) => {
       for (const url of urls) {
+        console.log('[LoginPrefill] Received URL:', url)
         const prefill = loginPrefillFromXmppUri(url)
         if (prefill) {
           useLoginPrefillStore.getState().setPrefill(prefill)
+          // Use only the first valid xmpp: URL; additional URLs in the batch are ignored.
           break
         }
       }
@@ -38,6 +40,7 @@ export function useLoginPrefillDeepLink(): void {
           unlisten()
           return
         }
+        // Listener is armed first (above) so a URL arriving while getCurrent() is in flight is not dropped.
         const initial = await getCurrent()
         if (initial && initial.length > 0) apply(initial)
         cleanup = unlisten
