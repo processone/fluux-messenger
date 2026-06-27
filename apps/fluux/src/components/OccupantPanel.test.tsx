@@ -4,6 +4,7 @@ import { OccupantPanel } from './OccupantPanel'
 import type { Room, RoomOccupant, Contact } from '@fluux/sdk'
 import { useIgnoreStore } from '@fluux/sdk/react'
 import { ignoreStore, type IgnoreState } from '@fluux/sdk/stores'
+import { auroraSenderColor } from '@/utils/senderColor'
 
 // Mock i18next
 vi.mock('react-i18next', () => ({
@@ -27,12 +28,19 @@ vi.mock('@/hooks', () => ({
     menuRef: { current: null },
     triggerHandlers: {},
   }),
+  useTheme: () => ({
+    isDark: true,
+    mode: 'dark',
+    resolvedMode: 'dark',
+    setMode: vi.fn(),
+    activeThemeId: 'aurora',
+  }),
 }))
 
-// Mock Avatar component
+// Mock Avatar component — exposes fallbackColor and fallbackTextColor as data attrs for assertions
 vi.mock('./Avatar', () => ({
-  Avatar: ({ name, presence }: { name: string; presence?: string }) => (
-    <div data-testid="avatar" data-name={name} data-presence={presence}>
+  Avatar: ({ name, presence, fallbackColor, fallbackTextColor }: { name: string; presence?: string; fallbackColor?: string; fallbackTextColor?: string }) => (
+    <div data-testid="avatar" data-name={name} data-presence={presence} data-fallback-color={fallbackColor} data-fallback-text-color={fallbackTextColor}>
       Avatar: {name}
     </div>
   ),
@@ -340,6 +348,47 @@ describe('OccupantPanel', () => {
       )
 
       expect(screen.getByText('user@example.com')).toBeInTheDocument()
+    })
+
+    it('colors a non-self occupant name with its Aurora sender color', () => {
+      // Use the real auroraSenderColor (not mocked) so the assertion proves byte-for-byte parity
+      // with the message list. useTheme mock returns isDark: true.
+      const expected = auroraSenderColor('Alice', true)
+      const occupants = new Map<string, RoomOccupant>([
+        ['alice@room', createOccupant({ nick: 'Alice' })],
+      ])
+      // room.nickname is 'Me' so Alice is non-self
+      const room = createRoom({ occupants, nickname: 'Me' })
+
+      render(
+        <OccupantPanel
+          room={room}
+          contactsByJid={new Map()}
+          onClose={() => {}}
+        />
+      )
+
+      const name = screen.getByText('Alice')
+      expect(name).toHaveStyle({ color: expected })
+    })
+
+    it('colors the Avatar fallbackColor of a non-self occupant with its Aurora sender color', () => {
+      const expected = auroraSenderColor('Alice', true)
+      const occupants = new Map<string, RoomOccupant>([
+        ['alice@room', createOccupant({ nick: 'Alice' })],
+      ])
+      const room = createRoom({ occupants, nickname: 'Me' })
+
+      render(
+        <OccupantPanel
+          room={room}
+          contactsByJid={new Map()}
+          onClose={() => {}}
+        />
+      )
+
+      const avatar = screen.getByTestId('avatar')
+      expect(avatar).toHaveAttribute('data-fallback-color', expected)
     })
   })
 

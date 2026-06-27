@@ -20,7 +20,9 @@ import { ignoreStore, type IgnoredUser } from '@fluux/sdk/stores'
 import { Avatar } from './Avatar'
 import { Tooltip } from './Tooltip'
 import { MenuButton, MenuDivider } from './sidebar-components/SidebarListMenu'
-import { useContextMenu, useWindowDrag } from '@/hooks'
+import { useContextMenu, useWindowDrag, useTheme } from '@/hooks'
+import { auroraSenderColor } from '@/utils/senderColor'
+import { bestTextColor } from '@/utils/contrastColor'
 import { useToastStore } from '@/stores/toastStore'
 import { getTranslatedShowText } from '@/utils/presence'
 import { detectRenderLoop } from '@/utils/renderLoopDetector'
@@ -78,6 +80,7 @@ interface OccupantRowProps {
   roomNickname: string
   ownAvatar?: string | null
   forceOffline: boolean
+  isDark: boolean
   contactsByJid: Map<string, ContactIdentity>
   ignored: boolean
   onContextMenu: (group: GroupedOccupant, e: React.MouseEvent) => void
@@ -106,6 +109,7 @@ function occupantRowPropsEqual(prev: OccupantRowProps, next: OccupantRowProps): 
     prev.roomNickname === next.roomNickname &&
     prev.ownAvatar === next.ownAvatar &&
     prev.forceOffline === next.forceOffline &&
+    prev.isDark === next.isDark &&
     prev.contactsByJid === next.contactsByJid &&
     prev.ignored === next.ignored &&
     prev.onContextMenu === next.onContextMenu &&
@@ -121,6 +125,7 @@ const OccupantRow = memo(function OccupantRow({
   roomNickname,
   ownAvatar,
   forceOffline,
+  isDark,
   contactsByJid,
   ignored,
   onContextMenu,
@@ -132,6 +137,12 @@ const OccupantRow = memo(function OccupantRow({
   const primaryOccupant = group.connections[0]
   const hasMultipleConnections = group.connections.length > 1
   const isMe = group.connections.some(conn => conn.nick === roomNickname)
+
+  // Per-person hue: same deterministic color the message list uses for this nick,
+  // keyed on primaryNick + isDark. Derived as a plain string — memo still bails for
+  // unchanged rows; when isDark flips all rows correctly re-render.
+  const identityColor = isMe ? undefined : auroraSenderColor(group.primaryNick, isDark)
+  const nameColor = isMe ? 'var(--fluux-text-self)' : identityColor!
 
   // Get occupant avatar from XEP-0398 or fall back to contact avatar
   const occupantAvatar = group.connections.find(c => c.avatar)?.avatar
@@ -186,7 +197,9 @@ const OccupantRow = memo(function OccupantRow({
           size="sm"
           presence={getPresenceFromShow(group.bestPresence)}
           presenceBorderColor="border-fluux-sidebar"
-          fallbackColor={isMe ? 'var(--fluux-bg-accent)' : undefined}
+          presenceHalo
+          fallbackColor={isMe ? 'var(--fluux-bg-accent)' : identityColor}
+          fallbackTextColor={isMe ? undefined : bestTextColor(identityColor!)}
           forceOffline={forceOffline}
         />
 
@@ -194,7 +207,7 @@ const OccupantRow = memo(function OccupantRow({
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5 flex-wrap">
             {isMe ? (
-              <span className="truncate text-sm font-semibold text-fluux-text">
+              <span className="truncate text-sm font-semibold" style={{ color: nameColor }}>
                 {group.primaryNick}
                 <span className="text-fluux-muted font-normal"> {t('rooms.you')}</span>
               </span>
@@ -206,7 +219,7 @@ const OccupantRow = memo(function OccupantRow({
                 role={primaryOccupant.role}
                 affiliation={bestAffiliation as RoomAffiliation}
               >
-                <span className="truncate text-sm text-fluux-text">
+                <span className="truncate text-sm" style={{ color: nameColor }}>
                   {group.primaryNick}
                 </span>
               </UserInfoPopover>
@@ -288,6 +301,7 @@ export function OccupantPanel({
 }: OccupantPanelProps) {
   detectRenderLoop('OccupantPanel')
   const { t } = useTranslation()
+  const { isDark } = useTheme()
   const connectionStatus = useConnectionStore((s) => s.status)
   const forceOffline = connectionStatus !== 'online'
   const { titleBarClass } = useWindowDrag()
@@ -549,6 +563,7 @@ export function OccupantPanel({
             roomNickname={room.nickname}
             ownAvatar={ownAvatar}
             forceOffline={forceOffline}
+            isDark={isDark}
             contactsByJid={contactsByJid}
             ignored={isOccupantIgnored(item.group)}
             onContextMenu={rowHandlers.onContextMenu}
