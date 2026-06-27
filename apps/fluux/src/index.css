@@ -505,10 +505,16 @@ em-emoji-picker {
   line-height: inherit;
 }
 
-/* Custom scrollbar styling */
+/* Custom scrollbar styling — thin gutter, auto-hiding thumb.
+   The thumb is transparent at rest and only painted while the container is
+   hovered or actively scrolling (the `[data-scrolling]` stamp comes from
+   scrollbarAutohide.ts). The 6px gutter is always reserved when a container
+   overflows, so revealing the thumb causes no layout shift (important for the
+   virtualized message list). transition is a progressive enhancement — WebKit
+   ignores it on older builds and simply toggles instantly. */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
 }
 
 ::-webkit-scrollbar-track {
@@ -516,20 +522,43 @@ em-emoji-picker {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--scrollbar-thumb);
-  border-radius: 4px;
+  background: transparent;
+  border-radius: 3px;
+  transition: background-color 0.2s ease;
 }
 
-::-webkit-scrollbar-thumb:hover {
+:hover::-webkit-scrollbar-thumb,
+[data-scrolling]::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+}
+
+:hover::-webkit-scrollbar-thumb:hover,
+[data-scrolling]::-webkit-scrollbar-thumb:hover {
   background: var(--scrollbar-thumb-hover);
 }
 
-/* Sidebar scrollbar — more visible on dark sidebar background */
-.sidebar-scroll::-webkit-scrollbar-thumb {
+/* Sidebar list rows. Horizontal padding stays a utility (px-2); the density-
+ * varying vertical padding + gap live here so a [data-density] flip needs no
+ * row re-render. Comfortable is the default. */
+.sidebar-row { padding-block: 8px; column-gap: 12px; }
+[data-density="compact"] .sidebar-row { padding-block: 4px; column-gap: 8px; }
+
+/* Icon rail density. Width + button + icon shrink in compact. */
+.icon-rail { width: 56px; }
+.icon-rail-btn { width: 40px; height: 40px; }
+.icon-rail-btn svg { width: 20px; height: 20px; }
+[data-density="compact"] .icon-rail { width: 48px; }
+[data-density="compact"] .icon-rail-btn { width: 36px; height: 36px; }
+[data-density="compact"] .icon-rail-btn svg { width: 18px; height: 18px; }
+
+/* Sidebar scrollbar — keeps its own (theme-specific) thumb color when revealed. */
+.sidebar-scroll:hover::-webkit-scrollbar-thumb,
+.sidebar-scroll[data-scrolling]::-webkit-scrollbar-thumb {
   background: var(--fluux-scrollbar-thumb-sidebar);
 }
 
-.sidebar-scroll::-webkit-scrollbar-thumb:hover {
+.sidebar-scroll:hover::-webkit-scrollbar-thumb:hover,
+.sidebar-scroll[data-scrolling]::-webkit-scrollbar-thumb:hover {
   background: var(--fluux-scrollbar-thumb-sidebar-hover);
 }
 

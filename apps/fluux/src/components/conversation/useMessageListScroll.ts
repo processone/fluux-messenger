@@ -27,7 +27,27 @@ import { notifyUserInput } from '@/utils/renderLoopDetector'
 // DEBUG
 // ============================================================================
 
-const DEBUG = false
+// Off by default. Toggle at runtime from the devtools console without a rebuild:
+//   __fluuxScrollDebug(true)   → start logging
+//   __fluuxScrollDebug(false)  → stop
+// Or persist across reloads with: localStorage.setItem('fluux:scroll-debug', '1')
+let DEBUG = (() => {
+  if (typeof window === 'undefined') return false
+  try {
+    return window.localStorage?.getItem('fluux:scroll-debug') === '1'
+  } catch {
+    return false
+  }
+})()
+
+if (typeof window !== 'undefined') {
+  ;(window as Window & { __fluuxScrollDebug?: (on?: boolean) => void }).__fluuxScrollDebug = (
+    on = true
+  ) => {
+    DEBUG = on
+    console.warn(`[Scroll] debug ${on ? 'ENABLED' : 'disabled'}`)
+  }
+}
 
 function debugLog(action: string, data?: Record<string, unknown>) {
   if (DEBUG) {
@@ -594,20 +614,47 @@ export function useMessageListScroll({
 
     // Immediate pin (pre-paint when called from a layout effect).
     virt.scrollToIndex(virt.itemCount - 1, { align: 'end' })
+    debugLog('PIN start', {
+      itemCount: virt.itemCount,
+      distFromBottom: scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight,
+    })
 
     const startedAt = Date.now()
     const loop = (reassertMonitorRef.current ??= createReassertLoopMonitor()).begin('pin-bottom', performance.now())
     let framesLeft = BOTTOM_REASSERT_FRAMES
     let lastHeight = scroller.scrollHeight
     const step = () => {
-      if (framesLeft-- <= 0) { loop.end(); return }
       const s = scrollerRef.current
+      if (framesLeft-- <= 0) {
+        // Loop ran to completion without being interrupted. If distFromBottom is still > the
+        // tolerance here, the pin never converged (the just-sent message ended up below the fold).
+        if (s) {
+          debugLog('PIN settled (frames exhausted)', {
+            distFromBottom: s.scrollHeight - s.scrollTop - s.clientHeight,
+          })
+        }
+        loop.end()
+        return
+      }
       const v = virtualizerRef.current
       if (!s || !v || v.itemCount === 0) { loop.end(); return }
       // User took over (FAB/wheel intent recorded after we started, or they scrolled away from
       // the bottom) → stop fighting them. Programmatic growth doesn't move scrollTop, so it never
       // flips isAtBottom; only a genuine user scroll up does.
-      if (userScrollIntentAtRef.current > startedAt || !isAtBottomRef.current) { loop.end(); return }
+      if (userScrollIntentAtRef.current > startedAt) {
+        debugLog('PIN bail (user scroll intent)', {
+          distFromBottom: s.scrollHeight - s.scrollTop - s.clientHeight,
+        })
+        loop.end()
+        return
+      }
+      if (!isAtBottomRef.current) {
+        debugLog('PIN bail (not at bottom)', {
+          distFromBottom: s.scrollHeight - s.scrollTop - s.clientHeight,
+        })
+        loop.end()
+        return
+      }
       const h = s.scrollHeight
       // Re-pin when the layout grew/shrank (the common case) OR when we're still measurably short
       // of the true bottom. The latter catches the frame the change-detection guard alone misses —
@@ -616,6 +663,7 @@ export function useMessageListScroll({
       const dist = h - s.scrollTop - s.clientHeight
       let wrote = false
       if (h !== lastHeight || dist > BOTTOM_PIN_TOLERANCE) {
+        debugLog('PIN re-assert', { distFromBottom: dist, heightChanged: h !== lastHeight })
         lastHeight = h
         v.scrollToIndex(v.itemCount - 1, { align: 'end' })
         wrote = true
@@ -1650,6 +1698,8 @@ export function useMessageListScroll({
         isAtBottom: isAtBottomRef.current,
         outgoing: lastMessageIsOutgoing,
         scrollTopBefore: scroller.scrollTop,
+        distFromBottomBefore:
+          scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight,
       })
       isAtBottomRef.current = true // a send from a scrolled-up position lands us at the bottom
       reassertBottom()
@@ -1658,6 +1708,18 @@ export function useMessageListScroll({
         messageCount,
         prevCount: prevMessageCountRef.current,
         isAtBottom: isAtBottomRef.current,
+      })
+    } else if (lastMessageIsOutgoing) {
+      // The last message is the user's own send but messageCount did NOT increase past the
+      // previous count, so this effect treats it as "not new" and never re-pins. Prime suspect
+      // for "I sent a message and the view didn't stick to bottom": the optimistic message was
+      // already counted on a prior render, or a reconciliation replaced a row in place. Logged
+      // so the troubleshooting phase can tell this apart from a failed pin.
+      debugLog('NEW MSG SKIPPED (outgoing but count did not grow)', {
+        messageCount,
+        prevCount: prevMessageCountRef.current,
+        isAtBottom: isAtBottomRef.current,
+        distFromBottom: scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight,
       })
     }
 

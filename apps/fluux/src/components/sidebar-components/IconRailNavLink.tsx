@@ -38,7 +38,7 @@ export function IconRailNavLink({
         aria-label={label}
         data-nav={view}
         className={`
-          relative size-10 rounded-xl flex items-center justify-center transition-colors
+          icon-rail-btn relative rounded-xl flex items-center justify-center transition-colors
           focus-visible:ring-2 focus-visible:ring-fluux-brand focus-visible:ring-offset-2 focus-visible:ring-offset-fluux-sidebar
           ${isActive
             ? 'bg-fluux-brand text-fluux-text-on-accent'
