@@ -20,6 +20,7 @@ import { scrollStateManager, type ScrollAnchor } from '@/utils/scrollStateManage
 import { createResizeLoopMonitor } from './resizeLoopMonitor'
 import { createSlowCorrectionMonitor } from './slowCorrectionMonitor'
 import { createReassertLoopMonitor } from './reassertLoopMonitor'
+import type { ReassertLoopHandle } from './reassertLoopMonitor'
 import type { MessageVirtualizer } from './messageVirtualizer'
 import { notifyUserInput } from '@/utils/renderLoopDetector'
 
@@ -253,6 +254,10 @@ export function useMessageListScroll({
   // surfaces a non-converging loop or two overlapping loops fighting over scrollTop on WebKit
   // (frame-coupled, so invisible to the headless harness and the other monitors). Never cancels.
   const reassertMonitorRef = useRef<ReturnType<typeof createReassertLoopMonitor> | null>(null)
+  // In-flight pin-bottom loop (rAF id + monitor handle), so a fresh pin can supersede it instead
+  // of running a second loop that fights the first over scrollTop (the overlap the monitor warns
+  // about). Single-flight: latest call wins with a fresh settle window.
+  const pinLoopRef = useRef<{ raf: number; handle: ReassertLoopHandle } | null>(null)
 
   // Track scroll position - always create internal ref to follow rules of hooks
   const internalIsAtBottomRef = useRef(true)
@@ -612,6 +617,19 @@ export function useMessageListScroll({
     const scroller = scrollerRef.current
     if (!virt || !scroller || virt.itemCount === 0) return
 
+    // Single-flight: supersede any pin-bottom loop still running from a previous call so two never
+    // run at once and fight over scrollTop (the overlap the reassert monitor warns about, and the
+    // suspected cause of a just-sent message not sticking to the bottom on WebKit). Cancel the
+    // in-flight loop's next frame and end its monitor handle; this call restarts with a fresh
+    // settle window. reassertBottom fires from several sites (new-message, typing, composer/viewport
+    // resize, media load) that can land within the ~1s window, so re-entry is routine.
+    if (pinLoopRef.current) {
+      cancelAnimationFrame(pinLoopRef.current.raf)
+      pinLoopRef.current.handle.end()
+      pinLoopRef.current = null
+      debugLog('PIN superseded in-flight loop')
+    }
+
     // Immediate pin (pre-paint when called from a layout effect).
     virt.scrollToIndex(virt.itemCount - 1, { align: 'end' })
     debugLog('PIN start', {
@@ -623,6 +641,10 @@ export function useMessageListScroll({
     const loop = (reassertMonitorRef.current ??= createReassertLoopMonitor()).begin('pin-bottom', performance.now())
     let framesLeft = BOTTOM_REASSERT_FRAMES
     let lastHeight = scroller.scrollHeight
+    const finish = () => {
+      loop.end()
+      pinLoopRef.current = null
+    }
     const step = () => {
       const s = scrollerRef.current
       if (framesLeft-- <= 0) {
@@ -633,11 +655,11 @@ export function useMessageListScroll({
             distFromBottom: s.scrollHeight - s.scrollTop - s.clientHeight,
           })
         }
-        loop.end()
+        finish()
         return
       }
       const v = virtualizerRef.current
-      if (!s || !v || v.itemCount === 0) { loop.end(); return }
+      if (!s || !v || v.itemCount === 0) { finish(); return }
       // User took over (FAB/wheel intent recorded after we started, or they scrolled away from
       // the bottom) → stop fighting them. Programmatic growth doesn't move scrollTop, so it never
       // flips isAtBottom; only a genuine user scroll up does.
@@ -645,14 +667,14 @@ export function useMessageListScroll({
         debugLog('PIN bail (user scroll intent)', {
           distFromBottom: s.scrollHeight - s.scrollTop - s.clientHeight,
         })
-        loop.end()
+        finish()
         return
       }
       if (!isAtBottomRef.current) {
         debugLog('PIN bail (not at bottom)', {
           distFromBottom: s.scrollHeight - s.scrollTop - s.clientHeight,
         })
-        loop.end()
+        finish()
         return
       }
       const h = s.scrollHeight
@@ -670,9 +692,9 @@ export function useMessageListScroll({
       }
       const warning = loop.frame(performance.now(), wrote)
       if (warning) console.warn(warning)
-      requestAnimationFrame(step)
+      pinLoopRef.current = { raf: requestAnimationFrame(step), handle: loop }
     }
-    requestAnimationFrame(step)
+    pinLoopRef.current = { raf: requestAnimationFrame(step), handle: loop }
   }, [isAtBottomRef])
 
   // Re-pin the list to the bottom after a layout change that grows the content or shrinks the
