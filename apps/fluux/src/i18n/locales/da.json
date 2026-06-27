@@ -889,6 +889,8 @@
             "title": "Avanceret",
             "warning": "Disse indstillinger er til avancerede brugere. Ændring af dem kan afbryde forbindelsen eller svække sikkerheden.",
             "empty": "Avancerede indstillinger vises her.",
+            "enable": "Aktivér avanceret tilstand",
+            "enableDescription": "Avanceret tilstand låser ekspertindstillinger op, f.eks. brugerdefinerede serverindstillinger og XMPP-konsollen.",
             "disableDescription": "Deaktivér avanceret tilstand for at skjule dette afsnit.",
             "disable": "Deaktivér avanceret tilstand"
         }

@@ -889,6 +889,8 @@
             "title": "高级",
             "warning": "这些选项面向高级用户。更改它们可能会中断连接或削弱安全性。",
             "empty": "高级选项将显示在此处。",
+            "enable": "启用高级模式",
+            "enableDescription": "高级模式解锁专家选项，例如自定义服务器设置和 XMPP 控制台。",
             "disableDescription": "关闭高级模式以隐藏此部分。",
             "disable": "关闭高级模式"
         }

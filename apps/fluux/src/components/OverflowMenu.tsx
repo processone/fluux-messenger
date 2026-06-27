@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { MoreVertical, type LucideIcon } from 'lucide-react'
+import { MoreVertical, Check, type LucideIcon } from 'lucide-react'
 import { useClickOutside } from '@/hooks/useClickOutside'
 
 export interface OverflowMenuItem {
@@ -14,6 +14,12 @@ export interface OverflowMenuItem {
   danger?: boolean
   /** Disables the item (no click, dimmed). */
   disabled?: boolean
+  /**
+   * When defined, the item is a checkable toggle: it renders with
+   * `role="menuitemcheckbox"`, reflects state via `aria-checked`, and shows a
+   * trailing check mark when `true`. Leave undefined for a plain action item.
+   */
+  active?: boolean
 }
 
 interface OverflowMenuProps {
@@ -78,10 +84,11 @@ export function OverflowMenu({
 
       {isOpen && (
         <div role="menu" className={menuClassName}>
-          {items.map(({ key, label, icon: Icon, onClick, danger, disabled }) => (
+          {items.map(({ key, label, icon: Icon, onClick, danger, disabled, active }) => (
             <button
               key={key}
-              role="menuitem"
+              role={active === undefined ? 'menuitem' : 'menuitemcheckbox'}
+              aria-checked={active === undefined ? undefined : active}
               type="button"
               disabled={disabled}
               onClick={() => {
@@ -92,6 +99,7 @@ export function OverflowMenu({
             >
               <Icon className="size-4 flex-shrink-0" />
               <span>{label}</span>
+              {active && <Check className="size-4 flex-shrink-0 ms-auto" aria-hidden="true" />}
             </button>
           ))}
         </div>

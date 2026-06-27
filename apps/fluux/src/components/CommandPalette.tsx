@@ -21,6 +21,7 @@ import type { PresenceStatus } from '@fluux/sdk'
 import type { SidebarView } from './Sidebar'
 import { Avatar } from './Avatar'
 import { useSettingsStore } from '@/stores/settingsStore'
+import { isAdvancedMode } from '@/stores/advancedModeStore'
 
 // =============================================================================
 // Types
@@ -351,7 +352,8 @@ function CommandPaletteContent({
       { id: 'action-join-room', label: t('rooms.joinRoom'), icon: <Plus />, action: () => closeAndNavigate('rooms'), keywords: ['join', 'room', 'muc'] },
       { id: 'action-settings', label: t('sidebar.settings'), icon: <Settings />, action: () => { onOpenSettings(); onClose() }, keywords: ['settings', 'preferences', 'options'] },
       { id: 'action-shortcuts', label: t('shortcuts.title'), icon: <HelpCircle />, action: () => { onToggleShortcutHelp(); onClose() }, keywords: ['shortcuts', 'keyboard', 'help'] },
-      { id: 'action-console', label: t('console.title'), icon: <Terminal />, action: () => { onToggleConsole(); onClose() }, keywords: ['console', 'xmpp', 'debug'] },
+      // Console is an advanced-only surface: hide the entry when advanced mode is off.
+      ...(isAdvancedMode() ? [{ id: 'action-console', label: t('console.title'), icon: <Terminal />, action: () => { onToggleConsole(); onClose() }, keywords: ['console', 'xmpp', 'debug'] }] : []),
     ]
 
     for (const a of actions) {

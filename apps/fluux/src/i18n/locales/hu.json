@@ -889,6 +889,8 @@
             "title": "Speciális",
             "warning": "Ezek a beállítások haladó felhasználóknak szólnak. Módosításuk megszakíthatja a kapcsolatot vagy gyengítheti a biztonságot.",
             "empty": "A speciális beállítások itt jelennek meg.",
+            "enable": "Speciális mód bekapcsolása",
+            "enableDescription": "A speciális mód feloldja a szakértői beállításokat, például az egyéni szerverkonfigurációt és az XMPP-konzolt.",
             "disableDescription": "Kapcsolja ki a speciális módot a szakasz elrejtéséhez.",
             "disable": "Speciális mód kikapcsolása"
         }

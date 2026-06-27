@@ -86,4 +86,30 @@ describe('OverflowMenu', () => {
     const { container } = render(<OverflowMenu ariaLabel="More actions" items={[]} />)
     expect(container).toBeEmptyDOMElement()
   })
+
+  it('renders an active toggle item with menuitemcheckbox role and aria-checked true', () => {
+    render(
+      <OverflowMenu
+        ariaLabel="More actions"
+        items={[{ key: 'adv', label: 'Advanced mode', icon: User, onClick: vi.fn(), active: true }]}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'More actions' }))
+    const item = screen.getByRole('menuitemcheckbox', { name: 'Advanced mode' })
+    expect(item).toHaveAttribute('aria-checked', 'true')
+  })
+
+  it('renders an inactive toggle item with aria-checked false', () => {
+    render(
+      <OverflowMenu
+        ariaLabel="More actions"
+        items={[{ key: 'adv', label: 'Advanced mode', icon: User, onClick: vi.fn(), active: false }]}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'More actions' }))
+    const item = screen.getByRole('menuitemcheckbox', { name: 'Advanced mode' })
+    expect(item).toHaveAttribute('aria-checked', 'false')
+  })
 })

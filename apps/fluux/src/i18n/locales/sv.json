@@ -889,6 +889,8 @@
             "title": "Avancerat",
             "warning": "Dessa inställningar är för avancerade användare. Att ändra dem kan bryta anslutningen eller försvaga säkerheten.",
             "empty": "Avancerade inställningar visas här.",
+            "enable": "Aktivera avancerat läge",
+            "enableDescription": "Avancerat läge låser upp expertinställningar, till exempel anpassade serverinställningar och XMPP-konsolen.",
             "disableDescription": "Stäng av avancerat läge för att dölja det här avsnittet.",
             "disable": "Stäng av avancerat läge"
         }

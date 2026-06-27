@@ -889,6 +889,8 @@
             "title": "Geavanceerd",
             "warning": "Deze opties zijn voor gevorderde gebruikers. Ze wijzigen kan de verbinding verstoren of de beveiliging verzwakken.",
             "empty": "Geavanceerde opties verschijnen hier.",
+            "enable": "Geavanceerde modus inschakelen",
+            "enableDescription": "De geavanceerde modus ontgrendelt expertopties zoals aangepaste serverinstellingen en de XMPP-console.",
             "disableDescription": "Schakel de geavanceerde modus uit om dit gedeelte te verbergen.",
             "disable": "Geavanceerde modus uitschakelen"
         }

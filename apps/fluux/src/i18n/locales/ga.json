@@ -889,6 +889,8 @@
             "title": "Ardleibhéal",
             "warning": "Tá na roghanna seo dírithe ar úsáideoirí ardleibhéil. Féadann a n-athrú an nasc a bhriseadh nó an tslándáil a lagú.",
             "empty": "Taispeánfar na roghanna ardleibhéil anseo.",
+            "enable": "Cumasaigh an mód ardleibhéil",
+            "enableDescription": "Osclaíonn an mód ardleibhéil roghanna saineolaithe cosúil le socruithe freastalaí saincheaptha agus consól XMPP.",
             "disableDescription": "Díchumasaigh an mód ardleibhéil chun an chuid seo a fholú.",
             "disable": "Díchumasaigh an mód ardleibhéil"
         }

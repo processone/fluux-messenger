@@ -891,6 +891,8 @@
             "title": "Avançado",
             "warning": "Estas opções destinam-se a utilizadores avançados. Alterá-las pode afetar a ligação ou enfraquecer a segurança.",
             "empty": "As opções avançadas aparecerão aqui.",
+            "enable": "Ativar o modo avançado",
+            "enableDescription": "O modo avançado desbloqueia opções avançadas como as definições de servidor personalizadas e a consola XMPP.",
             "disableDescription": "Desative o modo avançado para ocultar esta secção.",
             "disable": "Desativar o modo avançado"
         }

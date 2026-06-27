@@ -891,6 +891,8 @@
             "title": "Täpsem",
             "warning": "Need valikud on mõeldud kogenud kasutajatele. Nende muutmine võib ühenduse katkestada või turvalisust nõrgendada.",
             "empty": "Täpsemad valikud kuvatakse siin.",
+            "enable": "Lülita täpsem režiim sisse",
+            "enableDescription": "Täpsem režiim avab ekspertvalikud, nagu kohandatud serveri seaded ja XMPP-konsool.",
             "disableDescription": "Peida see jaotis, lülitades täpsema režiimi välja.",
             "disable": "Lülita täpsem režiim välja"
         }

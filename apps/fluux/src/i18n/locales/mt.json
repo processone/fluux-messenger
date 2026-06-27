@@ -891,6 +891,8 @@
             "title": "Avvanzat",
             "warning": "Dawn l-għażliet huma għal utenti avvanzati. Il-bidla tagħhom tista' tkisser il-konnessjoni jew iddgħajjef is-sigurtà.",
             "empty": "L-għażliet avvanzati se jidhru hawn.",
+            "enable": "Attiva l-modalità avvanzata",
+            "enableDescription": "Il-modalità avvanzata tiftaħ opcjonijiet tal-esperti bħall-impostazzjonijiet tal-server personalizzati u l-konsol XMPP.",
             "disableDescription": "Itfi l-modalità avvanzata biex taħbi din it-taqsima.",
             "disable": "Itfi l-modalità avvanzata"
         }

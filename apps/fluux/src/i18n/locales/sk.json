@@ -890,6 +890,8 @@
             "title": "Pokročilé",
             "warning": "Tieto možnosti sú určené pre pokročilých používateľov. Ich zmena môže narušiť pripojenie alebo oslabiť zabezpečenie.",
             "empty": "Pokročilé možnosti sa zobrazia tu.",
+            "enable": "Aktivovať pokročilý režim",
+            "enableDescription": "Pokročilý režim odomkne odborné možnosti, ako sú vlastné nastavenia servera a konzola XMPP.",
             "disableDescription": "Vypnite pokročilý režim, ak chcete túto sekciu skryť.",
             "disable": "Vypnúť pokročilý režim"
         }

@@ -889,6 +889,8 @@
             "title": "Išplėstiniai",
             "warning": "Šios parinktys skirtos pažengusiems naudotojams. Jas pakeitus gali nutrūkti ryšys arba susilpnėti sauga.",
             "empty": "Išplėstinės parinktys bus rodomos čia.",
+            "enable": "Įjungti išplėstinį režimą",
+            "enableDescription": "Išplėstinis režimas suteikia prieigą prie ekspertinių parinkčių, tokių kaip pasirinktiniai serverio nustatymai ir XMPP konsolė.",
             "disableDescription": "Išjunkite išplėstinį režimą, kad paslėptumėte šį skyrių.",
             "disable": "Išjungti išplėstinį režimą"
         }

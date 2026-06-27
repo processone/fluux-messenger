@@ -889,6 +889,8 @@
             "title": "Ítarlegt",
             "warning": "Þessir valkostir eru fyrir lengra komna notendur. Að breyta þeim getur rofið tenginguna eða veikt öryggi.",
             "empty": "Ítarlegir valkostir birtast hér.",
+            "enable": "Virkja ítarlegan ham",
+            "enableDescription": "Ítarlegur hamur opnar sérfræðivalkosti eins og sérsniðnar þjónustillegar og XMPP-stjórnborðið.",
             "disableDescription": "Slökktu á ítarlegum ham til að fela þennan hluta.",
             "disable": "Slökkva á ítarlegum ham"
         }

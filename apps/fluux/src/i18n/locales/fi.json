@@ -889,6 +889,8 @@
             "title": "Lisäasetukset",
             "warning": "Nämä asetukset on tarkoitettu kokeneille käyttäjille. Niiden muuttaminen voi katkaista yhteyden tai heikentää tietoturvaa.",
             "empty": "Lisäasetukset näkyvät tässä.",
+            "enable": "Ota edistynyt tila käyttöön",
+            "enableDescription": "Edistynyt tila avaa asiantuntija-asetukset, kuten mukautetut palvelinasetukset ja XMPP-konsolin.",
             "disableDescription": "Poista edistynyt tila käytöstä piilottaaksesi tämän osion.",
             "disable": "Poista edistynyt tila käytöstä"
         }

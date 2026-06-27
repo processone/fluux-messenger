@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react'
 import { useModalStore } from '@/stores/modalStore'
 import { chatStore, roomStore } from '@fluux/sdk'
 import { useSettingsStore } from '../stores/settingsStore'
+import { isAdvancedMode } from '@/stores/advancedModeStore'
 
 export interface ShortcutDefinition {
   key: string
@@ -335,7 +336,11 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions): Shor
       modifiers: [],
       description: 'shortcuts.toggleXmppConsole',
       category: 'general',
-      action: onToggleConsole,
+      // Read advanced-mode non-reactively at key-press time to avoid a render
+      // subscription. The console is an advanced-only surface: pressing F12
+      // while advanced mode is off is a no-op (avoids the open-then-close flash
+      // that would occur if the close-on-disable effect ran immediately after).
+      action: () => { if (isAdvancedMode()) onToggleConsole() },
     },
     {
       key: 'l',

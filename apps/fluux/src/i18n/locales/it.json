@@ -891,6 +891,8 @@
             "title": "Avanzate",
             "warning": "Queste opzioni sono per utenti esperti. Modificarle può compromettere la connessione o indebolire la sicurezza.",
             "empty": "Le opzioni avanzate appariranno qui.",
+            "enable": "Attiva la modalità avanzata",
+            "enableDescription": "La modalità avanzata sblocca opzioni avanzate come le impostazioni server personalizzate e la console XMPP.",
             "disableDescription": "Disattiva la modalità avanzata per nascondere questa sezione.",
             "disable": "Disattiva la modalità avanzata"
         }

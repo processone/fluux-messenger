@@ -889,6 +889,8 @@
             "title": "Napredno",
             "warning": "Ove su opcije namijenjene naprednim korisnicima. Njihova promjena može narušiti vezu ili oslabiti sigurnost.",
             "empty": "Napredne će se opcije pojaviti ovdje.",
+            "enable": "Uključi napredni način",
+            "enableDescription": "Napredni način otključava stručne mogućnosti kao što su prilagođene postavke poslužitelja i konzola XMPP.",
             "disableDescription": "Isključite napredni način kako biste sakrili ovaj odjeljak.",
             "disable": "Isključi napredni način"
         }

@@ -1,7 +1,6 @@
 import type { LucideIcon } from 'lucide-react'
 import { User, Palette, Globe, Bell, Download, Ban, HardDrive, Lock, ShieldCheck, Wrench, Accessibility } from 'lucide-react'
 import { isTauri, isUpdaterEnabled } from '@/utils/tauri'
-import { isAdvancedMode } from '@/stores/advancedModeStore'
 
 export type SettingsCategory =
   | 'profile'
@@ -24,8 +23,6 @@ export interface SettingsCategoryConfig {
   tauriOnly?: boolean
   /** Only show when in-app updater is enabled (macOS/Windows, not Linux) */
   updaterOnly?: boolean
-  /** Only show when advanced mode is unlocked (see advancedModeStore) */
-  advancedOnly?: boolean
 }
 
 export { isTauri }
@@ -41,7 +38,7 @@ export const SETTINGS_CATEGORIES: SettingsCategoryConfig[] = [
   { id: 'storage', labelKey: 'settings.categories.storage', icon: HardDrive, tauriOnly: true },
   { id: 'encryption', labelKey: 'settings.categories.encryption', icon: Lock },
   { id: 'updates', labelKey: 'settings.categories.updates', icon: Download, updaterOnly: true },
-  { id: 'advanced', labelKey: 'settings.categories.advanced', icon: Wrench, advancedOnly: true },
+  { id: 'advanced', labelKey: 'settings.categories.advanced', icon: Wrench },
 ]
 
 /**
@@ -52,7 +49,6 @@ export function getVisibleCategories(): SettingsCategoryConfig[] {
   return SETTINGS_CATEGORIES.filter(cat => {
     if (cat.tauriOnly && !isTauri()) return false
     if (cat.updaterOnly && !updaterEnabled) return false
-    if (cat.advancedOnly && !isAdvancedMode()) return false
     return true
   })
 }

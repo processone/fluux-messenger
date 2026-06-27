@@ -1,12 +1,12 @@
 import { create } from 'zustand'
 
 /**
- * Advanced mode — an opt-in flag that unlocks advanced/expert settings
- * throughout the app (e.g. the "Advanced" settings category).
+ * Advanced mode — an opt-in flag that unlocks advanced/expert surfaces
+ * throughout the app (e.g. the XMPP console, the "Advanced" settings category).
  *
- * It is toggled by a discreet "Advanced mode" checkbox on the login screen
- * (reachable on mobile as well as desktop) and can also be turned back off
- * from the Advanced settings category once unlocked.
+ * It is toggled by a kebab menu on the login screen. The Advanced settings
+ * category (always visible) also provides a toggle to turn it on or off at
+ * any time.
  *
  * Persisted to localStorage, mirroring the pattern used by settingsStore.
  */

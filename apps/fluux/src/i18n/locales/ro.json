@@ -891,6 +891,8 @@
             "title": "Avansat",
             "warning": "Aceste opțiuni sunt pentru utilizatori avansați. Modificarea lor poate afecta conexiunea sau slăbi securitatea.",
             "empty": "Opțiunile avansate vor apărea aici.",
+            "enable": "Activați modul avansat",
+            "enableDescription": "Modul avansat deblochează opțiuni avansate, cum ar fi setările de server personalizate și consola XMPP.",
             "disableDescription": "Dezactivați modul avansat pentru a ascunde această secțiune.",
             "disable": "Dezactivați modul avansat"
         }
