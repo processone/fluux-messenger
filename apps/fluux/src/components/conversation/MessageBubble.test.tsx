@@ -783,6 +783,25 @@ describe('Own-message tint', () => {
     const { container } = render(<MessageBubble {...props} />)
     expect(container.querySelector('.message-own-tint')).not.toBeInTheDocument()
   })
+
+  // Inside a whisper thread the rows already share one bounded "private with X"
+  // container (bg-fluux-private-soft + border-x). The own-tint sets its own
+  // `background` (overriding the purple fill) and widens the row via
+  // margin-inline: -0.5rem, so an outgoing whisper row would render with a
+  // mismatched blue fill and side-borders 8px out of alignment with the
+  // incoming rows — visually shattering the single card. The name header
+  // ("You" vs the counterpart) already carries the sender identity, so the
+  // tint must be suppressed in-thread.
+  it('does not apply the own-tint class to an outgoing whisper-thread row', () => {
+    const props = createDefaultProps({
+      message: createTestMessage({ isOutgoing: true }),
+      whisperThread: 'start',
+      whisperWith: 'Emma',
+      counterpartPresent: true,
+    })
+    const { container } = render(<MessageBubble {...props} />)
+    expect(container.querySelector('.message-own-tint')).not.toBeInTheDocument()
+  })
 })
 
 describe('Density spacing', () => {

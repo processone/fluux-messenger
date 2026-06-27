@@ -491,9 +491,14 @@ export const MessageBubble = memo(function MessageBubble({
         )}
       </div>
 
-      {/* Content */}
+      {/* Content. The own-message tint is suppressed inside a whisper thread
+          (`!inThread`): it sets its own `background` (overriding the bounded
+          card's purple fill) and widens the row via margin-inline, which would
+          mismatch the fill and knock the side borders 8px out of alignment with
+          the incoming rows — shattering the single "private with X" card. The
+          name header already carries the own-vs-counterpart distinction. */}
       <div
-        className={`relative flex-1 min-w-0 touch:select-none touch:[-webkit-touch-callout:none] ${isSelected || showActionSheet ? 'bg-fluux-selection -my-0.5 py-0.5 -ms-2 ps-2 -me-4 pe-4 rounded-s' : ''}${inThread ? ` bg-fluux-private-soft border-x border-fluux-private-border px-2.5 py-1 ${threadStart ? 'border-t rounded-t-lg' : ''} ${threadEnd ? 'border-b rounded-b-lg' : ''}` : ''} ${message.isOutgoing ? 'message-own-tint' : ''}`}
+        className={`relative flex-1 min-w-0 touch:select-none touch:[-webkit-touch-callout:none] ${isSelected || showActionSheet ? 'bg-fluux-selection -my-0.5 py-0.5 -ms-2 ps-2 -me-4 pe-4 rounded-s' : ''}${inThread ? ` bg-fluux-private-soft border-x border-fluux-private-border px-2.5 py-1 ${threadStart ? 'border-t rounded-t-lg' : ''} ${threadEnd ? 'border-b rounded-b-lg' : ''}` : ''} ${message.isOutgoing && !inThread ? 'message-own-tint' : ''}`}
         onTouchStart={handleContentTouchStart}
         onTouchEnd={cancelLongPress}
         onTouchMove={cancelLongPress}
