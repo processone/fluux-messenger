@@ -16,6 +16,10 @@ import { logStartupCapabilities } from './utils/startupDiagnostics'
 import { startStallSentinel } from './utils/stallSentinel'
 import { registerServiceWorker } from './utils/serviceWorkerUpdate'
 import { getReconnectIntent } from './utils/reconnectIntent'
+import { installScrollbarAutohide } from './utils/scrollbarAutohide'
+
+// Auto-hide scrollbars: paint the thumb only while hovering / scrolling.
+installScrollbarAutohide()
 
 // Check if running in Tauri
 const isTauri = '__TAURI_INTERNALS__' in window
