@@ -86,6 +86,13 @@ describe('sweepExpiredPassphrases', () => {
 
     await sweepExpiredPassphrases()
 
+    // Verify the sweep PHYSICALLY removed the expired record (rawRecord bypasses
+    // lazy-delete in loadCachedPassphrase, so this proves the sweep did the work).
+    expect(await rawRecord('bob@example.com')).toBeNull()
+    // Fresh record must still be stored in IndexedDB.
+    expect(await rawRecord('alice@example.com')).not.toBeNull()
+
+    // Behavioral assertions: fresh passphrase still loads; expired one does not.
     expect(await loadCachedPassphrase('alice@example.com')).toBe('fresh-secret')
     expect(await loadCachedPassphrase('bob@example.com')).toBeNull()
   })
