@@ -9,6 +9,7 @@ import { useTranslation } from 'react-i18next'
 import { CornerUpRight, AlertCircle, RefreshCw, Lock, ShieldAlert, Ear, UserX } from 'lucide-react'
 import { formatMessagePreview, formatXMPPError, getBareJid, type BaseMessage, type MentionReference, type Contact, type ContactIdentity, type RoomRole, type RoomAffiliation } from '@fluux/sdk'
 import { useVerifiedPeerKeysStore } from '@/stores/verifiedPeerKeysStore'
+import { useSettingsStore } from '@/stores/settingsStore'
 import { Avatar } from '../Avatar'
 import { AvatarLightbox } from '../AvatarLightbox'
 import { MessageToolbar } from './MessageToolbar'
@@ -341,6 +342,15 @@ export const MessageBubble = memo(function MessageBubble({
   )
   const displayTrust = resolveDisplayTrust(message.securityContext, verifiedFingerprint)
 
+  // Density-aware avatar: reads only `densityMode` (narrow selector) so this row
+  // only re-renders on a density change, NOT on message append or composing toggle.
+  // Do NOT add densityMode to arePropsEqual or thread it as a prop.
+  const densityMode = useSettingsStore((s) => s.densityMode)
+  const avatarSize = densityMode === 'compact' ? 'sm' : 'md'
+  const avatarColWidth = densityMode === 'compact'
+    ? (timeFormat === '12h' ? 'w-10' : 'w-8')
+    : (timeFormat === '12h' ? 'w-12' : 'w-10')
+
   const inThread = !!whisperThread
   const counterpartGone = inThread && counterpartPresent === false
 
@@ -403,7 +413,7 @@ export const MessageBubble = memo(function MessageBubble({
   const threadEnd = whisperThread === 'end' || whisperThread === 'solo'
   const outerRowClass = inThread
     ? `group flex gap-4 -mx-4 px-4 transition-colors ${threadStart ? 'pt-3' : ''} ${threadEnd ? 'pb-1.5' : ''}`
-    : `group flex gap-4 ${hoverClass} -mx-4 px-4 py-0.5 transition-colors ${showAvatar ? 'pt-4' : ''}`
+    : `group flex gap-4 ${hoverClass} -mx-4 px-4 py-0.5 transition-colors ${showAvatar ? 'message-group-start' : ''}`
 
   // Action capabilities — shared by the hover toolbar (MessageToolbar) and the
   // touch action sheet (MessageActionSheet) so the two surfaces stay in lock-step.
@@ -446,8 +456,8 @@ export const MessageBubble = memo(function MessageBubble({
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
     >
-      {/* Avatar, timestamp (when selected), or spacer - width adapts to time format */}
-      <div className={`${timeFormat === '12h' ? 'w-12' : 'w-10'} flex-shrink-0 flex flex-col`}>
+      {/* Avatar, timestamp (when selected), or spacer - width adapts to time format and density */}
+      <div className={`${avatarColWidth} flex-shrink-0 flex flex-col`}>
         {/* /me action messages always show timestamp instead of avatar */}
         {isActionMessage(message.body) ? (
           <span className={`block text-center text-[10px] text-fluux-muted font-mono pt-0.5 ${isSelected ? 'opacity-100' : hasKeyboardSelection ? 'opacity-0' : 'opacity-0 group-hover:opacity-100 touch:opacity-100'} transition-opacity`}>
@@ -469,7 +479,7 @@ export const MessageBubble = memo(function MessageBubble({
               name={senderName}
               avatarUrl={avatarUrl}
               fallbackColor={avatarFallbackColor}
-              size="md"
+              size={avatarSize}
               presence={avatarPresence}
               presenceBorderColor="border-fluux-chat"
             />

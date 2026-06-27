@@ -30,6 +30,7 @@
         "serverPlaceholderDesktop": "example.com or tls://host:port",
         "serverHint": "Leave empty to use domain from JID",
         "serverHintDesktop": "Leave empty to auto-detect. Supports domain, tls://host:port, tcp://host:port",
+        "linkSetServer": "A link set a custom server: {{host}}",
         "rememberMe": "Remember me",
         "storedInKeychain": "(stored in Keychain)",
         "staySignedIn": "(stay signed in)",

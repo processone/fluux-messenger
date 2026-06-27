@@ -30,6 +30,7 @@
         "serverPlaceholderDesktop": "exemple.com o tls://servidor:port",
         "serverHint": "Deixa-ho buit per fer servir el domini del JID",
         "serverHintDesktop": "Deixa-ho buit per autodetectar. Suporta domini, tls://servidor:port, tcp://servidor:port",
+        "linkSetServer": "Un enllaç ha definit un servidor personalitzat: {{host}}",
         "rememberMe": "Recorda'm",
         "storedInKeychain": "(desat al clauer)",
         "staySignedIn": "(mantenir la sessió)",

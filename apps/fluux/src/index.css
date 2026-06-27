@@ -556,6 +556,11 @@ em-emoji-picker {
 .sidebar-row { padding-block: 8px; column-gap: 12px; }
 [data-density="compact"] .sidebar-row { padding-block: 4px; column-gap: 8px; }
 
+/* Message group-start spacing. The vertical gap before a new sender group;
+ * tightens in compact. Comfortable keeps the current 16px. */
+.message-group-start { padding-top: 16px; }
+[data-density="compact"] .message-group-start { padding-top: 8px; }
+
 /* Icon rail density. Width + button + icon shrink in compact. */
 .icon-rail {
   width: 56px;

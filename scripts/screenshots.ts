@@ -124,6 +124,15 @@ test('3x — Conversation List Compact (dark)', async ({ page }) => {
   await capture(page, '3x-conversation-list-compact-dark')
 })
 
+test('3y — Chat Compact (dark)', async ({ page }) => {
+  // Compact message pane: smaller avatars (sm/32px) and tighter group spacing (8px).
+  // Compare with 01-chat-dark (comfortable) to see the density difference.
+  await waitForDemoReady(page, 'dark', DEMO_URL + '&density=compact')
+  await navigateTo(page, 'messages')
+  await selectItem(page, 'Emma Wilson')
+  await capture(page, '3y-chat-compact-dark')
+})
+
 test('04 — Contact Directory (dark)', async ({ page }) => {
   await waitForDemoReady(page)
   await navigateTo(page, 'directory')

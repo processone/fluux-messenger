@@ -30,6 +30,7 @@
         "serverPlaceholderDesktop": "example.com או tls://host:port",
         "serverHint": "השאר ריק לשימוש בדומיין מה-JID",
         "serverHintDesktop": "השאר ריק לזיהוי אוטומטי. תומך בדומיין, tls://host:port, tcp://host:port",
+        "linkSetServer": "קישור הגדיר שרת מותאם אישית: {{host}}",
         "rememberMe": "זכור אותי",
         "storedInKeychain": "(שמור ב-Keychain)",
         "staySignedIn": "(הישאר מחובר)",

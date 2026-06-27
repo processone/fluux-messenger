@@ -30,6 +30,7 @@
         "serverPlaceholderDesktop": "exemplo.com ou tls://host:porta",
         "serverHint": "Deixe em branco para usar o domínio do JID",
         "serverHintDesktop": "Deixe em branco para detectar automaticamente. Suporta domínio, tls://host:porta, tcp://host:porta",
+        "linkSetServer": "Uma ligação definiu um servidor personalizado: {{host}}",
         "rememberMe": "Lembrar-me",
         "storedInKeychain": "(guardado no Keychain)",
         "staySignedIn": "(manter sessão)",

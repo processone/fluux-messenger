@@ -15,6 +15,8 @@ import { getReconnectIntent } from '@/utils/reconnectIntent'
 import { validateBareJid } from '@/utils/jidValidation'
 import { LoginErrorPanel } from './LoginErrorPanel'
 import { useAdvancedModeStore } from '@/stores/advancedModeStore'
+import { useLoginPrefillStore } from '@/stores/loginPrefillStore'
+import { useLoginPrefillDeepLink } from '@/hooks/useLoginPrefillDeepLink'
 
 const STORAGE_KEY_JID = 'xmpp-last-jid'
 const STORAGE_KEY_SERVER = 'xmpp-last-server'
@@ -60,6 +62,19 @@ function resolveServerForConnection(jid: string, server: string): string {
   const domain = getDomainFromJid(jid) || jid.split('@')[1] || ''
   if (!domain) return ''
   return getWebsocketUrlForDomain(domain) || domain
+}
+
+/**
+ * Display label for a link-supplied custom server, shown in the calm note.
+ * Returns the URL host when parseable (e.g. `tls://chat.example.com:5223` ->
+ * `chat.example.com:5223`), otherwise the raw value (bare domain, `host:port`).
+ */
+function serverHostLabel(server: string): string {
+  try {
+    return new URL(server).host || server
+  } catch {
+    return server
+  }
 }
 
 interface LoginScreenProps {
@@ -120,6 +135,15 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
   const advancedMode = useAdvancedModeStore((s) => s.advancedMode)
   const setAdvancedMode = useAdvancedModeStore((s) => s.setAdvancedMode)
 
+  // Login prefill from an xmpp: deep link (desktop) or URL params (web).
+  useLoginPrefillDeepLink()
+  const prefill = useLoginPrefillStore((s) => s.prefill)
+  const clearPrefill = useLoginPrefillStore((s) => s.clearPrefill)
+  // Host of a link-supplied custom server, shown as a calm note under the field.
+  const [linkServerHost, setLinkServerHost] = useState<string | null>(null)
+  // A link-supplied resource overrides getResource() at submit time.
+  const linkResourceRef = useRef<string | undefined>(undefined)
+
   // Check if running in Tauri and load credentials
   useEffect(() => {
     // Skip if already loaded (StrictMode protection)
@@ -140,20 +164,29 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
         setRememberMe(true)
       }
 
+      // Check if a link prefill is present (xmpp: deep link or URL params).
+      // If so, we'll let the prefill effect handle the JID/server seed — no flash.
+      // A link prefill represents explicit intent for a (possibly different)
+      // account, so do not auto-load / auto-connect saved keychain credentials.
+      const hasLinkPrefill = !!useLoginPrefillStore.getState().prefill
+
       // Load JID and server from localStorage first (fast, no prompt)
+      // Skip if a link prefill is present; it will override these values.
       const savedJid = localStorage.getItem(STORAGE_KEY_JID)
       const savedServer = localStorage.getItem(STORAGE_KEY_SERVER)
-      if (savedJid) setJid(savedJid)
-      // On web, ignore bare-domain server values (e.g. from desktop sessions)
-      // so well-known auto-fill can provide the correct WebSocket URL
-      const isWebSocketUrl = savedServer?.startsWith('ws://') || savedServer?.startsWith('wss://')
-      if (savedServer && (inTauri || isWebSocketUrl)) {
-        setServer(savedServer)
+      if (!hasLinkPrefill) {
+        if (savedJid) setJid(savedJid)
+        // On web, ignore bare-domain server values (e.g. from desktop sessions)
+        // so well-known auto-fill can provide the correct WebSocket URL
+        const isWebSocketUrl = savedServer?.startsWith('ws://') || savedServer?.startsWith('wss://')
+        if (savedServer && (inTauri || isWebSocketUrl)) {
+          setServer(savedServer)
+        }
       }
 
       // Try to load credentials from keychain (Tauri only)
       // Only check keychain if we previously saved credentials (avoids prompt on first run)
-      if (inTauri && hasSavedCredentials()) {
+      if (inTauri && hasSavedCredentials() && !hasLinkPrefill) {
         // Wait for browser to paint the login screen before triggering keychain prompt
         // Double requestAnimationFrame ensures the paint has completed
         await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))
@@ -208,6 +241,26 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
       setShowServerField(true)
     }
   }, [isLoadingCredentials, server])
+
+  // Apply a login prefill (xmpp: link / URL params). Runs after the localStorage
+  // and keychain seeds, so the link wins. One-shot: cleared after applying.
+  useEffect(() => {
+    if (!prefill) return
+    if (prefill.jid) setJid(prefill.jid)
+    if (prefill.server) {
+      setServer(prefill.server)
+      setShowServerField(true)
+      setHasManuallySetServer(true) // stop web auto-fill from clobbering the link value
+      setLinkServerHost(serverHostLabel(prefill.server))
+    }
+    if (prefill.resource) linkResourceRef.current = prefill.resource
+    if (prefill.lang) void i18n.changeLanguage(prefill.lang)
+    // Suppress any in-flight or subsequent keychain auto-connect: the link
+    // represents explicit intent for (possibly) a different account, so the
+    // saved-credentials auto-connect must not race with the prefilled JID.
+    hasAutoConnected.current = true
+    clearPrefill()
+  }, [prefill, clearPrefill, i18n])
 
   // Handle authentication errors + auto-reveal server field on non-auth errors
   useEffect(() => {
@@ -340,7 +393,7 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
       // Kick off the Argon2id unlock before the socket connects so the
       // KDF (~500 ms) overlaps with the TCP/TLS/XMPP handshake.
       void prewarmOpenpgpUnlock(jid)
-      const resource = getResource()
+      const resource = linkResourceRef.current || getResource()
       await connect(jid, password, actualServer, undefined, resource, i18n.language, isTauri(), rememberMe)
       // Save session for auto-reconnect on page reload
       saveSession(jid, password, actualServer)
@@ -392,7 +445,14 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
               type="text"
               autoComplete="username"
               value={jid}
-              onChange={(e) => { setJid(e.target.value); setCredentialsModified(true) }}
+              onChange={(e) => {
+                setJid(e.target.value)
+                setCredentialsModified(true)
+                // Drop the link-supplied resource when the user edits the JID:
+                // the resource was bound to the prefilled account and must not
+                // carry over to a manually entered (different) account.
+                linkResourceRef.current = undefined
+              }}
               onBlur={() => setJidTouched(true)}
               placeholder={t('login.jidPlaceholder')}
               required
@@ -490,6 +550,11 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
                 <p className="text-xs text-fluux-muted mt-1">
                   {isDesktopApp ? t('login.serverHintDesktop') : t('login.serverHint')}
                 </p>
+                {linkServerHost && (
+                  <p className="text-xs text-fluux-muted mt-1">
+                    {t('login.linkSetServer', { host: linkServerHost })}
+                  </p>
+                )}
               </>
             )}
           </div>

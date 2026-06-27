@@ -11,13 +11,13 @@
  *
  * Scroll behavior is handled by useMessageListScroll hook.
  */
-import { useMemo, useRef, type ReactNode } from 'react'
+import { useMemo, useRef, useEffect, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { BaseMessage } from '@fluux/sdk'
 import { useMessageCopyFormatter, useMessageRangeSelection } from '@/hooks'
 import { useViewportObserver } from '@/hooks/useViewportObserver'
 import { useRenderCostProbe } from '@/hooks/useRenderCostProbe'
-import { detectRenderLoop } from '@/utils/renderLoopDetector'
+import { detectRenderLoop, notifyUserInput } from '@/utils/renderLoopDetector'
 import { DateSeparator } from './DateSeparator'
 import { NewMessageMarker } from './NewMessageMarker'
 import { HistoryStartMarker } from './HistoryStartMarker'
@@ -27,6 +27,7 @@ import { groupMessagesByDate, shouldShowAvatar } from './messageGrouping'
 import { useMessageListScroll } from './useMessageListScroll'
 import { MessageWidthProvider } from './messageWidthContext'
 import { isFeatureEnabled } from '@/utils/featureFlags'
+import { useSettingsStore } from '@/stores/settingsStore'
 import type { CopyMessageMeta } from '@/utils/buildCopyText'
 import { buildMessageListItems, type RenderItem } from './messageListItems'
 import { useTanstackMessageVirtualizer } from './tanstackMessageVirtualizer'
@@ -135,6 +136,13 @@ export function MessageList<T extends BaseMessage>({
 }: MessageListProps<T>) {
   // Detect render loops before they freeze the UI
   detectRenderLoop('MessageList')
+
+  // A density change re-measures every visible row once; arm the interaction
+  // grace window so the virtualizer's re-window burst is not flagged as a loop.
+  const densityMode = useSettingsStore((s) => s.densityMode)
+  useEffect(() => {
+    notifyUserInput()
+  }, [densityMode])
 
   // Attribute slow message-list renders (room-entry stall triage on WebKitGTK):
   // splits the cost into React commit vs browser layout/paint in fluux.log.

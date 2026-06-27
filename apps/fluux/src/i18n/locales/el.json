@@ -30,6 +30,7 @@
         "serverPlaceholderDesktop": "example.com ή tls://host:port",
         "serverHint": "Αφήστε κενό για χρήση του τομέα από το JID",
         "serverHintDesktop": "Αφήστε κενό για αυτόματη ανίχνευση. Υποστηρίζει τομέα, tls://host:port, tcp://host:port",
+        "linkSetServer": "Ένας σύνδεσμος όρισε προσαρμοσμένο διακομιστή: {{host}}",
         "rememberMe": "Να με θυμάσαι",
         "storedInKeychain": "(αποθηκευμένο στο Keychain)",
         "staySignedIn": "(παραμείνετε συνδεδεμένοι)",

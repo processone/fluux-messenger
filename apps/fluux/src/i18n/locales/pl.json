@@ -30,6 +30,7 @@
         "serverPlaceholderDesktop": "przykład.pl lub tls://host:port",
         "serverHint": "Pozostaw puste, aby użyć domeny z JID",
         "serverHintDesktop": "Pozostaw puste, aby wykryć automatycznie. Obsługuje domenę, tls://host:port, tcp://host:port",
+        "linkSetServer": "Łącze ustawiło niestandardowy serwer: {{host}}",
         "rememberMe": "Zapamiętaj mnie",
         "storedInKeychain": "(przechowywane w pęku kluczy)",
         "staySignedIn": "(pozostań zalogowany)",

@@ -30,6 +30,7 @@
         "serverPlaceholderDesktop": "primjer.hr ili tls://domaćin:port",
         "serverHint": "Ostavite prazno za korištenje domene iz JID-a",
         "serverHintDesktop": "Ostavite prazno za automatsko otkrivanje. Podržava domenu, tls://domaćin:port, tcp://domaćin:port",
+        "linkSetServer": "Poveznica je postavila prilagođeni poslužitelj: {{host}}",
         "rememberMe": "Zapamti me",
         "storedInKeychain": "(spremljeno u privjesak)",
         "staySignedIn": "(ostani prijavljen)",

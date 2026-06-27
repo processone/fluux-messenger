@@ -30,6 +30,7 @@
         "serverPlaceholderDesktop": "voorbeeld.nl of tls://host:poort",
         "serverHint": "Laat leeg om domein van JID te gebruiken",
         "serverHintDesktop": "Laat leeg voor automatische detectie. Ondersteunt domein, tls://host:poort, tcp://host:poort",
+        "linkSetServer": "Een koppeling heeft een aangepaste server ingesteld: {{host}}",
         "rememberMe": "Onthoud mij",
         "storedInKeychain": "(opgeslagen in Sleutelhanger)",
         "staySignedIn": "(ingelogd blijven)",
