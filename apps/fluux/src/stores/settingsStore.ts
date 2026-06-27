@@ -5,6 +5,8 @@ export type TimeFormat = '12h' | '24h' | 'auto'
 export type MediaAutoDownload = 'always' | 'private-only' | 'never'
 /** Motion preference: follow the OS, force full animations, or reduce them. */
 export type MotionPreference = 'system' | 'full' | 'reduced'
+/** Transparency preference: follow the OS, force glass frost, or reduce to solid surfaces. */
+export type TransparencyMode = 'system' | 'full' | 'reduced'
 /** Display density: normal spacing or compact spacing. */
 export type DensityMode = 'comfortable' | 'compact'
 
@@ -22,6 +24,8 @@ interface SettingsState {
   setMediaAutoDownload: (value: MediaAutoDownload) => void
   motionPreference: MotionPreference
   setMotionPreference: (value: MotionPreference) => void
+  transparencyMode: TransparencyMode
+  setTransparencyMode: (value: TransparencyMode) => void
   densityMode: DensityMode
   setDensityMode: (mode: DensityMode) => void
 }
@@ -31,6 +35,7 @@ const TIME_FORMAT_KEY = 'fluux-time-format'
 const FONT_SIZE_KEY = 'fluux-font-size'
 const MEDIA_AUTO_DOWNLOAD_KEY = 'fluux-media-autodownload'
 const MOTION_KEY = 'fluux-motion'
+const TRANSPARENCY_KEY = 'fluux-transparency'
 const DENSITY_KEY = 'fluux-density'
 
 /**
@@ -111,6 +116,20 @@ function getInitialMotion(): MotionPreference {
 }
 
 /**
+ * Get initial transparency preference from localStorage, default to 'system'
+ * (follow the OS prefers-reduced-transparency setting).
+ */
+function getInitialTransparency(): TransparencyMode {
+  try {
+    const s = localStorage.getItem(TRANSPARENCY_KEY)
+    if (s === 'system' || s === 'full' || s === 'reduced') return s
+  } catch {
+    // localStorage not available
+  }
+  return 'system'
+}
+
+/**
  * Get initial display density from localStorage, default to 'comfortable'.
  */
 function getInitialDensity(): DensityMode {
@@ -180,6 +199,13 @@ export const useSettingsStore = create<SettingsState>((set) => ({
       // localStorage not available
     }
     set({ motionPreference: value })
+  },
+
+  transparencyMode: getInitialTransparency(),
+
+  setTransparencyMode: (value) => {
+    try { localStorage.setItem(TRANSPARENCY_KEY, value) } catch { /* */ }
+    set({ transparencyMode: value })
   },
 
   densityMode: getInitialDensity(),

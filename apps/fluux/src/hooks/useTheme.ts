@@ -201,6 +201,7 @@ export function useTheme() {
   const setMode = useSettingsStore((s) => s.setThemeMode)
   const fontSize = useSettingsStore((s) => s.fontSize)
   const motionPreference = useSettingsStore((s) => s.motionPreference)
+  const transparencyMode = useSettingsStore((s) => s.transparencyMode)
 
   const activeThemeId = useThemeStore((s) => s.activeThemeId)
   const getActiveTheme = useThemeStore((s) => s.getActiveTheme)
@@ -309,6 +310,23 @@ export function useTheme() {
     mq.addEventListener('change', apply)
     return () => mq.removeEventListener('change', apply)
   }, [motionPreference])
+
+  // Apply transparency preference. Sets data-transparency="full"|"reduced" on <html>;
+  // CSS frosts .fluux-glass by default and the [data-transparency="reduced"] rule
+  // reverts to a solid surface. 'system' resolves from prefers-reduced-transparency.
+  useEffect(() => {
+    const resolve = () => {
+      if (transparencyMode === 'reduced') return 'reduced'
+      if (transparencyMode === 'full') return 'full'
+      return window.matchMedia('(prefers-reduced-transparency: reduce)').matches ? 'reduced' : 'full'
+    }
+    document.documentElement.setAttribute('data-transparency', resolve())
+    if (transparencyMode !== 'system') return
+    const mq = window.matchMedia('(prefers-reduced-transparency: reduce)')
+    const on = () => document.documentElement.setAttribute('data-transparency', resolve())
+    mq.addEventListener('change', on)
+    return () => mq.removeEventListener('change', on)
+  }, [transparencyMode])
 
   // Sync CSS snippets
   useEffect(() => {
