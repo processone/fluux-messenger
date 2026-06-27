@@ -151,22 +151,28 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
         setRememberMe(true)
       }
 
+      // Check if a link prefill is present (xmpp: deep link or URL params).
+      // If so, we'll let the prefill effect handle the JID/server seed — no flash.
+      // A link prefill represents explicit intent for a (possibly different)
+      // account, so do not auto-load / auto-connect saved keychain credentials.
+      const hasLinkPrefill = !!useLoginPrefillStore.getState().prefill
+
       // Load JID and server from localStorage first (fast, no prompt)
+      // Skip if a link prefill is present; it will override these values.
       const savedJid = localStorage.getItem(STORAGE_KEY_JID)
       const savedServer = localStorage.getItem(STORAGE_KEY_SERVER)
-      if (savedJid) setJid(savedJid)
-      // On web, ignore bare-domain server values (e.g. from desktop sessions)
-      // so well-known auto-fill can provide the correct WebSocket URL
-      const isWebSocketUrl = savedServer?.startsWith('ws://') || savedServer?.startsWith('wss://')
-      if (savedServer && (inTauri || isWebSocketUrl)) {
-        setServer(savedServer)
+      if (!hasLinkPrefill) {
+        if (savedJid) setJid(savedJid)
+        // On web, ignore bare-domain server values (e.g. from desktop sessions)
+        // so well-known auto-fill can provide the correct WebSocket URL
+        const isWebSocketUrl = savedServer?.startsWith('ws://') || savedServer?.startsWith('wss://')
+        if (savedServer && (inTauri || isWebSocketUrl)) {
+          setServer(savedServer)
+        }
       }
 
       // Try to load credentials from keychain (Tauri only)
       // Only check keychain if we previously saved credentials (avoids prompt on first run)
-      // A link prefill represents explicit intent for a (possibly different)
-      // account, so do not auto-load / auto-connect saved keychain credentials.
-      const hasLinkPrefill = !!useLoginPrefillStore.getState().prefill
       if (inTauri && hasSavedCredentials() && !hasLinkPrefill) {
         // Wait for browser to paint the login screen before triggering keychain prompt
         // Double requestAnimationFrame ensures the paint has completed
