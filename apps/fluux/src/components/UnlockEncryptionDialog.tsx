@@ -2,9 +2,17 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Loader2 } from 'lucide-react'
 import type { XMPPClient } from '@fluux/sdk/core'
+import { getBareJid } from '@fluux/sdk'
 import { KeyPickerDialog } from './KeyPickerDialog'
 import { KeyPickerRequiredError, NoRecoveryAvailableError } from '@/e2ee/recoveryErrors'
 import type { KeyBundle } from '@/e2ee/OpenPGPPluginBase'
+import { isTauri } from '@/utils/tauri'
+import {
+  cachePassphrase,
+  clearCachedPassphrase,
+  getRememberPassphrasePreference,
+  setRememberPassphrasePreference,
+} from '@/e2ee/webPassphraseCache'
 
 interface UnlockEncryptionDialogProps {
   client: XMPPClient
@@ -32,6 +40,7 @@ export function UnlockEncryptionDialog({ client, onClose }: UnlockEncryptionDial
 
   const [passphrase, setPassphrase] = useState('')
   const [confirmPassphrase, setConfirmPassphrase] = useState('')
+  const [rememberPassphrase, setRememberPassphrase] = useState(getRememberPassphrasePreference)
   type DialogMode = 'unlock' | 'restore' | 'setup'
   const [mode, setMode] = useState<DialogMode | null>(null)
   const [recovered, setRecovered] = useState(false)
@@ -108,6 +117,18 @@ export function UnlockEncryptionDialog({ client, onClose }: UnlockEncryptionDial
       // unlock() signals key-unlocked itself now — happy path directly, or via
       // restoreSecretKey → doInstallKey on recovery — so the SDK re-runs
       // deferred decrypts without an explicit notifyE2EEKeyUnlocked() here.
+      // Persist the remember-passphrase choice and (un)cache accordingly. Only
+      // meaningful on web; on Tauri the checkbox is not rendered and the jid
+      // guard below makes this a no-op anyway.
+      if (mode === 'unlock' && !isTauri()) {
+        const full = client.getJid()
+        const bareJid = full ? getBareJid(full) : null
+        setRememberPassphrasePreference(rememberPassphrase)
+        if (bareJid) {
+          if (rememberPassphrase) await cachePassphrase(bareJid, passphrase)
+          else await clearCachedPassphrase(bareJid)
+        }
+      }
       if (result?.recovered) {
         setRecovered(true)
         setTimeout(() => onClose(true), 1500)
@@ -128,7 +149,7 @@ export function UnlockEncryptionDialog({ client, onClose }: UnlockEncryptionDial
       setError(err instanceof Error ? err.message : String(err))
       setIsWorking(false)
     }
-  }, [passphrase, confirmPassphrase, mode, client, onClose, t])
+  }, [passphrase, confirmPassphrase, mode, client, onClose, t, rememberPassphrase])
 
   const handleImportKeyFile = useCallback(async () => {
     const plugin = client.e2ee?.getPlugin('openpgp') as
@@ -250,6 +271,25 @@ export function UnlockEncryptionDialog({ client, onClose }: UnlockEncryptionDial
                 className="w-full px-3 py-2 mb-3 rounded-lg bg-fluux-bg border border-fluux-hover text-fluux-text focus:outline-none focus:border-fluux-brand disabled:opacity-50"
               />
             </>
+          )}
+
+          {mode === 'unlock' && !isTauri() && (
+            <label className="flex items-start gap-2 mb-3 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                aria-label={t('settings.encryption.rememberPassphrase')}
+                checked={rememberPassphrase}
+                disabled={isWorking || loading}
+                onChange={(e) => setRememberPassphrase(e.target.checked)}
+                className="mt-0.5"
+              />
+              <span className="text-sm text-fluux-text">
+                {t('settings.encryption.rememberPassphrase')}
+                <span className="block text-xs text-fluux-muted">
+                  {t('settings.encryption.rememberPassphraseHint')}
+                </span>
+              </span>
+            </label>
           )}
 
           {recovered && (
