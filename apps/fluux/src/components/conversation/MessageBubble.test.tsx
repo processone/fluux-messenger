@@ -768,3 +768,17 @@ describe('Own-message tint', () => {
     expect(container.querySelector('.message-own-tint')).not.toBeInTheDocument()
   })
 })
+
+describe('Density spacing', () => {
+  it('marks group-start rows with the density spacing class', () => {
+    const groupStartProps = createDefaultProps({ showAvatar: true })
+    const { container: groupStartContainer } = render(<MessageBubble {...groupStartProps} />)
+    const outerRow = groupStartContainer.firstChild as HTMLElement
+    expect(outerRow.className).toContain('message-group-start')
+
+    const continuationProps = createDefaultProps({ showAvatar: false })
+    const { container: continuationContainer } = render(<MessageBubble {...continuationProps} />)
+    const continuationRow = continuationContainer.firstChild as HTMLElement
+    expect(continuationRow.className).not.toContain('message-group-start')
+  })
+})
