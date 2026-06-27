@@ -62,6 +62,10 @@ const BOTTOM_REASSERT_FRAMES = 60
 const MARKER_REASSERT_FRAMES = 120
 // Consecutive frames the marker target must hold steady before the re-assert loop stops early.
 const MARKER_STABLE_FRAMES = 8
+// Sub-row tolerance for the marker re-assert: only re-scroll when the resolved target moves more
+// than this (rows measuring jitter the offset by a few px every frame; a 1px threshold would
+// re-scroll — and re-render — every frame and never stabilize).
+const MARKER_DRIFT_PX = 16
 // While re-pinning, treat the list as not-yet-pinned whenever it sits more than this many pixels
 // above the true bottom. The change-detection guard (re-pin only when scrollHeight moved) can miss
 // the frame where the last row's measurement settles — coalesced height deltas, or a height delta
@@ -1075,11 +1079,12 @@ export function useMessageListScroll({
         let framesLeft = MARKER_REASSERT_FRAMES
         let stableFrames = 0
         let landedTarget = -1
+        let resolved = false
         const stepToMarker = () => {
           if (framesLeft-- <= 0) {
-            // Marker never resolved (e.g. trimmed from the loaded set) — don't strand the view at
-            // the top; fall back to the bottom.
-            if (landedTarget < 0) reassertBottom()
+            // Marker never resolved at all (e.g. trimmed from the loaded set) — don't strand the
+            // view at the top; fall back to the bottom.
+            if (!resolved) reassertBottom()
             return
           }
           const s = scrollerRef.current
@@ -1093,30 +1098,43 @@ export function useMessageListScroll({
 
           const viewportHeight = s.clientHeight
           const v = latestRef.current.virtualizer
-          let target: number | null = null
+          let offset: number | null = null
           if (v) {
-            const offset = v.getOffsetForMessageId(markerId)
-            if (offset != null) target = Math.max(0, offset - viewportHeight / 3)
+            offset = v.getOffsetForMessageId(markerId)
           } else {
             const el = s.querySelector(`[data-message-id="${CSS.escape(markerId)}"]`) as HTMLElement | null
-            if (el) target = Math.max(0, el.offsetTop - viewportHeight / 3)
+            if (el) offset = el.offsetTop
           }
 
-          if (target != null && Math.abs(target - landedTarget) > 1) {
-            // Route through the virtualizer (scrollToOffset) so @tanstack's reactive scrollOffset
-            // stays in sync — a raw scrollTop write is reverted to the top on the next re-window.
-            if (v) v.scrollToOffset(target)
-            else s.scrollTop = target
-            landedTarget = target
-            stableFrames = 0
-            const distFromBottom = s.scrollHeight - target - viewportHeight
-            isAtBottomRef.current = distFromBottom < AT_BOTTOM_THRESHOLD
-            debugLog('CONVERSATION SWITCH: scrolled to new message marker', {
-              firstNewMessageId: markerId, target, viewportHeight, isAtBottom: isAtBottomRef.current,
-            })
-          } else if (landedTarget >= 0 && ++stableFrames >= MARKER_STABLE_FRAMES) {
-            // Landed and the target has held steady — stop re-asserting.
-            return
+          if (offset != null) {
+            resolved = true
+            const target = Math.max(0, offset - viewportHeight / 3)
+            // Marker sits in the top third of the content (vh/3-from-top would be above the content
+            // top, so the only valid scroll target is 0). Scrolling to 0 would spuriously fire
+            // triggerLoadOlder (handleScroll keys load-older on scrollTop===0) and churn — the
+            // regression that consumed the older-message backlog on entry. This is the all/mostly-
+            // unread case; fall back to the bottom (the prior behavior) rather than paginating.
+            if (target <= 0) {
+              isAtBottomRef.current = true
+              reassertBottom()
+              return
+            }
+            if (Math.abs(target - landedTarget) > MARKER_DRIFT_PX) {
+              // Route through the virtualizer (scrollToOffset) so @tanstack's reactive scrollOffset
+              // stays in sync — a raw scrollTop write is reverted to the top on the next re-window.
+              if (v) v.scrollToOffset(target)
+              else s.scrollTop = target
+              landedTarget = target
+              stableFrames = 0
+              const distFromBottom = s.scrollHeight - target - viewportHeight
+              isAtBottomRef.current = distFromBottom < AT_BOTTOM_THRESHOLD
+              debugLog('CONVERSATION SWITCH: scrolled to new message marker', {
+                firstNewMessageId: markerId, target, viewportHeight, isAtBottom: isAtBottomRef.current,
+              })
+            } else if (landedTarget >= 0 && ++stableFrames >= MARKER_STABLE_FRAMES) {
+              // Landed and the target has held steady — stop re-asserting.
+              return
+            }
           }
           requestAnimationFrame(stepToMarker)
         }
