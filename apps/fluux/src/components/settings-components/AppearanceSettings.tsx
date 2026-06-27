@@ -8,6 +8,9 @@ import { getBuiltinTheme } from '@/themes/builtins'
 import { ModalShell } from '@/components/ModalShell'
 import { TextInput, TextArea } from '../ui/TextInput'
 import { SettingsSection } from '@/components/ui/SettingsSection'
+import { SettingsGroup } from '@/components/ui/SettingsGroup'
+import { SettingsRow } from '@/components/ui/SettingsRow'
+import { Toggle } from '@/components/ui/Toggle'
 
 const themeOptions: { value: ThemeMode; labelKey: string; icon: typeof Sun; descriptionKey: string }[] = [
   { value: 'dark', labelKey: 'settings.dark', icon: Moon, descriptionKey: 'settings.darkDescription' },
@@ -240,176 +243,164 @@ export function AppearanceSettings() {
     <section className="max-w-md">
       <SettingsSection title={t('settings.appearance')}>
         <div className="space-y-6">
-        {/* 1. Mode */}
-        <div className="space-y-3">
-          <label className="text-sm font-medium text-fluux-text">{t('settings.mode')}</label>
-          <div className="grid grid-cols-3 gap-3">
-            {themeOptions.map((option) => {
-              const Icon = option.icon
-              const isSelected = themeMode === option.value
-              return (
-                <button
-                  key={option.value}
-                  onClick={() => setThemeMode(option.value)}
-                  className={`flex flex-col items-center gap-2 p-4 rounded-lg border-2 transition-all
-                    ${isSelected
-                      ? 'border-fluux-brand bg-fluux-brand/10'
-                      : 'border-fluux-hover bg-fluux-bg hover:border-fluux-muted'
-                    }`}
-                >
-                  <Icon className={`size-6 ${isSelected ? 'text-fluux-brand' : 'text-fluux-muted'}`} />
-                  <span className={`text-sm font-medium ${isSelected ? 'text-fluux-text' : 'text-fluux-muted'}`}>
-                    {t(option.labelKey)}
-                  </span>
-                </button>
-              )
-            })}
+          {/* 1. Mode */}
+          <div className="space-y-3">
+            <label className="text-sm font-medium text-fluux-text">{t('settings.mode')}</label>
+            <div className="grid grid-cols-3 gap-3">
+              {themeOptions.map((option) => {
+                const Icon = option.icon
+                const isSelected = themeMode === option.value
+                return (
+                  <button
+                    key={option.value}
+                    onClick={() => setThemeMode(option.value)}
+                    className={`flex flex-col items-center gap-2 p-4 rounded-lg border-2 transition-all
+                      ${isSelected
+                        ? 'border-fluux-brand bg-fluux-brand/10'
+                        : 'border-fluux-hover bg-fluux-bg hover:border-fluux-muted'
+                      }`}
+                  >
+                    <Icon className={`size-6 ${isSelected ? 'text-fluux-brand' : 'text-fluux-muted'}`} />
+                    <span className={`text-sm font-medium ${isSelected ? 'text-fluux-text' : 'text-fluux-muted'}`}>
+                      {t(option.labelKey)}
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+            <p className="text-xs text-fluux-muted mt-2">
+              {t(themeOptions.find(o => o.value === themeMode)?.descriptionKey || '')}
+            </p>
           </div>
-          <p className="text-xs text-fluux-muted mt-2">
-            {t(themeOptions.find(o => o.value === themeMode)?.descriptionKey || '')}
-          </p>
-        </div>
 
-        {/* Display density */}
-        <div className="space-y-3">
-          <label className="text-sm font-medium text-fluux-text">{t('settings.density')}</label>
-          <div className="grid grid-cols-2 gap-3">
-            {densityOptions.map((option) => {
-              const isSelected = densityMode === option.value
-              return (
-                <button
-                  key={option.value}
-                  onClick={() => setDensityMode(option.value)}
-                  className={`flex flex-col items-center gap-2 p-4 rounded-lg border-2 transition-all
-                    ${isSelected ? 'border-fluux-brand bg-fluux-brand/10' : 'border-fluux-hover bg-fluux-bg hover:border-fluux-muted'}`}
-                >
-                  <span className={`text-sm font-medium ${isSelected ? 'text-fluux-text' : 'text-fluux-muted'}`}>
-                    {t(option.labelKey)}
-                  </span>
-                </button>
-              )
-            })}
+          {/* Display density */}
+          <div className="space-y-3">
+            <label className="text-sm font-medium text-fluux-text">{t('settings.density')}</label>
+            <div className="grid grid-cols-2 gap-3">
+              {densityOptions.map((option) => {
+                const isSelected = densityMode === option.value
+                return (
+                  <button
+                    key={option.value}
+                    onClick={() => setDensityMode(option.value)}
+                    className={`flex flex-col items-center gap-2 p-4 rounded-lg border-2 transition-all
+                      ${isSelected ? 'border-fluux-brand bg-fluux-brand/10' : 'border-fluux-hover bg-fluux-bg hover:border-fluux-muted'}`}
+                  >
+                    <span className={`text-sm font-medium ${isSelected ? 'text-fluux-text' : 'text-fluux-muted'}`}>
+                      {t(option.labelKey)}
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+            <p className="text-xs text-fluux-muted mt-2">
+              {t(densityOptions.find(o => o.value === densityMode)?.descriptionKey || '')}
+            </p>
           </div>
-          <p className="text-xs text-fluux-muted mt-2">
-            {t(densityOptions.find(o => o.value === densityMode)?.descriptionKey || '')}
-          </p>
-        </div>
 
-        {/* 2. Theme picker */}
-        <div className="space-y-3">
-          <label className="text-sm font-medium text-fluux-text">{t('settings.theme')}</label>
-          <div className="grid grid-cols-4 gap-2">
-            {allThemes.map((theme) => (
-              <ThemeCard
-                key={theme.id}
-                theme={theme}
-                isActive={activeThemeId === theme.id}
-                isDark={isDark}
-                onSelect={() => setActiveTheme(theme.id)}
-                onRemove={() => removeTheme(theme.id)}
-                isBuiltIn={!!getBuiltinTheme(theme.id)}
-              />
-            ))}
-          </div>
-          <button
-            onClick={() => themeInputRef.current?.click()}
-            className="flex items-center gap-1.5 text-xs text-fluux-muted hover:text-fluux-text transition-colors"
-          >
-            <Upload className="size-3.5" />
-            {t('settings.importTheme')}
-          </button>
-          <input
-            ref={themeInputRef}
-            type="file"
-            accept=".json"
-            className="hidden"
-            onChange={handleThemeImport}
-          />
-        </div>
-
-        {/* 4. Accent color picker */}
-        <div className="space-y-3">
-          <label className="text-sm font-medium text-fluux-text">{t('settings.accentColor')}</label>
-          <div className="flex flex-wrap gap-2 items-center">
-            {/* Theme Default reset button */}
+          {/* 2. Theme picker */}
+          <div className="space-y-3">
+            <label className="text-sm font-medium text-fluux-text">{t('settings.theme')}</label>
+            <div className="grid grid-cols-4 gap-2">
+              {allThemes.map((theme) => (
+                <ThemeCard
+                  key={theme.id}
+                  theme={theme}
+                  isActive={activeThemeId === theme.id}
+                  isDark={isDark}
+                  onSelect={() => setActiveTheme(theme.id)}
+                  onRemove={() => removeTheme(theme.id)}
+                  isBuiltIn={!!getBuiltinTheme(theme.id)}
+                />
+              ))}
+            </div>
             <button
-              onClick={() => clearAccentPreset()}
-              title={t('settings.accentThemeDefault')}
-              className={`size-7 rounded-full shrink-0 transition-all ring-offset-2 ring-offset-fluux-bg
-                flex items-center justify-center border-2 border-dashed
-                ${!accentPreset
-                  ? 'ring-2 ring-fluux-brand scale-110 border-fluux-brand'
-                  : 'border-fluux-muted hover:scale-110 hover:border-fluux-text'
-                }`}
+              onClick={() => themeInputRef.current?.click()}
+              className="flex items-center gap-1.5 text-xs text-fluux-muted hover:text-fluux-text transition-colors"
             >
-              <RotateCcw className="size-3 text-fluux-muted" />
+              <Upload className="size-3.5" />
+              {t('settings.importTheme')}
             </button>
-            {/* Accent presets */}
-            {getAccentPresets().map((preset) => (
-              <AccentDot
-                key={preset.name}
-                preset={preset}
-                isSelected={accentPreset?.name === preset.name}
-                isDark={isDark}
-                onSelect={() => setAccentPreset(preset)}
-              />
-            ))}
+            <input
+              ref={themeInputRef}
+              type="file"
+              accept=".json"
+              className="hidden"
+              onChange={handleThemeImport}
+            />
           </div>
-        </div>
+
+          {/* 4. Accent color picker */}
+          <div className="space-y-3">
+            <label className="text-sm font-medium text-fluux-text">{t('settings.accentColor')}</label>
+            <div className="flex flex-wrap gap-2 items-center">
+              {/* Theme Default reset button */}
+              <button
+                onClick={() => clearAccentPreset()}
+                title={t('settings.accentThemeDefault')}
+                className={`size-7 rounded-full shrink-0 transition-all ring-offset-2 ring-offset-fluux-bg
+                  flex items-center justify-center border-2 border-dashed
+                  ${!accentPreset
+                    ? 'ring-2 ring-fluux-brand scale-110 border-fluux-brand'
+                    : 'border-fluux-muted hover:scale-110 hover:border-fluux-text'
+                  }`}
+              >
+                <RotateCcw className="size-3 text-fluux-muted" />
+              </button>
+              {/* Accent presets */}
+              {getAccentPresets().map((preset) => (
+                <AccentDot
+                  key={preset.name}
+                  preset={preset}
+                  isSelected={accentPreset?.name === preset.name}
+                  isDark={isDark}
+                  onSelect={() => setAccentPreset(preset)}
+                />
+              ))}
+            </div>
+          </div>
         </div>
       </SettingsSection>
 
-        {/* 5. CSS Snippets (advanced) */}
-        <div className="space-y-3">
-          <label className="text-sm font-medium text-fluux-text">{t('settings.cssSnippets')}</label>
-          {snippets.length > 0 && (
-            <div className="space-y-1">
-              {snippets.map((snippet) => (
-                <div
-                  key={snippet.id}
-                  className="flex items-center justify-between px-3 py-2 rounded-lg bg-fluux-bg"
-                >
-                  <span className="text-sm text-fluux-text truncate flex-1">{snippet.filename}</span>
-                  <div className="flex items-center gap-1.5">
-                    <button
-                      onClick={() => setEditingSnippet(snippet)}
-                      className="p-1 text-fluux-muted hover:text-fluux-text transition-colors"
-                      title={t('settings.editSnippet')}
-                    >
-                      <Pencil className="size-3.5" />
-                    </button>
-                    <button
-                      onClick={() => removeSnippet(snippet.id)}
-                      className="p-1 text-fluux-muted hover:text-fluux-error transition-colors"
-                      title={t('settings.removeTheme')}
-                    >
-                      <Trash2 className="size-3.5" />
-                    </button>
-                    <button
-                      onClick={() => toggleSnippet(snippet.id)}
-                      className={`relative w-9 h-5 rounded-full transition-colors ${
-                        snippet.enabled ? 'bg-fluux-brand' : 'bg-fluux-hover'
-                      }`}
-                    >
-                      <span
-                        className={`absolute top-0.5 start-0.5 size-4 rounded-full bg-white transition-transform ${
-                          snippet.enabled ? 'translate-x-4' : ''
-                        }`}
-                      />
-                    </button>
-                  </div>
+      {/* 5. CSS Snippets (advanced) */}
+      <SettingsSection title={t('settings.cssSnippets')} className="mt-6">
+        {snippets.length > 0 && (
+          <SettingsGroup className="mb-3">
+            {snippets.map((snippet) => (
+              <SettingsRow key={snippet.id} label={snippet.filename}>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => setEditingSnippet(snippet)}
+                    className="p-1 text-fluux-muted hover:text-fluux-text transition-colors"
+                    title={t('settings.editSnippet')}
+                  >
+                    <Pencil className="size-3.5" />
+                  </button>
+                  <button
+                    onClick={() => removeSnippet(snippet.id)}
+                    className="p-1 text-fluux-muted hover:text-fluux-error transition-colors"
+                    title={t('settings.removeTheme')}
+                  >
+                    <Trash2 className="size-3.5" />
+                  </button>
+                  <Toggle
+                    checked={snippet.enabled}
+                    onChange={() => toggleSnippet(snippet.id)}
+                    aria-label={snippet.filename}
+                  />
                 </div>
-              ))}
-            </div>
-          )}
-          <button
-            onClick={() => setShowNewSnippet(true)}
-            className="flex items-center gap-1.5 text-xs text-fluux-muted hover:text-fluux-text transition-colors"
-          >
-            <Plus className="size-3.5" />
-            {t('settings.addCustomCss')}
-          </button>
-        </div>
+              </SettingsRow>
+            ))}
+          </SettingsGroup>
+        )}
+        <button
+          onClick={() => setShowNewSnippet(true)}
+          className="flex items-center gap-1.5 text-xs text-fluux-muted hover:text-fluux-text transition-colors"
+        >
+          <Plus className="size-3.5" />
+          {t('settings.addCustomCss')}
+        </button>
+      </SettingsSection>
 
       {/* Snippet editor modal */}
       {(showNewSnippet || editingSnippet) && (

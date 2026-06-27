@@ -4,6 +4,7 @@ import { Search, Ban, Loader2, Plus, X } from 'lucide-react'
 import { useBlocking, getLocalPart } from '@fluux/sdk'
 import { TextInput } from '../ui/TextInput'
 import { Avatar } from '../Avatar'
+import { SettingsSection } from '@/components/ui/SettingsSection'
 
 export function BlockedUsersSettings() {
   const { t } = useTranslation()
@@ -90,13 +91,7 @@ export function BlockedUsersSettings() {
 
   return (
     <section className="max-w-md">
-      <h3 className="text-xs font-semibold text-fluux-muted uppercase tracking-wide mb-4">
-        {t('settings.blocked.title')}
-      </h3>
-
-      <p className="text-sm text-fluux-muted mb-4">
-        {t('settings.blocked.description')}
-      </p>
+      <SettingsSection title={t('settings.blocked.title')} description={t('settings.blocked.description')}>
 
       {/* Add block form */}
       {showAddForm ? (
@@ -236,6 +231,7 @@ export function BlockedUsersSettings() {
           )}
         </div>
       )}
+      </SettingsSection>
     </section>
   )
 }
