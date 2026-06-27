@@ -5,8 +5,8 @@
  * differs between DOM environments (jsdom normalizes #hex to rgb(); happy-dom, the
  * default env, keeps the literal). These assertions/snapshots only hold under jsdom.
  */
-import { describe, it, expect, vi, test } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { describe, it, expect, vi, test, beforeEach, afterEach } from 'vitest'
+import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { Avatar, getConsistentTextColor } from './Avatar'
 
 // Mock the SDK color generation
@@ -204,6 +204,93 @@ describe('Avatar', () => {
       expect(root.className).toContain('rounded-xl')
       expect(root.className).not.toContain('rounded-full')
     })
+  })
+})
+
+describe('Avatar — animated GIF freeze-on-hover', () => {
+  const STATIC_DATA_URL = 'data:image/png;base64,FROZEN'
+  let fetchSpy: ReturnType<typeof vi.fn>
+  let OriginalImage: typeof Image
+
+  // Minimal Image stub: fires onload asynchronously once `src` is assigned,
+  // so the extraction effect (which sets onload *before* src) runs to completion.
+  class MockImage {
+    onload: (() => void) | null = null
+    naturalWidth = 48
+    naturalHeight = 48
+    set src(_v: string) {
+      queueMicrotask(() => this.onload?.())
+    }
+  }
+
+  // The extraction only branches on blob.type, so a bare { type } suffices.
+  const respondWith = (type: string) =>
+    fetchSpy.mockResolvedValue({ blob: () => Promise.resolve({ type }) })
+
+  beforeEach(() => {
+    fetchSpy = vi.fn()
+    respondWith('image/gif')
+    global.fetch = fetchSpy as unknown as typeof fetch
+    OriginalImage = global.Image
+    global.Image = MockImage as unknown as typeof Image
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
+      drawImage: vi.fn(),
+    } as unknown as CanvasRenderingContext2D)
+    vi.spyOn(HTMLCanvasElement.prototype, 'toDataURL').mockReturnValue(STATIC_DATA_URL)
+  })
+
+  afterEach(() => {
+    global.Image = OriginalImage
+    vi.restoreAllMocks()
+  })
+
+  it('freezes an animated GIF to its first frame after extraction', async () => {
+    const url = 'blob:gif-freeze'
+    render(<Avatar identifier="alice" name="Alice" avatarUrl={url} />)
+    // The live (animated) URL shows while the first frame is being extracted.
+    expect(screen.getByRole('img')).toHaveAttribute('src', url)
+    await waitFor(() =>
+      expect(screen.getByRole('img')).toHaveAttribute('src', STATIC_DATA_URL)
+    )
+  })
+
+  it('shows the cached static frame synchronously on remount (no replay)', async () => {
+    // Regression: virtualized message rows unmount/remount on scroll. The frozen
+    // frame must be applied on the first render of the new instance, without a
+    // fresh fetch/decode — otherwise the GIF replays every time it scrolls in.
+    const url = 'blob:gif-remount'
+    const { unmount } = render(<Avatar identifier="alice" name="Alice" avatarUrl={url} />)
+    await waitFor(() =>
+      expect(screen.getByRole('img')).toHaveAttribute('src', STATIC_DATA_URL)
+    )
+    expect(fetchSpy).toHaveBeenCalledTimes(1)
+    unmount()
+
+    render(<Avatar identifier="alice" name="Alice" avatarUrl={url} />)
+    expect(screen.getByRole('img')).toHaveAttribute('src', STATIC_DATA_URL)
+    expect(fetchSpy).toHaveBeenCalledTimes(1)
+  })
+
+  it('plays the GIF on hover and re-freezes on mouse leave', async () => {
+    const url = 'blob:gif-hover'
+    const { container } = render(<Avatar identifier="alice" name="Alice" avatarUrl={url} />)
+    await waitFor(() =>
+      expect(screen.getByRole('img')).toHaveAttribute('src', STATIC_DATA_URL)
+    )
+    fireEvent.mouseEnter(container.firstChild as Element)
+    expect(screen.getByRole('img')).toHaveAttribute('src', url)
+    fireEvent.mouseLeave(container.firstChild as Element)
+    expect(screen.getByRole('img')).toHaveAttribute('src', STATIC_DATA_URL)
+  })
+
+  it('never freezes a non-GIF image', async () => {
+    respondWith('image/png')
+    const url = 'blob:png-static'
+    render(<Avatar identifier="alice" name="Alice" avatarUrl={url} />)
+    expect(screen.getByRole('img')).toHaveAttribute('src', url)
+    // Let any extraction microtasks flush; the src must stay the live URL.
+    await new Promise((r) => setTimeout(r, 0))
+    expect(screen.getByRole('img')).toHaveAttribute('src', url)
   })
 })
 
