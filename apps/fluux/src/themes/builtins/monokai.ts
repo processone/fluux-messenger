@@ -85,7 +85,7 @@ export const monokaiTheme: ThemeDefinition = {
       '--fluux-color-purple-rgb': '117, 64, 201',
       // Semantic overrides
       '--fluux-bg-secondary': '#e4dfd4',
-      '--fluux-border-color': 'rgba(39, 40, 34, 0.12)',
+      '--fluux-border-color': 'rgba(39, 40, 34, 0.23)',
       '--fluux-selection-bg': 'hsla(338, 75%, 42%, 0.15)',
       '--fluux-scrollbar-thumb': '#c8c4b8',
       '--fluux-scrollbar-thumb-hover': '#b0aca0',

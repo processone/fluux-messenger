@@ -85,7 +85,7 @@ export const oneDarkTheme: ThemeDefinition = {
       '--fluux-color-purple-rgb': '166, 38, 164',
       // Semantic overrides
       '--fluux-bg-secondary': '#e8e8e9',
-      '--fluux-border-color': 'rgba(56, 58, 66, 0.10)',
+      '--fluux-border-color': 'rgba(56, 58, 66, 0.25)',
       '--fluux-selection-bg': 'hsla(224, 100%, 56%, 0.12)',
       '--fluux-scrollbar-thumb': '#c8c8c9',
       '--fluux-scrollbar-thumb-hover': '#b0b0b1',

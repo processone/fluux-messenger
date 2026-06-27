@@ -98,6 +98,13 @@ export const catppuccinMochaTheme: ThemeDefinition = {
       '--fluux-color-blue': '#1e66f5',
       '--fluux-color-purple': '#8839ef',
       '--fluux-color-gray': '#8c8fa1',
+      // Status as text/icon labels on cards (bg-primary). The vibrant palette
+      // colors above are tuned for fills/swatches and fail WCAG AA as text on
+      // this theme's light bg-primary; these darkened, hue-matched shades clear
+      // AA (white still clears AA on the error fill).
+      '--fluux-status-success': '#2c6d1d',
+      '--fluux-status-warning': '#865511',
+      '--fluux-status-error': '#c10e34',
       '--fluux-color-red-rgb': '210, 15, 57',
       // Error as text/icon — darkened for WCAG AA on the light chat surface.
       '--fluux-text-error': '#ae0c2f',
@@ -107,7 +114,7 @@ export const catppuccinMochaTheme: ThemeDefinition = {
       '--fluux-color-purple-rgb': '136, 57, 239',
       // Semantic overrides
       '--fluux-bg-secondary': '#dce0e8',
-      '--fluux-border-color': 'rgba(76, 79, 105, 0.12)',
+      '--fluux-border-color': 'rgba(76, 79, 105, 0.29)',
       '--fluux-selection-bg': 'hsla(267, 83%, 58%, 0.15)',
       '--fluux-scrollbar-thumb': '#bcc0cc',
       '--fluux-scrollbar-thumb-hover': '#acb0be',

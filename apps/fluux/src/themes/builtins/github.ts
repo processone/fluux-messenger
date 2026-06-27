@@ -89,7 +89,7 @@ export const githubTheme: ThemeDefinition = {
       '--fluux-color-purple-rgb': '130, 80, 223',
       // Semantic overrides
       '--fluux-bg-secondary': '#eff2f5',
-      '--fluux-border-color': 'rgba(31, 35, 40, 0.12)',
+      '--fluux-border-color': 'rgba(31, 35, 40, 0.22)',
       '--fluux-selection-bg': 'hsla(212, 92%, 45%, 0.15)',
       '--fluux-scrollbar-thumb': '#dae0e7',
       '--fluux-scrollbar-thumb-hover': '#c8ced5',

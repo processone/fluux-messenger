@@ -6,8 +6,8 @@ import type { ThemeDefinition } from '../types'
  * Neutral grey surfaces with an indigo/blurple accent. Preserved as a built-in
  * so anyone who preferred the original look can keep it. It overrides only what
  * Aurora changed in the defaults (the neutral ramp, the accent, own-message and
- * accent-2 colors, the unread-badge color, and the light secondary surface);
- * everything else cascades from the semantic/component tiers.
+ * accent-2 colors, the classic red unread badge, and the light secondary
+ * surface); everything else cascades from the semantic/component tiers.
  */
 export const indigoTheme: ThemeDefinition = {
   id: 'indigo',
@@ -41,8 +41,9 @@ export const indigoTheme: ThemeDefinition = {
       // theme's lighter grey chat surface, so lighten it for WCAG AA. (Light
       // mode inherits Aurora's value, which clears AA on the white surface.)
       '--fluux-text-error': '#e77c7f',
-      // Unread badge stays red (classic behavior)
+      // Classic red unread badge (white text clears AA on the red fill).
       '--fluux-badge-bg': 'var(--fluux-status-error)',
+      '--fluux-badge-text': '#ffffff',
     },
     light: {
       // Neutral ramp (00 = lightest, 100 = darkest)
@@ -67,8 +68,16 @@ export const indigoTheme: ThemeDefinition = {
       '--fluux-text-self': '#4f46e5',
       // Restore the original warm-grey secondary surface
       '--fluux-bg-secondary': '#d8dadf',
-      // Unread badge stays red (classic behavior)
+      // Status as text/icon labels on cards. This theme's light bg-primary
+      // (#e3e5e8) is darker than Aurora's, dropping the inherited status colors
+      // below WCAG AA as text; darkened, hue-matched shades restore AA (white
+      // still clears AA on the error fill).
+      '--fluux-status-success': '#18703d',
+      '--fluux-status-warning': '#7d5d1a',
+      '--fluux-status-error': '#b72e32',
+      // Classic red unread badge (white text clears AA on the red fill).
       '--fluux-badge-bg': 'var(--fluux-status-error)',
+      '--fluux-badge-text': '#ffffff',
     },
   },
   swatches: {

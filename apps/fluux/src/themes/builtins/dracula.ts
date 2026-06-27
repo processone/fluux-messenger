@@ -84,7 +84,7 @@ export const draculaTheme: ThemeDefinition = {
       '--fluux-color-blue-rgb': '15, 143, 168',
       '--fluux-color-purple-rgb': '124, 80, 199',
       '--fluux-bg-secondary': '#ddddd7',
-      '--fluux-border-color': 'rgba(40, 42, 54, 0.12)',
+      '--fluux-border-color': 'rgba(40, 42, 54, 0.23)',
       '--fluux-selection-bg': 'hsla(265, 70%, 55%, 0.15)',
       '--fluux-scrollbar-thumb': '#c8c8c2',
       '--fluux-scrollbar-thumb-hover': '#b0b0aa',

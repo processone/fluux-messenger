@@ -220,7 +220,8 @@ Per-widget overrides for surgical changes. These default to semantic values.
 | `--fluux-modal-backdrop`     | `rgba(0,0,0,0.5)`    | Modal overlay                 |
 | `--fluux-toast-bg`           | `sidebar-bg`         | Toast notification background |
 | `--fluux-tooltip-bg`         | `bg-primary`         | Tooltip background            |
-| `--fluux-badge-bg`           | `status-error`       | Unread count badge            |
+| `--fluux-badge-bg`           | `bg-accent`          | Unread count badge fill       |
+| `--fluux-badge-text`         | `text-on-accent`     | Unread count badge text       |
 | `--fluux-presence-online`    | `status-success`     | Online indicator              |
 | `--fluux-presence-away`      | `status-warning`     | Away indicator                |
 | `--fluux-presence-dnd`       | `status-error`       | Do not disturb indicator      |
@@ -229,6 +230,15 @@ Per-widget overrides for surgical changes. These default to semantic values.
 | `--fluux-button-danger-bg`   | `status-error`       | Danger button                 |
 
 **When to override component variables:** When you want one specific widget to look different from the rest. For example, giving the sidebar a distinct tint while keeping other surfaces neutral.
+
+**Unread badge color.** The unread count badge defaults to the accent fill (`--fluux-badge-bg`) with auto-contrasting text (`--fluux-badge-text` follows `--fluux-text-on-accent`, so it stays readable on light or dark accents). To get a classic **red** badge instead, override the fill and pair it with a text color that clears WCAG AA on that fill — the built-in **Indigo** theme does exactly this:
+
+```json
+"--fluux-badge-bg": "var(--fluux-status-error)",
+"--fluux-badge-text": "#ffffff"
+```
+
+Always set `--fluux-badge-text` whenever you override `--fluux-badge-bg`: the default tracks the *accent*, not your chosen fill, so a custom fill needs its own readable text color. The `themeContrast.test.ts` guard asserts badge text clears AA on the badge fill for every built-in theme.
 
 ## Theme File Format
 

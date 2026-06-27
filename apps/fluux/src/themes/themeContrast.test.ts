@@ -3,6 +3,7 @@ import { readFileSync } from 'fs'
 import { fileURLToPath } from 'url'
 import { dirname, resolve } from 'path'
 import { builtinThemes } from './builtins'
+import { auroraSenderColor } from '@/utils/senderColor'
 import type { ThemeDefinition } from './types'
 
 /**
@@ -181,6 +182,97 @@ describe('Builtin theme error-text contrast', () => {
     for (const mode of ['dark', 'light'] as const) {
       it(`[${theme.id}/${mode}] text-error clears WCAG AA on the chat surface`, () => {
         const r = contrast('var(--fluux-text-error)', 'var(--fluux-chat-bg)', themeTokens(theme, mode))
+        expect(r).toBeGreaterThanOrEqual(4.5)
+      })
+    }
+  }
+})
+
+// Per-theme sender-name contrast guard. Sender names are the primary message
+// attribution cue (especially in MUC). The palette (auroraSenderColor) is
+// generated deterministically per identifier and is theme-INDEPENDENT, so it
+// must stay legible on every theme's chat surface, not just Aurora's near-black.
+// The 2026-06-27 audit found nord/catppuccin (lighter dark surfaces) pushed the
+// worst-case sender below AA because the dark branch assumed a near-black bg.
+//
+// We sample a deterministic spread of identifiers (djb2 distributes hues evenly)
+// and assert the WORST-case sender clears AA on each theme's --fluux-chat-bg.
+const SENDER_SAMPLE_IDS = Array.from({ length: 2000 }, (_, i) => `user${i}@example.com`)
+
+describe('Builtin theme sender-name contrast', () => {
+  for (const theme of builtinThemes) {
+    for (const mode of ['dark', 'light'] as const) {
+      it(`[${theme.id}/${mode}] worst-case sender name clears WCAG AA on the chat surface`, () => {
+        const vars = themeTokens(theme, mode)
+        let worst = Infinity
+        for (const id of SENDER_SAMPLE_IDS) {
+          const hex = auroraSenderColor(id, mode === 'dark')
+          worst = Math.min(worst, contrast(hex, 'var(--fluux-chat-bg)', vars))
+        }
+        expect(worst).toBeGreaterThanOrEqual(4.5)
+      })
+    }
+  }
+})
+
+// Per-theme light-mode status-as-text guard. status-{success,warning,error}
+// double as text/icon labels on cards & settings (bg-primary). The Aurora light
+// overrides clear AA on Aurora's bg-primary, but themes with a darker light
+// bg-primary (base-10) drop the inherited status colors below AA (audit
+// 2026-06-27: tokyo-night/gruvbox/catppuccin/indigo). Each theme must keep
+// status text legible on its own light bg-primary.
+describe('Builtin theme light status-as-text contrast', () => {
+  for (const theme of builtinThemes) {
+    for (const key of ['success', 'warning', 'error'] as const) {
+      it(`[${theme.id}/light] status-${key} clears WCAG AA as text on bg-primary`, () => {
+        const r = contrast(`var(--fluux-status-${key})`, 'var(--fluux-bg-primary)', themeTokens(theme, 'light'))
+        expect(r).toBeGreaterThanOrEqual(4.5)
+      })
+    }
+  }
+})
+
+// Per-theme light-mode hairline guard. The border-color carries every control
+// and panel edge; on light surfaces it is a black-alpha hairline. Themes with a
+// tinted (non-pure-white) chat surface composited the inherited alpha down to
+// ~1.16-1.29:1 (audit 2026-06-27), below the 1.5 floor that the Aurora tokens
+// already satisfy. 1.5 is a deliberately low bar (a visible hairline, not AA).
+describe('Builtin theme light hairline visibility', () => {
+  for (const theme of builtinThemes) {
+    it(`[${theme.id}/light] border-color reads as a hairline on the chat surface`, () => {
+      const r = contrast('var(--fluux-border-color)', 'var(--fluux-chat-bg)', themeTokens(theme, 'light'))
+      expect(r).toBeGreaterThanOrEqual(1.5)
+    })
+  }
+})
+
+// Per-theme unread-badge contrast guard. The badge background is overridable
+// (--fluux-badge-bg, default the accent fill) and pairs with --fluux-badge-text.
+// When badge-text is left at the auto on-accent value, it tracks the accent so
+// it stays readable on light AND dark accents; a theme that overrides badge-bg
+// (e.g. indigo's classic red) must keep its badge-text readable on that fill.
+// Mirrors contrastColorForHsl() in hooks/useTheme.ts (higher-contrast of b/w).
+function autoOnAccent(h: number, s: number, l: number): '#ffffff' | '#000000' {
+  const lum = relLum(hslToRgb(h, s, l))
+  return (lum + 0.05) / 0.05 > 1.05 / (lum + 0.05) ? '#000000' : '#ffffff'
+}
+function accentHsl(vars: Record<string, string>): [number, number, number] {
+  return [
+    parseFloat(expand('var(--fluux-accent-h)', vars)),
+    parseFloat(expand('var(--fluux-accent-s)', vars)),
+    parseFloat(expand('var(--fluux-accent-l)', vars)),
+  ]
+}
+
+describe('Builtin theme unread-badge contrast', () => {
+  for (const theme of builtinThemes) {
+    for (const mode of ['dark', 'light'] as const) {
+      it(`[${theme.id}/${mode}] badge text clears WCAG AA on the badge background`, () => {
+        const vars = themeTokens(theme, mode)
+        const text = /text-on-accent/.test(vars['--fluux-badge-text'])
+          ? autoOnAccent(...accentHsl(vars))
+          : 'var(--fluux-badge-text)'
+        const r = contrast(text, 'var(--fluux-badge-bg)', vars)
         expect(r).toBeGreaterThanOrEqual(4.5)
       })
     }
