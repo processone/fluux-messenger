@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback, Suspense, lazy, type ReactNode, type RefObject, type Ref, useImperativeHandle } from 'react'
 import { useTranslation } from 'react-i18next'
 import { detectRenderLoop, notifyUserInput } from '@/utils/renderLoopDetector'
-import { Send, Smile, Paperclip, Reply, X, Pencil, Loader2, Image, FileText, Trash2, BarChart3, Plus, Lock, ShieldCheck } from 'lucide-react'
+import { Send, Smile, Paperclip, Reply, X, Pencil, Loader2, Image, FileText, Trash2, BarChart3, Plus, Lock, ShieldCheck, ShieldAlert } from 'lucide-react'
 import { useClickOutside, useSlashCommands } from '@/hooks'
 import { Tooltip } from './Tooltip'
 import { TextArea } from './ui/TextInput'
@@ -45,6 +45,8 @@ export interface ReplyInfo {
   body: string
   // Full data for constructing reply
   from: string
+  /** Per-person Aurora color (auroraSenderColor of the replied sender); falls back to the brand accent. */
+  senderColor?: string
 }
 
 export interface EditInfo {
@@ -155,6 +157,13 @@ interface MessageComposerProps {
    * (private message). Hidden when an encryption badge is shown (encryption wins).
    */
   sendBadge?: ReactNode
+  /**
+   * Open the verify/trust UI for the current peer. Wired by the 1:1 wrapper
+   * (the same handler the header's EncryptionIcon uses). When set, the leading
+   * lock and the key-change escalation are interactive; when absent they are
+   * non-interactive reminders. Rooms never set this (group E2EE is disabled).
+   */
+  onEncryptionClick?: () => void
 }
 
 export function MessageComposer({
@@ -189,6 +198,7 @@ export function MessageComposer({
   onEditLastMessage,
   encryptionState,
   sendBadge,
+  onEncryptionClick,
   ref,
 }: MessageComposerProps & { ref?: Ref<MessageComposerHandle> }) {
   detectRenderLoop('MessageComposer')
@@ -655,14 +665,28 @@ export function MessageComposer({
     onCancelEdit?.()
   }
 
+  // Aurora encryption reminder. Calm by default (teal lock/shield), escalates to
+  // amber only on a real key change ('blocked'). Everything else shows nothing.
+  const enc = encryptionState
+  const lockInfo: { Icon: typeof Lock; color: string; label: string } | null =
+    enc?.kind === 'encrypted'
+      ? enc.trust === 'verified'
+        ? { Icon: ShieldCheck, color: 'var(--fluux-text-encryption)', label: t('chat.encryption.verifiedTooltip') }
+        : { Icon: Lock, color: 'var(--fluux-text-encryption)', label: t('chat.encryption.openpgpTooltip') }
+      : enc?.kind === 'blocked'
+        ? { Icon: ShieldAlert, color: 'var(--fluux-status-warning)', label: t('chat.encryption.blockedTooltip') }
+        : null
+  const keyChanged = enc?.kind === 'blocked'
+
   return (
     <form onSubmit={handleSubmit} className="px-4 pt-2 pb-safe relative">
       {/* Custom content above input (e.g., mention autocomplete) */}
       {aboveInput}
 
+      <div className="composer-card bg-fluux-hover">
       {/* Edit indicator */}
       {editingMessage && (
-        <div className={`bg-fluux-hover rounded-t-lg px-3 py-2 flex items-start gap-2 border-s-2 ${willDeleteMessage ? 'border-red-500' : 'border-green-500'}`}>
+        <div className={`px-3 py-2 flex items-start gap-2 border-s-2 border-b border-fluux-border ${willDeleteMessage ? 'border-s-red-500' : 'border-s-green-500'}`}>
           {willDeleteMessage ? (
             <Trash2 className="size-4 text-red-500 flex-shrink-0 mt-0.5" />
           ) : (
@@ -710,11 +734,14 @@ export function MessageComposer({
       )}
 
       {/* Reply preview */}
-      {replyingTo && !editingMessage && (
-        <div className="bg-fluux-hover rounded-t-lg px-3 py-2 flex items-start gap-2 border-s-2 border-fluux-brand">
-          <Reply className="rtl-mirror size-4 text-fluux-brand flex-shrink-0 mt-0.5" />
+      {replyingTo && !editingMessage && (() => {
+        const replyColor = replyingTo.senderColor || 'var(--fluux-brand)'
+        return (
+        <div className="px-3 py-2 flex items-start gap-2 border-s-2 border-b border-fluux-border"
+             style={{ borderInlineStartColor: replyColor }}>
+          <Reply className="rtl-mirror size-4 flex-shrink-0 mt-0.5" style={{ color: replyColor }} />
           <div className="flex-1 min-w-0">
-            <p className="text-xs font-medium text-fluux-brand">
+            <p className="text-xs font-medium" style={{ color: replyColor }}>
               Replying to {replyingTo.senderName}
             </p>
             {replyQuoteHidden ? (
@@ -736,11 +763,12 @@ export function MessageComposer({
             <X className="size-4" />
           </button>
         </div>
-      )}
+        )
+      })()}
 
       {/* Pending attachment preview */}
       {pendingAttachment && !editingMessage && (
-        <div className={`bg-fluux-hover ${replyingTo ? '' : 'rounded-t-lg'} px-3 py-2 flex items-center gap-3 border-s-2 border-fluux-brand`}>
+        <div className="px-3 py-2 flex items-center gap-3 border-s-2 border-b border-fluux-border border-s-fluux-brand">
           {/* Thumbnail preview for images/videos */}
           {pendingAttachment.previewUrl && pendingAttachment.file.type.startsWith('image/') ? (
             <img
@@ -793,7 +821,7 @@ export function MessageComposer({
 
       {/* Upload error banner */}
       {uploadState?.error && (
-        <div className={`bg-fluux-red/10 ${(replyingTo || editingMessage || pendingAttachment) ? '' : 'rounded-t-lg'} px-3 py-2 flex items-center gap-2`}>
+        <div className="bg-fluux-red/10 px-3 py-2 flex items-center gap-2 border-b border-fluux-border">
           <p className="text-xs text-fluux-error flex-1">{uploadState.error}</p>
           <button
             type="button"
@@ -806,7 +834,25 @@ export function MessageComposer({
         </div>
       )}
 
-      <div className={`bg-fluux-hover ${(replyingTo || editingMessage || pendingAttachment || uploadState?.error) ? 'rounded-b-lg' : 'rounded-lg'} flex items-center`}>
+      {/* Key-change escalation (amber) — docked in the card, calls out the one moment that matters */}
+      {keyChanged && (
+        <button
+          type="button"
+          data-encryption-escalation
+          onClick={onEncryptionClick}
+          disabled={!onEncryptionClick}
+          className="w-full text-start px-3 py-2 flex items-center gap-2 border-s-2 border-b border-fluux-border"
+          style={{ borderInlineStartColor: 'var(--fluux-status-warning)' }}
+          title={t('chat.encryption.blockedTooltip')}
+        >
+          <ShieldAlert className="size-4 flex-shrink-0" style={{ color: 'var(--fluux-status-warning)' }} />
+          <span className="text-xs font-medium" style={{ color: 'var(--fluux-status-warning)' }}>
+            {t('chat.encryption.blocked')}
+          </span>
+        </button>
+      )}
+
+      <div className="flex items-center">
         {/* Hidden file input */}
         <input
           ref={fileInputRef}
@@ -873,6 +919,25 @@ export function MessageComposer({
           )}
         </div>
 
+        {/* Leading encryption lock — calm teal reminder, escalates to amber ShieldAlert on blocked */}
+        {lockInfo && (
+          onEncryptionClick ? (
+            <button
+              type="button"
+              data-encryption-lock
+              onClick={onEncryptionClick}
+              aria-label={lockInfo.label}
+              className="p-1.5 flex-shrink-0 rounded-lg hover:bg-fluux-bg transition-colors"
+            >
+              <lockInfo.Icon className="size-4" style={{ color: lockInfo.color }} />
+            </button>
+          ) : (
+            <span data-encryption-lock aria-label={lockInfo.label} className="p-1.5 flex-shrink-0">
+              <lockInfo.Icon className="size-4" style={{ color: lockInfo.color }} />
+            </span>
+          )
+        )}
+
         {/* Text input - either custom or default */}
         {renderInput ? (
           <div className="flex-1 min-w-0 flex items-center relative">
@@ -915,28 +980,20 @@ export function MessageComposer({
           )}
         </div>
 
-        {/* Send button */}
-        <Tooltip
-          content={encryptionState?.kind === 'encrypted'
-            ? t(encryptionState.trust === 'verified' ? 'chat.encryption.verifiedTooltip' : 'chat.encryption.openpgpTooltip')
-            : ''}
-          position="top"
-          disabled={encryptionState?.kind !== 'encrypted'}
+        {/* Send button — filled accent. Encryption state is shown by the leading lock (not here). */}
+        <button
+          type="submit"
+          disabled={(!text.trim() && !pendingAttachment) || sending || disabled || sendDisabled}
+          aria-label={t('chat.send', 'Send')}
+          className="group/send relative m-1 p-2.5 rounded-xl tap-target flex items-center justify-center
+                     bg-fluux-brand text-white hover:bg-fluux-brand-hover
+                     disabled:bg-transparent disabled:text-fluux-muted disabled:cursor-not-allowed
+                     transition-colors"
         >
-          <button
-            type="submit"
-            disabled={(!text.trim() && !pendingAttachment) || sending || disabled || sendDisabled}
-            className="group/send p-3 text-fluux-brand hover:text-fluux-brand-hover
-                       disabled:text-fluux-muted disabled:cursor-not-allowed transition-colors relative"
-          >
-            <Send className="rtl-mirror size-5" />
-            {encryptionState?.kind === 'encrypted' ? (
-              encryptionState.trust === 'verified'
-                ? <ShieldCheck className="absolute bottom-2 end-2 size-2.5 text-green-500 group-disabled/send:text-fluux-muted" />
-                : <Lock className="absolute bottom-2 end-2 size-2.5 text-fluux-muted" />
-            ) : sendBadge}
-          </button>
-        </Tooltip>
+          <Send className="rtl-mirror size-5" />
+          {sendBadge}
+        </button>
+      </div>
       </div>
     </form>
   )

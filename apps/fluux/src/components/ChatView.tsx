@@ -289,7 +289,16 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
     | { open: true; peerJid: string; peerFingerprint: string; ownFingerprint: string | null }
   >({ open: false })
   const handleOpenVerify = useCallback(() => {
-    if (encryptionState.kind !== 'encrypted' || activeConversation?.type !== 'chat' || !activeConversation?.id) return
+    if (activeConversation?.type !== 'chat' || !activeConversation?.id) return
+    // Open the verify dialog for both encrypted (verify current key) and blocked
+    // (verify the new advertised key so encryption can resume).
+    const peerFingerprint =
+      encryptionState.kind === 'encrypted'
+        ? encryptionState.fingerprint
+        : encryptionState.kind === 'blocked'
+          ? encryptionState.advertisedFingerprint
+          : null
+    if (!peerFingerprint) return
     const plugin = client.e2ee?.getPlugin('openpgp') as
       | { getOwnFingerprint?: () => string | null }
       | null
@@ -297,7 +306,7 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
     setVerifyDialogState({
       open: true,
       peerJid: activeConversation.id,
-      peerFingerprint: encryptionState.fingerprint,
+      peerFingerprint,
       ownFingerprint: plugin?.getOwnFingerprint?.() ?? null,
     })
   }, [client, activeConversation, encryptionState])
@@ -367,7 +376,7 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
         onBack={onBack}
         onSearchInConversation={handleSearchInConversation}
         encryptionState={encryptionState}
-        onEncryptionClick={encryptionState.kind === 'encrypted' ? handleOpenVerify : undefined}
+        onEncryptionClick={encryptionState.kind === 'encrypted' || encryptionState.kind === 'blocked' ? handleOpenVerify : undefined}
         onDisableEncryptionClick={encryptionState.kind === 'encrypted' ? handleDisableEncryption : undefined}
         onEnableEncryptionClick={encryptionState.kind === 'plaintextForced' ? handleEnableEncryption : undefined}
         onShowProfile={
@@ -531,6 +540,12 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
         isConnected={isConnected}
         onSwitchToMessages={onSwitchToMessages}
         encryptionState={encryptionState}
+        onEncryptionClick={
+          encryptionState.kind === 'encrypted' || encryptionState.kind === 'blocked'
+            ? handleOpenVerify
+            : undefined
+        }
+        isDarkMode={resolvedMode === 'dark'}
       />
 
       {/* Easter egg animation */}
@@ -982,6 +997,8 @@ export const MessageInput = memo(function MessageInput({
   onSwitchToMessages,
   onMessageIdSent,
   encryptionState,
+  onEncryptionClick,
+  isDarkMode,
 }: {
   composerRef: React.RefObject<MessageComposerHandle | null>
   textareaRef?: React.RefObject<HTMLTextAreaElement | null>
@@ -1019,6 +1036,10 @@ export const MessageInput = memo(function MessageInput({
   processLinkPreview?: (messageId: string, body: string, to: string, type: 'chat' | 'groupchat') => Promise<void>
   onSwitchToMessages?: (conversationId: string) => void
   encryptionState: ConversationEncryptionState
+  /** Open the verify/trust UI for the current peer. Passed through to MessageComposer's leading lock. */
+  onEncryptionClick?: () => void
+  /** Whether the app is in dark mode — used to compute the per-person reply-chip color. */
+  isDarkMode?: boolean
 }) {
   const { t } = useTranslation()
   const openWebUnlockDialog = useWebUnlockDialogStore((s) => s.openWebUnlockDialog)
@@ -1038,6 +1059,7 @@ export const MessageInput = memo(function MessageInput({
         from: replyingTo.from,
         senderName: contactsByJid.get(replyingTo.from.split('/')[0])?.name || replyingTo.from.split('@')[0],
         body: replyingTo.body,
+        senderColor: auroraSenderColor(replyingTo.from.split('/')[0], isDarkMode ?? true),
       }
     : null
 
@@ -1183,6 +1205,7 @@ export const MessageInput = memo(function MessageInput({
         onValueChange={setText}
         onEditLastMessage={onEditLastMessage}
         encryptionState={encryptionState}
+        onEncryptionClick={onEncryptionClick}
       />
     </>
   )

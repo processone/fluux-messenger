@@ -1078,6 +1078,25 @@ describe('MessageComposer', () => {
     })
   })
 
+  describe('Aurora card', () => {
+    it('wraps context and input in a single .composer-card', () => {
+      const { container } = render(
+        <MessageComposer
+          placeholder="Type a message"
+          onSend={vi.fn().mockResolvedValue(true)}
+          replyingTo={{ id: '1', from: 'emma@x.com', senderName: 'Emma', body: 'hi' }}
+          onCancelReply={vi.fn()}
+        />
+      )
+      const card = container.querySelector('.composer-card')
+      expect(card).not.toBeNull()
+      // The reply preview lives INSIDE the card (docked), not as a sibling above it.
+      expect(card!.textContent).toContain('Emma')
+      // The textarea also lives inside the same card.
+      expect(card!.querySelector('textarea')).not.toBeNull()
+    })
+  })
+
   describe('clipboard paste image handling', () => {
     it('should call onFileSelect when pasting an image from clipboard (items)', () => {
       const onSend = vi.fn().mockResolvedValue(true)
@@ -1351,6 +1370,103 @@ describe('MessageComposer', () => {
       }).not.toThrow()
 
       expect(onFileSelect).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('Aurora send button', () => {
+    it('is a filled accent button when there is text, with no encryption badge on it', () => {
+      const { container } = render(
+        <MessageComposer
+          placeholder="Type a message"
+          onSend={vi.fn().mockResolvedValue(true)}
+          encryptionState={{ kind: 'encrypted', fingerprint: 'abc', trust: 'verified' }}
+        />
+      )
+      const textarea = screen.getByPlaceholderText('Type a message')
+      fireEvent.change(textarea, { target: { value: 'hi' } })
+      const send = container.querySelector('button[type="submit"]')!
+      expect(send.className).toContain('bg-fluux-brand')
+      // The encryption badge no longer lives on the send button (moved to the leading lock).
+      expect(send.querySelector('.lucide-shield-check')).toBeNull()
+    })
+
+    it('still renders the whisper sendBadge on the send button', () => {
+      const { container } = render(
+        <MessageComposer
+          placeholder="Type a message"
+          onSend={vi.fn().mockResolvedValue(true)}
+          sendBadge={<span data-testid="whisper-badge" />}
+        />
+      )
+      const send = container.querySelector('button[type="submit"]')!
+      expect(send.querySelector('[data-testid="whisper-badge"]')).not.toBeNull()
+    })
+  })
+
+  describe('Aurora encryption lock', () => {
+    const base = { placeholder: 'Type a message', onSend: vi.fn().mockResolvedValue(true) }
+
+    it('shows no lock when not encrypted', () => {
+      const { container } = render(<MessageComposer {...base} encryptionState={{ kind: 'disabled' }} />)
+      expect(container.querySelector('[data-encryption-lock]')).toBeNull()
+    })
+
+    it('shows a teal lock when encrypted but unverified', () => {
+      const { container } = render(<MessageComposer {...base} encryptionState={{ kind: 'encrypted', fingerprint: 'a', trust: 'unverified' }} />)
+      const lock = container.querySelector('[data-encryption-lock]')!
+      expect(lock).not.toBeNull()
+      expect(lock.querySelector('.lucide-lock')).not.toBeNull()
+    })
+
+    it('shows a teal lock when trust is tofu-new', () => {
+      const { container } = render(<MessageComposer {...base} encryptionState={{ kind: 'encrypted', fingerprint: 'a', trust: 'tofu-new' }} />)
+      expect(container.querySelector('[data-encryption-lock] .lucide-lock')).not.toBeNull()
+    })
+
+    it('shows a shield-check when verified', () => {
+      const { container } = render(<MessageComposer {...base} encryptionState={{ kind: 'encrypted', fingerprint: 'a', trust: 'verified' }} />)
+      expect(container.querySelector('[data-encryption-lock] .lucide-shield-check')).not.toBeNull()
+    })
+
+    it('shows the amber escalation row when the key changed (blocked)', () => {
+      const { container } = render(<MessageComposer {...base} encryptionState={{ kind: 'blocked', pinnedFingerprint: 'a', advertisedFingerprint: 'b' }} />)
+      expect(container.querySelector('[data-encryption-escalation]')).not.toBeNull()
+    })
+
+    it('calls onEncryptionClick when the lock is activated', () => {
+      const onEncryptionClick = vi.fn()
+      const { container } = render(<MessageComposer {...base} onEncryptionClick={onEncryptionClick} encryptionState={{ kind: 'encrypted', fingerprint: 'a', trust: 'unverified' }} />)
+      fireEvent.click(container.querySelector('[data-encryption-lock]')!)
+      expect(onEncryptionClick).toHaveBeenCalledTimes(1)
+    })
+  })
+
+  describe('Aurora reply-chip color', () => {
+    it('colors the reply chip with the replied-person color', () => {
+      render(
+        <MessageComposer
+          placeholder="Type a message"
+          onSend={vi.fn().mockResolvedValue(true)}
+          replyingTo={{ id: '1', from: 'emma@x.com', senderName: 'Emma', body: 'hi', senderColor: 'rgb(154, 212, 255)' }}
+          onCancelReply={vi.fn()}
+        />
+      )
+      // The "Replying to Emma" line is colored with the provided sender color.
+      const name = screen.getByText(/Replying to/i)
+      expect(name.getAttribute('style')).toContain('rgb(154, 212, 255)')
+    })
+
+    it('falls back to the brand color when no senderColor is given', () => {
+      render(
+        <MessageComposer
+          placeholder="Type a message"
+          onSend={vi.fn().mockResolvedValue(true)}
+          replyingTo={{ id: '1', from: 'emma@x.com', senderName: 'Emma', body: 'hi' }}
+          onCancelReply={vi.fn()}
+        />
+      )
+      const name = screen.getByText(/Replying to/i)
+      expect(name.getAttribute('style')).toContain('var(--fluux-brand)')
     })
   })
 })
