@@ -40,6 +40,13 @@ export const oneDarkTheme: ThemeDefinition = {
       // Error as text/icon — lightened from --fluux-color-red so it clears WCAG
       // AA on this theme's chat surface (status-error stays the fill).
       '--fluux-text-error': '#e5838a',
+      // Floating surface (menus, dropdowns, context menus via .fluux-popover).
+      // Default dark maps this to base-50, but One Dark base-50 (#4b5263) is a
+      // light-ish gray, so menu text dropped to ~3.7:1 (sub-AA). Use a surface
+      // lifted just above the chat (#313640) that clears AA (5.04:1) for menu
+      // text; border + shadow carry the elevation.
+      '--fluux-bg-float': '#383e4a',
+      '--fluux-bg-float-hover': '#3e4451',
       '--fluux-color-green-rgb': '152, 195, 121',
       '--fluux-color-yellow-rgb': '229, 192, 123',
       '--fluux-color-blue-rgb': '97, 175, 239',

@@ -62,6 +62,13 @@ export const catppuccinMochaTheme: ThemeDefinition = {
       // Error as text/icon — lightened from --fluux-color-red so it clears WCAG
       // AA on this theme's chat surface (status-error stays the fill).
       '--fluux-text-error': '#f5a0b8',
+      // Floating surface (menus, dropdowns, context menus via .fluux-popover).
+      // Default dark maps this to base-50, but Catppuccin base-50 (#6c7086/overlay0)
+      // is a light overlay tone, so menu text dropped to ~3.4:1 (sub-AA). Use a
+      // mid-surface lifted above the chat (#45475a/surface1) that clears AA
+      // (5.45:1) for menu text; border + shadow carry the elevation.
+      '--fluux-bg-float': '#4e5066',
+      '--fluux-bg-float-hover': '#585b70',
       '--fluux-color-green-rgb': '166, 227, 161',
       '--fluux-color-yellow-rgb': '249, 226, 175',
       '--fluux-color-blue-rgb': '137, 180, 250',
