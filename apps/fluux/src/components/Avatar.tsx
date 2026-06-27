@@ -117,14 +117,39 @@ function getPresenceStatusFromShow(show: PresenceShow | undefined): PresenceStat
 }
 
 /**
+ * Module-level cache of extracted first frames, keyed by avatar URL. It outlives
+ * any single Avatar mount so a frozen frame is reused instantly when the same URL
+ * mounts again — e.g. a virtualized message row scrolling back into view. Without
+ * it, each remount restarts the async extraction and the GIF replays its opening
+ * frames every time it re-enters the viewport. Bounded so churning blob: URLs
+ * (re-minted on every reconnect) can't grow it without limit.
+ */
+const STATIC_FRAME_CACHE_CAP = 256
+const staticFrameCache = new Map<string, string>()
+
+function cacheStaticFrame(url: string, dataUrl: string): void {
+  if (staticFrameCache.size >= STATIC_FRAME_CACHE_CAP) {
+    const oldest = staticFrameCache.keys().next().value
+    if (oldest !== undefined) staticFrameCache.delete(oldest)
+  }
+  staticFrameCache.set(url, dataUrl)
+}
+
+/**
  * For animated GIF avatars, extract the first frame as a static PNG data URL.
- * Returns null for non-GIF images or while loading.
+ * Returns null for non-GIF images or while loading. A cached frame for the same
+ * URL is applied synchronously on mount (no re-fetch, no replay).
  */
 function useStaticFrame(url: string | undefined): string | null {
-  const [frame, setFrame] = useState<string | null>(null)
+  const [frame, setFrame] = useState<string | null>(() =>
+    url ? staticFrameCache.get(url) ?? null : null
+  )
 
   useEffect(() => {
     if (!url) { setFrame(null); return }
+    const cached = staticFrameCache.get(url)
+    if (cached) { setFrame(cached); return }
+    setFrame(null)
     let cancelled = false
 
     fetch(url)
@@ -138,7 +163,9 @@ function useStaticFrame(url: string | undefined): string | null {
           c.width = img.naturalWidth
           c.height = img.naturalHeight
           c.getContext('2d')?.drawImage(img, 0, 0)
-          setFrame(c.toDataURL('image/png'))
+          const dataUrl = c.toDataURL('image/png')
+          cacheStaticFrame(url, dataUrl)
+          setFrame(dataUrl)
         }
         img.src = url
       })
