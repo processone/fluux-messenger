@@ -11,6 +11,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { MessageList } from './MessageList'
 import type { BaseMessage } from '@fluux/sdk'
+import type { MessageVirtualizer } from './messageVirtualizer'
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (key: string) => key, i18n: { language: 'en' } }),
@@ -42,6 +43,29 @@ vi.mock('@tanstack/react-virtual', () => ({
   }),
 }))
 
+// Adapter mock: captures the args passed by MessageList so we can assert estimateSize.
+// Returns a render-all stub so the structure tests still pass (same behaviour as the
+// @tanstack/react-virtual mock, but at the adapter level).
+let _capturedAdapterArgs: { estimateSize?: unknown; items?: readonly { key: string }[] } = {}
+vi.mock('./tanstackMessageVirtualizer', () => ({
+  useTanstackMessageVirtualizer: (args: { estimateSize?: unknown; items?: readonly { key: string }[] }) => {
+    _capturedAdapterArgs = args
+    const items = args.items ?? []
+    const stub: MessageVirtualizer = {
+      getVirtualItems: () =>
+        items.map((_, index) => ({ index, start: index * 40, size: 40, key: items[index].key })),
+      getTotalSize: () => items.length * 40,
+      itemCount: items.length,
+      getOffsetForMessageId: () => null,
+      ensureMessageMounted: async () => {},
+      measureElement: () => {},
+      scrollToOffset: () => {},
+      scrollToIndex: () => {},
+    }
+    return stub
+  },
+}))
+
 function makeMessages(count: number): BaseMessage[] {
   return Array.from({ length: count }, (_, i) => ({
     id: `msg-${i}`,
@@ -54,7 +78,10 @@ function makeMessages(count: number): BaseMessage[] {
 }
 
 describe('MessageList — virtualized render path (flag ON)', () => {
-  beforeEach(() => localStorage.setItem('fluux:flags:enableMessageVirtualization', 'true'))
+  beforeEach(() => {
+    localStorage.setItem('fluux:flags:enableMessageVirtualization', 'true')
+    _capturedAdapterArgs = {}
+  })
   afterEach(() => localStorage.clear())
 
   it('renders one windowed message-row per message, with data-message-id + body + a date separator', () => {
@@ -79,5 +106,16 @@ describe('MessageList — virtualized render path (flag ON)', () => {
       />,
     )
     expect(screen.getByText('chat.loadEarlierMessages')).toBeInTheDocument()
+  })
+
+  it('passes a per-index estimateSize function to the adapter when virtualized', () => {
+    render(
+      <MessageList
+        messages={makeMessages(3)}
+        conversationId="conv-1"
+        renderMessage={(msg) => <div>{msg.body}</div>}
+      />,
+    )
+    expect(typeof _capturedAdapterArgs.estimateSize).toBe('function')
   })
 })

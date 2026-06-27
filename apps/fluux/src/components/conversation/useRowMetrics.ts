@@ -73,7 +73,11 @@ export function useRowMetrics(
     const fontSpec = fontSpecFrom(textEl)
     const contentWidthPx = textEl.clientWidth || ctxRef.current.contentWidthPx
 
-    // Real rendered line box: a one-line text node's height, else floor(lineHeight).
+    // Line box height: primary = floor(lineHeightPx) — the engine-correct rendered box (WebKit
+    // floors line boxes to integer px; floor(lineHeight) matches the real box for font-size
+    // combinations that don't land on a pixel boundary). We refine to the measured height of a
+    // single-line element only when it is in the expected single-line range (<= ceil(lineHeight))
+    // — a multi-line measurement would produce an inflated value and must be ignored.
     const measuredBox = Math.round(textEl.getBoundingClientRect().height)
     const lineBoxPx =
       measuredBox > 0 && measuredBox <= Math.ceil(fontSpec.lineHeightPx)
