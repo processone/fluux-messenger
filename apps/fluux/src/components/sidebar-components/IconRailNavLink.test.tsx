@@ -51,6 +51,22 @@ describe('IconRailNavLink', () => {
       expect(screen.getByRole('button')).toBeInTheDocument()
     })
 
+    it('should have icon-rail-btn class on button for density CSS', () => {
+      const Wrapper = createWrapper('/rooms')
+      render(
+        <IconRailNavLink
+          icon={MessageCircle}
+          label="Messages"
+          view="messages"
+          pathPrefix="/messages"
+          onNavigate={vi.fn()}
+        />,
+        { wrapper: Wrapper }
+      )
+
+      expect(screen.getByRole('button')).toHaveClass('icon-rail-btn')
+    })
+
     it('should show tooltip on hover', async () => {
       vi.useFakeTimers()
       const Wrapper = createWrapper('/rooms')

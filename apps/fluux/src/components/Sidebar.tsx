@@ -217,7 +217,7 @@ export function Sidebar({ onSelectContact, onStartChat, onManageUser, adminCateg
       style={{ width: isDesktop ? sidebarWidth : '100%' }}
     >
       {/* Icon Rail - with padding for macOS traffic lights */}
-      <div className="w-14 bg-fluux-bg flex flex-col items-center pt-8 pb-safe-3 gap-2">
+      <div className="icon-rail bg-fluux-bg flex flex-col items-center pt-8 pb-safe-3 gap-2">
         {/* Fluux logo - enable with VITE_SHOW_LOGO=true */}
         {import.meta.env.VITE_SHOW_LOGO === 'true' && (
           <img

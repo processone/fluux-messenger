@@ -495,6 +495,14 @@
 .sidebar-row { padding-block: 8px; column-gap: 12px; }
 [data-density="compact"] .sidebar-row { padding-block: 4px; column-gap: 8px; }
 
+/* Icon rail density. Width + button + icon shrink in compact. */
+.icon-rail { width: 56px; }
+.icon-rail-btn { width: 40px; height: 40px; }
+.icon-rail-btn svg { width: 20px; height: 20px; }
+[data-density="compact"] .icon-rail { width: 48px; }
+[data-density="compact"] .icon-rail-btn { width: 36px; height: 36px; }
+[data-density="compact"] .icon-rail-btn svg { width: 18px; height: 18px; }
+
 /* Sidebar scrollbar — more visible on dark sidebar background */
 .sidebar-scroll::-webkit-scrollbar-thumb {
   background: var(--fluux-scrollbar-thumb-sidebar);
