@@ -1056,6 +1056,29 @@ describe('ChatLayout - URL→store sync hydration (popstate)', () => {
   })
 })
 
+describe('ChatLayout - EmptyState visual design', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(sessionPersistence.getSavedViewState).mockReturnValue(null)
+    setMockState({
+      activeConversationId: null,
+      activeRoomJid: null,
+      isArchivedResult: false,
+    })
+  })
+
+  it('renders the empty-state with an accent mark and a display-font title', () => {
+    render(<ChatLayoutWithRouter initialRoute="/messages" />)
+    // title carries the display font utility
+    const title = screen.getByRole('heading', { level: 2 })
+    expect(title.className).toMatch(/font-display/)
+    // the mark uses the accent, not the flat sidebar gray
+    const mark = title.parentElement?.querySelector('.rounded-full')
+    expect(mark?.className).toMatch(/fluux-brand/)
+    expect(mark?.className).not.toMatch(/bg-fluux-sidebar/)
+  })
+})
+
 describe('ChatLayout - Show profile from conversation header', () => {
   beforeEach(() => {
     vi.clearAllMocks()
