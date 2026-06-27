@@ -30,6 +30,7 @@
         "serverPlaceholderDesktop": "example.com vagy tls://host:port",
         "serverHint": "Hagyja üresen a JID-ből származó domain használatához",
         "serverHintDesktop": "Hagyja üresen az automatikus felismeréshez. Támogatott: domain, tls://host:port, tcp://host:port",
+        "linkSetServer": "Egy hivatkozás egyéni kiszolgálót állított be: {{host}}",
         "rememberMe": "Emlékezz rám",
         "storedInKeychain": "(Kulcskarikában tárolva)",
         "staySignedIn": "(bejelentkezve maradás)",

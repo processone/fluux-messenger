@@ -30,6 +30,7 @@
         "serverPlaceholderDesktop": "domain.tld или tls://host:port",
         "serverHint": "Оставьте пустым, чтобы использовать домен из JID",
         "serverHintDesktop": "Оставьте поле пустым для авто-определения. Поддерживаются домены, tls://host:port, tcp://host:port",
+        "linkSetServer": "Ссылка задала пользовательский сервер: {{host}}",
         "rememberMe": "Запомнить меня",
         "storedInKeychain": "(сохранено в Keychain)",
         "staySignedIn": "(оставаться в системе)",

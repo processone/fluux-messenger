@@ -497,6 +497,10 @@ export { discoSupportsPep } from './core/modules/Discovery'
 export { parseXmppUri, isMucJid } from './utils/xmppUri'
 export type { XmppUri } from './utils/xmppUri'
 
+// Login prefill utilities
+export { normalizeLoginPrefill } from './utils/loginPrefill'
+export type { LoginPrefill } from './utils/loginPrefill'
+
 // Client identification utilities
 export { getClientType } from './core/clients'
 export type { ClientType } from './core/clients'

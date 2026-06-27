@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { LoginScreen } from './LoginScreen'
+import { useLoginPrefillStore } from '@/stores/loginPrefillStore'
 
 const mockConnect = vi.fn()
 
@@ -46,9 +47,17 @@ vi.mock('@fluux/sdk', () => ({
 // Mock react-i18next
 vi.mock('react-i18next', () => ({
     useTranslation: () => ({
-        t: (key: string) => key,
-        i18n: { language: 'en' },
+        t: (key: string, opts?: Record<string, unknown>) => {
+            if (opts) return `${key}:${JSON.stringify(opts)}`
+            return key
+        },
+        i18n: { language: 'en', changeLanguage: vi.fn() },
     }),
+}))
+
+// Mock useLoginPrefillDeepLink — no-op in unit tests (desktop-only Tauri hook)
+vi.mock('@/hooks/useLoginPrefillDeepLink', () => ({
+    useLoginPrefillDeepLink: vi.fn(),
 }))
 
 // Mock hooks
@@ -418,5 +427,66 @@ describe('LoginScreen', () => {
             // No xmpp-last-jid in localStorage
             expect(() => render(<LoginScreen />)).not.toThrow()
         })
+    })
+})
+
+describe('LoginScreen prefill', () => {
+    beforeEach(() => {
+        vi.clearAllMocks()
+        localStorage.clear()
+        useLoginPrefillStore.getState().clearPrefill()
+        mockGetDomainFromJid.mockReturnValue(null)
+        mockGetWebsocketUrlForDomain.mockReturnValue(null)
+        mockConnect.mockResolvedValue(undefined)
+        mockUseConnection.mockReturnValue({
+            status: 'offline',
+            error: null,
+            connect: mockConnect,
+        })
+    })
+
+    it('seeds the JID field from a prefill', async () => {
+        useLoginPrefillStore.getState().setPrefill({ jid: 'alice@example.com' })
+        const { container } = render(<LoginScreen />)
+        const jidInput = container.querySelector('#jid')
+        await waitFor(() => expect((jidInput as HTMLInputElement).value).toBe('alice@example.com'))
+        // prefill is one-shot: cleared after consumption
+        expect(useLoginPrefillStore.getState().prefill).toBeNull()
+    })
+
+    it('reveals the server field and shows the custom-server note', async () => {
+        useLoginPrefillStore.getState().setPrefill({
+            jid: 'alice@example.com',
+            server: 'wss://custom.example.com:5443/ws',
+        })
+        const { container } = render(<LoginScreen />)
+        const serverInput = container.querySelector('#server')
+        await waitFor(() =>
+            expect((serverInput as HTMLInputElement).value).toBe('wss://custom.example.com:5443/ws')
+        )
+        // host shown in the calm note
+        expect(await screen.findByText(/custom\.example\.com/)).toBeTruthy()
+    })
+
+    it('reveals the field and shows the note for a native (bare-domain) server', async () => {
+        useLoginPrefillStore.getState().setPrefill({
+            jid: 'alice@example.com',
+            server: 'process-one.net',
+        })
+        const { container } = render(<LoginScreen />)
+        const serverInput = container.querySelector('#server')
+        await waitFor(() =>
+            expect((serverInput as HTMLInputElement).value).toBe('process-one.net')
+        )
+        // host shown in the calm note even though the value is not a URL
+        expect(await screen.findByText(/process-one\.net/)).toBeTruthy()
+    })
+
+    it('lets a prefill JID override the localStorage seed', async () => {
+        localStorage.setItem('xmpp-last-jid', 'old@example.com')
+        useLoginPrefillStore.getState().setPrefill({ jid: 'new@example.com' })
+        const { container } = render(<LoginScreen />)
+        const jidInput = container.querySelector('#jid')
+        await waitFor(() => expect((jidInput as HTMLInputElement).value).toBe('new@example.com'))
     })
 })

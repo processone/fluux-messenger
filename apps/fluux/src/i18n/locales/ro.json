@@ -30,6 +30,7 @@
         "serverPlaceholderDesktop": "exemplu.com sau tls://host:port",
         "serverHint": "Lasă gol pentru a folosi domeniul din JID",
         "serverHintDesktop": "Lasă gol pentru detectare automată. Suportă domeniu, tls://host:port, tcp://host:port",
+        "linkSetServer": "Un link a setat un server personalizat: {{host}}",
         "rememberMe": "Ține-mă minte",
         "storedInKeychain": "(stocat în Keychain)",
         "staySignedIn": "(rămâi conectat)",

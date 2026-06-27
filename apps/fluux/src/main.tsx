@@ -16,6 +16,8 @@ import { logStartupCapabilities } from './utils/startupDiagnostics'
 import { startStallSentinel } from './utils/stallSentinel'
 import { registerServiceWorker } from './utils/serviceWorkerUpdate'
 import { getReconnectIntent } from './utils/reconnectIntent'
+import { captureWebLoginPrefill } from './utils/loginPrefillSources'
+import { useLoginPrefillStore } from './stores/loginPrefillStore'
 import { installScrollbarAutohide } from './utils/scrollbarAutohide'
 
 // Auto-hide scrollbars: paint the thumb only while hovering / scrolling.
@@ -34,6 +36,16 @@ const proxyAdapter = isTauri && !disableTcpProxy ? tauriProxyAdapter : undefined
 // land without needing to reinstall an installed PWA (see serviceWorkerUpdate.ts).
 if (!isTauri) {
   registerServiceWorker()
+}
+
+// Web: capture any login-prefill params from the launch URL (e.g. a shared
+// link) and stash them for LoginScreen to seed. Desktop uses the xmpp: deep
+// link path instead. Runs once at boot, before React mounts.
+if (!isTauri) {
+  const webPrefill = captureWebLoginPrefill()
+  if (webPrefill) {
+    useLoginPrefillStore.getState().setPrefill(webPrefill)
+  }
 }
 
 // Add 'user-interacted' class to html on first user interaction

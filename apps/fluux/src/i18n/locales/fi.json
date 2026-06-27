@@ -30,6 +30,7 @@
         "serverPlaceholderDesktop": "esimerkki.fi tai tls://isäntä:portti",
         "serverHint": "Jätä tyhjäksi käyttääksesi JID:n verkkotunnusta",
         "serverHintDesktop": "Jätä tyhjäksi automaattista tunnistusta varten. Tukee verkkotunnusta, tls://isäntä:portti, tcp://isäntä:portti",
+        "linkSetServer": "Linkki asetti mukautetun palvelimen: {{host}}",
         "rememberMe": "Muista minut",
         "storedInKeychain": "(tallennettu avainnippuun)",
         "staySignedIn": "(pysy kirjautuneena)",
