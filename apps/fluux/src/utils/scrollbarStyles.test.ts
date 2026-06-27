@@ -2,24 +2,21 @@ import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'fs'
 import { fileURLToPath } from 'url'
 import { dirname, resolve } from 'path'
-import { SCROLLING_ATTR } from './scrollbarAutohide'
 
 /**
  * Scrollbar styling guard (index.css).
  *
- * The auto-hide behaviour is a CSS contract that no visual diff in review would
- * catch if it regressed: making the resting thumb opaque turns the scrollbar
- * always-on again, fattening the gutter undoes the "subtle" intent, and the
- * reveal rules are coupled to the `data-scrolling` attribute written by
- * scrollbarAutohide.ts — rename one side and the thumb silently never appears.
- * These assertions lock the contract:
+ * The scrollbar is a thin, subtle, always-visible thumb. Auto-hide was tried
+ * (transparent thumb revealed on :hover / [data-scrolling]) but did not work in
+ * the desktop app's WebKit engine, so a regression toward it must be caught:
+ * a transparent resting thumb makes the scrollbar disappear in WebKit, and a
+ * fatter gutter undoes the "thin/subtle" intent. These assertions lock the
+ * contract:
  *
  *  - thin gutter (<= 6px)
- *  - thumb transparent at rest (hidden)
- *  - revealed on hover AND on [data-scrolling]
- *  - the CSS selector matches the JS attribute constant
- *  - ::-webkit-scrollbar selectors are never grouped (WebKit drops the whole
- *    selector list if it dislikes any compound in it — see the index.css note)
+ *  - thumb visible at rest (resolves to the scrollbar-thumb token, not transparent)
+ *  - brighter on hover
+ *  - sidebar keeps its own theme token
  */
 
 const cssPath = resolve(dirname(fileURLToPath(import.meta.url)), '../index.css')
@@ -54,36 +51,29 @@ describe('scrollbar styles (index.css)', () => {
     expect(parseInt(bar.decls.height, 10)).toBeLessThanOrEqual(6)
   })
 
-  it('hides the thumb at rest (transparent background)', () => {
-    expect(ruleFor('::-webkit-scrollbar-thumb').decls.background).toBe('transparent')
+  it('keeps the thumb visible at rest (not transparent)', () => {
+    // A transparent resting thumb is the auto-hide regression that vanished the
+    // scrollbar in WebKit. The thumb must paint the scrollbar-thumb token.
+    const thumb = ruleFor('::-webkit-scrollbar-thumb')
+    expect(thumb.decls.background).toBe('var(--scrollbar-thumb)')
+    expect(thumb.decls.background).not.toBe('transparent')
   })
 
-  it('reveals the thumb while actively scrolling', () => {
-    const rule = ruleFor(`[${SCROLLING_ATTR}]::-webkit-scrollbar-thumb`)
-    expect(rule.decls.background).toBe('var(--scrollbar-thumb)')
-    expect(rule.decls.background).not.toBe('transparent')
+  it('brightens the thumb on hover', () => {
+    expect(ruleFor('::-webkit-scrollbar-thumb:hover').decls.background).toBe(
+      'var(--scrollbar-thumb-hover)',
+    )
   })
 
-  it('reveals the thumb on hover', () => {
-    const rule = ruleFor(':hover::-webkit-scrollbar-thumb')
-    expect(rule.decls.background).toBe('var(--scrollbar-thumb)')
-  })
-
-  it('couples the reveal selector to the JS data-scrolling attribute', () => {
-    // If scrollbarAutohide.ts renames the attribute, the CSS selector keyed on
-    // the old name would no longer match and the thumb would never reveal.
-    expect(css).toContain(`[${SCROLLING_ATTR}]::-webkit-scrollbar-thumb`)
-  })
-
-  it('reveals the sidebar thumb with its own theme color', () => {
-    const rule = ruleFor(`.sidebar-scroll[${SCROLLING_ATTR}]::-webkit-scrollbar-thumb`)
-    expect(rule.decls.background).toBe('var(--fluux-scrollbar-thumb-sidebar)')
+  it('gives the sidebar its own visible thumb token', () => {
+    expect(ruleFor('.sidebar-scroll::-webkit-scrollbar-thumb').decls.background).toBe(
+      'var(--fluux-scrollbar-thumb-sidebar)',
+    )
   })
 
   it('never groups ::-webkit-scrollbar selectors (WebKit drops grouped lists)', () => {
-    // A comma-grouped list containing a ::-webkit-scrollbar compound is dropped
-    // wholesale by WebKit, taking the reliable `:hover` reveal down with the
-    // unreliable `[data-scrolling]` one. Each must be its own rule.
+    // WebKit discards an entire comma list if it dislikes any ::-webkit-scrollbar
+    // compound in it. Keep every scrollbar rule single-selector.
     const grouped = rules
       .filter(r => r.selectors.length > 1 && r.selectors.some(s => s.includes('::-webkit-scrollbar')))
       .map(r => r.selectors.join(', '))
