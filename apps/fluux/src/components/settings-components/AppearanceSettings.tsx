@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Sun, Moon, Monitor, Upload, Trash2, Pencil, Plus, RotateCcw, Sparkles, CircleSlash } from 'lucide-react'
-import { useSettingsStore, type ThemeMode, type MotionPreference } from '@/stores/settingsStore'
+import { useSettingsStore, type ThemeMode, type MotionPreference, type DensityMode } from '@/stores/settingsStore'
 import { useThemeStore } from '@/stores/themeStore'
 import type { ThemeDefinition, AccentPreset } from '@/themes/types'
 import { getBuiltinTheme } from '@/themes/builtins'
@@ -18,6 +18,11 @@ const motionOptions: { value: MotionPreference; labelKey: string; icon: typeof S
   { value: 'full', labelKey: 'settings.motionFull', icon: Sparkles, descriptionKey: 'settings.motionFullDescription' },
   { value: 'reduced', labelKey: 'settings.motionReduced', icon: CircleSlash, descriptionKey: 'settings.motionReducedDescription' },
   { value: 'system', labelKey: 'settings.system', icon: Monitor, descriptionKey: 'settings.motionSystemDescription' },
+]
+
+const densityOptions: { value: DensityMode; labelKey: string; descriptionKey: string }[] = [
+  { value: 'comfortable', labelKey: 'settings.comfortable', descriptionKey: 'settings.densityComfortableDescription' },
+  { value: 'compact', labelKey: 'settings.compact', descriptionKey: 'settings.densityCompactDescription' },
 ]
 
 const FONT_SIZE_MIN = 75
@@ -198,6 +203,8 @@ export function AppearanceSettings() {
   const setFontSize = useSettingsStore((s) => s.setFontSize)
   const motionPreference = useSettingsStore((s) => s.motionPreference)
   const setMotionPreference = useSettingsStore((s) => s.setMotionPreference)
+  const densityMode = useSettingsStore((s) => s.densityMode)
+  const setDensityMode = useSettingsStore((s) => s.setDensityMode)
 
   const activeThemeId = useThemeStore((s) => s.activeThemeId)
   const setActiveTheme = useThemeStore((s) => s.setActiveTheme)
@@ -306,6 +313,31 @@ export function AppearanceSettings() {
           </div>
           <p className="text-xs text-fluux-muted mt-2">
             {t(motionOptions.find(o => o.value === motionPreference)?.descriptionKey || '')}
+          </p>
+        </div>
+
+        {/* Display density */}
+        <div className="space-y-3">
+          <label className="text-sm font-medium text-fluux-text">{t('settings.density')}</label>
+          <div className="grid grid-cols-2 gap-3">
+            {densityOptions.map((option) => {
+              const isSelected = densityMode === option.value
+              return (
+                <button
+                  key={option.value}
+                  onClick={() => setDensityMode(option.value)}
+                  className={`flex flex-col items-center gap-2 p-4 rounded-lg border-2 transition-all
+                    ${isSelected ? 'border-fluux-brand bg-fluux-brand/10' : 'border-fluux-hover bg-fluux-bg hover:border-fluux-muted'}`}
+                >
+                  <span className={`text-sm font-medium ${isSelected ? 'text-fluux-text' : 'text-fluux-muted'}`}>
+                    {t(option.labelKey)}
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+          <p className="text-xs text-fluux-muted mt-2">
+            {t(densityOptions.find(o => o.value === densityMode)?.descriptionKey || '')}
           </p>
         </div>
 
