@@ -18,11 +18,17 @@ export function SettingsSidebar({ activeCategory, onCategoryChange }: SettingsSi
       {sections.map((section) => (
         <div key={section.group} className="mt-4 first:mt-0">
           {section.labelKey && (
-            <h3 className="px-3 pb-1 text-xs font-semibold uppercase tracking-wide text-fluux-muted">
+            <h3
+              id={`settings-group-${section.group}`}
+              className="px-3 pb-1 text-xs font-semibold uppercase tracking-wide text-fluux-muted"
+            >
               {t(section.labelKey)}
             </h3>
           )}
-          <ul className="space-y-1">
+          <ul
+            className="space-y-1"
+            aria-labelledby={section.labelKey ? `settings-group-${section.group}` : undefined}
+          >
             {section.items.map((category) => {
               const Icon = category.icon
               const isActive = activeCategory === category.id
