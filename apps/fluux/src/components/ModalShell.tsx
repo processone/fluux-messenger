@@ -1,7 +1,8 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { X } from 'lucide-react'
 import { Tooltip } from './Tooltip'
+import { useRestoreFocus } from '@/hooks/useRestoreFocus'
 
 interface ModalShellProps {
   title: React.ReactNode
@@ -21,6 +22,12 @@ export function ModalShell({
   children,
 }: ModalShellProps) {
   const { t } = useTranslation()
+  const panelRef = useRef<HTMLDivElement>(null)
+
+  // Keep keyboard focus inside the modal across OS window blur/refocus, so
+  // global shortcuts don't reclaim arrow/Tab keys when the user switches away
+  // and back. See useRestoreFocus for the full rationale.
+  useRestoreFocus(panelRef)
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -42,7 +49,7 @@ export function ModalShell({
         onClick={onClose}
         className="absolute inset-0 cursor-default"
       />
-      <div className={`relative z-10 fluux-glass rounded-lg w-full ${width} mx-4 ${panelClassName ?? ''}`}>
+      <div ref={panelRef} className={`relative z-10 fluux-glass rounded-lg w-full ${width} mx-4 ${panelClassName ?? ''}`}>
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-fluux-hover flex-shrink-0">
           <h2 className="text-lg font-semibold text-fluux-text">{title}</h2>
