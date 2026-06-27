@@ -872,7 +872,7 @@
             "unlockSetupAction": "Konfigurer",
             "unlockSkip": "Spring over, send uden kryptering",
             "rememberPassphrase": "Gem min adgangskode på denne enhed i 24 timer",
-            "rememberPassphraseHint": "Gemt krypteret. Alle med adgang til denne enhed kan bruge den, indtil den udlober.",
+            "rememberPassphraseHint": "Gemt krypteret. Alle med adgang til denne enhed kan bruge den, indtil den udløber.",
             "unlockPassphraseMismatch": "Adgangskoderne stemmer ikke overens",
             "unlockPassphraseTooShort": "Adgangskoden skal være mindst 8 tegn",
             "lockedBannerBody": "Din krypteringsnøgle er låst. Indtast din adgangskode for at aktivere kryptering for denne session.",
