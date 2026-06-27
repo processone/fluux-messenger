@@ -6,6 +6,8 @@
 
 **Architecture:** A shared `.fluux-glass` CSS class (mirroring `.fluux-popover`) provides a solid theme-derived elevated surface, with a `@supports`-gated frosted variant (translucent `color-mix` of the theme's own `--fluux-bg-float` + `backdrop-filter: blur`). Frost is the default; a `[data-transparency="reduced"]` attribute (set by resolving a `transparencyMode` preference against the OS `prefers-reduced-transparency`, mirroring the existing `motionPreference` resolution in `useTheme.ts`) overrides it back to solid. A cross-theme guard test enforces readability across all 13 themes.
 
+> **As-built note:** the glass surface shipped as `--fluux-chat-bg`, NOT `--fluux-bg-float`. Task 1's cross-theme guard (the readability gate this plan mandates below) found that no fixed elevated ramp step is AA for text in every theme x mode: `bg-float` (base-50) fails 4 dark themes, `bg-hover` (base-40) fails 2 dark, `bg-tertiary` (base-20) fails 2 light. `--fluux-chat-bg` is the one surface where text contrast is guaranteed (AAA, asserted by `themeContrast.test.ts`) in every theme and mode; the frost + border + shadow + scrim carry the elevation. Read `--fluux-bg-float` below as "the glass surface token" — the shipped token is `--fluux-chat-bg`.
+
 **Tech Stack:** React + TypeScript, Tailwind + CSS custom properties (`index.css`), Zustand (`settingsStore`), i18next (33 locales), Vitest + Testing Library, lucide-react.
 
 ## Global Constraints

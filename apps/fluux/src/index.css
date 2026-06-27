@@ -518,8 +518,8 @@
     -webkit-backdrop-filter: none;
   }
 
-  /* Scrim utility: uses the themed backdrop token so the scrim colour tracks
-     the active theme (default: rgba(0,0,0,0.5), set in --fluux-modal-backdrop). */
+  /* Scrim utility: reads the --fluux-modal-backdrop token (rgba(0,0,0,0.5)) so a
+     theme can override the scrim colour. No theme overrides it today. */
   .modal-scrim {
     background: var(--fluux-modal-backdrop);
   }

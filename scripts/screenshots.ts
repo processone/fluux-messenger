@@ -1124,7 +1124,7 @@ test('30b — Message Identity — sender colors + own-edge (light)', async ({ p
 
 // ── Glass Theme-Variant Scenes ─────────────────────────────────────
 // Captures the .fluux-glass frost effect across themes to verify that the
-// glass panel tints to each theme's surface (--fluux-bg-float via color-mix)
+// glass panel tints to each theme's surface (--fluux-chat-bg via color-mix)
 // rather than rendering a fixed navy background.
 // Scene 10-command-palette-dark (Aurora dark) is the existing reference.
 // Scenes below add Aurora light + three accent themes: gruvbox, dracula,
@@ -1172,16 +1172,19 @@ test('42d — Glass Palette Rose Pine', async ({ page }) => {
   await setTheme(page, 'aurora')
 })
 
-// ── Glass Modal Scenes ─────────────────────────────────────────────
-// Captures a modal dialog with .fluux-glass applied, in Aurora dark and
-// Aurora light. Uses the Settings panel as the modal vehicle since the
-// Settings nav opens a panel overlay reliably in demo mode.
+// ── Accessibility Pane Scenes (Task 3 UI) ──────────────────────────
+// Captures the new Accessibility settings pane (the Transparency control), in
+// Aurora dark and light. NOTE: the settings view is a full-page pane, not one
+// of the .fluux-glass modals -- those (ModalShell / ConfirmDialog / the command
+// palette) are covered by the palette scenes above plus the ModalShell and
+// CommandPalette unit tests; demo mode has no reliable trigger to open one.
+// Filenames keep the historical "glass-modal" prefix to avoid churning the
+// committed PNGs.
 
 test('43 — Glass Modal Settings Aurora dark', async ({ page }) => {
   await waitForDemoReady(page)
   await navigateTo(page, 'settings')
-  // The settings panel itself carries .fluux-glass on modal containers --
-  // navigate to Accessibility to show the Transparency pane (Task 3 output).
+  // Navigate to the new Accessibility pane to show the Transparency control.
   await page.getByText('Accessibility').first().click()
   await page.waitForTimeout(800)
   await capture(page, '43-glass-modal-aurora-dark')
