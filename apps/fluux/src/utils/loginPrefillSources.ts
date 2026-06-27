@@ -6,6 +6,9 @@ import { parseXmppUri, normalizeLoginPrefill, type LoginPrefill } from '@fluux/s
  * carries the optional server/resource/lang overrides.
  */
 export function loginPrefillFromXmppUri(uri: string): LoginPrefill | null {
+  // Note: parseXmppUri requires a full JID (user@domain); bare-domain JIDs
+  // (accepted by normalizeLoginPrefill and the web path) cannot be prefilled
+  // via an xmpp: URI on desktop — they will not parse and return null here.
   const parsed = parseXmppUri(uri)
   if (!parsed) return null
   return normalizeLoginPrefill({

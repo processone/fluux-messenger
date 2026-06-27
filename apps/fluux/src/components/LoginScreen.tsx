@@ -246,6 +246,10 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
     }
     if (prefill.resource) linkResourceRef.current = prefill.resource
     if (prefill.lang) void i18n.changeLanguage(prefill.lang)
+    // Suppress any in-flight or subsequent keychain auto-connect: the link
+    // represents explicit intent for (possibly) a different account, so the
+    // saved-credentials auto-connect must not race with the prefilled JID.
+    hasAutoConnected.current = true
     clearPrefill()
   }, [prefill, clearPrefill, i18n])
 
@@ -432,7 +436,14 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
               type="text"
               autoComplete="username"
               value={jid}
-              onChange={(e) => { setJid(e.target.value); setCredentialsModified(true) }}
+              onChange={(e) => {
+                setJid(e.target.value)
+                setCredentialsModified(true)
+                // Drop the link-supplied resource when the user edits the JID:
+                // the resource was bound to the prefilled account and must not
+                // carry over to a manually entered (different) account.
+                linkResourceRef.current = undefined
+              }}
               onBlur={() => setJidTouched(true)}
               placeholder={t('login.jidPlaceholder')}
               required
