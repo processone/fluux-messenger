@@ -51,7 +51,7 @@ export function AdminUserView({
           </button>
         </Tooltip>
         <div className="flex-1 min-w-0">
-          <h2 className="text-lg font-semibold text-fluux-text truncate">{user.jid}</h2>
+          <h2 className="text-lg font-semibold font-display text-fluux-text truncate">{user.jid}</h2>
           <p className="text-sm text-fluux-muted">{t('admin.userView.manageUser')}</p>
         </div>
       </div>
@@ -93,7 +93,7 @@ export function AdminUserView({
               onClick={() => setShowDeleteConfirm(true)}
               disabled={isExecuting}
               className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg
-                         bg-red-500/10 hover:bg-red-500/20 text-red-500
+                         bg-fluux-red/10 hover:bg-fluux-red/20 text-fluux-red
                          disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               <Trash2 className="size-4" />

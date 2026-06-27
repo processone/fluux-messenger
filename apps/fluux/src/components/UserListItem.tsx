@@ -44,7 +44,7 @@ function UserListItemImpl({ user, onSelect, requestLastActivity }: UserListItemP
   const renderCell = () => {
     if (isOnline === true) {
       return (
-        <span className="text-xs text-green-600 dark:text-green-400">{t('admin.users.onlineNow')}</span>
+        <span className="text-xs text-fluux-green">{t('admin.users.onlineNow')}</span>
       )
     }
     if (!supported) return null
@@ -71,7 +71,7 @@ function UserListItemImpl({ user, onSelect, requestLastActivity }: UserListItemP
     >
       {showDot && (
         <span
-          className={`size-2 rounded-full shrink-0 ${isOnline ? 'bg-green-500' : 'bg-fluux-muted'}`}
+          className={`size-2 rounded-full shrink-0 ${isOnline ? 'bg-fluux-green' : 'bg-fluux-muted'}`}
           aria-label={isOnline ? t('admin.users.online') : t('admin.users.offline')}
         />
       )}

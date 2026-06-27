@@ -59,7 +59,7 @@ export function EntityListView<T>({
     <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
       {/* Header with title, count, and optional action */}
       <div className="flex items-center justify-between mb-3">
-        <h2 className="text-lg font-semibold text-fluux-text">
+        <h2 className="text-lg font-semibold font-display text-fluux-text">
           {title}
           {totalCount !== undefined && (
             <span className="ms-2 text-sm font-normal text-fluux-muted">
