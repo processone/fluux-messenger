@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { renderHook } from '@testing-library/react'
 import { useKeyboardShortcuts } from './useKeyboardShortcuts'
 import { useModalStore } from '../stores/modalStore'
+import { useAdvancedModeStore } from '../stores/advancedModeStore'
 
 // Mock settingsStore
 const mockSettingsState = {
@@ -124,6 +125,8 @@ describe('useKeyboardShortcuts', () => {
     mockSettingsState.setThemeMode = vi.fn((mode: string) => { mockSettingsState.themeMode = mode as 'light' | 'dark' | 'system' })
     // Modals live in the real modalStore now — reset them so tests start clean.
     useModalStore.setState({ commandPalette: false, shortcutHelp: false, presenceMenu: false, quickChat: false, addContact: false, joinRoom: false })
+    // Advanced mode defaults to off; individual tests that need it on must set it.
+    useAdvancedModeStore.setState({ advancedMode: false })
   })
 
   const createDefaultOptions = () => ({
@@ -999,6 +1002,32 @@ describe('useKeyboardShortcuts', () => {
       expect(mockSettingsState.setThemeMode).toHaveBeenCalledWith('dark')
 
       window.matchMedia = originalMatchMedia
+    })
+  })
+
+  describe('F12 console toggle — gated on advanced mode', () => {
+    it('should NOT call onToggleConsole when advanced mode is off', () => {
+      useAdvancedModeStore.setState({ advancedMode: false })
+      const options = createDefaultOptions()
+      const { result } = renderHook(() => useKeyboardShortcuts(options))
+
+      const f12 = result.current.find(s => s.key === 'F12')
+      expect(f12).toBeDefined()
+      f12!.action()
+
+      expect(options.onToggleConsole).not.toHaveBeenCalled()
+    })
+
+    it('should call onToggleConsole when advanced mode is on', () => {
+      useAdvancedModeStore.setState({ advancedMode: true })
+      const options = createDefaultOptions()
+      const { result } = renderHook(() => useKeyboardShortcuts(options))
+
+      const f12 = result.current.find(s => s.key === 'F12')
+      expect(f12).toBeDefined()
+      f12!.action()
+
+      expect(options.onToggleConsole).toHaveBeenCalledOnce()
     })
   })
 })
