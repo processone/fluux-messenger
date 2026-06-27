@@ -35,7 +35,7 @@ export function ConfirmDialog({
   return (
     <div
       data-modal="true"
-      className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+      className="fixed inset-0 modal-scrim flex items-center justify-center z-50"
     >
       <button
         type="button"
@@ -44,7 +44,7 @@ export function ConfirmDialog({
         onClick={onCancel}
         className="absolute inset-0 cursor-default"
       />
-      <div className="relative z-10 bg-fluux-sidebar rounded-lg p-4 max-w-sm w-full mx-4 shadow-xl">
+      <div className="relative z-10 fluux-glass rounded-lg p-4 max-w-sm w-full mx-4">
         <h3 className="text-lg font-semibold text-fluux-text mb-2">{title}</h3>
         <p className="text-sm text-fluux-muted mb-4">{message}</p>
         <div className="flex gap-2 justify-end">

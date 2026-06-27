@@ -617,6 +617,7 @@
         "categories": {
             "profile": "Profil",
             "appearance": "Erscheinungsbild",
+            "accessibility": "Barrierefreiheit",
             "language": "Sprache & Region",
             "notifications": "Benachrichtigungen",
             "updates": "Aktualisierungen",
@@ -643,6 +644,13 @@
             "blockFailed": "Benutzer konnte nicht blockiert werden"
         },
         "appearance": "Erscheinungsbild",
+        "accessibility": "Barrierefreiheit",
+        "transparency": "Transparenz",
+        "transparencyFull": "Voll",
+        "transparencyReduced": "Reduziert",
+        "transparencyFullDescription": "Milchglaspanele für Menüs und Dialoge.",
+        "transparencyReducedDescription": "Einfarbige Panels ohne Unschärfe oder Transluzenz.",
+        "transparencySystemDescription": "Systemeinstellung für reduzierte Transparenz verwenden.",
         "theme": "Design",
         "themeDefault": "Standard-Design",
         "importTheme": "Design importieren",

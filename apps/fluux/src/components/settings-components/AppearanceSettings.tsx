@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Sun, Moon, Monitor, Upload, Trash2, Pencil, Plus, RotateCcw, Sparkles, CircleSlash } from 'lucide-react'
-import { useSettingsStore, type ThemeMode, type MotionPreference, type DensityMode } from '@/stores/settingsStore'
+import { Sun, Moon, Monitor, Upload, Trash2, Pencil, Plus, RotateCcw } from 'lucide-react'
+import { useSettingsStore, type ThemeMode, type DensityMode } from '@/stores/settingsStore'
 import { useThemeStore } from '@/stores/themeStore'
 import type { ThemeDefinition, AccentPreset } from '@/themes/types'
 import { getBuiltinTheme } from '@/themes/builtins'
@@ -14,20 +14,10 @@ const themeOptions: { value: ThemeMode; labelKey: string; icon: typeof Sun; desc
   { value: 'system', labelKey: 'settings.system', icon: Monitor, descriptionKey: 'settings.systemDescription' },
 ]
 
-const motionOptions: { value: MotionPreference; labelKey: string; icon: typeof Sun; descriptionKey: string }[] = [
-  { value: 'full', labelKey: 'settings.motionFull', icon: Sparkles, descriptionKey: 'settings.motionFullDescription' },
-  { value: 'reduced', labelKey: 'settings.motionReduced', icon: CircleSlash, descriptionKey: 'settings.motionReducedDescription' },
-  { value: 'system', labelKey: 'settings.system', icon: Monitor, descriptionKey: 'settings.motionSystemDescription' },
-]
-
 const densityOptions: { value: DensityMode; labelKey: string; descriptionKey: string }[] = [
   { value: 'comfortable', labelKey: 'settings.comfortable', descriptionKey: 'settings.densityComfortableDescription' },
   { value: 'compact', labelKey: 'settings.compact', descriptionKey: 'settings.densityCompactDescription' },
 ]
-
-const FONT_SIZE_MIN = 75
-const FONT_SIZE_MAX = 150
-const FONT_SIZE_STEP = 5
 
 /** Render a strip of color swatches for a theme */
 function ThemeSwatches({ colors }: { colors?: string[] }) {
@@ -199,10 +189,6 @@ export function AppearanceSettings() {
   const { t } = useTranslation()
   const themeMode = useSettingsStore((s) => s.themeMode)
   const setThemeMode = useSettingsStore((s) => s.setThemeMode)
-  const fontSize = useSettingsStore((s) => s.fontSize)
-  const setFontSize = useSettingsStore((s) => s.setFontSize)
-  const motionPreference = useSettingsStore((s) => s.motionPreference)
-  const setMotionPreference = useSettingsStore((s) => s.setMotionPreference)
   const densityMode = useSettingsStore((s) => s.densityMode)
   const setDensityMode = useSettingsStore((s) => s.setDensityMode)
 
@@ -286,36 +272,6 @@ export function AppearanceSettings() {
           </p>
         </div>
 
-        {/* Motion */}
-        <div className="space-y-3">
-          <label className="text-sm font-medium text-fluux-text">{t('settings.motion')}</label>
-          <div className="grid grid-cols-3 gap-3">
-            {motionOptions.map((option) => {
-              const Icon = option.icon
-              const isSelected = motionPreference === option.value
-              return (
-                <button
-                  key={option.value}
-                  onClick={() => setMotionPreference(option.value)}
-                  className={`flex flex-col items-center gap-2 p-4 rounded-lg border-2 transition-all
-                    ${isSelected
-                      ? 'border-fluux-brand bg-fluux-brand/10'
-                      : 'border-fluux-hover bg-fluux-bg hover:border-fluux-muted'
-                    }`}
-                >
-                  <Icon className={`size-6 ${isSelected ? 'text-fluux-brand' : 'text-fluux-muted'}`} />
-                  <span className={`text-sm font-medium ${isSelected ? 'text-fluux-text' : 'text-fluux-muted'}`}>
-                    {t(option.labelKey)}
-                  </span>
-                </button>
-              )
-            })}
-          </div>
-          <p className="text-xs text-fluux-muted mt-2">
-            {t(motionOptions.find(o => o.value === motionPreference)?.descriptionKey || '')}
-          </p>
-        </div>
-
         {/* Display density */}
         <div className="space-y-3">
           <label className="text-sm font-medium text-fluux-text">{t('settings.density')}</label>
@@ -341,41 +297,7 @@ export function AppearanceSettings() {
           </p>
         </div>
 
-        {/* 2. Font size */}
-        <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <label className="text-sm font-medium text-fluux-text">{t('settings.fontSize')}</label>
-            <span className="text-sm text-fluux-muted">{fontSize}%</span>
-          </div>
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={() => setFontSize(fontSize - FONT_SIZE_STEP)}
-              className="text-xs text-fluux-muted shrink-0 cursor-pointer hover:text-fluux-text transition-colors"
-              aria-label={t('settings.decreaseFontSize')}
-            >A</button>
-            <input
-              type="range"
-              min={FONT_SIZE_MIN}
-              max={FONT_SIZE_MAX}
-              step={FONT_SIZE_STEP}
-              value={fontSize}
-              onChange={(e) => setFontSize(Number(e.target.value))}
-              className="w-full accent-fluux-brand"
-            />
-            <button
-              type="button"
-              onClick={() => setFontSize(fontSize + FONT_SIZE_STEP)}
-              className="text-base font-medium text-fluux-muted shrink-0 cursor-pointer hover:text-fluux-text transition-colors"
-              aria-label={t('settings.increaseFontSize')}
-            >A</button>
-          </div>
-          <p className="text-xs text-fluux-muted">
-            {t('settings.fontSizeDescription')}
-          </p>
-        </div>
-
-        {/* 3. Theme picker */}
+        {/* 2. Theme picker */}
         <div className="space-y-3">
           <label className="text-sm font-medium text-fluux-text">{t('settings.theme')}</label>
           <div className="grid grid-cols-4 gap-2">

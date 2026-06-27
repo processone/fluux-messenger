@@ -617,6 +617,7 @@
         "categories": {
             "profile": "Profil",
             "appearance": "Dehra",
+            "accessibility": "Aċċessibilità",
             "language": "Lingwa u Reġjun",
             "notifications": "Notifiki",
             "updates": "Aġġornamenti",
@@ -643,6 +644,13 @@
             "blockFailed": "Ma rnexxiex tibblokka l-utent"
         },
         "appearance": "Dehra",
+        "accessibility": "Aċċessibilità",
+        "transparency": "Trasparenza",
+        "transparencyFull": "Sħiħa",
+        "transparencyReduced": "Mnaqqsa",
+        "transparencyFullDescription": "Panili tal-ħġieġ mfesfesin għall-menus u d-djalogu.",
+        "transparencyReducedDescription": "Panili solidi mingħajr tbajbir jew translucenza.",
+        "transparencySystemDescription": "Segwi s-setting ta' tnaqqis tat-trasparenza tas-sistema.",
         "theme": "Tema",
         "themeDefault": "Tema prestabilita",
         "importTheme": "Importa tema",

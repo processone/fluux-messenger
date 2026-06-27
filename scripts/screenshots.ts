@@ -1121,3 +1121,79 @@ test('30b — Message Identity — sender colors + own-edge (light)', async ({ p
   await page.waitForTimeout(600)
   await capture(page, '30-message-identity-light')
 })
+
+// ── Glass Theme-Variant Scenes ─────────────────────────────────────
+// Captures the .fluux-glass frost effect across themes to verify that the
+// glass panel tints to each theme's surface (--fluux-chat-bg via color-mix)
+// rather than rendering a fixed navy background.
+// Scene 10-command-palette-dark (Aurora dark) is the existing reference.
+// Scenes below add Aurora light + three accent themes: gruvbox, dracula,
+// rose-pine. Each opens the command palette with Cmd+K after switching theme.
+
+test('42 — Glass Palette Aurora light', async ({ page }) => {
+  await waitForDemoReady(page, 'light')
+  await navigateTo(page, 'messages')
+  await selectItem(page, 'Emma Wilson')
+  await page.keyboard.press('Meta+k')
+  await page.waitForTimeout(800)
+  await capture(page, '42-glass-palette-aurora-light')
+})
+
+test('42b — Glass Palette Gruvbox', async ({ page }) => {
+  await waitForDemoReady(page)
+  await setTheme(page, 'gruvbox')
+  await navigateTo(page, 'messages')
+  await selectItem(page, 'Emma Wilson')
+  await page.keyboard.press('Meta+k')
+  await page.waitForTimeout(800)
+  await capture(page, '42b-glass-palette-gruvbox')
+  await setTheme(page, 'aurora')
+})
+
+test('42c — Glass Palette Dracula', async ({ page }) => {
+  await waitForDemoReady(page)
+  await setTheme(page, 'dracula')
+  await navigateTo(page, 'messages')
+  await selectItem(page, 'Emma Wilson')
+  await page.keyboard.press('Meta+k')
+  await page.waitForTimeout(800)
+  await capture(page, '42c-glass-palette-dracula')
+  await setTheme(page, 'aurora')
+})
+
+test('42d — Glass Palette Rose Pine', async ({ page }) => {
+  await waitForDemoReady(page)
+  await setTheme(page, 'rose-pine')
+  await navigateTo(page, 'messages')
+  await selectItem(page, 'Emma Wilson')
+  await page.keyboard.press('Meta+k')
+  await page.waitForTimeout(800)
+  await capture(page, '42d-glass-palette-rose-pine')
+  await setTheme(page, 'aurora')
+})
+
+// ── Accessibility Pane Scenes (Task 3 UI) ──────────────────────────
+// Captures the new Accessibility settings pane (the Transparency control), in
+// Aurora dark and light. NOTE: the settings view is a full-page pane, not one
+// of the .fluux-glass modals -- those (ModalShell / ConfirmDialog / the command
+// palette) are covered by the palette scenes above plus the ModalShell and
+// CommandPalette unit tests; demo mode has no reliable trigger to open one.
+// Filenames keep the historical "glass-modal" prefix to avoid churning the
+// committed PNGs.
+
+test('43 — Glass Modal Settings Aurora dark', async ({ page }) => {
+  await waitForDemoReady(page)
+  await navigateTo(page, 'settings')
+  // Navigate to the new Accessibility pane to show the Transparency control.
+  await page.getByText('Accessibility').first().click()
+  await page.waitForTimeout(800)
+  await capture(page, '43-glass-modal-aurora-dark')
+})
+
+test('43b — Glass Modal Settings Aurora light', async ({ page }) => {
+  await waitForDemoReady(page, 'light')
+  await navigateTo(page, 'settings')
+  await page.getByText('Accessibility').first().click()
+  await page.waitForTimeout(800)
+  await capture(page, '43b-glass-modal-aurora-light')
+})

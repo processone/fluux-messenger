@@ -615,6 +615,7 @@
         "categories": {
             "profile": "פרופיל",
             "appearance": "מראה",
+            "accessibility": "נגישות",
             "language": "שפה ואזור",
             "notifications": "התראות",
             "updates": "עדכונים",
@@ -641,6 +642,13 @@
             "blockFailed": "החסימה נכשלה"
         },
         "appearance": "מראה",
+        "accessibility": "נגישות",
+        "transparency": "שקיפות",
+        "transparencyFull": "מלאה",
+        "transparencyReduced": "מופחתת",
+        "transparencyFullDescription": "לוחות זכוכית מחוספסת לתפריטים ולחלונות דיאלוג.",
+        "transparencyReducedDescription": "לוחות מלאים ללא טשטוש או שקיפות.",
+        "transparencySystemDescription": "עקוב אחר הגדרת הפחתת השקיפות של המערכת.",
         "theme": "ערכת נושא",
         "themeDefault": "ערכת נושא ברירת מחדל",
         "importTheme": "ייבוא ערכת נושא",

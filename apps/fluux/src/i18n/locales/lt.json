@@ -615,6 +615,7 @@
         "categories": {
             "profile": "Profilis",
             "appearance": "Išvaizda",
+            "accessibility": "Prieinamumas",
             "language": "Kalba ir regionas",
             "notifications": "Pranešimai",
             "updates": "Atnaujinimai",
@@ -641,6 +642,13 @@
             "blockFailed": "Nepavyko užblokuoti vartotojo"
         },
         "appearance": "Išvaizda",
+        "accessibility": "Prieinamumas",
+        "transparency": "Skaidrumas",
+        "transparencyFull": "Visiškas",
+        "transparencyReduced": "Sumažintas",
+        "transparencyFullDescription": "Matiniai stiklo skydeliai meniu ir dialogams.",
+        "transparencyReducedDescription": "Standūs skydeliai be suliejimo ar peršviečiamumo.",
+        "transparencySystemDescription": "Naudoti sistemos sumažinto skaidrumo nustatymą.",
         "theme": "Tema",
         "themeDefault": "Numatytoji tema",
         "importTheme": "Importuoti temą",

@@ -615,6 +615,7 @@
         "categories": {
             "profile": "Профил",
             "appearance": "Външен вид",
+            "accessibility": "Достъпност",
             "language": "Език и регион",
             "notifications": "Известия",
             "updates": "Актуализации",
@@ -641,6 +642,13 @@
             "blockFailed": "Неуспешно блокиране на потребител"
         },
         "appearance": "Външен вид",
+        "accessibility": "Достъпност",
+        "transparency": "Прозрачност",
+        "transparencyFull": "Пълна",
+        "transparencyReduced": "Намалена",
+        "transparencyFullDescription": "Матирани стъклени панели за менюта и диалози.",
+        "transparencyReducedDescription": "Плътни панели без размазване или прозрачност.",
+        "transparencySystemDescription": "Следвайте системната настройка за намалена прозрачност.",
         "theme": "Тема",
         "themeDefault": "Тема по подразбиране",
         "importTheme": "Импортиране на тема",

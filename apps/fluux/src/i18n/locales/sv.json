@@ -615,6 +615,7 @@
         "categories": {
             "profile": "Profil",
             "appearance": "Utseende",
+            "accessibility": "Tillgänglighet",
             "language": "Språk & region",
             "notifications": "Aviseringar",
             "updates": "Uppdateringar",
@@ -641,6 +642,13 @@
             "blockFailed": "Kunde inte blockera användare"
         },
         "appearance": "Utseende",
+        "accessibility": "Tillgänglighet",
+        "transparency": "Genomskinlighet",
+        "transparencyFull": "Full",
+        "transparencyReduced": "Reducerad",
+        "transparencyFullDescription": "Frostade glasspaneler för menyer och dialoger.",
+        "transparencyReducedDescription": "Täckande paneler utan oskärpa eller genomskinlighet.",
+        "transparencySystemDescription": "Följ systemets inställning för reducerad genomskinlighet.",
         "theme": "Tema",
         "themeDefault": "Standardtema",
         "importTheme": "Importera tema",

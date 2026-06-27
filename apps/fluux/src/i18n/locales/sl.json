@@ -617,6 +617,7 @@
         "categories": {
             "profile": "Profil",
             "appearance": "Videz",
+            "accessibility": "Dostopnost",
             "language": "Jezik in regija",
             "notifications": "Obvestila",
             "updates": "Posodobitve",
@@ -643,6 +644,13 @@
             "blockFailed": "Blokiranje uporabnika ni uspelo"
         },
         "appearance": "Videz",
+        "accessibility": "Dostopnost",
+        "transparency": "Prosojnost",
+        "transparencyFull": "Popolna",
+        "transparencyReduced": "Zmanjšana",
+        "transparencyFullDescription": "Motno steklene plošče za menije in pogovorna okna.",
+        "transparencyReducedDescription": "Polne plošče brez zameglitve ali prosojnosti.",
+        "transparencySystemDescription": "Upoštevaj sistemsko nastavitev zmanjšane prosojnosti.",
         "theme": "Tema",
         "themeDefault": "Privzeta tema",
         "importTheme": "Uvozi temo",

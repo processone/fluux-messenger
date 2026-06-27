@@ -615,6 +615,7 @@
         "categories": {
             "profile": "Prófíll",
             "appearance": "Útlit",
+            "accessibility": "Aðgengi",
             "language": "Tungumál og svæði",
             "notifications": "Tilkynningar",
             "updates": "Uppfærslur",
@@ -641,6 +642,13 @@
             "blockFailed": "Ekki tókst að loka á notanda"
         },
         "appearance": "Útlit",
+        "accessibility": "Aðgengi",
+        "transparency": "Gegnsæi",
+        "transparencyFull": "Fullt",
+        "transparencyReduced": "Minnkað",
+        "transparencyFullDescription": "Frostglerpaneler fyrir valmyndir og glugga.",
+        "transparencyReducedDescription": "Heilar flísar án þokumyndar eða hleypni.",
+        "transparencySystemDescription": "Fylgja gegnsæisminnkandi stillingum kerfisins.",
         "theme": "Þema",
         "themeDefault": "Sjálfgefið þema",
         "importTheme": "Flytja inn þema",

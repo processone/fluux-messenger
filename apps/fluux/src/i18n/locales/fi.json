@@ -615,6 +615,7 @@
         "categories": {
             "profile": "Profiili",
             "appearance": "Ulkoasu",
+            "accessibility": "Esteettömyys",
             "language": "Kieli ja alue",
             "notifications": "Ilmoitukset",
             "updates": "Päivitykset",
@@ -641,6 +642,13 @@
             "blockFailed": "Käyttäjän estäminen epäonnistui"
         },
         "appearance": "Ulkoasu",
+        "accessibility": "Esteettömyys",
+        "transparency": "Läpinäkyvyys",
+        "transparencyFull": "Täysi",
+        "transparencyReduced": "Vähennetty",
+        "transparencyFullDescription": "Huurrelasipaneelit valikkoihin ja valintaikkunoihin.",
+        "transparencyReducedDescription": "Kiinteät paneelit ilman sumentamista tai läpikuultavuutta.",
+        "transparencySystemDescription": "Käytä järjestelmän läpinäkyvyyden vähennysasetusta.",
         "theme": "Teema",
         "themeDefault": "Oletusteema",
         "importTheme": "Tuo teema",

@@ -616,6 +616,7 @@
         "categories": {
             "profile": "Profil",
             "appearance": "Apparence",
+            "accessibility": "Accessibilité",
             "language": "Langue et région",
             "notifications": "Notifications",
             "updates": "Mises à jour",
@@ -649,6 +650,13 @@
             "blockFailed": "Échec du blocage"
         },
         "appearance": "Apparence",
+        "accessibility": "Accessibilité",
+        "transparency": "Transparence",
+        "transparencyFull": "Complète",
+        "transparencyReduced": "Réduite",
+        "transparencyFullDescription": "Panneaux en verre dépoli pour les menus et boîtes de dialogue.",
+        "transparencyReducedDescription": "Panneaux opaques sans flou ni translucidité.",
+        "transparencySystemDescription": "Suivre le réglage de réduction de transparence du système.",
         "theme": "Thème",
         "themeDefault": "Thème par défaut",
         "importTheme": "Importer un thème",

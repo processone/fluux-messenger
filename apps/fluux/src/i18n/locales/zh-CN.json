@@ -615,6 +615,7 @@
         "categories": {
             "profile": "个人资料",
             "appearance": "外观",
+            "accessibility": "无障碍",
             "language": "语言和区域",
             "notifications": "通知",
             "updates": "更新",
@@ -641,6 +642,13 @@
             "blockFailed": "无法屏蔽用户"
         },
         "appearance": "外观",
+        "accessibility": "无障碍",
+        "transparency": "透明度",
+        "transparencyFull": "完整",
+        "transparencyReduced": "降低",
+        "transparencyFullDescription": "为菜单和对话框使用磨砂玻璃效果。",
+        "transparencyReducedDescription": "纯色面板，无模糊或半透明效果。",
+        "transparencySystemDescription": "跟随系统的减少透明度设置。",
         "theme": "主题",
         "themeDefault": "默认主题",
         "importTheme": "导入主题",

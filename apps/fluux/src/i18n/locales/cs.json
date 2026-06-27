@@ -617,6 +617,7 @@
         "categories": {
             "profile": "Profil",
             "appearance": "Vzhled",
+            "accessibility": "Přístupnost",
             "language": "Jazyk a region",
             "notifications": "Oznámení",
             "updates": "Aktualizace",
@@ -643,6 +644,13 @@
             "blockFailed": "Nepodařilo se zablokovat uživatele"
         },
         "appearance": "Vzhled",
+        "accessibility": "Přístupnost",
+        "transparency": "Průhlednost",
+        "transparencyFull": "Plná",
+        "transparencyReduced": "Snížená",
+        "transparencyFullDescription": "Matované skleněné panely pro nabídky a dialogy.",
+        "transparencyReducedDescription": "Plné panely bez rozmazání nebo průhlednosti.",
+        "transparencySystemDescription": "Použít systémové nastavení snížení průhlednosti.",
         "theme": "Motiv",
         "themeDefault": "Výchozí motiv",
         "importTheme": "Importovat motiv",
