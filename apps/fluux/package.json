@@ -21,6 +21,7 @@
     "tauri:install": "./scripts/tauri-install.sh"
   },
   "dependencies": {
+    "@chenglou/pretext": "^0.0.8",
     "@emoji-mart/data": "^1.2.1",
     "@fluux/sdk": "*",
     "@tanstack/react-virtual": "^3.13.23",
