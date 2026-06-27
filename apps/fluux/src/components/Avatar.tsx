@@ -88,6 +88,13 @@ export interface AvatarProps {
    */
   fallbackColor?: string
 
+  /** Colour for the fallback letter. Defaults to white. Set to a best-contrast
+   *  value (see bestTextColor) when fallbackColor is a light fill. */
+  fallbackTextColor?: string
+
+  /** Adds a soft colored glow behind the presence dot (Aurora members panel). */
+  presenceHalo?: boolean
+
   /**
    * Glyph rendered on the colored background when no avatar image is present,
    * in place of the first letter. Used for non-person entities such as rooms
@@ -209,6 +216,8 @@ export function Avatar({
   overlay,
   fallbackColor,
   fallbackIcon,
+  fallbackTextColor,
+  presenceHalo = false,
   forceOffline = false,
   shape = 'circle',
 }: AvatarProps) {
@@ -323,7 +332,10 @@ export function Avatar({
           {fallbackIcon ? (
             <span className="text-white flex items-center justify-center">{fallbackIcon}</span>
           ) : (
-            <span className={`${sizeClasses.text} font-semibold text-white select-none`}>
+            <span
+              className={`${sizeClasses.text} font-semibold select-none`}
+              style={{ color: fallbackTextColor ?? '#ffffff' }}
+            >
               {letter}
             </span>
           )}
@@ -336,7 +348,12 @@ export function Avatar({
       ) : presenceColor && (
         <div
           className={`absolute ${sizeClasses.presence} rounded-full border-2 ${presenceBorderColor} ${presenceBgStyle ? '' : presenceColor} transition-colors duration-500 ease-in-out`}
-          style={presenceBgStyle}
+          style={{
+            ...presenceBgStyle,
+            ...(presenceHalo && presenceBgStyle
+              ? { boxShadow: `0 0 5px ${PRESENCE_CSS_VARS[resolvedPresence!]}` }
+              : {}),
+          }}
         />
       )}
     </div>

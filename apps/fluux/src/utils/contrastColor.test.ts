@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { getLuminance, contrastRatio, ensureContrast, ensureContrastWithWhite, hexToRgb } from './contrastColor'
+import { getLuminance, contrastRatio, ensureContrast, ensureContrastWithWhite, hexToRgb, bestTextColor } from './contrastColor'
 
 describe('contrastColor', () => {
   it('parses hex to rgb', () => {
@@ -20,5 +20,16 @@ describe('contrastColor', () => {
     const out = ensureContrast('#66D08A', 0.8) // light green on a light bg
     const rgb = hexToRgb(out)!
     expect(contrastRatio(getLuminance(rgb.r, rgb.g, rgb.b), 0.8)).toBeGreaterThanOrEqual(4.5)
+  })
+})
+
+describe('bestTextColor', () => {
+  it('picks black on a light fill, white on a dark fill', () => {
+    expect(bestTextColor('#A9B4FF')).toBe('#000000') // light periwinkle (dark-mode sender hue)
+    expect(bestTextColor('#1A2238')).toBe('#ffffff') // deep navy
+  })
+  it('falls back to white for a non-hex input', () => {
+    expect(bestTextColor('var(--fluux-bg-accent)')).toBe('#ffffff')
+    expect(bestTextColor('')).toBe('#ffffff')
   })
 })

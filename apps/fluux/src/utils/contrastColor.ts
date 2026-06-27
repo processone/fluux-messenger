@@ -69,3 +69,25 @@ export function ensureContrastOnDark(hex: string, bgLuminance: number, ratio = 4
   }
   return toHex(r, g, b)
 }
+
+/**
+ * Pick the better of black/white as a readable foreground on a solid hex fill.
+ * Returns whichever of #000/#fff has the higher WCAG contrast ratio against the
+ * fill. By construction the chosen ratio is >= ~4.58:1 for any fill (the
+ * crossover sits at relative luminance ~0.18), so a fallback-avatar letter
+ * coloured this way always clears AA. Non-hex inputs (e.g. CSS vars) -> white.
+ */
+export function bestTextColor(hex: string): '#ffffff' | '#000000' {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim())
+  if (!m) return '#ffffff'
+  const int = parseInt(m[1], 16)
+  const channels = [(int >> 16) & 255, (int >> 8) & 255, int & 255]
+  const [r, g, b] = channels.map((c) => {
+    const s = c / 255
+    return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4
+  })
+  const L = 0.2126 * r + 0.7152 * g + 0.0722 * b
+  const contrastWhite = 1.05 / (L + 0.05)
+  const contrastBlack = (L + 0.05) / 0.05
+  return contrastBlack > contrastWhite ? '#000000' : '#ffffff'
+}
