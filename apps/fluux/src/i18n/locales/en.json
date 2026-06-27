@@ -625,6 +625,11 @@
             "privacy": "Privacy",
             "advanced": "Advanced"
         },
+        "groups": {
+            "general": "General",
+            "privacy": "Privacy & Security",
+            "system": "System"
+        },
         "advanced": {
             "title": "Advanced",
             "warning": "These options are for advanced users. Changing them can break connectivity or weaken security.",

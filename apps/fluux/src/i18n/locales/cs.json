@@ -627,6 +627,11 @@
             "privacy": "Soukromí",
             "advanced": "Pokročilé"
         },
+        "groups": {
+            "general": "Obecné",
+            "privacy": "Soukromí a zabezpečení",
+            "system": "Systém"
+        },
         "blocked": {
             "title": "Zablokovaní uživatelé",
             "description": "Zablokované kontakty vám nemohou posílat zprávy ani vidět váš stav.",

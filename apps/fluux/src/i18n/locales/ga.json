@@ -625,6 +625,11 @@
             "privacy": "Príobháideacht",
             "advanced": "Ardleibhéal"
         },
+        "groups": {
+            "general": "Ginearálta",
+            "privacy": "Príobháideachas agus slándáil",
+            "system": "Córas"
+        },
         "blocked": {
             "title": "Úsáideoirí Coiscthe",
             "description": "Ní féidir le teagmhálacha coiscthe teachtaireachtaí a sheoladh chugat nó do láithreacht a fheiceáil.",

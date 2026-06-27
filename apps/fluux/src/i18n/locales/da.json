@@ -625,6 +625,11 @@
             "privacy": "Privatliv",
             "advanced": "Avanceret"
         },
+        "groups": {
+            "general": "Generelt",
+            "privacy": "Privatliv og sikkerhed",
+            "system": "System"
+        },
         "blocked": {
             "title": "Blokerede brugere",
             "description": "Blokerede kontakter kan ikke sende dig beskeder eller se din status.",

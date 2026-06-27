@@ -627,6 +627,11 @@
             "privacy": "Confidențialitate",
             "advanced": "Avansat"
         },
+        "groups": {
+            "general": "General",
+            "privacy": "Confidențialitate și securitate",
+            "system": "Sistem"
+        },
         "blocked": {
             "title": "Utilizatori blocați",
             "description": "Contactele blocate nu îți pot trimite mesaje și nu îți pot vedea starea.",

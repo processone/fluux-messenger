@@ -625,6 +625,11 @@
             "privacy": "Sekretess",
             "advanced": "Avancerat"
         },
+        "groups": {
+            "general": "Allmänt",
+            "privacy": "Integritet och säkerhet",
+            "system": "System"
+        },
         "blocked": {
             "title": "Blockerade användare",
             "description": "Blockerade kontakter kan inte skicka meddelanden till dig eller se din status.",

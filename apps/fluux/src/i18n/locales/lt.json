@@ -625,6 +625,11 @@
             "privacy": "Privatumas",
             "advanced": "Išplėstiniai"
         },
+        "groups": {
+            "general": "Bendra",
+            "privacy": "Privatumas ir sauga",
+            "system": "Sistema"
+        },
         "blocked": {
             "title": "Užblokuoti vartotojai",
             "description": "Užblokuoti kontaktai negali siųsti jums žinučių ar matyti jūsų būsenos.",

@@ -627,6 +627,11 @@
             "privacy": "Privacidad",
             "advanced": "Avanzado"
         },
+        "groups": {
+            "general": "General",
+            "privacy": "Privacidad y seguridad",
+            "system": "Sistema"
+        },
         "blocked": {
             "title": "Usuarios Bloqueados",
             "description": "Los contactos bloqueados no pueden enviarte mensajes ni ver tu presencia.",

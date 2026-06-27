@@ -627,6 +627,11 @@
             "privacy": "Prywatność",
             "advanced": "Zaawansowane"
         },
+        "groups": {
+            "general": "Ogólne",
+            "privacy": "Prywatność i bezpieczeństwo",
+            "system": "System"
+        },
         "blocked": {
             "title": "Zablokowani użytkownicy",
             "description": "Zablokowani użytkownicy nie mogą wysyłać Ci wiadomości ani widzieć Twojego statusu.",

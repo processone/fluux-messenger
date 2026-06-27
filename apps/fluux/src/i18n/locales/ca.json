@@ -627,6 +627,11 @@
             "privacy": "Privadesa",
             "advanced": "Avançat"
         },
+        "groups": {
+            "general": "General",
+            "privacy": "Privadesa i seguretat",
+            "system": "Sistema"
+        },
         "blocked": {
             "title": "Usuaris blocats",
             "description": "Els contactes blocats no et poden enviar missatges ni veure el teu estat.",

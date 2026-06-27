@@ -627,6 +627,11 @@
             "privacy": "Zasebnost",
             "advanced": "Napredno"
         },
+        "groups": {
+            "general": "Splošno",
+            "privacy": "Zasebnost in varnost",
+            "system": "Sistem"
+        },
         "blocked": {
             "title": "Blokirani uporabniki",
             "description": "Blokirani stiki vam ne morejo pošiljati sporočil ali videti vašega statusa.",

@@ -625,6 +625,11 @@
             "privacy": "Adatvédelem",
             "advanced": "Speciális"
         },
+        "groups": {
+            "general": "Általános",
+            "privacy": "Adatvédelem és biztonság",
+            "system": "Rendszer"
+        },
         "blocked": {
             "title": "Letiltott felhasználók",
             "description": "A letiltott névjegyek nem küldhetnek üzenetet és nem láthatják az Ön elérhetőségét.",

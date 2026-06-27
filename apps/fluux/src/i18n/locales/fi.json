@@ -625,6 +625,11 @@
             "privacy": "Yksityisyys",
             "advanced": "Lisäasetukset"
         },
+        "groups": {
+            "general": "Yleiset",
+            "privacy": "Yksityisyys ja turvallisuus",
+            "system": "Järjestelmä"
+        },
         "blocked": {
             "title": "Estetyt käyttäjät",
             "description": "Estetyt yhteystiedot eivät voi lähettää sinulle viestejä tai nähdä tilaasi.",
