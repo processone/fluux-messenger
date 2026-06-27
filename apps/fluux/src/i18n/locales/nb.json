@@ -625,6 +625,11 @@
             "privacy": "Personvern",
             "advanced": "Avansert"
         },
+        "groups": {
+            "general": "Generelt",
+            "privacy": "Personvern og sikkerhet",
+            "system": "System"
+        },
         "blocked": {
             "title": "Blokkerte brukere",
             "description": "Blokkerte kontakter kan ikke sende deg meldinger eller se din status.",

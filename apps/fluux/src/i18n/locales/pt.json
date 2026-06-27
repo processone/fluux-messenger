@@ -627,6 +627,11 @@
             "privacy": "Privacidade",
             "advanced": "Avançado"
         },
+        "groups": {
+            "general": "Geral",
+            "privacy": "Privacidade e segurança",
+            "system": "Sistema"
+        },
         "blocked": {
             "title": "Utilizadores bloqueados",
             "description": "Os contactos bloqueados não podem enviar-lhe mensagens nem ver o seu estado.",

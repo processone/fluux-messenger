@@ -627,6 +627,11 @@
             "privacy": "Datenschutz",
             "advanced": "Erweitert"
         },
+        "groups": {
+            "general": "Allgemein",
+            "privacy": "Datenschutz & Sicherheit",
+            "system": "System"
+        },
         "blocked": {
             "title": "Blockierte Benutzer",
             "description": "Blockierte Kontakte können Ihnen keine Nachrichten senden oder Ihren Status sehen.",

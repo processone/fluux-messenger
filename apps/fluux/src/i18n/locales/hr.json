@@ -625,6 +625,11 @@
             "privacy": "Privatnost",
             "advanced": "Napredno"
         },
+        "groups": {
+            "general": "Općenito",
+            "privacy": "Privatnost i sigurnost",
+            "system": "Sustav"
+        },
         "blocked": {
             "title": "Blokirani korisnici",
             "description": "Blokirani kontakti vam ne mogu slati poruke niti vidjeti vaš status.",

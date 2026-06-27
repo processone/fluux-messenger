@@ -626,6 +626,11 @@
             "privacy": "Privātums",
             "advanced": "Papildu"
         },
+        "groups": {
+            "general": "Vispārīgi",
+            "privacy": "Konfidencialitāte un drošība",
+            "system": "Sistēma"
+        },
         "blocked": {
             "title": "Bloķētie lietotāji",
             "description": "Bloķētie kontakti nevar sūtīt jums ziņojumus vai redzēt jūsu klātbūtni.",

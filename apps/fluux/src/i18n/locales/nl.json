@@ -625,6 +625,11 @@
             "privacy": "Privacy",
             "advanced": "Geavanceerd"
         },
+        "groups": {
+            "general": "Algemeen",
+            "privacy": "Privacy en beveiliging",
+            "system": "Systeem"
+        },
         "blocked": {
             "title": "Geblokkeerde gebruikers",
             "description": "Geblokkeerde contacten kunnen je geen berichten sturen of je status zien.",

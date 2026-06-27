@@ -627,6 +627,11 @@
             "privacy": "Privaatsus",
             "advanced": "Täpsem"
         },
+        "groups": {
+            "general": "Üldine",
+            "privacy": "Privaatsus ja turvalisus",
+            "system": "Süsteem"
+        },
         "blocked": {
             "title": "Blokeeritud kasutajad",
             "description": "Blokeeritud kontaktid ei saa sulle sõnumeid saata ega näha su olekut.",

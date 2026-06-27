@@ -625,6 +625,11 @@
             "privacy": "Friðhelgi",
             "advanced": "Ítarlegt"
         },
+        "groups": {
+            "general": "Almennt",
+            "privacy": "Persónuvernd og öryggi",
+            "system": "Kerfi"
+        },
         "blocked": {
             "title": "Útilokaðir notendur",
             "description": "Útilokaðir tengiliðir geta ekki sent þér skilaboð eða séð stöðu þína.",

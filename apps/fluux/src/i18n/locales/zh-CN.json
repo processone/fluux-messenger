@@ -625,6 +625,11 @@
             "privacy": "隐私",
             "advanced": "高级"
         },
+        "groups": {
+            "general": "通用",
+            "privacy": "隐私与安全",
+            "system": "系统"
+        },
         "blocked": {
             "title": "已屏蔽用户",
             "description": "被屏蔽的联系人无法向您发送消息，也无法查看您的在线状态。",

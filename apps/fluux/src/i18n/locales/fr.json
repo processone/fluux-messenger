@@ -626,6 +626,11 @@
             "privacy": "Confidentialité",
             "advanced": "Avancé"
         },
+        "groups": {
+            "general": "Général",
+            "privacy": "Confidentialité et sécurité",
+            "system": "Système"
+        },
         "advanced": {
             "title": "Avancé",
             "warning": "Ces options sont réservées aux utilisateurs avertis. Les modifier peut empêcher la connexion ou affaiblir la sécurité.",

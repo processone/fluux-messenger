@@ -627,6 +627,11 @@
             "privacy": "Privatezza",
             "advanced": "Avvanzat"
         },
+        "groups": {
+            "general": "Ġenerali",
+            "privacy": "Privatezza u sigurtà",
+            "system": "Sistema"
+        },
         "blocked": {
             "title": "Utenti Imblokkati",
             "description": "Kuntatti mblokkati ma jistgħux jibagħtulek messaġġi jew jaraw il-preżenza tiegħek.",
