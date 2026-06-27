@@ -79,6 +79,10 @@ export const rosePineTheme: ThemeDefinition = {
       '--fluux-color-purple': '#907aa9', // iris
       '--fluux-color-gray': '#9893a5',   // muted
       '--fluux-color-red-rgb': '180, 99, 122',
+      // Decouple text-muted from base-80: base-80 (#797593/subtle) reaches only
+      // 4.23:1 on chat-bg (#fffaf3) and 3.67:1 on sidebar-bg (#f2e9e1).
+      // Darken lightness 52->45 to clear AA on the harder sidebar surface.
+      '--fluux-text-muted': '#696581',
       // Error as text/icon — darkened for WCAG AA on the light chat surface.
       '--fluux-text-error': '#9b2d3c',
       '--fluux-color-green-rgb': '40, 105, 131',

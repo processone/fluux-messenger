@@ -17,7 +17,12 @@ import type { ThemeDefinition } from './types'
  *                           guarded on chat-bg elsewhere.
  *
  * For every builtin theme x both modes, both tokens must clear WCAG AA
- * (>= 4.5:1) on --fluux-chat-bg.
+ * (>= 4.5:1) on BOTH --fluux-chat-bg AND --fluux-sidebar-bg.
+ *
+ * --fluux-text-muted is used app-wide (timestamps, labels, placeholders,
+ * rail icons). The sidebar surface is the harder constraint in light mode
+ * since it sits between two lighter steps on the ramp. Testing both surfaces
+ * here ensures a theme fix does not leave the sidebar sub-AA.
  *
  * Helpers are copied verbatim from themeContrast.test.ts; that is the
  * established pattern in sibling guards (occupantAvatarContrast.test.ts,
@@ -103,18 +108,35 @@ describe('empty-state text contrast on the main surface', () => {
     for (const mode of ['dark', 'light'] as const) {
       it(`${theme.id}/${mode}: title + prompt clear AA on chat-bg`, () => {
         const vars = themeTokens(theme, mode)
-        const bg = 'var(--fluux-chat-bg)'
+        const chatBg = 'var(--fluux-chat-bg)'
 
-        const titleRatio = contrast('var(--fluux-text-normal)', bg, vars)
+        const titleRatio = contrast('var(--fluux-text-normal)', chatBg, vars)
         expect(
           titleRatio,
           `${theme.id}/${mode}: text-normal (title) on chat-bg = ${titleRatio.toFixed(2)} (need >= 4.5)`
         ).toBeGreaterThanOrEqual(4.5)
 
-        const promptRatio = contrast('var(--fluux-text-muted)', bg, vars)
+        const promptRatio = contrast('var(--fluux-text-muted)', chatBg, vars)
         expect(
           promptRatio,
           `${theme.id}/${mode}: text-muted (prompt) on chat-bg = ${promptRatio.toFixed(2)} (need >= 4.5)`
+        ).toBeGreaterThanOrEqual(4.5)
+      })
+
+      it(`${theme.id}/${mode}: title + prompt clear AA on sidebar-bg`, () => {
+        const vars = themeTokens(theme, mode)
+        const sidebarBg = 'var(--fluux-sidebar-bg)'
+
+        const titleRatio = contrast('var(--fluux-text-normal)', sidebarBg, vars)
+        expect(
+          titleRatio,
+          `${theme.id}/${mode}: text-normal (title) on sidebar-bg = ${titleRatio.toFixed(2)} (need >= 4.5)`
+        ).toBeGreaterThanOrEqual(4.5)
+
+        const promptRatio = contrast('var(--fluux-text-muted)', sidebarBg, vars)
+        expect(
+          promptRatio,
+          `${theme.id}/${mode}: text-muted (prompt) on sidebar-bg = ${promptRatio.toFixed(2)} (need >= 4.5)`
         ).toBeGreaterThanOrEqual(4.5)
       })
     }

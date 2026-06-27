@@ -33,6 +33,10 @@ export const tokyoNightTheme: ThemeDefinition = {
       '--fluux-color-purple': '#bb9af7',
       '--fluux-color-gray': '#545c7e',
       '--fluux-color-red-rgb': '247, 118, 142',
+      // Decouple text-muted from base-80: base-80 (#737aa2/dark5) reaches only
+      // 3.22:1 on chat-bg (#292e42) and 3.49:1 on sidebar-bg (#24283b). Increase
+      // lightness 54->64 to clear AA on both text surfaces.
+      '--fluux-text-muted': '#9196b6',
       // Error as text/icon — lightened from --fluux-color-red so it clears WCAG
       // AA on this theme's chat surface (status-error stays the fill).
       '--fluux-text-error': '#f66782',
@@ -83,6 +87,15 @@ export const tokyoNightTheme: ThemeDefinition = {
       '--fluux-status-warning': '#705632',
       '--fluux-status-error': '#a71d45',
       '--fluux-color-red-rgb': '245, 42, 101',
+      // Decouple text-normal from base-90: base-90 (#3760bf/vivid indigo) reaches
+      // only 4.52:1 on chat-bg and 3.52:1 on sidebar-bg (#c4c8da) -- sub-AA on
+      // sidebar. Override to base-100 (#1a1b26) which clears both surfaces.
+      '--fluux-text-normal': '#1a1b26',
+      // Decouple text-muted from base-80: base-80 (#68709a/dark5) reaches only
+      // 3.71:1 on chat-bg (#e1e2e7) and 2.89:1 on sidebar-bg (#c4c8da). Darken
+      // lightness 51->36.5 to clear AA on the much harder sidebar surface while
+      // remaining visually secondary vs. the overridden text-normal above.
+      '--fluux-text-muted': '#4a5170',
       // Error as text/icon — darkened for WCAG AA on the light chat surface.
       '--fluux-text-error': '#8c072d',
       '--fluux-color-green-rgb': '88, 117, 57',
