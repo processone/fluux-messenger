@@ -34,7 +34,7 @@ vi.mock('./EncryptedPlaceholder', () => ({
 // Does NOT render the name as text to avoid duplicates with the nick header.
 vi.mock('../Avatar', () => ({
   Avatar: ({ size }: { name?: string; size?: string }) => (
-    <div data-testid="avatar" data-size={size ?? 'sm'} />
+    <div data-testid="avatar" data-size={size ?? 'md'} />
   ),
 }))
 
