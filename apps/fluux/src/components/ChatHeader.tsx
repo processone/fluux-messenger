@@ -322,7 +322,7 @@ function EncryptionIcon({
           <div
             ref={menu.menuRef}
             style={{ left: menu.position.x, top: menu.position.y }}
-            className="fixed w-72 max-w-[calc(100vw-1rem)] rounded-lg border border-fluux-hover bg-fluux-bg shadow-lg z-50 py-2 px-3 overflow-hidden">
+            className="fixed w-72 max-w-[calc(100vw-1rem)] rounded-lg fluux-popover z-50 py-2 px-3 overflow-hidden">
             <div className="text-sm font-medium text-red-600 dark:text-red-400 mb-1.5">
               {t('chat.encryption.rejectedTitle')}
             </div>
@@ -366,7 +366,7 @@ function EncryptionIcon({
           <div
             ref={menu.menuRef}
             style={{ left: menu.position.x, top: menu.position.y }}
-            className="fixed w-56 max-w-[calc(100vw-1rem)] rounded-lg border border-fluux-hover bg-fluux-bg shadow-lg z-50 py-1 overflow-hidden">
+            className="fixed w-56 max-w-[calc(100vw-1rem)] rounded-lg fluux-popover z-50 py-1 overflow-hidden">
             {onEnableClick && (
               <button
                 type="button"
@@ -457,7 +457,7 @@ function EncryptionIcon({
         <div
           ref={menu.menuRef}
           style={{ left: menu.position.x, top: menu.position.y }}
-          className="fixed w-56 max-w-[calc(100vw-1rem)] rounded-lg border border-fluux-hover bg-fluux-bg shadow-lg z-50 py-1 overflow-hidden">
+          className="fixed w-56 max-w-[calc(100vw-1rem)] rounded-lg fluux-popover z-50 py-1 overflow-hidden">
           {onVerifyClick && (
             <button
               type="button"

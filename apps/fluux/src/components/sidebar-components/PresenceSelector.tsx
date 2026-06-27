@@ -143,7 +143,7 @@ export function PresenceSelector({ isOpen: isOpenProp, onOpenChange }: PresenceS
           ref={menu.menuRef}
           tabIndex={-1}
           style={{ left: menu.position.x, top: menu.position.y }}
-          className="fixed w-56 max-w-[calc(100vw-1rem)] bg-fluux-bg rounded-lg shadow-xl border border-fluux-hover py-1 z-50 overflow-hidden outline-none"
+          className="fixed w-56 max-w-[calc(100vw-1rem)] fluux-popover rounded-lg py-1 z-50 overflow-hidden outline-none"
         >
           {/* Presence options */}
           {presenceOptions.map((option, index) => (

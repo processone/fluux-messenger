@@ -333,7 +333,7 @@ function ReactionMuteDropdown({
       </button>
 
       {isOpen && (
-        <div className="absolute end-0 top-full mt-1 z-50 bg-fluux-bg border border-fluux-hover rounded-md shadow-lg py-1 min-w-[200px]">
+        <div className="absolute end-0 top-full mt-1 z-50 fluux-popover rounded-md py-1 min-w-[200px]">
           <button
             className="w-full text-start px-3 py-1.5 text-xs text-fluux-text hover:bg-fluux-hover transition-colors"
             onClick={(e) => {

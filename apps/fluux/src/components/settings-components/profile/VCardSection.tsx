@@ -196,7 +196,7 @@ export function VCardSection() {
             {t('profile.addField')}
           </button>
           {showAddField && (
-            <div className="absolute top-full mt-1 start-0 bg-fluux-sidebar border border-fluux-hover rounded-lg shadow-lg py-1 z-10">
+            <div className="absolute top-full mt-1 start-0 fluux-popover rounded-lg py-1 z-10">
               {availableFields.map(({ key, label, icon: Icon }) => (
                 <button
                   key={key}

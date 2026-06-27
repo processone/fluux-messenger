@@ -47,7 +47,7 @@ export function ImageContextMenu({ originalUrl, proxiedUrl, filename, menu }: Im
   return (
     <div
       ref={menu.menuRef}
-      className="fixed z-50 min-w-[180px] py-1 rounded-lg bg-fluux-bg border border-fluux-border shadow-lg"
+      className="fixed z-50 min-w-[180px] py-1 rounded-lg fluux-popover"
       style={{ left: menu.position.x, top: menu.position.y }}
     >
       <MenuButton

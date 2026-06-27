@@ -889,7 +889,7 @@ export function MessageComposer({
           )}
 
           {showAttachMenu && (
-            <div className="absolute bottom-full start-0 mb-2 z-50 bg-fluux-bg border border-fluux-hover rounded-lg shadow-lg py-1 min-w-[180px]">
+            <div className="absolute bottom-full start-0 mb-2 z-50 fluux-popover rounded-lg py-1 min-w-[180px]">
               <button
                 type="button"
                 onClick={() => {

@@ -469,6 +469,21 @@
   --em-color-border-over: var(--fluux-bg-active);
 }
 
+/* Elevated floating surface shared by every menu, dropdown, context menu and
+   popover. Uses the lifted float background (lighter than the canvas in dark,
+   white in light), the visible hairline border and the overlay drop shadow, so
+   the panel reads as a distinct floating card rather than a recessed hole. The
+   previous bg-primary surface was *darker* than the sidebar/chat it floated
+   over (Aurora dark), which is what made these menus look wrong. Pair with
+   positioning, width, padding and radius utilities at the call site. */
+@layer components {
+  .fluux-popover {
+    background-color: var(--fluux-bg-float);
+    border: 1px solid var(--fluux-border-color);
+    box-shadow: var(--fluux-shadow-overlay);
+  }
+}
+
 /* Text selection styling - uses brand color for consistent look */
 ::selection {
   background-color: var(--fluux-selection);

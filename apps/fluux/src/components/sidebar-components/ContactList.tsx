@@ -407,7 +407,7 @@ const ContactItem = memo(function ContactItem({
       {menu.isOpen && (
         <div
           ref={menu.menuRef}
-          className="fixed bg-fluux-bg rounded-lg shadow-xl border border-fluux-hover py-1 z-50 min-w-40"
+          className="fixed fluux-popover rounded-lg py-1 z-50 min-w-40"
           style={{ left: menu.position.x, top: menu.position.y }}
         >
           <button

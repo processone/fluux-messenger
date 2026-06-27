@@ -327,7 +327,7 @@ export function ContactSelector({
 
         {/* Dropdown with keyboard-highlighted contacts - flips up when near bottom */}
         {isFocused && filteredContacts.length > 0 && (
-          <div className={`absolute inset-x-0 max-h-40 overflow-y-auto bg-fluux-bg rounded border border-fluux-hover shadow-lg z-10 ${
+          <div className={`absolute inset-x-0 max-h-40 overflow-y-auto fluux-popover rounded z-10 ${
             flipUp ? 'bottom-full mb-1' : 'top-full mt-1'
           }`}>
             {filteredContacts.map((contact, index) => {
@@ -366,7 +366,7 @@ export function ContactSelector({
 
         {/* Hint when input is a valid JID but no contacts match */}
         {isFocused && filteredContacts.length === 0 && canAddAsJid && (
-          <div className={`absolute inset-x-0 bg-fluux-bg rounded border border-fluux-hover shadow-lg z-10 ${
+          <div className={`absolute inset-x-0 fluux-popover rounded z-10 ${
             flipUp ? 'bottom-full mb-1' : 'top-full mt-1'
           }`}>
             <div
@@ -386,7 +386,7 @@ export function ContactSelector({
 
         {/* No contacts found hint */}
         {isFocused && filteredContacts.length === 0 && search && !canAddAsJid && (
-          <div className={`absolute inset-x-0 bg-fluux-bg rounded border border-fluux-hover shadow-lg z-10 px-3 py-2 text-sm text-fluux-muted ${
+          <div className={`absolute inset-x-0 fluux-popover rounded z-10 px-3 py-2 text-sm text-fluux-muted ${
             flipUp ? 'bottom-full mb-1' : 'top-full mt-1'
           }`}>
             {t('contacts.noContactsFound')}

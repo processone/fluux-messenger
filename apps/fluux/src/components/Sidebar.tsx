@@ -331,7 +331,7 @@ export function Sidebar({ onSelectContact, onStartChat, onManageUser, adminCateg
                 </button>
               </Tooltip>
               {showContactDropdown && (
-                <div className="absolute end-0 mt-1 w-52 bg-fluux-bg rounded-lg shadow-xl border border-fluux-hover py-1 z-50">
+                <div className="absolute end-0 mt-1 w-52 fluux-popover rounded-lg py-1 z-50">
                   <button
                     onClick={() => { setShowContactDropdown(false); modalOpen('addContact') }}
                     className="w-full px-3 py-2 text-start text-sm hover:bg-fluux-hover flex items-center gap-2"
@@ -363,7 +363,7 @@ export function Sidebar({ onSelectContact, onStartChat, onManageUser, adminCateg
                 </button>
               </Tooltip>
               {showRoomDropdown && (
-                <div className="absolute end-0 mt-1 w-52 bg-fluux-bg rounded-lg shadow-xl border border-fluux-hover py-1 z-50">
+                <div className="absolute end-0 mt-1 w-52 fluux-popover rounded-lg py-1 z-50">
                   <button
                     onClick={() => { setShowRoomDropdown(false); modalOpen('quickChat') }}
                     className="w-full px-3 py-2 text-start text-sm hover:bg-fluux-hover flex items-center gap-2"

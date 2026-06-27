@@ -73,7 +73,7 @@ export function UserMenu({ onLogout }: UserMenuProps) {
           <div
             ref={menu.menuRef}
             style={{ left: menu.position.x, top: menu.position.y }}
-            className="fixed w-48 max-w-[calc(100vw-1rem)] bg-fluux-bg rounded-lg shadow-xl border border-fluux-hover py-1 z-50">
+            className="fixed w-48 max-w-[calc(100vw-1rem)] fluux-popover rounded-lg py-1 z-50">
             {/* Console toggle - hidden on mobile */}
             {!isMobile && (
               <button

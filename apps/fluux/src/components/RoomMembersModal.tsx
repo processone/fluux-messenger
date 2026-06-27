@@ -433,7 +433,7 @@ function AffiliationDropdown({
         <ChevronDown className="size-3" />
       </button>
       {isOpen && (
-        <div className="absolute end-0 top-full mt-1 bg-fluux-bg rounded-lg shadow-xl border border-fluux-hover py-1 z-50 min-w-36">
+        <div className="absolute end-0 top-full mt-1 fluux-popover rounded-lg py-1 z-50 min-w-36">
           {availableAffiliations.map(aff => (
             <button
               key={aff}

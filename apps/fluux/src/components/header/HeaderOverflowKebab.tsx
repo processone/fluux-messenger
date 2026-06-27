@@ -107,7 +107,7 @@ export function HeaderOverflowKebab({ ariaLabel, entries, triggerClassName }: He
             ref={menu.menuRef}
             role="menu"
             style={{ left: menu.position.x, top: menu.position.y }}
-            className="fixed w-64 max-w-[calc(100vw-1rem)] bg-fluux-bg border border-fluux-hover rounded-lg shadow-lg z-50 py-1"
+            className="fixed w-64 max-w-[calc(100vw-1rem)] fluux-popover rounded-lg z-50 py-1"
           >
             {entries.map((e) =>
               e.kind === 'action' ? (
