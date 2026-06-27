@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import 'fake-indexeddb/auto'
 import { IDBFactory } from 'fake-indexeddb'
 import {
@@ -96,12 +96,14 @@ describe('sweepExpiredPassphrases', () => {
 
   it('never throws when indexedDB is unavailable', async () => {
     const original = globalThis.indexedDB
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
     // @ts-expect-error force the failure path
     globalThis.indexedDB = undefined
     try {
       await expect(sweepExpiredPassphrases()).resolves.toBeUndefined()
     } finally {
       globalThis.indexedDB = original
+      warnSpy.mockRestore()
     }
   })
 })
