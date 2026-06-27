@@ -18,6 +18,8 @@ import { SCROLLING_ATTR } from './scrollbarAutohide'
  *  - thumb transparent at rest (hidden)
  *  - revealed on hover AND on [data-scrolling]
  *  - the CSS selector matches the JS attribute constant
+ *  - ::-webkit-scrollbar selectors are never grouped (WebKit drops the whole
+ *    selector list if it dislikes any compound in it — see the index.css note)
  */
 
 const cssPath = resolve(dirname(fileURLToPath(import.meta.url)), '../index.css')
@@ -76,5 +78,15 @@ describe('scrollbar styles (index.css)', () => {
   it('reveals the sidebar thumb with its own theme color', () => {
     const rule = ruleFor(`.sidebar-scroll[${SCROLLING_ATTR}]::-webkit-scrollbar-thumb`)
     expect(rule.decls.background).toBe('var(--fluux-scrollbar-thumb-sidebar)')
+  })
+
+  it('never groups ::-webkit-scrollbar selectors (WebKit drops grouped lists)', () => {
+    // A comma-grouped list containing a ::-webkit-scrollbar compound is dropped
+    // wholesale by WebKit, taking the reliable `:hover` reveal down with the
+    // unreliable `[data-scrolling]` one. Each must be its own rule.
+    const grouped = rules
+      .filter(r => r.selectors.length > 1 && r.selectors.some(s => s.includes('::-webkit-scrollbar')))
+      .map(r => r.selectors.join(', '))
+    expect(grouped).toEqual([])
   })
 })
