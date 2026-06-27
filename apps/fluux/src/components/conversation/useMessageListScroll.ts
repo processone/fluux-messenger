@@ -1068,8 +1068,14 @@ export function useMessageListScroll({
     // Track if user scrolled away from top (allows re-trigger of load)
     if (scrollTop > 50) scrolledAwayFromTopRef.current = true
 
-    // Auto-trigger load when at top (disabled in static mode — preview starts at scrollTop=0)
-    if (scrollTop === 0 && !staticMode) triggerLoadOlder()
+    // Auto-trigger load when at top (disabled in static mode — preview starts at scrollTop=0).
+    // Gate on scrolledAwayFromTop: a PASSIVE scroll reaching the top must only auto-load when the
+    // user genuinely scrolled up to it (was away from the top and returned). On a fresh entry the
+    // list briefly renders at scrollTop=0 before the auto-scroll-to-bottom settles; that transient
+    // must NOT spuriously load older — doing so prepends a batch and clears isAtBottom, breaking
+    // bottom-stick for the next incoming message. A wheel-up (handleWheel) is explicit intent and
+    // is intentionally NOT gated this way.
+    if (scrollTop === 0 && !staticMode && scrolledAwayFromTopRef.current) triggerLoadOlder()
   }
 
   const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
