@@ -286,11 +286,16 @@ function App() {
               | { unlock?: (pp: string) => Promise<{ recovered: boolean }> }
               | null
               | undefined
-            try {
-              await unlockPlugin?.unlock?.(cached)
-              // success: key unlocked silently, dialog stays closed
-            } catch {
-              if (accountJid) await clearCachedPassphrase(accountJid)
+            if (unlockPlugin?.unlock) {
+              try {
+                await unlockPlugin.unlock(cached)
+                // success: key unlocked silently, dialog stays closed
+              } catch {
+                if (accountJid) await clearCachedPassphrase(accountJid)
+                openWebUnlockDialog()
+              }
+            } else {
+              // no plugin to unlock with: fall back to the dialog rather than strand the user
               openWebUnlockDialog()
             }
           } else {
