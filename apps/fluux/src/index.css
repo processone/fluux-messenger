@@ -134,6 +134,9 @@
   --fluux-accent-2: #38E0C4;
   --fluux-grad: linear-gradient(135deg, #38E0C4, #7C8CFF, #A78BFA);
   --fluux-glass-blur: 12px;
+  /* Backdrop blur applied to the modal scrim itself, so the whole background
+     behind a modal/palette frosts (the strongest "glass" cue in dark themes). */
+  --fluux-scrim-blur: 10px;
   --fluux-glass-border: rgba(255, 255, 255, 0.12);
   --fluux-shadow-overlay: 0 24px 70px rgba(0, 0, 0, 0.55);
 
@@ -319,7 +322,9 @@
   /* Modal */
   --fluux-modal-bg: var(--fluux-sidebar-bg);
   --fluux-modal-border: var(--fluux-border-color-strong);
-  --fluux-modal-backdrop: rgba(0, 0, 0, 0.5);
+  /* Lighter than a plain dimmer (was 0.5) so the frosted backdrop reads through
+     the scrim; the blur, not the darkness, carries the focus. */
+  --fluux-modal-backdrop: rgba(0, 0, 0, 0.4);
 
   /* Toast */
   --fluux-toast-bg: var(--fluux-sidebar-bg);
@@ -504,11 +509,16 @@
     border: 1px solid var(--fluux-glass-border);
     box-shadow: var(--fluux-shadow-overlay);
   }
-  @supports (backdrop-filter: blur(1px)) and (background: color-mix(in srgb, red, blue)) {
+  /* The gate accepts EITHER the unprefixed or the -webkit- prefixed property:
+     WebKit (Safari < 18, older WebKitGTK, the Tauri WKWebView) exposes only the
+     prefixed one, so gating on the unprefixed property alone would silently drop
+     the whole frost there. A touch more translucency (15%) + saturation gives the
+     panel its own life; the scrim frost below carries most of the glass feel. */
+  @supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) and (background: color-mix(in srgb, red, blue)) {
     .fluux-glass {
-      background-color: color-mix(in srgb, var(--fluux-chat-bg), transparent 12%);
-      backdrop-filter: blur(var(--fluux-glass-blur));
-      -webkit-backdrop-filter: blur(var(--fluux-glass-blur));
+      background-color: color-mix(in srgb, var(--fluux-chat-bg), transparent 15%);
+      backdrop-filter: blur(var(--fluux-glass-blur)) saturate(1.4);
+      -webkit-backdrop-filter: blur(var(--fluux-glass-blur)) saturate(1.4);
     }
   }
   /* Reduce-transparency: override back to the solid surface. */
@@ -518,10 +528,26 @@
     -webkit-backdrop-filter: none;
   }
 
-  /* Scrim utility: reads the --fluux-modal-backdrop token (rgba(0,0,0,0.5)) so a
-     theme can override the scrim colour. No theme overrides it today. */
+  /* Scrim utility: reads the --fluux-modal-backdrop token so a theme can override
+     the scrim colour. No theme overrides it today. */
   .modal-scrim {
     background: var(--fluux-modal-backdrop);
+  }
+  /* Frost the backdrop behind the modal: the entire app blurs, which reads
+     unmistakably as glass even in a dark theme where a darkened-but-sharp
+     backdrop looks like a plain solid panel. The scrim sits behind the opaque
+     panel, so this never touches panel text contrast. saturate() keeps the
+     blurred colours lively. -webkit- prefix included for WebKit (see above). */
+  @supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    .modal-scrim {
+      backdrop-filter: blur(var(--fluux-scrim-blur)) saturate(1.2);
+      -webkit-backdrop-filter: blur(var(--fluux-scrim-blur)) saturate(1.2);
+    }
+  }
+  /* Reduce-transparency: drop the scrim frost too (a11y opt-out → solid, no blur). */
+  [data-transparency="reduced"] .modal-scrim {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
   }
 }
 

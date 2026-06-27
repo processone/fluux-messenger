@@ -107,6 +107,30 @@ function themeTokens(theme: ThemeDefinition, mode: 'dark' | 'light'): Record<str
   return { ...base, ...(theme.variables[mode] ?? {}) }
 }
 
+describe('Glass frost structural guards', () => {
+  // The frosted-glass @supports gate must accept the -webkit- prefixed
+  // backdrop-filter too. WebKit (Safari < 18, older WebKitGTK, the Tauri
+  // WKWebView) historically exposes ONLY -webkit-backdrop-filter; gating solely
+  // on the unprefixed property silently skips the entire frost block there and
+  // the panel falls back to a flat solid surface. Require both in the condition.
+  it('panel frost @supports gate accepts -webkit-backdrop-filter', () => {
+    expect(css).toMatch(/@supports[^{]*-webkit-backdrop-filter[^{]*\{\s*\.fluux-glass/)
+  })
+
+  // The scrim must frost the backdrop behind the modal (blur), not merely darken
+  // it: in a dark theme a darkened-but-sharp backdrop reads as a plain solid
+  // panel. The frost is what makes "glass" perceptible. Gated by @supports.
+  it('modal scrim has a frosted (backdrop-blur) variant', () => {
+    expect(css).toMatch(/\.modal-scrim\s*\{[^}]*backdrop-filter\s*:\s*blur/)
+  })
+
+  // Reduce-transparency must disable the scrim frost too (the existing rule only
+  // covered .fluux-glass), so the a11y opt-out yields a fully solid, blur-free UI.
+  it('reduce-transparency disables the scrim frost', () => {
+    expect(css).toMatch(/\[data-transparency="reduced"\]\s+\.modal-scrim\s*\{[^}]*backdrop-filter\s*:\s*none/)
+  })
+})
+
 describe('Glass surface cross-theme guard', () => {
   for (const theme of builtinThemes) {
     for (const mode of ['dark', 'light'] as const) {
