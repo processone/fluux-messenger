@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, beforeAll } from 'vitest'
 import { render, screen, fireEvent, act } from '@testing-library/react'
 import { CommandPalette } from './CommandPalette'
+import { useAdvancedModeStore } from '@/stores/advancedModeStore'
 
 // Mock scrollIntoView which is not implemented in jsdom
 beforeAll(() => {
@@ -130,6 +131,7 @@ describe('CommandPalette', () => {
     vi.clearAllMocks()
     mockIsArchived.mockReturnValue(false)
     mockArchivedConversations = []
+    useAdvancedModeStore.setState({ advancedMode: false })
   })
 
   describe('Rendering', () => {
@@ -557,6 +559,7 @@ describe('CommandPalette', () => {
     })
 
     it('should toggle console when console action is selected', () => {
+      useAdvancedModeStore.setState({ advancedMode: true })
       render(<CommandPalette {...defaultProps} />)
       const input = screen.getByPlaceholderText('Go to...')
 
@@ -904,6 +907,7 @@ describe('CommandPalette', () => {
   describe('Prefix Filtering', () => {
     describe('> prefix (commands)', () => {
       it('should show only commands and views when using > prefix', () => {
+        useAdvancedModeStore.setState({ advancedMode: true })
         render(<CommandPalette {...defaultProps} />)
         const input = screen.getByPlaceholderText('Go to...')
 
@@ -930,12 +934,26 @@ describe('CommandPalette', () => {
       })
 
       it('should handle spaces after > prefix', () => {
+        useAdvancedModeStore.setState({ advancedMode: true })
         render(<CommandPalette {...defaultProps} />)
         const input = screen.getByPlaceholderText('Go to...')
 
         fireEvent.change(input, { target: { value: '> console' } })
 
         expect(screen.getByText('XMPP Console')).toBeInTheDocument()
+      })
+
+      it('should NOT show console entry when advanced mode is OFF', () => {
+        // advancedMode defaults to false (reset in outer beforeEach)
+        render(<CommandPalette {...defaultProps} />)
+        const input = screen.getByPlaceholderText('Go to...')
+
+        fireEvent.change(input, { target: { value: '>' } })
+
+        // Non-gated commands still visible
+        expect(screen.getByText('Settings')).toBeInTheDocument()
+        // Console entry must be absent
+        expect(screen.queryByText('XMPP Console')).not.toBeInTheDocument()
       })
     })
 
