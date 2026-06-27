@@ -8,7 +8,8 @@ import { CORPUS } from './corpus'
 import { predictTextHeight, type FontSpec, type Prediction } from './predictTextHeight'
 import { buildReport, type Sample } from './compareHeights'
 
-const WIDTHS = [320, 560, 760] // narrow / medium / wide content-column widths
+const WIDTHS = [320, 560, 760] // narrow / medium / wide content-column widths (px)
+const SCALES = [90, 100, 125, 150] // character scaling = document.documentElement root font-size %
 const SENDER_COLOR = '#3b82f6'
 
 function fontSpecFrom(el: HTMLElement): FontSpec {
@@ -38,13 +39,24 @@ function App() {
 
   useEffect(() => {
     let cancelled = false
-    void document.fonts.ready.then(() => {
-      // one extra frame so layout settles after fonts swap
-      requestAnimationFrame(() => {
-        if (cancelled || !containerRef.current) return
-        const root = containerRef.current
-        const samples: Sample[] = []
+    const nextFrame = () => new Promise<void>((r) => requestAnimationFrame(() => r()))
 
+    async function run() {
+      await document.fonts.ready
+      await nextFrame() // settle after font swap
+      if (cancelled || !containerRef.current) return
+      const root = containerRef.current
+      const runs: Array<{ fontScalePct: number; report: ReturnType<typeof buildReport>; samples: Sample[] }> = []
+
+      // Character scaling = root font-size %. The SAME DOM is re-measured at each
+      // scale (changing root font-size reflows the rem-based message text); the
+      // font spec is read live from getComputedStyle, so the predictor tracks the
+      // scaled font. Density is intentionally NOT varied (it changes only chrome).
+      for (const pct of SCALES) {
+        document.documentElement.style.fontSize = `${pct}%`
+        await nextFrame() // reflow at the new scale
+        if (cancelled) return
+        const samples: Sample[] = []
         for (const width of WIDTHS) {
           for (const item of CORPUS) {
             const bodyEl = root.querySelector<HTMLElement>(
@@ -58,22 +70,21 @@ function App() {
             samples.push({ id: item.id, category: item.category, widthPx: width, predicted, measuredHeightPx, measuredLineCount })
           }
         }
-
         const report = buildReport(samples, {
           lineExactThresholdPct: 98,
           heightTolPx: 2,
           textCategories: ['short', 'wrap', 'mention', 'link', 'me', 'mixed'],
         })
-        const out = {
-          engine: navigator.userAgent,
-          widths: WIDTHS,
-          report,
-          samples,
-        }
-        if (!cancelled) setJson(JSON.stringify(out, null, 2))
-      })
-    })
-    return () => { cancelled = true }
+        runs.push({ fontScalePct: pct, report, samples })
+      }
+
+      document.documentElement.style.fontSize = '' // restore default scale
+      const out = { engine: navigator.userAgent, widths: WIDTHS, scales: SCALES, runs }
+      if (!cancelled) setJson(JSON.stringify(out, null, 2))
+    }
+
+    void run()
+    return () => { cancelled = true; document.documentElement.style.fontSize = '' }
   }, [])
 
   return (
