@@ -22,6 +22,7 @@ import type { SidebarView } from './Sidebar'
 import { Avatar } from './Avatar'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { isAdvancedMode } from '@/stores/advancedModeStore'
+import { useRestoreFocus } from '@/hooks/useRestoreFocus'
 
 // =============================================================================
 // Types
@@ -182,6 +183,7 @@ function CommandPaletteContent({
   const selectedIndexRef = useRef(0) // Ref for synchronous access in event handlers
   const inputRef = useRef<HTMLInputElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
+  const dialogRef = useRef<HTMLDivElement>(null)
   const ignoreMouseRef = useRef(true) // start true; cleared after first paint to avoid stale-hover index changes
   const [isKeyboardNav, setIsKeyboardNav] = useState(false) // Track keyboard navigation mode
   const lastMousePosRef = useRef<{ x: number; y: number } | null>(null) // Track mouse position to detect real movement
@@ -444,6 +446,11 @@ function CommandPaletteContent({
     })
   }, [])
 
+  // Restore focus to the search input when the app window regains focus.
+  // Without this, switching away and back leaves focus on <body>, so arrow keys
+  // leak to the sidebar instead of moving the palette selection.
+  useRestoreFocus(dialogRef, inputRef)
+
   // Reset selection synchronously when query changes
   useLayoutEffect(() => {
     setSelectedIndex(0)
@@ -526,6 +533,7 @@ function CommandPaletteContent({
         className="absolute inset-0 cursor-default"
       />
       <div
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         className="relative z-10 fluux-glass rounded-lg w-full max-w-lg mx-4 overflow-hidden"

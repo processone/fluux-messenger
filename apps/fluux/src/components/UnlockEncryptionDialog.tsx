@@ -7,6 +7,7 @@ import { KeyPickerDialog } from './KeyPickerDialog'
 import { KeyPickerRequiredError, NoRecoveryAvailableError } from '@/e2ee/recoveryErrors'
 import type { KeyBundle } from '@/e2ee/OpenPGPPluginBase'
 import { isTauri } from '@/utils/tauri'
+import { useRestoreFocus } from '@/hooks/useRestoreFocus'
 import {
   cachePassphrase,
   clearCachedPassphrase,
@@ -37,6 +38,11 @@ interface UnlockEncryptionDialogProps {
 export function UnlockEncryptionDialog({ client, onClose }: UnlockEncryptionDialogProps) {
   const { t } = useTranslation()
   const inputRef = useRef<HTMLInputElement | null>(null)
+  const dialogRef = useRef<HTMLDivElement>(null)
+
+  // Keep keyboard focus inside the dialog (or its nested key picker) across OS
+  // window blur/refocus, falling back to the passphrase field.
+  useRestoreFocus(dialogRef, inputRef)
 
   const [passphrase, setPassphrase] = useState('')
   const [confirmPassphrase, setConfirmPassphrase] = useState('')
@@ -203,6 +209,7 @@ export function UnlockEncryptionDialog({ client, onClose }: UnlockEncryptionDial
 
   return (
     <div
+      ref={dialogRef}
       data-modal="true"
       role="dialog"
       aria-modal="true"

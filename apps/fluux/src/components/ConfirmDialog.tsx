@@ -1,5 +1,6 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useRestoreFocus } from '@/hooks/useRestoreFocus'
 
 interface ConfirmDialogProps {
   title: string
@@ -19,6 +20,10 @@ export function ConfirmDialog({
   variant = 'danger',
 }: ConfirmDialogProps) {
   const { t } = useTranslation()
+  const panelRef = useRef<HTMLDivElement>(null)
+
+  // Keep keyboard focus inside the dialog across OS window blur/refocus.
+  useRestoreFocus(panelRef)
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -44,7 +49,7 @@ export function ConfirmDialog({
         onClick={onCancel}
         className="absolute inset-0 cursor-default"
       />
-      <div className="relative z-10 fluux-glass rounded-lg p-4 max-w-sm w-full mx-4">
+      <div ref={panelRef} className="relative z-10 fluux-glass rounded-lg p-4 max-w-sm w-full mx-4">
         <h3 className="text-lg font-semibold text-fluux-text mb-2">{title}</h3>
         <p className="text-sm text-fluux-muted mb-4">{message}</p>
         <div className="flex gap-2 justify-end">

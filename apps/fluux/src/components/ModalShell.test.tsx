@@ -27,4 +27,27 @@ describe('ModalShell glass surface', () => {
     expect(scrim?.classList.contains('modal-scrim')).toBe(true)
     expect(scrim?.classList.contains('bg-black/50')).toBe(false)
   })
+
+  it('restores focus to its input when the window regains focus', () => {
+    const { container } = render(
+      <>
+        <button data-testid="outside">outside</button>
+        <ModalShell title="X" onClose={() => {}}>
+          <input data-testid="field" autoFocus />
+        </ModalShell>
+      </>
+    )
+    const field = container.querySelector('[data-testid="field"]') as HTMLInputElement
+    const outside = container.querySelector('[data-testid="outside"]') as HTMLButtonElement
+
+    // The input is focused on open; the user types, then the OS window blurs and
+    // focus collapses to an element outside the modal.
+    field.focus()
+    outside.focus()
+    expect(document.activeElement).toBe(outside)
+
+    window.dispatchEvent(new Event('focus'))
+
+    expect(document.activeElement).toBe(field)
+  })
 })

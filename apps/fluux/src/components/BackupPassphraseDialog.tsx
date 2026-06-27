@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Copy, Check, AlertTriangle, Loader2, RefreshCw } from 'lucide-react'
 import { generateBackupPassphrase, generateBackupCode, USE_V6_KEYS } from '@/e2ee/passphraseGenerator'
 import { SaveToPasswordManagerButton } from './SaveToPasswordManagerButton'
+import { useRestoreFocus } from '@/hooks/useRestoreFocus'
 
 // Draw a fresh passphrase in the user's UI language. 8 words ×
 // 11 bits (BIP-39) = 88 bits, which matches the acceptability gate
@@ -46,6 +47,10 @@ export function BackupPassphraseDialog({
   confirmLabel,
 }: BackupPassphraseDialogProps) {
   const { t, i18n } = useTranslation()
+  const panelRef = useRef<HTMLDivElement>(null)
+
+  // Keep keyboard focus inside the dialog across OS window blur/refocus.
+  useRestoreFocus(panelRef)
 
   // Regenerate on every open rather than keeping a stable value — a
   // user who cancelled and reopened should get a fresh passphrase so
@@ -148,7 +153,7 @@ export function BackupPassphraseDialog({
         onClick={onCancel}
         className="absolute inset-0 cursor-default"
       />
-      <div className="relative z-10 fluux-glass rounded-lg max-w-md w-full mx-4 max-h-[calc(100vh-2rem)] flex flex-col overflow-hidden">
+      <div ref={panelRef} className="relative z-10 fluux-glass rounded-lg max-w-md w-full mx-4 max-h-[calc(100vh-2rem)] flex flex-col overflow-hidden">
         <form
           onSubmit={(e) => { e.preventDefault(); void handleConfirm() }}
           className="contents"
