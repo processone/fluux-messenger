@@ -22,7 +22,7 @@ Give the command palette and modal panels a frosted-glass surface that looks gre
 
 ## Scope
 
-**In scope:** the **command palette** (`CommandPalette.tsx`) and the **modal panels** — `ModalShell.tsx` + the four that roll their own (`ConfirmDialog`, `BackupPassphraseDialog`, `AvatarCropModal`, `ui/BottomSheet`); plus the **reduce-transparency accessibility preference** (setting + `useTransparency` hook + Appearance toggle) that gates the frost.
+**In scope:** the **command palette** (`CommandPalette.tsx`) and the **modal panels** — `ModalShell.tsx` + the four that roll their own (`ConfirmDialog`, `BackupPassphraseDialog`, `AvatarCropModal`, `ui/BottomSheet`); plus the **reduce-transparency preference** (setting + `useTransparency` hook) that gates the frost, and a new **Accessibility settings pane** that groups Animation + Transparency + Character size (Motion + Font Size move out of Appearance).
 
 **Out of scope:** the ~26 `.fluux-popover` dropdown menus (stay solid, already theme-derived); the modals' internal content/layout (only the panel surface + scrim change); motion/transitions; any modalStore/host logic.
 
@@ -87,7 +87,11 @@ Translucency + blur can hurt some users (low vision, vestibular sensitivity, foc
 - **Setting**: `transparencyMode: 'system' | 'full' | 'reduced'` in `settingsStore` (default `'system'`), exactly mirroring `motionPreference` (type, `getInitial...`, persist key `'fluux-transparency'`, setter).
 - **Resolution** (`useTransparency` hook, mirroring `useDensity`/the motion resolution): `'system'` resolves via `window.matchMedia('(prefers-reduced-transparency: reduce)')` (so macOS "Reduce transparency" and the OS setting are honored automatically); `'full'` / `'reduced'` are explicit. The hook sets `data-transparency="full" | "reduced"` on `document.documentElement` and updates on the media-query change + the setting change. Called once at the app root (next to `useDensity`).
 - **Effect**: the frosted CSS is gated on `[data-transparency="full"]` (see the class above), so `reduced` (explicit, or `system` + OS-reduce) yields the **solid** theme-derived panel — no blur, no translucency. The solid panel is already the readable, theme-correct baseline.
-- **Settings UI**: a "Transparency" control in Appearance (System / Full / Reduced), mirroring the Motion block; new i18n keys translated in all 33 locales.
+- **Settings UI — a new Accessibility pane** (the transparency control lives here, not in Appearance): the app's settings are panes registered in `SettingsView.tsx` (a `switch` on the active section) + listed in `SettingsSidebar.tsx`, with the section ids in `settings-components/types.ts`. Add an `'accessibility'` section: a nav entry (icon + `settings.accessibility` label) in the sidebar, a `case 'accessibility'` in `SettingsView`, and a new `AccessibilitySettings.tsx` pane. Group the accessibility-related preferences there:
+  - **Animation** (the existing `motionPreference` Motion block) — **moved** out of `AppearanceSettings.tsx`.
+  - **Transparency** (the new `transparencyMode` control) — added here.
+  - **Character size** (the existing `fontSize` Font Size slider) — **moved** out of `AppearanceSettings.tsx`.
+  `AppearanceSettings` keeps theme mode, theme picker, accent, and CSS snippets. Reuse the existing `settings.motion*` and `settings.fontSize*` i18n keys for the moved controls; add new keys (`settings.accessibility`, the transparency labels/descriptions) translated in all 33 locales.
 
 ## Theme robustness (binding)
 
@@ -104,7 +108,8 @@ Translucency + blur can hurt some users (low vision, vestibular sensitivity, foc
 
 - **Glass cross-theme guard** (as above): solid-fallback bg readability + glass-border perceptibility, all 13 themes × 2 modes.
 - **Component tests**: `ModalShell` / `CommandPalette` panels carry the `fluux-glass` class (render assertion); the scrim uses the backdrop token, not `bg-black/50`.
-- **Transparency preference**: `settingsStore` defaults `transparencyMode` to `'system'` + persists; `useTransparency` sets `data-transparency` to `full`/`reduced` from the mode (+ the media query for `system`); the Appearance toggle switches it; i18n keys present in all 33 locales. (The frost-off effect itself is CSS gated on `[data-transparency="full"]`, verified by the screenshot pass with the attribute toggled.)
+- **Transparency preference**: `settingsStore` defaults `transparencyMode` to `'system'` + persists; `useTransparency` sets `data-transparency` to `full`/`reduced` from the mode (+ the media query for `system`); i18n keys present in all 33 locales. (The frost-off effect itself is CSS gated on `[data-transparency="full"]`, verified by the screenshot pass with the attribute toggled.)
+- **Accessibility pane**: `AccessibilitySettings` renders the three controls (Animation, Transparency, Character size) and switching each updates the store; the new `'accessibility'` section appears in the settings nav and routes to the pane; `AppearanceSettings` no longer renders the Motion or Font Size controls (they moved). Extend/relocate the existing `AppearanceSettings` Motion/font-size tests accordingly.
 - **Screenshots**: the command palette + a representative modal (e.g. About or Create Room), captured in Aurora dark, Aurora light, and 2-3 other themes (gruvbox, dracula, rose-pine) to confirm the glass tints per theme and the fallback path looks clean. (Existing scene `10-command-palette-dark` covers the palette; add a couple theme variants.)
 - Typecheck, lint, full suite green.
 
