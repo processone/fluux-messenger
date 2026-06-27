@@ -1,8 +1,9 @@
-import { connectionStore } from '@fluux/sdk'
+import { connectionStore, getBareJid } from '@fluux/sdk'
 import { clearSession } from '@/hooks/useSessionPersistence'
 import { deleteCredentials } from '@/utils/keychain'
 import { clearLocalData, clearAutoReconnectCredentials } from '@/utils/clearLocalData'
 import { markLoggedOut } from '@/utils/reconnectIntent'
+import { clearCachedPassphrase } from '@/e2ee/webPassphraseCache'
 
 const LOGOUT_DISCONNECT_TIMEOUT_MS = 2500
 const LOGOUT_KEYCHAIN_TIMEOUT_MS = 2500
@@ -33,6 +34,10 @@ export interface PerformLogoutDeps {
 export async function performLogout({ disconnect, jid, shouldCleanLocalData }: PerformLogoutDeps): Promise<void> {
   // 1. Record logout intent FIRST — see module docstring. Must precede any await.
   markLoggedOut()
+  // Forget any 24h-cached web passphrase: a deliberate logout should not leave
+  // the key unlockable without re-entry. Best-effort; never blocks logout. On
+  // desktop there is no record, so this is a harmless no-op.
+  if (jid) void clearCachedPassphrase(getBareJid(jid))
 
   // 2. Always attempt disconnect first. Request FAST token invalidation
   //    (XEP-0484 §6) so the server drops any stored token instead of leaving
