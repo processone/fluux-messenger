@@ -557,7 +557,7 @@ export const MessageBubble = memo(function MessageBubble({
                 <span
                   className={`flex items-center ${
                     displayTrust === 'verified'
-                      ? 'text-green-500'
+                      ? 'text-fluux-encryption'
                       : displayTrust === 'rejected'
                       ? 'text-red-500'
                       : displayTrust === 'untrusted'
