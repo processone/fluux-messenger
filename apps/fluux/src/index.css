@@ -290,9 +290,14 @@
   --fluux-sidebar-border: var(--fluux-divider-color);
 
   /* Icon rail */
-  --fluux-rail-bg: var(--fluux-bg-primary);
+  --fluux-rail-bg: var(--fluux-base-05);
   --fluux-rail-icon: var(--fluux-text-muted);
   --fluux-rail-icon-active: var(--fluux-bg-accent);
+
+  /* Chrome surface delimitation. The rail is the deepest chrome (one ramp step
+     below the sidebar); the divider is an alpha hairline that reads on any
+     theme surface. */
+  --fluux-surface-divider: rgba(255, 255, 255, 0.07);
 
   /* Chat area */
   --fluux-chat-bg: var(--fluux-base-30);
@@ -460,6 +465,11 @@
   --fluux-grad: linear-gradient(135deg, #11A88C, #5B6CF0, #7C6CF0);
   --fluux-glass-bg: rgba(255, 255, 255, 0.72);
   --fluux-shadow-overlay: 0 20px 50px rgba(20, 27, 48, 0.18);
+
+  /* Light ramp inverts (base-05 is LIGHTER than base-10), so the rail keeps
+     base-10 to stay the deepest grey; the divider flips to a black alpha. */
+  --fluux-rail-bg: var(--fluux-base-10);
+  --fluux-surface-divider: rgba(0, 0, 0, 0.07);
 }
 
 /* Elevated floating surface shared by every menu, dropdown, context menu and
@@ -557,9 +567,16 @@ em-emoji-picker {
 [data-density="compact"] .message-group-start { padding-top: 8px; }
 
 /* Icon rail density. Width + button + icon shrink in compact. */
-.icon-rail { width: 56px; }
+.icon-rail {
+  width: 56px;
+  background: var(--fluux-rail-bg);
+  border-inline-end: 1px solid var(--fluux-surface-divider);
+}
 .icon-rail-btn { width: 40px; height: 40px; }
 .icon-rail-btn svg { width: 20px; height: 20px; }
+/* Divider between the sidebar column and the main message view. */
+.chrome-sidebar { border-inline-end: 1px solid var(--fluux-surface-divider); }
+
 [data-density="compact"] .icon-rail { width: 48px; }
 [data-density="compact"] .icon-rail-btn { width: 36px; height: 36px; }
 [data-density="compact"] .icon-rail-btn svg { width: 18px; height: 18px; }

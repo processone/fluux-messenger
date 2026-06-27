@@ -213,11 +213,11 @@ export function Sidebar({ onSelectContact, onStartChat, onManageUser, adminCateg
   return (
     <aside
       ref={sidebarRef}
-      className="relative bg-fluux-sidebar flex select-none flex-shrink-0"
+      className="relative bg-fluux-sidebar chrome-sidebar flex select-none flex-shrink-0"
       style={{ width: isDesktop ? sidebarWidth : '100%' }}
     >
       {/* Icon Rail - with padding for macOS traffic lights */}
-      <div className="icon-rail bg-fluux-bg flex flex-col items-center pt-8 pb-safe-3 gap-2">
+      <div className="icon-rail flex flex-col items-center pt-8 pb-safe-3 gap-2">
         {/* Fluux logo - enable with VITE_SHOW_LOGO=true */}
         {import.meta.env.VITE_SHOW_LOGO === 'true' && (
           <img
