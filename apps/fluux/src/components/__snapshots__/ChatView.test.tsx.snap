@@ -102,7 +102,7 @@ exports[`ChatView > Snapshots > should match snapshot with messages 1`] = `
                 data-message-id="msg-1"
               >
                 <div
-                  class="group flex gap-4  -mx-4 px-4 py-0.5 transition-colors pt-4"
+                  class="group flex gap-4  -mx-4 px-4 py-0.5 transition-colors message-group-start"
                   data-message-body="Hello there!"
                   data-message-from="Alice Smith"
                   data-message-id="msg-1"
@@ -262,7 +262,7 @@ exports[`ChatView > Snapshots > should match snapshot with messages 1`] = `
                 data-message-id="msg-2"
               >
                 <div
-                  class="group flex gap-4  -mx-4 px-4 py-0.5 transition-colors pt-4"
+                  class="group flex gap-4  -mx-4 px-4 py-0.5 transition-colors message-group-start"
                   data-message-body="Hi! How are you?"
                   data-message-from="Me"
                   data-message-id="msg-2"

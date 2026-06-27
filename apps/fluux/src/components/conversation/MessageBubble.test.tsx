@@ -1,8 +1,9 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, act, within } from '@testing-library/react'
 import { MessageBubble, buildReplyContext, type MessageBubbleProps } from './MessageBubble'
 import type { BaseMessage } from '@fluux/sdk'
 import { setPeerVerified, clearPeerVerified } from '@/stores/verifiedPeerKeysStore'
+import type { DensityMode } from '@/stores/settingsStore'
 
 // Mock i18next
 vi.mock('react-i18next', () => ({
@@ -27,6 +28,21 @@ vi.mock('./messageGrouping', () => ({
 // We only need to assert MessageBubble routes to it when encryptedPayload is set.
 vi.mock('./EncryptedPlaceholder', () => ({
   EncryptedPlaceholder: () => <div data-testid="encrypted-placeholder" />,
+}))
+
+// Avatar mock that exposes the size prop via data-size for density assertions.
+// Does NOT render the name as text to avoid duplicates with the nick header.
+vi.mock('../Avatar', () => ({
+  Avatar: ({ size }: { name?: string; size?: string }) => (
+    <div data-testid="avatar" data-size={size ?? 'md'} />
+  ),
+}))
+
+// Mutable density so tests can override it without re-importing.
+const settings = { densityMode: 'comfortable' as DensityMode }
+
+vi.mock('@/stores/settingsStore', () => ({
+  useSettingsStore: (selector: (s: typeof settings) => unknown) => selector(settings),
 }))
 
 // Create a base message for testing
@@ -766,5 +782,67 @@ describe('Own-message tint', () => {
     const props = createDefaultProps({ message: createTestMessage({ isOutgoing: false }) })
     const { container } = render(<MessageBubble {...props} />)
     expect(container.querySelector('.message-own-tint')).not.toBeInTheDocument()
+  })
+})
+
+describe('Density spacing', () => {
+  it('marks group-start rows with the density spacing class', () => {
+    const groupStartProps = createDefaultProps({ showAvatar: true })
+    const { container: groupStartContainer } = render(<MessageBubble {...groupStartProps} />)
+    const outerRow = groupStartContainer.firstChild as HTMLElement
+    expect(outerRow.className).toContain('message-group-start')
+
+    const continuationProps = createDefaultProps({ showAvatar: false })
+    const { container: continuationContainer } = render(<MessageBubble {...continuationProps} />)
+    const continuationRow = continuationContainer.firstChild as HTMLElement
+    expect(continuationRow.className).not.toContain('message-group-start')
+  })
+})
+
+describe('Density avatar size', () => {
+  beforeEach(() => {
+    settings.densityMode = 'comfortable'
+  })
+
+  it('renders a compact (sm) message avatar when density is compact', () => {
+    settings.densityMode = 'compact'
+    render(<MessageBubble {...createDefaultProps({ showAvatar: true })} />)
+    const avatar = screen.getByTestId('avatar')
+    expect(avatar.getAttribute('data-size')).toBe('sm')
+  })
+
+  it('keeps the md avatar in comfortable density', () => {
+    settings.densityMode = 'comfortable'
+    render(<MessageBubble {...createDefaultProps({ showAvatar: true })} />)
+    const avatar = screen.getByTestId('avatar')
+    expect(avatar.getAttribute('data-size')).toBe('md')
+  })
+
+  it('narrows the avatar column to w-8 in compact density with 24h time format', () => {
+    settings.densityMode = 'compact'
+    const { container } = render(<MessageBubble {...createDefaultProps({ showAvatar: true, timeFormat: '24h' })} />)
+    const col = container.querySelector('.flex-shrink-0') as HTMLElement
+    expect(col.className).toContain('w-8')
+  })
+
+  it('narrows the avatar column to w-10 in compact density with 12h time format', () => {
+    settings.densityMode = 'compact'
+    const { container } = render(<MessageBubble {...createDefaultProps({ showAvatar: true, timeFormat: '12h' })} />)
+    const col = container.querySelector('.flex-shrink-0') as HTMLElement
+    expect(col.className).toContain('w-10')
+  })
+
+  it('uses w-10 column in comfortable density with 24h time format', () => {
+    settings.densityMode = 'comfortable'
+    const { container } = render(<MessageBubble {...createDefaultProps({ showAvatar: true, timeFormat: '24h' })} />)
+    const col = container.querySelector('.flex-shrink-0') as HTMLElement
+    expect(col.className).toContain('w-10')
+  })
+
+  it('uses w-12 column in comfortable density with 12h time format', () => {
+    settings.densityMode = 'comfortable'
+    const { container } = render(<MessageBubble {...createDefaultProps({ showAvatar: true, timeFormat: '12h' })} />)
+    const col = container.querySelector('.flex-shrink-0') as HTMLElement
+    expect(col.className).toContain('w-12')
   })
 })
