@@ -49,26 +49,14 @@ const EMPTY_IGNORED_ARRAY: IgnoredUser[] = []
 
 // Affiliation badge — pure mapping from affiliation to a small icon. Module-level so
 // the memoized OccupantRow can use it without recreating a closure per render.
-function getAffiliationBadge(affiliation: string) {
+function getAffiliationBadge(affiliation: string, t: (key: string) => string) {
   switch (affiliation) {
     case 'owner':
-      return (
-        <span className="flex items-center gap-0.5 text-amber-600 dark:text-amber-400">
-          <Crown className="size-3" />
-        </span>
-      )
+      return <span className="flex items-center text-fluux-yellow" title={t('rooms.affiliationOwner')}><Crown className="size-3" /></span>
     case 'admin':
-      return (
-        <span className="flex items-center gap-0.5 text-fluux-brand">
-          <Shield className="size-3" />
-        </span>
-      )
+      return <span className="flex items-center text-fluux-brand" title={t('rooms.affiliationAdmin')}><Shield className="size-3" /></span>
     case 'member':
-      return (
-        <span className="flex items-center gap-0.5 text-fluux-green">
-          <UserCheck className="size-3" />
-        </span>
-      )
+      return <span className="flex items-center text-fluux-muted" title={t('rooms.affiliationMember')}><UserCheck className="size-3" /></span>
     default:
       return null
   }
@@ -230,7 +218,7 @@ const OccupantRow = memo(function OccupantRow({
                 ×{group.connections.length}
               </span>
             )}
-            {getAffiliationBadge(bestAffiliation)}
+            {getAffiliationBadge(bestAffiliation, t)}
             {/* Ignored indicator */}
             {ignored && (
               <EyeOff className="size-3 text-fluux-muted" />
@@ -549,10 +537,10 @@ export function OccupantPanel({
     switch (item.type) {
       case 'role-header':
         return (
-          <div className="px-4 pt-4 pb-1 flex items-center gap-2 text-xs font-semibold text-fluux-muted uppercase">
+          <div className="px-4 pt-3 pb-1 mt-1 border-t border-[color:var(--fluux-surface-divider)] flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.09em] text-fluux-muted">
             {getRoleIcon(item.role)}
-            <span>{getRoleLabel(item.role)}</span>
-            <span className="text-fluux-muted/60">— {item.count}</span>
+            <span style={{ fontFamily: 'var(--fluux-font-display)' }}>{getRoleLabel(item.role)}</span>
+            <span className="text-fluux-brand">{item.count}</span>
           </div>
         )
       case 'occupant':
@@ -574,9 +562,9 @@ export function OccupantPanel({
         )
       case 'offline-header':
         return (
-          <div className="px-4 pt-4 pb-1 flex items-center gap-2 text-xs font-semibold text-fluux-muted uppercase">
-            <span>{t('rooms.offlineMembers')}</span>
-            <span className="text-fluux-muted/60">— {item.count}</span>
+          <div className="px-4 pt-3 pb-1 mt-1 border-t border-[color:var(--fluux-surface-divider)] flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.09em] text-fluux-muted">
+            <span style={{ fontFamily: 'var(--fluux-font-display)' }}>{t('rooms.offlineMembers')}</span>
+            <span className="text-fluux-brand">{item.count}</span>
           </div>
         )
       case 'offline': {
@@ -603,7 +591,7 @@ export function OccupantPanel({
                   <span className="truncate text-sm text-fluux-text">
                     {displayName}
                   </span>
-                  {getAffiliationBadge(member.affiliation)}
+                  {getAffiliationBadge(member.affiliation, t)}
                 </div>
                 <p className="text-xs text-fluux-muted truncate">{member.jid}</p>
               </div>
@@ -613,10 +601,10 @@ export function OccupantPanel({
       }
       case 'ignored-header':
         return (
-          <div className="px-4 pt-4 pb-1 flex items-center gap-2 text-xs font-semibold text-fluux-muted uppercase">
+          <div className="px-4 pt-3 pb-1 mt-1 border-t border-[color:var(--fluux-surface-divider)] flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.09em] text-fluux-muted">
             <EyeOff className="size-3" />
-            <span>{t('rooms.ignoredUsers')}</span>
-            <span className="text-fluux-muted/60">— {item.count}</span>
+            <span style={{ fontFamily: 'var(--fluux-font-display)' }}>{t('rooms.ignoredUsers')}</span>
+            <span className="text-fluux-brand">{item.count}</span>
           </div>
         )
       case 'ignored': {
