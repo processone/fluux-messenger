@@ -47,6 +47,14 @@ export const solarizedTheme: ThemeDefinition = {
       // Semantic overrides — base-40/50 are content colors, too bright for backgrounds
       '--fluux-bg-hover': 'rgba(7, 54, 66, 0.6)',
       '--fluux-bg-active': '#073642',
+      // Floating surface (menus, dropdowns, context menus via .fluux-popover).
+      // Default dark maps this to base-50, but Solarized base-50 (#657b83/base00)
+      // is a body-TEXT color, so the popover rendered as a washed-out light slab
+      // over the dark chat and dropped menu text to ~3.6:1 (sub-AA). Use a deep
+      // teal lifted above the chat surface (#0a4050): #0f4c5d clears AAA (7.75:1)
+      // for menu text while still reading as a raised panel via border + shadow.
+      '--fluux-bg-float': '#0f4c5d',
+      '--fluux-bg-float-hover': '#14596d',
       '--fluux-selection-bg': 'hsla(205, 69%, 49%, 0.2)',
       '--fluux-scrollbar-thumb': '#073642',
       '--fluux-scrollbar-thumb-hover': '#0a4050',

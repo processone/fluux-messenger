@@ -40,6 +40,13 @@ export const nordTheme: ThemeDefinition = {
       // Error as text/icon — lightened from --fluux-color-red so it clears WCAG
       // AA on this theme's chat surface (status-error stays the fill).
       '--fluux-text-error': '#ebadb3',
+      // Floating surface (menus, dropdowns, context menus via .fluux-popover).
+      // Default dark maps this to base-50, but Nord base-50 (#59657d) is a light
+      // polar tone, so menu text dropped to ~4.3:1 (sub-AA). Use nord3 (#4c566a),
+      // the authentic polar-night surface lifted above the chat (#434c5e); it
+      // clears AA (5.46:1) for menu text, with border + shadow carrying the lift.
+      '--fluux-bg-float': '#4c566a',
+      '--fluux-bg-float-hover': '#59657d',
       '--fluux-color-green-rgb': '163, 190, 140',
       '--fluux-color-yellow-rgb': '235, 203, 139',
       '--fluux-color-blue-rgb': '129, 161, 193',

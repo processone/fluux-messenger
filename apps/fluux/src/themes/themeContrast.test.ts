@@ -279,6 +279,26 @@ describe('Builtin theme unread-badge contrast', () => {
   }
 })
 
+// Per-theme popover-surface text contrast guard. Every menu, dropdown and
+// context menu renders through .fluux-popover, whose surface is --fluux-bg-float
+// and whose label text is --fluux-text-normal. In dark mode index.css maps
+// bg-float to base-50, but several palettes use a light "content/overlay" tone
+// for base-50 (Solarized base00, Catppuccin overlay0, Nord/One Dark mid-grays);
+// that pushed menu text below AA and made the panel read as a washed-out light
+// slab over the dark chat (audit 2026-06-27). Each theme overrides bg-float to a
+// surface tone where menu text clears AA, in both modes. (Light mode maps
+// bg-float to base-00 — near-white everywhere — and already clears AA.)
+describe('Builtin theme popover-surface text contrast', () => {
+  for (const theme of builtinThemes) {
+    for (const mode of ['dark', 'light'] as const) {
+      it(`[${theme.id}/${mode}] normal text clears WCAG AA on the popover (float) surface`, () => {
+        const r = contrast('var(--fluux-text-normal)', 'var(--fluux-bg-float)', themeTokens(theme, mode))
+        expect(r).toBeGreaterThanOrEqual(4.5)
+      })
+    }
+  }
+})
+
 // Encryption lock/shield icon contrast guard.
 // The composer card uses --fluux-base-40 as its background. The global
 // --fluux-accent-2 fails the 3:1 non-text contrast floor (WCAG 1.4.11) in light
