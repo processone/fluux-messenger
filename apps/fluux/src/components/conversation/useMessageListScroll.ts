@@ -1603,6 +1603,16 @@ export function useMessageListScroll({
     saved.restoredAt = Date.now()
     lastRestoreTimeRef.current = Date.now()
 
+    // Account for the prepended rows in the new-message baseline. This layout effect runs BEFORE
+    // the new-message effect in the same commit and flips `restored` true, so that effect no
+    // longer takes its `!restored` skip branch. Without syncing the count here it would compare
+    // the post-prepend messageCount against the STALE pre-prepend count, misread the load-older as
+    // a new message, and (in a short conversation, where the top is still within AT_BOTTOM_THRESHOLD
+    // so isAtBottom stays true) pin the view to the bottom — the reported "scroll up to the top
+    // jumps back to the bottom". A genuine new message arriving later still grows the count past
+    // this and scrolls normally.
+    prevMessageCountRef.current = messageCount
+
     // Measurement-aware re-assert loop: tanstack's estimated sizes for prepended rows
     // may differ from actual heights. As ResizeObserver reports measurements,
     // getOffsetForMessageId(anchor) shifts upward. Re-apply the anchor-based target
