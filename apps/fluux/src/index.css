@@ -289,8 +289,9 @@
   --fluux-sidebar-item-active-accent: var(--fluux-bg-accent);
   --fluux-sidebar-border: var(--fluux-divider-color);
 
-  /* Icon rail */
-  --fluux-rail-bg: var(--fluux-base-05);
+  /* Icon rail — overlay composited over the sidebar at render time so the rail
+     is always darker than the sidebar BY CONSTRUCTION across every theme and mode. */
+  --fluux-rail-overlay: rgba(0, 0, 0, 0.14);
   --fluux-rail-icon: var(--fluux-text-muted);
   --fluux-rail-icon-active: var(--fluux-bg-accent);
 
@@ -466,9 +467,9 @@
   --fluux-glass-bg: rgba(255, 255, 255, 0.72);
   --fluux-shadow-overlay: 0 20px 50px rgba(20, 27, 48, 0.18);
 
-  /* Light ramp inverts (base-05 is LIGHTER than base-10), so the rail keeps
-     base-10 to stay the deepest grey; the divider flips to a black alpha. */
-  --fluux-rail-bg: var(--fluux-base-10);
+  /* Divider flips to black-alpha on the light canvas. The rail is derived by
+     compositing --fluux-rail-overlay over --fluux-sidebar-bg at render time;
+     no fixed rail token is needed in light mode. */
   --fluux-surface-divider: rgba(0, 0, 0, 0.07);
 }
 
@@ -567,9 +568,11 @@ em-emoji-picker {
 [data-density="compact"] .message-group-start { padding-top: 8px; }
 
 /* Icon rail density. Width + button + icon shrink in compact. */
+/* Rail background: 14% black overlay composited over the sidebar color so the
+   rail is always visually deeper than the sidebar, regardless of theme or mode. */
 .icon-rail {
   width: 56px;
-  background: var(--fluux-rail-bg);
+  background: linear-gradient(var(--fluux-rail-overlay), var(--fluux-rail-overlay)), var(--fluux-sidebar-bg);
   border-inline-end: 1px solid var(--fluux-surface-divider);
 }
 .icon-rail-btn { width: 40px; height: 40px; }
