@@ -394,7 +394,7 @@ function EncryptionIcon({
   // share an alarming icon.
   const Icon = verified ? ShieldCheck : Lock
   const colorClass = verified
-    ? 'text-green-500'
+    ? 'text-fluux-encryption'
     : 'text-fluux-muted hover:text-fluux-text'
   const hasActions = onVerifyClick || onDisableClick
 
@@ -464,7 +464,7 @@ function EncryptionIcon({
               className="flex w-full items-center gap-2.5 px-3 py-2 text-sm text-fluux-text hover:bg-fluux-hover transition-colors"
               onClick={() => { setOpen(false); onVerifyClick() }}
             >
-              <ShieldCheck className={`size-4 flex-shrink-0 ${verified ? 'text-green-500' : 'text-fluux-muted'}`} />
+              <ShieldCheck className={`size-4 flex-shrink-0 ${verified ? 'text-fluux-encryption' : 'text-fluux-muted'}`} />
               {verified
                 ? t('chat.verifyPeer.menuViewVerified', { name: peerName })
                 : t('chat.verifyPeer.dialogTitle', { name: peerName })}

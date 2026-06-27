@@ -45,6 +45,9 @@ export default {
           'badge-text': 'var(--fluux-badge-text)',
           // Aurora identity tokens
           'accent-2': 'var(--fluux-accent-2)',
+          // Encryption affordance (shields, locks) — single source of truth so
+          // the header shield, composer lock, and per-message lock match.
+          'encryption': 'var(--fluux-text-encryption)',
           // Status (semantic purpose, not color)
           'green': 'var(--fluux-status-success)',
           'yellow': 'var(--fluux-status-warning)',
