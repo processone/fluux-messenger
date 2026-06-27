@@ -691,10 +691,17 @@ html, body {
   outline-offset: -2px;
 }
 
-/* Focus zone styling - only show after user interaction */
+/* Focus zone styling - only show after user interaction.
+ * Matches the composer card's focus treatment (1px accent line + soft glow) so
+ * the sidebar / message / room focus rings read at the same weight as the
+ * composer instead of a heavier 2px solid outline. Inset because these zones are
+ * flush panels (no room for an outset glow); the solid 1px line keeps the
+ * keyboard-focus indicator visible for accessibility. */
 .user-interacted .focus-zone:focus {
-  outline: 2px solid var(--fluux-focus-ring) !important;
-  outline-offset: -2px !important;
+  outline: none !important;
+  box-shadow:
+    inset 0 0 0 1px var(--fluux-brand),
+    inset 0 0 0 3px hsla(var(--fluux-accent-h), var(--fluux-accent-s), var(--fluux-accent-l), 0.22) !important;
 }
 
 /*
