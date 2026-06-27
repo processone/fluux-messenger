@@ -49,14 +49,14 @@ for (const key of Object.keys(localStorage)) {
 if (params.get('virt') === '1') {
   localStorage.setItem('fluux:flags:enableMessageVirtualization', 'true')
 }
-// Query-param seam: ?density=compact/comfortable drives the store directly so the
-// avatar size (store-driven) and CSS spacing (data-density attribute) both change.
-// localStorage is also seeded so the value survives any internal re-init paths.
-// Used by the screenshot harness (scripts/screenshots.ts) to render the compact
-// conversation-list scene without a runtime store mutation or page reload.
+// Query-param seam: ?density=compact/comfortable drives the store via setDensityMode
+// so the avatar size (store-driven) and the CSS spacing (data-density attribute, set
+// by the useDensity hook) both reflect the requested density. setDensityMode also
+// persists 'fluux-density' internally. Used by the screenshot harness
+// (scripts/screenshots.ts) to render the compact conversation-list scene.
 const densityParam = params.get('density')
 if (densityParam === 'compact' || densityParam === 'comfortable') {
-  // Drive the store directly (store is already created by this point via the import)
+  // Drive the store directly (the store is already created by this point via the import)
   useSettingsStore.getState().setDensityMode(densityParam)
 }
 // Clear IndexedDB caches (async, best-effort)

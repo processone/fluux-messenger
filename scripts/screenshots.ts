@@ -116,9 +116,9 @@ test('03 — Conversation List (dark)', async ({ page }) => {
 })
 
 test('3x — Conversation List Compact (dark)', async ({ page }) => {
-  // Load demo with ?density=compact so the Zustand store initialises in compact mode.
-  // demo.tsx seeds localStorage after its own clear, so the store reads 'compact'
-  // on first creation — both the avatar size (store-driven) and CSS spacing change.
+  // Load demo with ?density=compact: demo.tsx calls setDensityMode('compact') at startup
+  // (after its localStorage clear), so both the avatar size (store-driven) and the CSS
+  // spacing (data-density attribute) render compact.
   await waitForDemoReady(page, 'dark', DEMO_URL + '&density=compact')
   await navigateTo(page, 'messages')
   await capture(page, '3x-conversation-list-compact-dark')
