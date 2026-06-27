@@ -46,6 +46,8 @@ if (typeof window !== 'undefined') {
     on = true
   ) => {
     DEBUG = on
+    // Shared flag so sibling modules (scrollStateManager) log in the same trace.
+    ;(window as Window & { __fluuxScrollDebugOn?: boolean }).__fluuxScrollDebugOn = on
     console.warn(`[Scroll] debug ${on ? 'ENABLED' : 'disabled'}`)
   }
 }
@@ -190,6 +192,10 @@ export interface UseMessageListScrollOptions {
    *  appears we scroll to the bottom regardless of position — you always want to see what you
    *  just sent — whereas an incoming message only auto-follows when already near the bottom. */
   lastMessageIsOutgoing?: boolean
+  /** Id of the newest message. A send can REPLACE the last row in place (optimistic →
+   *  reconciled) without growing messageCount, so "did the bottom change?" must key off this
+   *  id, not just the count — otherwise a just-sent message fails to stick to the bottom. */
+  lastMessageId?: string
   /** When true, disables all auto-scroll behaviors (conversation switch scroll,
    *  ResizeObserver auto-scroll, new message scroll-to-bottom, target message scroll).
    *  Used by read-only preview views (search context, activity context) that manage
@@ -233,6 +239,7 @@ export function useMessageListScroll({
   typingUsersCount,
   lastMessageReactionsKey,
   lastMessageIsOutgoing = false,
+  lastMessageId,
   staticMode = false,
   virtualizer,
 }: UseMessageListScrollOptions): UseMessageListScrollResult {
@@ -284,6 +291,7 @@ export function useMessageListScroll({
   // Track conversation
   const prevConversationRef = useRef<string | null>(null)
   const prevMessageCountRef = useRef(0)
+  const prevLastMessageIdRef = useRef<string | undefined>(lastMessageId)
   const hasInitializedRef = useRef(false)
 
   // Track prepend (loading older messages)
@@ -1029,15 +1037,26 @@ export function useMessageListScroll({
     const shouldShowFab = distFromBottom > FAB_THRESHOLD
     setShowScrollToBottom(prev => prev !== shouldShowFab ? shouldShowFab : prev)
 
+    // A programmatic re-assert loop (marker positioning / pin-bottom / prepend restore) owns
+    // scrollTop while it runs — those scroll events are NOT the user. They must not (a) clear the
+    // marker (the marker-positioning loop scrolls TO the marker, momentarily landing at/near the
+    // bottom for a last-message marker, which would trip the "reached bottom" clear), nor (b) save
+    // the position (the transient scrollTop:0 of the virtualized initial render was saved as a
+    // "scrolled-up" position, poisoning the next re-entry into restore-position and bypassing the
+    // marker entirely). Gate both on a genuine user scroll.
+    const programmaticScroll = reassertLoopRef.current !== null
+
     // Clear new message marker when user scrolls past it or reaches the bottom.
     // Skip on the very first scroll events after marker setup to avoid clearing
     // the marker before the user has a chance to see it.
-    if (firstNewMessageId && clearFirstNewMessageId) {
+    if (firstNewMessageId && clearFirstNewMessageId && !programmaticScroll) {
       if (!userHasScrolledSinceMarkerRef.current) {
         // First scroll after marker was set — arm the flag for next time
         userHasScrolledSinceMarkerRef.current = true
+        debugLog('MARKER CLEAR armed (first scroll)', { firstNewMessageId, distFromBottom })
       } else if (distFromBottom < AT_BOTTOM_THRESHOLD) {
         // User reached the bottom — all new messages are visible
+        debugLog('MARKER CLEAR (reached bottom)', { firstNewMessageId, distFromBottom })
         clearFirstNewMessageId()
       } else {
         const escapedId = CSS.escape(firstNewMessageId)
@@ -1047,10 +1066,12 @@ export function useMessageListScroll({
           const markerRect = markerEl.getBoundingClientRect()
           // Marker is "scrolled past" when its bottom edge is above the viewport
           if (markerRect.bottom < scrollerRect.top) {
+            debugLog('MARKER CLEAR (scrolled past)', { firstNewMessageId })
             clearFirstNewMessageId()
           }
         } else {
           // Marker element not in DOM (trimmed) — clear it
+          debugLog('MARKER CLEAR (not in DOM/trimmed)', { firstNewMessageId, distFromBottom })
           clearFirstNewMessageId()
         }
       }
@@ -1059,8 +1080,10 @@ export function useMessageListScroll({
     // Save position for cross-conversation persistence (throttled). Capture the
     // bottom-most-visible anchor here too — throttled so the DOM query is bounded,
     // and during scroll because at switch time the DOM is already the new room.
+    // Skipped while a programmatic loop is positioning the list (see programmaticScroll above):
+    // saving the transient entry position would poison the next re-entry's restore decision.
     const now = Date.now()
-    if (now - lastSaveTimeRef.current > SAVE_THROTTLE_MS) {
+    if (!programmaticScroll && now - lastSaveTimeRef.current > SAVE_THROTTLE_MS) {
       lastSaveTimeRef.current = now
       scrollStateManager.saveScrollPosition(conversationId, scrollTop, scrollHeight, clientHeight, lastAnchorRef.current ?? undefined)
     }
@@ -1225,6 +1248,7 @@ export function useMessageListScroll({
 
           const viewportHeight = s.clientHeight
           const v = latestRef.current.virtualizer
+          const markerIndex = v ? v.getIndexForMessageId(markerId) : null
           let offset: number | null = null
           if (v) {
             offset = v.getOffsetForMessageId(markerId)
@@ -1234,38 +1258,48 @@ export function useMessageListScroll({
           }
 
           let wrote = false
-          if (offset != null) {
+          if (offset != null && (!v || markerIndex != null)) {
             resolved = true
-            const target = Math.max(0, offset - viewportHeight / 3)
             // Marker sits in the top third of the content (vh/3-from-top would be above the content
             // top, so the only valid scroll target is 0). Scrolling to 0 would spuriously fire
             // triggerLoadOlder (handleScroll keys load-older on scrollTop===0) and churn — the
             // regression that consumed the older-message backlog on entry. This is the all/mostly-
             // unread case; fall back to the bottom (the prior behavior) rather than paginating.
-            if (target <= 0) {
+            if (offset <= viewportHeight / 3) {
               isAtBottomRef.current = true
               finishMarker()
               reassertBottom()
               return
             }
-            if (Math.abs(target - landedTarget) > MARKER_DRIFT_PX) {
-              // Route through the virtualizer (scrollToOffset) so @tanstack's reactive scrollOffset
-              // stays in sync — a raw scrollTop write is reverted to the top on the next re-window.
-              if (v) v.scrollToOffset(target)
-              else s.scrollTop = target
+            // Position the marker row via the virtualizer's measurement-aware scrollToIndex.
+            // A raw scrollToOffset to the ESTIMATED offset lands SHORT and never windows the marker
+            // row in, so its height never measures and the offset estimate never sharpens — the loop
+            // then sees a "stable" (wrong) target and stops with the marker stranded below the fold
+            // (the bug). scrollToIndex windows the marker region in (mount + measure), so each frame
+            // lands closer and re-asserting converges, exactly like pinVirtualizedBottom. align:'start'
+            // puts the divider near the top to read forward, and clamps to the bottom when the marker
+            // is the last message (so a single new message lands at the bottom, fully visible).
+            if (v) v.scrollToIndex(markerIndex!, { align: 'start' })
+            else s.scrollTop = Math.max(0, offset - viewportHeight / 3)
+
+            const st = s.scrollTop
+            // Converged when the landing position stops moving (rows have finished measuring).
+            if (landedTarget >= 0 && Math.abs(st - landedTarget) <= MARKER_DRIFT_PX) {
+              if (++stableFrames >= MARKER_STABLE_FRAMES) {
+                finishMarker()
+                return
+              }
+            } else {
               wrote = true
-              landedTarget = target
               stableFrames = 0
-              const distFromBottom = s.scrollHeight - target - viewportHeight
+              const distFromBottom = s.scrollHeight - st - viewportHeight
               isAtBottomRef.current = distFromBottom < AT_BOTTOM_THRESHOLD
-              debugLog('CONVERSATION SWITCH: scrolled to new message marker', {
-                firstNewMessageId: markerId, target, viewportHeight, isAtBottom: isAtBottomRef.current,
+              debugLog('CONVERSATION SWITCH: scrolling to new message marker', {
+                firstNewMessageId: markerId, markerIndex, offset, scrollTop: st,
+                distFromBottom, isAtBottom: isAtBottomRef.current,
               })
-            } else if (landedTarget >= 0 && ++stableFrames >= MARKER_STABLE_FRAMES) {
-              // Landed and the target has held steady — stop re-asserting.
-              finishMarker()
-              return
             }
+            landedTarget = st
           }
           const warning = markerLoop.frame(performance.now(), wrote)
           if (warning) console.warn(warning)
@@ -1313,10 +1347,13 @@ export function useMessageListScroll({
       }
     }
 
-    // Update tracking
+    // Update tracking. Sync prevLastMessageIdRef to the entered conversation's newest message so
+    // the new-message effect (which keys "did the bottom change?" off lastMessageId) does not
+    // mistake the switch itself for a fresh send and override the marker/restore positioning.
     hasInitializedRef.current = true
     prevConversationRef.current = conversationId
     prevMessageCountRef.current = messageCount
+    prevLastMessageIdRef.current = lastMessageId
 
     // Cleanup: properly leave conversation in scrollStateManager when unmounting
     // This prevents stale currentConversationId from causing 'no-action' on remount
@@ -1330,7 +1367,7 @@ export function useMessageListScroll({
         }
       }
     }
-  }, [conversationId, messageCount, firstNewMessageId, targetMessageId, isAtBottomRef, staticMode, pinVirtualizedBottom, reassertBottom])
+  }, [conversationId, messageCount, firstNewMessageId, targetMessageId, lastMessageId, isAtBottomRef, staticMode, pinVirtualizedBottom, reassertBottom])
 
   // ==========================================================================
   // EFFECT: Scroll to target message (from activity log click, etc.)
@@ -1740,18 +1777,27 @@ export function useMessageListScroll({
         prevCount: prevMessageCountRef.current,
       })
       prevMessageCountRef.current = messageCount
+      prevLastMessageIdRef.current = lastMessageId
       return
     }
 
-    const isNewMessage = messageCount > prevMessageCountRef.current
-    // Scroll to the bottom when a new message arrives AND either we're already near the bottom
-    // (auto-follow) OR the message is the user's own send — you always want to see what you
-    // just sent, even from a scrolled-up position. An incoming message while scrolled up does
-    // NOT yank the reader down.
-    if (isNewMessage && (isAtBottomRef.current || lastMessageIsOutgoing)) {
+    // "Did the bottom row change?" must key off the last message ID, not just messageCount: a
+    // send REPLACES the optimistic last row in place (reconciled to the server id) without growing
+    // the count, so a count-only check misses it and the just-sent message fails to stick to the
+    // bottom. Either a count increase OR a new last-message id is a fresh bottom row.
+    const countIncreased = messageCount > prevMessageCountRef.current
+    const lastMessageChanged = lastMessageId !== undefined && lastMessageId !== prevLastMessageIdRef.current
+    const newBottomRow = countIncreased || lastMessageChanged
+
+    // Scroll to the bottom when a new bottom row appears AND either we're already near the bottom
+    // (auto-follow) OR it's the user's own send — you always want to see what you just sent, even
+    // from a scrolled-up position. An incoming message while scrolled up does NOT yank the reader.
+    if (newBottomRow && (isAtBottomRef.current || lastMessageIsOutgoing)) {
       debugLog('NEW MSG SCROLL TO BOTTOM', {
         messageCount,
         prevCount: prevMessageCountRef.current,
+        countIncreased,
+        lastMessageChanged,
         isAtBottom: isAtBottomRef.current,
         outgoing: lastMessageIsOutgoing,
         scrollTopBefore: scroller.scrollTop,
@@ -1760,28 +1806,19 @@ export function useMessageListScroll({
       })
       isAtBottomRef.current = true // a send from a scrolled-up position lands us at the bottom
       reassertBottom()
-    } else if (isNewMessage) {
-      debugLog('NEW MSG NO SCROLL (not at bottom)', {
+    } else if (newBottomRow) {
+      debugLog('NEW MSG NO SCROLL (incoming, not at bottom)', {
         messageCount,
         prevCount: prevMessageCountRef.current,
+        countIncreased,
+        lastMessageChanged,
         isAtBottom: isAtBottomRef.current,
-      })
-    } else if (lastMessageIsOutgoing) {
-      // The last message is the user's own send but messageCount did NOT increase past the
-      // previous count, so this effect treats it as "not new" and never re-pins. Prime suspect
-      // for "I sent a message and the view didn't stick to bottom": the optimistic message was
-      // already counted on a prior render, or a reconciliation replaced a row in place. Logged
-      // so the troubleshooting phase can tell this apart from a failed pin.
-      debugLog('NEW MSG SKIPPED (outgoing but count did not grow)', {
-        messageCount,
-        prevCount: prevMessageCountRef.current,
-        isAtBottom: isAtBottomRef.current,
-        distFromBottom: scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight,
       })
     }
 
     prevMessageCountRef.current = messageCount
-  }, [messageCount, isAtBottomRef, staticMode, lastMessageIsOutgoing, reassertBottom])
+    prevLastMessageIdRef.current = lastMessageId
+  }, [messageCount, lastMessageId, isAtBottomRef, staticMode, lastMessageIsOutgoing, reassertBottom])
 
   // ==========================================================================
   // EFFECT: Reset marker scroll tracking when firstNewMessageId changes

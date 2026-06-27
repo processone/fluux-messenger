@@ -56,6 +56,10 @@ vi.mock('./tanstackMessageVirtualizer', () => ({
     getTotalSize: () => args.items.length * 40,
     itemCount: args.items.length,
     getOffsetForMessageId,
+    getIndexForMessageId: (id: string) => {
+      const i = args.items.findIndex((it) => it.key === id)
+      return i >= 0 ? i : null
+    },
     ensureMessageMounted,
     measureElement: () => {},
     // Wire scrollToOffset/scrollToIndex to the actual scroller so tests can track scrollTop.
@@ -182,14 +186,16 @@ describe('MessageList — virtualized scroll integration (ensureMessageMounted)'
     expect(scrollTopSets).toContain(1000)
   })
 
-  it('positions the unread marker from the virtualizer offset on entry, not the windowed-out DOM row', async () => {
+  it('positions the unread marker via the virtualizer scrollToIndex on entry, not the windowed-out DOM row', async () => {
     // Entering an unread conversation, the marker row is typically windowed OUT and the
     // messages may still be rehydrating from cache, so querySelector(marker).offsetTop is
     // unreliable (null when unmounted; 0 with no layout). The old code positioned the marker
-    // from that DOM read and fell back to a raw scrollTop=scrollHeight, which the virtualizer
-    // reverts to offset 0 — parking the view at the TOP with the marker stranded below the fold.
-    // The fix resolves the marker offset from the virtualizer (getOffsetForMessageId), which
-    // works for unmounted rows, so the entry scroll lands at the marker.
+    // from a raw scrollTop=scrollHeight, which the virtualizer reverts to offset 0 — parking the
+    // view at the TOP with the marker stranded below the fold. Resolving an ESTIMATED offset and
+    // scrolling there also fails to converge (the scroll never windows the marker row in, so its
+    // height never measures and the estimate never sharpens — it stops with the marker below the
+    // fold). The fix drives the measurement-aware scrollToIndex(markerIndex,'start'), which windows
+    // the marker row in so the entry scroll converges onto it.
     vi.useFakeTimers()
     try {
       // Marker (msg-40) sits 1600px down the content; viewport is 600px tall.
@@ -207,14 +213,16 @@ describe('MessageList — virtualized scroll integration (ensureMessageMounted)'
       Object.defineProperty(scroller, 'scrollHeight', { get: () => 2000, configurable: true })
       Object.defineProperty(scroller, 'clientHeight', { value: 600, configurable: true })
 
-      scrollToOffsetCalls.length = 0
+      scrollToIndexCalls.length = 0
       // Flush the rAF / timeout re-assert window.
       await vi.advanceTimersByTimeAsync(600)
 
-      // Target = markerOffset - viewportHeight/3 = 1600 - 200 = 1400. The view must land at the
-      // marker (offset well below the fold), NOT at ~0 (the top) as the windowed-out DOM read gave.
+      // The marker (offset 1600, well past the 200px top-third) routes through scrollToIndex with
+      // align 'start' (NOT scrollToOffset to an estimate), landing the view at the marker row
+      // (msg-40 is flat index 41 → scrollTop 1640 in the mock), NOT at ~0 (the top).
       expect(getOffsetForMessageId).toHaveBeenCalledWith('msg-40')
-      expect(scrollToOffsetCalls.some((o) => o > 1000)).toBe(true)
+      expect(scrollToIndexCalls).toContain('start')
+      expect(scroller.scrollTop).toBeGreaterThan(1000)
     } finally {
       vi.useRealTimers()
     }

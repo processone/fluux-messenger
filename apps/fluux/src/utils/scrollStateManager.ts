@@ -12,7 +12,18 @@
  * - Debug logging (controlled via DEBUG flag)
  */
 
-const DEBUG = false
+// Runtime-toggleable, sharing the same flag as useMessageListScroll's [Scroll] debug:
+//   __fluuxScrollDebug(true)  → enable, or localStorage 'fluux:scroll-debug' = '1'
+// so the enterConversation decision shows up inline with the hook's scroll trace.
+function isDebugEnabled(): boolean {
+  if (typeof window === 'undefined') return false
+  try {
+    if ((window as Window & { __fluuxScrollDebugOn?: boolean }).__fluuxScrollDebugOn) return true
+    return window.localStorage?.getItem('fluux:scroll-debug') === '1'
+  } catch {
+    return false
+  }
+}
 
 /**
  * A content-stable scroll anchor: the bottom-most visible message and the gap
@@ -53,7 +64,7 @@ class ScrollStateManager {
   private staleThresholdMs = 30 * 60 * 1000 // 30 minutes
 
   private log(action: string, data?: Record<string, unknown>) {
-    if (DEBUG) {
+    if (isDebugEnabled()) {
       console.log(`[ScrollStateManager] ${action}`, data ?? '')
     }
   }
