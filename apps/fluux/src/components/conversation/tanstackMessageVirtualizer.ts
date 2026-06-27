@@ -143,6 +143,10 @@ export function useTanstackMessageVirtualizer({
     return virtualizer.getOffsetForIndex(index, 'start')?.[0] ?? null
   }, [indexById, virtualizer])
 
+  const getIndexForMessageId = useCallback((id: string): number | null => {
+    return indexById.get(id) ?? null
+  }, [indexById])
+
   const ensureMessageMounted = useCallback((id: string): Promise<void> => {
     const index = indexById.get(id)
     if (index == null) return Promise.resolve()
@@ -156,6 +160,7 @@ export function useTanstackMessageVirtualizer({
     getTotalSize: () => virtualizer.getTotalSize(),
     itemCount: items.length,
     getOffsetForMessageId,
+    getIndexForMessageId,
     ensureMessageMounted,
     measureElement: virtualizer.measureElement,
     scrollToOffset: (offset, opts) => {

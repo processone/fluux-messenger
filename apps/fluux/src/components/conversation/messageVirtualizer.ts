@@ -40,6 +40,9 @@ export interface MessageVirtualizer {
   /** Offset (px from content top) of a message by id, whether or not it is mounted.
    *  null when the id is not in the current item set. */
   getOffsetForMessageId(id: string): number | null
+  /** Flat virtualizer index of a message by id, or null when the id is not in the current
+   *  item set. Lets callers drive the measurement-aware scrollToIndex for a message row. */
+  getIndexForMessageId(id: string): number | null
   /** Expand the rendered window so the row for `id` is mounted on the next commit.
    *  Callers that only need the offset should use getOffsetForMessageId and skip this. */
   ensureMessageMounted(id: string): Promise<void>

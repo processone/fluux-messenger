@@ -12,7 +12,7 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { HashRouter } from 'react-router-dom'
 import { XMPPProvider, DemoClient, E2EEManager, InMemoryStorageBackend } from '@fluux/sdk'
-import { adminStore, ignoreStore, roomStore } from '@fluux/sdk/stores'
+import { adminStore, chatStore, ignoreStore, roomStore } from '@fluux/sdk/stores'
 import { DemoOpenPGPPlugin, DEMO_AVA_FINGERPRINT } from './demo/DemoOpenPGPPlugin'
 import { ThemeProvider } from './providers/ThemeProvider'
 import { useThemeStore } from './stores/themeStore'
@@ -130,6 +130,7 @@ setSessionPassphrase('demo')
 ;(window as any).__demoClient = demoClient
 ;(window as any).__adminStore = adminStore
 ;(window as any).__roomStore = roomStore
+;(window as any).__chatStore = chatStore
 ;(window as any).__themeStore = useThemeStore
 ;(window as any).__settingsStore = useSettingsStore
 ;(window as any).__i18n = i18n
