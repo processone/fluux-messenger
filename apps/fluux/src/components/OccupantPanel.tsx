@@ -184,7 +184,7 @@ const OccupantRow = memo(function OccupantRow({
           avatarUrl={isMe ? (ownAvatar || undefined) : displayAvatar}
           size="sm"
           presence={getPresenceFromShow(group.bestPresence)}
-          presenceBorderColor="border-fluux-sidebar"
+          presenceBorderColor="border-fluux-chat"
           presenceHalo
           fallbackColor={isMe ? 'var(--fluux-bg-accent)' : identityColor}
           fallbackTextColor={isMe ? undefined : bestTextColor(identityColor!)}
@@ -584,7 +584,7 @@ export function OccupantPanel({
                 avatarUrl={contact?.avatar}
                 size="sm"
                 presence="offline"
-                presenceBorderColor="border-fluux-sidebar"
+                presenceBorderColor="border-fluux-chat"
               />
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-1.5 flex-wrap">
@@ -640,7 +640,7 @@ export function OccupantPanel({
                 name={displayName}
                 size="sm"
                 presence="offline"
-                presenceBorderColor="border-fluux-sidebar"
+                presenceBorderColor="border-fluux-chat"
               />
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-1.5 flex-wrap">
@@ -661,7 +661,7 @@ export function OccupantPanel({
   }
 
   return (
-    <div className={`${fullScreen ? 'w-full h-full' : 'w-64 border-s border-fluux-bg'} flex flex-col bg-fluux-sidebar`}>
+    <div className={`${fullScreen ? 'w-full h-full' : 'w-64 border-s border-fluux-bg'} flex flex-col bg-fluux-chat`}>
       {/* Panel header */}
       <div className={`h-14 ${titleBarClass} px-4 flex items-center justify-between border-b border-fluux-bg`}>
         {fullScreen ? (
