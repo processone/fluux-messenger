@@ -370,12 +370,9 @@
   --scrollbar-thumb: var(--fluux-scrollbar-thumb);
   --scrollbar-thumb-hover: var(--fluux-scrollbar-thumb-hover);
 
-  /* emoji-mart theming */
-  --em-rgb-background: 30, 31, 34;
-  --em-rgb-input: 53, 55, 60;
-  --em-rgb-color: 219, 222, 225;
-  --em-color-border: var(--fluux-bg-hover);
-  --em-color-border-over: var(--fluux-bg-active);
+  /* emoji-mart theming lives on the em-emoji-picker host rule below (not here):
+     emoji-mart's own per-theme :host rules would override these if set on :root,
+     so they must target the host element directly. */
 }
 
 /* Light mode — overrides foundation + select semantic vars */
@@ -460,13 +457,6 @@
   --fluux-grad: linear-gradient(135deg, #11A88C, #5B6CF0, #7C6CF0);
   --fluux-glass-bg: rgba(255, 255, 255, 0.72);
   --fluux-shadow-overlay: 0 20px 50px rgba(20, 27, 48, 0.18);
-
-  /* emoji-mart theming */
-  --em-rgb-background: 227, 229, 232;
-  --em-rgb-input: 220, 222, 227;
-  --em-rgb-color: 46, 51, 56;
-  --em-color-border: var(--fluux-bg-hover);
-  --em-color-border-over: var(--fluux-bg-active);
 }
 
 /* Elevated floating surface shared by every menu, dropdown, context menu and
@@ -482,6 +472,24 @@
     border: 1px solid var(--fluux-border-color);
     box-shadow: var(--fluux-shadow-overlay);
   }
+}
+
+/* Emoji picker (emoji-mart web component) — give it the same elevated treatment
+   as .fluux-popover: the float surface, a hairline border and the overlay drop
+   shadow. The COLOR hooks (--rgb-background/input/color/accent, RGB triples that
+   emoji-mart reads as rgb(var(--rgb-*))) are derived per-theme at runtime in
+   useTheme.ts (applyEmojiPickerColors) from --fluux-bg-float / --fluux-input-bg
+   / --fluux-text-normal / --fluux-bg-accent, so the picker tracks the active
+   theme. Only the structural vars live here — they reference the --fluux-*
+   tokens, which already adapt per theme and mode. */
+em-emoji-picker {
+  --border-radius: var(--fluux-radius-l);
+  --color-border: var(--fluux-border-color);
+  --color-border-over: var(--fluux-border-color-strong);
+  --shadow: var(--fluux-shadow-overlay);
+  /* emoji-mart draws no outer border on :host; add the popover hairline so the
+     edge matches the menus (the shadow alone carries the lift otherwise). */
+  border: 1px solid var(--fluux-border-color);
 }
 
 /* Text selection styling - uses brand color for consistent look */
