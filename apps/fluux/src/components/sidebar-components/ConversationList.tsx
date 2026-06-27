@@ -225,6 +225,7 @@ export const ConversationItem = memo(function ConversationItem({
   const { getItemMenuProps, isOpen, longPressTriggered, targetItem } = useSidebarListMenu<Conversation>()
   const currentLang = i18n.language.split('-')[0]
   const timeFormat = useSettingsStore((s) => s.timeFormat)
+  const densityMode = useSettingsStore((s) => s.densityMode)
 
   // Per-item subscriptions: each row re-renders only when ITS conversation /
   // contact / room / typing / draft changes — not when any OTHER conversation
@@ -247,6 +248,8 @@ export const ConversationItem = memo(function ConversationItem({
 
   if (!conversation) return null
   const isGroupChat = conversation.type === 'groupchat'
+  const avatarSize = densityMode === 'compact' ? 'sm' : 'md'
+  const avatarBox = densityMode === 'compact' ? 'size-8' : 'size-10'
   const menuProps = getItemMenuProps(conversation)
   // While the long-press / context menu is open, highlight the targeted cell so
   // the user can clearly see which conversation the action will apply to.
@@ -272,7 +275,7 @@ export const ConversationItem = memo(function ConversationItem({
         onClick={handleClick}
         onMouseEnter={onMouseEnter}
         onMouseMove={onMouseMove}
-        className={`w-full relative px-2 py-1.5 rounded border flex items-center gap-3 text-start cursor-pointer
+        className={`w-full relative px-2 sidebar-row rounded border flex items-center text-start cursor-pointer
                     transition-colors ${isMenuTarget ? 'ring-2 ring-fluux-brand ring-inset z-10' : ''} ${isActive
                       ? "bg-fluux-sidebar-item-active text-fluux-text border-transparent before:content-[''] before:absolute before:left-0 before:top-1.5 before:bottom-1.5 before:w-[3px] before:rounded-r-full before:bg-fluux-sidebar-item-active-accent"
                       : isMenuTarget
@@ -292,14 +295,14 @@ export const ConversationItem = memo(function ConversationItem({
               <img
                 src={room.avatar}
                 alt={conversation.name}
-                className="size-8 rounded-xl object-cover"
+                className={`${avatarBox} rounded-xl object-cover`}
                 draggable={false}
                 onError={() => setRoomAvatarBroken(true)}
                 onLoad={(e) => { if (e.currentTarget.naturalWidth === 0) setRoomAvatarBroken(true) }}
               />
             ) : (
               <Hash
-                className="size-8 p-1.5 rounded-xl text-white"
+                className={`${avatarBox} p-1.5 rounded-xl text-white`}
                 style={{ backgroundColor: generateConsistentColorHexSync(conversation.id, { saturation: 60, lightness: 45 }) }}
               />
             )
@@ -308,7 +311,7 @@ export const ConversationItem = memo(function ConversationItem({
               identifier={conversation.id}
               name={conversation.name}
               avatarUrl={contact?.avatar}
-              size="sm"
+              size={avatarSize}
               presence={contact?.presence ?? 'offline'}
               forceOffline={forceOffline}
               overlay={isTyping ? <TypingIndicator /> : undefined}
@@ -322,7 +325,7 @@ export const ConversationItem = memo(function ConversationItem({
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between gap-2">
-            <p dir="auto" className="truncate font-medium">{conversation.name}</p>
+            <p dir="auto" className={`truncate ${conversation.unreadCount > 0 ? 'font-semibold text-fluux-text' : 'font-medium'}`}>{conversation.name}</p>
             {conversation.lastMessage && (
               <span className="text-xs text-fluux-muted flex-shrink-0">
                 {formatConversationTime(conversation.lastMessage.timestamp, t, currentLang, timeFormat)}
