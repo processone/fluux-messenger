@@ -22,11 +22,20 @@ describe('HistoryStartMarker', () => {
     expect(screen.getByText('Beginning of conversation')).toBeInTheDocument()
   })
 
-  it('should render horizontal lines', () => {
+  it('should render a single trailing rule after the label', () => {
     const { container } = render(<HistoryStartMarker />)
 
     const lines = container.querySelectorAll('.h-px.bg-fluux-hover')
-    expect(lines).toHaveLength(2)
+    expect(lines).toHaveLength(1)
+  })
+
+  it('should render the label before the rule so it sits on the reading-start edge', () => {
+    const { container } = render(<HistoryStartMarker />)
+
+    const wrapper = container.firstChild as HTMLElement
+    const [first, second] = Array.from(wrapper.children)
+    expect(first).toHaveTextContent('Beginning of conversation')
+    expect(second).toHaveClass('flex-1', 'h-px', 'bg-fluux-hover')
   })
 
   it('should render a clock icon', () => {
