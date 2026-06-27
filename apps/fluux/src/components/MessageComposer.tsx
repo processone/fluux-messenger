@@ -671,8 +671,8 @@ export function MessageComposer({
   const lockInfo: { Icon: typeof Lock; color: string; label: string } | null =
     enc?.kind === 'encrypted'
       ? enc.trust === 'verified'
-        ? { Icon: ShieldCheck, color: 'var(--fluux-accent-2)', label: t('chat.encryption.verifiedTooltip') }
-        : { Icon: Lock, color: 'var(--fluux-accent-2)', label: t('chat.encryption.openpgpTooltip') }
+        ? { Icon: ShieldCheck, color: 'var(--fluux-text-encryption)', label: t('chat.encryption.verifiedTooltip') }
+        : { Icon: Lock, color: 'var(--fluux-text-encryption)', label: t('chat.encryption.openpgpTooltip') }
       : enc?.kind === 'blocked'
         ? { Icon: ShieldAlert, color: 'var(--fluux-status-warning)', label: t('chat.encryption.blockedTooltip') }
         : null

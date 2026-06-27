@@ -192,6 +192,12 @@
      value is used, tuned to clear WCAG AA on both the resting and hover message
      backgrounds. Dark default here; .light overrides below. */
   --fluux-text-self: #A9B4FF;
+  /* Encryption lock/shield icon color. Tuned to clear the 3:1 non-text contrast
+     floor (WCAG 1.4.11) on the composer card (--fluux-base-40). Dark: #38E0C4
+     reaches 10.27:1 on #141B30. Light override below uses #0D8872 (3.58:1 on
+     #E4E8F3). The global --fluux-accent-2 is NOT used here because its light
+     value (#11A88C) only reaches ~2.45:1 on the card — below the 3:1 floor. */
+  --fluux-text-encryption: #38E0C4;
   /* Error as text/icon (delivery failures, inline error labels). Split from the
      --fluux-status-error fill: that value is tuned dark so white text on it
      (danger button, toast border, dnd dot) clears AA, which leaves it at only
@@ -432,6 +438,9 @@
 
   /* ── Aurora identity (light) ── */
   --fluux-accent-2: #11A88C;
+  /* Encryption lock icon — #11A88C only reaches ~2.45:1 on the card bg #E4E8F3;
+     this darker teal clears 3.58:1 (non-text floor is 3:1, target 3.5+). */
+  --fluux-text-encryption: #0D8872;
   --fluux-grad: linear-gradient(135deg, #11A88C, #5B6CF0, #7C6CF0);
   --fluux-glass-bg: rgba(255, 255, 255, 0.72);
   --fluux-shadow-overlay: 0 20px 50px rgba(20, 27, 48, 0.18);

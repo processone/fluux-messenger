@@ -275,9 +275,24 @@ function EncryptionIcon({
         <div className="font-mono text-xs mt-0.5 opacity-75">{formatFingerprint(state.advertisedFingerprint)}</div>
       </div>
     )
+    if (onVerifyClick) {
+      return (
+        <Tooltip content={tooltip} position="bottom">
+          <button
+            type="button"
+            className={`${btnClass} cursor-pointer`}
+            style={{ color: 'var(--fluux-status-warning)' }}
+            aria-label={t('chat.encryption.blockedTooltip')}
+            onClick={onVerifyClick}
+          >
+            <ShieldAlert className="size-4" />
+          </button>
+        </Tooltip>
+      )
+    }
     return (
       <Tooltip content={tooltip} position="bottom">
-        <div className={`${btnClass} text-yellow-500`} role="status">
+        <div className={`${btnClass}`} style={{ color: 'var(--fluux-status-warning)' }} role="status">
           <ShieldAlert className="size-4" />
         </div>
       </Tooltip>
