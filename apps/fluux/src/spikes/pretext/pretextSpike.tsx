@@ -33,9 +33,35 @@ function countLineBoxes(el: HTMLElement, lineHeightPx: number): number {
   return Math.max(1, Math.round(el.getBoundingClientRect().height / lineHeightPx))
 }
 
+// Fallback copy for webviews where navigator.clipboard is unavailable: select
+// the report node's text and execCommand('copy').
+function selectAndCopy(el: HTMLElement): void {
+  const range = document.createRange()
+  range.selectNodeContents(el)
+  const sel = window.getSelection()
+  sel?.removeAllRanges()
+  sel?.addRange(range)
+  try { document.execCommand('copy') } catch { /* ignore */ }
+}
+
 function App() {
   const containerRef = useRef<HTMLDivElement>(null)
   const [json, setJson] = useState('measuring...')
+  const [summary, setSummary] = useState('')
+  const [copied, setCopied] = useState(false)
+
+  function copyReport() {
+    const el = document.getElementById('report')
+    if (!el) return
+    const text = el.textContent ?? ''
+    const done = () => { setCopied(true); window.setTimeout(() => setCopied(false), 1500) }
+    if (navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(text).then(done).catch(() => { selectAndCopy(el); done() })
+    } else {
+      selectAndCopy(el)
+      done()
+    }
+  }
 
   useEffect(() => {
     let cancelled = false
@@ -81,7 +107,16 @@ function App() {
 
       document.documentElement.style.fontSize = '' // restore default scale
       const out = { engine: navigator.userAgent, widths: WIDTHS, scales: SCALES, runs }
-      if (!cancelled) setJson(JSON.stringify(out, null, 2))
+      const summaryLine = runs
+        .map((r) => `${r.fontScalePct}%: ${r.report.overall.textLineExactPct.toFixed(2)}% ${r.report.overall.passesThreshold ? 'PASS' : 'FAIL'}`)
+        .join('    ')
+      // expose for manual capture from a webview (devtools or the Copy button)
+      ;(window as Window & { __pretextReport?: unknown }).__pretextReport = out
+      console.log('[pretext-spike] report ready. window.__pretextReport =', out)
+      if (!cancelled) {
+        setJson(JSON.stringify(out, null, 2))
+        setSummary(summaryLine)
+      }
     }
 
     void run()
@@ -91,6 +126,12 @@ function App() {
   return (
     <div style={{ fontFamily: 'Inter, sans-serif', padding: 16 }}>
       <h1 style={{ fontSize: 16 }}>Pretext height spike</h1>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '8px 0' }}>
+        <button type="button" onClick={copyReport} style={{ fontSize: 13, padding: '4px 10px', cursor: 'pointer' }}>
+          {copied ? 'Copied' : 'Copy JSON'}
+        </button>
+        <span style={{ fontSize: 13, fontVariantNumeric: 'tabular-nums' }}>{summary || 'measuring...'}</span>
+      </div>
       <pre id="report" data-spike-report style={{ whiteSpace: 'pre-wrap', maxHeight: 280, overflow: 'auto', border: '1px solid #ccc', padding: 8 }}>{json}</pre>
       <div ref={containerRef}>
         {WIDTHS.map((width) => (
