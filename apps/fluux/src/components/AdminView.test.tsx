@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, within } from '@testing-library/react'
 import type { AdminRoom } from '@fluux/sdk'
 
 // Identity translation so we can query by key.
@@ -13,6 +13,7 @@ vi.mock('@/hooks', () => ({
 }))
 
 const mockRoom: AdminRoom = { jid: 'testroom@conference.example.com', name: 'Test Room' }
+const mockUser = { jid: 'alice@example.com', username: 'alice', isOnline: true }
 
 // Controllable useAdmin/useXMPP. Defaults give a single-room list under the 'rooms' category.
 const adminState = {
@@ -26,14 +27,16 @@ const adminState = {
   targetJid: null,
   canGoBack: false,
   canGoNext: false,
-  userList: { items: [], isLoading: false, hasFetched: true },
+  userList: { items: [mockUser], isLoading: false, hasFetched: true },
   roomList: { items: [mockRoom], isLoading: false, hasFetched: true },
-  entityCounts: { users: 0, rooms: 1 },
+  entityCounts: { users: 1, rooms: 1 },
+  serverStats: null,
   hasMoreUsers: false,
   hasMoreRooms: false,
-  fetchUsers: vi.fn().mockResolvedValue(undefined),
+  fetchAllUsers: vi.fn().mockResolvedValue(undefined),
   loadMoreUsers: vi.fn(),
   resetUserList: vi.fn(),
+  requestLastActivity: vi.fn(),
   fetchRooms: vi.fn().mockResolvedValue(undefined),
   loadMoreRooms: vi.fn(),
   resetRoomList: vi.fn(),
@@ -141,5 +144,52 @@ describe('AdminView mobile section sheet', () => {
     expect(setActiveCategory).toHaveBeenCalledWith('users')
     // Sheet closed → its section buttons are gone again.
     expect(screen.queryByText('admin.categories.users')).not.toBeInTheDocument()
+  })
+})
+
+// Locks the Task 4 header: the AdminView header renders the AdminBreadcrumb
+// (clickable home crumb + category trail), NOT the old getIcon()+<h2>{getTitle()}</h2>.
+// This is screenshot-independent — it asserts the actual rendered breadcrumb DOM.
+describe('AdminView breadcrumb', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('renders a clickable home crumb wired to the stats overview at the users list level', () => {
+    render(<AdminView activeCategory="users" onBack={vi.fn()} />)
+
+    const nav = screen.getByLabelText('breadcrumb')
+    // Home crumb is a clickable button labelled with t('admin.title') ("Administration").
+    const home = within(nav).getByRole('button', { name: 'admin.title' })
+    // The category crumb is present alongside it.
+    expect(within(nav).getByText('admin.categories.users')).toBeInTheDocument()
+
+    // Clicking the home crumb returns to the admin overview (stats category).
+    fireEvent.click(home)
+    expect(setActiveCategory).toHaveBeenCalledWith('stats')
+  })
+
+  it('shows the full Administration > Users > <jid> trail at the user detail level', () => {
+    render(<AdminView activeCategory="users" onBack={vi.fn()} />)
+
+    // Drill into a user (selectedUser is local state set by clicking the row).
+    fireEvent.click(screen.getByText('alice@example.com'))
+
+    const nav = screen.getByLabelText('breadcrumb')
+    // All three crumbs are present: home, category, and the leaf JID.
+    expect(within(nav).getByRole('button', { name: 'admin.title' })).toBeInTheDocument()
+    expect(within(nav).getByRole('button', { name: 'admin.categories.users' })).toBeInTheDocument()
+    expect(within(nav).getByText('alice@example.com')).toBeInTheDocument()
+  })
+
+  it('renders the breadcrumb header, never a standalone getTitle() heading', () => {
+    render(<AdminView activeCategory="users" onBack={vi.fn()} />)
+
+    // The header is the <nav aria-label="breadcrumb">, proving the old
+    // icon+<h2>{getTitle()}</h2> header was replaced.
+    expect(screen.getByLabelText('breadcrumb')).toBeInTheDocument()
+    // admin.userView.title ("User") must NOT appear as a header — it is only a
+    // fallback crumb label for other categories, never the users-list header.
+    expect(screen.queryByText('admin.userView.title')).not.toBeInTheDocument()
   })
 })

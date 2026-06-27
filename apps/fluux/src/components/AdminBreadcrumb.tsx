@@ -22,8 +22,9 @@ export function AdminBreadcrumb({ crumbs }: AdminBreadcrumbProps) {
             {!isLast && crumb.onClick ? (
               <button
                 onClick={crumb.onClick}
-                className="text-sm text-fluux-muted hover:text-fluux-text transition-colors
-                           truncate max-w-[120px]"
+                className={`text-sm text-fluux-muted hover:text-fluux-text transition-colors ${
+                  index === 0 ? 'shrink-0 whitespace-nowrap' : 'truncate max-w-[120px]'
+                }`}
               >
                 {crumb.label}
               </button>
