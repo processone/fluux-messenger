@@ -218,7 +218,10 @@ export function useTanstackMessageVirtualizer({
     // are only recomputed by the memoized `getMeasurements()` on the NEXT render. Reading
     // measurementsCache here returns the STALE estimate (e.g. the 64px default), which would seed
     // the persistent cache with estimates — defeating the feature. Read the LIVE rendered height
-    // from the element itself via getBoundingClientRect, which is always current.
+    // from the element itself, which is always current. Use `offsetHeight` (NOT
+    // getBoundingClientRect().height) to match @tanstack's own default measureElement (it returns
+    // `element.offsetHeight` for the vertical, non-ResizeObserver-entry path) — so the seeded value
+    // equals what @tanstack will measure on re-entry and there is no sub-pixel re-snap.
     // Only sizes > 0 are forwarded (matches recordMeasuredHeight's guard).
     measureElement: (element: Element | null) => {
       // Always delegate first so @tanstack's own observe/unobserve + null-cleanup runs.
@@ -228,7 +231,7 @@ export function useTanstackMessageVirtualizer({
       const index = virtualizer.indexFromElement(element as HTMLElement)
       if (index < 0) return
       const key = items[index]?.key
-      const size = (element as HTMLElement).getBoundingClientRect().height
+      const size = (element as HTMLElement).offsetHeight
       if (key && size > 0) {
         onMeasured(key, size)
       }

@@ -92,10 +92,12 @@ function renderAdapter({
   return { capturedConfig: capturedConfig!, result }
 }
 
-/** Build a fake row element whose live rendered height is `height` (no real layout in jsdom). */
+/** Build a fake row element whose live rendered height is `height` (no real layout in jsdom).
+ *  The adapter reads `offsetHeight` (to match @tanstack's own measure), which jsdom reports as 0,
+ *  so define it explicitly. */
 function makeRowElement(height: number): HTMLElement {
   const el = document.createElement('div')
-  el.getBoundingClientRect = () => ({ height, width: 0, top: 0, left: 0, right: 0, bottom: 0, x: 0, y: 0, toJSON: () => ({}) })
+  Object.defineProperty(el, 'offsetHeight', { configurable: true, value: height })
   return el
 }
 
