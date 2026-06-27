@@ -6,6 +6,7 @@ import { useConsole } from '@fluux/sdk'
 import { AboutModal } from '../AboutModal'
 import { ChangelogModal } from '../ChangelogModal'
 import { Tooltip } from '../Tooltip'
+import { useAdvancedModeStore } from '@/stores/advancedModeStore'
 import {
   LogOut,
   MoreVertical,
@@ -37,6 +38,15 @@ export function UserMenu({ onLogout }: UserMenuProps) {
   // never re-renders on modal state changes.
   const modalOpen = useModalStore((s) => s.open)
   const isMobile = useIsMobileWeb()
+  const advancedMode = useAdvancedModeStore((s) => s.advancedMode)
+
+  // The console is an advanced-only surface: if the flag is turned off while it
+  // is open, close it so no orphaned console view remains.
+  useEffect(() => {
+    if (!advancedMode && consoleOpen) {
+      toggleConsole()
+    }
+  }, [advancedMode, consoleOpen, toggleConsole])
 
   // Close menu when clicking outside
   const closeMenu = () => setIsOpen(false)
@@ -74,8 +84,8 @@ export function UserMenu({ onLogout }: UserMenuProps) {
             ref={menu.menuRef}
             style={{ left: menu.position.x, top: menu.position.y }}
             className="fixed w-48 max-w-[calc(100vw-1rem)] fluux-popover rounded-lg py-1 z-50">
-            {/* Console toggle - hidden on mobile */}
-            {!isMobile && (
+            {/* Console toggle - hidden on mobile and behind advanced mode */}
+            {!isMobile && advancedMode && (
               <button
                 onClick={() => {
                   toggleConsole()
