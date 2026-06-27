@@ -20,10 +20,10 @@ const OUTPUT_DIR = 'screenshots'
 mkdirSync(OUTPUT_DIR, { recursive: true })
 
 /** Wait for the demo to fully load and freeze animation state. */
-async function waitForDemoReady(page: Page, colorScheme: 'dark' | 'light' = 'dark') {
+async function waitForDemoReady(page: Page, colorScheme: 'dark' | 'light' = 'dark', url: string = DEMO_URL) {
   // Set color scheme BEFORE navigation so the theme resolves correctly on load
   await page.emulateMedia({ colorScheme })
-  await page.goto(DEMO_URL)
+  await page.goto(url)
 
   // Wait for sidebar navigation to render (proves React mounted)
   await page.waitForSelector('[data-nav="messages"]', { timeout: 15_000 })
@@ -116,14 +116,12 @@ test('03 — Conversation List (dark)', async ({ page }) => {
 })
 
 test('3x — Conversation List Compact (dark)', async ({ page }) => {
-  await waitForDemoReady(page)
+  // Load demo with ?density=compact so the Zustand store initialises in compact mode.
+  // demo.tsx seeds localStorage after its own clear, so the store reads 'compact'
+  // on first creation — both the avatar size (store-driven) and CSS spacing change.
+  await waitForDemoReady(page, 'dark', DEMO_URL + '&density=compact')
   await navigateTo(page, 'messages')
-  // Switch to compact density via the root attribute (pure CSS, no reload needed)
-  await page.evaluate(() => document.documentElement.setAttribute('data-density', 'compact'))
-  await page.waitForTimeout(300)
   await capture(page, '3x-conversation-list-compact-dark')
-  // Reset to comfortable so later scenes are unaffected
-  await page.evaluate(() => document.documentElement.setAttribute('data-density', 'comfortable'))
 })
 
 test('04 — Contact Directory (dark)', async ({ page }) => {

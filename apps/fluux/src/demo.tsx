@@ -16,6 +16,7 @@ import { adminStore, ignoreStore, roomStore } from '@fluux/sdk/stores'
 import { DemoOpenPGPPlugin, DEMO_AVA_FINGERPRINT } from './demo/DemoOpenPGPPlugin'
 import { ThemeProvider } from './providers/ThemeProvider'
 import { useThemeStore } from './stores/themeStore'
+import { useSettingsStore } from './stores/settingsStore'
 import { useEncryptionSettingsStore } from './stores/encryptionSettingsStore'
 import { useVerifiedPeerKeysStore } from './stores/verifiedPeerKeysStore'
 import { setSessionPassphrase } from './e2ee/webPassphraseStore'
@@ -47,6 +48,16 @@ for (const key of Object.keys(localStorage)) {
 // Playwright harness passes ?virt=1 to explicitly re-enable it in the cleared environment.
 if (params.get('virt') === '1') {
   localStorage.setItem('fluux:flags:enableMessageVirtualization', 'true')
+}
+// Query-param seam: ?density=compact/comfortable drives the store directly so the
+// avatar size (store-driven) and CSS spacing (data-density attribute) both change.
+// localStorage is also seeded so the value survives any internal re-init paths.
+// Used by the screenshot harness (scripts/screenshots.ts) to render the compact
+// conversation-list scene without a runtime store mutation or page reload.
+const densityParam = params.get('density')
+if (densityParam === 'compact' || densityParam === 'comfortable') {
+  // Drive the store directly (store is already created by this point via the import)
+  useSettingsStore.getState().setDensityMode(densityParam)
 }
 // Clear IndexedDB caches (async, best-effort)
 indexedDB.deleteDatabase('fluux-message-cache')
@@ -120,6 +131,7 @@ setSessionPassphrase('demo')
 ;(window as any).__adminStore = adminStore
 ;(window as any).__roomStore = roomStore
 ;(window as any).__themeStore = useThemeStore
+;(window as any).__settingsStore = useSettingsStore
 ;(window as any).__i18n = i18n
 
 // Seed admin store so the Admin panel is accessible in demo
