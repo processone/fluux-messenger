@@ -872,6 +872,8 @@
             "unlockAction": "Atslēgt",
             "unlockSetupAction": "Iestatīt",
             "unlockSkip": "Izlaist, sūtīt bez šifrēšanas",
+            "rememberPassphrase": "Saglabāt paroli šajā ierīcē uz 24 stundām",
+            "rememberPassphraseHint": "Saglabāta šifrētā veidā. Ikviens, kam ir piekļuve šai ierīcei, varēs to izmantot, līdz tā beidzas.",
             "unlockPassphraseMismatch": "Paroles nesakrīt",
             "unlockPassphraseTooShort": "Parole jābūt vismaz 8 rakstzīmēm",
             "lockedBannerBody": "Jūsu šifrēšanas atslēga ir bloķēta. Ievadiet paroli, lai aktivizētu šifrēšanu šai sesijai.",

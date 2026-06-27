@@ -873,6 +873,8 @@
             "unlockAction": "Desbloquear",
             "unlockSetupAction": "Configurar",
             "unlockSkip": "Omitir, enviar sin cifrado",
+            "rememberPassphrase": "Guardar mi contraseña en este dispositivo durante 24 horas",
+            "rememberPassphraseHint": "Almacenada cifrada. Cualquier persona con acceso a este dispositivo podría usarla hasta que expire.",
             "unlockPassphraseMismatch": "Las contraseñas no coinciden",
             "unlockPassphraseTooShort": "La contraseña debe tener al menos 8 caracteres",
             "lockedBannerBody": "Tu clave de cifrado está bloqueada. Introduce tu contraseña para activar el cifrado en esta sesión.",

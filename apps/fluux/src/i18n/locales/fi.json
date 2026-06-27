@@ -871,6 +871,8 @@
             "unlockAction": "Avaa lukitus",
             "unlockSetupAction": "Asenna",
             "unlockSkip": "Ohita, lähetä ilman salausta",
+            "rememberPassphrase": "Säilytä salasana tällä laitteella 24 tuntia",
+            "rememberPassphraseHint": "Tallennettu salattuna. Kuka tahansa, jolla on pääsy tähän laitteeseen, voi käyttää sitä ennen vanhentumista.",
             "unlockPassphraseMismatch": "Salasanat eivät täsmää",
             "unlockPassphraseTooShort": "Salasanassa on oltava vähintään 8 merkkiä",
             "lockedBannerBody": "Salausavaimesi on lukittu. Syötä salasana ottaaksesi salauksen käyttöön tässä istunnossa.",

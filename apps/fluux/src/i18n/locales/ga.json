@@ -871,6 +871,8 @@
             "unlockAction": "Díghlasáil",
             "unlockSetupAction": "Cumraigh",
             "unlockSkip": "Scip, seol gan criptiú",
+            "rememberPassphrase": "Coinnigh mo phasfhrása ar an bhfeiste seo ar feadh 24 uair an chloig",
+            "rememberPassphraseHint": "Stóráilte ar bhealach criptithe. Is féidir le duine ar bith a bhfuil rochtain aige ar an bhfeiste seo é a úsáid go dtí go rachaidh sé in éag.",
             "unlockPassphraseMismatch": "Ní hionann na pasfhrásaí",
             "unlockPassphraseTooShort": "Caithfidh an pasfhrása a bheith ar a laghad 8 gcarachtar",
             "lockedBannerBody": "Tá d'eochair criptiúcháin glasáilte. Cuir isteach do phasfhrása chun criptiú a chumasú don seisiún seo.",

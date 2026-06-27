@@ -873,6 +873,8 @@
             "unlockAction": "Iftaħ",
             "unlockSetupAction": "Issettja",
             "unlockSkip": "Aqbeż, ibgħat mingħajr kriptaġġ",
+            "rememberPassphrase": "Żomm il-passphrase tiegħi fuq dan it-tagħmir għal 24 siegħa",
+            "rememberPassphraseHint": "Maħżun b'mod kriptat. Kull min ikollu aċċess għal dan it-tagħmir jista' jużah sakemm jiskadi.",
             "unlockPassphraseMismatch": "Il-passphrase ma jaqblux",
             "unlockPassphraseTooShort": "Il-passphrase għandu jkollu mill-inqas 8 karattri",
             "lockedBannerBody": "Iċ-ċavetta tal-kriptaġġ tiegħek hija msakkar. Daħħal il-passphrase biex tattiva l-kriptaġġ għal din is-sessjoni.",

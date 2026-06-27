@@ -873,6 +873,8 @@
             "unlockAction": "Odkleni",
             "unlockSetupAction": "Nastavi",
             "unlockSkip": "Preskoči, pošlji brez šifriranja",
+            "rememberPassphrase": "Shrani geslo na tej napravi za 24 ur",
+            "rememberPassphraseHint": "Shranjeno v šifrirani obliki. Kdorkoli z dostopom do te naprave ga lahko uporabi, dokler ne poteče.",
             "unlockPassphraseMismatch": "Gesli se ne ujemata",
             "unlockPassphraseTooShort": "Geslo mora imeti vsaj 8 znakov",
             "lockedBannerBody": "Šifrirni ključ je zaklenjen. Vnesite geslo za aktivacijo šifriranja za to sejo.",

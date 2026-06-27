@@ -16,6 +16,7 @@ import {
 import { clearSession, getSession } from '@/hooks/useSessionPersistence'
 import { deleteCredentials } from '@/utils/keychain'
 import { clearMediaCache } from '@/utils/mediaCache'
+import { clearCachedPassphrase, clearAllCachedPassphrases } from '@/e2ee/webPassphraseCache'
 
 /** localStorage keys containing user data (not app preferences) */
 const USER_DATA_KEYS = [
@@ -121,6 +122,9 @@ export async function clearLocalData(options: ClearLocalDataOptions = {}): Promi
     if (allAccounts) {
       await clearAllAvatarData()
       await clearMediaCache()
+      await clearAllCachedPassphrases()
+    } else if (scopedJid) {
+      await clearCachedPassphrase(scopedJid)
     }
     console.log('[Fluux] clearLocalData: complete')
   } finally {

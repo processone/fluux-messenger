@@ -873,6 +873,8 @@
             "unlockAction": "Ava",
             "unlockSetupAction": "Seadista",
             "unlockSkip": "Jäta vahele, saada ilma krüpteerimiseta",
+            "rememberPassphrase": "Salvesta parool sellele seadmele 24 tunniks",
+            "rememberPassphraseHint": "Salvestatud krüpteeritult. Igaüks, kellel on juurdepääs sellele seadmele, saab seda kasutada kuni aegumiseni.",
             "unlockPassphraseMismatch": "Paroolid ei ühti",
             "unlockPassphraseTooShort": "Parool peab olema vähemalt 8 märki pikk",
             "lockedBannerBody": "Sinu krüpteerimisvõti on lukustatud. Sisesta parool krüpteerimise aktiveerimiseks selle seansi jaoks.",

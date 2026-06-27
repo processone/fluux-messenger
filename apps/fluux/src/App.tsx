@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { useConnectionStatus, useXMPPContext, hasFastToken } from '@fluux/sdk'
 import { registerE2EEPlugins } from './e2ee/registerPlugins'
 import { isKeyLocked } from './e2ee/webPassphraseStore'
+import { attemptCachedUnlockOrPrompt } from '@/e2ee/silentRestore'
 import { probeRemoteIdentityState } from './e2ee/secretKeyProbe'
 import { isOpenpgpEnabled } from './stores/encryptionSettingsStore'
 import { useToastStore } from './stores/toastStore'
@@ -276,8 +277,18 @@ function App() {
           }
         }
         // Web-only: a stored-but-locked key needs the session passphrase.
+        // Try the opt-in 24h cache first so the user skips re-entry; fall back
+        // to the interactive dialog on miss or any failure (e.g. rotated key).
         if (!isTauri && isKeyLocked()) {
-          openWebUnlockDialog()
+          await attemptCachedUnlockOrPrompt({
+            accountJid,
+            getUnlockPlugin: () =>
+              client.e2ee?.getPlugin('openpgp') as
+                | { unlock?: (pp: string) => Promise<{ recovered: boolean }> }
+                | null
+                | undefined,
+            openDialog: openWebUnlockDialog,
+          })
         }
       })
     } else if (status !== 'connecting') {

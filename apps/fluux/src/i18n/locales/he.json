@@ -871,6 +871,8 @@
             "unlockAction": "בטל נעילה",
             "unlockSetupAction": "הגדר",
             "unlockSkip": "דלג, שלח ללא הצפנה",
+            "rememberPassphrase": "שמור את ביטוי הסיסמה במכשיר זה למשך 24 שעות",
+            "rememberPassphraseHint": "מאוחסן בצורה מוצפנת. כל מי שיש לו גישה למכשיר זה יוכל להשתמש בו עד לפקיעת תוקפו.",
             "unlockPassphraseMismatch": "ביטויי הסיסמה אינם תואמים",
             "unlockPassphraseTooShort": "ביטוי הסיסמה חייב להכיל לפחות 8 תווים",
             "lockedBannerBody": "מפתח ההצפנה שלך נעול. הזן את ביטוי הסיסמה כדי לאפשר הצפנה לסשן זה.",

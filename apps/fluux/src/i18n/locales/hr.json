@@ -871,6 +871,8 @@
             "unlockAction": "Otključaj",
             "unlockSetupAction": "Postavi",
             "unlockSkip": "Preskoči, pošalji bez enkripcije",
+            "rememberPassphrase": "Spremi lozinku na ovom uređaju na 24 sata",
+            "rememberPassphraseHint": "Pohranjeno kriptirano. Svaka osoba s pristupom ovom uređaju može je koristiti do isteka.",
             "unlockPassphraseMismatch": "Lozinke se ne podudaraju",
             "unlockPassphraseTooShort": "Lozinka mora imati najmanje 8 znakova",
             "lockedBannerBody": "Tvoj ključ za enkripciju je zaključan. Unesi lozinku za aktivaciju enkripcije za ovu sesiju.",

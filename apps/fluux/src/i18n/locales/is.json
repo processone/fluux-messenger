@@ -871,6 +871,8 @@
             "unlockAction": "Opna",
             "unlockSetupAction": "Setja upp",
             "unlockSkip": "Sleppa, senda án dulkóðunar",
+            "rememberPassphrase": "Geyma aðgangsorðið á þessum tæki í 24 klukkustundir",
+            "rememberPassphraseHint": "Geymt dulkóðað. Allir með aðgang að þessum tæki geta notað það þar til gildistími rennur út.",
             "unlockPassphraseMismatch": "Aðgangsorðin stemma ekki",
             "unlockPassphraseTooShort": "Aðgangsorðið verður að vera að minnsta kosti 8 stafir",
             "lockedBannerBody": "Dulkóðunarlykillinn þinn er læstur. Sláðu inn aðgangsorð til að virkja dulkóðun fyrir þessa lotu.",

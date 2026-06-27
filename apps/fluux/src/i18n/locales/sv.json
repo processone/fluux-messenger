@@ -871,6 +871,8 @@
             "unlockAction": "Lås upp",
             "unlockSetupAction": "Konfigurera",
             "unlockSkip": "Hoppa över, skicka utan kryptering",
+            "rememberPassphrase": "Spara min lösenfras på den här enheten i 24 timmar",
+            "rememberPassphraseHint": "Lagras krypterat. Alla med tillgång till den här enheten kan använda det tills det löper ut.",
             "unlockPassphraseMismatch": "Lösenfraser matchar inte",
             "unlockPassphraseTooShort": "Lösenfrasen måste vara minst 8 tecken",
             "lockedBannerBody": "Din krypteringsnyckel är låst. Ange lösenfrasen för att aktivera kryptering för den här sessionen.",
