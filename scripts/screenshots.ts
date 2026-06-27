@@ -115,6 +115,17 @@ test('03 — Conversation List (dark)', async ({ page }) => {
   await capture(page, '03-conversation-list-dark')
 })
 
+test('3x — Conversation List Compact (dark)', async ({ page }) => {
+  await waitForDemoReady(page)
+  await navigateTo(page, 'messages')
+  // Switch to compact density via the root attribute (pure CSS, no reload needed)
+  await page.evaluate(() => document.documentElement.setAttribute('data-density', 'compact'))
+  await page.waitForTimeout(300)
+  await capture(page, '3x-conversation-list-compact-dark')
+  // Reset to comfortable so later scenes are unaffected
+  await page.evaluate(() => document.documentElement.setAttribute('data-density', 'comfortable'))
+})
+
 test('04 — Contact Directory (dark)', async ({ page }) => {
   await waitForDemoReady(page)
   await navigateTo(page, 'directory')
