@@ -64,6 +64,7 @@ vi.mock('./tanstackMessageVirtualizer', () => ({
       getTotalSize: () => items.length * 40,
       itemCount: items.length,
       getOffsetForMessageId: () => null,
+      getIndexForMessageId: () => null,
       ensureMessageMounted: async () => {},
       measureElement: () => {},
       scrollToOffset: () => {},
