@@ -32,4 +32,12 @@ describe('predictMessageTextHeight', () => {
     const narrow = predictMessageTextHeight('the quick brown fox jumps over the lazy dog repeatedly', 160, FONT, 22)
     expect(narrow.lineCount).toBeGreaterThanOrEqual(wide.lineCount)
   })
+
+  it.runIf(!canvasAvailable)('degrades to a hard-line count without throwing when Canvas 2D is unavailable', () => {
+    // jsdom has no canvas: the predictor must NOT throw (it runs on every virtualized render), and
+    // falls back to counting explicit newlines.
+    expect(() => predictMessageTextHeight('one line', 560, FONT, 20)).not.toThrow()
+    expect(predictMessageTextHeight('one line', 560, FONT, 20)).toEqual({ lineCount: 1, heightPx: 20 })
+    expect(predictMessageTextHeight('a\nb\nc', 560, FONT, 20)).toEqual({ lineCount: 3, heightPx: 60 })
+  })
 })
