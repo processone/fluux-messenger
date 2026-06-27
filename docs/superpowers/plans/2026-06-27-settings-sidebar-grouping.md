@@ -360,7 +360,7 @@ interface SettingsSidebarProps {
 
 export function SettingsSidebar({ activeCategory, onCategoryChange }: SettingsSidebarProps) {
   const { t } = useTranslation()
-  // Re-render when advanced mode toggles (it can change which categories show).
+  // Re-render the sidebar when advanced mode is toggled.
   useAdvancedModeStore((s) => s.advancedMode)
   const sections = getGroupedVisibleCategories()
 
