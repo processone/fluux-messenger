@@ -1012,11 +1012,13 @@
     "emptyState": {
         "messages": {
             "title": "Private Conversations",
-            "description": "Select a conversation from the sidebar or create one from your contact list."
+            "description": "Select a conversation from the sidebar or create one from your contact list.",
+            "action": "Start a conversation"
         },
         "rooms": {
             "title": "Chat Rooms",
-            "description": "Join a room from your bookmarks or create a new group chat to start chatting."
+            "description": "Join a room from your bookmarks or create a new group chat to start chatting.",
+            "action": "Create a room"
         },
         "directory": {
             "title": "Contact Information",

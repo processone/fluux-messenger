@@ -488,6 +488,14 @@ vi.mock('./ToastContainer', () => ({
   ToastContainer: () => null,
 }))
 
+vi.mock('./CreateRoomModal', () => ({
+  CreateRoomModal: ({ onClose }: { onClose: () => void }) => (
+    <div data-testid="create-room-modal">
+      <button data-testid="create-room-close" onClick={onClose}>Close</button>
+    </div>
+  ),
+}))
+
 describe('ChatLayout - Tab Memory', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -1108,5 +1116,39 @@ describe('ChatLayout - Show profile from conversation header', () => {
     })
     expect(screen.queryByTestId('chat-view')).not.toBeInTheDocument()
     expect(mockActivateConversation).not.toHaveBeenCalledWith('alice@example.com')
+  })
+})
+
+describe('ChatLayout - EmptyState primary actions', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    setMockState({
+      activeConversationId: null,
+      activeRoomJid: null,
+      isArchivedResult: false,
+    })
+  })
+
+  it('shows a primary action on the messages empty-state and not on archive', async () => {
+    render(<ChatLayoutWithRouter initialRoute="/messages" />)
+    expect(screen.getByText('Start a conversation')).toBeInTheDocument()
+    fireEvent.click(screen.getByTestId('archive-tab'))
+    await waitFor(() => {
+      expect(screen.queryByText('Start a conversation')).toBeNull()
+    })
+    expect(screen.queryByRole('button', { name: /create a room/i })).toBeNull()
+  })
+
+  it('shows a primary action on the rooms empty-state', () => {
+    render(<ChatLayoutWithRouter initialRoute="/rooms" />)
+    expect(screen.getByRole('button', { name: /create a room/i })).toBeInTheDocument()
+  })
+
+  it('clicking the rooms action opens the create-room modal', async () => {
+    render(<ChatLayoutWithRouter initialRoute="/rooms" />)
+    fireEvent.click(screen.getByRole('button', { name: /create a room/i }))
+    await waitFor(() => {
+      expect(screen.getByTestId('create-room-modal')).toBeInTheDocument()
+    })
   })
 })

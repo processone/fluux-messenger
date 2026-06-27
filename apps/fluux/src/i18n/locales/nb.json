@@ -1012,11 +1012,13 @@
     "emptyState": {
         "messages": {
             "title": "Private samtaler",
-            "description": "Velg en samtale fra sidepanelet eller opprett en fra kontaktlisten din."
+            "description": "Velg en samtale fra sidepanelet eller opprett en fra kontaktlisten din.",
+            "action": "Start en samtale"
         },
         "rooms": {
             "title": "Chatterom",
-            "description": "Bli med i et rom fra bokmerkene dine eller opprett en ny gruppechat for å begynne å chatte."
+            "description": "Bli med i et rom fra bokmerkene dine eller opprett en ny gruppechat for å begynne å chatte.",
+            "action": "Opprett et rom"
         },
         "directory": {
             "title": "Kontaktinformasjon",

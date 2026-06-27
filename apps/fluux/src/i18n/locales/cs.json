@@ -1014,11 +1014,13 @@
     "emptyState": {
         "messages": {
             "title": "Soukromé konverzace",
-            "description": "Vyberte konverzaci z postranního panelu nebo ji vytvořte ze seznamu kontaktů."
+            "description": "Vyberte konverzaci z postranního panelu nebo ji vytvořte ze seznamu kontaktů.",
+            "action": "Zahájit konverzaci"
         },
         "rooms": {
             "title": "Chatovací místnosti",
-            "description": "Vstupte do místnosti ze záložek nebo vytvořte nový skupinový chat."
+            "description": "Vstupte do místnosti ze záložek nebo vytvořte nový skupinový chat.",
+            "action": "Vytvořit místnost"
         },
         "directory": {
             "title": "Informace o kontaktech",

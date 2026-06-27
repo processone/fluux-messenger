@@ -1014,11 +1014,13 @@
     "emptyState": {
         "messages": {
             "title": "Conversas privadas",
-            "description": "Selecione uma conversa na barra lateral ou crie uma a partir da sua lista de contactos."
+            "description": "Selecione uma conversa na barra lateral ou crie uma a partir da sua lista de contactos.",
+            "action": "Iniciar uma conversa"
         },
         "rooms": {
             "title": "Salas de chat",
-            "description": "Entre numa sala a partir dos seus marcadores ou crie um novo chat de grupo para começar a conversar."
+            "description": "Entre numa sala a partir dos seus marcadores ou crie um novo chat de grupo para começar a conversar.",
+            "action": "Criar uma sala"
         },
         "directory": {
             "title": "Informação do contacto",

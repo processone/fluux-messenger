@@ -1012,11 +1012,13 @@
     "emptyState": {
         "messages": {
             "title": "Yksityiset keskustelut",
-            "description": "Valitse keskustelu sivupalkista tai luo uusi yhteystietoluettelostasi."
+            "description": "Valitse keskustelu sivupalkista tai luo uusi yhteystietoluettelostasi.",
+            "action": "Aloita keskustelu"
         },
         "rooms": {
             "title": "Keskusteluhuoneet",
-            "description": "Liity huoneeseen kirjanmerkeistäsi tai luo uusi ryhmäkeskustelu aloittaaksesi keskustelun."
+            "description": "Liity huoneeseen kirjanmerkeistäsi tai luo uusi ryhmäkeskustelu aloittaaksesi keskustelun.",
+            "action": "Luo huone"
         },
         "directory": {
             "title": "Yhteystiedon tiedot",

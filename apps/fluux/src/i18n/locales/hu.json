@@ -1012,11 +1012,13 @@
     "emptyState": {
         "messages": {
             "title": "Privát beszélgetések",
-            "description": "Válasszon egy beszélgetést az oldalsávból, vagy indítson újat a névjegyzékből."
+            "description": "Válasszon egy beszélgetést az oldalsávból, vagy indítson újat a névjegyzékből.",
+            "action": "Beszélgetés indítása"
         },
         "rooms": {
             "title": "Csevegőszobák",
-            "description": "Csatlakozzon egy szobához a könyvjelzőiből, vagy hozzon létre egy új csoportos csevegést."
+            "description": "Csatlakozzon egy szobához a könyvjelzőiből, vagy hozzon létre egy új csoportos csevegést.",
+            "action": "Szoba létrehozása"
         },
         "directory": {
             "title": "Névjegy információ",

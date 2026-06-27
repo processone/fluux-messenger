@@ -1012,11 +1012,13 @@
     "emptyState": {
         "messages": {
             "title": "Privata konversationer",
-            "description": "Välj en konversation från sidofältet eller skapa en från din kontaktlista."
+            "description": "Välj en konversation från sidofältet eller skapa en från din kontaktlista.",
+            "action": "Starta ett samtal"
         },
         "rooms": {
             "title": "Chattrum",
-            "description": "Gå med i ett rum från dina bokmärken eller skapa en ny gruppchatt för att börja chatta."
+            "description": "Gå med i ett rum från dina bokmärken eller skapa en ny gruppchatt för att börja chatta.",
+            "action": "Skapa ett rum"
         },
         "directory": {
             "title": "Kontaktinformation",

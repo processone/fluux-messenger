@@ -1014,11 +1014,13 @@
     "emptyState": {
         "messages": {
             "title": "Converses privades",
-            "description": "Selecciona una conversa de la barra lateral o crea'n una des de la teva llista de contactes."
+            "description": "Selecciona una conversa de la barra lateral o crea'n una des de la teva llista de contactes.",
+            "action": "Inicia una conversa"
         },
         "rooms": {
             "title": "Sales de xat",
-            "description": "Uneix-te a una sala dels teus marcadors o crea un xat de grup nou per començar a parlar."
+            "description": "Uneix-te a una sala dels teus marcadors o crea un xat de grup nou per començar a parlar.",
+            "action": "Crea una sala"
         },
         "directory": {
             "title": "Informació de contacte",

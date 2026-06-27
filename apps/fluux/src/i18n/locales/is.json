@@ -1012,11 +1012,13 @@
     "emptyState": {
         "messages": {
             "title": "Einkaspjöll",
-            "description": "Veldu samtal frá hliðarstikunni eða búðu til nýtt úr tengiliðalistanum þínum."
+            "description": "Veldu samtal frá hliðarstikunni eða búðu til nýtt úr tengiliðalistanum þínum.",
+            "action": "Hefja samtal"
         },
         "rooms": {
             "title": "Spjallherbergi",
-            "description": "Gangt í herbergi úr bókamerkjum þínum eða búðu til nýtt hópspjall."
+            "description": "Gangt í herbergi úr bókamerkjum þínum eða búðu til nýtt hópspjall.",
+            "action": "Búa til herbergi"
         },
         "directory": {
             "title": "Tengiliðaupplýsingar",
