@@ -476,18 +476,13 @@
 
 /* Emoji picker (emoji-mart web component) — give it the same elevated treatment
    as .fluux-popover: the float surface, a hairline border and the overlay drop
-   shadow. emoji-mart's PUBLIC theming hooks are the un-prefixed --rgb-* (RGB
-   triples) and --color-border / --shadow / --border-radius; internally it maps
-   them to --em-rgb-* per theme (--em-rgb-background: var(--rgb-background, …)),
-   so the --em-* names are emoji-mart's and must NOT be set by us. These are set
-   on the host element and inherit into the picker's shadow tree. Dark values
-   here; the .light override follows. Structural vars use the Aurora tokens,
-   which already adapt per theme. */
+   shadow. The COLOR hooks (--rgb-background/input/color/accent, RGB triples that
+   emoji-mart reads as rgb(var(--rgb-*))) are derived per-theme at runtime in
+   useTheme.ts (applyEmojiPickerColors) from --fluux-bg-float / --fluux-input-bg
+   / --fluux-text-normal / --fluux-bg-accent, so the picker tracks the active
+   theme. Only the structural vars live here — they reference the --fluux-*
+   tokens, which already adapt per theme and mode. */
 em-emoji-picker {
-  --rgb-background: 26, 34, 56;   /* --fluux-bg-float #1A2238 (lifted) */
-  --rgb-input: 11, 16, 32;        /* --fluux-base-10 #0B1020 (inset search) */
-  --rgb-color: 233, 237, 247;     /* --fluux-base-90 #E9EDF7 (text) */
-  --rgb-accent: 71, 99, 255;      /* brand periwinkle */
   --border-radius: var(--fluux-radius-l);
   --color-border: var(--fluux-border-color);
   --color-border-over: var(--fluux-border-color-strong);
@@ -495,12 +490,6 @@ em-emoji-picker {
   /* emoji-mart draws no outer border on :host; add the popover hairline so the
      edge matches the menus (the shadow alone carries the lift otherwise). */
   border: 1px solid var(--fluux-border-color);
-}
-.light em-emoji-picker {
-  --rgb-background: 255, 255, 255; /* --fluux-bg-float (white, lifted) */
-  --rgb-input: 238, 240, 248;      /* --fluux-base-20 #EEF0F8 (subtle search) */
-  --rgb-color: 27, 34, 51;         /* --fluux-base-90 #1B2233 (text) */
-  --rgb-accent: 51, 82, 255;       /* brand periwinkle (light) */
 }
 
 /* Text selection styling - uses brand color for consistent look */

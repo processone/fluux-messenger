@@ -120,6 +120,42 @@ function applyAccentOverride(accent: AccentPreset | null, resolved: 'light' | 'd
   }
 }
 
+/**
+ * emoji-mart (the web-component emoji picker) reads its colors as RGB *triples*
+ * — `rgb(var(--rgb-background))` etc. Fluux tokens are hex/hsl and themes only
+ * ship RGB triples for the named status colors, so we derive the few triples the
+ * picker needs from the *resolved* theme tokens at apply-time. This keeps the
+ * picker on the active theme's elevated surface (and works for custom/plugin
+ * themes) without every theme having to declare emoji-mart vars. The structural
+ * look (border/shadow/radius) is handled in index.css via the --fluux-* tokens.
+ */
+const EMOJI_PICKER_COLOR_MAP: ReadonlyArray<readonly [emojiVar: string, sourceVar: string]> = [
+  ['--rgb-background', '--fluux-bg-float'], // picker surface (lifted, matches .fluux-popover)
+  ['--rgb-input', '--fluux-input-bg'],      // search field
+  ['--rgb-color', '--fluux-text-normal'],   // text
+  ['--rgb-accent', '--fluux-bg-accent'],    // accent (selected category, focus ring)
+]
+
+function applyEmojiPickerColors() {
+  const root = document.documentElement
+  // Resolve each source token to an "r, g, b" triple via the browser's own color
+  // parser (handles hex/hsl/rgb uniformly), then expose it under emoji-mart's
+  // public --rgb-* hook. One hidden probe is reused for all reads. These are
+  // always overwritten on every theme/mode change, so no cleanup is needed.
+  const probe = document.createElement('span')
+  probe.style.cssText = 'position:absolute;width:0;height:0;visibility:hidden;pointer-events:none'
+  document.body.appendChild(probe)
+  try {
+    for (const [emojiVar, sourceVar] of EMOJI_PICKER_COLOR_MAP) {
+      probe.style.color = `var(${sourceVar})`
+      const m = getComputedStyle(probe).color.match(/(\d+)[,\s]+(\d+)[,\s]+(\d+)/)
+      if (m) root.style.setProperty(emojiVar, `${m[1]}, ${m[2]}, ${m[3]}`)
+    }
+  } finally {
+    probe.remove()
+  }
+}
+
 /** Snippet <style> element data attribute */
 const SNIPPET_ATTR = 'data-fluux-snippet'
 
@@ -195,6 +231,9 @@ export function useTheme() {
       root.style.setProperty('--fluux-text-on-accent', contrastColorForHsl(effectiveHsl.h, effectiveHsl.s, effectiveHsl.l))
     }
 
+    // 3c. Derive emoji-picker RGB triples from the now-resolved theme tokens
+    applyEmojiPickerColors()
+
     // 4. Sync status bar color
     updateThemeColorMeta(resolved)
 
@@ -233,6 +272,8 @@ export function useTheme() {
         const effectiveHsl = getEffectiveAccentHsl(null, resolved, modeVars)
         document.documentElement.style.setProperty('--fluux-text-on-accent', contrastColorForHsl(effectiveHsl.h, effectiveHsl.s, effectiveHsl.l))
       }
+
+      applyEmojiPickerColors()
 
       updateThemeColorMeta(resolved)
     }
