@@ -1,5 +1,12 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { heightCacheKey, getCachedHeights, recordMeasuredHeight, __clearHeightCache } from './messageHeightCache'
+import {
+  heightCacheKey,
+  getCachedHeights,
+  recordMeasuredHeight,
+  noteConversationWidthBucket,
+  getConversationWidthBucket,
+  __clearHeightCache,
+} from './messageHeightCache'
 
 beforeEach(() => __clearHeightCache())
 
@@ -30,5 +37,13 @@ describe('messageHeightCache', () => {
     recordMeasuredHeight('conv8', heightCacheKey('m1', 560, 100), 48)
     expect(getCachedHeights('conv8').get('m1@560@100')).toBe(48)
     expect(getCachedHeights('conv1').get('m1@560@100')).toBeUndefined()
+  })
+  it('records and reads back the real width bucket per conversation', () => {
+    expect(getConversationWidthBucket('c')).toBeUndefined()
+    noteConversationWidthBucket('c', 580)
+    expect(getConversationWidthBucket('c')).toBe(580)
+    expect(getConversationWidthBucket('other')).toBeUndefined()
+    __clearHeightCache()
+    expect(getConversationWidthBucket('c')).toBeUndefined()
   })
 })

@@ -17,6 +17,15 @@ const MAX_ENTRIES_PER_CONVERSATION = 6000
 const cache = new Map<string, Map<string, number>>()
 
 /**
+ * Last REAL width bucket (px) each conversation's entries were written under. The seed is built at
+ * synchronous mount when `rowMetricsRef.current.contentWidthPx` is still the 560 fallback (the live
+ * width is only sampled in a rAF after layout), but the write-back stores entries under the real
+ * sampled bucket. Persisting the real bucket here lets the seed filter by it, so same-width
+ * re-entry hits the cache instead of missing every entry.
+ */
+const widthBucketByConversation = new Map<string, number>()
+
+/**
  * Build the lookup key for a single row.
  * Format: `messageId@widthBucketPx@scalePct`
  */
@@ -69,7 +78,24 @@ export function recordMeasuredHeight(
   m.set(key, px)
 }
 
+/**
+ * Record the REAL width bucket (px) a conversation's entries are written under. Called from the
+ * write-back path alongside recordMeasuredHeight, using the same real bucket as the key.
+ */
+export function noteConversationWidthBucket(conversationId: string, widthBucketPx: number): void {
+  widthBucketByConversation.set(conversationId, widthBucketPx)
+}
+
+/**
+ * Read the last real width bucket persisted for a conversation, or undefined if none recorded yet.
+ * The seed uses this (falling back to the mount-time bucket) to filter cached entries.
+ */
+export function getConversationWidthBucket(conversationId: string): number | undefined {
+  return widthBucketByConversation.get(conversationId)
+}
+
 /** Test-only reset — clears the entire module-level cache. */
 export function __clearHeightCache(): void {
   cache.clear()
+  widthBucketByConversation.clear()
 }

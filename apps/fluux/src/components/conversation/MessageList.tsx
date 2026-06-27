@@ -33,7 +33,13 @@ import { buildMessageListItems, type RenderItem } from './messageListItems'
 import { useTanstackMessageVirtualizer } from './tanstackMessageVirtualizer'
 import { useRowMetrics } from './useRowMetrics'
 import { estimateRowHeight } from './rowHeightEstimator'
-import { getCachedHeights, recordMeasuredHeight, heightCacheKey } from './messageHeightCache'
+import {
+  getCachedHeights,
+  recordMeasuredHeight,
+  heightCacheKey,
+  noteConversationWidthBucket,
+  getConversationWidthBucket,
+} from './messageHeightCache'
 import { Loader2, ChevronUp, ChevronDown } from 'lucide-react'
 import { Tooltip } from '../Tooltip'
 import { MessageSelectionBar } from './MessageSelectionBar'
@@ -256,14 +262,23 @@ export function MessageList<T extends BaseMessage>({
   const scalePct = useSettingsStore((s) => s.fontSize)
 
   // Build the initialMeasurements seed from the persistent cache. Only when virtualized —
-  // flag-OFF path is unchanged. Filter to keys that match the current width bucket + scale
-  // so stale entries from a different viewport/font-size are not applied.
+  // flag-OFF path is unchanged. Filter to keys that match the width bucket + scale so stale
+  // entries from a different viewport/font-size are not applied.
   // Use a ref so it is evaluated once at mount without needing eslint-disable on empty deps.
+  // MOUNT-SCOPED: this builds the seed exactly once per mount and relies on MessageList
+  // remounting on every conversation switch (the cache is the whole point — it survives that
+  // remount). It will NOT rebuild if MessageList is ever reused across conversations without a
+  // remount; that is not the case today.
   const initialMeasurementsRef = useRef<ReadonlyMap<string, number> | undefined>(undefined)
   const initialMeasurementsBuiltRef = useRef(false)
   if (!initialMeasurementsBuiltRef.current && virtualized) {
     initialMeasurementsBuiltRef.current = true
-    const widthBucketPx = Math.round(rowMetricsRef.current.contentWidthPx / 20) * 20
+    // The mount-time content width is still the 560 fallback here (useRowMetrics samples the real
+    // width in a rAF after layout), so prefer the REAL bucket persisted by a prior write-back. The
+    // common case — re-entering at the same viewport — then hits; a genuine width change falls back
+    // to the mount-time bucket and just re-measures on mount as before.
+    const mountWidthBucketPx = Math.round(rowMetricsRef.current.contentWidthPx / 20) * 20
+    const widthBucketPx = getConversationWidthBucket(conversationId) ?? mountWidthBucketPx
     const stored = getCachedHeights(conversationId)
     if (stored.size > 0) {
       const suffix = `@${widthBucketPx}@${scalePct}`
@@ -294,8 +309,11 @@ export function MessageList<T extends BaseMessage>({
       virtualized
         ? (key: string, size: number) => {
             const { conversationId: cid, scalePct: scale, rowMetricsRef: metricsRef } = onMeasuredParamsRef.current
+            // Real sampled bucket. Persist it alongside the entry so the next mount's seed (which
+            // runs before the real width is sampled) can filter by this same bucket and hit.
             const widthBucketPx = Math.round(metricsRef.current.contentWidthPx / 20) * 20
             recordMeasuredHeight(cid, heightCacheKey(key, widthBucketPx, scale), size)
+            noteConversationWidthBucket(cid, widthBucketPx)
           }
         : undefined,
     [virtualized],
