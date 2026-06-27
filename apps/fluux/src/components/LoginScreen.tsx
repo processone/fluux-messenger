@@ -3,7 +3,7 @@ import { TextInput } from './ui/TextInput'
 import { useTranslation } from 'react-i18next'
 import { detectRenderLoop } from '@/utils/renderLoopDetector'
 import { useConnectionStatus, useConnectionActions, deleteFastToken, classifyConnectionError } from '@fluux/sdk'
-import { Loader2, KeyRound, Eye, EyeOff, ChevronDown, ChevronRight } from 'lucide-react'
+import { Loader2, KeyRound, Eye, EyeOff, Wrench } from 'lucide-react'
 import { saveSession } from '@/hooks/useSessionPersistence'
 import { getResource } from '@/utils/xmppResource'
 import { hasSavedCredentials, getCredentials, saveCredentials, deleteCredentials } from '@/utils/keychain'
@@ -14,6 +14,7 @@ import { isOpenpgpEnabled } from '@/stores/encryptionSettingsStore'
 import { getReconnectIntent } from '@/utils/reconnectIntent'
 import { validateBareJid } from '@/utils/jidValidation'
 import { LoginErrorPanel } from './LoginErrorPanel'
+import { OverflowMenu } from './OverflowMenu'
 import { useAdvancedModeStore } from '@/stores/advancedModeStore'
 import { useLoginPrefillStore } from '@/stores/loginPrefillStore'
 import { useLoginPrefillDeepLink } from '@/hooks/useLoginPrefillDeepLink'
@@ -420,7 +421,21 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
           lets the container scroll to every field on short viewports (e.g. a
           phone in landscape with the keyboard open). */}
       <div className="min-h-full flex items-center justify-center p-4">
-        <div className="w-full max-w-md">
+        <div className="relative w-full max-w-md">
+        {/* Advanced-mode kebab — quiet, top-right. The toggle reveals the
+            custom-server field below and unlocks the app's expert surfaces. */}
+        <div className="absolute top-0 end-0 z-10">
+          <OverflowMenu
+            ariaLabel={t('common.options')}
+            items={[{
+              key: 'advanced-mode',
+              label: t('login.advancedMode'),
+              icon: Wrench,
+              active: advancedMode,
+              onClick: () => setAdvancedMode(!advancedMode),
+            }]}
+          />
+        </div>
         {/* Logo / Header */}
         <div className="text-center mb-8">
           <img
@@ -515,49 +530,39 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
             </div>
           </div>
 
-          {/* Server Field (Advanced - hidden by default) */}
-          <div>
-            <button
-              type="button"
-              onClick={() => setShowServerField(!showServerField)}
-              className="flex items-center gap-1 text-xs text-fluux-muted hover:text-fluux-text transition-colors mb-2"
-            >
-              {showServerField ? (
-                <ChevronDown className="size-3" />
-              ) : (
-                <ChevronRight className="size-3" />
-              )}
-              <span className="font-semibold uppercase">{t('login.serverLabel')}</span>
-            </button>
-            {showServerField && (
-              <>
-                <TextInput
-                  id="server"
-                  type="text"
-                  value={server}
-                  onChange={(e) => {
-                    setServer(e.target.value)
-                    setCredentialsModified(true)
-                    setHasManuallySetServer(true) // Prevent auto-fill after manual edit
-                  }}
-                  placeholder={isDesktopApp ? t('login.serverPlaceholderDesktop') : t('login.serverPlaceholder')}
-                  disabled={isLoading}
-                  className="w-full px-3 py-2 bg-fluux-bg text-fluux-text rounded
-                             border border-fluux-border focus:border-fluux-brand
-                             focus-visible:ring-2 focus-visible:ring-fluux-brand/50
-                             placeholder:text-fluux-muted disabled:opacity-50"
-                />
+          {/* Server field — shown when advanced mode is on, or auto-revealed by
+              a saved server, a deep-link prefill, or a non-auth connect error. */}
+          {(showServerField || advancedMode) && (
+            <div>
+              <label htmlFor="server" className="block text-xs font-semibold text-fluux-muted uppercase mb-2">
+                {t('login.serverLabel')}
+              </label>
+              <TextInput
+                id="server"
+                type="text"
+                value={server}
+                onChange={(e) => {
+                  setServer(e.target.value)
+                  setCredentialsModified(true)
+                  setHasManuallySetServer(true) // Prevent auto-fill after manual edit
+                }}
+                placeholder={isDesktopApp ? t('login.serverPlaceholderDesktop') : t('login.serverPlaceholder')}
+                disabled={isLoading}
+                className="w-full px-3 py-2 bg-fluux-bg text-fluux-text rounded
+                           border border-fluux-border focus:border-fluux-brand
+                           focus-visible:ring-2 focus-visible:ring-fluux-brand/50
+                           placeholder:text-fluux-muted disabled:opacity-50"
+              />
+              <p className="text-xs text-fluux-muted mt-1">
+                {isDesktopApp ? t('login.serverHintDesktop') : t('login.serverHint')}
+              </p>
+              {linkServerHost && (
                 <p className="text-xs text-fluux-muted mt-1">
-                  {isDesktopApp ? t('login.serverHintDesktop') : t('login.serverHint')}
+                  {t('login.linkSetServer', { host: linkServerHost })}
                 </p>
-                {linkServerHost && (
-                  <p className="text-xs text-fluux-muted mt-1">
-                    {t('login.linkSetServer', { host: linkServerHost })}
-                  </p>
-                )}
-              </>
-            )}
-          </div>
+              )}
+            </div>
+          )}
 
           {/* Remember Me */}
           <div className="flex items-center gap-3">
@@ -616,23 +621,6 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
             )}
           </button>
         </form>
-
-        {/* Advanced mode toggle - discreet opt-in below the form. Reveals the
-            advanced settings category (and, later, advanced login options). */}
-        <div className="flex items-center justify-center gap-2 mt-4">
-          <input
-            id="advanced-mode"
-            type="checkbox"
-            checked={advancedMode}
-            onChange={(e) => setAdvancedMode(e.target.checked)}
-            className="size-3.5 rounded border border-fluux-border bg-fluux-bg
-                       checked:bg-fluux-brand checked:border-fluux-brand
-                       focus:ring-fluux-brand focus:ring-offset-0"
-          />
-          <label htmlFor="advanced-mode" className="text-xs text-fluux-muted select-none">
-            {t('login.advancedMode')}
-          </label>
-        </div>
 
         {/* Footer */}
         <div className="text-center text-fluux-muted text-sm mt-6 space-y-1">

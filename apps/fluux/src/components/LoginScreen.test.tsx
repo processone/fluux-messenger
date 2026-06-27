@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { LoginScreen } from './LoginScreen'
 import { useLoginPrefillStore } from '@/stores/loginPrefillStore'
+import { useAdvancedModeStore } from '@/stores/advancedModeStore'
 
 const mockConnect = vi.fn()
 
@@ -111,6 +112,8 @@ describe('LoginScreen', () => {
             error: null,
             connect: mockConnect,
         })
+        // Reset advanced mode so tests don't leak into each other
+        useAdvancedModeStore.setState({ advancedMode: false })
     })
 
     describe('rendering', () => {
@@ -124,20 +127,20 @@ describe('LoginScreen', () => {
         it('should hide server field by default', () => {
             render(<LoginScreen />)
 
-            // Server toggle button should be visible
-            expect(screen.getByText('login.serverLabel')).toBeInTheDocument()
-            // But the server input should not be rendered
+            // Server label and input should not be rendered by default
+            expect(screen.queryByText('login.serverLabel')).not.toBeInTheDocument()
             expect(screen.queryByPlaceholderText('login.serverPlaceholder')).not.toBeInTheDocument()
         })
 
-        it('should show server field when toggle is clicked', () => {
+        it('should show server field when advanced mode is toggled via kebab', async () => {
             render(<LoginScreen />)
 
-            // Click the server toggle button
-            fireEvent.click(screen.getByText('login.serverLabel'))
+            // Open the kebab menu and click Advanced mode
+            fireEvent.click(screen.getByRole('button', { name: 'common.options' }))
+            fireEvent.click(screen.getByRole('menuitemcheckbox', { name: 'login.advancedMode' }))
 
             // Server input should now be visible
-            expect(screen.getByPlaceholderText('login.serverPlaceholder')).toBeInTheDocument()
+            expect(await screen.findByPlaceholderText('login.serverPlaceholder')).toBeInTheDocument()
         })
 
         it('should render connect button', () => {
@@ -351,9 +354,11 @@ describe('LoginScreen', () => {
 
             fireEvent.change(screen.getByLabelText('login.jidLabel'), { target: { value: 'alice@example.com' } })
             fireEvent.change(screen.getByLabelText('login.passwordLabel'), { target: { value: 'secret' } })
-            // Show and fill server field
-            fireEvent.click(screen.getByText('login.serverLabel'))
-            fireEvent.change(screen.getByPlaceholderText('login.serverPlaceholder'), { target: { value: 'wss://custom.example.com/ws' } })
+            // Show and fill server field via the kebab menu
+            fireEvent.click(screen.getByRole('button', { name: 'common.options' }))
+            fireEvent.click(screen.getByRole('menuitemcheckbox', { name: 'login.advancedMode' }))
+            const serverInput = await screen.findByPlaceholderText('login.serverPlaceholder')
+            fireEvent.change(serverInput, { target: { value: 'wss://custom.example.com/ws' } })
             fireEvent.click(screen.getByRole('button', { name: 'login.connect' }))
 
             await waitFor(() => {
@@ -443,6 +448,8 @@ describe('LoginScreen prefill', () => {
             error: null,
             connect: mockConnect,
         })
+        // Reset advanced mode so tests don't leak into each other
+        useAdvancedModeStore.setState({ advancedMode: false })
     })
 
     it('seeds the JID field from a prefill', async () => {
@@ -489,4 +496,30 @@ describe('LoginScreen prefill', () => {
         const jidInput = container.querySelector('#jid')
         await waitFor(() => expect((jidInput as HTMLInputElement).value).toBe('new@example.com'))
     })
+})
+
+describe('LoginScreen — advanced-mode kebab', () => {
+  beforeEach(() => {
+    useAdvancedModeStore.setState({ advancedMode: false })
+    mockUseConnection.mockReturnValue({ status: 'offline', error: null, connect: mockConnect })
+  })
+
+  it('renders the kebab and hides the server field by default', () => {
+    render(<LoginScreen />)
+    expect(screen.getByRole('button', { name: 'common.options' })).toBeInTheDocument()
+    expect(screen.queryByText('login.serverLabel')).not.toBeInTheDocument()
+    // The old inline advanced-mode checkbox is gone.
+    expect(document.querySelector('#advanced-mode')).toBeNull()
+  })
+
+  it('reveals the server field when advanced mode is enabled via the kebab', async () => {
+    render(<LoginScreen />)
+    fireEvent.click(screen.getByRole('button', { name: 'common.options' }))
+    fireEvent.click(screen.getByRole('menuitemcheckbox', { name: 'login.advancedMode' }))
+
+    await waitFor(() => {
+      expect(screen.getByText('login.serverLabel')).toBeInTheDocument()
+    })
+    expect(useAdvancedModeStore.getState().advancedMode).toBe(true)
+  })
 })
