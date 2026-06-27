@@ -228,11 +228,15 @@
   --fluux-search-highlight-bg: hsla(var(--fluux-accent-h), var(--fluux-accent-s), var(--fluux-accent-l), 0.35);
   --fluux-search-highlight-text: var(--fluux-text-normal);
 
-  /* Scrollbar */
-  --fluux-scrollbar-thumb: var(--fluux-base-05);
-  --fluux-scrollbar-thumb-hover: var(--fluux-base-20);
-  --fluux-scrollbar-thumb-sidebar: var(--fluux-base-30);
-  --fluux-scrollbar-thumb-sidebar-hover: var(--fluux-base-50);
+  /* Scrollbar — the thumb sits over a transparent track on the dark chat
+     (base-30) and sidebar (base-20) surfaces. base-05 was darker than both, so
+     the thumb read as invisible (~1.05:1). These mid-ramp blues clear ~3:1
+     resting and brighten on hover, matching the visible thumbs the other dark
+     themes ship. .light overrides below. */
+  --fluux-scrollbar-thumb: var(--fluux-base-70);
+  --fluux-scrollbar-thumb-hover: var(--fluux-base-80);
+  --fluux-scrollbar-thumb-sidebar: var(--fluux-base-70);
+  --fluux-scrollbar-thumb-sidebar-hover: var(--fluux-base-80);
 
   /* Focus ring — drives the universal `.user-interacted *:focus` outline, so this
      one token governs keyboard-focus visibility app-wide. Solid accent: at 0.5
