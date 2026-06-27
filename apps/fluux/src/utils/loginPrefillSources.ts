@@ -35,6 +35,7 @@ export function captureWebLoginPrefill(): LoginPrefill | null {
     lang: params.get('lang') ?? undefined,
   })
 
+  // Strip regardless of validation result: a malformed prefill must not survive a reload.
   for (const key of WEB_PREFILL_PARAMS) params.delete(key)
   const query = params.toString()
   const newUrl = window.location.pathname + (query ? `?${query}` : '') + window.location.hash

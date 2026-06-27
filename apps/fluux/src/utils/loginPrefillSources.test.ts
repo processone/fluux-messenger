@@ -38,4 +38,10 @@ describe('captureWebLoginPrefill', () => {
     expect(window.location.search).toBe('?keep=1')
     expect(window.location.hash).toBe('#/x')
   })
+
+  it('returns null but still strips params when the prefill is invalid', () => {
+    window.history.replaceState(null, '', '/?jid=nonsense&keep=1')
+    expect(captureWebLoginPrefill()).toBeNull()
+    expect(window.location.search).toBe('?keep=1')
+  })
 })
