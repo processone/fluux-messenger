@@ -360,10 +360,14 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
   }
 
   return (
-    <div className="h-full bg-fluux-bg flex items-center justify-center p-4 relative">
+    <div className="h-full bg-fluux-bg overflow-y-auto relative">
       {/* Window drag region - covers top area for title bar */}
       <div className="absolute top-0 inset-x-0 h-8" {...dragRegionProps} />
-      <div className="w-full max-w-md">
+      {/* min-h-full + centering keeps the card centered when there is room, but
+          lets the container scroll to every field on short viewports (e.g. a
+          phone in landscape with the keyboard open). */}
+      <div className="min-h-full flex items-center justify-center p-4">
+        <div className="w-full max-w-md">
         {/* Logo / Header */}
         <div className="text-center mb-8">
           <img
@@ -598,6 +602,7 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
               XMPP
             </a>
           </p>
+        </div>
         </div>
       </div>
     </div>
