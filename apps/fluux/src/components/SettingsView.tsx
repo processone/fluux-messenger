@@ -5,6 +5,7 @@ import { useRouteSync } from '@/hooks/useRouteSync'
 import {
   ProfileSettings,
   AppearanceSettings,
+  AccessibilitySettings,
   LanguageSettings,
   NotificationsSettings,
   UpdatesSettings,
@@ -49,6 +50,8 @@ export function SettingsView({ onBack }: SettingsViewProps) {
         return <ProfileSettings />
       case 'appearance':
         return <AppearanceSettings />
+      case 'accessibility':
+        return <AccessibilitySettings />
       case 'language':
         return <LanguageSettings />
       case 'notifications':

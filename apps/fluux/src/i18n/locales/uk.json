@@ -615,6 +615,7 @@
         "categories": {
             "profile": "Профіль",
             "appearance": "Зовнішній вигляд",
+            "accessibility": "Доступність",
             "language": "Мова",
             "notifications": "Сповіщення",
             "updates": "Оновлення",
@@ -641,6 +642,13 @@
             "blockFailed": "Не вдалося заблокувати користувача"
         },
         "appearance": "Зовнішній вигляд",
+        "accessibility": "Доступність",
+        "transparency": "Прозорість",
+        "transparencyFull": "Повна",
+        "transparencyReduced": "Зменшена",
+        "transparencyFullDescription": "Матові скляні панелі для меню та діалогів.",
+        "transparencyReducedDescription": "Непрозорі панелі без розмиття або напівпрозорості.",
+        "transparencySystemDescription": "Використовувати системне налаштування зменшення прозорості.",
         "theme": "Тема",
         "themeDefault": "Тема за замовчуванням",
         "importTheme": "Імпортувати тему",

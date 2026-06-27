@@ -616,6 +616,7 @@
         "categories": {
             "profile": "Προφίλ",
             "appearance": "Εμφάνιση",
+            "accessibility": "Προσβασιμότητα",
             "language": "Γλώσσα & Περιοχή",
             "notifications": "Ειδοποιήσεις",
             "updates": "Ενημερώσεις",
@@ -642,6 +643,13 @@
             "blockFailed": "Αποτυχία αποκλεισμού χρήστη"
         },
         "appearance": "Εμφάνιση",
+        "accessibility": "Προσβασιμότητα",
+        "transparency": "Διαφάνεια",
+        "transparencyFull": "Πλήρης",
+        "transparencyReduced": "Μειωμένη",
+        "transparencyFullDescription": "Γυάλινα ματ πάνελ για μενού και παράθυρα διαλόγου.",
+        "transparencyReducedDescription": "Συμπαγή πάνελ χωρίς θάμπωμα ή διαφάνεια.",
+        "transparencySystemDescription": "Ακολουθήστε την ρύθμιση μείωσης διαφάνειας του συστήματος.",
         "theme": "Θέμα",
         "themeDefault": "Προεπιλεγμένο θέμα",
         "importTheme": "Εισαγωγή θέματος",

@@ -615,6 +615,7 @@
         "categories": {
             "profile": "Profil",
             "appearance": "Udseende",
+            "accessibility": "Tilgængelighed",
             "language": "Sprog og region",
             "notifications": "Notifikationer",
             "updates": "Opdateringer",
@@ -641,6 +642,13 @@
             "blockFailed": "Kunne ikke blokere bruger"
         },
         "appearance": "Udseende",
+        "accessibility": "Tilgængelighed",
+        "transparency": "Gennemsigtighed",
+        "transparencyFull": "Fuld",
+        "transparencyReduced": "Reduceret",
+        "transparencyFullDescription": "Matterede glaspaneler til menuer og dialoger.",
+        "transparencyReducedDescription": "Solide paneler uden sløring eller gennemskinnelighed.",
+        "transparencySystemDescription": "Følg systemets indstilling for reduceret gennemsigtighed.",
         "theme": "Tema",
         "themeDefault": "Standardtema",
         "importTheme": "Importér tema",

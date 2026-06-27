@@ -617,6 +617,7 @@
         "categories": {
             "profile": "Perfil",
             "appearance": "Aparença",
+            "accessibility": "Accessibilitat",
             "language": "Idioma i regió",
             "notifications": "Notificacions",
             "updates": "Actualitzacions",
@@ -643,6 +644,13 @@
             "blockFailed": "No s'ha pogut blocar l'usuari"
         },
         "appearance": "Aparença",
+        "accessibility": "Accessibilitat",
+        "transparency": "Transparència",
+        "transparencyFull": "Total",
+        "transparencyReduced": "Reduïda",
+        "transparencyFullDescription": "Panells de vidre esmerilat per a menús i diàlegs.",
+        "transparencyReducedDescription": "Panells sòlids sense desenfocament ni translucidesa.",
+        "transparencySystemDescription": "Seguiu la configuració de reducció de transparència del sistema.",
         "theme": "Tema",
         "themeDefault": "Tema per defecte",
         "importTheme": "Importar tema",

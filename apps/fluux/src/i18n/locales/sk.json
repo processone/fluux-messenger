@@ -616,6 +616,7 @@
         "categories": {
             "profile": "Profil",
             "appearance": "Vzhľad",
+            "accessibility": "Prístupnosť",
             "language": "Jazyk a región",
             "notifications": "Notifikácie",
             "updates": "Aktualizácie",
@@ -642,6 +643,13 @@
             "blockFailed": "Nepodarilo sa zablokovať používateľa"
         },
         "appearance": "Vzhľad",
+        "accessibility": "Prístupnosť",
+        "transparency": "Priehľadnosť",
+        "transparencyFull": "Plná",
+        "transparencyReduced": "Znížená",
+        "transparencyFullDescription": "Matové sklenené panely pre ponuky a dialógy.",
+        "transparencyReducedDescription": "Plné panely bez rozmazania alebo priehľadnosti.",
+        "transparencySystemDescription": "Použiť systémové nastavenie zníženia priehľadnosti.",
         "theme": "Motív",
         "themeDefault": "Predvolený motív",
         "importTheme": "Importovať motív",

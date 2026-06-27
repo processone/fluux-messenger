@@ -617,6 +617,7 @@
         "categories": {
             "profile": "Profiil",
             "appearance": "Välimus",
+            "accessibility": "Ligipääsetavus",
             "language": "Keel ja piirkond",
             "notifications": "Teavitused",
             "updates": "Värskendused",
@@ -643,6 +644,13 @@
             "blockFailed": "Kasutaja blokeerimine ebaõnnestus"
         },
         "appearance": "Välimus",
+        "accessibility": "Ligipääsetavus",
+        "transparency": "Läbipaistvus",
+        "transparencyFull": "Täielik",
+        "transparencyReduced": "Vähendatud",
+        "transparencyFullDescription": "Mattklaaspaneelid menüüde ja dialoogide jaoks.",
+        "transparencyReducedDescription": "Tahked paneelid ilma hägustuse või läbipaistvuseta.",
+        "transparencySystemDescription": "Järgi süsteemi läbipaistvuse vähendamise seadet.",
         "theme": "Teema",
         "themeDefault": "Vaiketeema",
         "importTheme": "Impordi teema",
