@@ -22,7 +22,7 @@ Give the command palette and modal panels a frosted-glass surface that looks gre
 
 ## Scope
 
-**In scope:** the **command palette** (`CommandPalette.tsx`) and the **modal panels** — `ModalShell.tsx` + the four that roll their own (`ConfirmDialog`, `BackupPassphraseDialog`, `AvatarCropModal`, `ui/BottomSheet`).
+**In scope:** the **command palette** (`CommandPalette.tsx`) and the **modal panels** — `ModalShell.tsx` + the four that roll their own (`ConfirmDialog`, `BackupPassphraseDialog`, `AvatarCropModal`, `ui/BottomSheet`); plus the **reduce-transparency accessibility preference** (setting + `useTransparency` hook + Appearance toggle) that gates the frost.
 
 **Out of scope:** the ~26 `.fluux-popover` dropdown menus (stay solid, already theme-derived); the modals' internal content/layout (only the panel surface + scrim change); motion/transitions; any modalStore/host logic.
 
@@ -42,11 +42,16 @@ Add one class (mirroring `.fluux-popover`) that all the in-scope panels use, so 
     box-shadow: var(--fluux-shadow-overlay);
   }
   /* Frosted variant: only when BOTH backdrop-filter and the translucent
-     theme-derived background are supported, so we never get blur-with-opaque-bg
-     or an invalid background. */
+     theme-derived background are supported AND transparency is enabled
+     (data-transparency="full"), so we never get blur-with-opaque-bg, an invalid
+     background, or frost when the user/OS asked to reduce transparency. */
   @supports (backdrop-filter: blur(1px)) and (background: color-mix(in srgb, red, blue)) {
-    .fluux-glass {
-      background-color: color-mix(in srgb, var(--fluux-bg-float), transparent 20%);
+    [data-transparency="full"] .fluux-glass {
+      /* High opacity on purpose: readability first. ~88% opaque means only a
+         hint of the blurred backdrop shows through; combined with the dimming
+         scrim, panel content stays as legible as the solid surface. Tune via
+         screenshots, but do not go below ~85% opacity (transparent 15%). */
+      background-color: color-mix(in srgb, var(--fluux-bg-float), transparent 12%);
       backdrop-filter: blur(var(--fluux-glass-blur));
       -webkit-backdrop-filter: blur(var(--fluux-glass-blur));
     }
@@ -55,7 +60,8 @@ Add one class (mirroring `.fluux-popover`) that all the in-scope panels use, so 
 ```
 
 - **Theme-derived**: both the solid (`--fluux-bg-float`) and the frosted (`color-mix` of `--fluux-bg-float` with transparent) backgrounds come from each theme's own elevated surface. No hardcoded navy. Each theme's glass tints to itself.
-- **Graceful fallback**: where blur or `color-mix` is unsupported, the panel is a solid theme-derived elevated surface (still clean, just not frosted). macOS gets the full frost.
+- **Readability first**: the frost is deliberately subtle (~88% opaque). The point is a refined elevated surface with a hint of depth, NOT a heavily see-through panel that fights legibility.
+- **Graceful fallback**: where blur or `color-mix` is unsupported, OR transparency is reduced, the panel is a solid theme-derived elevated surface (still clean, just not frosted). macOS with transparency on gets the full frost.
 
 ### 2. Tokens (in `index.css`)
 
@@ -72,7 +78,16 @@ Add one class (mirroring `.fluux-popover`) that all the in-scope panels use, so 
 
 ### 4. Readability on glass
 
-Content on a translucent panel must stay legible over whatever is behind it. The frosted background is `--fluux-bg-float` at ~80% opacity — close to the solid surface — and the scrim dims the backdrop, so contrast stays near the solid case. Verify the palette's muted placeholder + result text and the modal body text read in both modes across themes.
+Content on a translucent panel must stay legible over whatever is behind it. The frosted background is `--fluux-bg-float` at ~88% opacity — very close to the solid surface — and the scrim dims the backdrop, so contrast stays near the solid case. Verify the palette's muted placeholder + result text and the modal body text read in both modes across themes. **Readability beats frost intensity**: if a value looks too see-through in any theme, raise the opacity.
+
+### 5. Accessibility — reduce transparency
+
+Translucency + blur can hurt some users (low vision, vestibular sensitivity, focus). Provide an explicit opt-out that mirrors the existing Motion preference:
+
+- **Setting**: `transparencyMode: 'system' | 'full' | 'reduced'` in `settingsStore` (default `'system'`), exactly mirroring `motionPreference` (type, `getInitial...`, persist key `'fluux-transparency'`, setter).
+- **Resolution** (`useTransparency` hook, mirroring `useDensity`/the motion resolution): `'system'` resolves via `window.matchMedia('(prefers-reduced-transparency: reduce)')` (so macOS "Reduce transparency" and the OS setting are honored automatically); `'full'` / `'reduced'` are explicit. The hook sets `data-transparency="full" | "reduced"` on `document.documentElement` and updates on the media-query change + the setting change. Called once at the app root (next to `useDensity`).
+- **Effect**: the frosted CSS is gated on `[data-transparency="full"]` (see the class above), so `reduced` (explicit, or `system` + OS-reduce) yields the **solid** theme-derived panel — no blur, no translucency. The solid panel is already the readable, theme-correct baseline.
+- **Settings UI**: a "Transparency" control in Appearance (System / Full / Reduced), mirroring the Motion block; new i18n keys translated in all 33 locales.
 
 ## Theme robustness (binding)
 
@@ -89,6 +104,7 @@ Content on a translucent panel must stay legible over whatever is behind it. The
 
 - **Glass cross-theme guard** (as above): solid-fallback bg readability + glass-border perceptibility, all 13 themes × 2 modes.
 - **Component tests**: `ModalShell` / `CommandPalette` panels carry the `fluux-glass` class (render assertion); the scrim uses the backdrop token, not `bg-black/50`.
+- **Transparency preference**: `settingsStore` defaults `transparencyMode` to `'system'` + persists; `useTransparency` sets `data-transparency` to `full`/`reduced` from the mode (+ the media query for `system`); the Appearance toggle switches it; i18n keys present in all 33 locales. (The frost-off effect itself is CSS gated on `[data-transparency="full"]`, verified by the screenshot pass with the attribute toggled.)
 - **Screenshots**: the command palette + a representative modal (e.g. About or Create Room), captured in Aurora dark, Aurora light, and 2-3 other themes (gruvbox, dracula, rose-pine) to confirm the glass tints per theme and the fallback path looks clean. (Existing scene `10-command-palette-dark` covers the palette; add a couple theme variants.)
 - Typecheck, lint, full suite green.
 
