@@ -189,3 +189,25 @@ The contrast math is deterministic. A small unit test that resolves the theme to
 - Accent fill contrast is healthy: white-on-accent **4.67:1 (dark) / 5.54:1 (light)** — AA. The existing `contrastColorForHsl()` machinery works; the gaps are in *non-accent* token placement.
 - Light mode is consistently the weaker of the two — its surfaces sit in a narrow high-luminance band (`#E7EAF4`–`#FFFFFF`), so both colored text and surface separation have less room.
 - All ratios above are exact WCAG 2.1, alpha tokens composited over their real backdrop, and were spot-validated against live `getComputedStyle` in the running app.
+
+---
+
+## 6. Cross-theme follow-up (2026-06-27, PR #700)
+
+This audit covered the Aurora default (`id: fluux`) only. A follow-up audit measured the **13 built-in themes** against the same standards (accent triplet, semantic/component tokens, sender palette, 5-level elevation, type scale, component specs). The standards held structurally, but four invariants that pass on Aurora's surfaces failed on themes whose surfaces differ — and only `--fluux-text-error` was guarded per theme, so the failures were silent.
+
+| # | Finding | Severity | Affected | Root cause |
+|---|---------|----------|----------|-----------|
+| 1 | **Sender names below AA** | High | nord (3.98), catppuccin (4.20) dark | `auroraSenderColor` tuned its dark hues to Aurora's near-black; lighter dark chat surfaces drop contrast |
+| 2 | **Light status-as-text below AA** | Med | tokyo-night (3.81), gruvbox, catppuccin, indigo | inherited Aurora light `--fluux-status-*` on a darker theme `bg-primary` |
+| 3 | **Light hairline below 1.5** | Low | 11 themes (1.16–1.29) | each theme's tinted light `--fluux-border-color` at low alpha composited too faint on its chat surface |
+| 4 | **Unread badge text unreadable** | High | 8 themes (bright dark accents) | `--fluux-badge-text` hardcoded white on the accent fill; `contrastColorForHsl` mispicked via a `lum > 0.36` threshold |
+
+**Fixes (all token-level + one util/hook):**
+
+1. **Surface-aware sender generator** — new `ensureContrastOnDark` (the dark-surface mirror of `ensureContrast`, lightening toward white); the dark branch AA-corrects against a conservative `DARK_ROW_LUMINANCE = 0.08` floor (covers the lightest built-in dark surface, Nord's, with margin). Theme-independent palette preserved; senders just run slightly more luminous.
+2. **Per-theme dark light-mode `--fluux-status-*`** for the four failing themes (the same text-vs-fill split as `--fluux-text-error`): hue-matched, AA on their `bg-primary`, white still AA on the error fill.
+3. **Raised each theme's light `--fluux-border-color` alpha** (0.10–0.15 → 0.22–0.34), tint preserved, hairline clears the floor.
+4. **Theme-overridable unread badge** — `--fluux-badge-bg` + `--fluux-badge-text`; the text default now follows the auto on-accent color, and `contrastColorForHsl` (in `useTheme.ts`) picks the higher-**contrast** of black/white instead of a luminance threshold. This also fixes unreadable on-accent **button** text (same `--fluux-text-on-accent` token). The built-in **Indigo** theme uses the override to keep its classic **red** badge.
+
+**Guards** (`themeContrast.test.ts`, per theme / per mode): worst-case sender ≥4.5 on chat-bg; light status-{success,warning,error} ≥4.5 on bg-primary; light border ≥1.5 on chat-bg; badge text ≥4.5 on badge fill (modelling the real auto on-accent pick). `docs/THEMES.md` documents the badge override and the corrected `--fluux-badge-bg` / `--fluux-badge-text` defaults.
