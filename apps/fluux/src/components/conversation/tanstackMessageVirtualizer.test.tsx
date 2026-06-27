@@ -10,7 +10,10 @@ const scrollToOffsetSpy = vi.fn()
 
 // Captured config from the last useVirtualizer call — allows tests to inspect what the adapter
 // passes to @tanstack (e.g. estimateSize per index).
-let capturedConfig: { estimateSize: (index: number) => number } | null = null
+let capturedConfig: {
+  estimateSize: (index: number) => number
+  initialMeasurementsCache?: Array<{ key: string | number; index: number; start: number; end: number; size: number; lane: number }>
+} | null = null
 
 // Mock the real @tanstack/react-virtual surface the adapter uses (jsdom has no layout):
 // a fixed 40px row height exposes deterministic offsets for every index. The mock also invokes
@@ -22,12 +25,13 @@ vi.mock('@tanstack/react-virtual', () => ({
     getItemKey: (i: number) => string
     getScrollElement: () => HTMLElement | null
     estimateSize: (index: number) => number
+    initialMeasurementsCache?: Array<{ key: string | number; index: number; start: number; end: number; size: number; lane: number }>
     observeElementOffset?: (
       instance: { scrollElement: HTMLElement | null },
       cb: (offset: number, isScrolling: boolean) => void,
     ) => void | (() => void)
   }) => {
-    capturedConfig = { estimateSize: opts.estimateSize }
+    capturedConfig = { estimateSize: opts.estimateSize, initialMeasurementsCache: opts.initialMeasurementsCache }
     opts.observeElementOffset?.({ scrollElement: opts.getScrollElement() }, offsetNotifySpy)
     return {
       getVirtualItems: () =>
@@ -37,6 +41,8 @@ vi.mock('@tanstack/react-virtual', () => ({
       getTotalSize: () => opts.count * 40,
       getOffsetForIndex: (index: number) => [index * 40, 'start'] as const,
       measureElement: () => {},
+      measurementsCache: [] as Array<{ key: string | number; index: number; size: number }>,
+      indexFromElement: () => -1,
       // Mirror real @tanstack: scrollToIndex resolves an offset and sets the DOM scrollTop
       // (via _scrollToOffset → scrollToFn) but does NOT update its reactive scrollOffset. The
       // adapter must read the landed scrollTop back and re-window through the offset callback.
@@ -60,15 +66,17 @@ function makeItems(ids: string[]): { items: { key: string }[]; indexById: Map<st
 function renderAdapter({
   items,
   estimateSize,
+  initialMeasurements,
 }: {
   items: { key: string }[]
   estimateSize?: number | ((index: number) => number)
+  initialMeasurements?: ReadonlyMap<string, number>
 }) {
   const indexById = new Map(items.map((item, i) => [item.key, i]))
   capturedConfig = null
   renderHook(() => {
     const scrollRef = useRef<HTMLElement | null>(null)
-    return useTanstackMessageVirtualizer({ items, indexById, scrollRef, estimateSize })
+    return useTanstackMessageVirtualizer({ items, indexById, scrollRef, estimateSize, initialMeasurements })
   })
   return { capturedConfig: capturedConfig! }
 }
@@ -183,5 +191,31 @@ describe('useTanstackMessageVirtualizer', () => {
   it('uses a constant numeric estimateSize when a number is passed', () => {
     const { capturedConfig } = renderAdapter({ items: [{ key: 'a' }], estimateSize: 120 })
     expect(capturedConfig.estimateSize(0)).toBe(120)
+  })
+
+  it('translates initialMeasurements map into @tanstack initialMeasurementsCache array', () => {
+    // The adapter must convert the caller's ReadonlyMap<messageId, px> into an array of
+    // VirtualItem-like entries { key, index, start, end, size, lane } for @tanstack.
+    // Only entries whose key is in the items array are included; start/end/lane are 0
+    // (size is the only field @tanstack needs for the seed).
+    const items = [{ key: 'a' }, { key: 'b' }, { key: 'c' }]
+    const initialMeasurements = new Map([
+      ['a', 84],
+      ['c', 120],
+      ['z', 50], // unknown key — must be dropped
+    ])
+    const { capturedConfig } = renderAdapter({ items, initialMeasurements })
+    const cache = capturedConfig.initialMeasurementsCache
+    expect(cache).toBeDefined()
+    expect(cache!.length).toBe(2)
+    const byKey = Object.fromEntries(cache!.map((e) => [String(e.key), e]))
+    expect(byKey['a']).toMatchObject({ key: 'a', index: 0, size: 84, start: 0, end: 0, lane: 0 })
+    expect(byKey['c']).toMatchObject({ key: 'c', index: 2, size: 120, start: 0, end: 0, lane: 0 })
+    expect(byKey['z']).toBeUndefined()
+  })
+
+  it('omits initialMeasurementsCache when no initialMeasurements are provided', () => {
+    const { capturedConfig } = renderAdapter({ items: [{ key: 'a' }] })
+    expect(capturedConfig.initialMeasurementsCache).toBeUndefined()
   })
 })
