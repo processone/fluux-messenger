@@ -497,7 +497,7 @@ function CommandPaletteContent({
 
   return (
     <div
-      className="fixed inset-0 bg-black/50 flex items-start justify-center pt-[15vh] z-50"
+      className="fixed inset-0 modal-scrim flex items-start justify-center pt-[15vh] z-50"
     >
       <button
         type="button"
@@ -509,7 +509,7 @@ function CommandPaletteContent({
       <div
         role="dialog"
         aria-modal="true"
-        className="relative z-10 bg-fluux-sidebar rounded-lg shadow-2xl w-full max-w-lg mx-4 overflow-hidden border border-fluux-hover"
+        className="relative z-10 fluux-glass rounded-lg w-full max-w-lg mx-4 overflow-hidden"
         onKeyDown={handleKeyDown}
       >
         {/* Search Input */}

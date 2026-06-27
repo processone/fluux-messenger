@@ -517,6 +517,12 @@
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
   }
+
+  /* Scrim utility: uses the themed backdrop token so the scrim colour tracks
+     the active theme (default: rgba(0,0,0,0.5), set in --fluux-modal-backdrop). */
+  .modal-scrim {
+    background: var(--fluux-modal-backdrop);
+  }
 }
 
 /* Emoji picker (emoji-mart web component) — give it the same elevated treatment

@@ -359,7 +359,7 @@ export function AvatarCropModal({ isOpen, onClose, onSave }: AvatarCropModalProp
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70">
-      <div className="bg-fluux-sidebar rounded-lg shadow-xl w-full max-w-md mx-4 max-h-[calc(100vh-2rem)] flex flex-col overflow-hidden">
+      <div className="fluux-glass rounded-lg w-full max-w-md mx-4 max-h-[calc(100vh-2rem)] flex flex-col overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-fluux-bg">
           <h2 className="text-lg font-semibold text-fluux-text">{t('avatar.uploadTitle')}</h2>
