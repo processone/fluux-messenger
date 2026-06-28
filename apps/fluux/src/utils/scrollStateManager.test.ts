@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest'
-import { ScrollStateManager, AT_BOTTOM_THRESHOLD } from './scrollStateManager'
+import { ScrollStateManager } from './scrollStateManager'
 
 describe('ScrollStateManager', () => {
   let manager: ScrollStateManager
