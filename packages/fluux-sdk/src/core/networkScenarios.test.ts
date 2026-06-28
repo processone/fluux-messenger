@@ -253,7 +253,13 @@ describe('Network Scenario Journey Tests', () => {
   // Scenario 7: SM Resume → Switch room → MAM behavior
   // =========================================================================
   describe('Scenario 7: SM Resume → Switch room', () => {
-    it('should NOT trigger MAM when switching to a previously joined room after SM resume', async () => {
+    it('fetches MAM when switching to a previously joined room with an empty local archive after SM resume', async () => {
+      // roomB was joined but never opened/fetched this session — its local archive is
+      // empty. SM resume must NOT mark a never-fetched room caught up (there is nothing
+      // in the replay queue to give it), so the first switch into it fetches the
+      // archive. Otherwise the room shows permanently empty (the reported bug).
+      // A room we already hold (resident/queried) is still skipped — see the
+      // roomSideEffects "already hold" and #679 re-entry tests.
       seedRooms([
         { jid: 'roomA@conference.example.com', joined: true, supportsMAM: true },
         { jid: 'roomB@conference.example.com', joined: true, supportsMAM: true },
@@ -262,7 +268,6 @@ describe('Network Scenario Journey Tests', () => {
       connectionStore.getState().setStatus('disconnected')
       cleanup = setupRoomSideEffects(client)
 
-      // SM resume marks both rooms in fetchInitiated
       await simulateSmResumptionWithRejoin(client, [
         'roomA@conference.example.com',
         'roomB@conference.example.com',
@@ -270,11 +275,13 @@ describe('Network Scenario Journey Tests', () => {
 
       vi.mocked(client.chat.queryRoomMAM).mockClear()
 
-      // Switch to room B — should NOT trigger MAM because SM resume marked it
+      // Switch to room B (empty local archive) — must fetch its archive.
       roomStore.getState().setActiveRoom('roomB@conference.example.com')
       await settle()
 
-      expect(client.chat.queryRoomMAM).not.toHaveBeenCalled()
+      expect(client.chat.queryRoomMAM).toHaveBeenCalledWith(
+        expect.objectContaining({ roomJid: 'roomB@conference.example.com' })
+      )
     })
 
     // =========================================================================

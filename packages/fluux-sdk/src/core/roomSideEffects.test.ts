@@ -669,7 +669,11 @@ describe('setupRoomSideEffects', () => {
       expect(mockClient.chat.queryRoomMAM).not.toHaveBeenCalled()
     })
 
-    it('should NOT trigger MAM when supportsMAM becomes true during SM resumption (fetchInitiated blocks it)', async () => {
+    it('triggers MAM when supportsMAM becomes true after SM resumption for a never-fetched room', async () => {
+      // SM resume must NOT mark a never-fetched room caught up: supportsMAM was false
+      // so its archive was never queried, and the SM queue has nothing to replay for
+      // it. When MAM support is discovered the archive must be fetched for the first
+      // time (the "archive not retrieved after a reconnect" bug).
       roomStore.getState().addRoom({
         jid: 'room@conference.example.com',
         name: 'Test Room',
@@ -688,19 +692,24 @@ describe('setupRoomSideEffects', () => {
 
       cleanup = setupRoomSideEffects(mockClient)
 
-      // SM resumption adds the active room to fetchInitiated, preventing redundant queries
+      // SM resumption: room is empty + never queried -> NOT seeded into fetchInitiated.
       simulateSmResumption(mockClient)
 
-      // supportsMAM transition — blocked by fetchInitiated
       roomStore.getState().updateRoom('room@conference.example.com', {
         supportsMAM: true,
       })
 
-      await new Promise(resolve => setTimeout(resolve, 50))
-      expect(mockClient.chat.queryRoomMAM).not.toHaveBeenCalled()
+      await vi.waitFor(() => {
+        expect(mockClient.chat.queryRoomMAM).toHaveBeenCalledWith(
+          expect.objectContaining({ roomJid: 'room@conference.example.com' })
+        )
+      })
     })
 
-    it('should NOT trigger MAM when room:joined fires during SM resumption (fetchInitiated blocks it)', async () => {
+    it('triggers MAM when room:joined fires after SM resumption for a never-fetched room', async () => {
+      // A bookmarked room autojoined in the background but never opened has no archive.
+      // After an SM resume its (possibly belated) room:joined must still fetch the
+      // archive on first activation — the resume seeding must not suppress it.
       roomStore.getState().addRoom({
         jid: 'room@conference.example.com',
         name: 'Test Room',
@@ -719,19 +728,64 @@ describe('setupRoomSideEffects', () => {
 
       cleanup = setupRoomSideEffects(mockClient)
 
-      // SM resumption adds the active room to fetchInitiated
+      // SM resumption: room is empty + never queried -> NOT seeded into fetchInitiated.
       simulateSmResumption(mockClient)
 
-      // Simulate server replaying self-presence during SM resumption
+      // Server replays self-presence during SM resumption.
       roomStore.getState().setRoomJoined('room@conference.example.com', true)
+      mockClient._emitSDK('room:joined', { roomJid: 'room@conference.example.com', joined: true })
+
+      await vi.waitFor(() => {
+        expect(mockClient.chat.queryRoomMAM).toHaveBeenCalledWith(
+          expect.objectContaining({ roomJid: 'room@conference.example.com' })
+        )
+      })
+    })
+
+    it('does NOT re-trigger MAM after SM resumption for a room whose archive we already hold', async () => {
+      // A room with resident messages IS caught up: SM resume seeds it into
+      // fetchInitiated, so a belated room:joined skips the redundant MAM query.
+      const resident = {
+        type: 'groupchat' as const,
+        id: 'm1',
+        roomJid: 'room@conference.example.com',
+        from: 'room@conference.example.com/alice',
+        nick: 'alice',
+        body: 'hi',
+        timestamp: new Date('2026-02-04T12:00:00Z'),
+        isOutgoing: false,
+      }
+      roomStore.getState().addRoom({
+        jid: 'room@conference.example.com',
+        name: 'Test Room',
+        nickname: 'testuser',
+        joined: true,
+        supportsMAM: true,
+        occupants: new Map(),
+        messages: [resident],
+        unreadCount: 0,
+        mentionsCount: 0,
+        typingUsers: new Set(),
+        isBookmarked: true,
+      })
+
+      roomStore.getState().setActiveRoom('room@conference.example.com')
+
+      cleanup = setupRoomSideEffects(mockClient)
+
+      // SM resumption: room holds an archive -> seeded into fetchInitiated.
+      simulateSmResumption(mockClient)
+
       mockClient._emitSDK('room:joined', { roomJid: 'room@conference.example.com', joined: true })
 
       await new Promise(resolve => setTimeout(resolve, 50))
       expect(mockClient.chat.queryRoomMAM).not.toHaveBeenCalled()
     })
 
-    it('should mark all joined rooms in fetchInitiated on SM resumption (not just active)', async () => {
-      // Add two rooms, both joined — only room1 is active
+    it('does NOT trigger MAM on a post-resumption room:joined for a NON-ACTIVE room', async () => {
+      // Two rooms joined, only room1 active. A belated room:joined for the non-active
+      // room2 must not fetch its archive (it is not the foreground room) — independent
+      // of whether the resume seeded it.
       roomStore.getState().addRoom({
         jid: 'room1@conference.example.com',
         name: 'Room 1',
@@ -763,16 +817,15 @@ describe('setupRoomSideEffects', () => {
 
       cleanup = setupRoomSideEffects(mockClient)
 
-      // SM resumption should mark BOTH rooms in fetchInitiated
       simulateSmResumption(mockClient)
 
-      // Simulate room:joined for the non-active room (from rejoin flow after SM resume)
+      // room:joined for the non-active room (from rejoin flow after SM resume).
       roomStore.getState().setRoomJoined('room2@conference.example.com', true)
       mockClient._emitSDK('room:joined', { roomJid: 'room2@conference.example.com', joined: true })
 
       await new Promise(resolve => setTimeout(resolve, 50))
 
-      // MAM should NOT be queried for room2 because SM resumption marked it in fetchInitiated
+      // room2 is not the active room, so no foreground catch-up is needed.
       expect(mockClient.chat.queryRoomMAM).not.toHaveBeenCalled()
     })
 
@@ -810,6 +863,72 @@ describe('setupRoomSideEffects', () => {
           expect.objectContaining({
             roomJid: 'room@conference.example.com',
           })
+        )
+      })
+    })
+  })
+
+  describe('first-open archive fetch after reconnect (autojoin / bookmark)', () => {
+    // Autojoin (and double-clicking a not-yet-joined bookmark) joins a room in the
+    // BACKGROUND — it is not the active room, so the room:joined trigger is skipped
+    // and its archive is fetched lazily on first open. An SM resume in between must
+    // not mark such a never-fetched room "caught up" and suppress that first fetch.
+    const ROOM = 'autojoined@conference.example.com'
+
+    function addBackgroundRoom() {
+      roomStore.getState().addRoom({
+        jid: ROOM,
+        name: 'Autojoined Room',
+        nickname: 'me',
+        joined: false,
+        supportsMAM: true,
+        occupants: new Map(),
+        messages: [],
+        unreadCount: 0,
+        mentionsCount: 0,
+        typingUsers: new Set(),
+        isBookmarked: true,
+        autojoin: true,
+      })
+    }
+
+    function confirmBackgroundJoin() {
+      // self-presence arrives while the room is NOT active (background autojoin).
+      roomStore.getState().setRoomJoined(ROOM, true)
+      mockClient._emitSDK('room:joined', { roomJid: ROOM, joined: true })
+    }
+
+    it('fetches the archive when opening a background-autojoined room (fresh session)', async () => {
+      cleanup = setupRoomSideEffects(mockClient)
+      simulateFreshSession(mockClient) // online, fetchInitiated cleared, no active room
+
+      addBackgroundRoom()
+      confirmBackgroundJoin() // room:joined while NOT active -> trigger skipped
+
+      await roomStore.getState().activateRoom(ROOM)
+
+      await vi.waitFor(() => {
+        expect(mockClient.chat.queryRoomMAM).toHaveBeenCalledWith(
+          expect.objectContaining({ roomJid: ROOM, before: '', max: 50 })
+        )
+      })
+    })
+
+    it('fetches the archive when opening a background-autojoined room AFTER an SM resume', async () => {
+      cleanup = setupRoomSideEffects(mockClient)
+      simulateFreshSession(mockClient)
+
+      addBackgroundRoom()
+      confirmBackgroundJoin() // joined in background, archive NEVER fetched
+
+      // Network blip -> SM resumption. Must NOT seed this never-fetched room.
+      simulateSmResumption(mockClient)
+
+      await roomStore.getState().activateRoom(ROOM)
+
+      await vi.waitFor(() => {
+        expect(mockClient.chat.queryRoomMAM).toHaveBeenCalledWith(
+          expect.objectContaining({ roomJid: ROOM, before: '', max: 50 })
         )
       })
     })
