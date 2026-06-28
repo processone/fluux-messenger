@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Server, Users, Hash, User, Plus, ArrowLeft, Menu } from 'lucide-react'
+import { Server, Plus, ArrowLeft, Menu } from 'lucide-react'
 import { useAdmin, useXMPP, adminStore, type AdminCategory, type AdminUser, type AdminRoom } from '@fluux/sdk'
 import { useAdminStore } from '@fluux/sdk/react'
 import { useWindowDrag, useModalInput } from '@/hooks'
@@ -18,6 +18,7 @@ import { ServerOverview } from './ServerOverview'
 import { getAdminBackTarget } from './adminBackTarget'
 import { BottomSheet } from './ui/BottomSheet'
 import { AdminDashboard } from './AdminDashboard'
+import { AdminBreadcrumb } from './AdminBreadcrumb'
 
 interface AdminViewProps {
   activeCategory: AdminCategory | null
@@ -312,23 +313,6 @@ export function AdminView({ activeCategory, onBack }: AdminViewProps) {
     }
   }
 
-  // Get icon based on active category
-  const getIcon = () => {
-    if (selectedUser) {
-      return <User className="size-5 text-fluux-brand" />
-    }
-    switch (activeCategory) {
-      case 'stats':
-        return <Server className="size-5 text-fluux-brand" />
-      case 'users':
-        return <Users className="size-5 text-fluux-brand" />
-      case 'rooms':
-        return <Hash className="size-5 text-fluux-brand" />
-      default:
-        return <Server className="size-5 text-fluux-brand" />
-    }
-  }
-
   // Render content based on state
   const renderContent = () => {
     // If there's an active command session, show the form/result
@@ -405,7 +389,7 @@ export function AdminView({ activeCategory, onBack }: AdminViewProps) {
             </div>
           )}
           {usersTruncated && (
-            <div className="mb-3 px-3 py-2 text-sm rounded-lg bg-amber-500/10 text-amber-700 dark:text-amber-300">
+            <div className="mb-3 px-3 py-2 text-sm rounded-lg bg-fluux-yellow/10 text-fluux-yellow">
               {serverStats?.registeredUsers != null
                 ? t('admin.users.truncatedBanner', {
                     shown: filteredUsers.length,
@@ -497,6 +481,53 @@ export function AdminView({ activeCategory, onBack }: AdminViewProps) {
     )
   }
 
+  // Build breadcrumb trail from current admin navigation state.
+  const buildCrumbs = () => {
+    const crumbs: { label: string; onClick?: () => void }[] = []
+
+    // Home crumb — always present, click navigates to admin overview.
+    crumbs.push({
+      label: t('admin.title'),
+      onClick: () => {
+        adminStore.getState().setActiveCategory('stats')
+      },
+    })
+
+    if (!activeCategory || activeCategory === 'stats') {
+      // At overview level: home crumb is the leaf (no onClick on home).
+      crumbs[0] = { label: t('admin.title') }
+      return crumbs
+    }
+
+    // Category crumb
+    if (activeCategory === 'users') {
+      if (selectedUser) {
+        crumbs.push({
+          label: t('admin.categories.users'),
+          onClick: () => setSelectedUser(null),
+        })
+        crumbs.push({ label: selectedUser.jid })
+      } else {
+        crumbs.push({ label: t('admin.categories.users') })
+      }
+    } else if (activeCategory === 'rooms') {
+      if (selectedRoom) {
+        crumbs.push({
+          label: t('admin.categories.rooms'),
+          onClick: () => setSelectedRoom(null),
+        })
+        crumbs.push({ label: selectedRoom.name || selectedRoom.jid })
+      } else {
+        crumbs.push({ label: t('admin.categories.rooms') })
+      }
+    } else {
+      // Other categories (stats, announcements, etc.)
+      crumbs.push({ label: getTitle() })
+    }
+
+    return crumbs
+  }
+
   return (
     <div className="flex-1 flex flex-col min-h-0 bg-fluux-sidebar">
       {/* Header */}
@@ -511,10 +542,7 @@ export function AdminView({ activeCategory, onBack }: AdminViewProps) {
             <ArrowLeft className="size-5 text-fluux-muted rtl-mirror" />
           </button>
         )}
-        {getIcon()}
-        {/* Only raw command-node titles need capitalize ("delete user" → "Delete User");
-            i18n titles (overview, users, rooms) are already correctly cased. */}
-        <h2 className={`ms-2 font-semibold text-fluux-text ${currentSession?.node ? 'capitalize' : ''}`}>{getTitle()}</h2>
+        <AdminBreadcrumb crumbs={buildCrumbs()} />
         {onBack && (
           <button
             onClick={() => setSectionsSheetOpen(true)}

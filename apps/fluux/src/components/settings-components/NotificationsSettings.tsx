@@ -9,6 +9,7 @@ import {
   requestNotificationPermission,
 } from '@/hooks/useNotificationPermission'
 import { isWebPushSupported, requestWebPushRegistration } from '@/hooks/useWebPush'
+import { SettingsSection } from '@/components/ui/SettingsSection'
 
 type NotificationStatus = 'checking' | 'granted' | 'denied' | 'default' | 'unavailable'
 
@@ -145,17 +146,14 @@ export function NotificationsSettings() {
 
   return (
     <section className="max-w-md">
-      <h3 className="text-xs font-semibold text-fluux-muted uppercase tracking-wide mb-4">
-        {t('settings.notifications')}
-      </h3>
-
+      <SettingsSection title={t('settings.notifications')}>
       <div className="space-y-3">
         <div className="flex items-center justify-between p-4 rounded-lg border-2 border-fluux-hover bg-fluux-bg">
           <div className="flex items-center gap-3">
             {notificationStatus === 'granted' ? (
-              <Bell className="size-5 text-green-500" />
+              <Bell className="size-5 text-fluux-green" />
             ) : notificationStatus === 'denied' ? (
-              <BellOff className="size-5 text-red-500" />
+              <BellOff className="size-5 text-fluux-red" />
             ) : notificationStatus === 'unavailable' ? (
               <BellOff className="size-5 text-fluux-muted" />
             ) : (
@@ -228,9 +226,9 @@ export function NotificationsSettings() {
           <div className="flex items-center justify-between p-4 rounded-lg border-2 border-fluux-hover bg-fluux-bg">
             <div className="flex items-center gap-3">
               <Send className={`size-5 ${
-                webPushStatus === 'registered' ? 'text-green-500'
-                  : webPushStatus === 'disabled' ? 'text-red-500'
-                  : webPushStatus === 'available' ? 'text-yellow-500'
+                webPushStatus === 'registered' ? 'text-fluux-green'
+                  : webPushStatus === 'disabled' ? 'text-fluux-red'
+                  : webPushStatus === 'available' ? 'text-fluux-yellow'
                   : 'text-fluux-muted'
               }`} />
               <div>
@@ -258,8 +256,8 @@ export function NotificationsSettings() {
               <button
                 onClick={handleDisableWebPush}
                 disabled={disabling}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-red-500 hover:text-red-400
-                           bg-red-500/10 hover:bg-red-500/20 rounded-md transition-colors disabled:opacity-50"
+                className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-fluux-red hover:text-fluux-red/80
+                           bg-fluux-red/10 hover:bg-fluux-red/20 rounded-md transition-colors disabled:opacity-50"
               >
                 <BellOff className="size-4" />
                 {t('settings.webPushDisable')}
@@ -279,6 +277,7 @@ export function NotificationsSettings() {
           </div>
         )}
       </div>
+      </SettingsSection>
     </section>
   )
 }

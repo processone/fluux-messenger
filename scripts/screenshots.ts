@@ -1281,3 +1281,83 @@ for (const theme of emptyStateThemes) {
     if (theme.id) await setTheme(page, 'aurora')
   })
 }
+
+// ── Settings Pane Scenes (Aurora settings/admin slice) ──────────────────────
+// Captures two settings panes (Notifications and Appearance) across
+// Aurora dark, Aurora light, and Gruvbox. These scenes verify that the
+// SettingsSection/SettingsGroup/SettingsRow/Toggle/Select primitive kit
+// renders with consistent rhythm across themes.
+
+const settingsThemes: { id: string | null; mode: 'dark' | 'light'; label: string }[] = [
+  { id: null, mode: 'dark', label: 'aurora-dark' },
+  { id: null, mode: 'light', label: 'aurora-light' },
+  { id: 'gruvbox', mode: 'dark', label: 'gruvbox' },
+]
+
+for (const theme of settingsThemes) {
+  test(`7x — Settings Notifications ${theme.label}`, async ({ page }) => {
+    await waitForDemoReady(page, theme.mode)
+    if (theme.id) await setTheme(page, theme.id)
+    await navigateTo(page, 'settings')
+    await page.getByText('Notifications', { exact: true }).first().click()
+    await page.waitForTimeout(800)
+    await capture(page, `7x-settings-notifications-${theme.label}`)
+    if (theme.id) await setTheme(page, 'aurora')
+  })
+}
+
+for (const theme of settingsThemes) {
+  test(`7x — Settings Appearance ${theme.label}`, async ({ page }) => {
+    await waitForDemoReady(page, theme.mode)
+    if (theme.id) await setTheme(page, theme.id)
+    await navigateTo(page, 'settings')
+    await page.getByText('Appearance', { exact: true }).first().click()
+    await page.waitForTimeout(800)
+    await capture(page, `7x-settings-appearance-${theme.label}`)
+    if (theme.id) await setTheme(page, 'aurora')
+  })
+}
+
+// ── Admin Breadcrumb Scene (Administration > Users > user detail) ────────────
+// Opens the admin panel as admin, navigates to the Users category, seeds a
+// user list so the list renders, then sets pendingSelectedUserJid to drive the
+// AdminView effect that selects a user and shows the three-level breadcrumb:
+//   Administration > Users > emma@domain
+// Captured in Aurora dark, Aurora light, and Gruvbox.
+
+async function openAdminUserBreadcrumb(page: Page): Promise<void> {
+  // Demo mode already seeds isAdmin + full command list at startup.
+  // Navigate to admin — view bootstraps on the overview (stats category).
+  // The breadcrumb at this level shows: Administration (one crumb, overview).
+  await navigateTo(page, 'admin')
+  await page.waitForTimeout(800)
+
+  // Click the "Users" sidebar button to switch to the users category.
+  // AdminDashboard renders a button with the text 'Users' (from t('admin.categories.users')).
+  // After clicking, AdminView fetches the user list via the DemoClient.
+  const usersBtn = page.getByRole('button', { name: /^Users/i }).first()
+  if (await usersBtn.isVisible()) {
+    await usersBtn.click()
+    // Wait for user list to load (DemoClient responds to #get-registered-users-list).
+    await page.waitForTimeout(1500)
+  }
+
+  // The breadcrumb now shows: Administration > Users (two crumbs with clickable home).
+  // Try clicking the first user row to reach the three-level breadcrumb:
+  //   Administration > Users > emma@fluux.chat
+  const firstUserBtn = page.locator('button').filter({ hasText: '@fluux.chat' }).first()
+  if (await firstUserBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
+    await firstUserBtn.click()
+    await page.waitForTimeout(600)
+  }
+}
+
+for (const theme of settingsThemes) {
+  test(`7x — Admin Breadcrumb ${theme.label}`, async ({ page }) => {
+    await waitForDemoReady(page, theme.mode)
+    if (theme.id) await setTheme(page, theme.id)
+    await openAdminUserBreadcrumb(page)
+    await capture(page, `7x-admin-breadcrumb-${theme.label}`)
+    if (theme.id) await setTheme(page, 'aurora')
+  })
+}

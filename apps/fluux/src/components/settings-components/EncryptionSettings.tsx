@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Copy, Check, Lock, AlertTriangle, Trash2, CloudUpload, CloudDownload, RefreshCw, X, Info, ChevronDown, ChevronRight, FileDown, FileUp } from 'lucide-react'
+import { Toggle } from '@/components/ui/Toggle'
+import { SettingsSection } from '@/components/ui/SettingsSection'
 import { useConnection, useXMPPContext } from '@fluux/sdk'
 import { useEncryptionSettingsStore } from '@/stores/encryptionSettingsStore'
 import { registerE2EEPlugins, unregisterE2EEPlugins } from '@/e2ee/registerPlugins'
@@ -873,10 +875,7 @@ export function EncryptionSettings() {
 
   return (
     <section className="max-w-md w-full">
-      <h3 className="text-xs font-semibold text-fluux-muted uppercase tracking-wide mb-4">
-        {t('settings.categories.encryption')}
-      </h3>
-
+      <SettingsSection title={t('settings.categories.encryption')}>
       <div className="space-y-6">
         {/* Toggle block */}
         <div className="space-y-3">
@@ -887,7 +886,7 @@ export function EncryptionSettings() {
                 <label className="text-sm font-medium text-fluux-text">
                   {t('settings.encryption.openpgpLabel')}
                 </label>
-                <span className="px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider rounded bg-yellow-500/15 text-yellow-600 dark:text-yellow-400">
+                <span className="px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider rounded bg-fluux-yellow/15 text-fluux-yellow">
                   {t('settings.encryption.experimental')}
                 </span>
               </div>
@@ -895,27 +894,12 @@ export function EncryptionSettings() {
                 {t('settings.encryption.openpgpDescription')}
               </p>
             </div>
-            <button
-              onClick={handleToggle}
+            <Toggle
+              checked={openpgpEnabled}
+              onChange={handleToggle}
               disabled={toggleDisabled}
-              aria-pressed={openpgpEnabled}
               aria-label={t('settings.encryption.openpgpLabel')}
-              className={`relative w-9 h-5 rounded-full transition-colors flex-shrink-0 ${
-                openpgpEnabled ? 'bg-fluux-brand' : 'bg-fluux-hover'
-              } ${
-                isToggling
-                  ? 'opacity-50 cursor-wait'
-                  : toggleDisabled
-                    ? 'opacity-50 cursor-not-allowed'
-                    : 'cursor-pointer'
-              }`}
-            >
-              <span
-                className={`absolute top-0.5 start-0.5 size-4 rounded-full bg-white transition-transform ${
-                  openpgpEnabled ? 'translate-x-4' : ''
-                }`}
-              />
-            </button>
+            />
           </div>
         </div>
 
@@ -1220,6 +1204,7 @@ export function EncryptionSettings() {
           </div>
         )}
       </div>
+      </SettingsSection>
 
       {showDeleteConfirm && fingerprint && (
         <DeleteOpenpgpKeyDialog

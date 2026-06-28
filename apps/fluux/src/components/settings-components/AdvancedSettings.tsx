@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next'
 import { Wrench, AlertTriangle } from 'lucide-react'
 import { useAdvancedModeStore } from '@/stores/advancedModeStore'
+import { SettingsSection } from '@/components/ui/SettingsSection'
 
 /**
  * Advanced settings category.
@@ -18,10 +19,7 @@ export function AdvancedSettings() {
 
   return (
     <section className="max-w-md">
-      <h3 className="text-xs font-semibold text-fluux-muted uppercase tracking-wide mb-4">
-        {t('settings.advanced.title')}
-      </h3>
-
+      <SettingsSection title={t('settings.advanced.title')}>
       {!advancedMode ? (
         /* OFF: explain what advanced mode unlocks, then offer to enable it. */
         <div className="space-y-4">
@@ -61,6 +59,7 @@ export function AdvancedSettings() {
           </div>
         </>
       )}
+      </SettingsSection>
     </section>
   )
 }

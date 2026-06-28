@@ -5,6 +5,7 @@ import { formatBytes } from '@/hooks'
 import { getMediaCacheSize, clearMediaCache } from '@/utils/mediaCache'
 import { rebuildSearchIndex } from '@fluux/sdk'
 import type { RebuildProgress } from '@fluux/sdk'
+import { SettingsSection } from '@/components/ui/SettingsSection'
 
 export function StorageSettings() {
   const { t } = useTranslation()
@@ -58,12 +59,8 @@ export function StorageSettings() {
 
   return (
     <section className="max-w-md space-y-8">
-      <div>
-      <h3 className="text-xs font-semibold text-fluux-muted uppercase tracking-wide mb-4">
-        {t('settings.storage.mediaCache')}
-      </h3>
-
-      <div className="space-y-4">
+      <SettingsSection title={t('settings.storage.mediaCache')}>
+        <div className="space-y-4">
         <p className="text-sm text-fluux-muted">
           {t('settings.storage.mediaCacheDescription')}
         </p>
@@ -96,57 +93,53 @@ export function StorageSettings() {
           )}
           {cleared ? t('settings.storage.cacheCleared') : t('settings.storage.clearCache')}
         </button>
-      </div>
-      </div>
+        </div>
+      </SettingsSection>
 
       {/* Search index */}
-      <div>
-      <h3 className="text-xs font-semibold text-fluux-muted uppercase tracking-wide mb-4">
-        {t('settings.storage.searchIndex', 'Search Index')}
-      </h3>
+      <SettingsSection title={t('settings.storage.searchIndex', 'Search Index')}>
+        <div className="space-y-4">
+          <p className="text-sm text-fluux-muted">
+            {t('settings.storage.searchIndexDescription', 'The search index allows full-text search across your message history. Rebuild it if search results seem incomplete.')}
+          </p>
 
-      <div className="space-y-4">
-        <p className="text-sm text-fluux-muted">
-          {t('settings.storage.searchIndexDescription', 'The search index allows full-text search across your message history. Rebuild it if search results seem incomplete.')}
-        </p>
-
-        {/* Progress bar */}
-        {isRebuilding && progress && progress.total > 0 && (
-          <div className="space-y-1">
-            <div className="h-2 rounded-full bg-fluux-hover overflow-hidden">
-              <div
-                className="h-full rounded-full bg-fluux-brand transition-all duration-300"
-                style={{ width: `${progressPercent}%` }}
-              />
+          {/* Progress bar */}
+          {isRebuilding && progress && progress.total > 0 && (
+            <div className="space-y-1">
+              <div className="h-2 rounded-full bg-fluux-hover overflow-hidden">
+                <div
+                  className="h-full rounded-full bg-fluux-brand transition-all duration-300"
+                  style={{ width: `${progressPercent}%` }}
+                />
+              </div>
+              <p className="text-xs text-fluux-muted text-end">
+                {progress.indexed} / {progress.total} ({progressPercent}%)
+              </p>
             </div>
-            <p className="text-xs text-fluux-muted text-end">
-              {progress.indexed} / {progress.total} ({progressPercent}%)
-            </p>
-          </div>
-        )}
-
-        <button
-          onClick={handleRebuildIndex}
-          disabled={isRebuilding}
-          className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors
-            bg-fluux-hover hover:bg-fluux-border text-fluux-text
-            disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {isRebuilding ? (
-            <Loader2 className="size-4 animate-spin" />
-          ) : rebuilt !== false ? (
-            <Check className="size-4 text-fluux-green" />
-          ) : (
-            <Search className="size-4" />
           )}
-          {isRebuilding
-            ? t('settings.storage.rebuildingIndex', 'Rebuilding…')
-            : rebuilt !== false
-              ? t('settings.storage.indexRebuilt', '{{count}} messages indexed', { count: rebuilt })
-              : t('settings.storage.rebuildIndex', 'Rebuild search index')}
-        </button>
-      </div>
-      </div>
+
+          <button
+            onClick={handleRebuildIndex}
+            disabled={isRebuilding}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors
+              bg-fluux-hover hover:bg-fluux-border text-fluux-text
+              disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isRebuilding ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : rebuilt !== false ? (
+              <Check className="size-4 text-fluux-green" />
+            ) : (
+              <Search className="size-4" />
+            )}
+            {isRebuilding
+              ? t('settings.storage.rebuildingIndex', 'Rebuilding…')
+              : rebuilt !== false
+                ? t('settings.storage.indexRebuilt', '{{count}} messages indexed', { count: rebuilt })
+                : t('settings.storage.rebuildIndex', 'Rebuild search index')}
+          </button>
+        </div>
+      </SettingsSection>
     </section>
   )
 }

@@ -167,9 +167,9 @@ function NoteDisplay({ note }: { note: { type: 'info' | 'warn' | 'error'; text: 
     error: AlertCircle,
   }
   const styles = {
-    info: 'bg-blue-500/10 border-blue-500/30 text-blue-400',
-    warn: 'bg-yellow-500/10 border-yellow-500/30 text-yellow-400',
-    error: 'bg-red-500/10 border-red-500/30 text-red-400',
+    info: 'bg-fluux-link/10 border-fluux-link/30 text-fluux-link',
+    warn: 'bg-fluux-yellow/10 border-fluux-yellow/30 text-fluux-yellow',
+    error: 'bg-fluux-red/10 border-fluux-red/30 text-fluux-red',
   }
   const Icon = icons[note.type]
 

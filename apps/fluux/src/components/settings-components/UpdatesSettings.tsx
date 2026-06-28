@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next'
 import { Download, RefreshCw, CheckCircle, Loader2 } from 'lucide-react'
 import { useAutoUpdate } from '@/hooks'
+import { SettingsSection } from '@/components/ui/SettingsSection'
 
 export function UpdatesSettings() {
   const { t } = useTranslation()
@@ -8,11 +9,8 @@ export function UpdatesSettings() {
 
   return (
     <section className="max-w-md">
-      <h3 className="text-xs font-semibold text-fluux-muted uppercase tracking-wide mb-4">
-        {t('settings.updates')}
-      </h3>
-
-      <div className="space-y-3">
+      <SettingsSection title={t('settings.updates')}>
+        <div className="space-y-3">
         <div className="flex items-center justify-between p-4 rounded-lg border-2 border-fluux-hover bg-fluux-bg">
           <div className="flex items-center gap-3">
             {update.downloaded ? (
@@ -93,7 +91,8 @@ export function UpdatesSettings() {
         {update.error && (
           <p className="text-xs text-fluux-error">{t(update.error)}</p>
         )}
-      </div>
+        </div>
+      </SettingsSection>
     </section>
   )
 }
