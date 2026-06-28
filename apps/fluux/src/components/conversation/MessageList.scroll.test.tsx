@@ -1027,6 +1027,30 @@ describe('MessageList scroll behavior', () => {
   })
 
   describe('scroll position restoration on conversation switch', () => {
+    it('should not mark the active conversation as left on same-room message updates', () => {
+      const { rerender } = render(
+        <MessageList
+          messages={createTestMessages(5)}
+          conversationId="conv-same-room"
+          clearFirstNewMessageId={vi.fn()}
+          renderMessage={(msg) => <div key={msg.id}>{msg.body}</div>}
+        />
+      )
+
+      expect(scrollStateManager.getCurrentConversationId()).toBe('conv-same-room')
+
+      rerender(
+        <MessageList
+          messages={createTestMessages(6)}
+          conversationId="conv-same-room"
+          clearFirstNewMessageId={vi.fn()}
+          renderMessage={(msg) => <div key={msg.id}>{msg.body}</div>}
+        />
+      )
+
+      expect(scrollStateManager.getCurrentConversationId()).toBe('conv-same-room')
+    })
+
     it('should use deferred scroll-to-bottom with RAF when switching to new conversation', () => {
       // This test verifies the fix for the bug where messages appeared aligned to top
       // when navigating via notification or Option+U. The issue was that scrollHeight

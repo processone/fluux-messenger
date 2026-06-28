@@ -18,7 +18,7 @@
  */
 import React from 'react'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, fireEvent } from '@testing-library/react'
+import { render, fireEvent, act } from '@testing-library/react'
 import { MessageList, type MessageListProps } from './MessageList'
 import type { BaseMessage } from '@fluux/sdk'
 import { scrollStateManager } from '@/utils/scrollStateManager'
@@ -33,6 +33,7 @@ const scrollToOffsetCalls: number[] = []
 // scrollToIndex(last,'end') (re-windows the virtualizer); a raw scrollTop write does not.
 // Lets a test prove the composer-resize correction routes through the virtualizer.
 const scrollToIndexCalls: Array<string | undefined> = []
+const scrollToIndexStartOffsets: number[] = []
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (key: string) => key, i18n: { language: 'en' } }),
@@ -80,7 +81,9 @@ vi.mock('./tanstackMessageVirtualizer', () => ({
       if (opts?.align === 'end') {
         el.scrollTop = el.scrollHeight  // simulate scroll-to-bottom
       } else {
-        el.scrollTop = _index * 40
+        el.scrollTop = scrollToIndexStartOffsets.length > 0
+          ? scrollToIndexStartOffsets.shift()!
+          : _index * 40
       }
     },
   }),
@@ -119,6 +122,7 @@ describe('MessageList — virtualized scroll integration (ensureMessageMounted)'
     getOffsetForMessageId.mockImplementation(() => 0)
     scrollToIndexCalls.length = 0
     scrollToOffsetCalls.length = 0
+    scrollToIndexStartOffsets.length = 0
   })
   afterEach(() => localStorage.clear())
 
@@ -142,12 +146,73 @@ describe('MessageList — virtualized scroll integration (ensureMessageMounted)'
     // FAB previously used ensureMessageMounted + querySelector + offsetTop (which fails when the
     // marker is windowed out). New path: getIndexForMessageId + scrollToIndex('start', smooth),
     // no DOM dependency. ensureMessageMounted is no longer called for the FAB.
+    getOffsetForMessageId.mockImplementation((id) => (id === 'msg-40' ? 1600 : null))
+    const { container, getByLabelText } = renderList({ firstNewMessageId: 'msg-40' })
+    const scroller = container.querySelector('[data-message-list]') as HTMLElement
+    Object.defineProperty(scroller, 'clientHeight', { value: 500, configurable: true })
+    Object.defineProperty(scroller, 'scrollTop', { value: 0, writable: true, configurable: true })
+
     scrollToIndexCalls.length = 0
-    const { getByLabelText } = renderList({ firstNewMessageId: 'msg-40' })
     ensureMessageMounted.mockClear()
     fireEvent.click(getByLabelText('chat.scrollToBottom'))
     expect(scrollToIndexCalls).toContain('start')
     expect(ensureMessageMounted).not.toHaveBeenCalledWith('msg-40')
+  })
+
+  it('uses the virtualizer offset, not a fixed row estimate, when deciding whether FAB should stop at the unread marker', () => {
+    // msg-40's index would make the old markerIdx * 40 estimate look far below the viewport.
+    // The virtualizer's real/estimated offset says it is already visible, so the FAB should go
+    // straight to bottom instead of wasting a click at the marker.
+    getOffsetForMessageId.mockImplementation((id) => (id === 'msg-40' ? 200 : null))
+    const { container, getByLabelText } = renderList({ firstNewMessageId: 'msg-40' })
+    const scroller = container.querySelector('[data-message-list]') as HTMLElement
+    Object.defineProperty(scroller, 'scrollHeight', { value: 2000, configurable: true })
+    Object.defineProperty(scroller, 'clientHeight', { value: 500, configurable: true })
+    Object.defineProperty(scroller, 'scrollTop', { value: 0, writable: true, configurable: true })
+
+    scrollToIndexCalls.length = 0
+    fireEvent.click(getByLabelText('chat.scrollToBottom'))
+
+    expect(scrollToIndexCalls).not.toContain('start')
+    expect(scrollToIndexCalls).toContain('end')
+  })
+
+  it('routes media-load bottom correction through the virtualizer bottom reassert path', () => {
+    vi.useFakeTimers()
+    try {
+      const { container, getAllByText } = render(
+        <MessageList
+          messages={makeMessages(8)}
+          conversationId="conv-media-load"
+          renderMessage={(msg, _idx, _group, _showNew, onMediaLoad) => (
+            <button onClick={onMediaLoad}>media loaded {msg.id}</button>
+          )}
+        />,
+      )
+      const scroller = container.querySelector('[data-message-list]') as HTMLElement
+      let scrollTopVal = 4500
+      Object.defineProperty(scroller, 'scrollHeight', { value: 5000, configurable: true })
+      Object.defineProperty(scroller, 'clientHeight', { value: 500, configurable: true })
+      Object.defineProperty(scroller, 'scrollTop', {
+        get: () => scrollTopVal,
+        set: (v: number) => { scrollTopVal = v },
+        configurable: true,
+      })
+
+      scroller.dispatchEvent(new Event('scroll', { bubbles: true }))
+      scrollToIndexCalls.length = 0
+
+      fireEvent.click(getAllByText(/media loaded/)[0])
+      act(() => {
+        vi.advanceTimersByTime(151)
+      })
+
+      // Old code wrote raw scrollTop = scrollHeight, which does not re-window @tanstack.
+      // The fixed path goes through reassertBottom -> scrollToIndex(last, 'end').
+      expect(scrollToIndexCalls).toContain('end')
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('does not call ensureMessageMounted when there is no marker or target', () => {
@@ -272,6 +337,7 @@ describe('MessageList — virtualized bottom-stick re-asserts as rows measure', 
     rafQueue = []
     scrollToOffsetCalls.length = 0
     scrollToIndexCalls.length = 0
+    scrollToIndexStartOffsets.length = 0
     realRaf = globalThis.requestAnimationFrame
     globalThis.requestAnimationFrame = ((cb: FrameRequestCallback) => {
       rafQueue.push(cb)
@@ -301,6 +367,31 @@ describe('MessageList — virtualized bottom-stick re-asserts as rows measure', 
   }
 
   const props = { renderMessage: (m: BaseMessage) => <div>{m.body}</div> }
+
+  it('reasserts target-message jumps while virtualized rows settle', () => {
+    // Reply/search/activity jumps used to call scrollToIndex('start') once. If rows above the
+    // target measured taller after that first landing, the target could drift. The target path now
+    // reasserts for a short settle window, mirroring the unread-marker path.
+    scrollToIndexStartOffsets.push(1200, 1400, 1400, 1400, 1400, 1400, 1400, 1400)
+    const onConsumed = vi.fn()
+    const { container } = render(
+      <MessageList
+        messages={makeMessages(50)}
+        conversationId="conv-target-reassert"
+        targetMessageId="msg-30"
+        onTargetMessageConsumed={onConsumed}
+        {...props}
+      />,
+    )
+    const scroller = container.querySelector('[data-message-list]') as HTMLElement
+    instrumentScroller(scroller, 5000)
+
+    scrollToIndexCalls.length = 0
+    flush(8)
+
+    expect(scrollToIndexCalls.filter((align) => align === 'start').length).toBeGreaterThan(1)
+    expect(onConsumed).toHaveBeenCalledTimes(1)
+  })
 
   // The ResizeObserver bottom-stick correction is intentionally disabled when the virtualizer
   // is active (to prevent oscillation from spacer-height churn). Instead the scroll hook runs a

@@ -87,6 +87,11 @@ const MARKER_STABLE_FRAMES = 8
 // than this (rows measuring jitter the offset by a few px every frame; a 1px threshold would
 // re-scroll — and re-render — every frame and never stabilize).
 const MARKER_DRIFT_PX = 16
+// Target jumps (reply/search/activity) need the same measurement-aware behavior as unread-marker
+// entry, but for a shorter window: the target row is explicitly requested and should settle fast.
+const TARGET_REASSERT_FRAMES = 30
+const TARGET_STABLE_FRAMES = 4
+const TARGET_DRIFT_PX = 16
 // While re-pinning, treat the list as not-yet-pinned whenever it sits more than this many pixels
 // above the true bottom. The change-detection guard (re-pin only when scrollHeight moved) can miss
 // the frame where the last row's measurement settles — coalesced height deltas, or a height delta
@@ -714,9 +719,9 @@ export function useMessageListScroll({
       if (virt) {
         const markerIdx = virt.getIndexForMessageId(firstNewMessageId)
         if (markerIdx !== null) {
-          const estimatedOffset = markerIdx * 40 // rough estimate; accurate enough for the check
+          const markerOffset = virt.getOffsetForMessageId(firstNewMessageId)
           const viewportBottom = scroller.scrollTop + scroller.clientHeight
-          if (estimatedOffset > viewportBottom) {
+          if (markerOffset === null || markerOffset > viewportBottom) {
             virt.scrollToIndex(markerIdx, { align: 'start', behavior: 'smooth' })
             return
           }
@@ -1008,7 +1013,7 @@ export function useMessageListScroll({
             userScrolled,
             scrollHeight: currentScroller.scrollHeight,
           })
-          currentScroller.scrollTop = currentScroller.scrollHeight
+          reassertBottom()
         } else {
           // User actively scrolled during the batch - respect their position
           debugLog('MEDIA LOAD: batch complete, user scrolled away', {
@@ -1026,7 +1031,7 @@ export function useMessageListScroll({
       mediaLoadSnapshotRef.current = null
       mediaLoadDebounceRef.current = null
     }, MEDIA_LOAD_DEBOUNCE_MS)
-  }, [isAtBottomRef])
+  }, [isAtBottomRef, reassertBottom])
 
   // ==========================================================================
   // SCROLL EVENT HANDLER
@@ -1417,8 +1422,14 @@ export function useMessageListScroll({
     prevMessageCountRef.current = messageCount
     prevLastMessageIdRef.current = lastMessageId
 
-    // Cleanup: properly leave conversation in scrollStateManager when unmounting
-    // This prevents stale currentConversationId from causing 'no-action' on remount
+  }, [conversationId, messageCount, firstNewMessageId, targetMessageId, lastMessageId, isAtBottomRef, staticMode, pinVirtualizedBottom, reassertBottom])
+
+  // Cleanup: properly leave conversation in scrollStateManager only when the message list
+  // actually unmounts. The conversation-switch effect above intentionally has broad deps
+  // (message count, target, marker) so it sees the current entry state, but a cleanup attached
+  // there would also run on same-conversation updates and mark the singleton manager "left"
+  // while the room is still mounted.
+  useLayoutEffect(() => {
     return () => {
       if (prevConversationRef.current) {
         if (lastScrollDataRef.current) {
@@ -1429,7 +1440,7 @@ export function useMessageListScroll({
         }
       }
     }
-  }, [conversationId, messageCount, firstNewMessageId, targetMessageId, lastMessageId, isAtBottomRef, staticMode, pinVirtualizedBottom, reassertBottom])
+  }, [])
 
   // ==========================================================================
   // EFFECT: Scroll to target message (from activity log click, etc.)
@@ -1446,7 +1457,7 @@ export function useMessageListScroll({
 
     const virt = latestRef.current.virtualizer
     const escapedId = CSS.escape(targetMessageId)
-    let rafId: number | null = null
+    let highlightRafId: number | null = null
 
     const highlight = (el: Element) => {
       el.classList.add('message-highlight')
@@ -1463,15 +1474,97 @@ export function useMessageListScroll({
         debugLog('TARGET MESSAGE: not in item set yet, waiting for load', { targetMessageId })
         return
       }
-      virt.scrollToIndex(idx, { align: 'start' })
-      isAtBottomRef.current = (scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight) < AT_BOTTOM_THRESHOLD
-      // Row is now windowed in — add the highlight on the next frame once it is mounted.
-      rafId = requestAnimationFrame(() => {
-        const el = scrollerRef.current?.querySelector(`[data-message-id="${escapedId}"]`)
-        if (el) highlight(el)
-      })
-      debugLog('TARGET MESSAGE: scrolled via virtualizer index', { targetMessageId, idx })
-      onTargetMessageConsumed?.()
+      const targetConvId = conversationId
+      const startedAt = Date.now()
+      supersedeReassertLoopRef.current()
+      const targetLoop = (reassertMonitorRef.current ??= createReassertLoopMonitor()).begin('target', performance.now())
+      let framesLeft = TARGET_REASSERT_FRAMES
+      let stableFrames = 0
+      let landedTarget = -1
+      let targetRafId: number | null = null
+      let finished = false
+      let consumed = false
+
+      const finishTarget = () => {
+        if (finished) return
+        finished = true
+        targetLoop.end()
+        if (reassertLoopRef.current?.handle === targetLoop) {
+          if (targetRafId !== null) cancelAnimationFrame(targetRafId)
+          reassertLoopRef.current = null
+        }
+      }
+
+      const consumeAndHighlight = () => {
+        if (consumed) return
+        consumed = true
+        highlightRafId = requestAnimationFrame(() => {
+          const el = scrollerRef.current?.querySelector(`[data-message-id="${escapedId}"]`)
+          if (el) highlight(el)
+        })
+        onTargetMessageConsumed?.()
+      }
+
+      const stepToTarget = () => {
+        if (framesLeft-- <= 0) {
+          finishTarget()
+          consumeAndHighlight()
+          return
+        }
+        const s = scrollerRef.current
+        const v = latestRef.current.virtualizer
+        if (!s || !v) { finishTarget(); return }
+        if (prevConversationRef.current !== targetConvId) { finishTarget(); return }
+        if (userScrollIntentAtRef.current > startedAt) {
+          finishTarget()
+          consumeAndHighlight()
+          return
+        }
+
+        const currentIdx = v.getIndexForMessageId(targetMessageId)
+        if (currentIdx === null) {
+          finishTarget()
+          return
+        }
+
+        v.scrollToIndex(currentIdx, { align: 'start' })
+        const st = s.scrollTop
+        const distFromBottom = s.scrollHeight - st - s.clientHeight
+        isAtBottomRef.current = distFromBottom < AT_BOTTOM_THRESHOLD
+
+        let wrote = false
+        if (landedTarget >= 0 && Math.abs(st - landedTarget) <= TARGET_DRIFT_PX) {
+          if (++stableFrames >= TARGET_STABLE_FRAMES) {
+            finishTarget()
+            consumeAndHighlight()
+            return
+          }
+        } else {
+          wrote = true
+          stableFrames = 0
+          debugLog('TARGET MESSAGE: reasserting virtualizer index', {
+            targetMessageId,
+            idx: currentIdx,
+            scrollTop: st,
+            distFromBottom,
+            isAtBottom: isAtBottomRef.current,
+          })
+        }
+        landedTarget = st
+
+        const warning = targetLoop.frame(performance.now(), wrote)
+        if (warning) console.warn(warning)
+        targetRafId = requestAnimationFrame(stepToTarget)
+        reassertLoopRef.current = { raf: targetRafId, handle: targetLoop }
+      }
+
+      debugLog('TARGET MESSAGE: scrolling via virtualizer index', { targetMessageId, idx })
+      stepToTarget()
+
+      return () => {
+        finishTarget()
+        if (highlightRafId !== null) cancelAnimationFrame(highlightRafId)
+      }
     } else {
       // Non-virtualized: all rows are always in the DOM.
       const el = scroller.querySelector(`[data-message-id="${escapedId}"]`)
@@ -1488,11 +1581,11 @@ export function useMessageListScroll({
       onTargetMessageConsumed?.()
     }
 
-    return () => { if (rafId !== null) cancelAnimationFrame(rafId) }
+    return () => { if (highlightRafId !== null) cancelAnimationFrame(highlightRafId) }
 
     // messageCount is in deps so this re-fires when messages load from async sources
     // (e.g., IndexedDB in search context view)
-  }, [targetMessageId, messageCount, isAtBottomRef, onTargetMessageConsumed, staticMode])
+  }, [targetMessageId, messageCount, conversationId, isAtBottomRef, onTargetMessageConsumed, staticMode])
 
   // ==========================================================================
   // EFFECT: Cleanup on unmount
