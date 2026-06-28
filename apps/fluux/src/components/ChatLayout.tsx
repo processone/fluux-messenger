@@ -617,7 +617,7 @@ function ChatLayoutContent() {
   const shortcuts = useKeyboardShortcuts({
     onToggleShortcutHelp: toggleShortcutHelp,
     onToggleConsole: toggleConsole,
-    onOpenSettings: () => navigateToSettings(),
+    onOpenSettings: () => handleSidebarViewChange('settings'),
     onQuitApp: handleQuitApp,
     onCreateQuickChat: handleCreateQuickChat,
     onOpenCommandPalette: toggleCommandPalette,
