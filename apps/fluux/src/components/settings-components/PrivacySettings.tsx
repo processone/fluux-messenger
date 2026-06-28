@@ -14,7 +14,7 @@ export function PrivacySettings() {
   const setMediaAutoDownload = useSettingsStore((s) => s.setMediaAutoDownload)
 
   return (
-    <section className="max-w-md">
+    <section className="w-full max-w-md">
       <SettingsSection title={t('settings.categories.privacy')}>
         <div className="space-y-3">
         <label className="text-sm font-medium text-fluux-text">{t('settings.mediaAutoDownload')}</label>

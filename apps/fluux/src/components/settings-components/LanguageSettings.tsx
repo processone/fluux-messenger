@@ -60,7 +60,7 @@ export function LanguageSettings() {
   }
 
   return (
-    <section className="max-w-md">
+    <section className="w-full max-w-md">
       <SettingsSection title={t('settings.languageAndRegion')}>
         <div className="space-y-6">
           {/* Language selection */}

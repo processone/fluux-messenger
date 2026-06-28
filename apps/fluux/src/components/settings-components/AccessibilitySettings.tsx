@@ -29,28 +29,30 @@ export function AccessibilitySettings() {
   const setFontSize = useSettingsStore((s) => s.setFontSize)
 
   return (
-    <section className="max-w-md">
+    <section className="w-full max-w-md">
       <SettingsSection title={t('settings.accessibility')}>
         <div className="space-y-6">
         {/* Animation */}
         <div className="space-y-3">
           <label className="text-sm font-medium text-fluux-text">{t('settings.motion')}</label>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid w-full grid-cols-3 gap-3">
             {motionOptions.map((option) => {
               const Icon = option.icon
               const isSelected = motionPreference === option.value
               return (
                 <button
+                  type="button"
                   key={option.value}
                   onClick={() => setMotionPreference(option.value)}
-                  className={`flex flex-col items-center gap-2 p-4 rounded-lg border-2 transition-all
+                  aria-pressed={isSelected}
+                  className={`flex min-h-24 min-w-0 flex-col items-center justify-center gap-2 rounded-lg border-2 p-4 text-center transition-all
                     ${isSelected
                       ? 'border-fluux-brand bg-fluux-brand/10'
                       : 'border-fluux-hover bg-fluux-bg hover:border-fluux-muted'
                     }`}
                 >
                   <Icon className={`size-6 ${isSelected ? 'text-fluux-brand' : 'text-fluux-muted'}`} />
-                  <span className={`text-sm font-medium ${isSelected ? 'text-fluux-text' : 'text-fluux-muted'}`}>
+                  <span className={`min-w-0 text-sm font-medium leading-tight ${isSelected ? 'text-fluux-text' : 'text-fluux-muted'}`}>
                     {t(option.labelKey)}
                   </span>
                 </button>
@@ -65,22 +67,24 @@ export function AccessibilitySettings() {
         {/* Transparency */}
         <div className="space-y-3">
           <label className="text-sm font-medium text-fluux-text">{t('settings.transparency')}</label>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid w-full grid-cols-3 gap-3">
             {transparencyOptions.map((option) => {
               const Icon = option.icon
               const isSelected = transparencyMode === option.value
               return (
                 <button
+                  type="button"
                   key={option.value}
                   onClick={() => setTransparencyMode(option.value)}
-                  className={`flex flex-col items-center gap-2 p-4 rounded-lg border-2 transition-all
+                  aria-pressed={isSelected}
+                  className={`flex min-h-24 min-w-0 flex-col items-center justify-center gap-2 rounded-lg border-2 p-4 text-center transition-all
                     ${isSelected
                       ? 'border-fluux-brand bg-fluux-brand/10'
                       : 'border-fluux-hover bg-fluux-bg hover:border-fluux-muted'
                     }`}
                 >
                   <Icon className={`size-6 ${isSelected ? 'text-fluux-brand' : 'text-fluux-muted'}`} />
-                  <span className={`text-sm font-medium ${isSelected ? 'text-fluux-text' : 'text-fluux-muted'}`}>
+                  <span className={`min-w-0 text-sm font-medium leading-tight ${isSelected ? 'text-fluux-text' : 'text-fluux-muted'}`}>
                     {t(option.labelKey)}
                   </span>
                 </button>

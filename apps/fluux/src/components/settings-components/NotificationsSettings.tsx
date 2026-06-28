@@ -145,7 +145,7 @@ export function NotificationsSettings() {
   }
 
   return (
-    <section className="max-w-md">
+    <section className="w-full max-w-md">
       <SettingsSection title={t('settings.notifications')}>
       <div className="space-y-3">
         <div className="flex items-center justify-between p-4 rounded-lg border-2 border-fluux-hover bg-fluux-bg">

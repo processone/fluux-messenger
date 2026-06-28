@@ -58,7 +58,7 @@ export function StorageSettings() {
     : 0
 
   return (
-    <section className="max-w-md space-y-8">
+    <section className="w-full max-w-md space-y-8">
       <SettingsSection title={t('settings.storage.mediaCache')}>
         <div className="space-y-4">
         <p className="text-sm text-fluux-muted">

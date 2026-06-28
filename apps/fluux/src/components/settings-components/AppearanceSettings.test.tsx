@@ -37,6 +37,20 @@ beforeEach(() => {
 })
 
 describe('AppearanceSettings', () => {
+  it('keeps the appearance panel width stable when mode and density change', () => {
+    const { container } = render(<AppearanceSettings />)
+    const panel = container.firstElementChild
+    expect(panel).toHaveClass('w-full', 'max-w-md')
+
+    const initialClassName = panel?.className
+    fireEvent.click(screen.getByRole('button', { name: /settings\.light/i }))
+    fireEvent.click(screen.getByRole('button', { name: /settings\.compact/i }))
+    expect(panel?.className).toBe(initialClassName)
+
+    expect(screen.getByRole('button', { name: /settings\.light/i })).toHaveClass('min-w-0')
+    expect(screen.getByRole('button', { name: /settings\.compact/i })).toHaveClass('min-w-0')
+  })
+
   it('renders the density toggle and switches density', () => {
     render(<AppearanceSettings />)
     const compact = screen.getByRole('button', { name: /compact/i })

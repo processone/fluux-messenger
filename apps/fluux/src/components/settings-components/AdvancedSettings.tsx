@@ -18,7 +18,7 @@ export function AdvancedSettings() {
   const setAdvancedMode = useAdvancedModeStore((s) => s.setAdvancedMode)
 
   return (
-    <section className="max-w-md">
+    <section className="w-full max-w-md">
       <SettingsSection title={t('settings.advanced.title')}>
       {!advancedMode ? (
         /* OFF: explain what advanced mode unlocks, then offer to enable it. */

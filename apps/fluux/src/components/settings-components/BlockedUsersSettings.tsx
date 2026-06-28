@@ -90,7 +90,7 @@ export function BlockedUsersSettings() {
   }
 
   return (
-    <section className="max-w-md">
+    <section className="w-full max-w-md">
       <SettingsSection title={t('settings.blocked.title')} description={t('settings.blocked.description')}>
 
       {/* Add block form */}

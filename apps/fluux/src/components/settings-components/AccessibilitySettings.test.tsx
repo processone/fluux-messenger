@@ -21,6 +21,19 @@ describe('AccessibilitySettings', () => {
     expect(useSettingsStore.getState().transparencyMode).toBe('reduced')
   })
 
+  it('keeps the accessibility panel width stable when transparency changes', () => {
+    const { container } = render(<AccessibilitySettings />)
+    const panel = container.firstElementChild
+    expect(panel).toHaveClass('w-full', 'max-w-md')
+
+    const initialClassName = panel?.className
+    fireEvent.click(screen.getByRole('button', { name: /transparencyFull/i }))
+    expect(panel?.className).toBe(initialClassName)
+
+    const transparencyButton = screen.getByRole('button', { name: /transparencyFull/i })
+    expect(transparencyButton).toHaveClass('min-w-0')
+  })
+
   it('switches motion preference', () => {
     render(<AccessibilitySettings />)
     fireEvent.click(screen.getByRole('button', { name: /motionFull/i }))

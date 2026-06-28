@@ -240,28 +240,30 @@ export function AppearanceSettings() {
   }
 
   return (
-    <section className="max-w-md">
+    <section className="w-full max-w-md">
       <SettingsSection title={t('settings.appearance')}>
         <div className="space-y-6">
           {/* 1. Mode */}
           <div className="space-y-3">
             <label className="text-sm font-medium text-fluux-text">{t('settings.mode')}</label>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid w-full grid-cols-3 gap-3">
               {themeOptions.map((option) => {
                 const Icon = option.icon
                 const isSelected = themeMode === option.value
                 return (
                   <button
+                    type="button"
                     key={option.value}
                     onClick={() => setThemeMode(option.value)}
-                    className={`flex flex-col items-center gap-2 p-4 rounded-lg border-2 transition-all
+                    aria-pressed={isSelected}
+                    className={`flex min-h-24 min-w-0 flex-col items-center justify-center gap-2 rounded-lg border-2 p-4 text-center transition-all
                       ${isSelected
                         ? 'border-fluux-brand bg-fluux-brand/10'
                         : 'border-fluux-hover bg-fluux-bg hover:border-fluux-muted'
                       }`}
                   >
                     <Icon className={`size-6 ${isSelected ? 'text-fluux-brand' : 'text-fluux-muted'}`} />
-                    <span className={`text-sm font-medium ${isSelected ? 'text-fluux-text' : 'text-fluux-muted'}`}>
+                    <span className={`min-w-0 text-sm font-medium leading-tight ${isSelected ? 'text-fluux-text' : 'text-fluux-muted'}`}>
                       {t(option.labelKey)}
                     </span>
                   </button>
@@ -276,17 +278,19 @@ export function AppearanceSettings() {
           {/* Display density */}
           <div className="space-y-3">
             <label className="text-sm font-medium text-fluux-text">{t('settings.density')}</label>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid w-full grid-cols-2 gap-3">
               {densityOptions.map((option) => {
                 const isSelected = densityMode === option.value
                 return (
                   <button
+                    type="button"
                     key={option.value}
                     onClick={() => setDensityMode(option.value)}
-                    className={`flex flex-col items-center gap-2 p-4 rounded-lg border-2 transition-all
+                    aria-pressed={isSelected}
+                    className={`flex min-h-16 min-w-0 flex-col items-center justify-center gap-2 rounded-lg border-2 p-4 text-center transition-all
                       ${isSelected ? 'border-fluux-brand bg-fluux-brand/10' : 'border-fluux-hover bg-fluux-bg hover:border-fluux-muted'}`}
                   >
-                    <span className={`text-sm font-medium ${isSelected ? 'text-fluux-text' : 'text-fluux-muted'}`}>
+                    <span className={`min-w-0 text-sm font-medium leading-tight ${isSelected ? 'text-fluux-text' : 'text-fluux-muted'}`}>
                       {t(option.labelKey)}
                     </span>
                   </button>
@@ -301,7 +305,7 @@ export function AppearanceSettings() {
           {/* 2. Theme picker */}
           <div className="space-y-3">
             <label className="text-sm font-medium text-fluux-text">{t('settings.theme')}</label>
-            <div className="grid grid-cols-4 gap-2">
+            <div className="grid w-full grid-cols-4 gap-2">
               {allThemes.map((theme) => (
                 <ThemeCard
                   key={theme.id}
