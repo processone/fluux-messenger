@@ -346,10 +346,18 @@ export function MessageList<T extends BaseMessage>({
 
   // Dev-only: expose virtualizer offset lookup for Playwright test assertions (invariant-1).
   // Allows tests to check anchor position without requiring the row to be in the DOM window.
-  if (import.meta.env.DEV && activeVirtualizer) {
-    ;(window as unknown as Record<string, unknown>).__fluuxGetVirtOffset =
-      (id: string) => activeVirtualizer.getOffsetForMessageId(id)
-  }
+  useEffect(() => {
+    if (!import.meta.env.DEV || !activeVirtualizer || typeof window === 'undefined') return
+
+    const devWindow = window as unknown as Record<string, unknown>
+    const getVirtOffset = (id: string) => activeVirtualizer.getOffsetForMessageId(id)
+    devWindow.__fluuxGetVirtOffset = getVirtOffset
+    return () => {
+      if (devWindow.__fluuxGetVirtOffset === getVirtOffset) {
+        delete devWindow.__fluuxGetVirtOffset
+      }
+    }
+  }, [activeVirtualizer])
 
   // Gap marker position: the first chronological message past the forward-catch-up
   // boundary (the per-group computation in the legacy render reduces to this).
@@ -402,9 +410,17 @@ export function MessageList<T extends BaseMessage>({
   // Dev-only: expose the full load-earlier trigger (saves anchor + calls onScrollToTop)
   // so tests can fire it without scrolling to 0, which would change findAnchorElement's
   // anchor to firstMessageId instead of the actual top-visible message at that scrollTop.
-  if (import.meta.env.DEV) {
-    ;(window as unknown as Record<string, unknown>).__fluuxTriggerLoadOlder = handleLoadEarlier
-  }
+  useEffect(() => {
+    if (!import.meta.env.DEV || typeof window === 'undefined') return
+
+    const devWindow = window as unknown as Record<string, unknown>
+    devWindow.__fluuxTriggerLoadOlder = handleLoadEarlier
+    return () => {
+      if (devWindow.__fluuxTriggerLoadOlder === handleLoadEarlier) {
+        delete devWindow.__fluuxTriggerLoadOlder
+      }
+    }
+  }, [handleLoadEarlier])
 
   // --------------------------------------------------------------------------
   // VIEWPORT OBSERVER (tracks bottom-most visible message for lastSeenMessageId)

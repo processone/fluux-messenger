@@ -349,6 +349,22 @@ export function useMessageListScroll({
   const getDistanceFromBottom = (el: HTMLElement) =>
     el.scrollHeight - el.scrollTop - el.clientHeight
 
+  const rememberBottomIntent = useCallback(() => {
+    const scroller = scrollerRef.current
+    if (!scroller) return
+
+    const bottomTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight)
+    lastScrollDataRef.current = {
+      top: bottomTop,
+      height: scroller.scrollHeight,
+      client: scroller.clientHeight,
+    }
+    lastAnchorRef.current = findBottomAnchor(scroller)
+    isAtBottomRef.current = true
+    setShowScrollToBottom(false)
+    scrollStateManager.clearSavedScrollState(conversationId)
+  }, [conversationId, isAtBottomRef])
+
   // ==========================================================================
   // CALLBACK REFS: scroll container + content wrapper
   // ==========================================================================
@@ -561,71 +577,6 @@ export function useMessageListScroll({
 
   const { setScrollContainerRef, setContentRef } = stableSettersRef.current
 
-  // ==========================================================================
-  // SCROLL ACTIONS
-  // ==========================================================================
-
-  const scrollToBottom = useCallback(() => {
-    const scroller = scrollerRef.current
-    if (!scroller) return
-
-    // FAB / scroll-to-bottom is a deliberate user action — record it so the prepend re-assert
-    // loop yields instead of fighting it back to the anchor (it can fire while the loop runs:
-    // entering at the top triggers a load-older, then the user clicks the FAB).
-    userScrollIntentAtRef.current = Date.now()
-
-    // Two-step behavior: scroll to the new message marker only when it exists AND
-    // is still further down than the current viewport (not yet visible). Otherwise —
-    // including when the marker is already on screen or scrolled above — go straight
-    // to the bottom. This is a live position check rather than a one-shot latch, so a
-    // single click always makes progress toward the bottom: no wasted click when the
-    // user is already sitting at the marker (e.g. right after opening a conversation,
-    // where the init effect auto-scrolls to the marker).
-    if (firstNewMessageId) {
-      const virt = latestRef.current.virtualizer
-      // Two-step: scroll to the marker first, then bottom on a second click.
-      // Virtualized: use getIndexForMessageId (works for unmounted rows) + scrollToIndex.
-      // Non-virtualized: DOM querySelector + offsetTop (all rows are always mounted).
-      if (virt) {
-        const markerIdx = virt.getIndexForMessageId(firstNewMessageId)
-        if (markerIdx !== null) {
-          const estimatedOffset = markerIdx * 40 // rough estimate; accurate enough for the check
-          const viewportBottom = scroller.scrollTop + scroller.clientHeight
-          if (estimatedOffset > viewportBottom) {
-            virt.scrollToIndex(markerIdx, { align: 'start', behavior: 'smooth' })
-            return
-          }
-        }
-      } else {
-        const messageElement = scroller.querySelector(`[data-message-id="${CSS.escape(firstNewMessageId)}"]`)
-        if (messageElement) {
-          const elementTop = (messageElement as HTMLElement).offsetTop
-          const viewportBottom = scroller.scrollTop + scroller.clientHeight
-          if (elementTop > viewportBottom) {
-            scroller.scrollTo({ top: Math.max(0, elementTop - scroller.clientHeight / 3), behavior: 'smooth' })
-            return
-          }
-        }
-      }
-    }
-
-    // Virtualized path: scrollToIndex(last, 'end') lands on the exact last item using
-    // measured heights, not the estimated spacer height used by scrollTo({top:scrollHeight}).
-    // latestRef is current here (FAB click fires after renders + useEffect run).
-    const virtFab = latestRef.current.virtualizer
-    if (virtFab && virtFab.itemCount > 0) {
-      virtFab.scrollToIndex(virtFab.itemCount - 1, { align: 'end' })
-      return
-    }
-
-    scroller.scrollTo({ top: scroller.scrollHeight, behavior: 'smooth' })
-  }, [firstNewMessageId])
-
-  const scrollToTop = useCallback(() => {
-    lastLoadTimeRef.current = Date.now() // prevent auto-load trigger
-    scrollerRef.current?.scrollTo({ top: 0, behavior: 'smooth' })
-  }, [])
-
   // Pin a VIRTUALIZED list to the bottom and keep it pinned as rows measure.
   //
   // scrollToIndex(last, 'end') uses the virtualizer's current (estimated) layout. Rows then
@@ -732,7 +683,71 @@ export function useMessageListScroll({
       const s = scrollerRef.current
       if (s) s.scrollTop = s.scrollHeight
     }
-  }, [pinVirtualizedBottom])
+    rememberBottomIntent()
+  }, [pinVirtualizedBottom, rememberBottomIntent])
+
+  // ==========================================================================
+  // SCROLL ACTIONS
+  // ==========================================================================
+
+  const scrollToBottom = useCallback(() => {
+    const scroller = scrollerRef.current
+    if (!scroller) return
+
+    // FAB / scroll-to-bottom is a deliberate user action — record it so the prepend re-assert
+    // loop yields instead of fighting it back to the anchor (it can fire while the loop runs:
+    // entering at the top triggers a load-older, then the user clicks the FAB).
+    userScrollIntentAtRef.current = Date.now()
+
+    // Two-step behavior: scroll to the new message marker only when it exists AND
+    // is still further down than the current viewport (not yet visible). Otherwise —
+    // including when the marker is already on screen or scrolled above — go straight
+    // to the bottom. This is a live position check rather than a one-shot latch, so a
+    // single click always makes progress toward the bottom: no wasted click when the
+    // user is already sitting at the marker (e.g. right after opening a conversation,
+    // where the init effect auto-scrolls to the marker).
+    if (firstNewMessageId) {
+      const virt = latestRef.current.virtualizer
+      // Two-step: scroll to the marker first, then bottom on a second click.
+      // Virtualized: use getIndexForMessageId (works for unmounted rows) + scrollToIndex.
+      // Non-virtualized: DOM querySelector + offsetTop (all rows are always mounted).
+      if (virt) {
+        const markerIdx = virt.getIndexForMessageId(firstNewMessageId)
+        if (markerIdx !== null) {
+          const estimatedOffset = markerIdx * 40 // rough estimate; accurate enough for the check
+          const viewportBottom = scroller.scrollTop + scroller.clientHeight
+          if (estimatedOffset > viewportBottom) {
+            virt.scrollToIndex(markerIdx, { align: 'start', behavior: 'smooth' })
+            return
+          }
+        }
+      } else {
+        const messageElement = scroller.querySelector(`[data-message-id="${CSS.escape(firstNewMessageId)}"]`)
+        if (messageElement) {
+          const elementTop = (messageElement as HTMLElement).offsetTop
+          const viewportBottom = scroller.scrollTop + scroller.clientHeight
+          if (elementTop > viewportBottom) {
+            scroller.scrollTo({ top: Math.max(0, elementTop - scroller.clientHeight / 3), behavior: 'smooth' })
+            return
+          }
+        }
+      }
+    }
+
+    const virtFab = latestRef.current.virtualizer
+    if (virtFab && virtFab.itemCount > 0) {
+      reassertBottom()
+      return
+    }
+
+    rememberBottomIntent()
+    scroller.scrollTo({ top: scroller.scrollHeight, behavior: 'smooth' })
+  }, [firstNewMessageId, reassertBottom, rememberBottomIntent])
+
+  const scrollToTop = useCallback(() => {
+    lastLoadTimeRef.current = Date.now() // prevent auto-load trigger
+    scrollerRef.current?.scrollTo({ top: 0, behavior: 'smooth' })
+  }, [])
 
   // Re-pin to the bottom when the VIEWPORT itself shrinks (or grows) under a list
   // that is following along — most importantly when the mobile on-screen keyboard

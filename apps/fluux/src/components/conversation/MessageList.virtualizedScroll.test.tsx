@@ -21,6 +21,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, fireEvent } from '@testing-library/react'
 import { MessageList, type MessageListProps } from './MessageList'
 import type { BaseMessage } from '@fluux/sdk'
+import { scrollStateManager } from '@/utils/scrollStateManager'
 
 const ensureMessageMounted = vi.fn((_id: string) => Promise.resolve())
 const getOffsetForMessageId = vi.fn((_id: string): number | null => 0)
@@ -112,9 +113,12 @@ describe('MessageList — virtualized scroll integration (ensureMessageMounted)'
     localStorage.setItem('fluux:flags:enableMessageVirtualization', 'true')
     // jsdom doesn't implement Element.scrollTo; the scroll-to-bottom path calls it.
     HTMLElement.prototype.scrollTo = vi.fn()
+    scrollStateManager.reset()
     ensureMessageMounted.mockClear()
     getOffsetForMessageId.mockClear()
     getOffsetForMessageId.mockImplementation(() => 0)
+    scrollToIndexCalls.length = 0
+    scrollToOffsetCalls.length = 0
   })
   afterEach(() => localStorage.clear())
 
@@ -264,8 +268,10 @@ describe('MessageList — virtualized bottom-stick re-asserts as rows measure', 
   beforeEach(() => {
     localStorage.setItem('fluux:flags:enableMessageVirtualization', 'true')
     HTMLElement.prototype.scrollTo = vi.fn()
+    scrollStateManager.reset()
     rafQueue = []
     scrollToOffsetCalls.length = 0
+    scrollToIndexCalls.length = 0
     realRaf = globalThis.requestAnimationFrame
     globalThis.requestAnimationFrame = ((cb: FrameRequestCallback) => {
       rafQueue.push(cb)
@@ -314,6 +320,30 @@ describe('MessageList — virtualized bottom-stick re-asserts as rows measure', 
     expect(scrollTopSets).toContain(2000)
 
     // One settle frame at the estimate, THEN the bottom rows measure taller -> height grows.
+    scrollTopSets.length = 0
+    flush(1)
+    grow(3000)
+    flush(14)
+    expect(scrollTopSets).toContain(3000)
+  })
+
+  it('re-pins to the bottom as scrollHeight grows after the FAB scroll-to-bottom', () => {
+    const { container } = render(
+      <MessageList messages={makeMessages(50)} conversationId="conv-fab-pin" {...props} />,
+    )
+    const scroller = container.querySelector('[data-message-list]') as HTMLElement
+    const { scrollTopSets, grow } = instrumentScroller(scroller, 2000)
+    rafQueue.length = 0
+
+    // User is reading history, then clicks the bottom FAB.
+    scroller.scrollTop = 200
+    scroller.dispatchEvent(new Event('scroll', { bubbles: true }))
+    scrollTopSets.length = 0
+    fireEvent.click(container.querySelector('[data-fab="scroll-to-bottom"]') as HTMLButtonElement)
+    expect(scrollTopSets).toContain(2000)
+
+    // The bottom rows measure taller after the initial jump; the FAB path must use the
+    // same re-assert loop as conversation entry/new-message bottom pinning.
     scrollTopSets.length = 0
     flush(1)
     grow(3000)
@@ -429,6 +459,38 @@ describe('MessageList — virtualized bottom-stick re-asserts as rows measure', 
     // runs — pinning it guards against a refactor that regresses restore into a scroll-to-bottom.
     expect(scrollTopSets).toContain(200)
     expect(scrollTopSets).not.toContain(5000)
+  })
+
+  it('does not restore an old scrolled-up position after the FAB returns the room to bottom', () => {
+    const { container, rerender } = render(
+      <MessageList messages={makeMessages(50)} conversationId="conv-return-bottom" {...props} />,
+    )
+    const scroller = container.querySelector('[data-message-list]') as HTMLElement
+    const { scrollTopSets } = instrumentScroller(scroller, 5000)
+    rafQueue.length = 0
+
+    // First visit: user scrolled up, so the room should restore this once.
+    scroller.scrollTop = 200
+    scroller.dispatchEvent(new Event('scroll', { bubbles: true }))
+    rerender(<MessageList messages={makeMessages(50)} conversationId="conv-other" {...props} />)
+    rerender(<MessageList messages={makeMessages(50)} conversationId="conv-return-bottom" {...props} />)
+    expect(scrollTopSets).toContain(200)
+
+    // User explicitly goes back to bottom. Programmatic virtualizer scrolls do not dispatch a
+    // synthetic scroll event, so the hook must update its saved switch-away data immediately.
+    scrollTopSets.length = 0
+    scrollToOffsetCalls.length = 0
+    fireEvent.click(container.querySelector('[data-fab="scroll-to-bottom"]') as HTMLButtonElement)
+    expect(scrollTopSets).toContain(5000)
+
+    // Switch away and back again. The old 200px restore must not come back.
+    scrollTopSets.length = 0
+    scrollToOffsetCalls.length = 0
+    rerender(<MessageList messages={makeMessages(50)} conversationId="conv-other" {...props} />)
+    rerender(<MessageList messages={makeMessages(50)} conversationId="conv-return-bottom" {...props} />)
+
+    expect(scrollToOffsetCalls).not.toContain(200)
+    expect(scrollTopSets).toContain(5000)
   })
 
   it('re-windows the virtualizer (scrollToOffset) on switch-back restore, not just a raw scrollTop write', () => {
