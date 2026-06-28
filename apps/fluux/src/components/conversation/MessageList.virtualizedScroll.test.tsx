@@ -9,7 +9,8 @@
  * `querySelector('[data-message-id]')` never finds it and the jump silently no-ops. jsdom
  * has no layout, so the pixel positioning is verified on a real engine; here we pin the
  * integration CONTRACTS that have no other automated guard:
- *  - jump sites call `ensureMessageMounted(id)` to bring an off-window row in;
+ *  - unread-marker and scroll-to-bottom call `ensureMessageMounted(id)` to bring an
+ *    off-window row in; targetMessageId jumps use getIndexForMessageId + scrollToIndex directly;
  *  - the MAM prepend restore reads the anchor offset from the VIRTUALIZER
  *    (`getOffsetForMessageId`), not `querySelector(anchor).offsetTop` — the anchor is
  *    windowed out on prepend, so the DOM read returns null and the old code fell back to
@@ -122,16 +123,27 @@ describe('MessageList — virtualized scroll integration (ensureMessageMounted)'
     expect(ensureMessageMounted).toHaveBeenCalledWith('msg-40')
   })
 
-  it('brings the target row into the window when a targetMessageId is set (reply / find-on-page jump)', () => {
+  it('scrolls to the target row via virtualizer index when a targetMessageId is set (reply / search jump)', () => {
+    // targetMessageId (reply-to jump, search result open) previously used ensureMessageMounted
+    // + DOM querySelector + 4 retry timeouts to find the row. The new path uses
+    // getIndexForMessageId + scrollToIndex('start') which resolves unmounted rows directly —
+    // no DOM query, no async waits. ensureMessageMounted is no longer called for this path.
+    scrollToIndexCalls.length = 0
     renderList({ targetMessageId: 'msg-30' })
-    expect(ensureMessageMounted).toHaveBeenCalledWith('msg-30')
+    expect(scrollToIndexCalls).toContain('start')
+    expect(ensureMessageMounted).not.toHaveBeenCalledWith('msg-30')
   })
 
-  it('brings the marker row into the window when scroll-to-bottom is clicked with an unread marker', () => {
+  it('scrolls to the marker row via scrollToIndex when FAB is clicked with an unread marker', () => {
+    // FAB previously used ensureMessageMounted + querySelector + offsetTop (which fails when the
+    // marker is windowed out). New path: getIndexForMessageId + scrollToIndex('start', smooth),
+    // no DOM dependency. ensureMessageMounted is no longer called for the FAB.
+    scrollToIndexCalls.length = 0
     const { getByLabelText } = renderList({ firstNewMessageId: 'msg-40' })
     ensureMessageMounted.mockClear()
     fireEvent.click(getByLabelText('chat.scrollToBottom'))
-    expect(ensureMessageMounted).toHaveBeenCalledWith('msg-40')
+    expect(scrollToIndexCalls).toContain('start')
+    expect(ensureMessageMounted).not.toHaveBeenCalledWith('msg-40')
   })
 
   it('does not call ensureMessageMounted when there is no marker or target', () => {
@@ -449,6 +461,52 @@ describe('MessageList — virtualized bottom-stick re-asserts as rows measure', 
     // The restore re-windowed the virtualizer at the saved offset rather than only writing
     // scrollTop. Without the fix scrollToOffset is never called and the viewport goes blank.
     expect(scrollToOffsetCalls).toContain(200)
+  })
+
+  it('restores via virtualizer scrollToIndex when the anchor row is windowed out of the DOM', () => {
+    // Real-browser case: the virtualizer's initial window covers only the top rows; the saved
+    // anchor (the bottom-most message the user was reading) is NOT in the DOM. restoreToAnchor()
+    // returns false, so the hook falls through to the new virtualizer-index path:
+    // getIndexForMessageId + scrollToIndex('end') + scrollToOffset(bottomGap adjustment).
+    // Previously both DOM paths failed and the hook fell back to pinVirtualizedBottom(),
+    // which cleared the saved state and left the conversation stuck at bottom on every return.
+    const { container, rerender } = render(
+      <MessageList messages={makeMessages(50)} conversationId="conv-vi1" {...props} />,
+    )
+    const scroller = container.querySelector('[data-message-list]') as HTMLElement
+    instrumentScroller(scroller, 5000)
+    rafQueue.length = 0
+
+    // User scrolls up and the hook captures the anchor + saved position.
+    scroller.scrollTop = 200
+    scroller.dispatchEvent(new Event('scroll', { bubbles: true }))
+
+    // Switch away (saves conv-vi1's position and anchor).
+    rerender(<MessageList messages={makeMessages(50)} conversationId="conv-vi2" {...props} />)
+
+    // Simulate windowed-out anchor: make querySelector return null for message rows
+    // (in a real browser the virtualizer's initial window doesn't include the saved anchor,
+    // so DOM lookup fails; here we force that failure by patching the method).
+    const origQS = scroller.querySelector.bind(scroller) as (sel: string) => Element | null
+    scroller.querySelector = ((sel: string) => {
+      if (sel.includes('message-row')) return null
+      return origQS(sel)
+    }) as typeof scroller.querySelector
+
+    scrollToIndexCalls.length = 0
+    scrollToOffsetCalls.length = 0
+
+    // Return to conversation — restoreToAnchor fails, must use virtualizer-index path.
+    rerender(<MessageList messages={makeMessages(50)} conversationId="conv-vi1" {...props} />)
+
+    scroller.querySelector = origQS as typeof scroller.querySelector
+
+    // The virtualizer-index path called scrollToIndex('end') to place the anchor at the
+    // viewport bottom, then scrollToOffset for the bottomGap adjustment.
+    // pinVirtualizedBottom also calls scrollToIndex('end') but never calls scrollToOffset,
+    // so scrollToOffsetCalls.length > 0 proves the restore path ran, not the bottom fallback.
+    expect(scrollToIndexCalls).toContain('end')
+    expect(scrollToOffsetCalls.length).toBeGreaterThan(0)
   })
 
   it('restores (re-windowed) when a message arrived in the conversation while it was hidden', () => {
