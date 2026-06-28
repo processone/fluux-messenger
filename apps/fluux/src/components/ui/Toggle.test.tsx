@@ -17,4 +17,23 @@ describe('Toggle', () => {
     fireEvent.click(screen.getByRole('switch'))
     expect(onChange).not.toHaveBeenCalled()
   })
+
+  it('shows cursor-wait (not cursor-not-allowed) while loading, even when also disabled', () => {
+    // The async-pending affordance: a toggle mid-operation reads as "busy",
+    // not "blocked". EncryptionSettings drives both at once (disabled covers
+    // isToggling AND the PEP gate), so cursor-wait must win over the
+    // disabled cursor-not-allowed.
+    const onChange = vi.fn()
+    render(<Toggle checked onChange={onChange} disabled loading aria-label="Sounds" />)
+    const sw = screen.getByRole('switch', { name: 'Sounds' })
+    expect(sw.className).toContain('cursor-wait')
+    expect(sw.className).not.toContain('cursor-not-allowed')
+  })
+
+  it('does not fire onChange while loading', () => {
+    const onChange = vi.fn()
+    render(<Toggle checked={false} onChange={onChange} loading aria-label="Sounds" />)
+    fireEvent.click(screen.getByRole('switch'))
+    expect(onChange).not.toHaveBeenCalled()
+  })
 })
