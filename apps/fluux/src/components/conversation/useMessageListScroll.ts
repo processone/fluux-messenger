@@ -221,6 +221,8 @@ export interface UseMessageListScrollResult {
   showScrollToBottom: boolean
 }
 
+type RestoreSavedPositionResult = 'restored' | 'pending' | 'bottom'
+
 // ============================================================================
 // HOOK
 // ============================================================================
@@ -295,6 +297,7 @@ export function useMessageListScroll({
   const prevMessageCountRef = useRef(0)
   const prevLastMessageIdRef = useRef<string | undefined>(lastMessageId)
   const hasInitializedRef = useRef(false)
+  const pendingRestoreConversationRef = useRef<string | null>(null)
 
   // Track prepend (loading older messages)
   // When we load older messages, we save the anchor element position BEFORE the load,
@@ -353,6 +356,17 @@ export function useMessageListScroll({
 
   const getDistanceFromBottom = (el: HTMLElement) =>
     el.scrollHeight - el.scrollTop - el.clientHeight
+
+  const rememberCurrentScrollSnapshot = useCallback(() => {
+    const scroller = scrollerRef.current
+    if (!scroller) return
+    lastScrollDataRef.current = {
+      top: scroller.scrollTop,
+      height: scroller.scrollHeight,
+      client: scroller.clientHeight,
+    }
+    lastAnchorRef.current = findBottomAnchor(scroller)
+  }, [])
 
   const rememberBottomIntent = useCallback(() => {
     const scroller = scrollerRef.current
@@ -691,6 +705,93 @@ export function useMessageListScroll({
     rememberBottomIntent()
   }, [pinVirtualizedBottom, rememberBottomIntent])
 
+  const restoreSavedPosition = useCallback((source: 'entry' | 'retry'): RestoreSavedPositionResult => {
+    const scroller = scrollerRef.current
+    if (!scroller) return 'pending'
+
+    const savedPos = scrollStateManager.getSavedScrollTop(conversationId)
+    const savedAnchor = scrollStateManager.getSavedAnchor(conversationId)
+    const hasSavedState = savedPos !== null || savedAnchor !== null
+
+    if (!hasSavedState) {
+      return 'bottom'
+    }
+
+    // Rooms often mount once with a loading/empty message set, then hydrate from
+    // cache/MAM. A saved scrolled-up position is still valid, just not restorable
+    // until there is at least one row/virtualizer item to target.
+    if (messageCount === 0 || !firstMessageId) {
+      isAtBottomRef.current = false
+      debugLog('RESTORE pending (no rows yet)', { source, savedPos, savedAnchor })
+      return 'pending'
+    }
+
+    const maxScrollTop = scroller.scrollHeight - scroller.clientHeight
+    const virtRestore = virtualizerRef.current
+    const finishRestore = (
+      action: string,
+      data: Record<string, unknown>
+    ): RestoreSavedPositionResult => {
+      isAtBottomRef.current = getDistanceFromBottom(scroller) < AT_BOTTOM_THRESHOLD
+      rememberCurrentScrollSnapshot()
+      debugLog(action, { source, ...data })
+      return 'restored'
+    }
+
+    if (savedAnchor && restoreToAnchor(scroller, savedAnchor)) {
+      if (virtRestore) virtRestore.scrollToOffset(scroller.scrollTop)
+      return finishRestore('RESTORE via anchor', { savedAnchor })
+    }
+
+    if (virtRestore && savedAnchor) {
+      const anchorIndex = virtRestore.getIndexForMessageId(savedAnchor.messageId)
+      if (anchorIndex !== null) {
+        // Place the anchor row's bottom at the viewport bottom (align:'end'), then
+        // shift by bottomGap so its bottom edge sits the same distance from the
+        // viewport bottom as when the user left.
+        virtRestore.scrollToIndex(anchorIndex, { align: 'end' })
+        if (savedAnchor.bottomGap !== 0) {
+          virtRestore.scrollToOffset(scroller.scrollTop + savedAnchor.bottomGap)
+        }
+        return finishRestore('RESTORE via virtualizer index', { savedAnchor, anchorIndex })
+      }
+
+      if (savedPos !== null) {
+        virtRestore.scrollToOffset(savedPos)
+        return finishRestore('RESTORE via savedPos (virt, anchor not indexed)', { savedPos })
+      }
+
+      debugLog('RESTORE: anchor not indexed, no savedPos, scrolling to bottom', { source, savedAnchor })
+      reassertBottom()
+      return 'bottom'
+    }
+
+    if (virtRestore && savedPos !== null) {
+      // Virtualized, no anchor: use savedPos without bounds check because the
+      // initial estimated scrollHeight may be smaller than the real saved offset.
+      virtRestore.scrollToOffset(savedPos)
+      return finishRestore('RESTORE via savedPos (virtualized, no anchor)', { savedPos })
+    }
+
+    if (savedPos !== null && savedPos <= maxScrollTop && maxScrollTop > 0) {
+      scroller.scrollTop = savedPos
+      return finishRestore('RESTORE via savedPos', { savedPos })
+    }
+
+    debugLog('RESTORE out of bounds / anchor missing, scrolling to bottom', {
+      source, savedPos, maxScrollTop, scrollHeight: scroller.scrollHeight,
+    })
+    reassertBottom()
+    return 'bottom'
+  }, [
+    conversationId,
+    firstMessageId,
+    isAtBottomRef,
+    messageCount,
+    reassertBottom,
+    rememberCurrentScrollSnapshot,
+  ])
+
   // ==========================================================================
   // SCROLL ACTIONS
   // ==========================================================================
@@ -739,6 +840,10 @@ export function useMessageListScroll({
       }
     }
 
+    if (firstNewMessageId) {
+      clearFirstNewMessageId?.()
+    }
+
     const virtFab = latestRef.current.virtualizer
     if (virtFab && virtFab.itemCount > 0) {
       reassertBottom()
@@ -747,7 +852,7 @@ export function useMessageListScroll({
 
     rememberBottomIntent()
     scroller.scrollTo({ top: scroller.scrollHeight, behavior: 'smooth' })
-  }, [firstNewMessageId, reassertBottom, rememberBottomIntent])
+  }, [firstNewMessageId, clearFirstNewMessageId, reassertBottom, rememberBottomIntent])
 
   const scrollToTop = useCallback(() => {
     lastLoadTimeRef.current = Date.now() // prevent auto-load trigger
@@ -1078,7 +1183,12 @@ export function useMessageListScroll({
     // Skip on the very first scroll events after marker setup to avoid clearing
     // the marker before the user has a chance to see it.
     if (firstNewMessageId && clearFirstNewMessageId && !programmaticScroll) {
-      if (!userHasScrolledSinceMarkerRef.current) {
+      const recentUserScrollIntent =
+        userScrollIntentAtRef.current > 0 && Date.now() - userScrollIntentAtRef.current < 1500
+      if (
+        !userHasScrolledSinceMarkerRef.current &&
+        !(distFromBottom < AT_BOTTOM_THRESHOLD && recentUserScrollIntent)
+      ) {
         // First scroll after marker was set — arm the flag for next time
         userHasScrolledSinceMarkerRef.current = true
         debugLog('MARKER CLEAR armed (first scroll)', { firstNewMessageId, distFromBottom })
@@ -1167,6 +1277,7 @@ export function useMessageListScroll({
     lastScrollDataRef.current = null
     lastAnchorRef.current = null
     prependRef.current = null
+    pendingRestoreConversationRef.current = null
     setShowScrollToBottom(false)
 
     // Clear any pending media load batch
@@ -1189,75 +1300,9 @@ export function useMessageListScroll({
       debugLog('CONVERSATION ACTION', { action, savedPos, scrollHeight: scroller.scrollHeight })
 
       if (action === 'restore-position') {
-        const savedAnchor = scrollStateManager.getSavedAnchor(conversationId)
-        const maxScrollTop = scroller.scrollHeight - scroller.clientHeight
-        const virtRestore = virtualizerRef.current
-        if (savedAnchor && restoreToAnchor(scroller, savedAnchor)) {
-          // Anchor message found in the DOM. Works for non-virtualized lists (all rows
-          // always mounted) and for the virtualized case when the anchor happens to be
-          // in the current window (user was near the top). Sync the virtualizer offset
-          // so @tanstack's internal state stays consistent with the restored scrollTop.
-          isAtBottomRef.current = (scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight) < AT_BOTTOM_THRESHOLD
-          if (virtRestore) virtRestore.scrollToOffset(scroller.scrollTop)
-          debugLog('RESTORE via anchor', { savedAnchor })
-        } else if (virtRestore && savedAnchor) {
-          // VIRTUALIZED: anchor row not in the current DOM window (typical on remount —
-          // the virtualizer's initial window covers only the top rows). Use
-          // getIndexForMessageId which resolves unmounted rows from the message index,
-          // then scrollToIndex so the virtualizer re-windows the correct region before
-          // paint. This is the same pattern as the unread-marker re-assert loop.
-          //
-          // Previously both DOM paths below failed here:
-          //   1. restoreToAnchor returned false (anchor windowed out)
-          //   2. savedPos > maxScrollTop because scroller.scrollHeight at layout-effect
-          //      time uses estimated row heights, which can be smaller than the actual
-          //      measured height when the position was saved
-          // Both caused a fallback to pinVirtualizedBottom(), clearing the saved state
-          // and leaving the conversation stuck at the bottom on every subsequent visit.
-          const anchorIndex = virtRestore.getIndexForMessageId(savedAnchor.messageId)
-          if (anchorIndex !== null) {
-            // Place the anchor row's bottom at the viewport bottom (align:'end'), then
-            // shift by bottomGap so its bottom edge sits the same distance from the
-            // viewport bottom as when the user left. Estimated heights are close enough
-            // for a position restore (no re-assert loop needed — unlike the marker path
-            // which needs pixel-perfect convergence).
-            virtRestore.scrollToIndex(anchorIndex, { align: 'end' })
-            if (savedAnchor.bottomGap !== 0) {
-              virtRestore.scrollToOffset(scroller.scrollTop + savedAnchor.bottomGap)
-            }
-            isAtBottomRef.current = (scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight) < AT_BOTTOM_THRESHOLD
-            debugLog('RESTORE via virtualizer index', { savedAnchor, anchorIndex })
-          } else if (savedPos !== null) {
-            // Anchor message trimmed from the loaded set — use raw offset without bounds
-            // check: the virtualizer's initial scrollHeight (estimated) may be smaller than
-            // the actual savedPos even though the saved position is valid.
-            virtRestore.scrollToOffset(savedPos)
-            isAtBottomRef.current = (scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight) < AT_BOTTOM_THRESHOLD
-            debugLog('RESTORE via savedPos (virt, anchor not indexed)', { savedPos })
-          } else {
-            debugLog('RESTORE: anchor not indexed, no savedPos, scrolling to bottom', { savedAnchor })
-            pinVirtualizedBottom()
-            isAtBottomRef.current = true
-          }
-        } else if (virtRestore && savedPos !== null) {
-          // Virtualized, no anchor — use savedPos without bounds check (estimated
-          // scrollHeight may be smaller than the actual savedPos).
-          virtRestore.scrollToOffset(savedPos)
-          isAtBottomRef.current = (scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight) < AT_BOTTOM_THRESHOLD
-          debugLog('RESTORE via savedPos (virtualized, no anchor)', { savedPos })
-        } else if (savedPos !== null && savedPos <= maxScrollTop && maxScrollTop > 0) {
-          // Non-virtualized: bounds-checked savedPos (scrollHeight is exact, not estimated).
-          scroller.scrollTop = savedPos
-          isAtBottomRef.current = false
-        } else {
-          debugLog('RESTORE out of bounds / anchor missing, scrolling to bottom', {
-            savedPos, maxScrollTop, scrollHeight: scroller.scrollHeight,
-          })
-          if (virtRestore) pinVirtualizedBottom()
-          else scroller.scrollTop = scroller.scrollHeight
-          isAtBottomRef.current = true
-        }
-        scrollStateManager.clearSavedScrollState(conversationId)
+        const restoreResult = restoreSavedPosition('entry')
+        pendingRestoreConversationRef.current =
+          restoreResult === 'pending' ? conversationId : null
       } else if (firstNewMessageId) {
         // Has unread messages — position the first-unread marker ~1/3 down from the top so the
         // user reads forward from where they left off. Mark NOT at bottom up front (mirrors the
@@ -1422,7 +1467,23 @@ export function useMessageListScroll({
     prevMessageCountRef.current = messageCount
     prevLastMessageIdRef.current = lastMessageId
 
-  }, [conversationId, messageCount, firstNewMessageId, targetMessageId, lastMessageId, isAtBottomRef, staticMode, pinVirtualizedBottom, reassertBottom])
+  }, [conversationId, messageCount, firstNewMessageId, targetMessageId, lastMessageId, isAtBottomRef, staticMode, pinVirtualizedBottom, reassertBottom, restoreSavedPosition])
+
+  // Retry a saved-position restore that entered before any rows were mounted.
+  // This is common for rooms: the MessageList mounts in a loading state, then
+  // cache/MAM rows arrive in the same conversation id. Until the restore lands,
+  // keep isAtBottom=false so the async message-count growth does not auto-pin.
+  useLayoutEffect(() => {
+    if (staticMode) return
+    if (pendingRestoreConversationRef.current !== conversationId) return
+
+    const restoreResult = restoreSavedPosition('retry')
+    if (restoreResult !== 'pending') {
+      pendingRestoreConversationRef.current = null
+      prevMessageCountRef.current = messageCount
+      prevLastMessageIdRef.current = lastMessageId
+    }
+  }, [conversationId, messageCount, lastMessageId, staticMode, restoreSavedPosition])
 
   // Cleanup: properly leave conversation in scrollStateManager only when the message list
   // actually unmounts. The conversation-switch effect above intentionally has broad deps
@@ -1898,6 +1959,17 @@ export function useMessageListScroll({
     const scroller = scrollerRef.current
     if (!scroller || !hasInitializedRef.current || staticMode) return
 
+    if (pendingRestoreConversationRef.current === conversationId) {
+      debugLog('NEW MSG SKIP (restore pending)', {
+        messageCount,
+        prevCount: prevMessageCountRef.current,
+      })
+      isAtBottomRef.current = false
+      prevMessageCountRef.current = messageCount
+      prevLastMessageIdRef.current = lastMessageId
+      return
+    }
+
     // Don't interfere with prepend that's actively in progress (not yet restored)
     // Once restored, allow new message auto-scroll even during cooldown period
     if (prependRef.current && !prependRef.current.restored) {
@@ -1947,7 +2019,7 @@ export function useMessageListScroll({
 
     prevMessageCountRef.current = messageCount
     prevLastMessageIdRef.current = lastMessageId
-  }, [messageCount, lastMessageId, isAtBottomRef, staticMode, lastMessageIsOutgoing, reassertBottom])
+  }, [conversationId, messageCount, lastMessageId, isAtBottomRef, staticMode, lastMessageIsOutgoing, reassertBottom])
 
   // ==========================================================================
   // EFFECT: Reset marker scroll tracking when firstNewMessageId changes

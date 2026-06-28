@@ -552,6 +552,34 @@ describe('MessageList — virtualized bottom-stick re-asserts as rows measure', 
     expect(scrollTopSets).not.toContain(5000)
   })
 
+  it('keeps restored scrolled-up intent across repeated virtualized room switches', () => {
+    const { container, rerender } = render(
+      <MessageList messages={makeMessages(50)} conversationId="room-repeat-1" {...props} />,
+    )
+    const scroller = container.querySelector('[data-message-list]') as HTMLElement
+    const { scrollTopSets } = instrumentScroller(scroller, 5000)
+    rafQueue.length = 0
+
+    scroller.scrollTop = 200
+    scroller.dispatchEvent(new Event('scroll', { bubbles: true }))
+
+    rerender(<MessageList messages={makeMessages(50)} conversationId="room-repeat-2" {...props} />)
+    scrollTopSets.length = 0
+    scrollToOffsetCalls.length = 0
+    rerender(<MessageList messages={makeMessages(50)} conversationId="room-repeat-1" {...props} />)
+    expect(scrollToOffsetCalls).toContain(200)
+
+    scrollTopSets.length = 0
+    scrollToOffsetCalls.length = 0
+    rerender(<MessageList messages={makeMessages(50)} conversationId="room-repeat-2" {...props} />)
+    scrollTopSets.length = 0
+    scrollToOffsetCalls.length = 0
+    rerender(<MessageList messages={makeMessages(50)} conversationId="room-repeat-1" {...props} />)
+
+    expect(scrollToOffsetCalls).toContain(200)
+    expect(scrollTopSets).not.toContain(5000)
+  })
+
   it('does not restore an old scrolled-up position after the FAB returns the room to bottom', () => {
     const { container, rerender } = render(
       <MessageList messages={makeMessages(50)} conversationId="conv-return-bottom" {...props} />,

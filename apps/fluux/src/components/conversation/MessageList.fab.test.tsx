@@ -407,6 +407,41 @@ describe('MessageList FAB badge and scroll behavior', () => {
       )
     })
 
+    it('should clear the unread marker when the FAB intentionally goes to bottom', () => {
+      const messages = createTestMessages(10)
+      const clearFirstNewMessageId = vi.fn()
+
+      render(
+        <MessageList
+          messages={messages}
+          conversationId="conv-1"
+          clearFirstNewMessageId={clearFirstNewMessageId}
+          firstNewMessageId="msg-5"
+          renderMessage={(msg) => <div key={msg.id}>{msg.body}</div>}
+        />
+      )
+
+      const scrollCtx = setupScrollContainer({ scrollHeight: 2000, clientHeight: 500, initialScrollTop: 633 })
+      if (!scrollCtx) return
+
+      const markerElement = scrollCtx.container.querySelector('[data-message-id="msg-5"]') as HTMLElement
+      if (markerElement) {
+        Object.defineProperty(markerElement, 'offsetTop', { value: 800, configurable: true })
+      }
+
+      act(() => { scrollCtx.container.dispatchEvent(new Event('scroll')) })
+
+      const fab = scrollCtx.container.parentElement?.querySelector('button[aria-label="chat.scrollToBottom"]') as HTMLButtonElement
+      expect(fab).toBeTruthy()
+
+      act(() => { fireEvent.click(fab) })
+
+      expect(clearFirstNewMessageId).toHaveBeenCalled()
+      expect(scrollCtx.scrollToSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ top: 2000, behavior: 'smooth' })
+      )
+    })
+
     it('should scroll to bottom on second click after scrolling to marker', () => {
       const messages = createTestMessages(10)
       const firstNewMessageId = 'msg-5'
