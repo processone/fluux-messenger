@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest'
-import { ScrollStateManager } from './scrollStateManager'
+import { ScrollStateManager, AT_BOTTOM_THRESHOLD } from './scrollStateManager'
 
 describe('ScrollStateManager', () => {
   let manager: ScrollStateManager
@@ -71,20 +71,20 @@ describe('ScrollStateManager', () => {
       expect(manager.getSavedScrollTop('conv1')).toBe(200)
     })
 
-    it('considers within 50px of bottom as "at bottom"', () => {
+    it('considers within AT_BOTTOM_THRESHOLD of bottom as "at bottom"', () => {
       manager.enterConversation('conv1', 10)
-      // Almost at bottom: scrollHeight - scrollTop - clientHeight = 1000 - 855 - 100 = 45 < 50
-      manager.leaveConversation('conv1', 855, 1000, 100)
+      // Almost at bottom: distFromBottom = 1000 - 800 - 100 = 100 < AT_BOTTOM_THRESHOLD (150)
+      manager.leaveConversation('conv1', 800, 1000, 100)
 
       expect(manager.getSavedScrollTop('conv1')).toBeNull()
     })
 
-    it('saves position when just outside the 50px threshold', () => {
+    it('saves position when just outside AT_BOTTOM_THRESHOLD', () => {
       manager.enterConversation('conv1', 10)
-      // Just outside: scrollHeight - scrollTop - clientHeight = 1000 - 849 - 100 = 51 > 50
-      manager.leaveConversation('conv1', 849, 1000, 100)
+      // Just outside: distFromBottom = 1000 - 749 - 100 = 151 > AT_BOTTOM_THRESHOLD (150)
+      manager.leaveConversation('conv1', 749, 1000, 100)
 
-      expect(manager.getSavedScrollTop('conv1')).toBe(849)
+      expect(manager.getSavedScrollTop('conv1')).toBe(749)
     })
   })
 

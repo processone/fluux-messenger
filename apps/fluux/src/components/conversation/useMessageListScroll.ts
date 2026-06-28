@@ -16,7 +16,7 @@
  */
 
 import { useRef, useEffect, useLayoutEffect, useState, useCallback } from 'react'
-import { scrollStateManager, type ScrollAnchor } from '@/utils/scrollStateManager'
+import { scrollStateManager, AT_BOTTOM_THRESHOLD, type ScrollAnchor } from '@/utils/scrollStateManager'
 import { createResizeLoopMonitor } from './resizeLoopMonitor'
 import { createSlowCorrectionMonitor } from './slowCorrectionMonitor'
 import { createReassertLoopMonitor } from './reassertLoopMonitor'
@@ -64,10 +64,7 @@ function debugLog(action: string, data?: Record<string, unknown>) {
 
 // Pixels from the bottom still considered "at bottom" (auto-follow new messages). Generous
 // on purpose: a tall last message can measure taller than the estimate and leave the view a
-// little short of the real bottom; too tight a threshold would flip "at bottom" false and stop
-// following. Still well under FAB_THRESHOLD so the scroll-to-bottom button only shows when the
-// user has genuinely scrolled up.
-const AT_BOTTOM_THRESHOLD = 150
+// AT_BOTTOM_THRESHOLD is imported from scrollStateManager (shared with wasAtBottom persistence).
 const FAB_THRESHOLD = 300 // pixels from bottom to show "scroll to bottom" button
 const LOAD_COOLDOWN_MS = 500 // minimum time between load triggers
 const SAVE_THROTTLE_MS = 100 // minimum time between position saves
@@ -410,7 +407,10 @@ export function useMessageListScroll({
         void scroller.offsetHeight // Force reflow
         scroller.scrollTop = scroller.scrollHeight
         requestAnimationFrame(() => {
-          if (scrollerRef.current) {
+          // Guard: useLayoutEffect may have set isAtBottomRef=false if restoring
+          // a mid-conversation scroll position (e.g. returning from Settings).
+          // Re-check here so we don't override the position restore.
+          if (scrollerRef.current && isAtBottomRef.current) {
             scrollerRef.current.scrollTop = scrollerRef.current.scrollHeight
           }
         })

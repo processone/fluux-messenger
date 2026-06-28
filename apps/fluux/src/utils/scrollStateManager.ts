@@ -26,6 +26,13 @@ function isDebugEnabled(): boolean {
 }
 
 /**
+ * Pixels from the bottom edge that still counts as "at the bottom".
+ * Used both for the live isAtBottomRef tracking and for persisting wasAtBottom
+ * in ScrollState — must be the same value so the two agree.
+ */
+export const AT_BOTTOM_THRESHOLD = 150
+
+/**
  * A content-stable scroll anchor: the bottom-most visible message and the gap
  * (px) between its bottom edge and the viewport bottom. Survives a change in the
  * loaded message set (e.g. after memory eviction + re-hydration from cache),
@@ -157,7 +164,7 @@ class ScrollStateManager {
   ): void {
     const state = this.getState(conversationId)
     const distanceFromBottom = scrollHeight - scrollTop - clientHeight
-    const wasAtBottom = distanceFromBottom < 50
+    const wasAtBottom = distanceFromBottom < AT_BOTTOM_THRESHOLD
 
     this.log('saveScrollPosition', {
       conversationId: conversationId.substring(0, 20),
