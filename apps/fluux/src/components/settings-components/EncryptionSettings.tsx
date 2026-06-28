@@ -898,6 +898,7 @@ export function EncryptionSettings() {
               checked={openpgpEnabled}
               onChange={handleToggle}
               disabled={toggleDisabled}
+              loading={isToggling}
               aria-label={t('settings.encryption.openpgpLabel')}
             />
           </div>
@@ -907,8 +908,8 @@ export function EncryptionSettings() {
             so OpenPGP (XEP-0373) can never work on this account. Shown from
             the proactive probe, before the user even tries the toggle. */}
         {pepSupported === false && (
-          <div className="flex gap-2 p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/20 text-xs leading-snug">
-            <AlertTriangle className="size-4 text-yellow-600 dark:text-yellow-400 flex-shrink-0 mt-0.5" />
+          <div className="flex gap-2 p-3 rounded-lg bg-fluux-yellow/10 border border-fluux-yellow/20 text-xs leading-snug">
+            <AlertTriangle className="size-4 text-fluux-yellow flex-shrink-0 mt-0.5" />
             <p className="flex-1 text-fluux-text">
               {t('settings.encryption.pepUnsupportedBanner')}
             </p>
@@ -922,7 +923,7 @@ export function EncryptionSettings() {
 
         {/* Web locked banner — shown when key exists but no session passphrase */}
         {webLocked && (
-          <div className="flex items-center justify-between gap-3 p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/20">
+          <div className="flex items-center justify-between gap-3 p-3 rounded-lg bg-fluux-bg border border-fluux-hover">
             <p className="text-xs text-fluux-text leading-snug flex-1">
               {t('settings.encryption.lockedBannerBody')}
             </p>
@@ -944,14 +945,14 @@ export function EncryptionSettings() {
             <div
               className={`rounded-lg border-2 p-3 space-y-2 ${
                 pluginStatus === 'generation-failed' || pluginStatus === 'registration-failed'
-                  ? 'border-red-500/40 bg-red-500/5'
+                  ? 'border-fluux-red/40 bg-fluux-red/5'
                   : 'border-fluux-hover bg-fluux-bg'
               }`}
             >
               <div
                 className={`text-xs ${
                   pluginStatus === 'generation-failed' || pluginStatus === 'registration-failed'
-                    ? 'text-red-500 dark:text-red-400'
+                    ? 'text-fluux-error'
                     : 'text-fluux-muted'
                 }`}
               >
@@ -983,7 +984,7 @@ export function EncryptionSettings() {
                     aria-label={t('settings.encryption.copyFingerprint')}
                   >
                     {isCopied ? (
-                      <Check className="size-3.5 text-green-500" />
+                      <Check className="size-3.5 text-fluux-green" />
                     ) : (
                       <Copy className="size-3.5" />
                     )}
@@ -1000,7 +1001,7 @@ export function EncryptionSettings() {
         {keychainBacked === false && (
           <div
             role="alert"
-            className="flex gap-2 p-3 rounded-lg bg-red-500/10 text-xs text-red-600 dark:text-red-400 leading-snug"
+            className="flex gap-2 p-3 rounded-lg bg-fluux-red/10 text-xs text-fluux-error leading-snug"
           >
             <AlertTriangle className="size-4 flex-shrink-0 mt-0.5" />
             <p className="flex-1">{t('settings.encryption.notProtectedAtRest')}</p>
@@ -1009,8 +1010,8 @@ export function EncryptionSettings() {
 
         {/* Limitations callout — dismissible */}
         {!limitationsDismissed && (
-          <div className="flex gap-2 p-3 rounded-lg bg-yellow-500/10 text-xs text-fluux-muted leading-snug">
-            <AlertTriangle className="size-4 text-yellow-600 dark:text-yellow-400 flex-shrink-0 mt-0.5" />
+          <div className="flex gap-2 p-3 rounded-lg bg-fluux-yellow/10 text-xs text-fluux-muted leading-snug">
+            <AlertTriangle className="size-4 text-fluux-yellow flex-shrink-0 mt-0.5" />
             <div className="flex-1">
               <p className="font-medium text-fluux-text">
                 {t('settings.encryption.limitationsTitle')}
@@ -1071,7 +1072,7 @@ export function EncryptionSettings() {
                       </span>
                     )}
                     {!checking && inSync && (
-                      <span className="text-green-600 dark:text-green-400">
+                      <span className="text-fluux-green">
                         {t('settings.encryption.backupStatusInSync')}
                       </span>
                     )}
@@ -1081,7 +1082,7 @@ export function EncryptionSettings() {
                       </span>
                     )}
                     {!checking && !inSync && remoteBackupExists === true && (
-                      <span className="text-yellow-600 dark:text-yellow-400">
+                      <span className="text-fluux-yellow">
                         {t('settings.encryption.backupStatusMismatch')}
                       </span>
                     )}
@@ -1194,7 +1195,7 @@ export function EncryptionSettings() {
                 <button
                   onClick={() => setShowDeleteConfirm(true)}
                   disabled={isDeleting}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-red-500/10 hover:bg-red-500/20 text-red-500 dark:text-red-400 rounded transition-colors disabled:opacity-50 disabled:cursor-wait"
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-fluux-red/10 hover:bg-fluux-red/20 text-fluux-error rounded transition-colors disabled:opacity-50 disabled:cursor-wait"
                 >
                   <Trash2 className="size-3.5" />
                   {t('settings.encryption.deleteKey')}

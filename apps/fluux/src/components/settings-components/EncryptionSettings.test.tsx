@@ -10,6 +10,7 @@
  *   immediately (specific text for `pep-unsupported`, generic for other
  *   codes) instead of spinning on "Generating your key…" for 60s.
  */
+import { readFileSync } from 'node:fs'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import { EncryptionSettings } from './EncryptionSettings'
@@ -247,6 +248,23 @@ describe('EncryptionSettings PEP support', () => {
         expect(document.querySelector('input[name="backup-code"]')).not.toBeNull()
         expect(document.querySelector('input[name="passphrase"]')).toBeNull()
       })
+    })
+  })
+
+  // Aurora security-iconography pass: every status color routes through the
+  // theme-aware Aurora tokens (fluux-red/green/yellow + text-fluux-error for
+  // red text) so it adapts across all 13 themes x light/dark. This guards
+  // against a regression reintroducing raw Tailwind palette literals like
+  // `bg-yellow-500/10`, `text-red-400`, or `text-green-600`.
+  describe('Aurora color tokenization', () => {
+    it('uses fluux- design tokens, not hardcoded Tailwind palette colors', () => {
+      // Resolved from cwd: the app suite always runs from apps/fluux.
+      const source = readFileSync(
+        'src/components/settings-components/EncryptionSettings.tsx',
+        'utf8',
+      )
+      const hardcoded = source.match(/(?:red|green|yellow)-\d{2,3}/g) ?? []
+      expect(hardcoded).toEqual([])
     })
   })
 })
