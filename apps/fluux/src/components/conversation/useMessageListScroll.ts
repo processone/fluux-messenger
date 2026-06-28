@@ -582,21 +582,29 @@ export function useMessageListScroll({
     // user is already sitting at the marker (e.g. right after opening a conversation,
     // where the init effect auto-scrolls to the marker).
     if (firstNewMessageId) {
-      // When virtualized, ensure the marker row is mounted (best-effort; falls back to
-      // scroll-to-bottom below if it isn't mounted yet on this single-shot click).
-      void latestRef.current.virtualizer?.ensureMessageMounted(firstNewMessageId)
-      const escapedId = CSS.escape(firstNewMessageId)
-      const messageElement = scroller.querySelector(`[data-message-id="${escapedId}"]`)
-
-      if (messageElement) {
-        const elementTop = (messageElement as HTMLElement).offsetTop
-        const viewportHeight = scroller.clientHeight
-        const viewportBottom = scroller.scrollTop + viewportHeight
-
-        if (elementTop > viewportBottom) {
-          const targetScrollTop = Math.max(0, elementTop - viewportHeight / 3)
-          scroller.scrollTo({ top: targetScrollTop, behavior: 'smooth' })
-          return
+      const virt = latestRef.current.virtualizer
+      // Two-step: scroll to the marker first, then bottom on a second click.
+      // Virtualized: use getIndexForMessageId (works for unmounted rows) + scrollToIndex.
+      // Non-virtualized: DOM querySelector + offsetTop (all rows are always mounted).
+      if (virt) {
+        const markerIdx = virt.getIndexForMessageId(firstNewMessageId)
+        if (markerIdx !== null) {
+          const estimatedOffset = markerIdx * 40 // rough estimate; accurate enough for the check
+          const viewportBottom = scroller.scrollTop + scroller.clientHeight
+          if (estimatedOffset > viewportBottom) {
+            virt.scrollToIndex(markerIdx, { align: 'start', behavior: 'smooth' })
+            return
+          }
+        }
+      } else {
+        const messageElement = scroller.querySelector(`[data-message-id="${CSS.escape(firstNewMessageId)}"]`)
+        if (messageElement) {
+          const elementTop = (messageElement as HTMLElement).offsetTop
+          const viewportBottom = scroller.scrollTop + scroller.clientHeight
+          if (elementTop > viewportBottom) {
+            scroller.scrollTo({ top: Math.max(0, elementTop - scroller.clientHeight / 3), behavior: 'smooth' })
+            return
+          }
         }
       }
     }
@@ -1164,23 +1172,62 @@ export function useMessageListScroll({
         const savedAnchor = scrollStateManager.getSavedAnchor(conversationId)
         const maxScrollTop = scroller.scrollHeight - scroller.clientHeight
         const virtRestore = virtualizerRef.current
-        // Prefer the content-stable anchor (survives memory eviction + cache
-        // re-hydration); fall back to the legacy pixel scrollTop (bounds-checked),
-        // then to bottom when neither is usable (e.g. scrolled up beyond the
-        // re-hydrated window so the anchor message isn't loaded).
-        //
-        // VIRTUALIZED: a direct `scroller.scrollTop = …` leaves @tanstack's scrollOffset
-        // stale (it syncs only from the scroll event / rAF poll), so on a fresh switch the
-        // mounted window keeps the TOP rows and the restored region renders BLANK until the
-        // user scrolls. Route the restored offset through the virtualizer so it re-windows
-        // before paint — the same fix as the MAM-prepend restore and scroll-to-bottom paths.
         if (savedAnchor && restoreToAnchor(scroller, savedAnchor)) {
+          // Anchor message found in the DOM. Works for non-virtualized lists (all rows
+          // always mounted) and for the virtualized case when the anchor happens to be
+          // in the current window (user was near the top). Sync the virtualizer offset
+          // so @tanstack's internal state stays consistent with the restored scrollTop.
           isAtBottomRef.current = (scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight) < AT_BOTTOM_THRESHOLD
           if (virtRestore) virtRestore.scrollToOffset(scroller.scrollTop)
           debugLog('RESTORE via anchor', { savedAnchor })
+        } else if (virtRestore && savedAnchor) {
+          // VIRTUALIZED: anchor row not in the current DOM window (typical on remount —
+          // the virtualizer's initial window covers only the top rows). Use
+          // getIndexForMessageId which resolves unmounted rows from the message index,
+          // then scrollToIndex so the virtualizer re-windows the correct region before
+          // paint. This is the same pattern as the unread-marker re-assert loop.
+          //
+          // Previously both DOM paths below failed here:
+          //   1. restoreToAnchor returned false (anchor windowed out)
+          //   2. savedPos > maxScrollTop because scroller.scrollHeight at layout-effect
+          //      time uses estimated row heights, which can be smaller than the actual
+          //      measured height when the position was saved
+          // Both caused a fallback to pinVirtualizedBottom(), clearing the saved state
+          // and leaving the conversation stuck at the bottom on every subsequent visit.
+          const anchorIndex = virtRestore.getIndexForMessageId(savedAnchor.messageId)
+          if (anchorIndex !== null) {
+            // Place the anchor row's bottom at the viewport bottom (align:'end'), then
+            // shift by bottomGap so its bottom edge sits the same distance from the
+            // viewport bottom as when the user left. Estimated heights are close enough
+            // for a position restore (no re-assert loop needed — unlike the marker path
+            // which needs pixel-perfect convergence).
+            virtRestore.scrollToIndex(anchorIndex, { align: 'end' })
+            if (savedAnchor.bottomGap !== 0) {
+              virtRestore.scrollToOffset(scroller.scrollTop + savedAnchor.bottomGap)
+            }
+            isAtBottomRef.current = (scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight) < AT_BOTTOM_THRESHOLD
+            debugLog('RESTORE via virtualizer index', { savedAnchor, anchorIndex })
+          } else if (savedPos !== null) {
+            // Anchor message trimmed from the loaded set — use raw offset without bounds
+            // check: the virtualizer's initial scrollHeight (estimated) may be smaller than
+            // the actual savedPos even though the saved position is valid.
+            virtRestore.scrollToOffset(savedPos)
+            isAtBottomRef.current = (scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight) < AT_BOTTOM_THRESHOLD
+            debugLog('RESTORE via savedPos (virt, anchor not indexed)', { savedPos })
+          } else {
+            debugLog('RESTORE: anchor not indexed, no savedPos, scrolling to bottom', { savedAnchor })
+            pinVirtualizedBottom()
+            isAtBottomRef.current = true
+          }
+        } else if (virtRestore && savedPos !== null) {
+          // Virtualized, no anchor — use savedPos without bounds check (estimated
+          // scrollHeight may be smaller than the actual savedPos).
+          virtRestore.scrollToOffset(savedPos)
+          isAtBottomRef.current = (scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight) < AT_BOTTOM_THRESHOLD
+          debugLog('RESTORE via savedPos (virtualized, no anchor)', { savedPos })
         } else if (savedPos !== null && savedPos <= maxScrollTop && maxScrollTop > 0) {
-          if (virtRestore) virtRestore.scrollToOffset(savedPos)
-          else scroller.scrollTop = savedPos
+          // Non-virtualized: bounds-checked savedPos (scrollHeight is exact, not estimated).
+          scroller.scrollTop = savedPos
           isAtBottomRef.current = false
         } else {
           debugLog('RESTORE out of bounds / anchor missing, scrolling to bottom', {
@@ -1382,77 +1429,51 @@ export function useMessageListScroll({
     const scroller = scrollerRef.current
     if (!scroller) return
 
-    const timeouts: ReturnType<typeof setTimeout>[] = []
+    const virt = latestRef.current.virtualizer
+    const escapedId = CSS.escape(targetMessageId)
     let rafId: number | null = null
-    let found = false
 
-    const scrollToTarget = () => {
-      if (found) return
-      const currentScroller = scrollerRef.current
-      if (!currentScroller) return
-
-      const escapedId = CSS.escape(targetMessageId)
-      const messageElement = currentScroller.querySelector(`[data-message-id="${escapedId}"]`)
-
-      if (messageElement) {
-        found = true
-        const elementTop = (messageElement as HTMLElement).offsetTop
-        const viewportHeight = currentScroller.clientHeight
-        // Center the target message in the viewport
-        const targetScrollTop = Math.max(0, elementTop - viewportHeight / 3)
-
-        currentScroller.scrollTop = targetScrollTop
-
-        const distFromBottom = currentScroller.scrollHeight - targetScrollTop - viewportHeight
-        isAtBottomRef.current = distFromBottom < AT_BOTTOM_THRESHOLD
-
-        // Briefly highlight the target message (same effect as reply-to navigation)
-        messageElement.classList.add('message-highlight')
-        setTimeout(() => messageElement.classList.remove('message-highlight'), 1500)
-
-        debugLog('TARGET MESSAGE: scrolled to target', {
-          targetMessageId,
-          elementTop,
-          targetScrollTop,
-          viewportHeight,
-          isAtBottom: isAtBottomRef.current,
-        })
-
-        onTargetMessageConsumed?.()
-      } else {
-        debugLog('TARGET MESSAGE: element not found', { targetMessageId })
-      }
+    const highlight = (el: Element) => {
+      el.classList.add('message-highlight')
+      setTimeout(() => el.classList.remove('message-highlight'), 1500)
     }
 
-    // When virtualized, bring the (possibly unmounted) target row into the window first.
-    void latestRef.current.virtualizer?.ensureMessageMounted(targetMessageId)
-    // Try with increasing delays to handle async rendering
-    rafId = requestAnimationFrame(scrollToTarget)
-    timeouts.push(setTimeout(scrollToTarget, 50))
-    timeouts.push(setTimeout(scrollToTarget, 150))
-    timeouts.push(setTimeout(scrollToTarget, 300))
-
-    // Safety fallback: if target message is never found after all attempts,
-    // scroll to bottom and clear the target to avoid being stuck
-    timeouts.push(setTimeout(() => {
-      if (found) return
-      const currentScroller = scrollerRef.current
-      if (!currentScroller || !targetMessageId) return
-      const escapedId = CSS.escape(targetMessageId)
-      const el = currentScroller.querySelector(`[data-message-id="${escapedId}"]`)
+    if (virt) {
+      // Virtualized: resolve the row by index (works whether or not the row is mounted)
+      // and let the virtualizer window it in. No DOM query or retry timeouts needed.
+      // messageCount is in deps so this effect re-fires if the message isn't in the list
+      // yet (e.g., search opens a conversation before messages finish loading from cache).
+      const idx = virt.getIndexForMessageId(targetMessageId)
+      if (idx === null) {
+        debugLog('TARGET MESSAGE: not in item set yet, waiting for load', { targetMessageId })
+        return
+      }
+      virt.scrollToIndex(idx, { align: 'start' })
+      isAtBottomRef.current = (scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight) < AT_BOTTOM_THRESHOLD
+      // Row is now windowed in — add the highlight on the next frame once it is mounted.
+      rafId = requestAnimationFrame(() => {
+        const el = scrollerRef.current?.querySelector(`[data-message-id="${escapedId}"]`)
+        if (el) highlight(el)
+      })
+      debugLog('TARGET MESSAGE: scrolled via virtualizer index', { targetMessageId, idx })
+      onTargetMessageConsumed?.()
+    } else {
+      // Non-virtualized: all rows are always in the DOM.
+      const el = scroller.querySelector(`[data-message-id="${escapedId}"]`)
       if (!el) {
-        debugLog('TARGET MESSAGE: not found after all attempts, scrolling to bottom', { targetMessageId })
-        currentScroller.scrollTop = currentScroller.scrollHeight
-        isAtBottomRef.current = true
-        onTargetMessageConsumed?.()
+        debugLog('TARGET MESSAGE: element not found (non-virtualized), waiting for load', { targetMessageId })
+        return
       }
-    }, 500))
-
-    // Cleanup pending timeouts on re-run (e.g., when messageCount changes from async load)
-    return () => {
-      timeouts.forEach(clearTimeout)
-      if (rafId !== null) cancelAnimationFrame(rafId)
+      const elementTop = (el as HTMLElement).offsetTop
+      const targetScrollTop = Math.max(0, elementTop - scroller.clientHeight / 3)
+      scroller.scrollTop = targetScrollTop
+      isAtBottomRef.current = (scroller.scrollHeight - targetScrollTop - scroller.clientHeight) < AT_BOTTOM_THRESHOLD
+      highlight(el)
+      debugLog('TARGET MESSAGE: scrolled to target', { targetMessageId, elementTop, targetScrollTop })
+      onTargetMessageConsumed?.()
     }
+
+    return () => { if (rafId !== null) cancelAnimationFrame(rafId) }
 
     // messageCount is in deps so this re-fires when messages load from async sources
     // (e.g., IndexedDB in search context view)
