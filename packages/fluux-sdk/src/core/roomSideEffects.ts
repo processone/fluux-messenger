@@ -190,9 +190,18 @@ export function setupRoomSideEffects(
         if (debug) console.log('[SideEffects] Room: Loading from cache')
         await roomStore.getState().loadMessagesFromCache(activeRoomJid, { limit: MAM_CACHE_LOAD_LIMIT })
 
-        // Step 2: Background MAM fetch for catchup (skip if already initiated this session)
-        if (fetchInitiated.has(activeRoomJid)) {
-          if (debug) console.log('[SideEffects] Room: MAM already initiated for', activeRoomJid)
+        // Step 2: Background MAM fetch for catchup. Skip only if this room's archive
+        // was actually fetched this session. Guard on hasQueried, NOT just
+        // fetchInitiated: an SM resume can mark a room "initiated" without it ever
+        // being fetched (e.g. a backgrounded autojoin), and skipping on that alone
+        // would leave the archive permanently unfetched on first open — an empty
+        // room. hasQueried flips true only once a MAM query completes (even empty),
+        // so a genuinely-empty room still skips the redundant re-query on re-entry.
+        if (
+          fetchInitiated.has(activeRoomJid) &&
+          roomStore.getState().getRoomMAMQueryState(activeRoomJid).hasQueried
+        ) {
+          if (debug) console.log('[SideEffects] Room: MAM already fetched for', activeRoomJid)
           return
         }
 
@@ -221,21 +230,35 @@ export function setupRoomSideEffects(
     }
   })
 
-  // SM resumption: no MAM catch-up needed — the server replays undelivered
-  // stanzas via the SM queue, and we don't re-issue presence/joinRoom so there
-  // are no spurious room:joined events. We still seed fetchInitiated for every
-  // joined room so any belated room:joined (e.g. from a bookmark-driven join
-  // after a long disconnect) skips redundant MAM.
+  // SM resumption: no MAM catch-up needed for rooms we already hold — the server
+  // replays undelivered stanzas via the SM queue, and we don't re-issue
+  // presence/joinRoom so there are no spurious room:joined events. We seed
+  // fetchInitiated so a belated room:joined (e.g. a bookmark-driven rejoin after a
+  // long disconnect) skips redundant MAM.
+  //
+  // CRITICAL: only seed rooms whose archive we ACTUALLY hold — resident messages,
+  // or MAM already queried this session. A room autojoined in the background but
+  // never opened has neither: its archive was never fetched and the SM queue has
+  // nothing to replay for it. Marking such a room caught-up makes its first open
+  // skip the initial MAM fetch and show an empty room (the "archive not retrieved
+  // after a reconnect" bug). hasQueried (set on any completed MAM query, even an
+  // empty result) is the durable signal; it's separate from "has resident
+  // messages" so a room caught up via live delivery is still covered.
   const unsubscribeResumed = client.on('resumed', () => {
     if (debug) console.log('[SideEffects] Room: SM resumption — skipping MAM catchup')
 
     const state = roomStore.getState()
+    const archiveHeld = (jid: string): boolean => {
+      const room = state.rooms.get(jid)
+      if (!room) return false
+      return room.messages.length > 0 || state.getRoomMAMQueryState(jid).hasQueried
+    }
     for (const [jid, room] of state.rooms) {
-      if (room.joined || room.isJoining) {
+      if ((room.joined || room.isJoining) && archiveHeld(jid)) {
         fetchInitiated.add(jid)
       }
     }
-    if (state.activeRoomJid) {
+    if (state.activeRoomJid && archiveHeld(state.activeRoomJid)) {
       fetchInitiated.add(state.activeRoomJid)
     }
   })
