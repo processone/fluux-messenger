@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { detectRenderLoop } from '@/utils/renderLoopDetector'
+import { navDebugLog } from '@/utils/scrollDebug'
 import { Sidebar, type SidebarView } from './Sidebar'
 import { ChatView } from './ChatView'
 import { RoomView } from './RoomView'
@@ -268,6 +269,36 @@ function ChatLayoutContent() {
     navigateToSettings,
     navigateToSearch,
   } = useViewNavigation(selectedContact)
+
+  // ── Scroll-debug: SCREEN navigation trace ────────────────────────────────
+  // Logs which main-panel view is mounted and the active conversation/room id on every change,
+  // tagged `[Nav]` and gated on the shared `fluux:scroll-debug` flag (enable from devtools with
+  // `__fluuxScrollDebug(true)`). The `[Scroll]`/`[ScrollStateManager]` traces inside the message
+  // list only see a `conversationId` prop change OR a mount/unmount in isolation — they cannot tell
+  // whether the trigger was a DM↔DM switch (ChatView stays mounted), a trip through Settings (full
+  // unmount + remount), or a DM↔Room swap (ChatView↔RoomView). This makes that boundary visible so
+  // a wrong scroll-restore can be attributed to the navigation that caused it. Diagnostic only.
+  const activeMainView =
+    sidebarView === 'settings' ? 'settings'
+    : activeRoomJid ? 'room'
+    : activeConversationId ? 'chat'
+    : selectedContact ? 'contact'
+    : 'other'
+  const prevNavRef = useRef<{ view: string; conv: string | null; room: string | null } | null>(null)
+  useEffect(() => {
+    const next = { view: activeMainView, conv: activeConversationId ?? null, room: activeRoomJid ?? null }
+    const prev = prevNavRef.current
+    if (prev && prev.view === next.view && prev.conv === next.conv && prev.room === next.room) return
+    navDebugLog('TRANSITION', {
+      from: prev ? `${prev.view}(${prev.conv ?? prev.room ?? '-'})` : '(initial)',
+      to: `${next.view}(${next.conv ?? next.room ?? '-'})`,
+      sidebarView,
+      // True when the active message view is UNMOUNTING (settings/contact/empty) vs staying mounted
+      // — the harder-to-restore path that round-trips scroll state through the in-memory manager.
+      mainViewUnmounted: next.view !== 'chat' && next.view !== 'room',
+    })
+    prevNavRef.current = next
+  }, [activeMainView, activeConversationId, activeRoomJid, sidebarView])
 
 
   // Ref for main container to enable focus for keyboard shortcuts

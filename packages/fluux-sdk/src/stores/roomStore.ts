@@ -27,6 +27,7 @@ import { buildMessageKeySet, isMessageDuplicate, sortMessagesByTimestamp, trimMe
 import { shouldUpdateLastMessage, shouldReplaceLastMessage, isPreviewableMessage, findLastNonIgnoredMessage } from './shared/lastMessageUtils'
 import { ignoreStore, isMessageFromIgnoredUser } from './ignoreStore'
 import * as notifState from './shared/notificationState'
+import { markerDebugLog } from '../utils/markerDebug'
 import { connectionStore } from './connectionStore'
 import { buildScopedStorageKey } from '../utils/storageScope'
 
@@ -1488,7 +1489,21 @@ export const roomStore = createStore<RoomState>()(
       // BEFORE setActiveRoom derives the new-message divider (parity with
       // chatStore.activateConversation). Forward-only against the loaded messages.
       const pending = get().roomMeta.get(roomJid)?.pendingRemoteDisplayedStanzaId
-      if (pending) get().applyRemoteDisplayed(roomJid, pending)
+      if (pending) {
+        // Entry-time XEP-0490 fold (see chatStore.activateConversation for the full rationale): a
+        // remote read position is applied to lastSeenMessageId here, then setActiveRoom derives the
+        // unread divider from it — so a further-along remote read can collapse the divider and send
+        // the room's message list to the bottom instead of restoring. Log before→after.
+        const lastSeenBefore = get().roomMeta.get(roomJid)?.lastSeenMessageId
+        get().applyRemoteDisplayed(roomJid, pending)
+        markerDebugLog('activation fold (XEP-0490 pending → divider)', {
+          roomJid,
+          pendingStanzaId: pending,
+          lastSeenBefore,
+          lastSeenAfter: get().roomMeta.get(roomJid)?.lastSeenMessageId,
+          advanced: lastSeenBefore !== get().roomMeta.get(roomJid)?.lastSeenMessageId,
+        })
+      }
     }
     get().setActiveRoom(roomJid)
   },

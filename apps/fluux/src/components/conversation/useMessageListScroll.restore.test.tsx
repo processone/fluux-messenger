@@ -222,6 +222,90 @@ describe('useMessageListScroll saved-position restore', () => {
     expect(handle?.scrollTopSets).not.toContain(1000)
   })
 
+  // The unread-marker positioning runs in a requestAnimationFrame loop that intentionally bails
+  // if prevConversationRef (set at the END of the conversation-switch effect) doesn't yet match —
+  // so it must run AFTER the effect, like a real async rAF. The shared beforeEach uses a synchronous
+  // rAF (fine for the restore path, which writes scrollTop directly in the effect); these
+  // marker-positioning tests install a deferred queue and flush it after render instead.
+  const installDeferredRaf = () => {
+    const queue: FrameRequestCallback[] = []
+    window.requestAnimationFrame = (cb: FrameRequestCallback) => { queue.push(cb); return queue.length }
+    const flush = (max = 400) => {
+      act(() => {
+        let n = 0
+        while (queue.length && n++ < max) {
+          const cb = queue.shift()!
+          cb(0)
+        }
+      })
+    }
+    return flush
+  }
+
+  const markerTarget = 400 - 500 / 3 // msg-10 offsetTop(400) minus clientHeight/3
+  const manyIds = () => Array.from({ length: 20 }, (_, i) => `msg-${i}`)
+
+  it('does not scroll to the unread marker when re-opening a conversation left at the bottom (same session)', () => {
+    // Already opened this session, then left at the bottom (no saved scrolled-up position).
+    scrollStateManager.enterConversation('reopen-bottom', 20)
+    scrollStateManager.leaveConversation('reopen-bottom', 850, 1000, 500)
+    expect(scrollStateManager.isInitialized('reopen-bottom')).toBe(true)
+    expect(scrollStateManager.getSavedScrollTop('reopen-bottom')).toBeNull()
+
+    const flush = installDeferredRaf()
+    let handle: HarnessHandle | undefined
+
+    render(
+      <HookHarness
+        conversationId="reopen-bottom"
+        ids={manyIds()}
+        firstNewMessageId="msg-10"
+        onReady={(next) => { handle = next }}
+      />,
+    )
+    flush()
+
+    // Re-open within the session: the synced unread marker must NOT drive scroll; land at bottom.
+    expect(handle?.scrollTopSets.some((v) => Math.abs(v - markerTarget) < 1)).toBe(false)
+    expect(handle?.scrollTopSets).toContain(1000)
+  })
+
+  it('scrolls to the unread marker on the first open of a conversation this session', () => {
+    const flush = installDeferredRaf()
+    let handle: HarnessHandle | undefined
+
+    render(
+      <HookHarness
+        conversationId="first-open-marker"
+        ids={manyIds()}
+        firstNewMessageId="msg-10"
+        onReady={(next) => { handle = next }}
+      />,
+    )
+    flush()
+
+    expect(handle?.scrollTopSets.some((v) => Math.abs(v - markerTarget) < 1)).toBe(true)
+  })
+
+  it('restores the saved position (not the marker) when re-opening a scrolled-up conversation', () => {
+    seedSavedScrollPosition('reopen-saved', 200)
+    const flush = installDeferredRaf()
+    let handle: HarnessHandle | undefined
+
+    render(
+      <HookHarness
+        conversationId="reopen-saved"
+        ids={manyIds()}
+        firstNewMessageId="msg-10"
+        onReady={(next) => { handle = next }}
+      />,
+    )
+    flush()
+
+    expect(handle?.scrollTopSets).toContain(200)
+    expect(handle?.scrollTopSets.some((v) => Math.abs(v - markerTarget) < 1)).toBe(false)
+  })
+
   it('clears restored scrolled-up state only after explicit bottom intent', () => {
     seedSavedScrollPosition('room-bottom-intent', 200)
     let handle: HarnessHandle | undefined

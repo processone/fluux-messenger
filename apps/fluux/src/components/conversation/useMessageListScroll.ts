@@ -714,6 +714,12 @@ export function useMessageListScroll({
     const hasSavedState = savedPos !== null || savedAnchor !== null
 
     if (!hasSavedState) {
+      // No saved scrolled-up position → caller scrolls to bottom. This is the silent path behind a
+      // "jumps to bottom on return" report: it means the leave-side SAVE did not persist a
+      // scrolled-up anchor (saved as wasAtBottom, throttled-out, or cleared as stale). Log it so the
+      // trace shows restore was ASKED to restore but had nothing to restore TO — distinct from a
+      // restore that ran and landed wrong.
+      debugLog('RESTORE: no saved state, scrolling to bottom', { source, conversationId })
       return 'bottom'
     }
 
@@ -1249,6 +1255,18 @@ export function useMessageListScroll({
     if (scrollTop === 0 && e.deltaY > 0) scrolledAwayFromTopRef.current = true
   }
 
+  // Mount marker (diagnostic). Fires once when the message view is freshly created — i.e. after a
+  // navigation that UNMOUNTED it (Settings, DM↔Room, back-to-list). Pairs with 'UNMOUNT
+  // leaveConversation (save)' so the trace shows the full tear-down → rebuild cycle around a screen
+  // change. A DM↔DM switch does NOT mount fresh (no marker here), only the conversation-switch
+  // effect fires — that absence is itself the signal for which navigation path ran.
+  const mountLoggedRef = useRef(false)
+  useEffect(() => {
+    if (mountLoggedRef.current) return
+    mountLoggedRef.current = true
+    debugLog('MOUNT', { conversationId, messageCount, virtualized: !!virtualizerRef.current, staticMode })
+  }, [conversationId, messageCount, staticMode])
+
   // ==========================================================================
   // EFFECT: Conversation switch
   // ==========================================================================
@@ -1293,17 +1311,28 @@ export function useMessageListScroll({
       isAtBottomRef.current = false
       debugLog('CONVERSATION SWITCH: static mode, skipping scroll')
     } else {
+      // Is this the FIRST open of this conversation this session? Captured BEFORE
+      // enterConversation, which flips the manager's `initialized` flag. The unread-marker
+      // divider is derived from lastSeenMessageId, which XEP-0490 advances from OTHER devices'
+      // read positions — so honoring it on every open lets a cross-device read-sync drive scroll
+      // on every return. Only the FIRST open this session should position to the synced marker;
+      // re-opens restore this client's local position (or land at the bottom). The manager is an
+      // in-memory singleton reset on logout and rebuilt on app reload, so "this session" is
+      // platform-agnostic (identical on web and Tauri/WebKit).
+      // See docs/superpowers/specs/2026-06-29-mds-sync-marker-first-open-design.md.
+      const firstOpenThisSession = !scrollStateManager.isInitialized(conversationId)
+
       // Decide: restore position or scroll to bottom?
       const action = scrollStateManager.enterConversation(conversationId, messageCount)
       const savedPos = scrollStateManager.getSavedScrollTop(conversationId)
 
-      debugLog('CONVERSATION ACTION', { action, savedPos, scrollHeight: scroller.scrollHeight })
+      debugLog('CONVERSATION ACTION', { action, savedPos, firstOpenThisSession, scrollHeight: scroller.scrollHeight })
 
       if (action === 'restore-position') {
         const restoreResult = restoreSavedPosition('entry')
         pendingRestoreConversationRef.current =
           restoreResult === 'pending' ? conversationId : null
-      } else if (firstNewMessageId) {
+      } else if (firstNewMessageId && firstOpenThisSession) {
         // Has unread messages — position the first-unread marker ~1/3 down from the top so the
         // user reads forward from where they left off. Mark NOT at bottom up front (mirrors the
         // targetMessageId branch) so the content-growth ResizeObserver doesn't auto-pin to the
@@ -1495,8 +1524,24 @@ export function useMessageListScroll({
       if (prevConversationRef.current) {
         if (lastScrollDataRef.current) {
           const { top, height, client } = lastScrollDataRef.current
+          // UNMOUNT save: this is the leave path for navigations that DESTROY the message view —
+          // opening Settings, switching DM↔Room, going back to the list. (DM↔DM keeps the view
+          // mounted and saves via the conversation-switch effect instead.) If `top`/anchor here are
+          // stale or already at-bottom, the next entry restores wrong / jumps to bottom — so this
+          // shows exactly what was persisted at the moment the screen was torn down.
+          debugLog('UNMOUNT leaveConversation (save)', {
+            conversationId: prevConversationRef.current,
+            top, height, client,
+            distFromBottom: height - top - client,
+            anchorMessageId: lastAnchorRef.current?.messageId,
+            anchorBottomGap: lastAnchorRef.current?.bottomGap,
+          })
           scrollStateManager.leaveConversation(prevConversationRef.current, top, height, client, lastAnchorRef.current ?? undefined)
         } else {
+          // No scroll data captured before unmount → nothing to restore TO on return. A user who
+          // never scrolled (or unmounted before the first throttled save) lands at the bottom next
+          // time, by design — but if this fires after the user DID scroll up, the save side is the bug.
+          debugLog('UNMOUNT markAsLeft (no scroll data)', { conversationId: prevConversationRef.current })
           scrollStateManager.markAsLeft(prevConversationRef.current)
         }
       }

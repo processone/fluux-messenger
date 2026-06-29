@@ -12,6 +12,7 @@ import * as draftState from './shared/draftState'
 import { buildMessageKeySet, isMessageDuplicate, sortMessagesByTimestamp, trimMessages, prependOlderMessages, mergeAndProcessMessages, backfillArchiveIds } from './shared/messageArrayUtils'
 import { isPreviewableMessage, findLastPreviewableMessage, shouldReplaceLastMessage, isResolvedSamePreview } from './shared/lastMessageUtils'
 import * as notifState from './shared/notificationState'
+import { markerDebugLog } from '../utils/markerDebug'
 import { connectionStore } from './connectionStore'
 import { buildScopedStorageKey } from '../utils/storageScope'
 
@@ -646,7 +647,22 @@ export const chatStore = createStore<ChatState>()(
           // just-loaded messages) so the divider reflects reads synced from other
           // devices instead of the stale local position.
           const pending = get().conversationMeta.get(id)?.pendingRemoteDisplayedStanzaId
-          if (pending) get().applyRemoteDisplayed(id, pending)
+          if (pending) {
+            // Entry-time XEP-0490 fold. This is the highest-signal vector for a "jumped to bottom on
+            // return" report: a read position synced from another device is applied to
+            // lastSeenMessageId HERE, then setActiveConversation (next line) derives the unread
+            // divider from it. If the remote device had read further, the divider shrinks/vanishes
+            // and the message list scrolls to bottom instead of restoring. Log before→after.
+            const lastSeenBefore = get().conversationMeta.get(id)?.lastSeenMessageId
+            get().applyRemoteDisplayed(id, pending)
+            markerDebugLog('activation fold (XEP-0490 pending → divider)', {
+              conversationId: id,
+              pendingStanzaId: pending,
+              lastSeenBefore,
+              lastSeenAfter: get().conversationMeta.get(id)?.lastSeenMessageId,
+              advanced: lastSeenBefore !== get().conversationMeta.get(id)?.lastSeenMessageId,
+            })
+          }
         }
         get().setActiveConversation(id)
       },
