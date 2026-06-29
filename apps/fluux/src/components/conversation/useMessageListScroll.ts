@@ -1381,13 +1381,33 @@ export function useMessageListScroll({
     const { scrollTop, scrollHeight, clientHeight, clientWidth } = el
     const distFromBottom = scrollHeight - scrollTop - clientHeight
 
+    // A programmatic re-assert loop (marker positioning / pin-bottom / prepend / anchor restore)
+    // owns scrollTop while it runs — scroll events fired during it are NOT the user.
+    const programmaticScroll = reassertLoopRef.current !== null
+
     // Update refs (NO React state updates here except FAB)
     lastScrollDataRef.current = { top: scrollTop, height: scrollHeight, client: clientHeight, width: clientWidth }
     // Capture the bottom-most-visible anchor on every scroll event (binary search,
     // cheap) so it reflects the latest position — at switch time the DOM is already
     // the new conversation, so this must be captured live during scroll.
     lastAnchorRef.current = findBottomAnchor(el)
-    isAtBottomRef.current = distFromBottom < AT_BOTTOM_THRESHOLD
+    // Do NOT recompute at-bottom from a GROWTH-driven scroll event fired while a programmatic loop
+    // owns scrollTop. The pin-bottom comment's assumption that "programmatic growth doesn't move
+    // scrollTop, so it never flips isAtBottom" is FALSE on WebKitGTK (Tauri): when the just-pinned
+    // bottom row measures taller than its estimate AFTER paint (a group-START send — avatar + sender
+    // header, ± a date separator — or media), scrollHeight grows and the engine fires a 'scroll'
+    // event at the same scrollTop, so distFromBottom is transiently large. Reading it here flipped
+    // isAtBottomRef false and the pin loop BAILED, stranding the send below the fold (the reported
+    // Tauri send-stick bug). We skip the write ONLY when a loop is running AND scrollHeight grew —
+    // the measurement-noise signature. A genuine user scroll-UP during a loop (e.g. scrolling back
+    // while the entry pin is still settling) leaves scrollHeight unchanged, so it still registers
+    // and correctly flips isAtBottom false. The loops also detect deliberate takeover via
+    // userScrollIntentAtRef. Mirrors the same height-unchanged discriminator used by the save gate.
+    const growthDrivenDuringLoop =
+      programmaticScroll && prevScrollHeightRef.current !== null && scrollHeight > prevScrollHeightRef.current
+    if (!growthDrivenDuringLoop) {
+      isAtBottomRef.current = distFromBottom < AT_BOTTOM_THRESHOLD
+    }
 
     // Track user scroll during media load batch
     if (mediaLoadSnapshotRef.current) {
@@ -1398,14 +1418,12 @@ export function useMessageListScroll({
     const shouldShowFab = distFromBottom > FAB_THRESHOLD
     setShowScrollToBottom(prev => prev !== shouldShowFab ? shouldShowFab : prev)
 
-    // A programmatic re-assert loop (marker positioning / pin-bottom / prepend restore) owns
-    // scrollTop while it runs — those scroll events are NOT the user. They must not (a) clear the
-    // marker (the marker-positioning loop scrolls TO the marker, momentarily landing at/near the
-    // bottom for a last-message marker, which would trip the "reached bottom" clear), nor (b) save
-    // the position (the transient scrollTop:0 of the virtualized initial render was saved as a
-    // "scrolled-up" position, poisoning the next re-entry into restore-position and bypassing the
-    // marker entirely). Gate both on a genuine user scroll.
-    const programmaticScroll = reassertLoopRef.current !== null
+    // `programmaticScroll` (computed above) also gates the marker-clear and position-save below: a
+    // re-assert loop owns scrollTop while it runs, so its scroll events must not (a) clear the marker
+    // (the marker-positioning loop scrolls TO the marker, momentarily landing at/near the bottom for
+    // a last-message marker, which would trip the "reached bottom" clear), nor (b) save the position
+    // (the transient scrollTop:0 of the virtualized initial render was saved as a "scrolled-up"
+    // position, poisoning the next re-entry into restore-position and bypassing the marker entirely).
 
     // Open the save gate when this is a genuine user scroll: content height UNCHANGED from the
     // previous scroll event (a media/measurement-driven shift changes the height; a wheel / touch /
