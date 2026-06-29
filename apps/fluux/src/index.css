@@ -875,6 +875,20 @@ html, body {
   outline-offset: -1px !important;
 }
 
+/* XMPP console entries: per-row keyboard-focus ring. The app-wide focus rule
+ * (.user-interacted *:focus) insets the outline 2px, which on these dense,
+ * square rows leaves only a hair of clearance above the first line — and WebKit
+ * strokes outlines on a rounded path, so on some platforms the top line's glyphs
+ * poke past the ring. Scope a calmer ring here: a defined corner radius (the
+ * outline now follows a known curve instead of WebKit's implicit one) and just a
+ * 1px inset so the ring hugs the row edge, keeping the full row padding as
+ * clearance between the ring and the content. */
+.user-interacted .xmpp-console-entry:focus {
+  outline: 2px solid var(--fluux-focus-ring) !important;
+  outline-offset: -1px !important;
+  border-radius: 6px;
+}
+
 /*
  * Aurora composer card. The bar that wraps the context sections + input row.
  * Background is applied as a utility (bg-fluux-hover) on the element; this class

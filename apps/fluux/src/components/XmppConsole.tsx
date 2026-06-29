@@ -66,11 +66,11 @@ const ConsoleEntry = React.memo(function ConsoleEntry({ entry, isSelected, expan
       <div
         role="button"
         tabIndex={0}
-        className={`${selectedClass} cursor-pointer border-s-4 border-s-orange-500`}
+        className={`xmpp-console-entry ${selectedClass} cursor-pointer border-s-4 border-s-orange-500`}
         onClick={() => onSelect(entry.id)}
         onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelect(entry.id) } }}
       >
-        <div className="flex items-start gap-2 px-3 py-1.5">
+        <div className="flex items-start gap-2 px-3 py-2">
           <span className="text-fluux-muted text-xs font-mono whitespace-nowrap">
             [{format(entry.timestamp, 'HH:mm:ss.SSS')}]
           </span>
@@ -112,7 +112,7 @@ const ConsoleEntry = React.memo(function ConsoleEntry({ entry, isSelected, expan
         role="button"
         tabIndex={0}
         aria-expanded={expanded}
-        className="flex items-center gap-2 px-3 py-1.5 cursor-pointer select-none"
+        className="xmpp-console-entry flex items-center gap-2 px-3 py-2 cursor-pointer select-none"
         onClick={() => { onSelect(entry.id); onToggle(entry.id); }}
         onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelect(entry.id); onToggle(entry.id); } }}
       >
