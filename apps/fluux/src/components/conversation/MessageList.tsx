@@ -533,7 +533,7 @@ export function MessageList<T extends BaseMessage>({
             data-message-id={msg.id}
             data-stanza-id={msg.stanzaId}
             data-origin-id={msg.originId}
-            style={msg.id === lastSentMessageId ? { animation: 'message-send 300ms ease-out' } : undefined}
+            style={msg.id === lastSentMessageId ? { animation: 'message-send var(--fluux-duration-slow) var(--fluux-ease-standard)' } : undefined}
           >
             {msg.id === gapMarkerMessageId && onCatchUpHistory && (
               <HistoryGapMarker onLoadMore={onCatchUpHistory} isLoading={isCatchingUp ?? false} />
@@ -665,7 +665,7 @@ export function MessageList<T extends BaseMessage>({
                     data-message-id={msg.id}
                     data-stanza-id={msg.stanzaId}
                     data-origin-id={msg.originId}
-                    style={msg.id === lastSentMessageId ? { animation: 'message-send 300ms ease-out' } : undefined}
+                    style={msg.id === lastSentMessageId ? { animation: 'message-send var(--fluux-duration-slow) var(--fluux-ease-standard)' } : undefined}
                   >
                     {showGapMarker && <HistoryGapMarker onLoadMore={onCatchUpHistory} isLoading={isCatchingUp ?? false} />}
                     {showNewMarker && <NewMessageMarker />}
@@ -698,7 +698,7 @@ export function MessageList<T extends BaseMessage>({
       <div
         className={`absolute bottom-4 end-4 z-40 ${
           showScrollToBottom
-            ? 'animate-[fab-spring-in_0.4s_cubic-bezier(0.34,1.56,0.64,1)_forwards]'
+            ? 'animate-[fab-spring-in_0.4s_var(--fluux-ease-spring)_forwards]'
             : 'animate-[fab-spring-out_0.25s_ease-in_forwards] pointer-events-none'
         }`}
         inert={!showScrollToBottom}

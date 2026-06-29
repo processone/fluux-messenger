@@ -1,6 +1,7 @@
-import { useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useRestoreFocus } from '@/hooks/useRestoreFocus'
+import { useModalTransition } from '@/hooks/useModalTransition'
 
 interface ConfirmDialogProps {
   title: string
@@ -25,13 +26,16 @@ export function ConfirmDialog({
   // Keep keyboard focus inside the dialog across OS window blur/refocus.
   useRestoreFocus(panelRef)
 
+  const { panelClass, scrimClass, requestClose } = useModalTransition()
+  const cancel = useCallback(() => requestClose(onCancel), [requestClose, onCancel])
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onCancel()
+      if (e.key === 'Escape') cancel()
     }
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [onCancel])
+  }, [cancel])
 
   const confirmColors = variant === 'warning'
     ? 'bg-orange-500 hover:bg-orange-600'
@@ -40,21 +44,21 @@ export function ConfirmDialog({
   return (
     <div
       data-modal="true"
-      className="fixed inset-0 modal-scrim flex items-center justify-center z-50"
+      className={`fixed inset-0 modal-scrim flex items-center justify-center z-50 ${scrimClass}`}
     >
       <button
         type="button"
         aria-hidden="true"
         tabIndex={-1}
-        onClick={onCancel}
+        onClick={cancel}
         className="absolute inset-0 cursor-default"
       />
-      <div ref={panelRef} className="relative z-10 fluux-glass rounded-lg p-4 max-w-sm w-full mx-4">
+      <div ref={panelRef} className={`relative z-10 fluux-glass rounded-lg p-4 max-w-sm w-full mx-4 ${panelClass}`}>
         <h3 className="text-lg font-semibold text-fluux-text mb-2">{title}</h3>
         <p className="text-sm text-fluux-muted mb-4">{message}</p>
         <div className="flex gap-2 justify-end">
           <button
-            onClick={onCancel}
+            onClick={cancel}
             className="px-4 py-2 text-sm text-fluux-text bg-fluux-hover hover:bg-fluux-active
                        rounded-lg transition-colors"
           >

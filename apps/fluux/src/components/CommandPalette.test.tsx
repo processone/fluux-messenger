@@ -435,12 +435,14 @@ describe('CommandPalette', () => {
     })
 
     it('should close on Escape', () => {
+      document.documentElement.setAttribute('data-motion', 'reduced')
       render(<CommandPalette {...defaultProps} />)
       const container = screen.getByPlaceholderText('Go to...').closest('div')?.parentElement
 
       fireEvent.keyDown(container!, { key: 'Escape' })
 
       expect(defaultProps.onClose).toHaveBeenCalled()
+      document.documentElement.removeAttribute('data-motion')
     })
 
     it('should close on Cmd+K (toggle)', () => {
@@ -516,6 +518,7 @@ describe('CommandPalette', () => {
     })
 
     it('should close on backdrop click', () => {
+      document.documentElement.setAttribute('data-motion', 'reduced')
       render(<CommandPalette {...defaultProps} />)
 
       // Click on the backdrop (the outer div)
@@ -524,6 +527,7 @@ describe('CommandPalette', () => {
       fireEvent.click(backdrop.querySelector('button')!)
 
       expect(defaultProps.onClose).toHaveBeenCalled()
+      document.documentElement.removeAttribute('data-motion')
     })
 
     it('should not close when clicking inside the palette', () => {

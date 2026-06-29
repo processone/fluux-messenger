@@ -4,6 +4,7 @@ import { Copy, Check, AlertTriangle, Loader2, RefreshCw } from 'lucide-react'
 import { generateBackupPassphrase, generateBackupCode, USE_V6_KEYS } from '@/e2ee/passphraseGenerator'
 import { SaveToPasswordManagerButton } from './SaveToPasswordManagerButton'
 import { useRestoreFocus } from '@/hooks/useRestoreFocus'
+import { useModalTransition } from '@/hooks/useModalTransition'
 
 // Draw a fresh passphrase in the user's UI language. 8 words ×
 // 11 bits (BIP-39) = 88 bits, which matches the acceptability gate
@@ -52,6 +53,9 @@ export function BackupPassphraseDialog({
   // Keep keyboard focus inside the dialog across OS window blur/refocus.
   useRestoreFocus(panelRef)
 
+  const { panelClass, scrimClass, requestClose } = useModalTransition()
+  const cancel = useCallback(() => requestClose(onCancel), [requestClose, onCancel])
+
   // Regenerate on every open rather than keeping a stable value — a
   // user who cancelled and reopened should get a fresh passphrase so
   // a shoulder-surfing observer of the first attempt can't reuse it.
@@ -86,11 +90,11 @@ export function BackupPassphraseDialog({
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !isPublishing) onCancel()
+      if (e.key === 'Escape' && !isPublishing) cancel()
     }
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [onCancel, isPublishing])
+  }, [cancel, isPublishing])
 
   const handleRegenerate = useCallback(async () => {
     if (isPublishing) return
@@ -143,17 +147,17 @@ export function BackupPassphraseDialog({
   return (
     <div
       data-modal="true"
-      className="fixed inset-0 modal-scrim flex items-center justify-center z-50"
+      className={`fixed inset-0 modal-scrim flex items-center justify-center z-50 ${scrimClass}`}
     >
       <button
         type="button"
         aria-hidden="true"
         tabIndex={-1}
         disabled={isPublishing}
-        onClick={onCancel}
+        onClick={cancel}
         className="absolute inset-0 cursor-default"
       />
-      <div ref={panelRef} className="relative z-10 fluux-glass rounded-lg max-w-md w-full mx-4 max-h-[calc(100vh-2rem)] flex flex-col overflow-hidden">
+      <div ref={panelRef} className={`relative z-10 fluux-glass rounded-lg max-w-md w-full mx-4 max-h-[calc(100vh-2rem)] flex flex-col overflow-hidden ${panelClass}`}>
         <form
           onSubmit={(e) => { e.preventDefault(); void handleConfirm() }}
           className="contents"
@@ -264,7 +268,7 @@ export function BackupPassphraseDialog({
           <div className="flex gap-2 justify-end">
             <button
               type="button"
-              onClick={onCancel}
+              onClick={cancel}
               disabled={isPublishing}
               className="px-4 py-2 text-sm text-fluux-text bg-fluux-hover hover:bg-fluux-active rounded-lg transition-colors disabled:opacity-50"
             >

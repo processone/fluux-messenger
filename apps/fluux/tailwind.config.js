@@ -66,6 +66,16 @@ export default {
         mono: ['var(--fluux-font-mono)'],
         display: ['var(--fluux-font-display)'],
       },
+      transitionDuration: {
+        fast: 'var(--fluux-duration-fast)',
+        base: 'var(--fluux-duration-base)',
+        slow: 'var(--fluux-duration-slow)',
+      },
+      transitionTimingFunction: {
+        standard: 'var(--fluux-ease-standard)',
+        emphasized: 'var(--fluux-ease-emphasized)',
+        spring: 'var(--fluux-ease-spring)',
+      },
       keyframes: {
         'tooltip-in': {
           '0%': { opacity: '0', transform: 'scale(0.96)' },
@@ -81,9 +91,9 @@ export default {
         },
       },
       animation: {
-        'tooltip-in': 'tooltip-in 150ms ease-out',
-        'toast-in': 'toast-in 200ms ease-out',
-        'sheet-up': 'sheet-up 220ms cubic-bezier(0.32, 0.72, 0, 1)',
+        'tooltip-in': 'tooltip-in var(--fluux-duration-fast) var(--fluux-ease-standard)',
+        'toast-in': 'toast-in var(--fluux-duration-base) var(--fluux-ease-standard)',
+        'sheet-up': 'sheet-up 220ms var(--fluux-ease-emphasized)',
       },
     },
   },

@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { X, Upload, ZoomIn, ZoomOut, RotateCcw, Camera, Video, VideoOff } from 'lucide-react'
 import { Tooltip } from './Tooltip'
+import { useModalTransition } from '@/hooks/useModalTransition'
 
 interface AvatarCropModalProps {
   isOpen: boolean
@@ -15,6 +16,8 @@ const MAX_ZOOM = 3
 
 export function AvatarCropModal({ isOpen, onClose, onSave }: AvatarCropModalProps) {
   const { t } = useTranslation()
+  const { panelClass, scrimClass, requestClose } = useModalTransition()
+  const close = useCallback(() => requestClose(onClose), [requestClose, onClose])
   const [, setSelectedFile] = useState<File | null>(null)
   const [imageUrl, setImageUrl] = useState<string | null>(null)
   const [zoom, setZoom] = useState(1)
@@ -358,14 +361,14 @@ export function AvatarCropModal({ isOpen, onClose, onSave }: AvatarCropModalProp
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70">
-      <div className="fluux-glass rounded-lg w-full max-w-md mx-4 max-h-[calc(100vh-2rem)] flex flex-col overflow-hidden">
+    <div className={`fixed inset-0 z-50 flex items-center justify-center bg-black/70 ${scrimClass}`}>
+      <div className={`fluux-glass rounded-lg w-full max-w-md mx-4 max-h-[calc(100vh-2rem)] flex flex-col overflow-hidden ${panelClass}`}>
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-fluux-bg">
           <h2 className="text-lg font-semibold text-fluux-text">{t('avatar.uploadTitle')}</h2>
           <Tooltip content={t('common.close')}>
             <button
-              onClick={onClose}
+              onClick={close}
               className="p-1 text-fluux-muted hover:text-fluux-text rounded"
             >
               <X className="size-5" />
@@ -562,7 +565,7 @@ export function AvatarCropModal({ isOpen, onClose, onSave }: AvatarCropModalProp
         {/* Footer */}
         <div className="flex justify-end gap-3 p-4 border-t border-fluux-bg">
           <button
-            onClick={onClose}
+            onClick={close}
             className="px-4 py-2 text-fluux-text hover:bg-fluux-hover rounded transition-colors"
           >
             {t('common.cancel')}

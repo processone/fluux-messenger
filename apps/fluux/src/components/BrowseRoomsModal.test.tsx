@@ -137,6 +137,7 @@ describe('BrowseRoomsModal', () => {
     })
 
     it('should call onClose when close button is clicked', async () => {
+      document.documentElement.setAttribute('data-motion', 'reduced')
       render(<BrowseRoomsModal onClose={mockOnClose} />)
       await act(async () => {})
 
@@ -144,9 +145,11 @@ describe('BrowseRoomsModal', () => {
       fireEvent.click(closeButton)
 
       expect(mockOnClose).toHaveBeenCalled()
+      document.documentElement.removeAttribute('data-motion')
     })
 
     it('should call onClose when clicking backdrop', async () => {
+      document.documentElement.setAttribute('data-motion', 'reduced')
       render(<BrowseRoomsModal onClose={mockOnClose} />)
       await act(async () => {})
 
@@ -156,6 +159,7 @@ describe('BrowseRoomsModal', () => {
       fireEvent.click(backdrop.querySelector('button')!)
 
       expect(mockOnClose).toHaveBeenCalled()
+      document.documentElement.removeAttribute('data-motion')
     })
 
     it('should show loading spinner while fetching rooms', async () => {

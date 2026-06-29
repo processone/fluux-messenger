@@ -44,7 +44,7 @@ export function ReactionBurst({ x, y, onDone }: ReactionBurstProps) {
             style={{
               '--angle': `${angle}deg`,
               '--distance': `-${distance}px`,
-              animation: `reaction-burst ${DURATION_MS}ms ease-out forwards`,
+              animation: `reaction-burst ${DURATION_MS}ms var(--fluux-ease-standard) forwards`,
               animationDelay: `${i * 15}ms`,
             } as React.CSSProperties}
           />
