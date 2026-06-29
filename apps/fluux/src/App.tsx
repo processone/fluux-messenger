@@ -437,7 +437,10 @@ function App() {
   // Phase 2 will migrate view selection to route-based rendering
   return (
     <>
-      <TitleBar />
+      {/* No overlay TitleBar here: the desktop AppBar (rendered inside ChatLayout)
+          hosts the macOS traffic lights and is the window drag region. The thin
+          overlay TitleBar is kept only on the login / reconnect screens, which
+          have no AppBar. */}
       <Routes>
         {/* Phase 1: All routes render ChatLayout, which handles view internally */}
         {/* Phase 2 will move view selection logic to route components */}

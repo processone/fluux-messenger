@@ -30,6 +30,13 @@ void i18n.use(initReactI18next).init({
         // Common translations (needed for aria-label tests)
         common: {
           dismiss: 'Dismiss',
+          back: 'Back',
+          forward: 'Forward',
+        },
+        // Sidebar labels reused by the AppBar (search / settings)
+        sidebar: {
+          search: 'Search',
+          settings: 'Settings',
         },
         conversations: {
           backToConversations: 'Back to conversations',
