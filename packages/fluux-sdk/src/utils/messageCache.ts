@@ -484,6 +484,76 @@ export async function getMessages(
 }
 
 /**
+ * Options for loading a contiguous window of cached messages centered on an anchor.
+ */
+export interface GetMessagesAroundOptions {
+  /** Messages of context to include immediately BEFORE (older than) the anchor. Default 50. */
+  before?: number
+  /**
+   * Optional cap on how many messages to include AFTER (newer than) the anchor. Omit to include
+   * EVERY newer message through the latest, so the rehydrated window stays contiguous to the
+   * present (required for scroll-position restore: the resident array must reach the tail so
+   * bottom-stick and "new message arrives" keep working). A finite value yields a bounded window
+   * on both sides (used for search/target navigation to an arbitrary point in history).
+   */
+  after?: number
+}
+
+/**
+ * Load a contiguous window of cached chat messages centered on a specific message.
+ *
+ * Returns the anchor message, up to `before` messages of older context above it, and the messages
+ * after it (capped by `after`, or all the way through the latest when `after` is omitted), in
+ * chronological order. Returns `[]` when the anchor id is not in the cache so the caller can fall
+ * back to a latest-slice load.
+ *
+ * This is what makes scroll restore independent of the latest-N rehydration: after deep scroll-back
+ * the saved anchor points at an OLD message absent from the newest-100 slice, so the restore can't
+ * resolve it. Loading the slice that CONTAINS the anchor (plus the tail to the present) lets the
+ * existing content-anchor restore land correctly. The same primitive serves search/activity jumps
+ * to a message that isn't in the recent slice.
+ *
+ * @param anchorMessageId - The anchor's client id (`message.id`, as carried by `data-message-id`).
+ *   Falls back to the stanza-id index so a server stanza id (e.g. a navigation target) also resolves.
+ */
+export async function getMessagesAround(
+  conversationId: string,
+  anchorMessageId: string,
+  options: GetMessagesAroundOptions = {}
+): Promise<Message[]> {
+  const { before = 50, after } = options
+
+  let anchor = await getMessage(anchorMessageId)
+  if (!anchor) anchor = await getMessageByStanzaId(anchorMessageId)
+  if (!anchor) return []
+
+  const t = anchor.timestamp.getTime()
+  // Context above + the anchor itself: the `before + 1` newest messages with timestamp <= t.
+  // (upperBound is exclusive, so `t + 1` includes the anchor sitting at exactly t.)
+  const olderAndAnchor = await getMessages(conversationId, {
+    before: new Date(t + 1),
+    limit: before + 1,
+  })
+  // Tail: messages strictly newer than the anchor. Capped by `after` (oldest-first from the
+  // anchor) for a bounded window, or uncapped to reach the latest message.
+  const newer = await getMessages(conversationId, {
+    after: new Date(t),
+    ...(after !== undefined ? { limit: after } : {}),
+  })
+
+  // Merge + dedupe by id, preserving chronological order (the two reads cannot overlap by
+  // timestamp, but a defensive id-dedupe keeps it robust against same-ms siblings).
+  const seen = new Set<string>()
+  const merged: Message[] = []
+  for (const m of [...olderAndAnchor, ...newer]) {
+    if (seen.has(m.id)) continue
+    seen.add(m.id)
+    merged.push(m)
+  }
+  return merged
+}
+
+/**
  * Get the count of messages for a conversation.
  */
 export async function getMessageCount(conversationId: string): Promise<number> {
@@ -734,6 +804,43 @@ export async function getRoomMessages(
     }
     return []
   }
+}
+
+/**
+ * Load a contiguous window of cached room messages centered on a specific message.
+ * Room counterpart of {@link getMessagesAround} — see it for semantics.
+ */
+export async function getRoomMessagesAround(
+  roomJid: string,
+  anchorMessageId: string,
+  options: GetMessagesAroundOptions = {}
+): Promise<RoomMessage[]> {
+  const { before = 50, after } = options
+
+  let anchor = await getRoomMessage(anchorMessageId)
+  if (!anchor) anchor = await getRoomMessageByStanzaId(anchorMessageId)
+  if (!anchor) return []
+
+  const t = anchor.timestamp.getTime()
+  const olderAndAnchor = await getRoomMessages(roomJid, {
+    before: new Date(t + 1),
+    limit: before + 1,
+  })
+  const newer = await getRoomMessages(roomJid, {
+    after: new Date(t),
+    ...(after !== undefined ? { limit: after } : {}),
+  })
+
+  // Dedupe by the same key the cache uses (room ids are not unique across senders).
+  const seen = new Set<string>()
+  const merged: RoomMessage[] = []
+  for (const m of [...olderAndAnchor, ...newer]) {
+    const key = getRoomMessageCacheKey(m)
+    if (seen.has(key)) continue
+    seen.add(key)
+    merged.push(m)
+  }
+  return merged
 }
 
 /**

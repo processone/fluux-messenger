@@ -76,6 +76,56 @@ function getScopedStorageKey(jid?: string | null): string {
   return buildScopedStorageKey(STORAGE_KEY_BASE, jid)
 }
 
+/**
+ * Merge a batch of cached messages into a conversation's resident array, returning the partial
+ * state update (or `null` when every cached message is already resident). Shared by
+ * {@link ChatState.loadMessagesFromCache} and {@link ChatState.loadMessagesAroundFromCache}: both
+ * filter duplicates, merge/sort/trim, and refresh the sidebar preview to the newest previewable
+ * message (healing a stuck encrypted-fallback placeholder). The only difference between the two
+ * callers is WHICH cache slice they fetch (latest-N vs the slice around an anchor).
+ */
+function mergeCachedChatMessages(
+  state: ChatState,
+  conversationId: string,
+  cachedMessages: Message[]
+): Pick<ChatState, 'messages' | 'conversationMeta' | 'conversations'> | { messages: ChatState['messages'] } | null {
+  const existingMessages = state.messages.get(conversationId) || []
+
+  const existingKeySet = buildMessageKeySet(existingMessages, getChatMessageKeys)
+  const newMessages = cachedMessages.filter(
+    (m) => !isMessageDuplicate(m, existingKeySet, getChatMessageKeys)
+  )
+
+  if (newMessages.length === 0) return null
+
+  const merged = sortMessagesByTimestamp([...existingMessages, ...newMessages])
+  const trimmed = trimMessages(merged, MAX_MESSAGES_PER_CONVERSATION)
+
+  const newMessagesMap = new Map(state.messages)
+  newMessagesMap.set(conversationId, trimmed)
+
+  // Update lastMessage with the newest previewable message after merge/sort, skipping bodiless
+  // signal placeholders. Opening a conversation whose stored preview is a stuck placeholder heals
+  // it here: a real cached message supersedes the placeholder even though the placeholder's
+  // timestamp is newer.
+  const lastMessage = findLastPreviewableMessage(trimmed)
+  const meta = state.conversationMeta.get(conversationId)
+  const conv = state.conversations.get(conversationId)
+  if (
+    meta && conv && lastMessage &&
+    (shouldReplaceLastMessage(meta.lastMessage, lastMessage) ||
+      isResolvedSamePreview(meta.lastMessage, lastMessage))
+  ) {
+    const newMeta = new Map(state.conversationMeta)
+    newMeta.set(conversationId, { ...meta, lastMessage })
+    const newConversations = new Map(state.conversations)
+    newConversations.set(conversationId, { ...conv, lastMessage })
+    return { messages: newMessagesMap, conversationMeta: newMeta, conversations: newConversations }
+  }
+
+  return { messages: newMessagesMap }
+}
+
 function getLegacyStorageKey(): string {
   return STORAGE_KEY_BASE
 }
@@ -271,6 +321,16 @@ interface ChatState {
   refreshLastMessageContent: (conversationId: string, messageId: string, updates: Partial<Message>) => void
   // IndexedDB message loading
   loadMessagesFromCache: (conversationId: string, options?: { limit?: number; before?: Date; peek?: boolean }) => Promise<Message[]>
+  /**
+   * Hydrate the resident array with the contiguous cache slice that CONTAINS a specific message
+   * (the anchor), rather than the latest-N slice. Used by scroll-position restore on return to a
+   * conversation the user had scrolled deep into: the saved content anchor points at an old message
+   * absent from the latest-100 rehydration, so restore can't resolve it. Loading the slice around
+   * the anchor (older context + the tail through the latest message) makes the existing anchor
+   * restore land correctly. Also serves search/activity navigation to a message not in the recent
+   * slice. Returns the loaded slice (empty if the anchor is not in the cache).
+   */
+  loadMessagesAroundFromCache: (conversationId: string, anchorMessageId: string, options?: { before?: number; after?: number }) => Promise<Message[]>
   loadOlderMessagesFromCache: (conversationId: string, limit?: number) => Promise<Message[]>
   setTargetMessageId: (id: string | null) => void
   switchAccount: (jid: string | null) => void
@@ -1633,62 +1693,25 @@ export const chatStore = createStore<ChatState>()(
           // used to compute a catch-up cursor for a non-active conversation without
           // pulling its history into RAM (only the active conversation is resident).
           if (!peek && cachedMessages.length > 0) {
-            set((state) => {
-              const existingMessages = state.messages.get(conversationId) || []
-
-              // Build key set and filter duplicates using shared utilities
-              const existingKeySet = buildMessageKeySet(existingMessages, getChatMessageKeys)
-              const newMessages = cachedMessages.filter(
-                (m) => !isMessageDuplicate(m, existingKeySet, getChatMessageKeys)
-              )
-
-              if (newMessages.length === 0) {
-                return state
-              }
-
-              // Merge, sort, and trim using shared utilities
-              const merged = sortMessagesByTimestamp([...existingMessages, ...newMessages])
-              const trimmed = trimMessages(merged, MAX_MESSAGES_PER_CONVERSATION)
-
-              const newMessagesMap = new Map(state.messages)
-              newMessagesMap.set(conversationId, trimmed)
-
-              // Update lastMessage with the newest previewable message after
-              // merge/sort, skipping bodiless signal placeholders. Opening a
-              // conversation whose stored preview is a stuck placeholder heals
-              // it here: a real cached message supersedes the placeholder even
-              // though the placeholder's timestamp is newer.
-              const lastMessage = findLastPreviewableMessage(trimmed)
-              const meta = state.conversationMeta.get(conversationId)
-              const conv = state.conversations.get(conversationId)
-              // Replace when newer/a stuck placeholder, OR when this is the same
-              // message resolved in the cache (deferred decrypt) while the preview
-              // kept the encrypted fallback — shouldReplaceLastMessage's
-              // strictly-newer gate would otherwise leave the sidebar stuck on
-              // "[OpenPGP-encrypted message]".
-              if (
-                meta && conv && lastMessage &&
-                (shouldReplaceLastMessage(meta.lastMessage, lastMessage) ||
-                  isResolvedSamePreview(meta.lastMessage, lastMessage))
-              ) {
-                // Update metadata map
-                const newMeta = new Map(state.conversationMeta)
-                newMeta.set(conversationId, { ...meta, lastMessage })
-
-                // Update combined map
-                const newConversations = new Map(state.conversations)
-                newConversations.set(conversationId, { ...conv, lastMessage })
-
-                return { messages: newMessagesMap, conversationMeta: newMeta, conversations: newConversations }
-              }
-
-              return { messages: newMessagesMap }
-            })
+            set((state) => mergeCachedChatMessages(state, conversationId, cachedMessages) ?? state)
           }
 
           return cachedMessages
         } catch (error) {
           console.warn('Failed to load messages from cache:', error)
+          return []
+        }
+      },
+
+      loadMessagesAroundFromCache: async (conversationId, anchorMessageId, options = {}) => {
+        try {
+          const slice = await messageCache.getMessagesAround(conversationId, anchorMessageId, options)
+          if (slice.length > 0) {
+            set((state) => mergeCachedChatMessages(state, conversationId, slice) ?? state)
+          }
+          return slice
+        } catch (error) {
+          console.warn('Failed to load messages around anchor from cache:', error)
           return []
         }
       },

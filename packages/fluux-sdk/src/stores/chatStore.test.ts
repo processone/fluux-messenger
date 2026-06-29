@@ -38,6 +38,7 @@ vi.mock('../utils/messageCache', async (importOriginal) => {
     saveMessage: vi.fn().mockResolvedValue(undefined),
     saveMessages: vi.fn().mockResolvedValue(undefined),
     getMessages: vi.fn().mockResolvedValue([]),
+    getMessagesAround: vi.fn().mockResolvedValue([]),
     updateMessage: vi.fn().mockResolvedValue(undefined),
   }
 })
@@ -367,6 +368,66 @@ describe('chatStore', () => {
       await stale
 
       expect(chatStore.getState().activeConversationId).toBe('bob@example.com')
+    })
+  })
+
+  describe('loadMessagesAroundFromCache', () => {
+    afterEach(() => {
+      vi.mocked(messageCache.getMessagesAround).mockReset()
+      vi.mocked(messageCache.getMessagesAround).mockResolvedValue([])
+    })
+
+    function msgAt(conversationId: string, id: string, minute: number): Message {
+      return {
+        type: 'chat',
+        id,
+        conversationId,
+        from: conversationId,
+        body: id,
+        timestamp: new Date(`2024-03-01T10:0${minute}:00Z`),
+        isOutgoing: false,
+      }
+    }
+
+    it('hydrates the resident array with the cache slice that contains the anchor', async () => {
+      const A = 'alice@example.com'
+      chatStore.getState().addConversation(createConversation(A))
+      chatStore.setState({ activeConversationId: A })
+
+      const slice = [
+        msgAt(A, 'old-3', 3),
+        msgAt(A, 'anchor', 4),
+        msgAt(A, 'newer-5', 5),
+        msgAt(A, 'newer-6', 6),
+      ]
+      vi.mocked(messageCache.getMessagesAround).mockResolvedValue(slice)
+
+      const returned = await chatStore.getState().loadMessagesAroundFromCache(A, 'anchor')
+
+      expect(messageCache.getMessagesAround).toHaveBeenCalledWith(A, 'anchor', expect.any(Object))
+      const resident = chatStore.getState().messages.get(A)
+      expect(resident?.map((m) => m.id)).toEqual(['old-3', 'anchor', 'newer-5', 'newer-6'])
+      expect(returned.map((m) => m.id)).toEqual(['old-3', 'anchor', 'newer-5', 'newer-6'])
+    })
+
+    it('merges the slice with any already-resident messages, deduped and sorted', async () => {
+      const A = 'alice@example.com'
+      chatStore.getState().addConversation(createConversation(A))
+      chatStore.setState({
+        activeConversationId: A,
+        messages: new Map([[A, [msgAt(A, 'newer-6', 6), msgAt(A, 'newer-7', 7)]]]),
+      })
+
+      vi.mocked(messageCache.getMessagesAround).mockResolvedValue([
+        msgAt(A, 'anchor', 4),
+        msgAt(A, 'newer-5', 5),
+        msgAt(A, 'newer-6', 6), // duplicate of a resident message
+      ])
+
+      await chatStore.getState().loadMessagesAroundFromCache(A, 'anchor')
+
+      const resident = chatStore.getState().messages.get(A)
+      expect(resident?.map((m) => m.id)).toEqual(['anchor', 'newer-5', 'newer-6', 'newer-7'])
     })
   })
 

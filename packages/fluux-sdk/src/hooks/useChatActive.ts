@@ -373,6 +373,18 @@ export function useChatActive() {
     }
   }, [client])
 
+  // Hydrate the resident array with the cache slice CONTAINING a specific message, used by scroll
+  // restore / search navigation when the target/anchor isn't in the latest-N slice. Bound to the
+  // currently-active conversation (the one being viewed when restore runs).
+  const loadMessagesAround = useCallback(
+    (anchorMessageId: string) => {
+      const id = chatStore.getState().activeConversationId
+      if (!id) return Promise.resolve([])
+      return chatStore.getState().loadMessagesAroundFromCache(id, anchorMessageId)
+    },
+    []
+  )
+
   // --- Return ---
 
   const actions = useMemo(
@@ -400,6 +412,7 @@ export function useChatActive() {
       updateLastSeenMessageId,
       fetchHistory,
       fetchOlderHistory,
+      loadMessagesAround,
       continueChatCatchUp,
     }),
     [
@@ -408,7 +421,7 @@ export function useChatActive() {
       sendChatState, sendReaction, sendCorrection, retractMessage, retryMessage,
       sendEasterEgg, clearAnimation, clearTargetMessageId, setDraft, getDraft, clearDraft,
       clearFirstNewMessageId, updateLastSeenMessageId, fetchHistory, fetchOlderHistory,
-      continueChatCatchUp,
+      loadMessagesAround, continueChatCatchUp,
     ]
   )
 

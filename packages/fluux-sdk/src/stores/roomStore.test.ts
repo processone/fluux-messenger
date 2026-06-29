@@ -38,6 +38,7 @@ vi.mock('../utils/messageCache', async (importOriginal) => {
     saveRoomMessage: vi.fn().mockResolvedValue(undefined),
     saveRoomMessages: vi.fn().mockResolvedValue(undefined),
     getRoomMessages: vi.fn().mockResolvedValue([]),
+    getRoomMessagesAround: vi.fn().mockResolvedValue([]),
     updateRoomMessage: vi.fn().mockResolvedValue(undefined),
     deleteRoomMessages: vi.fn().mockResolvedValue(undefined),
   }
@@ -3386,6 +3387,55 @@ describe('roomStore', () => {
 
       expect(result).toBeNull()
       expect(messageCache.getRoomMessages).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('loadMessagesAroundFromCache', () => {
+    const roomJid = 'room@conference.example.com'
+
+    beforeEach(() => {
+      roomStore.getState().reset()
+      vi.mocked(messageCache.getRoomMessagesAround).mockReset()
+      vi.mocked(messageCache.getRoomMessagesAround).mockResolvedValue([])
+      roomStore.getState().addRoom({
+        jid: roomJid,
+        name: 'Test Room',
+        nickname: 'testuser',
+        joined: true,
+        isJoining: false,
+        isBookmarked: false,
+        supportsMAM: true,
+        occupants: new Map(),
+        messages: [],
+        unreadCount: 0,
+        mentionsCount: 0,
+        typingUsers: new Set(),
+      })
+    })
+
+    function roomMsgAt(id: string, minute: number): RoomMessage {
+      return {
+        type: 'groupchat',
+        id,
+        roomJid,
+        from: `${roomJid}/alice`,
+        nick: 'alice',
+        body: id,
+        timestamp: new Date(`2024-03-01T10:0${minute}:00Z`),
+        isOutgoing: false,
+      }
+    }
+
+    it('hydrates the resident array with the cache slice that contains the anchor', async () => {
+      const slice = [roomMsgAt('old-3', 3), roomMsgAt('anchor', 4), roomMsgAt('newer-5', 5)]
+      vi.mocked(messageCache.getRoomMessagesAround).mockResolvedValue(slice)
+
+      const returned = await roomStore.getState().loadMessagesAroundFromCache(roomJid, 'anchor')
+
+      expect(messageCache.getRoomMessagesAround).toHaveBeenCalledWith(roomJid, 'anchor', expect.any(Object))
+      const resident = roomStore.getState().rooms.get(roomJid)?.messages
+      expect(resident?.map((m) => m.id)).toEqual(['old-3', 'anchor', 'newer-5'])
+      expect(returned.map((m) => m.id)).toEqual(['old-3', 'anchor', 'newer-5'])
     })
   })
 

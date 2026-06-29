@@ -32,6 +32,7 @@ interface HookHarnessProps {
   ids: string[]
   firstNewMessageId?: string
   clearFirstNewMessageId?: () => void
+  onLoadAround?: (anchorMessageId: string) => Promise<unknown> | void
   scrollHeight?: number
   clientHeight?: number
   initialScrollTop?: number
@@ -43,11 +44,23 @@ function seedSavedScrollPosition(conversationId: string, scrollTop = 200) {
   scrollStateManager.leaveConversation(conversationId, scrollTop, 1000, 500)
 }
 
+// Seed a saved CONTENT anchor whose scrollHeight differs from the harness scroller (1000) so the
+// exact-scrollTop fast-path is skipped and the anchor path runs — mirrors returning to a deeply
+// scrolled-back conversation whose tall window was evicted and rehydrated to a short latest slice.
+function seedSavedAnchor(conversationId: string, anchorMessageId: string, scrollTop = 200) {
+  scrollStateManager.enterConversation(conversationId, 10)
+  scrollStateManager.leaveConversation(conversationId, scrollTop, 5000, 500, {
+    messageId: anchorMessageId,
+    fraction: 1,
+  })
+}
+
 function HookHarness({
   conversationId,
   ids,
   firstNewMessageId,
   clearFirstNewMessageId,
+  onLoadAround,
   scrollHeight = 1000,
   clientHeight = 500,
   initialScrollTop = 0,
@@ -65,6 +78,7 @@ function HookHarness({
     firstMessageId: ids[0],
     firstNewMessageId,
     clearFirstNewMessageId,
+    onLoadAround,
     typingUsersCount: 0,
     lastMessageReactionsKey: '',
     lastMessageId: ids.at(-1),
@@ -307,5 +321,41 @@ describe('useMessageListScroll saved-position restore', () => {
 
     expect(handle?.getScrollTop()).toBe(1000)
     expect(scrollStateManager.getSavedScrollTop('room-bottom-intent')).toBeNull()
+  })
+
+  // Regression: returning to a conversation scrolled deep into history. The saved anchor points at
+  // an OLD message that the latest-N rehydration didn't load, so restore can't resolve it. It must
+  // request the cache slice AROUND the anchor (onLoadAround) rather than fall back to the saved
+  // scrollTop on the short list (which landed near the top at the load-more trigger — the bug).
+  it('requests the cache slice around a saved anchor that is not in the loaded set', () => {
+    seedSavedAnchor('around-missing', 'old-anchor')
+    const onLoadAround = vi.fn().mockResolvedValue([])
+
+    render(
+      <HookHarness
+        conversationId="around-missing"
+        ids={['msg-0', 'msg-1', 'msg-2']}
+        onLoadAround={onLoadAround}
+        onReady={() => {}}
+      />,
+    )
+
+    expect(onLoadAround).toHaveBeenCalledWith('old-anchor')
+  })
+
+  it('does not request a slice when the saved anchor is already in the loaded set', () => {
+    seedSavedAnchor('around-present', 'msg-1')
+    const onLoadAround = vi.fn().mockResolvedValue([])
+
+    render(
+      <HookHarness
+        conversationId="around-present"
+        ids={['msg-0', 'msg-1', 'msg-2']}
+        onLoadAround={onLoadAround}
+        onReady={() => {}}
+      />,
+    )
+
+    expect(onLoadAround).not.toHaveBeenCalled()
   })
 })
