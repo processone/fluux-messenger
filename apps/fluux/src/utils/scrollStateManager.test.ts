@@ -145,6 +145,18 @@ describe('ScrollStateManager', () => {
     })
   })
 
+  describe('getSavedClientWidth', () => {
+    it('round-trips the saved viewport width (used to gate the exact-scrollTop restore)', () => {
+      manager.leaveConversation('conv1', 200, 1000, 100, { messageId: 'm', fraction: 0.5 }, 800)
+      expect(manager.getSavedClientWidth('conv1')).toBe(800)
+    })
+
+    it('returns null for a legacy save that did not capture width', () => {
+      manager.leaveConversation('conv1', 200, 1000, 100, { messageId: 'm', fraction: 0.5 })
+      expect(manager.getSavedClientWidth('conv1')).toBeNull()
+    })
+  })
+
   describe('updateMessageCount', () => {
     it('returns false for first update (no previous count)', () => {
       manager.enterConversation('conv1', 0)

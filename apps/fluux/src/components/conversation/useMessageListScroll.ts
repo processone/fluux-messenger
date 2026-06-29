@@ -337,7 +337,7 @@ export function useMessageListScroll({
   const mediaLoadDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Last scroll data (for saving on conversation switch)
-  const lastScrollDataRef = useRef<{ top: number; height: number; client: number } | null>(null)
+  const lastScrollDataRef = useRef<{ top: number; height: number; client: number; width: number } | null>(null)
   // Bottom-most-visible message anchor, captured (throttled) during scroll so it
   // survives the conversation switch (at switch time the DOM is already the new
   // conversation). Used for content-stable position restoration on return.
@@ -369,6 +369,7 @@ export function useMessageListScroll({
       top: scroller.scrollTop,
       height: scroller.scrollHeight,
       client: scroller.clientHeight,
+      width: scroller.clientWidth,
     }
     lastAnchorRef.current = findBottomAnchor(scroller)
   }, [])
@@ -382,6 +383,7 @@ export function useMessageListScroll({
       top: bottomTop,
       height: scroller.scrollHeight,
       client: scroller.clientHeight,
+      width: scroller.clientWidth,
     }
     lastAnchorRef.current = findBottomAnchor(scroller)
     isAtBottomRef.current = true
@@ -756,10 +758,20 @@ export function useMessageListScroll({
     // "jump to bottom on return" report). The fraction anchor below is for a CHANGED height (MAM
     // prepend, width change). Tolerance covers sub-pixel measurement noise only.
     const savedHeight = scrollStateManager.getSavedScrollHeight(conversationId)
-    if (savedPos !== null && savedHeight !== null && Math.abs(scroller.scrollHeight - savedHeight) <= 4) {
+    const savedWidth = scrollStateManager.getSavedClientWidth(conversationId)
+    // A width change rewraps bubbles, so the absolute scrollTop is meaningless even if the total
+    // height coincidentally matches — only take the exact fast-path when the width is unchanged (or
+    // unknown, for legacy saves). Otherwise fall through to the rendering-independent fraction anchor.
+    const widthUnchanged = savedWidth === null || scroller.clientWidth === savedWidth
+    if (
+      savedPos !== null &&
+      savedHeight !== null &&
+      widthUnchanged &&
+      Math.abs(scroller.scrollHeight - savedHeight) <= 4
+    ) {
       if (virtRestore) virtRestore.scrollToOffset(savedPos)
       else scroller.scrollTop = savedPos
-      return finishRestore('RESTORE via savedPos (layout unchanged)', { savedPos, savedHeight })
+      return finishRestore('RESTORE via savedPos (layout unchanged)', { savedPos, savedHeight, savedWidth })
     }
 
     if (savedAnchor && restoreToAnchor(scroller, savedAnchor)) {
@@ -1181,11 +1193,11 @@ export function useMessageListScroll({
     notifyUserInput()
 
     const el = e.currentTarget
-    const { scrollTop, scrollHeight, clientHeight } = el
+    const { scrollTop, scrollHeight, clientHeight, clientWidth } = el
     const distFromBottom = scrollHeight - scrollTop - clientHeight
 
     // Update refs (NO React state updates here except FAB)
-    lastScrollDataRef.current = { top: scrollTop, height: scrollHeight, client: clientHeight }
+    lastScrollDataRef.current = { top: scrollTop, height: scrollHeight, client: clientHeight, width: clientWidth }
     // Capture the bottom-most-visible anchor on every scroll event (binary search,
     // cheap) so it reflects the latest position — at switch time the DOM is already
     // the new conversation, so this must be captured live during scroll.
@@ -1254,7 +1266,7 @@ export function useMessageListScroll({
     const now = Date.now()
     if (!programmaticScroll && now - lastSaveTimeRef.current > SAVE_THROTTLE_MS) {
       lastSaveTimeRef.current = now
-      scrollStateManager.saveScrollPosition(conversationId, scrollTop, scrollHeight, clientHeight, lastAnchorRef.current ?? undefined)
+      scrollStateManager.saveScrollPosition(conversationId, scrollTop, scrollHeight, clientHeight, lastAnchorRef.current ?? undefined, clientWidth)
     }
 
     // Track if user scrolled away from top (allows re-trigger of load)
@@ -1309,8 +1321,8 @@ export function useMessageListScroll({
 
     // LEAVING old conversation - save position
     if (prevConversationRef.current && lastScrollDataRef.current) {
-      const { top, height, client } = lastScrollDataRef.current
-      scrollStateManager.leaveConversation(prevConversationRef.current, top, height, client, lastAnchorRef.current ?? undefined)
+      const { top, height, client, width } = lastScrollDataRef.current
+      scrollStateManager.leaveConversation(prevConversationRef.current, top, height, client, lastAnchorRef.current ?? undefined, width)
     }
 
     // ENTERING new conversation - reset state
@@ -1547,7 +1559,7 @@ export function useMessageListScroll({
     return () => {
       if (prevConversationRef.current) {
         if (lastScrollDataRef.current) {
-          const { top, height, client } = lastScrollDataRef.current
+          const { top, height, client, width } = lastScrollDataRef.current
           // UNMOUNT save: this is the leave path for navigations that DESTROY the message view —
           // opening Settings, switching DM↔Room, going back to the list. (DM↔DM keeps the view
           // mounted and saves via the conversation-switch effect instead.) If `top`/anchor here are
@@ -1560,7 +1572,7 @@ export function useMessageListScroll({
             anchorMessageId: lastAnchorRef.current?.messageId,
             anchorFraction: lastAnchorRef.current?.fraction,
           })
-          scrollStateManager.leaveConversation(prevConversationRef.current, top, height, client, lastAnchorRef.current ?? undefined)
+          scrollStateManager.leaveConversation(prevConversationRef.current, top, height, client, lastAnchorRef.current ?? undefined, width)
         } else {
           // No scroll data captured before unmount → nothing to restore TO on return. A user who
           // never scrolled (or unmounted before the first throttled save) lands at the bottom next
