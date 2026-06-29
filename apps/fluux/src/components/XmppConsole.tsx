@@ -124,12 +124,12 @@ const ConsoleEntry = React.memo(function ConsoleEntry({ entry, isSelected, expan
         {stanzaPreview ? (
           <>
             {/* Type badge */}
-            <span className={`px-1.5 py-0.5 text-xs font-bold rounded ${typeColors[stanzaPreview.type] || 'bg-gray-600'} text-white`}>
+            <span className={`px-1.5 py-1 text-xs font-bold rounded ${typeColors[stanzaPreview.type] || 'bg-gray-600'} text-white`}>
               {stanzaPreview.type}
             </span>
 
             {/* Subtype */}
-            <span className={`px-1.5 py-0.5 text-xs rounded ${subtypeColors[stanzaPreview.subtype] || 'bg-fluux-bg'} text-fluux-text`}>
+            <span className={`px-1.5 py-1 text-xs rounded ${subtypeColors[stanzaPreview.subtype] || 'bg-fluux-bg'} text-fluux-text`}>
               {stanzaPreview.subtype}
             </span>
 
