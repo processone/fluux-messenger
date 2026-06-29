@@ -30,6 +30,8 @@ import { isFeatureEnabled } from '@/utils/featureFlags'
 import { useSettingsStore } from '@/stores/settingsStore'
 import type { CopyMessageMeta } from '@/utils/buildCopyText'
 import { buildMessageListItems, type RenderItem } from './messageListItems'
+import { FloatingDateHeader } from './FloatingDateHeader'
+import { getTopVisibleDate } from './getTopVisibleDate'
 import { useTanstackMessageVirtualizer } from './tanstackMessageVirtualizer'
 import { useRowMetrics } from './useRowMetrics'
 import { estimateRowHeight } from './rowHeightEstimator'
@@ -350,6 +352,18 @@ export function MessageList<T extends BaseMessage>({
 
   const virtualizer = useTanstackMessageVirtualizer({ items: virtualItems, indexById, scrollRef: scrollContainerRef, estimateSize, initialMeasurements, onMeasured })
   const activeVirtualizer = virtualized ? virtualizer : undefined
+
+  // Ref-backed so FloatingDateHeader subscribes once. Reads the live virtualizer
+  // window + scrollTop each call; returns null to suppress (separator at top / no
+  // date above). MessageList itself does not re-render on scroll.
+  const getTopVisibleDateRef = useRef<() => string | null>(() => null)
+  getTopVisibleDateRef.current = () => {
+    const v = activeVirtualizer
+    const scroller = scrollContainerRef.current
+    if (!v || !scroller) return null
+    return getTopVisibleDate(v.getVirtualItems(), virtualItems, scroller.scrollTop)
+  }
+  const getTopDate = useCallback(() => getTopVisibleDateRef.current(), [])
 
   // Dev-only: expose virtualizer offset lookup for Playwright test assertions (invariant-1).
   // Allows tests to check anchor position without requiring the row to be in the DOM window.
@@ -674,6 +688,11 @@ export function MessageList<T extends BaseMessage>({
         </div>
         ))}
       </div>
+
+      {/* Floating date pill — appears while scrolling the virtualized list */}
+      {virtualized && hasContent && (
+        <FloatingDateHeader scrollerRef={scrollContainerRef} getTopDate={getTopDate} />
+      )}
 
       {/* Scroll to bottom FAB with spring animation */}
       <div
