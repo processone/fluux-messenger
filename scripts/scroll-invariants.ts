@@ -1079,6 +1079,243 @@ test.describe('Marker-on-reentry diagnostic (1:1)', () => {
   })
 })
 
+// ── DIAGNOSTIC: a new bottom row sticks to the bottom (incoming + send, plain + new-day divider) ──
+// The user report: "stick to bottom does not work if the last message is not from me (or if it's
+// the first for today and a day marker needs to be inserted)". The real cause: a send whose bottom
+// row is a GROUP-START (taller — avatar + sender header, ± a date separator) grows after paint; on
+// WebKitGTK that growth fires a scroll event mid-pin that flipped isAtBottom false and bailed the
+// pin. invariant-4 covers an incoming room message; these isolate the 1:1 path, the date-divider
+// case, and the group-start send growth race (the WebKitGTK model below).
+test.describe('At-bottom stick diagnostic (1:1)', () => {
+  const AVA = 'ava@fluux.chat'
+
+  async function emitIncoming(page: Page, jid: string, id: string, whenMs: number): Promise<void> {
+    await page.evaluate(([j, i, ts]) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const c = (window as any).__demoClient
+      if (!c) throw new Error('no __demoClient')
+      c.emitSDK('chat:message', {
+        message: {
+          type: 'chat', conversationId: j, from: j, id: i,
+          body: 'incoming while you watch — must stick to the bottom',
+          timestamp: new Date(ts as number), isOutgoing: false,
+        },
+      })
+    }, [jid, id, whenMs] as const)
+  }
+
+  async function newMsgStuck(page: Page, id: string): Promise<{ visible: boolean; distFromBottom: number }> {
+    return page.evaluate((msgId) => {
+      const s = document.querySelector('[data-message-list]') as HTMLElement | null
+      if (!s) return { visible: false, distFromBottom: -1 }
+      const el = s.querySelector(`[data-message-id="${CSS.escape(msgId)}"]`) as HTMLElement | null
+      const sRect = s.getBoundingClientRect()
+      const visible = !!el && (() => {
+        const r = el.getBoundingClientRect()
+        return r.top >= sRect.top - 5 && r.bottom <= sRect.bottom + 120
+      })()
+      return { visible, distFromBottom: Math.round(s.scrollHeight - s.scrollTop - s.clientHeight) }
+    }, id)
+  }
+
+  test('plain: incoming message (same day) while at bottom stays visible', async ({ page }) => {
+    await loadDemo(page)
+    await activateChat(page, AVA)
+    await scrollToBottom(page)
+
+    const id = `incoming-plain-${Date.now()}`
+    await emitIncoming(page, AVA, id, Date.now())
+    await page.waitForSelector(`[data-message-id="${id}"]`, { timeout: 5_000 })
+    await page.waitForTimeout(400)
+
+    const res = await newMsgStuck(page, id)
+    expect(res.visible, `incoming message "${id}" not visible — distFromBottom=${res.distFromBottom}`).toBe(true)
+    expect(res.distFromBottom, 'view not pinned to the bottom after incoming message').toBeLessThan(AT_BOTTOM_OK_PX)
+  })
+
+  test('new-day: incoming message that inserts a date divider while at bottom stays visible', async ({ page }) => {
+    await loadDemo(page)
+    await activateChat(page, AVA)
+    await scrollToBottom(page)
+
+    // Timestamp on the NEXT day → groupMessagesByDate creates a new group, inserting a date
+    // separator AND the message at the bottom (the "day marker needs to be inserted" case).
+    const id = `incoming-newday-${Date.now()}`
+    await emitIncoming(page, AVA, id, Date.now() + 24 * 60 * 60 * 1000)
+    await page.waitForSelector(`[data-message-id="${id}"]`, { timeout: 5_000 })
+    await page.waitForTimeout(400)
+
+    const res = await newMsgStuck(page, id)
+    expect(res.visible, `new-day incoming message "${id}" not visible — distFromBottom=${res.distFromBottom}`).toBe(true)
+    expect(res.distFromBottom, 'view not pinned to the bottom after new-day incoming message').toBeLessThan(AT_BOTTOM_OK_PX)
+  })
+
+  test('typing-then-incoming: message preceded by a typing indicator while at bottom stays visible', async ({ page }) => {
+    await loadDemo(page)
+    await activateChat(page, AVA)
+    await scrollToBottom(page)
+
+    // Real-world sequence: the other party is typing (indicator grows the footer), THEN the
+    // message lands (indicator clears + message appends).
+    await page.evaluate((jid) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const c = (window as any).__demoClient
+      c.emitSDK('chat:typing', { conversationId: jid, jid, isTyping: true })
+    }, AVA)
+    await page.waitForTimeout(400)
+
+    const id = `incoming-aftertyping-${Date.now()}`
+    await page.evaluate(([j, i]) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const c = (window as any).__demoClient
+      c.emitSDK('chat:typing', { conversationId: j, jid: j, isTyping: false })
+      c.emitSDK('chat:message', {
+        message: {
+          type: 'chat', conversationId: j, from: j, id: i,
+          body: 'arrived right after typing — must stick to the bottom',
+          timestamp: new Date(), isOutgoing: false,
+        },
+      })
+    }, [AVA, id] as const)
+    await page.waitForSelector(`[data-message-id="${id}"]`, { timeout: 5_000 })
+    await page.waitForTimeout(400)
+
+    const res = await newMsgStuck(page, id)
+    expect(res.visible, `post-typing incoming message "${id}" not visible — distFromBottom=${res.distFromBottom}`).toBe(true)
+    expect(res.distFromBottom, 'view not pinned to the bottom after post-typing incoming message').toBeLessThan(AT_BOTTOM_OK_PX)
+  })
+
+  test('tall incoming: a multi-line message far taller than the row estimate sticks to the bottom', async ({ page }) => {
+    await loadDemo(page)
+    await activateChat(page, AVA)
+    await scrollToBottom(page)
+
+    const id = `incoming-tall-${Date.now()}`
+    await page.evaluate(([j, i]) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const c = (window as any).__demoClient
+      c.emitSDK('chat:message', {
+        message: {
+          type: 'chat', conversationId: j, from: j, id: i,
+          body: Array.from({ length: 18 }, (_, k) => `tall incoming line ${k + 1} — far taller than the 64px estimate`).join('\n'),
+          timestamp: new Date(), isOutgoing: false,
+        },
+      })
+    }, [AVA, id] as const)
+    await page.waitForSelector(`[data-message-id="${id}"]`, { timeout: 5_000 })
+    await page.waitForTimeout(500)
+
+    // For a tall message, "stuck" means its BOTTOM edge is at the viewport bottom (its top may be
+    // above the fold if the message is taller than the viewport).
+    const res = await page.evaluate((msgId) => {
+      const s = document.querySelector('[data-message-list]') as HTMLElement | null
+      if (!s) return { bottomVisible: false, distFromBottom: -1 }
+      const el = s.querySelector(`[data-message-id="${CSS.escape(msgId)}"]`) as HTMLElement | null
+      const sRect = s.getBoundingClientRect()
+      const r = el?.getBoundingClientRect()
+      return {
+        bottomVisible: !!(r && r.bottom <= sRect.bottom + 8 && r.bottom > sRect.top),
+        distFromBottom: Math.round(s.scrollHeight - s.scrollTop - s.clientHeight),
+      }
+    }, id)
+    expect(res.bottomVisible, `tall incoming message "${id}" bottom not at viewport bottom — distFromBottom=${res.distFromBottom}`).toBe(true)
+    expect(res.distFromBottom, 'view not pinned to the bottom after tall incoming message').toBeLessThan(AT_BOTTOM_OK_PX)
+  })
+
+  // ROOT-CAUSE MODEL (the Tauri/WebKitGTK send-stick bug): a sent message whose bottom row is a
+  // GROUP-START (avatar + sender header, ± a date separator) measures much TALLER than the row
+  // estimate AFTER paint. On WebKitGTK that post-paint growth fires a 'scroll' event while the
+  // pin-bottom loop still owns scrollTop; handleScroll reads the now-large distFromBottom and flips
+  // isAtBottomRef false, so the pin loop BAILS and the send is stranded below the fold.
+  //
+  // Playwright's engines don't fire a scroll event on pure scrollHeight growth, so we MODEL the
+  // engine condition deterministically: grow the just-sent row and dispatch a 'scroll' event during
+  // the pin's settle window. RED with the unconditional isAtBottomRef write; GREEN once handleScroll
+  // ignores scroll events fired while a programmatic re-assert loop owns scrollTop.
+  test('group-start send survives a growth-driven scroll event during the pin (WebKitGTK model)', async ({ page }) => {
+    await loadDemo(page)
+    await activateChat(page, AVA)
+    await scrollToBottom(page)
+
+    // A send whose previous message is from the OTHER party → a group-START row (taller).
+    const id = `send-groupstart-${Date.now()}`
+    await page.evaluate(([jid, msgId]) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const cs = (window as any).__chatStore
+      const st = cs.getState()
+      const msgs = (st.messages.get(jid) ?? []).slice()
+      msgs.push({
+        type: 'chat', conversationId: jid, from: 'me@fluux.chat', to: jid, id: msgId,
+        body: 'my reply — starts a new bubble group', isOutgoing: true, timestamp: new Date(),
+      })
+      const m = new Map(st.messages)
+      m.set(jid, msgs)
+      cs.setState({ messages: m })
+    }, [AVA, id] as const)
+    await page.waitForSelector(`[data-message-id="${id}"]`, { timeout: 5_000 })
+
+    // While the pin-bottom loop is still settling, model WebKitGTK: the row grows tall AFTER paint
+    // (scrollHeight up, scrollTop unchanged → distFromBottom large) and the engine fires a scroll
+    // event. One rAF in keeps us inside the 60-frame pin window.
+    await page.evaluate((msgId) => new Promise<void>((resolve) => {
+      requestAnimationFrame(() => {
+        const s = document.querySelector('[data-message-list]') as HTMLElement | null
+        const el = s?.querySelector(`[data-message-id="${CSS.escape(msgId)}"]`) as HTMLElement | null
+        if (s && el) {
+          el.style.minHeight = '600px' // grow the bottom row well past AT_BOTTOM_THRESHOLD (150)
+          s.dispatchEvent(new Event('scroll', { bubbles: true }))
+        }
+        resolve()
+      })
+    }), id)
+    await page.waitForTimeout(700) // let the remaining pin frames run (or bail)
+
+    const res = await page.evaluate((msgId) => {
+      const s = document.querySelector('[data-message-list]') as HTMLElement | null
+      if (!s) return { bottomVisible: false, distFromBottom: -1 }
+      const el = s.querySelector(`[data-message-id="${CSS.escape(msgId)}"]`) as HTMLElement | null
+      const sRect = s.getBoundingClientRect()
+      const r = el?.getBoundingClientRect()
+      return {
+        bottomVisible: !!(r && r.bottom <= sRect.bottom + 8 && r.bottom > sRect.top),
+        distFromBottom: Math.round(s.scrollHeight - s.scrollTop - s.clientHeight),
+      }
+    }, id)
+    expect(res.bottomVisible, `group-start send "${id}" stranded below the fold — distFromBottom=${res.distFromBottom}`).toBe(true)
+    expect(res.distFromBottom, 'pin bailed on a growth-driven scroll event — send not stuck').toBeLessThan(AT_BOTTOM_OK_PX)
+  })
+
+  test('outgoing new-day: a sent message that inserts a date divider sticks to the bottom', async ({ page }) => {
+    await loadDemo(page)
+    await activateChat(page, AVA)
+    await scrollToBottom(page)
+
+    // The user sends the FIRST message of a new day: optimistic row + a date separator are both
+    // inserted at the bottom. Emulate the optimistic add via the store (timestamp = next day).
+    const id = `outgoing-newday-${Date.now()}`
+    await page.evaluate(([jid, msgId]) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const cs = (window as any).__chatStore
+      const st = cs.getState()
+      const msgs = (st.messages.get(jid) ?? []).slice()
+      msgs.push({
+        type: 'chat', conversationId: jid, from: 'me@fluux.chat', to: jid, id: msgId,
+        body: 'first message of a new day — sent by me', isOutgoing: true,
+        timestamp: new Date(Date.now() + 24 * 60 * 60 * 1000),
+      })
+      const m = new Map(st.messages)
+      m.set(jid, msgs)
+      cs.setState({ messages: m })
+    }, [AVA, id] as const)
+    await page.waitForSelector(`[data-message-id="${id}"]`, { timeout: 5_000 })
+    await page.waitForTimeout(400)
+
+    const res = await newMsgStuck(page, id)
+    expect(res.visible, `outgoing new-day message "${id}" not visible — distFromBottom=${res.distFromBottom}`).toBe(true)
+    expect(res.distFromBottom, 'view not pinned to the bottom after outgoing new-day message').toBeLessThan(AT_BOTTOM_OK_PX)
+  })
+})
+
 // ── DIAGNOSTIC: send sticks to the bottom even when the optimistic row is reconciled ────────────
 // "I sent a message and the view didn't stick to the bottom." A send REPLACES the optimistic last
 // row in place (reconciled to the server id) WITHOUT growing messageCount, so the old count-only
