@@ -57,7 +57,7 @@ export function ChatHeader({
 }: ChatHeaderProps) {
   const { t } = useTranslation()
   const isGroupChat = type === 'groupchat'
-  const { titleBarClass, dragRegionProps } = useWindowDrag()
+  const { dragRegionProps } = useWindowDrag()
 
   // Subscribe to this specific contact's full data from the roster store
   // for presence display. This is a focused selector — only re-renders when
@@ -92,7 +92,7 @@ export function ChatHeader({
   const kebabWrapperClass = hasAlwaysShownEntry ? undefined : kebabClass('search')
 
   return (
-    <header className={`@container h-14 ${titleBarClass} px-4 flex items-center border-b border-fluux-bg shadow-sm gap-3`} {...dragRegionProps}>
+    <header className="@container h-14 px-4 flex items-center border-b border-fluux-bg shadow-sm gap-3" {...dragRegionProps}>
       {/* Back button - mobile only */}
       {onBack && (
         <button

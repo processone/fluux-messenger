@@ -195,7 +195,7 @@ vi.mock('@/hooks', () => ({
     menuRef: { current: null },
     position: { x: 0, y: 0 },
   }),
-  useWindowDrag: () => ({ titleBarClass: '', dragRegionProps: {} }),
+  useWindowDrag: () => ({ dragRegionProps: {} }),
   useFileUpload: () => ({
     uploadFile: vi.fn(),
     isUploading: false,

@@ -17,7 +17,6 @@ vi.mock('react-i18next', () => ({
 // Mock hooks
 vi.mock('@/hooks', () => ({
   useWindowDrag: () => ({
-    titleBarClass: 'mt-5',
     dragRegionProps: { 'data-tauri-drag-region': true },
   }),
   useContextMenu: () => ({
@@ -196,20 +195,6 @@ describe('OccupantPanel', () => {
       )
 
       expect(screen.getByText('rooms.noMembersInRoom')).toBeInTheDocument()
-    })
-
-    it('applies title bar class from useWindowDrag', () => {
-      const room = createRoom()
-      const { container } = render(
-        <OccupantPanel
-          room={room}
-          contactsByJid={new Map()}
-          onClose={() => {}}
-        />
-      )
-
-      const header = container.querySelector('.h-14')
-      expect(header).toHaveClass('mt-5')
     })
   })
 

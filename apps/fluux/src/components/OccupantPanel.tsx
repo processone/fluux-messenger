@@ -20,7 +20,7 @@ import { ignoreStore, type IgnoredUser } from '@fluux/sdk/stores'
 import { Avatar } from './Avatar'
 import { Tooltip } from './Tooltip'
 import { MenuButton, MenuDivider } from './sidebar-components/SidebarListMenu'
-import { useContextMenu, useWindowDrag, useTheme } from '@/hooks'
+import { useContextMenu, useTheme } from '@/hooks'
 import { auroraSenderColor } from '@/utils/senderColor'
 import { bestTextColor } from '@/utils/contrastColor'
 import { useToastStore } from '@/stores/toastStore'
@@ -292,7 +292,6 @@ export function OccupantPanel({
   const { isDark } = useTheme()
   const connectionStatus = useConnectionStore((s) => s.status)
   const forceOffline = connectionStatus !== 'online'
-  const { titleBarClass } = useWindowDrag()
   const ignoredForRoom = useIgnoreStore((s) => s.ignoredUsers[room.jid] ?? EMPTY_IGNORED_ARRAY)
 
   // Context menu state
@@ -663,7 +662,7 @@ export function OccupantPanel({
   return (
     <div className={`${fullScreen ? 'w-full h-full' : 'w-64 border-s border-fluux-bg'} flex flex-col bg-fluux-chat`}>
       {/* Panel header */}
-      <div className={`h-14 ${titleBarClass} px-4 flex items-center justify-between border-b border-fluux-bg`}>
+      <div className="h-14 px-4 flex items-center justify-between border-b border-fluux-bg">
         {fullScreen ? (
           <div className="flex items-center gap-2">
             <button

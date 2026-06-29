@@ -47,7 +47,7 @@ export function ContactProfileView({
   const connectionStatus = useConnectionStore((s) => s.status)
   const ownJid = useConnectionStore((s) => s.jid)
   const forceOffline = connectionStatus !== 'online'
-  const { titleBarClass, dragRegionProps } = useWindowDrag()
+  const { dragRegionProps } = useWindowDrag()
 
   const [activeTab, setActiveTab] = useState<ContactProfileTab>('profile')
   const [isEditing, setIsEditing] = useState(false)
@@ -202,7 +202,7 @@ export function ContactProfileView({
       <div className="h-full flex flex-col bg-fluux-chat">
         {/* Header */}
         <div
-          className={`h-14 ${titleBarClass} px-4 flex items-center gap-2 border-b border-fluux-bg shadow-sm`}
+          className="h-14 px-4 flex items-center gap-2 border-b border-fluux-bg shadow-sm"
           {...dragRegionProps}
         >
           {onBack && (
