@@ -301,16 +301,7 @@ export function Sidebar({ onSelectContact, onStartChat, onManageUser, adminCateg
         {/* Header - with drag region for window movement */}
         <div className={`h-14 ${titleBarClass} px-4 flex items-center border-b border-fluux-bg shadow-sm`} {...dragRegionProps}>
           <h1 className="flex-1 font-semibold text-fluux-text truncate">
-            {sidebarView === 'admin' && isAdmin ? (
-              // Clicking the title returns to the admin "home" (server overview)
-              <button
-                type="button"
-                onClick={() => onAdminCategoryChange?.('stats')}
-                className="text-start hover:text-fluux-brand transition-colors"
-              >
-                {t('sidebar.admin')}
-              </button>
-            ) : sidebarView === 'messages' ? t('sidebar.messages')
+            {sidebarView === 'messages' ? t('sidebar.messages')
               : sidebarView === 'rooms' ? t('sidebar.rooms')
               : sidebarView === 'directory' ? t('sidebar.connections')
               : sidebarView === 'archive' ? t('sidebar.archive')
