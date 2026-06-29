@@ -33,7 +33,12 @@ function contrastColorForHsl(h: number, s: number, l: number): '#ffffff' | '#000
 }
 
 /**
- * Resolves the effective accent HSL from: accent preset > theme variables > CSS defaults.
+ * Resolves the effective accent HSL from: accent preset > theme variables > the
+ * *resolved* accent painted by CSS (index.css :root/.light, or an active theme's
+ * already-applied variables). Reading the resolved CSS value — rather than a fixed
+ * fallback — keeps the on-accent contrast pick locked to the real fill, so it can't
+ * drift from index.css. Numeric fallbacks mirror index.css for the (test/headless)
+ * case where computed values are unavailable.
  */
 function getEffectiveAccentHsl(
   accentPreset: AccentPreset | null,
@@ -43,9 +48,17 @@ function getEffectiveAccentHsl(
   if (accentPreset) {
     return resolved === 'light' ? accentPreset.light : accentPreset.dark
   }
-  const h = parseFloat(themeVars?.['--fluux-accent-h'] ?? '235')
-  const s = parseFloat(themeVars?.['--fluux-accent-s'] ?? '86')
-  const l = parseFloat(themeVars?.['--fluux-accent-l'] ?? '65')
+  // themeVars are already applied to :root at call time, so computed style reflects
+  // them along with the index.css defaults and the resolved mode class.
+  const computed = getComputedStyle(document.documentElement)
+  const read = (name: string, fallback: number) => {
+    const raw = themeVars?.[name] ?? computed.getPropertyValue(name)
+    const value = parseFloat(raw)
+    return Number.isFinite(value) ? value : fallback
+  }
+  const h = read('--fluux-accent-h', 231)
+  const s = read('--fluux-accent-s', 100)
+  const l = read('--fluux-accent-l', resolved === 'light' ? 60 : 64)
   return { h, s, l }
 }
 
