@@ -40,7 +40,6 @@ vi.mock('react-i18next', () => ({
 // Mock useWindowDrag hook
 vi.mock('@/hooks', () => ({
   useWindowDrag: () => ({
-    titleBarClass: 'mt-5',
     dragRegionProps: { 'data-tauri-drag-region': true },
   }),
   useClickOutside: vi.fn(),
@@ -749,26 +748,6 @@ describe('RoomHeader', () => {
     })
   })
 
-  describe('Title Bar', () => {
-    it('applies title bar class from useWindowDrag', () => {
-      const { container } = render(
-        <RoomHeader
-          room={createRoom()}
-          showOccupants={false}
-          onToggleOccupants={mockOnToggleOccupants}
-          setRoomNotifyAll={mockSetRoomNotifyAll}
-          setRoomAvatar={mockSetRoomAvatar}
-          clearRoomAvatar={mockClearRoomAvatar}
-          submitRoomConfig={mockSubmitRoomConfig}
-          setSubject={mockSetSubject}
-          destroyRoom={mockDestroyRoom}
-        />
-      )
-
-      const header = container.querySelector('header')
-      expect(header).toHaveClass('mt-5')
-    })
-  })
 
   describe('Manage Hats', () => {
     it('shows "Manage Hats" only for owners', () => {

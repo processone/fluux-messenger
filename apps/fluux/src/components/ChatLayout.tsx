@@ -39,7 +39,6 @@ import { useFocusZones, useViewNavigation, isMobileWeb, isSmallScreen, useWindow
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
 import { useDeepLink } from '@/hooks/useDeepLink'
 import { saveViewState, getSavedViewState, type ViewStateData } from '@/hooks/useSessionPersistence'
-import { useWindowDrag } from '@/hooks'
 import { useModalStore } from '@/stores/modalStore'
 import { Server, ShieldOff, MessageCircle, Hash, Users, Archive, Bell, Search, Settings, Plus, type LucideIcon } from 'lucide-react'
 
@@ -1077,13 +1076,12 @@ function EmptyState({ sidebarView, primaryAction }: { sidebarView: SidebarView; 
  */
 function AdminEmptyState() {
   const { t } = useTranslation()
-  const { titleBarClass } = useWindowDrag()
   const isAdmin = useAdminStore((s) => s.isAdmin)
 
   return (
     <div className="flex-1 flex flex-col bg-fluux-sidebar">
       {/* Header - no close button on root admin screen */}
-      <div className={`flex items-center px-4 py-3 ${titleBarClass} border-b border-fluux-bg`}>
+      <div className="flex items-center px-4 py-3 border-b border-fluux-bg">
         <div className="flex items-center gap-2">
           <Server className="size-5 text-fluux-muted" />
           <h2 className="font-semibold text-fluux-text">{t('admin.title')}</h2>

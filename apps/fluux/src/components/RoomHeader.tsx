@@ -71,7 +71,7 @@ export function RoomHeader({
   const [showMembersModal, setShowMembersModal] = useState(false)
   const [showHatsModal, setShowHatsModal] = useState(false)
   const [avatarError, setAvatarError] = useState<string | null>(null)
-  const { titleBarClass, dragRegionProps } = useWindowDrag()
+  const { dragRegionProps } = useWindowDrag()
 
   // Get self occupant to check affiliation
   const selfOccupant = room.nickname ? room.occupants.get(room.nickname) : undefined
@@ -97,7 +97,7 @@ export function RoomHeader({
   })
 
   return (
-    <header className={`@container h-14 ${titleBarClass} px-4 flex items-center border-b border-fluux-bg shadow-sm gap-3`} {...dragRegionProps}>
+    <header className="@container h-14 px-4 flex items-center border-b border-fluux-bg shadow-sm gap-3" {...dragRegionProps}>
       {/* Back button - mobile only */}
       {onBack && (
         <button

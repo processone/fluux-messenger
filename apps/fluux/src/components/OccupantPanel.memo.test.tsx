@@ -15,7 +15,7 @@ vi.mock('react-i18next', () => ({
 const themeMock = { isDark: true }
 
 vi.mock('@/hooks', () => ({
-  useWindowDrag: () => ({ titleBarClass: '', dragRegionProps: {} }),
+  useWindowDrag: () => ({ dragRegionProps: {} }),
   useContextMenu: () => ({
     isOpen: false, position: { x: 0, y: 0 }, open: vi.fn(), close: vi.fn(),
     menuRef: { current: null }, triggerHandlers: {},

@@ -14,7 +14,6 @@ vi.mock('react-i18next', () => ({
 // Mock useWindowDrag hook and other hooks used by ChatHeader and HeaderOverflowKebab
 vi.mock('@/hooks', () => ({
   useWindowDrag: () => ({
-    titleBarClass: 'mt-5',
     dragRegionProps: { 'data-tauri-drag-region': true },
   }),
   useAnchoredMenu: () => ({
@@ -297,19 +296,6 @@ describe('ChatHeader', () => {
   })
 
   describe('Title Bar', () => {
-    it('applies title bar class from useWindowDrag', () => {
-      const { container } = render(
-        <ChatHeader
-          name="Alice"
-          type="chat"
-          jid="alice@example.com"
-        />
-      )
-
-      const header = container.querySelector('header')
-      expect(header).toHaveClass('mt-5')
-    })
-
     it('applies drag region props for Tauri', () => {
       const { container } = render(
         <ChatHeader

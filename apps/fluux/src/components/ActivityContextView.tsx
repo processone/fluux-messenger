@@ -31,7 +31,7 @@ export function ActivityContextView({ onBack }: { onBack?: () => void }) {
   const { t } = useTranslation()
   const { previewEvent, setPreviewEvent } = useActivityLog()
   const { navigateToConversation, navigateToRoom } = useNavigateToTarget()
-  const { titleBarClass, dragRegionProps } = useWindowDrag()
+  const { dragRegionProps } = useWindowDrag()
   const { resolvedMode } = useMode()
   const isDarkMode = resolvedMode === 'dark'
   const hasRoom = useCallback((jid: string) => roomStore.getState().rooms.has(jid), [])
@@ -255,7 +255,7 @@ export function ActivityContextView({ onBack }: { onBack?: () => void }) {
   return (
     <div className="flex flex-col h-full bg-fluux-surface/50">
       {/* Header */}
-      <header className={`h-14 ${titleBarClass} px-4 flex items-center border-b border-fluux-bg shadow-sm gap-3`} {...dragRegionProps}>
+      <header className="h-14 px-4 flex items-center border-b border-fluux-bg shadow-sm gap-3" {...dragRegionProps}>
         {/* Back button - mobile */}
         {onBack && (
           <button

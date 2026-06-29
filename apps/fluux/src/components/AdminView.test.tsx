@@ -8,7 +8,7 @@ vi.mock('react-i18next', () => ({
 }))
 
 vi.mock('@/hooks', () => ({
-  useWindowDrag: () => ({ titleBarClass: '' }),
+  useWindowDrag: () => ({ dragRegionProps: { 'data-tauri-drag-region': true } }),
   useModalInput: () => ({ current: null }),
 }))
 

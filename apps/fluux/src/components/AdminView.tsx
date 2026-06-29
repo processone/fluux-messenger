@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { Server, Plus, ArrowLeft, Menu } from 'lucide-react'
 import { useAdmin, useXMPP, adminStore, type AdminCategory, type AdminUser, type AdminRoom } from '@fluux/sdk'
 import { useAdminStore } from '@fluux/sdk/react'
-import { useWindowDrag, useModalInput } from '@/hooks'
+import { useModalInput } from '@/hooks'
 import { useWindowedList } from '../hooks/useWindowedList'
 import { Tooltip } from './Tooltip'
 import { ModalShell } from './ModalShell'
@@ -27,7 +27,6 @@ interface AdminViewProps {
 
 export function AdminView({ activeCategory, onBack }: AdminViewProps) {
   const { t } = useTranslation()
-  const { titleBarClass } = useWindowDrag()
   const { client } = useXMPP()
   const {
     currentSession,
@@ -531,7 +530,7 @@ export function AdminView({ activeCategory, onBack }: AdminViewProps) {
   return (
     <div className="flex-1 flex flex-col min-h-0 bg-fluux-sidebar">
       {/* Header */}
-      <div className={`h-14 flex items-center px-4 ${titleBarClass} border-b border-fluux-bg`}>
+      <div className="h-14 flex items-center px-4 border-b border-fluux-bg">
         {/* Back button - mobile only */}
         {onBack && (
           <button

@@ -8,7 +8,7 @@ exports[`ChatView > Snapshots > should match snapshot with messages 1`] = `
     class="flex flex-col h-full min-h-0 relative"
   >
     <header
-      class="@container h-14  px-4 flex items-center border-b border-fluux-bg shadow-sm gap-3"
+      class="@container h-14 px-4 flex items-center border-b border-fluux-bg shadow-sm gap-3"
     >
       <div
         data-testid="avatar"
@@ -472,7 +472,7 @@ exports[`ChatView > Snapshots > should match snapshot with typing indicator 1`] 
     class="flex flex-col h-full min-h-0 relative"
   >
     <header
-      class="@container h-14  px-4 flex items-center border-b border-fluux-bg shadow-sm gap-3"
+      class="@container h-14 px-4 flex items-center border-b border-fluux-bg shadow-sm gap-3"
     >
       <div
         data-testid="avatar"
