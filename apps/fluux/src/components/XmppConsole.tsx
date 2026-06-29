@@ -123,13 +123,15 @@ const ConsoleEntry = React.memo(function ConsoleEntry({ entry, isSelected, expan
 
         {stanzaPreview ? (
           <>
-            {/* Type badge */}
-            <span className={`px-1.5 py-1 text-xs font-bold rounded ${typeColors[stanzaPreview.type] || 'bg-gray-600'} text-white`}>
+            {/* Type badge. leading-none keeps the pill tight to the text so it
+                stays well clear of the row's focus ring (a taller pill crowds and
+                visually crosses the ring on the selected row). */}
+            <span className={`px-1.5 py-0.5 text-xs font-bold leading-none rounded ${typeColors[stanzaPreview.type] || 'bg-gray-600'} text-white`}>
               {stanzaPreview.type}
             </span>
 
             {/* Subtype */}
-            <span className={`px-1.5 py-1 text-xs rounded ${subtypeColors[stanzaPreview.subtype] || 'bg-fluux-bg'} text-fluux-text`}>
+            <span className={`px-1.5 py-0.5 text-xs leading-none rounded ${subtypeColors[stanzaPreview.subtype] || 'bg-fluux-bg'} text-fluux-text`}>
               {stanzaPreview.subtype}
             </span>
 
@@ -628,10 +630,12 @@ export function XmppConsole() {
         <div
           ref={packetsContainerRef}
           tabIndex={0}
-          // border-transparent insets the scroll clip by 1px so it lines up with
-          // the focus ring (outline-offset: -1px). Without it, rows scroll in the
-          // 1px band above the ring and a sliver of content peeks over the top edge.
-          className="xmpp-console-log absolute inset-0 overflow-y-auto overflow-x-hidden border border-transparent"
+          // Transparent borders inset the scroll clip away from the focus ring
+          // (outline-offset: -1px). Top/bottom get a 4px inset so scrolling rows
+          // are clipped a few px clear of the ring line — otherwise a row's badge
+          // can scroll up to the ring and its background paints over it. Left/right
+          // stay at 1px so the per-row accent bars still hug the edge.
+          className="xmpp-console-log absolute inset-0 overflow-y-auto overflow-x-hidden border-x border-y-4 border-transparent"
           onScroll={handleScroll}
           onKeyDown={handleLogKeyDown}
         >
