@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next'
 import { X } from 'lucide-react'
 import { Tooltip } from './Tooltip'
+import { ModalOverlay } from './ModalOverlay'
 import { type ShortcutDefinition, formatShortcutKey } from '@/hooks/useKeyboardShortcuts'
 
 interface ShortcutHelpProps {
@@ -30,25 +31,22 @@ export function ShortcutHelp({ shortcuts, onClose }: ShortcutHelpProps) {
   const categoryOrder = ['general', 'navigation', 'actions']
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+    // Escape to close is handled by the global escape hierarchy in
+    // useKeyboardShortcuts, so the overlay does not also bind it.
+    <ModalOverlay
+      onClose={onClose}
+      width="max-w-lg"
+      panelClassName="max-h-[80vh] overflow-hidden flex flex-col"
+      closeOnEscape={false}
     >
-      <button
-        type="button"
-        aria-hidden="true"
-        tabIndex={-1}
-        onClick={onClose}
-        className="absolute inset-0 cursor-default"
-      />
-      <div
-        className="relative z-10 bg-fluux-sidebar rounded-lg shadow-xl max-w-lg w-full mx-4 max-h-[80vh] overflow-hidden flex flex-col"
-      >
+      {({ close }) => (
+        <>
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-fluux-border">
           <h2 className="text-lg font-semibold text-fluux-text">{t('shortcuts.title')}</h2>
           <Tooltip content={t('common.close')} position="left">
             <button
-              onClick={onClose}
+              onClick={close}
               className="p-1.5 rounded hover:bg-fluux-hover text-fluux-muted hover:text-fluux-text transition-colors"
               aria-label={t('common.close')}
             >
@@ -92,7 +90,8 @@ export function ShortcutHelp({ shortcuts, onClose }: ShortcutHelpProps) {
             {t('shortcuts.pressEscToClose')}
           </span>
         </div>
-      </div>
-    </div>
+        </>
+      )}
+    </ModalOverlay>
   )
 }

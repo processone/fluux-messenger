@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ShieldCheck, ShieldOff, AlertTriangle, Check, ChevronDown, ChevronRight } from 'lucide-react'
 import { deriveSas, splitSas } from '@fluux/sdk'
+import { ModalOverlay } from './ModalOverlay'
 
 interface VerifyPeerDialogProps {
   /** Display name of the peer (the "Are you talking to {name}?" subject). */
@@ -66,14 +67,6 @@ export function VerifyPeerDialog({
   const [input, setInput] = useState('')
   const [showFingerprints, setShowFingerprints] = useState(false)
 
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onCancel()
-    }
-    document.addEventListener('keydown', handleKeyDown)
-    return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [onCancel])
-
   // Derive the SAS once both fingerprints are available. Cleared if the
   // dialog re-mounts with a different peer (cancellation guard against
   // a late promise resolving for the previous peer's keys).
@@ -99,18 +92,11 @@ export function VerifyPeerDialog({
   const inputMismatch = sas !== null && input.length === 4 && input !== sas.theirs
 
   return (
-    <div
-      data-modal="true"
-      className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+    <ModalOverlay
+      onClose={onCancel}
+      width="max-w-md"
+      panelClassName="max-h-[calc(100vh-2rem)] flex flex-col overflow-hidden"
     >
-      <button
-        type="button"
-        aria-hidden="true"
-        tabIndex={-1}
-        onClick={onCancel}
-        className="absolute inset-0 cursor-default"
-      />
-      <div className="relative z-10 bg-fluux-sidebar rounded-lg max-w-md w-full mx-4 shadow-xl max-h-[calc(100vh-2rem)] flex flex-col overflow-hidden">
         <div className="px-5 pt-5 pb-3">
           <h3 className="text-lg font-semibold text-fluux-text mb-1">
             {t('chat.verifyPeer.dialogTitle', { name: peerName })}
@@ -278,8 +264,7 @@ export function VerifyPeerDialog({
             </div>
           </div>
         </div>
-      </div>
-    </div>
+    </ModalOverlay>
   )
 }
 

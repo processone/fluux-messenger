@@ -7,7 +7,7 @@ import { KeyPickerDialog } from './KeyPickerDialog'
 import { KeyPickerRequiredError, NoRecoveryAvailableError } from '@/e2ee/recoveryErrors'
 import type { KeyBundle } from '@/e2ee/OpenPGPPluginBase'
 import { isTauri } from '@/utils/tauri'
-import { useRestoreFocus } from '@/hooks/useRestoreFocus'
+import { ModalOverlay } from './ModalOverlay'
 import {
   cachePassphrase,
   clearCachedPassphrase,
@@ -38,11 +38,6 @@ interface UnlockEncryptionDialogProps {
 export function UnlockEncryptionDialog({ client, onClose }: UnlockEncryptionDialogProps) {
   const { t } = useTranslation()
   const inputRef = useRef<HTMLInputElement | null>(null)
-  const dialogRef = useRef<HTMLDivElement>(null)
-
-  // Keep keyboard focus inside the dialog (or its nested key picker) across OS
-  // window blur/refocus, falling back to the passphrase field.
-  useRestoreFocus(dialogRef, inputRef)
 
   const [passphrase, setPassphrase] = useState('')
   const [confirmPassphrase, setConfirmPassphrase] = useState('')
@@ -89,14 +84,6 @@ export function UnlockEncryptionDialog({ client, onClose }: UnlockEncryptionDial
   useEffect(() => {
     inputRef.current?.focus()
   }, [mode])
-
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !isWorking) onClose(false)
-    }
-    document.addEventListener('keydown', handleKeyDown)
-    return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [onClose, isWorking])
 
   const handleConfirm = useCallback(async () => {
     if (!passphrase.trim()) return
@@ -208,25 +195,20 @@ export function UnlockEncryptionDialog({ client, onClose }: UnlockEncryptionDial
   const loading = mode === null
 
   return (
-    <div
-      ref={dialogRef}
-      data-modal="true"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="unlock-encryption-dialog-title"
-      aria-describedby="unlock-encryption-dialog-body"
-      aria-busy={loading || isWorking || undefined}
-      className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+    <ModalOverlay
+      onClose={() => onClose(false)}
+      width="max-w-md"
+      panelClassName="max-h-[calc(100vh-2rem)] flex flex-col overflow-hidden"
+      dismissable={!isWorking}
+      focusRef={inputRef}
+      panelProps={{
+        role: 'dialog',
+        'aria-modal': true,
+        'aria-labelledby': 'unlock-encryption-dialog-title',
+        'aria-describedby': 'unlock-encryption-dialog-body',
+        'aria-busy': loading || isWorking || undefined,
+      }}
     >
-      <button
-        type="button"
-        aria-hidden="true"
-        tabIndex={-1}
-        disabled={isWorking}
-        onClick={() => onClose(false)}
-        className="absolute inset-0 cursor-default"
-      />
-      <div className="relative z-10 bg-fluux-sidebar rounded-lg max-w-md w-full mx-4 shadow-xl max-h-[calc(100vh-2rem)] flex flex-col overflow-hidden">
         <form
           onSubmit={(e) => { e.preventDefault(); void handleConfirm() }}
           className="contents"
@@ -345,7 +327,6 @@ export function UnlockEncryptionDialog({ client, onClose }: UnlockEncryptionDial
           </button>
         </div>
         </form>
-      </div>
 
       {picker && (
         <KeyPickerDialog
@@ -367,6 +348,6 @@ export function UnlockEncryptionDialog({ client, onClose }: UnlockEncryptionDial
           onCancel={() => setPicker(null)}
         />
       )}
-    </div>
+    </ModalOverlay>
   )
 }

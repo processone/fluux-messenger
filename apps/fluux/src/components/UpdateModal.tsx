@@ -1,7 +1,7 @@
-import { useRef, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { X, Download, RefreshCw, CheckCircle, AlertCircle } from 'lucide-react'
 import { Tooltip } from './Tooltip'
+import { ModalOverlay } from './ModalOverlay'
 import type { UpdateState } from '@/hooks'
 
 interface UpdateModalProps {
@@ -13,40 +13,22 @@ interface UpdateModalProps {
 
 export function UpdateModal({ state, onDownload, onRelaunch, onDismiss }: UpdateModalProps) {
   const { t } = useTranslation()
-  const modalRef = useRef<HTMLDivElement>(null)
-
-  // Close on escape key (only if not downloading)
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !state.downloading) onDismiss()
-    }
-    document.addEventListener('keydown', handleKeyDown)
-    return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [onDismiss, state.downloading])
 
   return (
-    <div
-      className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+    <ModalOverlay
+      onClose={onDismiss}
+      panelClassName="overflow-hidden"
+      dismissable={!state.downloading}
     >
-      <button
-        type="button"
-        aria-hidden="true"
-        tabIndex={-1}
-        disabled={state.downloading}
-        onClick={onDismiss}
-        className="absolute inset-0 cursor-default"
-      />
-      <div
-        ref={modalRef}
-        className="relative z-10 bg-fluux-sidebar rounded-lg shadow-xl border border-fluux-hover w-96 overflow-hidden"
-      >
+      {({ close }) => (
+        <>
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-fluux-hover">
           <h2 className="text-lg font-semibold text-fluux-text">{t('update.title')}</h2>
           {!state.downloading && (
             <Tooltip content={t('common.close')}>
               <button
-                onClick={onDismiss}
+                onClick={close}
                 className="p-1 text-fluux-muted hover:text-fluux-text rounded hover:bg-fluux-hover"
               >
                 <X className="size-4" />
@@ -133,7 +115,7 @@ export function UpdateModal({ state, onDownload, onRelaunch, onDismiss }: Update
             ) : (
               <>
                 <button
-                  onClick={onDismiss}
+                  onClick={close}
                   className="flex-1 px-4 py-2 text-fluux-muted hover:text-fluux-text border border-fluux-hover rounded-lg hover:bg-fluux-hover transition-colors"
                 >
                   {t('update.later')}
@@ -149,7 +131,8 @@ export function UpdateModal({ state, onDownload, onRelaunch, onDismiss }: Update
             )}
           </div>
         </div>
-      </div>
-    </div>
+        </>
+      )}
+    </ModalOverlay>
   )
 }

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { AlertTriangle, Loader2, Server, FileUp, RotateCcw } from 'lucide-react'
+import { ModalOverlay } from './ModalOverlay'
 
 type Phase = 'choose' | 'restoring' | 'importing' | 'confirm-replace' | 'replacing'
 
@@ -138,19 +139,13 @@ export function IdentityChoiceDialog({
   const isBusy = phase === 'importing' || phase === 'replacing'
 
   return (
-    <div
-      data-modal="true"
-      className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+    <ModalOverlay
+      onClose={onCancel}
+      width="max-w-lg"
+      panelClassName="max-h-[calc(100vh-2rem)] flex flex-col overflow-hidden"
+      dismissable={!isBusy}
+      closeOnEscape={false}
     >
-      <button
-        type="button"
-        aria-hidden="true"
-        tabIndex={-1}
-        disabled={isBusy}
-        onClick={onCancel}
-        className="absolute inset-0 cursor-default"
-      />
-      <div className="relative z-10 bg-fluux-sidebar rounded-lg max-w-lg w-full mx-4 shadow-xl max-h-[calc(100vh-2rem)] flex flex-col overflow-hidden">
         <div className="px-5 pt-5 pb-3">
           <h3 className="text-lg font-semibold text-fluux-text mb-1">
             {t('settings.encryption.identityChoice.title')}
@@ -302,8 +297,7 @@ export function IdentityChoiceDialog({
             </button>
           </div>
         )}
-      </div>
-    </div>
+    </ModalOverlay>
   )
 }
 

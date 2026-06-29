@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Key, Loader2, Star } from 'lucide-react'
 import type { KeyBundle } from '../e2ee/OpenPGPPluginBase'
+import { ModalOverlay } from './ModalOverlay'
 
 interface KeyPickerDialogProps {
   candidates: KeyBundle[]
@@ -20,14 +21,6 @@ export function KeyPickerDialog({ candidates, onConfirm, onCancel }: KeyPickerDi
   const [selected, setSelected] = useState(sorted[0]?.fingerprint ?? '')
   const [isInstalling, setIsInstalling] = useState(false)
   const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !isInstalling) onCancel()
-    }
-    document.addEventListener('keydown', handleKeyDown)
-    return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [onCancel, isInstalling])
 
   const handleConfirm = useCallback(async () => {
     if (!selected) return
@@ -54,19 +47,12 @@ export function KeyPickerDialog({ candidates, onConfirm, onCancel }: KeyPickerDi
   }
 
   return (
-    <div
-      data-modal="true"
-      className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+    <ModalOverlay
+      onClose={onCancel}
+      width="max-w-md"
+      panelClassName="max-h-[calc(100vh-2rem)] flex flex-col overflow-hidden"
+      dismissable={!isInstalling}
     >
-      <button
-        type="button"
-        aria-hidden="true"
-        tabIndex={-1}
-        disabled={isInstalling}
-        onClick={onCancel}
-        className="absolute inset-0 cursor-default"
-      />
-      <div className="relative z-10 bg-fluux-sidebar rounded-lg max-w-md w-full mx-4 shadow-xl max-h-[calc(100vh-2rem)] flex flex-col overflow-hidden">
         <div className="px-5 pt-5 pb-3">
           <h3 className="text-lg font-semibold text-fluux-text mb-1">
             {t('settings.encryption.keyPicker.title')}
@@ -144,7 +130,6 @@ export function KeyPickerDialog({ candidates, onConfirm, onCancel }: KeyPickerDi
             {t('settings.encryption.keyPicker.confirm')}
           </button>
         </div>
-      </div>
-    </div>
+    </ModalOverlay>
   )
 }

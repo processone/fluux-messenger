@@ -1,4 +1,4 @@
-import { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useLayoutEffect, useRef } from 'react'
 import { TextInput } from './ui/TextInput'
 import { useTranslation } from 'react-i18next'
 import {
@@ -22,8 +22,7 @@ import type { SidebarView } from './Sidebar'
 import { Avatar } from './Avatar'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { isAdvancedMode } from '@/stores/advancedModeStore'
-import { useRestoreFocus } from '@/hooks/useRestoreFocus'
-import { useModalTransition } from '@/hooks/useModalTransition'
+import { ModalOverlay } from './ModalOverlay'
 
 // =============================================================================
 // Types
@@ -179,14 +178,11 @@ function CommandPaletteContent({
 }: CommandPaletteProps) {
   detectRenderLoop('CommandPalette')
   const { t } = useTranslation()
-  const { panelClass, scrimClass, requestClose } = useModalTransition({ panelInClass: 'command-palette-in' })
-  const close = useCallback(() => requestClose(onClose), [requestClose, onClose])
   const [query, setQuery] = useState('')
   const [selectedIndex, setSelectedIndex] = useState(0)
   const selectedIndexRef = useRef(0) // Ref for synchronous access in event handlers
   const inputRef = useRef<HTMLInputElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
-  const dialogRef = useRef<HTMLDivElement>(null)
   const ignoreMouseRef = useRef(true) // start true; cleared after first paint to avoid stale-hover index changes
   const [isKeyboardNav, setIsKeyboardNav] = useState(false) // Track keyboard navigation mode
   const lastMousePosRef = useRef<{ x: number; y: number } | null>(null) // Track mouse position to detect real movement
@@ -449,11 +445,6 @@ function CommandPaletteContent({
     })
   }, [])
 
-  // Restore focus to the search input when the app window regains focus.
-  // Without this, switching away and back leaves focus on <body>, so arrow keys
-  // leak to the sidebar instead of moving the palette selection.
-  useRestoreFocus(dialogRef, inputRef)
-
   // Reset selection synchronously when query changes
   useLayoutEffect(() => {
     setSelectedIndex(0)
@@ -469,7 +460,7 @@ function CommandPaletteContent({
   // Event handlers
   // =============================================================================
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
+  const handleKeyDown = (e: React.KeyboardEvent, { close }: { close: () => void }) => {
     // Handle Cmd+K / Ctrl+K to toggle (close) the palette
     if (e.key.toLowerCase() === 'k' && (e.metaKey || e.ctrlKey)) {
       e.preventDefault()
@@ -525,23 +516,17 @@ function CommandPaletteContent({
   const indexById = new Map(flatItems.map((item, i) => [item.id, i]))
 
   return (
-    <div
-      className={`fixed inset-0 modal-scrim flex items-start justify-center pt-[15vh] z-50 ${scrimClass}`}
+    <ModalOverlay
+      onClose={onClose}
+      align="top"
+      width="max-w-lg"
+      panelClassName="overflow-hidden"
+      panelInClass="command-palette-in"
+      focusRef={inputRef}
+      closeOnEscape={false}
+      panelProps={{ role: 'dialog', 'aria-modal': true }}
+      onPanelKeyDown={handleKeyDown}
     >
-      <button
-        type="button"
-        aria-hidden="true"
-        tabIndex={-1}
-        onClick={close}
-        className="absolute inset-0 cursor-default"
-      />
-      <div
-        ref={dialogRef}
-        role="dialog"
-        aria-modal="true"
-        className={`relative z-10 fluux-glass rounded-lg w-full max-w-lg mx-4 overflow-hidden ${panelClass}`}
-        onKeyDown={handleKeyDown}
-      >
         {/* Search Input — contained, rounded field with a soft accent focus ring
             that wraps the whole field (icon + input + esc), matching the
             composer card's `:focus-within` treatment. The palette auto-focuses
@@ -594,7 +579,7 @@ function CommandPaletteContent({
                       className={`w-full flex items-center command-row px-4 text-start transition-colors
                         focus:outline-none focus-visible:!shadow-none border-s-2
                         ${isSelected
-                          ? 'bg-fluux-brand/50 text-fluux-text border-fluux-brand font-medium'
+                          ? 'text-fluux-text border-fluux-brand font-medium'
                           : `text-fluux-text border-transparent ${isKeyboardNav ? '' : 'hover:bg-fluux-hover'}`
                         }`}
                     >
@@ -685,7 +670,6 @@ function CommandPaletteContent({
             </span>
           </div>
         </div>
-      </div>
-    </div>
+    </ModalOverlay>
   )
 }

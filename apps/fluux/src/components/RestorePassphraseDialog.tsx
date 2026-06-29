@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 import { useTranslation } from 'react-i18next'
 import { AlertTriangle, Eye, EyeOff, Loader2 } from 'lucide-react'
 import { USE_V6_KEYS } from '@/e2ee/passphraseGenerator'
+import { ModalOverlay } from './ModalOverlay'
 
 const BACKUP_CODE_ALPHABET = '123456789ABCDEFGHIJKLMNPQRSTUVWXYZ'
 
@@ -103,14 +104,6 @@ export function RestorePassphraseDialog({
     inputRef.current?.focus()
   }, [])
 
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !isRestoring) onCancel()
-    }
-    document.addEventListener('keydown', handleKeyDown)
-    return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [onCancel, isRestoring])
-
   // After backup code reformatting, restore cursor position to where the
   // user was typing rather than jumping to the end.
   useLayoutEffect(() => {
@@ -176,19 +169,13 @@ export function RestorePassphraseDialog({
   }, [onConfirm, passphrase, isImport])
 
   return (
-    <div
-      data-modal="true"
-      className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+    <ModalOverlay
+      onClose={onCancel}
+      width="max-w-md"
+      panelClassName="max-h-[calc(100vh-2rem)] flex flex-col overflow-hidden"
+      dismissable={!isRestoring}
+      focusRef={inputRef}
     >
-      <button
-        type="button"
-        aria-hidden="true"
-        tabIndex={-1}
-        disabled={isRestoring}
-        onClick={onCancel}
-        className="absolute inset-0 cursor-default"
-      />
-      <div className="relative z-10 bg-fluux-sidebar rounded-lg max-w-md w-full mx-4 shadow-xl max-h-[calc(100vh-2rem)] flex flex-col overflow-hidden">
         <form
           onSubmit={(e) => { e.preventDefault(); void handleConfirm() }}
           className="contents"
@@ -300,7 +287,6 @@ export function RestorePassphraseDialog({
           </button>
         </div>
         </form>
-      </div>
-    </div>
+    </ModalOverlay>
   )
 }

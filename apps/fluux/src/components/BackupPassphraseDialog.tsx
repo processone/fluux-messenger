@@ -1,10 +1,9 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Copy, Check, AlertTriangle, Loader2, RefreshCw } from 'lucide-react'
 import { generateBackupPassphrase, generateBackupCode, USE_V6_KEYS } from '@/e2ee/passphraseGenerator'
 import { SaveToPasswordManagerButton } from './SaveToPasswordManagerButton'
-import { useRestoreFocus } from '@/hooks/useRestoreFocus'
-import { useModalTransition } from '@/hooks/useModalTransition'
+import { ModalOverlay } from './ModalOverlay'
 
 // Draw a fresh passphrase in the user's UI language. 8 words ×
 // 11 bits (BIP-39) = 88 bits, which matches the acceptability gate
@@ -48,13 +47,6 @@ export function BackupPassphraseDialog({
   confirmLabel,
 }: BackupPassphraseDialogProps) {
   const { t, i18n } = useTranslation()
-  const panelRef = useRef<HTMLDivElement>(null)
-
-  // Keep keyboard focus inside the dialog across OS window blur/refocus.
-  useRestoreFocus(panelRef)
-
-  const { panelClass, scrimClass, requestClose } = useModalTransition()
-  const cancel = useCallback(() => requestClose(onCancel), [requestClose, onCancel])
 
   // Regenerate on every open rather than keeping a stable value — a
   // user who cancelled and reopened should get a fresh passphrase so
@@ -87,14 +79,6 @@ export function BackupPassphraseDialog({
       cancelled = true
     }
   }, [i18n.language])
-
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !isPublishing) cancel()
-    }
-    document.addEventListener('keydown', handleKeyDown)
-    return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [cancel, isPublishing])
 
   const handleRegenerate = useCallback(async () => {
     if (isPublishing) return
@@ -145,19 +129,13 @@ export function BackupPassphraseDialog({
   const wordGroups = useMemo(() => (passphrase && !isBackupCode ? passphrase.split(' ') : []), [passphrase, isBackupCode])
 
   return (
-    <div
-      data-modal="true"
-      className={`fixed inset-0 modal-scrim flex items-center justify-center z-50 ${scrimClass}`}
+    <ModalOverlay
+      onClose={onCancel}
+      width="max-w-md"
+      panelClassName="max-h-[calc(100vh-2rem)] flex flex-col overflow-hidden"
+      dismissable={!isPublishing}
     >
-      <button
-        type="button"
-        aria-hidden="true"
-        tabIndex={-1}
-        disabled={isPublishing}
-        onClick={cancel}
-        className="absolute inset-0 cursor-default"
-      />
-      <div ref={panelRef} className={`relative z-10 fluux-glass rounded-lg max-w-md w-full mx-4 max-h-[calc(100vh-2rem)] flex flex-col overflow-hidden ${panelClass}`}>
+      {({ close }) => (
         <form
           onSubmit={(e) => { e.preventDefault(); void handleConfirm() }}
           className="contents"
@@ -268,7 +246,7 @@ export function BackupPassphraseDialog({
           <div className="flex gap-2 justify-end">
             <button
               type="button"
-              onClick={cancel}
+              onClick={close}
               disabled={isPublishing}
               className="px-4 py-2 text-sm text-fluux-text bg-fluux-hover hover:bg-fluux-active rounded-lg transition-colors disabled:opacity-50"
             >
@@ -285,7 +263,7 @@ export function BackupPassphraseDialog({
           </div>
         </div>
         </form>
-      </div>
-    </div>
+      )}
+    </ModalOverlay>
   )
 }
