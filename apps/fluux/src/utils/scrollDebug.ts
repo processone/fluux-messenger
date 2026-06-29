@@ -15,12 +15,28 @@ export function isScrollDebugEnabled(): boolean {
 }
 
 /**
- * Console log gated on the scroll-debug flag, tagged `[Estimate]` so the estimator/sampler/cache
- * lines are filterable within the shared scroll trace. No-op (and zero arg cost at call sites that
- * pre-check {@link isScrollDebugEnabled}) when the flag is off.
+ * The `[Estimate]` trace is on its OWN flag — it logs per-row, per-measure (hundreds of lines per
+ * scroll), which buries the `[Scroll]`/`[ScrollStateManager]` decision trace. So `__fluuxScrollDebug`
+ * (or `fluux:scroll-debug`) gives a clean decision trace; enable this separately only when actually
+ * auditing estimate accuracy: `__fluuxEstimateDebug(true)`, or `localStorage 'fluux:estimate-debug'`.
+ */
+export function isEstimateDebugEnabled(): boolean {
+  if (typeof window === 'undefined') return false
+  try {
+    if ((window as Window & { __fluuxEstimateDebugOn?: boolean }).__fluuxEstimateDebugOn) return true
+    return window.localStorage?.getItem('fluux:estimate-debug') === '1'
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Console log tagged `[Estimate]`, gated on the SEPARATE estimate-debug flag (see
+ * {@link isEstimateDebugEnabled}) so it doesn't flood the scroll-decision trace. No-op (and zero arg
+ * cost at call sites that pre-check the flag) when off.
  */
 export function estimateDebugLog(...args: unknown[]): void {
-  if (!isScrollDebugEnabled()) return
+  if (!isEstimateDebugEnabled()) return
   console.log('[Estimate]', ...args)
 }
 

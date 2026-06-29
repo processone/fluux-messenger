@@ -35,7 +35,7 @@ import { getTopVisibleDate } from './getTopVisibleDate'
 import { useTanstackMessageVirtualizer } from './tanstackMessageVirtualizer'
 import { useRowMetrics } from './useRowMetrics'
 import { estimateRowHeight } from './rowHeightEstimator'
-import { isScrollDebugEnabled, estimateDebugLog } from '@/utils/scrollDebug'
+import { isEstimateDebugEnabled, estimateDebugLog } from '@/utils/scrollDebug'
 import {
   getCachedHeights,
   recordMeasuredHeight,
@@ -332,9 +332,9 @@ export function MessageList<T extends BaseMessage>({
             const widthBucketPx = Math.round(metricsRef.current.contentWidthPx / 20) * 20
             recordMeasuredHeight(cid, heightCacheKey(key, widthBucketPx, scale), size)
             noteConversationWidthBucket(cid, widthBucketPx)
-            // Estimate-accuracy trace (scroll-debug only): predicted vs first-measured per row.
+            // Estimate-accuracy trace (estimate-debug only): predicted vs first-measured per row.
             // Gated up front so the predict (which may call pretext) is skipped when debug is off.
-            if (isScrollDebugEnabled()) {
+            if (isEstimateDebugEnabled()) {
               const idx = idMap.get(key)
               const item = idx != null ? items[idx] : undefined
               const predicted = item ? estimateRowHeight(item, metricsRef.current) : undefined
