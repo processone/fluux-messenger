@@ -32,6 +32,15 @@ it to the bar would strand it on mobile, where the bar doesn't render.
 On macOS the bar reserves `TRAFFIC_LIGHT_INSET` (84px) at its start so the back
 arrow never overlaps the native traffic lights.
 
+**Vertical centring of the traffic lights** is handled by registering
+`tauri-plugin-decorum`, whose `on_window_ready` hook parks the dots at a *fixed*
+inset (dot centre ~20px from the window top) and keeps them there across resize.
+decorum hardcodes that inset — `set_traffic_lights_inset(x, y)` is overridden by
+the on-ready hook and `create_overlay_titlebar()` injects a conflicting titlebar
+— so we call neither. Instead the bar height (`h-10` / 40px) is chosen so the
+fixed ~20px dot centre lands in the bar's middle. **Changing the bar height
+means re-checking the dot alignment** on a real macOS build.
+
 ## Platform behaviour (Path 1 — current)
 
 | Platform           | Window controls            | App bar |

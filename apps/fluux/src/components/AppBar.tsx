@@ -32,7 +32,9 @@ const TRAFFIC_LIGHT_INSET = 84
  * Platform behaviour:
  *  - macOS (Tauri): the native traffic lights overlay the bar's start; the bar
  *    background drags the window. `TRAFFIC_LIGHT_INSET` keeps controls clear of
- *    the dots, and decorum centres the dots vertically (see src-tauri).
+ *    the dots. The decorum plugin parks the dots at a FIXED inset (~20px dot
+ *    centre); the bar height (h-10/40px) is chosen so that centre is vertically
+ *    centred. Changing the height means re-checking the dot alignment.
  *  - Windows / Linux (Tauri): the OS keeps its native title bar above; this bar
  *    renders below it as a normal toolbar (left edge free) and is also draggable.
  *  - Web desktop: a plain toolbar (no window dragging).
@@ -118,7 +120,7 @@ export const AppBar = memo(function AppBar() {
     <div
       onMouseDown={handleDragMouseDown}
       onDoubleClick={handleDragDoubleClick}
-      className="flex items-center gap-2 h-11 flex-shrink-0 bg-fluux-sidebar border-b border-fluux-bg shadow-sm pe-2 select-none"
+      className="flex items-center gap-2 h-10 flex-shrink-0 bg-fluux-sidebar border-b border-fluux-bg shadow-sm pe-2 select-none"
       style={{ paddingInlineStart: needsTrafficLightInset ? TRAFFIC_LIGHT_INSET : 8 }}
     >
       {/* History back / forward — mirror the webview history the keyboard drives */}
