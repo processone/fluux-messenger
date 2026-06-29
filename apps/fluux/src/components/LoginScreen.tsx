@@ -428,20 +428,6 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
           phone in landscape with the keyboard open). */}
       <div className="min-h-full flex items-center justify-center p-4 relative z-10">
         <div className="relative w-full max-w-md">
-        {/* Advanced-mode kebab — quiet, top-right. The toggle reveals the
-            custom-server field below and unlocks the app's expert surfaces. */}
-        <div className="absolute top-0 end-0 z-10">
-          <OverflowMenu
-            ariaLabel={t('common.options')}
-            items={[{
-              key: 'advanced-mode',
-              label: t('login.advancedMode'),
-              icon: Wrench,
-              active: advancedMode,
-              onClick: () => setAdvancedMode(!advancedMode),
-            }]}
-          />
-        </div>
         {/* Logo / Header */}
         <div className="text-center mb-8">
           {/* Aurora gradient brand mark: the --fluux-grad tile + a soft glow */}
@@ -579,7 +565,9 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
             </div>
           )}
 
-          {/* Remember Me */}
+          {/* Remember Me — checkbox on the left, advanced-mode kebab right-aligned
+              on the same line to keep the header clean. The toggle reveals the
+              custom-server field below and unlocks the app's expert surfaces. */}
           <div className="flex items-center gap-3">
             <input
               id="remember"
@@ -601,6 +589,18 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
                 <span className="text-xs text-fluux-muted">{t('login.staySignedIn')}</span>
               )}
             </label>
+            <div className="ms-auto">
+              <OverflowMenu
+                ariaLabel={t('common.options')}
+                items={[{
+                  key: 'advanced-mode',
+                  label: t('login.advancedMode'),
+                  icon: Wrench,
+                  active: advancedMode,
+                  onClick: () => setAdvancedMode(!advancedMode),
+                }]}
+              />
+            </div>
           </div>
 
           {/* Keychain indicator */}
