@@ -27,6 +27,7 @@ import { buildMessageKeySet, isMessageDuplicate, sortMessagesByTimestamp, trimMe
 import { shouldUpdateLastMessage, shouldReplaceLastMessage, isPreviewableMessage, findLastNonIgnoredMessage } from './shared/lastMessageUtils'
 import { ignoreStore, isMessageFromIgnoredUser } from './ignoreStore'
 import * as notifState from './shared/notificationState'
+import { markerDebugLog } from '../utils/markerDebug'
 import { connectionStore } from './connectionStore'
 import { buildScopedStorageKey } from '../utils/storageScope'
 
@@ -244,6 +245,12 @@ const EMPTY_SIDEBAR_JIDS: string[] = []
 // Monotonic token so a slow cache read from a superseded activateRoom call
 // can't overwrite a newer activation when it finally resolves
 let activationToken = 0
+
+// Rooms whose pending XEP-0490 read marker has already been consumed for divider positioning
+// THIS session (parity with chatStore). XEP-0490 markers broadcast live over PEP, so after the
+// first open's fold the live `read:displayed-synced` notifies keep us current; re-folding on
+// every open would reposition the divider on each return. Cleared on reset() (logout).
+const mdsConsumedThisSession = new Set<string>()
 
 // Selector memoization caches.
 // Store selectors (joinedRooms, allRooms, etc.) are called on every Zustand subscription check.
@@ -1055,6 +1062,8 @@ export const roomStore = createStore<RoomState>()(
     // Note: We don't clear IndexedDB on reset - room messages are valuable cache
     // They will be cleared when rooms are explicitly removed or user logs out
     // (The connection store's reset handles full logout cleanup via clearAllMessages)
+    // New session → the XEP-0490 synced read marker may be folded again on first open.
+    mdsConsumedThisSession.clear()
     // Clear persisted room drafts and poll state on logout
     localStorage.removeItem(getRoomDraftsStorageKey())
     localStorage.removeItem(getRoomVotedPollsStorageKey())
@@ -1487,8 +1496,29 @@ export const roomStore = createStore<RoomState>()(
       // XEP-0490: fold any pending remote read position into lastSeenMessageId
       // BEFORE setActiveRoom derives the new-message divider (parity with
       // chatStore.activateConversation). Forward-only against the loaded messages.
+      // Fold a pending XEP-0490 synced read position into lastSeenMessageId BEFORE setActiveRoom
+      // derives the divider — but only on the FIRST open of this room this session (parity with
+      // chatStore.activateConversation). XEP-0490 markers broadcast live over PEP, so re-folding on
+      // every open would reposition the divider on each return.
+      const firstConsumeThisSession = !mdsConsumedThisSession.has(roomJid)
+      mdsConsumedThisSession.add(roomJid)
       const pending = get().roomMeta.get(roomJid)?.pendingRemoteDisplayedStanzaId
-      if (pending) get().applyRemoteDisplayed(roomJid, pending)
+      if (pending && firstConsumeThisSession) {
+        const lastSeenBefore = get().roomMeta.get(roomJid)?.lastSeenMessageId
+        get().applyRemoteDisplayed(roomJid, pending)
+        markerDebugLog('activation fold (XEP-0490 pending → divider, first open this session)', {
+          roomJid,
+          pendingStanzaId: pending,
+          lastSeenBefore,
+          lastSeenAfter: get().roomMeta.get(roomJid)?.lastSeenMessageId,
+          advanced: lastSeenBefore !== get().roomMeta.get(roomJid)?.lastSeenMessageId,
+        })
+      } else if (pending) {
+        markerDebugLog('activation fold SKIPPED (already consumed this session — PEP keeps it live)', {
+          roomJid,
+          pendingStanzaId: pending,
+        })
+      }
     }
     get().setActiveRoom(roomJid)
   },
