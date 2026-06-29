@@ -595,7 +595,7 @@ export const MessageBubble = memo(function MessageBubble({
         {!message.isRetracted && replyContext && (
           <button
             onClick={() => scrollToMessage(replyContext.messageId)}
-            className="flex items-start gap-1.5 py-1 pe-2 ps-2 border-s-2 text-start min-w-0 bg-fluux-bg-secondary hover:bg-fluux-hover/50 rounded-e transition-colors cursor-pointer select-none"
+            className="flex items-start gap-1.5 py-1 pe-2 ps-2 mb-1.5 border-s-2 text-start min-w-0 bg-fluux-bg-secondary hover:bg-fluux-hover/50 rounded-e transition-colors cursor-pointer select-none"
             style={{ borderColor: replyContext.senderColor }}
           >
             <CornerUpRight
