@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import { JoinRoomModal } from './JoinRoomModal'
 
@@ -400,6 +400,13 @@ describe('JoinRoomModal', () => {
   })
 
   describe('modal closing', () => {
+    beforeEach(() => {
+      document.documentElement.setAttribute('data-motion', 'reduced')
+    })
+    afterEach(() => {
+      document.documentElement.removeAttribute('data-motion')
+    })
+
     it('should call onClose when Cancel button is clicked', () => {
       render(<JoinRoomModal onClose={mockOnClose} />)
 

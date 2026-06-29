@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { InviteToRoomModal } from './InviteToRoomModal'
 import { useToastStore } from '@/stores/toastStore'
@@ -223,6 +223,13 @@ describe('InviteToRoomModal', () => {
   })
 
   describe('close behavior', () => {
+    beforeEach(() => {
+      document.documentElement.setAttribute('data-motion', 'reduced')
+    })
+    afterEach(() => {
+      document.documentElement.removeAttribute('data-motion')
+    })
+
     it('should call onClose when close button is clicked', () => {
       render(
         <InviteToRoomModal
