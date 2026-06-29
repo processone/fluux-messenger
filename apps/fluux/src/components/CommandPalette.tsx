@@ -539,11 +539,18 @@ function CommandPaletteContent({
         className="relative z-10 fluux-glass rounded-lg w-full max-w-lg mx-4 overflow-hidden"
         onKeyDown={handleKeyDown}
       >
-        {/* Search Input — contained, rounded field with a neutral hairline.
-            The palette auto-focuses the input, so the field is the obvious
-            "type here" affordance without needing an accent ring. */}
+        {/* Search Input — contained, rounded field with a soft accent focus ring
+            that wraps the whole field (icon + input + esc), matching the
+            composer card's `:focus-within` treatment. The palette auto-focuses
+            the input, so the ring is effectively always on while open, giving a
+            clear "type here" affordance. The ring lives on the wrapper via the
+            `command-search-field` class (Tailwind's `/opacity` modifiers no-op
+            on our `hsl()`-string accent token, so a plain CSS rule is used). The
+            inner input carries `no-focus-ring` so the global 2px outline doesn't
+            draw a second, tighter box around just the text field. */}
         <div className="p-3 border-b border-fluux-hover">
-          <div className="flex items-center gap-3 px-3 py-2 rounded-lg border border-fluux-hover bg-fluux-bg/40">
+          <div className="command-search-field flex items-center gap-3 px-3 py-2 rounded-lg border border-fluux-hover bg-fluux-bg/40
+            transition-[box-shadow,border-color] duration-150">
             <Search className="size-5 text-fluux-muted flex-shrink-0" />
             <TextInput
               ref={inputRef}
@@ -551,7 +558,7 @@ function CommandPaletteContent({
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder={t('commandPalette.placeholder')}
-              className="flex-1 bg-transparent text-fluux-text placeholder:text-fluux-muted outline-none text-base"
+              className="flex-1 bg-transparent text-fluux-text placeholder:text-fluux-muted outline-none no-focus-ring text-base"
             />
             <kbd className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 text-xs text-fluux-muted bg-fluux-bg rounded border border-fluux-hover">
               esc
