@@ -126,47 +126,52 @@ export function cancelKineticScroll(el: HTMLElement): void {
 // ANCHOR HELPERS (content-stable scroll restoration)
 // ============================================================================
 
+const clamp01 = (n: number) => (n < 0 ? 0 : n > 1 ? 1 : n)
+
 /**
- * Find the bottom-most visible message row and the gap between its bottom edge
- * and the viewport bottom. This anchor survives a change in the loaded message
- * set (memory eviction + cache re-hydration), unlike a raw scrollTop.
+ * Capture a CONTENT anchor: the bottom-most visible message and the FRACTION (0..1) of its
+ * height at which the viewport bottom sits. fraction=1 → the message's bottom edge is at the
+ * window bottom; 0.5 → the window bottom cuts its middle.
+ *
+ * Storing a fraction (not a pixel gap) makes the position INDEPENDENT OF RENDERING: on return we
+ * re-derive pixels from the message's CURRENT measured height, so a re-measure, a width change, or
+ * a virtualization re-window can't corrupt it. The previous implementation stored a pixel gap found
+ * via a BINARY SEARCH over `offsetTop` assuming rows were in sorted document order — false under
+ * virtualization (the DOM holds an unsorted/stale window), which produced a wildly wrong gap and
+ * flung the view to the bottom on return. This is a linear max-scan over the (small) rendered
+ * window using each row's own `offsetTop`/`offsetHeight`, so DOM order no longer matters.
  */
 function findBottomAnchor(scroller: HTMLElement): ScrollAnchor | null {
   const rows = scroller.querySelectorAll('.message-row[data-message-id]')
   if (rows.length === 0) return null
   const viewportBottom = scroller.scrollTop + scroller.clientHeight
-  // Binary search (rows are in ascending offsetTop order) for the bottom-most row
-  // whose top is above the viewport bottom — the last visible row. O(log n), so
-  // it's cheap to run on every scroll event (keeps the anchor at the latest pos).
-  let lo = 0
-  let hi = rows.length - 1
-  let found = 0
-  while (lo <= hi) {
-    const mid = (lo + hi) >> 1
-    if ((rows[mid] as HTMLElement).offsetTop < viewportBottom) {
-      found = mid
-      lo = mid + 1
-    } else {
-      hi = mid - 1
+  // Bottom-most row that STARTS above the viewport bottom (greatest offsetTop < viewportBottom).
+  let best: HTMLElement | null = null
+  for (const node of rows) {
+    const el = node as HTMLElement
+    if (el.offsetHeight <= 0) continue
+    if (el.offsetTop < viewportBottom && (best === null || el.offsetTop > best.offsetTop)) {
+      best = el
     }
   }
-  const el = rows[found] as HTMLElement
-  const messageId = el.dataset.messageId
+  if (best === null) best = rows[rows.length - 1] as HTMLElement
+  const messageId = best.dataset.messageId
   if (!messageId) return null
-  return { messageId, bottomGap: viewportBottom - (el.offsetTop + el.offsetHeight) }
+  const height = best.offsetHeight || 1
+  return { messageId, fraction: clamp01((viewportBottom - best.offsetTop) / height) }
 }
 
 /**
- * Restore scroll so the anchor message's bottom sits at its saved offset from the
- * viewport bottom. Returns false if the anchor message isn't currently loaded
- * (scrolled up beyond the re-hydrated window) so the caller can fall back.
+ * Restore scroll so the viewport bottom sits at the saved FRACTION through the anchor message,
+ * using the message's CURRENT measured height. Returns false if the anchor message isn't currently
+ * mounted (scrolled up beyond the re-hydrated/virtualized window) so the caller can fall back.
  */
 function restoreToAnchor(scroller: HTMLElement, anchor: ScrollAnchor): boolean {
   const el = scroller.querySelector(
     `.message-row[data-message-id="${CSS.escape(anchor.messageId)}"]`
   ) as HTMLElement | null
-  if (!el) return false
-  scroller.scrollTop = el.offsetTop + el.offsetHeight + anchor.bottomGap - scroller.clientHeight
+  if (!el || el.offsetHeight <= 0) return false
+  scroller.scrollTop = el.offsetTop + anchor.fraction * el.offsetHeight - scroller.clientHeight
   return true
 }
 
@@ -332,7 +337,7 @@ export function useMessageListScroll({
   const mediaLoadDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Last scroll data (for saving on conversation switch)
-  const lastScrollDataRef = useRef<{ top: number; height: number; client: number } | null>(null)
+  const lastScrollDataRef = useRef<{ top: number; height: number; client: number; width: number } | null>(null)
   // Bottom-most-visible message anchor, captured (throttled) during scroll so it
   // survives the conversation switch (at switch time the DOM is already the new
   // conversation). Used for content-stable position restoration on return.
@@ -364,6 +369,7 @@ export function useMessageListScroll({
       top: scroller.scrollTop,
       height: scroller.scrollHeight,
       client: scroller.clientHeight,
+      width: scroller.clientWidth,
     }
     lastAnchorRef.current = findBottomAnchor(scroller)
   }, [])
@@ -377,6 +383,7 @@ export function useMessageListScroll({
       top: bottomTop,
       height: scroller.scrollHeight,
       client: scroller.clientHeight,
+      width: scroller.clientWidth,
     }
     lastAnchorRef.current = findBottomAnchor(scroller)
     isAtBottomRef.current = true
@@ -744,6 +751,29 @@ export function useMessageListScroll({
       return 'restored'
     }
 
+    // Exact restore when the layout is UNCHANGED since save (same-session navigate-back, including
+    // eviction+rehydrate that reproduces identical content): the saved scrollTop is exact and
+    // layout-independent precisely because the content is the same, so the ratio-based anchor isn't
+    // needed — and a corrupt/degenerate anchor can't override a perfectly good saved position (the
+    // "jump to bottom on return" report). The fraction anchor below is for a CHANGED height (MAM
+    // prepend, width change). Tolerance covers sub-pixel measurement noise only.
+    const savedHeight = scrollStateManager.getSavedScrollHeight(conversationId)
+    const savedWidth = scrollStateManager.getSavedClientWidth(conversationId)
+    // A width change rewraps bubbles, so the absolute scrollTop is meaningless even if the total
+    // height coincidentally matches — only take the exact fast-path when the width is unchanged (or
+    // unknown, for legacy saves). Otherwise fall through to the rendering-independent fraction anchor.
+    const widthUnchanged = savedWidth === null || scroller.clientWidth === savedWidth
+    if (
+      savedPos !== null &&
+      savedHeight !== null &&
+      widthUnchanged &&
+      Math.abs(scroller.scrollHeight - savedHeight) <= 4
+    ) {
+      if (virtRestore) virtRestore.scrollToOffset(savedPos)
+      else scroller.scrollTop = savedPos
+      return finishRestore('RESTORE via savedPos (layout unchanged)', { savedPos, savedHeight, savedWidth })
+    }
+
     if (savedAnchor && restoreToAnchor(scroller, savedAnchor)) {
       if (virtRestore) virtRestore.scrollToOffset(scroller.scrollTop)
       return finishRestore('RESTORE via anchor', { savedAnchor })
@@ -752,12 +782,19 @@ export function useMessageListScroll({
     if (virtRestore && savedAnchor) {
       const anchorIndex = virtRestore.getIndexForMessageId(savedAnchor.messageId)
       if (anchorIndex !== null) {
-        // Place the anchor row's bottom at the viewport bottom (align:'end'), then
-        // shift by bottomGap so its bottom edge sits the same distance from the
-        // viewport bottom as when the user left.
+        // Baseline: place the anchor message's bottom at the viewport bottom (align:'end').
+        // This both windows the (possibly off-screen) row in and covers the common fraction=1
+        // case. scrollToIndex re-windows synchronously in the adapter, so its measured size is
+        // available right after for the sub-message refine below.
         virtRestore.scrollToIndex(anchorIndex, { align: 'end' })
-        if (savedAnchor.bottomGap !== 0) {
-          virtRestore.scrollToOffset(scroller.scrollTop + savedAnchor.bottomGap)
+        // Refine to the saved fraction using the message's CURRENT measured height (rendering-
+        // independent — re-derived from measurements, never a stored pixel gap).
+        if (savedAnchor.fraction < 1) {
+          const start = virtRestore.getOffsetForMessageId(savedAnchor.messageId)
+          const size = virtRestore.getVirtualItems().find((v) => v.index === anchorIndex)?.size
+          if (start !== null && size) {
+            virtRestore.scrollToOffset(Math.max(0, start + savedAnchor.fraction * size - scroller.clientHeight))
+          }
         }
         return finishRestore('RESTORE via virtualizer index', { savedAnchor, anchorIndex })
       }
@@ -1156,11 +1193,11 @@ export function useMessageListScroll({
     notifyUserInput()
 
     const el = e.currentTarget
-    const { scrollTop, scrollHeight, clientHeight } = el
+    const { scrollTop, scrollHeight, clientHeight, clientWidth } = el
     const distFromBottom = scrollHeight - scrollTop - clientHeight
 
     // Update refs (NO React state updates here except FAB)
-    lastScrollDataRef.current = { top: scrollTop, height: scrollHeight, client: clientHeight }
+    lastScrollDataRef.current = { top: scrollTop, height: scrollHeight, client: clientHeight, width: clientWidth }
     // Capture the bottom-most-visible anchor on every scroll event (binary search,
     // cheap) so it reflects the latest position — at switch time the DOM is already
     // the new conversation, so this must be captured live during scroll.
@@ -1229,7 +1266,7 @@ export function useMessageListScroll({
     const now = Date.now()
     if (!programmaticScroll && now - lastSaveTimeRef.current > SAVE_THROTTLE_MS) {
       lastSaveTimeRef.current = now
-      scrollStateManager.saveScrollPosition(conversationId, scrollTop, scrollHeight, clientHeight, lastAnchorRef.current ?? undefined)
+      scrollStateManager.saveScrollPosition(conversationId, scrollTop, scrollHeight, clientHeight, lastAnchorRef.current ?? undefined, clientWidth)
     }
 
     // Track if user scrolled away from top (allows re-trigger of load)
@@ -1284,8 +1321,8 @@ export function useMessageListScroll({
 
     // LEAVING old conversation - save position
     if (prevConversationRef.current && lastScrollDataRef.current) {
-      const { top, height, client } = lastScrollDataRef.current
-      scrollStateManager.leaveConversation(prevConversationRef.current, top, height, client, lastAnchorRef.current ?? undefined)
+      const { top, height, client, width } = lastScrollDataRef.current
+      scrollStateManager.leaveConversation(prevConversationRef.current, top, height, client, lastAnchorRef.current ?? undefined, width)
     }
 
     // ENTERING new conversation - reset state
@@ -1522,7 +1559,7 @@ export function useMessageListScroll({
     return () => {
       if (prevConversationRef.current) {
         if (lastScrollDataRef.current) {
-          const { top, height, client } = lastScrollDataRef.current
+          const { top, height, client, width } = lastScrollDataRef.current
           // UNMOUNT save: this is the leave path for navigations that DESTROY the message view —
           // opening Settings, switching DM↔Room, going back to the list. (DM↔DM keeps the view
           // mounted and saves via the conversation-switch effect instead.) If `top`/anchor here are
@@ -1533,9 +1570,9 @@ export function useMessageListScroll({
             top, height, client,
             distFromBottom: height - top - client,
             anchorMessageId: lastAnchorRef.current?.messageId,
-            anchorBottomGap: lastAnchorRef.current?.bottomGap,
+            anchorFraction: lastAnchorRef.current?.fraction,
           })
-          scrollStateManager.leaveConversation(prevConversationRef.current, top, height, client, lastAnchorRef.current ?? undefined)
+          scrollStateManager.leaveConversation(prevConversationRef.current, top, height, client, lastAnchorRef.current ?? undefined, width)
         } else {
           // No scroll data captured before unmount → nothing to restore TO on return. A user who
           // never scrolled (or unmounted before the first throttled save) lands at the bottom next

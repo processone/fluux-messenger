@@ -644,13 +644,12 @@ describe('MessageList — virtualized bottom-stick re-asserts as rows measure', 
     expect(scrollToOffsetCalls).toContain(200)
   })
 
-  it('restores via virtualizer scrollToIndex when the anchor row is windowed out of the DOM', () => {
+  it('re-windows to the saved offset even when the anchor row is windowed out of the DOM', () => {
     // Real-browser case: the virtualizer's initial window covers only the top rows; the saved
-    // anchor (the bottom-most message the user was reading) is NOT in the DOM. restoreToAnchor()
-    // returns false, so the hook falls through to the new virtualizer-index path:
-    // getIndexForMessageId + scrollToIndex('end') + scrollToOffset(bottomGap adjustment).
-    // Previously both DOM paths failed and the hook fell back to pinVirtualizedBottom(),
-    // which cleared the saved state and left the conversation stuck at bottom on every return.
+    // anchor row is NOT in the DOM, so the DOM anchor lookup fails. Because the content height is
+    // unchanged since save (same-session return), restore takes the layout-unchanged path and
+    // re-windows to the EXACT saved offset via scrollToOffset — it must NOT go blank or fall back
+    // to pinVirtualizedBottom() (which cleared the saved state and stuck the convo at the bottom).
     const { container, rerender } = render(
       <MessageList messages={makeMessages(50)} conversationId="conv-vi1" {...props} />,
     )
@@ -682,12 +681,8 @@ describe('MessageList — virtualized bottom-stick re-asserts as rows measure', 
 
     scroller.querySelector = origQS as typeof scroller.querySelector
 
-    // The virtualizer-index path called scrollToIndex('end') to place the anchor at the
-    // viewport bottom, then scrollToOffset for the bottomGap adjustment.
-    // pinVirtualizedBottom also calls scrollToIndex('end') but never calls scrollToOffset,
-    // so scrollToOffsetCalls.length > 0 proves the restore path ran, not the bottom fallback.
-    expect(scrollToIndexCalls).toContain('end')
-    expect(scrollToOffsetCalls.length).toBeGreaterThan(0)
+    // Re-windowed to the exact saved offset (200) rather than going blank or to the bottom.
+    expect(scrollToOffsetCalls).toContain(200)
   })
 
   it('restores (re-windowed) when a message arrived in the conversation while it was hidden', () => {
