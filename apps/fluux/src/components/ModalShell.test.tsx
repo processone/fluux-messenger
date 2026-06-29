@@ -1,5 +1,5 @@
-import { describe, it, expect, vi } from 'vitest'
-import { render } from '@testing-library/react'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import { render, fireEvent } from '@testing-library/react'
 import { ModalShell } from './ModalShell'
 
 vi.mock('react-i18next', () => ({
@@ -49,5 +49,38 @@ describe('ModalShell glass surface', () => {
     window.dispatchEvent(new Event('focus'))
 
     expect(document.activeElement).toBe(field)
+  })
+})
+
+function setMotion(value: 'full' | 'reduced') {
+  document.documentElement.setAttribute('data-motion', value)
+}
+
+describe('ModalShell motion', () => {
+  beforeEach(() => { vi.useFakeTimers(); setMotion('full') })
+  afterEach(() => { vi.useRealTimers(); document.documentElement.removeAttribute('data-motion') })
+
+  it('renders the enter classes on mount', () => {
+    const { container } = render(<ModalShell title="T" onClose={() => {}}>body</ModalShell>)
+    expect(container.querySelector('.scrim-in')).toBeTruthy()
+    expect(container.querySelector('.modal-panel-in')).toBeTruthy()
+  })
+
+  it('plays the exit then calls onClose after the delay (motion full)', () => {
+    const onClose = vi.fn()
+    const { container } = render(<ModalShell title="T" onClose={onClose}>body</ModalShell>)
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(onClose).not.toHaveBeenCalled()
+    expect(container.querySelector('.modal-panel-out')).toBeTruthy()
+    vi.advanceTimersByTime(150)
+    expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('closes immediately when motion is reduced', () => {
+    setMotion('reduced')
+    const onClose = vi.fn()
+    render(<ModalShell title="T" onClose={onClose}>body</ModalShell>)
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(onClose).toHaveBeenCalledTimes(1)
   })
 })

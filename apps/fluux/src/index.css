@@ -1208,6 +1208,22 @@ input[type="range"]::-moz-range-thumb {
   }
 }
 
+/* Modal / dialog / command-palette enter + exit (Aurora motion language).
+   The scrim layer fades (opacity); the panel scales (transform) so the two
+   compose without double-fading the panel. Exits use `forwards` to hold the
+   end frame for the ~150ms before the component unmounts. */
+@keyframes modal-panel-in  { from { transform: scale(0.97); } to { transform: scale(1); } }
+@keyframes modal-panel-out { from { transform: scale(1); }    to { transform: scale(0.98); } }
+@keyframes command-palette-in { from { transform: translateY(-8px) scale(0.98); } to { transform: translateY(0) scale(1); } }
+@keyframes scrim-in  { from { opacity: 0; } to { opacity: 1; } }
+@keyframes scrim-out { from { opacity: 1; } to { opacity: 0; } }
+
+.modal-panel-in     { animation: modal-panel-in var(--fluux-duration-base) var(--fluux-ease-emphasized); }
+.modal-panel-out    { animation: modal-panel-out var(--fluux-duration-fast) var(--fluux-ease-standard) forwards; }
+.command-palette-in { animation: command-palette-in var(--fluux-duration-base) var(--fluux-ease-emphasized); }
+.scrim-in  { animation: scrim-in var(--fluux-duration-base) var(--fluux-ease-standard); }
+.scrim-out { animation: scrim-out var(--fluux-duration-fast) var(--fluux-ease-standard) forwards; }
+
 /* Bulk-copy selection highlight. Decoupled from native text selection (which cannot span
    virtualized/unmounted rows); driven by the `copy-selected` class on `.message-row`
    (MessageList). Uses the Aurora selection token so it adapts across themes. */
