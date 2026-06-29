@@ -116,7 +116,7 @@ export function Sidebar({ onSelectContact, onStartChat, onManageUser, adminCateg
   trackSelectorChange('Sidebar', 'pendingCount', pendingCount)
   trackSelectorChange('Sidebar', 'totalMentionsCount', totalMentionsCount)
   trackSelectorChange('Sidebar', 'totalNotifiableUnreadCount', totalNotifiableUnreadCount)
-  const { titleBarClass, dragRegionProps } = useWindowDrag()
+  const { dragRegionProps } = useWindowDrag()
 
   // Per-modal subscriptions: the Sidebar owns these three modals and re-renders
   // only when one of THEM toggles, not when ChatLayout's modals (command palette,
@@ -216,8 +216,10 @@ export function Sidebar({ onSelectContact, onStartChat, onManageUser, adminCateg
       className="relative bg-fluux-sidebar chrome-sidebar flex select-none flex-shrink-0"
       style={{ width: isDesktop ? sidebarWidth : '100%' }}
     >
-      {/* Icon Rail - with padding for macOS traffic lights */}
-      <div className="icon-rail flex flex-col items-center pt-8 pb-safe-3 gap-2">
+      {/* Icon Rail — top clearance is now provided by the desktop AppBar
+          (which hosts the macOS traffic lights), so the rail just needs a small
+          top padding rather than the old traffic-light gap. */}
+      <div className="icon-rail flex flex-col items-center pt-3 pb-safe-3 gap-2">
         {/* Fluux logo - enable with VITE_SHOW_LOGO=true */}
         {import.meta.env.VITE_SHOW_LOGO === 'true' && (
           <img
@@ -299,7 +301,7 @@ export function Sidebar({ onSelectContact, onStartChat, onManageUser, adminCateg
       {/* Main Content */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Header - with drag region for window movement */}
-        <div className={`h-14 ${titleBarClass} px-4 flex items-center border-b border-fluux-bg shadow-sm`} {...dragRegionProps}>
+        <div className="h-14 px-4 flex items-center border-b border-fluux-bg shadow-sm" {...dragRegionProps}>
           <h1 className="flex-1 font-semibold text-fluux-text truncate">
             {sidebarView === 'admin' && isAdmin ? (
               // Clicking the title returns to the admin "home" (server overview)

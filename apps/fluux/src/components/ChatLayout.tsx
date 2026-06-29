@@ -16,6 +16,7 @@ const SearchContextView = lazy(() => import('./SearchContextView').then(m => ({ 
 const ActivityContextView = lazy(() => import('./ActivityContextView').then(m => ({ default: m.ActivityContextView })))
 import { ShortcutHelp } from './ShortcutHelp'
 import { CommandPalette } from './CommandPalette'
+import { AppBar } from './AppBar'
 import { ToastContainer } from './ToastContainer'
 import { CreateRoomModal } from './CreateRoomModal'
 import {
@@ -804,6 +805,10 @@ function ChatLayoutContent() {
     >
       {/* Global side-effect hooks isolated from ChatLayout re-renders */}
       <GlobalEffects />
+
+      {/* Desktop window app bar — hosts macOS traffic lights + nav/search/settings.
+          Renders null on mobile; the single-pane layout owns navigation there. */}
+      <AppBar />
 
       {/* Main content area */}
       <div className="flex flex-1 min-h-0">
