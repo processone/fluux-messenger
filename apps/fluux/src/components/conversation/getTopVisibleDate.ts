@@ -32,6 +32,7 @@ export function getTopVisibleDate<T extends { id: string }>(
   if (topIndex === null) return null
 
   const topItem = allItems[topIndex]
+  // !topItem guards a transient window/list desync (a window index momentarily out of range); kind === 'date' suppresses the pill under an inline separator.
   if (!topItem || topItem.kind === 'date') return null // suppress under a separator
 
   // Walk backward to the nearest preceding date item.

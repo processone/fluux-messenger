@@ -43,6 +43,7 @@ describe('FloatingDateHeader', () => {
   }
 
   it('shows the date pill on scroll with a non-null date', () => {
+    vi.setSystemTime(new Date('2026-06-30T12:00:00'))
     const { container } = render(<Host getTopDate={() => '2026-06-28'} />)
     const overlay = container.querySelector('[data-floating-date]') as HTMLElement
     expect(overlay.className).toContain('opacity-0') // hidden at rest
@@ -50,9 +51,9 @@ describe('FloatingDateHeader', () => {
     scroll(container)
 
     expect(overlay.className).toContain('opacity-100')
-    // 2026-06-28 is yesterday relative to test run date (2026-06-29), so
-    // formatDateHeader returns "Yesterday" — assert truthy as authorized by the brief.
-    expect(container.querySelector('[data-floating-date-pill]')?.textContent).toBeTruthy()
+    // With the clock at 2026-06-30, 2026-06-28 is neither today nor yesterday,
+    // so formatDateHeader returns the PPP locale form (e.g. "June 28, 2026") — assert the year.
+    expect(container.querySelector('[data-floating-date-pill]')?.textContent).toContain('2026')
   })
 
   it('fades out after the fade delay once scrolling stops', () => {
