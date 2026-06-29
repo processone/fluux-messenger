@@ -20,6 +20,7 @@ import { UnsupportedEncryptionNotice } from './UnsupportedEncryptionNotice'
 import { MessageReactions } from './MessageReactions'
 import { scrollToMessage, isActionMessage, type WhisperThreadPosition } from './messageGrouping'
 import { resolveDisplayTrust } from './messageTrust'
+import { trustVisual } from '@/e2ee/trustVisual'
 import { MessageAttachments } from '../MessageAttachments'
 import { LinkPreviewCard } from '../LinkPreviewCard'
 import { UserInfoPopover } from './UserInfoPopover'
@@ -599,15 +600,15 @@ export const MessageBubble = memo(function MessageBubble({
             {message.securityContext && (
               <Tooltip content={formatSecurityTooltip(t, { ...message.securityContext, trust: displayTrust ?? message.securityContext.trust })} position="top" triggerMode="click">
                 <span
-                  className={`flex items-center ${
+                  className={`flex items-center ${trustVisual(
                     displayTrust === 'verified'
-                      ? 'text-fluux-encryption'
+                      ? 'verified'
                       : displayTrust === 'rejected'
-                      ? 'text-red-500'
+                      ? 'rejected'
                       : displayTrust === 'untrusted'
-                      ? 'text-yellow-500'
-                      : 'text-fluux-muted'
-                  }`}
+                      ? 'decryptFailed'
+                      : 'trusted'
+                  ).colorClass}`}
                   aria-label={`Encrypted with ${message.securityContext.protocolId}, trust ${displayTrust}`}
                 >
                   {displayTrust === 'rejected'
