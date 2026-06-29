@@ -701,6 +701,69 @@ test.describe('Virtualization scroll invariants', () => {
     expect(placed!.distFromBottom, 'view snapped to the bottom instead of restoring the deep reading position').toBeGreaterThan(1500)
   })
 
+  // ── 9: Re-opening a scrolled-up conversation must not drift older each time ──
+  //
+  // Reported (real data): opening a conversation that isn't at the bottom restores a position that
+  // creeps further back in time on every re-open. Cause: the one-shot anchor restore landed on
+  // ESTIMATED row sizes; rows then measured taller, the anchor slid below the fold, and handleScroll
+  // SAVED the drifted (older) position — so the next open started from there and compounded. The
+  // measurement-aware re-assert (pinVirtualizedAnchor) lands on settled sizes and gates the save.
+  //
+  // CAVEAT: the demo's stress room is text-only, so its rows measure synchronously on mount and the
+  // one-shot restore does NOT visibly compound here — the real-world drift needs rows that measure
+  // taller AFTER paint (images / link previews). So this asserts the general "stable restore across
+  // re-opens" contract (a regression guard) rather than isolating the media-induced compounding; the
+  // specific fix is pinned by the trace diagnosis + by mirroring the marker/target re-assert loops.
+  test('invariant-9: re-opening a scrolled-up conversation restores a stable position (no backward drift)', async ({ page }) => {
+    await loadDemo(page)
+    await navigateToStressRoom(page)
+
+    const distFromBottom = () => page.evaluate(() => {
+      const s = document.querySelector('[data-message-list]') as HTMLElement | null
+      return s ? Math.round(s.scrollHeight - s.scrollTop - s.clientHeight) : -1
+    })
+
+    // Scroll UP into the loaded window (real wheel so the virtualizer re-windows), away from the
+    // bottom but not so far it needs an on-demand slice — this exercises the anchor-restore path.
+    const box = await page.locator('[data-message-list]').first().boundingBox()
+    if (box) await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+    await page.mouse.wheel(0, -2500)
+    await page.waitForTimeout(700)
+
+    expect(await distFromBottom(), 'precondition: must be scrolled up off the bottom').toBeGreaterThan(AT_BOTTOM_OK_PX)
+
+    // Re-open the conversation several times; after each restore record the content anchor (the
+    // bottom-most visible message — the same thing the restore persists/targets) and the restored
+    // distance-from-bottom. "Goes back in time" = the anchor message changes / the distance grows
+    // each open. We compare RESTORED opens to each other (not to the live pre-leave scroll, whose
+    // distFromBottom legitimately differs once rows below the fold finish measuring).
+    const anchors: (string | null)[] = []
+    const dists: number[] = []
+    for (let i = 0; i < 4; i++) {
+      await page.evaluate(() => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        void (window as any).__roomStore?.getState?.()?.activateRoom(null)
+      })
+      await page.waitForTimeout(300)
+      await navigateToStressRoom(page)
+      await page.waitForTimeout(900) // activation + anchor re-assert settle
+      anchors.push((await findBottomVisibleMessage(page))?.id ?? null)
+      dists.push(await distFromBottom())
+    }
+
+    // The bug made each re-open land on an OLDER anchor message; the fix keeps it identical.
+    expect(
+      anchors.every((a) => a !== null && a === anchors[0]),
+      `restored anchor drifted older across re-opens (bottom-visible per open: ${JSON.stringify(anchors)}) — anchor not re-pinned`,
+    ).toBe(true)
+    // …and the restored distance-from-bottom is stable open-to-open (the bug grew it ~1000–2000px
+    // each time). 200px covers media/measurement settle between opens.
+    expect(
+      Math.max(...dists) - Math.min(...dists),
+      `restored position drifted across re-opens (distFromBottom: ${JSON.stringify(dists)})`,
+    ).toBeLessThan(200)
+  })
+
 })
 
 // ── DIAGNOSTIC: new-message marker on re-entry (the user-reported bug) ──────────

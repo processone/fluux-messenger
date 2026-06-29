@@ -92,6 +92,16 @@ const MARKER_DRIFT_PX = 16
 const TARGET_REASSERT_FRAMES = 30
 const TARGET_STABLE_FRAMES = 4
 const TARGET_DRIFT_PX = 16
+// Saved-position (content-anchor) restore needs the SAME measurement-aware re-assert as the marker
+// path. A one-shot scrollToIndex(anchor,'end') lands on the rows' ESTIMATED sizes; those rows then
+// measure TALLER over the next frames (media, wrapping), the content above the anchor grows, and the
+// anchor slides below the fold — the view drifts OLDER. handleScroll then saves that drifted position
+// and the (now older) bottom-visible message becomes the next anchor, so each re-open drifts further
+// back ("goes back in time on every open"). Re-pinning the anchor across frames lands it on settled
+// measurements, and registering the loop gates the save so the transient can't compound.
+const RESTORE_REASSERT_FRAMES = 90
+const RESTORE_STABLE_FRAMES = 8
+const RESTORE_DRIFT_PX = 8
 // While re-pinning, treat the list as not-yet-pinned whenever it sits more than this many pixels
 // above the true bottom. The change-detection guard (re-pin only when scrollHeight moved) can miss
 // the frame where the last row's measurement settles — coalesced height deltas, or a height delta
@@ -736,6 +746,87 @@ export function useMessageListScroll({
     rememberBottomIntent()
   }, [pinVirtualizedBottom, rememberBottomIntent])
 
+  // Re-pin a VIRTUALIZED list to a saved CONTENT ANCHOR and keep it pinned as rows measure — the
+  // restore counterpart of pinVirtualizedBottom. A one-shot scrollToIndex(anchor,'end') lands on the
+  // rows' estimated sizes; they then measure taller and the anchor drifts below the fold (see the
+  // RESTORE_* constants). Re-deriving the anchor's pixel target each frame (align:'end' + the saved
+  // fraction, both from CURRENT measurements) lands it on settled layout. Registering the loop in
+  // reassertLoopRef makes handleScroll treat these scrolls as programmatic — so the drifting
+  // transient is NOT saved (which is what made the drift compound across re-opens). Bails on a user
+  // scroll or a conversation switch; converges (and stops early) once the landing position is stable.
+  const pinVirtualizedAnchor = useCallback((anchor: ScrollAnchor, anchorConvId: string) => {
+    const scroller = scrollerRef.current
+    if (!virtualizerRef.current || !scroller) return
+
+    supersedeReassertLoopRef.current()
+
+    // Re-derive and apply the anchor's pixel position from the CURRENT measured layout. Returns the
+    // resulting scrollTop, or null when the anchor row is no longer resolvable.
+    const applyAnchor = (): number | null => {
+      const v = virtualizerRef.current
+      const s = scrollerRef.current
+      if (!v || !s) return null
+      const idx = v.getIndexForMessageId(anchor.messageId)
+      if (idx === null) return null
+      v.scrollToIndex(idx, { align: 'end' })
+      if (anchor.fraction < 1) {
+        const start = v.getOffsetForMessageId(anchor.messageId)
+        const size = v.getVirtualItems().find((vi) => vi.index === idx)?.size
+        if (start !== null && size) {
+          v.scrollToOffset(Math.max(0, start + anchor.fraction * size - s.clientHeight))
+        }
+      }
+      return s.scrollTop
+    }
+
+    // Immediate pin (pre-paint when called from the restore path's layout effect).
+    applyAnchor()
+
+    const startedAt = Date.now()
+    const loop = (reassertMonitorRef.current ??= createReassertLoopMonitor()).begin('restore-anchor', performance.now())
+    let framesLeft = RESTORE_REASSERT_FRAMES
+    let stableFrames = 0
+    let landed = -1
+    const finish = () => {
+      loop.end()
+      reassertLoopRef.current = null
+      // Capture the settled position so a leave right after restore saves the anchor we LANDED on,
+      // not a mid-settle transient.
+      const s = scrollerRef.current
+      if (s) {
+        isAtBottomRef.current = (s.scrollHeight - s.scrollTop - s.clientHeight) < AT_BOTTOM_THRESHOLD
+        rememberCurrentScrollSnapshot()
+      }
+    }
+    const step = () => {
+      const s = scrollerRef.current
+      if (!s) { finish(); return }
+      if (framesLeft-- <= 0) { finish(); return }
+      // Stale loop must never scroll the new conversation (prevConversationRef is set synchronously
+      // at the end of the conversation-switch effect).
+      if (prevConversationRef.current !== anchorConvId) { finish(); return }
+      // User took over → stop fighting them.
+      if (userScrollIntentAtRef.current > startedAt) { finish(); return }
+
+      const st = applyAnchor()
+      if (st === null) { finish(); return }
+
+      let wrote = false
+      if (landed >= 0 && Math.abs(st - landed) <= RESTORE_DRIFT_PX) {
+        if (++stableFrames >= RESTORE_STABLE_FRAMES) { finish(); return }
+      } else {
+        wrote = true
+        stableFrames = 0
+      }
+      landed = st
+
+      const warning = loop.frame(performance.now(), wrote)
+      if (warning) console.warn(warning)
+      reassertLoopRef.current = { raf: requestAnimationFrame(step), handle: loop }
+    }
+    reassertLoopRef.current = { raf: requestAnimationFrame(step), handle: loop }
+  }, [isAtBottomRef, rememberCurrentScrollSnapshot])
+
   const restoreSavedPosition = useCallback((source: 'entry' | 'retry'): RestoreSavedPositionResult => {
     const scroller = scrollerRef.current
     if (!scroller) return 'pending'
@@ -836,20 +927,11 @@ export function useMessageListScroll({
     if (virtRestore && savedAnchor) {
       const anchorIndex = virtRestore.getIndexForMessageId(savedAnchor.messageId)
       if (anchorIndex !== null) {
-        // Baseline: place the anchor message's bottom at the viewport bottom (align:'end').
-        // This both windows the (possibly off-screen) row in and covers the common fraction=1
-        // case. scrollToIndex re-windows synchronously in the adapter, so its measured size is
-        // available right after for the sub-message refine below.
-        virtRestore.scrollToIndex(anchorIndex, { align: 'end' })
-        // Refine to the saved fraction using the message's CURRENT measured height (rendering-
-        // independent — re-derived from measurements, never a stored pixel gap).
-        if (savedAnchor.fraction < 1) {
-          const start = virtRestore.getOffsetForMessageId(savedAnchor.messageId)
-          const size = virtRestore.getVirtualItems().find((v) => v.index === anchorIndex)?.size
-          if (start !== null && size) {
-            virtRestore.scrollToOffset(Math.max(0, start + savedAnchor.fraction * size - scroller.clientHeight))
-          }
-        }
+        // Position the anchor's bottom at the viewport bottom (align:'end') refined to the saved
+        // fraction, and KEEP it pinned across frames as the just-windowed rows measure taller. A
+        // one-shot landing here drifts older (and compounds across re-opens) because it lands on
+        // estimated sizes — see pinVirtualizedAnchor / the RESTORE_* constants.
+        pinVirtualizedAnchor(savedAnchor, conversationId)
         return finishRestore('RESTORE via virtualizer index', { savedAnchor, anchorIndex })
       }
 
@@ -896,6 +978,7 @@ export function useMessageListScroll({
     firstMessageId,
     isAtBottomRef,
     messageCount,
+    pinVirtualizedAnchor,
     reassertBottom,
     rememberCurrentScrollSnapshot,
   ])
