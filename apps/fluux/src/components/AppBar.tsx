@@ -1,12 +1,14 @@
-import { memo, useEffect, useState } from 'react'
+import { memo, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
 import { useNavigate, useLocation, useNavigationType } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { ChevronLeft, ChevronRight, Search } from 'lucide-react'
 import { useIsDesktop } from '@/hooks/useIsDesktop'
 import { useHasHover } from '@/hooks/useHasHover'
 import { useFullscreen } from '@/hooks/useFullscreen'
-import { useWindowDrag } from '@/hooks/useWindowDrag'
 import { useModalStore } from '@/stores/modalStore'
+
+// Minimal shape of the Tauri window methods we drive for window dragging.
+type DraggableWindow = { startDragging: () => Promise<void>; toggleMaximize: () => Promise<void> }
 
 // Tauri / macOS detection — only macOS overlays native traffic lights onto the
 // webview, so only there does the bar need to reserve space at its start.
@@ -28,12 +30,17 @@ const TRAFFIC_LIGHT_INSET = 84
  * full-width surface to sit on, and reuses that otherwise-empty chrome.
  *
  * Platform behaviour:
- *  - macOS (Tauri): the native traffic lights overlay the bar's start; it is the
- *    window drag region. `TRAFFIC_LIGHT_INSET` keeps controls clear of the dots.
+ *  - macOS (Tauri): the native traffic lights overlay the bar's start; the bar
+ *    background drags the window. `TRAFFIC_LIGHT_INSET` keeps controls clear of
+ *    the dots, and decorum centres the dots vertically (see src-tauri).
  *  - Windows / Linux (Tauri): the OS keeps its native title bar above; this bar
- *    renders below it as a normal toolbar (left edge free).
- *  - Web desktop: a plain toolbar (no dots, drag attrs are inert).
+ *    renders below it as a normal toolbar (left edge free) and is also draggable.
+ *  - Web desktop: a plain toolbar (no window dragging).
  *  - Mobile (< md): not rendered — the single-pane layout owns navigation.
+ *
+ * Dragging calls Tauri's startDragging() on mousedown rather than using
+ * `-webkit-app-region: drag` (data-tauri-drag-region), whose macOS WebKit
+ * implementation stops responding after the first drag.
  *
  * Path 2 (future): go borderless (`decorations: false`) on Windows/Linux and
  * draw custom min/maximize/close controls into this bar for full Discord-style
@@ -46,8 +53,21 @@ export const AppBar = memo(function AppBar() {
   const isFullscreen = useFullscreen()
   const navigate = useNavigate()
   const { t } = useTranslation()
-  const { dragRegionProps } = useWindowDrag()
   const toggleModal = useModalStore((s) => s.toggle)
+
+  // Pre-resolve the Tauri window so the mousedown drag handler stays synchronous
+  // (an async import there would miss the gesture). Null in the browser.
+  const dragWindowRef = useRef<DraggableWindow | null>(null)
+  useEffect(() => {
+    if (!isTauri) return
+    let cancelled = false
+    void import('@tauri-apps/api/window').then(({ getCurrentWindow }) => {
+      if (!cancelled) dragWindowRef.current = getCurrentWindow() as unknown as DraggableWindow
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   // React Router stores a numeric index in history state; re-read it on every
   // navigation (useLocation re-renders us). `currentIdx` is the position in the
@@ -78,14 +98,27 @@ export const AppBar = memo(function AppBar() {
   const canGoBack = currentIdx > 0
   const canGoForward = currentIdx < maxIdx
 
+  // Drag the window from the bar background, but never from the controls.
+  const isControl = (target: EventTarget | null) =>
+    target instanceof Element && target.closest('button, a, input, [role="button"]') !== null
+  const handleDragMouseDown = (e: ReactMouseEvent) => {
+    if (e.button !== 0 || isControl(e.target)) return
+    void dragWindowRef.current?.startDragging()
+  }
+  const handleDragDoubleClick = (e: ReactMouseEvent) => {
+    if (isControl(e.target)) return
+    void dragWindowRef.current?.toggleMaximize()
+  }
+
   const shortcutMod = isMacOS ? '⌘' : 'Ctrl'
   const iconButton =
     'flex items-center justify-center size-7 rounded-md text-fluux-muted hover:text-fluux-text hover:bg-fluux-bg/60 transition-colors disabled:opacity-40 disabled:pointer-events-none'
 
   return (
     <div
-      {...dragRegionProps}
-      className="flex items-center gap-2 h-9 flex-shrink-0 bg-fluux-sidebar border-b border-fluux-bg pe-2 select-none"
+      onMouseDown={handleDragMouseDown}
+      onDoubleClick={handleDragDoubleClick}
+      className="flex items-center gap-2 h-11 flex-shrink-0 bg-fluux-sidebar border-b border-fluux-bg shadow-sm pe-2 select-none"
       style={{ paddingInlineStart: needsTrafficLightInset ? TRAFFIC_LIGHT_INSET : 8 }}
     >
       {/* History back / forward — mirror the webview history the keyboard drives */}

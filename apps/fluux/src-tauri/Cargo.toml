@@ -23,6 +23,10 @@ tauri-plugin-http = "2"
 tauri-plugin-clipboard-manager = "2"
 tauri-plugin-deep-link = "2"
 tauri-plugin-process = "2"
+# Vertically centers the macOS traffic lights inside the taller app bar
+# (components/AppBar.tsx). set_traffic_lights_inset re-applies across resize and
+# fullscreen transitions, which a hand-rolled objc2 reposition would not.
+tauri-plugin-decorum = "1"
 serde = { version = "1", features = ["derive"] }
 
 # XMPP WebSocket-to-TCP proxy dependencies

@@ -1390,6 +1390,9 @@ fn main() {
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
+        // Repositions the macOS traffic lights (see set_traffic_lights_inset in
+        // the macOS setup block). Cross-platform-safe to register everywhere.
+        .plugin(tauri_plugin_decorum::init())
         .invoke_handler(tauri::generate_handler![
             get_idle_time,
             save_credentials,
@@ -1692,6 +1695,17 @@ fn main() {
                 macos::disable_app_nap();
 
                 let main_window = app.get_webview_window("main").unwrap();
+
+                // Vertically center the traffic lights inside the app bar.
+                // The bar is 44px tall (h-11 in components/AppBar.tsx) and the
+                // buttons are ~16px, so an inset of ~14px from the top centers
+                // them. decorum re-applies this across resize / fullscreen.
+                // Tune the y value here if the bar height changes.
+                {
+                    use tauri_plugin_decorum::WebviewWindowExt;
+                    let _ = main_window.set_traffic_lights_inset(16.0, 14.0);
+                }
+
                 let window = main_window.clone();
                 let app_handle = app.handle().clone();
                 main_window.on_window_event(move |event| {
