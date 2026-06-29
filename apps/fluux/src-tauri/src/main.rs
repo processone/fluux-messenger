@@ -1390,8 +1390,11 @@ fn main() {
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
-        // Repositions the macOS traffic lights (see set_traffic_lights_inset in
-        // the macOS setup block). Cross-platform-safe to register everywhere.
+        // On macOS, decorum's on_window_ready hook repositions the traffic
+        // lights at a fixed inset (dot centre ~20px from top) and keeps them
+        // there across resize. The AppBar height is matched to that. We do NOT
+        // call decorum's per-window APIs — see the note in the macOS setup
+        // block. Cross-platform-safe to register everywhere.
         .plugin(tauri_plugin_decorum::init())
         .invoke_handler(tauri::generate_handler![
             get_idle_time,
@@ -1696,21 +1699,16 @@ fn main() {
 
                 let main_window = app.get_webview_window("main").unwrap();
 
-                // Vertically center the traffic lights inside the 44px app bar
-                // (h-11 in components/AppBar.tsx). decorum must take over the
-                // overlay titlebar first (create_overlay_titlebar) for the inset
-                // to apply; it then re-positions across resize / fullscreen.
-                // The buttons are ~16px, so y ≈ (44-16)/2 ≈ 14 centers them —
-                // tune the y value here if the bar height changes.
-                {
-                    use tauri_plugin_decorum::WebviewWindowExt;
-                    if let Err(e) = main_window.create_overlay_titlebar() {
-                        eprintln!("[decorum] create_overlay_titlebar failed: {e}");
-                    }
-                    if let Err(e) = main_window.set_traffic_lights_inset(16.0, 14.0) {
-                        eprintln!("[decorum] set_traffic_lights_inset failed: {e}");
-                    }
-                }
+                // NOTE: the macOS traffic lights are positioned by the decorum
+                // plugin's own `on_window_ready` hook at its FIXED inset (dot
+                // centre ~20px from the window top), kept in place across resize
+                // by a native delegate. We intentionally do NOT call
+                // set_traffic_lights_inset / create_overlay_titlebar: decorum
+                // hardcodes the inset and overrides any per-call value, and
+                // create_overlay_titlebar injects its own titlebar HTML that
+                // clashes with our AppBar. Instead the AppBar height (h-10 /
+                // 40px, see components/AppBar.tsx) is chosen so that fixed dot
+                // centre lands in the middle of the bar.
 
                 let window = main_window.clone();
                 let app_handle = app.handle().clone();
