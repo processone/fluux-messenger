@@ -1027,6 +1027,7 @@ export const RoomMessageList = memo(function RoomMessageList({
       <RoomMessageBubbleWrapper
         message={msg}
         showAvatar={shouldShowAvatar(groupMessages, idx)}
+        isGroupEnd={idx === groupMessages.length - 1 || shouldShowAvatar(groupMessages, idx + 1)}
         whisperThread={whisperThreadPosition(groupMessages, idx)}
         roomJid={room.jid}
         myNick={room.nickname}
@@ -1119,6 +1120,7 @@ export const RoomMessageList = memo(function RoomMessageList({
 interface RoomMessageBubbleWrapperProps {
   message: RoomMessage
   showAvatar: boolean
+  isGroupEnd: boolean
   whisperThread: WhisperThreadPosition | null
   // Per-row resolved sender data (resolved in the list layer from cheap Map lookups).
   // `occupant` is the live, reference-stable occupant record (roomStore.addOccupant
@@ -1197,6 +1199,7 @@ interface RoomMessageBubbleWrapperProps {
 const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
   message,
   showAvatar,
+  isGroupEnd,
   whisperThread,
   roomJid,
   myNick,
@@ -1424,6 +1427,7 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
       <MessageBubble
         message={message}
         showAvatar={showAvatar}
+        isGroupEnd={isGroupEnd}
         isSelected={isSelected}
         hasKeyboardSelection={hasKeyboardSelection}
         showToolbarForSelection={showToolbarForSelection}

@@ -479,6 +479,7 @@ export const SearchContextMessageList = memo(function SearchContextMessageList({
         <MessageBubble
           message={msg}
           showAvatar={shouldShowAvatar(groupMessages, idx)}
+          isGroupEnd={idx === groupMessages.length - 1 || shouldShowAvatar(groupMessages, idx + 1)}
           isLastOutgoing={false}
           isLastMessage={false}
           hideToolbar

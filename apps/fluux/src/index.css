@@ -981,9 +981,25 @@ input[type="range"]::-moz-range-thumb {
    kept subtle so body text AA holds. */
 .message-own-tint {
   background: hsla(var(--fluux-accent-h), var(--fluux-accent-s), var(--fluux-accent-l), 0.08);
-  border-radius: var(--fluux-radius-m);
   padding-inline: 0.5rem;
   margin-inline: -0.5rem;
+  /* Bridge the outer row's py-0.5 (2px) gap so a run of consecutive own
+     messages renders as one continuous surface: each tint grows 2px into its
+     row's vertical padding and meets the next at the row boundary, seamlessly. */
+  padding-block: 0.125rem;
+  margin-block: -0.125rem;
+}
+
+/* Corner rounding is carried only at the group edges so interior rows stay
+   square and the run reads as a single panel. A solo own message gets both
+   (full radius); the default isGroupEnd=true keeps standalone bubbles rounded. */
+.message-own-tint-start {
+  border-top-left-radius: var(--fluux-radius-m);
+  border-top-right-radius: var(--fluux-radius-m);
+}
+.message-own-tint-end {
+  border-bottom-left-radius: var(--fluux-radius-m);
+  border-bottom-right-radius: var(--fluux-radius-m);
 }
 
 /* Persistent highlight for search context view */

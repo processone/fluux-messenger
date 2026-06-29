@@ -677,6 +677,7 @@ export const ChatMessageList = memo(function ChatMessageList({
     <ChatMessageBubble
       message={msg}
       showAvatar={shouldShowAvatar(groupMessages, idx)}
+      isGroupEnd={idx === groupMessages.length - 1 || shouldShowAvatar(groupMessages, idx + 1)}
       avatar={msg.isOutgoing ? ownAvatar ?? undefined : contactsByJid.get(msg.from)?.avatar}
       ownAvatar={ownAvatar}
       ownNickname={ownNickname}
@@ -753,6 +754,7 @@ export const ChatMessageList = memo(function ChatMessageList({
 interface ChatMessageBubbleProps {
   message: Message
   showAvatar: boolean
+  isGroupEnd: boolean
   avatar?: string
   ownAvatar?: string | null
   ownNickname?: string | null
@@ -796,6 +798,7 @@ interface ChatMessageBubbleProps {
 const ChatMessageBubble = memo(function ChatMessageBubble({
   message,
   showAvatar,
+  isGroupEnd,
   avatar,
   ownAvatar,
   ownNickname,
@@ -914,6 +917,7 @@ const ChatMessageBubble = memo(function ChatMessageBubble({
       <MessageBubble
         message={message}
         showAvatar={showAvatar}
+        isGroupEnd={isGroupEnd}
         isSelected={isSelected}
         hasKeyboardSelection={hasKeyboardSelection}
         showToolbarForSelection={showToolbarForSelection}
