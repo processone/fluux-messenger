@@ -1,73 +1,70 @@
-# Sync marker only on first open (Approach A)
+# Sync marker only on first open (XEP-0490)
 
 Date: 2026-06-29
 
 ## Problem
 
-Returning to a conversation often jumps to the bottom (or a wrong mid-point) instead of
-restoring where the user was. Root contributor: XEP-0490 (Message Displayed Synchronization)
-advances the persisted, forward-only `lastSeenMessageId` from other devices' read positions.
-The unread divider (`firstNewMessageId`) is derived from `lastSeenMessageId`, and the message
-list's conversation-switch effect scrolls to that divider on **every** open where a divider
-exists and no scrolled-up position was saved — not only the first open. So a cross-device read
-sync ends up driving scroll position on each re-open.
+Returning to a conversation could jump to the bottom (or a wrong mid-point). The unread divider
+(`firstNewMessageId`) is derived from `lastSeenMessageId`, which XEP-0490 (Message Displayed
+Synchronization) advances from other devices' read positions. The synced read position was being
+consumed on **every** conversation open, so a cross-device read-sync could reposition the divider
+on each return.
 
 ## Desired behavior (confirmed)
 
-- **First open per app session**: the synced read marker may position the view (scroll to the
-  unread divider as today).
-- **Re-open within the session (navigate-back / reload)**: restore this client's local scroll
-  position; do **not** scroll to the synced marker. If there is no saved local position (the
-  user was at the bottom), go to the bottom.
-- "First open per session" = `scrollStateManager` has not yet initialized this conversation.
-  The manager is an in-memory singleton reset on logout and rebuilt on app reload, so this is
-  naturally per-session and identical on web and Tauri/WebKit.
+- The XEP-0490 synced read position drives the divider only on the **first open of a conversation
+  per app session**.
+- On a re-open within the session (navigate-back / reload), the synced marker is **not**
+  re-applied; the client keeps the position it already had.
+- XEP-0490 markers are broadcast live over PEP, so after the first consumption the live
+  `read:displayed-synced` notifies keep loaded conversations current — there is no need to
+  re-check pending markers on each open during a session.
 
-## Approach A — gate the divider scroll-branch to first-open-per-session (app-only)
+## Approach B — gate the XEP-0490 entry fold in the SDK (chosen)
 
-In the conversation-switch `useLayoutEffect` of
-`apps/fluux/src/components/conversation/useMessageListScroll.ts`:
+`activateConversation` (chatStore) and `activateRoom` (roomStore) fold a pending
+`pendingRemoteDisplayedStanzaId` into `lastSeenMessageId` before deriving the divider. Gate that
+fold to the **first activation of each conversation/room per session**:
 
-1. Capture `firstOpen = !scrollStateManager.isInitialized(conversationId)` **before** calling
-   `enterConversation` (which flips the `initialized` flag).
-2. Change the unread-divider branch condition from `else if (firstNewMessageId)` to
-   `else if (firstNewMessageId && firstOpen)`.
-3. Everything else is unchanged:
-   - `restore-position` branch still runs first (independent of `firstOpen`) — saved local
-     position always wins on re-open.
-   - `targetMessageId` branch (explicit reply/search/activity jump) still works on re-open.
-   - Falling through with no saved position lands at the bottom.
+- A module-level `Set<string>` (`mdsConsumedThisSession`) per store records which
+  conversations/rooms have had their synced marker consumed this session.
+- On activation: if not yet consumed, fold the pending marker (as before) and mark consumed; if
+  already consumed, skip the fold (a `[MDS]` debug line records the skip).
+- The set is cleared in each store's `reset()` (logout/account switch), so it is naturally
+  per app session and platform-agnostic (web and Tauri/WebKit behave identically).
 
-The divider line is still rendered as a visual aid; we only stop auto-scrolling to it on
-re-open.
+Pending markers that arrive while a conversation is loaded are still applied live via the
+`read:displayed-synced` binding (unread badges stay correct); only the entry-time *fold* is gated.
 
-### Why this matches the two requirements
+## Why NOT Approach A (scroll-layer gate)
 
-- On the genuine first open, `enterConversation` returns `scroll-to-bottom` (first view) and
-  `firstOpen` is true → the marker branch positions at the divider (unchanged behavior).
-- On a return, `firstOpen` is false → the marker branch is skipped. If a scrolled-up position
-  was saved, `restore-position` already restored it; otherwise the local position was the
-  bottom, so bottom is correct.
+The first attempt gated the message-list `firstNewMessageId` scroll branch on first-open-per-session.
+That was the wrong layer: at the scroll layer a **stale/synced** marker and a **genuine "new
+message arrived while away"** marker are indistinguishable, so it suppressed the latter on re-entry
+and broke the deliberate e2e invariant *"return to room after a new message shows the marker and the
+message"* (`scripts/scroll-invariants.ts`). Provenance is only knowable in the SDK, so the gate
+belongs there. The scroll-layer branch is left unchanged (`else if (firstNewMessageId)`); a
+`firstOpenThisSession` value is still logged there for diagnostics only.
 
 ## Out of scope
 
-- No change to XEP-0490 read-state semantics: cross-device unread badges and read-sync continue
-  to work (this is purely a scroll-positioning gate). The SDK entry-fold (Approach B) is **not**
-  changed.
+No change to XEP-0490 read-state semantics beyond the entry-fold gate: cross-device unread badges
+and live read-sync continue to work.
 
-## Cross-platform
+## Diagnostics (kept in, gated off by default)
 
-Approach A is pure React scroll-decision logic with no platform-specific branch. It executes
-identically on web (Chromium) and Tauri (WebKit). Verified in demo mode on web; the same code
-path runs on desktop.
+Under the shared `fluux:scroll-debug` flag (`__fluuxScrollDebug(true)`), retained until confirmed on
+the desktop build:
+- `[Nav]` screen transitions in ChatLayout (view mount/unmount, active ids)
+- `[Scroll]` MessageList MOUNT/UNMOUNT, no-saved-state→bottom, and a new-message "no bottom-row
+  change" line (covers "sent a message but it didn't scroll")
+- `[MDS]` XEP-0490 dispatch + activation folds (and skips), logging `lastSeenMessageId` before/after
 
 ## Testing
 
-- Unit (existing scroll suite, `useMessageListScroll.restore.test.tsx` /
-  `MessageList.virtualizedScroll.test.tsx`):
-  - First open with a divider → scrolls to the marker.
-  - Re-open of the same conversation (initialized) with a divider and a saved scrolled-up
-    position → restores the saved position, does **not** scroll to the marker.
-  - Re-open with a divider and no saved position (was at bottom) → lands at bottom, not marker.
-- Manual/demo (web): open a conversation with unread → lands at divider; scroll up; switch away
-  and back → restores position rather than jumping to the divider/bottom.
+- SDK unit (chatStore.mds.test.ts / roomStore.mds.test.ts): a second activation in the same session
+  with a fresh further-ahead pending marker does NOT re-fold (`lastSeenMessageId` unchanged);
+  first-open fold still applies. Both verified RED (gate defeated) → GREEN.
+- e2e (`scripts/scroll-invariants.ts`): the "new message while away → divider visible on re-entry"
+  invariant passes (chromium verified locally; webkit via CI).
+- App scroll unit suite unchanged behavior (the scroll-layer marker branch is not gated).

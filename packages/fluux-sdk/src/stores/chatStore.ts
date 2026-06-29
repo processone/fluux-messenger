@@ -63,6 +63,15 @@ function conversationIdsByActivity(
 // call can't overwrite a newer activation when it finally resolves
 let activationToken = 0
 
+// Conversations whose pending XEP-0490 (Message Displayed Synchronization) read marker has
+// already been consumed for divider positioning THIS session. XEP-0490 markers are broadcast
+// live over PEP, so once we fold the synced read position on the first open of a conversation
+// this session, later opens must NOT re-check/re-fold it — the live `read:displayed-synced`
+// notifies keep loaded conversations current, and re-folding on every open lets a synced read
+// position reposition the divider on each return. Cleared on reset() (logout/account switch);
+// module-level so it is naturally per app session.
+const mdsConsumedThisSession = new Set<string>()
+
 function getScopedStorageKey(jid?: string | null): string {
   return buildScopedStorageKey(STORAGE_KEY_BASE, jid)
 }
@@ -646,21 +655,28 @@ export const chatStore = createStore<ChatState>()(
           // pendingRemoteDisplayedStanzaId; resolve it now (forward-only, against the
           // just-loaded messages) so the divider reflects reads synced from other
           // devices instead of the stale local position.
+          // Fold a pending XEP-0490 synced read position into lastSeenMessageId BEFORE
+          // setActiveConversation derives the divider — but only on the FIRST open of this
+          // conversation this session. XEP-0490 markers broadcast live over PEP, so after the
+          // first consumption the live `read:displayed-synced` notifies keep us current; re-folding
+          // on every open would let a synced read position reposition the divider on each return.
+          const firstConsumeThisSession = !mdsConsumedThisSession.has(id)
+          mdsConsumedThisSession.add(id)
           const pending = get().conversationMeta.get(id)?.pendingRemoteDisplayedStanzaId
-          if (pending) {
-            // Entry-time XEP-0490 fold. This is the highest-signal vector for a "jumped to bottom on
-            // return" report: a read position synced from another device is applied to
-            // lastSeenMessageId HERE, then setActiveConversation (next line) derives the unread
-            // divider from it. If the remote device had read further, the divider shrinks/vanishes
-            // and the message list scrolls to bottom instead of restoring. Log before→after.
+          if (pending && firstConsumeThisSession) {
             const lastSeenBefore = get().conversationMeta.get(id)?.lastSeenMessageId
             get().applyRemoteDisplayed(id, pending)
-            markerDebugLog('activation fold (XEP-0490 pending → divider)', {
+            markerDebugLog('activation fold (XEP-0490 pending → divider, first open this session)', {
               conversationId: id,
               pendingStanzaId: pending,
               lastSeenBefore,
               lastSeenAfter: get().conversationMeta.get(id)?.lastSeenMessageId,
               advanced: lastSeenBefore !== get().conversationMeta.get(id)?.lastSeenMessageId,
+            })
+          } else if (pending) {
+            markerDebugLog('activation fold SKIPPED (already consumed this session — PEP keeps it live)', {
+              conversationId: id,
+              pendingStanzaId: pending,
             })
           }
         }
@@ -1722,6 +1738,8 @@ export const chatStore = createStore<ChatState>()(
 
       reset: () => {
         clearAllTypingTimeouts()
+        // New session → the XEP-0490 synced read marker may be folded again on first open.
+        mdsConsumedThisSession.clear()
         // Clear persisted data on logout
         try {
           localStorage.removeItem(getScopedStorageKey())

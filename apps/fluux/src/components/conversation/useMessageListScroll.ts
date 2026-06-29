@@ -1311,15 +1311,14 @@ export function useMessageListScroll({
       isAtBottomRef.current = false
       debugLog('CONVERSATION SWITCH: static mode, skipping scroll')
     } else {
-      // Is this the FIRST open of this conversation this session? Captured BEFORE
-      // enterConversation, which flips the manager's `initialized` flag. The unread-marker
-      // divider is derived from lastSeenMessageId, which XEP-0490 advances from OTHER devices'
-      // read positions — so honoring it on every open lets a cross-device read-sync drive scroll
-      // on every return. Only the FIRST open this session should position to the synced marker;
-      // re-opens restore this client's local position (or land at the bottom). The manager is an
-      // in-memory singleton reset on logout and rebuilt on app reload, so "this session" is
-      // platform-agnostic (identical on web and Tauri/WebKit).
-      // See docs/superpowers/specs/2026-06-29-mds-sync-marker-first-open-design.md.
+      // Diagnostic only: is this the FIRST open of this conversation this session? (Captured BEFORE
+      // enterConversation, which flips the manager's `initialized` flag.) The "synced marker only on
+      // first open" concern is handled at the SOURCE — the SDK gates the XEP-0490 entry fold to the
+      // first activation per session (chatStore/roomStore), so the divider here already reflects the
+      // intended read position. Gating the scroll branch on first-open was the wrong layer: it could
+      // not distinguish a stale/synced marker from a genuine "new message arrived while away" marker
+      // and suppressed the latter on re-entry. See
+      // docs/superpowers/specs/2026-06-29-mds-sync-marker-first-open-design.md.
       const firstOpenThisSession = !scrollStateManager.isInitialized(conversationId)
 
       // Decide: restore position or scroll to bottom?
@@ -1332,7 +1331,7 @@ export function useMessageListScroll({
         const restoreResult = restoreSavedPosition('entry')
         pendingRestoreConversationRef.current =
           restoreResult === 'pending' ? conversationId : null
-      } else if (firstNewMessageId && firstOpenThisSession) {
+      } else if (firstNewMessageId) {
         // Has unread messages — position the first-unread marker ~1/3 down from the top so the
         // user reads forward from where they left off. Mark NOT at bottom up front (mirrors the
         // targetMessageId branch) so the content-growth ResizeObserver doesn't auto-pin to the

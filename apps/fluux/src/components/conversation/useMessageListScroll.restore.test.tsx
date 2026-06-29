@@ -245,30 +245,10 @@ describe('useMessageListScroll saved-position restore', () => {
   const markerTarget = 400 - 500 / 3 // msg-10 offsetTop(400) minus clientHeight/3
   const manyIds = () => Array.from({ length: 20 }, (_, i) => `msg-${i}`)
 
-  it('does not scroll to the unread marker when re-opening a conversation left at the bottom (same session)', () => {
-    // Already opened this session, then left at the bottom (no saved scrolled-up position).
-    scrollStateManager.enterConversation('reopen-bottom', 20)
-    scrollStateManager.leaveConversation('reopen-bottom', 850, 1000, 500)
-    expect(scrollStateManager.isInitialized('reopen-bottom')).toBe(true)
-    expect(scrollStateManager.getSavedScrollTop('reopen-bottom')).toBeNull()
-
-    const flush = installDeferredRaf()
-    let handle: HarnessHandle | undefined
-
-    render(
-      <HookHarness
-        conversationId="reopen-bottom"
-        ids={manyIds()}
-        firstNewMessageId="msg-10"
-        onReady={(next) => { handle = next }}
-      />,
-    )
-    flush()
-
-    // Re-open within the session: the synced unread marker must NOT drive scroll; land at bottom.
-    expect(handle?.scrollTopSets.some((v) => Math.abs(v - markerTarget) < 1)).toBe(false)
-    expect(handle?.scrollTopSets).toContain(1000)
-  })
+  // NOTE: the unread-marker scroll branch is intentionally NOT gated on first-open at the scroll
+  // layer — that could not tell a stale/synced marker from a genuine "new message while away" marker
+  // and broke the latter on re-entry (scroll-invariants e2e). The "synced marker only on first open"
+  // behavior is enforced at the SDK source (XEP-0490 entry fold), see chatStore/roomStore tests.
 
   it('scrolls to the unread marker on the first open of a conversation this session', () => {
     const flush = installDeferredRaf()

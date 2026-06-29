@@ -189,6 +189,41 @@ describe('roomStore.activateRoom — XEP-0490 divider sync', () => {
     expect(roomStore.getState().roomMeta.get(ROOM)?.lastSeenMessageId).toBe('m4')
     expect(roomSelectors.firstNewMessageIdFor(ROOM)(roomStore.getState())).toBeUndefined()
   })
+
+  it('does NOT re-fold a remote room marker on a later activation in the same session', async () => {
+    // Distinct jid: the session-scoped "consumed" set is module-level and (unlike chatStore's
+    // reset-based beforeEach) this file's beforeEach only resets store STATE, so a room consumed by
+    // an earlier test would otherwise pre-mark this one and skip the legitimate first-open fold.
+    const REOPEN_ROOM = 'reopen-stress@conference.example'
+    const messages = [rmsg('m1', 's1', 1), rmsg('m2', 's2', 2), rmsg('m3', 's3', 3), rmsg('m4', 's4', 4)]
+    seedRoom(REOPEN_ROOM, messages, 'm2')
+    // First open: a remote device read up to s3 (pending).
+    roomStore.setState((s) => {
+      const m = new Map(s.roomMeta)
+      m.set(REOPEN_ROOM, { ...m.get(REOPEN_ROOM)!, pendingRemoteDisplayedStanzaId: 's3' })
+      return { roomMeta: m }
+    })
+    await roomStore.getState().activateRoom(REOPEN_ROOM)
+    expect(roomStore.getState().roomMeta.get(REOPEN_ROOM)?.lastSeenMessageId).toBe('m3')
+
+    // Leave (deactivation evicts the resident message array).
+    await roomStore.getState().activateRoom(null)
+
+    // Re-open: rehydrate the messages (cache reload) and a NEW further-ahead remote read (s4).
+    roomStore.setState((s) => {
+      const rt = new Map(s.roomRuntime)
+      const existing = rt.get(REOPEN_ROOM)
+      if (existing) rt.set(REOPEN_ROOM, { ...existing, messages })
+      const m = new Map(s.roomMeta)
+      m.set(REOPEN_ROOM, { ...m.get(REOPEN_ROOM)!, pendingRemoteDisplayedStanzaId: 's4' })
+      return { roomRuntime: rt, roomMeta: m }
+    })
+
+    // Re-open in the SAME session: the synced marker must NOT be folded again (XEP-0490 markers
+    // broadcast live over PEP). Without the gate this would advance lastSeenMessageId to m4.
+    await roomStore.getState().activateRoom(REOPEN_ROOM)
+    expect(roomStore.getState().roomMeta.get(REOPEN_ROOM)?.lastSeenMessageId).toBe('m3')
+  })
 })
 
 describe('roomStore — new-message divider is session-only', () => {

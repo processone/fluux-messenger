@@ -284,4 +284,46 @@ describe('chatStore.activateConversation — XEP-0490 divider sync', () => {
     // NOT the stale 'm3' it would show if the marker resolved after onActivate.
     expect(chatSelectors.firstNewMessageIdFor(cid)(chatStore.getState())).toBeUndefined()
   })
+
+  it('does NOT re-fold a remote read marker on a later activation in the same session', async () => {
+    const cid = 'juliet@capulet.example'
+    // Distinct, increasing timestamps so sortMessagesByTimestamp gives a stable order and the
+    // index-based forward-only advance is deterministic.
+    const t = (n: number) => new Date(`2026-01-01T00:0${n}:00Z`)
+    const timed = (id: string, stanzaId: string, n: number): Message => ({ ...msg(id, stanzaId), timestamp: t(n) })
+    const messages = [timed('m1', 's1', 1), timed('m2', 's2', 2), timed('m3', 's3', 3), timed('m4', 's4', 4)]
+    seedMessages(cid, messages)
+
+    // First open: local read stale at m2, a remote device read up to s3 (pending).
+    chatStore.setState((state) => {
+      const newMeta = new Map(state.conversationMeta)
+      newMeta.set(cid, { unreadCount: 0, lastSeenMessageId: 'm2', pendingRemoteDisplayedStanzaId: 's3' })
+      const newConvs = new Map(state.conversations)
+      newConvs.set(cid, { id: cid, name: cid, type: 'chat', unreadCount: 0, lastSeenMessageId: 'm2', pendingRemoteDisplayedStanzaId: 's3' })
+      return { conversationMeta: newMeta, conversations: newConvs }
+    })
+
+    await chatStore.getState().activateConversation(cid)
+    // First open folds the synced read forward to m3.
+    expect(chatStore.getState().conversationMeta.get(cid)?.lastSeenMessageId).toBe('m3')
+
+    // Leave (deactivation evicts the resident message array — memory windowing).
+    await chatStore.getState().activateConversation(null)
+
+    // Re-open: the cache reload brings the messages back (re-seed simulates it), and a NEW remote
+    // read (s4, further ahead) has arrived as a fresh pending marker since first open.
+    seedMessages(cid, messages)
+    chatStore.setState((state) => {
+      const meta = state.conversationMeta.get(cid)!
+      const newMeta = new Map(state.conversationMeta)
+      newMeta.set(cid, { ...meta, pendingRemoteDisplayedStanzaId: 's4' })
+      return { conversationMeta: newMeta }
+    })
+
+    // Re-open in the SAME session: the synced marker must NOT be folded again — XEP-0490 markers
+    // broadcast live over PEP, so the read position (and the divider) stay where this client left
+    // it. Without the gate this would fold s4 and advance lastSeenMessageId to m4.
+    await chatStore.getState().activateConversation(cid)
+    expect(chatStore.getState().conversationMeta.get(cid)?.lastSeenMessageId).toBe('m3')
+  })
 })
