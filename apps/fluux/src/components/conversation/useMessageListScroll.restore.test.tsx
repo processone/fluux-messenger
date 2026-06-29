@@ -358,4 +358,43 @@ describe('useMessageListScroll saved-position restore', () => {
 
     expect(onLoadAround).not.toHaveBeenCalled()
   })
+
+  // Regression: after a restore, the view can shift on its own as rows below the fold load media /
+  // re-measure. Those non-user scroll events must NOT overwrite the saved position — otherwise the
+  // (drifted, older) position is persisted and the next open starts from there, compounding into
+  // "goes back in time on every switch". Only a genuine user scroll updates the saved position.
+  describe('save gating after restore', () => {
+    const scrollAndFire = (handle: HarnessHandle, top: number) => {
+      handle.scroller.scrollTop = top
+      handle.api.handleScroll({ currentTarget: handle.scroller } as unknown as React.UIEvent<HTMLDivElement>)
+    }
+
+    it('does not overwrite the saved position from a non-user (media/measurement) scroll', () => {
+      seedSavedScrollPosition('gate-nonuser', 200)
+      let handle: HarnessHandle | undefined
+      render(
+        <HookHarness conversationId="gate-nonuser" ids={['m0', 'm1', 'm2']} onReady={(n) => { handle = n }} />,
+      )
+
+      // A spontaneous (non-user) scroll to a different, not-at-bottom position.
+      act(() => scrollAndFire(handle!, 320))
+
+      expect(scrollStateManager.getSavedScrollTop('gate-nonuser')).toBe(200)
+    })
+
+    it('saves the new position once the user genuinely scrolls (wheel)', () => {
+      seedSavedScrollPosition('gate-user', 200)
+      let handle: HarnessHandle | undefined
+      render(
+        <HookHarness conversationId="gate-user" ids={['m0', 'm1', 'm2']} onReady={(n) => { handle = n }} />,
+      )
+
+      act(() => {
+        handle!.api.handleWheel({ currentTarget: handle!.scroller, deltaY: -10 } as unknown as React.WheelEvent<HTMLDivElement>)
+        scrollAndFire(handle!, 320)
+      })
+
+      expect(scrollStateManager.getSavedScrollTop('gate-user')).toBe(320)
+    })
+  })
 })
