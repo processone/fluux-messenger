@@ -42,6 +42,15 @@ export interface MessageBubbleProps {
   hideToolbar?: boolean
   isLastOutgoing: boolean
   isLastMessage: boolean
+  /**
+   * Whether this row is the LAST in its avatar-group (the next message starts a
+   * new group, or this is the last message). Combined with `showAvatar` (group
+   * start), it lets the own-message tint render a run of outgoing messages as one
+   * continuous surface — rounded at the top of the first and bottom of the last —
+   * so the group's lock/trust indicator visually covers every message under it.
+   * Defaults to true so a standalone bubble renders a fully-rounded solo surface.
+   */
+  isGroupEnd?: boolean
   isDarkMode?: boolean
 
   // Hover state (controlled by parent for stable toolbar interaction)
@@ -204,6 +213,7 @@ function arePropsEqual(prev: MessageBubbleProps, next: MessageBubbleProps): bool
   if (prev.hideToolbar !== next.hideToolbar) return false
   if (prev.isLastOutgoing !== next.isLastOutgoing) return false
   if (prev.isLastMessage !== next.isLastMessage) return false
+  if (prev.isGroupEnd !== next.isGroupEnd) return false
   if (prev.isHovered !== next.isHovered) return false
 
   // Sender info
@@ -267,6 +277,7 @@ export const MessageBubble = memo(function MessageBubble({
   hideToolbar,
   isLastOutgoing,
   isLastMessage,
+  isGroupEnd = true,
   isDarkMode,
   isHovered,
   onMouseEnter,
@@ -417,6 +428,16 @@ export const MessageBubble = memo(function MessageBubble({
 
   // Action capabilities — shared by the hover toolbar (MessageToolbar) and the
   // touch action sheet (MessageActionSheet) so the two surfaces stay in lock-step.
+  // Own-message tint as a continuous surface across an avatar-group: `showAvatar`
+  // marks the group start (round the top), `isGroupEnd` the last row (round the
+  // bottom); interior rows stay square and the tint bridges the inter-row gap so
+  // the run reads as one panel under the group's lock indicator. Suppressed in a
+  // whisper thread (the bounded "private with X" card owns the fill there).
+  const ownTint = message.isOutgoing && !inThread
+  const ownTintClass = ownTint
+    ? `message-own-tint${showAvatar ? ' message-own-tint-start' : ''}${isGroupEnd ? ' message-own-tint-end' : ''}`
+    : ''
+
   const { canReply, canEdit, canDelete } = actions
   const canCopyBody = !!message.body && !message.isRetracted && !message.encryptedPayload && !message.unsupportedEncryption
   const hasMessageActions = !message.isRetracted && (actions.canReact || canReply || canEdit || canDelete || canCopyBody)
@@ -498,7 +519,7 @@ export const MessageBubble = memo(function MessageBubble({
           the incoming rows — shattering the single "private with X" card. The
           name header already carries the own-vs-counterpart distinction. */}
       <div
-        className={`relative flex-1 min-w-0 touch:select-none touch:[-webkit-touch-callout:none] ${isSelected || showActionSheet ? 'bg-fluux-selection -my-0.5 py-0.5 -ms-2 ps-2 -me-4 pe-4 rounded-s' : ''}${inThread ? ` bg-fluux-private-soft border-x border-fluux-private-border px-2.5 py-1 ${threadStart ? 'border-t rounded-t-lg' : ''} ${threadEnd ? 'border-b rounded-b-lg' : ''}` : ''} ${message.isOutgoing && !inThread ? 'message-own-tint' : ''}`}
+        className={`relative flex-1 min-w-0 touch:select-none touch:[-webkit-touch-callout:none] ${isSelected || showActionSheet ? 'bg-fluux-selection -my-0.5 py-0.5 -ms-2 ps-2 -me-4 pe-4 rounded-s' : ''}${inThread ? ` bg-fluux-private-soft border-x border-fluux-private-border px-2.5 py-1 ${threadStart ? 'border-t rounded-t-lg' : ''} ${threadEnd ? 'border-b rounded-b-lg' : ''}` : ''} ${ownTintClass}`}
         data-msg-chrome={showAvatar ? 'header' : 'cont'}
         onTouchStart={handleContentTouchStart}
         onTouchEnd={cancelLongPress}

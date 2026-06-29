@@ -802,6 +802,58 @@ describe('Own-message tint', () => {
     const { container } = render(<MessageBubble {...props} />)
     expect(container.querySelector('.message-own-tint')).not.toBeInTheDocument()
   })
+
+  // The tint renders a run of own messages as one continuous surface: the group
+  // start (showAvatar) rounds the top, the group end (isGroupEnd) rounds the
+  // bottom, interior rows stay square so the run reads as a single panel under
+  // the group's lock indicator.
+  it('rounds both corners of a solo own message (group start and end)', () => {
+    const props = createDefaultProps({
+      message: createTestMessage({ isOutgoing: true }),
+      showAvatar: true,
+      isGroupEnd: true,
+    })
+    const { container } = render(<MessageBubble {...props} />)
+    const tint = container.querySelector('.message-own-tint')!
+    expect(tint.className).toContain('message-own-tint-start')
+    expect(tint.className).toContain('message-own-tint-end')
+  })
+
+  it('rounds only the top of an own group-start row that continues below', () => {
+    const props = createDefaultProps({
+      message: createTestMessage({ isOutgoing: true }),
+      showAvatar: true,
+      isGroupEnd: false,
+    })
+    const { container } = render(<MessageBubble {...props} />)
+    const tint = container.querySelector('.message-own-tint')!
+    expect(tint.className).toContain('message-own-tint-start')
+    expect(tint.className).not.toContain('message-own-tint-end')
+  })
+
+  it('rounds only the bottom of an own group-end continuation row', () => {
+    const props = createDefaultProps({
+      message: createTestMessage({ isOutgoing: true }),
+      showAvatar: false,
+      isGroupEnd: true,
+    })
+    const { container } = render(<MessageBubble {...props} />)
+    const tint = container.querySelector('.message-own-tint')!
+    expect(tint.className).not.toContain('message-own-tint-start')
+    expect(tint.className).toContain('message-own-tint-end')
+  })
+
+  it('leaves an interior own continuation row square (neither corner rounded)', () => {
+    const props = createDefaultProps({
+      message: createTestMessage({ isOutgoing: true }),
+      showAvatar: false,
+      isGroupEnd: false,
+    })
+    const { container } = render(<MessageBubble {...props} />)
+    const tint = container.querySelector('.message-own-tint')!
+    expect(tint.className).not.toContain('message-own-tint-start')
+    expect(tint.className).not.toContain('message-own-tint-end')
+  })
 })
 
 describe('Density spacing', () => {
