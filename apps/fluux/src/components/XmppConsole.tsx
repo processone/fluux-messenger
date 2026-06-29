@@ -630,10 +630,12 @@ export function XmppConsole() {
         <div
           ref={packetsContainerRef}
           tabIndex={0}
-          // border-transparent insets the scroll clip by 1px so it lines up with
-          // the focus ring (outline-offset: -1px). Without it, rows scroll in the
-          // 1px band above the ring and a sliver of content peeks over the top edge.
-          className="xmpp-console-log absolute inset-0 overflow-y-auto overflow-x-hidden border border-transparent"
+          // Transparent borders inset the scroll clip away from the focus ring
+          // (outline-offset: -1px). Top/bottom get a 4px inset so scrolling rows
+          // are clipped a few px clear of the ring line — otherwise a row's badge
+          // can scroll up to the ring and its background paints over it. Left/right
+          // stay at 1px so the per-row accent bars still hug the edge.
+          className="xmpp-console-log absolute inset-0 overflow-y-auto overflow-x-hidden border-x border-y-4 border-transparent"
           onScroll={handleScroll}
           onKeyDown={handleLogKeyDown}
         >
