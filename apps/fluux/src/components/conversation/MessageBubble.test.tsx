@@ -854,6 +854,57 @@ describe('Own-message tint', () => {
     expect(tint.className).not.toContain('message-own-tint-start')
     expect(tint.className).not.toContain('message-own-tint-end')
   })
+
+  // Interior junctions of an own group are tightened so the merged surface reads
+  // as one block: the row pulls toward neighbouring own messages, but the
+  // group's outer top (group-start separation) and bottom are left alone.
+  it('tightens an own group-start row only at the bottom (toward the continuation)', () => {
+    const props = createDefaultProps({
+      message: createTestMessage({ isOutgoing: true }),
+      showAvatar: true,
+      isGroupEnd: false,
+    })
+    const { container } = render(<MessageBubble {...props} />)
+    const row = container.firstChild as HTMLElement
+    expect(row.className).toContain('message-own-cont-bottom')
+    expect(row.className).not.toContain('message-own-cont-top')
+  })
+
+  it('tightens an interior own continuation row on both edges', () => {
+    const props = createDefaultProps({
+      message: createTestMessage({ isOutgoing: true }),
+      showAvatar: false,
+      isGroupEnd: false,
+    })
+    const { container } = render(<MessageBubble {...props} />)
+    const row = container.firstChild as HTMLElement
+    expect(row.className).toContain('message-own-cont-top')
+    expect(row.className).toContain('message-own-cont-bottom')
+  })
+
+  it('tightens an own group-end row only at the top (toward the previous message)', () => {
+    const props = createDefaultProps({
+      message: createTestMessage({ isOutgoing: true }),
+      showAvatar: false,
+      isGroupEnd: true,
+    })
+    const { container } = render(<MessageBubble {...props} />)
+    const row = container.firstChild as HTMLElement
+    expect(row.className).toContain('message-own-cont-top')
+    expect(row.className).not.toContain('message-own-cont-bottom')
+  })
+
+  it('leaves a solo own message untightened (keeps normal outer spacing)', () => {
+    const props = createDefaultProps({
+      message: createTestMessage({ isOutgoing: true }),
+      showAvatar: true,
+      isGroupEnd: true,
+    })
+    const { container } = render(<MessageBubble {...props} />)
+    const row = container.firstChild as HTMLElement
+    expect(row.className).not.toContain('message-own-cont-top')
+    expect(row.className).not.toContain('message-own-cont-bottom')
+  })
 })
 
 describe('Density spacing', () => {

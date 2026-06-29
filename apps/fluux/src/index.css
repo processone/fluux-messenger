@@ -997,12 +997,26 @@ input[type="range"]::-moz-range-thumb {
   background: hsla(var(--fluux-accent-h), var(--fluux-accent-s), var(--fluux-accent-l), 0.08);
   padding-inline: 0.5rem;
   margin-inline: -0.5rem;
-  /* Bridge the outer row's py-0.5 (2px) gap so a run of consecutive own
-     messages renders as one continuous surface: each tint grows 2px into its
-     row's vertical padding and meets the next at the row boundary, seamlessly. */
-  padding-block: 0.125rem;
-  margin-block: -0.125rem;
+  /* Render a run of consecutive own messages as one continuous surface. At an
+     interior group junction both rows are tightened to 1px (message-own-cont-*
+     below), so `padding-block`/`margin-block` are set to 1px/-1px: the negative
+     margin cancels that 1px row padding so adjacent tints abut flush (no seam,
+     no overlap that would darken the translucent wash). The resulting gap
+     between two grouped messages is 2px — tight enough to read as one block
+     rather than a blank line. At the group's outer top/bottom the row keeps its
+     normal py-0.5, so the tint sits a hair inside the separation gap there. */
+  padding-block: 0.0625rem;
+  margin-block: -0.0625rem;
 }
+
+/* Tighten only the INTERIOR junctions of an own-message group so the run reads
+   as one block: a continuation row pulls up toward the message above it, and a
+   row followed by a continuation pulls down toward the message below. The
+   group's first-row top (message-group-start separation) and last-row bottom
+   are left untouched. Single-class selectors override Tailwind's py-0.5 (which
+   lives in @layer utilities). */
+.message-own-cont-top { padding-top: 0.0625rem; }
+.message-own-cont-bottom { padding-bottom: 0.0625rem; }
 
 /* Corner rounding is carried only at the group edges so interior rows stay
    square and the run reads as a single panel. A solo own message gets both

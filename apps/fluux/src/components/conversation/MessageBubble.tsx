@@ -437,6 +437,13 @@ export const MessageBubble = memo(function MessageBubble({
   const ownTintClass = ownTint
     ? `message-own-tint${showAvatar ? ' message-own-tint-start' : ''}${isGroupEnd ? ' message-own-tint-end' : ''}`
     : ''
+  // Tighten the interior junctions of an own-message group so the merged surface
+  // reads as one block rather than messages separated by a blank line: a
+  // continuation row (no avatar) pulls up toward the message above; a row that a
+  // continuation follows (not the group end) pulls down toward the one below.
+  const ownRowClass = ownTint
+    ? `${!showAvatar ? ' message-own-cont-top' : ''}${!isGroupEnd ? ' message-own-cont-bottom' : ''}`
+    : ''
 
   const { canReply, canEdit, canDelete } = actions
   const canCopyBody = !!message.body && !message.isRetracted && !message.encryptedPayload && !message.unsupportedEncryption
@@ -473,7 +480,7 @@ export const MessageBubble = memo(function MessageBubble({
       data-message-from={senderName}
       data-message-time={formatTime(message.timestamp)}
       data-message-body={message.body || ''}
-      className={outerRowClass}
+      className={`${outerRowClass}${ownRowClass}`}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
     >
