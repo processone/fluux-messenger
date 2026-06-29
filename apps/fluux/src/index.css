@@ -892,6 +892,16 @@ html, body {
   box-shadow: 0 0 0 3px hsla(var(--fluux-accent-h), var(--fluux-accent-s), var(--fluux-accent-l), 0.22);
 }
 
+/* Command palette (⌘K) search field — same soft accent focus ring as the
+ * composer card, wrapping the whole field (icon + input + esc). The palette
+ * auto-focuses its input, so this reads as an always-on "type here" affordance
+ * while the panel is open. The dialog's header padding keeps the 3px outset
+ * glow from being clipped by its overflow-hidden. */
+.command-search-field:focus-within {
+  border-color: var(--fluux-brand);
+  box-shadow: 0 0 0 3px hsla(var(--fluux-accent-h), var(--fluux-accent-s), var(--fluux-accent-l), 0.22);
+}
+
 /*
  * Hide the per-message floating hover toolbars while the user is composing.
  * Driven by the `composer-active` class toggled on the message area (ChatView),
