@@ -432,6 +432,18 @@ export function useRoomActive() {
     }
   }, [client])
 
+  // Hydrate the resident array with the cache slice CONTAINING a specific message, used by scroll
+  // restore / search navigation when the target/anchor isn't in the latest-N slice. Bound to the
+  // currently-active room (the one being viewed when restore runs).
+  const loadMessagesAround = useCallback(
+    (anchorMessageId: string) => {
+      const id = roomStore.getState().activeRoomJid
+      if (!id) return Promise.resolve([])
+      return roomStore.getState().loadMessagesAroundFromCache(id, anchorMessageId)
+    },
+    []
+  )
+
   // --- Return ---
 
   // Memoize actions object to prevent re-renders when only state changes
@@ -467,6 +479,7 @@ export function useRoomActive() {
       clearFirstNewMessageId,
       updateLastSeenMessageId,
       fetchOlderHistory,
+      loadMessagesAround,
       continueRoomCatchUp,
       submitRoomConfig,
       setSubject,
@@ -505,6 +518,7 @@ export function useRoomActive() {
       clearFirstNewMessageId,
       updateLastSeenMessageId,
       fetchOlderHistory,
+      loadMessagesAround,
       continueRoomCatchUp,
       submitRoomConfig,
       setSubject,

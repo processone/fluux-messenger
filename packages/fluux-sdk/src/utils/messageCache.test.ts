@@ -370,6 +370,54 @@ describe('messageCache', () => {
         expect(timestamp).toBeNull()
       })
     })
+
+    describe('getMessagesAround', () => {
+      // Ten messages, one minute apart, ids a0..a9 in chronological order.
+      const around = (i: number) => new Date(`2024-03-01T10:0${i}:00Z`)
+      async function seedTen() {
+        await messageCache.saveMessages(
+          Array.from({ length: 10 }, (_, i) =>
+            createMockMessage(conversationId, { id: `a${i}`, timestamp: around(i) })
+          )
+        )
+      }
+
+      it('loads the anchor plus context above it AND the full tail through the latest', async () => {
+        await seedTen()
+        // Anchor a5, two messages of context above it, tail uncapped → reach a9.
+        const slice = await messageCache.getMessagesAround(conversationId, 'a5', { before: 2 })
+        expect(slice.map((m) => m.id)).toEqual(['a3', 'a4', 'a5', 'a6', 'a7', 'a8', 'a9'])
+      })
+
+      it('honours an explicit forward cap (windowed load for search)', async () => {
+        await seedTen()
+        const slice = await messageCache.getMessagesAround(conversationId, 'a5', { before: 2, after: 2 })
+        expect(slice.map((m) => m.id)).toEqual(['a3', 'a4', 'a5', 'a6', 'a7'])
+      })
+
+      it('returns the anchor at the head when there is no older context', async () => {
+        await seedTen()
+        const slice = await messageCache.getMessagesAround(conversationId, 'a0', { before: 5 })
+        expect(slice[0].id).toBe('a0')
+        expect(slice.map((m) => m.id)).toEqual(['a0', 'a1', 'a2', 'a3', 'a4', 'a5', 'a6', 'a7', 'a8', 'a9'])
+      })
+
+      it('returns an empty array when the anchor id is not cached', async () => {
+        await seedTen()
+        const slice = await messageCache.getMessagesAround(conversationId, 'not-here', { before: 2 })
+        expect(slice).toEqual([])
+      })
+
+      it('resolves the anchor by stanzaId when the id is a server stanza id', async () => {
+        await messageCache.saveMessages([
+          createMockMessage(conversationId, { id: 'sa0', timestamp: around(0) }),
+          createMockMessage(conversationId, { id: 'sa1', stanzaId: 'stanza-anchor', timestamp: around(1) }),
+          createMockMessage(conversationId, { id: 'sa2', timestamp: around(2) }),
+        ])
+        const slice = await messageCache.getMessagesAround(conversationId, 'stanza-anchor', { before: 5 })
+        expect(slice.map((m) => m.id)).toEqual(['sa0', 'sa1', 'sa2'])
+      })
+    })
   })
 
   describe('Room Messages', () => {
@@ -535,6 +583,29 @@ describe('messageCache', () => {
 
         const timestamp = await messageCache.getOldestRoomMessageTimestamp(roomJid)
         expect(timestamp?.getTime()).toBe(oldest.getTime())
+      })
+    })
+
+    describe('getRoomMessagesAround', () => {
+      const around = (i: number) => new Date(`2024-03-01T10:0${i}:00Z`)
+      async function seedTen() {
+        await messageCache.saveRoomMessages(
+          Array.from({ length: 10 }, (_, i) =>
+            createMockRoomMessage(roomJid, { id: `r${i}`, timestamp: around(i) })
+          )
+        )
+      }
+
+      it('loads the anchor plus context above it AND the full tail through the latest', async () => {
+        await seedTen()
+        const slice = await messageCache.getRoomMessagesAround(roomJid, 'r5', { before: 2 })
+        expect(slice.map((m) => m.id)).toEqual(['r3', 'r4', 'r5', 'r6', 'r7', 'r8', 'r9'])
+      })
+
+      it('returns an empty array when the anchor id is not cached', async () => {
+        await seedTen()
+        const slice = await messageCache.getRoomMessagesAround(roomJid, 'not-here', { before: 2 })
+        expect(slice).toEqual([])
       })
     })
   })

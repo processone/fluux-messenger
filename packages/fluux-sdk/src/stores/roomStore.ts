@@ -283,6 +283,57 @@ function getRoomMessageKeys(m: RoomMessage): string[] {
 }
 
 /**
+ * Merge a batch of cached room messages into a room's resident array (and runtime mirror),
+ * returning the partial state update (or `null` when the room is not present). Shared by
+ * {@link RoomState.loadMessagesFromCache} and {@link RoomState.loadMessagesAroundFromCache}: both
+ * dedupe, merge/sort/trim, and refresh the sidebar preview. The only difference between the two
+ * callers is WHICH cache slice they fetch (latest-N vs the slice around an anchor).
+ */
+function mergeCachedRoomMessages(
+  state: RoomState,
+  roomJid: string,
+  cachedMessages: RoomMessage[]
+): Pick<RoomState, 'rooms' | 'roomRuntime' | 'roomMeta'> | null {
+  const newRooms = new Map(state.rooms)
+  const existing = newRooms.get(roomJid)
+  if (!existing) return null
+
+  // Build key set from in-memory messages (they take precedence)
+  const existingKeys = buildMessageKeySet(existing.messages, getRoomMessageKeys)
+
+  // Filter out duplicates from cached messages
+  const newFromCache = cachedMessages.filter(
+    (msg) => !isMessageDuplicate(msg, existingKeys, getRoomMessageKeys)
+  )
+
+  // Merge, sort, and trim using shared utilities
+  const combined = [...newFromCache, ...existing.messages]
+  const sorted = sortMessagesByTimestamp(combined)
+  const merged = trimMessages(sorted, MAX_MESSAGES_PER_ROOM)
+
+  // Get last non-ignored message from merged messages for sidebar preview
+  const lastMessage = (merged.length > 0 ? findLastNonIgnoredMessage(merged, roomJid, existing.nickToJidCache) : undefined) ?? existing.lastMessage
+
+  newRooms.set(roomJid, { ...existing, messages: merged, lastMessage })
+
+  // Update runtime
+  const newRuntime = new Map(state.roomRuntime)
+  const existingRuntime = newRuntime.get(roomJid)
+  if (existingRuntime) {
+    newRuntime.set(roomJid, { ...existingRuntime, messages: merged })
+  }
+
+  // Update metadata with lastMessage for sidebar
+  const newMeta = new Map(state.roomMeta)
+  const existingMeta = newMeta.get(roomJid)
+  if (existingMeta) {
+    newMeta.set(roomJid, { ...existingMeta, lastMessage })
+  }
+
+  return { rooms: newRooms, roomRuntime: newRuntime, roomMeta: newMeta }
+}
+
+/**
  * Room state interface for Multi-User Chat (MUC) rooms.
  *
  * Manages group chat rooms, occupants, messages, bookmarks, typing indicators,
@@ -439,6 +490,14 @@ export interface RoomState {
 
   // IndexedDB cache loading
   loadMessagesFromCache: (roomJid: string, options?: GetMessagesOptions & { peek?: boolean }) => Promise<RoomMessage[]>
+  /**
+   * Hydrate the resident array with the contiguous cache slice that CONTAINS a specific message
+   * (the anchor), rather than the latest-N slice. Room counterpart of
+   * {@link ChatState.loadMessagesAroundFromCache} — used by scroll-position restore on return to a
+   * room the user had scrolled deep into, and by search/activity navigation. Returns the loaded
+   * slice (empty if the anchor is not in the cache).
+   */
+  loadMessagesAroundFromCache: (roomJid: string, anchorMessageId: string, options?: { before?: number; after?: number }) => Promise<RoomMessage[]>
   loadOlderMessagesFromCache: (roomJid: string, limit?: number) => Promise<RoomMessage[]>
   /** Load only the latest message from cache for sidebar preview (doesn't modify messages array) */
   loadPreviewFromCache: (roomJid: string) => Promise<RoomMessage | null>
@@ -1948,50 +2007,29 @@ export const roomStore = createStore<RoomState>()(
       // store. Used to compute a catch-up cursor for a non-active room without
       // breaking the invariant that only the active room is resident in RAM.
       if (!options.peek && cachedMessages.length > 0) {
-        // Merge with existing messages in memory using shared utilities
-        set((state) => {
-          const newRooms = new Map(state.rooms)
-          const existing = newRooms.get(roomJid)
-          if (!existing) return state
-
-          // Build key set from in-memory messages (they take precedence)
-          const existingKeys = buildMessageKeySet(existing.messages, getRoomMessageKeys)
-
-          // Filter out duplicates from cached messages
-          const newFromCache = cachedMessages.filter(
-            (msg) => !isMessageDuplicate(msg, existingKeys, getRoomMessageKeys)
-          )
-
-          // Merge, sort, and trim using shared utilities
-          const combined = [...newFromCache, ...existing.messages]
-          const sorted = sortMessagesByTimestamp(combined)
-          const merged = trimMessages(sorted, MAX_MESSAGES_PER_ROOM)
-
-          // Get last non-ignored message from merged messages for sidebar preview
-          const lastMessage = (merged.length > 0 ? findLastNonIgnoredMessage(merged, roomJid, existing.nickToJidCache) : undefined) ?? existing.lastMessage
-
-          newRooms.set(roomJid, { ...existing, messages: merged, lastMessage })
-
-          // Update runtime
-          const newRuntime = new Map(state.roomRuntime)
-          const existingRuntime = newRuntime.get(roomJid)
-          if (existingRuntime) {
-            newRuntime.set(roomJid, { ...existingRuntime, messages: merged })
-          }
-
-          // Update metadata with lastMessage for sidebar
-          const newMeta = new Map(state.roomMeta)
-          const existingMeta = newMeta.get(roomJid)
-          if (existingMeta) {
-            newMeta.set(roomJid, { ...existingMeta, lastMessage })
-          }
-
-          return { rooms: newRooms, roomRuntime: newRuntime, roomMeta: newMeta }
-        })
+        // Merge with existing messages in memory using the shared helper
+        set((state) => mergeCachedRoomMessages(state, roomJid, cachedMessages) ?? state)
       }
       return cachedMessages
     } catch (error) {
       console.error('Failed to load room messages from IndexedDB:', error)
+      return []
+    }
+  },
+
+  loadMessagesAroundFromCache: async (roomJid, anchorMessageId, options = {}) => {
+    if (!messageCache.isMessageCacheAvailable()) {
+      return []
+    }
+
+    try {
+      const slice = await messageCache.getRoomMessagesAround(roomJid, anchorMessageId, options)
+      if (slice.length > 0) {
+        set((state) => mergeCachedRoomMessages(state, roomJid, slice) ?? state)
+      }
+      return slice
+    } catch (error) {
+      console.error('Failed to load room messages around anchor from IndexedDB:', error)
       return []
     }
   },

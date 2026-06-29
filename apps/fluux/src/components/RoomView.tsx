@@ -81,7 +81,7 @@ const EMPTY_OCCUPANTS: Map<string, RoomOccupant> = new Map()
 export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = false, onShowOccupantsChange, onStartChat, onShowProfile, findOnPageRef, onSearchInConversation }: RoomViewProps) {
   detectRenderLoop('RoomView')
   const { t } = useTranslation()
-  const { activeRoom, activeMessages, activeTypingUsers, sendMessage, sendWhisper, sendReaction, sendPoll, votePoll, closePoll, sendCorrection, retractMessage, moderateMessage, sendChatState, sendWhisperChatState, setRoomNotifyAll, activeAnimation, sendEasterEgg, clearAnimation, clearFirstNewMessageId, updateLastSeenMessageId, joinRoom, joinResult, setRoomAvatar, clearRoomAvatar, fetchOlderHistory, continueRoomCatchUp, activeMAMState, submitRoomConfig, setSubject, destroyRoom, setAffiliation, setRole, targetMessageId, clearTargetMessageId, firstNewMessageId } = useRoomActive()
+  const { activeRoom, activeMessages, activeTypingUsers, sendMessage, sendWhisper, sendReaction, sendPoll, votePoll, closePoll, sendCorrection, retractMessage, moderateMessage, sendChatState, sendWhisperChatState, setRoomNotifyAll, activeAnimation, sendEasterEgg, clearAnimation, clearFirstNewMessageId, updateLastSeenMessageId, joinRoom, joinResult, setRoomAvatar, clearRoomAvatar, fetchOlderHistory, loadMessagesAround, continueRoomCatchUp, activeMAMState, submitRoomConfig, setSubject, destroyRoom, setAffiliation, setRole, targetMessageId, clearTargetMessageId, firstNewMessageId } = useRoomActive()
   const mediaPolicy = useSettingsStore((s) => s.mediaAutoDownload)
 
   // NOTE: Use focused selectors instead of useConnection() hook to avoid
@@ -549,6 +549,7 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
             isDarkMode={resolvedMode === 'dark'}
             onMediaLoad={handleMediaLoad}
             onScrollToTop={fetchOlderHistory}
+            onLoadAround={loadMessagesAround}
             isLoadingOlder={activeMAMState?.isLoading}
             isHistoryComplete={activeRoom.supportsMAM === false || activeMAMState?.isHistoryComplete}
             onNickContextMenu={handleNickContextMenu}
@@ -826,6 +827,7 @@ export const RoomMessageList = memo(function RoomMessageList({
   isDarkMode,
   onMediaLoad,
   onScrollToTop,
+  onLoadAround,
   isLoadingOlder,
   isHistoryComplete,
   onNickContextMenu,
@@ -869,6 +871,7 @@ export const RoomMessageList = memo(function RoomMessageList({
   isDarkMode?: boolean
   onMediaLoad?: () => void
   onScrollToTop?: () => void
+  onLoadAround?: (anchorMessageId: string) => Promise<unknown> | void
   isLoadingOlder?: boolean
   isHistoryComplete?: boolean
   onNickContextMenu?: (nick: string, e: React.MouseEvent) => void
@@ -1100,6 +1103,7 @@ export const RoomMessageList = memo(function RoomMessageList({
       emptyState={emptyState}
       extraContent={extraContent}
       onScrollToTop={onScrollToTop}
+      onLoadAround={onLoadAround}
       isLoadingOlder={isLoadingOlder}
       isHistoryComplete={isHistoryComplete}
       renderMessage={renderMessage}

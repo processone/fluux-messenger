@@ -191,6 +191,15 @@ export interface UseMessageListScrollOptions {
   externalIsAtBottomRef?: React.MutableRefObject<boolean>
   clearFirstNewMessageId?: () => void  // Called when user scrolls past the new message marker
   onScrollToTop?: () => void
+  /**
+   * Hydrate the resident message window with the cache slice CONTAINING a specific message.
+   * Called by the restore path when a saved content anchor (or a navigation target) is older than
+   * the latest-N slice loaded on activation, so it isn't in the loaded set and the anchor restore
+   * can't resolve it. The resulting message-count growth re-runs the restore via the retry effect.
+   * Returns a promise that resolves once the slice has merged (or with an empty slice when the
+   * anchor isn't in the cache).
+   */
+  onLoadAround?: (anchorMessageId: string) => Promise<unknown> | void
   isLoadingOlder?: boolean
   isHistoryComplete?: boolean
   typingUsersCount: number
@@ -243,6 +252,7 @@ export function useMessageListScroll({
   externalScrollerRef,
   externalIsAtBottomRef,
   onScrollToTop,
+  onLoadAround,
   isLoadingOlder,
   isHistoryComplete,
   typingUsersCount,
@@ -303,6 +313,20 @@ export function useMessageListScroll({
   const prevLastMessageIdRef = useRef<string | undefined>(lastMessageId)
   const hasInitializedRef = useRef(false)
   const pendingRestoreConversationRef = useRef<string | null>(null)
+  // Per-anchor status for the on-demand "load the cache slice around the anchor" request used when
+  // a saved content anchor (or navigation target) is older than the latest-N slice loaded on
+  // activation. 'loading' → request in flight (stay pending); 'done' → attempted (resolved by the
+  // index path, or the anchor wasn't in the cache → fall through to the legacy fallback). Keyed by
+  // `${conversationId}:${anchorMessageId}` and cleared on conversation switch so returning to the
+  // same conversation re-requests. Prevents re-issuing the load on every retry frame.
+  const aroundLoadStatusRef = useRef<Map<string, 'loading' | 'done'>>(new Map())
+  // Last target message id we requested an around-load for (search / activity navigation to a
+  // message older than the loaded window). Prevents re-issuing the load while the target effect
+  // re-fires waiting for the slice to merge.
+  const targetAroundRequestedRef = useRef<string | null>(null)
+  // Stable indirection so the async around-load completion can re-run restore without making
+  // restoreSavedPosition a dependency of itself.
+  const restoreSavedPositionRef = useRef<((source: 'entry' | 'retry') => RestoreSavedPositionResult) | null>(null)
 
   // Track prepend (loading older messages)
   // When we load older messages, we save the anchor element position BEFORE the load,
@@ -415,9 +439,9 @@ export function useMessageListScroll({
   //    values they need are read through latestRef (updated each render via
   //    effect), never closed over.
 
-  const latestRef = useRef({ staticMode, externalScrollerRef, isAtBottomRef, conversationId, virtualizer })
+  const latestRef = useRef({ staticMode, externalScrollerRef, isAtBottomRef, conversationId, virtualizer, onLoadAround })
   useEffect(() => {
-    latestRef.current = { staticMode, externalScrollerRef, isAtBottomRef, conversationId, virtualizer }
+    latestRef.current = { staticMode, externalScrollerRef, isAtBottomRef, conversationId, virtualizer, onLoadAround }
   })
 
   const stableSettersRef = useRef<{
@@ -751,6 +775,36 @@ export function useMessageListScroll({
       return 'restored'
     }
 
+    // The saved anchor message is not in the currently-loaded window (the user had scrolled deep
+    // into history, so it sits OLDER than the latest-N slice rehydrated on activation). Request the
+    // cache slice that CONTAINS it; the merge grows messageCount, which re-runs this restore via the
+    // retry effect, and the anchor then resolves through the virtualizer-index path below. Without
+    // this the restore fell through to the saved scrollTop on the short rehydrated list and landed
+    // near the top at the load-more trigger — the reported bug. Returns true while the load should
+    // hold the restore in 'pending'; false when there's no loader or the load already completed
+    // without recovering the anchor (then the legacy fallbacks run).
+    const requestAnchorAroundLoad = (anchorMessageId: string): boolean => {
+      const loader = latestRef.current.onLoadAround
+      if (!loader) return false
+      const key = `${conversationId}:${anchorMessageId}`
+      const status = aroundLoadStatusRef.current.get(key)
+      if (status === 'done') return false
+      if (status === 'loading') return true
+      aroundLoadStatusRef.current.set(key, 'loading')
+      isAtBottomRef.current = false
+      debugLog('RESTORE: anchor not loaded, requesting cache slice around it', { source, anchorMessageId, conversationId })
+      void Promise.resolve(loader(anchorMessageId)).finally(() => {
+        aroundLoadStatusRef.current.set(key, 'done')
+        // The merge bumps messageCount → the retry effect re-runs restore. Force one attempt too,
+        // covering the empty-slice case (anchor not in cache → no count change → no retry) so the
+        // restore can fall through to its bottom fallback instead of hanging in 'pending'.
+        if (pendingRestoreConversationRef.current === conversationId) {
+          restoreSavedPositionRef.current?.('retry')
+        }
+      })
+      return true
+    }
+
     // Exact restore when the layout is UNCHANGED since save (same-session navigate-back, including
     // eviction+rehydrate that reproduces identical content): the saved scrollTop is exact and
     // layout-independent precisely because the content is the same, so the ratio-based anchor isn't
@@ -799,6 +853,11 @@ export function useMessageListScroll({
         return finishRestore('RESTORE via virtualizer index', { savedAnchor, anchorIndex })
       }
 
+      // Anchor is older than the loaded window — pull in the slice that contains it, then retry.
+      if (requestAnchorAroundLoad(savedAnchor.messageId)) {
+        return 'pending'
+      }
+
       if (savedPos !== null) {
         virtRestore.scrollToOffset(savedPos)
         return finishRestore('RESTORE via savedPos (virt, anchor not indexed)', { savedPos })
@@ -807,6 +866,12 @@ export function useMessageListScroll({
       debugLog('RESTORE: anchor not indexed, no savedPos, scrolling to bottom', { source, savedAnchor })
       reassertBottom()
       return 'bottom'
+    }
+
+    // Non-virtualized: all loaded rows are in the DOM, so a missing anchor row means the anchor
+    // isn't loaded. Pull in its slice and retry before falling back to the saved scrollTop.
+    if (!virtRestore && savedAnchor && requestAnchorAroundLoad(savedAnchor.messageId)) {
+      return 'pending'
     }
 
     if (virtRestore && savedPos !== null) {
@@ -834,6 +899,10 @@ export function useMessageListScroll({
     reassertBottom,
     rememberCurrentScrollSnapshot,
   ])
+
+  // Stable handle so the async around-load completion can re-run restore (see
+  // requestAnchorAroundLoad) without restoreSavedPosition depending on itself. Updated each render.
+  restoreSavedPositionRef.current = restoreSavedPosition
 
   // ==========================================================================
   // SCROLL ACTIONS
@@ -1333,6 +1402,8 @@ export function useMessageListScroll({
     lastAnchorRef.current = null
     prependRef.current = null
     pendingRestoreConversationRef.current = null
+    // Returning to this conversation later must be free to re-request its anchor slice.
+    aroundLoadStatusRef.current.clear()
     setShowScrollToBottom(false)
 
     // Clear any pending media load batch
@@ -1593,7 +1664,12 @@ export function useMessageListScroll({
   // as the unread marker scroll. Clears the target after consumption.
 
   useEffect(() => {
-    if (!targetMessageId || staticMode) return
+    if (!targetMessageId || staticMode) {
+      // Target cleared (consumed or navigated away): allow a future jump to the same id to
+      // re-request its slice (it may have been evicted again in the meantime).
+      if (!targetMessageId) targetAroundRequestedRef.current = null
+      return
+    }
     const scroller = scrollerRef.current
     if (!scroller) return
 
@@ -1613,7 +1689,17 @@ export function useMessageListScroll({
       // yet (e.g., search opens a conversation before messages finish loading from cache).
       const idx = virt.getIndexForMessageId(targetMessageId)
       if (idx === null) {
-        debugLog('TARGET MESSAGE: not in item set yet, waiting for load', { targetMessageId })
+        // The target isn't in the loaded window — pull in the cache slice that contains it (search /
+        // activity jump to a message older than the latest-N slice). The merge grows messageCount,
+        // re-firing this effect with the target now resolvable. Request once per target.
+        const loader = latestRef.current.onLoadAround
+        if (loader && targetAroundRequestedRef.current !== targetMessageId) {
+          targetAroundRequestedRef.current = targetMessageId
+          debugLog('TARGET MESSAGE: not loaded, requesting cache slice around it', { targetMessageId })
+          void Promise.resolve(loader(targetMessageId))
+        } else {
+          debugLog('TARGET MESSAGE: not in item set yet, waiting for load', { targetMessageId })
+        }
         return
       }
       const targetConvId = conversationId
@@ -1711,7 +1797,14 @@ export function useMessageListScroll({
       // Non-virtualized: all rows are always in the DOM.
       const el = scroller.querySelector(`[data-message-id="${escapedId}"]`)
       if (!el) {
-        debugLog('TARGET MESSAGE: element not found (non-virtualized), waiting for load', { targetMessageId })
+        const loader = latestRef.current.onLoadAround
+        if (loader && targetAroundRequestedRef.current !== targetMessageId) {
+          targetAroundRequestedRef.current = targetMessageId
+          debugLog('TARGET MESSAGE: not loaded (non-virtualized), requesting cache slice around it', { targetMessageId })
+          void Promise.resolve(loader(targetMessageId))
+        } else {
+          debugLog('TARGET MESSAGE: element not found (non-virtualized), waiting for load', { targetMessageId })
+        }
         return
       }
       const elementTop = (el as HTMLElement).offsetTop

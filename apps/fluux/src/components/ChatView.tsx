@@ -47,7 +47,7 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
   const { t } = useTranslation()
   // Use useChatActive instead of useChat to avoid subscribing to the conversation list.
   // This prevents re-renders during background MAM sync of other conversations.
-  const { activeConversation, firstNewMessageId, activeMessages, activeTypingUsers, sendMessage, sendReaction, sendCorrection, retractMessage, retryMessage, sendChatState, isArchived, archiveConversation, unarchiveConversation, setDraft, getDraft, clearDraft, activeAnimation, sendEasterEgg, clearAnimation, clearFirstNewMessageId, updateLastSeenMessageId, activeMAMState, fetchOlderHistory, continueChatCatchUp, targetMessageId, clearTargetMessageId } = useChatActive()
+  const { activeConversation, firstNewMessageId, activeMessages, activeTypingUsers, sendMessage, sendReaction, sendCorrection, retractMessage, retryMessage, sendChatState, isArchived, archiveConversation, unarchiveConversation, setDraft, getDraft, clearDraft, activeAnimation, sendEasterEgg, clearAnimation, clearFirstNewMessageId, updateLastSeenMessageId, activeMAMState, fetchOlderHistory, loadMessagesAround, continueChatCatchUp, targetMessageId, clearTargetMessageId } = useChatActive()
   // Use useContactIdentities instead of useRoster() to avoid re-renders on
   // presence changes. ChatView only needs contact names and avatars for display.
   const contactsByJid = useContactIdentities()
@@ -488,6 +488,7 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
             onMessageSeen={handleMessageSeen}
             isDarkMode={resolvedMode === 'dark'}
           onScrollToTop={fetchOlderHistory}
+          onLoadAround={loadMessagesAround}
           isLoadingOlder={activeMAMState?.isLoading ?? false}
           isHistoryComplete={activeMAMState?.isHistoryComplete ?? false}
           forwardGapTimestamp={activeMAMState?.forwardGapTimestamp}
@@ -586,6 +587,7 @@ export const ChatMessageList = memo(function ChatMessageList({
   onMessageSeen,
   isDarkMode,
   onScrollToTop,
+  onLoadAround,
   isLoadingOlder,
   isHistoryComplete,
   isInitialLoading,
@@ -625,6 +627,7 @@ export const ChatMessageList = memo(function ChatMessageList({
   onMessageSeen?: (messageId: string) => void
   isDarkMode?: boolean
   onScrollToTop?: () => void
+  onLoadAround?: (anchorMessageId: string) => Promise<unknown> | void
   isLoadingOlder?: boolean
   isHistoryComplete?: boolean
   isInitialLoading?: boolean
@@ -728,6 +731,7 @@ export const ChatMessageList = memo(function ChatMessageList({
       formatMessageForCopy={formatMessageForCopy}
       lastSentMessageId={lastSentMessageId}
       onScrollToTop={onScrollToTop}
+      onLoadAround={onLoadAround}
       isLoadingOlder={isLoadingOlder}
       isHistoryComplete={isHistoryComplete}
       forwardGapTimestamp={forwardGapTimestamp}

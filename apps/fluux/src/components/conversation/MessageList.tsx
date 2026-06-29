@@ -86,6 +86,12 @@ export interface MessageListProps<T extends BaseMessage> {
   isAtBottomRef?: React.MutableRefObject<boolean>
   /** Callback when user scrolls to top (for lazy loading older messages) */
   onScrollToTop?: () => void
+  /**
+   * Hydrate the resident message window with the cache slice CONTAINING a specific message.
+   * Used by scroll-position restore (and search/target navigation) when the saved anchor / target
+   * is older than the latest-N slice loaded on activation, so the existing anchor restore can land.
+   */
+  onLoadAround?: (anchorMessageId: string) => Promise<unknown> | void
   /** If true, show loading indicator at top while fetching older messages */
   isLoadingOlder?: boolean
   /** If true, all history has been fetched - disable scroll-to-top trigger */
@@ -134,6 +140,7 @@ export function MessageList<T extends BaseMessage>({
   scrollerRef: externalScrollerRef,
   isAtBottomRef: externalIsAtBottomRef,
   onScrollToTop,
+  onLoadAround,
   isLoadingOlder,
   isHistoryComplete,
   onMessageSeen,
@@ -391,6 +398,7 @@ export function MessageList<T extends BaseMessage>({
     externalScrollerRef,
     externalIsAtBottomRef,
     onScrollToTop,
+    onLoadAround,
     isLoadingOlder,
     isHistoryComplete,
     typingUsersCount: typingUsers.length,

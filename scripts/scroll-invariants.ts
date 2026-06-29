@@ -167,6 +167,29 @@ async function findTopVisibleMessage(page: Page): Promise<{ id: string; offsetFr
   })
 }
 
+/**
+ * Find the BOTTOM-most message row whose top is above the viewport bottom — i.e. the row the
+ * content anchor is captured from (mirrors findBottomAnchor in useMessageListScroll). Returns
+ * {id, visible} or null.
+ */
+async function findBottomVisibleMessage(page: Page): Promise<{ id: string; topInView: number } | null> {
+  return page.evaluate(() => {
+    const scroller = document.querySelector('[data-message-list]') as HTMLElement | null
+    if (!scroller) return null
+    const sRect = scroller.getBoundingClientRect()
+    const viewportBottom = scroller.scrollTop + scroller.clientHeight
+    const rows = Array.from(scroller.querySelectorAll('.message-row[data-message-id]')) as HTMLElement[]
+    let best: HTMLElement | null = null
+    for (const el of rows) {
+      if (el.offsetHeight <= 0) continue
+      if (el.offsetTop < viewportBottom && (best === null || el.offsetTop > best.offsetTop)) best = el
+    }
+    if (!best && rows.length) best = rows[rows.length - 1]
+    if (!best) return null
+    return { id: best.dataset.messageId!, topInView: best.getBoundingClientRect().top - sRect.top }
+  })
+}
+
 /** Get a message row's current viewport offset-from-top (null if not mounted). */
 async function getMessageOffsetFromTop(page: Page, messageId: string): Promise<number | null> {
   return page.evaluate((id) => {
@@ -571,6 +594,111 @@ test.describe('Virtualization scroll invariants', () => {
       'viewport went BLANK on at least one frame after scroll-up load-older — virtualizer ' +
         'window desynced from scrollTop (mounted rows fell outside the visible band)',
     ).toBeGreaterThan(0)
+  })
+
+  // ── 8: Deep-history restore survives conversation-switch eviction ───────────
+  //
+  // The reported bug: scroll FAR back into history (load several older pages), switch to another
+  // conversation, switch back. On return the non-active room's resident window was evicted and
+  // rehydrated to the LATEST slice (~100), so the saved content anchor — an OLD message now absent
+  // from the loaded set — couldn't be resolved and the restore fell back near the TOP at the
+  // load-more trigger. The fix loads the cache slice AROUND the anchor on demand, so the anchor is
+  // resident before restore runs and the position is restored.
+  test('invariant-8: deep-history anchor is reloaded and repositioned after switching away and back', async ({ page }) => {
+    await loadDemo(page)
+    await navigateToStressRoom(page)
+
+    // Load several older pages so the loaded window extends WELL past the latest ~100 (each
+    // load-older synthesizes + persists a 50-message batch via the real MAM/cache path).
+    for (let i = 0; i < 5; i++) {
+      const spacerBefore = await getSpacerHeight(page)
+      await page.evaluate(() => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const trigger = (window as any).__fluuxTriggerLoadOlder
+        if (typeof trigger === 'function') trigger()
+      })
+      await page.waitForFunction(
+        (before) => {
+          const sp = document.querySelector('[data-virtualizer-spacer]') as HTMLElement | null
+          return sp ? sp.offsetHeight > before + 1500 : false
+        },
+        spacerBefore,
+        { timeout: 6_000 },
+      ).catch(() => { /* history may complete; tolerate */ })
+      await page.waitForTimeout(200)
+    }
+
+    // The view is still at the bottom (load-older prepends above the fold). Scroll UP into deep
+    // history with real wheel events (the virtualizer re-windows on the native scroll event; a raw
+    // scrollTop write doesn't in headless). Stop well short of the top so we don't sit on the
+    // load-more trigger. This leaves a deep OLD message as the bottom-most-visible content anchor.
+    const box = await page.locator('[data-message-list]').first().boundingBox()
+    if (box) await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+    for (let i = 0; i < 8; i++) {
+      await page.mouse.wheel(0, -1500)
+      await page.waitForTimeout(150)
+    }
+    await page.waitForTimeout(400)
+    const anchor = await findBottomVisibleMessage(page)
+    expect(anchor, 'must capture a deep-history anchor message').not.toBeNull()
+    const anchorId = anchor!.id
+    // Sanity: the anchor is a synthesized OLDER message, i.e. genuinely deep history (not a seed),
+    // so after eviction it is absent from the latest-~100 rehydration.
+    expect(anchorId, `anchor "${anchorId}" should be a deep older message, not the latest slice`).toContain('older-')
+
+    // SWITCH AWAY → the room's resident window is evicted from RAM.
+    await page.evaluate(() => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      void (window as any).__roomStore?.getState?.()?.activateRoom(null)
+    })
+    await page.waitForTimeout(400)
+    // Confirm the eviction actually happened (resident array dropped to the latest slice or empty).
+    const evicted = await page.evaluate((jid) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const rs = (window as any).__roomStore.getState()
+      return (rs.roomRuntime.get(jid)?.messages ?? rs.rooms.get(jid)?.messages ?? []).length
+    }, STRESS_ROOM_JID)
+    expect(evicted, 'resident window should be evicted (or trimmed) after switching away').toBeLessThan(150)
+
+    // SWITCH BACK → activation rehydrates the latest slice; the restore must pull in the anchor's
+    // slice on demand and reposition to it.
+    await navigateToStressRoom(page)
+    await page.waitForTimeout(2500) // activation + on-demand around-load + retry restore + re-assert
+
+    // CORE OF THE FIX: the deep anchor's cache slice was pulled back in. The resident window now
+    // spans far more than the latest-~100 rehydration (the buggy path stayed at ~100, never reloaded
+    // the anchor), and the captured deep-history anchor is resident again.
+    const reloaded = await page.evaluate(([jid, id]) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const rs = (window as any).__roomStore.getState()
+      const msgs = rs.roomRuntime.get(jid)?.messages ?? rs.rooms.get(jid)?.messages ?? []
+      return { residentLen: msgs.length, hasAnchor: msgs.some((m: { id: string }) => m.id === id) }
+    }, [STRESS_ROOM_JID, anchorId] as const)
+    expect(reloaded.residentLen, 'resident window did not grow past the latest slice — anchor slice not reloaded').toBeGreaterThan(150)
+    expect(reloaded.hasAnchor, `deep anchor "${anchorId}" was not reloaded into the resident window`).toBe(true)
+
+    // POSITIONED in deep history — NOT stranded near the top at the load-more trigger (the bug), and
+    // NOT snapped to the bottom (the latest seeds). The top-most visible row is a synthesized OLDER
+    // message and the view sits well off both the top and the bottom.
+    const placed = await page.evaluate(() => {
+      const s = document.querySelector('[data-message-list]') as HTMLElement | null
+      if (!s) return null
+      const sRect = s.getBoundingClientRect()
+      let topVisible: string | null = null
+      for (const el of Array.from(s.querySelectorAll('.message-row[data-message-id]')) as HTMLElement[]) {
+        const r = el.getBoundingClientRect()
+        if (r.bottom > sRect.top && r.top < sRect.bottom) { topVisible = el.dataset.messageId ?? null; break }
+      }
+      return {
+        topVisible,
+        scrollTop: Math.round(s.scrollTop),
+        distFromBottom: Math.round(s.scrollHeight - s.scrollTop - s.clientHeight),
+      }
+    })
+    expect(placed, 'message list not found after return').not.toBeNull()
+    expect(placed!.topVisible, `view did not restore to deep history (top-visible="${placed!.topVisible}") — likely snapped to bottom or stranded at top`).toContain('older-')
+    expect(placed!.scrollTop, 'view is stranded at the very top (load-more trigger) instead of the reading position').toBeGreaterThan(300)
+    expect(placed!.distFromBottom, 'view snapped to the bottom instead of restoring the deep reading position').toBeGreaterThan(1500)
   })
 
 })
