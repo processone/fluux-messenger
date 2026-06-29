@@ -50,6 +50,14 @@ if (typeof window !== 'undefined') {
     ;(window as Window & { __fluuxScrollDebugOn?: boolean }).__fluuxScrollDebugOn = on
     console.warn(`[Scroll] debug ${on ? 'ENABLED' : 'disabled'}`)
   }
+  // SEPARATE toggle for the high-volume per-row `[Estimate]` trace, so the scroll-decision trace
+  // above stays readable. Enable only when auditing estimate accuracy.
+  ;(window as Window & { __fluuxEstimateDebug?: (on?: boolean) => void }).__fluuxEstimateDebug = (
+    on = true
+  ) => {
+    ;(window as Window & { __fluuxEstimateDebugOn?: boolean }).__fluuxEstimateDebugOn = on
+    console.warn(`[Estimate] debug ${on ? 'ENABLED' : 'disabled'}`)
+  }
 }
 
 function debugLog(action: string, data?: Record<string, unknown>) {
