@@ -764,6 +764,69 @@ test.describe('Virtualization scroll invariants', () => {
     ).toBeLessThan(200)
   })
 
+  // invariant-10: the MEDIA-DRIFT reproduction that invariant-9 cannot do on its own.
+  //
+  // invariant-9 runs against the text-only stress room, whose rows measure synchronously on mount
+  // ≈ the 64px estimate — so the estimate→measure correction is tiny and the one-shot restore does
+  // NOT visibly compound there (it passes with or without the fix). The real-world bug needs rows
+  // that measure MUCH TALLER than the estimate AFTER paint (images / link previews): the virtualizer
+  // lands the restore on estimated offsets, the rows then measure tall, content shifts under a fixed
+  // scrollTop so the bottom-most-visible message slides OLDER, a scroll event fires, and the old code
+  // SAVED that drifted anchor — compounding on every re-open.
+  //
+  // We reproduce that deterministically (no flaky async image decode) by forcing every measured row
+  // to ~2.5x the estimate via injected CSS. ResizeObserver reports the tall size to the virtualizer,
+  // exactly as a decoded image would. This goes RED without pinVirtualizedAnchor + the user-scroll
+  // save gate (anchor drifts older / distance grows each open) and GREEN with them.
+  test('invariant-10: tall (media-like) rows do not drift the restored position across re-opens', async ({ page }) => {
+    await loadDemo(page)
+    await navigateToStressRoom(page)
+
+    // Force every virtualizer-measured row to ~2.5x the 64px estimate. `[data-index]` is the element
+    // the virtualizer observes (ref={measureElement}); min-height on it makes ResizeObserver report a
+    // tall size, mimicking a row whose real height the layout only learns after paint.
+    await page.addStyleTag({ content: '[data-message-list] [data-index] { min-height: 160px; }' })
+    await page.waitForTimeout(500) // let the initial measurement + bottom-stick settle at the tall size
+
+    const distFromBottom = () => page.evaluate(() => {
+      const s = document.querySelector('[data-message-list]') as HTMLElement | null
+      return s ? Math.round(s.scrollHeight - s.scrollTop - s.clientHeight) : -1
+    })
+
+    // Scroll up off the bottom (real wheel so the virtualizer re-windows) to a deep-ish anchor.
+    const box = await page.locator('[data-message-list]').first().boundingBox()
+    if (box) await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+    await page.mouse.wheel(0, -3000)
+    await page.waitForTimeout(700)
+
+    expect(await distFromBottom(), 'precondition: must be scrolled up off the bottom').toBeGreaterThan(AT_BOTTOM_OK_PX)
+
+    // Re-open several times WITHOUT scrolling. With tall rows the estimate→measure correction runs on
+    // every remount, so an unguarded restore drifts the bottom-visible anchor older each open.
+    const anchors: (string | null)[] = []
+    const dists: number[] = []
+    for (let i = 0; i < 4; i++) {
+      await page.evaluate(() => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        void (window as any).__roomStore?.getState?.()?.activateRoom(null)
+      })
+      await page.waitForTimeout(300)
+      await navigateToStressRoom(page)
+      await page.waitForTimeout(1000) // activation + tall-row measurement + anchor re-assert settle
+      anchors.push((await findBottomVisibleMessage(page))?.id ?? null)
+      dists.push(await distFromBottom())
+    }
+
+    expect(
+      anchors.every((a) => a !== null && a === anchors[0]),
+      `restored anchor drifted older across re-opens with tall rows (bottom-visible per open: ${JSON.stringify(anchors)}) — anchor not re-pinned / drifted position saved`,
+    ).toBe(true)
+    expect(
+      Math.max(...dists) - Math.min(...dists),
+      `restored position drifted across re-opens with tall rows (distFromBottom: ${JSON.stringify(dists)})`,
+    ).toBeLessThan(250)
+  })
+
 })
 
 // ── DIAGNOSTIC: new-message marker on re-entry (the user-reported bug) ──────────
