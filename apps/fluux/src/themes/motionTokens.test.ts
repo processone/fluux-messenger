@@ -33,3 +33,21 @@ describe('motion tokens', () => {
     expect(css).not.toMatch(/animation:\s*drawer-in-end 220ms cubic-bezier/)
   })
 })
+
+describe('component animations reference motion tokens', () => {
+  const read = (p: string) => readFileSync(join(process.cwd(), p), 'utf-8')
+
+  it('MessageList send + FAB animations use tokens', () => {
+    const f = read('src/components/conversation/MessageList.tsx')
+    expect(f).toMatch(/message-send var\(--fluux-duration-slow\) var\(--fluux-ease-standard\)/)
+    expect(f).toMatch(/fab-spring-in_0\.4s_var\(--fluux-ease-spring\)_forwards/)
+  })
+
+  it('Sidebar view-enter uses tokens', () => {
+    expect(read('src/components/Sidebar.tsx')).toMatch(/sidebar-view-enter var\(--fluux-duration-fast\) var\(--fluux-ease-standard\)/)
+  })
+
+  it('ReactionBurst uses the standard easing token', () => {
+    expect(read('src/components/conversation/ReactionBurst.tsx')).toMatch(/reaction-burst \$\{DURATION_MS\}ms var\(--fluux-ease-standard\)/)
+  })
+})
