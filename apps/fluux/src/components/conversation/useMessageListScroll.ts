@@ -2060,6 +2060,21 @@ export function useMessageListScroll({
         lastMessageChanged,
         isAtBottom: isAtBottomRef.current,
       })
+    } else {
+      // The effect ran but saw NO new bottom row (count unchanged AND lastMessageId unchanged).
+      // This is the blind spot behind "I sent a message but it didn't scroll to the bottom": if the
+      // just-sent row's props (lastMessageId / messageCount) haven't propagated by the time this
+      // effect fires — e.g. an optimistic row reconciled to its server id on a later commit — the
+      // send is never recognized here and (without this log) nothing is emitted at all. Logging the
+      // current-vs-previous identifiers makes a missed send visible in the trace.
+      debugLog('NEW MSG (no bottom-row change)', {
+        messageCount,
+        prevCount: prevMessageCountRef.current,
+        lastMessageId,
+        prevLastMessageId: prevLastMessageIdRef.current,
+        outgoing: lastMessageIsOutgoing,
+        isAtBottom: isAtBottomRef.current,
+      })
     }
 
     prevMessageCountRef.current = messageCount
