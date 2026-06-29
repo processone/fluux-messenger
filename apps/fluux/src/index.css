@@ -628,6 +628,13 @@ em-emoji-picker {
 .message-group-start { padding-top: 16px; }
 [data-density="compact"] .message-group-start { padding-top: 8px; }
 
+/* The "New messages" marker already provides the visual break before the first
+ * unread message, so collapse the sender-group top padding on the row right after
+ * it down to the normal inter-row gap (py-0.5). Without this the marker's label is
+ * pushed up against the previous message instead of sitting centred between its
+ * neighbours. */
+[data-new-message-marker] + .message-group-start { padding-top: 0.125rem; }
+
 /* Icon rail density. Width + button + icon shrink in compact. */
 /* Rail background: 14% black overlay composited over the sidebar color so the
    rail is always visually deeper than the sidebar, regardless of theme or mode. */
