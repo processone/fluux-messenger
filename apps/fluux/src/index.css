@@ -134,6 +134,18 @@
   --fluux-accent-2: #38E0C4;
   --fluux-grad: linear-gradient(135deg, #38E0C4, #7C8CFF, #A78BFA);
   --fluux-glass-blur: 12px;
+
+  /* ── Motion language: duration + easing tokens (global, never themed) ──
+     Three durations and three easings form the app's motion vocabulary.
+     Migrated animations reference these; new modal motion uses them natively.
+     The reduced-motion gate ([data-motion="reduced"]) collapses all of it. */
+  --fluux-duration-fast: 150ms;
+  --fluux-duration-base: 200ms;
+  --fluux-duration-slow: 300ms;
+  --fluux-ease-standard: ease-out;
+  --fluux-ease-emphasized: cubic-bezier(0.32, 0.72, 0, 1);
+  --fluux-ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+
   /* Backdrop blur applied to the modal scrim itself, so the whole background
      behind a modal/palette frosts (the strongest "glass" cue in dark themes). */
   --fluux-scrim-blur: 10px;
@@ -793,8 +805,8 @@ html, body {
 @keyframes drawer-in-end { from { transform: translateX(100%); } to { transform: translateX(0); } }
 @keyframes drawer-in-end-rtl { from { transform: translateX(-100%); } to { transform: translateX(0); } }
 @media (max-width: 1023px) {
-  .animate-drawer-in { animation: drawer-in-end 220ms cubic-bezier(0.32, 0.72, 0, 1); }
-  [dir="rtl"] .animate-drawer-in { animation: drawer-in-end-rtl 220ms cubic-bezier(0.32, 0.72, 0, 1); }
+  .animate-drawer-in { animation: drawer-in-end 220ms var(--fluux-ease-emphasized); }
+  [dir="rtl"] .animate-drawer-in { animation: drawer-in-end-rtl 220ms var(--fluux-ease-emphasized); }
 }
 
 /* Allow native rubber band effect within scrollable elements (macOS) */
@@ -984,7 +996,7 @@ input[type="range"]::-moz-range-thumb {
 }
 
 .message-highlight {
-  animation: message-highlight 1.5s ease-out;
+  animation: message-highlight 1.5s var(--fluux-ease-standard);
   border-radius: 0.5rem;
 }
 
@@ -1070,11 +1082,11 @@ input[type="range"]::-moz-range-thumb {
 }
 
 .bounce-top {
-  animation: bounce-top 0.3s ease-out;
+  animation: bounce-top var(--fluux-duration-slow) var(--fluux-ease-standard);
 }
 
 .bounce-bottom {
-  animation: bounce-bottom 0.3s ease-out;
+  animation: bounce-bottom var(--fluux-duration-slow) var(--fluux-ease-standard);
 }
 
 /* Christmas animation - falling particles with sway */
