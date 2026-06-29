@@ -1696,14 +1696,20 @@ fn main() {
 
                 let main_window = app.get_webview_window("main").unwrap();
 
-                // Vertically center the traffic lights inside the app bar.
-                // The bar is 44px tall (h-11 in components/AppBar.tsx) and the
-                // buttons are ~16px, so an inset of ~14px from the top centers
-                // them. decorum re-applies this across resize / fullscreen.
-                // Tune the y value here if the bar height changes.
+                // Vertically center the traffic lights inside the 44px app bar
+                // (h-11 in components/AppBar.tsx). decorum must take over the
+                // overlay titlebar first (create_overlay_titlebar) for the inset
+                // to apply; it then re-positions across resize / fullscreen.
+                // The buttons are ~16px, so y ≈ (44-16)/2 ≈ 14 centers them —
+                // tune the y value here if the bar height changes.
                 {
                     use tauri_plugin_decorum::WebviewWindowExt;
-                    let _ = main_window.set_traffic_lights_inset(16.0, 14.0);
+                    if let Err(e) = main_window.create_overlay_titlebar() {
+                        eprintln!("[decorum] create_overlay_titlebar failed: {e}");
+                    }
+                    if let Err(e) = main_window.set_traffic_lights_inset(16.0, 14.0) {
+                        eprintln!("[decorum] set_traffic_lights_inset failed: {e}");
+                    }
                 }
 
                 let window = main_window.clone();
