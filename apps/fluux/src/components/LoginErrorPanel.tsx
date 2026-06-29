@@ -23,7 +23,7 @@ function certBodyKey(sub: string | null): string {
 }
 
 const plainBoxClass =
-  'p-3 bg-fluux-red/20 border border-fluux-red/50 rounded text-fluux-error text-sm'
+  'p-3 bg-fluux-red/20 border border-fluux-red/50 rounded-lg text-fluux-error text-sm'
 
 /**
  * Renders a connection error. For recognized transport/TLS kinds it shows a

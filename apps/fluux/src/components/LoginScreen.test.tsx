@@ -498,6 +498,22 @@ describe('LoginScreen prefill', () => {
     })
 })
 
+describe('LoginScreen — Aurora branding', () => {
+  beforeEach(() => {
+    useAdvancedModeStore.setState({ advancedMode: false })
+    mockUseConnection.mockReturnValue({ status: 'offline', error: null, connect: mockConnect })
+  })
+
+  it('renders the Aurora gradient mark + display-font heading (no flat logo img)', () => {
+    render(<LoginScreen />)
+    // display-font heading
+    const heading = screen.getByRole('heading', { level: 1 })
+    expect(heading.className).toMatch(/font-display/)
+    // the flat logo <img> is replaced by the gradient mark (no <img> for the brand)
+    expect(screen.queryByRole('img')).toBeNull()
+  })
+})
+
 describe('LoginScreen — advanced-mode kebab', () => {
   beforeEach(() => {
     useAdvancedModeStore.setState({ advancedMode: false })

@@ -3,7 +3,7 @@ import { TextInput } from './ui/TextInput'
 import { useTranslation } from 'react-i18next'
 import { detectRenderLoop } from '@/utils/renderLoopDetector'
 import { useConnectionStatus, useConnectionActions, deleteFastToken, classifyConnectionError } from '@fluux/sdk'
-import { Loader2, KeyRound, Eye, EyeOff, Wrench } from 'lucide-react'
+import { Loader2, KeyRound, Eye, EyeOff, Wrench, MessageCircle } from 'lucide-react'
 import { saveSession } from '@/hooks/useSessionPersistence'
 import { getResource } from '@/utils/xmppResource'
 import { hasSavedCredentials, getCredentials, saveCredentials, deleteCredentials } from '@/utils/keychain'
@@ -417,10 +417,16 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
     <div className="h-full bg-fluux-bg overflow-y-auto relative">
       {/* Window drag region - covers top area for title bar */}
       <div className="absolute top-0 inset-x-0 h-8" {...dragRegionProps} />
+      {/* Faint aurora backdrop glow — decorative, behind the content */}
+      <div
+        className="pointer-events-none absolute inset-x-0 top-0 h-80 z-0"
+        style={{ background: 'radial-gradient(60% 100% at 50% 0%, color-mix(in srgb, var(--fluux-bg-accent), transparent 88%), transparent 70%)' }}
+        aria-hidden="true"
+      />
       {/* min-h-full + centering keeps the card centered when there is room, but
           lets the container scroll to every field on short viewports (e.g. a
           phone in landscape with the keyboard open). */}
-      <div className="min-h-full flex items-center justify-center p-4">
+      <div className="min-h-full flex items-center justify-center p-4 relative z-10">
         <div className="relative w-full max-w-md">
         {/* Advanced-mode kebab — quiet, top-right. The toggle reveals the
             custom-server field below and unlocks the app's expert surfaces. */}
@@ -438,17 +444,26 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
         </div>
         {/* Logo / Header */}
         <div className="text-center mb-8">
-          <img
-            src="/logo.png"
-            alt={t('login.title')}
-            className="size-16 mx-auto mb-4"
-          />
-          <h1 className="text-2xl font-bold text-fluux-text">{t('login.title')}</h1>
+          {/* Aurora gradient brand mark: the --fluux-grad tile + a soft glow */}
+          <div className="relative size-16 mx-auto mb-4">
+            <div
+              className="absolute -inset-1.5 rounded-2xl blur-xl opacity-60"
+              style={{ background: 'var(--fluux-grad)' }}
+              aria-hidden="true"
+            />
+            <div
+              className="absolute inset-0 rounded-2xl flex items-center justify-center"
+              style={{ background: 'var(--fluux-grad)' }}
+            >
+              <MessageCircle className="size-8 text-white" aria-hidden="true" />
+            </div>
+          </div>
+          <h1 className="text-3xl font-semibold font-display tracking-tight text-fluux-text">{t('login.title')}</h1>
           <p className="text-fluux-muted mt-2">{t('login.subtitle')}</p>
         </div>
 
         {/* Login Form */}
-        <form onSubmit={handleSubmit} name="login" className="bg-fluux-sidebar rounded-lg p-6 space-y-4">
+        <form onSubmit={handleSubmit} name="login" className="bg-fluux-sidebar rounded-lg p-6 space-y-4 border border-[color:var(--fluux-surface-divider)] shadow-[var(--fluux-shadow-overlay)]">
           {/* JID Field */}
           <div>
             <label htmlFor="jid" className="block text-xs font-semibold text-fluux-muted uppercase mb-2">
