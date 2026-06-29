@@ -1,4 +1,4 @@
-import { useState, useEffect, useLayoutEffect, useRef } from 'react'
+import { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react'
 import { TextInput } from './ui/TextInput'
 import { useTranslation } from 'react-i18next'
 import {
@@ -23,6 +23,7 @@ import { Avatar } from './Avatar'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { isAdvancedMode } from '@/stores/advancedModeStore'
 import { useRestoreFocus } from '@/hooks/useRestoreFocus'
+import { useModalTransition } from '@/hooks/useModalTransition'
 
 // =============================================================================
 // Types
@@ -178,6 +179,8 @@ function CommandPaletteContent({
 }: CommandPaletteProps) {
   detectRenderLoop('CommandPalette')
   const { t } = useTranslation()
+  const { panelClass, scrimClass, requestClose } = useModalTransition({ panelInClass: 'command-palette-in' })
+  const close = useCallback(() => requestClose(onClose), [requestClose, onClose])
   const [query, setQuery] = useState('')
   const [selectedIndex, setSelectedIndex] = useState(0)
   const selectedIndexRef = useRef(0) // Ref for synchronous access in event handlers
@@ -499,7 +502,7 @@ function CommandPaletteContent({
       case 'Escape':
         e.preventDefault()
         e.stopPropagation() // Prevent global shortcuts from firing
-        onClose()
+        close()
         break
     }
   }
@@ -523,20 +526,20 @@ function CommandPaletteContent({
 
   return (
     <div
-      className="fixed inset-0 modal-scrim flex items-start justify-center pt-[15vh] z-50"
+      className={`fixed inset-0 modal-scrim flex items-start justify-center pt-[15vh] z-50 ${scrimClass}`}
     >
       <button
         type="button"
         aria-hidden="true"
         tabIndex={-1}
-        onClick={onClose}
+        onClick={close}
         className="absolute inset-0 cursor-default"
       />
       <div
         ref={dialogRef}
         role="dialog"
         aria-modal="true"
-        className="relative z-10 fluux-glass rounded-lg w-full max-w-lg mx-4 overflow-hidden"
+        className={`relative z-10 fluux-glass rounded-lg w-full max-w-lg mx-4 overflow-hidden ${panelClass}`}
         onKeyDown={handleKeyDown}
       >
         {/* Search Input — contained, rounded field with a soft accent focus ring

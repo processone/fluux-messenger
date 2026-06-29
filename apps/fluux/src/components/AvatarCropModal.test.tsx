@@ -73,12 +73,14 @@ describe('AvatarCropModal', () => {
     })
 
     it('should call onClose when Cancel button is clicked', () => {
+      document.documentElement.setAttribute('data-motion', 'reduced')
       render(
         <AvatarCropModal isOpen={true} onClose={mockOnClose} onSave={mockOnSave} />
       )
 
       fireEvent.click(screen.getAllByText('common.cancel')[0])
       expect(mockOnClose).toHaveBeenCalled()
+      document.documentElement.removeAttribute('data-motion')
     })
 
     it('should have disabled Save button when no image is selected', () => {
