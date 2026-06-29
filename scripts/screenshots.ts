@@ -1361,3 +1361,52 @@ for (const theme of settingsThemes) {
     if (theme.id) await setTheme(page, 'aurora')
   })
 }
+
+// ── Login Screen Scenes (Aurora auth/login slice) ────────────────────────────
+// The demo auto-connects and bypasses LoginScreen. Instead we load the production
+// entry (index.html) with a fresh context (no stored session) so the app starts
+// in status='disconnected' and renders LoginScreen naturally.
+// Theme is set via localStorage before navigation (ThemeProvider reads 'fluux-theme-store'
+// on init), so the correct palette is active on first render.
+
+async function waitForLoginReady(
+  page: Page,
+  themeId: string = 'fluux',
+  colorScheme: 'dark' | 'light' = 'dark',
+): Promise<void> {
+  await page.emulateMedia({ colorScheme })
+  // Seed the theme in localStorage before the page loads so ThemeProvider picks it up.
+  await page.addInitScript((id) => {
+    localStorage.setItem('fluux-theme-store', JSON.stringify({ activeThemeId: id }))
+  }, themeId)
+  await page.goto('/')
+  // LoginScreen renders a form with name="login" and an input#jid field.
+  await page.waitForSelector('input#jid', { timeout: 15_000 })
+  // Freeze transitions and hide scrollbars for crisp capture.
+  await page.addStyleTag({
+    content: `
+      *::-webkit-scrollbar { display: none !important; }
+      * { scrollbar-width: none !important; caret-color: transparent !important; }
+      *, *::before, *::after {
+        transition-duration: 0s !important;
+        animation-duration: 0s !important;
+      }
+    `,
+  })
+  await page.waitForTimeout(500)
+}
+
+const loginThemes: { themeId: string; colorScheme: 'dark' | 'light'; label: string }[] = [
+  { themeId: 'fluux', colorScheme: 'dark', label: 'aurora-dark' },
+  { themeId: 'fluux', colorScheme: 'light', label: 'aurora-light' },
+  { themeId: 'gruvbox', colorScheme: 'dark', label: 'gruvbox' },
+]
+
+for (const entry of loginThemes) {
+  test(`8x — Login screen ${entry.label}`, async ({ page }) => {
+    await waitForLoginReady(page, entry.themeId, entry.colorScheme)
+    await clearHover(page)
+    await page.waitForTimeout(300)
+    await page.screenshot({ path: `${OUTPUT_DIR}/8x-login-${entry.label}.png`, type: 'png' })
+  })
+}
