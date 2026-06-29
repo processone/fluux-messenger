@@ -1,5 +1,5 @@
-import { memo } from 'react'
-import { useNavigate, useLocation } from 'react-router-dom'
+import { memo, useEffect, useState } from 'react'
+import { useNavigate, useLocation, useNavigationType } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { ChevronLeft, ChevronRight, Search } from 'lucide-react'
 import { useIsDesktop } from '@/hooks/useIsDesktop'
@@ -49,9 +49,22 @@ export const AppBar = memo(function AppBar() {
   const { dragRegionProps } = useWindowDrag()
   const toggleModal = useModalStore((s) => s.toggle)
 
-  // Re-render on every navigation so `canGoBack` reflects the current history
-  // position (React Router stores a numeric index in history state).
-  useLocation()
+  // React Router stores a numeric index in history state; re-read it on every
+  // navigation (useLocation re-renders us). `currentIdx` is the position in the
+  // stack; back is available when we're past the first entry.
+  const location = useLocation()
+  const navigationType = useNavigationType()
+  const currentIdx =
+    (typeof window !== 'undefined' ? (window.history.state?.idx as number | undefined) : undefined) ?? 0
+
+  // The History API exposes no "can go forward" flag, so derive it from the
+  // furthest index we've reached. A PUSH truncates any forward entries, so it
+  // resets the ceiling to the new index; POP/REPLACE keep the existing ceiling.
+  // Forward is available whenever we've stepped back below that ceiling.
+  const [maxIdx, setMaxIdx] = useState(currentIdx)
+  useEffect(() => {
+    setMaxIdx((prev) => (navigationType === 'PUSH' ? currentIdx : Math.max(prev, currentIdx)))
+  }, [location, navigationType, currentIdx])
 
   // App bar is desktop window chrome: render only on a wide viewport AND a
   // hovering, fine pointer (mouse/trackpad). The hover gate keeps it hidden on
@@ -62,12 +75,8 @@ export const AppBar = memo(function AppBar() {
 
   const needsTrafficLightInset = isTauri && isMacOS && !isFullscreen
 
-  // Back is unavailable at the first history entry. Forward availability isn't
-  // reliably exposed by the History API, so it stays enabled and safely no-ops
-  // at the end of history — identical to the keyboard navigation today.
-  const historyIdx =
-    (typeof window !== 'undefined' ? (window.history.state?.idx as number | undefined) : undefined) ?? 0
-  const canGoBack = historyIdx > 0
+  const canGoBack = currentIdx > 0
+  const canGoForward = currentIdx < maxIdx
 
   const shortcutMod = isMacOS ? '⌘' : 'Ctrl'
   const iconButton =
@@ -95,6 +104,7 @@ export const AppBar = memo(function AppBar() {
           type="button"
           aria-label={t('common.forward')}
           title={t('common.forward')}
+          disabled={!canGoForward}
           onClick={() => navigate(1)}
           className={iconButton}
         >
