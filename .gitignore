@@ -1,5 +1,6 @@
 # Dependencies
-node_modules/
+# No trailing slash so node_modules symlinks (used in git worktrees) are also ignored.
+node_modules
 
 # Build outputs
 dist/
