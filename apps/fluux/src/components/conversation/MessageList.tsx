@@ -437,12 +437,18 @@ export function MessageList<T extends BaseMessage>({
 
     const devWindow = window as unknown as Record<string, unknown>
     devWindow.__fluuxTriggerLoadOlder = handleLoadEarlier
+    // Also expose the media-load handler so tests can fire a media batch (image decode) without a
+    // real <img> onLoad, which is timing- and approval-gated and not reproducible headless.
+    devWindow.__fluuxTriggerMediaLoad = handleMediaLoad
     return () => {
       if (devWindow.__fluuxTriggerLoadOlder === handleLoadEarlier) {
         delete devWindow.__fluuxTriggerLoadOlder
       }
+      if (devWindow.__fluuxTriggerMediaLoad === handleMediaLoad) {
+        delete devWindow.__fluuxTriggerMediaLoad
+      }
     }
-  }, [handleLoadEarlier])
+  }, [handleLoadEarlier, handleMediaLoad])
 
   // --------------------------------------------------------------------------
   // VIEWPORT OBSERVER (tracks bottom-most visible message for lastSeenMessageId)
