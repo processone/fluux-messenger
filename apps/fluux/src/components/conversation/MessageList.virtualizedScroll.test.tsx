@@ -428,6 +428,9 @@ describe('MessageList — virtualized bottom-stick re-asserts as rows measure', 
 
     // User is reading history, then clicks the bottom FAB.
     scroller.scrollTop = 200
+    // A genuine user scroll fires a wheel (the save gate only persists user-driven positions, not
+    // media/measurement-induced shifts); a bare scroll event alone no longer counts.
+    scroller.dispatchEvent(new WheelEvent('wheel', { bubbles: true }))
     scroller.dispatchEvent(new Event('scroll', { bubbles: true }))
     scrollTopSets.length = 0
     fireEvent.click(container.querySelector('[data-fab="scroll-to-bottom"]') as HTMLButtonElement)
@@ -538,6 +541,9 @@ describe('MessageList — virtualized bottom-stick re-asserts as rows measure', 
 
     // Scroll up to 200 and let the scroll handler record the position + anchor.
     scroller.scrollTop = 200
+    // A genuine user scroll fires a wheel (the save gate only persists user-driven positions, not
+    // media/measurement-induced shifts); a bare scroll event alone no longer counts.
+    scroller.dispatchEvent(new WheelEvent('wheel', { bubbles: true }))
     scroller.dispatchEvent(new Event('scroll', { bubbles: true }))
 
     // Switch away (saves conv-r1's position) then back (should restore it).
@@ -561,6 +567,9 @@ describe('MessageList — virtualized bottom-stick re-asserts as rows measure', 
     rafQueue.length = 0
 
     scroller.scrollTop = 200
+    // A genuine user scroll fires a wheel (the save gate only persists user-driven positions, not
+    // media/measurement-induced shifts); a bare scroll event alone no longer counts.
+    scroller.dispatchEvent(new WheelEvent('wheel', { bubbles: true }))
     scroller.dispatchEvent(new Event('scroll', { bubbles: true }))
 
     rerender(<MessageList messages={makeMessages(50)} conversationId="room-repeat-2" {...props} />)
@@ -590,6 +599,9 @@ describe('MessageList — virtualized bottom-stick re-asserts as rows measure', 
 
     // First visit: user scrolled up, so the room should restore this once.
     scroller.scrollTop = 200
+    // A genuine user scroll fires a wheel (the save gate only persists user-driven positions, not
+    // media/measurement-induced shifts); a bare scroll event alone no longer counts.
+    scroller.dispatchEvent(new WheelEvent('wheel', { bubbles: true }))
     scroller.dispatchEvent(new Event('scroll', { bubbles: true }))
     rerender(<MessageList messages={makeMessages(50)} conversationId="conv-other" {...props} />)
     rerender(<MessageList messages={makeMessages(50)} conversationId="conv-return-bottom" {...props} />)
@@ -631,6 +643,9 @@ describe('MessageList — virtualized bottom-stick re-asserts as rows measure', 
 
     // Scroll up to 200 and let the scroll handler record the position + anchor.
     scroller.scrollTop = 200
+    // A genuine user scroll fires a wheel (the save gate only persists user-driven positions, not
+    // media/measurement-induced shifts); a bare scroll event alone no longer counts.
+    scroller.dispatchEvent(new WheelEvent('wheel', { bubbles: true }))
     scroller.dispatchEvent(new Event('scroll', { bubbles: true }))
 
     // Switch away (saves conv-rw1's position) then back (should restore it).
@@ -659,6 +674,9 @@ describe('MessageList — virtualized bottom-stick re-asserts as rows measure', 
 
     // User scrolls up and the hook captures the anchor + saved position.
     scroller.scrollTop = 200
+    // A genuine user scroll fires a wheel (the save gate only persists user-driven positions, not
+    // media/measurement-induced shifts); a bare scroll event alone no longer counts.
+    scroller.dispatchEvent(new WheelEvent('wheel', { bubbles: true }))
     scroller.dispatchEvent(new Event('scroll', { bubbles: true }))
 
     // Switch away (saves conv-vi1's position and anchor).
@@ -702,6 +720,9 @@ describe('MessageList — virtualized bottom-stick re-asserts as rows measure', 
 
     // Scroll up to 200 in the conversation and record the position + anchor.
     scroller.scrollTop = 200
+    // A genuine user scroll fires a wheel (the save gate only persists user-driven positions, not
+    // media/measurement-induced shifts); a bare scroll event alone no longer counts.
+    scroller.dispatchEvent(new WheelEvent('wheel', { bubbles: true }))
     scroller.dispatchEvent(new Event('scroll', { bubbles: true }))
 
     // Switch away (conversation is now hidden / unmounted from the user's view).

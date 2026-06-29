@@ -1144,8 +1144,10 @@ describe('MessageList scroll behavior', () => {
           configurable: true,
         })
 
-        // Trigger scroll event to save the scrolled-up position
+        // Trigger scroll event to save the scrolled-up position. A genuine user scroll fires a
+        // wheel first — the save gate only persists user-driven positions (see the hook).
         act(() => {
+          container.dispatchEvent(new WheelEvent('wheel', { bubbles: true }))
           container.dispatchEvent(new Event('scroll'))
         })
 
@@ -1213,8 +1215,9 @@ describe('MessageList scroll behavior', () => {
           configurable: true,
         })
 
-        // Trigger scroll to mark as scrolled up and save position
+        // Trigger scroll to mark as scrolled up and save position (wheel = genuine user scroll).
         act(() => {
+          container.dispatchEvent(new WheelEvent('wheel', { bubbles: true }))
           container.dispatchEvent(new Event('scroll'))
         })
         scrollSpy.mockClear()
@@ -1524,8 +1527,9 @@ describe('MessageList scroll behavior', () => {
           configurable: true,
         })
 
-        // Trigger a scroll event to ensure the hook has the scroll data
+        // Trigger a scroll event to ensure the hook has the scroll data (wheel = genuine user scroll).
         act(() => {
+          container.dispatchEvent(new WheelEvent('wheel', { bubbles: true }))
           container.dispatchEvent(new Event('scroll'))
         })
 
@@ -1584,8 +1588,9 @@ describe('MessageList scroll behavior', () => {
           configurable: true,
         })
 
-        // Scroll to position 100 - this gets captured
+        // Scroll to position 100 - this gets captured (wheel = genuine user scroll).
         act(() => {
+          container.dispatchEvent(new WheelEvent('wheel', { bubbles: true }))
           container.dispatchEvent(new Event('scroll'))
         })
 
@@ -2110,8 +2115,9 @@ describe('MessageList scroll behavior', () => {
         })
         scrollContainer.scrollTo = vi.fn()
 
-        // Trigger scroll to save position
+        // Trigger scroll to save position (wheel = genuine user scroll).
         act(() => {
+          scrollContainer.dispatchEvent(new WheelEvent('wheel', { bubbles: true }))
           scrollContainer.dispatchEvent(new Event('scroll'))
         })
         scrollSpy.mockClear()

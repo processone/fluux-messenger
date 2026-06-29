@@ -92,6 +92,16 @@ const MARKER_DRIFT_PX = 16
 const TARGET_REASSERT_FRAMES = 30
 const TARGET_STABLE_FRAMES = 4
 const TARGET_DRIFT_PX = 16
+// Saved-position (content-anchor) restore needs the SAME measurement-aware re-assert as the marker
+// path. A one-shot scrollToIndex(anchor,'end') lands on the rows' ESTIMATED sizes; those rows then
+// measure TALLER over the next frames (media, wrapping), the content above the anchor grows, and the
+// anchor slides below the fold — the view drifts OLDER. handleScroll then saves that drifted position
+// and the (now older) bottom-visible message becomes the next anchor, so each re-open drifts further
+// back ("goes back in time on every open"). Re-pinning the anchor across frames lands it on settled
+// measurements, and registering the loop gates the save so the transient can't compound.
+const RESTORE_REASSERT_FRAMES = 90
+const RESTORE_STABLE_FRAMES = 8
+const RESTORE_DRIFT_PX = 8
 // While re-pinning, treat the list as not-yet-pinned whenever it sits more than this many pixels
 // above the true bottom. The change-detection guard (re-pin only when scrollHeight moved) can miss
 // the frame where the last row's measurement settles — coalesced height deltas, or a height delta
@@ -313,6 +323,20 @@ export function useMessageListScroll({
   const prevLastMessageIdRef = useRef<string | undefined>(lastMessageId)
   const hasInitializedRef = useRef(false)
   const pendingRestoreConversationRef = useRef<string | null>(null)
+  // Whether the user has GENUINELY scrolled since entering this conversation (wheel / touch /
+  // keyboard / FAB). Reset on every conversation switch. The saved scroll position is only
+  // overwritten once this is true: a restore can drift on its own as rows below the fold load media
+  // and re-measure, and persisting that spontaneous shift made the position creep older on every
+  // re-open ("goes back in time on switch"). Gating the save on real user intent keeps the saved
+  // anchor at the user's actual reading position, so re-opens are stable regardless of media timing.
+  const userHasScrolledSinceEntryRef = useRef(false)
+  // scrollHeight at the previous scroll event, to tell a genuine user scroll (content height
+  // unchanged) from a media/measurement-driven shift (height changed). Complements the input-event
+  // listeners below so scrollbar-drag — which fires no wheel/touch — still counts. Reset per entry.
+  const prevScrollHeightRef = useRef<number | null>(null)
+  // Teardown for the native user-input listeners attached to the scroller (set them via addEventListener
+  // so touch/keyboard scrolls — which don't go through the React onWheel handler — also count).
+  const userInputCleanupRef = useRef<(() => void) | null>(null)
   // Per-anchor status for the on-demand "load the cache slice around the anchor" request used when
   // a saved content anchor (or navigation target) is older than the latest-N slice loaded on
   // activation. 'loading' → request in flight (stay pending); 'done' → attempted (resolved by the
@@ -614,7 +638,24 @@ export function useMessageListScroll({
         if (externalScrollerRef) {
           (externalScrollerRef as React.MutableRefObject<HTMLElement | null>).current = el
         }
-        if (el) trySetupContentObserver()
+        // Native user-input listeners: mark a GENUINE user scroll so the save gate (see
+        // userHasScrolledSinceEntryRef) opens. wheel covers mouse/trackpad, touchstart covers
+        // mobile, keydown covers PageUp/Down/arrows/Space when the list is focused. These are
+        // distinct from media/measurement-driven scroll events, which must NOT open the gate.
+        userInputCleanupRef.current?.()
+        userInputCleanupRef.current = null
+        if (el) {
+          const markUserScrolled = () => { userHasScrolledSinceEntryRef.current = true }
+          el.addEventListener('wheel', markUserScrolled, { passive: true })
+          el.addEventListener('touchstart', markUserScrolled, { passive: true })
+          el.addEventListener('keydown', markUserScrolled)
+          userInputCleanupRef.current = () => {
+            el.removeEventListener('wheel', markUserScrolled)
+            el.removeEventListener('touchstart', markUserScrolled)
+            el.removeEventListener('keydown', markUserScrolled)
+          }
+          trySetupContentObserver()
+        }
       },
       setContentRef: (element: HTMLDivElement | null) => {
         if (element === contentRef.current) return
@@ -736,6 +777,87 @@ export function useMessageListScroll({
     rememberBottomIntent()
   }, [pinVirtualizedBottom, rememberBottomIntent])
 
+  // Re-pin a VIRTUALIZED list to a saved CONTENT ANCHOR and keep it pinned as rows measure — the
+  // restore counterpart of pinVirtualizedBottom. A one-shot scrollToIndex(anchor,'end') lands on the
+  // rows' estimated sizes; they then measure taller and the anchor drifts below the fold (see the
+  // RESTORE_* constants). Re-deriving the anchor's pixel target each frame (align:'end' + the saved
+  // fraction, both from CURRENT measurements) lands it on settled layout. Registering the loop in
+  // reassertLoopRef makes handleScroll treat these scrolls as programmatic — so the drifting
+  // transient is NOT saved (which is what made the drift compound across re-opens). Bails on a user
+  // scroll or a conversation switch; converges (and stops early) once the landing position is stable.
+  const pinVirtualizedAnchor = useCallback((anchor: ScrollAnchor, anchorConvId: string) => {
+    const scroller = scrollerRef.current
+    if (!virtualizerRef.current || !scroller) return
+
+    supersedeReassertLoopRef.current()
+
+    // Re-derive and apply the anchor's pixel position from the CURRENT measured layout. Returns the
+    // resulting scrollTop, or null when the anchor row is no longer resolvable.
+    const applyAnchor = (): number | null => {
+      const v = virtualizerRef.current
+      const s = scrollerRef.current
+      if (!v || !s) return null
+      const idx = v.getIndexForMessageId(anchor.messageId)
+      if (idx === null) return null
+      v.scrollToIndex(idx, { align: 'end' })
+      if (anchor.fraction < 1) {
+        const start = v.getOffsetForMessageId(anchor.messageId)
+        const size = v.getVirtualItems().find((vi) => vi.index === idx)?.size
+        if (start !== null && size) {
+          v.scrollToOffset(Math.max(0, start + anchor.fraction * size - s.clientHeight))
+        }
+      }
+      return s.scrollTop
+    }
+
+    // Immediate pin (pre-paint when called from the restore path's layout effect).
+    applyAnchor()
+
+    const startedAt = Date.now()
+    const loop = (reassertMonitorRef.current ??= createReassertLoopMonitor()).begin('restore-anchor', performance.now())
+    let framesLeft = RESTORE_REASSERT_FRAMES
+    let stableFrames = 0
+    let landed = -1
+    const finish = () => {
+      loop.end()
+      reassertLoopRef.current = null
+      // Capture the settled position so a leave right after restore saves the anchor we LANDED on,
+      // not a mid-settle transient.
+      const s = scrollerRef.current
+      if (s) {
+        isAtBottomRef.current = (s.scrollHeight - s.scrollTop - s.clientHeight) < AT_BOTTOM_THRESHOLD
+        rememberCurrentScrollSnapshot()
+      }
+    }
+    const step = () => {
+      const s = scrollerRef.current
+      if (!s) { finish(); return }
+      if (framesLeft-- <= 0) { finish(); return }
+      // Stale loop must never scroll the new conversation (prevConversationRef is set synchronously
+      // at the end of the conversation-switch effect).
+      if (prevConversationRef.current !== anchorConvId) { finish(); return }
+      // User took over → stop fighting them.
+      if (userScrollIntentAtRef.current > startedAt) { finish(); return }
+
+      const st = applyAnchor()
+      if (st === null) { finish(); return }
+
+      let wrote = false
+      if (landed >= 0 && Math.abs(st - landed) <= RESTORE_DRIFT_PX) {
+        if (++stableFrames >= RESTORE_STABLE_FRAMES) { finish(); return }
+      } else {
+        wrote = true
+        stableFrames = 0
+      }
+      landed = st
+
+      const warning = loop.frame(performance.now(), wrote)
+      if (warning) console.warn(warning)
+      reassertLoopRef.current = { raf: requestAnimationFrame(step), handle: loop }
+    }
+    reassertLoopRef.current = { raf: requestAnimationFrame(step), handle: loop }
+  }, [isAtBottomRef, rememberCurrentScrollSnapshot])
+
   const restoreSavedPosition = useCallback((source: 'entry' | 'retry'): RestoreSavedPositionResult => {
     const scroller = scrollerRef.current
     if (!scroller) return 'pending'
@@ -836,20 +958,11 @@ export function useMessageListScroll({
     if (virtRestore && savedAnchor) {
       const anchorIndex = virtRestore.getIndexForMessageId(savedAnchor.messageId)
       if (anchorIndex !== null) {
-        // Baseline: place the anchor message's bottom at the viewport bottom (align:'end').
-        // This both windows the (possibly off-screen) row in and covers the common fraction=1
-        // case. scrollToIndex re-windows synchronously in the adapter, so its measured size is
-        // available right after for the sub-message refine below.
-        virtRestore.scrollToIndex(anchorIndex, { align: 'end' })
-        // Refine to the saved fraction using the message's CURRENT measured height (rendering-
-        // independent — re-derived from measurements, never a stored pixel gap).
-        if (savedAnchor.fraction < 1) {
-          const start = virtRestore.getOffsetForMessageId(savedAnchor.messageId)
-          const size = virtRestore.getVirtualItems().find((v) => v.index === anchorIndex)?.size
-          if (start !== null && size) {
-            virtRestore.scrollToOffset(Math.max(0, start + savedAnchor.fraction * size - scroller.clientHeight))
-          }
-        }
+        // Position the anchor's bottom at the viewport bottom (align:'end') refined to the saved
+        // fraction, and KEEP it pinned across frames as the just-windowed rows measure taller. A
+        // one-shot landing here drifts older (and compounds across re-opens) because it lands on
+        // estimated sizes — see pinVirtualizedAnchor / the RESTORE_* constants.
+        pinVirtualizedAnchor(savedAnchor, conversationId)
         return finishRestore('RESTORE via virtualizer index', { savedAnchor, anchorIndex })
       }
 
@@ -896,6 +1009,7 @@ export function useMessageListScroll({
     firstMessageId,
     isAtBottomRef,
     messageCount,
+    pinVirtualizedAnchor,
     reassertBottom,
     rememberCurrentScrollSnapshot,
   ])
@@ -916,6 +1030,8 @@ export function useMessageListScroll({
     // loop yields instead of fighting it back to the anchor (it can fire while the loop runs:
     // entering at the top triggers a load-older, then the user clicks the FAB).
     userScrollIntentAtRef.current = Date.now()
+    // Deliberate user action → open the save gate so the resulting position persists.
+    userHasScrolledSinceEntryRef.current = true
 
     // Two-step behavior: scroll to the new message marker only when it exists AND
     // is still further down than the current viewport (not yet visible). Otherwise —
@@ -1291,6 +1407,15 @@ export function useMessageListScroll({
     // marker entirely). Gate both on a genuine user scroll.
     const programmaticScroll = reassertLoopRef.current !== null
 
+    // Open the save gate when this is a genuine user scroll: content height UNCHANGED from the
+    // previous scroll event (a media/measurement-driven shift changes the height; a wheel / touch /
+    // scrollbar-drag does not). Complements the input-event listeners so scrollbar-drag — which
+    // fires no wheel/touch — also counts. Programmatic loop scrolls are excluded.
+    if (!programmaticScroll && prevScrollHeightRef.current === scrollHeight) {
+      userHasScrolledSinceEntryRef.current = true
+    }
+    prevScrollHeightRef.current = scrollHeight
+
     // Clear new message marker when user scrolls past it or reaches the bottom.
     // Skip on the very first scroll events after marker setup to avoid clearing
     // the marker before the user has a chance to see it.
@@ -1332,8 +1457,11 @@ export function useMessageListScroll({
     // and during scroll because at switch time the DOM is already the new room.
     // Skipped while a programmatic loop is positioning the list (see programmaticScroll above):
     // saving the transient entry position would poison the next re-entry's restore decision.
+    // Also skipped until the user has GENUINELY scrolled this entry: a post-restore scroll caused
+    // by media/measurement settling must not overwrite the saved anchor (that drift compounded
+    // across re-opens — see userHasScrolledSinceEntryRef).
     const now = Date.now()
-    if (!programmaticScroll && now - lastSaveTimeRef.current > SAVE_THROTTLE_MS) {
+    if (!programmaticScroll && userHasScrolledSinceEntryRef.current && now - lastSaveTimeRef.current > SAVE_THROTTLE_MS) {
       lastSaveTimeRef.current = now
       scrollStateManager.saveScrollPosition(conversationId, scrollTop, scrollHeight, clientHeight, lastAnchorRef.current ?? undefined, clientWidth)
     }
@@ -1356,6 +1484,9 @@ export function useMessageListScroll({
     // the user keeps scrolling after a load (rather than fighting a content-shrink clamp). The
     // wheel that triggers the load itself is recorded BEFORE the loop starts, so it won't bail.
     userScrollIntentAtRef.current = Date.now()
+    // Genuine user scroll → open the save gate (see userHasScrolledSinceEntryRef). Mirrors the
+    // native wheel listener; kept here so it fires even when wheel arrives via the React handler.
+    userHasScrolledSinceEntryRef.current = true
     const { scrollTop } = e.currentTarget
     if (scrollTop === 0 && e.deltaY < 0 && !staticMode) triggerLoadOlder()
     if (scrollTop === 0 && e.deltaY > 0) scrolledAwayFromTopRef.current = true
@@ -1388,10 +1519,15 @@ export function useMessageListScroll({
       messageCount,
     })
 
-    // LEAVING old conversation - save position
-    if (prevConversationRef.current && lastScrollDataRef.current) {
+    // LEAVING old conversation - save position, but ONLY if the user genuinely scrolled it this
+    // visit. Otherwise keep its existing saved anchor untouched (markAsLeft): the live scroll data
+    // may have drifted from media/measurement after the restore, and persisting it would make the
+    // position creep older on the next open (see userHasScrolledSinceEntryRef).
+    if (prevConversationRef.current && lastScrollDataRef.current && userHasScrolledSinceEntryRef.current) {
       const { top, height, client, width } = lastScrollDataRef.current
       scrollStateManager.leaveConversation(prevConversationRef.current, top, height, client, lastAnchorRef.current ?? undefined, width)
+    } else if (prevConversationRef.current) {
+      scrollStateManager.markAsLeft(prevConversationRef.current)
     }
 
     // ENTERING new conversation - reset state
@@ -1404,6 +1540,9 @@ export function useMessageListScroll({
     pendingRestoreConversationRef.current = null
     // Returning to this conversation later must be free to re-request its anchor slice.
     aroundLoadStatusRef.current.clear()
+    // Fresh entry: the saved position is locked until the user genuinely scrolls (see the ref).
+    userHasScrolledSinceEntryRef.current = false
+    prevScrollHeightRef.current = null
     setShowScrollToBottom(false)
 
     // Clear any pending media load batch
@@ -1629,7 +1768,10 @@ export function useMessageListScroll({
   useLayoutEffect(() => {
     return () => {
       if (prevConversationRef.current) {
-        if (lastScrollDataRef.current) {
+        // Same gate as the conversation-switch leave: only persist the live scroll data when the
+        // user genuinely scrolled this visit; otherwise keep the existing saved anchor (markAsLeft)
+        // so a media/measurement-induced post-restore drift can't be saved (see the ref).
+        if (lastScrollDataRef.current && userHasScrolledSinceEntryRef.current) {
           const { top, height, client, width } = lastScrollDataRef.current
           // UNMOUNT save: this is the leave path for navigations that DESTROY the message view —
           // opening Settings, switching DM↔Room, going back to the list. (DM↔DM keeps the view
@@ -1645,13 +1787,14 @@ export function useMessageListScroll({
           })
           scrollStateManager.leaveConversation(prevConversationRef.current, top, height, client, lastAnchorRef.current ?? undefined, width)
         } else {
-          // No scroll data captured before unmount → nothing to restore TO on return. A user who
-          // never scrolled (or unmounted before the first throttled save) lands at the bottom next
-          // time, by design — but if this fires after the user DID scroll up, the save side is the bug.
-          debugLog('UNMOUNT markAsLeft (no scroll data)', { conversationId: prevConversationRef.current })
+          // No scroll data, or the user never scrolled this visit → don't overwrite the saved
+          // position; just mark the conversation left so a return is detected as a switch.
+          debugLog('UNMOUNT markAsLeft (no user scroll / no scroll data)', { conversationId: prevConversationRef.current })
           scrollStateManager.markAsLeft(prevConversationRef.current)
         }
       }
+      userInputCleanupRef.current?.()
+      userInputCleanupRef.current = null
     }
   }, [])
 
