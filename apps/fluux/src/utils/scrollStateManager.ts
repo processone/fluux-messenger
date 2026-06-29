@@ -33,14 +33,15 @@ function isDebugEnabled(): boolean {
 export const AT_BOTTOM_THRESHOLD = 150
 
 /**
- * A content-stable scroll anchor: the bottom-most visible message and the gap
- * (px) between its bottom edge and the viewport bottom. Survives a change in the
- * loaded message set (e.g. after memory eviction + re-hydration from cache),
- * unlike a raw pixel scrollTop whose meaning depends on the total content height.
+ * A content-stable scroll anchor: the bottom-most visible message and the FRACTION
+ * (0..1) of that message's height at which the viewport bottom sits (1 = message bottom
+ * at the window bottom). Survives a change in the loaded message set (memory eviction +
+ * re-hydration) AND a re-measure/width change, because the position is re-derived from the
+ * message's CURRENT height on restore — independent of rendering — rather than a stored pixel gap.
  */
 export interface ScrollAnchor {
   messageId: string
-  bottomGap: number
+  fraction: number
 }
 
 interface ScrollState {
@@ -250,6 +251,23 @@ class ScrollStateManager {
     }
 
     return state.scrollState.scrollTop
+  }
+
+  /**
+   * Get the scrollHeight captured at save time, or null when no restorable state.
+   * Lets the restore prefer the exact saved scrollTop when the content height is unchanged
+   * since save (same-session navigate-back): the pixel is then exact and layout-independent,
+   * so the (ratio-based) anchor is only needed when the height actually changed.
+   */
+  getSavedScrollHeight(conversationId: string): number | null {
+    const state = this.states.get(conversationId)
+    if (!state?.scrollState || state.scrollState.wasAtBottom) {
+      return null
+    }
+    if (Date.now() - state.scrollState.savedAt > this.staleThresholdMs) {
+      return null
+    }
+    return state.scrollState.scrollHeight
   }
 
   /**
