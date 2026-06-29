@@ -42,6 +42,8 @@ describe('AppBar', () => {
     mockHasHover = true
     navigateSpy.mockClear()
     toggleSpy.mockClear()
+    // Reset history position so each test starts at index 0 (start = end).
+    window.history.replaceState(null, '')
   })
 
   it('renders nothing on mobile (below the desktop breakpoint)', () => {
@@ -69,16 +71,26 @@ describe('AppBar', () => {
     expect(screen.queryByRole('button', { name: 'Settings' })).not.toBeInTheDocument()
   })
 
-  it('navigates forward through history', () => {
-    renderAppBar()
-    fireEvent.click(screen.getByRole('button', { name: 'Forward' }))
-    expect(navigateSpy).toHaveBeenCalledWith(1)
-  })
-
   it('disables back at the first history entry', () => {
     renderAppBar()
     // Fresh history starts at index 0 → nowhere to go back.
     expect(screen.getByRole('button', { name: 'Back' })).toBeDisabled()
+  })
+
+  it('disables forward at the end of history', () => {
+    renderAppBar()
+    // At the furthest index reached → nowhere to go forward.
+    expect(screen.getByRole('button', { name: 'Forward' })).toBeDisabled()
+  })
+
+  it('navigates back when not at the first history entry', () => {
+    // Simulate being one step into the history stack.
+    window.history.replaceState({ idx: 1 }, '')
+    renderAppBar()
+    const back = screen.getByRole('button', { name: 'Back' })
+    expect(back).toBeEnabled()
+    fireEvent.click(back)
+    expect(navigateSpy).toHaveBeenCalledWith(-1)
   })
 
   it('opens the command palette from the search control', () => {
