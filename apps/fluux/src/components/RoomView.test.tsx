@@ -127,6 +127,23 @@ function _isReplyToIgnoredUser(
   return _isMessageFromIgnoredUser(ignoredUsers, { nick }, nickToJidCache)
 }
 
+function _filterIgnoredReactions(
+  reactions: Record<string, string[]> | undefined,
+  ignoredUsers: { identifier: string; jid?: string }[],
+  nickToJidCache?: Map<string, string>,
+): Record<string, string[]> | undefined {
+  if (!reactions || ignoredUsers.length === 0) return reactions
+  let changed = false
+  const result: Record<string, string[]> = {}
+  for (const [emoji, reactors] of Object.entries(reactions)) {
+    const kept = reactors.filter(nick => !_isMessageFromIgnoredUser(ignoredUsers, { nick }, nickToJidCache))
+    if (kept.length !== reactors.length) changed = true
+    if (kept.length > 0) result[emoji] = kept
+  }
+  if (!changed) return reactions
+  return Object.keys(result).length > 0 ? result : undefined
+}
+
 // Mock SDK hooks and pure functions
 vi.mock('@fluux/sdk', () => ({
   useReferencedMessage: () => undefined,
@@ -218,6 +235,7 @@ vi.mock('@fluux/sdk', () => ({
   },
   isMessageFromIgnoredUser: _isMessageFromIgnoredUser,
   isReplyToIgnoredUser: _isReplyToIgnoredUser,
+  filterIgnoredReactions: _filterIgnoredReactions,
   canKick: () => false,
   canBan: () => false,
   canModerate: () => false,
@@ -1146,6 +1164,49 @@ describe('RoomView', () => {
       expect(screen.queryByText('Alice text')).not.toBeInTheDocument()
       expect(screen.getByText('Bob text')).toBeInTheDocument()
       expect(screen.queryByText('Charlie text')).not.toBeInTheDocument()
+    })
+
+    it('should hide a reaction left by an ignored user on a visible message', () => {
+      // Bob (not ignored) posts a message that Mallory (ignored) and Bob both
+      // react to. Mallory's emoji must not leak through even though the target
+      // message stays visible.
+      mockActiveMessages = [
+        createRoomMessage({
+          id: 'msg-1',
+          nick: 'Bob',
+          body: 'Bob says hello',
+          occupantId: 'occ-bob',
+          // Emojis are chosen outside TOOLBAR_REACTIONS so the quick-react
+          // picker buttons don't collide with the rendered reaction pills.
+          reactions: { '🔥': ['Mallory'], '🎉': ['Bob'] },
+        }),
+      ]
+      mockIgnoredUsers = {
+        [ROOM_JID]: [{ identifier: 'Mallory', displayName: 'Mallory' }],
+      }
+
+      render(<RoomView />)
+
+      expect(screen.getByText('Bob says hello')).toBeInTheDocument()
+      // Bob's reaction survives, Mallory's is stripped.
+      expect(screen.getByText('🎉')).toBeInTheDocument()
+      expect(screen.queryByText('🔥')).not.toBeInTheDocument()
+    })
+
+    it('should keep reactions from ignored users when no one is ignored', () => {
+      mockActiveMessages = [
+        createRoomMessage({
+          id: 'msg-1',
+          nick: 'Bob',
+          body: 'Bob says hello',
+          reactions: { '🔥': ['Mallory'] },
+        }),
+      ]
+      mockIgnoredUsers = {}
+
+      render(<RoomView />)
+
+      expect(screen.getByText('🔥')).toBeInTheDocument()
     })
 
     it('should prioritize occupantId match over nick match', () => {

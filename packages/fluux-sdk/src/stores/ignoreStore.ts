@@ -209,4 +209,38 @@ export function isReplyToIgnoredUser(
   return isMessageFromIgnoredUser(ignoredUsers, { nick }, nickToJidCache)
 }
 
+/**
+ * Strip reactions (XEP-0444) contributed by ignored users from a reactions map.
+ *
+ * Reactions are stored on the *target* message keyed by reactor nick. Because
+ * the target is usually authored by a non-ignored user, the message survives
+ * the message-level ignore filter — so an ignored user's emoji would still be
+ * shown unless its reactor entry is removed here. Reactors are matched by nick
+ * with the same logic used for messages (nick > JID via nickToJidCache).
+ *
+ * Returns the original `reactions` reference when nothing is removed, so
+ * callers can rely on referential equality to skip re-renders. Returns
+ * `undefined` when every reaction came from ignored users.
+ */
+export function filterIgnoredReactions(
+  reactions: Record<string, string[]> | undefined,
+  ignoredUsers: IgnoredUser[],
+  nickToJidCache?: Map<string, string>,
+): Record<string, string[]> | undefined {
+  if (!reactions || ignoredUsers.length === 0) return reactions
+
+  let changed = false
+  const result: Record<string, string[]> = {}
+  for (const [emoji, reactors] of Object.entries(reactions)) {
+    const kept = reactors.filter(
+      nick => !isMessageFromIgnoredUser(ignoredUsers, { nick }, nickToJidCache),
+    )
+    if (kept.length !== reactors.length) changed = true
+    if (kept.length > 0) result[emoji] = kept
+  }
+
+  if (!changed) return reactions
+  return Object.keys(result).length > 0 ? result : undefined
+}
+
 export type { IgnoreState }

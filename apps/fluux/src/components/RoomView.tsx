@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback, useImperativeHandle, useMemo, memo, type RefObject } from 'react'
 import { useTranslation } from 'react-i18next'
 import { detectRenderLoop } from '@/utils/renderLoopDetector'
-import { useRoomActive, useRoomEntity, useRoomOccupantCount, useContactIdentities, getBareJid, generateConsistentColorHexSync, useReferencedMessage, isMessageFromIgnoredUser, isReplyToIgnoredUser, canKick, canBan, getAvailableAffiliations, getAvailableRoles, getMyReactions, WhisperCounterpartGoneError, type RoomMessage, type Room, type RoomOccupant, type MentionReference, type ChatStateNotification, type ContactIdentity, type FileAttachment, type RoomAffiliation, type RoomRole, type PollData } from '@fluux/sdk'
+import { useRoomActive, useRoomEntity, useRoomOccupantCount, useContactIdentities, getBareJid, generateConsistentColorHexSync, useReferencedMessage, isMessageFromIgnoredUser, isReplyToIgnoredUser, filterIgnoredReactions, canKick, canBan, getAvailableAffiliations, getAvailableRoles, getMyReactions, WhisperCounterpartGoneError, type RoomMessage, type Room, type RoomOccupant, type MentionReference, type ChatStateNotification, type ContactIdentity, type FileAttachment, type RoomAffiliation, type RoomRole, type PollData } from '@fluux/sdk'
 import { useConnectionStore, useIgnoreStore, useRoomStore } from '@fluux/sdk/react'
 import { ignoreStore, roomStore, type IgnoredUser } from '@fluux/sdk/stores'
 import { useMentionAutocomplete, useFileUpload, useLinkPreview, useTypeToFocus, useMessageCopy, useMode, useMessageSelection, useMessageHoverState, useDragAndDrop, useConversationDraft, useTimeFormat, useContextMenu, useWhisperCounterpartPresent, isSmallScreen } from '@/hooks'
@@ -113,10 +113,19 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
   const displayMessages = useMemo(() => {
     if (ignoredForRoom.length === 0) return activeMessages
     const cache = activeRoom?.nickToJidCache
-    return activeMessages.filter(msg =>
-      !isMessageFromIgnoredUser(ignoredForRoom, msg, cache) &&
-      !isReplyToIgnoredUser(ignoredForRoom, msg.replyTo, cache)
-    )
+    return activeMessages
+      .filter(msg =>
+        !isMessageFromIgnoredUser(ignoredForRoom, msg, cache) &&
+        !isReplyToIgnoredUser(ignoredForRoom, msg.replyTo, cache)
+      )
+      // Also strip reactions left by ignored users on surviving messages. The
+      // helper returns the same reference when nothing is removed, so we only
+      // clone the rare message that actually carried an ignored reaction —
+      // keeping the memo bailout intact for everything else.
+      .map(msg => {
+        const reactions = filterIgnoredReactions(msg.reactions, ignoredForRoom, cache)
+        return reactions === msg.reactions ? msg : { ...msg, reactions }
+      })
   }, [activeMessages, ignoredForRoom, activeRoom?.nickToJidCache])
 
   // Filter typing indicators from ignored users
