@@ -318,6 +318,15 @@ vi.mock('@fluux/sdk', async (importOriginal) => {
       isConnected: () => false,
       getJid: () => null,
     })),
+    useRoster: vi.fn(() => ({
+      contacts: [],
+      sortedContacts: [],
+      onlineContacts: [],
+      addContact: vi.fn(),
+      removeContact: vi.fn(),
+      acceptSubscription: vi.fn(),
+      rejectSubscription: vi.fn(),
+    })),
   }
 })
 

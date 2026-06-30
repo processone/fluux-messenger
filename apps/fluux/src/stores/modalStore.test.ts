@@ -5,7 +5,7 @@ import * as tooltipBus from '../utils/tooltipBus'
 const reset = () =>
   useModalStore.setState({
     commandPalette: false, shortcutHelp: false, presenceMenu: false,
-    quickChat: false, addContact: false, joinRoom: false,
+    quickChat: false, newMessage: false, addContact: false, joinRoom: false,
   })
 
 describe('modalStore', () => {
@@ -98,5 +98,12 @@ describe('modalStore', () => {
     expect(after.toggle).toBe(before.toggle)
     expect(after.closeAll).toBe(before.closeAll)
     expect(after.closeTopmost).toBe(before.closeTopmost)
+  })
+
+  it('opens and closes the newMessage modal', () => {
+    useModalStore.getState().open('newMessage')
+    expect(useModalStore.getState().newMessage).toBe(true)
+    useModalStore.getState().close('newMessage')
+    expect(useModalStore.getState().newMessage).toBe(false)
   })
 })

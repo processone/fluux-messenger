@@ -21,6 +21,7 @@ export type ModalName =
   | 'quickChat'
   | 'addContact'
   | 'joinRoom'
+  | 'newMessage'
 
 /**
  * Escape priority order (highest first). On Escape, the first open modal in this
@@ -31,6 +32,7 @@ export const MODAL_ESCAPE_PRIORITY: ModalName[] = [
   'shortcutHelp',
   'presenceMenu',
   'quickChat',
+  'newMessage',
   'addContact',
   'joinRoom',
 ]
@@ -40,6 +42,7 @@ interface ModalStoreState {
   shortcutHelp: boolean
   presenceMenu: boolean
   quickChat: boolean
+  newMessage: boolean
   addContact: boolean
   joinRoom: boolean
   /** Open a specific modal. */
@@ -59,6 +62,7 @@ const ALL_CLOSED = {
   shortcutHelp: false,
   presenceMenu: false,
   quickChat: false,
+  newMessage: false,
   addContact: false,
   joinRoom: false,
 } as const
