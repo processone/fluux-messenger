@@ -5,7 +5,6 @@ import {
   useEvents,
   useBlocking,
   getBareJid,
-  type SubscriptionRequest,
   type MucInvitation,
   type SystemNotification,
 } from '@fluux/sdk'
@@ -19,6 +18,7 @@ import {
   DoorOpen,
   Ban,
 } from 'lucide-react'
+import { SubscriptionRequestItem } from './SubscriptionRequestItem'
 
 export function EventsView() {
   const { t } = useTranslation()
@@ -191,64 +191,6 @@ function SystemNotificationItem({ notification, onDismiss }: SystemNotificationI
             aria-label={t('sidebar.dismiss')}
           >
             <X className="size-4" />
-          </button>
-        </Tooltip>
-      </div>
-    </div>
-  )
-}
-
-interface SubscriptionRequestItemProps {
-  request: SubscriptionRequest
-  onAccept: () => void
-  onReject: () => void
-  onBlock: () => void
-}
-
-function SubscriptionRequestItem({ request, onAccept, onReject, onBlock }: SubscriptionRequestItemProps) {
-  const { t } = useTranslation()
-  const displayName = request.from.split('@')[0]
-
-  return (
-    <div className="px-2 py-2 rounded hover:bg-fluux-hover transition-colors">
-      <div className="flex items-center gap-3">
-        {/* Avatar */}
-        <Avatar
-          identifier={request.from}
-          name={displayName}
-          size="md"
-        />
-
-        {/* Info */}
-        <div className="flex-1 min-w-0">
-          <p className="font-medium text-fluux-text truncate">{displayName}</p>
-          <p className="text-xs text-fluux-muted truncate">{request.from}</p>
-        </div>
-      </div>
-
-      {/* Actions */}
-      <div className="flex gap-2 mt-2 ms-13">
-        <button
-          onClick={onAccept}
-          className="flex-1 px-3 py-1.5 bg-fluux-green text-white text-sm font-medium rounded hover:bg-fluux-green/80 transition-colors flex items-center justify-center gap-1"
-        >
-          <Check className="size-4" />
-          {t('common.accept')}
-        </button>
-        <button
-          onClick={onReject}
-          className="flex-1 px-3 py-1.5 bg-fluux-muted/20 text-fluux-text text-sm font-medium rounded hover:bg-fluux-muted/30 transition-colors flex items-center justify-center gap-1"
-        >
-          <X className="size-4" />
-          {t('common.reject')}
-        </button>
-        <Tooltip content={t('common.block')} position="top">
-          <button
-            onClick={onBlock}
-            className="px-3 py-1.5 bg-fluux-red text-white text-sm font-medium rounded hover:bg-fluux-red/80 transition-colors flex items-center justify-center gap-1"
-            aria-label={t('common.block')}
-          >
-            <Ban className="size-4" />
           </button>
         </Tooltip>
       </div>

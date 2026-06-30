@@ -2,8 +2,9 @@ import React, { useState, useRef, memo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import { useContextMenu, useTypeToFocus, useListKeyboardNav } from '@/hooks'
-import { useContactIdentities, useRosterActions, useAdminPermissions, rosterStore, type Contact } from '@fluux/sdk'
+import { useContactIdentities, useRosterActions, useAdminPermissions, useEvents, useBlocking, rosterStore, type Contact } from '@fluux/sdk'
 import { useConnectionStore, useRosterStore } from '@fluux/sdk/react'
+import { SubscriptionRequestItem } from './SubscriptionRequestItem'
 import { Avatar } from '../Avatar'
 import { RenameContactModal } from '../RenameContactModal'
 import { Tooltip } from '../Tooltip'
@@ -32,6 +33,12 @@ export function ContactList({ onStartChat, onSelectContact, onManageUser, active
   const entries = useRosterStore(useShallow((s) => s.contactSidebarEntries()))
   const identities = useContactIdentities()
   const { removeContact, renameContact } = useRosterActions()
+  const { subscriptionRequests, acceptSubscription, rejectSubscription } = useEvents()
+  const { blockJid } = useBlocking()
+  const handleBlockRequest = async (jid: string) => {
+    await rejectSubscription(jid)
+    await blockJid(jid)
+  }
   const connectionStatus = useConnectionStore((s) => s.status)
   const forceOffline = connectionStatus !== 'online'
   const [searchQuery, setSearchQuery] = useState('')
@@ -143,6 +150,22 @@ export function ContactList({ onStartChat, onSelectContact, onManageUser, active
 
       {/* Contact list */}
       <div ref={listRef} className="flex-1 overflow-y-auto px-2 pb-2" {...getContainerProps()}>
+        {subscriptionRequests.length > 0 && (
+          <div className="mb-2">
+            <h3 className="text-xs font-semibold text-fluux-muted uppercase px-2 mb-2 mt-2">
+              {t('contacts.requestsHeading')} — {subscriptionRequests.length}
+            </h3>
+            {subscriptionRequests.map((request) => (
+              <SubscriptionRequestItem
+                key={request.id}
+                request={request}
+                onAccept={() => acceptSubscription(request.from)}
+                onReject={() => rejectSubscription(request.from)}
+                onBlock={() => handleBlockRequest(request.from)}
+              />
+            ))}
+          </div>
+        )}
         {entries.length === 0 ? (
           <ListEmpty icon={Users} title={t('contacts.noContacts')} />
         ) : flatJids.length === 0 ? (
