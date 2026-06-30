@@ -21,6 +21,7 @@ import { createResizeLoopMonitor } from './resizeLoopMonitor'
 import { createSlowCorrectionMonitor } from './slowCorrectionMonitor'
 import { createReassertLoopMonitor } from './reassertLoopMonitor'
 import type { ReassertLoopHandle } from './reassertLoopMonitor'
+import { isProgrammaticScroll } from './scrollGate'
 import type { MessageVirtualizer } from './messageVirtualizer'
 import { notifyUserInput } from '@/utils/renderLoopDetector'
 
@@ -355,6 +356,12 @@ export function useMessageListScroll({
   // unchanged) from a media/measurement-driven shift (height changed). Complements the input-event
   // listeners below so scrollbar-drag — which fires no wheel/touch — still counts. Reset per entry.
   const prevScrollHeightRef = useRef<number | null>(null)
+  // Timestamp of the last programmatic scroll WRITE (one-shot restore, or the frame the re-pin loop
+  // ends). Scroll events within PROGRAMMATIC_SETTLE_MS of it are the virtualizer's measurement settle,
+  // not the user, so they must NOT open the save gate — see scrollGate.isProgrammaticScroll. Without
+  // it, that settle (height unchanged, no loop running) looks exactly like a scrollbar drag, opens the
+  // gate, and the drifted position is persisted → the reading position creeps older on every re-open.
+  const lastProgrammaticScrollAtRef = useRef(0)
   // Teardown for the native user-input listeners attached to the scroller (set them via addEventListener
   // so touch/keyboard scrolls — which don't go through the React onWheel handler — also count).
   const userInputCleanupRef = useRef<(() => void) | null>(null)
@@ -874,6 +881,9 @@ export function useMessageListScroll({
     const finish = () => {
       loop.end()
       reassertLoopRef.current = null
+      // The loop just stopped owning scrollTop; keep the brief measurement settle that follows it
+      // classified as programmatic so it can't open the save gate (see lastProgrammaticScrollAtRef).
+      lastProgrammaticScrollAtRef.current = Date.now()
       // Capture the settled position so a leave right after restore saves the anchor we LANDED on,
       // not a mid-settle transient.
       const s = scrollerRef.current
@@ -946,6 +956,9 @@ export function useMessageListScroll({
     ): RestoreSavedPositionResult => {
       isAtBottomRef.current = getDistanceFromBottom(scroller) < AT_BOTTOM_THRESHOLD
       rememberCurrentScrollSnapshot()
+      // We just wrote scrollTop programmatically; the measurement settle that follows must not be
+      // mistaken for a user scroll and open the save gate (see lastProgrammaticScrollAtRef).
+      lastProgrammaticScrollAtRef.current = Date.now()
       debugLog(action, { source, ...data })
       return 'restored'
     }
@@ -1504,8 +1517,15 @@ export function useMessageListScroll({
     // Open the save gate when this is a genuine user scroll: content height UNCHANGED from the
     // previous scroll event (a media/measurement-driven shift changes the height; a wheel / touch /
     // scrollbar-drag does not). Complements the input-event listeners so scrollbar-drag — which
-    // fires no wheel/touch — also counts. Programmatic loop scrolls are excluded.
-    if (!programmaticScroll && prevScrollHeightRef.current === scrollHeight) {
+    // fires no wheel/touch — also counts. Excluded: programmatic loop scrolls AND the brief
+    // post-restore / post-re-pin measurement settle (isProgrammaticScroll's window) — that settle is
+    // height-unchanged too, so without the window a SECOND settle event looked like a scrollbar drag,
+    // opened the gate, and persisted a drifted position that crept older on every re-open. Genuine
+    // user scrolls still open the gate via the input-event listeners / handleWheel, unaffected.
+    if (
+      !isProgrammaticScroll(programmaticScroll, Date.now(), lastProgrammaticScrollAtRef.current) &&
+      prevScrollHeightRef.current === scrollHeight
+    ) {
       userHasScrolledSinceEntryRef.current = true
     }
     prevScrollHeightRef.current = scrollHeight

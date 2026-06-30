@@ -396,5 +396,25 @@ describe('useMessageListScroll saved-position restore', () => {
 
       expect(scrollStateManager.getSavedScrollTop('gate-user')).toBe(320)
     })
+
+    // Regression (the compounding "few px on every reload"): the post-restore SETTLE fires MORE THAN
+    // ONE height-unchanged scroll event. The first only sets prevScrollHeight; the second then matches
+    // it and — no input event, no loop running — looked exactly like a scrollbar drag, opened the save
+    // gate, and persisted the drifted position (→ the reading position creeps older on every re-open).
+    // A pure settle must not save: two settle events with no wheel/touch/key leave the saved position.
+    it('does not save a multi-event settle right after restore (programmatic window)', () => {
+      seedSavedScrollPosition('gate-settle', 200)
+      let handle: HarnessHandle | undefined
+      render(
+        <HookHarness conversationId="gate-settle" ids={['m0', 'm1', 'm2']} onReady={(n) => { handle = n }} />,
+      )
+
+      act(() => {
+        scrollAndFire(handle!, 198)
+        scrollAndFire(handle!, 196)
+      })
+
+      expect(scrollStateManager.getSavedScrollTop('gate-settle')).toBe(200)
+    })
   })
 })
