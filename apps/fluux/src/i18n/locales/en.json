@@ -64,6 +64,7 @@
         "messages": "Messages",
         "rooms": "Rooms",
         "connections": "Connections",
+        "contacts": "Contacts",
         "archive": "Archive",
         "events": "Events",
         "settings": "Settings",
@@ -74,6 +75,11 @@
         "viewProfile": "View profile",
         "resizeHint": "Drag to resize, double-click to reset",
         "dismiss": "Dismiss"
+    },
+    "newMessage": {
+        "title": "New message",
+        "searchPlaceholder": "Search a person or enter a JID",
+        "manageContacts": "Manage contacts"
     },
     "archive": {
         "noArchivedConversations": "No archived conversations"
@@ -120,6 +126,7 @@
     },
     "contacts": {
         "noContacts": "No contacts yet",
+        "requestsHeading": "Requests",
         "online": "Online",
         "offline": "Offline",
         "error": "Error",

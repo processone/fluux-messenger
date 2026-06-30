@@ -64,6 +64,7 @@
         "messages": "Messaġġi",
         "rooms": "Kmamar",
         "connections": "Konnessjonijiet",
+        "contacts": "Kuntatti",
         "archive": "Arkivju",
         "events": "Avvenimenti",
         "settings": "Issettjar",
@@ -74,6 +75,11 @@
         "viewProfile": "Ara profil",
         "resizeHint": "Iġbed biex tibdel id-daqs, ikklikkja darbtejn biex tirrisettja",
         "dismiss": "Warrab"
+    },
+    "newMessage": {
+        "title": "Messaġġ ġdid",
+        "searchPlaceholder": "Fittex persuna jew daħħal JID",
+        "manageContacts": "Immaniġġja l-kuntatti"
     },
     "archive": {
         "noArchivedConversations": "M'hemmx konversazzjonijiet arkivjati"
@@ -185,7 +191,8 @@
             "profile": "Profil",
             "security": "Sigurtà"
         },
-        "actionsMenu": "Aktar azzjonijiet"
+        "actionsMenu": "Aktar azzjonijiet",
+        "requestsHeading": "Talbiet"
     },
     "rooms": {
         "backToRooms": "Lura għall-kmamar",

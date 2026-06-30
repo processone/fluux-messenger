@@ -64,6 +64,7 @@
         "messages": "الرسائل",
         "rooms": "الغرف",
         "connections": "جهات الاتصال",
+        "contacts": "جهات الاتصال",
         "archive": "الأرشيف",
         "events": "الأحداث",
         "settings": "الإعدادات",
@@ -74,6 +75,11 @@
         "viewProfile": "عرض الملف الشخصي",
         "resizeHint": "اسحب لتغيير الحجم، انقر مرتين لإعادة التعيين",
         "dismiss": "تجاهل"
+    },
+    "newMessage": {
+        "title": "رسالة جديدة",
+        "searchPlaceholder": "ابحث عن شخص أو أدخل JID",
+        "manageContacts": "إدارة جهات الاتصال"
     },
     "archive": {
         "noArchivedConversations": "لا توجد محادثات مؤرشفة"
@@ -183,7 +189,8 @@
             "profile": "الملف الشخصي",
             "security": "الأمان"
         },
-        "actionsMenu": "إجراءات أخرى"
+        "actionsMenu": "إجراءات أخرى",
+        "requestsHeading": "طلبات"
     },
     "rooms": {
         "backToRooms": "العودة إلى الغرف",

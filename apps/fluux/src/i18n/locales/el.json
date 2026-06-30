@@ -64,6 +64,7 @@
         "messages": "Μηνύματα",
         "rooms": "Δωμάτια",
         "connections": "Επαφές",
+        "contacts": "Επαφές",
         "archive": "Αρχείο",
         "events": "Συμβάντα",
         "settings": "Ρυθμίσεις",
@@ -74,6 +75,11 @@
         "viewProfile": "Προβολή προφίλ",
         "resizeHint": "Σύρετε για αλλαγή μεγέθους, διπλό κλικ για επαναφορά",
         "dismiss": "Απόρριψη"
+    },
+    "newMessage": {
+        "title": "Νέο μήνυμα",
+        "searchPlaceholder": "Αναζητήστε άτομο ή εισαγάγετε JID",
+        "manageContacts": "Διαχείριση επαφών"
     },
     "archive": {
         "noArchivedConversations": "Δεν υπάρχουν αρχειοθετημένες συνομιλίες"
@@ -184,7 +190,8 @@
             "profile": "Προφίλ",
             "security": "Ασφάλεια"
         },
-        "actionsMenu": "Περισσότερες ενέργειες"
+        "actionsMenu": "Περισσότερες ενέργειες",
+        "requestsHeading": "Αιτήματα"
     },
     "rooms": {
         "backToRooms": "Πίσω στα δωμάτια",

@@ -64,6 +64,7 @@
         "messages": "Viestit",
         "rooms": "Huoneet",
         "connections": "Yhteydet",
+        "contacts": "Yhteystiedot",
         "archive": "Arkisto",
         "events": "Tapahtumat",
         "settings": "Asetukset",
@@ -74,6 +75,11 @@
         "viewProfile": "Näytä profiili",
         "resizeHint": "Vedä muuttaaksesi kokoa, kaksoisnapsauta nollataksesi",
         "dismiss": "Hylkää"
+    },
+    "newMessage": {
+        "title": "Uusi viesti",
+        "searchPlaceholder": "Etsi henkilöä tai syötä JID",
+        "manageContacts": "Hallitse yhteystietoja"
     },
     "archive": {
         "noArchivedConversations": "Ei arkistoituja keskusteluja"
@@ -183,7 +189,8 @@
             "profile": "Profiili",
             "security": "Tietoturva"
         },
-        "actionsMenu": "Lisätoiminnot"
+        "actionsMenu": "Lisätoiminnot",
+        "requestsHeading": "Pyynnöt"
     },
     "rooms": {
         "backToRooms": "Takaisin huoneisiin",

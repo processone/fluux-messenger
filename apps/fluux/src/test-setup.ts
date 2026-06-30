@@ -37,6 +37,16 @@ void i18n.use(initReactI18next).init({
         sidebar: {
           search: 'Search',
           settings: 'Settings',
+          contacts: 'Contacts',
+        },
+        newMessage: {
+          title: 'New message',
+          searchPlaceholder: 'Search a person or enter a JID',
+          manageContacts: 'Manage contacts',
+        },
+        contacts: {
+          addContact: 'Add contact',
+          requestsHeading: 'Requests',
         },
         conversations: {
           backToConversations: 'Back to conversations',

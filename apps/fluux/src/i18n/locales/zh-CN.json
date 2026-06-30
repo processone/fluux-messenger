@@ -64,6 +64,7 @@
         "messages": "消息",
         "rooms": "房间",
         "connections": "连接",
+        "contacts": "联系人",
         "archive": "归档",
         "events": "事件",
         "settings": "设置",
@@ -74,6 +75,11 @@
         "viewProfile": "查看个人资料",
         "resizeHint": "拖动即可调整大小，双击即可重置",
         "dismiss": "关闭"
+    },
+    "newMessage": {
+        "title": "新消息",
+        "searchPlaceholder": "搜索联系人或输入 JID",
+        "manageContacts": "管理联系人"
     },
     "archive": {
         "noArchivedConversations": "没有已归档的对话"
@@ -183,7 +189,8 @@
             "profile": "个人资料",
             "security": "安全"
         },
-        "actionsMenu": "更多操作"
+        "actionsMenu": "更多操作",
+        "requestsHeading": "请求"
     },
     "rooms": {
         "backToRooms": "返回房间列表",

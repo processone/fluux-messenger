@@ -64,6 +64,7 @@
         "messages": "Повідомлення",
         "rooms": "Кімнати",
         "connections": "Контакти",
+        "contacts": "Контакти",
         "archive": "Архів",
         "events": "Події",
         "settings": "Налаштування",
@@ -74,6 +75,11 @@
         "viewProfile": "Переглянути профіль",
         "resizeHint": "Потягніть для зміни розміру, подвійне клацання для скидання",
         "dismiss": "Скасувати"
+    },
+    "newMessage": {
+        "title": "Нове повідомлення",
+        "searchPlaceholder": "Пошук людини або введення JID",
+        "manageContacts": "Управління контактами"
     },
     "archive": {
         "noArchivedConversations": "Немає архівованих розмов"
@@ -183,7 +189,8 @@
             "profile": "Профіль",
             "security": "Безпека"
         },
-        "actionsMenu": "Інші дії"
+        "actionsMenu": "Інші дії",
+        "requestsHeading": "Запити"
     },
     "rooms": {
         "backToRooms": "Назад до кімнат",

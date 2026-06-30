@@ -64,6 +64,7 @@
         "messages": "Meldinger",
         "rooms": "Rom",
         "connections": "Tilkoblinger",
+        "contacts": "Kontakter",
         "archive": "Arkiv",
         "events": "Hendelser",
         "settings": "Innstillinger",
@@ -74,6 +75,11 @@
         "viewProfile": "Vis profil",
         "resizeHint": "Dra for å endre størrelse, dobbeltklikk for å tilbakestille",
         "dismiss": "Avvis"
+    },
+    "newMessage": {
+        "title": "Ny melding",
+        "searchPlaceholder": "Søk etter en person eller skriv inn et JID",
+        "manageContacts": "Administrer kontakter"
     },
     "archive": {
         "noArchivedConversations": "Ingen arkiverte samtaler"
@@ -183,7 +189,8 @@
             "profile": "Profil",
             "security": "Sikkerhet"
         },
-        "actionsMenu": "Flere handlinger"
+        "actionsMenu": "Flere handlinger",
+        "requestsHeading": "Forespørsler"
     },
     "rooms": {
         "backToRooms": "Tilbake til rom",

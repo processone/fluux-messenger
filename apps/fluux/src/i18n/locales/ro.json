@@ -64,6 +64,7 @@
         "messages": "Mesaje",
         "rooms": "Camere",
         "connections": "Conexiuni",
+        "contacts": "Contacte",
         "archive": "Arhivă",
         "events": "Evenimente",
         "settings": "Setări",
@@ -74,6 +75,11 @@
         "viewProfile": "Vezi profil",
         "resizeHint": "Trage pentru a redimensiona, dublu-clic pentru a reseta",
         "dismiss": "Închide"
+    },
+    "newMessage": {
+        "title": "Mesaj nou",
+        "searchPlaceholder": "Căutați o persoană sau introduceți un JID",
+        "manageContacts": "Gestionați contactele"
     },
     "archive": {
         "noArchivedConversations": "Nicio conversație arhivată"
@@ -185,7 +191,8 @@
             "profile": "Profil",
             "security": "Securitate"
         },
-        "actionsMenu": "Mai multe acțiuni"
+        "actionsMenu": "Mai multe acțiuni",
+        "requestsHeading": "Solicitări"
     },
     "rooms": {
         "backToRooms": "Înapoi la camere",

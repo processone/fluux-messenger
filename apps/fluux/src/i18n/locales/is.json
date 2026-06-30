@@ -64,6 +64,7 @@
         "messages": "Skilaboð",
         "rooms": "Herbergi",
         "connections": "Tengingar",
+        "contacts": "Tengiliðir",
         "archive": "Skjalasafn",
         "events": "Atburðir",
         "settings": "Stillingar",
@@ -74,6 +75,11 @@
         "viewProfile": "Skoða prófíl",
         "resizeHint": "Dragðu til að breyta stærð, tvísmelltu til að endurstilla",
         "dismiss": "Hafna"
+    },
+    "newMessage": {
+        "title": "Ný skilaboð",
+        "searchPlaceholder": "Leita að einstaklingi eða slá inn JID",
+        "manageContacts": "Stjórna tengiliðum"
     },
     "archive": {
         "noArchivedConversations": "Engin safnvistuð samtöl"
@@ -183,7 +189,8 @@
             "profile": "Notandasnið",
             "security": "Öryggi"
         },
-        "actionsMenu": "Fleiri aðgerðir"
+        "actionsMenu": "Fleiri aðgerðir",
+        "requestsHeading": "Beiðnir"
     },
     "rooms": {
         "backToRooms": "Til baka í herbergi",

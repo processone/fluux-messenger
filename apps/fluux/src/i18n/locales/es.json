@@ -64,6 +64,7 @@
         "messages": "Mensajes",
         "rooms": "Salas",
         "connections": "Conexiones",
+        "contacts": "Contactos",
         "archive": "Archivo",
         "events": "Eventos",
         "settings": "Ajustes",
@@ -74,6 +75,11 @@
         "viewProfile": "Ver perfil",
         "resizeHint": "Arrastra para redimensionar, doble clic para restablecer",
         "dismiss": "Descartar"
+    },
+    "newMessage": {
+        "title": "Nuevo mensaje",
+        "searchPlaceholder": "Buscar una persona o introducir un JID",
+        "manageContacts": "Gestionar contactos"
     },
     "archive": {
         "noArchivedConversations": "Sin conversaciones archivadas"
@@ -185,7 +191,8 @@
             "profile": "Perfil",
             "security": "Seguridad"
         },
-        "actionsMenu": "Más acciones"
+        "actionsMenu": "Más acciones",
+        "requestsHeading": "Solicitudes"
     },
     "rooms": {
         "backToRooms": "Volver a salas",

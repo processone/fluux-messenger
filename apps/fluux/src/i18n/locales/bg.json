@@ -64,6 +64,7 @@
         "messages": "Съобщения",
         "rooms": "Стаи",
         "connections": "Връзки",
+        "contacts": "Контакти",
         "archive": "Архив",
         "events": "Събития",
         "settings": "Настройки",
@@ -74,6 +75,11 @@
         "viewProfile": "Преглед на профил",
         "resizeHint": "Плъзнете за преоразмеряване, щракнете двукратно за нулиране",
         "dismiss": "Отхвърли"
+    },
+    "newMessage": {
+        "title": "Ново съобщение",
+        "searchPlaceholder": "Търсете лице или въведете JID",
+        "manageContacts": "Управление на контакти"
     },
     "archive": {
         "noArchivedConversations": "Няма архивирани разговори"
@@ -183,7 +189,8 @@
             "profile": "Профил",
             "security": "Сигурност"
         },
-        "actionsMenu": "Още действия"
+        "actionsMenu": "Още действия",
+        "requestsHeading": "Заявки"
     },
     "rooms": {
         "backToRooms": "Назад към стаите",

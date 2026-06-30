@@ -64,6 +64,7 @@
         "messages": "Сообщения",
         "rooms": "Конференции",
         "connections": "Контакты",
+        "contacts": "Контакты",
         "archive": "Архив",
         "events": "События",
         "settings": "Настройки",
@@ -74,6 +75,11 @@
         "viewProfile": "Посмотреть профиль",
         "resizeHint": "Потяните для изменения размера, двойной клик для сброса",
         "dismiss": "Скрыть"
+    },
+    "newMessage": {
+        "title": "Новое сообщение",
+        "searchPlaceholder": "Поиск человека или ввод JID",
+        "manageContacts": "Управление контактами"
     },
     "archive": {
         "noArchivedConversations": "Нет архивированных бесед"
@@ -183,7 +189,8 @@
             "profile": "Профиль",
             "security": "Безопасность"
         },
-        "actionsMenu": "Другие действия"
+        "actionsMenu": "Другие действия",
+        "requestsHeading": "Запросы"
     },
     "rooms": {
         "backToRooms": "Назад к комнатам",

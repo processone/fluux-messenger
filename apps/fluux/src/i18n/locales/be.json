@@ -64,6 +64,7 @@
         "messages": "Паведамленні",
         "rooms": "Пакоі",
         "connections": "Кантакты",
+        "contacts": "Кантакты",
         "archive": "Архіў",
         "events": "Падзеі",
         "settings": "Налады",
@@ -74,6 +75,11 @@
         "viewProfile": "Праглядзець профіль",
         "resizeHint": "Пцягніце для змены памеру, падвойнае пстрык для скідання",
         "dismiss": "Адхіліць"
+    },
+    "newMessage": {
+        "title": "Новае паведамленне",
+        "searchPlaceholder": "Пошук асобы або ўвод JID",
+        "manageContacts": "Кіраванне кантактамі"
     },
     "archive": {
         "noArchivedConversations": "Няма архіваваных размоў"
@@ -183,7 +189,8 @@
             "profile": "Профіль",
             "security": "Бяспека"
         },
-        "actionsMenu": "Іншыя дзеянні"
+        "actionsMenu": "Іншыя дзеянні",
+        "requestsHeading": "Запыты"
     },
     "rooms": {
         "backToRooms": "Назад да пакояў",

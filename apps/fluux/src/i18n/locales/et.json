@@ -64,6 +64,7 @@
         "messages": "Sõnumid",
         "rooms": "Toad",
         "connections": "Ühendused",
+        "contacts": "Kontaktid",
         "archive": "Arhiiv",
         "events": "Sündmused",
         "settings": "Seaded",
@@ -74,6 +75,11 @@
         "viewProfile": "Vaata profiili",
         "resizeHint": "Lohista suuruse muutmiseks, topeltklõps lähtestamiseks",
         "dismiss": "Loobu"
+    },
+    "newMessage": {
+        "title": "Uus sõnum",
+        "searchPlaceholder": "Otsi isikut või sisesta JID",
+        "manageContacts": "Halda kontakte"
     },
     "archive": {
         "noArchivedConversations": "Arhiveeritud vestlusi pole"
@@ -185,7 +191,8 @@
             "profile": "Profiil",
             "security": "Turvalisus"
         },
-        "actionsMenu": "Rohkem toiminguid"
+        "actionsMenu": "Rohkem toiminguid",
+        "requestsHeading": "Taotlused"
     },
     "rooms": {
         "backToRooms": "Tagasi tubade juurde",

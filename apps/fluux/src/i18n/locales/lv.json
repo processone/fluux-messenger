@@ -64,6 +64,7 @@
         "messages": "Ziņojumi",
         "rooms": "Istabas",
         "connections": "Savienojumi",
+        "contacts": "Kontakti",
         "archive": "Arhīvs",
         "events": "Notikumi",
         "settings": "Iestatījumi",
@@ -74,6 +75,11 @@
         "viewProfile": "Skatīt profilu",
         "resizeHint": "Velciet, lai mainītu izmēru, dubultklikšķis, lai atiestatītu",
         "dismiss": "Noraidīt"
+    },
+    "newMessage": {
+        "title": "Jauna ziņa",
+        "searchPlaceholder": "Meklēt personu vai ievadīt JID",
+        "manageContacts": "Pārvaldīt kontaktus"
     },
     "archive": {
         "noArchivedConversations": "Nav arhivētu sarunu"
@@ -184,7 +190,8 @@
             "profile": "Profils",
             "security": "Drošība"
         },
-        "actionsMenu": "Vairāk darbību"
+        "actionsMenu": "Vairāk darbību",
+        "requestsHeading": "Pieprasījumi"
     },
     "rooms": {
         "backToRooms": "Atpakaļ pie istabām",

@@ -64,6 +64,7 @@
         "messages": "Správy",
         "rooms": "Miestnosti",
         "connections": "Pripojenia",
+        "contacts": "Kontakty",
         "archive": "Archív",
         "events": "Udalosti",
         "settings": "Nastavenia",
@@ -74,6 +75,11 @@
         "viewProfile": "Zobraziť profil",
         "resizeHint": "Potiahnutím zmeníte veľkosť, dvojklikom obnovíte",
         "dismiss": "Zamietnuť"
+    },
+    "newMessage": {
+        "title": "Nová správa",
+        "searchPlaceholder": "Hľadajte osobu alebo zadajte JID",
+        "manageContacts": "Správa kontaktov"
     },
     "archive": {
         "noArchivedConversations": "Žiadne archivované konverzácie"
@@ -184,7 +190,8 @@
             "profile": "Profil",
             "security": "Zabezpečenie"
         },
-        "actionsMenu": "Ďalšie akcie"
+        "actionsMenu": "Ďalšie akcie",
+        "requestsHeading": "Žiadosti"
     },
     "rooms": {
         "backToRooms": "Späť do miestností",

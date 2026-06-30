@@ -64,6 +64,7 @@
         "messages": "הודעות",
         "rooms": "חדרים",
         "connections": "אנשי קשר",
+        "contacts": "אנשי קשר",
         "archive": "ארכיון",
         "events": "אירועים",
         "settings": "הגדרות",
@@ -74,6 +75,11 @@
         "viewProfile": "צפה בפרופיל",
         "resizeHint": "גרור לשינוי גודל, לחיצה כפולה לאיפוס",
         "dismiss": "סגור"
+    },
+    "newMessage": {
+        "title": "הודעה חדשה",
+        "searchPlaceholder": "חפש אדם או הזן JID",
+        "manageContacts": "ניהול אנשי קשר"
     },
     "archive": {
         "noArchivedConversations": "אין שיחות בארכיון"
@@ -183,7 +189,8 @@
             "profile": "פרופיל",
             "security": "אבטחה"
         },
-        "actionsMenu": "פעולות נוספות"
+        "actionsMenu": "פעולות נוספות",
+        "requestsHeading": "בקשות"
     },
     "rooms": {
         "backToRooms": "חזרה לחדרים",

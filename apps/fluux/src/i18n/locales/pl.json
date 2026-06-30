@@ -64,6 +64,7 @@
         "messages": "Wiadomości",
         "rooms": "Pokoje",
         "connections": "Kontakty",
+        "contacts": "Kontakty",
         "archive": "Archiwum",
         "events": "Zdarzenia",
         "settings": "Ustawienia",
@@ -74,6 +75,11 @@
         "viewProfile": "Zobacz profil",
         "resizeHint": "Przeciągnij, aby zmienić rozmiar, kliknij dwukrotnie, aby zresetować",
         "dismiss": "Odrzuć"
+    },
+    "newMessage": {
+        "title": "Nowa wiadomość",
+        "searchPlaceholder": "Wyszukaj osobę lub wpisz JID",
+        "manageContacts": "Zarządzaj kontaktami"
     },
     "archive": {
         "noArchivedConversations": "Brak zarchiwizowanych rozmów"
@@ -185,7 +191,8 @@
             "profile": "Profil",
             "security": "Bezpieczeństwo"
         },
-        "actionsMenu": "Więcej akcji"
+        "actionsMenu": "Więcej akcji",
+        "requestsHeading": "Prośby"
     },
     "rooms": {
         "backToRooms": "Wróć do pokojów",

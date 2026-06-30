@@ -64,6 +64,7 @@
         "messages": "Poruke",
         "rooms": "Sobe",
         "connections": "Veze",
+        "contacts": "Kontakti",
         "archive": "Arhiva",
         "events": "Događaji",
         "settings": "Postavke",
@@ -74,6 +75,11 @@
         "viewProfile": "Prikaži profil",
         "resizeHint": "Povucite za promjenu veličine, dvostruki klik za resetiranje",
         "dismiss": "Odbaci"
+    },
+    "newMessage": {
+        "title": "Nova poruka",
+        "searchPlaceholder": "Pretražite osobu ili unesite JID",
+        "manageContacts": "Upravljanje kontaktima"
     },
     "archive": {
         "noArchivedConversations": "Nema arhiviranih razgovora"
@@ -183,7 +189,8 @@
             "profile": "Profil",
             "security": "Sigurnost"
         },
-        "actionsMenu": "Više radnji"
+        "actionsMenu": "Više radnji",
+        "requestsHeading": "Zahtjevi"
     },
     "rooms": {
         "backToRooms": "Natrag na sobe",

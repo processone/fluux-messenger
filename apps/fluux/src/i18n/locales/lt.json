@@ -64,6 +64,7 @@
         "messages": "Žinutės",
         "rooms": "Kambariai",
         "connections": "Ryšiai",
+        "contacts": "Kontaktai",
         "archive": "Archyvas",
         "events": "Įvykiai",
         "settings": "Nustatymai",
@@ -74,6 +75,11 @@
         "viewProfile": "Peržiūrėti profilį",
         "resizeHint": "Vilkite, kad pakeistumėte dydį, dukart spustelėkite, kad atstatytumėte",
         "dismiss": "Atmesti"
+    },
+    "newMessage": {
+        "title": "Naujas pranešimas",
+        "searchPlaceholder": "Ieškoti asmens arba įvesti JID",
+        "manageContacts": "Tvarkyti kontaktus"
     },
     "archive": {
         "noArchivedConversations": "Nėra archyvuotų pokalbių"
@@ -183,7 +189,8 @@
             "profile": "Profilis",
             "security": "Saugumas"
         },
-        "actionsMenu": "Daugiau veiksmų"
+        "actionsMenu": "Daugiau veiksmų",
+        "requestsHeading": "Prašymai"
     },
     "rooms": {
         "backToRooms": "Grįžti prie kambarių",

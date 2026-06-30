@@ -64,6 +64,7 @@
         "messages": "Üzenetek",
         "rooms": "Szobák",
         "connections": "Kapcsolatok",
+        "contacts": "Névjegyek",
         "archive": "Archívum",
         "events": "Események",
         "settings": "Beállítások",
@@ -74,6 +75,11 @@
         "viewProfile": "Profil megtekintése",
         "resizeHint": "Húzza az átméretezéshez, dupla kattintás a visszaállításhoz",
         "dismiss": "Elvetés"
+    },
+    "newMessage": {
+        "title": "Új üzenet",
+        "searchPlaceholder": "Keressen személyt vagy adjon meg JID-t",
+        "manageContacts": "Névjegyek kezelése"
     },
     "archive": {
         "noArchivedConversations": "Nincsenek archivált beszélgetések"
@@ -183,7 +189,8 @@
             "profile": "Profil",
             "security": "Biztonság"
         },
-        "actionsMenu": "További műveletek"
+        "actionsMenu": "További műveletek",
+        "requestsHeading": "Kérések"
     },
     "rooms": {
         "backToRooms": "Vissza a szobákhoz",

@@ -64,6 +64,7 @@
         "messages": "Meddelanden",
         "rooms": "Rum",
         "connections": "Anslutningar",
+        "contacts": "Kontakter",
         "archive": "Arkiv",
         "events": "Händelser",
         "settings": "Inställningar",
@@ -74,6 +75,11 @@
         "viewProfile": "Visa profil",
         "resizeHint": "Dra för att ändra storlek, dubbelklicka för att återställa",
         "dismiss": "Avfärda"
+    },
+    "newMessage": {
+        "title": "Nytt meddelande",
+        "searchPlaceholder": "Sök efter en person eller ange ett JID",
+        "manageContacts": "Hantera kontakter"
     },
     "archive": {
         "noArchivedConversations": "Inga arkiverade konversationer"
@@ -183,7 +189,8 @@
             "profile": "Profil",
             "security": "Säkerhet"
         },
-        "actionsMenu": "Fler åtgärder"
+        "actionsMenu": "Fler åtgärder",
+        "requestsHeading": "Förfrågningar"
     },
     "rooms": {
         "backToRooms": "Tillbaka till rum",

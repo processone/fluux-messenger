@@ -64,6 +64,7 @@
         "messages": "Missatges",
         "rooms": "Sales",
         "connections": "Connexions",
+        "contacts": "Contactes",
         "archive": "Arxiu",
         "events": "Esdeveniments",
         "settings": "Configuració",
@@ -74,6 +75,11 @@
         "viewProfile": "Veure perfil",
         "resizeHint": "Arrossega per redimensionar, doble clic per reiniciar",
         "dismiss": "Descarta"
+    },
+    "newMessage": {
+        "title": "Missatge nou",
+        "searchPlaceholder": "Cerqueu una persona o introduïu un JID",
+        "manageContacts": "Gestionar contactes"
     },
     "archive": {
         "noArchivedConversations": "No hi ha converses arxivades"
@@ -185,7 +191,8 @@
             "profile": "Perfil",
             "security": "Seguretat"
         },
-        "actionsMenu": "Més accions"
+        "actionsMenu": "Més accions",
+        "requestsHeading": "Sol·licituds"
     },
     "rooms": {
         "backToRooms": "Torna a les sales",

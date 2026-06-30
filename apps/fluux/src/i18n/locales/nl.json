@@ -64,6 +64,7 @@
         "messages": "Berichten",
         "rooms": "Groepen",
         "connections": "Contacten",
+        "contacts": "Contacten",
         "archive": "Archief",
         "events": "Gebeurtenissen",
         "settings": "Instellingen",
@@ -74,6 +75,11 @@
         "viewProfile": "Profiel bekijken",
         "resizeHint": "Sleep om te verkleinen, dubbelklik om te herstellen",
         "dismiss": "Sluiten"
+    },
+    "newMessage": {
+        "title": "Nieuw bericht",
+        "searchPlaceholder": "Zoek een persoon of voer een JID in",
+        "manageContacts": "Contacten beheren"
     },
     "archive": {
         "noArchivedConversations": "Geen gearchiveerde gesprekken"
@@ -183,7 +189,8 @@
             "profile": "Profiel",
             "security": "Beveiliging"
         },
-        "actionsMenu": "Meer acties"
+        "actionsMenu": "Meer acties",
+        "requestsHeading": "Verzoeken"
     },
     "rooms": {
         "backToRooms": "Terug naar kamers",

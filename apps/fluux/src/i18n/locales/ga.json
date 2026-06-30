@@ -64,6 +64,7 @@
         "messages": "Teachtaireachtaí",
         "rooms": "Seomraí",
         "connections": "Ceangail",
+        "contacts": "Teagmhálacha",
         "archive": "Cartlann",
         "events": "Imeachtaí",
         "settings": "Socruithe",
@@ -74,6 +75,11 @@
         "viewProfile": "Féach ar phróifíl",
         "resizeHint": "Tarraing chun méid a athrú, cliceáil faoi dhó chun athshocrú",
         "dismiss": "Díbir"
+    },
+    "newMessage": {
+        "title": "Teachtaireacht nua",
+        "searchPlaceholder": "Cuardaigh duine nó cuir isteach JID",
+        "manageContacts": "Bainistigh teagmhálacha"
     },
     "archive": {
         "noArchivedConversations": "Níl aon chomhráite cartlannaithe"
@@ -183,7 +189,8 @@
             "profile": "Próifíl",
             "security": "Slándáil"
         },
-        "actionsMenu": "Tuilleadh gníomhartha"
+        "actionsMenu": "Tuilleadh gníomhartha",
+        "requestsHeading": "Iarratais"
     },
     "rooms": {
         "backToRooms": "Ar ais go seomraí",

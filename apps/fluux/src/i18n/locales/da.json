@@ -64,6 +64,7 @@
         "messages": "Beskeder",
         "rooms": "Rum",
         "connections": "Forbindelser",
+        "contacts": "Kontakter",
         "archive": "Arkiv",
         "events": "Begivenheder",
         "settings": "Indstillinger",
@@ -74,6 +75,11 @@
         "viewProfile": "Se profil",
         "resizeHint": "Træk for at ændre størrelse, dobbeltklik for at nulstille",
         "dismiss": "Afvis"
+    },
+    "newMessage": {
+        "title": "Ny besked",
+        "searchPlaceholder": "Søg efter en person eller indtast et JID",
+        "manageContacts": "Administrer kontakter"
     },
     "archive": {
         "noArchivedConversations": "Ingen arkiverede samtaler"
@@ -183,7 +189,8 @@
             "profile": "Profil",
             "security": "Sikkerhed"
         },
-        "actionsMenu": "Flere handlinger"
+        "actionsMenu": "Flere handlinger",
+        "requestsHeading": "Anmodninger"
     },
     "rooms": {
         "backToRooms": "Tilbage til rum",
