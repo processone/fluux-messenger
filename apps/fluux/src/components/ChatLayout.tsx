@@ -854,6 +854,7 @@ function ChatLayoutContent() {
           <Sidebar
             onSelectContact={handleSelectContact}
             onStartChat={handleStartConversation}
+            onStartChatWithJid={handleStartChatWithJid}
             onManageUser={handleManageUser}
             adminCategory={adminCategory}
             onAdminCategoryChange={handleAdminCategoryChange}

@@ -18,6 +18,7 @@ import { Tooltip } from './Tooltip'
 import { AddContactModal } from './AddContactModal'
 import { CreateRoomModal } from './CreateRoomModal'
 import { CreateQuickChatModal } from './CreateQuickChatModal'
+import { NewMessageModal } from './NewMessageModal'
 import { SettingsSidebar, type SettingsCategory, DEFAULT_SETTINGS_CATEGORY } from './settings-components'
 import {
   MessageCircle,
@@ -66,6 +67,7 @@ export type { SidebarView }
 interface SidebarProps {
   onSelectContact?: (contact: Contact) => void
   onStartChat?: (contact: Contact) => void
+  onStartChatWithJid?: (jid: string) => void
   onManageUser?: (jid: string) => void
   adminCategory?: AdminCategory | null
   onAdminCategoryChange?: (category: AdminCategory | null) => void
@@ -77,11 +79,11 @@ interface SidebarProps {
   onViewChange: (view: SidebarView) => void
 }
 
-export function Sidebar({ onSelectContact, onStartChat, onManageUser, adminCategory, onAdminCategoryChange, sidebarListRef, activeContactJid, onViewChange }: SidebarProps) {
+export function Sidebar({ onSelectContact, onStartChat, onStartChatWithJid, onManageUser, adminCategory, onAdminCategoryChange, sidebarListRef, activeContactJid, onViewChange }: SidebarProps) {
   detectRenderLoop('Sidebar')
   const { t } = useTranslation()
   // Get current view from URL
-  const { sidebarView, settingsCategory, navigateToSettings } = useRouteSync()
+  const { sidebarView, settingsCategory, navigateToSettings, navigateToContacts } = useRouteSync()
   // Use focused selectors instead of useConnection() to avoid re-renders when unrelated values change
   // (e.g., ownResources updates shouldn't re-render the entire sidebar)
   const jid = useConnectionStore((s) => s.jid)
@@ -126,6 +128,7 @@ export function Sidebar({ onSelectContact, onStartChat, onManageUser, adminCateg
   // shortcut help) open/close. Actions are stable store methods.
   const showQuickChat = useModalStore((s) => s.quickChat)
   const showAddContact = useModalStore((s) => s.addContact)
+  const showNewMessage = useModalStore((s) => s.newMessage)
   const showPresenceMenu = useModalStore((s) => s.presenceMenu)
   const modalOpen = useModalStore((s) => s.open)
   const modalClose = useModalStore((s) => s.close)
@@ -361,6 +364,18 @@ export function Sidebar({ onSelectContact, onStartChat, onManageUser, adminCateg
               )}
             </div>
           )}
+          {sidebarView === 'messages' && (
+            <Tooltip content={t('newMessage.title')} position="bottom">
+              <button
+                type="button"
+                onClick={() => modalOpen('newMessage')}
+                aria-label={t('newMessage.title')}
+                className="ms-auto p-1 text-fluux-muted hover:text-fluux-text flex items-center"
+              >
+                <Plus className="size-5" />
+              </button>
+            </Tooltip>
+          )}
           {sidebarView === 'rooms' && (
             <div className="relative ms-auto" ref={roomDropdownRef}>
               <Tooltip content={t('sidebar.joinRoom')} position="bottom">
@@ -528,6 +543,16 @@ export function Sidebar({ onSelectContact, onStartChat, onManageUser, adminCateg
       {/* Add Contact Modal */}
       {showAddContact && (
         <AddContactModal onClose={() => modalClose('addContact')} />
+      )}
+
+      {/* New Message Modal */}
+      {showNewMessage && (
+        <NewMessageModal
+          onClose={() => modalClose('newMessage')}
+          onPick={(jid) => onStartChatWithJid?.(jid)}
+          onAddContact={() => { modalClose('newMessage'); modalOpen('addContact') }}
+          onManageContacts={() => navigateToContacts()}
+        />
       )}
 
       {/* Create Room Modal */}
