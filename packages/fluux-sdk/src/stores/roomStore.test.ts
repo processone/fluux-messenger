@@ -1799,6 +1799,42 @@ describe('roomStore', () => {
 
       expect(roomStore.getState().activeRoomJid).toBe('fast@conference.example.com')
     })
+
+    it('flags activationPending while the cache read is in flight, then clears it', async () => {
+      const roomJid = 'test@conference.example.com'
+      roomStore.getState().addRoom(createRoom(roomJid))
+
+      // Hold the cache read open so we can observe the in-flight window — this is
+      // the gap during which ChatLayout would otherwise flash the empty state.
+      let resolveRead: (value: RoomMessage[]) => void = () => {}
+      vi.mocked(messageCache.getRoomMessages).mockReturnValue(
+        new Promise((resolve) => { resolveRead = resolve })
+      )
+
+      expect(roomStore.getState().activationPending).toBe(false)
+
+      const activation = roomStore.getState().activateRoom(roomJid)
+
+      // Synchronously after the call: read is in flight, active room not set yet
+      expect(roomStore.getState().activationPending).toBe(true)
+      expect(roomStore.getState().activeRoomJid).toBeNull()
+
+      resolveRead([])
+      await activation
+
+      // Once the active room lands the flag clears, atomically with activation
+      expect(roomStore.getState().activationPending).toBe(false)
+      expect(roomStore.getState().activeRoomJid).toBe(roomJid)
+    })
+
+    it('does not flag activationPending when deactivating with null', async () => {
+      roomStore.setState({ activeRoomJid: 'test@conference.example.com' })
+
+      await roomStore.getState().activateRoom(null)
+
+      expect(roomStore.getState().activationPending).toBe(false)
+      expect(roomStore.getState().activeRoomJid).toBeNull()
+    })
   })
 
   describe('activeRoom', () => {
