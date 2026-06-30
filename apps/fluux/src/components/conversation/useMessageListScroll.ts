@@ -162,21 +162,34 @@ const clamp01 = (n: number) => (n < 0 ? 0 : n > 1 ? 1 : n)
 function findBottomAnchor(scroller: HTMLElement): ScrollAnchor | null {
   const rows = scroller.querySelectorAll('.message-row[data-message-id]')
   if (rows.length === 0) return null
-  const viewportBottom = scroller.scrollTop + scroller.clientHeight
-  // Bottom-most row that STARTS above the viewport bottom (greatest offsetTop < viewportBottom).
+  // Measure with getBoundingClientRect (relative to the scroller), NOT offsetTop. Under
+  // virtualization each `.message-row` sits inside its own `position:absolute` `[data-index]`
+  // wrapper, which is the row's offsetParent — so `offsetTop` is ~0 for EVERY row and the old
+  // "greatest offsetTop" pick always returned the top-most MOUNTED row instead of the bottom-most
+  // visible one. That wrong anchor was saved/restored (masked by consistency-only tests) and is a
+  // root cause of the conversation-switch "drifts back in time" report. Bounding rects reflect the
+  // real on-screen position for both the virtualized and the normal-flow paths.
+  const sTop = scroller.getBoundingClientRect().top
+  const viewportH = scroller.clientHeight
+  // Bottom-most row whose TOP is still within the viewport (greatest scroller-relative top < height).
   let best: HTMLElement | null = null
+  let bestTop = -Infinity
   for (const node of rows) {
     const el = node as HTMLElement
     if (el.offsetHeight <= 0) continue
-    if (el.offsetTop < viewportBottom && (best === null || el.offsetTop > best.offsetTop)) {
+    const top = el.getBoundingClientRect().top - sTop
+    if (top < viewportH && top > bestTop) {
       best = el
+      bestTop = top
     }
   }
   if (best === null) best = rows[rows.length - 1] as HTMLElement
   const messageId = best.dataset.messageId
   if (!messageId) return null
-  const height = best.offsetHeight || 1
-  return { messageId, fraction: clamp01((viewportBottom - best.offsetTop) / height) }
+  const rect = best.getBoundingClientRect()
+  const height = rect.height || 1
+  const topRel = rect.top - sTop
+  return { messageId, fraction: clamp01((viewportH - topRel) / height) }
 }
 
 /**
@@ -389,7 +402,7 @@ export function useMessageListScroll({
   // Media load batching (for images, videos, link previews)
   // When multiple media elements load in quick succession, we batch them and apply
   // a single scroll correction at the end to avoid jitter.
-  const mediaLoadSnapshotRef = useRef<{ wasAtBottom: boolean; userScrolled: boolean } | null>(null)
+  const mediaLoadSnapshotRef = useRef<{ wasAtBottom: boolean; userScrolled: boolean; anchor: ScrollAnchor | null } | null>(null)
   const mediaLoadDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Last scroll data (for saving on conversation switch)
@@ -1325,9 +1338,16 @@ export function useMessageListScroll({
     const scroller = scrollerRef.current
     if (!scroller) return
 
-    // Capture snapshot on first load in batch (user's intent at start of batch)
+    // Capture snapshot on first load in batch (user's intent at start of batch). Also snapshot the
+    // bottom-most-visible reading anchor BEFORE the media grows the layout, so a scrolled-up reader
+    // can be re-pinned to it once the batch settles (media above the viewport would otherwise push
+    // their position down/out — the conversation-switch "drifts back in time" bug).
     if (!mediaLoadSnapshotRef.current) {
-      mediaLoadSnapshotRef.current = { wasAtBottom: isAtBottomRef.current, userScrolled: false }
+      mediaLoadSnapshotRef.current = {
+        wasAtBottom: isAtBottomRef.current,
+        userScrolled: false,
+        anchor: findBottomAnchor(scroller),
+      }
       debugLog('MEDIA LOAD: batch started', {
         wasAtBottom: isAtBottomRef.current,
         scrollTop: scroller.scrollTop,
@@ -1344,7 +1364,7 @@ export function useMessageListScroll({
       const currentScroller = scrollerRef.current
       if (!currentScroller || !mediaLoadSnapshotRef.current) return
 
-      const { wasAtBottom, userScrolled } = mediaLoadSnapshotRef.current
+      const { wasAtBottom, userScrolled, anchor } = mediaLoadSnapshotRef.current
 
       if (wasAtBottom) {
         if (!userScrolled) {
@@ -1362,9 +1382,21 @@ export function useMessageListScroll({
             userScrolled,
           })
         }
-      } else {
-        debugLog('MEDIA LOAD: batch complete, was not at bottom', {
+      } else if (!userScrolled && anchor) {
+        // Scrolled up and the user did NOT genuinely scroll during the batch: media that decoded
+        // ABOVE the viewport grew the content and pushed the reading position down/out. Re-pin to the
+        // anchor captured BEFORE the growth so the reader stays put (the conversation-switch + media
+        // "drifts back in time" bug). Mirrors the at-bottom reassertBottom, but for a held position.
+        debugLog('MEDIA LOAD: batch complete, re-anchoring scrolled-up position', {
           wasAtBottom,
+          anchorId: anchor.messageId,
+        })
+        if (virtualizerRef.current) pinVirtualizedAnchor(anchor, conversationId)
+        else restoreToAnchor(currentScroller, anchor)
+      } else {
+        debugLog('MEDIA LOAD: batch complete, was not at bottom (user scrolled / no anchor)', {
+          wasAtBottom,
+          userScrolled,
         })
       }
 
@@ -1372,7 +1404,7 @@ export function useMessageListScroll({
       mediaLoadSnapshotRef.current = null
       mediaLoadDebounceRef.current = null
     }, MEDIA_LOAD_DEBOUNCE_MS)
-  }, [isAtBottomRef, reassertBottom])
+  }, [isAtBottomRef, reassertBottom, pinVirtualizedAnchor, conversationId])
 
   // ==========================================================================
   // SCROLL EVENT HANDLER
@@ -1417,8 +1449,12 @@ export function useMessageListScroll({
       isAtBottomRef.current = distFromBottom < AT_BOTTOM_THRESHOLD
     }
 
-    // Track user scroll during media load batch
-    if (mediaLoadSnapshotRef.current) {
+    // Track user scroll during a media load batch — but ONLY a GENUINE user scroll, not the
+    // measurement/growth-driven scroll events the media itself produces (same height-unchanged +
+    // not-programmatic discriminator the save gate below uses). A growth event marking userScrolled
+    // is exactly what made the media handler "respect" a position the user never moved — leaving the
+    // view drifted (at the bottom: no re-pin; scrolled up: no re-anchor).
+    if (mediaLoadSnapshotRef.current && !programmaticScroll && prevScrollHeightRef.current === scrollHeight) {
       mediaLoadSnapshotRef.current.userScrolled = true
     }
 

@@ -177,17 +177,38 @@ async function findBottomVisibleMessage(page: Page): Promise<{ id: string; topIn
     const scroller = document.querySelector('[data-message-list]') as HTMLElement | null
     if (!scroller) return null
     const sRect = scroller.getBoundingClientRect()
-    const viewportBottom = scroller.scrollTop + scroller.clientHeight
+    // Measure with getBoundingClientRect, NOT offsetTop: under virtualization every `.message-row`
+    // sits in its own `position:absolute` `[data-index]` wrapper, so `offsetTop` is ~0 for all rows
+    // and the old "greatest offsetTop" pick returned the top-most MOUNTED row, not the bottom-visible
+    // one. This MUST mirror the production findBottomAnchor (which uses rects) or the saved anchor
+    // and the test's captured anchor diverge (the invariant-8/9 inconsistency).
+    const viewportH = scroller.clientHeight
     const rows = Array.from(scroller.querySelectorAll('.message-row[data-message-id]')) as HTMLElement[]
     let best: HTMLElement | null = null
+    let bestTop = -Infinity
     for (const el of rows) {
       if (el.offsetHeight <= 0) continue
-      if (el.offsetTop < viewportBottom && (best === null || el.offsetTop > best.offsetTop)) best = el
+      const top = el.getBoundingClientRect().top - sRect.top
+      if (top < viewportH && top > bestTop) { best = el; bestTop = top }
     }
     if (!best && rows.length) best = rows[rows.length - 1]
     if (!best) return null
     return { id: best.dataset.messageId!, topInView: best.getBoundingClientRect().top - sRect.top }
   })
+}
+
+/**
+ * Trailing message index of a stress-room id ("stress-0-33" → 33), or NaN. Used to measure how far
+ * a restored bottom-anchor drifts across re-opens. The restored anchor is now the TRUE bottom-visible
+ * row (see findBottomAnchor's rect fix), which can legitimately settle by ≤1 row as estimated heights
+ * resolve — so we bound the SPREAD rather than demand an exact match. The real regression is a
+ * monotonic creep older every open (spread grows with each re-open); that still fails this bound, and
+ * the distFromBottom guard alongside it is the stronger measure.
+ */
+function stressMsgIndex(id: string | null): number {
+  if (!id) return NaN
+  const m = /-(\d+)$/.exec(id)
+  return m ? Number(m[1]) : NaN
 }
 
 /** Get a message row's current viewport offset-from-top (null if not mounted). */
@@ -751,11 +772,15 @@ test.describe('Virtualization scroll invariants', () => {
       dists.push(await distFromBottom())
     }
 
-    // The bug made each re-open land on an OLDER anchor message; the fix keeps it identical.
+    // The bug made each re-open land on a progressively OLDER anchor (monotonic creep). The fix keeps
+    // it within a ≤1-message measurement settle (the now-correct bottom-visible anchor can resolve one
+    // row as estimated heights settle); creep grows the spread with every open and still fails here.
+    expect(anchors.every((a) => a !== null), `every re-open must capture an anchor (${JSON.stringify(anchors)})`).toBe(true)
+    const anchorSpread = Math.max(...anchors.map(stressMsgIndex)) - Math.min(...anchors.map(stressMsgIndex))
     expect(
-      anchors.every((a) => a !== null && a === anchors[0]),
-      `restored anchor drifted older across re-opens (bottom-visible per open: ${JSON.stringify(anchors)}) — anchor not re-pinned`,
-    ).toBe(true)
+      anchorSpread,
+      `restored anchor drifted ${anchorSpread} messages across re-opens (bottom-visible per open: ${JSON.stringify(anchors)}) — anchor not re-pinned`,
+    ).toBeLessThanOrEqual(1)
     // …and the restored distance-from-bottom is stable open-to-open (the bug grew it ~1000–2000px
     // each time). 200px covers media/measurement settle between opens.
     expect(
@@ -817,10 +842,12 @@ test.describe('Virtualization scroll invariants', () => {
       dists.push(await distFromBottom())
     }
 
+    expect(anchors.every((a) => a !== null), `every re-open must capture an anchor (${JSON.stringify(anchors)})`).toBe(true)
+    const tallAnchorSpread = Math.max(...anchors.map(stressMsgIndex)) - Math.min(...anchors.map(stressMsgIndex))
     expect(
-      anchors.every((a) => a !== null && a === anchors[0]),
-      `restored anchor drifted older across re-opens with tall rows (bottom-visible per open: ${JSON.stringify(anchors)}) — anchor not re-pinned / drifted position saved`,
-    ).toBe(true)
+      tallAnchorSpread,
+      `restored anchor drifted ${tallAnchorSpread} messages across re-opens with tall rows (bottom-visible per open: ${JSON.stringify(anchors)}) — anchor not re-pinned / drifted position saved`,
+    ).toBeLessThanOrEqual(1)
     expect(
       Math.max(...dists) - Math.min(...dists),
       `restored position drifted across re-opens with tall rows (distFromBottom: ${JSON.stringify(dists)})`,
@@ -1381,5 +1408,85 @@ test.describe('Send-stick diagnostic (1:1)', () => {
 
     expect(after.lastVisible, 'the reconciled last message must be fully visible at the bottom').toBe(true)
     expect(after.distFromBottom ?? 999, 'the view must be pinned to the bottom after reconcile').toBeLessThan(AT_BOTTOM_OK_PX)
+  })
+})
+
+// ── 11: Media decoding above a scrolled-up viewport must not drift the reading position ──────────
+//
+// The reported bug (real WebKitGTK trace): switch INTO a conversation, the saved scrolled-up anchor
+// restores, then images ABOVE the viewport decode AFTER the ~1s restore re-assert window closes.
+// That growth pushes the reader's content down/out ("drifts back in time") and the media-load
+// handler's not-at-bottom branch did nothing to compensate. Demo images reserve space (width/height
+// present) so they can't reproduce it; we MODEL the late decode deterministically: fire a media
+// batch (handleMediaLoad) to snapshot the reading anchor, then grow a mounted row ABOVE the viewport
+// (as a decoded image would) and let the debounced batch settle. RED before the fix (anchor drifts
+// by the growth); GREEN once the handler re-anchors the scrolled-up reading position.
+test.describe('Media-growth drift while scrolled up', () => {
+  test('invariant-11: media decode above a scrolled-up viewport keeps the reading anchor fixed', async ({ page }) => {
+    const trace: string[] = []
+    page.on('console', (m) => { const t = m.text(); if (t.includes('[Scroll]')) trace.push(t) })
+    await loadDemo(page)
+    await page.evaluate(() => { (window as any).__fluuxScrollDebug?.(true) }) // eslint-disable-line @typescript-eslint/no-explicit-any
+    await navigateToStressRoom(page)
+
+    // Scroll UP off the bottom with real wheel so the virtualizer windows and there is content both
+    // above and below (mirrors invariant-9's reliable scroll-up).
+    const box = await page.locator('[data-message-list]').first().boundingBox()
+    if (box) await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+    await page.mouse.wheel(0, -2500)
+    await page.waitForTimeout(700)
+
+    const distFromBottom = () => page.evaluate(() => {
+      const s = document.querySelector('[data-message-list]') as HTMLElement | null
+      return s ? Math.round(s.scrollHeight - s.scrollTop - s.clientHeight) : -1
+    })
+    expect(await distFromBottom(), 'precondition: must be scrolled up off the bottom').toBeGreaterThan(AT_BOTTOM_OK_PX)
+
+    // Track a message in the LOWER part of the viewport; grow a row in the UPPER part (content above
+    // it). Both stay mounted through the small compensation, so the CSS growth isn't lost to an
+    // unmount (a real decoded image keeps its size; transient inline CSS would not). Measured by
+    // bounding rect (the offsetTop-based findBottomVisibleMessage is ambiguous under virtualization).
+    const visibleRows = () => page.evaluate(() => {
+      const s = document.querySelector('[data-message-list]') as HTMLElement | null
+      if (!s) return []
+      const sr = s.getBoundingClientRect()
+      return (Array.from(s.querySelectorAll('.message-row[data-message-id]')) as HTMLElement[])
+        .map((el) => ({ id: el.dataset.messageId!, top: el.getBoundingClientRect().top - sr.top, bottom: el.getBoundingClientRect().bottom - sr.top }))
+        .filter((r) => r.top >= 5 && r.bottom <= sr.height - 5)
+        .sort((a, b) => a.top - b.top)
+    })
+
+    const visBefore = await visibleRows()
+    expect(visBefore.length, 'need several fully-visible rows to pick a grow target above a tracked row').toBeGreaterThan(3)
+    const growId = visBefore[1].id                          // upper row → content above the tracked one
+    const track = visBefore[visBefore.length - 2]            // lower row → the reading position
+
+    // Start a media batch NOW (snapshots the reading anchor BEFORE growth), THEN grow the upper row.
+    const GROW_PX = 220
+    const grew = await page.evaluate(([gid, growPx]) => {
+      const s = document.querySelector('[data-message-list]') as HTMLElement | null
+      if (!s) return false
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const trigger = (window as any).__fluuxTriggerMediaLoad
+      if (typeof trigger !== 'function') return false
+      trigger() // batch start: snapshot the reading anchor at its correct position
+      const row = s.querySelector(`.message-row[data-message-id="${CSS.escape(gid as string)}"]`) as HTMLElement | null
+      const idx = row?.closest('[data-index]') as HTMLElement | null
+      if (!idx) return false
+      idx.style.minHeight = idx.offsetHeight + (growPx as number) + 'px'
+      trigger() // keep the debounce window open through the growth
+      return true
+    }, [growId, GROW_PX] as const)
+    expect(grew, 'could not grow the upper row (need __fluuxTriggerMediaLoad)').toBe(true)
+
+    await page.waitForTimeout(600) // media debounce (150ms) + re-anchor settle
+
+    const afterTop = await getMessageOffsetFromTop(page, track.id)
+    const drift = afterTop !== null ? Math.abs(afterTop - track.top) : 9999
+    console.log('── MEDIA-DRIFT ──', JSON.stringify({ trackedId: track.id, beforeTop: Math.round(track.top), afterTop: afterTop !== null ? Math.round(afterTop) : null, drift: Math.round(drift), grow: GROW_PX }))
+    if (drift >= 120) console.log('── TRACE ──\n' + trace.filter((t) => t.includes('MEDIA') || t.includes('anchor') || t.includes('RESTORE')).slice(-12).join('\n'))
+
+    // The tracked message must stay at the same viewport position despite content growing above it.
+    expect(drift, `reading position drifted ${Math.round(drift)}px after media grew above (grew ${GROW_PX}px)`).toBeLessThan(120)
   })
 })
