@@ -271,13 +271,18 @@ describe('Avatar — animated GIF freeze-on-hover', () => {
     }
   }
 
-  // The extraction only branches on blob.type, so a bare { type } suffices.
-  const respondWith = (type: string) =>
-    fetchSpy.mockResolvedValue({ blob: () => Promise.resolve({ type }) })
+  // Extraction sniffs the image bytes (not the MIME type), so each response
+  // carries real magic bytes. Minimal but valid signatures per format:
+  const GIF89A = [0x47, 0x49, 0x46, 0x38, 0x39, 0x61, 0, 0, 0, 0, 0, 0]
+  const APNG = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x61, 0x63, 0x54, 0x4c] // PNG sig + acTL
+  const STATIC_PNG = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x49, 0x44, 0x41, 0x54] // PNG sig + IDAT
+  const WEBP_ANIMATED = [0x52, 0x49, 0x46, 0x46, 0, 0, 0, 0, 0x57, 0x45, 0x42, 0x50, 0x41, 0x4e, 0x49, 0x4d] // RIFF/WEBP + ANIM
+  const respondWithBytes = (bytes: number[]) =>
+    fetchSpy.mockResolvedValue({ arrayBuffer: () => Promise.resolve(new Uint8Array(bytes).buffer) })
 
   beforeEach(() => {
     fetchSpy = vi.fn()
-    respondWith('image/gif')
+    respondWithBytes(GIF89A)
     global.fetch = fetchSpy as unknown as typeof fetch
     OriginalImage = global.Image
     global.Image = MockImage as unknown as typeof Image
@@ -297,6 +302,28 @@ describe('Avatar — animated GIF freeze-on-hover', () => {
     render(<Avatar identifier="alice" name="Alice" avatarUrl={url} />)
     // The live (animated) URL shows while the first frame is being extracted.
     expect(screen.getByRole('img')).toHaveAttribute('src', url)
+    await waitFor(() =>
+      expect(screen.getByRole('img')).toHaveAttribute('src', STATIC_DATA_URL)
+    )
+  })
+
+  it('freezes an animated avatar that is not a GIF (e.g. APNG delivered as image/png)', async () => {
+    // Real-world: the SDK occupant-avatar path hardcodes/defaults the stored
+    // type to image/png (Profile.ts), and many animated avatars are APNG or
+    // animated WebP, not GIF. Freezing must key off the actual image bytes, not
+    // the declared mime type, or these animate forever (kuyuhi in #XSF).
+    respondWithBytes(APNG)
+    const url = 'blob:apng-freeze'
+    render(<Avatar identifier="kuyuhi" name="kuyuhi" avatarUrl={url} />)
+    await waitFor(() =>
+      expect(screen.getByRole('img')).toHaveAttribute('src', STATIC_DATA_URL)
+    )
+  })
+
+  it('freezes an animated WebP avatar', async () => {
+    respondWithBytes(WEBP_ANIMATED)
+    const url = 'blob:webp-freeze'
+    render(<Avatar identifier="dave" name="Dave" avatarUrl={url} />)
     await waitFor(() =>
       expect(screen.getByRole('img')).toHaveAttribute('src', STATIC_DATA_URL)
     )
@@ -354,8 +381,8 @@ describe('Avatar — animated GIF freeze-on-hover', () => {
     expect(screen.getByRole('img')).toHaveAttribute('src', STATIC_DATA_URL)
   })
 
-  it('never freezes a non-GIF image', async () => {
-    respondWith('image/png')
+  it('never freezes a static image (PNG with no acTL chunk)', async () => {
+    respondWithBytes(STATIC_PNG)
     const url = 'blob:png-static'
     render(<Avatar identifier="alice" name="Alice" avatarUrl={url} />)
     expect(screen.getByRole('img')).toHaveAttribute('src', url)

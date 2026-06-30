@@ -159,11 +159,55 @@ function cacheStaticFrame(url: string, dataUrl: string): void {
  */
 const inFlightFrames = new Map<string, Promise<string | null>>()
 
+// Control-chunk markers that only appear in animated files: 'acTL' (APNG) and
+// 'ANIM' (animated WebP).
+const APNG_ACTL = [0x61, 0x63, 0x54, 0x4c]
+const WEBP_ANIM = [0x41, 0x4e, 0x49, 0x4d]
+
+function containsMarker(bytes: Uint8Array, marker: number[], limit: number): boolean {
+  const end = Math.min(bytes.length - marker.length, limit)
+  for (let i = 0; i <= end; i++) {
+    let hit = true
+    for (let j = 0; j < marker.length; j++) {
+      if (bytes[i + j] !== marker[j]) { hit = false; break }
+    }
+    if (hit) return true
+  }
+  return false
+}
+
 /**
- * Extract an animated GIF's first frame as a static PNG data URL and populate the
- * module-level cache on success. Resolves to null for non-GIF images or on any
- * decode failure. Deliberately decoupled from React: it is NOT cancelled when the
- * requesting component unmounts, so the cache fills even during fast scrolling.
+ * Detect an animated raster image from its bytes, independent of the declared
+ * MIME type. The type cannot be trusted: the SDK occupant-avatar path stores
+ * avatars as image/png regardless of the real format (Profile.ts), and many
+ * animated avatars are APNG or animated WebP rather than GIF. Covers exactly the
+ * formats WebKit animates in an <img>. The marker scan is capped to the header
+ * region where the control chunks always sit.
+ */
+function isAnimatedImage(buffer: ArrayBuffer): boolean {
+  const b = new Uint8Array(buffer)
+  if (b.length < 12) return false
+  // GIF87a / GIF89a — a single-frame GIF frozen is identical, so freeze all GIFs.
+  if (b[0] === 0x47 && b[1] === 0x49 && b[2] === 0x46) return true
+  // APNG: PNG signature followed by an 'acTL' chunk (absent in static PNGs).
+  if (b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47) {
+    return containsMarker(b, APNG_ACTL, 4096)
+  }
+  // Animated WebP: RIFF....WEBP container with an 'ANIM' chunk.
+  if (b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46 &&
+      b[8] === 0x57 && b[9] === 0x45 && b[10] === 0x42 && b[11] === 0x50) {
+    return containsMarker(b, WEBP_ANIM, 4096)
+  }
+  return false
+}
+
+/**
+ * Extract an animated avatar's first frame as a static PNG data URL and populate
+ * the module-level cache on success. Resolves to null for static images or on any
+ * decode failure. Animation is decided from the image bytes (GIF / APNG /
+ * animated WebP), never the declared MIME type. Deliberately decoupled from
+ * React: it is NOT cancelled when the requesting component unmounts, so the cache
+ * fills even during fast scrolling.
  */
 function extractFirstFrame(url: string): Promise<string | null> {
   const cached = staticFrameCache.get(url)
@@ -172,9 +216,9 @@ function extractFirstFrame(url: string): Promise<string | null> {
   if (pending) return pending
 
   const extraction = fetch(url)
-    .then(r => r.blob())
-    .then(blob => {
-      if (blob.type !== 'image/gif') return null
+    .then(r => r.arrayBuffer())
+    .then(buffer => {
+      if (!isAnimatedImage(buffer)) return null
       return new Promise<string | null>((resolve) => {
         const img = new Image()
         img.onload = () => {
@@ -200,9 +244,10 @@ function extractFirstFrame(url: string): Promise<string | null> {
 }
 
 /**
- * For animated GIF avatars, extract the first frame as a static PNG data URL.
- * Returns null for non-GIF images or while loading. A cached frame for the same
- * URL is applied synchronously on mount (no re-fetch, no replay).
+ * For animated avatars (GIF, APNG, animated WebP), extract the first frame as a
+ * static PNG data URL. Returns null for static images or while loading. A cached
+ * frame for the same URL is applied synchronously on mount (no re-fetch, no
+ * replay).
  */
 function useStaticFrame(url: string | undefined): string | null {
   const [frame, setFrame] = useState<string | null>(() =>
@@ -237,7 +282,7 @@ function useStaticFrame(url: string | undefined): string | null {
  * - Supports presence indicators
  * - Multiple size presets
  * - Accessible with proper alt text
- * - Animated GIF avatars are frozen by default, play on hover
+ * - Animated avatars (GIF, APNG, animated WebP) are frozen by default, play on hover
  */
 export function Avatar({
   identifier,
