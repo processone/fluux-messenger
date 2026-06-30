@@ -733,30 +733,32 @@ export function useMessageListScroll({
     const step = () => {
       const s = scrollerRef.current
       if (framesLeft-- <= 0) {
-        // Loop ran to completion without being interrupted. If distFromBottom is still > the
-        // tolerance here, the pin never converged (the just-sent message ended up below the fold).
+        // Loop ran its full budget. Re-derive isAtBottom from REAL geometry so downstream consumers
+        // (FAB, auto-follow on the next message, position save) are left accurate even if WebKit
+        // withheld the final settle scroll event — the pin no longer trusts the position-derived flag
+        // mid-loop (see the removed bail above), so it must leave a correct one behind here. If dist
+        // is still > tolerance the pin never converged (the just-sent message ended up below the fold).
         if (s) {
-          debugLog('PIN settled (frames exhausted)', {
-            distFromBottom: s.scrollHeight - s.scrollTop - s.clientHeight,
-          })
+          const dist = s.scrollHeight - s.scrollTop - s.clientHeight
+          isAtBottomRef.current = dist < AT_BOTTOM_THRESHOLD
+          debugLog('PIN settled (frames exhausted)', { distFromBottom: dist })
         }
         finish()
         return
       }
       const v = virtualizerRef.current
       if (!s || !v || v.itemCount === 0) { finish(); return }
-      // User took over (FAB/wheel intent recorded after we started, or they scrolled away from
-      // the bottom) → stop fighting them. Programmatic growth doesn't move scrollTop, so it never
-      // flips isAtBottom; only a genuine user scroll up does.
+      // The ONLY reason to stop pinning is a genuine user takeover — a FAB tap or a wheel scroll,
+      // both of which stamp userScrollIntentAtRef AFTER we started. We deliberately do NOT also bail
+      // on a position-derived `!isAtBottomRef.current`: on WebKit a tall bottom row's post-paint
+      // growth fires extra `scroll` events that transiently report a large distFromBottom, and the
+      // height-unchanged discriminator in handleScroll cannot catch every one — a growth that settles
+      // across TWO scroll events (the second at the now-unchanged height) slips it, flips isAtBottom
+      // false, and used to strand the just-sent message below the fold (the recurring send-stick bug).
+      // The pin instead keeps converging on REAL geometry (the dist check below) and yields only to
+      // real input intent. See scroll-invariants "...growth that settles across TWO scroll events".
       if (userScrollIntentAtRef.current > startedAt) {
         debugLog('PIN bail (user scroll intent)', {
-          distFromBottom: s.scrollHeight - s.scrollTop - s.clientHeight,
-        })
-        finish()
-        return
-      }
-      if (!isAtBottomRef.current) {
-        debugLog('PIN bail (not at bottom)', {
           distFromBottom: s.scrollHeight - s.scrollTop - s.clientHeight,
         })
         finish()

@@ -1312,6 +1312,76 @@ test.describe('At-bottom stick diagnostic (1:1)', () => {
     expect(res.distFromBottom, 'pin bailed on a growth-driven scroll event — send not stuck').toBeLessThan(AT_BOTTOM_OK_PX)
   })
 
+  // ROOT-CAUSE MODEL #2 (the RESIDUAL send-stick hole the single-event #760 fix does NOT close): on
+  // WebKit a tall bottom row's growth settles across MORE THAN ONE scroll event. handleScroll's
+  // growth discriminator (`scrollHeight > prevScrollHeightRef`) only catches the FIRST event — it
+  // advances prevScrollHeightRef every time, so a SECOND scroll event fired at the now-settled height
+  // (scrollHeight === prevScrollHeightRef) but a still-short scrollTop is NOT recognised as
+  // growth-driven. The unconditional isAtBottom write then flips it false and the position-gated pin
+  // BAILS — exactly the original symptom, one scroll event later. The height-unchanged discriminator
+  // fundamentally cannot tell this WebKit growth-settle noise from a real scrollbar drag.
+  //
+  // Engine-agnostic because we MODEL both events synthetically: RED on the position-gated pin (it
+  // bails on event 2 and leaves the send stranded), GREEN once the pin is intent-gated (it keeps
+  // converging on real geometry and only yields to a genuine wheel/touch/keyboard scroll).
+  test('group-start send survives a growth that settles across TWO scroll events (height-unchanged discriminator hole)', async ({ page }) => {
+    await loadDemo(page)
+    await activateChat(page, AVA)
+    await scrollToBottom(page)
+
+    // A send whose previous message is from the OTHER party → a group-START row (taller).
+    const id = `send-twophase-${Date.now()}`
+    await page.evaluate(([jid, msgId]) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const cs = (window as any).__chatStore
+      const st = cs.getState()
+      const msgs = (st.messages.get(jid) ?? []).slice()
+      msgs.push({
+        type: 'chat', conversationId: jid, from: 'me@fluux.chat', to: jid, id: msgId,
+        body: 'my reply — starts a new bubble group', isOutgoing: true, timestamp: new Date(),
+      })
+      const m = new Map(st.messages)
+      m.set(jid, msgs)
+      cs.setState({ messages: m })
+    }, [AVA, id] as const)
+    await page.waitForSelector(`[data-message-id="${id}"]`, { timeout: 5_000 })
+
+    // Two-phase growth settle, both events inside the pin window:
+    //   event 1 (growth frame): scrollHeight UP vs prev → discriminator absorbs it (isAtBottom kept).
+    //   event 2 (one frame later): SAME height, scrollTop short → discriminator misses → current code
+    //   flips isAtBottom false and the pin bails. The intent-gated pin re-pins through it.
+    await page.evaluate((msgId) => {
+      const s = document.querySelector('[data-message-list]') as HTMLElement | null
+      const el = s?.querySelector(`[data-message-id="${CSS.escape(msgId)}"]`) as HTMLElement | null
+      if (!s || !el) return
+      requestAnimationFrame(() => {
+        el.style.minHeight = '600px' // grow the bottom row well past AT_BOTTOM_THRESHOLD
+        s.dispatchEvent(new Event('scroll', { bubbles: true })) // event 1: height > prev (absorbed)
+        // Two frames later the height has settled; model the engine reporting a short scrollTop with
+        // a second scroll event at the unchanged height — the case the discriminator cannot catch.
+        requestAnimationFrame(() => requestAnimationFrame(() => {
+          s.scrollTop = Math.max(0, s.scrollTop - 400)
+          s.dispatchEvent(new Event('scroll', { bubbles: true })) // event 2: height === prev (slips guard)
+        }))
+      })
+    }, id)
+    await page.waitForTimeout(700) // let the remaining pin frames run (converge) or bail
+
+    const res = await page.evaluate((msgId) => {
+      const s = document.querySelector('[data-message-list]') as HTMLElement | null
+      if (!s) return { bottomVisible: false, distFromBottom: -1 }
+      const el = s.querySelector(`[data-message-id="${CSS.escape(msgId)}"]`) as HTMLElement | null
+      const sRect = s.getBoundingClientRect()
+      const r = el?.getBoundingClientRect()
+      return {
+        bottomVisible: !!(r && r.bottom <= sRect.bottom + 8 && r.bottom > sRect.top),
+        distFromBottom: Math.round(s.scrollHeight - s.scrollTop - s.clientHeight),
+      }
+    }, id)
+    expect(res.bottomVisible, `two-phase-growth send "${id}" stranded below the fold — distFromBottom=${res.distFromBottom}`).toBe(true)
+    expect(res.distFromBottom, 'pin bailed on a height-unchanged growth-settle scroll event — send not stuck').toBeLessThan(AT_BOTTOM_OK_PX)
+  })
+
   test('outgoing new-day: a sent message that inserts a date divider sticks to the bottom', async ({ page }) => {
     await loadDemo(page)
     await activateChat(page, AVA)
