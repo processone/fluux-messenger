@@ -632,6 +632,14 @@ em-emoji-picker {
  * Comfortable matches the previous static py-2 / gap-3. */
 .command-row { padding-block: 8px; column-gap: 12px; }
 [data-density="compact"] .command-row { padding-block: 4px; column-gap: 8px; }
+/* Keyboard-selected row fill. A soft accent tint (NOT the Tailwind `/opacity`
+   modifier, which no-ops on our hsl()-string accent token and renders fully
+   transparent). Kept a touch stronger than `hover:bg-fluux-hover` so the active
+   selection reads as more prominent than a hovered row, while the 2px accent
+   left border + medium weight carry the rest of the emphasis. */
+.command-row[data-selected="true"] {
+  background: hsla(var(--fluux-accent-h), var(--fluux-accent-s), var(--fluux-accent-l), 0.15);
+}
 .command-group-label { padding-block: 6px; }
 [data-density="compact"] .command-group-label { padding-block: 3px; }
 
