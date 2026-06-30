@@ -284,6 +284,21 @@ vi.mock('@fluux/sdk', async (importOriginal) => {
       unblockAll: vi.fn(),
       isBlocked: () => false,
     })),
+    useEvents: vi.fn(() => ({
+      subscriptionRequests: [],
+      strangerMessages: [],
+      strangerConversations: {},
+      mucInvitations: [],
+      systemNotifications: [],
+      pendingCount: 0,
+      acceptSubscription: vi.fn(),
+      rejectSubscription: vi.fn(),
+      acceptStranger: vi.fn(),
+      ignoreStranger: vi.fn(),
+      acceptInvitation: vi.fn(),
+      declineInvitation: vi.fn(),
+      dismissNotification: vi.fn(),
+    })),
     searchStore: {
       getState: () => ({
         query: '',
