@@ -854,6 +854,85 @@ test.describe('Virtualization scroll invariants', () => {
     ).toBeLessThan(250)
   })
 
+  // ── 12: A relayout WHILE AWAY (viewport width + view density) holds the reading anchor ──
+  //
+  // Restore is driven by the CONTENT ANCHOR (the bottom-visible message + the fraction of its height
+  // at the viewport bottom), re-derived from each row's CURRENT measured height on return — so it is
+  // independent of the layout that existed at save time. This pins that contract across the two real
+  // relayout knobs a saved PIXEL cannot survive: a viewport-WIDTH change rewraps bubbles, and a
+  // DENSITY change re-pads every message group — both move absolute offsets (and the total height) out
+  // from under any saved scrollTop. After such a change while the conversation is away, returning must
+  // keep the SAME message in view at ~the same fractional position: not snapped to the bottom, not
+  // jumped to a stale pixel.
+  //
+  // This is the regression guard for making the anchor authoritative (PR removing the exact-scrollTop
+  // fast-path): the old fast-path gated on width, so it already deferred to the anchor on a width
+  // change — but a density change that left the total height ~unchanged could still mis-fire it onto
+  // the stale pixel. Removing it routes every relayout through the one correct (anchor) path.
+  test('invariant-12: a width + density change while away holds the reading anchor on return', async ({ page }) => {
+    await loadDemo(page)
+    await navigateToStressRoom(page)
+
+    const distFromBottom = () => page.evaluate(() => {
+      const s = document.querySelector('[data-message-list]') as HTMLElement | null
+      return s ? Math.round(s.scrollHeight - s.scrollTop - s.clientHeight) : -1
+    })
+
+    // Scroll up off the bottom to a mid-history reading position (real wheel so the virtualizer
+    // re-windows), then settle.
+    const box = await page.locator('[data-message-list]').first().boundingBox()
+    if (box) await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+    await page.mouse.wheel(0, -2500)
+    await page.waitForTimeout(700)
+    // The save fires on the scroll EVENT, at the row sizes the virtualizer had ESTIMATED then; rows
+    // re-measure over the next frames, shifting the visually-settled bottom-anchor. Nudge once more
+    // after the settle so the persisted anchor matches the SETTLED position we capture below
+    // (otherwise the test's reference diverges from what was saved — a harness artifact, not drift).
+    await page.mouse.wheel(0, -4)
+    await page.waitForTimeout(500)
+    expect(await distFromBottom(), 'precondition: must be scrolled up off the bottom').toBeGreaterThan(AT_BOTTOM_OK_PX)
+
+    const before = await findBottomVisibleMessage(page)
+    expect(before, 'must capture a reading anchor before leaving').not.toBeNull()
+    const anchorId = before!.id
+
+    // LEAVE the room (its mounted window unmounts).
+    await page.evaluate(() => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      void (window as any).__roomStore?.getState?.()?.activateRoom(null)
+    })
+    await page.waitForTimeout(300)
+
+    // RELAYOUT WHILE AWAY, via the two real layout knobs: narrow the viewport (rewraps bubbles) and
+    // flip the density to compact (re-pads every message group). Both move absolute offsets and the
+    // total height out from under any saved pixel; only the re-derived content anchor survives. 900px
+    // stays in the desktop layout (above the mobile breakpoint) so navigation is unchanged.
+    await page.setViewportSize({ width: 900, height: 800 })
+    await page.evaluate(() => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (window as any).__settingsStore?.getState?.()?.setDensityMode('compact')
+    })
+    await page.waitForTimeout(200)
+
+    // RETURN — restore must re-derive the anchor's pixel target from the NEW layout.
+    await navigateToStressRoom(page)
+    await page.waitForTimeout(1600) // activation + anchor re-assert settle at the new layout
+
+    // (A) Did NOT snap to the bottom — the saved scrolled-up reading position was restored, not lost.
+    expect(await distFromBottom(), 'view snapped to the bottom after the relayout instead of holding the anchor').toBeGreaterThan(AT_BOTTOM_OK_PX)
+
+    // (B) The SAME message (±2 as the rewrapped / re-padded rows settle) is still the bottom-visible
+    // content — the reading position held at the fold through a relayout that changed every row's
+    // height, i.e. it landed on the content anchor and NOT a stale saved pixel (which the larger row
+    // heights would have left showing much older content). The precise fractional offset is not
+    // asserted: a width rewrap can multiply the anchor message's own height, so its in-viewport
+    // fraction legitimately shifts even as the message itself stays pinned at the fold.
+    const after = await findBottomVisibleMessage(page)
+    expect(after, 'must capture a reading anchor after return').not.toBeNull()
+    const drift = Math.abs(stressMsgIndex(after!.id) - stressMsgIndex(anchorId))
+    expect(drift, `bottom-visible anchor moved ${drift} messages across the relayout (before=${anchorId}, after=${after!.id})`).toBeLessThanOrEqual(2)
+  })
+
 })
 
 // ── DIAGNOSTIC: new-message marker on re-entry (the user-reported bug) ──────────

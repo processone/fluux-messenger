@@ -45,20 +45,16 @@ export interface ScrollAnchor {
 }
 
 interface ScrollState {
-  /** Saved scroll position (scrollTop) */
+  /** Saved scroll position (scrollTop). Last-resort fallback when no usable anchor was captured;
+   *  the content-stable {@link ScrollState.anchor} is authoritative on restore. */
   scrollTop: number
   /** Whether the user was at the bottom when leaving */
   wasAtBottom: boolean
   /** Timestamp when the state was saved */
   savedAt: number
-  /** Total scroll height when saved (for validation) */
-  scrollHeight: number
-  /** Viewport width (clientWidth) when saved. The exact-scrollTop fast-path on restore is valid
-   *  ONLY when BOTH height and width are unchanged — a width change rewraps bubbles (heights
-   *  change), so the absolute scrollTop points at different content even if the total height
-   *  coincidentally matches. On a width change the (rendering-independent) anchor governs instead. */
-  clientWidth?: number
-  /** Content-stable anchor (preferred over scrollTop for restoration). */
+  /** Content-stable anchor, authoritative for restoration: its pixel position is re-derived from
+   *  the anchor message's CURRENT measured height, so it survives re-measure / width / density /
+   *  font-size changes. {@link ScrollState.scrollTop} is only a fallback when this is absent. */
   anchor?: ScrollAnchor
 }
 
@@ -166,10 +162,12 @@ class ScrollStateManager {
     scrollTop: number,
     scrollHeight: number,
     clientHeight: number,
-    anchor?: ScrollAnchor,
-    clientWidth?: number
+    anchor?: ScrollAnchor
   ): void {
     const state = this.getState(conversationId)
+    // scrollHeight/clientHeight are transient inputs used only to decide wasAtBottom here — they are
+    // NOT stored: restore is driven by the content anchor (re-derived from current layout), so a
+    // saved pixel height would be meaningless after a re-measure / width / font-size change.
     const distanceFromBottom = scrollHeight - scrollTop - clientHeight
     const wasAtBottom = distanceFromBottom < AT_BOTTOM_THRESHOLD
 
@@ -187,13 +185,11 @@ class ScrollStateManager {
       delete state.scrollState
     } else {
       // Save the scroll position for restoration. The anchor (bottom-most visible
-      // message) is preferred on restore; scrollTop is the legacy fallback.
+      // message) is authoritative on restore; scrollTop is the last-resort fallback.
       state.scrollState = {
         scrollTop,
         wasAtBottom,
         savedAt: Date.now(),
-        scrollHeight,
-        clientWidth,
         anchor,
       }
     }
@@ -208,11 +204,10 @@ class ScrollStateManager {
     scrollTop: number,
     scrollHeight: number,
     clientHeight: number,
-    anchor?: ScrollAnchor,
-    clientWidth?: number
+    anchor?: ScrollAnchor
   ): void {
     // Save position first
-    this.saveScrollPosition(conversationId, scrollTop, scrollHeight, clientHeight, anchor, clientWidth)
+    this.saveScrollPosition(conversationId, scrollTop, scrollHeight, clientHeight, anchor)
 
     const state = this.getState(conversationId)
     this.log('leaveConversation', {
@@ -259,39 +254,6 @@ class ScrollStateManager {
     }
 
     return state.scrollState.scrollTop
-  }
-
-  /**
-   * Get the scrollHeight captured at save time, or null when no restorable state.
-   * Lets the restore prefer the exact saved scrollTop when the content height is unchanged
-   * since save (same-session navigate-back): the pixel is then exact and layout-independent,
-   * so the (ratio-based) anchor is only needed when the height actually changed.
-   */
-  getSavedScrollHeight(conversationId: string): number | null {
-    const state = this.states.get(conversationId)
-    if (!state?.scrollState || state.scrollState.wasAtBottom) {
-      return null
-    }
-    if (Date.now() - state.scrollState.savedAt > this.staleThresholdMs) {
-      return null
-    }
-    return state.scrollState.scrollHeight
-  }
-
-  /**
-   * Get the viewport width captured at save time, or null when none/stale/legacy save.
-   * Used together with {@link getSavedScrollHeight} to confirm the layout is truly unchanged
-   * before taking the exact-scrollTop restore fast-path.
-   */
-  getSavedClientWidth(conversationId: string): number | null {
-    const state = this.states.get(conversationId)
-    if (!state?.scrollState || state.scrollState.wasAtBottom) {
-      return null
-    }
-    if (Date.now() - state.scrollState.savedAt > this.staleThresholdMs) {
-      return null
-    }
-    return state.scrollState.clientWidth ?? null
   }
 
   /**

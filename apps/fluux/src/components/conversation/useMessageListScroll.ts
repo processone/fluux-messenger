@@ -413,7 +413,7 @@ export function useMessageListScroll({
   const mediaLoadDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Last scroll data (for saving on conversation switch)
-  const lastScrollDataRef = useRef<{ top: number; height: number; client: number; width: number } | null>(null)
+  const lastScrollDataRef = useRef<{ top: number; height: number; client: number } | null>(null)
   // Bottom-most-visible message anchor, captured (throttled) during scroll so it
   // survives the conversation switch (at switch time the DOM is already the new
   // conversation). Used for content-stable position restoration on return.
@@ -445,7 +445,6 @@ export function useMessageListScroll({
       top: scroller.scrollTop,
       height: scroller.scrollHeight,
       client: scroller.clientHeight,
-      width: scroller.clientWidth,
     }
     lastAnchorRef.current = findBottomAnchor(scroller)
   }, [])
@@ -459,7 +458,6 @@ export function useMessageListScroll({
       top: bottomTop,
       height: scroller.scrollHeight,
       client: scroller.clientHeight,
-      width: scroller.clientWidth,
     }
     lastAnchorRef.current = findBottomAnchor(scroller)
     isAtBottomRef.current = true
@@ -993,29 +991,16 @@ export function useMessageListScroll({
       return true
     }
 
-    // Exact restore when the layout is UNCHANGED since save (same-session navigate-back, including
-    // eviction+rehydrate that reproduces identical content): the saved scrollTop is exact and
-    // layout-independent precisely because the content is the same, so the ratio-based anchor isn't
-    // needed — and a corrupt/degenerate anchor can't override a perfectly good saved position (the
-    // "jump to bottom on return" report). The fraction anchor below is for a CHANGED height (MAM
-    // prepend, width change). Tolerance covers sub-pixel measurement noise only.
-    const savedHeight = scrollStateManager.getSavedScrollHeight(conversationId)
-    const savedWidth = scrollStateManager.getSavedClientWidth(conversationId)
-    // A width change rewraps bubbles, so the absolute scrollTop is meaningless even if the total
-    // height coincidentally matches — only take the exact fast-path when the width is unchanged (or
-    // unknown, for legacy saves). Otherwise fall through to the rendering-independent fraction anchor.
-    const widthUnchanged = savedWidth === null || scroller.clientWidth === savedWidth
-    if (
-      savedPos !== null &&
-      savedHeight !== null &&
-      widthUnchanged &&
-      Math.abs(scroller.scrollHeight - savedHeight) <= 4
-    ) {
-      if (virtRestore) virtRestore.scrollToOffset(savedPos)
-      else scroller.scrollTop = savedPos
-      return finishRestore('RESTORE via savedPos (layout unchanged)', { savedPos, savedHeight, savedWidth })
-    }
-
+    // THE CONTENT ANCHOR IS AUTHORITATIVE. The saved fraction anchor — re-derived from the anchor
+    // message's CURRENT measured height on every restore — is correct in every case: identical
+    // layout, MAM prepend, font-size change, view-density change, or a viewport-width change (which
+    // rewraps bubbles and so invalidates any saved pixel). We therefore try the anchor FIRST and
+    // UNCONDITIONALLY — no "layout unchanged" height/width gate. The saved scrollTop is only a pixel
+    // PROXY that holds when the layout is byte-identical; it is demoted to a last-resort fallback,
+    // used solely when there is NO usable anchor (a legacy save with no captured anchor, or an
+    // anchor message that is no longer in the loaded set). Pixel correctness is covered by the
+    // real-engine scroll-invariants e2e — jsdom/happy-dom have no layout, so the captured fraction
+    // degenerates (last row, fraction 1) and cannot be exercised in a unit test.
     if (savedAnchor && restoreToAnchor(scroller, savedAnchor)) {
       if (virtRestore) virtRestore.scrollToOffset(scroller.scrollTop)
       return finishRestore('RESTORE via anchor', { savedAnchor })
@@ -1463,7 +1448,7 @@ export function useMessageListScroll({
     notifyUserInput()
 
     const el = e.currentTarget
-    const { scrollTop, scrollHeight, clientHeight, clientWidth } = el
+    const { scrollTop, scrollHeight, clientHeight } = el
     const distFromBottom = scrollHeight - scrollTop - clientHeight
 
     // A programmatic re-assert loop (marker positioning / pin-bottom / prepend / anchor restore)
@@ -1471,7 +1456,7 @@ export function useMessageListScroll({
     const programmaticScroll = reassertLoopRef.current !== null
 
     // Update refs (NO React state updates here except FAB)
-    lastScrollDataRef.current = { top: scrollTop, height: scrollHeight, client: clientHeight, width: clientWidth }
+    lastScrollDataRef.current = { top: scrollTop, height: scrollHeight, client: clientHeight }
     // Capture the bottom-most-visible anchor on every scroll event (binary search,
     // cheap) so it reflects the latest position — at switch time the DOM is already
     // the new conversation, so this must be captured live during scroll.
@@ -1577,7 +1562,7 @@ export function useMessageListScroll({
     const now = Date.now()
     if (!programmaticScroll && userHasScrolledSinceEntryRef.current && now - lastSaveTimeRef.current > SAVE_THROTTLE_MS) {
       lastSaveTimeRef.current = now
-      scrollStateManager.saveScrollPosition(conversationId, scrollTop, scrollHeight, clientHeight, lastAnchorRef.current ?? undefined, clientWidth)
+      scrollStateManager.saveScrollPosition(conversationId, scrollTop, scrollHeight, clientHeight, lastAnchorRef.current ?? undefined)
     }
 
     // Track if user scrolled away from top (allows re-trigger of load)
@@ -1638,8 +1623,8 @@ export function useMessageListScroll({
     // may have drifted from media/measurement after the restore, and persisting it would make the
     // position creep older on the next open (see userHasScrolledSinceEntryRef).
     if (prevConversationRef.current && lastScrollDataRef.current && userHasScrolledSinceEntryRef.current) {
-      const { top, height, client, width } = lastScrollDataRef.current
-      scrollStateManager.leaveConversation(prevConversationRef.current, top, height, client, lastAnchorRef.current ?? undefined, width)
+      const { top, height, client } = lastScrollDataRef.current
+      scrollStateManager.leaveConversation(prevConversationRef.current, top, height, client, lastAnchorRef.current ?? undefined)
     } else if (prevConversationRef.current) {
       scrollStateManager.markAsLeft(prevConversationRef.current)
     }
@@ -1886,7 +1871,7 @@ export function useMessageListScroll({
         // user genuinely scrolled this visit; otherwise keep the existing saved anchor (markAsLeft)
         // so a media/measurement-induced post-restore drift can't be saved (see the ref).
         if (lastScrollDataRef.current && userHasScrolledSinceEntryRef.current) {
-          const { top, height, client, width } = lastScrollDataRef.current
+          const { top, height, client } = lastScrollDataRef.current
           // UNMOUNT save: this is the leave path for navigations that DESTROY the message view —
           // opening Settings, switching DM↔Room, going back to the list. (DM↔DM keeps the view
           // mounted and saves via the conversation-switch effect instead.) If `top`/anchor here are
@@ -1899,7 +1884,7 @@ export function useMessageListScroll({
             anchorMessageId: lastAnchorRef.current?.messageId,
             anchorFraction: lastAnchorRef.current?.fraction,
           })
-          scrollStateManager.leaveConversation(prevConversationRef.current, top, height, client, lastAnchorRef.current ?? undefined, width)
+          scrollStateManager.leaveConversation(prevConversationRef.current, top, height, client, lastAnchorRef.current ?? undefined)
         } else {
           // No scroll data, or the user never scrolled this visit → don't overwrite the saved
           // position; just mark the conversation left so a return is detected as a switch.

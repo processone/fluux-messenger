@@ -100,6 +100,21 @@ function makeMessages(count: number): BaseMessage[] {
   }))
 }
 
+/**
+ * Seed a KNOWN content anchor for `conversationId`, overwriting whatever the component captured on
+ * leave. jsdom has no layout (rows measure offsetHeight 0), so findBottomAnchor degenerates to
+ * {last row, fraction 1} and a meaningful anchor can't arise organically — we inject one. A
+ * fraction < 1 forces the virtualizer-index restore's fraction-refine branch, whose
+ * `getOffsetForMessageId(anchorId)` call is the observable proof that the restore CONSULTED THE
+ * ANCHOR (rather than a blind scroll-to-bottom or a saved-pixel fallback). Pixel-position
+ * correctness is covered by the real-engine scroll-invariants e2e — jsdom can't exercise the
+ * fraction math. dist = 5000 − 200 − 500 = 4300 > AT_BOTTOM_THRESHOLD → wasAtBottom false → the
+ * scrolled-up state persists for restore.
+ */
+function seedSavedAnchor(conversationId: string, messageId: string, fraction = 0.5) {
+  scrollStateManager.saveScrollPosition(conversationId, 200, 5000, 500, { messageId, fraction })
+}
+
 function renderList(props: Partial<MessageListProps<BaseMessage>> = {}) {
   return render(
     <MessageList
@@ -529,33 +544,37 @@ describe('MessageList — virtualized bottom-stick re-asserts as rows measure', 
     expect(scrollTopSets).toContain(5000)
   })
 
-  it('restores a scrolled-up position on conversation switch instead of jumping to the bottom (virtualized)', () => {
-    // Returning to a conversation you'd scrolled up in must restore that position, not
-    // scroll-to-bottom. The flag-OFF suite covers this; this pins it with the virtualizer wired.
+  it('restores a scrolled-up conversation from its content anchor on switch (virtualized)', () => {
+    // Returning to a conversation you'd scrolled up in must restore via the saved CONTENT ANCHOR,
+    // not scroll to the bottom. The anchor row is typically windowed out under virtualization, so
+    // the restore resolves it through the virtualizer index (scrollToIndex) and refines to the
+    // saved fraction (getOffsetForMessageId) — both keyed to the anchor message. (Real pixel
+    // landing is covered by scroll-invariants.ts; jsdom has no layout.)
     const { container, rerender } = render(
       <MessageList messages={makeMessages(50)} conversationId="conv-r1" {...props} />,
     )
     const scroller = container.querySelector('[data-message-list]') as HTMLElement
-    const { scrollTopSets } = instrumentScroller(scroller, 5000)
+    instrumentScroller(scroller, 5000)
     rafQueue.length = 0
 
-    // Scroll up to 200 and let the scroll handler record the position + anchor.
+    // Scroll up and switch away (saves conv-r1; the captured anchor degenerates in jsdom).
     scroller.scrollTop = 200
     // A genuine user scroll fires a wheel (the save gate only persists user-driven positions, not
     // media/measurement-induced shifts); a bare scroll event alone no longer counts.
     scroller.dispatchEvent(new WheelEvent('wheel', { bubbles: true }))
     scroller.dispatchEvent(new Event('scroll', { bubbles: true }))
-
-    // Switch away (saves conv-r1's position) then back (should restore it).
     rerender(<MessageList messages={makeMessages(50)} conversationId="conv-r2" {...props} />)
-    scrollTopSets.length = 0
+
+    // Inject a real anchor, then return.
+    seedSavedAnchor('conv-r1', 'msg-20')
+    getOffsetForMessageId.mockClear()
+    scrollToIndexCalls.length = 0
     rerender(<MessageList messages={makeMessages(50)} conversationId="conv-r1" {...props} />)
 
-    // Restored to the saved scroll position (200), not scrolled to the bottom (5000). Under
-    // virtualization the anchor is typically windowed out, so the saved-pixel fallback is what
-    // runs — pinning it guards against a refactor that regresses restore into a scroll-to-bottom.
-    expect(scrollTopSets).toContain(200)
-    expect(scrollTopSets).not.toContain(5000)
+    // Restore consulted the saved anchor (windowed the row in by index + refined by fraction)
+    // rather than scrolling to the bottom and clearing the saved position.
+    expect(getOffsetForMessageId).toHaveBeenCalledWith('msg-20')
+    expect(scrollToIndexCalls).toContain('end')
   })
 
   it('keeps restored scrolled-up intent across repeated virtualized room switches', () => {
@@ -563,7 +582,7 @@ describe('MessageList — virtualized bottom-stick re-asserts as rows measure', 
       <MessageList messages={makeMessages(50)} conversationId="room-repeat-1" {...props} />,
     )
     const scroller = container.querySelector('[data-message-list]') as HTMLElement
-    const { scrollTopSets } = instrumentScroller(scroller, 5000)
+    instrumentScroller(scroller, 5000)
     rafQueue.length = 0
 
     scroller.scrollTop = 200
@@ -572,21 +591,20 @@ describe('MessageList — virtualized bottom-stick re-asserts as rows measure', 
     scroller.dispatchEvent(new WheelEvent('wheel', { bubbles: true }))
     scroller.dispatchEvent(new Event('scroll', { bubbles: true }))
 
+    // Round-trip #1: leave (saves room-repeat-1), inject a real anchor, return.
     rerender(<MessageList messages={makeMessages(50)} conversationId="room-repeat-2" {...props} />)
-    scrollTopSets.length = 0
-    scrollToOffsetCalls.length = 0
+    seedSavedAnchor('room-repeat-1', 'msg-20')
+    getOffsetForMessageId.mockClear()
     rerender(<MessageList messages={makeMessages(50)} conversationId="room-repeat-1" {...props} />)
-    expect(scrollToOffsetCalls).toContain(200)
+    expect(getOffsetForMessageId).toHaveBeenCalledWith('msg-20')
 
-    scrollTopSets.length = 0
-    scrollToOffsetCalls.length = 0
+    // Round-trip #2: the scrolled-up intent must survive a second switch (regression: a coalesced
+    // second restore used to be dropped). Re-inject (the jsdom re-capture degenerates) and return.
     rerender(<MessageList messages={makeMessages(50)} conversationId="room-repeat-2" {...props} />)
-    scrollTopSets.length = 0
-    scrollToOffsetCalls.length = 0
+    seedSavedAnchor('room-repeat-1', 'msg-20')
+    getOffsetForMessageId.mockClear()
     rerender(<MessageList messages={makeMessages(50)} conversationId="room-repeat-1" {...props} />)
-
-    expect(scrollToOffsetCalls).toContain(200)
-    expect(scrollTopSets).not.toContain(5000)
+    expect(getOffsetForMessageId).toHaveBeenCalledWith('msg-20')
   })
 
   it('does not restore an old scrolled-up position after the FAB returns the room to bottom', () => {
@@ -624,47 +642,42 @@ describe('MessageList — virtualized bottom-stick re-asserts as rows measure', 
     expect(scrollTopSets).toContain(5000)
   })
 
-  it('re-windows the virtualizer (scrollToOffset) on switch-back restore, not just a raw scrollTop write', () => {
-    // The blank-screen-until-scroll bug: a direct `scroller.scrollTop = saved` leaves
-    // @tanstack's scrollOffset stale (it syncs only from the scroll event / rAF poll),
-    // so on a fresh switch the mounted window keeps the top rows and the restored region
-    // renders BLANK until the user scrolls. The restore must route the offset through the
-    // virtualizer (scrollToOffset) so it re-windows before paint — same as the MAM-prepend
-    // restore and scroll-to-bottom. jsdom has no layout (the blank can't be observed), so
-    // this pins the re-window CONTRACT: scrollToOffset is called with the restored offset.
-    // (Both restore sub-paths — content-stable anchor and saved-pixel fallback — must
-    // re-window; in production the anchor row is usually windowed out so the pixel path runs.)
+  it('re-windows the virtualizer through the anchor on switch-back restore, not a raw scrollTop write', () => {
+    // The blank-screen-until-scroll bug: a direct `scroller.scrollTop = saved` leaves @tanstack's
+    // offset stale, so on a fresh switch the mounted window keeps the top rows and the restored
+    // region renders BLANK until the user scrolls. The restore must route through the virtualizer so
+    // it re-windows before paint. With the anchor authoritative, that means resolving the anchor by
+    // index (scrollToIndex, which re-windows) and refining to the saved fraction (getOffsetForMessageId
+    // → scrollToOffset). jsdom has no layout, so this pins the re-window CONTRACT: the restore
+    // consults the anchor through the virtualizer rather than writing a raw scrollTop.
     const { container, rerender } = render(
       <MessageList messages={makeMessages(50)} conversationId="conv-rw1" {...props} />,
     )
     const scroller = container.querySelector('[data-message-list]') as HTMLElement
-    const { scrollTopSets } = instrumentScroller(scroller, 5000)
+    instrumentScroller(scroller, 5000)
     rafQueue.length = 0
 
-    // Scroll up to 200 and let the scroll handler record the position + anchor.
     scroller.scrollTop = 200
-    // A genuine user scroll fires a wheel (the save gate only persists user-driven positions, not
-    // media/measurement-induced shifts); a bare scroll event alone no longer counts.
-    scroller.dispatchEvent(new WheelEvent('wheel', { bubbles: true }))
     scroller.dispatchEvent(new Event('scroll', { bubbles: true }))
 
-    // Switch away (saves conv-rw1's position) then back (should restore it).
+    // Switch away (saves conv-rw1; the captured anchor degenerates in jsdom), inject a real anchor,
+    // then return.
     rerender(<MessageList messages={makeMessages(50)} conversationId="conv-rw2" {...props} />)
-    scrollToOffsetCalls.length = 0
-    scrollTopSets.length = 0
+    seedSavedAnchor('conv-rw1', 'msg-20')
+    getOffsetForMessageId.mockClear()
+    scrollToIndexCalls.length = 0
     rerender(<MessageList messages={makeMessages(50)} conversationId="conv-rw1" {...props} />)
 
-    // The restore re-windowed the virtualizer at the saved offset rather than only writing
-    // scrollTop. Without the fix scrollToOffset is never called and the viewport goes blank.
-    expect(scrollToOffsetCalls).toContain(200)
+    expect(scrollToIndexCalls).toContain('end')                    // windowed the anchor row in
+    expect(getOffsetForMessageId).toHaveBeenCalledWith('msg-20')   // refined to the saved fraction
   })
 
-  it('re-windows to the saved offset even when the anchor row is windowed out of the DOM', () => {
-    // Real-browser case: the virtualizer's initial window covers only the top rows; the saved
-    // anchor row is NOT in the DOM, so the DOM anchor lookup fails. Because the content height is
-    // unchanged since save (same-session return), restore takes the layout-unchanged path and
-    // re-windows to the EXACT saved offset via scrollToOffset — it must NOT go blank or fall back
-    // to pinVirtualizedBottom() (which cleared the saved state and stuck the convo at the bottom).
+  it('resolves the anchor through the virtualizer index when the anchor row is windowed out of the DOM', () => {
+    // Real-browser case: the virtualizer's initial window covers only the top rows; the saved anchor
+    // row is NOT in the DOM, so the DOM anchor lookup (restoreToAnchor) fails. The restore must then
+    // resolve the anchor through the virtualizer INDEX (getIndexForMessageId → scrollToIndex),
+    // re-deriving its position from measurements — it must NOT go blank or fall back to
+    // pinVirtualizedBottom() (which would clear the saved state and stick the convo at the bottom).
     const { container, rerender } = render(
       <MessageList messages={makeMessages(50)} conversationId="conv-vi1" {...props} />,
     )
@@ -672,35 +685,28 @@ describe('MessageList — virtualized bottom-stick re-asserts as rows measure', 
     instrumentScroller(scroller, 5000)
     rafQueue.length = 0
 
-    // User scrolls up and the hook captures the anchor + saved position.
     scroller.scrollTop = 200
-    // A genuine user scroll fires a wheel (the save gate only persists user-driven positions, not
-    // media/measurement-induced shifts); a bare scroll event alone no longer counts.
-    scroller.dispatchEvent(new WheelEvent('wheel', { bubbles: true }))
     scroller.dispatchEvent(new Event('scroll', { bubbles: true }))
-
-    // Switch away (saves conv-vi1's position and anchor).
     rerender(<MessageList messages={makeMessages(50)} conversationId="conv-vi2" {...props} />)
+    seedSavedAnchor('conv-vi1', 'msg-20')
 
-    // Simulate windowed-out anchor: make querySelector return null for message rows
-    // (in a real browser the virtualizer's initial window doesn't include the saved anchor,
-    // so DOM lookup fails; here we force that failure by patching the method).
+    // Simulate windowed-out anchor: make querySelector return null for message rows so the DOM
+    // anchor lookup (restoreToAnchor) fails and the virtualizer-index path must take over.
     const origQS = scroller.querySelector.bind(scroller) as (sel: string) => Element | null
     scroller.querySelector = ((sel: string) => {
       if (sel.includes('message-row')) return null
       return origQS(sel)
     }) as typeof scroller.querySelector
 
+    getOffsetForMessageId.mockClear()
     scrollToIndexCalls.length = 0
-    scrollToOffsetCalls.length = 0
-
-    // Return to conversation — restoreToAnchor fails, must use virtualizer-index path.
     rerender(<MessageList messages={makeMessages(50)} conversationId="conv-vi1" {...props} />)
-
     scroller.querySelector = origQS as typeof scroller.querySelector
 
-    // Re-windowed to the exact saved offset (200) rather than going blank or to the bottom.
-    expect(scrollToOffsetCalls).toContain(200)
+    // Resolved the anchor by index (re-windowing the row in) + refined by fraction, rather than a
+    // scroll-to-bottom.
+    expect(scrollToIndexCalls).toContain('end')
+    expect(getOffsetForMessageId).toHaveBeenCalledWith('msg-20')
   })
 
   it('restores (re-windowed) when a message arrived in the conversation while it was hidden', () => {
@@ -715,28 +721,24 @@ describe('MessageList — virtualized bottom-stick re-asserts as rows measure', 
       <MessageList messages={makeMessages(50)} conversationId="conv-hidden" {...props} />,
     )
     const scroller = container.querySelector('[data-message-list]') as HTMLElement
-    const { scrollTopSets } = instrumentScroller(scroller, 5000)
+    instrumentScroller(scroller, 5000)
     rafQueue.length = 0
 
-    // Scroll up to 200 in the conversation and record the position + anchor.
     scroller.scrollTop = 200
-    // A genuine user scroll fires a wheel (the save gate only persists user-driven positions, not
-    // media/measurement-induced shifts); a bare scroll event alone no longer counts.
-    scroller.dispatchEvent(new WheelEvent('wheel', { bubbles: true }))
     scroller.dispatchEvent(new Event('scroll', { bubbles: true }))
 
-    // Switch away (conversation is now hidden / unmounted from the user's view).
+    // Switch away (conversation is now hidden / unmounted), inject a real anchor.
     rerender(<MessageList messages={makeMessages(50)} conversationId="conv-other" {...props} />)
-    scrollToOffsetCalls.length = 0
-    scrollTopSets.length = 0
+    seedSavedAnchor('conv-hidden', 'msg-20')
+    getOffsetForMessageId.mockClear()
+    scrollToIndexCalls.length = 0
 
-    // Return to it AFTER a message arrived while it was hidden (51 messages now). The new
-    // message is appended at the bottom, so the saved scrolled-up position is still valid.
+    // Return AFTER a message arrived while hidden (51 messages now, appended at the bottom).
     rerender(<MessageList messages={makeMessages(51)} conversationId="conv-hidden" {...props} />)
 
-    // Restored (and re-windowed) to the saved offset, not yanked to the new message at bottom.
-    expect(scrollToOffsetCalls).toContain(200)
-    expect(scrollTopSets).not.toContain(5000)
+    // Restore resolved the saved anchor rather than yanking to the new message at the bottom.
+    expect(getOffsetForMessageId).toHaveBeenCalledWith('msg-20')
+    expect(scrollToIndexCalls).toContain('end')
   })
 
   it('re-windows the virtualizer when the composer grows (attachment / whisper / reply banner) while at bottom', () => {
