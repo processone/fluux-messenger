@@ -16,6 +16,15 @@ import {
   type MockStoreBindings,
 } from '../test-utils'
 
+/** Base64-encode a small byte array, for crafting avatar payloads with real magic bytes. */
+const toBase64 = (bytes: number[]) => btoa(String.fromCharCode(...bytes))
+
+// Minimal payloads whose leading bytes identify a non-png image format.
+const GIF_BASE64 = toBase64([0x47, 0x49, 0x46, 0x38, 0x39, 0x61, 0x01, 0x00]) // "GIF89a"
+const WEBP_BASE64 = toBase64([
+  0x52, 0x49, 0x46, 0x46, 0x1a, 0x00, 0x00, 0x00, 0x57, 0x45, 0x42, 0x50,
+]) // "RIFF....WEBP"
+
 let mockXmppClientInstance: MockXmppClient
 
 // Use vi.hoisted to create the mock factory at hoist time
@@ -294,6 +303,73 @@ describe('XMPPClient Own Avatar', () => {
       // Should only make 1 request (metadata), skip data fetch because of cache
       expect(mockXmppClientInstance.iqCaller.request).toHaveBeenCalledTimes(1)
       expect(emitSDKSpy).toHaveBeenCalledWith('connection:own-avatar', { avatar: 'blob:cached-existing', hash: 'abc123hash' })
+    })
+
+    it('caches the own avatar with its sniffed type, overriding a mislabeled <info type>', async () => {
+      mockXmppClientInstance.iqCaller.request.mockClear()
+
+      const { getCachedAvatar, cacheAvatar } = await import('../../utils/avatarCache')
+      vi.mocked(getCachedAvatar).mockResolvedValue(null)
+      vi.mocked(cacheAvatar).mockResolvedValue('blob:own-gif')
+
+      // Metadata advertises image/png...
+      const metadataResponse = createMockElement('iq', { type: 'result' }, [
+        {
+          name: 'pubsub',
+          attrs: { xmlns: 'http://jabber.org/protocol/pubsub' },
+          children: [
+            {
+              name: 'items',
+              attrs: { node: 'urn:xmpp:avatar:metadata' },
+              children: [
+                {
+                  name: 'item',
+                  attrs: { id: 'own-hash' },
+                  children: [
+                    {
+                      name: 'metadata',
+                      attrs: { xmlns: 'urn:xmpp:avatar:metadata' },
+                      children: [
+                        { name: 'info', attrs: { id: 'own-hash', type: 'image/png', bytes: '128' } },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ])
+      // ...but the actual bytes are a GIF.
+      const dataResponse = createMockElement('iq', { type: 'result' }, [
+        {
+          name: 'pubsub',
+          attrs: { xmlns: 'http://jabber.org/protocol/pubsub' },
+          children: [
+            {
+              name: 'items',
+              attrs: { node: 'urn:xmpp:avatar:data' },
+              children: [
+                {
+                  name: 'item',
+                  attrs: { id: 'own-hash' },
+                  children: [
+                    { name: 'data', attrs: { xmlns: 'urn:xmpp:avatar:data' }, text: GIF_BASE64 },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ])
+      mockXmppClientInstance.iqCaller.request
+        .mockResolvedValueOnce(metadataResponse)
+        .mockResolvedValueOnce(dataResponse)
+
+      await xmppClient.profile.fetchOwnAvatar()
+
+      // The advertised image/png is only a fallback; the GIF bytes win.
+      expect(cacheAvatar).toHaveBeenCalledWith('own-hash', GIF_BASE64, 'image/gif')
     })
   })
 
@@ -1455,6 +1531,35 @@ describe('XMPPClient Own Avatar', () => {
           avatarHash: 'avatar-hash',
         })
       })
+
+      it('caches a non-png occupant PEP avatar with the MIME type sniffed from its bytes', async () => {
+        mockXmppClientInstance.iqCaller.request.mockClear()
+
+        const { getCachedAvatar, cacheAvatar } = await import('../../utils/avatarCache')
+        vi.mocked(getCachedAvatar).mockResolvedValueOnce(null)
+        vi.mocked(cacheAvatar).mockResolvedValue('blob:webp-occupant')
+
+        // Occupant PEP data node carries WebP bytes (no advertised type on the wire).
+        const pepResponse = createMockElement('iq', { type: 'result' }, [
+          { name: 'pubsub', attrs: { xmlns: 'http://jabber.org/protocol/pubsub' }, children: [
+            { name: 'items', children: [
+              { name: 'item', attrs: { id: 'webp-hash' }, children: [
+                { name: 'data', attrs: { xmlns: 'urn:xmpp:avatar:data' }, text: WEBP_BASE64 },
+              ] },
+            ] },
+          ] },
+        ])
+        mockXmppClientInstance.iqCaller.request.mockResolvedValueOnce(pepResponse)
+
+        await xmppClient.profile.fetchOccupantAvatar(
+          'room@conference.example.com',
+          'WebpUser',
+          'webp-hash',
+          'webpuser@example.com'
+        )
+
+        expect(cacheAvatar).toHaveBeenCalledWith('webp-hash', WEBP_BASE64, 'image/webp')
+      })
     })
 
     describe('fetchOccupantAvatar saves JID→hash mapping', () => {
@@ -1679,6 +1784,44 @@ describe('XMPPClient Own Avatar', () => {
       // Should cache the fetched avatar to IndexedDB
       expect(cacheAvatar).toHaveBeenCalledWith('new-hash', 'iVBORw0KGgo=', 'image/png')
       expect(saveAvatarHash).toHaveBeenCalledWith('contact@example.com', 'new-hash', 'contact')
+    })
+
+    it('caches a non-png PEP avatar with the MIME type sniffed from its bytes', async () => {
+      mockXmppClientInstance.iqCaller.request.mockClear()
+      emitSDKSpy.mockClear()
+
+      const { getCachedAvatar, cacheAvatar } = await import('../../utils/avatarCache')
+      vi.mocked(getCachedAvatar).mockResolvedValueOnce(null)
+      vi.mocked(cacheAvatar).mockResolvedValueOnce('blob:gif-avatar')
+
+      // PEP data node carries GIF bytes (XEP-0084 data responses have no type).
+      const dataResponse = createMockElement('iq', { type: 'result' }, [
+        {
+          name: 'pubsub',
+          attrs: { xmlns: 'http://jabber.org/protocol/pubsub' },
+          children: [
+            {
+              name: 'items',
+              attrs: { node: 'urn:xmpp:avatar:data' },
+              children: [
+                {
+                  name: 'item',
+                  attrs: { id: 'gif-hash' },
+                  children: [
+                    { name: 'data', attrs: { xmlns: 'urn:xmpp:avatar:data' }, text: GIF_BASE64 },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ])
+      mockXmppClientInstance.iqCaller.request.mockResolvedValueOnce(dataResponse)
+
+      await xmppClient.profile.fetchAvatarData('contact@example.com', 'gif-hash')
+
+      // Cached as image/gif, not the old hardcoded image/png.
+      expect(cacheAvatar).toHaveBeenCalledWith('gif-hash', GIF_BASE64, 'image/gif')
     })
   })
 

@@ -5,6 +5,7 @@ import { getBareJid, getLocalPart, getDomain } from '../jid'
 import type { VCardInfo } from '../types/roster'
 import { generateUUID } from '../../utils/uuid'
 import { getCachedAvatar, getAvatarHash, cacheAvatar, saveAvatarHash, getAllAvatarHashes, hasNoAvatar, markNoAvatar, clearNoAvatar, refreshAllBlobUrls, isPepForbiddenDomain, markPepForbiddenDomain, loadPepForbiddenDomains } from '../../utils/avatarCache'
+import { sniffImageMimeType } from '../../utils/imageType'
 import {
   NS_PUBSUB,
   NS_NICK,
@@ -86,8 +87,12 @@ export class Profile extends BaseModule {
       const data = result.getChild('pubsub', NS_PUBSUB)?.getChild('items')?.getChild('item')?.getChild('data', 'urn:xmpp:avatar:data')?.text()
 
       if (data) {
+        // XEP-0084 data responses carry no MIME type, so sniff the bytes rather
+        // than assume PNG — otherwise animated GIF/WebP/APNG avatars get a Blob
+        // typed image/png and any consumer trusting blob.type is misled.
+        const mimeType = sniffImageMimeType(data) ?? 'image/png'
         // Cache to IndexedDB and get a blob URL
-        const blobUrl = await cacheAvatar(hash, data, 'image/png')
+        const blobUrl = await cacheAvatar(hash, data, mimeType)
         await saveAvatarHash(bareJid, hash, 'contact')
         this.updateAvatar(bareJid, blobUrl, hash)
         // Clear negative cache since we found an avatar
@@ -317,7 +322,9 @@ export class Profile extends BaseModule {
           const data = result.getChild('pubsub', NS_PUBSUB)?.getChild('items')?.getChild('item')?.getChild('data', NS_AVATAR_DATA)?.text()
 
           if (data) {
-            const mimeType = 'image/png'
+            // The data node has no MIME type; sniff the bytes so animated
+            // avatars aren't cached as image/png (see fetchAvatarData).
+            const mimeType = sniffImageMimeType(data) ?? 'image/png'
             const blobUrl = await cacheAvatar(avatarHash, data, mimeType)
             await clearNoAvatar(bareJid)
             // Persist JID→hash mapping so we can restore from cache on next session
@@ -802,7 +809,10 @@ export class Profile extends BaseModule {
       if (data) {
         const base64 = data.text()
         if (base64) {
-          const blobUrl = await cacheAvatar(hash, base64, mimeType)
+          // Prefer the sniffed type over the advertised <info type>, which the
+          // publishing client may have mislabeled; fall back to it when unknown.
+          const sniffedType = sniffImageMimeType(base64) ?? mimeType
+          const blobUrl = await cacheAvatar(hash, base64, sniffedType)
           await saveAvatarHash(bareJid, hash, 'contact')
           this.deps.emitSDK('connection:own-avatar', { avatar: blobUrl, hash })
         }
