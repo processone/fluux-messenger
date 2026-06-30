@@ -131,6 +131,16 @@ Engage with the XMPP MLS XEP effort. Implement once the wire format stabilises.
 
 ---
 
+## Polish & Backlog
+
+- **Filter muted users from search results** — the per-room ignore (mute) list is
+  applied in the room view (messages, mentions, typing indicators and reactions are
+  hidden) but not in cross-room search. Messages, mentions and reactions from muted
+  users still surface in `SearchContextView`. Apply the same ignore filter to search
+  results so muted users stay hidden everywhere.
+
+---
+
 ## Already Shipped
 
 - Message editing, reactions, emoji, GIFs

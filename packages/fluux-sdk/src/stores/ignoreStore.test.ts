@@ -27,7 +27,7 @@ vi.mock('zustand/middleware', () => ({
   persist: (fn: unknown) => fn,
 }))
 
-import { ignoreStore, isMessageFromIgnoredUser, isReplyToIgnoredUser } from './ignoreStore'
+import { ignoreStore, isMessageFromIgnoredUser, isReplyToIgnoredUser, filterIgnoredReactions } from './ignoreStore'
 
 const ROOM_JID = 'room@conference.example.com'
 const ROOM_JID_2 = 'room2@conference.example.com'
@@ -329,6 +329,56 @@ describe('ignoreStore', () => {
       const ignored = [{ identifier: 'occ-alice', displayName: 'Alice' }]
 
       expect(isReplyToIgnoredUser(ignored, { to: `${ROOM}/Alice` })).toBe(false)
+    })
+  })
+
+  describe('filterIgnoredReactions', () => {
+    it('removes an ignored reactor matched by nick identifier', () => {
+      const ignored = [{ identifier: 'Mallory', displayName: 'Mallory' }]
+      const reactions = { '👍': ['Mallory', 'Bob'] }
+
+      expect(filterIgnoredReactions(reactions, ignored)).toEqual({ '👍': ['Bob'] })
+    })
+
+    it('removes an ignored reactor matched by JID via nickToJidCache', () => {
+      const ignored = [{ identifier: 'mallory@example.com', displayName: 'Mallory', jid: 'mallory@example.com' }]
+      const reactions = { '🎉': ['Mallory', 'Bob'] }
+      const cache = new Map([['Mallory', 'mallory@example.com']])
+
+      expect(filterIgnoredReactions(reactions, ignored, cache)).toEqual({ '🎉': ['Bob'] })
+    })
+
+    it('drops an emoji entirely when the ignored user was its only reactor', () => {
+      const ignored = [{ identifier: 'Mallory', displayName: 'Mallory' }]
+      const reactions = { '👍': ['Bob'], '😡': ['Mallory'] }
+
+      expect(filterIgnoredReactions(reactions, ignored)).toEqual({ '👍': ['Bob'] })
+    })
+
+    it('returns undefined when every reaction came from ignored users', () => {
+      const ignored = [{ identifier: 'Mallory', displayName: 'Mallory' }]
+      const reactions = { '😡': ['Mallory'] }
+
+      expect(filterIgnoredReactions(reactions, ignored)).toBeUndefined()
+    })
+
+    it('returns the same reference when nothing is removed (referential stability)', () => {
+      const ignored = [{ identifier: 'Mallory', displayName: 'Mallory' }]
+      const reactions = { '👍': ['Bob', 'Alice'] }
+
+      expect(filterIgnoredReactions(reactions, ignored)).toBe(reactions)
+    })
+
+    it('returns the same reference for an empty ignored list', () => {
+      const reactions = { '👍': ['Mallory'] }
+
+      expect(filterIgnoredReactions(reactions, [])).toBe(reactions)
+    })
+
+    it('returns undefined when reactions are undefined', () => {
+      const ignored = [{ identifier: 'Mallory', displayName: 'Mallory' }]
+
+      expect(filterIgnoredReactions(undefined, ignored)).toBeUndefined()
     })
   })
 

@@ -202,7 +202,7 @@ export type { IgnoredUser } from './stores/ignoreStore'
 
 // Conversation sync types
 export type { SyncedConversation } from './core/modules/ConversationSync'
-export { isMessageFromIgnoredUser, isReplyToIgnoredUser } from './stores/ignoreStore'
+export { isMessageFromIgnoredUser, isReplyToIgnoredUser, filterIgnoredReactions } from './stores/ignoreStore'
 
 // Notification state utilities (pure functions for badge computation, etc.)
 export { computeBadgeCount, shouldNotifyConversation, shouldNotifyRoom } from './stores/shared/notificationState'
