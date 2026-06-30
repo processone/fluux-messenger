@@ -28,6 +28,7 @@ import { connectionStore } from '../stores/connectionStore'
 import { chatStore } from '../stores/chatStore'
 import { roomStore } from '../stores/roomStore'
 import { activityLogStore } from '../stores/activityLogStore'
+import { eventsStore } from '../stores/eventsStore'
 import type { ActivityEventInput } from '../core/types/activity'
 import type { Contact } from '../core/types/roster'
 import type { Room, RoomMessage, RoomOccupant } from '../core/types/room'
@@ -389,6 +390,13 @@ export class DemoClient extends XMPPClient {
     // ActivityLogHook may not be registered yet at this point)
     for (const event of data.activityEvents) {
       activityLogStore.getState().addEvent(event)
+    }
+
+    // Events store: seed pending subscription (add-contact) requests so the Contacts
+    // destination shows them (badge + Requests section). Direct store access, same as
+    // the activity-log seed above.
+    for (const from of data.subscriptionRequests ?? []) {
+      eventsStore.getState().addSubscriptionRequest(from)
     }
   }
 

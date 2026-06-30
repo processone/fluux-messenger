@@ -6,7 +6,7 @@
  */
 
 import type { DemoData, DemoAnimationStep } from '@fluux/sdk'
-import { SELF } from './constants'
+import { SELF, DOMAIN } from './constants'
 import { DEMO_CONTACTS, DEMO_PRESENCES } from './contacts'
 import { getDemoConversations, getDemoMessages } from './conversations'
 import { getDemoRooms } from './rooms'
@@ -23,6 +23,7 @@ export function buildDemoData(): DemoData {
     messages: getDemoMessages(),
     rooms: getDemoRooms(),
     activityEvents: getDemoActivityEvents(),
+    subscriptionRequests: [`olivia@${DOMAIN}`, `alex@${DOMAIN}`],
     ownResources: [
       { resource: 'desktop-7m0lds', show: null, priority: 50, client: 'Fluux Desktop' },
       { resource: 'mobile-k9x2Qp', show: 'away', priority: 10, client: 'Fluux Mobile' },

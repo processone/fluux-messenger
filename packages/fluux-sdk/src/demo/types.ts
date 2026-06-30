@@ -80,5 +80,7 @@ export interface DemoData {
   messages: Map<string, Message[]>
   rooms: DemoRoomData[]
   activityEvents: ActivityEventInput[]
+  /** Bare JIDs that have sent a presence-subscription (add-contact) request. Seeded into eventsStore. */
+  subscriptionRequests?: string[]
   ownResources?: DemoOwnResource[]
 }
