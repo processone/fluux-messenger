@@ -194,7 +194,13 @@ export const ImageAttachment = memo(function ImageAttachment({ attachment, onLoa
             maxHeight: '300px',
           }}
           loading="lazy"
-          onLoad={onLoad}
+          // Notify the scroll layer ONLY when the load could shift layout. With known
+          // dimensions the aspect-ratio box above was reserved before decode, so the load
+          // moves nothing — and poking the scroll layer ran a non-idempotent re-anchor pass
+          // that injected a small reading-position drift compounding across conversation
+          // re-opens (cached <img>s re-fire onLoad on every re-mount). Unsized images fall
+          // back to a default box that the real decode CAN resize, so those still notify.
+          onLoad={hasKnownDimensions ? undefined : onLoad}
           onError={() => {
             failedUrlCache.add(originalImageSrc)
             setLoadError(true)

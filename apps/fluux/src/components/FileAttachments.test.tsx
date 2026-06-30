@@ -416,3 +416,58 @@ describe('MessageAttachments own-message threading', () => {
     expect(screen.getByText('chat.loadImage')).toBeInTheDocument()
   })
 })
+
+// ── onMediaLoad notify gating ────────────────────────────────────────────────
+//
+// The scroll layer is poked (onLoad → onMediaLoad → handleMediaLoad) on EVERY
+// image load, including re-mounts of cached images on conversation re-entry. When
+// the image already has known dimensions, ImageAttachment reserves the exact
+// aspect-ratio box BEFORE the image decodes, so the load shifts NOTHING — yet the
+// scroll layer still ran a re-anchor pass, and that non-idempotent pass injected a
+// small reading-position drift that compounded across re-opens (the reported
+// "conversation drifts older every visit" bug). A load into an already-reserved box
+// must NOT notify the scroll layer; only a genuinely-unsized image (whose decode
+// can change the reserved box) should.
+describe('ImageAttachment onMediaLoad notify gating', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    __resetApprovedMediaUrlsForTest()
+    useAttachmentUrlSpy.mockReturnValue({
+      url: 'blob:http://localhost/image123',
+      isLoading: false,
+      error: null,
+    })
+    useCachedMediaUrlSpy.mockReturnValue({ cachedUrl: null, isPeeking: false })
+  })
+
+  it('does NOT notify onLoad when XEP-0446 dimensions are known (box reserved, no shift)', () => {
+    const onLoad = vi.fn()
+    const sized: FileAttachment = {
+      url: 'https://x/a.jpg', mediaType: 'image/jpeg', name: 'a.jpg', width: 800, height: 600,
+    }
+    render(<ImageAttachment attachment={sized} onLoad={onLoad} />)
+    fireEvent.load(screen.getByRole('img'))
+    expect(onLoad).not.toHaveBeenCalled()
+  })
+
+  it('notifies onLoad when dimensions are unknown (decode can shift the default box)', () => {
+    const onLoad = vi.fn()
+    const unsized: FileAttachment = {
+      url: 'https://x/b.jpg', mediaType: 'image/jpeg', name: 'b.jpg',
+    }
+    render(<ImageAttachment attachment={unsized} onLoad={onLoad} />)
+    fireEvent.load(screen.getByRole('img'))
+    expect(onLoad).toHaveBeenCalledTimes(1)
+  })
+
+  it('treats thumbnail dimensions as known (also reserved, no shift)', () => {
+    const onLoad = vi.fn()
+    const thumbSized: FileAttachment = {
+      url: 'https://x/c.jpg', mediaType: 'image/jpeg', name: 'c.jpg',
+      thumbnail: { uri: 'https://x/c-thumb.jpg', mediaType: 'image/jpeg', width: 320, height: 240 },
+    }
+    render(<ImageAttachment attachment={thumbSized} onLoad={onLoad} />)
+    fireEvent.load(screen.getByRole('img'))
+    expect(onLoad).not.toHaveBeenCalled()
+  })
+})
