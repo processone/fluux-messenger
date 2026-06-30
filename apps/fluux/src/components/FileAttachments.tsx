@@ -233,7 +233,7 @@ export const ImageAttachment = memo(function ImageAttachment({ attachment, onLoa
  * Video attachment with inline player and info bar
  * Uses direct media URLs for browser/WebView loading.
  */
-export const VideoAttachment = memo(function VideoAttachment({ attachment, onLoad, isOwnMessage }: AttachmentProps) {
+export const VideoAttachment = memo(function VideoAttachment({ attachment, isOwnMessage }: AttachmentProps) {
   const { t } = useTranslation()
   const isVideo = attachment.mediaType?.startsWith('video/') ?? false
 
@@ -346,7 +346,9 @@ export const VideoAttachment = memo(function VideoAttachment({ attachment, onLoa
           poster={proxiedPosterUrl || undefined}
           className="absolute inset-0 h-full w-full object-contain"
           tabIndex={-1}
-          onLoadedMetadata={onLoad}
+          // No scroll-notify on metadata load: the box is height-locked (see above), so the load
+          // never shifts layout — poking the scroll layer would only run a spurious re-anchor that
+          // drifts the reading position (the same creep the ImageAttachment onLoad gate prevents).
           onError={() => {
             failedUrlCache.add(attachment.url)
             setLoadError(true)

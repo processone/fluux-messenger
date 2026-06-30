@@ -19,12 +19,15 @@ const MAX_IMAGE_ATTEMPTS = 2
 
 interface LinkPreviewCardProps {
   preview: LinkPreview
+  /** Accepted for uniformity with the other media components but intentionally NOT wired: the OG
+   *  image sits in a fixed `aspect-video` box (object-cover fills it), so its load never shifts
+   *  layout — notifying the scroll layer would only trigger a spurious, drift-inducing re-anchor. */
   onLoad?: () => void
   /** When true (the local user's own message), bypass media-autoload deferral. */
   isOwnMessage?: boolean
 }
 
-export function LinkPreviewCard({ preview, onLoad, isOwnMessage }: LinkPreviewCardProps) {
+export function LinkPreviewCard({ preview, isOwnMessage }: LinkPreviewCardProps) {
   const [attempt, setAttempt] = useState(0)
   const [imagePhase, setImagePhase] = useState<'showing' | 'waiting' | 'gone'>('showing')
   const retryTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -87,7 +90,6 @@ export function LinkPreviewCard({ preview, onLoad, isOwnMessage }: LinkPreviewCa
               alt=""
               className="w-full h-full object-cover"
               loading="lazy"
-              onLoad={onLoad}
               onError={handleImageError}
             />
           )}

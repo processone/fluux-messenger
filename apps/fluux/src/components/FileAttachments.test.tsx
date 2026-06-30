@@ -471,3 +471,31 @@ describe('ImageAttachment onMediaLoad notify gating', () => {
     expect(onLoad).not.toHaveBeenCalled()
   })
 })
+
+// Video sits in an always-reserved, height-locked box (aspect-ratio container with the
+// <video> absolutely positioned to fill it), so its metadata load can NEVER shift layout —
+// it must not poke the scroll layer (which would run a spurious, drift-inducing re-anchor).
+describe('VideoAttachment onMediaLoad notify gating', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    __resetApprovedMediaUrlsForTest()
+    useAttachmentUrlSpy.mockReturnValue({
+      url: 'blob:http://localhost/video123',
+      isLoading: false,
+      error: null,
+    })
+    useCachedMediaUrlSpy.mockReturnValue({ cachedUrl: null, isPeeking: false })
+  })
+
+  it('does NOT notify onLoad when video metadata loads (height-locked box never shifts)', () => {
+    const onLoad = vi.fn()
+    const video: FileAttachment = {
+      url: 'https://x/v.mp4', mediaType: 'video/mp4', name: 'v.mp4', width: 1920, height: 1080,
+    }
+    render(<VideoAttachment attachment={video} onLoad={onLoad} />)
+    const el = document.querySelector('video')
+    expect(el).not.toBeNull()
+    fireEvent.loadedMetadata(el!)
+    expect(onLoad).not.toHaveBeenCalled()
+  })
+})

@@ -130,3 +130,17 @@ describe('LinkPreviewCard image deferral', () => {
     expect(container.querySelector('img')).not.toBeNull()
   })
 })
+
+// The OG image sits in a fixed `aspect-video` box (object-cover fills it), so its load can
+// NEVER shift layout — it must not poke the scroll layer (a spurious re-anchor that drifts the
+// reading position). Mirrors the image/video notify gating in FileAttachments.
+describe('LinkPreviewCard onMediaLoad notify gating', () => {
+  it('does NOT notify onLoad when the preview image loads (fixed aspect-video box never shifts)', () => {
+    const onLoad = vi.fn()
+    const { container } = render(<LinkPreviewCard preview={preview} onLoad={onLoad} />)
+    const img = container.querySelector('img')
+    expect(img).not.toBeNull()
+    fireEvent.load(img!)
+    expect(onLoad).not.toHaveBeenCalled()
+  })
+})
