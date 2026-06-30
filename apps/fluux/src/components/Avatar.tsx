@@ -150,6 +150,56 @@ function cacheStaticFrame(url: string, dataUrl: string): void {
 }
 
 /**
+ * In-flight first-frame extractions, keyed by avatar URL. Dedupes concurrent
+ * decodes of the same avatar (it can be mounted in several visible rows at once)
+ * and, crucially, lets an extraction outlive the component that started it. A
+ * virtualized row routinely unmounts mid-decode while the user scrolls past;
+ * tying the decode to that component's lifetime meant the frozen frame never
+ * reached the cache during scrolling, so every scroll-in replayed the GIF.
+ */
+const inFlightFrames = new Map<string, Promise<string | null>>()
+
+/**
+ * Extract an animated GIF's first frame as a static PNG data URL and populate the
+ * module-level cache on success. Resolves to null for non-GIF images or on any
+ * decode failure. Deliberately decoupled from React: it is NOT cancelled when the
+ * requesting component unmounts, so the cache fills even during fast scrolling.
+ */
+function extractFirstFrame(url: string): Promise<string | null> {
+  const cached = staticFrameCache.get(url)
+  if (cached) return Promise.resolve(cached)
+  const pending = inFlightFrames.get(url)
+  if (pending) return pending
+
+  const extraction = fetch(url)
+    .then(r => r.blob())
+    .then(blob => {
+      if (blob.type !== 'image/gif') return null
+      return new Promise<string | null>((resolve) => {
+        const img = new Image()
+        img.onload = () => {
+          const c = document.createElement('canvas')
+          c.width = img.naturalWidth
+          c.height = img.naturalHeight
+          const ctx = c.getContext('2d')
+          if (!ctx) { resolve(null); return }
+          ctx.drawImage(img, 0, 0)
+          const dataUrl = c.toDataURL('image/png')
+          cacheStaticFrame(url, dataUrl)
+          resolve(dataUrl)
+        }
+        img.onerror = () => resolve(null)
+        img.src = url
+      })
+    })
+    .catch(() => null)
+    .finally(() => { inFlightFrames.delete(url) })
+
+  inFlightFrames.set(url, extraction)
+  return extraction
+}
+
+/**
  * For animated GIF avatars, extract the first frame as a static PNG data URL.
  * Returns null for non-GIF images or while loading. A cached frame for the same
  * URL is applied synchronously on mount (no re-fetch, no replay).
@@ -165,25 +215,12 @@ function useStaticFrame(url: string | undefined): string | null {
     if (cached) { setFrame(cached); return }
     setFrame(null)
     let cancelled = false
-
-    fetch(url)
-      .then(r => r.blob())
-      .then(blob => {
-        if (cancelled || blob.type !== 'image/gif') return
-        const img = new Image()
-        img.onload = () => {
-          if (cancelled) return
-          const c = document.createElement('canvas')
-          c.width = img.naturalWidth
-          c.height = img.naturalHeight
-          c.getContext('2d')?.drawImage(img, 0, 0)
-          const dataUrl = c.toDataURL('image/png')
-          cacheStaticFrame(url, dataUrl)
-          setFrame(dataUrl)
-        }
-        img.src = url
-      })
-      .catch(() => {})
+    // Extraction runs to completion regardless of unmount (it feeds the shared
+    // cache for the next mount); only the state update is guarded so we never
+    // setState on an unmounted row.
+    void extractFirstFrame(url).then(dataUrl => {
+      if (!cancelled && dataUrl) setFrame(dataUrl)
+    })
 
     return () => { cancelled = true }
   }, [url])
