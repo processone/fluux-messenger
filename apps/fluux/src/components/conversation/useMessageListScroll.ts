@@ -715,30 +715,33 @@ export function useMessageListScroll({
     // window — and a send can land mid-prepend — so re-entry is routine.
     supersedeReassertLoopRef.current()
 
-    // WebKit measurement-flush. A just-added bottom row's real height reaches @tanstack's
-    // getTotalSize — which IS the spacer's declared height, and therefore the scroller's
-    // scrollHeight — only when a ResizeObserver delivers, and WebKit (Safari + Tauri) delivers it
-    // LATE. Until then scrollHeight reads stale-short, so the pin computes distFromBottom 0 against
-    // content that has not grown yet and settles with the new message a row below the fold — the
-    // reported send/receive stick failure. Diagnosed via the observer effect: a console loop reading
-    // row geometry every frame made the bug vanish (forcing layout flushed the measurement). So we
-    // stop waiting on WebKit's RO and flush the tail ourselves: measureElement reads offsetHeight
-    // (forcing layout) AND writes the size into @tanstack synchronously, growing getTotalSize so the
-    // next frame's scrollHeight is fresh and the re-pin can reach the true bottom. Idempotent once a
-    // row's size is stable (no-ops on Chromium, where the RO was already prompt). The last few rows,
-    // not just the last, cover a grouping-height change in the row above the new one.
-    const flushTailMeasurements = () => {
-      const vv = virtualizerRef.current
+    // WebKit at-bottom stick. Rows are absolutely positioned, so the scroller's scrollHeight is the
+    // spacer's declared height (= @tanstack getTotalSize), which grows only once a just-added row's
+    // ResizeObserver delivers — and WebKit (Safari + Tauri) delivers that LATE. When you are already
+    // AT the bottom there is no scroll motion to trigger the re-window/measure, so scrollHeight reads
+    // stale-short by exactly the new row's height, the pin sees distFromBottom 0 against content that
+    // has not grown, and the new message is stranded a row below the fold. (Scrolled UP, a send still
+    // works: the large scroll re-windows and measures on the way down — confirmed in the field.)
+    //
+    // Diagnosed via the observer effect: a console loop reading row geometry every frame made the bug
+    // vanish, because reading a message row's getBoundingClientRect forces the layout that makes the
+    // observer deliver, so getTotalSize/scrollHeight catch up. We replicate exactly that — read the
+    // tail message rows' rects each settle frame — and let the existing scrollHeight-delta re-pin
+    // below scroll to the freshly-grown bottom. Strictly read-only (no scroll, no state), so it can't
+    // thrash; a no-op on Chromium, where the observer was already prompt. Reading the last few rows
+    // covers a grouping-height change in the row above the new one.
+    const flushTailLayout = () => {
       const ss = scrollerRef.current
-      if (!vv || !ss) return
-      const rows = ss.querySelectorAll('[data-index]')
+      if (!ss) return
+      ss.getBoundingClientRect()
+      const rows = ss.querySelectorAll('[data-message-id]')
       for (let i = Math.max(0, rows.length - 3); i < rows.length; i++) {
-        vv.measureElement(rows[i])
+        rows[i].getBoundingClientRect()
       }
     }
 
     // Immediate pin (pre-paint when called from a layout effect).
-    flushTailMeasurements()
+    flushTailLayout()
     virt.scrollToIndex(virt.itemCount - 1, { align: 'end' })
     debugLog('PIN start', {
       itemCount: virt.itemCount,
@@ -762,6 +765,7 @@ export function useMessageListScroll({
         // mid-loop (see the removed bail above), so it must leave a correct one behind here. If dist
         // is still > tolerance the pin never converged (the just-sent message ended up below the fold).
         if (s) {
+          flushTailLayout()
           const dist = s.scrollHeight - s.scrollTop - s.clientHeight
           isAtBottomRef.current = dist < AT_BOTTOM_THRESHOLD
           debugLog('PIN settled (frames exhausted)', { distFromBottom: dist })
@@ -787,15 +791,14 @@ export function useMessageListScroll({
         finish()
         return
       }
-      // Flush the tail rows' real heights into getTotalSize BEFORE reading scrollHeight, so on
-      // WebKit the spacer has grown to include the just-added row and the re-pin below can reach the
-      // true bottom this settle window instead of stranding it a row low (see pin-start comment).
-      flushTailMeasurements()
+      // Force the tail rows to lay out this frame (the field-proven flush) so WebKit's late
+      // ResizeObserver delivers and getTotalSize/scrollHeight grow to include the just-added row,
+      // BEFORE we read scrollHeight below.
+      flushTailLayout()
       const h = s.scrollHeight
-      // Re-pin when the layout grew/shrank (the common case) OR when we're still measurably short
-      // of the true bottom. The latter catches the frame the change-detection guard alone misses —
-      // the last row settling taller without a frame-to-frame scrollHeight delta to react to — and
-      // is what left the just-sent message a row below the fold on WebKit. Idempotent at the bottom.
+      // Re-pin when the layout grew/shrank (the common case) OR when we're still measurably short of
+      // the true bottom. The flush above makes the at-bottom growth show up here within a frame or
+      // two, so the send no longer settles a row low on WebKit. Idempotent at the bottom.
       const dist = h - s.scrollTop - s.clientHeight
       let wrote = false
       if (h !== lastHeight || dist > BOTTOM_PIN_TOLERANCE) {
