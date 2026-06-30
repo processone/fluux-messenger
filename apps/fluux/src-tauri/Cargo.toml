@@ -33,7 +33,7 @@ serde = { version = "1", features = ["derive"] }
 tokio = { version = "1", features = ["full"] }
 tokio-tungstenite = "0.29"
 futures-util = "0.3"
-quick-xml = "0.40"
+quick-xml = "0.41"
 tokio-rustls = "0.26"
 rustls = { version = "0.23", features = ["ring"] }
 rustls-native-certs = "0.8"
