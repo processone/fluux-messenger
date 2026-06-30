@@ -1,4 +1,6 @@
 import { describe, it, expect } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { trustVisual } from './trustVisual'
 
 describe('trustVisual', () => {
@@ -23,4 +25,22 @@ describe('trustVisual', () => {
     expect(trustVisual('plaintext')).toEqual({ colorClass: 'text-fluux-muted', tone: 'calm' })
     expect(trustVisual('checking')).toEqual({ colorClass: 'text-fluux-muted', tone: 'calm' })
   })
+})
+
+// Static guard: the trust-lock surfaces must route every trust color through
+// trustVisual (the tokens), never a bare red/yellow/green palette class. Read
+// the sources from process.cwd() (the app runs vitest from apps/fluux; import.meta.url
+// is not a file:// path under vitest, so the cwd-relative path is the reliable one).
+describe('lock surfaces use trustVisual tokens (no bare trust palette)', () => {
+  const lockSurfaces = [
+    'src/components/conversation/MessageBubble.tsx',
+    'src/components/ChatHeader.tsx',
+    'src/components/contact-profile/tabs/SecurityTab.tsx',
+  ]
+  for (const file of lockSurfaces) {
+    it(`${file} has no bare red/yellow/green trust palette class`, () => {
+      const src = readFileSync(join(process.cwd(), file), 'utf-8')
+      expect(src.match(/text-(red|yellow|green)-[0-9]{3}/g)).toBeNull()
+    })
+  }
 })
