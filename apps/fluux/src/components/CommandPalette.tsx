@@ -140,7 +140,7 @@ function groupItemsByType(items: CommandItem[], t: (key: string) => string): Ite
   const typeOrder: { type: ItemType; labelKey: string }[] = [
     { type: 'conversation', labelKey: 'sidebar.messages' },
     { type: 'room', labelKey: 'sidebar.rooms' },
-    { type: 'contact', labelKey: 'sidebar.connections' },
+    { type: 'contact', labelKey: 'sidebar.contacts' },
     { type: 'view', labelKey: 'commandPalette.views' },
     { type: 'action', labelKey: 'commandPalette.actions' },
   ]
@@ -395,7 +395,7 @@ function CommandPaletteContent({
     const views: Array<{ id: string; label: string; icon: React.ReactNode; view: SidebarView; keywords: string[] }> = [
       { id: 'view-messages', label: t('sidebar.messages'), icon: <MessageSquare />, view: 'messages', keywords: ['messages', 'conversations', 'chat'] },
       { id: 'view-rooms', label: t('sidebar.rooms'), icon: <Hash />, view: 'rooms', keywords: ['rooms', 'channels', 'muc'] },
-      { id: 'view-connections', label: t('sidebar.connections'), icon: <Users />, view: 'directory', keywords: ['connections', 'contacts', 'roster'] },
+      { id: 'view-connections', label: t('sidebar.contacts'), icon: <Users />, view: 'directory', keywords: ['connections', 'contacts', 'roster'] },
       { id: 'view-archive', label: t('sidebar.archive'), icon: <Archive />, view: 'archive', keywords: ['archive', 'hidden', 'old'] },
       { id: 'view-events', label: t('sidebar.events'), icon: <Bell />, view: 'events', keywords: ['events', 'notifications', 'requests'] },
     ]

@@ -64,6 +64,15 @@ import {
 // Re-export SidebarView for external use
 export type { SidebarView }
 
+/** Pure helper: counts Events-bell pending items, excluding subscription requests (those drive the Contacts badge). */
+export function eventsPendingCount(s: { strangerMessages: Array<{ from: string }>; mucInvitations: unknown[]; systemNotifications: unknown[] }) {
+  return (
+    new Set(s.strangerMessages.map((m) => m.from)).size +
+    s.mucInvitations.length +
+    s.systemNotifications.length
+  )
+}
+
 interface SidebarProps {
   onSelectContact?: (contact: Contact) => void
   onStartChat?: (contact: Contact) => void
@@ -102,12 +111,8 @@ export function Sidebar({ onSelectContact, onStartChat, onStartChatWithJid, onMa
     for (const meta of s.conversationMeta.values()) sum += meta.unreadCount
     return sum
   })
-  const pendingCount = useEventsStore((s) =>
-    s.subscriptionRequests.length +
-    new Set(s.strangerMessages.map((m) => m.from)).size +
-    s.mucInvitations.length +
-    s.systemNotifications.length
-  )
+  const pendingRequestCount = useEventsStore((s) => s.subscriptionRequests.length)
+  const pendingCount = useEventsStore((s) => eventsPendingCount(s))
   const totalMentionsCount = useRoomStore((s) => s.totalMentionsCount())
   const totalNotifiableUnreadCount = useRoomStore((s) => s.totalNotifiableUnreadCount())
 
@@ -263,13 +268,6 @@ export function Sidebar({ onSelectContact, onStartChat, onStartChatWithJid, onMa
           pathPrefix="/archive"
           onNavigate={onViewChange}
         />
-        <IconRailNavLink
-          icon={Users}
-          label={t('sidebar.connections')}
-          view="directory"
-          pathPrefix="/contacts"
-          onNavigate={onViewChange}
-        />
         {/* Events/Notifications */}
         <IconRailNavLink
           icon={Bell}
@@ -298,6 +296,16 @@ export function Sidebar({ onSelectContact, onStartChat, onStartChatWithJid, onMa
             onClick={activateUpdate}
           />
         )}
+        {/* Contacts - relocated to bottom cluster; badge shows pending subscription requests */}
+        <IconRailNavLink
+          icon={Users}
+          label={t('sidebar.contacts')}
+          view="directory"
+          pathPrefix="/contacts"
+          onNavigate={onViewChange}
+          badgeCount={pendingRequestCount}
+          badgeLabel={pendingRequestCount > 0 ? `${t('sidebar.contacts')} (${pendingRequestCount})` : undefined}
+        />
         {/* Admin - only visible for server administrators */}
         {isAdmin && (
           <IconRailNavLink
@@ -325,7 +333,7 @@ export function Sidebar({ onSelectContact, onStartChat, onStartChatWithJid, onMa
           <h1 className="flex-1 font-semibold text-fluux-text truncate">
             {sidebarView === 'messages' ? t('sidebar.messages')
               : sidebarView === 'rooms' ? t('sidebar.rooms')
-              : sidebarView === 'directory' ? t('sidebar.connections')
+              : sidebarView === 'directory' ? t('sidebar.contacts')
               : sidebarView === 'archive' ? t('sidebar.archive')
               : sidebarView === 'admin' ? t('sidebar.admin')
               : sidebarView === 'settings' ? t('sidebar.settings')
