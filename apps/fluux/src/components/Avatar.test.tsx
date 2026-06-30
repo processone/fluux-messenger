@@ -319,6 +319,29 @@ describe('Avatar — animated GIF freeze-on-hover', () => {
     expect(fetchSpy).toHaveBeenCalledTimes(1)
   })
 
+  it('caches the frozen frame even when the row unmounts mid-extraction (fast scroll)', async () => {
+    // The whole point of the module-level cache is virtualized scrolling, where
+    // rows mount and unmount in quick succession. Extraction (fetch -> decode ->
+    // canvas) is async and takes longer than a fast scroll-past, so the row
+    // unmounts *before* it finishes. The cache must still be populated by that
+    // in-flight extraction — otherwise it never fills during scrolling and every
+    // scroll-in replays the GIF, defeating the fix entirely.
+    const url = 'blob:gif-fastscroll'
+    const { unmount } = render(<Avatar identifier="alice" name="Alice" avatarUrl={url} />)
+    // Scroll past: unmount immediately, before the extraction microtasks resolve.
+    unmount()
+
+    // Let the background extraction run to completion despite the unmount.
+    await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1))
+    await new Promise((r) => setTimeout(r, 0))
+
+    // Scroll back into view: the frozen frame is applied on the first render with
+    // no second fetch, because the earlier extraction populated the shared cache.
+    render(<Avatar identifier="alice" name="Alice" avatarUrl={url} />)
+    expect(screen.getByRole('img')).toHaveAttribute('src', STATIC_DATA_URL)
+    expect(fetchSpy).toHaveBeenCalledTimes(1)
+  })
+
   it('plays the GIF on hover and re-freezes on mouse leave', async () => {
     const url = 'blob:gif-hover'
     const { container } = render(<Avatar identifier="alice" name="Alice" avatarUrl={url} />)
