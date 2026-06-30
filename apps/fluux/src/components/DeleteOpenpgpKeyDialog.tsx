@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { AlertTriangle, Loader2 } from 'lucide-react'
+import { ModalOverlay } from './ModalOverlay'
 
 interface DeleteOpenpgpKeyDialogProps {
   /**
@@ -54,14 +55,6 @@ export function DeleteOpenpgpKeyDialog({
   const [isRunning, setIsRunning] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !isRunning) onCancel()
-    }
-    document.addEventListener('keydown', handleKeyDown)
-    return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [onCancel, isRunning])
-
   const handleConfirm = useCallback(async () => {
     setIsRunning(true)
     setError(null)
@@ -74,19 +67,12 @@ export function DeleteOpenpgpKeyDialog({
   }, [onConfirm, deleteBackup])
 
   return (
-    <div
-      data-modal="true"
-      className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+    <ModalOverlay
+      onClose={onCancel}
+      width="max-w-md"
+      panelClassName="max-h-[calc(100vh-2rem)] flex flex-col overflow-hidden"
+      dismissable={!isRunning}
     >
-      <button
-        type="button"
-        aria-hidden="true"
-        tabIndex={-1}
-        disabled={isRunning}
-        onClick={onCancel}
-        className="absolute inset-0 cursor-default"
-      />
-      <div className="relative z-10 bg-fluux-sidebar rounded-lg max-w-md w-full mx-4 shadow-xl max-h-[calc(100vh-2rem)] flex flex-col overflow-hidden">
         <div className="px-5 pt-5 pb-3">
           <h3 className="text-lg font-semibold text-fluux-text mb-1">
             {t('settings.encryption.deleteKeyConfirmTitle')}
@@ -148,8 +134,7 @@ export function DeleteOpenpgpKeyDialog({
             {t('settings.encryption.deleteKeyConfirmAction')}
           </button>
         </div>
-      </div>
-    </div>
+    </ModalOverlay>
   )
 }
 

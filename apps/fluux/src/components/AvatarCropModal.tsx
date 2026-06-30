@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { X, Upload, ZoomIn, ZoomOut, RotateCcw, Camera, Video, VideoOff } from 'lucide-react'
 import { Tooltip } from './Tooltip'
-import { useModalTransition } from '@/hooks/useModalTransition'
+import { ModalOverlay } from './ModalOverlay'
 
 interface AvatarCropModalProps {
   isOpen: boolean
@@ -16,8 +16,6 @@ const MAX_ZOOM = 3
 
 export function AvatarCropModal({ isOpen, onClose, onSave }: AvatarCropModalProps) {
   const { t } = useTranslation()
-  const { panelClass, scrimClass, requestClose } = useModalTransition()
-  const close = useCallback(() => requestClose(onClose), [requestClose, onClose])
   const [, setSelectedFile] = useState<File | null>(null)
   const [imageUrl, setImageUrl] = useState<string | null>(null)
   const [zoom, setZoom] = useState(1)
@@ -361,8 +359,14 @@ export function AvatarCropModal({ isOpen, onClose, onSave }: AvatarCropModalProp
   if (!isOpen) return null
 
   return (
-    <div className={`fixed inset-0 z-50 flex items-center justify-center bg-black/70 ${scrimClass}`}>
-      <div className={`fluux-glass rounded-lg w-full max-w-md mx-4 max-h-[calc(100vh-2rem)] flex flex-col overflow-hidden ${panelClass}`}>
+    <ModalOverlay
+      onClose={onClose}
+      width="max-w-md"
+      panelClassName="max-h-[calc(100vh-2rem)] flex flex-col overflow-hidden"
+      dismissable={false}
+    >
+      {({ close }) => (
+        <>
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-fluux-bg">
           <h2 className="text-lg font-semibold text-fluux-text">{t('avatar.uploadTitle')}</h2>
@@ -578,7 +582,8 @@ export function AvatarCropModal({ isOpen, onClose, onSave }: AvatarCropModalProp
             {saving ? t('common.saving') : t('common.save')}
           </button>
         </div>
-      </div>
-    </div>
+        </>
+      )}
+    </ModalOverlay>
   )
 }

@@ -6,6 +6,7 @@ import { useConsole } from '@fluux/sdk'
 import { AboutModal } from '../AboutModal'
 import { ChangelogModal } from '../ChangelogModal'
 import { Tooltip } from '../Tooltip'
+import { ModalOverlay } from '../ModalOverlay'
 import { useAdvancedModeStore } from '@/stores/advancedModeStore'
 import {
   LogOut,
@@ -174,17 +175,12 @@ export function UserMenu({ onLogout }: UserMenuProps) {
 
       {/* Logout Confirmation Modal */}
       {showLogoutConfirm && (
-        <div
-          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+        <ModalOverlay
+          onClose={() => setShowLogoutConfirm(false)}
+          width="max-w-xs"
+          panelClassName="overflow-hidden"
         >
-          <button
-            type="button"
-            aria-hidden="true"
-            tabIndex={-1}
-            onClick={() => setShowLogoutConfirm(false)}
-            className="absolute inset-0 cursor-default"
-          />
-          <div className="relative z-10 bg-fluux-sidebar rounded-lg shadow-xl border border-fluux-hover w-80 overflow-hidden">
+          {({ close }) => (
             <div className="p-6 text-center">
               <LogOut className="size-12 mx-auto mb-4 text-fluux-muted" />
               <h3 className="text-lg font-semibold text-fluux-text mb-2">{t('menu.logOut')}</h3>
@@ -202,7 +198,7 @@ export function UserMenu({ onLogout }: UserMenuProps) {
               </label>
               <div className="flex gap-3">
                 <button
-                  onClick={() => setShowLogoutConfirm(false)}
+                  onClick={close}
                   className="flex-1 px-4 py-2 text-fluux-text bg-fluux-hover rounded hover:bg-fluux-hover/80 transition-colors"
                 >
                   {t('common.cancel')}
@@ -218,8 +214,8 @@ export function UserMenu({ onLogout }: UserMenuProps) {
                 </button>
               </div>
             </div>
-          </div>
-        </div>
+          )}
+        </ModalOverlay>
       )}
     </>
   )

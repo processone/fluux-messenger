@@ -8,6 +8,7 @@ import { formatStanzaPreview, formatStanzaXml } from '@/utils/stanzaPreviewForma
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { TextInput, TextArea } from './ui/TextInput'
 import { Tooltip } from './Tooltip'
+import { ModalOverlay } from './ModalOverlay'
 import { isTauri } from '@/utils/tauri'
 
 const isMac = typeof navigator !== 'undefined' && /Mac/.test(navigator.platform)
@@ -737,17 +738,11 @@ export function XmppConsole() {
 
       {/* Server Info Modal */}
       {showServerInfo && serverInfo && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <button
-            type="button"
-            aria-hidden="true"
-            tabIndex={-1}
-            onClick={() => setShowServerInfo(false)}
-            className="absolute inset-0 cursor-default"
-          />
-          <div
-            className="relative z-10 bg-fluux-sidebar rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[80vh] flex flex-col"
-          >
+        <ModalOverlay
+          onClose={() => setShowServerInfo(false)}
+          width="max-w-2xl"
+          panelClassName="max-h-[80vh] flex flex-col"
+        >
             {/* Modal Header */}
             <div className="flex items-center justify-between px-4 py-3 border-b border-fluux-bg">
               <div className="flex items-center gap-2">
@@ -811,8 +806,7 @@ export function XmppConsole() {
                 {t('common.close')}
               </button>
             </div>
-          </div>
-        </div>
+        </ModalOverlay>
       )}
     </div>
   )

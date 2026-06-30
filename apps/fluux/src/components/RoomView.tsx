@@ -27,6 +27,7 @@ import { useToastStore } from '@/stores/toastStore'
 import { findLastEditableMessage, findLastEditableMessageId } from '@/utils/messageUtils'
 import { useExpandedMessagesStore } from '@/stores/expandedMessagesStore'
 import { ConfirmDialog } from './ConfirmDialog'
+import { ModalOverlay } from './ModalOverlay'
 import { useRoomJoinWarning } from '@/hooks/useRoomJoinWarning'
 import { MediaAutoloadProvider } from '@/contexts'
 import { computeMediaAutoload } from '@/utils/mediaAutoload'
@@ -1503,22 +1504,16 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
 
       {/* Moderation confirmation dialog */}
       {showModerateConfirm && (
-        <div
-          data-modal="true"
-          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+        <ModalOverlay
+          onClose={() => {
+            setShowModerateConfirm(false)
+            setModerateReason('')
+            setBanAfterModerate(false)
+          }}
+          panelClassName="p-4"
         >
-          <button
-            type="button"
-            aria-hidden="true"
-            tabIndex={-1}
-            onClick={() => {
-              setShowModerateConfirm(false)
-              setModerateReason('')
-              setBanAfterModerate(false)
-            }}
-            className="absolute inset-0 cursor-default"
-          />
-          <div className="relative z-10 bg-fluux-sidebar rounded-lg p-4 max-w-sm w-full mx-4 shadow-xl">
+          {({ close }) => (
+            <>
             <h3 className="text-lg font-semibold text-fluux-text mb-2">{t('chat.moderateMessage')}</h3>
             <p className="text-sm text-fluux-muted mb-3">{t('chat.moderateMessageConfirm')}</p>
             <div className="mb-3">
@@ -1557,11 +1552,7 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
             )}
             <div className="flex gap-2 justify-end">
               <button
-                onClick={() => {
-                  setShowModerateConfirm(false)
-                  setModerateReason('')
-                  setBanAfterModerate(false)
-                }}
+                onClick={close}
                 className="px-4 py-2 text-sm text-fluux-text bg-fluux-hover hover:bg-fluux-active rounded-lg transition-colors"
               >
                 {t('common.cancel')}
@@ -1582,8 +1573,9 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
                 {t('chat.moderateMessage')}
               </button>
             </div>
-          </div>
-        </div>
+            </>
+          )}
+        </ModalOverlay>
       )}
     </>
   )
