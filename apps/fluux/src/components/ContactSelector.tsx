@@ -36,6 +36,8 @@ export interface ContactSelectorProps {
   excludeJids?: string[]
   /** Additional JID suggestions beyond roster contacts (e.g., room occupants, affiliated members) */
   extraSuggestions?: Array<{ jid: string; name?: string }>
+  /** Single-pick mode: when set, selecting a contact or typing a JID + Enter calls this once and skips chip selection. */
+  onPick?: (jid: string) => void
 }
 
 /** Unified contact entry for the dropdown */
@@ -67,6 +69,7 @@ export function ContactSelector({
   disabled = false,
   excludeJids = [],
   extraSuggestions = [],
+  onPick,
 }: ContactSelectorProps) {
   const { t } = useTranslation()
   const { contacts } = useRoster()
@@ -193,6 +196,12 @@ export function ContactSelector({
   }, [filteredContacts.length, search])
 
   const selectContact = (jid: string) => {
+    if (onPick) {
+      onPick(jid)
+      setSearch('')
+      setHighlightedIndex(0)
+      return
+    }
     if (!selectedContacts.includes(jid)) {
       onSelectionChange([...selectedContacts, jid])
     }
