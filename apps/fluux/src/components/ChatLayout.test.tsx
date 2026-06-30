@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { ChatLayout } from './ChatLayout'
@@ -18,6 +18,7 @@ const {
   const state = {
     activeConversationId: null as string | null,
     activeRoomJid: null as string | null,
+    activationPending: false,
     isArchivedResult: false,
   }
 
@@ -223,6 +224,7 @@ vi.mock('@fluux/sdk/react', () => ({
   useChatStore: Object.assign(
     (selector: (state: {
       activeConversationId: string | null;
+      activationPending: boolean;
       setActiveConversation: typeof mockSetActiveConversation;
       activateConversation: typeof mockActivateConversation;
       addConversation: ReturnType<typeof vi.fn>;
@@ -233,6 +235,7 @@ vi.mock('@fluux/sdk/react', () => ({
     }) => unknown) => {
       const state = {
         activeConversationId: getMockState().activeConversationId,
+        activationPending: getMockState().activationPending,
         setActiveConversation: mockSetActiveConversation,
         activateConversation: mockActivateConversation,
         addConversation: vi.fn(),
@@ -1150,5 +1153,39 @@ describe('ChatLayout - EmptyState primary actions', () => {
     await waitFor(() => {
       expect(screen.getByTestId('create-room-modal')).toBeInTheDocument()
     })
+  })
+})
+
+describe('ChatLayout - activation gap (no empty-state flash)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    setMockState({
+      activeConversationId: null,
+      activeRoomJid: null,
+      activationPending: false,
+      isArchivedResult: false,
+    })
+  })
+
+  afterEach(() => {
+    setMockState({ activationPending: false })
+  })
+
+  // Regression for the empty-screen flash on rail tab switch: while a hydrating
+  // activation is in flight (cache load before the active id lands) both active
+  // ids are null, so the render cascade would otherwise fall through to the
+  // empty-state hero. It must hold a neutral surface instead.
+  it('does not flash the empty-state hero while an activation is pending', () => {
+    setMockState({ activationPending: true })
+    render(<ChatLayoutWithRouter initialRoute="/messages" />)
+
+    expect(screen.queryByText('Start a conversation')).toBeNull()
+  })
+
+  it('shows the empty-state hero once no activation is pending', () => {
+    setMockState({ activationPending: false })
+    render(<ChatLayoutWithRouter initialRoute="/messages" />)
+
+    expect(screen.getByText('Start a conversation')).toBeInTheDocument()
   })
 })

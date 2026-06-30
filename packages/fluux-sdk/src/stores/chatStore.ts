@@ -186,6 +186,10 @@ interface ChatState {
   conversations: Map<string, Conversation>
   messages: Map<string, Message[]>
   activeConversationId: string | null
+  // True while activateConversation() is hydrating a conversation's cache before
+  // it becomes active. Lets the UI hold a neutral loading surface during the async
+  // gap instead of flashing the "nothing selected" empty state on tab switch.
+  activationPending: boolean
   // Archived conversation IDs - hidden from main list but reappear on new activity
   archivedConversations: Set<string>
   // Typing indicators: conversationId -> Set of JIDs currently typing (ephemeral, not persisted)
@@ -492,13 +496,14 @@ function deserializeState(persisted: PersistedState): Pick<ChatState, 'conversat
   }
 }
 
-function createEmptyChatState(): Pick<ChatState, 'conversationEntities' | 'conversationMeta' | 'conversations' | 'messages' | 'activeConversationId' | 'archivedConversations' | 'typingStates' | 'activeAnimation' | 'drafts' | 'mamQueryStates' | 'conversationGaps' | 'targetMessageId' | 'firstNewMessageMarkers'> {
+function createEmptyChatState(): Pick<ChatState, 'conversationEntities' | 'conversationMeta' | 'conversations' | 'messages' | 'activeConversationId' | 'activationPending' | 'archivedConversations' | 'typingStates' | 'activeAnimation' | 'drafts' | 'mamQueryStates' | 'conversationGaps' | 'targetMessageId' | 'firstNewMessageMarkers'> {
   return {
     conversationEntities: new Map(),
     conversationMeta: new Map(),
     conversations: new Map(),
     messages: new Map(),
     activeConversationId: null,
+    activationPending: false,
     archivedConversations: new Set(),
     typingStates: new Map(),
     activeAnimation: null,
@@ -706,8 +711,12 @@ export const chatStore = createStore<ChatState>()(
       activateConversation: async (id) => {
         const token = ++activationToken
         if (id) {
+          // Signal the hydration window so the UI can hold a neutral surface
+          // instead of flashing the empty state while the cache read is in flight.
+          set({ activationPending: true })
           await get().loadMessagesFromCache(id, { limit: 100 })
-          // A newer activation started while the cache read was in flight
+          // A newer activation started while the cache read was in flight: it owns
+          // the pending flag now, so bail without clearing it.
           if (token !== activationToken) return
           // XEP-0490: fold any pending remote read position into lastSeenMessageId
           // BEFORE setActiveConversation derives the new-message divider. The fresh
@@ -740,7 +749,10 @@ export const chatStore = createStore<ChatState>()(
             })
           }
         }
+        // Set active and clear pending atomically (same React commit) so the view
+        // swaps straight from loading surface to content with no empty-state frame.
         get().setActiveConversation(id)
+        set({ activationPending: false })
       },
 
       addConversation: (conv) => {

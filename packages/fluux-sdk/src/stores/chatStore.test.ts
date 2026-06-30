@@ -369,6 +369,42 @@ describe('chatStore', () => {
 
       expect(chatStore.getState().activeConversationId).toBe('bob@example.com')
     })
+
+    it('flags activationPending while the cache read is in flight, then clears it', async () => {
+      chatStore.getState().addConversation(createConversation('alice@example.com'))
+
+      // Hold the cache read open so we can observe the in-flight window — this is
+      // the gap during which ChatLayout would otherwise flash the empty state.
+      let resolveRead: (value: Message[]) => void = () => {}
+      vi.mocked(messageCache.getMessages).mockReturnValue(
+        new Promise((resolve) => { resolveRead = resolve })
+      )
+
+      expect(chatStore.getState().activationPending).toBe(false)
+
+      const activation = chatStore.getState().activateConversation('alice@example.com')
+
+      // Synchronously after the call: read is in flight, active id not set yet
+      expect(chatStore.getState().activationPending).toBe(true)
+      expect(chatStore.getState().activeConversationId).toBeNull()
+
+      resolveRead([])
+      await activation
+
+      // Once the active id lands the flag clears, atomically with activation
+      expect(chatStore.getState().activationPending).toBe(false)
+      expect(chatStore.getState().activeConversationId).toBe('alice@example.com')
+    })
+
+    it('does not flag activationPending when deactivating with null', async () => {
+      chatStore.getState().addConversation(createConversation('alice@example.com'))
+      chatStore.getState().setActiveConversation('alice@example.com')
+
+      await chatStore.getState().activateConversation(null)
+
+      expect(chatStore.getState().activationPending).toBe(false)
+      expect(chatStore.getState().activeConversationId).toBeNull()
+    })
   })
 
   describe('loadMessagesAroundFromCache', () => {

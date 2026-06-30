@@ -373,6 +373,10 @@ export interface RoomState {
   /** Runtime room data - occupants, messages (rebuilt on join) */
   roomRuntime: Map<string, RoomRuntime>
   activeRoomJid: string | null
+  // True while activateRoom() is hydrating a room's cache before it becomes active.
+  // Lets the UI hold a neutral loading surface during the async gap instead of
+  // flashing the "nothing selected" empty state on tab switch.
+  activationPending: boolean
   // Easter egg animation state (ephemeral)
   activeAnimation: { roomJid: string; animation: string } | null
   // Message drafts per room (persisted to localStorage separately)
@@ -550,13 +554,14 @@ function createEmptyRoomState(
   dismissedPollIds: Map<string, Set<string>> = new Map(),
   roomGaps: Map<string, GapInterval> = new Map(),
   acknowledgedNonAnonymousRooms: Set<string> = new Set(),
-): Pick<RoomState, 'rooms' | 'roomEntities' | 'roomMeta' | 'roomRuntime' | 'activeRoomJid' | 'activeAnimation' | 'drafts' | 'votedPollIds' | 'dismissedPollIds' | 'mamQueryStates' | 'roomGaps' | 'acknowledgedNonAnonymousRooms' | 'targetMessageId' | 'firstNewMessageMarkers'> {
+): Pick<RoomState, 'rooms' | 'roomEntities' | 'roomMeta' | 'roomRuntime' | 'activeRoomJid' | 'activationPending' | 'activeAnimation' | 'drafts' | 'votedPollIds' | 'dismissedPollIds' | 'mamQueryStates' | 'roomGaps' | 'acknowledgedNonAnonymousRooms' | 'targetMessageId' | 'firstNewMessageMarkers'> {
   return {
     rooms: new Map(),
     roomEntities: new Map(),
     roomMeta: new Map(),
     roomRuntime: new Map(),
     activeRoomJid: null,
+    activationPending: false,
     activeAnimation: null,
     drafts,
     votedPollIds,
@@ -1549,8 +1554,12 @@ export const roomStore = createStore<RoomState>()(
   activateRoom: async (roomJid) => {
     const token = ++activationToken
     if (roomJid) {
+      // Signal the hydration window so the UI can hold a neutral surface
+      // instead of flashing the empty state while the cache read is in flight.
+      set({ activationPending: true })
       await get().loadMessagesFromCache(roomJid, { limit: 100 })
-      // A newer activation started while the cache read was in flight
+      // A newer activation started while the cache read was in flight: it owns
+      // the pending flag now, so bail without clearing it.
       if (token !== activationToken) return
       // XEP-0490: fold any pending remote read position into lastSeenMessageId
       // BEFORE setActiveRoom derives the new-message divider (parity with
@@ -1579,7 +1588,10 @@ export const roomStore = createStore<RoomState>()(
         })
       }
     }
+    // Set active and clear pending atomically (same React commit) so the view
+    // swaps straight from loading surface to content with no empty-state frame.
     get().setActiveRoom(roomJid)
+    set({ activationPending: false })
   },
 
   getActiveRoomJid: () => get().activeRoomJid,

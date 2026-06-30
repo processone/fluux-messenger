@@ -184,6 +184,12 @@ function ChatLayoutContent() {
   const activeRoomJid = useRoomStore((s) => s.activeRoomJid)
   const setActiveRoom = useRoomStore((s) => s.setActiveRoom)
   const activateRoom = useRoomStore((s) => s.activateRoom)
+  // True while a hydrating activation is in flight (cache read before the active
+  // id lands). During this gap both active ids are null, so without it the main
+  // pane would flash the empty-state hero on every content-tab switch.
+  const chatActivationPending = useChatStore((s) => s.activationPending)
+  const roomActivationPending = useRoomStore((s) => s.activationPending)
+  const activationPending = chatActivationPending || roomActivationPending
   const searchPreviewResult = useSearchStore((s) => s.previewResult)
   const activityPreviewEvent = useActivityLogStore((s) => s.previewEvent)
 
@@ -898,6 +904,11 @@ function ChatLayoutContent() {
             <Suspense fallback={<ViewLoadingFallback />}>
               <ActivityContextView onBack={() => activityLogStore.getState().setPreviewEvent(null)} />
             </Suspense>
+          ) : activationPending ? (
+            // A hydrating activation is in flight (cache load before the active id
+            // lands). Hold the neutral loading surface — matching the lazy views
+            // above — so switching content tabs doesn't flash the empty-state hero.
+            <ViewLoadingFallback />
           ) : (
             <EmptyState
               sidebarView={sidebarView}
