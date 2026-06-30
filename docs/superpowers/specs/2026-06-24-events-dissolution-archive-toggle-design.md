@@ -1,10 +1,21 @@
 # Dissolve the Events tab — redistribute events, Archive as a toggle
 
-Date: 2026-06-24
+Date: 2026-06-24 (reactions design resolved 2026-06-30)
 Status: Approved design, pending implementation plan
 Companion to: `2026-06-24-conversation-first-contacts-design.md` (Decision 1).
 Build that one first — this design assumes subscription requests already live in
 the Contacts destination.
+
+> **Resolution (2026-06-30).** The reactions sub-design (§4) and the activity-log
+> removal (§6) were refined after exploring the codebase. Key changes from the
+> 2026-06-24 draft: (a) received reactions are signalled by a new SDK
+> `reaction:received` client event consumed by an app side-effect — there is no
+> resurrected per-conversation log; (b) **out-of-conversation** reactions show a
+> clickable **toast**, **in-conversation off-screen** reactions show a **transient
+> in-flow mention**, both **live-only** (never on MAM replay); (c) **reaction
+> muting is dropped entirely for now** (no `⋯` mute menu, no header "Reactions"
+> toggle) — the mute state is **deleted**, not relocated. The plan is split into
+> **2A** (redistribution + Archive) and **2B** (reactions + activity-log deletion).
 
 ## Problem
 
@@ -43,7 +54,7 @@ header (it is a filter over conversations, not a place).
 | Subscription requests | **Contacts** › Requests (Decision 1) |
 | Room invitations (`mucInvitations`) | **Rooms** › pinned entry at the top of `RoomsList` |
 | Messages from strangers (`strangerConversations`) | **Messages** › "Message requests" pinned entry atop `ConversationList` |
-| Reactions received (`reaction-received`) | **Conversation** › badge on the message + transient in-flow mention |
+| Reactions received | **Conversation** › badge on the message (persistent) + **toast** when out of conversation + **transient in-flow mention** when in conversation and the target is off-screen |
 | System / connection (`systemNotifications`) | **Toast** (transient) + connection status line (persistent) |
 | Activity history log | **Deleted** |
 
@@ -76,27 +87,36 @@ segmentation (that remains parked with Spaces).
 
 ### 4. Reactions → in the conversation
 
-Reactions stop being log entries. Two complementary representations:
+Reactions stop being log entries. The on-message badge stays the only persistent
+record; everything else is ephemeral *attention*, dispatched at receive time.
+
+**Signal source.** Where the SDK applies an incoming reaction to
+`message.reactions` (the point that used to also write an activity-log event), it
+emits a new client event `reaction:received` carrying
+`{ conversationId, messageId, reactor, emojis, isLastMessage, isLive }`. An app
+side-effect subscribes and dispatches. Only **live** reactions notify — reactions
+arriving via MAM catch-up / history replay (`isLive === false`) are ignored, so
+returning online does not produce a burst of toasts/mentions.
 
 - **Badge on the message** — the persistent record (who reacted, counts). Already
   rendered on messages; unchanged.
-- **Transient in-flow mention** — shown only when a received reaction targets a
-  message that is **not the last** one (so an off-screen reaction is still
-  noticed). Rendered distinctly from a message bubble: a centered, muted pill
-  ("❤️ Marie reacted to '…' · See") with a jump ("See" scrolls to the target via
-  the message's `data-*` id) and a `⋯` menu. It is transient — dismissible and
-  not persisted as a message.
+- **Toast (out of conversation)** — when the reaction's conversation is **not** the
+  active one, a clickable `ToastContainer` toast ("❤️ Marie reacted to '…'");
+  clicking opens the conversation and scrolls to the target message
+  (`scrollToMessage`, via the message's `data-message-id`). Transient, auto-dismiss.
+- **Transient in-flow mention (in conversation)** — when the reaction's conversation
+  **is** active and the target is **not the last message** (off-screen), a centered,
+  muted pill rendered in the message flow (distinct from a bubble): "❤️ Marie
+  reacted to '…' · See", with a "See" jump and a dismiss (✕). It is held in a small
+  **app-side ephemeral store** (`reactionMentionStore`, keyed by conversation, not
+  persisted, auto-pruned), not as a message. When the target **is** the last
+  (visible) message, neither toast nor mention fires — the on-message badge suffices.
 
-**Muting moves to the point of annoyance.** The transient mention's `⋯` offers
-two scopes: "Mute reactions for this message" and "Mute reactions for this
-conversation". The per-conversation scope is also a **"Reactions" toggle added to
-the existing Notifications submenu** in the conversation header
-(`HeaderSubmenuButton` / `HeaderOverflowKebab`, the group already holding
-"All messages" / "Mentions only"). Muting suppresses the *notification* only —
-badges remain visible (the toggle's subtitle says so). The existing reaction-mute
-state (`mutedReactionConversations` / `mutedReactionMessages` and the
-mute/unmute actions) is retained and drives both the transient mention and the
-toggle; only its old UI host (the log) is removed.
+**No muting (for now).** There is no per-message/per-conversation reaction mute, no
+`⋯` mute menu, and no "Reactions" header toggle. The existing reaction-mute state
+(`mutedReactionConversations` / `mutedReactionMessages`, the mute/unmute actions,
+`isReactionMuted`) is **deleted** with the activity log (§6), not relocated. (A mute
+control can be revisited later if needed.)
 
 ### 5. System / connection events → toast + status
 
@@ -109,11 +129,16 @@ toggle; only its old UI host (the log) is removed.
 
 ### 6. Activity log → deleted
 
-Remove `ActivityLogView`, `ActivityContextView`, the `useActivityLog` hook and
-its `activityLog` store, `setPreviewEvent`, and the `activityNavigation` helper.
-Once each item shows its own resolved state in its own home, a separate
-cross-cutting timeline is redundant. (The reaction-mute state in §4 is the one
-piece kept and relocated.)
+Remove `ActivityLogView`, `ActivityContextView`, the `useActivityLog` hook, its
+`useActivityLogStore` react wrapper and the `activityLogStore` vanilla store,
+`setPreviewEvent` / `previewEvent`, the `activityNavigation` helper, and the
+`reaction-received` activity-event emission in the SDK. Once each item shows its
+own resolved state in its own home, a separate cross-cutting timeline is
+redundant. The reaction-mute state that lived in `activityLogStore`
+(`mutedReactionConversations` / `mutedReactionMessages` + actions +
+`isReactionMuted`) is **deleted with it** (§4: no mute for now), so nothing is
+relocated. The SDK's reaction handler emits the new `reaction:received` event
+(§4) instead of writing an activity event.
 
 ### 7. Archive → header toggle
 
@@ -138,18 +163,27 @@ the mode when on (e.g. "Archived"). Remove `'archive'` from `SidebarView`.
   the Archive toggle handling (active vs archived mode), absorbing `ArchiveList`.
 - **Messages header** — add the Archive toggle left of the `+` (the `+` opens the
   New message picker from Decision 1).
-- **Conversation message list** — add the transient reaction-mention component
-  (render when the reaction targets a non-last message; jump + `⋯` mute menu).
-- **`HeaderSubmenuButton` / header Notifications group** — add a "Reactions"
-  toggle (per-conversation reaction-notification mute).
+- **SDK reaction handler** — emit a `reaction:received` client event
+  (`{ conversationId, messageId, reactor, emojis, isLastMessage, isLive }`) where it
+  applies an incoming reaction, in place of the deleted activity-log write.
+- **`reactionMentionStore` (new, app)** — small ephemeral store of in-flow reaction
+  mentions keyed by conversation (not persisted; auto-pruned on dismiss / view
+  change). Fed by the reaction side-effect; read by the active conversation view.
+- **Reaction notification side-effect (new, app)** — subscribes to
+  `reaction:received`; for live reactions, pushes a toast when the conversation is
+  inactive, or a `reactionMentionStore` entry when it is active and the target is a
+  non-last message.
+- **Conversation message list** — render the transient reaction-mention pill from
+  `reactionMentionStore` (jump via `scrollToMessage` + dismiss ✕). No mute menu.
 - **`ToastContainer` / `StatusDisplay`** — route `systemNotifications` to toasts
-  (transient) and the connection status line (persistent).
+  (transient) and the connection status line (persistent); add the clickable
+  reaction toast path.
 - **Remove** — `EventsView`, `ActivityLogView`, `ActivityContextView`,
-  `useActivityLog` + `activityLog` store, `activityNavigation`, `setPreviewEvent`.
+  `useActivityLog`, `useActivityLogStore`, `activityLogStore`, `activityNavigation`,
+  `setPreviewEvent`, and the reaction-mute state therein.
 - **`eventsStore`** — keep `subscriptionRequests` (→ Contacts), `mucInvitations`
   (→ Rooms), `strangerConversations` (→ Messages) and their accept/reject/ignore
-  actions; retire the `systemNotifications` list UI path; the reaction-mute state
-  moves with §4.
+  actions; retire the `systemNotifications` list UI path.
 
 ## What is NOT changing
 
@@ -168,5 +202,16 @@ the mode when on (e.g. "Archived"). Remove `'archive'` from `SidebarView`.
 - **Archive toggle vs future segmentation**: the toggle is a binary filter; if
   Decision 2 later introduces conversation filters/folders, fold Archive into
   that vocabulary rather than keeping a separate toggle.
-- **`SidebarView` churn**: removing `'events'`/`'archive'` touches routing and
-  tests; sequence after Decision 1's `'directory'`→`'contacts'` rename.
+- **`SidebarView` churn**: removing `'events'`/`'archive'` touches routing,
+  `useViewNavigation`, `useKeyboardShortcuts`, `useSessionPersistence` (persisted
+  view values), and tests. Decision 1 kept the `'directory'` value (did **not**
+  rename to `'contacts'`), so there is no rename to sequence against; treat the
+  `'archive'` removal (2A) and `'events'` removal (2B) as the churn points, each
+  with a persisted-value fallback so a stored `'archive'`/`'events'` degrades to
+  `'messages'` rather than breaking restore.
+- **Plan split**: this design is implemented as two plans — **2A** (room
+  invitations → Rooms, stranger messages → Messages, system → toast/status, empty
+  then remove `EventsView`, Archive → header toggle, remove the Archive rail icon)
+  and **2B** (reactions toast + in-flow mention via the new SDK event, then delete
+  the activity log and remove the Events rail icon). 2A leaves the `'events'`
+  destination temporarily hosting only `ActivityLogView`; 2B removes it.
