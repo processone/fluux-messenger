@@ -715,7 +715,30 @@ export function useMessageListScroll({
     // window — and a send can land mid-prepend — so re-entry is routine.
     supersedeReassertLoopRef.current()
 
+    // WebKit measurement-flush. A just-added bottom row's real height reaches @tanstack's
+    // getTotalSize — which IS the spacer's declared height, and therefore the scroller's
+    // scrollHeight — only when a ResizeObserver delivers, and WebKit (Safari + Tauri) delivers it
+    // LATE. Until then scrollHeight reads stale-short, so the pin computes distFromBottom 0 against
+    // content that has not grown yet and settles with the new message a row below the fold — the
+    // reported send/receive stick failure. Diagnosed via the observer effect: a console loop reading
+    // row geometry every frame made the bug vanish (forcing layout flushed the measurement). So we
+    // stop waiting on WebKit's RO and flush the tail ourselves: measureElement reads offsetHeight
+    // (forcing layout) AND writes the size into @tanstack synchronously, growing getTotalSize so the
+    // next frame's scrollHeight is fresh and the re-pin can reach the true bottom. Idempotent once a
+    // row's size is stable (no-ops on Chromium, where the RO was already prompt). The last few rows,
+    // not just the last, cover a grouping-height change in the row above the new one.
+    const flushTailMeasurements = () => {
+      const vv = virtualizerRef.current
+      const ss = scrollerRef.current
+      if (!vv || !ss) return
+      const rows = ss.querySelectorAll('[data-index]')
+      for (let i = Math.max(0, rows.length - 3); i < rows.length; i++) {
+        vv.measureElement(rows[i])
+      }
+    }
+
     // Immediate pin (pre-paint when called from a layout effect).
+    flushTailMeasurements()
     virt.scrollToIndex(virt.itemCount - 1, { align: 'end' })
     debugLog('PIN start', {
       itemCount: virt.itemCount,
@@ -764,6 +787,10 @@ export function useMessageListScroll({
         finish()
         return
       }
+      // Flush the tail rows' real heights into getTotalSize BEFORE reading scrollHeight, so on
+      // WebKit the spacer has grown to include the just-added row and the re-pin below can reach the
+      // true bottom this settle window instead of stranding it a row low (see pin-start comment).
+      flushTailMeasurements()
       const h = s.scrollHeight
       // Re-pin when the layout grew/shrank (the common case) OR when we're still measurably short
       // of the true bottom. The latter catches the frame the change-detection guard alone misses —
