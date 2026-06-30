@@ -282,7 +282,7 @@ export function UnlockEncryptionDialog({ client, onClose }: UnlockEncryptionDial
           )}
 
           {recovered && (
-            <p className="text-xs text-green-600 dark:text-green-400 mb-3">
+            <p className="text-xs text-fluux-green mb-3">
               {t('settings.encryption.unlockRecoveredNote')}
             </p>
           )}
@@ -304,7 +304,7 @@ export function UnlockEncryptionDialog({ client, onClose }: UnlockEncryptionDial
           )}
 
           {error && (
-            <p className="text-xs text-red-500 dark:text-red-400 mb-3 break-words">{error}</p>
+            <p className="text-xs text-fluux-error mb-3 break-words">{error}</p>
           )}
         </div>
 

@@ -101,7 +101,7 @@ export function KeyChangeBanner({ peerJid, peerName }: KeyChangeBannerProps) {
         role="alert"
         className="mx-1 mt-1 mb-2 flex items-start gap-2 px-3 py-2 rounded-lg border border-yellow-500/30 bg-yellow-500/10"
       >
-        <AlertTriangle className="size-4 text-yellow-600 dark:text-yellow-400 flex-shrink-0 mt-0.5" />
+        <AlertTriangle className="size-4 text-fluux-yellow flex-shrink-0 mt-0.5" />
         <div className="flex-1 min-w-0">
           <p className="text-sm font-medium text-fluux-text leading-snug">
             {t('chat.keyChangeBanner.title', { name: peerName })}
@@ -109,7 +109,7 @@ export function KeyChangeBanner({ peerJid, peerName }: KeyChangeBannerProps) {
           <p className="text-xs text-fluux-muted leading-snug mt-0.5">
             {t('chat.keyChangeBanner.body')}
           </p>
-          <p className="text-xs text-yellow-700 dark:text-yellow-500 leading-snug mt-1 font-medium">
+          <p className="text-xs text-fluux-yellow leading-snug mt-1 font-medium">
             {t('chat.keyChangeBanner.encryptionBlocked')}
           </p>
           <div className="flex flex-wrap gap-2 mt-2">

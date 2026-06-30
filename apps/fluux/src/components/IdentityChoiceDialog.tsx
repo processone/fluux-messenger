@@ -187,7 +187,7 @@ export function IdentityChoiceDialog({
                 onClick={handleImportFile}
               />
               <ChoiceButton
-                icon={<RotateCcw className="size-4 text-yellow-600 dark:text-yellow-400" />}
+                icon={<RotateCcw className="size-4 text-fluux-yellow" />}
                 title={t('settings.encryption.identityChoice.replaceTitle')}
                 description={t('settings.encryption.identityChoice.replaceBody')}
                 onClick={handleStartReplace}
@@ -222,7 +222,7 @@ export function IdentityChoiceDialog({
 
           {phase === 'confirm-replace' && (
             <div className="flex gap-2 p-3 mb-4 rounded-lg bg-yellow-500/10 text-xs text-fluux-muted leading-snug">
-              <AlertTriangle className="size-4 text-yellow-600 dark:text-yellow-400 flex-shrink-0 mt-0.5" />
+              <AlertTriangle className="size-4 text-fluux-yellow flex-shrink-0 mt-0.5" />
               <p className="font-medium text-fluux-text">
                 {t('settings.encryption.identityChoice.replaceWarning')}
               </p>
@@ -239,7 +239,7 @@ export function IdentityChoiceDialog({
           )}
 
           {error && (
-            <p className="text-xs text-red-500 dark:text-red-400 mb-3 break-words">
+            <p className="text-xs text-fluux-error mb-3 break-words">
               {error}
             </p>
           )}

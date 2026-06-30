@@ -17,6 +17,7 @@ import type { ConversationEncryptionState } from '@/hooks/useConversationEncrypt
 import { useWebUnlockDialogStore } from '@/stores/webUnlockDialogStore'
 import { HeaderOverflowKebab, type OverflowEntry } from './header/HeaderOverflowKebab'
 import { inlineClass, kebabClass } from './header/headerOverflow'
+import { trustVisual } from '@/e2ee/trustVisual'
 
 export interface ChatHeaderProps {
   name: string
@@ -218,7 +219,7 @@ function KeyLockedIcon({ fingerprint }: { fingerprint?: string }) {
       <button
         type="button"
         onClick={() => openWebUnlockDialog()}
-        className={`${btnClass} text-yellow-500 hover:text-yellow-600 cursor-pointer`}
+        className={`${btnClass} ${trustVisual('keyLocked').colorClass} hover:text-fluux-text cursor-pointer`}
         aria-label={t('chat.encryption.keyLocked')}
       >
         <Lock className="size-4" />
@@ -280,8 +281,7 @@ function EncryptionIcon({
         <Tooltip content={tooltip} position="bottom">
           <button
             type="button"
-            className={`${btnClass} cursor-pointer`}
-            style={{ color: 'var(--fluux-status-warning)' }}
+            className={`${btnClass} ${trustVisual('keyChanged').colorClass} cursor-pointer`}
             aria-label={t('chat.encryption.blockedTooltip')}
             onClick={onVerifyClick}
           >
@@ -292,7 +292,7 @@ function EncryptionIcon({
     }
     return (
       <Tooltip content={tooltip} position="bottom">
-        <div className={`${btnClass}`} style={{ color: 'var(--fluux-status-warning)' }} role="status">
+        <div className={`${btnClass} ${trustVisual('keyChanged').colorClass}`} role="status">
           <ShieldAlert className="size-4" />
         </div>
       </Tooltip>
@@ -311,7 +311,7 @@ function EncryptionIcon({
             ref={menu.triggerRef}
             type="button"
             onClick={() => setOpen((v) => !v)}
-            className={`${btnClass} text-red-500 hover:text-red-600 cursor-pointer`}
+            className={`${btnClass} ${trustVisual('rejected').colorClass} cursor-pointer`}
             aria-label={t('chat.encryption.rejected')}
             aria-expanded={open}
           >
@@ -323,7 +323,7 @@ function EncryptionIcon({
             ref={menu.menuRef}
             style={{ left: menu.position.x, top: menu.position.y }}
             className="fixed w-72 max-w-[calc(100vw-1rem)] rounded-lg fluux-popover z-50 py-2 px-3 overflow-hidden">
-            <div className="text-sm font-medium text-red-600 dark:text-red-400 mb-1.5">
+            <div className="text-sm font-medium text-fluux-error mb-1.5">
               {t('chat.encryption.rejectedTitle')}
             </div>
             <ul className="space-y-1.5">
@@ -394,8 +394,8 @@ function EncryptionIcon({
   // share an alarming icon.
   const Icon = verified ? ShieldCheck : Lock
   const colorClass = verified
-    ? 'text-fluux-encryption'
-    : 'text-fluux-muted hover:text-fluux-text'
+    ? trustVisual('verified').colorClass
+    : `${trustVisual('trusted').colorClass} hover:text-fluux-text`
   const hasActions = onVerifyClick || onDisableClick
 
   if (!hasActions) {

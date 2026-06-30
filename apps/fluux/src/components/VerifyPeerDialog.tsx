@@ -109,7 +109,7 @@ export function VerifyPeerDialog({
         <div className="flex-1 overflow-y-auto min-h-0 px-5">
         {alreadyVerified && (
           <div className="flex gap-2 p-3 mb-4 rounded-lg bg-green-500/10 text-xs text-fluux-muted leading-snug">
-            <ShieldCheck className="size-4 text-green-600 dark:text-green-400 flex-shrink-0 mt-0.5" />
+            <ShieldCheck className="size-4 text-fluux-encryption flex-shrink-0 mt-0.5" />
             <p className="font-medium text-fluux-text">
               {t('chat.verifyPeer.alreadyVerifiedBanner', { name: peerName })}
             </p>
@@ -117,7 +117,7 @@ export function VerifyPeerDialog({
         )}
 
         <div className="flex gap-2 p-3 mb-4 rounded-lg bg-yellow-500/10 text-xs text-fluux-muted leading-snug">
-          <AlertTriangle className="size-4 text-yellow-600 dark:text-yellow-400 flex-shrink-0 mt-0.5" />
+          <AlertTriangle className="size-4 text-fluux-yellow flex-shrink-0 mt-0.5" />
           <p className="font-medium text-fluux-text">
             {t('chat.verifyPeer.dialogWarning')}
           </p>

@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next'
 import { Loader2, Lock, LockOpen, ShieldAlert, ShieldCheck, ShieldOff, ShieldX } from 'lucide-react'
 import type { ConversationEncryptionState } from '@/hooks/useConversationEncryptionState'
+import { trustVisual } from '@/e2ee/trustVisual'
 
 interface SecurityTabProps {
   state: ConversationEncryptionState
@@ -32,7 +33,7 @@ export function SecurityTab({
 
         {state.kind === 'blocked' && (
           <ExplanationPanel
-            icon={<ShieldAlert className="size-5 text-yellow-600 dark:text-yellow-400 flex-shrink-0" />}
+            icon={<ShieldAlert className={`size-5 ${trustVisual('keyChanged').colorClass} flex-shrink-0`} />}
             title={t('chat.encryption.blocked')}
             tone="warning"
           />
@@ -41,7 +42,7 @@ export function SecurityTab({
         {state.kind === 'rejected' && (
           <>
             <ExplanationPanel
-              icon={<ShieldX className="size-5 text-red-600 dark:text-red-400 flex-shrink-0" />}
+              icon={<ShieldX className={`size-5 ${trustVisual('rejected').colorClass} flex-shrink-0`} />}
               title={t('contacts.encryption.rejectedTitle')}
               description={t('contacts.encryption.rejectedDescription')}
               tone="danger"
@@ -103,7 +104,7 @@ export function SecurityTab({
             <ExplanationPanel
               icon={
                 state.trust === 'verified' ? (
-                  <ShieldCheck className="size-5 text-green-600 dark:text-green-400 flex-shrink-0" />
+                  <ShieldCheck className={`size-5 ${trustVisual('verified').colorClass} flex-shrink-0`} />
                 ) : (
                   <Lock className="size-5 text-fluux-muted flex-shrink-0" />
                 )
@@ -182,9 +183,9 @@ function ExplanationPanel({ icon, title, description, tone }: ExplanationPanelPr
           : 'bg-fluux-bg/40'
   const titleColor =
     tone === 'danger'
-      ? 'text-red-700 dark:text-red-400'
+      ? 'text-fluux-error'
       : tone === 'warning'
-        ? 'text-yellow-700 dark:text-yellow-400'
+        ? 'text-fluux-yellow'
         : 'text-fluux-text'
   return (
     <div className={`flex items-start gap-3 px-3 py-3 rounded-lg ${bg}`}>

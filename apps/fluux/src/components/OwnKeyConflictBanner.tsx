@@ -88,7 +88,7 @@ export function OwnKeyConflictBanner() {
         role="alert"
         className="flex items-start gap-2 px-3 py-3 rounded-lg border border-red-500/30 bg-red-500/10"
       >
-        <AlertTriangle className="size-4 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
+        <AlertTriangle className="size-4 text-fluux-error flex-shrink-0 mt-0.5" />
         <div className="flex-1 min-w-0 space-y-2">
           <p className="text-sm font-medium text-fluux-text leading-snug">
             {isPrimaryMismatch
@@ -130,7 +130,7 @@ export function OwnKeyConflictBanner() {
             )}
           </div>
 
-          <p className="text-xs font-medium text-red-600 dark:text-red-400 leading-snug">
+          <p className="text-xs font-medium text-fluux-error leading-snug">
             {t('settings.encryption.ownKeyConflict.encryptionBlocked')}
           </p>
 

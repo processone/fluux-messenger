@@ -32,12 +32,12 @@ export function TrustStateCompromisedBanner() {
   return (
     <div className="rounded-lg border border-red-300 bg-red-50 p-4 dark:border-red-800 dark:bg-red-950/30">
       <div className="flex items-start gap-3">
-        <ShieldAlert className="mt-0.5 h-5 w-5 shrink-0 text-red-600 dark:text-red-400" />
+        <ShieldAlert className="mt-0.5 h-5 w-5 shrink-0 text-fluux-error" />
         <div className="flex-1 space-y-2">
-          <p className="text-sm font-medium text-red-800 dark:text-red-200">
+          <p className="text-sm font-medium text-fluux-error">
             {t('settings.encryption.trustStateCompromised.title', 'Trust state integrity check failed')}
           </p>
-          <p className="text-xs text-red-700 dark:text-red-300">
+          <p className="text-xs text-fluux-error">
             {t(
               'settings.encryption.trustStateCompromised.description',
               'Local trust data may have been tampered with. Silent key re-pinning is blocked to prevent key substitution.',
@@ -48,13 +48,13 @@ export function TrustStateCompromisedBanner() {
             <div>
               <button
                 type="button"
-                className="text-xs text-red-600 underline dark:text-red-400"
+                className="text-xs text-fluux-error underline"
                 onClick={() => setExpanded(!expanded)}
               >
                 {expanded ? t('common.hideDetails', 'Hide details') : t('common.showDetails', 'Show details')}
               </button>
               {expanded && (
-                <ul className="mt-1 list-disc pl-4 text-xs text-red-600 dark:text-red-400">
+                <ul className="mt-1 list-disc pl-4 text-xs text-fluux-error">
                   {details.map((d) => (
                     <li key={d}>{d}</li>
                   ))}

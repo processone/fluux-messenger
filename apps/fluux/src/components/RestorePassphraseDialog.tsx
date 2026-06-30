@@ -197,7 +197,7 @@ export function RestorePassphraseDialog({
 
         <div className="flex-1 overflow-y-auto min-h-0 px-5">
           <div className="flex gap-2 p-3 mb-4 rounded-lg bg-yellow-500/10 text-xs text-fluux-muted leading-snug">
-            <AlertTriangle className="size-4 text-yellow-600 dark:text-yellow-400 flex-shrink-0 mt-0.5" />
+            <AlertTriangle className="size-4 text-fluux-yellow flex-shrink-0 mt-0.5" />
             <p className="font-medium text-fluux-text">
               {t('settings.encryption.restoreDialogWarning')}
             </p>
@@ -262,7 +262,7 @@ export function RestorePassphraseDialog({
           )}
 
           {error && (
-            <p className="text-xs text-red-500 dark:text-red-400 mb-3 break-words">
+            <p className="text-xs text-fluux-error mb-3 break-words">
               {error}
             </p>
           )}

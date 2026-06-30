@@ -159,7 +159,7 @@ export function BackupPassphraseDialog({
         <div className="flex-1 overflow-y-auto min-h-0 px-5">
         {/* Warning callout — the single most important information in this dialog. */}
         <div className="flex gap-2 p-3 mb-4 rounded-lg bg-yellow-500/10 text-xs text-fluux-muted leading-snug">
-          <AlertTriangle className="size-4 text-yellow-600 dark:text-yellow-400 flex-shrink-0 mt-0.5" />
+          <AlertTriangle className="size-4 text-fluux-yellow flex-shrink-0 mt-0.5" />
           <p className="font-medium text-fluux-text">
             {t('settings.encryption.backupDialogWarning')}
           </p>
@@ -196,7 +196,7 @@ export function BackupPassphraseDialog({
             className="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 text-sm text-fluux-text bg-fluux-hover hover:bg-fluux-active rounded-lg transition-colors disabled:opacity-50"
           >
             {isCopied ? (
-              <Check className="size-3.5 text-green-500" />
+              <Check className="size-3.5 text-fluux-green" />
             ) : (
               <Copy className="size-3.5" />
             )}
@@ -236,7 +236,7 @@ export function BackupPassphraseDialog({
         </label>
 
         {error && (
-          <p className="text-xs text-red-500 dark:text-red-400 mb-3 break-words">
+          <p className="text-xs text-fluux-error mb-3 break-words">
             {error}
           </p>
         )}
