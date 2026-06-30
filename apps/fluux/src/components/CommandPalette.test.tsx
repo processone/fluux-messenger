@@ -109,6 +109,7 @@ vi.mock('react-i18next', () => ({
         'sidebar.messages': 'Messages',
         'sidebar.rooms': 'Rooms',
         'sidebar.connections': 'Connections',
+        'sidebar.contacts': 'Contacts',
         'sidebar.archive': 'Archive',
         'sidebar.events': 'Events',
         'sidebar.settings': 'Settings',
@@ -218,7 +219,7 @@ describe('CommandPalette', () => {
       const labelTexts = Array.from(groupLabels).map(el => el.textContent)
       expect(labelTexts).toContain('Messages')
       expect(labelTexts).toContain('Rooms')
-      expect(labelTexts).toContain('Connections')
+      expect(labelTexts).toContain('Contacts')
     })
 
     it('should show last message preview for conversations', () => {
