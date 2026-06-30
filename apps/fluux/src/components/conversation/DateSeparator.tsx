@@ -7,12 +7,12 @@ export interface DateSeparatorProps {
 }
 
 /**
- * Displays a leading-aligned date label followed by a horizontal rule.
+ * Displays a centered date label flanked by horizontal rules.
  * Used to separate messages by day in conversation views.
  *
- * Layout leans on flex flow + logical properties so it mirrors correctly
- * under RTL: the label always sits on the reading-start edge and the rule
- * extends toward the trailing edge.
+ * Centering mirrors the floating date reminder shown during scroll, so the
+ * static marker and the transient pill share the same horizontal anchor. The
+ * symmetric rules stay RTL-safe with no directional assumptions.
  */
 export function DateSeparator({ date }: DateSeparatorProps) {
   const { t, i18n } = useTranslation()
@@ -20,6 +20,7 @@ export function DateSeparator({ date }: DateSeparatorProps) {
 
   return (
     <div className="flex items-center gap-3 pt-6 pb-2">
+      <div className="flex-1 h-px bg-fluux-hover" />
       <span className="text-xs font-semibold text-fluux-muted whitespace-nowrap">
         {formatDateHeader(date, t, currentLang)}
       </span>

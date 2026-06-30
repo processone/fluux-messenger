@@ -27,18 +27,28 @@ function Host({ getTopDate, fadeDelayMs }: { getTopDate: () => string | null; fa
 }
 
 describe('FloatingDateHeader', () => {
-  beforeEach(() => vi.useFakeTimers())
+  beforeEach(() => {
+    vi.useFakeTimers()
+    // Run the scroll-coalescing rAF synchronously. Whether fake timers also fake
+    // rAF is environment-dependent under jsdom, which made the rAF-flush flaky;
+    // a synchronous frame keeps the scroll compute deterministic. The fade-out
+    // still rides the faked setTimeout below.
+    vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
+      cb(0)
+      return 0
+    })
+    vi.stubGlobal('cancelAnimationFrame', () => {})
+  })
   afterEach(() => {
     vi.runOnlyPendingTimers()
     vi.useRealTimers()
+    vi.unstubAllGlobals()
   })
 
   function scroll(container: HTMLElement) {
     const scroller = container.querySelector('[data-scroller]') as HTMLElement
-    fireEvent.scroll(scroller)
-    // flush the rAF-coalesced compute (vitest fake timers shim rAF as a ~16ms macrotask)
     act(() => {
-      vi.advanceTimersByTime(20)
+      fireEvent.scroll(scroller)
     })
   }
 
