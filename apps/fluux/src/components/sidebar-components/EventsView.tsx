@@ -18,8 +18,6 @@ import {
   DoorOpen,
   Ban,
 } from 'lucide-react'
-import { SubscriptionRequestItem } from './SubscriptionRequestItem'
-
 export function EventsView() {
   const { t } = useTranslation()
   const { navigateToMessages, navigateToRooms } = useRouteSync()
@@ -29,24 +27,15 @@ export function EventsView() {
   const { blockJid } = useBlocking()
   const { confirmJoin, warningDialog } = useRoomJoinWarning()
   const {
-    subscriptionRequests,
     strangerConversations,
     mucInvitations,
     systemNotifications,
-    acceptSubscription,
-    rejectSubscription,
     acceptStranger,
     ignoreStranger,
     acceptInvitation,
     declineInvitation,
     dismissNotification,
   } = useEvents()
-
-  // Block subscription request: reject and block the JID
-  const handleBlockSubscription = async (jid: string) => {
-    await rejectSubscription(jid)
-    await blockJid(jid)
-  }
 
   // Block stranger: ignore and block the JID
   const handleBlockStranger = async (jid: string) => {
@@ -74,7 +63,7 @@ export function EventsView() {
   }
 
   const strangerJids = Object.keys(strangerConversations)
-  const hasContent = subscriptionRequests.length > 0 || strangerJids.length > 0 || mucInvitations.length > 0 || systemNotifications.length > 0
+  const hasContent = strangerJids.length > 0 || mucInvitations.length > 0 || systemNotifications.length > 0
 
   if (!hasContent) {
     return null
@@ -109,22 +98,6 @@ export function EventsView() {
               onAccept={() => handleAcceptStranger(jid)}
               onIgnore={() => ignoreStranger(jid)}
               onBlock={() => handleBlockStranger(jid)}
-            />
-          ))}
-        </>
-      )}
-      {subscriptionRequests.length > 0 && (
-        <>
-          <h3 className="text-xs font-semibold text-fluux-muted uppercase px-2 mb-2 mt-4">
-            {t('events.subscriptionRequests')} — {subscriptionRequests.length}
-          </h3>
-          {subscriptionRequests.map((request) => (
-            <SubscriptionRequestItem
-              key={request.id}
-              request={request}
-              onAccept={() => acceptSubscription(request.from)}
-              onReject={() => rejectSubscription(request.from)}
-              onBlock={() => handleBlockSubscription(request.from)}
             />
           ))}
         </>

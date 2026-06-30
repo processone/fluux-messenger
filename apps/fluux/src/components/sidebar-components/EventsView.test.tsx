@@ -110,71 +110,21 @@ describe('EventsView', () => {
   })
 
   describe('subscription requests', () => {
-    beforeEach(() => {
+    it('does not render subscription requests (they live in Contacts now)', () => {
       mockSubscriptionRequests = [
         { id: 'req1', from: 'alice@example.com' },
         { id: 'req2', from: 'bob@example.com' },
       ]
-    })
-
-    it('should render subscription requests with count', () => {
+      // Also populate another category so the component renders at all
+      mockMucInvitations = [
+        { id: 'inv1', roomJid: 'room@conference.example.com', from: 'friend@example.com' },
+      ]
       render(<EventsView />)
-      expect(screen.getByText(/events.subscriptionRequests/)).toBeInTheDocument()
-      expect(screen.getByText('alice')).toBeInTheDocument()
-      expect(screen.getByText('bob')).toBeInTheDocument()
-    })
-
-    it('should call acceptSubscription when Accept is clicked', async () => {
-      render(<EventsView />)
-
-      const acceptButtons = screen.getAllByText('common.accept')
-      fireEvent.click(acceptButtons[0])
-
-      expect(mockAcceptSubscription).toHaveBeenCalledWith('alice@example.com')
-    })
-
-    it('should call rejectSubscription when Reject is clicked', async () => {
-      render(<EventsView />)
-
-      const rejectButtons = screen.getAllByText('common.reject')
-      fireEvent.click(rejectButtons[0])
-
-      expect(mockRejectSubscription).toHaveBeenCalledWith('alice@example.com')
-    })
-
-    it('should reject and block when Block is clicked on subscription request', async () => {
-      mockRejectSubscription.mockResolvedValue(undefined)
-      mockBlockJid.mockResolvedValue(undefined)
-
-      render(<EventsView />)
-
-      // Find block buttons by aria-label
-      const blockButtons = screen.getAllByLabelText('common.block')
-      fireEvent.click(blockButtons[0])
-
-      await waitFor(() => {
-        expect(mockRejectSubscription).toHaveBeenCalledWith('alice@example.com')
-        expect(mockBlockJid).toHaveBeenCalledWith('alice@example.com')
-      })
-    })
-
-    it('should call blockJid after rejectSubscription completes', async () => {
-      const callOrder: string[] = []
-      mockRejectSubscription.mockImplementation(async () => {
-        callOrder.push('reject')
-      })
-      mockBlockJid.mockImplementation(async () => {
-        callOrder.push('block')
-      })
-
-      render(<EventsView />)
-
-      const blockButtons = screen.getAllByLabelText('common.block')
-      fireEvent.click(blockButtons[0])
-
-      await waitFor(() => {
-        expect(callOrder).toEqual(['reject', 'block'])
-      })
+      expect(screen.queryByText(/events\.subscriptionRequests/)).toBeNull()
+      expect(screen.queryByText('alice')).toBeNull()
+      expect(screen.queryByText('bob')).toBeNull()
+      // The other category still renders
+      expect(screen.getByText(/events\.roomInvitations/)).toBeInTheDocument()
     })
   })
 
@@ -419,8 +369,7 @@ describe('EventsView', () => {
   })
 
   describe('mixed events', () => {
-    it('should render all event types when present', () => {
-      mockSubscriptionRequests = [{ id: 'req1', from: 'alice@example.com' }]
+    it('should render all remaining event types when present (subscriptions excluded)', () => {
       mockStrangerConversations = {
         'stranger@example.com': [{ id: 'msg1', from: 'stranger@example.com', body: 'Hi', timestamp: new Date() }],
       }
@@ -429,9 +378,9 @@ describe('EventsView', () => {
 
       render(<EventsView />)
 
-      expect(screen.getByText(/events.subscriptionRequests/)).toBeInTheDocument()
-      expect(screen.getByText(/events.messagesFromStrangers/)).toBeInTheDocument()
-      expect(screen.getByText(/events.roomInvitations/)).toBeInTheDocument()
+      expect(screen.queryByText(/events\.subscriptionRequests/)).toBeNull()
+      expect(screen.getByText(/events\.messagesFromStrangers/)).toBeInTheDocument()
+      expect(screen.getByText(/events\.roomInvitations/)).toBeInTheDocument()
       expect(screen.getByText('events.systemNotifications')).toBeInTheDocument()
     })
   })
