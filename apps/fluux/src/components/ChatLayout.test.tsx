@@ -21,6 +21,7 @@ const {
     activationPending: false,
     isArchivedResult: false,
     conversations: new Map<string, { id: string }>(),
+    rooms: new Map<string, { jid: string; joined: boolean }>(),
   }
 
   const mockContact: Contact = {
@@ -214,6 +215,8 @@ vi.mock('@fluux/sdk', () => ({
       clearFirstNewMessageId: vi.fn(),
       setActiveRoom: mockSetActiveRoom,
       activateRoom: mockActivateRoom,
+      rooms: getMockState().rooms,
+      allRooms: () => Array.from(getMockState().rooms.values()),
     }),
   },
   connectionStore: {
@@ -285,7 +288,7 @@ vi.mock('@fluux/sdk/react', () => ({
         activeRoomJid: getMockState().activeRoomJid,
         setActiveRoom: mockSetActiveRoom,
         activateRoom: mockActivateRoom,
-        rooms: new Map(),
+        rooms: getMockState().rooms,
       }
       return selector(state)
     },
@@ -529,6 +532,7 @@ describe('ChatLayout - Tab Memory', () => {
       activeRoomJid: null,
       isArchivedResult: false,
       conversations: new Map(),
+      rooms: new Map(),
     })
   })
 
@@ -555,6 +559,51 @@ describe('ChatLayout - Tab Memory', () => {
 
       // With replace there is nothing behind the auto-selected conversation.
       expect(path()).toBe('/messages/bob@example.com')
+    })
+  })
+
+  describe('deep-link / programmatic navigation to a specific target', () => {
+    // Regression: clicking a reaction toast (or any deep link) that targets a
+    // specific conversation/room must not be hijacked by the "auto-select first
+    // item" effect. activateConversation/activateRoom are async (they await a
+    // cache load before setting the active id), so on the navigation commit the
+    // store's active id is still null — the auto-select effect must instead defer
+    // to the URL's target (activeJid) and not pick the first item.
+    it('does not auto-select the first conversation when the URL targets another one', async () => {
+      // Store's first (only) conversation is bob, but the URL points at alice.
+      setMockState({
+        activeConversationId: null,
+        conversations: new Map([['bob@example.com', { id: 'bob@example.com' }]]),
+      })
+
+      render(<ChatLayoutWithProbe initialRoute="/messages/alice@example.com" />)
+
+      const path = () => decodeURIComponent(screen.getByTestId('probe-path').textContent ?? '')
+
+      // Give the auto-select effect a chance to (wrongly) fire, then assert the
+      // URL still targets alice — auto-select must not override it with bob.
+      await waitFor(() => {
+        expect(path()).toBe('/messages/alice@example.com')
+      })
+      expect(mockActivateConversation).not.toHaveBeenCalledWith('bob@example.com')
+    })
+
+    it('does not auto-select the first room when the URL targets another one', async () => {
+      // Store's first joined room is room1, but the URL points at room2 — the
+      // exact reaction-toast case: navigating to a room that isn't the first.
+      setMockState({
+        activeRoomJid: null,
+        rooms: new Map([['room1@conf.example.com', { jid: 'room1@conf.example.com', joined: true }]]),
+      })
+
+      render(<ChatLayoutWithProbe initialRoute="/rooms/room2@conf.example.com" />)
+
+      const path = () => decodeURIComponent(screen.getByTestId('probe-path').textContent ?? '')
+
+      await waitFor(() => {
+        expect(path()).toBe('/rooms/room2@conf.example.com')
+      })
+      expect(mockActivateRoom).not.toHaveBeenCalledWith('room1@conf.example.com')
     })
   })
 
