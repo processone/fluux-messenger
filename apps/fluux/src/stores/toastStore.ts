@@ -7,11 +7,12 @@ export interface Toast {
   type: ToastType
   message: string
   createdAt: number
+  onClick?: () => void
 }
 
 interface ToastState {
   toasts: Toast[]
-  addToast: (type: ToastType, message: string, duration?: number) => string
+  addToast: (type: ToastType, message: string, duration?: number, onClick?: () => void) => string
   removeToast: (id: string) => void
 }
 
@@ -24,9 +25,9 @@ const timeouts = new Map<string, ReturnType<typeof setTimeout>>()
 export const useToastStore = create<ToastState>((set, get) => ({
   toasts: [],
 
-  addToast: (type, message, duration = DEFAULT_DURATION_MS) => {
+  addToast: (type, message, duration = DEFAULT_DURATION_MS, onClick) => {
     const id = `toast-${++nextId}`
-    const toast: Toast = { id, type, message, createdAt: Date.now() }
+    const toast: Toast = { id, type, message, createdAt: Date.now(), ...(onClick ? { onClick } : {}) }
 
     set((state) => {
       // Clear timeout for evicted toast

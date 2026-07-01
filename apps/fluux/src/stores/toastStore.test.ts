@@ -101,4 +101,11 @@ describe('toastStore', () => {
     const types = useToastStore.getState().toasts.map(t => t.type)
     expect(types).toEqual(['success', 'error', 'info'])
   })
+
+  it('stores an onClick handler on the toast', () => {
+    const fn = vi.fn()
+    const id = useToastStore.getState().addToast('info', 'hi', 4000, fn)
+    const toast = useToastStore.getState().toasts.find((x) => x.id === id)
+    expect(toast?.onClick).toBe(fn)
+  })
 })
