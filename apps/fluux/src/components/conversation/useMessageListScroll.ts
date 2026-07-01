@@ -84,13 +84,6 @@ const MEDIA_LOAD_DEBOUNCE_MS = 150 // debounce time for batching image load even
 // scrollHeight grows and clips the last message; shorter → it floats above empty space), so a
 // one-shot scrollToIndex isn't enough. ~1s at 60fps comfortably covers the measurement settle.
 const BOTTOM_REASSERT_FRAMES = 60
-// Hard wall-clock cap (frames) for the bottom pin, independent of the settle window above. While the
-// AUTHORITATIVE content height (max of the DOM spacer and the virtualizer's getTotalSize) still shows
-// content below the fold, the pin keeps its settle window from expiring so it survives until the DOM
-// spacer commits the grown height (which, on a COLD first open, can land after the ~1s settle — the
-// just-sent row was stranded because the loop exited first). This cap bounds the pathological case
-// where the spacer never commits. ~3s at 60fps, comfortably longer than a cold measure + React commit.
-const BOTTOM_REASSERT_HARD_CAP_FRAMES = 180
 // Frames to keep re-resolving the unread-marker offset after a conversation switch. On entry the
 // conversation's messages were evicted on leave and rehydrate from cache asynchronously, then the
 // rows measure over several frames, so the marker offset is unresolved at first and sharpens as it
@@ -739,21 +732,12 @@ export function useMessageListScroll({
     // window — and a send can land mid-prepend — so re-entry is routine.
     supersedeReassertLoopRef.current()
 
-    // WebKit at-bottom stick. Rows are absolutely positioned, so the scroller's scrollHeight is the
-    // spacer's declared height (= @tanstack getTotalSize), which grows only once a just-added row's
-    // ResizeObserver delivers — and WebKit (Safari + Tauri) delivers that LATE. When you are already
-    // AT the bottom there is no scroll motion to trigger the re-window/measure, so scrollHeight reads
-    // stale-short by exactly the new row's height, the pin sees distFromBottom 0 against content that
-    // has not grown, and the new message is stranded a row below the fold. (Scrolled UP, a send still
-    // works: the large scroll re-windows and measures on the way down — confirmed in the field.)
-    //
-    // Diagnosed via the observer effect: a console loop reading row geometry every frame made the bug
-    // vanish, because reading a message row's getBoundingClientRect forces the layout that makes the
-    // observer deliver, so getTotalSize/scrollHeight catch up. We replicate exactly that — read the
-    // tail message rows' rects each settle frame — and let the existing scrollHeight-delta re-pin
-    // below scroll to the freshly-grown bottom. Strictly read-only (no scroll, no state), so it can't
-    // thrash; a no-op on Chromium, where the observer was already prompt. Reading the last few rows
-    // covers a grouping-height change in the row above the new one.
+    // Prompt WebKit's LATE row measure. Rows are absolutely positioned, so scrollHeight is the spacer's
+    // declared height (= @tanstack getTotalSize), which grows only once a just-added row's ResizeObserver
+    // delivers — and WebKit (Safari + Tauri) delivers that late. Reading a row's getBoundingClientRect
+    // forces the layout that makes the observer deliver, so scrollHeight catches up before we read it in
+    // the re-pin below. Strictly read-only; a no-op on Chromium. (NB: this only fixes the scrollHeight
+    // *value*; the actual send-stick was a stale PAINT — see forceRepaint below.)
     const flushTailLayout = () => {
       const ss = scrollerRef.current
       if (!ss) return
@@ -764,24 +748,28 @@ export function useMessageListScroll({
       }
     }
 
-    // Pixels the LAST message row's bottom sits below the viewport bottom: > tolerance = the just-sent
-    // row is below the fold (the send-stick bug); <= 0 = it is at/above the bottom, i.e. visible. This
-    // reads the row's REAL rendered rect — the only ground truth for "is the newest message visible".
-    // scrollHeight / getTotalSize math can report distFromBottom 0 while the row's actual bottom is
-    // below the viewport (short viewport + WebKit's late row measure); #782 keyed the pin on
-    // getTotalSize() and was a no-op because getTotalSize does not lead the DOM spacer.
-    const lastRowBottomGap = (): number => {
+    // THE ACTUAL SEND-STICK FIX — force a repaint after a programmatic scroll. On the Tauri WKWebView,
+    // setting scrollTop (via scrollToIndex) updates the LAYOUT correctly — scrollTop, the row rects and
+    // distFromBottom all land at the bottom — but the compositor does NOT repaint, so the pixels on
+    // screen keep showing the OLD position and the just-sent message looks stranded below the fold until
+    // a real user scroll forces a recomposite. This is why every geometry probe read "at bottom": the
+    // layout IS at the bottom; only the paint is stale (confirmed on-device — toggling overflow made the
+    // already-correctly-positioned message appear without any scroll). Toggling overflow forces the
+    // scroll container to re-layout and repaint at the current position; `overflowY = ''` yields the
+    // property back to the CSS class (overflow-y-auto) and scrollTop is preserved. A cheap extra reflow
+    // on Chromium, which repaints on its own.
+    const forceRepaint = () => {
       const ss = scrollerRef.current
-      if (!ss) return 0
-      const rows = ss.querySelectorAll('[data-message-id]')
-      const last = rows[rows.length - 1] as HTMLElement | undefined
-      if (!last) return 0
-      return last.getBoundingClientRect().bottom - ss.getBoundingClientRect().bottom
+      if (!ss) return
+      ss.style.overflowY = 'hidden'
+      void ss.offsetHeight // forced reflow → WebKit repaints the scrolled content
+      ss.style.overflowY = ''
     }
 
     // Immediate pin (pre-paint when called from a layout effect).
     flushTailLayout()
     virt.scrollToIndex(virt.itemCount - 1, { align: 'end' })
+    forceRepaint()
     debugLog('PIN start', {
       itemCount: virt.itemCount,
       distFromBottom: scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight,
@@ -790,9 +778,6 @@ export function useMessageListScroll({
     const startedAt = Date.now()
     const loop = (reassertMonitorRef.current ??= createReassertLoopMonitor()).begin('pin-bottom', performance.now())
     let framesLeft = BOTTOM_REASSERT_FRAMES
-    // Independent hard cap (see BOTTOM_REASSERT_HARD_CAP_FRAMES): the settle window above is held open
-    // while content is still below the fold, so this bounds the pathological never-commit case.
-    let hardFramesLeft = BOTTOM_REASSERT_HARD_CAP_FRAMES
     let lastHeight = scroller.scrollHeight
     const finish = () => {
       loop.end()
@@ -800,63 +785,49 @@ export function useMessageListScroll({
     }
     const step = () => {
       const s = scrollerRef.current
+      if (framesLeft-- <= 0) {
+        // Loop ran its full budget. Re-derive isAtBottom from geometry (accurate — the position is
+        // correct even when WebKit withheld the paint) and force one final repaint so the settled
+        // position is actually drawn.
+        if (s) {
+          flushTailLayout()
+          const dist = s.scrollHeight - s.scrollTop - s.clientHeight
+          isAtBottomRef.current = dist < AT_BOTTOM_THRESHOLD
+          forceRepaint()
+          debugLog('PIN settled (frames exhausted)', { distFromBottom: dist })
+        }
+        finish()
+        return
+      }
       const v = virtualizerRef.current
       if (!s || !v || v.itemCount === 0) { finish(); return }
-      // The ONLY reason to stop pinning early is a genuine user takeover — a FAB tap or a wheel scroll,
-      // both of which stamp userScrollIntentAtRef AFTER we started. We deliberately do NOT also bail on
-      // a position-derived `!isAtBottomRef.current`: on WebKit a tall bottom row's post-paint growth
-      // fires extra `scroll` events that transiently report a large distFromBottom, and the
-      // height-unchanged discriminator in handleScroll cannot catch every one — a growth that settles
-      // across TWO scroll events (the second at the now-unchanged height) slips it, flips isAtBottom
-      // false, and used to strand the just-sent message below the fold (the recurring send-stick bug).
-      // The pin instead keeps converging on the AUTHORITATIVE geometry (below) and yields only to real
-      // input intent. See scroll-invariants "...growth that settles across TWO scroll events".
+      // The ONLY reason to stop pinning is a genuine user takeover — a FAB tap or a wheel scroll, both
+      // of which stamp userScrollIntentAtRef AFTER we started. We do NOT bail on a position-derived
+      // `!isAtBottomRef.current`: on WebKit a tall bottom row's post-paint growth fires extra `scroll`
+      // events reporting a large distFromBottom that the height-unchanged discriminator can't always
+      // catch, and flipping isAtBottom false used to strand the send. The pin keeps converging on
+      // geometry and yields only to real input intent.
       if (userScrollIntentAtRef.current > startedAt) {
-        debugLog('PIN bail (user scroll intent)', { gap: Math.round(lastRowBottomGap()) })
+        debugLog('PIN bail (user scroll intent)', {
+          distFromBottom: s.scrollHeight - s.scrollTop - s.clientHeight,
+        })
         finish()
         return
       }
-      // Force the tail rows to lay out this frame (the field-proven flush) so WebKit's late
-      // ResizeObserver delivers and the last row's rect reflects its real height BEFORE we read it.
+      // Force the tail rows to lay out this frame so WebKit's late ResizeObserver delivers and
+      // scrollHeight grows to include a just-added row before we read it below.
       flushTailLayout()
       const h = s.scrollHeight
-      // GROUND TRUTH: the last message row's real rendered position. gap > tolerance = the just-sent row
-      // is below the fold (the send-stick bug); <= 0 = it is visible at the bottom. We key the whole
-      // loop on this, NOT on scrollHeight/getTotalSize — those can read "at bottom" while the row is
-      // actually hidden below the viewport (short viewport + WebKit late measure). This is the fix that
-      // supersedes #782 (which keyed on getTotalSize() and did nothing, since it doesn't lead the spacer).
-      const gap = lastRowBottomGap()
-      const domDist = h - s.scrollTop - s.clientHeight // distance to the CURRENTLY-reachable bottom
-      const atBottom = gap <= BOTTOM_PIN_TOLERANCE
-      // Settle only once the real row is at the bottom AND the settle window has elapsed — or the hard
-      // cap is hit. While the row is still below the fold, RESET the settle window and keep the loop
-      // ALIVE: a group-start row (avatar + name + time) measures taller than its estimate AFTER paint,
-      // and on WebKit that growth can land after the normal ~1s budget; exiting early strands the row.
-      if (atBottom) framesLeft--
-      else framesLeft = BOTTOM_REASSERT_FRAMES
-      if (hardFramesLeft-- <= 0 || (atBottom && framesLeft <= 0)) {
-        isAtBottomRef.current = domDist < AT_BOTTOM_THRESHOLD
-        debugLog('PIN settled', { gap: Math.round(gap), atBottom })
-        finish()
-        return
-      }
-      // WRITE (each scrollToIndex re-windows @tanstack + forces a re-render) only when it can make
-      // progress: the reachable bottom moved (height changed) or scrollTop drifted off it (domDist).
-      // We do NOT write every frame while the row is below the fold but scrollTop is already clamped to
-      // a short spacer — that would re-render each frame for nothing. Instead the loop stays alive on
-      // `gap` (above) and idle-polls via the read-only flushTailLayout, which prompts WebKit's late row
-      // measure; when the spacer grows (h changes) we re-pin, and if scrollToIndex still lands short of
-      // the row's real bottom we close the RESIDUAL gap through the adapter (only while there's room to
-      // scroll, so it can't fight a clamp).
+      // Re-pin when the layout grew/shrank OR we're still measurably short of the bottom. Idempotent
+      // once pinned. Every scrollToIndex is followed by forceRepaint because WebKit will not otherwise
+      // draw the programmatic scroll — the root cause of the send-stick.
+      const dist = h - s.scrollTop - s.clientHeight
       let wrote = false
-      if (h !== lastHeight || domDist > BOTTOM_PIN_TOLERANCE) {
-        debugLog('PIN re-assert', { gap: Math.round(gap), domDist, heightChanged: h !== lastHeight })
+      if (h !== lastHeight || dist > BOTTOM_PIN_TOLERANCE) {
+        debugLog('PIN re-assert', { distFromBottom: dist, heightChanged: h !== lastHeight })
         lastHeight = h
         v.scrollToIndex(v.itemCount - 1, { align: 'end' })
-        const residual = lastRowBottomGap()
-        if (residual > BOTTOM_PIN_TOLERANCE && (s.scrollHeight - s.scrollTop - s.clientHeight) > BOTTOM_PIN_TOLERANCE) {
-          v.scrollToOffset(Math.round(s.scrollTop + residual))
-        }
+        forceRepaint()
         wrote = true
       }
       const warning = loop.frame(performance.now(), wrote)
