@@ -4,7 +4,7 @@ import { useLastActivity } from '@fluux/sdk/react'
 import { getTranslatedStatusText } from '@/utils/statusText'
 import { getTranslatedShowText } from '@/utils/presence'
 
-export type SidebarView = 'messages' | 'rooms' | 'directory' | 'admin' | 'settings' | 'search'
+export type SidebarView = 'messages' | 'rooms' | 'contacts' | 'admin' | 'settings' | 'search'
 
 // Context to share sidebarListRef with child components for focus zone scoping
 export const SidebarZoneContext = createContext<RefObject<HTMLDivElement | null> | undefined>(undefined)
@@ -87,7 +87,7 @@ export const SIDEBAR_WIDTH_KEY = 'sidebar-width'
 export const VIEW_PATHS: Record<SidebarView, string> = {
   messages: '/messages',
   rooms: '/rooms',
-  directory: '/contacts',
+  contacts: '/contacts',
   admin: '/admin',
   settings: '/settings/appearance', // Default to appearance category
   search: '/search',

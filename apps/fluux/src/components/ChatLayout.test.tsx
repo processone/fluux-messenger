@@ -402,7 +402,7 @@ vi.mock('./Sidebar', () => ({
     const pathToView: Record<string, string> = {
       '/messages': 'messages',
       '/rooms': 'rooms',
-      '/contacts': 'directory',
+      '/contacts': 'contacts',
       '/admin': 'admin',
     }
     const activeView = pathToView[location.pathname.split('/')[1] ? `/${location.pathname.split('/')[1]}` : '/messages'] || 'messages'
@@ -790,7 +790,7 @@ describe('ChatLayout - Tab Memory', () => {
       fireEvent.click(screen.getByTestId('directory-tab'))
 
       await waitFor(() => {
-        expect(screen.getByTestId('active-view')).toHaveTextContent('directory')
+        expect(screen.getByTestId('active-view')).toHaveTextContent('contacts')
       })
 
       // Start a chat with the contact
@@ -860,7 +860,7 @@ describe('ChatLayout - Tab Memory', () => {
       fireEvent.click(screen.getByTestId('directory-tab'))
 
       await waitFor(() => {
-        expect(screen.getByTestId('active-view')).toHaveTextContent('directory')
+        expect(screen.getByTestId('active-view')).toHaveTextContent('contacts')
       })
 
       // Start a chat with the contact (who has an archived conversation)

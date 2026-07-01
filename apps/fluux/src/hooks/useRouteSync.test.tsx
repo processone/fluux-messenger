@@ -50,18 +50,18 @@ describe('useRouteSync', () => {
       expect(result.current.sidebarView).toBe('rooms')
     })
 
-    it('returns "directory" for /contacts', () => {
+    it('returns "contacts" for /contacts', () => {
       const { result } = renderHook(() => useRouteSync(), {
         wrapper: createWrapper(['/contacts']),
       })
-      expect(result.current.sidebarView).toBe('directory')
+      expect(result.current.sidebarView).toBe('contacts')
     })
 
-    it('returns "directory" for /contacts/:jid', () => {
+    it('returns "contacts" for /contacts/:jid', () => {
       const { result } = renderHook(() => useRouteSync(), {
         wrapper: createWrapper(['/contacts/contact@example.com']),
       })
-      expect(result.current.sidebarView).toBe('directory')
+      expect(result.current.sidebarView).toBe('contacts')
     })
 
     it('resolves a legacy /archive path to the messages view', () => {
@@ -443,7 +443,7 @@ describe('useRouteSync', () => {
     })
 
     it('returns /contacts for directory view', () => {
-      expect(getViewPath('directory')).toBe('/contacts')
+      expect(getViewPath('contacts')).toBe('/contacts')
     })
 
     it('returns /admin for admin view', () => {

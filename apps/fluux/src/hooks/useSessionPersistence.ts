@@ -121,7 +121,7 @@ interface ProfileData {
  * View state for restoring UI on page reload.
  */
 export interface ViewStateData {
-  sidebarView: 'messages' | 'rooms' | 'directory' | 'admin' | 'settings' | 'search'
+  sidebarView: 'messages' | 'rooms' | 'contacts' | 'admin' | 'settings' | 'search'
   activeConversationId: string | null
   activeRoomJid: string | null
   selectedContactJid: string | null
@@ -235,6 +235,10 @@ export function getSavedViewState(jid?: string | null): ViewStateData | null {
     // Normalize removed view names to 'messages' (forward compat)
     if (parsed.sidebarView === 'archive' || parsed.sidebarView === 'events') {
       parsed.sidebarView = 'messages'
+    }
+    // Normalize the old 'directory' view key to its current name 'contacts'
+    if (parsed.sidebarView === 'directory') {
+      parsed.sidebarView = 'contacts'
     }
     return parsed as ViewStateData
   } catch {

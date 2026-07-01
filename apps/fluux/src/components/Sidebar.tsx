@@ -275,7 +275,7 @@ export function Sidebar({ onSelectContact, onStartChat, onStartChatWithJid, onMa
         <IconRailNavLink
           icon={Users}
           label={t('sidebar.contacts')}
-          view="directory"
+          view="contacts"
           pathPrefix="/contacts"
           onNavigate={onViewChange}
           badgeCount={pendingRequestCount}
@@ -308,12 +308,12 @@ export function Sidebar({ onSelectContact, onStartChat, onStartChatWithJid, onMa
           <h1 className="flex-1 font-semibold text-fluux-text truncate">
             {sidebarView === 'messages' ? (showArchived ? t('messages.archivedTitle') : t('sidebar.messages'))
               : sidebarView === 'rooms' ? t('sidebar.rooms')
-              : sidebarView === 'directory' ? t('sidebar.contacts')
+              : sidebarView === 'contacts' ? t('sidebar.contacts')
               : sidebarView === 'admin' ? t('sidebar.admin')
               : sidebarView === 'settings' ? t('sidebar.settings')
               : t('sidebar.search', 'Search')}
           </h1>
-          {sidebarView === 'directory' && (
+          {sidebarView === 'contacts' && (
             <div className="relative ms-auto" ref={contactDropdownRef}>
               <Tooltip content={t('common.options')} position="bottom">
                 <button
@@ -371,7 +371,7 @@ export function Sidebar({ onSelectContact, onStartChat, onStartChatWithJid, onMa
           )}
           {sidebarView === 'rooms' && (
             <div className="relative ms-auto" ref={roomDropdownRef}>
-              <Tooltip content={t('sidebar.joinRoom')} position="bottom">
+              <Tooltip content={t('common.options')} position="bottom">
                 <button
                   onClick={() => setShowRoomDropdown(!showRoomDropdown)}
                   className="p-1 text-fluux-muted hover:text-fluux-text flex items-center"
@@ -444,7 +444,7 @@ export function Sidebar({ onSelectContact, onStartChat, onStartChatWithJid, onMa
               <div key={sidebarView} className="h-full md:h-auto" style={{ animation: 'sidebar-view-enter var(--fluux-duration-fast) var(--fluux-ease-standard)' }}>
               {sidebarView === 'messages' ? (
                 showArchived ? <ArchiveList /> : <ConversationList />
-              ) : sidebarView === 'directory' ? (
+              ) : sidebarView === 'contacts' ? (
                 <ContactList onStartChat={onStartChat} onSelectContact={onSelectContact} onManageUser={onManageUser} activeContactJid={activeContactJid} />
               ) : sidebarView === 'rooms' ? (
                 <RoomsList />

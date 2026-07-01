@@ -9,8 +9,8 @@
  * - /messages/:jid      → messages view, conversation selected
  * - /rooms              → rooms view, no selection
  * - /rooms/:jid         → rooms view, room selected
- * - /contacts           → directory view, no selection
- * - /contacts/:jid      → directory view, contact profile selected
+ * - /contacts           → contacts view, no selection
+ * - /contacts/:jid      → contacts view, contact profile selected
  * - /archive            → archive view, no selection
  * - /archive/:jid       → archive view, archived conversation selected
  * - /admin              → admin view, no category
@@ -50,7 +50,7 @@ export interface RouteActions {
   navigateToMessages: (jid?: string, options?: NavigateOptions) => void
   /** Navigate to rooms view, optionally selecting a room */
   navigateToRooms: (jid?: string, options?: NavigateOptions) => void
-  /** Navigate to contacts/directory view, optionally selecting a contact */
+  /** Navigate to contacts view, optionally selecting a contact */
   navigateToContacts: (jid?: string, options?: NavigateOptions) => void
   /** Navigate to admin view, optionally selecting a category */
   navigateToAdmin: (category?: string, options?: NavigateOptions) => void
@@ -74,7 +74,7 @@ function parseRoute(pathname: string): SidebarView {
     return 'rooms'
   }
   if (pathname.startsWith('/contacts')) {
-    return 'directory'
+    return 'contacts'
   }
   if (pathname.startsWith('/admin')) {
     return 'admin'
@@ -244,8 +244,7 @@ export function useRouteSync(): RouteState & RouteActions {
 
     if (hasDetail) {
       // Detail -> list: replace to keep stack clean
-      const base = view === 'directory' ? '/contacts' : `/${view}`
-      void navigate(base, { replace: true })
+      void navigate(`/${view}`, { replace: true })
     } else {
       // Already at list level, go to messages as fallback
       void navigate('/messages', { replace: true })
@@ -274,7 +273,7 @@ export function useRouteSync(): RouteState & RouteActions {
  * Useful for programmatic navigation based on view type.
  */
 export function getViewPath(view: SidebarView, jid?: string): string {
-  const base = view === 'directory' ? '/contacts' : `/${view}`
+  const base = `/${view}`
   if (jid) {
     return `${base}/${encodeURIComponent(jid)}`
   }

@@ -260,7 +260,7 @@ function ChatLayoutContent() {
   // Derive selectedContact from React state (selectedContactJid) with URL fallback (activeJid).
   // On mobile, React state and URL can briefly desync during navigation, causing the layout
   // to flash between profile and contact list. Using the URL as a fallback prevents this blink.
-  const effectiveContactJid = selectedContactJid ?? (urlSidebarView === 'directory' && activeJid ? activeJid : null)
+  const effectiveContactJid = selectedContactJid ?? (urlSidebarView === 'contacts' && activeJid ? activeJid : null)
   // For non-roster users (e.g. room occupants), create a minimal Contact object
   const selectedContact = selectedRosterContact ?? (effectiveContactJid ? {
     jid: effectiveContactJid,
@@ -370,7 +370,7 @@ function ChatLayoutContent() {
         case 'rooms':
           navigateToRooms(savedViewState.activeRoomJid ?? undefined)
           break
-        case 'directory':
+        case 'contacts':
           navigateToContacts(savedViewState.selectedContactJid ?? undefined)
           break
         case 'admin':
@@ -425,7 +425,7 @@ function ChatLayoutContent() {
     // Leaving the directory view clears the contact profile — without this,
     // browser back from /contacts/:jid keeps showing ContactProfileView while
     // the URL and sidebar already say otherwise (mirror of the directory branch)
-    if (sidebarView !== 'directory' && selectedContactJid !== null) {
+    if (sidebarView !== 'contacts' && selectedContactJid !== null) {
       setSelectedContactJid(null)
     }
     if (sidebarView === 'messages') {
@@ -438,7 +438,7 @@ function ChatLayoutContent() {
       if (activeJid !== currentStoreJid) {
         void activateRoom(activeJid)
       }
-    } else if (sidebarView === 'directory') {
+    } else if (sidebarView === 'contacts') {
       if (activeJid !== selectedContactJid) {
         setSelectedContactJid(activeJid)
       }
@@ -798,7 +798,7 @@ function ChatLayoutContent() {
     setActiveConversation(null)
     setActiveRoom(null)
     // Navigate first (which clears selectedContactJid), then set JID
-    handleSidebarViewChange('directory')
+    handleSidebarViewChange('contacts')
     setSelectedContactJid(jid)
     navigateToContacts(jid, { replace: true })
   }
@@ -948,7 +948,7 @@ function ChatLayoutContent() {
               sidebarView={sidebarView}
               primaryAction={
                 sidebarView === 'messages'
-                  ? { label: t('emptyState.messages.action'), onClick: () => handleSidebarViewChange('directory') }
+                  ? { label: t('emptyState.messages.action'), onClick: () => handleSidebarViewChange('contacts') }
                   : sidebarView === 'rooms'
                   ? { label: t('emptyState.rooms.action'), onClick: () => setShowCreateRoom(true) }
                   : undefined
@@ -1044,7 +1044,7 @@ function EmptyState({ sidebarView, primaryAction }: { sidebarView: SidebarView; 
           title: t('emptyState.rooms.title'),
           description: t('emptyState.rooms.description'),
         }
-      case 'directory':
+      case 'contacts':
         return {
           Icon: Users,
           title: t('emptyState.directory.title'),

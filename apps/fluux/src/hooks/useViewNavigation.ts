@@ -52,7 +52,7 @@ export interface ViewNavigationResult {
  * - Per-tab memory (lastMessagesConversation, lastRoomsRoom, lastDirectoryContact)
  * - Side effects: marking as read when leaving, clearing conflicting state
  *
- * @param selectedContact - Currently selected contact in directory view
+ * @param selectedContact - Currently selected contact in contacts view
  */
 export function useViewNavigation(selectedContact: Contact | null): ViewNavigationResult {
   // NOTE: Use direct store subscriptions instead of useChat()/useRoom() hooks.
@@ -109,7 +109,7 @@ export function useViewNavigation(selectedContact: Contact | null): ViewNavigati
       case 'rooms':
         if (currentConversationId) setActiveConversation(null)
         break
-      case 'directory':
+      case 'contacts':
         if (currentConversationId) setActiveConversation(null)
         if (currentRoomJid) setActiveRoom(null)
         break
@@ -148,7 +148,7 @@ export function useViewNavigation(selectedContact: Contact | null): ViewNavigati
       // Mark room as read and clear new message marker when leaving rooms tab
       roomStore.getState().markAsRead(currentRoomJid)
       roomStore.getState().clearFirstNewMessageId(currentRoomJid)
-    } else if (sidebarView === 'directory' && selectedContact) {
+    } else if (sidebarView === 'contacts' && selectedContact) {
       setLastDirectoryContact(selectedContact)
     } else if (sidebarView === 'search') {
       searchStore.getState().setPreviewResult(null)
@@ -201,7 +201,7 @@ export function useViewNavigation(selectedContact: Contact | null): ViewNavigati
         navigateToRooms(targetRoom ?? undefined, { replace: true })
         break
       }
-      case 'directory':
+      case 'contacts':
         setActiveConversation(null)
         setActiveRoom(null)
         // On small screens, don't auto-restore last contact - let user choose
