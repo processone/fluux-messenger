@@ -130,6 +130,12 @@ export function Sidebar({ onSelectContact, onStartChat, onStartChatWithJid, onMa
   // update modal). Hidden unless an update is actually ready.
   const { visible: updateAvailable, activate: activateUpdate } = useUpdateAffordance()
 
+  // Archive toggle state — reset when leaving messages view
+  const [showArchived, setShowArchived] = useState(false)
+  useEffect(() => {
+    if (sidebarView !== 'messages') setShowArchived(false)
+  }, [sidebarView])
+
   // Local UI state (not shared)
   const [showCreateRoom, setShowCreateRoom] = useState(false)
   const [showBrowseRooms, setShowBrowseRooms] = useState(false)
@@ -318,7 +324,7 @@ export function Sidebar({ onSelectContact, onStartChat, onStartChatWithJid, onMa
         {/* Header - with drag region for window movement */}
         <div className="h-14 px-4 flex items-center border-b border-fluux-bg shadow-sm" {...dragRegionProps}>
           <h1 className="flex-1 font-semibold text-fluux-text truncate">
-            {sidebarView === 'messages' ? t('sidebar.messages')
+            {sidebarView === 'messages' ? (showArchived ? t('messages.archivedTitle') : t('sidebar.messages'))
               : sidebarView === 'rooms' ? t('sidebar.rooms')
               : sidebarView === 'directory' ? t('sidebar.contacts')
               : sidebarView === 'archive' ? t('sidebar.archive')
@@ -360,16 +366,28 @@ export function Sidebar({ onSelectContact, onStartChat, onStartChatWithJid, onMa
             </div>
           )}
           {sidebarView === 'messages' && (
-            <Tooltip content={t('newMessage.title')} position="bottom">
-              <button
-                type="button"
-                onClick={() => modalOpen('newMessage')}
-                aria-label={t('newMessage.title')}
-                className="ms-auto p-1 text-fluux-muted hover:text-fluux-text flex items-center"
-              >
-                <Plus className="size-5" />
-              </button>
-            </Tooltip>
+            <>
+              <Tooltip content={showArchived ? t('messages.showActive') : t('messages.showArchived')} position="bottom">
+                <button
+                  type="button"
+                  onClick={() => setShowArchived((v) => !v)}
+                  aria-label={showArchived ? t('messages.showActive') : t('messages.showArchived')}
+                  className={`p-1 flex items-center ${showArchived ? 'text-fluux-brand' : 'text-fluux-muted hover:text-fluux-text'}`}
+                >
+                  <Archive className="size-5" />
+                </button>
+              </Tooltip>
+              <Tooltip content={t('newMessage.title')} position="bottom">
+                <button
+                  type="button"
+                  onClick={() => modalOpen('newMessage')}
+                  aria-label={t('newMessage.title')}
+                  className="ms-auto p-1 text-fluux-muted hover:text-fluux-text flex items-center"
+                >
+                  <Plus className="size-5" />
+                </button>
+              </Tooltip>
+            </>
           )}
           {sidebarView === 'rooms' && (
             <div className="relative ms-auto" ref={roomDropdownRef}>
@@ -445,7 +463,7 @@ export function Sidebar({ onSelectContact, onStartChat, onStartChatWithJid, onMa
             <SidebarZoneContext.Provider value={sidebarListRef}>
               <div key={sidebarView} className="h-full md:h-auto" style={{ animation: 'sidebar-view-enter var(--fluux-duration-fast) var(--fluux-ease-standard)' }}>
               {sidebarView === 'messages' ? (
-                <ConversationList />
+                showArchived ? <ArchiveList /> : <ConversationList />
               ) : sidebarView === 'directory' ? (
                 <ContactList onStartChat={onStartChat} onSelectContact={onSelectContact} onManageUser={onManageUser} activeContactJid={activeContactJid} />
               ) : sidebarView === 'rooms' ? (
