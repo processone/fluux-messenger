@@ -23,7 +23,9 @@
 - **Create** `apps/fluux/src/components/sidebar-components/MessagesHeaderActions.test.tsx`
 - **Create** `apps/fluux/src/components/sidebar-components/ContactsHeaderActions.tsx` — add-contact button + `⋮` (Blocked users).
 - **Create** `apps/fluux/src/components/sidebar-components/ContactsHeaderActions.test.tsx`
-- **Create** `apps/fluux/src/components/sidebar-components/RoomsHeaderActions.tsx` — `RoomsCreateSplitButton` (＋/▾) + `⋮` (Catch up all).
+- **Modify** `apps/fluux/src/components/OverflowMenu.tsx` — add an optional `renderTrigger` prop (backward-compatible) so a custom trigger can reuse the menu rendering.
+- **Modify** `apps/fluux/src/components/OverflowMenu.test.tsx` — cover the custom trigger.
+- **Create** `apps/fluux/src/components/sidebar-components/RoomsHeaderActions.tsx` — `RoomsCreateSplitButton` (＋/▾, built on `OverflowMenu` via `renderTrigger`) + `⋮` (Catch up all).
 - **Create** `apps/fluux/src/components/sidebar-components/RoomsHeaderActions.test.tsx`
 - **Modify** `apps/fluux/src/components/sidebar-components/types.tsx` — add `SIDEBAR_HEADER_ICON_BTN` constant.
 - **Modify** `apps/fluux/src/components/sidebar-components/index.ts` — export the three new components and the constant.
@@ -287,16 +289,21 @@ git commit -m "feat(sidebar): extract ContactsHeaderActions (add-contact + block
 
 ---
 
-### Task 3: RoomsHeaderActions + RoomsCreateSplitButton
+### Task 3: OverflowMenu custom trigger + RoomsHeaderActions
 
 **Files:**
+- Modify: `apps/fluux/src/components/OverflowMenu.tsx` (add `renderTrigger` prop)
+- Modify: `apps/fluux/src/components/OverflowMenu.test.tsx` (cover the custom trigger)
 - Modify: `apps/fluux/src/test-setup.ts` (i18n `rooms` block, ~lines 55-58)
 - Create: `apps/fluux/src/components/sidebar-components/RoomsHeaderActions.tsx`
 - Test: `apps/fluux/src/components/sidebar-components/RoomsHeaderActions.test.tsx`
 
 **Interfaces:**
-- Consumes: `SIDEBAR_HEADER_ICON_BTN` (Task 1); `OverflowMenu`, `OverflowMenuItem`; `useClickOutside` from `@/hooks`.
+- Consumes: `SIDEBAR_HEADER_ICON_BTN` (Task 1).
+- Produces (OverflowMenu): new optional prop `renderTrigger?: (state: { isOpen: boolean; toggle: () => void; close: () => void }) => ReactNode`. When provided it replaces the default kebab button; click-outside/Escape dismissal and the `role="menu"` item list are unchanged. `ariaLabel` remains required (used by the default trigger; ignored when `renderTrigger` is supplied).
 - Produces: `RoomsHeaderActions(props: { onQuickChat: () => void; onPermanentRoom: () => void; onJoinRoom: () => void; onBrowseRooms: () => void; onCatchUpAll: () => void; isCatchingUp: boolean })`.
+
+> **Note (icon color):** routing the create-menu through `OverflowMenu` renders each item's icon with the component's default class; the old amber tint on the Quick Chat `Zap` icon is intentionally dropped for menu consistency. `OverflowMenuItem` is NOT extended with per-item icon color (YAGNI).
 
 - [ ] **Step 1: Add the asserted i18n keys to `test-setup.ts`**
 
@@ -312,7 +319,140 @@ Extend the `rooms` block (currently `backToRooms`/`invitationsHeading`) with:
           catchUpAll: 'Catch up all rooms',
 ```
 
-- [ ] **Step 2: Write the failing test**
+- [ ] **Step 2: Write the failing OverflowMenu custom-trigger test**
+
+Append to `apps/fluux/src/components/OverflowMenu.test.tsx` (inside the existing `describe('OverflowMenu', ...)` block):
+
+```tsx
+  it('renders a custom trigger instead of the kebab and toggles the menu', () => {
+    render(
+      <OverflowMenu
+        ariaLabel="Create room"
+        items={makeItems()}
+        renderTrigger={({ isOpen, toggle }) => (
+          <button type="button" onClick={toggle} aria-expanded={isOpen}>
+            Custom trigger
+          </button>
+        )}
+      />,
+    )
+
+    // Default kebab (named by ariaLabel) is not rendered when renderTrigger is provided.
+    expect(screen.queryByRole('button', { name: 'Create room' })).not.toBeInTheDocument()
+
+    const trigger = screen.getByRole('button', { name: 'Custom trigger' })
+    expect(screen.queryByText('View profile')).not.toBeInTheDocument()
+
+    fireEvent.click(trigger)
+    expect(screen.getByText('View profile')).toBeInTheDocument()
+  })
+
+  it('closes the menu via the close helper passed to a custom trigger', () => {
+    render(
+      <OverflowMenu
+        ariaLabel="Create room"
+        items={makeItems()}
+        renderTrigger={({ isOpen, toggle, close }) => (
+          <>
+            <button type="button" onClick={toggle} aria-expanded={isOpen}>Toggle</button>
+            <button type="button" onClick={close}>Close it</button>
+          </>
+        )}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Toggle' }))
+    expect(screen.getByText('View profile')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Close it' }))
+    expect(screen.queryByText('View profile')).not.toBeInTheDocument()
+  })
+```
+
+- [ ] **Step 3: Run the OverflowMenu tests to verify the new ones fail**
+
+Run: `npx vitest run src/components/OverflowMenu.test.tsx`
+Expected: the two new tests FAIL (`renderTrigger` not a prop; default kebab still rendered). Existing tests still pass.
+
+- [ ] **Step 4: Add `renderTrigger` to `OverflowMenu.tsx`**
+
+Change the imports line 1 to include `ReactNode`:
+
+```tsx
+import { useEffect, useRef, useState, type ReactNode } from 'react'
+```
+
+Add to `OverflowMenuProps` (after `menuClassName?`):
+
+```tsx
+  /**
+   * Custom trigger renderer. When provided it replaces the default kebab
+   * button and receives the open state plus toggle/close helpers. Click-outside
+   * and Escape dismissal still apply. `ariaLabel` is then unused (the custom
+   * trigger supplies its own accessible name).
+   */
+  renderTrigger?: (state: { isOpen: boolean; toggle: () => void; close: () => void }) => ReactNode
+```
+
+Add `renderTrigger` to the destructured props, then define helpers and swap the trigger. Replace the existing trigger `<button>` (the one wrapping `<MoreVertical .../>`) with a conditional. The final render becomes:
+
+```tsx
+  const toggle = () => setIsOpen((open) => !open)
+  const close = () => setIsOpen(false)
+
+  if (items.length === 0) return null
+
+  return (
+    <div className="relative" ref={menuRef}>
+      {renderTrigger ? (
+        renderTrigger({ isOpen, toggle, close })
+      ) : (
+        <button
+          type="button"
+          onClick={toggle}
+          aria-label={ariaLabel}
+          aria-haspopup="menu"
+          aria-expanded={isOpen}
+          className={buttonClassName}
+        >
+          <MoreVertical className={iconClassName} />
+        </button>
+      )}
+
+      {isOpen && (
+        <div role="menu" className={menuClassName}>
+          {items.map(({ key, label, icon: Icon, onClick, danger, disabled, active }) => (
+            <button
+              key={key}
+              role={active === undefined ? 'menuitem' : 'menuitemcheckbox'}
+              aria-checked={active === undefined ? undefined : active}
+              type="button"
+              disabled={disabled}
+              onClick={() => {
+                setIsOpen(false)
+                onClick()
+              }}
+              className={`w-full flex items-center gap-2 px-3 py-2.5 text-start text-sm transition-colors hover:bg-fluux-active disabled:opacity-50 disabled:cursor-not-allowed ${danger ? 'text-fluux-error' : 'text-fluux-text'}`}
+            >
+              <Icon className="size-4 flex-shrink-0" />
+              <span>{label}</span>
+              {active && <Check className="size-4 flex-shrink-0 ms-auto" aria-hidden="true" />}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+```
+
+(The `useEffect` Escape handler and `useClickOutside` call above this block are unchanged.)
+
+- [ ] **Step 5: Run the OverflowMenu tests to verify all pass**
+
+Run: `npx vitest run src/components/OverflowMenu.test.tsx`
+Expected: PASS (all existing tests + the two new ones).
+
+- [ ] **Step 6: Write the failing RoomsHeaderActions test**
 
 Create `RoomsHeaderActions.test.tsx`:
 
@@ -373,18 +513,16 @@ describe('RoomsHeaderActions', () => {
 })
 ```
 
-- [ ] **Step 3: Run the test to verify it fails**
+- [ ] **Step 7: Run the test to verify it fails**
 
 Run: `npx vitest run src/components/sidebar-components/RoomsHeaderActions.test.tsx`
 Expected: FAIL — cannot resolve `./RoomsHeaderActions`.
 
-- [ ] **Step 4: Implement `RoomsHeaderActions.tsx`**
+- [ ] **Step 8: Implement `RoomsHeaderActions.tsx`**
 
 ```tsx
-import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Plus, ChevronDown, Zap, Hash, LogIn, Search, RefreshCw } from 'lucide-react'
-import { useClickOutside } from '@/hooks'
 import { Tooltip } from '../Tooltip'
 import { OverflowMenu, type OverflowMenuItem } from '../OverflowMenu'
 import { SIDEBAR_HEADER_ICON_BTN } from './types'
@@ -446,92 +584,70 @@ interface RoomsCreateSplitButtonProps {
 }
 
 /**
- * `+` fires Quick Chat directly; the adjacent `▾` opens a create-menu listing
- * all four create/join paths (Quick Chat included, so the shortcut is
- * discoverable). Menu dismissal (click-outside / Escape) mirrors OverflowMenu.
+ * `+` fires Quick Chat directly; the adjacent `▾` opens a create-menu (built on
+ * OverflowMenu via renderTrigger) listing all four create/join paths — Quick
+ * Chat included, so the `+` shortcut is discoverable.
  */
 function RoomsCreateSplitButton({ onQuickChat, onPermanentRoom, onJoinRoom, onBrowseRooms }: RoomsCreateSplitButtonProps) {
   const { t } = useTranslation()
-  const [isOpen, setIsOpen] = useState(false)
-  const ref = useRef<HTMLDivElement>(null)
-  useClickOutside(ref, () => setIsOpen(false), isOpen)
-
-  useEffect(() => {
-    if (!isOpen) return
-    const onEsc = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setIsOpen(false)
-    }
-    document.addEventListener('keydown', onEsc)
-    return () => document.removeEventListener('keydown', onEsc)
-  }, [isOpen])
-
-  const menuItems = [
-    { key: 'quickChat', label: t('rooms.quickChat'), icon: Zap, iconClass: 'text-amber-500', onClick: onQuickChat },
-    { key: 'permanentRoom', label: t('rooms.permanentRoom'), icon: Hash, iconClass: '', onClick: onPermanentRoom },
-    { key: 'joinRoom', label: t('rooms.joinRoom'), icon: LogIn, iconClass: '', onClick: onJoinRoom },
-    { key: 'browseRooms', label: t('rooms.browseRooms'), icon: Search, iconClass: '', onClick: onBrowseRooms },
+  const items: OverflowMenuItem[] = [
+    { key: 'quickChat', label: t('rooms.quickChat'), icon: Zap, onClick: onQuickChat },
+    { key: 'permanentRoom', label: t('rooms.permanentRoom'), icon: Hash, onClick: onPermanentRoom },
+    { key: 'joinRoom', label: t('rooms.joinRoom'), icon: LogIn, onClick: onJoinRoom },
+    { key: 'browseRooms', label: t('rooms.browseRooms'), icon: Search, onClick: onBrowseRooms },
   ]
-
   return (
-    <div className="relative flex items-center" ref={ref}>
-      <Tooltip content={t('rooms.createQuickChat')} position="bottom">
-        <button
-          type="button"
-          onClick={onQuickChat}
-          aria-label={t('rooms.createQuickChat')}
-          className={`${SIDEBAR_HEADER_ICON_BTN} text-fluux-muted hover:text-fluux-text`}
-        >
-          <Plus className="size-5" />
-        </button>
-      </Tooltip>
-      <Tooltip content={t('rooms.createRoom')} position="bottom">
-        <button
-          type="button"
-          onClick={() => setIsOpen((open) => !open)}
-          aria-label={t('rooms.createRoom')}
-          aria-haspopup="menu"
-          aria-expanded={isOpen}
-          className="-ms-1 p-2 rounded-lg hover:bg-fluux-hover transition-colors text-fluux-muted hover:text-fluux-text flex items-center"
-        >
-          <ChevronDown className="size-4" />
-        </button>
-      </Tooltip>
-      {isOpen && (
-        <div role="menu" className="absolute end-0 top-full mt-1 w-56 fluux-popover rounded-lg py-1 z-50">
-          {menuItems.map(({ key, label, icon: Icon, iconClass, onClick }) => (
+    <OverflowMenu
+      ariaLabel={t('rooms.createRoom')}
+      items={items}
+      renderTrigger={({ isOpen, toggle, close }) => (
+        <div className="flex items-center">
+          <Tooltip content={t('rooms.createQuickChat')} position="bottom">
             <button
-              key={key}
-              role="menuitem"
               type="button"
               onClick={() => {
-                setIsOpen(false)
-                onClick()
+                close()
+                onQuickChat()
               }}
-              className="w-full flex items-center gap-2 px-3 py-2.5 text-start text-sm text-fluux-text hover:bg-fluux-active transition-colors"
+              aria-label={t('rooms.createQuickChat')}
+              className={`${SIDEBAR_HEADER_ICON_BTN} text-fluux-muted hover:text-fluux-text`}
             >
-              <Icon className={`size-4 flex-shrink-0 ${iconClass}`} />
-              <span>{label}</span>
+              <Plus className="size-5" />
             </button>
-          ))}
+          </Tooltip>
+          <Tooltip content={t('rooms.createRoom')} position="bottom">
+            <button
+              type="button"
+              onClick={toggle}
+              aria-label={t('rooms.createRoom')}
+              aria-haspopup="menu"
+              aria-expanded={isOpen}
+              className="-ms-1 p-2 rounded-lg hover:bg-fluux-hover transition-colors text-fluux-muted hover:text-fluux-text flex items-center"
+            >
+              <ChevronDown className="size-4" />
+            </button>
+          </Tooltip>
         </div>
       )}
-    </div>
+    />
   )
 }
 ```
 
-- [ ] **Step 5: Run the test to verify it passes**
+- [ ] **Step 9: Run the test to verify it passes**
 
 Run: `npx vitest run src/components/sidebar-components/RoomsHeaderActions.test.tsx`
 Expected: PASS (5 tests).
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 10: Commit**
 
 ```bash
-git add apps/fluux/src/components/sidebar-components/RoomsHeaderActions.tsx \
+git add apps/fluux/src/components/OverflowMenu.tsx \
+        apps/fluux/src/components/OverflowMenu.test.tsx \
+        apps/fluux/src/components/sidebar-components/RoomsHeaderActions.tsx \
         apps/fluux/src/components/sidebar-components/RoomsHeaderActions.test.tsx \
         apps/fluux/src/test-setup.ts
-git commit -m "feat(sidebar): extract RoomsHeaderActions with split create button + catch-up overflow"
+git commit -m "feat(sidebar): RoomsHeaderActions split button via OverflowMenu renderTrigger"
 ```
 
 ---

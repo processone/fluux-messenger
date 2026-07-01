@@ -105,12 +105,15 @@ other extracted sidebar pieces.
 - All `⋮` overflows use the existing **`OverflowMenu`** (`MoreVertical` trigger,
   click-outside + Escape, `role="menu"`, `active` checkable items, `danger`,
   `disabled`). This removes the three hand-rolled dropdowns from `Sidebar.tsx`.
-- The one bespoke piece is **`RoomsCreateSplitButton`**: a `Plus` button
-  (`onClick` → Quick Chat) adjacent to a `▾` button (`onClick` → toggles a menu),
-  built on the existing **`useClickOutside`** hook and the shared `fluux-popover`
-  styling so it visually matches `OverflowMenu`. It is the only place needing a
-  non-kebab menu trigger, so a dedicated small component is preferred over
-  generalizing `OverflowMenu` (YAGNI — a single consumer).
+- **`RoomsCreateSplitButton`** is the one non-kebab trigger. Rather than
+  hand-rolling its menu (which would duplicate `OverflowMenu`'s item rendering),
+  `OverflowMenu` gains a small backward-compatible `renderTrigger` prop: when
+  supplied, a caller-provided trigger replaces the default kebab while the menu
+  list, click-outside, and Escape dismissal are reused. The split button renders
+  a `Plus` (→ Quick Chat) beside a `▾` (→ toggles the menu) as that trigger. The
+  create-menu's Quick Chat icon loses its former amber tint (menu items render
+  with `OverflowMenu`'s default icon styling); `OverflowMenuItem` is not extended
+  with per-item color (YAGNI).
 
 ### Tooltips / i18n
 
