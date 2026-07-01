@@ -121,47 +121,22 @@ export function ChatHeader({
         />
       )}
 
-      {/* Name and status */}
+      {/* Name and status — the name is intentionally not clickable; "View Profile" lives in the kebab menu */}
       <div className="flex-1 min-w-0">
-        {!isGroupChat && onShowProfile ? (
-          <button
-            type="button"
-            onClick={onShowProfile}
-            className="block w-full text-start -mx-1 px-1 py-0.5 rounded hover:bg-fluux-hover transition-colors cursor-pointer"
-            aria-label={t('sidebar.viewProfile')}
-          >
-            <h2 className="font-semibold text-fluux-text truncate leading-tight">{name}</h2>
-            <div className="flex items-center gap-1.5">
-              <p className="text-xs text-fluux-muted truncate">
-                {fullContact ? getTranslatedStatusText(fullContact, t) : jid}
-              </p>
-              {contactTime && (
-                <Tooltip content={t('presence.localTime')} position="bottom" className="inline-flex items-center">
-                  <span className="text-xs text-fluux-muted flex-shrink-0 flex items-center gap-1">
-                    · <Clock className="size-3" />{contactTime}
-                  </span>
-                </Tooltip>
-              )}
-            </div>
-          </button>
-        ) : (
-          <>
-            <h2 className="font-semibold text-fluux-text truncate leading-tight">{name}</h2>
-            {!isGroupChat && (
-              <div className="flex items-center gap-1.5">
-                <p className="text-xs text-fluux-muted truncate">
-                  {fullContact ? getTranslatedStatusText(fullContact, t) : jid}
-                </p>
-                {contactTime && (
-                  <Tooltip content={t('presence.localTime')} position="bottom" className="inline-flex items-center">
-                    <span className="text-xs text-fluux-muted flex-shrink-0 flex items-center gap-1">
-                      · <Clock className="size-3" />{contactTime}
-                    </span>
-                  </Tooltip>
-                )}
-              </div>
+        <h2 className="font-semibold text-fluux-text truncate leading-tight">{name}</h2>
+        {!isGroupChat && (
+          <div className="flex items-center gap-1.5">
+            <p className="text-xs text-fluux-muted truncate">
+              {fullContact ? getTranslatedStatusText(fullContact, t) : jid}
+            </p>
+            {contactTime && (
+              <Tooltip content={t('presence.localTime')} position="bottom" className="inline-flex items-center">
+                <span className="text-xs text-fluux-muted flex-shrink-0 flex items-center gap-1">
+                  · <Clock className="size-3" />{contactTime}
+                </span>
+              </Tooltip>
             )}
-          </>
+          </div>
         )}
       </div>
 
