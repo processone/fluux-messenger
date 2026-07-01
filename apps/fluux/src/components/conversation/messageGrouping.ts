@@ -1,4 +1,5 @@
 import { format } from 'date-fns'
+import { getActiveMessageListController } from './activeMessageListController'
 
 /**
  * Check if message is a /me action message (IRC-style action).
@@ -255,14 +256,32 @@ export function scrollToMessage(messageId: string): void {
     )
   }
 
+  let requestedMount = false
+
   function tryScroll(retriesLeft: number) {
     const element = findElement()
     if (element) {
+      // scrollIntoView uses the real measured layout, so it lands precisely even when the row was
+      // just windowed in via an estimate-based scrollToIndex below (which self-corrects here).
       element.scrollIntoView({ behavior: 'smooth', block: 'center' })
       element.classList.add('message-highlight')
       setTimeout(() => element.classList.remove('message-highlight'), 1500)
-    } else if (retriesLeft > 0) {
-      // Element may not be in DOM yet (first render). Retry after next frame.
+      return
+    }
+    // Under virtualization the target row may be OUTSIDE the mounted window, so the DOM query above
+    // finds nothing (retrying alone never helps — the row is never rendered). Ask the active list to
+    // window it in once, then keep retrying across frames while it mounts and measures. No-op /
+    // absent for non-virtualized lists, where every row is already in the DOM.
+    if (!requestedMount) {
+      const controller = getActiveMessageListController()
+      if (controller?.hasMessage(messageId)) {
+        controller.ensureMessageMounted(messageId)
+        requestedMount = true
+      }
+    }
+    if (retriesLeft > 0) {
+      // Element may not be in the DOM yet (first render, or a row still being windowed in). Retry
+      // after the next frame.
       requestAnimationFrame(() => tryScroll(retriesLeft - 1))
     } else {
       // Debug: message not found in DOM, log to help diagnose issues
@@ -273,5 +292,7 @@ export function scrollToMessage(messageId: string): void {
     }
   }
 
-  tryScroll(3)
+  // A windowed-in row needs a few frames to mount + measure, so allow more retries than the
+  // original 3 (which only had to cover a first-render race, not a virtualizer re-window).
+  tryScroll(8)
 }

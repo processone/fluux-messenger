@@ -33,6 +33,11 @@ import { buildMessageListItems, type RenderItem } from './messageListItems'
 import { FloatingDateHeader } from './FloatingDateHeader'
 import { getTopVisibleDate } from './getTopVisibleDate'
 import { useTanstackMessageVirtualizer } from './tanstackMessageVirtualizer'
+import {
+  setActiveMessageListController,
+  getActiveMessageListController,
+  type ActiveMessageListController,
+} from './activeMessageListController'
 import { useRowMetrics } from './useRowMetrics'
 import { estimateRowHeight } from './rowHeightEstimator'
 import { isEstimateDebugEnabled, estimateDebugLog } from '@/utils/scrollDebug'
@@ -364,6 +369,23 @@ export function MessageList<T extends BaseMessage>({
     return getTopVisibleDate(v.getVirtualItems(), virtualItems, scroller.scrollTop)
   }
   const getTopDate = useCallback(() => getTopVisibleDateRef.current(), [])
+
+  // Register this (virtualized) list so scrollToMessage — reply-quote taps, find-on-page, poll and
+  // reaction jumps — can window an off-screen target row in before its DOM read. Non-virtualized
+  // lists keep every row mounted, so they register nothing and scrollToMessage's plain DOM path
+  // works unchanged. Identity-checked cleanup so a fast conversation switch can't clear the newly
+  // mounted list's registration.
+  useEffect(() => {
+    if (!activeVirtualizer) return
+    const controller: ActiveMessageListController = {
+      hasMessage: (id) => activeVirtualizer.getIndexForMessageId(id) !== null,
+      ensureMessageMounted: (id) => { void activeVirtualizer.ensureMessageMounted(id) },
+    }
+    setActiveMessageListController(controller)
+    return () => {
+      if (getActiveMessageListController() === controller) setActiveMessageListController(null)
+    }
+  }, [activeVirtualizer])
 
   // Dev-only: expose virtualizer offset lookup for Playwright test assertions (invariant-1).
   // Allows tests to check anchor position without requiring the row to be in the DOM window.

@@ -146,21 +146,30 @@ describe('MessageList — virtualized scroll integration (ensureMessageMounted)'
     expect(ensureMessageMounted).toHaveBeenCalledWith('msg-40')
   })
 
-  it('scrolls to the target row via virtualizer index when a targetMessageId is set (reply / search jump)', () => {
-    // targetMessageId (reply-to jump, search result open) previously used ensureMessageMounted
-    // + DOM querySelector + 4 retry timeouts to find the row. The new path uses
-    // getIndexForMessageId + scrollToIndex('start') which resolves unmounted rows directly —
-    // no DOM query, no async waits. ensureMessageMounted is no longer called for this path.
+  it('scrolls to the target row ~1/3 down (scrollToIndex windows it in, then scrollToOffset shifts) when a targetMessageId is set (reply / search jump)', () => {
+    // targetMessageId (reply-to jump, search result open) resolves the row through the virtualizer
+    // index (works for unmounted rows — no DOM query, no async waits). Two-step, like the anchor
+    // restore: scrollToIndex('start') FIRST to window + measure the (possibly far-out-of-window)
+    // row, then scrollToOffset(offset - clientHeight/3) to shift it ~1/3 down from the top so it
+    // does NOT sit flush against the top edge (under the sticky date header) where it reads as
+    // misaligned and the highlight flash is easy to miss. The scrollToOffset step is the proof the
+    // row isn't left at the raw top-align position. ensureMessageMounted is not used for this path.
+    // Exact clientHeight/3 pixel math is covered by the real-engine scroll-invariants e2e (jsdom
+    // has no layout → clientHeight 0, so the shifted offset equals the raw offset here).
+    getOffsetForMessageId.mockImplementation((id) => (id === 'msg-30' ? 1200 : 0))
     scrollToIndexCalls.length = 0
+    scrollToOffsetCalls.length = 0
     renderList({ targetMessageId: 'msg-30' })
-    expect(scrollToIndexCalls).toContain('start')
+    expect(scrollToIndexCalls).toContain('start') // windows the target row in
+    expect(scrollToOffsetCalls).toContain(1200) // then positions via the measured offset (not left at top-align)
     expect(ensureMessageMounted).not.toHaveBeenCalledWith('msg-30')
   })
 
-  it('scrolls to the marker row via scrollToIndex when FAB is clicked with an unread marker', () => {
+  it('scrolls the FAB to the unread marker ~1/3 down via scrollToOffset (not flush at the top edge)', () => {
     // FAB previously used ensureMessageMounted + querySelector + offsetTop (which fails when the
-    // marker is windowed out). New path: getIndexForMessageId + scrollToIndex('start', smooth),
-    // no DOM dependency. ensureMessageMounted is no longer called for the FAB.
+    // marker is windowed out). New path: getOffsetForMessageId + scrollToOffset(offset - vh/3,
+    // smooth), positioning the marker ~1/3 down (consistent with the entry marker and the
+    // reply/search jump), no DOM dependency. ensureMessageMounted is no longer called for the FAB.
     getOffsetForMessageId.mockImplementation((id) => (id === 'msg-40' ? 1600 : null))
     const { container, getByLabelText } = renderList({ firstNewMessageId: 'msg-40' })
     const scroller = container.querySelector('[data-message-list]') as HTMLElement
@@ -168,9 +177,11 @@ describe('MessageList — virtualized scroll integration (ensureMessageMounted)'
     Object.defineProperty(scroller, 'scrollTop', { value: 0, writable: true, configurable: true })
 
     scrollToIndexCalls.length = 0
+    scrollToOffsetCalls.length = 0 // clear the entry-marker mount scroll so we isolate the FAB click
     ensureMessageMounted.mockClear()
     fireEvent.click(getByLabelText('chat.scrollToBottom'))
-    expect(scrollToIndexCalls).toContain('start')
+    expect(scrollToOffsetCalls).toContain(1600 - 500 / 3) // marker offset minus a third of the viewport
+    expect(scrollToIndexCalls).not.toContain('start') // not tucked flush against the top edge
     expect(ensureMessageMounted).not.toHaveBeenCalledWith('msg-40')
   })
 
