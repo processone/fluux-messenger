@@ -10,7 +10,7 @@ export function SharedCard({ groups, isInRoster }: SharedCardProps) {
   if (!isInRoster || !groups || groups.length === 0) return null
 
   return (
-    <section className="rounded-xl border border-fluux-hover bg-fluux-bg/40 p-3">
+    <section className="rounded-xl border border-fluux-hover bg-fluux-surface p-3">
       <h3 className="text-xs font-semibold text-fluux-muted uppercase tracking-wide mb-2 px-1">
         {t('contacts.shared')}
       </h3>
