@@ -124,7 +124,8 @@
         "delete": "Supprimer",
         "deleteConfirmMessage": "L'historique des messages sera définitivement supprimé.",
         "draft": "Brouillon",
-        "messageRequestsHeading": "Demandes de message"
+        "messageRequestsHeading": "Demandes de message",
+        "messageRequestPreview": "Demande de message"
     },
     "contacts": {
         "noContacts": "Aucun contact",
