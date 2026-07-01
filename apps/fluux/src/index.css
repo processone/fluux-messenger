@@ -272,8 +272,13 @@
      themes ship. .light overrides below. */
   --fluux-scrollbar-thumb: var(--fluux-base-70);
   --fluux-scrollbar-thumb-hover: var(--fluux-base-80);
-  --fluux-scrollbar-thumb-sidebar: var(--fluux-base-70);
-  --fluux-scrollbar-thumb-sidebar-hover: var(--fluux-base-80);
+  /* Sidebar thumb tracks the main thumb by default so a single per-theme override
+     of --fluux-scrollbar-thumb reskins both surfaces. In dark mode the light thumb
+     already clears contrast on the darker sidebar, so they stay equal here; the
+     light block below nudges the sidebar one step more prominent (matching the
+     builtin light themes), since a gray thumb on the grayer sidebar needs it. */
+  --fluux-scrollbar-thumb-sidebar: var(--fluux-scrollbar-thumb);
+  --fluux-scrollbar-thumb-sidebar-hover: var(--fluux-scrollbar-thumb-hover);
 
   /* Focus ring — drives the universal `.user-interacted *:focus` outline, so this
      one token governs keyboard-focus visibility app-wide. Solid accent: at 0.5
@@ -478,6 +483,11 @@
   --fluux-search-highlight-bg: hsla(var(--fluux-accent-h), var(--fluux-accent-s), var(--fluux-accent-l), 0.25);
   --fluux-scrollbar-thumb: #c4c9ce;
   --fluux-scrollbar-thumb-hover: #a8adb3;
+  /* Sidebar sits on a grayer surface than the white content area, so its thumb is
+     nudged one step more prominent (the main thumb's hover shade) to keep equal
+     visual weight — the convention the builtin light themes follow. */
+  --fluux-scrollbar-thumb-sidebar: var(--fluux-scrollbar-thumb-hover);
+  --fluux-scrollbar-thumb-sidebar-hover: #8f949b;
 
   /* ── Aurora identity (light) ── */
   --fluux-accent-2: #11A88C;
