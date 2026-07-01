@@ -1181,6 +1181,7 @@
         }
     },
     "commandPalette": {
+        "open": "Otwórz paletę poleceń",
         "placeholder": "Przejdź do...",
         "noResults": "Nie znaleziono wyników",
         "views": "Widoki",

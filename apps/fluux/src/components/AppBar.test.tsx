@@ -59,11 +59,11 @@ describe('AppBar', () => {
     expect(container).toBeEmptyDOMElement()
   })
 
-  it('renders back, forward and search controls on desktop', () => {
+  it('renders back, forward and command-palette controls on desktop', () => {
     renderAppBar()
     expect(screen.getByRole('button', { name: 'Back' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Forward' })).toBeInTheDocument()
-    expect(screen.getByText('Search')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Open command palette' })).toBeInTheDocument()
   })
 
   it('does not duplicate the settings control (it lives in the rail)', () => {
@@ -93,9 +93,9 @@ describe('AppBar', () => {
     expect(navigateSpy).toHaveBeenCalledWith(-1)
   })
 
-  it('opens the command palette from the search control', () => {
+  it('opens the command palette from the command-palette control', () => {
     renderAppBar()
-    fireEvent.click(screen.getByText('Search'))
+    fireEvent.click(screen.getByRole('button', { name: 'Open command palette' }))
     expect(toggleSpy).toHaveBeenCalledWith('commandPalette')
   })
 })

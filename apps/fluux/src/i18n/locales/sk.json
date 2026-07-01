@@ -1180,6 +1180,7 @@
         }
     },
     "commandPalette": {
+        "open": "Otvoriť paletu príkazov",
         "placeholder": "Prejsť na...",
         "noResults": "Žiadne výsledky sa nenašli",
         "views": "Zobrazenia",

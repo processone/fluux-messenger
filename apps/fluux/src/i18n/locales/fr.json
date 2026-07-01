@@ -1180,6 +1180,7 @@
         }
     },
     "commandPalette": {
+        "open": "Ouvrir la palette de commandes",
         "placeholder": "Aller à...",
         "noResults": "Aucun résultat",
         "views": "Vues",

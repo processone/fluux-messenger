@@ -1181,6 +1181,7 @@
         }
     },
     "commandPalette": {
+        "open": "Iftaħ il-palett tal-kmandi",
         "placeholder": "Mur għand...",
         "noResults": "Ma nstabux riżultati",
         "views": "Veduti",
