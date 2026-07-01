@@ -20,7 +20,7 @@ import { connectionStore, chatStore, roomStore } from '../stores'
 import { NS_MAM } from './namespaces'
 import { logInfo } from './logger'
 import { buildScopedStorageKey } from '../utils/storageScope'
-import { MAM_ROOM_CATCHUP_DELAY_MS } from '../utils/mamCatchUpUtils'
+import { MAM_ROOM_CATCHUP_DELAY_MS, MAM_ROOM_RESUME_CATCHUP_DELAY_MS } from '../utils/mamCatchUpUtils'
 
 /**
  * Sets up background sync side effects that run after a fresh session.
@@ -36,8 +36,10 @@ import { MAM_ROOM_CATCHUP_DELAY_MS } from '../utils/mamCatchUpUtils'
  * 4. **Room catch-up** (delayed): After a delay to let rooms finish joining,
  *    populate full message history for all MAM-enabled rooms (concurrency=2).
  *
- * On SM resumption (`'resumed'` event), no MAM queries are needed because the
- * server replays all undelivered stanzas automatically.
+ * On SM resumption (`'resumed'` event), the server replays undelivered stanzas, so
+ * rooms already caught up to live need nothing. A short-delayed pass then catches up
+ * only the joined MAM rooms NOT caught up this session (`onlyNotCaughtUp`) — the ones
+ * SM can't cover, e.g. an autojoined room the user never opened.
  *
  * @param client - The XMPPClient instance
  * @param options - Configuration options
@@ -55,6 +57,8 @@ export function setupBackgroundSyncSideEffects(
   let isFreshSession = false
   // Timer for delayed room catch-up (cleared on cleanup or disconnect)
   let roomCatchUpTimer: ReturnType<typeof setTimeout> | undefined
+  // Timer for the delayed SM-resume room catch-up (cleared on cleanup or disconnect)
+  let resumeCatchUpTimer: ReturnType<typeof setTimeout> | undefined
   // Epoch ms of the current fresh session's connection. Used as the forward
   // catch-up cursor boundary so live messages arriving during the 10s room
   // catch-up window can't poison the cursor and silently skip the offline gap.
@@ -282,10 +286,36 @@ export function setupBackgroundSyncSideEffects(
     // If MAM not yet known, the serverInfo subscription below will catch it
   })
 
-  // SM resumption: no MAM queries needed, just log
+  // SM resumption: the server replays undelivered stanzas, so rooms already caught
+  // up to live this session need nothing. But a room never caught up THIS session —
+  // an autojoined room the user never opened, or an interrupted fresh-session
+  // catch-up — has no preview and nothing in the SM queue (SM carries no history for
+  // a room whose archive we never subscribed to). After a short settle (so replay
+  // lands first and genuinely caught-up rooms are correctly skipped), drive a catch-up
+  // for joined MAM rooms that aren't caught up to live. Session-scoped
+  // `isCaughtUpToLive` is the signal; `catchUpAllRooms({ onlyNotCaughtUp: true })`
+  // filters on it, so this never re-fetches what stream management already replays.
   const unsubscribeResumed = client.on('resumed', () => {
     isFreshSession = false
-    logInfo('Background sync: SM resumption — skipping')
+    sessionStartTime = Date.now()
+    logInfo('Background sync: SM resumption — scheduling catch-up for not-caught-up rooms')
+
+    if (resumeCatchUpTimer) clearTimeout(resumeCatchUpTimer)
+    resumeCatchUpTimer = setTimeout(() => {
+      resumeCatchUpTimer = undefined
+      if (!client.isConnected()) return
+      const activeRoomJid = roomStore.getState().activeRoomJid
+      void (async () => {
+        try {
+          await client.mam.catchUpAllRooms({ concurrency: 2, exclude: activeRoomJid, sessionStartTime, onlyNotCaughtUp: true })
+        } catch {
+          // Silently ignore — best-effort resume catch-up.
+        }
+        // Re-decrypt anything stashed during the pass (parity with the fresh-session
+        // room catch-up); coalesced and a no-op when nothing is pending.
+        void client.retryPendingDecrypts()
+      })()
+    }, MAM_ROOM_RESUME_CATCHUP_DELAY_MS)
   })
 
   // When going offline, cancel any pending room catch-up timer.
@@ -301,6 +331,10 @@ export function setupBackgroundSyncSideEffects(
         if (roomCatchUpTimer) {
           clearTimeout(roomCatchUpTimer)
           roomCatchUpTimer = undefined
+        }
+        if (resumeCatchUpTimer) {
+          clearTimeout(resumeCatchUpTimer)
+          resumeCatchUpTimer = undefined
         }
       }
       previousStatus = status
@@ -385,6 +419,10 @@ export function setupBackgroundSyncSideEffects(
     if (roomCatchUpTimer) {
       clearTimeout(roomCatchUpTimer)
       roomCatchUpTimer = undefined
+    }
+    if (resumeCatchUpTimer) {
+      clearTimeout(resumeCatchUpTimer)
+      resumeCatchUpTimer = undefined
     }
   }
 }

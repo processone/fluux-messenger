@@ -27,6 +27,12 @@ export const MAM_CACHE_LOAD_LIMIT = 100
 /** Delay (ms) before room catch-up starts, to let rooms finish joining. */
 export const MAM_ROOM_CATCHUP_DELAY_MS = 10_000
 
+/** Delay (ms) before the SM-resume room catch-up runs. Lets stream-management
+ *  replay land first so genuinely caught-up rooms are skipped. Shorter than the
+ *  fresh-session delay because rooms are already joined (from persist/SM) on
+ *  resume — there is nothing to wait for them to join. */
+export const MAM_ROOM_RESUME_CATCHUP_DELAY_MS = 3_000
+
 /** Max auto-pagination pages for forward room MAM catch-up.
  *  Room traffic is typically higher than 1:1, so we allow many more pages
  *  (50 × 100 = 5 000 stanzas) to close the gap after long offline periods.
@@ -187,6 +193,33 @@ export function findContinueCatchUpCursor(
 ): { timestamp: Date } | undefined {
   if (forwardGapTimestamp !== undefined) return { timestamp: new Date(forwardGapTimestamp) }
   return findNewestMessage(messages)
+}
+
+/**
+ * Select the joined rooms a background catch-up pass should process.
+ *
+ * Keeps MAM-capable, non-Quick-Chat rooms; drops the excluded room (the active
+ * room is handled by roomSideEffects); and — when `onlyNotCaughtUp` is set (the
+ * SM-resume pass) — drops rooms already caught up to live this session, so the
+ * pass never re-fetches what stream-management already replays.
+ *
+ * Pure over the passed rooms plus an `isCaughtUpToLive` lookup, so it is
+ * trivially unit-testable without instantiating the MAM module. Generic so it
+ * returns the caller's own room type.
+ */
+export function selectRoomsToCatchUp<T extends { jid: string; supportsMAM?: boolean; isQuickChat?: boolean }>(
+  rooms: T[],
+  options: { exclude?: string | null; onlyNotCaughtUp?: boolean },
+  isCaughtUpToLive: (jid: string) => boolean,
+): T[] {
+  const { exclude, onlyNotCaughtUp } = options
+  return rooms.filter(
+    (r) =>
+      r.supportsMAM &&
+      !r.isQuickChat &&
+      (!exclude || r.jid !== exclude) &&
+      (!onlyNotCaughtUp || !isCaughtUpToLive(r.jid)),
+  )
 }
 
 /**

@@ -35,6 +35,7 @@ import { executeWithConcurrency } from '../../utils/concurrencyUtils'
 import { parseRSMResponse } from '../../utils/rsm'
 import {
   selectCatchUpQuery,
+  selectRoomsToCatchUp,
   isConnectionError,
   MAM_CATCHUP_FORWARD_MAX,
   MAM_CATCHUP_BACKWARD_MAX,
@@ -1048,13 +1049,21 @@ export class MAM extends BaseModule {
    *   provided, the forward cursor is the newest message *before* this time, so a live
    *   message arriving during the catch-up window can't poison the cursor and silently
    *   skip the offline gap. Omit to fall back to the global newest message.
+   * @param options.onlyNotCaughtUp - When true, skip rooms already caught up to live this
+   *   session (`isCaughtUpToLive`). Used by the SM-resume pass so it only re-drives rooms
+   *   the resume didn't cover, and never re-fetches what stream-management already replays.
    */
-  async catchUpAllRooms(options: { concurrency?: number; exclude?: string | null; sessionStartTime?: number } = {}): Promise<void> {
-    const { concurrency = 2, exclude, sessionStartTime } = options
+  async catchUpAllRooms(options: { concurrency?: number; exclude?: string | null; sessionStartTime?: number; onlyNotCaughtUp?: boolean } = {}): Promise<void> {
+    const { concurrency = 2, exclude, sessionStartTime, onlyNotCaughtUp } = options
     const joinedRooms = this.deps.stores?.room.joinedRooms() || []
 
-    // Filter for MAM-enabled, non-Quick Chat rooms (and exclude active room if specified)
-    const mamRooms = joinedRooms.filter((r) => r.supportsMAM && !r.isQuickChat && (!exclude || r.jid !== exclude))
+    // Filter for MAM-enabled, non-Quick Chat rooms (excluding the active room, and — for
+    // the SM-resume pass — rooms already caught up to live this session).
+    const mamRooms = selectRoomsToCatchUp(
+      joinedRooms,
+      { exclude, onlyNotCaughtUp },
+      (jid) => this.deps.stores?.room.getRoomMAMQueryState(jid).isCaughtUpToLive ?? false,
+    )
     if (mamRooms.length === 0) return
 
     logInfo(`Background catch-up for ${mamRooms.length} room(s)`)

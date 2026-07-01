@@ -48,7 +48,7 @@ import { connectionStore } from '../stores/connectionStore'
 import { chatStore } from '../stores/chatStore'
 import { roomStore } from '../stores/roomStore'
 import { NS_MAM } from './namespaces'
-import { createMockClient, simulateFreshSession } from './sideEffects.testHelpers'
+import { createMockClient, simulateFreshSession, simulateSmResumption } from './sideEffects.testHelpers'
 import { _resetStorageScopeForTesting } from '../utils/storageScope'
 
 describe('setupBackgroundSyncSideEffects', () => {
@@ -401,6 +401,49 @@ describe('setupBackgroundSyncSideEffects', () => {
       expect(mockClient.mam.catchUpAllRooms).toHaveBeenCalledWith(
         expect.objectContaining({ concurrency: 2, sessionStartTime: expect.any(Number) })
       )
+    })
+
+    it('catches up not-caught-up rooms after an SM resume', async () => {
+      connectionStore.getState().setStatus('disconnected')
+      cleanup = setupBackgroundSyncSideEffects(mockClient)
+
+      simulateSmResumption(mockClient)
+
+      // Nothing before the settle delay (lets SM replay land first).
+      await vi.advanceTimersByTimeAsync(1_000)
+      expect(mockClient.mam.catchUpAllRooms).not.toHaveBeenCalled()
+
+      // Then a pass scoped to rooms not caught up to live this session.
+      await vi.advanceTimersByTimeAsync(3_000)
+      expect(mockClient.mam.catchUpAllRooms).toHaveBeenCalledTimes(1)
+      expect(mockClient.mam.catchUpAllRooms).toHaveBeenCalledWith(
+        expect.objectContaining({ concurrency: 2, onlyNotCaughtUp: true, sessionStartTime: expect.any(Number) })
+      )
+    })
+
+    it('excludes the active room from the SM-resume catch-up', async () => {
+      roomStore.getState().setActiveRoom('room@conference.example.com')
+      connectionStore.getState().setStatus('disconnected')
+      cleanup = setupBackgroundSyncSideEffects(mockClient)
+
+      simulateSmResumption(mockClient)
+      await vi.advanceTimersByTimeAsync(3_000)
+
+      expect(mockClient.mam.catchUpAllRooms).toHaveBeenCalledWith(
+        expect.objectContaining({ exclude: 'room@conference.example.com', onlyNotCaughtUp: true })
+      )
+    })
+
+    it('cancels the SM-resume catch-up if the connection drops before the delay', async () => {
+      connectionStore.getState().setStatus('disconnected')
+      cleanup = setupBackgroundSyncSideEffects(mockClient)
+
+      simulateSmResumption(mockClient)
+      // Drop the connection before the settle delay elapses.
+      connectionStore.getState().setStatus('disconnected')
+
+      await vi.advanceTimersByTimeAsync(10_000)
+      expect(mockClient.mam.catchUpAllRooms).not.toHaveBeenCalled()
     })
 
     it('retries pending decrypts after conversation catch-up completes (catch-up-tail race)', async () => {

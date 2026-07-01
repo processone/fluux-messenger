@@ -6,14 +6,66 @@ import {
   selectCatchUpQuery,
   buildCatchUpStartTime,
   isConnectionError,
+  selectRoomsToCatchUp,
   MAM_ROOM_FORWARD_MAX_PAGES_MANUAL,
   MAM_CATCHUP_FORWARD_MAX,
   MAM_CATCHUP_BACKWARD_MAX,
   MAM_BACKGROUND_CONCURRENCY,
   MAM_CACHE_LOAD_LIMIT,
   MAM_ROOM_CATCHUP_DELAY_MS,
+  MAM_ROOM_RESUME_CATCHUP_DELAY_MS,
   MAM_ROOM_FORWARD_MAX_PAGES,
 } from './mamCatchUpUtils'
+
+// ============================================================================
+// selectRoomsToCatchUp
+// ============================================================================
+
+describe('selectRoomsToCatchUp', () => {
+  const rooms = [
+    { jid: 'a@muc', supportsMAM: true, isQuickChat: false },
+    { jid: 'b@muc', supportsMAM: true, isQuickChat: false },
+    { jid: 'nomam@muc', supportsMAM: false, isQuickChat: false },
+    { jid: 'quick@muc', supportsMAM: true, isQuickChat: true },
+  ]
+
+  it('keeps only MAM-capable, non-Quick-Chat rooms', () => {
+    const result = selectRoomsToCatchUp(rooms, {}, () => false)
+    expect(result.map((r) => r.jid)).toEqual(['a@muc', 'b@muc'])
+  })
+
+  it('excludes the given room jid', () => {
+    const result = selectRoomsToCatchUp(rooms, { exclude: 'a@muc' }, () => false)
+    expect(result.map((r) => r.jid)).toEqual(['b@muc'])
+  })
+
+  it('with onlyNotCaughtUp, keeps only rooms that are not caught up to live', () => {
+    const caughtUp = new Set(['a@muc'])
+    const result = selectRoomsToCatchUp(rooms, { onlyNotCaughtUp: true }, (jid) => caughtUp.has(jid))
+    expect(result.map((r) => r.jid)).toEqual(['b@muc'])
+  })
+
+  it('with onlyNotCaughtUp, drops every room already caught up to live', () => {
+    const result = selectRoomsToCatchUp(rooms, { onlyNotCaughtUp: true }, () => true)
+    expect(result).toEqual([])
+  })
+
+  it('without onlyNotCaughtUp, keeps rooms regardless of caught-up state', () => {
+    const result = selectRoomsToCatchUp(rooms, { onlyNotCaughtUp: false }, () => true)
+    expect(result.map((r) => r.jid)).toEqual(['a@muc', 'b@muc'])
+  })
+})
+
+// ============================================================================
+// MAM_ROOM_RESUME_CATCHUP_DELAY_MS
+// ============================================================================
+
+describe('MAM_ROOM_RESUME_CATCHUP_DELAY_MS', () => {
+  it('is a positive settle delay, shorter than the fresh-session room catch-up', () => {
+    expect(MAM_ROOM_RESUME_CATCHUP_DELAY_MS).toBeGreaterThan(0)
+    expect(MAM_ROOM_RESUME_CATCHUP_DELAY_MS).toBeLessThan(MAM_ROOM_CATCHUP_DELAY_MS)
+  })
+})
 
 // ============================================================================
 // findNewestMessage
