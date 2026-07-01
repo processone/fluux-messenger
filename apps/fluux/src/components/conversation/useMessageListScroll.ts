@@ -2508,6 +2508,8 @@ export function useMessageListScroll({
 
     let lastHeight: number | null = null
     let pendingHeight: number | null = null
+    let lastWidth: number | null = null
+    let pendingWidth: number | null = null
     let scheduled = false
     let rafId: number | null = null
     let monitor: ReturnType<typeof createResizeLoopMonitor> | null = null
@@ -2521,10 +2523,12 @@ export function useMessageListScroll({
       scheduled = false
       rafId = null
       const newHeight = pendingHeight
+      const newWidth = pendingWidth
       pendingHeight = null
+      pendingWidth = null
       if (newHeight === null) return
 
-      if (lastHeight === null) { lastHeight = newHeight; return }
+      if (lastHeight === null) { lastHeight = newHeight; lastWidth = newWidth; return }
 
       const shrunk = lastHeight - newHeight
       if (shrunk > 0 && scrollerRef.current) {
@@ -2532,9 +2536,23 @@ export function useMessageListScroll({
         // Route through reassertBottom so the virtualized path re-windows (scrollToIndex) rather
         // than a raw scrollTop write that would leave the mounted window stale → blank/clipped.
         if (wasNear) reassertBottom()
+      } else if (
+        newWidth !== null && lastWidth !== null && newWidth !== lastWidth &&
+        scrollerRef.current && isAtBottomRef.current
+      ) {
+        // A WIDTH change with no height shrink — most notably the occupant sidebar toggling
+        // in/out at lg+, where the message column narrows/widens as the panel becomes an
+        // in-flow flex sibling. That re-wraps message text and grows/shrinks row heights, but
+        // fires no window 'resize' event (so the viewport-resize handler never runs) and does
+        // not shrink the scroller's height (so the branch above never runs) — leaving the list
+        // drifted off the bottom. Re-assert while the user is following along, mirroring the
+        // window-resize handler. The scroller's own width only changes on real layout changes,
+        // not on row measurement, so this cannot feed back into the @tanstack spacer churn.
+        reassertBottom()
       }
 
       lastHeight = newHeight
+      lastWidth = newWidth
     }
 
     const observer = new ResizeObserver((entries) => {
@@ -2551,6 +2569,7 @@ export function useMessageListScroll({
       // double-scheduling: it stays correct even when rAF runs the callback
       // synchronously and reentrantly.
       pendingHeight = entries[0].contentRect.height
+      pendingWidth = entries[0].contentRect.width
       if (!scheduled) {
         scheduled = true
         rafId = requestAnimationFrame(runCorrection)
@@ -2564,7 +2583,9 @@ export function useMessageListScroll({
     }
     // reassertBottom is stable (depends only on the stable pinVirtualizedBottom), so listing it
     // re-creates the observer only on conversation change, same as conversationId alone.
-  }, [conversationId, reassertBottom])
+    // isAtBottomRef is stable unless the caller passes a new externalIsAtBottomRef (same
+    // rationale as the viewport-resize effect above).
+  }, [conversationId, reassertBottom, isAtBottomRef])
 
   // ==========================================================================
   // EFFECT: Keyboard shortcuts
