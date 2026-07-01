@@ -84,6 +84,13 @@ const MEDIA_LOAD_DEBOUNCE_MS = 150 // debounce time for batching image load even
 // scrollHeight grows and clips the last message; shorter → it floats above empty space), so a
 // one-shot scrollToIndex isn't enough. ~1s at 60fps comfortably covers the measurement settle.
 const BOTTOM_REASSERT_FRAMES = 60
+// Hard wall-clock cap (frames) for the bottom pin, independent of the settle window above. While the
+// AUTHORITATIVE content height (max of the DOM spacer and the virtualizer's getTotalSize) still shows
+// content below the fold, the pin keeps its settle window from expiring so it survives until the DOM
+// spacer commits the grown height (which, on a COLD first open, can land after the ~1s settle — the
+// just-sent row was stranded because the loop exited first). This cap bounds the pathological case
+// where the spacer never commits. ~3s at 60fps, comfortably longer than a cold measure + React commit.
+const BOTTOM_REASSERT_HARD_CAP_FRAMES = 180
 // Frames to keep re-resolving the unread-marker offset after a conversation switch. On entry the
 // conversation's messages were evicted on leave and rehydrate from cache asynchronously, then the
 // rows measure over several frames, so the marker offset is unresolved at first and sharpens as it
@@ -756,6 +763,9 @@ export function useMessageListScroll({
     const startedAt = Date.now()
     const loop = (reassertMonitorRef.current ??= createReassertLoopMonitor()).begin('pin-bottom', performance.now())
     let framesLeft = BOTTOM_REASSERT_FRAMES
+    // Independent hard cap (see BOTTOM_REASSERT_HARD_CAP_FRAMES): the settle window above is held open
+    // while content is still below the fold, so this bounds the pathological never-commit case.
+    let hardFramesLeft = BOTTOM_REASSERT_HARD_CAP_FRAMES
     let lastHeight = scroller.scrollHeight
     const finish = () => {
       loop.end()
@@ -763,51 +773,64 @@ export function useMessageListScroll({
     }
     const step = () => {
       const s = scrollerRef.current
-      if (framesLeft-- <= 0) {
-        // Loop ran its full budget. Re-derive isAtBottom from REAL geometry so downstream consumers
-        // (FAB, auto-follow on the next message, position save) are left accurate even if WebKit
-        // withheld the final settle scroll event — the pin no longer trusts the position-derived flag
-        // mid-loop (see the removed bail above), so it must leave a correct one behind here. If dist
-        // is still > tolerance the pin never converged (the just-sent message ended up below the fold).
-        if (s) {
-          flushTailLayout()
-          const dist = s.scrollHeight - s.scrollTop - s.clientHeight
-          isAtBottomRef.current = dist < AT_BOTTOM_THRESHOLD
-          debugLog('PIN settled (frames exhausted)', { distFromBottom: dist })
-        }
-        finish()
-        return
-      }
       const v = virtualizerRef.current
       if (!s || !v || v.itemCount === 0) { finish(); return }
-      // The ONLY reason to stop pinning is a genuine user takeover — a FAB tap or a wheel scroll,
-      // both of which stamp userScrollIntentAtRef AFTER we started. We deliberately do NOT also bail
-      // on a position-derived `!isAtBottomRef.current`: on WebKit a tall bottom row's post-paint
-      // growth fires extra `scroll` events that transiently report a large distFromBottom, and the
+      // The ONLY reason to stop pinning early is a genuine user takeover — a FAB tap or a wheel scroll,
+      // both of which stamp userScrollIntentAtRef AFTER we started. We deliberately do NOT also bail on
+      // a position-derived `!isAtBottomRef.current`: on WebKit a tall bottom row's post-paint growth
+      // fires extra `scroll` events that transiently report a large distFromBottom, and the
       // height-unchanged discriminator in handleScroll cannot catch every one — a growth that settles
       // across TWO scroll events (the second at the now-unchanged height) slips it, flips isAtBottom
       // false, and used to strand the just-sent message below the fold (the recurring send-stick bug).
-      // The pin instead keeps converging on REAL geometry (the dist check below) and yields only to
-      // real input intent. See scroll-invariants "...growth that settles across TWO scroll events".
+      // The pin instead keeps converging on the AUTHORITATIVE geometry (below) and yields only to real
+      // input intent. See scroll-invariants "...growth that settles across TWO scroll events".
       if (userScrollIntentAtRef.current > startedAt) {
         debugLog('PIN bail (user scroll intent)', {
-          distFromBottom: s.scrollHeight - s.scrollTop - s.clientHeight,
+          distFromBottom: Math.max(s.scrollHeight, v.getTotalSize()) - s.scrollTop - s.clientHeight,
         })
         finish()
         return
       }
       // Force the tail rows to lay out this frame (the field-proven flush) so WebKit's late
-      // ResizeObserver delivers and getTotalSize/scrollHeight grow to include the just-added row,
-      // BEFORE we read scrollHeight below.
+      // ResizeObserver delivers and getTotalSize() grows to include the just-added row BEFORE we read
+      // the height below.
       flushTailLayout()
       const h = s.scrollHeight
-      // Re-pin when the layout grew/shrank (the common case) OR when we're still measurably short of
-      // the true bottom. The flush above makes the at-bottom growth show up here within a frame or
-      // two, so the send no longer settles a row low on WebKit. Idempotent at the bottom.
-      const dist = h - s.scrollTop - s.clientHeight
+      // Two distances. domDist is measured against the DOM spacer — the bottom the scroll can actually
+      // REACH this frame (scrollTop is clamped to the spacer). trueDist also folds in the virtualizer's
+      // getTotalSize(), which reflects a just-measured tail row the instant measureElement's
+      // ResizeObserver delivers (the flush above forces it) and so LEADS the DOM spacer — the spacer
+      // only catches up on the next React commit. Keying settle on domDist alone let the pin read a
+      // false distFromBottom 0 and exit with the just-sent row still a line below the fold on a COLD
+      // first open (warm re-opens seed the heights, so getTotalSize never leads and the 0 is truthful).
+      const domDist = h - s.scrollTop - s.clientHeight
+      const trueDist = Math.max(h, v.getTotalSize()) - s.scrollTop - s.clientHeight
+      const converged = trueDist <= BOTTOM_PIN_TOLERANCE
+      // Settle only once genuinely at the bottom (trueDist within tolerance) AND the settle window has
+      // elapsed — or the hard cap is reached. While trueDist still shows content below the fold, RESET
+      // the settle window and keep the loop ALIVE: on a cold open the commit that reveals the grown
+      // height can land after the normal ~1s budget, and exiting early is exactly what stranded the row.
+      // isAtBottom is re-derived from geometry on exit so downstream consumers (FAB, next-message
+      // auto-follow, position save) stay accurate even if WebKit withheld the final settle scroll.
+      if (converged) framesLeft--
+      else framesLeft = BOTTOM_REASSERT_FRAMES
+      if (hardFramesLeft-- <= 0 || (converged && framesLeft <= 0)) {
+        isAtBottomRef.current = trueDist < AT_BOTTOM_THRESHOLD
+        debugLog('PIN settled', { distFromBottom: trueDist, converged })
+        finish()
+        return
+      }
+      // Re-pin (a WRITE — the adapter re-windows @tanstack + forces a re-render on every scrollToIndex)
+      // ONLY when it can make progress: the reachable bottom moved (height changed) or scrollTop drifted
+      // off it (domDist). We deliberately do NOT write each frame while merely WAITING for the spacer to
+      // commit — scrollTop is already clamped to the current spacer, so a re-pin would be a no-op
+      // position-wise yet still cost a re-window + re-render every frame. The loop instead stays alive on
+      // trueDist above (a cheap read-only flushTailLayout poll) and re-pins the instant the spacer grows
+      // (h changes), landing the true bottom with a single write. So the write/re-render profile stays
+      // identical to the original loop — only its lifetime changed.
       let wrote = false
-      if (h !== lastHeight || dist > BOTTOM_PIN_TOLERANCE) {
-        debugLog('PIN re-assert', { distFromBottom: dist, heightChanged: h !== lastHeight })
+      if (h !== lastHeight || domDist > BOTTOM_PIN_TOLERANCE) {
+        debugLog('PIN re-assert', { distFromBottom: trueDist, domDist, heightChanged: h !== lastHeight })
         lastHeight = h
         v.scrollToIndex(v.itemCount - 1, { align: 'end' })
         wrote = true
