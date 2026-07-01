@@ -154,6 +154,10 @@
         "startConversation": "Alusta vestlust",
         "addToContacts": "Lisa kontaktidesse",
         "connectedDevices": "Ühendatud seadmed",
+        "about": "Info",
+        "groups": "Rühmad",
+        "securityDetailsTitle": "Turvaandmed",
+        "noDetails": "Lisateave puudub",
         "nameCannotBeEmpty": "Nimi ei saa olla tühi",
         "removeConfirm": "Eemalda {{name}} oma kontaktidest?",
         "remove": "Eemalda",
@@ -185,11 +189,12 @@
             "unavailableNowTitle": "Krüpteerimine pole praegu saadaval",
             "unavailableNowDescription": "Loo uuesti ühendus või luba krüpteerimine seadetes.",
             "rejectedTitle": "Kehtetu sertifikaat",
-            "rejectedDescription": "See kontakt on avaldanud OpenPGP võtme, kuid selle valideerimine ebaõnnestus. Sõnumid saadetakse selgelt loetavana."
-        },
-        "tabs": {
-            "profile": "Profiil",
-            "security": "Turvalisus"
+            "rejectedDescription": "See kontakt on avaldanud OpenPGP võtme, kuid selle valideerimine ebaõnnestus. Sõnumid saadetakse selgelt loetavana.",
+            "glanceVerified": "Kontrollitud ja krüptitud",
+            "glanceEncrypted": "Krüptitud, kontrollimata",
+            "glanceNotEncrypted": "Krüptimata",
+            "glanceDisabled": "Krüptimine väljas",
+            "glanceLocked": "Krüptitud, lukustatud"
         },
         "actionsMenu": "Rohkem toiminguid",
         "requestsHeading": "Taotlused"

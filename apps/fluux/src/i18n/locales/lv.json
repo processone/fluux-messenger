@@ -153,6 +153,10 @@
         "startConversation": "Sākt sarunu",
         "addToContacts": "Pievienot kontaktiem",
         "connectedDevices": "Pievienotās ierīces",
+        "about": "Par",
+        "groups": "Grupas",
+        "securityDetailsTitle": "Drošības informācija",
+        "noDetails": "Nav papildu informācijas",
         "nameCannotBeEmpty": "Vārds nevar būt tukšs",
         "removeConfirm": "Noņemt {{name}} no jūsu kontaktiem?",
         "remove": "Noņemt",
@@ -184,11 +188,12 @@
             "unavailableNowTitle": "Šifrēšana šobrīd nav pieejama",
             "unavailableNowDescription": "Pieslēdzieties no jauna vai iespējojiet šifrēšanu iestatījumos.",
             "rejectedTitle": "Nederīgs sertifikāts",
-            "rejectedDescription": "Šis kontakts ir publicējis OpenPGP atslēgu, bet tās validācija neizdevās. Ziņojumi tiks sūtīti atklātā tekstā."
-        },
-        "tabs": {
-            "profile": "Profils",
-            "security": "Drošība"
+            "rejectedDescription": "Šis kontakts ir publicējis OpenPGP atslēgu, bet tās validācija neizdevās. Ziņojumi tiks sūtīti atklātā tekstā.",
+            "glanceVerified": "Pārbaudīts un šifrēts",
+            "glanceEncrypted": "Šifrēts, nepārbaudīts",
+            "glanceNotEncrypted": "Nešifrēts",
+            "glanceDisabled": "Šifrēšana izslēgta",
+            "glanceLocked": "Šifrēts, bloķēts"
         },
         "actionsMenu": "Vairāk darbību",
         "requestsHeading": "Pieprasījumi"

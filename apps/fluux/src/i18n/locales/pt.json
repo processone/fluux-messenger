@@ -154,6 +154,10 @@
         "startConversation": "Iniciar conversa",
         "addToContacts": "Adicionar aos Contactos",
         "connectedDevices": "Dispositivos ligados",
+        "about": "Sobre",
+        "groups": "Grupos",
+        "securityDetailsTitle": "Detalhes de segurança",
+        "noDetails": "Sem detalhes adicionais",
         "nameCannotBeEmpty": "O nome não pode estar vazio",
         "removeConfirm": "Remover {{name}} dos seus contactos?",
         "remove": "Remover",
@@ -185,11 +189,12 @@
             "unavailableNowTitle": "Encriptação atualmente indisponível",
             "unavailableNowDescription": "Volta a ligar-te ou ativa a encriptação nas definições.",
             "rejectedTitle": "Certificado inválido",
-            "rejectedDescription": "Este contacto publicou uma chave OpenPGP, mas a validação falhou. As mensagens serão enviadas em texto simples."
-        },
-        "tabs": {
-            "profile": "Perfil",
-            "security": "Segurança"
+            "rejectedDescription": "Este contacto publicou uma chave OpenPGP, mas a validação falhou. As mensagens serão enviadas em texto simples.",
+            "glanceVerified": "Verificado e cifrado",
+            "glanceEncrypted": "Cifrado, não verificado",
+            "glanceNotEncrypted": "Não cifrado",
+            "glanceDisabled": "Cifragem desativada",
+            "glanceLocked": "Cifrado, bloqueado"
         },
         "actionsMenu": "Mais ações",
         "requestsHeading": "Pedidos"
