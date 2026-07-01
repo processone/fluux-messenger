@@ -124,7 +124,8 @@
         "unarchive": "Zrušit archivaci",
         "delete": "Smazat",
         "deleteConfirmMessage": "Historie zpráv bude trvale smazána.",
-        "draft": "Koncept"
+        "draft": "Koncept",
+        "messageRequestsHeading": "Žádosti o zprávy"
     },
     "contacts": {
         "noContacts": "Zatím žádné kontakty",
@@ -420,7 +421,8 @@
         "selectHat": "Vybrat odznak",
         "hatJidPlaceholder": "user@example.com",
         "userInfo": "Informace o uživateli",
-        "manageOccupant": "Spravovat"
+        "manageOccupant": "Spravovat",
+        "invitationsHeading": "Pozvánky"
     },
     "events": {
         "noPendingEvents": "Žádné čekající události",
@@ -1303,5 +1305,10 @@
         "bannerMultiple": "📊 {{count}} nezodpovězených anket, klepněte pro zobrazení poslední",
         "dismissBanner": "Zavřít",
         "scrollToOriginal": "Přejít na původní anketu"
+    },
+    "messages": {
+        "showArchived": "Zobrazit archivované konverzace",
+        "showActive": "Zobrazit aktivní konverzace",
+        "archivedTitle": "Archivované"
     }
 }

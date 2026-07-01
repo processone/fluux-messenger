@@ -123,7 +123,8 @@
         "unarchive": "Αναίρεση αρχειοθέτησης",
         "delete": "Διαγραφή",
         "deleteConfirmMessage": "Το ιστορικό μηνυμάτων θα διαγραφεί οριστικά.",
-        "draft": "Πρόχειρο"
+        "draft": "Πρόχειρο",
+        "messageRequestsHeading": "Αιτήματα μηνυμάτων"
     },
     "contacts": {
         "noContacts": "Δεν υπάρχουν επαφές ακόμα",
@@ -419,7 +420,8 @@
         "selectHat": "Επιλογή σήματος",
         "hatJidPlaceholder": "user@example.com",
         "userInfo": "Πληροφορίες χρήστη",
-        "manageOccupant": "Διαχείριση"
+        "manageOccupant": "Διαχείριση",
+        "invitationsHeading": "Προσκλήσεις"
     },
     "events": {
         "noPendingEvents": "Δεν υπάρχουν εκκρεμή συμβάντα",
@@ -1302,5 +1304,10 @@
         "bannerMultiple": "📊 {{count}} αναπάντητες ψηφοφορίες, πατήστε για να δείτε την τελευταία",
         "dismissBanner": "Απόρριψη",
         "scrollToOriginal": "Μετακίνηση στην αρχική ψηφοφορία"
+    },
+    "messages": {
+        "showArchived": "Εμφάνιση αρχειοθετημένων συνομιλιών",
+        "showActive": "Εμφάνιση ενεργών συνομιλιών",
+        "archivedTitle": "Αρχειοθετημένες"
     }
 }

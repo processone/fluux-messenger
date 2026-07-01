@@ -122,7 +122,8 @@
         "unarchive": "Unarchive",
         "delete": "Delete",
         "deleteConfirmMessage": "The message history will be permanently deleted.",
-        "draft": "Draft"
+        "draft": "Draft",
+        "messageRequestsHeading": "Message requests"
     },
     "contacts": {
         "noContacts": "No contacts yet",
@@ -418,7 +419,8 @@
         "hatAssignError": "Failed to assign hat",
         "hatUnassignError": "Failed to remove hat",
         "selectHat": "Select hat",
-        "hatJidPlaceholder": "user@example.com"
+        "hatJidPlaceholder": "user@example.com",
+        "invitationsHeading": "Invitations"
     },
     "events": {
         "noPendingEvents": "No pending events",
@@ -1301,5 +1303,10 @@
         "bannerMultiple": "📊 {{count}} unanswered polls, tap to see latest",
         "dismissBanner": "Dismiss",
         "scrollToOriginal": "Scroll to original poll"
+    },
+    "messages": {
+        "showArchived": "Show archived conversations",
+        "showActive": "Show active conversations",
+        "archivedTitle": "Archived"
     }
 }

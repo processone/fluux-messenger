@@ -124,7 +124,8 @@
         "unarchive": "Ripristina",
         "delete": "Elimina",
         "deleteConfirmMessage": "La cronologia dei messaggi sara eliminata definitivamente.",
-        "draft": "Bozza"
+        "draft": "Bozza",
+        "messageRequestsHeading": "Richieste di messaggio"
     },
     "contacts": {
         "noContacts": "Nessun contatto",
@@ -420,7 +421,8 @@
         "selectHat": "Seleziona distintivo",
         "hatJidPlaceholder": "user@example.com",
         "userInfo": "Info utente",
-        "manageOccupant": "Gestisci"
+        "manageOccupant": "Gestisci",
+        "invitationsHeading": "Inviti"
     },
     "events": {
         "noPendingEvents": "Nessun evento in sospeso",
@@ -1303,5 +1305,10 @@
         "bannerMultiple": "📊 {{count}} sondaggi senza risposta, tocca per vedere l'ultimo",
         "dismissBanner": "Ignora",
         "scrollToOriginal": "Vai al sondaggio originale"
+    },
+    "messages": {
+        "showArchived": "Mostra le conversazioni archiviate",
+        "showActive": "Mostra le conversazioni attive",
+        "archivedTitle": "Archiviate"
     }
 }

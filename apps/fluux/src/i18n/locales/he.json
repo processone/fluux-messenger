@@ -122,7 +122,8 @@
         "unarchive": "שחזר מארכיון",
         "delete": "מחק",
         "deleteConfirmMessage": "היסטוריית ההודעות תימחק לצמיתות.",
-        "draft": "טיוטה"
+        "draft": "טיוטה",
+        "messageRequestsHeading": "בקשות הודעה"
     },
     "contacts": {
         "noContacts": "אין אנשי קשר עדיין",
@@ -418,7 +419,8 @@
         "hatAssignError": "הקצאת התג נכשלה",
         "hatUnassignError": "הסרת התג נכשלה",
         "selectHat": "בחר תג",
-        "hatJidPlaceholder": "user@example.com"
+        "hatJidPlaceholder": "user@example.com",
+        "invitationsHeading": "הזמנות"
     },
     "events": {
         "noPendingEvents": "אין אירועים ממתינים",
@@ -1301,5 +1303,10 @@
         "bannerMultiple": "📊 {{count}} סקרים ללא מענה, לחץ לצפייה באחרון",
         "dismissBanner": "סגור",
         "scrollToOriginal": "גלול לסקר המקורי"
+    },
+    "messages": {
+        "showArchived": "הצג שיחות מאורכבות",
+        "showActive": "הצג שיחות פעילות",
+        "archivedTitle": "מאורכב"
     }
 }

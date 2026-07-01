@@ -122,7 +122,8 @@
         "unarchive": "Išarchyvuoti",
         "delete": "Ištrinti",
         "deleteConfirmMessage": "Žinučių istorija bus visam laikui ištrinta.",
-        "draft": "Juodraštis"
+        "draft": "Juodraštis",
+        "messageRequestsHeading": "Pranešimų užklausos"
     },
     "contacts": {
         "noContacts": "Kol kas nėra kontaktų",
@@ -418,7 +419,8 @@
         "selectHat": "Pasirinkti ženklelį",
         "hatJidPlaceholder": "user@example.com",
         "userInfo": "Naudotojo informacija",
-        "manageOccupant": "Valdyti"
+        "manageOccupant": "Valdyti",
+        "invitationsHeading": "Kvietimai"
     },
     "events": {
         "noPendingEvents": "Nėra laukiančių įvykių",
@@ -1301,5 +1303,10 @@
         "bannerMultiple": "📊 {{count}} neatsakytų apklausų, palieskite, kad matytumėte naujausią",
         "dismissBanner": "Atmesti",
         "scrollToOriginal": "Slinkti iki originalios apklausos"
+    },
+    "messages": {
+        "showArchived": "Rodyti archyvuotus pokalbius",
+        "showActive": "Rodyti aktyvius pokalbius",
+        "archivedTitle": "Archyvuoti"
     }
 }

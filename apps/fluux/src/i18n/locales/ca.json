@@ -124,7 +124,8 @@
         "unarchive": "Desarxiva",
         "delete": "Elimina",
         "deleteConfirmMessage": "L'historial de missatges s'eliminarà permanentment.",
-        "draft": "Esborrany"
+        "draft": "Esborrany",
+        "messageRequestsHeading": "Sol·licituds de missatge"
     },
     "contacts": {
         "noContacts": "Encara no hi ha contactes",
@@ -420,7 +421,8 @@
         "selectHat": "Seleccionar insígnia",
         "hatJidPlaceholder": "user@example.com",
         "userInfo": "Info de l'usuari",
-        "manageOccupant": "Gestionar"
+        "manageOccupant": "Gestionar",
+        "invitationsHeading": "Invitacions"
     },
     "events": {
         "noPendingEvents": "No hi ha esdeveniments pendents",
@@ -1303,5 +1305,10 @@
         "bannerMultiple": "📊 {{count}} enquestes sense resposta, toca per veure l'última",
         "dismissBanner": "Descarta",
         "scrollToOriginal": "Desplaça fins a l'enquesta original"
+    },
+    "messages": {
+        "showArchived": "Mostra les converses arxivades",
+        "showActive": "Mostra les converses actives",
+        "archivedTitle": "Arxivades"
     }
 }

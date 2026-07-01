@@ -122,7 +122,8 @@
         "unarchive": "Dearhiviraj",
         "delete": "Obriši",
         "deleteConfirmMessage": "Povijest poruka bit će trajno obrisana.",
-        "draft": "Skica"
+        "draft": "Skica",
+        "messageRequestsHeading": "Zahtjevi za poruke"
     },
     "contacts": {
         "noContacts": "Još nema kontakata",
@@ -418,7 +419,8 @@
         "selectHat": "Odaberi značku",
         "hatJidPlaceholder": "user@example.com",
         "userInfo": "Podaci o korisniku",
-        "manageOccupant": "Upravljaj"
+        "manageOccupant": "Upravljaj",
+        "invitationsHeading": "Pozivnice"
     },
     "events": {
         "noPendingEvents": "Nema događaja na čekanju",
@@ -1301,5 +1303,10 @@
         "bannerMultiple": "📊 {{count}} neodgovorenih anketa, dodirni za najnoviju",
         "dismissBanner": "Odbaci",
         "scrollToOriginal": "Idi na izvornu anketu"
+    },
+    "messages": {
+        "showArchived": "Prikaži arhivirane razgovore",
+        "showActive": "Prikaži aktivne razgovore",
+        "archivedTitle": "Arhivirani"
     }
 }

@@ -122,7 +122,8 @@
         "unarchive": "取消归档",
         "delete": "删除",
         "deleteConfirmMessage": "消息历史记录将被永久删除。",
-        "draft": "草稿"
+        "draft": "草稿",
+        "messageRequestsHeading": "消息请求"
     },
     "contacts": {
         "noContacts": "暂无联系人",
@@ -418,7 +419,8 @@
         "selectHat": "选择头衔",
         "hatJidPlaceholder": "user@example.com",
         "userInfo": "用户信息",
-        "manageOccupant": "管理"
+        "manageOccupant": "管理",
+        "invitationsHeading": "邀请"
     },
     "events": {
         "noPendingEvents": "无待处理事件",
@@ -1301,5 +1303,10 @@
         "bannerMultiple": "📊 {{count}} 个未回答的投票，点击即可查看最新投票",
         "dismissBanner": "忽略",
         "scrollToOriginal": "滚动到原始投票"
+    },
+    "messages": {
+        "showArchived": "显示已归档的对话",
+        "showActive": "显示活跃对话",
+        "archivedTitle": "已归档"
     }
 }

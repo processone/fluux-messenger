@@ -122,7 +122,8 @@
         "unarchive": "Разархивировать",
         "delete": "Удалить",
         "deleteConfirmMessage": "История сообщений будет удалена навсегда.",
-        "draft": "Черновик"
+        "draft": "Черновик",
+        "messageRequestsHeading": "Запросы сообщений"
     },
     "contacts": {
         "noContacts": "Пока нет контактов",
@@ -418,7 +419,8 @@
         "selectHat": "Выбрать значок",
         "hatJidPlaceholder": "user@example.com",
         "userInfo": "Информация о пользователе",
-        "manageOccupant": "Управление"
+        "manageOccupant": "Управление",
+        "invitationsHeading": "Приглашения"
     },
     "events": {
         "noPendingEvents": "Нет ожидающих событий",
@@ -1301,5 +1303,10 @@
         "bannerMultiple": "📊 {{count}} неотвеченных опросов, нажмите, чтобы увидеть последний",
         "dismissBanner": "Скрыть",
         "scrollToOriginal": "Перейти к исходному опросу"
+    },
+    "messages": {
+        "showArchived": "Показать архивные разговоры",
+        "showActive": "Показать активные разговоры",
+        "archivedTitle": "Архивные"
     }
 }

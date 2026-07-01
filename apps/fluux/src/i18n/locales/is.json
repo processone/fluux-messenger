@@ -122,7 +122,8 @@
         "unarchive": "Fjarlægja úr safni",
         "delete": "Eyða",
         "deleteConfirmMessage": "Skilaboðaferillinn verður endanlega eytt.",
-        "draft": "Drög"
+        "draft": "Drög",
+        "messageRequestsHeading": "Skilaboðabeiðnir"
     },
     "contacts": {
         "noContacts": "Engir tengiliðir enn",
@@ -418,7 +419,8 @@
         "selectHat": "Veldu merki",
         "hatJidPlaceholder": "user@example.com",
         "userInfo": "Notandaupplýsingar",
-        "manageOccupant": "Stjórna"
+        "manageOccupant": "Stjórna",
+        "invitationsHeading": "Boð"
     },
     "events": {
         "noPendingEvents": "Engir atburðir í bið",
@@ -1301,5 +1303,10 @@
         "bannerMultiple": "📊 {{count}} ósvaraðar kannanir, ýttu til að sjá nýjustu",
         "dismissBanner": "Hunsa",
         "scrollToOriginal": "Fletta að upprunalegri könnun"
+    },
+    "messages": {
+        "showArchived": "Sýna safnvistuð samskipti",
+        "showActive": "Sýna virk samskipti",
+        "archivedTitle": "Safnvistuð"
     }
 }

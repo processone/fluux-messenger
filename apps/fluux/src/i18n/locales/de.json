@@ -124,7 +124,8 @@
         "unarchive": "Wiederherstellen",
         "delete": "Löschen",
         "deleteConfirmMessage": "Der Nachrichtenverlauf wird dauerhaft gelöscht.",
-        "draft": "Entwurf"
+        "draft": "Entwurf",
+        "messageRequestsHeading": "Nachrichtenanfragen"
     },
     "contacts": {
         "noContacts": "Noch keine Kontakte",
@@ -420,7 +421,8 @@
         "selectHat": "Abzeichen auswählen",
         "hatJidPlaceholder": "user@example.com",
         "userInfo": "Benutzerinfo",
-        "manageOccupant": "Verwalten"
+        "manageOccupant": "Verwalten",
+        "invitationsHeading": "Einladungen"
     },
     "events": {
         "noPendingEvents": "Keine ausstehenden Ereignisse",
@@ -1303,5 +1305,10 @@
         "bannerMultiple": "📊 {{count}} unbeantwortete Umfragen, tippen für die neueste",
         "dismissBanner": "Verwerfen",
         "scrollToOriginal": "Zur ursprünglichen Umfrage scrollen"
+    },
+    "messages": {
+        "showArchived": "Archivierte Gespräche anzeigen",
+        "showActive": "Aktive Gespräche anzeigen",
+        "archivedTitle": "Archiviert"
     }
 }

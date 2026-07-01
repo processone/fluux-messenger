@@ -122,7 +122,8 @@
         "unarchive": "Извади от архив",
         "delete": "Изтрий",
         "deleteConfirmMessage": "Историята на съобщенията ще бъде изтрита завинаги.",
-        "draft": "Чернова"
+        "draft": "Чернова",
+        "messageRequestsHeading": "Заявки за съобщения"
     },
     "contacts": {
         "noContacts": "Все още няма контакти",
@@ -418,7 +419,8 @@
         "selectHat": "Избери значка",
         "hatJidPlaceholder": "user@example.com",
         "userInfo": "Информация за потребителя",
-        "manageOccupant": "Управление"
+        "manageOccupant": "Управление",
+        "invitationsHeading": "Покани"
     },
     "events": {
         "noPendingEvents": "Няма чакащи събития",
@@ -1301,5 +1303,10 @@
         "bannerMultiple": "📊 {{count}} неотговорени анкети, докоснете, за да видите последната",
         "dismissBanner": "Отхвърли",
         "scrollToOriginal": "Превъртете до оригиналната анкета"
+    },
+    "messages": {
+        "showArchived": "Показване на архивираните разговори",
+        "showActive": "Показване на активните разговори",
+        "archivedTitle": "Архивирани"
     }
 }

@@ -122,7 +122,8 @@
         "unarchive": "Розархівувати",
         "delete": "Видалити",
         "deleteConfirmMessage": "Історія повідомлень буде остаточно видалена.",
-        "draft": "Чернетка"
+        "draft": "Чернетка",
+        "messageRequestsHeading": "Запити повідомлень"
     },
     "contacts": {
         "noContacts": "Ще немає контактів",
@@ -418,7 +419,8 @@
         "selectHat": "Обрати значок",
         "hatJidPlaceholder": "user@example.com",
         "userInfo": "Інформація про користувача",
-        "manageOccupant": "Керувати"
+        "manageOccupant": "Керувати",
+        "invitationsHeading": "Запрошення"
     },
     "events": {
         "noPendingEvents": "Немає очікуючих подій",
@@ -1301,5 +1303,10 @@
         "bannerMultiple": "📊 {{count}} опитувань без відповіді, натисніть, щоб побачити останнє",
         "dismissBanner": "Відхилити",
         "scrollToOriginal": "Перейти до оригінального опитування"
+    },
+    "messages": {
+        "showArchived": "Показати архівні розмови",
+        "showActive": "Показати активні розмови",
+        "archivedTitle": "Архівні"
     }
 }

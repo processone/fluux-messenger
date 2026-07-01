@@ -50,9 +50,16 @@ void i18n.use(initReactI18next).init({
         },
         conversations: {
           backToConversations: 'Back to conversations',
+          messageRequestsHeading: 'Message requests',
         },
         rooms: {
           backToRooms: 'Back to rooms',
+          invitationsHeading: 'Invitations',
+        },
+        messages: {
+          showArchived: 'Show archived conversations',
+          showActive: 'Show active conversations',
+          archivedTitle: 'Archived',
         },
         settings: {
           decreaseFontSize: 'Decrease font size',

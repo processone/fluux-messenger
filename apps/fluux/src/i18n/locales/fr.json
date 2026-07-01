@@ -123,7 +123,8 @@
         "unarchive": "Désarchiver",
         "delete": "Supprimer",
         "deleteConfirmMessage": "L'historique des messages sera définitivement supprimé.",
-        "draft": "Brouillon"
+        "draft": "Brouillon",
+        "messageRequestsHeading": "Demandes de message"
     },
     "contacts": {
         "noContacts": "Aucun contact",
@@ -419,7 +420,8 @@
         "hatUnassignError": "Échec du retrait du badge",
         "selectHat": "Sélectionner un badge",
         "hatJidPlaceholder": "user@example.com",
-        "manageOccupant": "Gérer"
+        "manageOccupant": "Gérer",
+        "invitationsHeading": "Invitations"
     },
     "events": {
         "noPendingEvents": "Aucun événement en attente",
@@ -1302,5 +1304,10 @@
         "bannerMultiple": "📊 {{count}} sondages sans réponse, appuyez pour voir le dernier",
         "dismissBanner": "Ignorer",
         "scrollToOriginal": "Aller au sondage original"
+    },
+    "messages": {
+        "showArchived": "Afficher les conversations archivées",
+        "showActive": "Afficher les conversations actives",
+        "archivedTitle": "Archivées"
     }
 }

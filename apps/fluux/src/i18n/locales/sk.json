@@ -123,7 +123,8 @@
         "unarchive": "Odarchivovať",
         "delete": "Vymazať",
         "deleteConfirmMessage": "História správ bude natrvalo vymazaná.",
-        "draft": "Koncept"
+        "draft": "Koncept",
+        "messageRequestsHeading": "Žiadosti o správy"
     },
     "contacts": {
         "noContacts": "Zatiaľ žiadne kontakty",
@@ -419,7 +420,8 @@
         "selectHat": "Vybrať odznak",
         "hatJidPlaceholder": "user@example.com",
         "userInfo": "Informácie o používateľovi",
-        "manageOccupant": "Spravovať"
+        "manageOccupant": "Spravovať",
+        "invitationsHeading": "Pozvánky"
     },
     "events": {
         "noPendingEvents": "Žiadne čakajúce udalosti",
@@ -1302,5 +1304,10 @@
         "bannerMultiple": "📊 {{count}} nezodpovedaných ankiet, ťuknite pre zobrazenie poslednej",
         "dismissBanner": "Zavrieť",
         "scrollToOriginal": "Prejsť na pôvodnú anketu"
+    },
+    "messages": {
+        "showArchived": "Zobraziť archivované konverzácie",
+        "showActive": "Zobraziť aktívne konverzácie",
+        "archivedTitle": "Archivované"
     }
 }

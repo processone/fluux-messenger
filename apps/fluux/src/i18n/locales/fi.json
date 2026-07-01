@@ -122,7 +122,8 @@
         "unarchive": "Palauta arkistosta",
         "delete": "Poista",
         "deleteConfirmMessage": "Viestihistoria poistetaan pysyvästi.",
-        "draft": "Luonnos"
+        "draft": "Luonnos",
+        "messageRequestsHeading": "Viestipyynnöt"
     },
     "contacts": {
         "noContacts": "Ei yhteystietoja vielä",
@@ -418,7 +419,8 @@
         "selectHat": "Valitse tunnus",
         "hatJidPlaceholder": "user@example.com",
         "userInfo": "Käyttäjätiedot",
-        "manageOccupant": "Hallitse"
+        "manageOccupant": "Hallitse",
+        "invitationsHeading": "Kutsut"
     },
     "events": {
         "noPendingEvents": "Ei odottavia tapahtumia",
@@ -1301,5 +1303,10 @@
         "bannerMultiple": "📊 {{count}} vastaamatonta äänestystä, napauta nähdäksesi viimeisin",
         "dismissBanner": "Sulje",
         "scrollToOriginal": "Vieritä alkuperäiseen äänestykseen"
+    },
+    "messages": {
+        "showArchived": "Näytä arkistoidut keskustelut",
+        "showActive": "Näytä aktiiviset keskustelut",
+        "archivedTitle": "Arkistoidut"
     }
 }

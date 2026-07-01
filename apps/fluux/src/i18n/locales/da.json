@@ -122,7 +122,8 @@
         "unarchive": "Fjern fra arkiv",
         "delete": "Slet",
         "deleteConfirmMessage": "Beskedhistorikken vil blive permanent slettet.",
-        "draft": "Kladde"
+        "draft": "Kladde",
+        "messageRequestsHeading": "Beskedsanmodninger"
     },
     "contacts": {
         "noContacts": "Ingen kontakter endnu",
@@ -418,7 +419,8 @@
         "selectHat": "Vælg badge",
         "hatJidPlaceholder": "user@example.com",
         "userInfo": "Brugerinfo",
-        "manageOccupant": "Administrer"
+        "manageOccupant": "Administrer",
+        "invitationsHeading": "Invitationer"
     },
     "events": {
         "noPendingEvents": "Ingen ventende begivenheder",
@@ -1301,5 +1303,10 @@
         "bannerMultiple": "📊 {{count}} ubesvarede afstemninger, tryk for at se seneste",
         "dismissBanner": "Luk",
         "scrollToOriginal": "Rul til den oprindelige afstemning"
+    },
+    "messages": {
+        "showArchived": "Vis arkiverede samtaler",
+        "showActive": "Vis aktive samtaler",
+        "archivedTitle": "Arkiverede"
     }
 }

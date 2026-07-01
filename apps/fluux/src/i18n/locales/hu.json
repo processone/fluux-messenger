@@ -122,7 +122,8 @@
         "unarchive": "Visszaállítás archívumból",
         "delete": "Törlés",
         "deleteConfirmMessage": "Az üzenetelőzmények véglegesen törlődnek.",
-        "draft": "Piszkozat"
+        "draft": "Piszkozat",
+        "messageRequestsHeading": "Üzenetkérések"
     },
     "contacts": {
         "noContacts": "Még nincsenek névjegyek",
@@ -418,7 +419,8 @@
         "selectHat": "Jelvény kiválasztása",
         "hatJidPlaceholder": "user@example.com",
         "userInfo": "Felhasználó adatai",
-        "manageOccupant": "Kezelés"
+        "manageOccupant": "Kezelés",
+        "invitationsHeading": "Meghívók"
     },
     "events": {
         "noPendingEvents": "Nincsenek függő események",
@@ -1301,5 +1303,10 @@
         "bannerMultiple": "📊 {{count}} megválaszolatlan szavazás, koppints a legutóbbi megtekintéséhez",
         "dismissBanner": "Elvetés",
         "scrollToOriginal": "Ugrás az eredeti szavazáshoz"
+    },
+    "messages": {
+        "showArchived": "Archivált beszélgetések megjelenítése",
+        "showActive": "Aktív beszélgetések megjelenítése",
+        "archivedTitle": "Archivált"
     }
 }

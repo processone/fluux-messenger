@@ -122,7 +122,8 @@
         "unarchive": "Díchartlannaigh",
         "delete": "Scrios",
         "deleteConfirmMessage": "Scriosfar stair na dteachtaireachtaí go buan.",
-        "draft": "Dréacht"
+        "draft": "Dréacht",
+        "messageRequestsHeading": "Iarratais teachtaireachtaí"
     },
     "contacts": {
         "noContacts": "Níl aon teagmhálacha fós",
@@ -418,7 +419,8 @@
         "selectHat": "Roghnaigh suaitheantais",
         "hatJidPlaceholder": "user@example.com",
         "userInfo": "Eolas úsáideora",
-        "manageOccupant": "Bainistigh"
+        "manageOccupant": "Bainistigh",
+        "invitationsHeading": "Cuirí"
     },
     "events": {
         "noPendingEvents": "Níl aon imeachtaí ar feitheamh",
@@ -1301,5 +1303,10 @@
         "bannerMultiple": "📊 {{count}} vótálacha gan freagra, tapáil chun an ceann is déanaí a fheiceáil",
         "dismissBanner": "Díbir",
         "scrollToOriginal": "Scrollaigh go dtí an vótáil bhunaidh"
+    },
+    "messages": {
+        "showArchived": "Taispeáin comhráite cartlannaithe",
+        "showActive": "Taispeáin comhráite gníomhacha",
+        "archivedTitle": "Cartlannaithe"
     }
 }

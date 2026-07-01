@@ -122,7 +122,8 @@
         "unarchive": "Dearchiveren",
         "delete": "Verwijderen",
         "deleteConfirmMessage": "De berichtgeschiedenis wordt permanent verwijderd.",
-        "draft": "Concept"
+        "draft": "Concept",
+        "messageRequestsHeading": "Berichtverzoeken"
     },
     "contacts": {
         "noContacts": "Nog geen contacten",
@@ -418,7 +419,8 @@
         "selectHat": "Badge selecteren",
         "hatJidPlaceholder": "user@example.com",
         "userInfo": "Gebruikersinfo",
-        "manageOccupant": "Beheren"
+        "manageOccupant": "Beheren",
+        "invitationsHeading": "Uitnodigingen"
     },
     "events": {
         "noPendingEvents": "Geen openstaande gebeurtenissen",
@@ -1301,5 +1303,10 @@
         "bannerMultiple": "📊 {{count}} onbeantwoorde peilingen, tik om de laatste te zien",
         "dismissBanner": "Sluiten",
         "scrollToOriginal": "Scroll naar de originele peiling"
+    },
+    "messages": {
+        "showArchived": "Gearchiveerde gesprekken weergeven",
+        "showActive": "Actieve gesprekken weergeven",
+        "archivedTitle": "Gearchiveerd"
     }
 }

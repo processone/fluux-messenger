@@ -123,7 +123,8 @@
         "unarchive": "Atarhivēt",
         "delete": "Dzēst",
         "deleteConfirmMessage": "Ziņojumu vēsture tiks neatgriezeniski dzēsta.",
-        "draft": "Melnraksts"
+        "draft": "Melnraksts",
+        "messageRequestsHeading": "Ziņojumu pieprasījumi"
     },
     "contacts": {
         "noContacts": "Vēl nav kontaktu",
@@ -419,7 +420,8 @@
         "selectHat": "Izvēlēties nozīmīti",
         "hatJidPlaceholder": "user@example.com",
         "userInfo": "Lietotāja informācija",
-        "manageOccupant": "Pārvaldīt"
+        "manageOccupant": "Pārvaldīt",
+        "invitationsHeading": "Ielūgumi"
     },
     "events": {
         "noPendingEvents": "Nav neapstiprinātu notikumu",
@@ -1302,5 +1304,10 @@
         "bannerMultiple": "📊 {{count}} neatbildētas aptaujas, pieskarieties, lai redzētu jaunāko",
         "dismissBanner": "Noraidīt",
         "scrollToOriginal": "Ritināt uz sākotnējo aptauju"
+    },
+    "messages": {
+        "showArchived": "Rādīt arhivētās sarunas",
+        "showActive": "Rādīt aktīvās sarunas",
+        "archivedTitle": "Arhivētas"
     }
 }

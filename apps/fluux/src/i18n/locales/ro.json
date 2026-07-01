@@ -124,7 +124,8 @@
         "unarchive": "Dezarhivează",
         "delete": "Șterge",
         "deleteConfirmMessage": "Istoricul mesajelor va fi șters permanent.",
-        "draft": "Ciornă"
+        "draft": "Ciornă",
+        "messageRequestsHeading": "Cereri de mesaje"
     },
     "contacts": {
         "noContacts": "Niciun contact încă",
@@ -420,7 +421,8 @@
         "selectHat": "Selectează insignă",
         "hatJidPlaceholder": "user@example.com",
         "userInfo": "Informații utilizator",
-        "manageOccupant": "Gestionează"
+        "manageOccupant": "Gestionează",
+        "invitationsHeading": "Invitații"
     },
     "events": {
         "noPendingEvents": "Niciun eveniment în așteptare",
@@ -1303,5 +1305,10 @@
         "bannerMultiple": "📊 {{count}} sondaje fără răspuns, apasă pentru a vedea ultimul",
         "dismissBanner": "Respinge",
         "scrollToOriginal": "Derulează la sondajul original"
+    },
+    "messages": {
+        "showArchived": "Afișează conversațiile arhivate",
+        "showActive": "Afișează conversațiile active",
+        "archivedTitle": "Arhivate"
     }
 }

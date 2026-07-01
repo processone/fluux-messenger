@@ -124,7 +124,8 @@
         "unarchive": "Desarchivar",
         "delete": "Eliminar",
         "deleteConfirmMessage": "El historial de mensajes sera eliminado permanentemente.",
-        "draft": "Borrador"
+        "draft": "Borrador",
+        "messageRequestsHeading": "Solicitudes de mensaje"
     },
     "contacts": {
         "noContacts": "Sin contactos aun",
@@ -420,7 +421,8 @@
         "selectHat": "Seleccionar insignia",
         "hatJidPlaceholder": "user@example.com",
         "userInfo": "Info del usuario",
-        "manageOccupant": "Gestionar"
+        "manageOccupant": "Gestionar",
+        "invitationsHeading": "Invitaciones"
     },
     "events": {
         "noPendingEvents": "Sin eventos pendientes",
@@ -1303,5 +1305,10 @@
         "bannerMultiple": "📊 {{count}} encuestas sin responder, toca para ver la última",
         "dismissBanner": "Descartar",
         "scrollToOriginal": "Ir a la encuesta original"
+    },
+    "messages": {
+        "showArchived": "Mostrar conversaciones archivadas",
+        "showActive": "Mostrar conversaciones activas",
+        "archivedTitle": "Archivadas"
     }
 }

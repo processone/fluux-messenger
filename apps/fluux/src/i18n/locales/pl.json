@@ -124,7 +124,8 @@
         "unarchive": "Przywróć z archiwum",
         "delete": "Usuń",
         "deleteConfirmMessage": "Historia wiadomości zostanie trwale usunięta.",
-        "draft": "Szkic"
+        "draft": "Szkic",
+        "messageRequestsHeading": "Prośby o wiadomości"
     },
     "contacts": {
         "noContacts": "Brak kontaktów",
@@ -420,7 +421,8 @@
         "selectHat": "Wybierz odznakę",
         "hatJidPlaceholder": "user@example.com",
         "userInfo": "Informacje o użytkowniku",
-        "manageOccupant": "Zarządzaj"
+        "manageOccupant": "Zarządzaj",
+        "invitationsHeading": "Zaproszenia"
     },
     "events": {
         "noPendingEvents": "Brak oczekujących zdarzeń",
@@ -1303,5 +1305,10 @@
         "bannerMultiple": "📊 {{count}} nieodpowiedzianych ankiet, dotknij, aby zobaczyć najnowszą",
         "dismissBanner": "Odrzuć",
         "scrollToOriginal": "Przewiń do oryginalnej ankiety"
+    },
+    "messages": {
+        "showArchived": "Pokaż zarchiwizowane rozmowy",
+        "showActive": "Pokaż aktywne rozmowy",
+        "archivedTitle": "Zarchiwizowane"
     }
 }

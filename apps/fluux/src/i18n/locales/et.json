@@ -124,7 +124,8 @@
         "unarchive": "Taasta arhiivist",
         "delete": "Kustuta",
         "deleteConfirmMessage": "Sõnumite ajalugu kustutatakse jäädavalt.",
-        "draft": "Mustand"
+        "draft": "Mustand",
+        "messageRequestsHeading": "Sõnumitaotlused"
     },
     "contacts": {
         "noContacts": "Kontakte veel pole",
@@ -420,7 +421,8 @@
         "selectHat": "Vali märgis",
         "hatJidPlaceholder": "user@example.com",
         "userInfo": "Kasutaja teave",
-        "manageOccupant": "Halda"
+        "manageOccupant": "Halda",
+        "invitationsHeading": "Kutsed"
     },
     "events": {
         "noPendingEvents": "Ootel sündmusi pole",
@@ -1303,5 +1305,10 @@
         "bannerMultiple": "📊 {{count}} vastamata küsitlust, puuduta viimase nägemiseks",
         "dismissBanner": "Sulge",
         "scrollToOriginal": "Keri algse küsitluseni"
+    },
+    "messages": {
+        "showArchived": "Kuva arhiveeritud vestlused",
+        "showActive": "Kuva aktiivsed vestlused",
+        "archivedTitle": "Arhiveeritud"
     }
 }

@@ -122,7 +122,8 @@
         "unarchive": "Avarkivera",
         "delete": "Ta bort",
         "deleteConfirmMessage": "Meddelandehistoriken kommer att tas bort permanent.",
-        "draft": "Utkast"
+        "draft": "Utkast",
+        "messageRequestsHeading": "Meddelandeförfrågningar"
     },
     "contacts": {
         "noContacts": "Inga kontakter ännu",
@@ -418,7 +419,8 @@
         "selectHat": "Välj märke",
         "hatJidPlaceholder": "user@example.com",
         "userInfo": "Användarinfo",
-        "manageOccupant": "Hantera"
+        "manageOccupant": "Hantera",
+        "invitationsHeading": "Inbjudningar"
     },
     "events": {
         "noPendingEvents": "Inga väntande händelser",
@@ -1301,5 +1303,10 @@
         "bannerMultiple": "📊 {{count}} obesvarade omröstningar, tryck för att se senaste",
         "dismissBanner": "Avfärda",
         "scrollToOriginal": "Scrolla till den ursprungliga omröstningen"
+    },
+    "messages": {
+        "showArchived": "Visa arkiverade konversationer",
+        "showActive": "Visa aktiva konversationer",
+        "archivedTitle": "Arkiverade"
     }
 }

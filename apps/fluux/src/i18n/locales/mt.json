@@ -124,7 +124,8 @@
         "unarchive": "Oħroġ mill-arkivju",
         "delete": "Ħassar",
         "deleteConfirmMessage": "L-istorja tal-messaġġi se titħassar b'mod permanenti.",
-        "draft": "Abbozz"
+        "draft": "Abbozz",
+        "messageRequestsHeading": "Talbiet ta' messaġġi"
     },
     "contacts": {
         "noContacts": "Għad m'hemmx kuntatti",
@@ -420,7 +421,8 @@
         "selectHat": "Agħżel badge",
         "hatJidPlaceholder": "user@example.com",
         "userInfo": "Info tal-utent",
-        "manageOccupant": "Immaniġġja"
+        "manageOccupant": "Immaniġġja",
+        "invitationsHeading": "Stedini"
     },
     "events": {
         "noPendingEvents": "M'hemmx avvenimenti pendenti",
@@ -1303,5 +1305,10 @@
         "bannerMultiple": "📊 {{count}} stħarriġiet mhux imwieġba, tektek biex tara l-aħħar wieħed",
         "dismissBanner": "Warrab",
         "scrollToOriginal": "Mur għall-istħarriġ oriġinali"
+    },
+    "messages": {
+        "showArchived": "Uri l-konversazzjonijiet arċivjati",
+        "showActive": "Uri l-konversazzjonijiet attivi",
+        "archivedTitle": "Arċivjati"
     }
 }

@@ -122,7 +122,8 @@
         "unarchive": "إلغاء الأرشفة",
         "delete": "حذف",
         "deleteConfirmMessage": "سيتم حذف سجل الرسائل نهائيًا.",
-        "draft": "مسودة"
+        "draft": "مسودة",
+        "messageRequestsHeading": "طلبات الرسائل"
     },
     "contacts": {
         "noContacts": "لا توجد جهات اتصال بعد",
@@ -418,7 +419,8 @@
         "hatAssignError": "فشل تعيين الشارة",
         "hatUnassignError": "فشل إزالة الشارة",
         "selectHat": "اختيار شارة",
-        "hatJidPlaceholder": "user@example.com"
+        "hatJidPlaceholder": "user@example.com",
+        "invitationsHeading": "الدعوات"
     },
     "events": {
         "noPendingEvents": "لا توجد أحداث معلّقة",
@@ -1301,5 +1303,10 @@
         "bannerMultiple": "📊 {{count}} استطلاعات بدون إجابة, انقر لرؤية الأحدث",
         "dismissBanner": "تجاهل",
         "scrollToOriginal": "الانتقال إلى الاستطلاع الأصلي"
+    },
+    "messages": {
+        "showArchived": "عرض المحادثات المؤرشفة",
+        "showActive": "عرض المحادثات النشطة",
+        "archivedTitle": "مؤرشف"
     }
 }

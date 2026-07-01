@@ -122,7 +122,8 @@
         "unarchive": "Разархіваваць",
         "delete": "Выдаліць",
         "deleteConfirmMessage": "Гісторыя паведамленняў будзе канчаткова выдалена.",
-        "draft": "Чарнавік"
+        "draft": "Чарнавік",
+        "messageRequestsHeading": "Запыты паведамленняў"
     },
     "contacts": {
         "noContacts": "Яшчэ няма кантактаў",
@@ -418,7 +419,8 @@
         "selectHat": "Абраць значок",
         "hatJidPlaceholder": "user@example.com",
         "userInfo": "Інфармацыя пра карыстальніка",
-        "manageOccupant": "Кіраванне"
+        "manageOccupant": "Кіраванне",
+        "invitationsHeading": "Запрашэнні"
     },
     "events": {
         "noPendingEvents": "Няма чакаючых падзей",
@@ -1301,5 +1303,10 @@
         "bannerMultiple": "📊 {{count}} неадказаных апытанняў, націсніце, каб убачыць апошняе",
         "dismissBanner": "Схаваць",
         "scrollToOriginal": "Перайсці да арыгінальнага апытання"
+    },
+    "messages": {
+        "showArchived": "Паказаць архіваваныя размовы",
+        "showActive": "Паказаць актыўныя размовы",
+        "archivedTitle": "Архіваваныя"
     }
 }
