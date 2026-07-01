@@ -433,8 +433,8 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
           {/* Aurora gradient brand mark: the --fluux-grad tile + a soft glow */}
           <div className="relative size-16 mx-auto mb-4">
             <div
-              className="absolute -inset-1.5 rounded-2xl blur-xl opacity-60"
-              style={{ background: 'var(--fluux-grad)' }}
+              className="absolute -inset-1.5 rounded-2xl blur-xl"
+              style={{ background: 'var(--fluux-grad)', opacity: 'var(--fluux-brand-glow-opacity)' }}
               aria-hidden="true"
             />
             <div
