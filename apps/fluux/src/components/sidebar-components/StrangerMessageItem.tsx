@@ -1,0 +1,72 @@
+import { useTranslation } from 'react-i18next'
+import { Check, X, Ban } from 'lucide-react'
+import { Avatar } from '../Avatar'
+import { Tooltip } from '../Tooltip'
+
+interface StrangerMessageItemProps {
+  jid: string
+  messages: { id: string; from: string; body: string; timestamp: Date }[]
+  onAccept: () => void
+  onIgnore: () => void
+  onBlock: () => void
+}
+
+export function StrangerMessageItem({ jid, messages, onAccept, onIgnore, onBlock }: StrangerMessageItemProps) {
+  const { t } = useTranslation()
+  const displayName = jid.split('@')[0]
+  const latestMessage = messages[messages.length - 1]
+  const messageCount = messages.length
+
+  return (
+    <div className="px-2 py-2 rounded hover:bg-fluux-hover transition-colors">
+      <div className="flex items-center gap-3">
+        {/* Avatar */}
+        <Avatar
+          identifier={jid}
+          name={displayName}
+          size="md"
+        />
+
+        {/* Info */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <p className="font-medium text-fluux-text truncate">{displayName}</p>
+            {messageCount > 1 && (
+              <span className="text-xs bg-fluux-brand/20 text-fluux-brand px-1.5 py-0.5 rounded">
+                {messageCount}
+              </span>
+            )}
+          </div>
+          <p className="text-xs text-fluux-muted truncate">{latestMessage?.body}</p>
+        </div>
+      </div>
+
+      {/* Actions */}
+      <div className="flex gap-2 mt-2 ms-13">
+        <button
+          onClick={onAccept}
+          className="flex-1 px-3 py-1.5 bg-fluux-brand text-fluux-text-on-accent text-sm font-medium rounded hover:bg-fluux-brand-hover transition-colors flex items-center justify-center gap-1"
+        >
+          <Check className="size-4" />
+          {t('common.accept')}
+        </button>
+        <button
+          onClick={onIgnore}
+          className="flex-1 px-3 py-1.5 bg-fluux-muted/20 text-fluux-text text-sm font-medium rounded hover:bg-fluux-muted/30 transition-colors flex items-center justify-center gap-1"
+        >
+          <X className="size-4" />
+          {t('common.ignore')}
+        </button>
+        <Tooltip content={t('common.block')} position="top">
+          <button
+            onClick={onBlock}
+            className="px-3 py-1.5 bg-fluux-red text-white text-sm font-medium rounded hover:bg-fluux-red/80 transition-colors flex items-center justify-center gap-1"
+            aria-label={t('common.block')}
+          >
+            <Ban className="size-4" />
+          </button>
+        </Tooltip>
+      </div>
+    </div>
+  )
+}
