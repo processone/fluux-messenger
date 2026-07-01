@@ -6,12 +6,14 @@ import { Tooltip } from '../Tooltip'
 interface StrangerMessageItemProps {
   jid: string
   messages: { id: string; from: string; body: string; timestamp: Date }[]
+  /** Open the read-only preview of this stranger's full thread. */
+  onSelect?: (jid: string) => void
   onAccept: () => void
   onIgnore: () => void
   onBlock: () => void
 }
 
-export function StrangerMessageItem({ jid, messages, onAccept, onIgnore, onBlock }: StrangerMessageItemProps) {
+export function StrangerMessageItem({ jid, messages, onSelect, onAccept, onIgnore, onBlock }: StrangerMessageItemProps) {
   const { t } = useTranslation()
   const displayName = jid.split('@')[0]
   const latestMessage = messages[messages.length - 1]
@@ -19,7 +21,20 @@ export function StrangerMessageItem({ jid, messages, onAccept, onIgnore, onBlock
 
   return (
     <div className="px-2 py-2 rounded hover:bg-fluux-hover transition-colors">
-      <div className="flex items-center gap-3">
+      {/* Clicking the info row opens the read-only preview; the action buttons
+          below are a separate sibling, so they don't trigger it. */}
+      <div
+        className="flex items-center gap-3 cursor-pointer"
+        role="button"
+        tabIndex={0}
+        onClick={() => onSelect?.(jid)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault()
+            onSelect?.(jid)
+          }
+        }}
+      >
         {/* Avatar */}
         <Avatar
           identifier={jid}

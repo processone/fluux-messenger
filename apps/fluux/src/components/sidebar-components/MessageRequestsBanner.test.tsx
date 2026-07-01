@@ -25,9 +25,10 @@ vi.mock('@fluux/sdk/react', () => ({
 vi.mock('@/hooks', () => ({ useRouteSync: () => ({ navigateToMessages }) }))
 
 import { MessageRequestsBanner } from './MessageRequestsBanner'
+import { messageRequestPreviewStore } from '@/stores/messageRequestPreviewStore'
 
 describe('MessageRequestsBanner', () => {
-  beforeEach(() => { vi.clearAllMocks(); strangerConversations = {} })
+  beforeEach(() => { vi.clearAllMocks(); strangerConversations = {}; messageRequestPreviewStore.getState().setPreviewJid(null) })
 
   it('renders nothing when there are no stranger conversations', () => {
     const { container } = render(<MessageRequestsBanner />)
@@ -40,5 +41,12 @@ describe('MessageRequestsBanner', () => {
     fireEvent.click(screen.getByText('common.accept'))
     await waitFor(() => expect(acceptStranger).toHaveBeenCalledWith('x@example.com'))
     expect(navigateToMessages).toHaveBeenCalledWith('x@example.com')
+  })
+
+  it('opens the preview for a stranger when its row is clicked', () => {
+    strangerConversations = { 'x@example.com': [{ id: 'm1', from: 'x@example.com', body: 'hi', timestamp: new Date() }] }
+    render(<MessageRequestsBanner />)
+    fireEvent.click(screen.getByText('x'))
+    expect(messageRequestPreviewStore.getState().previewJid).toBe('x@example.com')
   })
 })
