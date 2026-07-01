@@ -14,7 +14,7 @@ export interface ShortcutDefinition {
   displayOnly?: boolean
 }
 
-type SidebarView = 'messages' | 'rooms' | 'directory' | 'archive' | 'events' | 'admin' | 'settings' | 'search'
+type SidebarView = 'messages' | 'rooms' | 'directory' | 'admin' | 'settings' | 'search'
 
 interface UseKeyboardShortcutsOptions {
   onToggleShortcutHelp: () => void
@@ -202,7 +202,7 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions): Shor
   // Navigate to previous item in current sidebar view (stops at top, no wrap)
   // NOTE: Uses getState() to read current data without creating subscriptions
   const goToPreviousItem = () => {
-    if (sidebarView === 'messages' || sidebarView === 'archive') {
+    if (sidebarView === 'messages') {
       // Read current state without subscribing
       const conversations = Array.from(chatStore.getState().conversations.values())
         .filter(c => !chatStore.getState().archivedConversations.has(c.id))
@@ -237,7 +237,7 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions): Shor
   // Navigate to next item in current sidebar view (stops at bottom, no wrap)
   // NOTE: Uses getState() to read current data without creating subscriptions
   const goToNextItem = () => {
-    if (sidebarView === 'messages' || sidebarView === 'archive') {
+    if (sidebarView === 'messages') {
       // Read current state without subscribing
       const conversations = Array.from(chatStore.getState().conversations.values())
         .filter(c => !chatStore.getState().archivedConversations.has(c.id))
@@ -395,20 +395,6 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions): Shor
       description: 'shortcuts.connectionsView',
       category: 'navigation',
       action: () => onSidebarViewChange('directory'),
-    },
-    {
-      key: '4',
-      modifiers: ['alt'],
-      description: 'shortcuts.archiveView',
-      category: 'navigation',
-      action: () => onSidebarViewChange('archive'),
-    },
-    {
-      key: '5',
-      modifiers: ['alt'],
-      description: 'shortcuts.eventsView',
-      category: 'navigation',
-      action: () => onSidebarViewChange('events'),
     },
     {
       key: '0',

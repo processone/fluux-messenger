@@ -20,6 +20,7 @@ import { useSettingsStore } from '@/stores/settingsStore'
 import { Hash, Trash2, Archive, ArchiveRestore, MessageCircle } from 'lucide-react'
 import { ListEmpty } from '../ui/ListEmpty'
 import { ConfirmDialog } from '../ConfirmDialog'
+import { MessageRequestsBanner } from './MessageRequestsBanner'
 import {
   SidebarListMenuProvider,
   SidebarListMenuPortal,
@@ -86,26 +87,27 @@ export function ConversationList() {
     activeItemId: activeConversationId,
   })
 
-  if (conversationIds.length === 0) {
-    return <ListEmpty icon={MessageCircle} title={t('conversations.noConversations')} />
-  }
-
   return (
     <SidebarListMenuProvider<Conversation>>
-      <div ref={listRef} className="px-2 space-y-0.5" {...getContainerProps()}>
-        {conversationIds.map((id, index) => (
-          <ConversationItem
-            key={id}
-            conversationId={id}
-            isActive={id === activeConversationId}
-            isSelected={index === selectedIndex}
-            isKeyboardNav={isKeyboardNav}
-            onClick={handleConversationClick}
-            {...getItemAttribute(index)}
-            {...getItemProps(index)}
-          />
-        ))}
-      </div>
+      <MessageRequestsBanner />
+      {conversationIds.length === 0 ? (
+        <ListEmpty icon={MessageCircle} title={t('conversations.noConversations')} />
+      ) : (
+        <div ref={listRef} className="px-2 space-y-0.5" {...getContainerProps()}>
+          {conversationIds.map((id, index) => (
+            <ConversationItem
+              key={id}
+              conversationId={id}
+              isActive={id === activeConversationId}
+              isSelected={index === selectedIndex}
+              isKeyboardNav={isKeyboardNav}
+              onClick={handleConversationClick}
+              {...getItemAttribute(index)}
+              {...getItemProps(index)}
+            />
+          ))}
+        </div>
+      )}
       <ConversationContextMenu
         isArchived={false}
         onArchive={archiveConversation}
@@ -124,13 +126,13 @@ export function ArchiveList() {
   const activeConversationId = useChatStore((s) => s.activeConversationId)
   const deleteConversation = useChatStore((s) => s.deleteConversation)
   const unarchiveConversation = useChatStore((s) => s.unarchiveConversation)
-  const { navigateToArchive } = useRouteSync()
+  const { navigateToMessages } = useRouteSync()
   const listRef = useRef<HTMLDivElement>(null)
   const zoneRef = useSidebarZone()
 
   // Identity-stable click handler (see ConversationList for rationale).
-  const latestNavRef = useRef({ navigateToArchive })
-  latestNavRef.current = { navigateToArchive }
+  const latestNavRef = useRef({ navigateToMessages })
+  latestNavRef.current = { navigateToMessages }
   const clickRef = useRef<((convId: string) => void) | null>(null)
   if (!clickRef.current) {
     clickRef.current = (convId: string) => {
@@ -138,7 +140,7 @@ export function ArchiveList() {
       const hasActive = !!chatStore.getState().activeConversationId
       void roomStore.getState().activateRoom(null)
       void chatStore.getState().activateConversation(convId)
-      L.navigateToArchive(convId, { replace: hasActive })
+      L.navigateToMessages(convId, { replace: hasActive })
     }
   }
   const handleConversationClick = clickRef.current

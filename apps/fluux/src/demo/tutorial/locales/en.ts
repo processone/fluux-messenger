@@ -25,10 +25,6 @@ const tutorialEN = {
     content: 'You can share files, images, and documents with contacts.',
     actionHint: 'Try the attach button to send a file',
   },
-  'activity-log-hint': {
-    content: 'The Activity tab shows subscription requests, reactions, and invitations.',
-    actionHint: 'Click the Activity icon in the sidebar to see new events',
-  },
   'search-hint': {
     content: 'Search messages across all conversations. Use type filters or "in:Team" to narrow results.',
     actionHint: 'Click the Search icon and try typing "SDK" or "in:Team"',

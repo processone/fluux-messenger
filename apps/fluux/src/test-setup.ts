@@ -37,12 +37,29 @@ void i18n.use(initReactI18next).init({
         sidebar: {
           search: 'Search',
           settings: 'Settings',
+          contacts: 'Contacts',
+        },
+        newMessage: {
+          title: 'New message',
+          searchPlaceholder: 'Search a person or enter a JID',
+          manageContacts: 'Manage contacts',
+        },
+        contacts: {
+          addContact: 'Add contact',
+          requestsHeading: 'Requests',
         },
         conversations: {
           backToConversations: 'Back to conversations',
+          messageRequestsHeading: 'Message requests',
         },
         rooms: {
           backToRooms: 'Back to rooms',
+          invitationsHeading: 'Invitations',
+        },
+        messages: {
+          showArchived: 'Show archived conversations',
+          showActive: 'Show active conversations',
+          archivedTitle: 'Archived',
         },
         settings: {
           decreaseFontSize: 'Decrease font size',
@@ -91,6 +108,11 @@ void i18n.use(initReactI18next).init({
               vhosts: 'Virtual hosts',
             },
           },
+        },
+        // Reaction notification keys
+        reactions: {
+          mention: "{{emoji}} {{name}} reacted to '{{preview}}'",
+          see: 'See',
         },
       },
     },
@@ -274,6 +296,21 @@ vi.mock('@fluux/sdk', async (importOriginal) => {
       unblockAll: vi.fn(),
       isBlocked: () => false,
     })),
+    useEvents: vi.fn(() => ({
+      subscriptionRequests: [],
+      strangerMessages: [],
+      strangerConversations: {},
+      mucInvitations: [],
+      systemNotifications: [],
+      pendingCount: 0,
+      acceptSubscription: vi.fn(),
+      rejectSubscription: vi.fn(),
+      acceptStranger: vi.fn(),
+      ignoreStranger: vi.fn(),
+      acceptInvitation: vi.fn(),
+      declineInvitation: vi.fn(),
+      dismissNotification: vi.fn(),
+    })),
     searchStore: {
       getState: () => ({
         query: '',
@@ -307,6 +344,15 @@ vi.mock('@fluux/sdk', async (importOriginal) => {
       xml: vi.fn(),
       isConnected: () => false,
       getJid: () => null,
+    })),
+    useRoster: vi.fn(() => ({
+      contacts: [],
+      sortedContacts: [],
+      onlineContacts: [],
+      addContact: vi.fn(),
+      removeContact: vi.fn(),
+      acceptSubscription: vi.fn(),
+      rejectSubscription: vi.fn(),
     })),
   }
 })
@@ -452,27 +498,6 @@ vi.mock('@fluux/sdk/react', () => ({
       search: vi.fn(),
       clearSearch: vi.fn(),
       setPreviewResult: vi.fn(),
-    }
-    return selector ? selector(state) : state
-  }),
-  useActivityLogStore: vi.fn((selector) => {
-    const state = {
-      events: [],
-      mutedReactionConversations: new Set(),
-      mutedReactionMessages: new Set(),
-      previewEvent: null,
-      addEvent: vi.fn(),
-      resolveEvent: vi.fn(),
-      findEvent: vi.fn(),
-      removeEvent: vi.fn(),
-      muteReactionsForConversation: vi.fn(),
-      unmuteReactionsForConversation: vi.fn(),
-      muteReactionsForMessage: vi.fn(),
-      unmuteReactionsForMessage: vi.fn(),
-      isReactionMuted: () => false,
-      pendingActionableCount: () => 0,
-      setPreviewEvent: vi.fn(),
-      reset: vi.fn(),
     }
     return selector ? selector(state) : state
   }),

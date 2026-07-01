@@ -64,8 +64,7 @@
         "messages": "Сообщения",
         "rooms": "Конференции",
         "connections": "Контакты",
-        "archive": "Архив",
-        "events": "События",
+        "contacts": "Контакты",
         "settings": "Настройки",
         "admin": "Администрирование",
         "addContact": "Добавить контакт",
@@ -74,6 +73,11 @@
         "viewProfile": "Посмотреть профиль",
         "resizeHint": "Потяните для изменения размера, двойной клик для сброса",
         "dismiss": "Скрыть"
+    },
+    "newMessage": {
+        "title": "Новое сообщение",
+        "searchPlaceholder": "Поиск человека или ввод JID",
+        "manageContacts": "Управление контактами"
     },
     "archive": {
         "noArchivedConversations": "Нет архивированных бесед"
@@ -116,7 +120,9 @@
         "unarchive": "Разархивировать",
         "delete": "Удалить",
         "deleteConfirmMessage": "История сообщений будет удалена навсегда.",
-        "draft": "Черновик"
+        "draft": "Черновик",
+        "messageRequestPreview": "Запрос сообщения",
+        "messageRequestsHeading": "Запросы сообщений"
     },
     "contacts": {
         "noContacts": "Пока нет контактов",
@@ -183,7 +189,8 @@
             "profile": "Профиль",
             "security": "Безопасность"
         },
-        "actionsMenu": "Другие действия"
+        "actionsMenu": "Другие действия",
+        "requestsHeading": "Запросы"
     },
     "rooms": {
         "backToRooms": "Назад к комнатам",
@@ -411,46 +418,13 @@
         "selectHat": "Выбрать значок",
         "hatJidPlaceholder": "user@example.com",
         "userInfo": "Информация о пользователе",
-        "manageOccupant": "Управление"
+        "manageOccupant": "Управление",
+        "invitationsHeading": "Приглашения"
     },
     "events": {
-        "noPendingEvents": "Нет ожидающих событий",
-        "systemNotifications": "Системные уведомления",
-        "messagesFromStrangers": "Сообщения от незнакомцев",
-        "subscriptionRequests": "Запросы на подписку",
-        "roomInvitations": "Приглашения в комнаты",
         "invitedBy": "Пригласил(а) {{name}}",
         "join": "Войти",
         "decline": "Отклонить"
-    },
-    "activityLog": {
-        "title": "Журнал активности",
-        "noActivity": "Пока нет активности",
-        "markAllRead": "Отметить всё как прочитанное",
-        "today": "Сегодня",
-        "yesterday": "Вчера",
-        "subscriptionRequest": "Запрос на контакт от {{name}}",
-        "subscriptionAccepted": "{{name}} принял(а) ваш запрос",
-        "subscriptionDenied": "{{name}} отклонил(а) ваш запрос",
-        "mucInvitation": "Приглашение в комнату {{room}}",
-        "reactionReceived": "{{name}} отреагировал(а) {{emojis}}",
-        "reactionReceivedTo": " на \"{{preview}}\"",
-        "pollVoteReceived": "{{name}} проголосовал(а) {{emojis}} в опросе \"{{title}}\"",
-        "inConversation": " в {{conversation}}",
-        "strangerMessage": "Сообщение от {{name}}",
-        "resourceConflict": "Сессия заменена",
-        "authError": "Ошибка аутентификации",
-        "connectionError": "Ошибка подключения",
-        "accepted": "Принято",
-        "rejected": "Отклонено",
-        "dismissed": "Отклонено",
-        "pending": "Ожидает",
-        "muted": "Отключено",
-        "muteReactions": "Заглушить реакции",
-        "muteConversationReactions": "Заглушить реакции из этого чата",
-        "unmuteConversationReactions": "Включить реакции из этого чата",
-        "muteMessageReactions": "Заглушить реакции на это сообщение",
-        "unmuteMessageReactions": "Включить реакции на это сообщение"
     },
     "chat": {
         "selection": {
@@ -1032,14 +1006,6 @@
             "description": "Кликните на контакт, чтобы посмотреть его профиль, подключённые устройства или начать беседу.",
             "hint": "Двойной клик, чтобы начать беседу напрямую."
         },
-        "archive": {
-            "title": "Архивированные беседы",
-            "description": "Архивированные беседы будут отображаться здесь. Вы можете восстановить их в список сообщений в любое время."
-        },
-        "events": {
-            "title": "Ожидающие события",
-            "description": "Здесь будут отображаться запросы на подписку, приглашения в комнаты и сообщения от неизвестных контактов."
-        },
         "admin": {
             "title": "Администрирование сервера",
             "description": "Выберите команду на боковой панели для управления сервером."
@@ -1294,5 +1260,14 @@
         "bannerMultiple": "📊 {{count}} неотвеченных опросов, нажмите, чтобы увидеть последний",
         "dismissBanner": "Скрыть",
         "scrollToOriginal": "Перейти к исходному опросу"
+    },
+    "messages": {
+        "showArchived": "Показать архивные разговоры",
+        "showActive": "Показать активные разговоры",
+        "archivedTitle": "Архивные"
+    },
+    "reactions": {
+        "mention": "{{emoji}} {{name}} отреагировал(а) на '{{preview}}'",
+        "see": "Показать"
     }
 }

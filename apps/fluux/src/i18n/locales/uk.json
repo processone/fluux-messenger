@@ -64,8 +64,7 @@
         "messages": "Повідомлення",
         "rooms": "Кімнати",
         "connections": "Контакти",
-        "archive": "Архів",
-        "events": "Події",
+        "contacts": "Контакти",
         "settings": "Налаштування",
         "admin": "Адміністрування",
         "addContact": "Додати контакт",
@@ -74,6 +73,11 @@
         "viewProfile": "Переглянути профіль",
         "resizeHint": "Потягніть для зміни розміру, подвійне клацання для скидання",
         "dismiss": "Скасувати"
+    },
+    "newMessage": {
+        "title": "Нове повідомлення",
+        "searchPlaceholder": "Пошук людини або введення JID",
+        "manageContacts": "Управління контактами"
     },
     "archive": {
         "noArchivedConversations": "Немає архівованих розмов"
@@ -116,7 +120,9 @@
         "unarchive": "Розархівувати",
         "delete": "Видалити",
         "deleteConfirmMessage": "Історія повідомлень буде остаточно видалена.",
-        "draft": "Чернетка"
+        "draft": "Чернетка",
+        "messageRequestPreview": "Запит повідомлення",
+        "messageRequestsHeading": "Запити повідомлень"
     },
     "contacts": {
         "noContacts": "Ще немає контактів",
@@ -183,7 +189,8 @@
             "profile": "Профіль",
             "security": "Безпека"
         },
-        "actionsMenu": "Інші дії"
+        "actionsMenu": "Інші дії",
+        "requestsHeading": "Запити"
     },
     "rooms": {
         "backToRooms": "Назад до кімнат",
@@ -411,46 +418,13 @@
         "selectHat": "Обрати значок",
         "hatJidPlaceholder": "user@example.com",
         "userInfo": "Інформація про користувача",
-        "manageOccupant": "Керувати"
+        "manageOccupant": "Керувати",
+        "invitationsHeading": "Запрошення"
     },
     "events": {
-        "noPendingEvents": "Немає очікуючих подій",
-        "systemNotifications": "Системні сповіщення",
-        "messagesFromStrangers": "Повідомлення від незнайомців",
-        "subscriptionRequests": "Запити на підписку",
-        "roomInvitations": "Запрошення до кімнат",
         "invitedBy": "Запрошено {{name}}",
         "join": "Приєднатися",
         "decline": "Відхилити"
-    },
-    "activityLog": {
-        "title": "Журнал активності",
-        "noActivity": "Ще немає активності",
-        "markAllRead": "Позначити все як прочитане",
-        "today": "Сьогодні",
-        "yesterday": "Вчора",
-        "subscriptionRequest": "Запит на контакт від {{name}}",
-        "subscriptionAccepted": "{{name}} прийняв(-ла) ваш запит",
-        "subscriptionDenied": "{{name}} відхилив(-ла) ваш запит",
-        "mucInvitation": "Запрошення до кімнати {{room}}",
-        "reactionReceived": "{{name}} відреагував(-ла) {{emojis}}",
-        "reactionReceivedTo": " на \"{{preview}}\"",
-        "pollVoteReceived": "{{name}} проголосував(-ла) {{emojis}} в опитуванні \"{{title}}\"",
-        "inConversation": " в {{conversation}}",
-        "strangerMessage": "Повідомлення від {{name}}",
-        "resourceConflict": "Сесію замінено",
-        "authError": "Помилка автентифікації",
-        "connectionError": "Помилка з'єднання",
-        "accepted": "Прийнято",
-        "rejected": "Відхилено",
-        "dismissed": "Відхилено",
-        "pending": "Очікує",
-        "muted": "Вимкнено",
-        "muteReactions": "Вимкнути реакції",
-        "muteConversationReactions": "Вимкнути реакції з цього чату",
-        "unmuteConversationReactions": "Увімкнути реакції з цього чату",
-        "muteMessageReactions": "Вимкнути реакції на це повідомлення",
-        "unmuteMessageReactions": "Увімкнути реакції на це повідомлення"
     },
     "chat": {
         "selection": {
@@ -1032,14 +1006,6 @@
             "description": "Натисніть на контакт, щоб переглянути його профіль, підключені пристрої або почати розмову.",
             "hint": "Подвійне клацання, щоб почати розмову безпосередньо."
         },
-        "archive": {
-            "title": "Архівовані розмови",
-            "description": "Архівовані розмови з'являться тут. Ви можете відновити їх у ваш список повідомлень будь-коли."
-        },
-        "events": {
-            "title": "Очікуючі події",
-            "description": "Запити на підписку, запрошення до кімнат та повідомлення від невідомих контактів з'являться тут."
-        },
         "admin": {
             "title": "Адміністрування сервера",
             "description": "Виберіть команду на бічній панелі для керування сервером."
@@ -1294,5 +1260,14 @@
         "bannerMultiple": "📊 {{count}} опитувань без відповіді, натисніть, щоб побачити останнє",
         "dismissBanner": "Відхилити",
         "scrollToOriginal": "Перейти до оригінального опитування"
+    },
+    "messages": {
+        "showArchived": "Показати архівні розмови",
+        "showActive": "Показати активні розмови",
+        "archivedTitle": "Архівні"
+    },
+    "reactions": {
+        "mention": "{{emoji}} {{name}} відреагував(ла) на '{{preview}}'",
+        "see": "Показати"
     }
 }

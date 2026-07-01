@@ -13,6 +13,7 @@ import { formatLocalizedPreview } from '@/utils/messagePreviewText'
 import { EditBookmarkModal } from '../EditBookmarkModal'
 import { Tooltip } from '../Tooltip'
 import { useSidebarZone } from './types'
+import { RoomInvitationsBanner } from './RoomInvitationsBanner'
 import { formatConversationTime } from '@/utils/dateFormat'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useToastStore } from '@/stores/toastStore'
@@ -216,6 +217,7 @@ export function RoomsList() {
 
   return (
     <div ref={listRef} className="px-2 py-2" {...getContainerProps()}>
+      <RoomInvitationsBanner />
       {/* Quick Chats - only show if any exist */}
       {quickChatJids.length > 0 && (
         <div className="mb-4">

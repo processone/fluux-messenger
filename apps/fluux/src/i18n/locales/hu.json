@@ -64,8 +64,7 @@
         "messages": "Üzenetek",
         "rooms": "Szobák",
         "connections": "Kapcsolatok",
-        "archive": "Archívum",
-        "events": "Események",
+        "contacts": "Névjegyek",
         "settings": "Beállítások",
         "admin": "Adminisztráció",
         "addContact": "Névjegy hozzáadása",
@@ -74,6 +73,11 @@
         "viewProfile": "Profil megtekintése",
         "resizeHint": "Húzza az átméretezéshez, dupla kattintás a visszaállításhoz",
         "dismiss": "Elvetés"
+    },
+    "newMessage": {
+        "title": "Új üzenet",
+        "searchPlaceholder": "Keressen személyt vagy adjon meg JID-t",
+        "manageContacts": "Névjegyek kezelése"
     },
     "archive": {
         "noArchivedConversations": "Nincsenek archivált beszélgetések"
@@ -116,7 +120,9 @@
         "unarchive": "Visszaállítás archívumból",
         "delete": "Törlés",
         "deleteConfirmMessage": "Az üzenetelőzmények véglegesen törlődnek.",
-        "draft": "Piszkozat"
+        "draft": "Piszkozat",
+        "messageRequestPreview": "Üzenetkérés",
+        "messageRequestsHeading": "Üzenetkérések"
     },
     "contacts": {
         "noContacts": "Még nincsenek névjegyek",
@@ -183,7 +189,8 @@
             "profile": "Profil",
             "security": "Biztonság"
         },
-        "actionsMenu": "További műveletek"
+        "actionsMenu": "További műveletek",
+        "requestsHeading": "Kérések"
     },
     "rooms": {
         "backToRooms": "Vissza a szobákhoz",
@@ -411,46 +418,13 @@
         "selectHat": "Jelvény kiválasztása",
         "hatJidPlaceholder": "user@example.com",
         "userInfo": "Felhasználó adatai",
-        "manageOccupant": "Kezelés"
+        "manageOccupant": "Kezelés",
+        "invitationsHeading": "Meghívók"
     },
     "events": {
-        "noPendingEvents": "Nincsenek függő események",
-        "systemNotifications": "Rendszerértesítések",
-        "messagesFromStrangers": "Üzenetek ismeretlenektől",
-        "subscriptionRequests": "Feliratkozási kérelmek",
-        "roomInvitations": "Szobameghívók",
         "invitedBy": "Meghívta: {{name}}",
         "join": "Csatlakozás",
         "decline": "Elutasítás"
-    },
-    "activityLog": {
-        "title": "Tevékenységnapló",
-        "noActivity": "Még nincs tevékenység",
-        "markAllRead": "Összes olvasottnak jelölése",
-        "today": "Ma",
-        "yesterday": "Tegnap",
-        "subscriptionRequest": "Kapcsolatfelvételi kérés tőle: {{name}}",
-        "subscriptionAccepted": "{{name}} elfogadta a kérését",
-        "subscriptionDenied": "{{name}} elutasította a kérését",
-        "mucInvitation": "Szobameghívó ide: {{room}}",
-        "reactionReceived": "{{name}} reagált {{emojis}}",
-        "reactionReceivedTo": " erre: \"{{preview}}\"",
-        "pollVoteReceived": "{{name}} szavazott {{emojis}} a szavazásban: \"{{title}}\"",
-        "inConversation": " itt: {{conversation}}",
-        "strangerMessage": "Üzenet tőle: {{name}}",
-        "resourceConflict": "Munkamenet lecserélve",
-        "authError": "Hitelesítési hiba",
-        "connectionError": "Kapcsolódási hiba",
-        "accepted": "Elfogadva",
-        "rejected": "Elutasítva",
-        "dismissed": "Elvetve",
-        "pending": "Függőben",
-        "muted": "Némítva",
-        "muteReactions": "Reakciók némítása",
-        "muteConversationReactions": "Reakciók némítása ebből a csevegésből",
-        "unmuteConversationReactions": "Reakciók bekapcsolása ebből a csevegésből",
-        "muteMessageReactions": "Reakciók némítása ezen az üzeneten",
-        "unmuteMessageReactions": "Reakciók bekapcsolása ezen az üzeneten"
     },
     "chat": {
         "selection": {
@@ -1032,14 +1006,6 @@
             "description": "Kattintson egy névjegyre a profil, csatlakozott eszközök megtekintéséhez, vagy beszélgetés indításához.",
             "hint": "Dupla kattintással közvetlenül indíthat beszélgetést."
         },
-        "archive": {
-            "title": "Archivált beszélgetések",
-            "description": "Az archivált beszélgetések itt jelennek meg. Bármikor visszaállíthatja őket az üzenetlistájába."
-        },
-        "events": {
-            "title": "Függő események",
-            "description": "A feliratkozási kérelmek, szobameghívók és ismeretlen névjegyektől érkező üzenetek itt jelennek meg."
-        },
         "admin": {
             "title": "Szerver adminisztráció",
             "description": "Válasszon egy parancsot az oldalsávból a szerver kezeléséhez."
@@ -1294,5 +1260,14 @@
         "bannerMultiple": "📊 {{count}} megválaszolatlan szavazás, koppints a legutóbbi megtekintéséhez",
         "dismissBanner": "Elvetés",
         "scrollToOriginal": "Ugrás az eredeti szavazáshoz"
+    },
+    "messages": {
+        "showArchived": "Archivált beszélgetések megjelenítése",
+        "showActive": "Aktív beszélgetések megjelenítése",
+        "archivedTitle": "Archivált"
+    },
+    "reactions": {
+        "mention": "{{emoji}} {{name}} reagált erre: '{{preview}}'",
+        "see": "Megtekintés"
     }
 }

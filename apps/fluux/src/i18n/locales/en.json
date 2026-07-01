@@ -64,8 +64,7 @@
         "messages": "Messages",
         "rooms": "Rooms",
         "connections": "Connections",
-        "archive": "Archive",
-        "events": "Events",
+        "contacts": "Contacts",
         "settings": "Settings",
         "admin": "Admin",
         "addContact": "Add contact",
@@ -74,6 +73,11 @@
         "viewProfile": "View profile",
         "resizeHint": "Drag to resize, double-click to reset",
         "dismiss": "Dismiss"
+    },
+    "newMessage": {
+        "title": "New message",
+        "searchPlaceholder": "Search a person or enter a JID",
+        "manageContacts": "Manage contacts"
     },
     "archive": {
         "noArchivedConversations": "No archived conversations"
@@ -116,10 +120,13 @@
         "unarchive": "Unarchive",
         "delete": "Delete",
         "deleteConfirmMessage": "The message history will be permanently deleted.",
-        "draft": "Draft"
+        "draft": "Draft",
+        "messageRequestsHeading": "Message requests",
+        "messageRequestPreview": "Message request"
     },
     "contacts": {
         "noContacts": "No contacts yet",
+        "requestsHeading": "Requests",
         "online": "Online",
         "offline": "Offline",
         "error": "Error",
@@ -411,46 +418,13 @@
         "hatAssignError": "Failed to assign hat",
         "hatUnassignError": "Failed to remove hat",
         "selectHat": "Select hat",
-        "hatJidPlaceholder": "user@example.com"
+        "hatJidPlaceholder": "user@example.com",
+        "invitationsHeading": "Invitations"
     },
     "events": {
-        "noPendingEvents": "No pending events",
-        "systemNotifications": "System Notifications",
-        "messagesFromStrangers": "Messages from Strangers",
-        "subscriptionRequests": "Subscription Requests",
-        "roomInvitations": "Room Invitations",
         "invitedBy": "Invited by {{name}}",
         "join": "Join",
         "decline": "Decline"
-    },
-    "activityLog": {
-        "title": "Activity Log",
-        "noActivity": "No activity yet",
-        "markAllRead": "Mark all read",
-        "today": "Today",
-        "yesterday": "Yesterday",
-        "subscriptionRequest": "Contact request from {{name}}",
-        "subscriptionAccepted": "{{name}} accepted your request",
-        "subscriptionDenied": "{{name}} denied your request",
-        "mucInvitation": "Room invitation to {{room}}",
-        "reactionReceived": "{{name}} reacted {{emojis}}",
-        "reactionReceivedTo": " to \"{{preview}}\"",
-        "pollVoteReceived": "{{name}} voted {{emojis}} on poll \"{{title}}\"",
-        "inConversation": " in {{conversation}}",
-        "strangerMessage": "Message from {{name}}",
-        "resourceConflict": "Session replaced",
-        "authError": "Authentication error",
-        "connectionError": "Connection error",
-        "accepted": "Accepted",
-        "rejected": "Rejected",
-        "dismissed": "Dismissed",
-        "pending": "Pending",
-        "muted": "Muted",
-        "muteReactions": "Mute reactions",
-        "muteConversationReactions": "Mute reactions from this chat",
-        "unmuteConversationReactions": "Unmute reactions from this chat",
-        "muteMessageReactions": "Mute reactions on this message",
-        "unmuteMessageReactions": "Unmute reactions on this message"
     },
     "chat": {
         "selection": {
@@ -1032,14 +1006,6 @@
             "description": "Click on a contact to view their profile, connected devices, or start a conversation.",
             "hint": "Double-click to start a conversation directly."
         },
-        "archive": {
-            "title": "Archived Conversations",
-            "description": "Archived conversations will appear here. You can restore them to your message list anytime."
-        },
-        "events": {
-            "title": "Pending Events",
-            "description": "Subscription requests, room invitations, and messages from unknown contacts will appear here."
-        },
         "admin": {
             "title": "Server Administration",
             "description": "Select a command from the sidebar to manage your server."
@@ -1294,5 +1260,14 @@
         "bannerMultiple": "📊 {{count}} unanswered polls, tap to see latest",
         "dismissBanner": "Dismiss",
         "scrollToOriginal": "Scroll to original poll"
+    },
+    "messages": {
+        "showArchived": "Show archived conversations",
+        "showActive": "Show active conversations",
+        "archivedTitle": "Archived"
+    },
+    "reactions": {
+        "mention": "{{emoji}} {{name}} reacted to '{{preview}}'",
+        "see": "See"
     }
 }

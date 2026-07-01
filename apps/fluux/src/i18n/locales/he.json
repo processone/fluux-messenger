@@ -64,8 +64,7 @@
         "messages": "הודעות",
         "rooms": "חדרים",
         "connections": "אנשי קשר",
-        "archive": "ארכיון",
-        "events": "אירועים",
+        "contacts": "אנשי קשר",
         "settings": "הגדרות",
         "admin": "ניהול",
         "addContact": "הוסף איש קשר",
@@ -74,6 +73,11 @@
         "viewProfile": "צפה בפרופיל",
         "resizeHint": "גרור לשינוי גודל, לחיצה כפולה לאיפוס",
         "dismiss": "סגור"
+    },
+    "newMessage": {
+        "title": "הודעה חדשה",
+        "searchPlaceholder": "חפש אדם או הזן JID",
+        "manageContacts": "ניהול אנשי קשר"
     },
     "archive": {
         "noArchivedConversations": "אין שיחות בארכיון"
@@ -116,7 +120,9 @@
         "unarchive": "שחזר מארכיון",
         "delete": "מחק",
         "deleteConfirmMessage": "היסטוריית ההודעות תימחק לצמיתות.",
-        "draft": "טיוטה"
+        "draft": "טיוטה",
+        "messageRequestPreview": "בקשת הודעה",
+        "messageRequestsHeading": "בקשות הודעה"
     },
     "contacts": {
         "noContacts": "אין אנשי קשר עדיין",
@@ -183,7 +189,8 @@
             "profile": "פרופיל",
             "security": "אבטחה"
         },
-        "actionsMenu": "פעולות נוספות"
+        "actionsMenu": "פעולות נוספות",
+        "requestsHeading": "בקשות"
     },
     "rooms": {
         "backToRooms": "חזרה לחדרים",
@@ -411,46 +418,13 @@
         "hatAssignError": "הקצאת התג נכשלה",
         "hatUnassignError": "הסרת התג נכשלה",
         "selectHat": "בחר תג",
-        "hatJidPlaceholder": "user@example.com"
+        "hatJidPlaceholder": "user@example.com",
+        "invitationsHeading": "הזמנות"
     },
     "events": {
-        "noPendingEvents": "אין אירועים ממתינים",
-        "systemNotifications": "התראות מערכת",
-        "messagesFromStrangers": "הודעות מאנשים לא מוכרים",
-        "subscriptionRequests": "בקשות מנוי",
-        "roomInvitations": "הזמנות לחדרים",
         "invitedBy": "הוזמן על ידי {{name}}",
         "join": "הצטרף",
         "decline": "דחה"
-    },
-    "activityLog": {
-        "title": "יומן פעילות",
-        "noActivity": "אין פעילות עדיין",
-        "markAllRead": "סמן הכל כנקרא",
-        "today": "היום",
-        "yesterday": "אתמול",
-        "subscriptionRequest": "בקשת קשר מ-{{name}}",
-        "subscriptionAccepted": "{{name}} אישר/ה את הבקשה שלך",
-        "subscriptionDenied": "{{name}} דחה/תה את הבקשה שלך",
-        "mucInvitation": "הזמנה לחדר {{room}}",
-        "reactionReceived": "{{name}} הגיב/ה {{emojis}}",
-        "reactionReceivedTo": " על \"{{preview}}\"",
-        "pollVoteReceived": "{{name}} הצביע/ה {{emojis}} בסקר \"{{title}}\"",
-        "inConversation": " ב-{{conversation}}",
-        "strangerMessage": "הודעה מ-{{name}}",
-        "resourceConflict": "הסשן הוחלף",
-        "authError": "שגיאת אימות",
-        "connectionError": "שגיאת חיבור",
-        "accepted": "אושר",
-        "rejected": "נדחה",
-        "dismissed": "בוטל",
-        "pending": "ממתין",
-        "muted": "מושתק",
-        "muteReactions": "השתק תגובות",
-        "muteConversationReactions": "השתק תגובות משיחה זו",
-        "unmuteConversationReactions": "בטל השתקת תגובות משיחה זו",
-        "muteMessageReactions": "השתק תגובות על הודעה זו",
-        "unmuteMessageReactions": "בטל השתקת תגובות על הודעה זו"
     },
     "chat": {
         "selection": {
@@ -1032,14 +1006,6 @@
             "description": "לחץ על איש קשר לצפייה בפרופיל, במכשירים מחוברים, או להתחלת שיחה.",
             "hint": "לחיצה כפולה להתחלת שיחה ישירות."
         },
-        "archive": {
-            "title": "שיחות בארכיון",
-            "description": "שיחות שהועברו לארכיון יופיעו כאן. ניתן לשחזר אותן לרשימת ההודעות בכל עת."
-        },
-        "events": {
-            "title": "אירועים ממתינים",
-            "description": "בקשות מנוי, הזמנות לחדרים והודעות מאנשי קשר לא מוכרים יופיעו כאן."
-        },
         "admin": {
             "title": "ניהול שרת",
             "description": "בחר פקודה מסרגל הצד לניהול השרת שלך."
@@ -1294,5 +1260,14 @@
         "bannerMultiple": "📊 {{count}} סקרים ללא מענה, לחץ לצפייה באחרון",
         "dismissBanner": "סגור",
         "scrollToOriginal": "גלול לסקר המקורי"
+    },
+    "messages": {
+        "showArchived": "הצג שיחות מאורכבות",
+        "showActive": "הצג שיחות פעילות",
+        "archivedTitle": "מאורכב"
+    },
+    "reactions": {
+        "mention": "{{emoji}} {{name}} הגיב על '{{preview}}'",
+        "see": "הצג"
     }
 }

@@ -64,8 +64,7 @@
         "messages": "Poruke",
         "rooms": "Sobe",
         "connections": "Veze",
-        "archive": "Arhiva",
-        "events": "Događaji",
+        "contacts": "Kontakti",
         "settings": "Postavke",
         "admin": "Administracija",
         "addContact": "Dodaj kontakt",
@@ -74,6 +73,11 @@
         "viewProfile": "Prikaži profil",
         "resizeHint": "Povucite za promjenu veličine, dvostruki klik za resetiranje",
         "dismiss": "Odbaci"
+    },
+    "newMessage": {
+        "title": "Nova poruka",
+        "searchPlaceholder": "Pretražite osobu ili unesite JID",
+        "manageContacts": "Upravljanje kontaktima"
     },
     "archive": {
         "noArchivedConversations": "Nema arhiviranih razgovora"
@@ -116,7 +120,9 @@
         "unarchive": "Dearhiviraj",
         "delete": "Obriši",
         "deleteConfirmMessage": "Povijest poruka bit će trajno obrisana.",
-        "draft": "Skica"
+        "draft": "Skica",
+        "messageRequestPreview": "Zahtjev za poruku",
+        "messageRequestsHeading": "Zahtjevi za poruke"
     },
     "contacts": {
         "noContacts": "Još nema kontakata",
@@ -183,7 +189,8 @@
             "profile": "Profil",
             "security": "Sigurnost"
         },
-        "actionsMenu": "Više radnji"
+        "actionsMenu": "Više radnji",
+        "requestsHeading": "Zahtjevi"
     },
     "rooms": {
         "backToRooms": "Natrag na sobe",
@@ -411,46 +418,13 @@
         "selectHat": "Odaberi značku",
         "hatJidPlaceholder": "user@example.com",
         "userInfo": "Podaci o korisniku",
-        "manageOccupant": "Upravljaj"
+        "manageOccupant": "Upravljaj",
+        "invitationsHeading": "Pozivnice"
     },
     "events": {
-        "noPendingEvents": "Nema događaja na čekanju",
-        "systemNotifications": "Sistemske obavijesti",
-        "messagesFromStrangers": "Poruke od stranaca",
-        "subscriptionRequests": "Zahtjevi za pretplatu",
-        "roomInvitations": "Pozivnice za sobe",
         "invitedBy": "Pozvao {{name}}",
         "join": "Pridruži se",
         "decline": "Odbij"
-    },
-    "activityLog": {
-        "title": "Dnevnik aktivnosti",
-        "noActivity": "Još nema aktivnosti",
-        "markAllRead": "Označi sve kao pročitano",
-        "today": "Danas",
-        "yesterday": "Jučer",
-        "subscriptionRequest": "Zahtjev za kontakt od {{name}}",
-        "subscriptionAccepted": "{{name}} je prihvatio/la vaš zahtjev",
-        "subscriptionDenied": "{{name}} je odbio/la vaš zahtjev",
-        "mucInvitation": "Pozivnica u sobu {{room}}",
-        "reactionReceived": "{{name}} je reagirao/la {{emojis}}",
-        "reactionReceivedTo": " na \"{{preview}}\"",
-        "pollVoteReceived": "{{name}} je glasao/la {{emojis}} u anketi \"{{title}}\"",
-        "inConversation": " u {{conversation}}",
-        "strangerMessage": "Poruka od {{name}}",
-        "resourceConflict": "Sesija zamijenjena",
-        "authError": "Greška pri autentifikaciji",
-        "connectionError": "Greška pri povezivanju",
-        "accepted": "Prihvaćeno",
-        "rejected": "Odbijeno",
-        "dismissed": "Odbačeno",
-        "pending": "Na čekanju",
-        "muted": "Utišano",
-        "muteReactions": "Utišaj reakcije",
-        "muteConversationReactions": "Utišaj reakcije iz ovog razgovora",
-        "unmuteConversationReactions": "Uključi reakcije iz ovog razgovora",
-        "muteMessageReactions": "Utišaj reakcije na ovu poruku",
-        "unmuteMessageReactions": "Uključi reakcije na ovu poruku"
     },
     "chat": {
         "selection": {
@@ -1032,14 +1006,6 @@
             "description": "Kliknite na kontakt za pregled profila, povezanih uređaja ili započinjanje razgovora.",
             "hint": "Dvostruki klik za izravno započinjanje razgovora."
         },
-        "archive": {
-            "title": "Arhivirani razgovori",
-            "description": "Arhivirani razgovori će se pojaviti ovdje. Možete ih vratiti na popis poruka bilo kada."
-        },
-        "events": {
-            "title": "Događaji na čekanju",
-            "description": "Zahtjevi za pretplatu, pozivnice za sobe i poruke od nepoznatih kontakata pojavit će se ovdje."
-        },
         "admin": {
             "title": "Administracija poslužitelja",
             "description": "Odaberite naredbu iz bočne trake za upravljanje vašim poslužiteljem."
@@ -1294,5 +1260,14 @@
         "bannerMultiple": "📊 {{count}} neodgovorenih anketa, dodirni za najnoviju",
         "dismissBanner": "Odbaci",
         "scrollToOriginal": "Idi na izvornu anketu"
+    },
+    "messages": {
+        "showArchived": "Prikaži arhivirane razgovore",
+        "showActive": "Prikaži aktivne razgovore",
+        "archivedTitle": "Arhivirani"
+    },
+    "reactions": {
+        "mention": "{{emoji}} {{name}} reagirao je na '{{preview}}'",
+        "see": "Prikaži"
     }
 }

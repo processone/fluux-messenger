@@ -64,8 +64,7 @@
         "messages": "Missatges",
         "rooms": "Sales",
         "connections": "Connexions",
-        "archive": "Arxiu",
-        "events": "Esdeveniments",
+        "contacts": "Contactes",
         "settings": "Configuració",
         "admin": "Administració",
         "addContact": "Afegeix un contacte",
@@ -74,6 +73,11 @@
         "viewProfile": "Veure perfil",
         "resizeHint": "Arrossega per redimensionar, doble clic per reiniciar",
         "dismiss": "Descarta"
+    },
+    "newMessage": {
+        "title": "Missatge nou",
+        "searchPlaceholder": "Cerqueu una persona o introduïu un JID",
+        "manageContacts": "Gestionar contactes"
     },
     "archive": {
         "noArchivedConversations": "No hi ha converses arxivades"
@@ -118,7 +122,9 @@
         "unarchive": "Desarxiva",
         "delete": "Elimina",
         "deleteConfirmMessage": "L'historial de missatges s'eliminarà permanentment.",
-        "draft": "Esborrany"
+        "draft": "Esborrany",
+        "messageRequestPreview": "Sol·licitud de missatge",
+        "messageRequestsHeading": "Sol·licituds de missatge"
     },
     "contacts": {
         "noContacts": "Encara no hi ha contactes",
@@ -185,7 +191,8 @@
             "profile": "Perfil",
             "security": "Seguretat"
         },
-        "actionsMenu": "Més accions"
+        "actionsMenu": "Més accions",
+        "requestsHeading": "Sol·licituds"
     },
     "rooms": {
         "backToRooms": "Torna a les sales",
@@ -413,46 +420,13 @@
         "selectHat": "Seleccionar insígnia",
         "hatJidPlaceholder": "user@example.com",
         "userInfo": "Info de l'usuari",
-        "manageOccupant": "Gestionar"
+        "manageOccupant": "Gestionar",
+        "invitationsHeading": "Invitacions"
     },
     "events": {
-        "noPendingEvents": "No hi ha esdeveniments pendents",
-        "systemNotifications": "Notificacions del sistema",
-        "messagesFromStrangers": "Missatges de desconeguts",
-        "subscriptionRequests": "Sol·licituds de subscripció",
-        "roomInvitations": "Invitacions a sales",
         "invitedBy": "Convidat per {{name}}",
         "join": "Uneix-te",
         "decline": "Declina"
-    },
-    "activityLog": {
-        "title": "Registre d'activitat",
-        "noActivity": "Encara no hi ha activitat",
-        "markAllRead": "Marcar-ho tot com a llegit",
-        "today": "Avui",
-        "yesterday": "Ahir",
-        "subscriptionRequest": "Sol·licitud de contacte de {{name}}",
-        "subscriptionAccepted": "{{name}} ha acceptat la teva sol·licitud",
-        "subscriptionDenied": "{{name}} ha rebutjat la teva sol·licitud",
-        "mucInvitation": "Invitació a la sala {{room}}",
-        "reactionReceived": "{{name}} ha reaccionat {{emojis}}",
-        "reactionReceivedTo": " a \"{{preview}}\"",
-        "pollVoteReceived": "{{name}} ha votat {{emojis}} a l'enquesta \"{{title}}\"",
-        "inConversation": " a {{conversation}}",
-        "strangerMessage": "Missatge de {{name}}",
-        "resourceConflict": "Sessió substituïda",
-        "authError": "Error d'autenticació",
-        "connectionError": "Error de connexió",
-        "accepted": "Acceptat",
-        "rejected": "Rebutjat",
-        "dismissed": "Descartat",
-        "pending": "Pendent",
-        "muted": "Silenciat",
-        "muteReactions": "Silenciar reaccions",
-        "muteConversationReactions": "Silenciar reaccions d'aquest xat",
-        "unmuteConversationReactions": "Activar reaccions d'aquest xat",
-        "muteMessageReactions": "Silenciar reaccions en aquest missatge",
-        "unmuteMessageReactions": "Activar reaccions en aquest missatge"
     },
     "chat": {
         "selection": {
@@ -1034,14 +1008,6 @@
             "description": "Clica en un contacte per veure el seu perfil, dispositius connectats o iniciar una conversa.",
             "hint": "Doble clic per iniciar una conversa directament."
         },
-        "archive": {
-            "title": "Converses arxivades",
-            "description": "Les converses arxivades apareixeran aquí. Les pots restaurar a la teva llista de missatges en qualsevol moment."
-        },
-        "events": {
-            "title": "Esdeveniments pendents",
-            "description": "Les sol·licituds de subscripció, invitacions a sales i missatges de contactes desconeguts apareixeran aquí."
-        },
         "admin": {
             "title": "Administració del servidor",
             "description": "Selecciona una comanda de la barra lateral per gestionar el teu servidor."
@@ -1296,5 +1262,14 @@
         "bannerMultiple": "📊 {{count}} enquestes sense resposta, toca per veure l'última",
         "dismissBanner": "Descarta",
         "scrollToOriginal": "Desplaça fins a l'enquesta original"
+    },
+    "messages": {
+        "showArchived": "Mostra les converses arxivades",
+        "showActive": "Mostra les converses actives",
+        "archivedTitle": "Arxivades"
+    },
+    "reactions": {
+        "mention": "{{emoji}} {{name}} ha reaccionat a '{{preview}}'",
+        "see": "Mostra"
     }
 }

@@ -64,8 +64,7 @@
         "messages": "Ziņojumi",
         "rooms": "Istabas",
         "connections": "Savienojumi",
-        "archive": "Arhīvs",
-        "events": "Notikumi",
+        "contacts": "Kontakti",
         "settings": "Iestatījumi",
         "admin": "Administrēšana",
         "addContact": "Pievienot kontaktu",
@@ -74,6 +73,11 @@
         "viewProfile": "Skatīt profilu",
         "resizeHint": "Velciet, lai mainītu izmēru, dubultklikšķis, lai atiestatītu",
         "dismiss": "Noraidīt"
+    },
+    "newMessage": {
+        "title": "Jauna ziņa",
+        "searchPlaceholder": "Meklēt personu vai ievadīt JID",
+        "manageContacts": "Pārvaldīt kontaktus"
     },
     "archive": {
         "noArchivedConversations": "Nav arhivētu sarunu"
@@ -117,7 +121,9 @@
         "unarchive": "Atarhivēt",
         "delete": "Dzēst",
         "deleteConfirmMessage": "Ziņojumu vēsture tiks neatgriezeniski dzēsta.",
-        "draft": "Melnraksts"
+        "draft": "Melnraksts",
+        "messageRequestPreview": "Ziņojuma pieprasījums",
+        "messageRequestsHeading": "Ziņojumu pieprasījumi"
     },
     "contacts": {
         "noContacts": "Vēl nav kontaktu",
@@ -184,7 +190,8 @@
             "profile": "Profils",
             "security": "Drošība"
         },
-        "actionsMenu": "Vairāk darbību"
+        "actionsMenu": "Vairāk darbību",
+        "requestsHeading": "Pieprasījumi"
     },
     "rooms": {
         "backToRooms": "Atpakaļ pie istabām",
@@ -412,46 +419,13 @@
         "selectHat": "Izvēlēties nozīmīti",
         "hatJidPlaceholder": "user@example.com",
         "userInfo": "Lietotāja informācija",
-        "manageOccupant": "Pārvaldīt"
+        "manageOccupant": "Pārvaldīt",
+        "invitationsHeading": "Ielūgumi"
     },
     "events": {
-        "noPendingEvents": "Nav neapstiprinātu notikumu",
-        "systemNotifications": "Sistēmas paziņojumi",
-        "messagesFromStrangers": "Ziņojumi no nepazīstamiem",
-        "subscriptionRequests": "Abonēšanas pieprasījumi",
-        "roomInvitations": "Istabu uzaicinājumi",
         "invitedBy": "Uzaicināja {{name}}",
         "join": "Pievienoties",
         "decline": "Noraidīt"
-    },
-    "activityLog": {
-        "title": "Darbību žurnāls",
-        "noActivity": "Pagaidām nav darbību",
-        "markAllRead": "Atzīmēt visu kā lasītu",
-        "today": "Šodien",
-        "yesterday": "Vakar",
-        "subscriptionRequest": "Kontakta pieprasījums no {{name}}",
-        "subscriptionAccepted": "{{name}} pieņēma jūsu pieprasījumu",
-        "subscriptionDenied": "{{name}} noraidīja jūsu pieprasījumu",
-        "mucInvitation": "Istabas uzaicinājums uz {{room}}",
-        "reactionReceived": "{{name}} reaģēja {{emojis}}",
-        "reactionReceivedTo": " uz \"{{preview}}\"",
-        "pollVoteReceived": "{{name}} nobalsoja {{emojis}} aptaujā \"{{title}}\"",
-        "inConversation": " sarunā {{conversation}}",
-        "strangerMessage": "Ziņojums no {{name}}",
-        "resourceConflict": "Sesija aizstāta",
-        "authError": "Autentifikācijas kļūda",
-        "connectionError": "Savienojuma kļūda",
-        "accepted": "Pieņemts",
-        "rejected": "Noraidīts",
-        "dismissed": "Noraidīts",
-        "pending": "Gaida",
-        "muted": "Apklusināts",
-        "muteReactions": "Apklusināt reakcijas",
-        "muteConversationReactions": "Apklusināt reakcijas no šī čata",
-        "unmuteConversationReactions": "Ieslēgt reakcijas no šī čata",
-        "muteMessageReactions": "Apklusināt reakcijas uz šo ziņojumu",
-        "unmuteMessageReactions": "Ieslēgt reakcijas uz šo ziņojumu"
     },
     "chat": {
         "selection": {
@@ -1033,14 +1007,6 @@
             "description": "Noklikšķiniet uz kontakta, lai skatītu viņa profilu, pievienotās ierīces vai sāktu sarunu.",
             "hint": "Dubultklikšķis, lai sāktu sarunu uzreiz."
         },
-        "archive": {
-            "title": "Arhivētās sarunas",
-            "description": "Arhivētās sarunas parādīsies šeit. Jūs varat tās jebkurā laikā atjaunot ziņojumu sarakstā."
-        },
-        "events": {
-            "title": "Neapstiprināti notikumi",
-            "description": "Abonēšanas pieprasījumi, istabu uzaicinājumi un ziņojumi no nezināmiem kontaktiem parādīsies šeit."
-        },
         "admin": {
             "title": "Servera administrēšana",
             "description": "Izvēlieties komandu no sānjoslas, lai pārvaldītu savu serveri."
@@ -1295,5 +1261,14 @@
         "bannerMultiple": "📊 {{count}} neatbildētas aptaujas, pieskarieties, lai redzētu jaunāko",
         "dismissBanner": "Noraidīt",
         "scrollToOriginal": "Ritināt uz sākotnējo aptauju"
+    },
+    "messages": {
+        "showArchived": "Rādīt arhivētās sarunas",
+        "showActive": "Rādīt aktīvās sarunas",
+        "archivedTitle": "Arhivētas"
+    },
+    "reactions": {
+        "mention": "{{emoji}} {{name}} reaģēja uz '{{preview}}'",
+        "see": "Skatīt"
     }
 }

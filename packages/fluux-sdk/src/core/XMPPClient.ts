@@ -38,7 +38,6 @@ import {
   adminStore,
   blockingStore,
   ignoreStore,
-  activityLogStore,
 } from '../stores'
 import { detectPlatform, getCachedPlatform } from './platform'
 import { isDeadSocketError } from './modules/connectionUtils'
@@ -1002,7 +1001,6 @@ export class XMPPClient {
       setStorageScopeJid(scopedJid)
       chatStore.getState().switchAccount(scopedJid)
       roomStore.getState().switchAccount(scopedJid)
-      activityLogStore.getState().rehydrate()
       ignoreStore.getState().rehydrate()
     }
 
@@ -1275,7 +1273,7 @@ export class XMPPClient {
    *
    * @example
    * ```typescript
-   * const hook = new ActivityLogHook(client)
+   * const hook = new MyCustomHook(client)
    * client.registerHook(hook)
    * ```
    */

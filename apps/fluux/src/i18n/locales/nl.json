@@ -64,8 +64,7 @@
         "messages": "Berichten",
         "rooms": "Groepen",
         "connections": "Contacten",
-        "archive": "Archief",
-        "events": "Gebeurtenissen",
+        "contacts": "Contacten",
         "settings": "Instellingen",
         "admin": "Beheer",
         "addContact": "Contact toevoegen",
@@ -74,6 +73,11 @@
         "viewProfile": "Profiel bekijken",
         "resizeHint": "Sleep om te verkleinen, dubbelklik om te herstellen",
         "dismiss": "Sluiten"
+    },
+    "newMessage": {
+        "title": "Nieuw bericht",
+        "searchPlaceholder": "Zoek een persoon of voer een JID in",
+        "manageContacts": "Contacten beheren"
     },
     "archive": {
         "noArchivedConversations": "Geen gearchiveerde gesprekken"
@@ -116,7 +120,9 @@
         "unarchive": "Dearchiveren",
         "delete": "Verwijderen",
         "deleteConfirmMessage": "De berichtgeschiedenis wordt permanent verwijderd.",
-        "draft": "Concept"
+        "draft": "Concept",
+        "messageRequestPreview": "Berichtverzoek",
+        "messageRequestsHeading": "Berichtverzoeken"
     },
     "contacts": {
         "noContacts": "Nog geen contacten",
@@ -183,7 +189,8 @@
             "profile": "Profiel",
             "security": "Beveiliging"
         },
-        "actionsMenu": "Meer acties"
+        "actionsMenu": "Meer acties",
+        "requestsHeading": "Verzoeken"
     },
     "rooms": {
         "backToRooms": "Terug naar kamers",
@@ -411,46 +418,13 @@
         "selectHat": "Badge selecteren",
         "hatJidPlaceholder": "user@example.com",
         "userInfo": "Gebruikersinfo",
-        "manageOccupant": "Beheren"
+        "manageOccupant": "Beheren",
+        "invitationsHeading": "Uitnodigingen"
     },
     "events": {
-        "noPendingEvents": "Geen openstaande gebeurtenissen",
-        "systemNotifications": "Systeemmeldingen",
-        "messagesFromStrangers": "Berichten van onbekenden",
-        "subscriptionRequests": "Abonnementsverzoeken",
-        "roomInvitations": "Groepsuitnodigingen",
         "invitedBy": "Uitgenodigd door {{name}}",
         "join": "Joinen",
         "decline": "Weigeren"
-    },
-    "activityLog": {
-        "title": "Activiteitenlogboek",
-        "noActivity": "Nog geen activiteit",
-        "markAllRead": "Alles als gelezen markeren",
-        "today": "Vandaag",
-        "yesterday": "Gisteren",
-        "subscriptionRequest": "Contactverzoek van {{name}}",
-        "subscriptionAccepted": "{{name}} heeft uw verzoek geaccepteerd",
-        "subscriptionDenied": "{{name}} heeft uw verzoek geweigerd",
-        "mucInvitation": "Uitnodiging voor kamer {{room}}",
-        "reactionReceived": "{{name}} reageerde {{emojis}}",
-        "reactionReceivedTo": " op \"{{preview}}\"",
-        "pollVoteReceived": "{{name}} stemde {{emojis}} op peiling \"{{title}}\"",
-        "inConversation": " in {{conversation}}",
-        "strangerMessage": "Bericht van {{name}}",
-        "resourceConflict": "Sessie vervangen",
-        "authError": "Authenticatiefout",
-        "connectionError": "Verbindingsfout",
-        "accepted": "Geaccepteerd",
-        "rejected": "Geweigerd",
-        "dismissed": "Genegeerd",
-        "pending": "In afwachting",
-        "muted": "Gedempt",
-        "muteReactions": "Reacties dempen",
-        "muteConversationReactions": "Reacties uit deze chat dempen",
-        "unmuteConversationReactions": "Reacties uit deze chat inschakelen",
-        "muteMessageReactions": "Reacties op dit bericht dempen",
-        "unmuteMessageReactions": "Reacties op dit bericht inschakelen"
     },
     "chat": {
         "selection": {
@@ -1032,14 +1006,6 @@
             "description": "Klik op een contact om hun profiel, verbonden apparaten te bekijken of een gesprek te starten.",
             "hint": "Dubbelklik om direct een gesprek te starten."
         },
-        "archive": {
-            "title": "Gearchiveerde gesprekken",
-            "description": "Gearchiveerde gesprekken verschijnen hier. Je kunt ze altijd terugzetten naar je berichtenlijst."
-        },
-        "events": {
-            "title": "Openstaande gebeurtenissen",
-            "description": "Abonnementsverzoeken, groepsuitnodigingen en berichten van onbekende contacten verschijnen hier."
-        },
         "admin": {
             "title": "Serverbeheer",
             "description": "Selecteer een commando uit de zijbalk om je server te beheren."
@@ -1294,5 +1260,14 @@
         "bannerMultiple": "📊 {{count}} onbeantwoorde peilingen, tik om de laatste te zien",
         "dismissBanner": "Sluiten",
         "scrollToOriginal": "Scroll naar de originele peiling"
+    },
+    "messages": {
+        "showArchived": "Gearchiveerde gesprekken weergeven",
+        "showActive": "Actieve gesprekken weergeven",
+        "archivedTitle": "Gearchiveerd"
+    },
+    "reactions": {
+        "mention": "{{emoji}} {{name}} reageerde op '{{preview}}'",
+        "see": "Bekijken"
     }
 }

@@ -8,8 +8,6 @@ import {
   Settings,
   HelpCircle,
   Terminal,
-  Archive,
-  Bell,
   Users,
   Search,
 } from 'lucide-react'
@@ -140,7 +138,7 @@ function groupItemsByType(items: CommandItem[], t: (key: string) => string): Ite
   const typeOrder: { type: ItemType; labelKey: string }[] = [
     { type: 'conversation', labelKey: 'sidebar.messages' },
     { type: 'room', labelKey: 'sidebar.rooms' },
-    { type: 'contact', labelKey: 'sidebar.connections' },
+    { type: 'contact', labelKey: 'sidebar.contacts' },
     { type: 'view', labelKey: 'commandPalette.views' },
     { type: 'action', labelKey: 'commandPalette.actions' },
   ]
@@ -189,7 +187,7 @@ function buildDefaultGroups(items: CommandItem[], t: (key: string) => string): I
 
   const contacts = items.filter((i) => i.type === 'contact').slice(0, 3)
   if (contacts.length > 0) {
-    groups.push({ key: 'contact', type: 'contact', label: t('sidebar.connections'), items: contacts })
+    groups.push({ key: 'contact', type: 'contact', label: t('sidebar.contacts'), items: contacts })
   }
 
   const views = items.filter((i) => i.type === 'view').slice(0, 3)
@@ -252,7 +250,7 @@ function CommandPaletteContent({
   }
 
   // Data from stores
-  const { conversations, archivedConversations, isArchived } = useChat()
+  const { conversations, archivedConversations } = useChat()
   const { joinedRooms, bookmarkedRooms, setActiveRoom } = useRoom()
   const { contacts } = useRoster()
   const connectionStatus = useConnectionStore((s) => s.status)
@@ -281,9 +279,8 @@ function CommandPaletteContent({
   const selectConversation = (jid: string) => {
     // Navigate first, THEN set conversation - otherwise handleSidebarViewChange
     // will overwrite our selection with the "last conversation" restore logic
-    // Archived conversations open in the archive tab
-    const targetView = isArchived(jid) ? 'archive' : 'messages'
-    closeAndNavigate(targetView)
+    // Archived conversations open in the messages tab (via the archive toggle)
+    closeAndNavigate('messages')
     void setActiveConversation(jid)
     void setActiveRoom(null)
   }
@@ -395,9 +392,7 @@ function CommandPaletteContent({
     const views: Array<{ id: string; label: string; icon: React.ReactNode; view: SidebarView; keywords: string[] }> = [
       { id: 'view-messages', label: t('sidebar.messages'), icon: <MessageSquare />, view: 'messages', keywords: ['messages', 'conversations', 'chat'] },
       { id: 'view-rooms', label: t('sidebar.rooms'), icon: <Hash />, view: 'rooms', keywords: ['rooms', 'channels', 'muc'] },
-      { id: 'view-connections', label: t('sidebar.connections'), icon: <Users />, view: 'directory', keywords: ['connections', 'contacts', 'roster'] },
-      { id: 'view-archive', label: t('sidebar.archive'), icon: <Archive />, view: 'archive', keywords: ['archive', 'hidden', 'old'] },
-      { id: 'view-events', label: t('sidebar.events'), icon: <Bell />, view: 'events', keywords: ['events', 'notifications', 'requests'] },
+      { id: 'view-connections', label: t('sidebar.contacts'), icon: <Users />, view: 'directory', keywords: ['connections', 'contacts', 'roster'] },
     ]
 
     for (const v of views) {

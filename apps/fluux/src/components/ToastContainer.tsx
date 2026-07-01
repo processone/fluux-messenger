@@ -27,20 +27,25 @@ export function ToastContainer() {
       {toasts.map((toast) => {
         const Icon = iconMap[toast.type]
         const colors = colorMap[toast.type]
+        const hasAction = Boolean(toast.onClick)
         return (
           <div
             key={toast.id}
-            role="status"
+            role={hasAction ? 'button' : 'status'}
+            tabIndex={hasAction ? 0 : undefined}
+            onClick={hasAction ? () => { toast.onClick!(); removeToast(toast.id) } : undefined}
+            onKeyDown={hasAction ? (e) => { if (e.key === 'Enter' || e.key === ' ') { toast.onClick!(); removeToast(toast.id) } } : undefined}
             className={`pointer-events-auto flex items-center gap-3 px-4 py-3
                         bg-fluux-sidebar border border-fluux-border border-s-4
                         ${colors.border}
                         rounded-lg shadow-lg animate-toast-in
-                        max-w-sm min-w-[280px]`}
+                        max-w-sm min-w-[280px]
+                        ${hasAction ? 'cursor-pointer' : ''}`}
           >
             <Icon className={`size-5 shrink-0 ${colors.icon}`} />
             <span className="text-sm text-fluux-text flex-1">{toast.message}</span>
             <button
-              onClick={() => removeToast(toast.id)}
+              onClick={(e) => { e.stopPropagation(); removeToast(toast.id) }}
               className="p-0.5 rounded hover:bg-fluux-hover text-fluux-muted hover:text-fluux-text shrink-0"
               aria-label={t('common.dismiss')}
             >

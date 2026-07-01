@@ -64,8 +64,7 @@
         "messages": "Žinutės",
         "rooms": "Kambariai",
         "connections": "Ryšiai",
-        "archive": "Archyvas",
-        "events": "Įvykiai",
+        "contacts": "Kontaktai",
         "settings": "Nustatymai",
         "admin": "Administravimas",
         "addContact": "Pridėti kontaktą",
@@ -74,6 +73,11 @@
         "viewProfile": "Peržiūrėti profilį",
         "resizeHint": "Vilkite, kad pakeistumėte dydį, dukart spustelėkite, kad atstatytumėte",
         "dismiss": "Atmesti"
+    },
+    "newMessage": {
+        "title": "Naujas pranešimas",
+        "searchPlaceholder": "Ieškoti asmens arba įvesti JID",
+        "manageContacts": "Tvarkyti kontaktus"
     },
     "archive": {
         "noArchivedConversations": "Nėra archyvuotų pokalbių"
@@ -116,7 +120,9 @@
         "unarchive": "Išarchyvuoti",
         "delete": "Ištrinti",
         "deleteConfirmMessage": "Žinučių istorija bus visam laikui ištrinta.",
-        "draft": "Juodraštis"
+        "draft": "Juodraštis",
+        "messageRequestPreview": "Žinutės užklausa",
+        "messageRequestsHeading": "Pranešimų užklausos"
     },
     "contacts": {
         "noContacts": "Kol kas nėra kontaktų",
@@ -183,7 +189,8 @@
             "profile": "Profilis",
             "security": "Saugumas"
         },
-        "actionsMenu": "Daugiau veiksmų"
+        "actionsMenu": "Daugiau veiksmų",
+        "requestsHeading": "Prašymai"
     },
     "rooms": {
         "backToRooms": "Grįžti prie kambarių",
@@ -411,46 +418,13 @@
         "selectHat": "Pasirinkti ženklelį",
         "hatJidPlaceholder": "user@example.com",
         "userInfo": "Naudotojo informacija",
-        "manageOccupant": "Valdyti"
+        "manageOccupant": "Valdyti",
+        "invitationsHeading": "Kvietimai"
     },
     "events": {
-        "noPendingEvents": "Nėra laukiančių įvykių",
-        "systemNotifications": "Sistemos pranešimai",
-        "messagesFromStrangers": "Žinutės iš nepažįstamų",
-        "subscriptionRequests": "Prenumeratos užklausos",
-        "roomInvitations": "Pakvietimai į kambarius",
         "invitedBy": "Pakvietė {{name}}",
         "join": "Prisijungti",
         "decline": "Atmesti"
-    },
-    "activityLog": {
-        "title": "Veiklos žurnalas",
-        "noActivity": "Dar nėra veiklos",
-        "markAllRead": "Pažymėti viską kaip skaitytą",
-        "today": "Šiandien",
-        "yesterday": "Vakar",
-        "subscriptionRequest": "Kontakto užklausa nuo {{name}}",
-        "subscriptionAccepted": "{{name}} priėmė jūsų užklausą",
-        "subscriptionDenied": "{{name}} atmetė jūsų užklausą",
-        "mucInvitation": "Kvietimas į kambarį {{room}}",
-        "reactionReceived": "{{name}} sureagavo {{emojis}}",
-        "reactionReceivedTo": " į \"{{preview}}\"",
-        "pollVoteReceived": "{{name}} balsavo {{emojis}} apklausoje \"{{title}}\"",
-        "inConversation": " pokalbyje {{conversation}}",
-        "strangerMessage": "Žinutė nuo {{name}}",
-        "resourceConflict": "Sesija pakeista",
-        "authError": "Autentifikacijos klaida",
-        "connectionError": "Ryšio klaida",
-        "accepted": "Priimta",
-        "rejected": "Atmesta",
-        "dismissed": "Atmesta",
-        "pending": "Laukiama",
-        "muted": "Nutildyta",
-        "muteReactions": "Nutildyti reakcijas",
-        "muteConversationReactions": "Nutildyti reakcijas iš šio pokalbio",
-        "unmuteConversationReactions": "Įjungti reakcijas iš šio pokalbio",
-        "muteMessageReactions": "Nutildyti reakcijas į šią žinutę",
-        "unmuteMessageReactions": "Įjungti reakcijas į šią žinutę"
     },
     "chat": {
         "selection": {
@@ -1032,14 +1006,6 @@
             "description": "Spustelėkite kontaktą peržiūrėti profilį, prijungtus įrenginius arba pradėti pokalbį.",
             "hint": "Dukart spustelėkite tiesiogiai pradėti pokalbį."
         },
-        "archive": {
-            "title": "Archyvuoti pokalbiai",
-            "description": "Archyvuoti pokalbiai bus rodomi čia. Galite juos grąžinti į žinučių sąrašą bet kada."
-        },
-        "events": {
-            "title": "Laukiantys įvykiai",
-            "description": "Prenumeratos užklausos, pakvietimai į kambarius ir žinutės iš nežinomų kontaktų bus rodomos čia."
-        },
         "admin": {
             "title": "Serverio administravimas",
             "description": "Pasirinkite komandą iš šoninės juostos valdyti serverį."
@@ -1294,5 +1260,14 @@
         "bannerMultiple": "📊 {{count}} neatsakytų apklausų, palieskite, kad matytumėte naujausią",
         "dismissBanner": "Atmesti",
         "scrollToOriginal": "Slinkti iki originalios apklausos"
+    },
+    "messages": {
+        "showArchived": "Rodyti archyvuotus pokalbius",
+        "showActive": "Rodyti aktyvius pokalbius",
+        "archivedTitle": "Archyvuoti"
+    },
+    "reactions": {
+        "mention": "{{emoji}} {{name}} sureagavo į '{{preview}}'",
+        "see": "Peržiūrėti"
     }
 }

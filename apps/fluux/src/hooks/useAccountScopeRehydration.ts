@@ -10,7 +10,7 @@ import { rehydrateEncryptionSettings } from '../stores/encryptionSettingsStore'
 /**
  * Rehydrate app-layer persisted stores when the account JID changes.
  *
- * SDK stores (chatStore, roomStore, activityLogStore, ignoreStore) are
+ * SDK stores (chatStore, roomStore, ignoreStore) are
  * rehydrated inside XMPPClient.connect(). This hook handles the app-layer
  * stores that persist E2EE trust data to localStorage with account-scoped
  * keys — they need to reload from the correct scoped key after

@@ -18,6 +18,7 @@ import { Tooltip } from './Tooltip'
 import { AddContactModal } from './AddContactModal'
 import { CreateRoomModal } from './CreateRoomModal'
 import { CreateQuickChatModal } from './CreateQuickChatModal'
+import { NewMessageModal } from './NewMessageModal'
 import { SettingsSidebar, type SettingsCategory, DEFAULT_SETTINGS_CATEGORY } from './settings-components'
 import {
   MessageCircle,
@@ -26,7 +27,6 @@ import {
   Settings,
   Plus,
   Users,
-  Bell,
   Archive,
   Server,
   Zap,
@@ -54,8 +54,6 @@ import {
   ArchiveList,
   ContactList,
   RoomsList,
-  EventsView,
-  ActivityLogView,
   SearchView,
   UserMenu,
 } from './sidebar-components'
@@ -66,6 +64,7 @@ export type { SidebarView }
 interface SidebarProps {
   onSelectContact?: (contact: Contact) => void
   onStartChat?: (contact: Contact) => void
+  onStartChatWithJid?: (jid: string) => void
   onManageUser?: (jid: string) => void
   adminCategory?: AdminCategory | null
   onAdminCategoryChange?: (category: AdminCategory | null) => void
@@ -77,11 +76,11 @@ interface SidebarProps {
   onViewChange: (view: SidebarView) => void
 }
 
-export function Sidebar({ onSelectContact, onStartChat, onManageUser, adminCategory, onAdminCategoryChange, sidebarListRef, activeContactJid, onViewChange }: SidebarProps) {
+export function Sidebar({ onSelectContact, onStartChat, onStartChatWithJid, onManageUser, adminCategory, onAdminCategoryChange, sidebarListRef, activeContactJid, onViewChange }: SidebarProps) {
   detectRenderLoop('Sidebar')
   const { t } = useTranslation()
   // Get current view from URL
-  const { sidebarView, settingsCategory, navigateToSettings } = useRouteSync()
+  const { sidebarView, settingsCategory, navigateToSettings, navigateToContacts } = useRouteSync()
   // Use focused selectors instead of useConnection() to avoid re-renders when unrelated values change
   // (e.g., ownResources updates shouldn't re-render the entire sidebar)
   const jid = useConnectionStore((s) => s.jid)
@@ -100,12 +99,7 @@ export function Sidebar({ onSelectContact, onStartChat, onManageUser, adminCateg
     for (const meta of s.conversationMeta.values()) sum += meta.unreadCount
     return sum
   })
-  const pendingCount = useEventsStore((s) =>
-    s.subscriptionRequests.length +
-    new Set(s.strangerMessages.map((m) => m.from)).size +
-    s.mucInvitations.length +
-    s.systemNotifications.length
-  )
+  const pendingRequestCount = useEventsStore((s) => s.subscriptionRequests.length)
   const totalMentionsCount = useRoomStore((s) => s.totalMentionsCount())
   const totalNotifiableUnreadCount = useRoomStore((s) => s.totalNotifiableUnreadCount())
 
@@ -116,7 +110,6 @@ export function Sidebar({ onSelectContact, onStartChat, onManageUser, adminCateg
   trackSelectorChange('Sidebar', 'ownNickname', ownNickname)
   trackSelectorChange('Sidebar', 'isAdmin', isAdmin)
   trackSelectorChange('Sidebar', 'totalUnread', totalUnread)
-  trackSelectorChange('Sidebar', 'pendingCount', pendingCount)
   trackSelectorChange('Sidebar', 'totalMentionsCount', totalMentionsCount)
   trackSelectorChange('Sidebar', 'totalNotifiableUnreadCount', totalNotifiableUnreadCount)
   const { dragRegionProps } = useWindowDrag()
@@ -126,6 +119,7 @@ export function Sidebar({ onSelectContact, onStartChat, onManageUser, adminCateg
   // shortcut help) open/close. Actions are stable store methods.
   const showQuickChat = useModalStore((s) => s.quickChat)
   const showAddContact = useModalStore((s) => s.addContact)
+  const showNewMessage = useModalStore((s) => s.newMessage)
   const showPresenceMenu = useModalStore((s) => s.presenceMenu)
   const modalOpen = useModalStore((s) => s.open)
   const modalClose = useModalStore((s) => s.close)
@@ -133,6 +127,12 @@ export function Sidebar({ onSelectContact, onStartChat, onManageUser, adminCateg
   // Cross-platform "an update is available" affordance (web PWA reload / desktop
   // update modal). Hidden unless an update is actually ready.
   const { visible: updateAvailable, activate: activateUpdate } = useUpdateAffordance()
+
+  // Archive toggle state — reset when leaving messages view
+  const [showArchived, setShowArchived] = useState(false)
+  useEffect(() => {
+    if (sidebarView !== 'messages') setShowArchived(false)
+  }, [sidebarView])
 
   // Local UI state (not shared)
   const [showCreateRoom, setShowCreateRoom] = useState(false)
@@ -252,30 +252,6 @@ export function Sidebar({ onSelectContact, onStartChat, onManageUser, adminCateg
           onNavigate={onViewChange}
           showBadge={totalMentionsCount > 0 || totalNotifiableUnreadCount > 0}
         />
-        {/* Archive */}
-        <IconRailNavLink
-          icon={Archive}
-          label={t('sidebar.archive')}
-          view="archive"
-          pathPrefix="/archive"
-          onNavigate={onViewChange}
-        />
-        <IconRailNavLink
-          icon={Users}
-          label={t('sidebar.connections')}
-          view="directory"
-          pathPrefix="/contacts"
-          onNavigate={onViewChange}
-        />
-        {/* Events/Notifications */}
-        <IconRailNavLink
-          icon={Bell}
-          label={t('sidebar.events')}
-          view="events"
-          pathPrefix="/events"
-          onNavigate={onViewChange}
-          showBadge={pendingCount > 0}
-        />
         {/* Search */}
         <IconRailNavLink
           icon={Search}
@@ -295,6 +271,16 @@ export function Sidebar({ onSelectContact, onStartChat, onManageUser, adminCateg
             onClick={activateUpdate}
           />
         )}
+        {/* Contacts - relocated to bottom cluster; badge shows pending subscription requests */}
+        <IconRailNavLink
+          icon={Users}
+          label={t('sidebar.contacts')}
+          view="directory"
+          pathPrefix="/contacts"
+          onNavigate={onViewChange}
+          badgeCount={pendingRequestCount}
+          badgeLabel={pendingRequestCount > 0 ? `${t('sidebar.contacts')} (${pendingRequestCount})` : undefined}
+        />
         {/* Admin - only visible for server administrators */}
         {isAdmin && (
           <IconRailNavLink
@@ -320,14 +306,12 @@ export function Sidebar({ onSelectContact, onStartChat, onManageUser, adminCateg
         {/* Header - with drag region for window movement */}
         <div className="h-14 px-4 flex items-center border-b border-fluux-bg shadow-sm" {...dragRegionProps}>
           <h1 className="flex-1 font-semibold text-fluux-text truncate">
-            {sidebarView === 'messages' ? t('sidebar.messages')
+            {sidebarView === 'messages' ? (showArchived ? t('messages.archivedTitle') : t('sidebar.messages'))
               : sidebarView === 'rooms' ? t('sidebar.rooms')
-              : sidebarView === 'directory' ? t('sidebar.connections')
-              : sidebarView === 'archive' ? t('sidebar.archive')
+              : sidebarView === 'directory' ? t('sidebar.contacts')
               : sidebarView === 'admin' ? t('sidebar.admin')
               : sidebarView === 'settings' ? t('sidebar.settings')
-              : sidebarView === 'search' ? t('sidebar.search', 'Search')
-              : t('sidebar.events')}
+              : t('sidebar.search', 'Search')}
           </h1>
           {sidebarView === 'directory' && (
             <div className="relative ms-auto" ref={contactDropdownRef}>
@@ -360,6 +344,30 @@ export function Sidebar({ onSelectContact, onStartChat, onManageUser, adminCateg
                 </div>
               )}
             </div>
+          )}
+          {sidebarView === 'messages' && (
+            <>
+              <Tooltip content={showArchived ? t('messages.showActive') : t('messages.showArchived')} position="bottom">
+                <button
+                  type="button"
+                  onClick={() => setShowArchived((v) => !v)}
+                  aria-label={showArchived ? t('messages.showActive') : t('messages.showArchived')}
+                  className={`p-1 flex items-center ${showArchived ? 'text-fluux-brand' : 'text-fluux-muted hover:text-fluux-text'}`}
+                >
+                  <Archive className="size-5" />
+                </button>
+              </Tooltip>
+              <Tooltip content={t('newMessage.title')} position="bottom">
+                <button
+                  type="button"
+                  onClick={() => modalOpen('newMessage')}
+                  aria-label={t('newMessage.title')}
+                  className="ms-auto p-1 text-fluux-muted hover:text-fluux-text flex items-center"
+                >
+                  <Plus className="size-5" />
+                </button>
+              </Tooltip>
+            </>
           )}
           {sidebarView === 'rooms' && (
             <div className="relative ms-auto" ref={roomDropdownRef}>
@@ -435,13 +443,11 @@ export function Sidebar({ onSelectContact, onStartChat, onManageUser, adminCateg
             <SidebarZoneContext.Provider value={sidebarListRef}>
               <div key={sidebarView} className="h-full md:h-auto" style={{ animation: 'sidebar-view-enter var(--fluux-duration-fast) var(--fluux-ease-standard)' }}>
               {sidebarView === 'messages' ? (
-                <ConversationList />
+                showArchived ? <ArchiveList /> : <ConversationList />
               ) : sidebarView === 'directory' ? (
                 <ContactList onStartChat={onStartChat} onSelectContact={onSelectContact} onManageUser={onManageUser} activeContactJid={activeContactJid} />
               ) : sidebarView === 'rooms' ? (
                 <RoomsList />
-              ) : sidebarView === 'archive' ? (
-                <ArchiveList />
               ) : sidebarView === 'admin' ? (
                 <AdminDashboard
                   activeCategory={adminCategory ?? null}
@@ -454,12 +460,7 @@ export function Sidebar({ onSelectContact, onStartChat, onManageUser, adminCateg
                   activeCategory={(settingsCategory as SettingsCategory) || DEFAULT_SETTINGS_CATEGORY}
                   onCategoryChange={(category) => navigateToSettings(category)}
                 />
-              ) : (
-                <>
-                  <EventsView />
-                  <ActivityLogView />
-                </>
-              )}
+              ) : null}
               </div>
             </SidebarZoneContext.Provider>
           </div>
@@ -528,6 +529,16 @@ export function Sidebar({ onSelectContact, onStartChat, onManageUser, adminCateg
       {/* Add Contact Modal */}
       {showAddContact && (
         <AddContactModal onClose={() => modalClose('addContact')} />
+      )}
+
+      {/* New Message Modal */}
+      {showNewMessage && (
+        <NewMessageModal
+          onClose={() => modalClose('newMessage')}
+          onPick={(jid) => onStartChatWithJid?.(jid)}
+          onAddContact={() => { modalClose('newMessage'); modalOpen('addContact') }}
+          onManageContacts={() => navigateToContacts()}
+        />
       )}
 
       {/* Create Room Modal */}

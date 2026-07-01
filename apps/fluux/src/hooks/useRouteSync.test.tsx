@@ -64,18 +64,25 @@ describe('useRouteSync', () => {
       expect(result.current.sidebarView).toBe('directory')
     })
 
-    it('returns "archive" for /archive', () => {
+    it('resolves a legacy /archive path to the messages view', () => {
       const { result } = renderHook(() => useRouteSync(), {
         wrapper: createWrapper(['/archive']),
       })
-      expect(result.current.sidebarView).toBe('archive')
+      expect(result.current.sidebarView).toBe('messages')
     })
 
-    it('returns "events" for /events', () => {
+    it('resolves a legacy /archive/:jid path to the messages view', () => {
+      const { result } = renderHook(() => useRouteSync(), {
+        wrapper: createWrapper(['/archive/archived@example.com']),
+      })
+      expect(result.current.sidebarView).toBe('messages')
+    })
+
+    it('returns "messages" for /events (removed view, falls back to messages)', () => {
       const { result } = renderHook(() => useRouteSync(), {
         wrapper: createWrapper(['/events']),
       })
-      expect(result.current.sidebarView).toBe('events')
+      expect(result.current.sidebarView).toBe('messages')
     })
 
     it('returns "admin" for /admin', () => {
@@ -134,13 +141,6 @@ describe('useRouteSync', () => {
         wrapper: createWrapper(['/contacts/contact@example.com']),
       })
       expect(result.current.activeJid).toBe('contact@example.com')
-    })
-
-    it('extracts JID from /archive/:jid', () => {
-      const { result } = renderHook(() => useRouteSync(), {
-        wrapper: createWrapper(['/archive/archived@example.com']),
-      })
-      expect(result.current.activeJid).toBe('archived@example.com')
     })
 
     it('decodes URL-encoded JIDs', () => {
@@ -289,42 +289,6 @@ describe('useRouteSync', () => {
       })
 
       expect(currentPath).toBe('/contacts')
-    })
-
-    it('navigateToArchive navigates to /archive', () => {
-      let currentPath = '/messages'
-      const wrapper = ({ children }: { children: ReactNode }) => (
-        <MemoryRouter initialEntries={['/messages']}>
-          {children}
-          <LocationCapture onPathChange={(p) => (currentPath = p)} />
-        </MemoryRouter>
-      )
-
-      const { result } = renderHook(() => useRouteSync(), { wrapper })
-
-      act(() => {
-        result.current.navigateToArchive()
-      })
-
-      expect(currentPath).toBe('/archive')
-    })
-
-    it('navigateToEvents navigates to /events', () => {
-      let currentPath = '/messages'
-      const wrapper = ({ children }: { children: ReactNode }) => (
-        <MemoryRouter initialEntries={['/messages']}>
-          {children}
-          <LocationCapture onPathChange={(p) => (currentPath = p)} />
-        </MemoryRouter>
-      )
-
-      const { result } = renderHook(() => useRouteSync(), { wrapper })
-
-      act(() => {
-        result.current.navigateToEvents()
-      })
-
-      expect(currentPath).toBe('/events')
     })
 
     it('navigateToAdmin navigates to /admin', () => {
@@ -480,14 +444,6 @@ describe('useRouteSync', () => {
 
     it('returns /contacts for directory view', () => {
       expect(getViewPath('directory')).toBe('/contacts')
-    })
-
-    it('returns /archive for archive view', () => {
-      expect(getViewPath('archive')).toBe('/archive')
-    })
-
-    it('returns /events for events view', () => {
-      expect(getViewPath('events')).toBe('/events')
     })
 
     it('returns /admin for admin view', () => {

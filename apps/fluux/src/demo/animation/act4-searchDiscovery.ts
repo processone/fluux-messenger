@@ -7,24 +7,6 @@ import type { DemoAnimationStep } from '@fluux/sdk'
 import { DOMAIN, SELF_JID, SELF_NICK, ROOM_JID } from '../constants'
 
 export const act4Steps: DemoAnimationStep[] = [
-  // Stranger message in activity log
-  {
-    delayMs: 130_000,
-    action: 'activity-event',
-    data: {
-      type: 'stranger-message',
-      kind: 'actionable',
-      timestamp: new Date(),
-      resolution: 'pending',
-      payload: { type: 'stranger-message', from: 'hiring@techcorp.example', body: 'We loved your Fluux talk at FOSDEM — are you open to discussing a role?' },
-    },
-  },
-  // Tutorial: activity log
-  {
-    delayMs: 135_000,
-    action: 'custom',
-    data: { type: 'tutorial', stepId: 'activity-log-hint' },
-  },
   // Poll creation in Team Chat
   {
     delayMs: 140_000,

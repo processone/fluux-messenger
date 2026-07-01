@@ -64,8 +64,7 @@
         "messages": "Nachrichten",
         "rooms": "Räume",
         "connections": "Kontakte",
-        "archive": "Archiv",
-        "events": "Ereignisse",
+        "contacts": "Kontakte",
         "settings": "Einstellungen",
         "admin": "Administration",
         "addContact": "Kontakt hinzufügen",
@@ -74,6 +73,11 @@
         "viewProfile": "Profil anzeigen",
         "resizeHint": "Ziehen zum Ändern der Größe, Doppelklick zum Zurücksetzen",
         "dismiss": "Verwerfen"
+    },
+    "newMessage": {
+        "title": "Neue Nachricht",
+        "searchPlaceholder": "Person suchen oder JID eingeben",
+        "manageContacts": "Kontakte verwalten"
     },
     "archive": {
         "noArchivedConversations": "Keine archivierten Unterhaltungen"
@@ -118,7 +122,9 @@
         "unarchive": "Wiederherstellen",
         "delete": "Löschen",
         "deleteConfirmMessage": "Der Nachrichtenverlauf wird dauerhaft gelöscht.",
-        "draft": "Entwurf"
+        "draft": "Entwurf",
+        "messageRequestPreview": "Nachrichtenanfrage",
+        "messageRequestsHeading": "Nachrichtenanfragen"
     },
     "contacts": {
         "noContacts": "Noch keine Kontakte",
@@ -185,7 +191,8 @@
             "profile": "Profil",
             "security": "Sicherheit"
         },
-        "actionsMenu": "Weitere Aktionen"
+        "actionsMenu": "Weitere Aktionen",
+        "requestsHeading": "Anfragen"
     },
     "rooms": {
         "backToRooms": "Zurück zu Räumen",
@@ -413,46 +420,13 @@
         "selectHat": "Abzeichen auswählen",
         "hatJidPlaceholder": "user@example.com",
         "userInfo": "Benutzerinfo",
-        "manageOccupant": "Verwalten"
+        "manageOccupant": "Verwalten",
+        "invitationsHeading": "Einladungen"
     },
     "events": {
-        "noPendingEvents": "Keine ausstehenden Ereignisse",
-        "systemNotifications": "Systembenachrichtigungen",
-        "messagesFromStrangers": "Nachrichten von Unbekannten",
-        "subscriptionRequests": "Abonnementanfragen",
-        "roomInvitations": "Raumeinladungen",
         "invitedBy": "Eingeladen von {{name}}",
         "join": "Beitreten",
         "decline": "Ablehnen"
-    },
-    "activityLog": {
-        "title": "Aktivitätsprotokoll",
-        "noActivity": "Noch keine Aktivität",
-        "markAllRead": "Alle als gelesen markieren",
-        "today": "Heute",
-        "yesterday": "Gestern",
-        "subscriptionRequest": "Kontaktanfrage von {{name}}",
-        "subscriptionAccepted": "{{name}} hat Ihre Anfrage akzeptiert",
-        "subscriptionDenied": "{{name}} hat Ihre Anfrage abgelehnt",
-        "mucInvitation": "Raumeinladung zu {{room}}",
-        "reactionReceived": "{{name}} hat reagiert {{emojis}}",
-        "reactionReceivedTo": " auf \"{{preview}}\"",
-        "pollVoteReceived": "{{name}} hat {{emojis}} bei Umfrage \"{{title}}\" abgestimmt",
-        "inConversation": " in {{conversation}}",
-        "strangerMessage": "Nachricht von {{name}}",
-        "resourceConflict": "Sitzung ersetzt",
-        "authError": "Authentifizierungsfehler",
-        "connectionError": "Verbindungsfehler",
-        "accepted": "Akzeptiert",
-        "rejected": "Abgelehnt",
-        "dismissed": "Verworfen",
-        "pending": "Ausstehend",
-        "muted": "Stummgeschaltet",
-        "muteReactions": "Reaktionen stummschalten",
-        "muteConversationReactions": "Reaktionen aus diesem Chat stummschalten",
-        "unmuteConversationReactions": "Reaktionen aus diesem Chat aktivieren",
-        "muteMessageReactions": "Reaktionen auf diese Nachricht stummschalten",
-        "unmuteMessageReactions": "Reaktionen auf diese Nachricht aktivieren"
     },
     "chat": {
         "selection": {
@@ -1034,14 +1008,6 @@
             "description": "Klicken Sie auf einen Kontakt, um sein Profil, verbundene Geräte anzuzeigen oder eine Unterhaltung zu starten.",
             "hint": "Doppelklick um direkt eine Unterhaltung zu starten."
         },
-        "archive": {
-            "title": "Archivierte Unterhaltungen",
-            "description": "Archivierte Unterhaltungen werden hier angezeigt. Sie können sie jederzeit in Ihre Nachrichtenliste zurückholen."
-        },
-        "events": {
-            "title": "Ausstehende Ereignisse",
-            "description": "Abonnementanfragen, Raumeinladungen und Nachrichten von unbekannten Kontakten werden hier angezeigt."
-        },
         "admin": {
             "title": "Server-Administration",
             "description": "Wählen Sie einen Befehl aus der Seitenleiste, um Ihren Server zu verwalten."
@@ -1296,5 +1262,14 @@
         "bannerMultiple": "📊 {{count}} unbeantwortete Umfragen, tippen für die neueste",
         "dismissBanner": "Verwerfen",
         "scrollToOriginal": "Zur ursprünglichen Umfrage scrollen"
+    },
+    "messages": {
+        "showArchived": "Archivierte Gespräche anzeigen",
+        "showActive": "Aktive Gespräche anzeigen",
+        "archivedTitle": "Archiviert"
+    },
+    "reactions": {
+        "mention": "{{emoji}} {{name}} hat auf '{{preview}}' reagiert",
+        "see": "Anzeigen"
     }
 }

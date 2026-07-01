@@ -25,10 +25,6 @@ const tutorialFR = {
     content: 'Vous pouvez partager des fichiers, images et documents avec vos contacts.',
     actionHint: 'Essayez le bouton joindre pour envoyer un fichier',
   },
-  'activity-log-hint': {
-    content: 'L\'onglet Activité affiche les demandes d\'abonnement, réactions et invitations.',
-    actionHint: 'Cliquez sur l\'icône Activité dans la barre latérale pour voir les événements',
-  },
   'search-hint': {
     content: 'Recherchez des messages dans toutes les conversations. Utilisez les filtres ou « in:Team » pour affiner.',
     actionHint: 'Cliquez sur l\'icône Recherche et essayez « SDK » ou « in:Team »',

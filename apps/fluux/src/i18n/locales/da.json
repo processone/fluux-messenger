@@ -64,8 +64,7 @@
         "messages": "Beskeder",
         "rooms": "Rum",
         "connections": "Forbindelser",
-        "archive": "Arkiv",
-        "events": "Begivenheder",
+        "contacts": "Kontakter",
         "settings": "Indstillinger",
         "admin": "Administration",
         "addContact": "Tilføj kontakt",
@@ -74,6 +73,11 @@
         "viewProfile": "Se profil",
         "resizeHint": "Træk for at ændre størrelse, dobbeltklik for at nulstille",
         "dismiss": "Afvis"
+    },
+    "newMessage": {
+        "title": "Ny besked",
+        "searchPlaceholder": "Søg efter en person eller indtast et JID",
+        "manageContacts": "Administrer kontakter"
     },
     "archive": {
         "noArchivedConversations": "Ingen arkiverede samtaler"
@@ -116,7 +120,9 @@
         "unarchive": "Fjern fra arkiv",
         "delete": "Slet",
         "deleteConfirmMessage": "Beskedhistorikken vil blive permanent slettet.",
-        "draft": "Kladde"
+        "draft": "Kladde",
+        "messageRequestPreview": "Beskedanmodning",
+        "messageRequestsHeading": "Beskedsanmodninger"
     },
     "contacts": {
         "noContacts": "Ingen kontakter endnu",
@@ -183,7 +189,8 @@
             "profile": "Profil",
             "security": "Sikkerhed"
         },
-        "actionsMenu": "Flere handlinger"
+        "actionsMenu": "Flere handlinger",
+        "requestsHeading": "Anmodninger"
     },
     "rooms": {
         "backToRooms": "Tilbage til rum",
@@ -411,46 +418,13 @@
         "selectHat": "Vælg badge",
         "hatJidPlaceholder": "user@example.com",
         "userInfo": "Brugerinfo",
-        "manageOccupant": "Administrer"
+        "manageOccupant": "Administrer",
+        "invitationsHeading": "Invitationer"
     },
     "events": {
-        "noPendingEvents": "Ingen ventende begivenheder",
-        "systemNotifications": "Systemnotifikationer",
-        "messagesFromStrangers": "Beskeder fra fremmede",
-        "subscriptionRequests": "Abonnementsanmodninger",
-        "roomInvitations": "Ruminvitationer",
         "invitedBy": "Inviteret af {{name}}",
         "join": "Deltag",
         "decline": "Afvis"
-    },
-    "activityLog": {
-        "title": "Aktivitetslog",
-        "noActivity": "Ingen aktivitet endnu",
-        "markAllRead": "Markér alle som læst",
-        "today": "I dag",
-        "yesterday": "I går",
-        "subscriptionRequest": "Kontaktanmodning fra {{name}}",
-        "subscriptionAccepted": "{{name}} accepterede din anmodning",
-        "subscriptionDenied": "{{name}} afviste din anmodning",
-        "mucInvitation": "Ruminvitation til {{room}}",
-        "reactionReceived": "{{name}} reagerede {{emojis}}",
-        "reactionReceivedTo": " på \"{{preview}}\"",
-        "pollVoteReceived": "{{name}} stemte {{emojis}} i afstemning \"{{title}}\"",
-        "inConversation": " i {{conversation}}",
-        "strangerMessage": "Besked fra {{name}}",
-        "resourceConflict": "Session erstattet",
-        "authError": "Godkendelsesfejl",
-        "connectionError": "Forbindelsesfejl",
-        "accepted": "Accepteret",
-        "rejected": "Afvist",
-        "dismissed": "Afvist",
-        "pending": "Afventer",
-        "muted": "Lydløs",
-        "muteReactions": "Slå reaktioner fra",
-        "muteConversationReactions": "Slå reaktioner fra denne chat fra",
-        "unmuteConversationReactions": "Slå reaktioner fra denne chat til",
-        "muteMessageReactions": "Slå reaktioner på denne besked fra",
-        "unmuteMessageReactions": "Slå reaktioner på denne besked til"
     },
     "chat": {
         "selection": {
@@ -1032,14 +1006,6 @@
             "description": "Klik på en kontakt for at se deres profil, tilsluttede enheder eller starte en samtale.",
             "hint": "Dobbeltklik for at starte en samtale direkte."
         },
-        "archive": {
-            "title": "Arkiverede samtaler",
-            "description": "Arkiverede samtaler vises her. Du kan gendanne dem til din beskedliste når som helst."
-        },
-        "events": {
-            "title": "Ventende begivenheder",
-            "description": "Abonnementsanmodninger, ruminvitationer og beskeder fra ukendte kontakter vises her."
-        },
         "admin": {
             "title": "Serveradministration",
             "description": "Vælg en kommando fra sidebjælken for at administrere din server."
@@ -1294,5 +1260,14 @@
         "bannerMultiple": "📊 {{count}} ubesvarede afstemninger, tryk for at se seneste",
         "dismissBanner": "Luk",
         "scrollToOriginal": "Rul til den oprindelige afstemning"
+    },
+    "messages": {
+        "showArchived": "Vis arkiverede samtaler",
+        "showActive": "Vis aktive samtaler",
+        "archivedTitle": "Arkiverede"
+    },
+    "reactions": {
+        "mention": "{{emoji}} {{name}} reagerede på '{{preview}}'",
+        "see": "Vis"
     }
 }

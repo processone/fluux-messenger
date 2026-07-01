@@ -6,11 +6,10 @@
  */
 
 import type { DemoData, DemoAnimationStep } from '@fluux/sdk'
-import { SELF } from './constants'
+import { SELF, DOMAIN, CONFERENCE } from './constants'
 import { DEMO_CONTACTS, DEMO_PRESENCES } from './contacts'
 import { getDemoConversations, getDemoMessages } from './conversations'
 import { getDemoRooms } from './rooms'
-import { getDemoActivityEvents } from './activityEvents'
 import { buildDemoAnimation } from './animation'
 
 /** Build all demo data with fresh relative timestamps. */
@@ -22,7 +21,14 @@ export function buildDemoData(): DemoData {
     conversations: getDemoConversations(),
     messages: getDemoMessages(),
     rooms: getDemoRooms(),
-    activityEvents: getDemoActivityEvents(),
+    subscriptionRequests: [`olivia@${DOMAIN}`, `alex@${DOMAIN}`],
+    mucInvitations: [
+      { roomJid: `design-team@${CONFERENCE}`, from: `ava@${DOMAIN}`, reason: 'Join us for the redesign kickoff' },
+    ],
+    strangerMessages: [
+      { from: `recruiter@${DOMAIN}`, body: 'Hi! Are you open to new roles?' },
+      { from: `newcomer@${DOMAIN}`, body: 'Hello, found you via the community list.' },
+    ],
     ownResources: [
       { resource: 'desktop-7m0lds', show: null, priority: 50, client: 'Fluux Desktop' },
       { resource: 'mobile-k9x2Qp', show: 'away', priority: 10, client: 'Fluux Mobile' },

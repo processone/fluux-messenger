@@ -814,4 +814,38 @@ describe('ContactSelector', () => {
       expect(mockOnSelectionChange).toHaveBeenCalledWith(['clickable@new.org'])
     })
   })
+
+  describe('ContactSelector single-pick mode', () => {
+    it('calls onPick once with a typed valid JID on Enter and does not add a chip', () => {
+      const onPick = vi.fn()
+      const onSelectionChange = vi.fn()
+      render(
+        <ContactSelector selectedContacts={[]} onSelectionChange={onSelectionChange} onPick={onPick} />
+      )
+      const input = screen.getByPlaceholderText('Search contacts...')
+      fireEvent.change(input, { target: { value: 'bob@example.com' } })
+      fireEvent.keyDown(input, { key: 'Enter' })
+      expect(onPick).toHaveBeenCalledTimes(1)
+      expect(onPick).toHaveBeenCalledWith('bob@example.com')
+      expect(onSelectionChange).not.toHaveBeenCalled()
+    })
+
+    it('calls onPick when a roster suggestion is clicked', () => {
+      const onPick = vi.fn()
+      render(
+        <ContactSelector
+          selectedContacts={[]}
+          onSelectionChange={vi.fn()}
+          onPick={onPick}
+          extraSuggestions={[{ jid: 'alice@example.com', name: 'Alice' }]}
+        />
+      )
+      const input = screen.getByPlaceholderText('Search contacts...')
+      fireEvent.focus(input)
+      fireEvent.change(input, { target: { value: 'alice' } })
+      // Since there's a mock contact named 'Alice Smith' that matches 'alice', we click on it
+      fireEvent.click(screen.getByText('Alice Smith'))
+      expect(onPick).toHaveBeenCalledWith('alice@example.com')
+    })
+  })
 })

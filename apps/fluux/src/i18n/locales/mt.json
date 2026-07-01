@@ -64,8 +64,7 @@
         "messages": "Messaġġi",
         "rooms": "Kmamar",
         "connections": "Konnessjonijiet",
-        "archive": "Arkivju",
-        "events": "Avvenimenti",
+        "contacts": "Kuntatti",
         "settings": "Issettjar",
         "admin": "Amministrazzjoni",
         "addContact": "Żid kuntatt",
@@ -74,6 +73,11 @@
         "viewProfile": "Ara profil",
         "resizeHint": "Iġbed biex tibdel id-daqs, ikklikkja darbtejn biex tirrisettja",
         "dismiss": "Warrab"
+    },
+    "newMessage": {
+        "title": "Messaġġ ġdid",
+        "searchPlaceholder": "Fittex persuna jew daħħal JID",
+        "manageContacts": "Immaniġġja l-kuntatti"
     },
     "archive": {
         "noArchivedConversations": "M'hemmx konversazzjonijiet arkivjati"
@@ -118,7 +122,9 @@
         "unarchive": "Oħroġ mill-arkivju",
         "delete": "Ħassar",
         "deleteConfirmMessage": "L-istorja tal-messaġġi se titħassar b'mod permanenti.",
-        "draft": "Abbozz"
+        "draft": "Abbozz",
+        "messageRequestPreview": "Talba għal messaġġ",
+        "messageRequestsHeading": "Talbiet ta' messaġġi"
     },
     "contacts": {
         "noContacts": "Għad m'hemmx kuntatti",
@@ -185,7 +191,8 @@
             "profile": "Profil",
             "security": "Sigurtà"
         },
-        "actionsMenu": "Aktar azzjonijiet"
+        "actionsMenu": "Aktar azzjonijiet",
+        "requestsHeading": "Talbiet"
     },
     "rooms": {
         "backToRooms": "Lura għall-kmamar",
@@ -413,46 +420,13 @@
         "selectHat": "Agħżel badge",
         "hatJidPlaceholder": "user@example.com",
         "userInfo": "Info tal-utent",
-        "manageOccupant": "Immaniġġja"
+        "manageOccupant": "Immaniġġja",
+        "invitationsHeading": "Stedini"
     },
     "events": {
-        "noPendingEvents": "M'hemmx avvenimenti pendenti",
-        "systemNotifications": "Notifiki tas-Sistema",
-        "messagesFromStrangers": "Messaġġi minn Barranin",
-        "subscriptionRequests": "Talbiet ta' Abbonament",
-        "roomInvitations": "Stedini għal Kmamar",
         "invitedBy": "Mistieden minn {{name}}",
         "join": "Idħol",
         "decline": "Irrifjuta"
-    },
-    "activityLog": {
-        "title": "Log tal-attività",
-        "noActivity": "Għadha m'hemm attività",
-        "markAllRead": "Immarka kollox bħala moqri",
-        "today": "Illum",
-        "yesterday": "Ilbieraħ",
-        "subscriptionRequest": "Talba ta' kuntatt minn {{name}}",
-        "subscriptionAccepted": "{{name}} aċċetta t-talba tiegħek",
-        "subscriptionDenied": "{{name}} irrifjuta t-talba tiegħek",
-        "mucInvitation": "Stedina għall-kamra {{room}}",
-        "reactionReceived": "{{name}} irreaġixxa {{emojis}}",
-        "reactionReceivedTo": " għal \"{{preview}}\"",
-        "pollVoteReceived": "{{name}} ivvota {{emojis}} fil-poll \"{{title}}\"",
-        "inConversation": " fi {{conversation}}",
-        "strangerMessage": "Messaġġ minn {{name}}",
-        "resourceConflict": "Sessjoni sostitwita",
-        "authError": "Żball fl-awtentikazzjoni",
-        "connectionError": "Żball fil-konnessjoni",
-        "accepted": "Aċċettat",
-        "rejected": "Irrifjutat",
-        "dismissed": "Skartat",
-        "pending": "Pendenti",
-        "muted": "Maqtugħ",
-        "muteReactions": "Iskot ir-reazzjonijiet",
-        "muteConversationReactions": "Iskot ir-reazzjonijiet minn dan il-chat",
-        "unmuteConversationReactions": "Ixgħel ir-reazzjonijiet minn dan il-chat",
-        "muteMessageReactions": "Iskot ir-reazzjonijiet fuq dan il-messaġġ",
-        "unmuteMessageReactions": "Ixgħel ir-reazzjonijiet fuq dan il-messaġġ"
     },
     "chat": {
         "selection": {
@@ -1034,14 +1008,6 @@
             "description": "Ikklikkja fuq kuntatt biex tara l-profil tagħhom, apparat konnessi, jew tibda konversazzjoni.",
             "hint": "Ikklikkja darbtejn biex tibda konversazzjoni direttament."
         },
-        "archive": {
-            "title": "Konversazzjonijiet Arkivjati",
-            "description": "Konversazzjonijiet arkivjati se jidhru hawn. Tista' tirristawrahom fil-lista tal-messaġġi tiegħek kull meta trid."
-        },
-        "events": {
-            "title": "Avvenimenti Pendenti",
-            "description": "Talbiet ta' abbonament, stedini għal kmamar, u messaġġi minn kuntatti mhux magħrufa se jidhru hawn."
-        },
         "admin": {
             "title": "Amministrazzjoni tas-Server",
             "description": "Agħżel kmand mis-sidebar biex timmaniġġja s-server tiegħek."
@@ -1296,5 +1262,14 @@
         "bannerMultiple": "📊 {{count}} stħarriġiet mhux imwieġba, tektek biex tara l-aħħar wieħed",
         "dismissBanner": "Warrab",
         "scrollToOriginal": "Mur għall-istħarriġ oriġinali"
+    },
+    "messages": {
+        "showArchived": "Uri l-konversazzjonijiet arċivjati",
+        "showActive": "Uri l-konversazzjonijiet attivi",
+        "archivedTitle": "Arċivjati"
+    },
+    "reactions": {
+        "mention": "{{emoji}} {{name}} irreaġixxa għal '{{preview}}'",
+        "see": "Ara"
     }
 }

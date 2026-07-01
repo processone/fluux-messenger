@@ -161,10 +161,15 @@ vi.mock('@fluux/sdk', () => ({
   useEvents: () => ({
     subscriptionRequests: [],
     strangerMessages: [],
+    strangerConversations: {},
     mucInvitations: [],
     systemNotifications: [],
     pendingCount: 0,
+    acceptStranger: vi.fn().mockResolvedValue(undefined),
+    ignoreStranger: vi.fn(),
   }),
+  useBlocking: () => ({ blockJid: vi.fn().mockResolvedValue(undefined) }),
+  getBareJid: (jid: string) => jid.split('/')[0],
   // Vanilla stores (for imperative .getState() access)
   chatStore: {
     getState: () => ({
@@ -209,12 +214,6 @@ vi.mock('@fluux/sdk', () => ({
       vhosts: [],
       setSelectedVhost: vi.fn(),
       setPendingSelectedUserJid: vi.fn(),
-    }),
-  },
-  activityLogStore: {
-    getState: () => ({
-      previewEvent: null,
-      setPreviewEvent: vi.fn(),
     }),
   },
 }))
@@ -320,9 +319,6 @@ vi.mock('@fluux/sdk/react', () => ({
   useSearchStore: (selector: (state: { previewResult: null }) => unknown) => {
     return selector({ previewResult: null })
   },
-  useActivityLogStore: (selector: (state: { previewEvent: null }) => unknown) => {
-    return selector({ previewEvent: null })
-  },
 }))
 
 // Mock app hooks
@@ -374,6 +370,10 @@ vi.mock('@/hooks/useSDKErrorToasts', () => ({
   useSDKErrorToasts: () => {},
 }))
 
+vi.mock('@/hooks/useReactionNotifications', () => ({
+  useReactionNotifications: () => {},
+}))
+
 vi.mock('@/hooks/useDeepLink', () => ({
   useDeepLink: () => {},
 }))
@@ -403,8 +403,6 @@ vi.mock('./Sidebar', () => ({
       '/messages': 'messages',
       '/rooms': 'rooms',
       '/contacts': 'directory',
-      '/archive': 'archive',
-      '/events': 'events',
       '/admin': 'admin',
     }
     const activeView = pathToView[location.pathname.split('/')[1] ? `/${location.pathname.split('/')[1]}` : '/messages'] || 'messages'
@@ -415,7 +413,6 @@ vi.mock('./Sidebar', () => ({
         <NavLink to="/rooms" data-testid="rooms-tab">Rooms</NavLink>
         <NavLink to="/contacts" data-testid="directory-tab">Connections</NavLink>
         <NavLink to="/archive" data-testid="archive-tab">Archive</NavLink>
-        <NavLink to="/events" data-testid="events-tab">Events</NavLink>
         {/* Deep links simulate a URL-only change (browser back/forward, edge-swipe popstate):
             the URL moves to a detail route without any click handler updating the store */}
         <NavLink to="/messages/bob@example.com" data-testid="deep-conversation-link">Deep Conversation</NavLink>
@@ -658,67 +655,28 @@ describe('ChatLayout - Tab Memory', () => {
     })
   })
 
-  describe('Events tab', () => {
-    it('should preserve content when switching to Events tab', async () => {
-      // Start with an active conversation
-      setMockState({ activeConversationId: 'bob@example.com' })
-
-      render(<ChatLayoutWithRouter />)
-
-      expect(screen.getByTestId('chat-view')).toBeInTheDocument()
-
-      // Switch to Events tab
-      fireEvent.click(screen.getByTestId('events-tab'))
-
-      // Content should be preserved (conversation still visible)
-      expect(screen.getByTestId('chat-view')).toBeInTheDocument()
-      // Should NOT have cleared the conversation
-      expect(mockSetActiveConversation).not.toHaveBeenCalledWith(null)
-    })
-  })
-
-  describe('Archive tab', () => {
-    it('should clear room and contact when switching to Archive tab', async () => {
-      setMockState({ activeRoomJid: 'room@conference.example.com' })
-
-      render(<ChatLayoutWithRouter />)
-
-      expect(screen.getByTestId('room-view')).toBeInTheDocument()
-
-      // Switch to Archive tab
-      fireEvent.click(screen.getByTestId('archive-tab'))
+  describe('Legacy /archive URL (degraded to messages)', () => {
+    it('should degrade a legacy /archive URL to the messages view', async () => {
+      // /archive is a legacy URL - it now falls through to 'messages' view
+      render(<ChatLayoutWithRouter initialRoute="/archive" />)
 
       await waitFor(() => {
-        expect(mockSetActiveRoom).toHaveBeenCalledWith(null)
+        expect(screen.getByTestId('active-view')).toHaveTextContent('messages')
       })
     })
 
-    it('should allow viewing archived conversations in main panel', async () => {
+    it('should allow viewing archived conversations in messages panel after navigating to legacy /archive', async () => {
       // Start with no active content
       setMockState({ activeConversationId: null, activeRoomJid: null })
 
-      const { rerender } = render(<ChatLayoutWithRouter />)
-
-      // Switch to Archive tab
-      fireEvent.click(screen.getByTestId('archive-tab'))
+      const { rerender } = render(<ChatLayoutWithRouter initialRoute="/archive" />)
 
       // Now set an active conversation (simulating clicking archived conversation)
       setMockState({ activeConversationId: 'archived@example.com' })
-      rerender(<ChatLayoutWithRouter />)
+      rerender(<ChatLayoutWithRouter initialRoute="/archive" />)
 
       // Should show the chat view for the archived conversation
       expect(screen.getByTestId('chat-view')).toBeInTheDocument()
-    })
-
-    it('should switch to Archive view correctly', async () => {
-      render(<ChatLayoutWithRouter />)
-
-      // Switch to Archive tab
-      fireEvent.click(screen.getByTestId('archive-tab'))
-
-      await waitFor(() => {
-        expect(screen.getByTestId('active-view')).toHaveTextContent('archive')
-      })
     })
   })
 
@@ -888,8 +846,8 @@ describe('ChatLayout - Tab Memory', () => {
       })
     })
 
-    it('should switch to archive view when starting conversation with archived contact', async () => {
-      // Contact has an archived conversation
+    it('should switch to messages view when starting conversation with archived contact', async () => {
+      // Contact has an archived conversation - now opens in messages view (archive toggle handles display)
       setMockState({
         isArchivedResult: true,
         activeConversationId: null,
@@ -908,9 +866,9 @@ describe('ChatLayout - Tab Memory', () => {
       // Start a chat with the contact (who has an archived conversation)
       fireEvent.click(screen.getByTestId('start-chat'))
 
-      // Should switch to archive view (not messages) since conversation is archived
+      // Should switch to messages view (archive rail is gone)
       await waitFor(() => {
-        expect(screen.getByTestId('active-view')).toHaveTextContent('archive')
+        expect(screen.getByTestId('active-view')).toHaveTextContent('messages')
       })
 
       // Should activate the conversation (hydrating action)
@@ -1132,14 +1090,9 @@ describe('ChatLayout - EmptyState primary actions', () => {
     })
   })
 
-  it('shows a primary action on the messages empty-state and not on archive', async () => {
+  it('shows a primary action on the messages empty-state', async () => {
     render(<ChatLayoutWithRouter initialRoute="/messages" />)
     expect(screen.getByText('Start a conversation')).toBeInTheDocument()
-    fireEvent.click(screen.getByTestId('archive-tab'))
-    await waitFor(() => {
-      expect(screen.queryByText('Start a conversation')).toBeNull()
-    })
-    expect(screen.queryByRole('button', { name: /create a room/i })).toBeNull()
   })
 
   it('shows a primary action on the rooms empty-state', () => {

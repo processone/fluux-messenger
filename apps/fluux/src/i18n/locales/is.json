@@ -64,8 +64,7 @@
         "messages": "Skilaboð",
         "rooms": "Herbergi",
         "connections": "Tengingar",
-        "archive": "Skjalasafn",
-        "events": "Atburðir",
+        "contacts": "Tengiliðir",
         "settings": "Stillingar",
         "admin": "Stjórnun",
         "addContact": "Bæta við tengilið",
@@ -74,6 +73,11 @@
         "viewProfile": "Skoða prófíl",
         "resizeHint": "Dragðu til að breyta stærð, tvísmelltu til að endurstilla",
         "dismiss": "Hafna"
+    },
+    "newMessage": {
+        "title": "Ný skilaboð",
+        "searchPlaceholder": "Leita að einstaklingi eða slá inn JID",
+        "manageContacts": "Stjórna tengiliðum"
     },
     "archive": {
         "noArchivedConversations": "Engin safnvistuð samtöl"
@@ -116,7 +120,9 @@
         "unarchive": "Fjarlægja úr safni",
         "delete": "Eyða",
         "deleteConfirmMessage": "Skilaboðaferillinn verður endanlega eytt.",
-        "draft": "Drög"
+        "draft": "Drög",
+        "messageRequestPreview": "Skilaboðabeiðni",
+        "messageRequestsHeading": "Skilaboðabeiðnir"
     },
     "contacts": {
         "noContacts": "Engir tengiliðir enn",
@@ -183,7 +189,8 @@
             "profile": "Notandasnið",
             "security": "Öryggi"
         },
-        "actionsMenu": "Fleiri aðgerðir"
+        "actionsMenu": "Fleiri aðgerðir",
+        "requestsHeading": "Beiðnir"
     },
     "rooms": {
         "backToRooms": "Til baka í herbergi",
@@ -411,46 +418,13 @@
         "selectHat": "Veldu merki",
         "hatJidPlaceholder": "user@example.com",
         "userInfo": "Notandaupplýsingar",
-        "manageOccupant": "Stjórna"
+        "manageOccupant": "Stjórna",
+        "invitationsHeading": "Boð"
     },
     "events": {
-        "noPendingEvents": "Engir atburðir í bið",
-        "systemNotifications": "Kerfistilkynningar",
-        "messagesFromStrangers": "Skilaboð frá ókunnugum",
-        "subscriptionRequests": "Áskriftarbeiðnir",
-        "roomInvitations": "Herbergisboð",
         "invitedBy": "Boðið af {{name}}",
         "join": "Ganga inn",
         "decline": "Hafna"
-    },
-    "activityLog": {
-        "title": "Virknisskrá",
-        "noActivity": "Engin virkni enn sem komið er",
-        "markAllRead": "Merkja allt lesið",
-        "today": "Í dag",
-        "yesterday": "Í gær",
-        "subscriptionRequest": "Tengiliðabeiðni frá {{name}}",
-        "subscriptionAccepted": "{{name}} samþykkti beiðni þína",
-        "subscriptionDenied": "{{name}} hafnaði beiðni þinni",
-        "mucInvitation": "Boð í spjallrás {{room}}",
-        "reactionReceived": "{{name}} brást við {{emojis}}",
-        "reactionReceivedTo": " við \"{{preview}}\"",
-        "pollVoteReceived": "{{name}} kaus {{emojis}} í könnun \"{{title}}\"",
-        "inConversation": " í {{conversation}}",
-        "strangerMessage": "Skilaboð frá {{name}}",
-        "resourceConflict": "Setu var skipt út",
-        "authError": "Auðkenningarvilla",
-        "connectionError": "Tengingarvilla",
-        "accepted": "Samþykkt",
-        "rejected": "Hafnað",
-        "dismissed": "Vísað frá",
-        "pending": "Bíður",
-        "muted": "Þaggað",
-        "muteReactions": "Þagga viðbrögð",
-        "muteConversationReactions": "Þagga viðbrögð frá þessu spjalli",
-        "unmuteConversationReactions": "Virkja viðbrögð frá þessu spjalli",
-        "muteMessageReactions": "Þagga viðbrögð við þessu skilaboði",
-        "unmuteMessageReactions": "Virkja viðbrögð við þessu skilaboði"
     },
     "chat": {
         "selection": {
@@ -1032,14 +1006,6 @@
             "description": "Smelltu á tengilið til að skoða prófílinn þeirra, tengd tæki eða hefja samtal.",
             "hint": "Tvísmelltu til að hefja samtal strax."
         },
-        "archive": {
-            "title": "Safnvistuð samtöl",
-            "description": "Safnvistuð samtöl birtast hér. Þú getur endurheimt þau í skilaboðalistann hvenær sem er."
-        },
-        "events": {
-            "title": "Atburðir í bið",
-            "description": "Áskriftarbeiðnir, herbergisboð og skilaboð frá óþekktum tengiliðum birtast hér."
-        },
         "admin": {
             "title": "Þjónastjórnun",
             "description": "Veldu skipun frá hliðarstikunni til að stjórna þjóninum þínum."
@@ -1294,5 +1260,14 @@
         "bannerMultiple": "📊 {{count}} ósvaraðar kannanir, ýttu til að sjá nýjustu",
         "dismissBanner": "Hunsa",
         "scrollToOriginal": "Fletta að upprunalegri könnun"
+    },
+    "messages": {
+        "showArchived": "Sýna safnvistuð samskipti",
+        "showActive": "Sýna virk samskipti",
+        "archivedTitle": "Safnvistuð"
+    },
+    "reactions": {
+        "mention": "{{emoji}} {{name}} brást við '{{preview}}'",
+        "see": "Skoða"
     }
 }

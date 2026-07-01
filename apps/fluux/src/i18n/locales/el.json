@@ -64,8 +64,7 @@
         "messages": "Μηνύματα",
         "rooms": "Δωμάτια",
         "connections": "Επαφές",
-        "archive": "Αρχείο",
-        "events": "Συμβάντα",
+        "contacts": "Επαφές",
         "settings": "Ρυθμίσεις",
         "admin": "Διαχείριση",
         "addContact": "Προσθήκη επαφής",
@@ -74,6 +73,11 @@
         "viewProfile": "Προβολή προφίλ",
         "resizeHint": "Σύρετε για αλλαγή μεγέθους, διπλό κλικ για επαναφορά",
         "dismiss": "Απόρριψη"
+    },
+    "newMessage": {
+        "title": "Νέο μήνυμα",
+        "searchPlaceholder": "Αναζητήστε άτομο ή εισαγάγετε JID",
+        "manageContacts": "Διαχείριση επαφών"
     },
     "archive": {
         "noArchivedConversations": "Δεν υπάρχουν αρχειοθετημένες συνομιλίες"
@@ -117,7 +121,9 @@
         "unarchive": "Αναίρεση αρχειοθέτησης",
         "delete": "Διαγραφή",
         "deleteConfirmMessage": "Το ιστορικό μηνυμάτων θα διαγραφεί οριστικά.",
-        "draft": "Πρόχειρο"
+        "draft": "Πρόχειρο",
+        "messageRequestPreview": "Αίτημα μηνύματος",
+        "messageRequestsHeading": "Αιτήματα μηνυμάτων"
     },
     "contacts": {
         "noContacts": "Δεν υπάρχουν επαφές ακόμα",
@@ -184,7 +190,8 @@
             "profile": "Προφίλ",
             "security": "Ασφάλεια"
         },
-        "actionsMenu": "Περισσότερες ενέργειες"
+        "actionsMenu": "Περισσότερες ενέργειες",
+        "requestsHeading": "Αιτήματα"
     },
     "rooms": {
         "backToRooms": "Πίσω στα δωμάτια",
@@ -412,46 +419,13 @@
         "selectHat": "Επιλογή σήματος",
         "hatJidPlaceholder": "user@example.com",
         "userInfo": "Πληροφορίες χρήστη",
-        "manageOccupant": "Διαχείριση"
+        "manageOccupant": "Διαχείριση",
+        "invitationsHeading": "Προσκλήσεις"
     },
     "events": {
-        "noPendingEvents": "Δεν υπάρχουν εκκρεμή συμβάντα",
-        "systemNotifications": "Ειδοποιήσεις συστήματος",
-        "messagesFromStrangers": "Μηνύματα από αγνώστους",
-        "subscriptionRequests": "Αιτήματα εγγραφής",
-        "roomInvitations": "Προσκλήσεις σε δωμάτια",
         "invitedBy": "Πρόσκληση από {{name}}",
         "join": "Είσοδος",
         "decline": "Απόρριψη"
-    },
-    "activityLog": {
-        "title": "Αρχείο δραστηριότητας",
-        "noActivity": "Δεν υπάρχει δραστηριότητα ακόμα",
-        "markAllRead": "Σήμανση όλων ως αναγνωσμένα",
-        "today": "Σήμερα",
-        "yesterday": "Χθες",
-        "subscriptionRequest": "Αίτημα επαφής από {{name}}",
-        "subscriptionAccepted": "Ο/Η {{name}} αποδέχτηκε το αίτημά σας",
-        "subscriptionDenied": "Ο/Η {{name}} απέρριψε το αίτημά σας",
-        "mucInvitation": "Πρόσκληση σε δωμάτιο {{room}}",
-        "reactionReceived": "Ο/Η {{name}} αντέδρασε {{emojis}}",
-        "reactionReceivedTo": " στο \"{{preview}}\"",
-        "pollVoteReceived": "{{name}} ψήφισε {{emojis}} στη δημοσκόπηση \"{{title}}\"",
-        "inConversation": " σε {{conversation}}",
-        "strangerMessage": "Μήνυμα από {{name}}",
-        "resourceConflict": "Η συνεδρία αντικαταστάθηκε",
-        "authError": "Σφάλμα ελέγχου ταυτότητας",
-        "connectionError": "Σφάλμα σύνδεσης",
-        "accepted": "Αποδεκτό",
-        "rejected": "Απορρίφθηκε",
-        "dismissed": "Απορρίφθηκε",
-        "pending": "Σε αναμονή",
-        "muted": "Σε σίγαση",
-        "muteReactions": "Σίγαση αντιδράσεων",
-        "muteConversationReactions": "Σίγαση αντιδράσεων από αυτή τη συνομιλία",
-        "unmuteConversationReactions": "Ενεργοποίηση αντιδράσεων από αυτή τη συνομιλία",
-        "muteMessageReactions": "Σίγαση αντιδράσεων σε αυτό το μήνυμα",
-        "unmuteMessageReactions": "Ενεργοποίηση αντιδράσεων σε αυτό το μήνυμα"
     },
     "chat": {
         "selection": {
@@ -1033,14 +1007,6 @@
             "description": "Κάντε κλικ σε μια επαφή για να δείτε το προφίλ της, τις συνδεδεμένες συσκευές ή να ξεκινήσετε μια συνομιλία.",
             "hint": "Διπλό κλικ για άμεση έναρξη συνομιλίας."
         },
-        "archive": {
-            "title": "Αρχειοθετημένες συνομιλίες",
-            "description": "Οι αρχειοθετημένες συνομιλίες θα εμφανίζονται εδώ. Μπορείτε να τις επαναφέρετε στη λίστα μηνυμάτων σας ανά πάσα στιγμή."
-        },
-        "events": {
-            "title": "Εκκρεμή συμβάντα",
-            "description": "Αιτήματα εγγραφής, προσκλήσεις σε δωμάτια και μηνύματα από άγνωστες επαφές θα εμφανίζονται εδώ."
-        },
         "admin": {
             "title": "Διαχείριση διακομιστή",
             "description": "Επιλέξτε μια εντολή από την πλαϊνή μπάρα για να διαχειριστείτε τον διακομιστή σας."
@@ -1295,5 +1261,14 @@
         "bannerMultiple": "📊 {{count}} αναπάντητες ψηφοφορίες, πατήστε για να δείτε την τελευταία",
         "dismissBanner": "Απόρριψη",
         "scrollToOriginal": "Μετακίνηση στην αρχική ψηφοφορία"
+    },
+    "messages": {
+        "showArchived": "Εμφάνιση αρχειοθετημένων συνομιλιών",
+        "showActive": "Εμφάνιση ενεργών συνομιλιών",
+        "archivedTitle": "Αρχειοθετημένες"
+    },
+    "reactions": {
+        "mention": "{{emoji}} {{name}} αντέδρασε στο '{{preview}}'",
+        "see": "Προβολή"
     }
 }

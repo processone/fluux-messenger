@@ -64,8 +64,7 @@
         "messages": "Mensagens",
         "rooms": "Salas",
         "connections": "Ligações",
-        "archive": "Arquivo",
-        "events": "Eventos",
+        "contacts": "Contactos",
         "settings": "Definições",
         "admin": "Administração",
         "addContact": "Adicionar contacto",
@@ -74,6 +73,11 @@
         "viewProfile": "Ver perfil",
         "resizeHint": "Arraste para redimensionar, duplo clique para repor",
         "dismiss": "Fechar"
+    },
+    "newMessage": {
+        "title": "Nova mensagem",
+        "searchPlaceholder": "Pesquisar uma pessoa ou introduzir um JID",
+        "manageContacts": "Gerir contactos"
     },
     "archive": {
         "noArchivedConversations": "Sem conversas arquivadas"
@@ -118,7 +122,9 @@
         "unarchive": "Desarquivar",
         "delete": "Eliminar",
         "deleteConfirmMessage": "O histórico de mensagens será eliminado permanentemente.",
-        "draft": "Rascunho"
+        "draft": "Rascunho",
+        "messageRequestPreview": "Pedido de mensagem",
+        "messageRequestsHeading": "Pedidos de mensagem"
     },
     "contacts": {
         "noContacts": "Ainda não há contactos",
@@ -185,7 +191,8 @@
             "profile": "Perfil",
             "security": "Segurança"
         },
-        "actionsMenu": "Mais ações"
+        "actionsMenu": "Mais ações",
+        "requestsHeading": "Pedidos"
     },
     "rooms": {
         "backToRooms": "Voltar às salas",
@@ -413,46 +420,13 @@
         "selectHat": "Selecionar emblema",
         "hatJidPlaceholder": "user@example.com",
         "userInfo": "Info do utilizador",
-        "manageOccupant": "Gerir"
+        "manageOccupant": "Gerir",
+        "invitationsHeading": "Convites"
     },
     "events": {
-        "noPendingEvents": "Nenhum evento pendente",
-        "systemNotifications": "Notificações do sistema",
-        "messagesFromStrangers": "Mensagens de desconhecidos",
-        "subscriptionRequests": "Pedidos de subscrição",
-        "roomInvitations": "Convites para salas",
         "invitedBy": "Convidado por {{name}}",
         "join": "Entrar",
         "decline": "Recusar"
-    },
-    "activityLog": {
-        "title": "Registo de atividade",
-        "noActivity": "Sem atividade ainda",
-        "markAllRead": "Marcar tudo como lido",
-        "today": "Hoje",
-        "yesterday": "Ontem",
-        "subscriptionRequest": "Pedido de contacto de {{name}}",
-        "subscriptionAccepted": "{{name}} aceitou o seu pedido",
-        "subscriptionDenied": "{{name}} recusou o seu pedido",
-        "mucInvitation": "Convite para a sala {{room}}",
-        "reactionReceived": "{{name}} reagiu {{emojis}}",
-        "reactionReceivedTo": " a \"{{preview}}\"",
-        "pollVoteReceived": "{{name}} votou {{emojis}} na enquete \"{{title}}\"",
-        "inConversation": " em {{conversation}}",
-        "strangerMessage": "Mensagem de {{name}}",
-        "resourceConflict": "Sessão substituída",
-        "authError": "Erro de autenticação",
-        "connectionError": "Erro de ligação",
-        "accepted": "Aceite",
-        "rejected": "Rejeitado",
-        "dismissed": "Dispensado",
-        "pending": "Pendente",
-        "muted": "Silenciado",
-        "muteReactions": "Silenciar reações",
-        "muteConversationReactions": "Silenciar reações deste chat",
-        "unmuteConversationReactions": "Ativar reações deste chat",
-        "muteMessageReactions": "Silenciar reações nesta mensagem",
-        "unmuteMessageReactions": "Ativar reações nesta mensagem"
     },
     "chat": {
         "selection": {
@@ -1034,14 +1008,6 @@
             "description": "Clique num contacto para ver o perfil, dispositivos ligados ou iniciar uma conversa.",
             "hint": "Duplo clique para iniciar diretamente uma conversa."
         },
-        "archive": {
-            "title": "Conversas arquivadas",
-            "description": "As conversas arquivadas aparecerão aqui. Pode restaurá-las a qualquer momento."
-        },
-        "events": {
-            "title": "Eventos pendentes",
-            "description": "Pedidos de subscrição, convites para salas e mensagens de contactos desconhecidos aparecerão aqui."
-        },
         "admin": {
             "title": "Administração do servidor",
             "description": "Selecione um comando na barra lateral para gerir o seu servidor."
@@ -1296,5 +1262,14 @@
         "bannerMultiple": "📊 {{count}} sondagens por responder, toque para ver a mais recente",
         "dismissBanner": "Fechar",
         "scrollToOriginal": "Ir para a sondagem original"
+    },
+    "messages": {
+        "showArchived": "Mostrar conversas arquivadas",
+        "showActive": "Mostrar conversas ativas",
+        "archivedTitle": "Arquivadas"
+    },
+    "reactions": {
+        "mention": "{{emoji}} {{name}} reagiu a '{{preview}}'",
+        "see": "Ver"
     }
 }

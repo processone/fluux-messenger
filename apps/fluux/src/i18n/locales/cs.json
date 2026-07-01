@@ -64,8 +64,7 @@
         "messages": "Zprávy",
         "rooms": "Místnosti",
         "connections": "Kontakty",
-        "archive": "Archiv",
-        "events": "Události",
+        "contacts": "Kontakty",
         "settings": "Nastavení",
         "admin": "Správa",
         "addContact": "Přidat kontakt",
@@ -74,6 +73,11 @@
         "viewProfile": "Zobrazit profil",
         "resizeHint": "Tažením změníte velikost, dvojklikem obnovíte",
         "dismiss": "Zavřít"
+    },
+    "newMessage": {
+        "title": "Nová zpráva",
+        "searchPlaceholder": "Hledat osobu nebo zadat JID",
+        "manageContacts": "Správa kontaktů"
     },
     "archive": {
         "noArchivedConversations": "Žádné archivované konverzace"
@@ -118,7 +122,9 @@
         "unarchive": "Zrušit archivaci",
         "delete": "Smazat",
         "deleteConfirmMessage": "Historie zpráv bude trvale smazána.",
-        "draft": "Koncept"
+        "draft": "Koncept",
+        "messageRequestPreview": "Žádost o zprávu",
+        "messageRequestsHeading": "Žádosti o zprávy"
     },
     "contacts": {
         "noContacts": "Zatím žádné kontakty",
@@ -185,7 +191,8 @@
             "profile": "Profil",
             "security": "Zabezpečení"
         },
-        "actionsMenu": "Další akce"
+        "actionsMenu": "Další akce",
+        "requestsHeading": "Žádosti"
     },
     "rooms": {
         "backToRooms": "Zpět do místností",
@@ -413,46 +420,13 @@
         "selectHat": "Vybrat odznak",
         "hatJidPlaceholder": "user@example.com",
         "userInfo": "Informace o uživateli",
-        "manageOccupant": "Spravovat"
+        "manageOccupant": "Spravovat",
+        "invitationsHeading": "Pozvánky"
     },
     "events": {
-        "noPendingEvents": "Žádné čekající události",
-        "systemNotifications": "Systémová oznámení",
-        "messagesFromStrangers": "Zprávy od neznámých",
-        "subscriptionRequests": "Žádosti o odběr",
-        "roomInvitations": "Pozvánky do místností",
         "invitedBy": "Pozval(a) {{name}}",
         "join": "Vstoupit",
         "decline": "Odmítnout"
-    },
-    "activityLog": {
-        "title": "Protokol aktivity",
-        "noActivity": "Zatím žádná aktivita",
-        "markAllRead": "Označit vše jako přečtené",
-        "today": "Dnes",
-        "yesterday": "Včera",
-        "subscriptionRequest": "Žádost o kontakt od {{name}}",
-        "subscriptionAccepted": "{{name}} přijal(a) váš požadavek",
-        "subscriptionDenied": "{{name}} zamítl(a) váš požadavek",
-        "mucInvitation": "Pozvánka do místnosti {{room}}",
-        "reactionReceived": "{{name}} reagoval(a) {{emojis}}",
-        "reactionReceivedTo": " na \"{{preview}}\"",
-        "pollVoteReceived": "{{name}} hlasoval(a) {{emojis}} v anketě \"{{title}}\"",
-        "inConversation": " v {{conversation}}",
-        "strangerMessage": "Zpráva od {{name}}",
-        "resourceConflict": "Relace nahrazena",
-        "authError": "Chyba ověření",
-        "connectionError": "Chyba připojení",
-        "accepted": "Přijato",
-        "rejected": "Zamítnuto",
-        "dismissed": "Zamítnuto",
-        "pending": "Čeká",
-        "muted": "Ztlumeno",
-        "muteReactions": "Ztlumit reakce",
-        "muteConversationReactions": "Ztlumit reakce z tohoto chatu",
-        "unmuteConversationReactions": "Zapnout reakce z tohoto chatu",
-        "muteMessageReactions": "Ztlumit reakce na tuto zprávu",
-        "unmuteMessageReactions": "Zapnout reakce na tuto zprávu"
     },
     "chat": {
         "selection": {
@@ -1034,14 +1008,6 @@
             "description": "Klikněte na kontakt pro zobrazení profilu, připojených zařízení nebo zahájení konverzace.",
             "hint": "Dvojklikem přímo zahájíte konverzaci."
         },
-        "archive": {
-            "title": "Archivované konverzace",
-            "description": "Archivované konverzace se zobrazí zde. Můžete je kdykoli obnovit do seznamu zpráv."
-        },
-        "events": {
-            "title": "Čekající události",
-            "description": "Žádosti o odběr, pozvánky do místností a zprávy od neznámých kontaktů se zobrazí zde."
-        },
         "admin": {
             "title": "Správa serveru",
             "description": "Vyberte příkaz z postranního panelu pro správu vašeho serveru."
@@ -1296,5 +1262,14 @@
         "bannerMultiple": "📊 {{count}} nezodpovězených anket, klepněte pro zobrazení poslední",
         "dismissBanner": "Zavřít",
         "scrollToOriginal": "Přejít na původní anketu"
+    },
+    "messages": {
+        "showArchived": "Zobrazit archivované konverzace",
+        "showActive": "Zobrazit aktivní konverzace",
+        "archivedTitle": "Archivované"
+    },
+    "reactions": {
+        "mention": "{{emoji}} {{name}} zareagoval na '{{preview}}'",
+        "see": "Zobrazit"
     }
 }

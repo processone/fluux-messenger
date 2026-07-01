@@ -64,8 +64,7 @@
         "messages": "Sõnumid",
         "rooms": "Toad",
         "connections": "Ühendused",
-        "archive": "Arhiiv",
-        "events": "Sündmused",
+        "contacts": "Kontaktid",
         "settings": "Seaded",
         "admin": "Haldus",
         "addContact": "Lisa kontakt",
@@ -74,6 +73,11 @@
         "viewProfile": "Vaata profiili",
         "resizeHint": "Lohista suuruse muutmiseks, topeltklõps lähtestamiseks",
         "dismiss": "Loobu"
+    },
+    "newMessage": {
+        "title": "Uus sõnum",
+        "searchPlaceholder": "Otsi isikut või sisesta JID",
+        "manageContacts": "Halda kontakte"
     },
     "archive": {
         "noArchivedConversations": "Arhiveeritud vestlusi pole"
@@ -118,7 +122,9 @@
         "unarchive": "Taasta arhiivist",
         "delete": "Kustuta",
         "deleteConfirmMessage": "Sõnumite ajalugu kustutatakse jäädavalt.",
-        "draft": "Mustand"
+        "draft": "Mustand",
+        "messageRequestPreview": "Sõnumitaotlus",
+        "messageRequestsHeading": "Sõnumitaotlused"
     },
     "contacts": {
         "noContacts": "Kontakte veel pole",
@@ -185,7 +191,8 @@
             "profile": "Profiil",
             "security": "Turvalisus"
         },
-        "actionsMenu": "Rohkem toiminguid"
+        "actionsMenu": "Rohkem toiminguid",
+        "requestsHeading": "Taotlused"
     },
     "rooms": {
         "backToRooms": "Tagasi tubade juurde",
@@ -413,46 +420,13 @@
         "selectHat": "Vali märgis",
         "hatJidPlaceholder": "user@example.com",
         "userInfo": "Kasutaja teave",
-        "manageOccupant": "Halda"
+        "manageOccupant": "Halda",
+        "invitationsHeading": "Kutsed"
     },
     "events": {
-        "noPendingEvents": "Ootel sündmusi pole",
-        "systemNotifications": "Süsteemi teavitused",
-        "messagesFromStrangers": "Sõnumid võõrastelt",
-        "subscriptionRequests": "Tellimistaotlused",
-        "roomInvitations": "Toa kutsed",
         "invitedBy": "Kutsuja {{name}}",
         "join": "Liitu",
         "decline": "Keeldu"
-    },
-    "activityLog": {
-        "title": "Tegevuslogi",
-        "noActivity": "Tegevust pole veel",
-        "markAllRead": "Märgi kõik loetuks",
-        "today": "Täna",
-        "yesterday": "Eile",
-        "subscriptionRequest": "Kontaktipäring kasutajalt {{name}}",
-        "subscriptionAccepted": "{{name}} nõustus teie päringuga",
-        "subscriptionDenied": "{{name}} keeldus teie päringust",
-        "mucInvitation": "Ruumikutse kohta {{room}}",
-        "reactionReceived": "{{name}} reageeris {{emojis}}",
-        "reactionReceivedTo": " sõnumile \"{{preview}}\"",
-        "pollVoteReceived": "{{name}} hääletas {{emojis}} küsitluses \"{{title}}\"",
-        "inConversation": " vestluses {{conversation}}",
-        "strangerMessage": "Sõnum kasutajalt {{name}}",
-        "resourceConflict": "Seanss asendatud",
-        "authError": "Autentimise viga",
-        "connectionError": "Ühenduse viga",
-        "accepted": "Aktsepteeritud",
-        "rejected": "Tagasi lükatud",
-        "dismissed": "Eiratud",
-        "pending": "Ootel",
-        "muted": "Vaigistatud",
-        "muteReactions": "Vaigista reaktsioonid",
-        "muteConversationReactions": "Vaigista selle vestluse reaktsioonid",
-        "unmuteConversationReactions": "Lülita selle vestluse reaktsioonid sisse",
-        "muteMessageReactions": "Vaigista selle sõnumi reaktsioonid",
-        "unmuteMessageReactions": "Lülita selle sõnumi reaktsioonid sisse"
     },
     "chat": {
         "selection": {
@@ -1034,14 +1008,6 @@
             "description": "Klõpsa kontaktil, et vaadata tema profiili, ühendatud seadmeid või alustada vestlust.",
             "hint": "Topeltklõps vestluse alustamiseks otse."
         },
-        "archive": {
-            "title": "Arhiveeritud vestlused",
-            "description": "Arhiveeritud vestlused ilmuvad siia. Saad need igal ajal sõnumite nimekirja taastada."
-        },
-        "events": {
-            "title": "Ootel sündmused",
-            "description": "Tellimistaotlused, toa kutsed ja sõnumid tundmatutelt kontaktidelt ilmuvad siia."
-        },
         "admin": {
             "title": "Serveri haldus",
             "description": "Vali käsk külgribalt oma serveri haldamiseks."
@@ -1296,5 +1262,14 @@
         "bannerMultiple": "📊 {{count}} vastamata küsitlust, puuduta viimase nägemiseks",
         "dismissBanner": "Sulge",
         "scrollToOriginal": "Keri algse küsitluseni"
+    },
+    "messages": {
+        "showArchived": "Kuva arhiveeritud vestlused",
+        "showActive": "Kuva aktiivsed vestlused",
+        "archivedTitle": "Arhiveeritud"
+    },
+    "reactions": {
+        "mention": "{{emoji}} {{name}} reageeris sõnumile '{{preview}}'",
+        "see": "Vaata"
     }
 }

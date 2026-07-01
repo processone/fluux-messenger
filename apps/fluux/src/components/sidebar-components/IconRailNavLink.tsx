@@ -11,6 +11,10 @@ interface IconRailNavLinkProps {
   /** Path prefix to match for active state (e.g., '/messages', '/rooms') */
   pathPrefix: string
   showBadge?: boolean
+  /** When > 0, renders a red numeric badge (clamped to 99+). Takes precedence over showBadge. */
+  badgeCount?: number
+  /** Overrides the button aria-label (the tooltip still shows `label`). */
+  badgeLabel?: string
   /** Handler called when clicked - should handle navigation */
   onNavigate: (view: SidebarView) => void
 }
@@ -26,16 +30,19 @@ export function IconRailNavLink({
   view,
   pathPrefix,
   showBadge,
+  badgeCount,
+  badgeLabel,
   onNavigate,
 }: IconRailNavLinkProps) {
   const location = useLocation()
   const isActive = location.pathname === pathPrefix || location.pathname.startsWith(pathPrefix + '/')
+  const hasCount = typeof badgeCount === 'number' && badgeCount > 0
 
   return (
     <Tooltip content={label} position="right" delay={500}>
       <button
         onClick={() => onNavigate(view)}
-        aria-label={label}
+        aria-label={badgeLabel ?? label}
         data-nav={view}
         className={`
           icon-rail-btn relative rounded-xl flex items-center justify-center transition-colors
@@ -47,9 +54,13 @@ export function IconRailNavLink({
         `}
       >
         <Icon className="size-5" />
-        {showBadge && (
+        {hasCount ? (
+          <span className="absolute -top-0.5 -end-0.5 min-w-4 h-4 px-1 flex items-center justify-center bg-fluux-red text-white text-[10px] leading-none font-semibold rounded-full border-2 border-fluux-sidebar">
+            {badgeCount > 99 ? '99+' : badgeCount}
+          </span>
+        ) : showBadge ? (
           <span className="absolute top-0 end-0 size-3 bg-fluux-red rounded-full border-2 border-fluux-sidebar" />
-        )}
+        ) : null}
       </button>
     </Tooltip>
   )

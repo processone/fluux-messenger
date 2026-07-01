@@ -1090,6 +1090,7 @@ describe('XMPPClient Message', () => {
       mockXmppClientInstance._emit('stanza', stanza)
 
       expect(emitSDKSpy).toHaveBeenCalledWith('chat:reactions', {
+        isLive: true,
         conversationId: 'contact@example.com',
         messageId: 'target-msg-1',
         reactorJid: 'contact@example.com',
@@ -1121,6 +1122,8 @@ describe('XMPPClient Message', () => {
       mockXmppClientInstance._emit('stanza', stanza)
 
       expect(emitSDKSpy).toHaveBeenCalledWith('chat:reactions', {
+        // A delay stamp marks a replayed / offline-queued reaction — not live.
+        isLive: false,
         conversationId: 'contact@example.com',
         messageId: 'target-msg-delayed',
         reactorJid: 'contact@example.com',
@@ -1168,6 +1171,7 @@ describe('XMPPClient Message', () => {
 
       // Should handle as reaction only
       expect(emitSDKSpy).toHaveBeenCalledWith('chat:reactions', {
+        isLive: true,
         conversationId: 'contact@example.com',
         messageId: 'target-msg-2',
         reactorJid: 'contact@example.com',
@@ -1244,6 +1248,7 @@ describe('XMPPClient Message', () => {
 
       // Should handle as groupchat reaction only
       expect(emitSDKSpy).toHaveBeenCalledWith('room:reactions', {
+        isLive: true,
         roomJid: 'room@conference.example.com',
         messageId: 'target-msg-muc',
         reactorNick: 'Kris',
@@ -1347,6 +1352,7 @@ describe('XMPPClient Message', () => {
       await xmppClient.chat.sendReaction('alice@example.com', 'msg-123', ['👍'], 'chat')
 
       expect(emitSDKSpy).toHaveBeenCalledWith('chat:reactions', {
+        isLive: true,
         conversationId: 'alice@example.com',
         messageId: 'msg-123',
         reactorJid: 'user@example.com',

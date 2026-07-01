@@ -64,8 +64,7 @@
         "messages": "Messages",
         "rooms": "Salons",
         "connections": "Contacts",
-        "archive": "Archives",
-        "events": "Événements",
+        "contacts": "Contacts",
         "settings": "Paramètres",
         "admin": "Administration",
         "addContact": "Ajouter un contact",
@@ -74,6 +73,11 @@
         "viewProfile": "Voir le profil",
         "resizeHint": "Glisser pour redimensionner, double-clic pour réinitialiser",
         "dismiss": "Ignorer"
+    },
+    "newMessage": {
+        "title": "Nouveau message",
+        "searchPlaceholder": "Rechercher une personne ou saisir un JID",
+        "manageContacts": "Gérer les contacts"
     },
     "archive": {
         "noArchivedConversations": "Aucune conversation archivée"
@@ -117,7 +121,9 @@
         "unarchive": "Désarchiver",
         "delete": "Supprimer",
         "deleteConfirmMessage": "L'historique des messages sera définitivement supprimé.",
-        "draft": "Brouillon"
+        "draft": "Brouillon",
+        "messageRequestsHeading": "Demandes de message",
+        "messageRequestPreview": "Demande de message"
     },
     "contacts": {
         "noContacts": "Aucun contact",
@@ -184,7 +190,8 @@
             "profile": "Profil",
             "security": "Sécurité"
         },
-        "actionsMenu": "Plus d'actions"
+        "actionsMenu": "Plus d'actions",
+        "requestsHeading": "Demandes"
     },
     "rooms": {
         "backToRooms": "Retour aux salons",
@@ -412,46 +419,13 @@
         "hatUnassignError": "Échec du retrait du badge",
         "selectHat": "Sélectionner un badge",
         "hatJidPlaceholder": "user@example.com",
-        "manageOccupant": "Gérer"
+        "manageOccupant": "Gérer",
+        "invitationsHeading": "Invitations"
     },
     "events": {
-        "noPendingEvents": "Aucun événement en attente",
-        "systemNotifications": "Notifications système",
-        "messagesFromStrangers": "Messages d'inconnus",
-        "subscriptionRequests": "Demandes d'abonnement",
-        "roomInvitations": "Invitations aux salons",
         "invitedBy": "Invité par {{name}}",
         "join": "Rejoindre",
         "decline": "Refuser"
-    },
-    "activityLog": {
-        "title": "Journal d'activité",
-        "noActivity": "Aucune activité pour le moment",
-        "markAllRead": "Tout marquer comme lu",
-        "today": "Aujourd'hui",
-        "yesterday": "Hier",
-        "subscriptionRequest": "Demande de contact de {{name}}",
-        "subscriptionAccepted": "{{name}} a accepté votre demande",
-        "subscriptionDenied": "{{name}} a refusé votre demande",
-        "mucInvitation": "Invitation au salon {{room}}",
-        "reactionReceived": "{{name}} a réagi {{emojis}}",
-        "reactionReceivedTo": " à \"{{preview}}\"",
-        "pollVoteReceived": "{{name}} a voté {{emojis}} au sondage \"{{title}}\"",
-        "inConversation": " dans {{conversation}}",
-        "strangerMessage": "Message de {{name}}",
-        "resourceConflict": "Session remplacée",
-        "authError": "Erreur d'authentification",
-        "connectionError": "Erreur de connexion",
-        "accepted": "Accepté",
-        "rejected": "Rejeté",
-        "dismissed": "Ignoré",
-        "pending": "En attente",
-        "muted": "Mis en sourdine",
-        "muteReactions": "Mettre les réactions en sourdine",
-        "muteConversationReactions": "Mettre les réactions de cette discussion en sourdine",
-        "unmuteConversationReactions": "Réactiver les réactions de cette discussion",
-        "muteMessageReactions": "Mettre les réactions de ce message en sourdine",
-        "unmuteMessageReactions": "Réactiver les réactions de ce message"
     },
     "chat": {
         "selection": {
@@ -1033,14 +1007,6 @@
             "description": "Cliquez sur un contact pour voir son profil, ses appareils connectés ou démarrer une conversation.",
             "hint": "Double-cliquez pour converser directement."
         },
-        "archive": {
-            "title": "Conversations archivées",
-            "description": "Les conversations archivées apparaîtront ici. Vous pouvez les restaurer dans votre liste de messages à tout moment."
-        },
-        "events": {
-            "title": "Événements en attente",
-            "description": "Les demandes d'abonnement, invitations aux salons et messages de contacts inconnus apparaîtront ici."
-        },
         "admin": {
             "title": "Administration du serveur",
             "description": "Sélectionnez une commande dans la barre latérale pour gérer votre serveur."
@@ -1295,5 +1261,14 @@
         "bannerMultiple": "📊 {{count}} sondages sans réponse, appuyez pour voir le dernier",
         "dismissBanner": "Ignorer",
         "scrollToOriginal": "Aller au sondage original"
+    },
+    "messages": {
+        "showArchived": "Afficher les conversations archivées",
+        "showActive": "Afficher les conversations actives",
+        "archivedTitle": "Archivées"
+    },
+    "reactions": {
+        "mention": "{{emoji}} {{name}} a réagi à « {{preview}} »",
+        "see": "Voir"
     }
 }

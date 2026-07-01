@@ -64,8 +64,7 @@
         "messages": "الرسائل",
         "rooms": "الغرف",
         "connections": "جهات الاتصال",
-        "archive": "الأرشيف",
-        "events": "الأحداث",
+        "contacts": "جهات الاتصال",
         "settings": "الإعدادات",
         "admin": "الإدارة",
         "addContact": "إضافة جهة اتصال",
@@ -74,6 +73,11 @@
         "viewProfile": "عرض الملف الشخصي",
         "resizeHint": "اسحب لتغيير الحجم، انقر مرتين لإعادة التعيين",
         "dismiss": "تجاهل"
+    },
+    "newMessage": {
+        "title": "رسالة جديدة",
+        "searchPlaceholder": "ابحث عن شخص أو أدخل JID",
+        "manageContacts": "إدارة جهات الاتصال"
     },
     "archive": {
         "noArchivedConversations": "لا توجد محادثات مؤرشفة"
@@ -116,7 +120,9 @@
         "unarchive": "إلغاء الأرشفة",
         "delete": "حذف",
         "deleteConfirmMessage": "سيتم حذف سجل الرسائل نهائيًا.",
-        "draft": "مسودة"
+        "draft": "مسودة",
+        "messageRequestPreview": "طلب رسالة",
+        "messageRequestsHeading": "طلبات الرسائل"
     },
     "contacts": {
         "noContacts": "لا توجد جهات اتصال بعد",
@@ -183,7 +189,8 @@
             "profile": "الملف الشخصي",
             "security": "الأمان"
         },
-        "actionsMenu": "إجراءات أخرى"
+        "actionsMenu": "إجراءات أخرى",
+        "requestsHeading": "طلبات"
     },
     "rooms": {
         "backToRooms": "العودة إلى الغرف",
@@ -411,46 +418,13 @@
         "hatAssignError": "فشل تعيين الشارة",
         "hatUnassignError": "فشل إزالة الشارة",
         "selectHat": "اختيار شارة",
-        "hatJidPlaceholder": "user@example.com"
+        "hatJidPlaceholder": "user@example.com",
+        "invitationsHeading": "الدعوات"
     },
     "events": {
-        "noPendingEvents": "لا توجد أحداث معلّقة",
-        "systemNotifications": "إشعارات النظام",
-        "messagesFromStrangers": "رسائل من أشخاص غير معروفين",
-        "subscriptionRequests": "طلبات الاشتراك",
-        "roomInvitations": "دعوات الغرف",
         "invitedBy": "دعوة من {{name}}",
         "join": "انضم",
         "decline": "رفض"
-    },
-    "activityLog": {
-        "title": "سجل النشاط",
-        "noActivity": "لا يوجد نشاط بعد",
-        "markAllRead": "تعليم الكل كمقروء",
-        "today": "اليوم",
-        "yesterday": "أمس",
-        "subscriptionRequest": "طلب اتصال من {{name}}",
-        "subscriptionAccepted": "قبِل {{name}} طلبك",
-        "subscriptionDenied": "رفض {{name}} طلبك",
-        "mucInvitation": "دعوة إلى الغرفة {{room}}",
-        "reactionReceived": "تفاعل {{name}} بـ {{emojis}}",
-        "reactionReceivedTo": " على \"{{preview}}\"",
-        "pollVoteReceived": "صوّت {{name}} بـ {{emojis}} على استطلاع \"{{title}}\"",
-        "inConversation": " في {{conversation}}",
-        "strangerMessage": "رسالة من {{name}}",
-        "resourceConflict": "تم استبدال الجلسة",
-        "authError": "خطأ في المصادقة",
-        "connectionError": "خطأ في الاتصال",
-        "accepted": "مقبول",
-        "rejected": "مرفوض",
-        "dismissed": "تم التجاهل",
-        "pending": "معلّق",
-        "muted": "مكتوم",
-        "muteReactions": "كتم التفاعلات",
-        "muteConversationReactions": "كتم التفاعلات من هذه المحادثة",
-        "unmuteConversationReactions": "إلغاء كتم التفاعلات من هذه المحادثة",
-        "muteMessageReactions": "كتم التفاعلات على هذه الرسالة",
-        "unmuteMessageReactions": "إلغاء كتم التفاعلات على هذه الرسالة"
     },
     "chat": {
         "selection": {
@@ -1032,14 +1006,6 @@
             "description": "انقر على جهة اتصال لعرض ملفها الشخصي أو الأجهزة المتصلة أو بدء محادثة.",
             "hint": "انقر مرتين لبدء محادثة مباشرة."
         },
-        "archive": {
-            "title": "المحادثات المؤرشفة",
-            "description": "ستظهر المحادثات المؤرشفة هنا. يمكنك استعادتها إلى قائمة الرسائل في أي وقت."
-        },
-        "events": {
-            "title": "الأحداث المعلّقة",
-            "description": "ستظهر هنا طلبات الاشتراك ودعوات الغرف والرسائل من جهات اتصال غير معروفة."
-        },
         "admin": {
             "title": "إدارة الخادم",
             "description": "اختر أمرًا من الشريط الجانبي لإدارة خادمك."
@@ -1294,5 +1260,14 @@
         "bannerMultiple": "📊 {{count}} استطلاعات بدون إجابة, انقر لرؤية الأحدث",
         "dismissBanner": "تجاهل",
         "scrollToOriginal": "الانتقال إلى الاستطلاع الأصلي"
+    },
+    "messages": {
+        "showArchived": "عرض المحادثات المؤرشفة",
+        "showActive": "عرض المحادثات النشطة",
+        "archivedTitle": "مؤرشف"
+    },
+    "reactions": {
+        "mention": "{{emoji}} {{name}} تفاعل مع '{{preview}}'",
+        "see": "عرض"
     }
 }

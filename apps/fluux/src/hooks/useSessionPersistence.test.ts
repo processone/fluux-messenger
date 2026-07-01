@@ -161,8 +161,6 @@ describe('useSessionPersistence', () => {
         'messages',
         'rooms',
         'directory',
-        'archive',
-        'events',
         'admin',
         'settings',
       ]
@@ -222,8 +220,9 @@ describe('useSessionPersistence', () => {
       expect(getSavedViewState(OTHER_JID)).toEqual(secondState)
     })
 
-    it('should read legacy unscoped view state when no account scope is known', () => {
-      const legacyState: ViewStateData = {
+    it('should read legacy unscoped view state when no account scope is known, normalizing removed views', () => {
+      // Simulate old sessionStorage entry with a now-removed 'archive' view
+      const legacyState = {
         sidebarView: 'archive',
         activeConversationId: null,
         activeRoomJid: null,
@@ -232,12 +231,27 @@ describe('useSessionPersistence', () => {
 
       mockStorage[VIEW_STATE_KEY] = JSON.stringify(legacyState)
       delete mockStorage[ACTIVE_SESSION_JID_KEY]
-      expect(getSavedViewState()).toEqual(legacyState)
+      // 'archive' is normalized to 'messages' on read
+      expect(getSavedViewState()?.sidebarView).toBe('messages')
+    })
+
+    it('should normalize persisted "events" view to "messages" (events rail removed)', () => {
+      const legacyState = {
+        sidebarView: 'events',
+        activeConversationId: null,
+        activeRoomJid: null,
+        selectedContactJid: null,
+      }
+
+      mockStorage[VIEW_STATE_KEY] = JSON.stringify(legacyState)
+      delete mockStorage[ACTIVE_SESSION_JID_KEY]
+      // 'events' is normalized to 'messages' on read
+      expect(getSavedViewState()?.sidebarView).toBe('messages')
     })
 
     it('should not read legacy unscoped view state when account scope is known', () => {
-      const legacyState: ViewStateData = {
-        sidebarView: 'archive',
+      const legacyState = {
+        sidebarView: 'messages',
         activeConversationId: 'alice@example.com',
         activeRoomJid: null,
         selectedContactJid: null,

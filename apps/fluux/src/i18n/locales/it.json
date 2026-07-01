@@ -64,8 +64,7 @@
         "messages": "Messaggi",
         "rooms": "Stanze",
         "connections": "Contatti",
-        "archive": "Archivio",
-        "events": "Eventi",
+        "contacts": "Contatti",
         "settings": "Impostazioni",
         "admin": "Amministrazione",
         "addContact": "Aggiungi contatto",
@@ -74,6 +73,11 @@
         "viewProfile": "Visualizza profilo",
         "resizeHint": "Trascina per ridimensionare, doppio clic per reimpostare",
         "dismiss": "Ignora"
+    },
+    "newMessage": {
+        "title": "Nuovo messaggio",
+        "searchPlaceholder": "Cerca una persona o inserisci un JID",
+        "manageContacts": "Gestisci contatti"
     },
     "archive": {
         "noArchivedConversations": "Nessuna conversazione archiviata"
@@ -118,7 +122,9 @@
         "unarchive": "Ripristina",
         "delete": "Elimina",
         "deleteConfirmMessage": "La cronologia dei messaggi sara eliminata definitivamente.",
-        "draft": "Bozza"
+        "draft": "Bozza",
+        "messageRequestPreview": "Richiesta di messaggio",
+        "messageRequestsHeading": "Richieste di messaggio"
     },
     "contacts": {
         "noContacts": "Nessun contatto",
@@ -185,7 +191,8 @@
             "profile": "Profilo",
             "security": "Sicurezza"
         },
-        "actionsMenu": "Altre azioni"
+        "actionsMenu": "Altre azioni",
+        "requestsHeading": "Richieste"
     },
     "rooms": {
         "backToRooms": "Torna alle stanze",
@@ -413,46 +420,13 @@
         "selectHat": "Seleziona distintivo",
         "hatJidPlaceholder": "user@example.com",
         "userInfo": "Info utente",
-        "manageOccupant": "Gestisci"
+        "manageOccupant": "Gestisci",
+        "invitationsHeading": "Inviti"
     },
     "events": {
-        "noPendingEvents": "Nessun evento in sospeso",
-        "systemNotifications": "Notifiche di sistema",
-        "messagesFromStrangers": "Messaggi da sconosciuti",
-        "subscriptionRequests": "Richieste di sottoscrizione",
-        "roomInvitations": "Inviti alle stanze",
         "invitedBy": "Invitato da {{name}}",
         "join": "Entra",
         "decline": "Rifiuta"
-    },
-    "activityLog": {
-        "title": "Registro attività",
-        "noActivity": "Nessuna attività ancora",
-        "markAllRead": "Segna tutto come letto",
-        "today": "Oggi",
-        "yesterday": "Ieri",
-        "subscriptionRequest": "Richiesta di contatto da {{name}}",
-        "subscriptionAccepted": "{{name}} ha accettato la tua richiesta",
-        "subscriptionDenied": "{{name}} ha rifiutato la tua richiesta",
-        "mucInvitation": "Invito alla stanza {{room}}",
-        "reactionReceived": "{{name}} ha reagito {{emojis}}",
-        "reactionReceivedTo": " a \"{{preview}}\"",
-        "pollVoteReceived": "{{name}} ha votato {{emojis}} nel sondaggio \"{{title}}\"",
-        "inConversation": " in {{conversation}}",
-        "strangerMessage": "Messaggio da {{name}}",
-        "resourceConflict": "Sessione sostituita",
-        "authError": "Errore di autenticazione",
-        "connectionError": "Errore di connessione",
-        "accepted": "Accettato",
-        "rejected": "Rifiutato",
-        "dismissed": "Ignorato",
-        "pending": "In attesa",
-        "muted": "Silenziato",
-        "muteReactions": "Silenzia reazioni",
-        "muteConversationReactions": "Silenzia reazioni da questa chat",
-        "unmuteConversationReactions": "Attiva reazioni da questa chat",
-        "muteMessageReactions": "Silenzia reazioni su questo messaggio",
-        "unmuteMessageReactions": "Attiva reazioni su questo messaggio"
     },
     "chat": {
         "selection": {
@@ -1034,14 +1008,6 @@
             "description": "Clicca su un contatto per vedere il profilo, i dispositivi connessi o iniziare una conversazione.",
             "hint": "Doppio clic per iniziare direttamente una conversazione."
         },
-        "archive": {
-            "title": "Conversazioni archiviate",
-            "description": "Le conversazioni archiviate appariranno qui. Puoi ripristinarle nella lista messaggi in qualsiasi momento."
-        },
-        "events": {
-            "title": "Eventi in sospeso",
-            "description": "Richieste di sottoscrizione, inviti alle stanze e messaggi da contatti sconosciuti appariranno qui."
-        },
         "admin": {
             "title": "Amministrazione server",
             "description": "Seleziona un comando dalla barra laterale per gestire il tuo server."
@@ -1296,5 +1262,14 @@
         "bannerMultiple": "📊 {{count}} sondaggi senza risposta, tocca per vedere l'ultimo",
         "dismissBanner": "Ignora",
         "scrollToOriginal": "Vai al sondaggio originale"
+    },
+    "messages": {
+        "showArchived": "Mostra le conversazioni archiviate",
+        "showActive": "Mostra le conversazioni attive",
+        "archivedTitle": "Archiviate"
+    },
+    "reactions": {
+        "mention": "{{emoji}} {{name}} ha reagito a '{{preview}}'",
+        "see": "Vedi"
     }
 }

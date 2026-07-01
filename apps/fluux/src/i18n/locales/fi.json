@@ -64,8 +64,7 @@
         "messages": "Viestit",
         "rooms": "Huoneet",
         "connections": "Yhteydet",
-        "archive": "Arkisto",
-        "events": "Tapahtumat",
+        "contacts": "Yhteystiedot",
         "settings": "Asetukset",
         "admin": "Ylläpito",
         "addContact": "Lisää yhteystieto",
@@ -74,6 +73,11 @@
         "viewProfile": "Näytä profiili",
         "resizeHint": "Vedä muuttaaksesi kokoa, kaksoisnapsauta nollataksesi",
         "dismiss": "Hylkää"
+    },
+    "newMessage": {
+        "title": "Uusi viesti",
+        "searchPlaceholder": "Etsi henkilöä tai syötä JID",
+        "manageContacts": "Hallitse yhteystietoja"
     },
     "archive": {
         "noArchivedConversations": "Ei arkistoituja keskusteluja"
@@ -116,7 +120,9 @@
         "unarchive": "Palauta arkistosta",
         "delete": "Poista",
         "deleteConfirmMessage": "Viestihistoria poistetaan pysyvästi.",
-        "draft": "Luonnos"
+        "draft": "Luonnos",
+        "messageRequestPreview": "Viestipyyntö",
+        "messageRequestsHeading": "Viestipyynnöt"
     },
     "contacts": {
         "noContacts": "Ei yhteystietoja vielä",
@@ -183,7 +189,8 @@
             "profile": "Profiili",
             "security": "Tietoturva"
         },
-        "actionsMenu": "Lisätoiminnot"
+        "actionsMenu": "Lisätoiminnot",
+        "requestsHeading": "Pyynnöt"
     },
     "rooms": {
         "backToRooms": "Takaisin huoneisiin",
@@ -411,46 +418,13 @@
         "selectHat": "Valitse tunnus",
         "hatJidPlaceholder": "user@example.com",
         "userInfo": "Käyttäjätiedot",
-        "manageOccupant": "Hallitse"
+        "manageOccupant": "Hallitse",
+        "invitationsHeading": "Kutsut"
     },
     "events": {
-        "noPendingEvents": "Ei odottavia tapahtumia",
-        "systemNotifications": "Järjestelmäilmoitukset",
-        "messagesFromStrangers": "Viestit tuntemattomilta",
-        "subscriptionRequests": "Tilauspyynnöt",
-        "roomInvitations": "Huonekutsut",
         "invitedBy": "Kutsuja: {{name}}",
         "join": "Liity",
         "decline": "Hylkää"
-    },
-    "activityLog": {
-        "title": "Toimintaloki",
-        "noActivity": "Ei toimintaa vielä",
-        "markAllRead": "Merkitse kaikki luetuiksi",
-        "today": "Tänään",
-        "yesterday": "Eilen",
-        "subscriptionRequest": "Kontaktipyyntö käyttäjältä {{name}}",
-        "subscriptionAccepted": "{{name}} hyväksyi pyyntösi",
-        "subscriptionDenied": "{{name}} hylkäsi pyyntösi",
-        "mucInvitation": "Huonekutsu kohteeseen {{room}}",
-        "reactionReceived": "{{name}} reagoi {{emojis}}",
-        "reactionReceivedTo": " viestiin \"{{preview}}\"",
-        "pollVoteReceived": "{{name}} äänesti {{emojis}} äänestyksessä \"{{title}}\"",
-        "inConversation": " kohteessa {{conversation}}",
-        "strangerMessage": "Viesti käyttäjältä {{name}}",
-        "resourceConflict": "Istunto korvattu",
-        "authError": "Todennusvirhe",
-        "connectionError": "Yhteysvirhe",
-        "accepted": "Hyväksytty",
-        "rejected": "Hylätty",
-        "dismissed": "Ohitettu",
-        "pending": "Odottaa",
-        "muted": "Mykistetty",
-        "muteReactions": "Mykistä reaktiot",
-        "muteConversationReactions": "Mykistä tämän keskustelun reaktiot",
-        "unmuteConversationReactions": "Poista tämän keskustelun reaktioiden mykistys",
-        "muteMessageReactions": "Mykistä tämän viestin reaktiot",
-        "unmuteMessageReactions": "Poista tämän viestin reaktioiden mykistys"
     },
     "chat": {
         "selection": {
@@ -1032,14 +1006,6 @@
             "description": "Napsauta yhteystietoa nähdäksesi profiilin, yhdistetyt laitteet tai aloittaaksesi keskustelun.",
             "hint": "Kaksoisnapsauta aloittaaksesi keskustelun suoraan."
         },
-        "archive": {
-            "title": "Arkistoidut keskustelut",
-            "description": "Arkistoidut keskustelut näkyvät täällä. Voit palauttaa ne viestiluetteloosi milloin tahansa."
-        },
-        "events": {
-            "title": "Odottavat tapahtumat",
-            "description": "Tilauspyynnöt, huonekutsut ja viestit tuntemattomilta yhteystiedoilta näkyvät täällä."
-        },
         "admin": {
             "title": "Palvelimen hallinta",
             "description": "Valitse komento sivupalkista hallitaksesi palvelintasi."
@@ -1294,5 +1260,14 @@
         "bannerMultiple": "📊 {{count}} vastaamatonta äänestystä, napauta nähdäksesi viimeisin",
         "dismissBanner": "Sulje",
         "scrollToOriginal": "Vieritä alkuperäiseen äänestykseen"
+    },
+    "messages": {
+        "showArchived": "Näytä arkistoidut keskustelut",
+        "showActive": "Näytä aktiiviset keskustelut",
+        "archivedTitle": "Arkistoidut"
+    },
+    "reactions": {
+        "mention": "{{emoji}} {{name}} reagoi viestiin '{{preview}}'",
+        "see": "Näytä"
     }
 }

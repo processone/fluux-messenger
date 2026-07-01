@@ -64,8 +64,7 @@
         "messages": "Teachtaireachtaí",
         "rooms": "Seomraí",
         "connections": "Ceangail",
-        "archive": "Cartlann",
-        "events": "Imeachtaí",
+        "contacts": "Teagmhálacha",
         "settings": "Socruithe",
         "admin": "Riarachán",
         "addContact": "Cuir teagmháil leis",
@@ -74,6 +73,11 @@
         "viewProfile": "Féach ar phróifíl",
         "resizeHint": "Tarraing chun méid a athrú, cliceáil faoi dhó chun athshocrú",
         "dismiss": "Díbir"
+    },
+    "newMessage": {
+        "title": "Teachtaireacht nua",
+        "searchPlaceholder": "Cuardaigh duine nó cuir isteach JID",
+        "manageContacts": "Bainistigh teagmhálacha"
     },
     "archive": {
         "noArchivedConversations": "Níl aon chomhráite cartlannaithe"
@@ -116,7 +120,9 @@
         "unarchive": "Díchartlannaigh",
         "delete": "Scrios",
         "deleteConfirmMessage": "Scriosfar stair na dteachtaireachtaí go buan.",
-        "draft": "Dréacht"
+        "draft": "Dréacht",
+        "messageRequestPreview": "Iarratas teachtaireachta",
+        "messageRequestsHeading": "Iarratais teachtaireachtaí"
     },
     "contacts": {
         "noContacts": "Níl aon teagmhálacha fós",
@@ -183,7 +189,8 @@
             "profile": "Próifíl",
             "security": "Slándáil"
         },
-        "actionsMenu": "Tuilleadh gníomhartha"
+        "actionsMenu": "Tuilleadh gníomhartha",
+        "requestsHeading": "Iarratais"
     },
     "rooms": {
         "backToRooms": "Ar ais go seomraí",
@@ -411,46 +418,13 @@
         "selectHat": "Roghnaigh suaitheantais",
         "hatJidPlaceholder": "user@example.com",
         "userInfo": "Eolas úsáideora",
-        "manageOccupant": "Bainistigh"
+        "manageOccupant": "Bainistigh",
+        "invitationsHeading": "Cuirí"
     },
     "events": {
-        "noPendingEvents": "Níl aon imeachtaí ar feitheamh",
-        "systemNotifications": "Fógraí an Chórais",
-        "messagesFromStrangers": "Teachtaireachtaí ó Strainséirí",
-        "subscriptionRequests": "Iarratais Síntiúis",
-        "roomInvitations": "Cuirí Seomra",
         "invitedBy": "Cuireadh ag {{name}}",
         "join": "Téigh isteach",
         "decline": "Diúltaigh"
-    },
-    "activityLog": {
-        "title": "Log gníomhaíochta",
-        "noActivity": "Gan ghníomhaíocht fós",
-        "markAllRead": "Marcáil gach rud mar léite",
-        "today": "Inniu",
-        "yesterday": "Inné",
-        "subscriptionRequest": "Iarratas teagmhála ó {{name}}",
-        "subscriptionAccepted": "Ghlac {{name}} le d'iarratas",
-        "subscriptionDenied": "Dhiúltaigh {{name}} d'iarratas",
-        "mucInvitation": "Cuireadh seomra go {{room}}",
-        "reactionReceived": "Rinne {{name}} imoibriú {{emojis}}",
-        "reactionReceivedTo": " ar \"{{preview}}\"",
-        "pollVoteReceived": "Vótáil {{name}} {{emojis}} i bpobalbhreith \"{{title}}\"",
-        "inConversation": " i {{conversation}}",
-        "strangerMessage": "Teachtaireacht ó {{name}}",
-        "resourceConflict": "Seisiún ionadaithe",
-        "authError": "Earráid fíordheimhnithe",
-        "connectionError": "Earráid ceangail",
-        "accepted": "Glactha",
-        "rejected": "Diúltaithe",
-        "dismissed": "Díbeartha",
-        "pending": "Ar feitheamh",
-        "muted": "Balbhaithe",
-        "muteReactions": "Balbhaigh imoibriúcháin",
-        "muteConversationReactions": "Balbhaigh imoibriúcháin ón gcomhrá seo",
-        "unmuteConversationReactions": "Díbhalbhaigh imoibriúcháin ón gcomhrá seo",
-        "muteMessageReactions": "Balbhaigh imoibriúcháin ar an teachtaireacht seo",
-        "unmuteMessageReactions": "Díbhalbhaigh imoibriúcháin ar an teachtaireacht seo"
     },
     "chat": {
         "selection": {
@@ -1032,14 +1006,6 @@
             "description": "Cliceáil ar theagmháil lena bpróifíl, gléasanna ceangailte a fheiceáil, nó comhrá a thosú.",
             "hint": "Cliceáil faoi dhó le comhrá a thosú go díreach."
         },
-        "archive": {
-            "title": "Comhráite Cartlannaithe",
-            "description": "Beidh comhráite cartlannaithe le feiceáil anseo. Is féidir leat iad a athchur i do liosta teachtaireachtaí am ar bith."
-        },
-        "events": {
-            "title": "Imeachtaí ar Feitheamh",
-            "description": "Beidh iarratais síntiúis, cuirí seomra, agus teachtaireachtaí ó theagmhálacha anaithnide le feiceáil anseo."
-        },
         "admin": {
             "title": "Riarachán Freastalaí",
             "description": "Roghnaigh ordú ón mbarra taoibh chun do fhreastalaí a bhainistiú."
@@ -1294,5 +1260,14 @@
         "bannerMultiple": "📊 {{count}} vótálacha gan freagra, tapáil chun an ceann is déanaí a fheiceáil",
         "dismissBanner": "Díbir",
         "scrollToOriginal": "Scrollaigh go dtí an vótáil bhunaidh"
+    },
+    "messages": {
+        "showArchived": "Taispeáin comhráite cartlannaithe",
+        "showActive": "Taispeáin comhráite gníomhacha",
+        "archivedTitle": "Cartlannaithe"
+    },
+    "reactions": {
+        "mention": "{{emoji}} d'imoibrigh {{name}} le '{{preview}}'",
+        "see": "Amharc"
     }
 }

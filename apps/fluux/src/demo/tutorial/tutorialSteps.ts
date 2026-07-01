@@ -63,14 +63,7 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
     maxWaitMs: 30_000,
   },
 
-  // ── Act 4: Activity, Search & Mentions ────────────────────────────────
-  {
-    id: 'activity-log-hint',
-    targetSelector: '[data-nav="events"]',
-    position: 'right',
-    completionTrigger: { type: 'click', selector: '[data-nav="events"]' },
-    maxWaitMs: 30_000,
-  },
+  // ── Act 4: Search & Mentions ────────────────────────────────
   {
     id: 'search-hint',
     targetSelector: '[data-nav="search"]',

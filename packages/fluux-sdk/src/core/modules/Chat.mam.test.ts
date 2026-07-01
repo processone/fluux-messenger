@@ -2221,6 +2221,7 @@ describe('XMPPClient MAM', () => {
       )
       expect(reactionEvents.length).toBe(1)
       expect(reactionEvents[0][1]).toEqual({
+        isLive: false,
         conversationId: 'alice@example.com',
         messageId: 'old-msg-1',
         reactorJid: 'bob@example.com',

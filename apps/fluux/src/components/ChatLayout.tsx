@@ -14,7 +14,7 @@ const SettingsView = lazy(() => import('./SettingsView').then(m => ({ default: m
 const AdminView = lazy(() => import('./AdminView').then(m => ({ default: m.AdminView })))
 const XmppConsole = lazy(() => import('./XmppConsole').then(m => ({ default: m.XmppConsole })))
 const SearchContextView = lazy(() => import('./SearchContextView').then(m => ({ default: m.SearchContextView })))
-const ActivityContextView = lazy(() => import('./ActivityContextView').then(m => ({ default: m.ActivityContextView })))
+const StrangerRequestPreviewView = lazy(() => import('./StrangerRequestPreviewView').then(m => ({ default: m.StrangerRequestPreviewView })))
 import { ShortcutHelp } from './ShortcutHelp'
 import { CommandPalette } from './CommandPalette'
 import { AppBar } from './AppBar'
@@ -22,12 +22,13 @@ import { ToastContainer } from './ToastContainer'
 import { CreateRoomModal } from './CreateRoomModal'
 import {
   // Vanilla stores for imperative .getState() access
-  chatStore, roomStore, consoleStore, adminStore, rosterStore, searchStore, activityLogStore,
-  useRosterActions, useContactIdentities,
+  chatStore, roomStore, consoleStore, adminStore, rosterStore, searchStore,
+  useRosterActions, useContactIdentities, useEvents, useBlocking, getBareJid,
   type Contact, type Conversation, type AdminCategory
 } from '@fluux/sdk'
+import { useMessageRequestPreviewStore } from '@/stores/messageRequestPreviewStore'
 // React hook wrappers for reactive subscriptions
-import { useChatStore, useRoomStore, useRosterStore, useConnectionStore, useConsoleStore, useAdminStore, useSearchStore, useActivityLogStore } from '@fluux/sdk/react'
+import { useChatStore, useRoomStore, useRosterStore, useConnectionStore, useConsoleStore, useAdminStore, useSearchStore } from '@fluux/sdk/react'
 import { useNotificationBadge } from '@/hooks/useNotificationBadge'
 import { useDesktopNotifications } from '@/hooks/useDesktopNotifications'
 import { useWebPush } from '@/hooks/useWebPush'
@@ -35,12 +36,13 @@ import { useSoundNotification } from '@/hooks/useSoundNotification'
 import { useEventsSoundNotification } from '@/hooks/useEventsSoundNotification'
 import { useEventsDesktopNotifications } from '@/hooks/useEventsDesktopNotifications'
 import { useSDKErrorToasts } from '@/hooks/useSDKErrorToasts'
+import { useReactionNotifications } from '@/hooks/useReactionNotifications'
 import { useFocusZones, useViewNavigation, isMobileWeb, isSmallScreen, useWindowVisibility, useRouteSync, type FocusZoneRefs } from '@/hooks'
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
 import { useDeepLink } from '@/hooks/useDeepLink'
 import { saveViewState, getSavedViewState, type ViewStateData } from '@/hooks/useSessionPersistence'
 import { useModalStore } from '@/stores/modalStore'
-import { Server, ShieldOff, MessageCircle, Hash, Users, Archive, Bell, Search, Settings, Plus, type LucideIcon } from 'lucide-react'
+import { Server, ShieldOff, MessageCircle, Hash, Users, Search, Settings, Plus, type LucideIcon } from 'lucide-react'
 
 /**
  * ChatLayout wrapper. The actual layout logic is in ChatLayoutContent; modal state
@@ -84,6 +86,9 @@ function GlobalEffects() {
 
   // Surface SDK error events as toast notifications
   useSDKErrorToasts()
+
+  // Notify received reactions via toast (inactive conversation) or in-flow mention (active, off-screen)
+  useReactionNotifications()
 
   // Handle XMPP URI deep links (xmpp:user@example.com?message)
   useDeepLink()
@@ -191,7 +196,11 @@ function ChatLayoutContent() {
   const roomActivationPending = useRoomStore((s) => s.activationPending)
   const activationPending = chatActivationPending || roomActivationPending
   const searchPreviewResult = useSearchStore((s) => s.previewResult)
-  const activityPreviewEvent = useActivityLogStore((s) => s.previewEvent)
+  // Read-only message-request preview (transient; set by the Message-requests banner).
+  const previewJid = useMessageRequestPreviewStore((s) => s.previewJid)
+  const setPreviewJid = useMessageRequestPreviewStore((s) => s.setPreviewJid)
+  const { acceptStranger, ignoreStranger } = useEvents()
+  const { blockJid } = useBlocking()
 
   // NOTE: Don't use useRoster() hook here - it subscribes to ALL contacts and triggers
   // re-renders when ANY contact's presence changes. Use useRosterActions() for actions
@@ -269,8 +278,6 @@ function ChatLayoutContent() {
     navigateToMessages,
     navigateToRooms,
     navigateToContacts,
-    navigateToArchive,
-    navigateToEvents,
     navigateToAdmin,
     navigateToSettings,
     navigateToSearch,
@@ -366,12 +373,6 @@ function ChatLayoutContent() {
         case 'directory':
           navigateToContacts(savedViewState.selectedContactJid ?? undefined)
           break
-        case 'archive':
-          navigateToArchive(savedViewState.activeConversationId ?? undefined)
-          break
-        case 'events':
-          navigateToEvents()
-          break
         case 'admin':
           navigateToAdmin()
           break
@@ -380,7 +381,7 @@ function ChatLayoutContent() {
           break
       }
     }
-  }, [activateConversation, activateRoom, navigateToMessages, navigateToRooms, navigateToContacts, navigateToArchive, navigateToEvents, navigateToAdmin, navigateToSettings])
+  }, [activateConversation, activateRoom, navigateToMessages, navigateToRooms, navigateToContacts, navigateToAdmin, navigateToSettings])
 
   // Save view state when it changes (only when online)
   useEffect(() => {
@@ -440,11 +441,6 @@ function ChatLayoutContent() {
     } else if (sidebarView === 'directory') {
       if (activeJid !== selectedContactJid) {
         setSelectedContactJid(activeJid)
-      }
-    } else if (sidebarView === 'archive') {
-      const currentStoreId = chatStore.getState().activeConversationId
-      if (activeJid !== currentStoreId) {
-        void activateConversation(activeJid)
       }
     }
   }, [activeJid, sidebarView, activateConversation, activateRoom, selectedContactJid])
@@ -569,7 +565,7 @@ function ChatLayoutContent() {
   const adminHasMainContent = adminSession || adminCategory === 'users' || adminCategory === 'rooms' || adminCategory === 'stats'
   // Settings: only show content when a category is explicitly selected (on mobile, let user choose from sidebar first)
   const settingsHasContent = sidebarView === 'settings' && !!settingsCategory
-  const hasActiveContent = !!(activeConversationId || activeRoomJid || selectedContact || adminHasMainContent || settingsHasContent || searchPreviewResult || activityPreviewEvent)
+  const hasActiveContent = !!(activeConversationId || activeRoomJid || selectedContact || adminHasMainContent || settingsHasContent || searchPreviewResult || previewJid)
 
   // Toggle shortcut help overlay
   const toggleShortcutHelp = () => {
@@ -708,13 +704,12 @@ function ChatLayoutContent() {
   const handleStartConversation = (contact: Contact) => {
     const chatState = chatStore.getState()
 
-    // Check if conversation is archived - if so, open in archive view
+    // Check if conversation is archived - open in messages view (archive toggle handles display)
     if (chatState.isArchived(contact.jid)) {
-      // Navigate to archive view to show the archived conversation
-      handleSidebarViewChange('archive')
+      handleSidebarViewChange('messages')
       void activateConversation(contact.jid)
       setActiveRoom(null)
-      navigateToArchive(contact.jid, { replace: true })
+      navigateToMessages(contact.jid, { replace: true })
       return
     }
 
@@ -745,10 +740,10 @@ function ChatLayoutContent() {
   const handleStartChatWithJid = (jid: string) => {
     const chatState = chatStore.getState()
     if (chatState.isArchived(jid)) {
-      handleSidebarViewChange('archive')
+      handleSidebarViewChange('messages')
       void activateConversation(jid)
       setActiveRoom(null)
-      navigateToArchive(jid, { replace: true })
+      navigateToMessages(jid, { replace: true })
       return
     }
     if (!chatState.hasConversation(jid)) {
@@ -765,6 +760,38 @@ function ChatLayoutContent() {
     setActiveRoom(null)
     navigateToMessages(jid, { replace: true })
   }
+
+  // Message-request preview actions (read-only stranger thread in the main pane).
+  const handleAcceptStrangerRequest = async () => {
+    const jid = previewJid
+    if (!jid) return
+    setPreviewJid(null)
+    await acceptStranger(jid)
+    const bareJid = getBareJid(jid)
+    handleSidebarViewChange('messages')
+    void activateConversation(bareJid)
+    setActiveRoom(null)
+    navigateToMessages(bareJid, { replace: true })
+  }
+  const handleIgnoreStrangerRequest = () => {
+    if (!previewJid) return
+    const jid = previewJid
+    setPreviewJid(null)
+    ignoreStranger(jid)
+  }
+  const handleBlockStrangerRequest = async () => {
+    if (!previewJid) return
+    const jid = previewJid
+    setPreviewJid(null)
+    ignoreStranger(jid)
+    await blockJid(jid)
+  }
+
+  // Close the message-request preview whenever the user navigates to a
+  // conversation/room/contact or changes the sidebar view.
+  useEffect(() => {
+    setPreviewJid(null)
+  }, [activeConversationId, activeRoomJid, selectedContactJid, sidebarView, setPreviewJid])
 
   // Handle showing user profile from occupant panel context menu
   const handleShowProfileFromRoom = (jid: string) => {
@@ -854,6 +881,7 @@ function ChatLayoutContent() {
           <Sidebar
             onSelectContact={handleSelectContact}
             onStartChat={handleStartConversation}
+            onStartChatWithJid={handleStartChatWithJid}
             onManageUser={handleManageUser}
             adminCategory={adminCategory}
             onAdminCategoryChange={handleAdminCategoryChange}
@@ -869,6 +897,16 @@ function ChatLayoutContent() {
           {sidebarView === 'settings' ? (
             <Suspense fallback={<ViewLoadingFallback />}>
               <SettingsView onBack={handleSettingsBack} />
+            </Suspense>
+          ) : previewJid ? (
+            <Suspense fallback={<ViewLoadingFallback />}>
+              <StrangerRequestPreviewView
+                strangerJid={previewJid}
+                onAccept={handleAcceptStrangerRequest}
+                onIgnore={handleIgnoreStrangerRequest}
+                onBlock={handleBlockStrangerRequest}
+                onBack={() => setPreviewJid(null)}
+              />
             </Suspense>
           ) : activeRoomJid && showRoomOccupants && isSmallScreen() ? (
             <FullScreenOccupantPanel onClose={() => setShowRoomOccupants(false)} onStartChat={handleStartChatWithJid} onShowProfile={handleShowProfileFromRoom} />
@@ -899,10 +937,6 @@ function ChatLayoutContent() {
           ) : searchPreviewResult ? (
             <Suspense fallback={<ViewLoadingFallback />}>
               <SearchContextView onBack={() => searchStore.getState().setPreviewResult(null)} />
-            </Suspense>
-          ) : activityPreviewEvent ? (
-            <Suspense fallback={<ViewLoadingFallback />}>
-              <ActivityContextView onBack={() => activityLogStore.getState().setPreviewEvent(null)} />
             </Suspense>
           ) : activationPending ? (
             // A hydrating activation is in flight (cache load before the active id
@@ -1016,18 +1050,6 @@ function EmptyState({ sidebarView, primaryAction }: { sidebarView: SidebarView; 
           title: t('emptyState.directory.title'),
           description: t('emptyState.directory.description'),
           hint: t('emptyState.directory.hint'),
-        }
-      case 'archive':
-        return {
-          Icon: Archive,
-          title: t('emptyState.archive.title'),
-          description: t('emptyState.archive.description'),
-        }
-      case 'events':
-        return {
-          Icon: Bell,
-          title: t('emptyState.events.title'),
-          description: t('emptyState.events.description'),
         }
       case 'admin':
         return {

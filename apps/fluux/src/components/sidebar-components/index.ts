@@ -5,8 +5,6 @@ export { PresenceSelector, StatusDisplay, StatusOrPresence } from './PresenceSel
 export { ConversationList, ArchiveList, ConversationItem } from './ConversationList'
 export { ContactList } from './ContactList'
 export { RoomsList } from './RoomsList'
-export { EventsView } from './EventsView'
-export { ActivityLogView } from './ActivityLogView'
 export { SearchView } from './SearchView'
 export { UserMenu } from './UserMenu'
 

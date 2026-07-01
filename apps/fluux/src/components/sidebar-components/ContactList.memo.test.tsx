@@ -68,6 +68,8 @@ vi.mock('@fluux/sdk', async (importOriginal) => {
     useContactIdentities: () => new Map(),
     useRosterActions: () => ({ removeContact, renameContact }),
     useAdminPermissions: () => ({ isAdmin: false, hasUserCommands: false, canManageUser: () => false }),
+    useEvents: () => ({ subscriptionRequests: [], acceptSubscription: vi.fn(), rejectSubscription: vi.fn() }),
+    useBlocking: () => ({ blockJid: vi.fn() }),
     rosterStore: { getState: () => ({ contacts: mockContacts }) },
   }
 })

@@ -38,37 +38,6 @@ export const act6Steps: DemoAnimationStep[] = [
       incrementUnread: true,
     },
   },
-  // New subscription request
-  {
-    delayMs: 266_000,
-    action: 'activity-event',
-    data: {
-      type: 'subscription-request',
-      kind: 'actionable',
-      timestamp: new Date(),
-      resolution: 'pending',
-      payload: { type: 'subscription-request', from: `nina@${DOMAIN}` },
-    },
-  },
-  // MUC invitation
-  {
-    delayMs: 269_000,
-    action: 'activity-event',
-    data: {
-      type: 'muc-invitation',
-      kind: 'actionable',
-      timestamp: new Date(),
-      resolution: 'pending',
-      payload: {
-        type: 'muc-invitation',
-        roomJid: `releases@conference.${DOMAIN}`,
-        from: `ava@${DOMAIN}`,
-        reason: 'Join us for the v0.14 release planning!',
-        isDirect: true,
-        isQuickChat: false,
-      },
-    },
-  },
   // Ava sends a DM
   {
     delayMs: 271_000,

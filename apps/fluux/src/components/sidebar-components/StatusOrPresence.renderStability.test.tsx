@@ -60,6 +60,9 @@ vi.mock('react-i18next', () => ({
 vi.mock('@fluux/sdk/react', () => ({
   useConnectionStore: <T,>(selector: (s: ConnState) => T): T =>
     useSyncExternalStore(store.subscribe, () => selector(store.state)),
+  // StatusDisplay reads the latest persistent system alert; none in these tests.
+  useEventsStore: (selector: (s: { systemNotifications: unknown[] }) => unknown) =>
+    selector({ systemNotifications: [] }),
 }))
 
 vi.mock('@fluux/sdk', () => ({

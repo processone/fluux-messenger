@@ -202,30 +202,6 @@ describe('useViewNavigation', () => {
       expect(mockSetActiveRoom).toHaveBeenCalledWith(null)
     })
 
-    it('should navigate to archive view', () => {
-      const { result } = renderHook(() => useViewNavigation(null), {
-        wrapper: createWrapper('/messages'),
-      })
-
-      act(() => {
-        result.current.navigateToView('archive')
-      })
-
-      expect(currentLocation.current.pathname).toBe('/archive')
-    })
-
-    it('should navigate to events view', () => {
-      const { result } = renderHook(() => useViewNavigation(null), {
-        wrapper: createWrapper('/messages'),
-      })
-
-      act(() => {
-        result.current.navigateToView('events')
-      })
-
-      expect(currentLocation.current.pathname).toBe('/events')
-    })
-
     it('should navigate to admin view', () => {
       const { result } = renderHook(() => useViewNavigation(null), {
         wrapper: createWrapper('/messages'),
@@ -323,28 +299,6 @@ describe('useViewNavigation', () => {
       expect(getDecodedPath()).toBe('/rooms/room1@conference.example.com')
       // Should also set store state (via the hydrating activation action)
       expect(mockActivateRoom).toHaveBeenCalledWith('room1@conference.example.com')
-    })
-
-    it('should auto-select first archived conversation when navigating to archive', () => {
-      setMockState({
-        conversations: new Map([
-          ['active@example.com', { id: 'active@example.com' }],
-          ['archived@example.com', { id: 'archived@example.com' }],
-        ]),
-        isArchived: (id: string) => id === 'archived@example.com',
-      })
-
-      const { result } = renderHook(() => useViewNavigation(null), {
-        wrapper: createWrapper('/messages'),
-      })
-
-      act(() => {
-        result.current.navigateToView('archive')
-      })
-
-      // Should select the archived conversation
-      expect(getDecodedPath()).toBe('/archive/archived@example.com')
-      expect(mockActivateConversation).toHaveBeenCalledWith('archived@example.com')
     })
 
     it('should navigate without selection when no conversations exist', () => {
@@ -702,29 +656,6 @@ describe('useViewNavigation', () => {
       expect(currentLocation.current.pathname).toBe('/rooms')
       // Room activation should NOT happen with a JID
       expect(mockActivateRoom).not.toHaveBeenCalledWith('room1@conference.example.com')
-    })
-
-    it('should skip auto-selection when navigating to archive on small screen', () => {
-      setMockState({
-        conversations: new Map([
-          ['active@example.com', { id: 'active@example.com' }],
-          ['archived@example.com', { id: 'archived@example.com' }],
-        ]),
-        isArchived: (id: string) => id === 'archived@example.com',
-      })
-
-      const { result } = renderHook(() => useViewNavigation(null), {
-        wrapper: createWrapper('/messages'),
-      })
-
-      act(() => {
-        result.current.navigateToView('archive')
-      })
-
-      // Should navigate to /archive without auto-selecting
-      expect(currentLocation.current.pathname).toBe('/archive')
-      // Activation should NOT happen with the archived JID
-      expect(mockActivateConversation).not.toHaveBeenCalledWith('archived@example.com')
     })
 
     it('should skip auto-restoring last contact when navigating to directory on small screen', () => {

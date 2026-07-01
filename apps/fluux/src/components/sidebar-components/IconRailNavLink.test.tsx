@@ -291,4 +291,58 @@ describe('IconRailNavLink', () => {
       expect(onNavigate).toHaveBeenCalledWith('messages')
     })
   })
+
+  describe('numeric count badge', () => {
+    it('renders a numeric badge with the count when badgeCount > 0', () => {
+      const Wrapper = createWrapper('/messages')
+      render(
+        <IconRailNavLink
+          icon={Hash}
+          label="Contacts"
+          view="directory"
+          pathPrefix="/contacts"
+          onNavigate={vi.fn()}
+          badgeCount={2}
+          badgeLabel="Contacts (2)"
+        />,
+        { wrapper: Wrapper }
+      )
+      expect(screen.getByText('2')).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Contacts (2)' })).toBeInTheDocument()
+    })
+
+    it('clamps a large badge count to 99+', () => {
+      const Wrapper = createWrapper('/messages')
+      render(
+        <IconRailNavLink
+          icon={Hash}
+          label="Contacts"
+          view="directory"
+          pathPrefix="/contacts"
+          onNavigate={vi.fn()}
+          badgeCount={150}
+        />,
+        { wrapper: Wrapper }
+      )
+      expect(screen.getByText('99+')).toBeInTheDocument()
+      // No badgeLabel passed → aria-label falls back to label.
+      expect(screen.getByRole('button', { name: 'Contacts' })).toBeInTheDocument()
+    })
+
+    it('renders no badge when badgeCount is 0 and showBadge is false', () => {
+      const Wrapper = createWrapper('/messages')
+      const { container } = render(
+        <IconRailNavLink
+          icon={Hash}
+          label="Contacts"
+          view="directory"
+          pathPrefix="/contacts"
+          onNavigate={vi.fn()}
+          badgeCount={0}
+        />,
+        { wrapper: Wrapper }
+      )
+      expect(container.querySelector('span.bg-fluux-red')).toBeNull()
+    })
+  })
 })

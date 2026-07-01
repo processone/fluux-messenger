@@ -64,8 +64,7 @@
         "messages": "Паведамленні",
         "rooms": "Пакоі",
         "connections": "Кантакты",
-        "archive": "Архіў",
-        "events": "Падзеі",
+        "contacts": "Кантакты",
         "settings": "Налады",
         "admin": "Адміністраванне",
         "addContact": "Дадаць кантакт",
@@ -74,6 +73,11 @@
         "viewProfile": "Праглядзець профіль",
         "resizeHint": "Пцягніце для змены памеру, падвойнае пстрык для скідання",
         "dismiss": "Адхіліць"
+    },
+    "newMessage": {
+        "title": "Новае паведамленне",
+        "searchPlaceholder": "Пошук асобы або ўвод JID",
+        "manageContacts": "Кіраванне кантактамі"
     },
     "archive": {
         "noArchivedConversations": "Няма архіваваных размоў"
@@ -116,7 +120,9 @@
         "unarchive": "Разархіваваць",
         "delete": "Выдаліць",
         "deleteConfirmMessage": "Гісторыя паведамленняў будзе канчаткова выдалена.",
-        "draft": "Чарнавік"
+        "draft": "Чарнавік",
+        "messageRequestPreview": "Запыт паведамлення",
+        "messageRequestsHeading": "Запыты паведамленняў"
     },
     "contacts": {
         "noContacts": "Яшчэ няма кантактаў",
@@ -183,7 +189,8 @@
             "profile": "Профіль",
             "security": "Бяспека"
         },
-        "actionsMenu": "Іншыя дзеянні"
+        "actionsMenu": "Іншыя дзеянні",
+        "requestsHeading": "Запыты"
     },
     "rooms": {
         "backToRooms": "Назад да пакояў",
@@ -411,46 +418,13 @@
         "selectHat": "Абраць значок",
         "hatJidPlaceholder": "user@example.com",
         "userInfo": "Інфармацыя пра карыстальніка",
-        "manageOccupant": "Кіраванне"
+        "manageOccupant": "Кіраванне",
+        "invitationsHeading": "Запрашэнні"
     },
     "events": {
-        "noPendingEvents": "Няма чакаючых падзей",
-        "systemNotifications": "Сістэмныя апавяшчэнні",
-        "messagesFromStrangers": "Паведамленні ад незнаёмцаў",
-        "subscriptionRequests": "Запыты на падпіску",
-        "roomInvitations": "Запрашэнні ў пакоі",
         "invitedBy": "Запрошаны {{name}}",
         "join": "Далучыцца",
         "decline": "Адхіліць"
-    },
-    "activityLog": {
-        "title": "Журнал актыўнасці",
-        "noActivity": "Пакуль няма актыўнасці",
-        "markAllRead": "Пазначыць усё як прачытанае",
-        "today": "Сёння",
-        "yesterday": "Учора",
-        "subscriptionRequest": "Запыт на кантакт ад {{name}}",
-        "subscriptionAccepted": "{{name}} прыняў(-ла) ваш запыт",
-        "subscriptionDenied": "{{name}} адхіліў(-ла) ваш запыт",
-        "mucInvitation": "Запрашэнне ў пакой {{room}}",
-        "reactionReceived": "{{name}} адрэагаваў(-ла) {{emojis}}",
-        "reactionReceivedTo": " на \"{{preview}}\"",
-        "pollVoteReceived": "{{name}} прагаласаваў(-ла) {{emojis}} у апытанні \"{{title}}\"",
-        "inConversation": " у {{conversation}}",
-        "strangerMessage": "Паведамленне ад {{name}}",
-        "resourceConflict": "Сесія заменена",
-        "authError": "Памылка аўтэнтыфікацыі",
-        "connectionError": "Памылка злучэння",
-        "accepted": "Прынята",
-        "rejected": "Адхілена",
-        "dismissed": "Адхілена",
-        "pending": "Чакае",
-        "muted": "Выключана",
-        "muteReactions": "Заглушыць рэакцыі",
-        "muteConversationReactions": "Заглушыць рэакцыі з гэтага чата",
-        "unmuteConversationReactions": "Уключыць рэакцыі з гэтага чата",
-        "muteMessageReactions": "Заглушыць рэакцыі на гэта паведамленне",
-        "unmuteMessageReactions": "Уключыць рэакцыі на гэта паведамленне"
     },
     "chat": {
         "selection": {
@@ -1032,14 +1006,6 @@
             "description": "Націсніце на кантакт, каб праглядзець яго профіль, падлучаныя прылады альбо пачаць размову.",
             "hint": "Падвойнае пстрык, каб пачаць размову непасрэдна."
         },
-        "archive": {
-            "title": "Архіваваныя размовы",
-            "description": "Архіваваныя размовы з'явяцца тут. Вы можаце аднавіць іх у ваш спіс паведамленняў у любы час."
-        },
-        "events": {
-            "title": "Чакаючыя падзеі",
-            "description": "Запыты на падпіску, запрашэнні ў пакоі і паведамленні ад невядомых кантактаў з'явяцца тут."
-        },
         "admin": {
             "title": "Адміністраванне сервера",
             "description": "Выберыце каманду на бакавой панэлі для кіравання серверам."
@@ -1294,5 +1260,14 @@
         "bannerMultiple": "📊 {{count}} неадказаных апытанняў, націсніце, каб убачыць апошняе",
         "dismissBanner": "Схаваць",
         "scrollToOriginal": "Перайсці да арыгінальнага апытання"
+    },
+    "messages": {
+        "showArchived": "Паказаць архіваваныя размовы",
+        "showActive": "Паказаць актыўныя размовы",
+        "archivedTitle": "Архіваваныя"
+    },
+    "reactions": {
+        "mention": "{{emoji}} {{name}} адрэагаваў на '{{preview}}'",
+        "see": "Паказаць"
     }
 }

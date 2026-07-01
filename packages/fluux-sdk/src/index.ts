@@ -94,7 +94,6 @@ export { useRosterActions } from './hooks/useRosterActions'
 export { useContactIdentities, type ContactIdentity } from './hooks/useContactIdentities'
 export { useConsole } from './hooks/useConsole'
 export { useEvents } from './hooks/useEvents'
-export { useActivityLog } from './hooks/useActivityLog'
 export { useRoom } from './hooks/useRoom'
 export { useRoomActive } from './hooks/useRoomActive'
 export { useRoomActions } from './hooks/useRoomActions'
@@ -182,7 +181,6 @@ export {
   adminStore,
   blockingStore,
   searchStore,
-  activityLogStore,
 } from './stores'
 
 // React hook wrappers are available from '@fluux/sdk/react':
@@ -325,21 +323,8 @@ export type {
 // Events types
 export type { SubscriptionRequest, StrangerMessage, MucInvitation, SystemNotification, SystemNotificationType } from './core/types'
 
-// Activity types
-export type {
-  ActivityEventType,
-  ActivityEventKind,
-  ActivityResolution,
-  ActivityPayload,
-  ActivityEvent,
-  ActivityEventInput,
-  ReactionEntry,
-  ReactionReceivedPayload,
-} from './core/types'
-
 // EventHook base class (Obsidian-inspired plugin pattern)
 export { EventHook } from './core/EventHook'
-export { ActivityLogHook } from './core/eventHooks'
 
 // Media encryption helpers (XEP-0454-style encrypted file attachments).
 // Apps wrap HTTP Upload bytes in AES-256-GCM and carry the key/IV in the
@@ -367,7 +352,6 @@ export type {
   BlockingEvents,
   AdminEvents,
   ConsoleEvents,
-  ActivityEvents,
   StanzaEvents,
 } from './core/types'
 
