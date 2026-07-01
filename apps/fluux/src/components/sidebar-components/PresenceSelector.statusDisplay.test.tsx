@@ -41,6 +41,9 @@ vi.mock('@fluux/sdk/react', () => ({
       reconnectTargetTime: mockReconnectTargetTime,
       reconnectAttempt: mockReconnectAttempt,
     }),
+  // StatusDisplay reads the latest persistent system alert; no alerts in these tests.
+  useEventsStore: (selector: (s: { systemNotifications: unknown[] }) => unknown) =>
+    selector({ systemNotifications: [] }),
 }))
 
 vi.mock('@fluux/sdk', () => ({
