@@ -1224,7 +1224,8 @@
         "filteringContacts": "Filtering contacts...",
         "filteringRooms": "Filtering rooms...",
         "filteringCommands": "Filtering commands...",
-        "searchMessages": "Search messages for \"{{query}}\""
+        "searchMessages": "Search messages for \"{{query}}\"",
+        "unread": "Unread"
     },
     "dataFormHints": {
         "muc#roomconfig_roomname": "The display name shown in room listings and the header.",

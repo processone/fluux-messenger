@@ -1226,7 +1226,8 @@
         "filteringContacts": "Filtriranje stikov...",
         "filteringRooms": "Filtriranje sob...",
         "filteringCommands": "Filtriranje ukazov...",
-        "searchMessages": "Search messages for \"{{query}}\""
+        "searchMessages": "Search messages for \"{{query}}\"",
+        "unread": "Neprebrano"
     },
     "dataFormHints": {
         "muc#roomconfig_roomname": "Prikazano ime na seznamu sob in v glavi.",

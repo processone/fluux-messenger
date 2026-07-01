@@ -1224,7 +1224,8 @@
         "filteringContacts": "Filtrerer kontakter...",
         "filteringRooms": "Filtrerer rum...",
         "filteringCommands": "Filtrerer kommandoer...",
-        "searchMessages": "Search messages for \"{{query}}\""
+        "searchMessages": "Search messages for \"{{query}}\"",
+        "unread": "Ulæste"
     },
     "dataFormHints": {
         "muc#roomconfig_roomname": "Det viste navn i rumlister og overskriften.",

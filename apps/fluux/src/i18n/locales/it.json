@@ -1226,7 +1226,8 @@
         "filteringContacts": "Filtraggio contatti...",
         "filteringRooms": "Filtraggio stanze...",
         "filteringCommands": "Filtraggio comandi...",
-        "searchMessages": "Search messages for \"{{query}}\""
+        "searchMessages": "Search messages for \"{{query}}\"",
+        "unread": "Non letti"
     },
     "dataFormHints": {
         "muc#roomconfig_roomname": "Il nome visualizzato nell'elenco delle stanze e nell'intestazione.",

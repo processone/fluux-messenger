@@ -92,6 +92,7 @@ vi.mock('react-i18next', () => ({
         'commandPalette.filteringRooms': 'Filtering rooms...',
         'commandPalette.filteringCommands': 'Filtering commands...',
         'commandPalette.searchMessages': 'Search messages for "{{query}}"',
+        'commandPalette.unread': 'Unread',
         'sidebar.messages': 'Messages',
         'sidebar.rooms': 'Rooms',
         'sidebar.connections': 'Connections',
@@ -375,8 +376,8 @@ describe('CommandPalette', () => {
     it('should select first item by default', () => {
       render(<CommandPalette {...defaultProps} />)
 
-      // First item should have data-selected="true"
-      const firstItem = screen.getByText('Alice Smith').closest('button')
+      // Bob (unreadCount 2) is in the Unread section, which comes first
+      const firstItem = screen.getByText('Bob Jones').closest('button')
       expect(firstItem).toHaveAttribute('data-selected', 'true')
     })
 
@@ -386,8 +387,8 @@ describe('CommandPalette', () => {
 
       fireEvent.keyDown(container!, { key: 'ArrowDown' })
 
-      // Second item should now be selected
-      const secondItem = screen.getByText('Bob Jones').closest('button')
+      // Second item is Alice (in the Messages section, after the Unread section)
+      const secondItem = screen.getByText('Alice Smith').closest('button')
       expect(secondItem).toHaveAttribute('data-selected', 'true')
     })
 
@@ -402,7 +403,8 @@ describe('CommandPalette', () => {
       // Then move up
       fireEvent.keyDown(container!, { key: 'ArrowUp' })
 
-      const secondItem = screen.getByText('Bob Jones').closest('button')
+      // Back to index 1 = Alice (Messages section)
+      const secondItem = screen.getByText('Alice Smith').closest('button')
       expect(secondItem).toHaveAttribute('data-selected', 'true')
     })
 
@@ -429,8 +431,8 @@ describe('CommandPalette', () => {
         fireEvent.keyDown(container!, { key: 'ArrowUp' })
       }
 
-      // First item should still be selected
-      const firstItem = screen.getByText('Alice Smith').closest('button')
+      // First item should still be selected (Bob, in the Unread section)
+      const firstItem = screen.getByText('Bob Jones').closest('button')
       expect(firstItem).toHaveAttribute('data-selected', 'true')
     })
 
@@ -469,8 +471,8 @@ describe('CommandPalette', () => {
 
       fireEvent.keyDown(container!, { key: 'Enter' })
 
-      // First item is a conversation, should set active conversation
-      expect(mockSetActiveConversation).toHaveBeenCalledWith('alice@example.com')
+      // First item is Bob (unread, in the Unread section), should set active conversation
+      expect(mockSetActiveConversation).toHaveBeenCalledWith('bob@example.com')
       expect(defaultProps.onClose).toHaveBeenCalled()
     })
 
@@ -653,8 +655,8 @@ describe('CommandPalette', () => {
       rerender(<CommandPalette {...defaultProps} isOpen={false} />)
       rerender(<CommandPalette {...defaultProps} isOpen={true} />)
 
-      // First item should be selected again
-      const firstItem = screen.getByText('Alice Smith').closest('button')
+      // First item should be selected again (Bob, in the Unread section)
+      const firstItem = screen.getByText('Bob Jones').closest('button')
       expect(firstItem).toHaveAttribute('data-selected', 'true')
     })
   })
@@ -684,27 +686,27 @@ describe('CommandPalette', () => {
       render(<CommandPalette {...defaultProps} />)
       const container = screen.getByPlaceholderText('Go to...').closest('div')?.parentElement
 
-      // Navigate to Bob Jones (second item)
+      // Navigate to Alice Smith (second item — Bob is first in Unread section)
       fireEvent.keyDown(container!, { key: 'ArrowDown' })
 
-      // Verify Bob is selected
-      const bobItem = screen.getByText('Bob Jones').closest('button')
-      expect(bobItem).toHaveAttribute('data-selected', 'true')
+      // Verify Alice is selected
+      const aliceItem = screen.getByText('Alice Smith').closest('button')
+      expect(aliceItem).toHaveAttribute('data-selected', 'true')
 
-      // Press Enter - should select Bob, not Alice
+      // Press Enter - should select Alice, not Bob
       fireEvent.keyDown(container!, { key: 'Enter' })
 
-      expect(mockSetActiveConversation).toHaveBeenCalledWith('bob@example.com')
-      expect(mockSetActiveConversation).not.toHaveBeenCalledWith('alice@example.com')
+      expect(mockSetActiveConversation).toHaveBeenCalledWith('alice@example.com')
+      expect(mockSetActiveConversation).not.toHaveBeenCalledWith('bob@example.com')
     })
 
     it('should work correctly on consecutive selections after reopening', () => {
       const { rerender } = render(<CommandPalette {...defaultProps} />)
       const container = screen.getByPlaceholderText('Go to...').closest('div')?.parentElement
 
-      // First selection: Alice (first item)
+      // First selection: Bob (first item, in Unread section)
       fireEvent.keyDown(container!, { key: 'Enter' })
-      expect(mockSetActiveConversation).toHaveBeenLastCalledWith('alice@example.com')
+      expect(mockSetActiveConversation).toHaveBeenLastCalledWith('bob@example.com')
 
       vi.clearAllMocks()
 
@@ -714,11 +716,11 @@ describe('CommandPalette', () => {
 
       const container2 = screen.getByPlaceholderText('Go to...').closest('div')?.parentElement
 
-      // Navigate to Bob and select
+      // Navigate to Alice (index 1) and select
       fireEvent.keyDown(container2!, { key: 'ArrowDown' })
       fireEvent.keyDown(container2!, { key: 'Enter' })
 
-      expect(mockSetActiveConversation).toHaveBeenLastCalledWith('bob@example.com')
+      expect(mockSetActiveConversation).toHaveBeenLastCalledWith('alice@example.com')
     })
 
     it('should select correct item after filtering and navigating', () => {
@@ -773,7 +775,7 @@ describe('CommandPalette', () => {
       fireEvent.keyDown(container!, { key: 'ArrowUp' })
 
       // Third item in the list should be a room (Development)
-      // Order: Alice, Bob, Development, General Chat...
+      // Order: Bob (Unread), Alice (Messages), Development (Rooms), General Chat...
       const devRoom = screen.getByText('Development').closest('button')
       expect(devRoom).toHaveAttribute('data-selected', 'true')
 
@@ -791,8 +793,7 @@ describe('CommandPalette', () => {
 
         const container = screen.getByPlaceholderText('Go to...').closest('div')?.parentElement
 
-        // Navigate to second item and select
-        fireEvent.keyDown(container!, { key: 'ArrowDown' })
+        // Select first item (Bob, in the Unread section) without navigating
         fireEvent.keyDown(container!, { key: 'Enter' })
 
         expect(mockSetActiveConversation).toHaveBeenCalledWith('bob@example.com')
@@ -1226,6 +1227,24 @@ describe('CommandPalette', () => {
     })
   })
 
+  describe('Unread section', () => {
+    it('shows unread DMs under an Unread header, read DMs under Messages, no duplication', () => {
+      render(<CommandPalette {...defaultProps} />)
+
+      // The Unread section header is present
+      expect(screen.getByText('Unread')).toBeInTheDocument()
+
+      // Bob (unreadCount 2) appears exactly once, Alice (unreadCount 0) appears exactly once
+      expect(screen.getAllByText('Bob Jones')).toHaveLength(1)
+      expect(screen.getAllByText('Alice Smith')).toHaveLength(1)
+
+      // Bob's row is above Alice's row (Unread section precedes Messages section)
+      const bob = screen.getByText('Bob Jones')
+      const alice = screen.getByText('Alice Smith')
+      expect(bob.compareDocumentPosition(alice) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    })
+  })
+
   describe('Archived conversations', () => {
     it('should navigate to archive view when selecting an archived conversation', () => {
       // Make Bob's conversation archived
@@ -1275,7 +1294,8 @@ describe('CommandPalette', () => {
       render(<CommandPalette {...trackingProps} />)
       const container = screen.getByPlaceholderText('Go to...').closest('div')?.parentElement
 
-      // Alice is first in the list, press Enter
+      // Bob is first (Unread section), Alice is second (Messages section). Navigate to Alice.
+      fireEvent.keyDown(container!, { key: 'ArrowDown' })
       fireEvent.keyDown(container!, { key: 'Enter' })
 
       expect(trackingProps.onSidebarViewChange).toHaveBeenCalledWith('archive')

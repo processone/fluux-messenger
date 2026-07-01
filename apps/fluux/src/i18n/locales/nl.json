@@ -1224,7 +1224,8 @@
         "filteringContacts": "Contacten filteren...",
         "filteringRooms": "Groepen filteren...",
         "filteringCommands": "Commando's filteren...",
-        "searchMessages": "Search messages for \"{{query}}\""
+        "searchMessages": "Search messages for \"{{query}}\"",
+        "unread": "Ongelezen"
     },
     "dataFormHints": {
         "muc#roomconfig_roomname": "De weergavenaam in de kamerlijst en de koptekst.",

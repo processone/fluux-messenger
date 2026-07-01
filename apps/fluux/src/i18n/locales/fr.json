@@ -1225,7 +1225,8 @@
         "filteringContacts": "Filtrage des contacts...",
         "filteringRooms": "Filtrage des salons...",
         "filteringCommands": "Filtrage des commandes...",
-        "searchMessages": "Rechercher dans les messages \"{{query}}\""
+        "searchMessages": "Rechercher dans les messages \"{{query}}\"",
+        "unread": "Non lus"
     },
     "dataFormHints": {
         "muc#roomconfig_roomname": "Le nom affiché dans les listes de salons et l'en-tête.",

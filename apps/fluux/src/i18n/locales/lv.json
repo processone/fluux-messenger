@@ -1225,7 +1225,8 @@
         "filteringContacts": "Filtrē kontaktus...",
         "filteringRooms": "Filtrē istabas...",
         "filteringCommands": "Filtrē komandas...",
-        "searchMessages": "Search messages for \"{{query}}\""
+        "searchMessages": "Search messages for \"{{query}}\"",
+        "unread": "Nelasīti"
     },
     "dataFormHints": {
         "muc#roomconfig_roomname": "Attēlojamais nosaukums istabu sarakstā un galvenē.",

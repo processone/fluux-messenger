@@ -1224,7 +1224,8 @@
         "filteringContacts": "تصفية جهات الاتصال...",
         "filteringRooms": "تصفية الغرف...",
         "filteringCommands": "تصفية الأوامر...",
-        "searchMessages": "البحث في الرسائل عن \"{{query}}\""
+        "searchMessages": "البحث في الرسائل عن \"{{query}}\"",
+        "unread": "غير مقروءة"
     },
     "dataFormHints": {
         "muc#roomconfig_roomname": "الاسم المعروض في قوائم الغرف والعنوان.",

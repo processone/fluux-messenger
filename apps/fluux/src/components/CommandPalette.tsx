@@ -44,12 +44,17 @@ interface CommandItem {
   avatarIdentifier?: string
   /** Avatar image URL for an entity row (contact or room avatar), when available. */
   avatarUrl?: string
+  /** Unread message count for conversation/room rows (drives the Unread section + badge). */
+  unreadCount?: number
+  /** Mention count for room rows (ranks a mentioned room above merely-unread ones). */
+  mentionsCount?: number
   action: () => void
   keywords?: string[]
   presence?: PresenceStatus
 }
 
 interface ItemGroup {
+  key: string
   type: ItemType
   label: string
   items: CommandItem[]
@@ -143,8 +148,48 @@ function groupItemsByType(items: CommandItem[], t: (key: string) => string): Ite
   for (const { type, labelKey } of typeOrder) {
     const typeItems = items.filter((i) => i.type === type)
     if (typeItems.length > 0) {
-      groups.push({ type, label: t(labelKey), items: typeItems })
+      groups.push({ key: type, type, label: t(labelKey), items: typeItems })
     }
+  }
+
+  return groups
+}
+
+// =============================================================================
+// Helper: Build groups for the empty-query default view (unread-first)
+// =============================================================================
+
+function buildDefaultGroups(items: CommandItem[], t: (key: string) => string): ItemGroup[] {
+  const groups: ItemGroup[] = []
+
+  const conversations = items.filter((i) => i.type === 'conversation')
+  const unreadConvs = conversations.filter((i) => (i.unreadCount ?? 0) > 0).slice(0, 5)
+  const readConvs = conversations.filter((i) => (i.unreadCount ?? 0) === 0).slice(0, 5)
+  if (unreadConvs.length > 0) {
+    groups.push({ key: 'unread', type: 'conversation', label: t('commandPalette.unread'), items: unreadConvs })
+  }
+  if (readConvs.length > 0) {
+    groups.push({ key: 'conversation', type: 'conversation', label: t('sidebar.messages'), items: readConvs })
+  }
+
+  const rooms = items.filter((i) => i.type === 'room').slice(0, 4)
+  if (rooms.length > 0) {
+    groups.push({ key: 'room', type: 'room', label: t('sidebar.rooms'), items: rooms })
+  }
+
+  const contacts = items.filter((i) => i.type === 'contact').slice(0, 3)
+  if (contacts.length > 0) {
+    groups.push({ key: 'contact', type: 'contact', label: t('sidebar.connections'), items: contacts })
+  }
+
+  const views = items.filter((i) => i.type === 'view').slice(0, 3)
+  if (views.length > 0) {
+    groups.push({ key: 'view', type: 'view', label: t('commandPalette.views'), items: views })
+  }
+
+  const actions = items.filter((i) => i.type === 'action').slice(0, 3)
+  if (actions.length > 0) {
+    groups.push({ key: 'action', type: 'action', label: t('commandPalette.actions'), items: actions })
   }
 
   return groups
@@ -256,6 +301,7 @@ function CommandPaletteContent({
         sublabel: conv.id,
         lastMessagePreview: preview,
         lastMessageBody: conv.lastMessage?.body,
+        unreadCount: conv.unreadCount,
         avatarIdentifier: conv.id,
         avatarUrl: contact?.avatar,
         action: () => selectConversation(conv.id),
@@ -305,6 +351,8 @@ function CommandPaletteContent({
         sublabel: room.jid,
         lastMessagePreview: preview,
         lastMessageBody: room.lastMessage?.body,
+        unreadCount: room.unreadCount,
+        mentionsCount: room.mentionsCount,
         avatarIdentifier: room.jid,
         avatarUrl: room.avatar,
         action: () => selectRoom(room.jid),
@@ -375,31 +423,27 @@ function CommandPaletteContent({
   // Filter and group items (combined into single memo for simplicity)
   // =============================================================================
 
-  const { flatItems, groupedItems, filterMode } = (() => {
+  const { flatItems, groupedItems, filterMode, isDefaultView: _isDefaultView } = (() => {
     const { filterMode, searchQuery } = parseQuery(query)
     const allowedTypes = getTypesForMode(filterMode)
+    const isDefaultView = !searchQuery && filterMode === 'all'
 
-    let filtered: CommandItem[]
-
-    if (!searchQuery && filterMode === 'all') {
-      // Default view: show a balanced mix from each category
-      const convs = allItems.filter((i) => i.type === 'conversation').slice(0, 5)
-      const conts = allItems.filter((i) => i.type === 'contact').slice(0, 3)
-      const rooms = allItems.filter((i) => i.type === 'room').slice(0, 4)
-      const views = allItems.filter((i) => i.type === 'view').slice(0, 3)
-      const actions = allItems.filter((i) => i.type === 'action').slice(0, 3)
-      filtered = [...convs, ...conts, ...rooms, ...views, ...actions]
+    let grouped: ItemGroup[]
+    if (isDefaultView) {
+      // Default view: unread-first grouping (Unread DMs on top, then the rest)
+      grouped = buildDefaultGroups(allItems, t)
     } else if (!searchQuery) {
       // Filter mode without search: show all items of matching types
-      filtered = allItems.filter((i) => allowedTypes.includes(i.type))
+      grouped = groupItemsByType(allItems.filter((i) => allowedTypes.includes(i.type)), t)
     } else {
       // Search mode: filter by type and query
-      filtered = allItems
-        .filter((i) => allowedTypes.includes(i.type))
-        .filter((i) => itemMatchesQuery(i, searchQuery))
+      grouped = groupItemsByType(
+        allItems
+          .filter((i) => allowedTypes.includes(i.type))
+          .filter((i) => itemMatchesQuery(i, searchQuery)),
+        t,
+      )
     }
-
-    const grouped = groupItemsByType(filtered, t)
 
     // Append "Search messages" gateway when user has typed a query
     if (searchQuery && filterMode !== 'commands') {
@@ -419,13 +463,13 @@ function CommandPaletteContent({
       if (actionsGroup) {
         actionsGroup.items.push(gatewayItem)
       } else {
-        grouped.push({ type: 'action', label: t('commandPalette.actions'), items: [gatewayItem] })
+        grouped.push({ key: 'action', type: 'action', label: t('commandPalette.actions'), items: [gatewayItem] })
       }
     }
 
     const flat = grouped.flatMap((g) => g.items)
 
-    return { flatItems: flat, groupedItems: grouped, filterMode }
+    return { flatItems: flat, groupedItems: grouped, filterMode, isDefaultView }
   })()
 
   // Clamp selected index to valid range
@@ -562,7 +606,7 @@ function CommandPaletteContent({
             </div>
           ) : (
             groupedItems.map((group) => (
-              <div key={group.type}>
+              <div key={group.key}>
                 <div className="px-4 command-group-label text-xs font-semibold text-fluux-muted uppercase tracking-wide font-display">
                   {group.label}
                 </div>

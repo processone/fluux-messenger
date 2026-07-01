@@ -1226,7 +1226,8 @@
         "filteringContacts": "Filtrowanie kontaktów...",
         "filteringRooms": "Filtrowanie pokoi...",
         "filteringCommands": "Filtrowanie poleceń...",
-        "searchMessages": "Search messages for \"{{query}}\""
+        "searchMessages": "Search messages for \"{{query}}\"",
+        "unread": "Nieprzeczytane"
     },
     "dataFormHints": {
         "muc#roomconfig_roomname": "Wyświetlana nazwa na liście pokojów i w nagłówku.",

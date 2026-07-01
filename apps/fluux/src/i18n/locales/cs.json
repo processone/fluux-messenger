@@ -1226,7 +1226,8 @@
         "filteringContacts": "Filtrování kontaktů...",
         "filteringRooms": "Filtrování místností...",
         "filteringCommands": "Filtrování příkazů...",
-        "searchMessages": "Search messages for \"{{query}}\""
+        "searchMessages": "Search messages for \"{{query}}\"",
+        "unread": "Nepřečtené"
     },
     "dataFormHints": {
         "muc#roomconfig_roomname": "Zobrazovaný název v seznamu místností a v záhlaví.",

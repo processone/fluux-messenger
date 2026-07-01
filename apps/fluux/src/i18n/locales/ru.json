@@ -1224,7 +1224,8 @@
         "filteringContacts": "Фильтр контактов...",
         "filteringRooms": "Фильтр конференций...",
         "filteringCommands": "Фильтр команд...",
-        "searchMessages": "Search messages for \"{{query}}\""
+        "searchMessages": "Search messages for \"{{query}}\"",
+        "unread": "Непрочитанные"
     },
     "dataFormHints": {
         "muc#roomconfig_roomname": "Отображаемое имя в списке комнат и в заголовке.",

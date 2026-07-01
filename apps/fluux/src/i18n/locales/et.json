@@ -1226,7 +1226,8 @@
         "filteringContacts": "Kontaktide filtreerimine...",
         "filteringRooms": "Tubade filtreerimine...",
         "filteringCommands": "Käskude filtreerimine...",
-        "searchMessages": "Search messages for \"{{query}}\""
+        "searchMessages": "Search messages for \"{{query}}\"",
+        "unread": "Lugemata"
     },
     "dataFormHints": {
         "muc#roomconfig_roomname": "Kuvatav nimi ruumide loendis ja päises.",

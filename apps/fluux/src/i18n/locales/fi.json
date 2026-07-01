@@ -1224,7 +1224,8 @@
         "filteringContacts": "Suodatetaan yhteystietoja...",
         "filteringRooms": "Suodatetaan huoneita...",
         "filteringCommands": "Suodatetaan komentoja...",
-        "searchMessages": "Search messages for \"{{query}}\""
+        "searchMessages": "Search messages for \"{{query}}\"",
+        "unread": "Lukematta"
     },
     "dataFormHints": {
         "muc#roomconfig_roomname": "Huoneluettelossa ja otsikossa näkyvä nimi.",
