@@ -193,10 +193,6 @@
             "glanceDisabled": "הצפנה כבויה",
             "glanceLocked": "מוצפן, נעול"
         },
-        "tabs": {
-            "profile": "פרופיל",
-            "security": "אבטחה"
-        },
         "actionsMenu": "פעולות נוספות",
         "requestsHeading": "בקשות"
     },

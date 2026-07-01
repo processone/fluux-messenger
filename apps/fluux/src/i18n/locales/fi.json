@@ -193,10 +193,6 @@
             "glanceDisabled": "Salaus pois käytöstä",
             "glanceLocked": "Salattu, lukittu"
         },
-        "tabs": {
-            "profile": "Profiili",
-            "security": "Tietoturva"
-        },
         "actionsMenu": "Lisätoiminnot",
         "requestsHeading": "Pyynnöt"
     },

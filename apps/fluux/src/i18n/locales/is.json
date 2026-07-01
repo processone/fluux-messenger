@@ -193,10 +193,6 @@
             "glanceDisabled": "Dulkóðun slökkt",
             "glanceLocked": "Dulkóðað, læst"
         },
-        "tabs": {
-            "profile": "Notandasnið",
-            "security": "Öryggi"
-        },
         "actionsMenu": "Fleiri aðgerðir",
         "requestsHeading": "Beiðnir"
     },

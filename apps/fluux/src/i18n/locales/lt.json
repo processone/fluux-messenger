@@ -193,10 +193,6 @@
             "glanceDisabled": "Šifravimas išjungtas",
             "glanceLocked": "Užšifruota, užrakinta"
         },
-        "tabs": {
-            "profile": "Profilis",
-            "security": "Saugumas"
-        },
         "actionsMenu": "Daugiau veiksmų",
         "requestsHeading": "Prašymai"
     },

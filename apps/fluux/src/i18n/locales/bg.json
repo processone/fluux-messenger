@@ -193,10 +193,6 @@
             "glanceDisabled": "Криптирането е изключено",
             "glanceLocked": "Криптирано, заключено"
         },
-        "tabs": {
-            "profile": "Профил",
-            "security": "Сигурност"
-        },
         "actionsMenu": "Още действия",
         "requestsHeading": "Заявки"
     },

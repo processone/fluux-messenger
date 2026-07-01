@@ -193,10 +193,6 @@
             "glanceDisabled": "加密已关闭",
             "glanceLocked": "已加密，已锁定"
         },
-        "tabs": {
-            "profile": "个人资料",
-            "security": "安全"
-        },
         "actionsMenu": "更多操作",
         "requestsHeading": "请求"
     },

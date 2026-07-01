@@ -194,10 +194,6 @@
             "glanceDisabled": "Encryption off",
             "glanceLocked": "Encrypted, locked"
         },
-        "tabs": {
-            "profile": "Profile",
-            "security": "Security"
-        },
         "actionsMenu": "More actions"
     },
     "rooms": {

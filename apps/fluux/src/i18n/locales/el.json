@@ -194,10 +194,6 @@
             "glanceDisabled": "Κρυπτογράφηση απενεργοποιημένη",
             "glanceLocked": "Κρυπτογραφημένο, κλειδωμένο"
         },
-        "tabs": {
-            "profile": "Προφίλ",
-            "security": "Ασφάλεια"
-        },
         "actionsMenu": "Περισσότερες ενέργειες",
         "requestsHeading": "Αιτήματα"
     },

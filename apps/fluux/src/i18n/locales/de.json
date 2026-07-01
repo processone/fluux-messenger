@@ -195,10 +195,6 @@
             "glanceDisabled": "Verschlüsselung aus",
             "glanceLocked": "Verschlüsselt, gesperrt"
         },
-        "tabs": {
-            "profile": "Profil",
-            "security": "Sicherheit"
-        },
         "actionsMenu": "Weitere Aktionen",
         "requestsHeading": "Anfragen"
     },

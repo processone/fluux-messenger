@@ -195,10 +195,6 @@
             "glanceDisabled": "Šifrování vypnuto",
             "glanceLocked": "Šifrováno, uzamčeno"
         },
-        "tabs": {
-            "profile": "Profil",
-            "security": "Zabezpečení"
-        },
         "actionsMenu": "Další akce",
         "requestsHeading": "Žádosti"
     },

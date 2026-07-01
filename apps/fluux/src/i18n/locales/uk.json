@@ -193,10 +193,6 @@
             "glanceDisabled": "Шифрування вимкнено",
             "glanceLocked": "Зашифровано, заблоковано"
         },
-        "tabs": {
-            "profile": "Профіль",
-            "security": "Безпека"
-        },
         "actionsMenu": "Інші дії",
         "requestsHeading": "Запити"
     },

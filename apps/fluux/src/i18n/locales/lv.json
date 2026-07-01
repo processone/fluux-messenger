@@ -194,10 +194,6 @@
             "glanceDisabled": "Šifrēšana izslēgta",
             "glanceLocked": "Šifrēts, bloķēts"
         },
-        "tabs": {
-            "profile": "Profils",
-            "security": "Drošība"
-        },
         "actionsMenu": "Vairāk darbību",
         "requestsHeading": "Pieprasījumi"
     },

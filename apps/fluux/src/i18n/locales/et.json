@@ -195,10 +195,6 @@
             "glanceDisabled": "Krüptimine väljas",
             "glanceLocked": "Krüptitud, lukustatud"
         },
-        "tabs": {
-            "profile": "Profiil",
-            "security": "Turvalisus"
-        },
         "actionsMenu": "Rohkem toiminguid",
         "requestsHeading": "Taotlused"
     },

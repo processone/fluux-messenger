@@ -193,10 +193,6 @@
             "glanceDisabled": "Šifriranje isključeno",
             "glanceLocked": "Šifrirano, zaključano"
         },
-        "tabs": {
-            "profile": "Profil",
-            "security": "Sigurnost"
-        },
         "actionsMenu": "Više radnji",
         "requestsHeading": "Zahtjevi"
     },

@@ -195,10 +195,6 @@
             "glanceDisabled": "Kriptaġġ mitfi",
             "glanceLocked": "Kriptat, imsakkar"
         },
-        "tabs": {
-            "profile": "Profil",
-            "security": "Sigurtà"
-        },
         "actionsMenu": "Aktar azzjonijiet",
         "requestsHeading": "Talbiet"
     },

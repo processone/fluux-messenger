@@ -195,10 +195,6 @@
             "glanceDisabled": "Šifriranje izklopljeno",
             "glanceLocked": "Šifrirano, zaklenjeno"
         },
-        "tabs": {
-            "profile": "Profil",
-            "security": "Varnost"
-        },
         "actionsMenu": "Več dejanj",
         "requestsHeading": "Zahteve"
     },

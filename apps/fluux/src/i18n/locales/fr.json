@@ -194,10 +194,6 @@
             "glanceDisabled": "Chiffrement désactivé",
             "glanceLocked": "Chiffré, verrouillé"
         },
-        "tabs": {
-            "profile": "Profil",
-            "security": "Sécurité"
-        },
         "actionsMenu": "Plus d'actions",
         "requestsHeading": "Demandes"
     },

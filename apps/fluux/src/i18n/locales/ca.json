@@ -195,10 +195,6 @@
             "glanceDisabled": "Xifratge desactivat",
             "glanceLocked": "Xifrat, bloquejat"
         },
-        "tabs": {
-            "profile": "Perfil",
-            "security": "Seguretat"
-        },
         "actionsMenu": "Més accions",
         "requestsHeading": "Sol·licituds"
     },

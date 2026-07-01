@@ -193,10 +193,6 @@
             "glanceDisabled": "Kryptering av",
             "glanceLocked": "Krypterat, låst"
         },
-        "tabs": {
-            "profile": "Profil",
-            "security": "Säkerhet"
-        },
         "actionsMenu": "Fler åtgärder",
         "requestsHeading": "Förfrågningar"
     },

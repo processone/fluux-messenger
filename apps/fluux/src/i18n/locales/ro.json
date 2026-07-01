@@ -195,10 +195,6 @@
             "glanceDisabled": "Criptare dezactivată",
             "glanceLocked": "Criptat, blocat"
         },
-        "tabs": {
-            "profile": "Profil",
-            "security": "Securitate"
-        },
         "actionsMenu": "Mai multe acțiuni",
         "requestsHeading": "Solicitări"
     },

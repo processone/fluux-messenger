@@ -193,10 +193,6 @@
             "glanceDisabled": "التشفير معطّل",
             "glanceLocked": "مشفّر، مقفل"
         },
-        "tabs": {
-            "profile": "الملف الشخصي",
-            "security": "الأمان"
-        },
         "actionsMenu": "إجراءات أخرى",
         "requestsHeading": "طلبات"
     },

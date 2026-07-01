@@ -195,10 +195,6 @@
             "glanceDisabled": "Cifragem desativada",
             "glanceLocked": "Cifrado, bloqueado"
         },
-        "tabs": {
-            "profile": "Perfil",
-            "security": "Segurança"
-        },
         "actionsMenu": "Mais ações",
         "requestsHeading": "Pedidos"
     },

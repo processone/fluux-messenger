@@ -193,10 +193,6 @@
             "glanceDisabled": "Versleuteling uit",
             "glanceLocked": "Versleuteld, vergrendeld"
         },
-        "tabs": {
-            "profile": "Profiel",
-            "security": "Beveiliging"
-        },
         "actionsMenu": "Meer acties",
         "requestsHeading": "Verzoeken"
     },

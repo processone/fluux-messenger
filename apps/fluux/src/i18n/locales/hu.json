@@ -193,10 +193,6 @@
             "glanceDisabled": "Titkosítás kikapcsolva",
             "glanceLocked": "Titkosított, zárolt"
         },
-        "tabs": {
-            "profile": "Profil",
-            "security": "Biztonság"
-        },
         "actionsMenu": "További műveletek",
         "requestsHeading": "Kérések"
     },

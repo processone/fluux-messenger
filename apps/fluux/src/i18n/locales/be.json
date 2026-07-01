@@ -193,10 +193,6 @@
             "glanceDisabled": "Шыфраванне адключана",
             "glanceLocked": "Зашыфравана, заблакавана"
         },
-        "tabs": {
-            "profile": "Профіль",
-            "security": "Бяспека"
-        },
         "actionsMenu": "Іншыя дзеянні",
         "requestsHeading": "Запыты"
     },
