@@ -55,7 +55,6 @@ import {
   ArchiveList,
   ContactList,
   RoomsList,
-  EventsView,
   ActivityLogView,
   SearchView,
   UserMenu,
@@ -63,15 +62,6 @@ import {
 
 // Re-export SidebarView for external use
 export type { SidebarView }
-
-/** Pure helper: counts Events-bell pending items, excluding subscription requests (those drive the Contacts badge). */
-export function eventsPendingCount(s: { strangerMessages: Array<{ from: string }>; mucInvitations: unknown[]; systemNotifications: unknown[] }) {
-  return (
-    new Set(s.strangerMessages.map((m) => m.from)).size +
-    s.mucInvitations.length +
-    s.systemNotifications.length
-  )
-}
 
 interface SidebarProps {
   onSelectContact?: (contact: Contact) => void
@@ -112,7 +102,6 @@ export function Sidebar({ onSelectContact, onStartChat, onStartChatWithJid, onMa
     return sum
   })
   const pendingRequestCount = useEventsStore((s) => s.subscriptionRequests.length)
-  const pendingCount = useEventsStore((s) => eventsPendingCount(s))
   const totalMentionsCount = useRoomStore((s) => s.totalMentionsCount())
   const totalNotifiableUnreadCount = useRoomStore((s) => s.totalNotifiableUnreadCount())
 
@@ -123,7 +112,6 @@ export function Sidebar({ onSelectContact, onStartChat, onStartChatWithJid, onMa
   trackSelectorChange('Sidebar', 'ownNickname', ownNickname)
   trackSelectorChange('Sidebar', 'isAdmin', isAdmin)
   trackSelectorChange('Sidebar', 'totalUnread', totalUnread)
-  trackSelectorChange('Sidebar', 'pendingCount', pendingCount)
   trackSelectorChange('Sidebar', 'totalMentionsCount', totalMentionsCount)
   trackSelectorChange('Sidebar', 'totalNotifiableUnreadCount', totalNotifiableUnreadCount)
   const { dragRegionProps } = useWindowDrag()
@@ -275,7 +263,6 @@ export function Sidebar({ onSelectContact, onStartChat, onStartChatWithJid, onMa
           view="events"
           pathPrefix="/events"
           onNavigate={onViewChange}
-          showBadge={pendingCount > 0}
         />
         {/* Search */}
         <IconRailNavLink
@@ -478,10 +465,7 @@ export function Sidebar({ onSelectContact, onStartChat, onStartChatWithJid, onMa
                   onCategoryChange={(category) => navigateToSettings(category)}
                 />
               ) : (
-                <>
-                  <EventsView />
-                  <ActivityLogView />
-                </>
+                <ActivityLogView />
               )}
               </div>
             </SidebarZoneContext.Provider>
