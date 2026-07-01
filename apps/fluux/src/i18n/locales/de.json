@@ -424,11 +424,6 @@
         "invitationsHeading": "Einladungen"
     },
     "events": {
-        "noPendingEvents": "Keine ausstehenden Ereignisse",
-        "systemNotifications": "Systembenachrichtigungen",
-        "messagesFromStrangers": "Nachrichten von Unbekannten",
-        "subscriptionRequests": "Abonnementanfragen",
-        "roomInvitations": "Raumeinladungen",
         "invitedBy": "Eingeladen von {{name}}",
         "join": "Beitreten",
         "decline": "Ablehnen"

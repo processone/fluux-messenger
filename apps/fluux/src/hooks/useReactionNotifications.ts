@@ -4,6 +4,7 @@ import { useXMPP } from '@fluux/sdk'
 import { chatStore, roomStore, connectionStore, getBareJid } from '@fluux/sdk'
 import { findMessageById } from '@fluux/sdk'
 import { getMessage as getCachedMessage, getMessageByStanzaId as getCachedMessageByStanzaId } from '@fluux/sdk'
+import { getRoomMessage as getCachedRoomMessage, getRoomMessageByStanzaId as getCachedRoomMessageByStanzaId } from '@fluux/sdk'
 import { useToastStore } from '@/stores/toastStore'
 import { useReactionMentionStore } from '@/stores/reactionMentionStore'
 import { useRouteSync } from '@/hooks'
@@ -64,6 +65,10 @@ export function useReactionNotifications(): void {
     }
 
     const unsubChat = client.subscribe('chat:reactions', async ({ conversationId, messageId, reactorJid, emojis, isLive }) => {
+      // Only live reactions notify. Bail before any store/cache work so a MAM or
+      // replayed reaction never triggers a durable-cache read we'd discard.
+      if (!isLive) return
+
       // Skip own reactions
       const myJid = getBareJid(connectionStore.getState().jid ?? '')
       if (getBareJid(reactorJid) === myJid) return
@@ -106,7 +111,10 @@ export function useReactionNotifications(): void {
       })
     })
 
-    const unsubRoom = client.subscribe('room:reactions', ({ roomJid, messageId, reactorNick, emojis, isLive }) => {
+    const unsubRoom = client.subscribe('room:reactions', async ({ roomJid, messageId, reactorNick, emojis, isLive }) => {
+      // Only live reactions notify — bail before any store/cache work.
+      if (!isLive) return
+
       // Only act if we know the room
       const state = roomStore.getState()
       const room = state.rooms.get(roomJid)
@@ -115,12 +123,18 @@ export function useReactionNotifications(): void {
       // Skip own reactions (by nick)
       if (reactorNick === room.nickname) return
 
-      // Only notify for our own messages (identified by nick)
-      const message = state.getMessage(roomJid, messageId)
+      // Only notify for our own messages (identified by nick). Rooms keep just the
+      // resident window in RAM, so a reaction to an own message that has scrolled
+      // out of the window isn't found there — fall back to the durable cache, same
+      // as the 1:1 path.
+      const roomMessages = room.messages
+      let message = state.getMessage(roomJid, messageId)
+      if (!message) {
+        message = (await getCachedRoomMessage(messageId)) ?? (await getCachedRoomMessageByStanzaId(messageId)) ?? undefined
+      }
       if (!message || message.nick !== room.nickname) return
 
       const isActive = state.activeRoomJid === roomJid
-      const roomMessages = room.messages
       const isLastMessage = roomMessages.length > 0 ? roomMessages[roomMessages.length - 1].id === messageId : false
 
       const decision = decideReactionNotification(

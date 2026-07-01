@@ -423,11 +423,6 @@
         "invitationsHeading": "Ielūgumi"
     },
     "events": {
-        "noPendingEvents": "Nav neapstiprinātu notikumu",
-        "systemNotifications": "Sistēmas paziņojumi",
-        "messagesFromStrangers": "Ziņojumi no nepazīstamiem",
-        "subscriptionRequests": "Abonēšanas pieprasījumi",
-        "roomInvitations": "Istabu uzaicinājumi",
         "invitedBy": "Uzaicināja {{name}}",
         "join": "Pievienoties",
         "decline": "Noraidīt"

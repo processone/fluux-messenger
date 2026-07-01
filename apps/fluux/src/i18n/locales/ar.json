@@ -422,11 +422,6 @@
         "invitationsHeading": "الدعوات"
     },
     "events": {
-        "noPendingEvents": "لا توجد أحداث معلّقة",
-        "systemNotifications": "إشعارات النظام",
-        "messagesFromStrangers": "رسائل من أشخاص غير معروفين",
-        "subscriptionRequests": "طلبات الاشتراك",
-        "roomInvitations": "دعوات الغرف",
         "invitedBy": "دعوة من {{name}}",
         "join": "انضم",
         "decline": "رفض"

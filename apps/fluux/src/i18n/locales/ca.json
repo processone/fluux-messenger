@@ -424,11 +424,6 @@
         "invitationsHeading": "Invitacions"
     },
     "events": {
-        "noPendingEvents": "No hi ha esdeveniments pendents",
-        "systemNotifications": "Notificacions del sistema",
-        "messagesFromStrangers": "Missatges de desconeguts",
-        "subscriptionRequests": "Sol·licituds de subscripció",
-        "roomInvitations": "Invitacions a sales",
         "invitedBy": "Convidat per {{name}}",
         "join": "Uneix-te",
         "decline": "Declina"

@@ -422,11 +422,6 @@
         "invitationsHeading": "邀请"
     },
     "events": {
-        "noPendingEvents": "无待处理事件",
-        "systemNotifications": "系统通知",
-        "messagesFromStrangers": "来自陌生人的消息",
-        "subscriptionRequests": "订阅请求",
-        "roomInvitations": "房间邀请",
         "invitedBy": "邀请者 {{name}}",
         "join": "加入",
         "decline": "拒绝"

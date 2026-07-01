@@ -422,11 +422,6 @@
         "invitationsHeading": "Kutsut"
     },
     "events": {
-        "noPendingEvents": "Ei odottavia tapahtumia",
-        "systemNotifications": "Järjestelmäilmoitukset",
-        "messagesFromStrangers": "Viestit tuntemattomilta",
-        "subscriptionRequests": "Tilauspyynnöt",
-        "roomInvitations": "Huonekutsut",
         "invitedBy": "Kutsuja: {{name}}",
         "join": "Liity",
         "decline": "Hylkää"

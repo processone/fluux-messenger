@@ -422,11 +422,6 @@
         "invitationsHeading": "Запрошення"
     },
     "events": {
-        "noPendingEvents": "Немає очікуючих подій",
-        "systemNotifications": "Системні сповіщення",
-        "messagesFromStrangers": "Повідомлення від незнайомців",
-        "subscriptionRequests": "Запити на підписку",
-        "roomInvitations": "Запрошення до кімнат",
         "invitedBy": "Запрошено {{name}}",
         "join": "Приєднатися",
         "decline": "Відхилити"

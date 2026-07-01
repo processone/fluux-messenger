@@ -422,11 +422,6 @@
         "invitationsHeading": "Meghívók"
     },
     "events": {
-        "noPendingEvents": "Nincsenek függő események",
-        "systemNotifications": "Rendszerértesítések",
-        "messagesFromStrangers": "Üzenetek ismeretlenektől",
-        "subscriptionRequests": "Feliratkozási kérelmek",
-        "roomInvitations": "Szobameghívók",
         "invitedBy": "Meghívta: {{name}}",
         "join": "Csatlakozás",
         "decline": "Elutasítás"

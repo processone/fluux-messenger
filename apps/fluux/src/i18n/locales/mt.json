@@ -424,11 +424,6 @@
         "invitationsHeading": "Stedini"
     },
     "events": {
-        "noPendingEvents": "M'hemmx avvenimenti pendenti",
-        "systemNotifications": "Notifiki tas-Sistema",
-        "messagesFromStrangers": "Messaġġi minn Barranin",
-        "subscriptionRequests": "Talbiet ta' Abbonament",
-        "roomInvitations": "Stedini għal Kmamar",
         "invitedBy": "Mistieden minn {{name}}",
         "join": "Idħol",
         "decline": "Irrifjuta"

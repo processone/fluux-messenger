@@ -423,11 +423,6 @@
         "invitationsHeading": "Pozvánky"
     },
     "events": {
-        "noPendingEvents": "Žiadne čakajúce udalosti",
-        "systemNotifications": "Systémové oznámenia",
-        "messagesFromStrangers": "Správy od cudzincov",
-        "subscriptionRequests": "Žiadosti o odber",
-        "roomInvitations": "Pozvánky do miestností",
         "invitedBy": "Pozval {{name}}",
         "join": "Pripojiť sa",
         "decline": "Odmietnuť"

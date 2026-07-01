@@ -422,11 +422,6 @@
         "invitationsHeading": "Покани"
     },
     "events": {
-        "noPendingEvents": "Няма чакащи събития",
-        "systemNotifications": "Системни известия",
-        "messagesFromStrangers": "Съобщения от непознати",
-        "subscriptionRequests": "Заявки за абонамент",
-        "roomInvitations": "Покани за стая",
         "invitedBy": "Поканен от {{name}}",
         "join": "Присъедини се",
         "decline": "Откажи"

@@ -422,11 +422,6 @@
         "invitationsHeading": "Inbjudningar"
     },
     "events": {
-        "noPendingEvents": "Inga väntande händelser",
-        "systemNotifications": "Systemaviseringar",
-        "messagesFromStrangers": "Meddelanden från främlingar",
-        "subscriptionRequests": "Prenumerationsförfrågningar",
-        "roomInvitations": "Rumsinbjudningar",
         "invitedBy": "Inbjuden av {{name}}",
         "join": "Gå med",
         "decline": "Avböj"

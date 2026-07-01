@@ -221,6 +221,40 @@ describe('reaction event isLive flag', () => {
         isLive: true,
       })
     })
+
+    it('emits chat:reactions with isLive: false for a delay-stamped (offline-queued) reaction', () => {
+      const stanza = xml(
+        'message',
+        { from: `${PEER}/resource`, to: ME, type: 'chat', id: 'reaction-delayed-1' },
+        xml('reactions', { xmlns: 'urn:xmpp:reactions:0', id: TARGET_MSG_ID },
+          xml('reaction', {}, '👍'),
+        ),
+        xml('delay', { xmlns: 'urn:xmpp:delay', stamp: '2026-06-30T09:00:00Z' }),
+      )
+
+      chat.handle(stanza)
+
+      const hit = emitted.find(e => e.event === 'chat:reactions')
+      expect(hit).toBeDefined()
+      expect(hit!.payload).toMatchObject({ conversationId: PEER, messageId: TARGET_MSG_ID, isLive: false })
+    })
+
+    it('emits room:reactions with isLive: false for a delay-stamped (MUC history replay) reaction', () => {
+      const stanza = xml(
+        'message',
+        { from: `${ROOM}/alice`, to: ME, type: 'groupchat', id: 'room-reaction-delayed-1' },
+        xml('reactions', { xmlns: 'urn:xmpp:reactions:0', id: TARGET_MSG_ID },
+          xml('reaction', {}, '🎉'),
+        ),
+        xml('delay', { xmlns: 'urn:xmpp:delay', stamp: '2026-06-30T09:00:00Z' }),
+      )
+
+      chat.handle(stanza)
+
+      const hit = emitted.find(e => e.event === 'room:reactions')
+      expect(hit).toBeDefined()
+      expect(hit!.payload).toMatchObject({ roomJid: ROOM, messageId: TARGET_MSG_ID, isLive: false })
+    })
   })
 
   // -------------------------------------------------------------------------

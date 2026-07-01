@@ -422,11 +422,6 @@
         "invitationsHeading": "Запрашэнні"
     },
     "events": {
-        "noPendingEvents": "Няма чакаючых падзей",
-        "systemNotifications": "Сістэмныя апавяшчэнні",
-        "messagesFromStrangers": "Паведамленні ад незнаёмцаў",
-        "subscriptionRequests": "Запыты на падпіску",
-        "roomInvitations": "Запрашэнні ў пакоі",
         "invitedBy": "Запрошаны {{name}}",
         "join": "Далучыцца",
         "decline": "Адхіліць"

@@ -422,11 +422,6 @@
         "invitationsHeading": "Kvietimai"
     },
     "events": {
-        "noPendingEvents": "Nėra laukiančių įvykių",
-        "systemNotifications": "Sistemos pranešimai",
-        "messagesFromStrangers": "Žinutės iš nepažįstamų",
-        "subscriptionRequests": "Prenumeratos užklausos",
-        "roomInvitations": "Pakvietimai į kambarius",
         "invitedBy": "Pakvietė {{name}}",
         "join": "Prisijungti",
         "decline": "Atmesti"

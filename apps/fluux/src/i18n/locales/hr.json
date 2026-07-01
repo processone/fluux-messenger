@@ -422,11 +422,6 @@
         "invitationsHeading": "Pozivnice"
     },
     "events": {
-        "noPendingEvents": "Nema događaja na čekanju",
-        "systemNotifications": "Sistemske obavijesti",
-        "messagesFromStrangers": "Poruke od stranaca",
-        "subscriptionRequests": "Zahtjevi za pretplatu",
-        "roomInvitations": "Pozivnice za sobe",
         "invitedBy": "Pozvao {{name}}",
         "join": "Pridruži se",
         "decline": "Odbij"

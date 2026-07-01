@@ -422,11 +422,6 @@
         "invitationsHeading": "Boð"
     },
     "events": {
-        "noPendingEvents": "Engir atburðir í bið",
-        "systemNotifications": "Kerfistilkynningar",
-        "messagesFromStrangers": "Skilaboð frá ókunnugum",
-        "subscriptionRequests": "Áskriftarbeiðnir",
-        "roomInvitations": "Herbergisboð",
         "invitedBy": "Boðið af {{name}}",
         "join": "Ganga inn",
         "decline": "Hafna"

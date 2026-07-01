@@ -1122,7 +1122,8 @@ describe('XMPPClient Message', () => {
       mockXmppClientInstance._emit('stanza', stanza)
 
       expect(emitSDKSpy).toHaveBeenCalledWith('chat:reactions', {
-        isLive: true,
+        // A delay stamp marks a replayed / offline-queued reaction — not live.
+        isLive: false,
         conversationId: 'contact@example.com',
         messageId: 'target-msg-delayed',
         reactorJid: 'contact@example.com',

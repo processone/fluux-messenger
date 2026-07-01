@@ -1833,14 +1833,20 @@ export class Chat extends BaseModule {
     const stamp = delayEl?.attrs.stamp
     const timestamp = stamp ? new Date(stamp) : undefined
 
+    // A delay stamp marks a reaction that was stored and replayed — MUC history on
+    // re-join or offline-queued delivery on reconnect — not something happening now.
+    // Treat only undelayed reactions as live so the app doesn't fire a burst of
+    // reaction notifications after a reconnect (mirrors MAM replay, which is never live).
+    const isLive = !timestamp
+
     // SDK events only - bindings call store methods
     if (type === 'groupchat') {
       const roomNick = getResource(from)
       if (roomNick) {
-        this.deps.emitSDK('room:reactions', { roomJid: conversationId, messageId, reactorNick: roomNick, emojis, isLive: true, ...(timestamp && { timestamp }) })
+        this.deps.emitSDK('room:reactions', { roomJid: conversationId, messageId, reactorNick: roomNick, emojis, isLive, ...(timestamp && { timestamp }) })
       }
     } else {
-      this.deps.emitSDK('chat:reactions', { conversationId, messageId, reactorJid: bareFrom, emojis, isLive: true, ...(timestamp && { timestamp }) })
+      this.deps.emitSDK('chat:reactions', { conversationId, messageId, reactorJid: bareFrom, emojis, isLive, ...(timestamp && { timestamp }) })
     }
   }
 

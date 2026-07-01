@@ -424,11 +424,6 @@
         "invitationsHeading": "Inviti"
     },
     "events": {
-        "noPendingEvents": "Nessun evento in sospeso",
-        "systemNotifications": "Notifiche di sistema",
-        "messagesFromStrangers": "Messaggi da sconosciuti",
-        "subscriptionRequests": "Richieste di sottoscrizione",
-        "roomInvitations": "Inviti alle stanze",
         "invitedBy": "Invitato da {{name}}",
         "join": "Entra",
         "decline": "Rifiuta"

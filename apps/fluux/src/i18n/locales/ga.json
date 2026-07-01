@@ -422,11 +422,6 @@
         "invitationsHeading": "Cuirí"
     },
     "events": {
-        "noPendingEvents": "Níl aon imeachtaí ar feitheamh",
-        "systemNotifications": "Fógraí an Chórais",
-        "messagesFromStrangers": "Teachtaireachtaí ó Strainséirí",
-        "subscriptionRequests": "Iarratais Síntiúis",
-        "roomInvitations": "Cuirí Seomra",
         "invitedBy": "Cuireadh ag {{name}}",
         "join": "Téigh isteach",
         "decline": "Diúltaigh"

@@ -423,11 +423,6 @@
         "invitationsHeading": "Invitations"
     },
     "events": {
-        "noPendingEvents": "Aucun événement en attente",
-        "systemNotifications": "Notifications système",
-        "messagesFromStrangers": "Messages d'inconnus",
-        "subscriptionRequests": "Demandes d'abonnement",
-        "roomInvitations": "Invitations aux salons",
         "invitedBy": "Invité par {{name}}",
         "join": "Rejoindre",
         "decline": "Refuser"

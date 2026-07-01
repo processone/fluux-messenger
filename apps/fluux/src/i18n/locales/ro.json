@@ -424,11 +424,6 @@
         "invitationsHeading": "Invitații"
     },
     "events": {
-        "noPendingEvents": "Niciun eveniment în așteptare",
-        "systemNotifications": "Notificări de sistem",
-        "messagesFromStrangers": "Mesaje de la necunoscuți",
-        "subscriptionRequests": "Cereri de abonare",
-        "roomInvitations": "Invitații în camere",
         "invitedBy": "Invitat de {{name}}",
         "join": "Intră",
         "decline": "Refuză"

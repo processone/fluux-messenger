@@ -8,10 +8,16 @@ const chatState = {
   messages: new Map<string, Array<{ id: string; isOutgoing?: boolean; body?: string }>>(),
   activeConversationId: null as string | null,
 }
-const roomState = { rooms: new Map(), getMessage: vi.fn(), activeRoomJid: null as string | null }
+const roomState = {
+  rooms: new Map<string, { nickname: string; messages: Array<{ id: string; nick?: string; body?: string }> }>(),
+  getMessage: vi.fn(),
+  activeRoomJid: null as string | null,
+}
 const connectionState = { jid: 'me@example.com' }
 const mockGetCachedMessage = vi.fn()
 const mockGetCachedMessageByStanzaId = vi.fn()
+const mockGetCachedRoomMessage = vi.fn()
+const mockGetCachedRoomMessageByStanzaId = vi.fn()
 
 vi.mock('@fluux/sdk', () => ({
   useXMPP: () => ({ client: { subscribe: mockSubscribe } }),
@@ -22,6 +28,8 @@ vi.mock('@fluux/sdk', () => ({
   findMessageById: (msgs: Array<{ id: string }>, id: string) => msgs.find((m) => m.id === id),
   getMessage: (...args: unknown[]) => mockGetCachedMessage(...args),
   getMessageByStanzaId: (...args: unknown[]) => mockGetCachedMessageByStanzaId(...args),
+  getRoomMessage: (...args: unknown[]) => mockGetCachedRoomMessage(...args),
+  getRoomMessageByStanzaId: (...args: unknown[]) => mockGetCachedRoomMessageByStanzaId(...args),
 }))
 
 vi.mock('react-i18next', () => ({
@@ -48,12 +56,14 @@ vi.mock('@/hooks', () => ({
 
 vi.mock('@/components/conversation/messageGrouping', () => ({ scrollToMessage: vi.fn() }))
 
-/** Grab the chat:reactions handler registered on mount. */
-function chatHandler(): (ev: Record<string, unknown>) => Promise<void> {
-  const call = mockSubscribe.mock.calls.find((c) => c[0] === 'chat:reactions')
-  if (!call) throw new Error('chat:reactions not subscribed')
+/** Grab a subscribed handler by event name. */
+function handlerFor(event: string): (ev: Record<string, unknown>) => Promise<void> {
+  const call = mockSubscribe.mock.calls.find((c) => c[0] === event)
+  if (!call) throw new Error(`${event} not subscribed`)
   return call[1]
 }
+const chatHandler = () => handlerFor('chat:reactions')
+const roomHandler = () => handlerFor('room:reactions')
 
 describe('useReactionNotifications — chat reaction resolution', () => {
   beforeEach(() => {
@@ -62,8 +72,13 @@ describe('useReactionNotifications — chat reaction resolution', () => {
     chatState.messages = new Map()
     chatState.activeConversationId = null
     connectionState.jid = 'me@example.com'
+    roomState.rooms = new Map()
+    roomState.activeRoomJid = null
+    roomState.getMessage = vi.fn().mockReturnValue(undefined)
     mockGetCachedMessage.mockResolvedValue(null)
     mockGetCachedMessageByStanzaId.mockResolvedValue(null)
+    mockGetCachedRoomMessage.mockResolvedValue(null)
+    mockGetCachedRoomMessageByStanzaId.mockResolvedValue(null)
   })
 
   it('falls back to the durable cache and raises a toast when the conversation is evicted (not active)', async () => {
@@ -146,5 +161,76 @@ describe('useReactionNotifications — chat reaction resolution', () => {
     expect(mockGetCachedMessage).not.toHaveBeenCalled()
     expect(mockAddToast).not.toHaveBeenCalled()
     expect(mockAddMention).not.toHaveBeenCalled()
+  })
+
+  it('does no store or cache work for a non-live (replayed) reaction', async () => {
+    chatState.activeConversationId = 'other@example.com'
+    mockGetCachedMessage.mockResolvedValue({ id: 'm1', isOutgoing: true, body: 'x' })
+
+    renderHook(() => useReactionNotifications())
+    await chatHandler()({ conversationId: 'peer@example.com', messageId: 'm1', reactorJid: 'peer@example.com', emojis: ['🎉'], isLive: false })
+
+    expect(mockGetCachedMessage).not.toHaveBeenCalled()
+    expect(mockAddToast).not.toHaveBeenCalled()
+    expect(mockAddMention).not.toHaveBeenCalled()
+  })
+})
+
+describe('useReactionNotifications — room reaction resolution', () => {
+  const ROOM = 'team@conference.example.com'
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockSubscribe.mockReturnValue(vi.fn())
+    connectionState.jid = 'me@example.com'
+    mockGetCachedRoomMessage.mockResolvedValue(null)
+    mockGetCachedRoomMessageByStanzaId.mockResolvedValue(null)
+    roomState.rooms = new Map()
+    roomState.activeRoomJid = null
+    roomState.getMessage = vi.fn().mockReturnValue(undefined)
+    roomState.rooms.set(ROOM, { nickname: 'Me', messages: [{ id: 'r-last', nick: 'Alice' }] })
+  })
+
+  it('raises a toast for a resident own room message reacted to while a different room is active', async () => {
+    roomState.activeRoomJid = 'other@conference.example.com'
+    roomState.getMessage = vi.fn().mockReturnValue({ id: 'r1', nick: 'Me', body: 'my room message' })
+
+    renderHook(() => useReactionNotifications())
+    await roomHandler()({ roomJid: ROOM, messageId: 'r1', reactorNick: 'Alice', emojis: ['🎉'], isLive: true })
+
+    expect(mockAddToast).toHaveBeenCalledTimes(1)
+    expect(mockAddMention).not.toHaveBeenCalled()
+  })
+
+  it('falls back to the durable room cache when the reacted message is not resident', async () => {
+    roomState.activeRoomJid = 'other@conference.example.com'
+    roomState.getMessage = vi.fn().mockReturnValue(undefined) // evicted from the resident window
+    mockGetCachedRoomMessage.mockResolvedValue({ id: 'r-old', nick: 'Me', body: 'scrolled-away message' })
+
+    renderHook(() => useReactionNotifications())
+    await roomHandler()({ roomJid: ROOM, messageId: 'r-old', reactorNick: 'Alice', emojis: ['🔥'], isLive: true })
+
+    expect(mockGetCachedRoomMessage).toHaveBeenCalledWith('r-old')
+    expect(mockAddToast).toHaveBeenCalledTimes(1)
+  })
+
+  it('ignores a reaction to another occupant\'s message', async () => {
+    roomState.getMessage = vi.fn().mockReturnValue({ id: 'r2', nick: 'Bob', body: 'not mine' })
+
+    renderHook(() => useReactionNotifications())
+    await roomHandler()({ roomJid: ROOM, messageId: 'r2', reactorNick: 'Alice', emojis: ['🎉'], isLive: true })
+
+    expect(mockAddToast).not.toHaveBeenCalled()
+    expect(mockAddMention).not.toHaveBeenCalled()
+  })
+
+  it('does no cache work for a non-live room reaction', async () => {
+    roomState.getMessage = vi.fn().mockReturnValue(undefined)
+
+    renderHook(() => useReactionNotifications())
+    await roomHandler()({ roomJid: ROOM, messageId: 'r-old', reactorNick: 'Alice', emojis: ['🎉'], isLive: false })
+
+    expect(mockGetCachedRoomMessage).not.toHaveBeenCalled()
+    expect(mockAddToast).not.toHaveBeenCalled()
   })
 })

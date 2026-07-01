@@ -423,11 +423,6 @@
         "invitationsHeading": "Προσκλήσεις"
     },
     "events": {
-        "noPendingEvents": "Δεν υπάρχουν εκκρεμή συμβάντα",
-        "systemNotifications": "Ειδοποιήσεις συστήματος",
-        "messagesFromStrangers": "Μηνύματα από αγνώστους",
-        "subscriptionRequests": "Αιτήματα εγγραφής",
-        "roomInvitations": "Προσκλήσεις σε δωμάτια",
         "invitedBy": "Πρόσκληση από {{name}}",
         "join": "Είσοδος",
         "decline": "Απόρριψη"

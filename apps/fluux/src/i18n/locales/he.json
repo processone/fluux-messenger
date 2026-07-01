@@ -422,11 +422,6 @@
         "invitationsHeading": "הזמנות"
     },
     "events": {
-        "noPendingEvents": "אין אירועים ממתינים",
-        "systemNotifications": "התראות מערכת",
-        "messagesFromStrangers": "הודעות מאנשים לא מוכרים",
-        "subscriptionRequests": "בקשות מנוי",
-        "roomInvitations": "הזמנות לחדרים",
         "invitedBy": "הוזמן על ידי {{name}}",
         "join": "הצטרף",
         "decline": "דחה"

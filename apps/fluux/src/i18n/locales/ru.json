@@ -422,11 +422,6 @@
         "invitationsHeading": "Приглашения"
     },
     "events": {
-        "noPendingEvents": "Нет ожидающих событий",
-        "systemNotifications": "Системные уведомления",
-        "messagesFromStrangers": "Сообщения от незнакомцев",
-        "subscriptionRequests": "Запросы на подписку",
-        "roomInvitations": "Приглашения в комнаты",
         "invitedBy": "Пригласил(а) {{name}}",
         "join": "Войти",
         "decline": "Отклонить"

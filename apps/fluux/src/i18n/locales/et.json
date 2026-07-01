@@ -424,11 +424,6 @@
         "invitationsHeading": "Kutsed"
     },
     "events": {
-        "noPendingEvents": "Ootel sündmusi pole",
-        "systemNotifications": "Süsteemi teavitused",
-        "messagesFromStrangers": "Sõnumid võõrastelt",
-        "subscriptionRequests": "Tellimistaotlused",
-        "roomInvitations": "Toa kutsed",
         "invitedBy": "Kutsuja {{name}}",
         "join": "Liitu",
         "decline": "Keeldu"
