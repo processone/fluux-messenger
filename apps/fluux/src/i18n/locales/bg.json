@@ -152,6 +152,10 @@
         "startConversation": "Започни разговор",
         "addToContacts": "Добавяне в контакти",
         "connectedDevices": "Свързани устройства",
+        "about": "За",
+        "groups": "Групи",
+        "securityDetailsTitle": "Детайли за сигурност",
+        "noDetails": "Няма допълнителни данни",
         "nameCannotBeEmpty": "Името не може да е празно",
         "removeConfirm": "Премахване на {{name}} от вашите контакти?",
         "remove": "Премахни",
@@ -183,11 +187,12 @@
             "unavailableNowTitle": "Шифроването в момента не е налично",
             "unavailableNowDescription": "Свържете се отново или активирайте шифроването в настройките.",
             "rejectedTitle": "Невалиден сертификат",
-            "rejectedDescription": "Този контакт е публикувал ключ OpenPGP, но той не премина проверката. Съобщенията ще бъдат изпратени в обикновен текст."
-        },
-        "tabs": {
-            "profile": "Профил",
-            "security": "Сигурност"
+            "rejectedDescription": "Този контакт е публикувал ключ OpenPGP, но той не премина проверката. Съобщенията ще бъдат изпратени в обикновен текст.",
+            "glanceVerified": "Потвърдено и криптирано",
+            "glanceEncrypted": "Криптирано, непотвърдено",
+            "glanceNotEncrypted": "Некриптирано",
+            "glanceDisabled": "Криптирането е изключено",
+            "glanceLocked": "Криптирано, заключено"
         },
         "actionsMenu": "Още действия",
         "requestsHeading": "Заявки"

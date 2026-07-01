@@ -128,4 +128,13 @@ describe('VerifyPeerDialog', () => {
     fireEvent.click(revoke)
     expect(onRevoke).toHaveBeenCalled()
   })
+
+  it('makes the panel full-screen on small screens', () => {
+    const { container } = render(
+      <VerifyPeerDialog {...baseProps} />,
+    )
+    const panel = container.querySelector('.fluux-glass') as HTMLElement
+    expect(panel.className).toContain('max-md:h-[100dvh]')
+    expect(panel.className).toContain('max-md:rounded-none')
+  })
 })

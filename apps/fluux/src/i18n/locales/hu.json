@@ -152,6 +152,10 @@
         "startConversation": "Beszélgetés indítása",
         "addToContacts": "Hozzáadás a névjegyekhez",
         "connectedDevices": "Csatlakozott eszközök",
+        "about": "Névjegy",
+        "groups": "Csoportok",
+        "securityDetailsTitle": "Biztonsági részletek",
+        "noDetails": "Nincsenek további részletek",
         "nameCannotBeEmpty": "A név nem lehet üres",
         "removeConfirm": "Eltávolítja {{name}} nevű névjegyét?",
         "remove": "Eltávolítás",
@@ -183,11 +187,12 @@
             "unavailableNowTitle": "A titkosítás jelenleg nem érhető el",
             "unavailableNowDescription": "Kapcsolódj újra, vagy engedélyezd a titkosítást a beállításokban.",
             "rejectedTitle": "Érvénytelen tanúsítvány",
-            "rejectedDescription": "Ez a partner közzétett egy OpenPGP kulcsot, de az érvényesítés sikertelen volt. Az üzenetek titkosítatlanul kerülnek elküldésre."
-        },
-        "tabs": {
-            "profile": "Profil",
-            "security": "Biztonság"
+            "rejectedDescription": "Ez a partner közzétett egy OpenPGP kulcsot, de az érvényesítés sikertelen volt. Az üzenetek titkosítatlanul kerülnek elküldésre.",
+            "glanceVerified": "Ellenőrzött és titkosított",
+            "glanceEncrypted": "Titkosított, nem ellenőrzött",
+            "glanceNotEncrypted": "Nem titkosított",
+            "glanceDisabled": "Titkosítás kikapcsolva",
+            "glanceLocked": "Titkosított, zárolt"
         },
         "actionsMenu": "További műveletek",
         "requestsHeading": "Kérések"

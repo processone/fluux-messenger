@@ -64,7 +64,7 @@ export function ContactProfileHero({
 
   return (
     <div className="px-4 py-5 md:px-6 md:py-6 border-b border-fluux-bg">
-      <div className="flex flex-col md:flex-row items-center md:items-start gap-4 md:gap-5">
+      <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4 sm:gap-5">
         {/* Avatar */}
         <div className="flex-shrink-0">
           <Avatar
@@ -79,10 +79,9 @@ export function ContactProfileHero({
         </div>
 
         {/* Identity column */}
-        <div className="flex-1 min-w-0 flex flex-col items-center md:items-start text-center md:text-start w-full">
-          {/* Name (editable inline for roster contacts) */}
+        <div className="flex-1 min-w-0 flex flex-col items-center sm:items-start text-center sm:text-start w-full">
           {isInRoster && isEditing ? (
-            <div className="flex flex-col items-center md:items-start gap-1 w-full max-w-sm">
+            <div className="flex flex-col items-center sm:items-start gap-1 w-full max-w-sm">
               <TextInput
                 ref={inputRef}
                 type="text"
@@ -97,7 +96,7 @@ export function ContactProfileHero({
               {saving && <p className="text-xs text-fluux-muted">{t('common.saving')}</p>}
             </div>
           ) : (
-            <div className="group relative flex items-center justify-center md:justify-start gap-1">
+            <div className="group relative flex items-center justify-center sm:justify-start gap-1">
               <h1 className="text-xl font-bold text-fluux-text break-all">{contact.name}</h1>
               {isInRoster && (
                 <Tooltip content={t('contacts.rename')} position="top">
@@ -114,51 +113,33 @@ export function ContactProfileHero({
             </div>
           )}
 
-          {/* JID */}
           <p className="text-fluux-muted text-sm mt-1 break-all">{contact.jid}</p>
 
-          {/* PEP nickname */}
           {pepNickname && (
             <p className="text-fluux-muted text-xs mt-1 italic">"{pepNickname}"</p>
           )}
 
-          {/* Presence */}
           <div className="flex items-center gap-2 mt-2">
             <span className={`size-2 rounded-full ${presenceColor}`} />
             <span className="text-fluux-text text-sm">{statusText}</span>
           </div>
 
-          {/* Custom status message */}
           {contact.statusMessage && (
             <p className="text-fluux-muted text-sm mt-1 italic break-words">"{contact.statusMessage}"</p>
           )}
+        </div>
 
-          {/* Groups */}
-          {contact.groups && contact.groups.length > 0 && (
-            <div className="flex flex-wrap gap-2 mt-3 justify-center md:justify-start">
-              {contact.groups.map((group) => (
-                <span
-                  key={group}
-                  className="px-2 py-0.5 text-xs rounded-full bg-fluux-bg text-fluux-text border border-fluux-hover"
-                >
-                  {group}
-                </span>
-              ))}
-            </div>
-          )}
-
-          {/* Primary CTA + actions menu */}
-          <div className="mt-4 w-full max-w-sm flex items-center gap-2">
-            <button
-              type="button"
-              onClick={onStartConversation}
-              className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-fluux-brand hover:bg-fluux-brand-hover text-fluux-text-on-accent rounded-lg transition-colors min-h-[44px]"
-            >
-              <MessageCircle className="size-5" />
-              {t('contacts.startConversation')}
-            </button>
-            {actionsSlot}
-          </div>
+        {/* Primary CTA + actions menu — right on desktop, full-width below on mobile */}
+        <div className="w-full sm:w-auto sm:self-center flex items-center gap-2">
+          <button
+            type="button"
+            onClick={onStartConversation}
+            className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2.5 bg-fluux-brand hover:bg-fluux-brand-hover text-fluux-text-on-accent rounded-lg transition-colors min-h-[44px]"
+          >
+            <MessageCircle className="size-5" />
+            {t('contacts.startConversation')}
+          </button>
+          {actionsSlot}
         </div>
       </div>
     </div>

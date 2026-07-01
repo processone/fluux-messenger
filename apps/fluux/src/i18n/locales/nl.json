@@ -152,6 +152,10 @@
         "startConversation": "Gesprek starten",
         "addToContacts": "Toevoegen aan Contacten",
         "connectedDevices": "Verbonden apparaten",
+        "about": "Over",
+        "groups": "Groepen",
+        "securityDetailsTitle": "Beveiligingsdetails",
+        "noDetails": "Geen aanvullende gegevens",
         "nameCannotBeEmpty": "Naam mag niet leeg zijn",
         "removeConfirm": "{{name}} verwijderen uit je contacten?",
         "remove": "Verwijderen",
@@ -183,11 +187,12 @@
             "unavailableNowTitle": "Versleuteling momenteel niet beschikbaar",
             "unavailableNowDescription": "Maak opnieuw verbinding of schakel versleuteling in via de instellingen.",
             "rejectedTitle": "Ongeldig certificaat",
-            "rejectedDescription": "Dit contact heeft een OpenPGP-sleutel gepubliceerd, maar de validatie is mislukt. Berichten worden in platte tekst verzonden."
-        },
-        "tabs": {
-            "profile": "Profiel",
-            "security": "Beveiliging"
+            "rejectedDescription": "Dit contact heeft een OpenPGP-sleutel gepubliceerd, maar de validatie is mislukt. Berichten worden in platte tekst verzonden.",
+            "glanceVerified": "Geverifieerd en versleuteld",
+            "glanceEncrypted": "Versleuteld, niet geverifieerd",
+            "glanceNotEncrypted": "Niet versleuteld",
+            "glanceDisabled": "Versleuteling uit",
+            "glanceLocked": "Versleuteld, vergrendeld"
         },
         "actionsMenu": "Meer acties",
         "requestsHeading": "Verzoeken"

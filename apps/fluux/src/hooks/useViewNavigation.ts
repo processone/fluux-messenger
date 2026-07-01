@@ -154,7 +154,9 @@ export function useViewNavigation(selectedContact: Contact | null): ViewNavigati
       searchStore.getState().setPreviewResult(null)
     }
 
-    // Navigate to the new view via router
+    // Navigate to the new view via router. Tab switches PUSH a history entry
+    // (standard back stack) so Back retraces the views the user visited. The
+    // same-view early return above is the only dedup we need here.
     // Auto-select first item if no per-tab memory exists (skip on small screens - let user choose from sidebar)
     const skipAutoSelect = isSmallScreen()
 
@@ -182,7 +184,7 @@ export function useViewNavigation(selectedContact: Contact | null): ViewNavigati
         // Set store state AND navigate to URL
         // Always set conversation (even null) to clear any leftover archived conversation
         void activateConversation(targetConversation ?? null)
-        navigateToMessages(targetConversation ?? undefined, { replace: true })
+        navigateToMessages(targetConversation ?? undefined)
         break
       }
       case 'rooms': {
@@ -198,30 +200,30 @@ export function useViewNavigation(selectedContact: Contact | null): ViewNavigati
         // Set store state AND navigate to URL
         // Always set room (even null) to ensure clean state
         void activateRoom(targetRoom ?? null)
-        navigateToRooms(targetRoom ?? undefined, { replace: true })
+        navigateToRooms(targetRoom ?? undefined)
         break
       }
       case 'contacts':
         setActiveConversation(null)
         setActiveRoom(null)
         // On small screens, don't auto-restore last contact - let user choose
-        navigateToContacts(skipAutoSelect ? undefined : (lastDirectoryContact?.jid ?? undefined), { replace: true })
+        navigateToContacts(skipAutoSelect ? undefined : (lastDirectoryContact?.jid ?? undefined))
         break
       case 'admin':
         setActiveConversation(null)
         setActiveRoom(null)
-        navigateToAdmin(undefined, { replace: true })
+        navigateToAdmin(undefined)
         break
       case 'settings':
         setActiveConversation(null)
         setActiveRoom(null)
         // On small screens, don't auto-select a category - let user choose from sidebar
-        navigateToSettings(skipAutoSelect ? undefined : 'profile', { replace: true })
+        navigateToSettings(skipAutoSelect ? undefined : 'profile')
         break
       case 'search':
         setActiveConversation(null)
         setActiveRoom(null)
-        navigateToSearch({ replace: true })
+        navigateToSearch()
         break
     }
   }, [sidebarView, selectedContact, lastMessagesConversation, lastRoomsRoom, lastDirectoryContact,

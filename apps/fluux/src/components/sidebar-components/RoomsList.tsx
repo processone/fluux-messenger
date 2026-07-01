@@ -10,6 +10,7 @@ import {
 } from '@fluux/sdk'
 import { useChatStore, useRoomStore } from '@fluux/sdk/react'
 import { formatLocalizedPreview } from '@/utils/messagePreviewText'
+import { shouldReplaceOnSelect } from '@/utils/navigationHistory'
 import { EditBookmarkModal } from '../EditBookmarkModal'
 import { Tooltip } from '../Tooltip'
 import { useSidebarZone } from './types'
@@ -106,15 +107,16 @@ export function RoomsList() {
     handlersRef.current = {
       onSelect: (roomJid) => {
         const L = latestRef.current
-        const hasActive = !!roomStore.getState().activeRoomJid
+        // Standard back stack: switching rooms pushes; re-selecting dedups.
+        const current = roomStore.getState().activeRoomJid
         void L.setActiveConversation(null)
         void roomStore.getState().activateRoom(roomJid)
-        L.navigateToRooms(roomJid, { replace: hasActive })
+        L.navigateToRooms(roomJid, { replace: shouldReplaceOnSelect(roomJid, current) })
       },
       onActivate: async (roomJid) => {
         const L = latestRef.current
         const room = roomStore.getState().getRoom(roomJid)
-        const hasActive = !!roomStore.getState().activeRoomJid
+        const current = roomStore.getState().activeRoomJid
         if (room?.joined) {
           void L.setActiveConversation(null)
           void roomStore.getState().activateRoom(roomJid)
@@ -130,7 +132,7 @@ export function RoomsList() {
           void L.setActiveConversation(null)
           void roomStore.getState().activateRoom(roomJid)
         }
-        L.navigateToRooms(roomJid, { replace: hasActive })
+        L.navigateToRooms(roomJid, { replace: shouldReplaceOnSelect(roomJid, current) })
       },
       onJoin: (roomJid) => {
         const L = latestRef.current

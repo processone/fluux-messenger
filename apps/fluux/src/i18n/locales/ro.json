@@ -154,6 +154,10 @@
         "startConversation": "Începe conversația",
         "addToContacts": "Adaugă la Contacte",
         "connectedDevices": "Dispozitive conectate",
+        "about": "Despre",
+        "groups": "Grupuri",
+        "securityDetailsTitle": "Detalii de securitate",
+        "noDetails": "Fără detalii suplimentare",
         "nameCannotBeEmpty": "Numele nu poate fi gol",
         "removeConfirm": "Elimini pe {{name}} din contactele tale?",
         "remove": "Elimină",
@@ -185,11 +189,12 @@
             "unavailableNowTitle": "Criptarea este momentan indisponibilă",
             "unavailableNowDescription": "Reconectează-te sau activează criptarea din setări.",
             "rejectedTitle": "Certificat nevalid",
-            "rejectedDescription": "Acest contact a publicat o cheie OpenPGP, dar validarea a eșuat. Mesajele vor fi trimise în text simplu."
-        },
-        "tabs": {
-            "profile": "Profil",
-            "security": "Securitate"
+            "rejectedDescription": "Acest contact a publicat o cheie OpenPGP, dar validarea a eșuat. Mesajele vor fi trimise în text simplu.",
+            "glanceVerified": "Verificat și criptat",
+            "glanceEncrypted": "Criptat, neverificat",
+            "glanceNotEncrypted": "Necriptat",
+            "glanceDisabled": "Criptare dezactivată",
+            "glanceLocked": "Criptat, blocat"
         },
         "actionsMenu": "Mai multe acțiuni",
         "requestsHeading": "Solicitări"

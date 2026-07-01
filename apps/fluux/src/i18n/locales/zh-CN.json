@@ -152,6 +152,10 @@
         "startConversation": "开始对话",
         "addToContacts": "添加到联系人",
         "connectedDevices": "已连接设备",
+        "about": "关于",
+        "groups": "分组",
+        "securityDetailsTitle": "安全详情",
+        "noDetails": "暂无更多信息",
         "nameCannotBeEmpty": "名称不能为空",
         "removeConfirm": "从您的联系人中移除 {{name}}？",
         "remove": "移除",
@@ -183,11 +187,12 @@
             "unavailableNowTitle": "加密当前不可用",
             "unavailableNowDescription": "请重新连接或在设置中启用加密。",
             "rejectedTitle": "证书无效",
-            "rejectedDescription": "此联系人已发布 OpenPGP 密钥，但验证失败。消息将以明文形式发送。"
-        },
-        "tabs": {
-            "profile": "个人资料",
-            "security": "安全"
+            "rejectedDescription": "此联系人已发布 OpenPGP 密钥，但验证失败。消息将以明文形式发送。",
+            "glanceVerified": "已验证且已加密",
+            "glanceEncrypted": "已加密，未验证",
+            "glanceNotEncrypted": "未加密",
+            "glanceDisabled": "加密已关闭",
+            "glanceLocked": "已加密，已锁定"
         },
         "actionsMenu": "更多操作",
         "requestsHeading": "请求"

@@ -95,7 +95,7 @@ export function VerifyPeerDialog({
     <ModalOverlay
       onClose={onCancel}
       width="max-w-md"
-      panelClassName="max-h-[calc(100vh-2rem)] flex flex-col overflow-hidden"
+      panelClassName="flex flex-col overflow-hidden md:max-h-[calc(100vh-2rem)] max-md:mx-0 max-md:max-w-none max-md:h-[100dvh] max-md:rounded-none"
     >
         <div className="px-5 pt-5 pb-3">
           <h3 className="text-lg font-semibold text-fluux-text mb-1">

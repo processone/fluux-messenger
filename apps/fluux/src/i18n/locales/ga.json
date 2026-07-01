@@ -152,6 +152,10 @@
         "startConversation": "Tosaigh Comhrá",
         "addToContacts": "Cuir le Teagmhálaithe",
         "connectedDevices": "Gléasanna Ceangailte",
+        "about": "Maidir le",
+        "groups": "Grúpaí",
+        "securityDetailsTitle": "Sonraí slándála",
+        "noDetails": "Gan sonraí breise",
         "nameCannotBeEmpty": "Ní féidir leis an ainm a bheith folamh",
         "removeConfirm": "Bain {{name}} ó do theagmhálacha?",
         "remove": "Bain",
@@ -183,11 +187,12 @@
             "unavailableNowTitle": "Níl criptiú ar fáil faoi láthair",
             "unavailableNowDescription": "Athcheangail nó cumasaigh criptiú sna socruithe.",
             "rejectedTitle": "Teastas neamhbhailí",
-            "rejectedDescription": "D'fhoilsigh an teagmháil seo eochair OpenPGP, ach theip ar a bhailíochtú. Seolfar teachtaireachtaí i ngnáth-théacs."
-        },
-        "tabs": {
-            "profile": "Próifíl",
-            "security": "Slándáil"
+            "rejectedDescription": "D'fhoilsigh an teagmháil seo eochair OpenPGP, ach theip ar a bhailíochtú. Seolfar teachtaireachtaí i ngnáth-théacs.",
+            "glanceVerified": "Fíoraithe agus criptithe",
+            "glanceEncrypted": "Criptithe, gan fíorú",
+            "glanceNotEncrypted": "Gan criptiú",
+            "glanceDisabled": "Criptiú as",
+            "glanceLocked": "Criptithe, faoi ghlas"
         },
         "actionsMenu": "Tuilleadh gníomhartha",
         "requestsHeading": "Iarratais"

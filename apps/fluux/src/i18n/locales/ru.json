@@ -152,6 +152,10 @@
         "startConversation": "Начать беседу",
         "addToContacts": "Добавить в контакты",
         "connectedDevices": "Подключённые устройства",
+        "about": "О контакте",
+        "groups": "Группы",
+        "securityDetailsTitle": "Сведения о безопасности",
+        "noDetails": "Нет дополнительных сведений",
         "nameCannotBeEmpty": "Имя не может быть пустым",
         "removeConfirm": "Удалить {{name}} из ваших контактов?",
         "remove": "Удалить",
@@ -183,11 +187,12 @@
             "unavailableNowTitle": "Шифрование сейчас недоступно",
             "unavailableNowDescription": "Переподключитесь или включите шифрование в настройках.",
             "rejectedTitle": "Недействительный сертификат",
-            "rejectedDescription": "Этот контакт опубликовал ключ OpenPGP, но проверка не пройдена. Сообщения будут отправлены в открытом виде."
-        },
-        "tabs": {
-            "profile": "Профиль",
-            "security": "Безопасность"
+            "rejectedDescription": "Этот контакт опубликовал ключ OpenPGP, но проверка не пройдена. Сообщения будут отправлены в открытом виде.",
+            "glanceVerified": "Подтверждено и зашифровано",
+            "glanceEncrypted": "Зашифровано, не проверено",
+            "glanceNotEncrypted": "Не зашифровано",
+            "glanceDisabled": "Шифрование отключено",
+            "glanceLocked": "Зашифровано, заблокировано"
         },
         "actionsMenu": "Другие действия",
         "requestsHeading": "Запросы"
