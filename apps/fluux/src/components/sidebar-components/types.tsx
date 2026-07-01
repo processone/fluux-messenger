@@ -83,6 +83,14 @@ export const SIDEBAR_MAX_WIDTH = 400
 export const SIDEBAR_DEFAULT_WIDTH = 288 // 18rem = 288px (matches md:w-72)
 export const SIDEBAR_WIDTH_KEY = 'sidebar-width'
 
+/**
+ * Shared class for sidebar header icon buttons and OverflowMenu triggers.
+ * Layout + hover background only — callers append the text color (muted, or
+ * brand when a toggle is active) so there is no conflicting `text-*` class.
+ */
+export const SIDEBAR_HEADER_ICON_BTN =
+  'p-2 rounded-lg hover:bg-fluux-hover transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center'
+
 // URL paths for each sidebar view
 export const VIEW_PATHS: Record<SidebarView, string> = {
   messages: '/messages',
