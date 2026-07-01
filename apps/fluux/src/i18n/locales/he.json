@@ -1225,7 +1225,8 @@
         "filteringContacts": "מסנן אנשי קשר...",
         "filteringRooms": "מסנן חדרים...",
         "filteringCommands": "מסנן פקודות...",
-        "searchMessages": "חיפוש הודעות עבור \"{{query}}\""
+        "searchMessages": "חיפוש הודעות עבור \"{{query}}\"",
+        "unread": "לא נקראו"
     },
     "dataFormHints": {
         "muc#roomconfig_roomname": "שם התצוגה המוצג ברשימות החדרים ובכותרת.",

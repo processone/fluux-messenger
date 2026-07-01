@@ -1225,7 +1225,8 @@
         "filteringContacts": "Filtriranje kontakata...",
         "filteringRooms": "Filtriranje soba...",
         "filteringCommands": "Filtriranje naredbi...",
-        "searchMessages": "Search messages for \"{{query}}\""
+        "searchMessages": "Search messages for \"{{query}}\"",
+        "unread": "Nepročitano"
     },
     "dataFormHints": {
         "muc#roomconfig_roomname": "Prikazano ime na popisu soba i u zaglavlju.",

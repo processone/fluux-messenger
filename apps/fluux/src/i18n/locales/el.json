@@ -1226,7 +1226,8 @@
         "filteringContacts": "Φιλτράρισμα επαφών...",
         "filteringRooms": "Φιλτράρισμα δωματίων...",
         "filteringCommands": "Φιλτράρισμα εντολών...",
-        "searchMessages": "Search messages for \"{{query}}\""
+        "searchMessages": "Search messages for \"{{query}}\"",
+        "unread": "Μη αναγνωσμένα"
     },
     "dataFormHints": {
         "muc#roomconfig_roomname": "Το εμφανιζόμενο όνομα στη λίστα δωματίων και στην κεφαλίδα.",

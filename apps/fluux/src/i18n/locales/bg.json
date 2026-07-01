@@ -1225,7 +1225,8 @@
         "filteringContacts": "Филтриране на контакти...",
         "filteringRooms": "Филтриране на стаи...",
         "filteringCommands": "Филтриране на команди...",
-        "searchMessages": "Search messages for \"{{query}}\""
+        "searchMessages": "Search messages for \"{{query}}\"",
+        "unread": "Непрочетени"
     },
     "dataFormHints": {
         "muc#roomconfig_roomname": "Показваното име в списъка със стаи и в заглавието.",

@@ -14,9 +14,10 @@ const mockConversations: Array<{ id: string; name: string; unreadCount: number; 
   { id: 'bob@example.com', name: 'Bob Jones', unreadCount: 2, type: 'chat', lastMessage: { body: 'The exponential backoff is working now' } },
 ]
 
-const mockRooms: Array<{ jid: string; name: string; joined: boolean; lastMessage?: { body: string } }> = [
-  { jid: 'dev@conference.example.com', name: 'Development', joined: true, lastMessage: { body: 'PR merged successfully' } },
-  { jid: 'general@conference.example.com', name: 'General Chat', joined: true },
+const mockRooms: Array<{ jid: string; name: string; joined: boolean; unreadCount?: number; mentionsCount?: number; lastMessage?: { body: string } }> = [
+  { jid: 'dev@conference.example.com', name: 'Development', joined: true, unreadCount: 0, mentionsCount: 0, lastMessage: { body: 'PR merged successfully' } },
+  { jid: 'general@conference.example.com', name: 'General Chat', joined: true, unreadCount: 3, mentionsCount: 0 },
+  { jid: 'announce@conference.example.com', name: 'Announcements', joined: true, unreadCount: 1, mentionsCount: 1 },
 ]
 
 const mockBookmarkedRooms = [
@@ -32,6 +33,8 @@ const mockSetActiveConversation = vi.fn()
 const mockSetActiveRoom = vi.fn()
 const mockIsArchived = vi.fn((_jid: string) => false)
 let mockArchivedConversations: typeof mockConversations = []
+let mockActiveConversationId: string | null = null
+let mockActiveRoomJid: string | null = null
 
 // Mock SDK hooks
 const mockSearchFn = vi.fn()
@@ -65,14 +68,24 @@ vi.mock('@fluux/sdk', () => ({
 }))
 
 // Mock React store hooks (from @fluux/sdk/react)
-vi.mock('@fluux/sdk/react', () => ({
-  useChatStore: () => ({
+vi.mock('@fluux/sdk/react', () => {
+  // Selector-aware: called bare (`useChatStore()`) returns the state object;
+  // called with a selector returns the selected slice.
+  const chatState = () => ({
     setActiveConversation: mockSetActiveConversation,
-  }),
-  useConnectionStore: (selector: (state: { status: string }) => unknown) =>
-    selector({ status: 'online' }),
-  useContactTime: () => null, useLastActivity: vi.fn(),
-}))
+    activeConversationId: mockActiveConversationId,
+  })
+  const roomState = () => ({ activeRoomJid: mockActiveRoomJid })
+  return {
+    useChatStore: (selector?: (s: ReturnType<typeof chatState>) => unknown) =>
+      selector ? selector(chatState()) : chatState(),
+    useRoomStore: (selector?: (s: ReturnType<typeof roomState>) => unknown) =>
+      selector ? selector(roomState()) : roomState(),
+    useConnectionStore: (selector: (state: { status: string }) => unknown) =>
+      selector({ status: 'online' }),
+    useContactTime: () => null, useLastActivity: vi.fn(),
+  }
+})
 
 // Mock i18n
 vi.mock('react-i18next', () => ({
@@ -92,6 +105,7 @@ vi.mock('react-i18next', () => ({
         'commandPalette.filteringRooms': 'Filtering rooms...',
         'commandPalette.filteringCommands': 'Filtering commands...',
         'commandPalette.searchMessages': 'Search messages for "{{query}}"',
+        'commandPalette.unread': 'Unread',
         'sidebar.messages': 'Messages',
         'sidebar.rooms': 'Rooms',
         'sidebar.connections': 'Connections',
@@ -133,6 +147,8 @@ describe('CommandPalette', () => {
     vi.clearAllMocks()
     mockIsArchived.mockReturnValue(false)
     mockArchivedConversations = []
+    mockActiveConversationId = null
+    mockActiveRoomJid = null
     useAdvancedModeStore.setState({ advancedMode: false })
   })
 
@@ -375,8 +391,8 @@ describe('CommandPalette', () => {
     it('should select first item by default', () => {
       render(<CommandPalette {...defaultProps} />)
 
-      // First item should have data-selected="true"
-      const firstItem = screen.getByText('Alice Smith').closest('button')
+      // Bob (unreadCount 2) is in the Unread section, which comes first
+      const firstItem = screen.getByText('Bob Jones').closest('button')
       expect(firstItem).toHaveAttribute('data-selected', 'true')
     })
 
@@ -386,8 +402,8 @@ describe('CommandPalette', () => {
 
       fireEvent.keyDown(container!, { key: 'ArrowDown' })
 
-      // Second item should now be selected
-      const secondItem = screen.getByText('Bob Jones').closest('button')
+      // Second item is Alice (in the Messages section, after the Unread section)
+      const secondItem = screen.getByText('Alice Smith').closest('button')
       expect(secondItem).toHaveAttribute('data-selected', 'true')
     })
 
@@ -402,7 +418,8 @@ describe('CommandPalette', () => {
       // Then move up
       fireEvent.keyDown(container!, { key: 'ArrowUp' })
 
-      const secondItem = screen.getByText('Bob Jones').closest('button')
+      // Back to index 1 = Alice (Messages section)
+      const secondItem = screen.getByText('Alice Smith').closest('button')
       expect(secondItem).toHaveAttribute('data-selected', 'true')
     })
 
@@ -429,8 +446,8 @@ describe('CommandPalette', () => {
         fireEvent.keyDown(container!, { key: 'ArrowUp' })
       }
 
-      // First item should still be selected
-      const firstItem = screen.getByText('Alice Smith').closest('button')
+      // First item should still be selected (Bob, in the Unread section)
+      const firstItem = screen.getByText('Bob Jones').closest('button')
       expect(firstItem).toHaveAttribute('data-selected', 'true')
     })
 
@@ -469,8 +486,8 @@ describe('CommandPalette', () => {
 
       fireEvent.keyDown(container!, { key: 'Enter' })
 
-      // First item is a conversation, should set active conversation
-      expect(mockSetActiveConversation).toHaveBeenCalledWith('alice@example.com')
+      // First item is Bob (unread, in the Unread section), should set active conversation
+      expect(mockSetActiveConversation).toHaveBeenCalledWith('bob@example.com')
       expect(defaultProps.onClose).toHaveBeenCalled()
     })
 
@@ -653,8 +670,8 @@ describe('CommandPalette', () => {
       rerender(<CommandPalette {...defaultProps} isOpen={false} />)
       rerender(<CommandPalette {...defaultProps} isOpen={true} />)
 
-      // First item should be selected again
-      const firstItem = screen.getByText('Alice Smith').closest('button')
+      // First item should be selected again (Bob, in the Unread section)
+      const firstItem = screen.getByText('Bob Jones').closest('button')
       expect(firstItem).toHaveAttribute('data-selected', 'true')
     })
   })
@@ -684,27 +701,27 @@ describe('CommandPalette', () => {
       render(<CommandPalette {...defaultProps} />)
       const container = screen.getByPlaceholderText('Go to...').closest('div')?.parentElement
 
-      // Navigate to Bob Jones (second item)
+      // Navigate to Alice Smith (second item — Bob is first in Unread section)
       fireEvent.keyDown(container!, { key: 'ArrowDown' })
 
-      // Verify Bob is selected
-      const bobItem = screen.getByText('Bob Jones').closest('button')
-      expect(bobItem).toHaveAttribute('data-selected', 'true')
+      // Verify Alice is selected
+      const aliceItem = screen.getByText('Alice Smith').closest('button')
+      expect(aliceItem).toHaveAttribute('data-selected', 'true')
 
-      // Press Enter - should select Bob, not Alice
+      // Press Enter - should select Alice, not Bob
       fireEvent.keyDown(container!, { key: 'Enter' })
 
-      expect(mockSetActiveConversation).toHaveBeenCalledWith('bob@example.com')
-      expect(mockSetActiveConversation).not.toHaveBeenCalledWith('alice@example.com')
+      expect(mockSetActiveConversation).toHaveBeenCalledWith('alice@example.com')
+      expect(mockSetActiveConversation).not.toHaveBeenCalledWith('bob@example.com')
     })
 
     it('should work correctly on consecutive selections after reopening', () => {
       const { rerender } = render(<CommandPalette {...defaultProps} />)
       const container = screen.getByPlaceholderText('Go to...').closest('div')?.parentElement
 
-      // First selection: Alice (first item)
+      // First selection: Bob (first item, in Unread section)
       fireEvent.keyDown(container!, { key: 'Enter' })
-      expect(mockSetActiveConversation).toHaveBeenLastCalledWith('alice@example.com')
+      expect(mockSetActiveConversation).toHaveBeenLastCalledWith('bob@example.com')
 
       vi.clearAllMocks()
 
@@ -714,11 +731,11 @@ describe('CommandPalette', () => {
 
       const container2 = screen.getByPlaceholderText('Go to...').closest('div')?.parentElement
 
-      // Navigate to Bob and select
+      // Navigate to Alice (index 1) and select
       fireEvent.keyDown(container2!, { key: 'ArrowDown' })
       fireEvent.keyDown(container2!, { key: 'Enter' })
 
-      expect(mockSetActiveConversation).toHaveBeenLastCalledWith('bob@example.com')
+      expect(mockSetActiveConversation).toHaveBeenLastCalledWith('alice@example.com')
     })
 
     it('should select correct item after filtering and navigating', () => {
@@ -772,14 +789,14 @@ describe('CommandPalette', () => {
       fireEvent.keyDown(container!, { key: 'ArrowDown' })
       fireEvent.keyDown(container!, { key: 'ArrowUp' })
 
-      // Third item in the list should be a room (Development)
-      // Order: Alice, Bob, Development, General Chat...
-      const devRoom = screen.getByText('Development').closest('button')
-      expect(devRoom).toHaveAttribute('data-selected', 'true')
+      // Third item in the list should be a room (Announcements — tier 0, has mention)
+      // Order: Bob (Unread), Alice (Messages), Announcements (Rooms tier 0), General Chat (tier 1), Development (tier 2)...
+      const announceRoom = screen.getByText('Announcements').closest('button')
+      expect(announceRoom).toHaveAttribute('data-selected', 'true')
 
       fireEvent.keyDown(container!, { key: 'Enter' })
 
-      expect(mockSetActiveRoom).toHaveBeenCalledWith('dev@conference.example.com')
+      expect(mockSetActiveRoom).toHaveBeenCalledWith('announce@conference.example.com')
     })
 
     it('should work correctly with rapid consecutive selections', () => {
@@ -791,8 +808,7 @@ describe('CommandPalette', () => {
 
         const container = screen.getByPlaceholderText('Go to...').closest('div')?.parentElement
 
-        // Navigate to second item and select
-        fireEvent.keyDown(container!, { key: 'ArrowDown' })
+        // Select first item (Bob, in the Unread section) without navigating
         fireEvent.keyDown(container!, { key: 'Enter' })
 
         expect(mockSetActiveConversation).toHaveBeenCalledWith('bob@example.com')
@@ -1226,6 +1242,81 @@ describe('CommandPalette', () => {
     })
   })
 
+  describe('Unread section', () => {
+    it('shows unread DMs under an Unread header, read DMs under Messages, no duplication', () => {
+      render(<CommandPalette {...defaultProps} />)
+
+      // The Unread section header is present
+      expect(screen.getByText('Unread')).toBeInTheDocument()
+
+      // Bob (unreadCount 2) appears exactly once, Alice (unreadCount 0) appears exactly once
+      expect(screen.getAllByText('Bob Jones')).toHaveLength(1)
+      expect(screen.getAllByText('Alice Smith')).toHaveLength(1)
+
+      // Bob's row is above Alice's row (Unread section precedes Messages section)
+      const bob = screen.getByText('Bob Jones')
+      const alice = screen.getByText('Alice Smith')
+      expect(bob.compareDocumentPosition(alice) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    })
+  })
+
+  describe('Unread badge', () => {
+    it('shows a count badge for unread DMs in the default view', () => {
+      render(<CommandPalette {...defaultProps} />)
+      // Bob Jones has unreadCount 2
+      expect(screen.getByText('2')).toBeInTheDocument()
+    })
+
+    it('does not show unread badges once the user types a query', () => {
+      render(<CommandPalette {...defaultProps} />)
+      fireEvent.change(screen.getByPlaceholderText('Go to...'), { target: { value: 'Bob' } })
+      // Bob still listed, but no "2" badge in search results
+      expect(screen.getByText('Bob Jones')).toBeInTheDocument()
+      expect(screen.queryByText('2')).not.toBeInTheDocument()
+    })
+  })
+
+  describe('Room ordering', () => {
+    it('orders rooms mentions-first, then unread, then read', () => {
+      render(<CommandPalette {...defaultProps} />)
+
+      const announce = screen.getByText('Announcements') // mention (tier 0)
+      const general = screen.getByText('General Chat')    // unread (tier 1)
+      const dev = screen.getByText('Development')          // read (tier 2)
+
+      // Announcements before General Chat
+      expect(announce.compareDocumentPosition(general) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+      // General Chat before Development
+      expect(general.compareDocumentPosition(dev) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    })
+  })
+
+  describe('Active entity hidden', () => {
+    it('does not propose the currently-open conversation', () => {
+      mockActiveConversationId = 'bob@example.com'
+      render(<CommandPalette {...defaultProps} />)
+      // Bob is the open conversation — hidden everywhere, including the Unread section
+      expect(screen.queryByText('Bob Jones')).not.toBeInTheDocument()
+      // Other conversations still listed
+      expect(screen.getByText('Alice Smith')).toBeInTheDocument()
+    })
+
+    it('does not propose the open conversation even when the user searches for it', () => {
+      mockActiveConversationId = 'bob@example.com'
+      render(<CommandPalette {...defaultProps} />)
+      fireEvent.change(screen.getByPlaceholderText('Go to...'), { target: { value: 'Bob' } })
+      expect(screen.queryByText('Bob Jones')).not.toBeInTheDocument()
+    })
+
+    it('does not propose the currently-open room', () => {
+      mockActiveRoomJid = 'dev@conference.example.com'
+      render(<CommandPalette {...defaultProps} />)
+      // Development is the open room — hidden; other joined rooms still listed
+      expect(screen.queryByText('Development')).not.toBeInTheDocument()
+      expect(screen.getByText('General Chat')).toBeInTheDocument()
+    })
+  })
+
   describe('Archived conversations', () => {
     it('should navigate to archive view when selecting an archived conversation', () => {
       // Make Bob's conversation archived
@@ -1275,7 +1366,8 @@ describe('CommandPalette', () => {
       render(<CommandPalette {...trackingProps} />)
       const container = screen.getByPlaceholderText('Go to...').closest('div')?.parentElement
 
-      // Alice is first in the list, press Enter
+      // Bob is first (Unread section), Alice is second (Messages section). Navigate to Alice.
+      fireEvent.keyDown(container!, { key: 'ArrowDown' })
       fireEvent.keyDown(container!, { key: 'Enter' })
 
       expect(trackingProps.onSidebarViewChange).toHaveBeenCalledWith('archive')

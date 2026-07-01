@@ -1225,7 +1225,8 @@
         "filteringContacts": "Фільтрацыя кантактаў...",
         "filteringRooms": "Фільтрацыя пакояў...",
         "filteringCommands": "Фільтрацыя каманд...",
-        "searchMessages": "Search messages for \"{{query}}\""
+        "searchMessages": "Search messages for \"{{query}}\"",
+        "unread": "Непрачытаныя"
     },
     "dataFormHints": {
         "muc#roomconfig_roomname": "Імя, якое адлюстроўваецца ў спісе пакояў і ў загалоўку.",
