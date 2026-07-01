@@ -34,6 +34,8 @@ import { computeMediaAutoload } from '@/utils/mediaAutoload'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { getRoomJoinErrorMessage } from '@/utils/roomJoinError'
 import { auroraSenderColor } from '@/utils/senderColor'
+import { ReactionMentions } from './conversation/ReactionMentions'
+import { reactionMentionStore } from '@/stores/reactionMentionStore'
 
 // Generate hat colors from URI using XEP-0392 consistent color
 function getHatColors(hat: { uri: string; hue?: number }) {
@@ -366,6 +368,15 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
     }
   }, [enterWhisperMode, addToast, t])
 
+  // Clear stale reaction mentions when leaving a room
+  useEffect(() => {
+    return () => {
+      if (activeRoom?.jid) {
+        reactionMentionStore.getState().clearConversation(activeRoom.jid)
+      }
+    }
+  }, [activeRoom?.jid])
+
   // Clear reply/edit/whisper/pending attachment state when room changes
   // Note: scroll position is managed by MessageList component
   useEffect(() => {
@@ -575,6 +586,9 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
             />
           </MediaAutoloadProvider>
         </div>
+
+        {/* Reaction mention pills — pinned above the composer */}
+        <ReactionMentions conversationId={activeRoom.jid} />
 
         {/* Input - show composer if joined, join prompt if not */}
         {activeRoom.joined ? (

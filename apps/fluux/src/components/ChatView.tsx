@@ -28,6 +28,8 @@ import { MediaAutoloadProvider } from '@/contexts'
 import { computeMediaAutoload } from '@/utils/mediaAutoload'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { auroraSenderColor } from '@/utils/senderColor'
+import { ReactionMentions } from './conversation/ReactionMentions'
+import { reactionMentionStore } from '@/stores/reactionMentionStore'
 
 interface ChatViewProps {
   onBack?: () => void
@@ -208,6 +210,15 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
 
   // Clear reply/edit/pending attachment state when conversation changes
   // Note: scroll position is managed by MessageList component
+  useEffect(() => {
+    return () => {
+      // Clear stale reaction mentions when leaving a conversation
+      if (activeConversation?.id) {
+        reactionMentionStore.getState().clearConversation(activeConversation.id)
+      }
+    }
+  }, [activeConversation?.id])
+
   useEffect(() => {
     setReplyingTo(null)
     setEditingMessage(null)
@@ -502,6 +513,9 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
           />
         </MediaAutoloadProvider>
       </div>
+
+      {/* Reaction mention pills — pinned above the composer */}
+      <ReactionMentions conversationId={activeConversation.id} />
 
       {/* Input */}
       <MessageInput
