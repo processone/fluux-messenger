@@ -26,6 +26,17 @@ vi.mock('./sidebar-components', () => ({
   RoomsList: () => null,
   SearchView: () => null,
   UserMenu: () => null,
+  // Header action clusters. Only the Messages one needs to be interactive here:
+  // this test exercises Sidebar's showArchived → list-swap wiring, so the stub
+  // exposes the archive toggle (aria-label reflects state) and calls back.
+  MessagesHeaderActions: ({ showArchived, onToggleArchived }: { showArchived: boolean; onToggleArchived: () => void }) => (
+    <button
+      aria-label={showArchived ? 'Show active conversations' : 'Show archived conversations'}
+      onClick={onToggleArchived}
+    />
+  ),
+  ContactsHeaderActions: () => null,
+  RoomsHeaderActions: () => null,
 }))
 
 vi.mock('./AdminDashboard', () => ({ AdminDashboard: () => null }))
