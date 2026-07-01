@@ -10,6 +10,7 @@ import type { Contact, ContactIdentity, RoomAffiliation, RoomRole, VCardInfo } f
 import { useXMPP } from '@fluux/sdk'
 import { useConnectionStore, useContactTime, useLastActivity } from '@fluux/sdk/react'
 import { useClickOutside } from '@/hooks'
+import { useFocusTrap } from '@/hooks/useFocusTrap'
 import { getTranslatedShowText } from '@/utils/presence'
 import { Monitor, Smartphone, Tablet, Globe, HelpCircle, Shield, Crown, UserCheck, Building2, Mail, MapPin, Clock, Loader2 } from 'lucide-react'
 
@@ -88,6 +89,7 @@ export function UserInfoPopover({ contact, jid, occupantJid, role, affiliation, 
 
   // Close on click outside
   useClickOutside(popoverRef, () => setIsOpen(false), isOpen)
+  useFocusTrap(popoverRef, { active: isOpen })
 
   // Close on scroll (message list or any parent)
   useEffect(() => {

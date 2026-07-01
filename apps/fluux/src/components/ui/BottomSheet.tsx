@@ -12,8 +12,9 @@
  * Used for touch action menus (e.g. per-message actions) where a centered modal
  * or a hover toolbar doesn't fit thumb ergonomics.
  */
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
+import { useFocusTrap } from '@/hooks/useFocusTrap'
 
 interface BottomSheetProps {
   /** Whether the sheet is open. Renders nothing when false. */
@@ -37,6 +38,9 @@ export function BottomSheet({
   panelClassName,
   children,
 }: BottomSheetProps) {
+  const panelRef = useRef<HTMLDivElement>(null)
+  useFocusTrap(panelRef, { active: open })
+
   useEffect(() => {
     if (!open) return
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -61,6 +65,7 @@ export function BottomSheet({
         className="absolute inset-0 cursor-default"
       />
       <div
+        ref={panelRef}
         role="dialog"
         aria-modal="true"
         aria-label={ariaLabel}

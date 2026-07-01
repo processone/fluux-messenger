@@ -2,8 +2,9 @@
  * Full-screen lightbox overlay for viewing image attachments.
  * Triggered by clicking on an image attachment in chat/room views.
  */
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
+import { useFocusTrap } from '@/hooks/useFocusTrap'
 import { X, Download, Loader2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { FileEncryption } from '@fluux/sdk'
@@ -37,6 +38,8 @@ export function ImageLightbox({ src, alt, downloadUrl, filename, encryption, pla
   const { url: proxiedSrc, isLoading } = useAttachmentUrl(src, encryption, allowFetch)
   const { cachedUrl: cachedFullRes } = useCachedMediaUrl(src, encryption, !allowFetch)
   const imageMenu = useContextMenu()
+  const overlayRef = useRef<HTMLDivElement>(null)
+  useFocusTrap(overlayRef)
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -50,6 +53,7 @@ export function ImageLightbox({ src, alt, downloadUrl, filename, encryption, pla
 
   return createPortal(
     <div
+      ref={overlayRef}
       className="fixed inset-0 bg-black/90 flex flex-col items-center justify-center z-50"
     >
       {/* Click-outside-to-close backdrop (Escape also closes; see effect above) */}

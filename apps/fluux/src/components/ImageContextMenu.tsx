@@ -5,6 +5,7 @@ import { copyToClipboard } from '@/utils/clipboard'
 import { isTauri } from '@/utils/tauri'
 import { downloadFile } from '@/utils/download'
 import type { ContextMenuState } from '@/hooks/useContextMenu'
+import { useFocusTrap } from '@/hooks/useFocusTrap'
 
 interface ImageContextMenuProps {
   originalUrl: string
@@ -24,6 +25,8 @@ async function openInBrowser(url: string): Promise<void> {
 
 export function ImageContextMenu({ originalUrl, proxiedUrl, filename, menu }: ImageContextMenuProps) {
   const { t } = useTranslation()
+
+  useFocusTrap(menu.menuRef, { active: menu.isOpen })
 
   if (!menu.isOpen) return null
 
