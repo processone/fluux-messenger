@@ -37,6 +37,7 @@ import { useSoundNotification } from '@/hooks/useSoundNotification'
 import { useEventsSoundNotification } from '@/hooks/useEventsSoundNotification'
 import { useEventsDesktopNotifications } from '@/hooks/useEventsDesktopNotifications'
 import { useSDKErrorToasts } from '@/hooks/useSDKErrorToasts'
+import { useReactionNotifications } from '@/hooks/useReactionNotifications'
 import { useFocusZones, useViewNavigation, isMobileWeb, isSmallScreen, useWindowVisibility, useRouteSync, type FocusZoneRefs } from '@/hooks'
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
 import { useDeepLink } from '@/hooks/useDeepLink'
@@ -86,6 +87,9 @@ function GlobalEffects() {
 
   // Surface SDK error events as toast notifications
   useSDKErrorToasts()
+
+  // Notify received reactions via toast (inactive conversation) or in-flow mention (active, off-screen)
+  useReactionNotifications()
 
   // Handle XMPP URI deep links (xmpp:user@example.com?message)
   useDeepLink()

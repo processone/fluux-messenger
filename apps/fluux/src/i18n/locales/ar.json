@@ -1309,5 +1309,9 @@
         "showArchived": "عرض المحادثات المؤرشفة",
         "showActive": "عرض المحادثات النشطة",
         "archivedTitle": "مؤرشف"
+    },
+    "reactions": {
+        "mention": "{{emoji}} {{name}} تفاعل مع '{{preview}}'",
+        "see": "عرض"
     }
 }

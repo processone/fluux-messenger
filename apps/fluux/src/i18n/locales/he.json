@@ -1309,5 +1309,9 @@
         "showArchived": "הצג שיחות מאורכבות",
         "showActive": "הצג שיחות פעילות",
         "archivedTitle": "מאורכב"
+    },
+    "reactions": {
+        "mention": "{{emoji}} {{name}} הגיב על '{{preview}}'",
+        "see": "הצג"
     }
 }

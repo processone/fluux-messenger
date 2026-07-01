@@ -1311,5 +1311,9 @@
         "showArchived": "Pokaż zarchiwizowane rozmowy",
         "showActive": "Pokaż aktywne rozmowy",
         "archivedTitle": "Zarchiwizowane"
+    },
+    "reactions": {
+        "mention": "{{emoji}} {{name}} zareagował(a) na '{{preview}}'",
+        "see": "Pokaż"
     }
 }

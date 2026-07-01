@@ -1310,5 +1310,9 @@
         "showArchived": "Afficher les conversations archivées",
         "showActive": "Afficher les conversations actives",
         "archivedTitle": "Archivées"
+    },
+    "reactions": {
+        "mention": "{{emoji}} {{name}} a réagi à « {{preview}} »",
+        "see": "Voir"
     }
 }

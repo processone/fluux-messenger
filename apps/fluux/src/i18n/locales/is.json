@@ -1309,5 +1309,9 @@
         "showArchived": "Sýna safnvistuð samskipti",
         "showActive": "Sýna virk samskipti",
         "archivedTitle": "Safnvistuð"
+    },
+    "reactions": {
+        "mention": "{{emoji}} {{name}} brást við '{{preview}}'",
+        "see": "Skoða"
     }
 }

@@ -379,6 +379,10 @@ vi.mock('@/hooks/useSDKErrorToasts', () => ({
   useSDKErrorToasts: () => {},
 }))
 
+vi.mock('@/hooks/useReactionNotifications', () => ({
+  useReactionNotifications: () => {},
+}))
+
 vi.mock('@/hooks/useDeepLink', () => ({
   useDeepLink: () => {},
 }))

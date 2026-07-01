@@ -1310,5 +1310,9 @@
         "showArchived": "Rādīt arhivētās sarunas",
         "showActive": "Rādīt aktīvās sarunas",
         "archivedTitle": "Arhivētas"
+    },
+    "reactions": {
+        "mention": "{{emoji}} {{name}} reaģēja uz '{{preview}}'",
+        "see": "Skatīt"
     }
 }

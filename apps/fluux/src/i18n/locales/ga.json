@@ -1309,5 +1309,9 @@
         "showArchived": "Taispeáin comhráite cartlannaithe",
         "showActive": "Taispeáin comhráite gníomhacha",
         "archivedTitle": "Cartlannaithe"
+    },
+    "reactions": {
+        "mention": "{{emoji}} d'imoibrigh {{name}} le '{{preview}}'",
+        "see": "Amharc"
     }
 }

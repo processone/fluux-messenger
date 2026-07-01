@@ -1311,5 +1311,9 @@
         "showArchived": "Afișează conversațiile arhivate",
         "showActive": "Afișează conversațiile active",
         "archivedTitle": "Arhivate"
+    },
+    "reactions": {
+        "mention": "{{emoji}} {{name}} a reacționat la '{{preview}}'",
+        "see": "Vezi"
     }
 }

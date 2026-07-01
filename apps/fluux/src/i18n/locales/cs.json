@@ -1311,5 +1311,9 @@
         "showArchived": "Zobrazit archivované konverzace",
         "showActive": "Zobrazit aktivní konverzace",
         "archivedTitle": "Archivované"
+    },
+    "reactions": {
+        "mention": "{{emoji}} {{name}} zareagoval na '{{preview}}'",
+        "see": "Zobrazit"
     }
 }

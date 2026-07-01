@@ -1309,5 +1309,9 @@
         "showArchived": "Rodyti archyvuotus pokalbius",
         "showActive": "Rodyti aktyvius pokalbius",
         "archivedTitle": "Archyvuoti"
+    },
+    "reactions": {
+        "mention": "{{emoji}} {{name}} sureagavo į '{{preview}}'",
+        "see": "Peržiūrėti"
     }
 }

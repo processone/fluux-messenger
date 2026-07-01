@@ -1311,5 +1311,9 @@
         "showArchived": "Uri l-konversazzjonijiet arċivjati",
         "showActive": "Uri l-konversazzjonijiet attivi",
         "archivedTitle": "Arċivjati"
+    },
+    "reactions": {
+        "mention": "{{emoji}} {{name}} irreaġixxa għal '{{preview}}'",
+        "see": "Ara"
     }
 }

@@ -1310,5 +1310,9 @@
         "showArchived": "Zobraziť archivované konverzácie",
         "showActive": "Zobraziť aktívne konverzácie",
         "archivedTitle": "Archivované"
+    },
+    "reactions": {
+        "mention": "{{emoji}} {{name}} zareagoval na '{{preview}}'",
+        "see": "Zobraziť"
     }
 }

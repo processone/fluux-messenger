@@ -1311,5 +1311,9 @@
         "showArchived": "Kuva arhiveeritud vestlused",
         "showActive": "Kuva aktiivsed vestlused",
         "archivedTitle": "Arhiveeritud"
+    },
+    "reactions": {
+        "mention": "{{emoji}} {{name}} reageeris sõnumile '{{preview}}'",
+        "see": "Vaata"
     }
 }

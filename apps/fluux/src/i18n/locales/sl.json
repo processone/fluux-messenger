@@ -1311,5 +1311,9 @@
         "showArchived": "Prikaži arhivirane pogovore",
         "showActive": "Prikaži aktivne pogovore",
         "archivedTitle": "Arhivirani"
+    },
+    "reactions": {
+        "mention": "{{emoji}} {{name}} se je odzval(a) na '{{preview}}'",
+        "see": "Prikaži"
     }
 }

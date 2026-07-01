@@ -1309,5 +1309,9 @@
         "showArchived": "Visa arkiverade konversationer",
         "showActive": "Visa aktiva konversationer",
         "archivedTitle": "Arkiverade"
+    },
+    "reactions": {
+        "mention": "{{emoji}} {{name}} reagerade på '{{preview}}'",
+        "see": "Visa"
     }
 }

@@ -1311,5 +1311,9 @@
         "showArchived": "Mostra les converses arxivades",
         "showActive": "Mostra les converses actives",
         "archivedTitle": "Arxivades"
+    },
+    "reactions": {
+        "mention": "{{emoji}} {{name}} ha reaccionat a '{{preview}}'",
+        "see": "Mostra"
     }
 }

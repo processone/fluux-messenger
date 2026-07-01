@@ -1309,5 +1309,9 @@
         "showArchived": "Näytä arkistoidut keskustelut",
         "showActive": "Näytä aktiiviset keskustelut",
         "archivedTitle": "Arkistoidut"
+    },
+    "reactions": {
+        "mention": "{{emoji}} {{name}} reagoi viestiin '{{preview}}'",
+        "see": "Näytä"
     }
 }

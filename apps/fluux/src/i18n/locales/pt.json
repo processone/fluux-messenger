@@ -1311,5 +1311,9 @@
         "showArchived": "Mostrar conversas arquivadas",
         "showActive": "Mostrar conversas ativas",
         "archivedTitle": "Arquivadas"
+    },
+    "reactions": {
+        "mention": "{{emoji}} {{name}} reagiu a '{{preview}}'",
+        "see": "Ver"
     }
 }

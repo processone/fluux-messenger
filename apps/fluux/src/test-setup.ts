@@ -109,6 +109,11 @@ void i18n.use(initReactI18next).init({
             },
           },
         },
+        // Reaction notification keys
+        reactions: {
+          mention: "{{emoji}} {{name}} reacted to '{{preview}}'",
+          see: 'See',
+        },
       },
     },
   },

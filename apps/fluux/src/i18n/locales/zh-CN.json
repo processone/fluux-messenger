@@ -1309,5 +1309,9 @@
         "showArchived": "显示已归档的对话",
         "showActive": "显示活跃对话",
         "archivedTitle": "已归档"
+    },
+    "reactions": {
+        "mention": "{{emoji}} {{name}} 回应了 '{{preview}}'",
+        "see": "查看"
     }
 }

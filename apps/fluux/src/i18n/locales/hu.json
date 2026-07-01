@@ -1309,5 +1309,9 @@
         "showArchived": "Archivált beszélgetések megjelenítése",
         "showActive": "Aktív beszélgetések megjelenítése",
         "archivedTitle": "Archivált"
+    },
+    "reactions": {
+        "mention": "{{emoji}} {{name}} reagált erre: '{{preview}}'",
+        "see": "Megtekintés"
     }
 }

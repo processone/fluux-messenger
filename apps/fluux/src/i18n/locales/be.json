@@ -1309,5 +1309,9 @@
         "showArchived": "Паказаць архіваваныя размовы",
         "showActive": "Паказаць актыўныя размовы",
         "archivedTitle": "Архіваваныя"
+    },
+    "reactions": {
+        "mention": "{{emoji}} {{name}} адрэагаваў на '{{preview}}'",
+        "see": "Паказаць"
     }
 }

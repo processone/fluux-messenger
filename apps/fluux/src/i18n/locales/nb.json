@@ -1309,5 +1309,9 @@
         "showArchived": "Vis arkiverte samtaler",
         "showActive": "Vis aktive samtaler",
         "archivedTitle": "Arkiverte"
+    },
+    "reactions": {
+        "mention": "{{emoji}} {{name}} reagerte på '{{preview}}'",
+        "see": "Vis"
     }
 }

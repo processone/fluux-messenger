@@ -1309,5 +1309,9 @@
         "showArchived": "Show archived conversations",
         "showActive": "Show active conversations",
         "archivedTitle": "Archived"
+    },
+    "reactions": {
+        "mention": "{{emoji}} {{name}} reacted to '{{preview}}'",
+        "see": "See"
     }
 }

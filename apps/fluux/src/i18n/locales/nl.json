@@ -1309,5 +1309,9 @@
         "showArchived": "Gearchiveerde gesprekken weergeven",
         "showActive": "Actieve gesprekken weergeven",
         "archivedTitle": "Gearchiveerd"
+    },
+    "reactions": {
+        "mention": "{{emoji}} {{name}} reageerde op '{{preview}}'",
+        "see": "Bekijken"
     }
 }

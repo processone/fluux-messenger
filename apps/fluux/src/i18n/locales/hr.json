@@ -1309,5 +1309,9 @@
         "showArchived": "Prikaži arhivirane razgovore",
         "showActive": "Prikaži aktivne razgovore",
         "archivedTitle": "Arhivirani"
+    },
+    "reactions": {
+        "mention": "{{emoji}} {{name}} reagirao je na '{{preview}}'",
+        "see": "Prikaži"
     }
 }
