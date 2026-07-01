@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next'
 import { type MucInvitation } from '@fluux/sdk'
 import { Check, X, DoorOpen } from 'lucide-react'
+import { Tooltip } from '../Tooltip'
 
 interface MucInvitationItemProps {
   invitation: MucInvitation
@@ -35,22 +36,25 @@ export function MucInvitationItem({ invitation, onAccept, onDecline }: MucInvita
         </div>
       </div>
 
-      {/* Actions */}
-      <div className="flex gap-2 mt-2 ms-13">
+      {/* Join keeps its label (primary action); decline is a compact icon
+          button so the row never overflows the narrow sidebar. */}
+      <div className="flex items-stretch gap-1.5 mt-2">
         <button
           onClick={onAccept}
-          className="flex-1 px-3 py-1.5 bg-fluux-green text-white text-sm font-medium rounded hover:bg-fluux-green/80 transition-colors flex items-center justify-center gap-1"
+          className="flex-1 min-w-0 px-2 py-1.5 bg-fluux-green text-white text-sm font-medium rounded hover:bg-fluux-green/80 transition-colors flex items-center justify-center gap-1"
         >
-          <Check className="size-4" />
-          {t('events.join')}
+          <Check className="size-4 flex-shrink-0" />
+          <span className="truncate">{t('events.join')}</span>
         </button>
-        <button
-          onClick={onDecline}
-          className="flex-1 px-3 py-1.5 bg-fluux-red text-white text-sm font-medium rounded hover:bg-fluux-red/80 transition-colors flex items-center justify-center gap-1"
-        >
-          <X className="size-4" />
-          {t('events.decline')}
-        </button>
+        <Tooltip content={t('events.decline')} position="top">
+          <button
+            onClick={onDecline}
+            className="flex-shrink-0 px-2.5 py-1.5 bg-fluux-muted/20 text-fluux-text rounded hover:bg-fluux-muted/30 transition-colors flex items-center justify-center"
+            aria-label={t('events.decline')}
+          >
+            <X className="size-4" />
+          </button>
+        </Tooltip>
       </div>
     </div>
   )
