@@ -1148,15 +1148,8 @@ export function useMessageListScroll({
         if (markerIdx !== null) {
           const markerOffset = virt.getOffsetForMessageId(firstNewMessageId)
           const viewportBottom = scroller.scrollTop + scroller.clientHeight
-          if (markerOffset === null) {
-            // Offset unresolved — windowing scroll at top-align still brings the row in.
+          if (markerOffset === null || markerOffset > viewportBottom) {
             virt.scrollToIndex(markerIdx, { align: 'start', behavior: 'smooth' })
-            return
-          }
-          if (markerOffset > viewportBottom) {
-            // Position the marker ~1/3 down from the top, consistent with the non-virtualized path
-            // below and the entry-marker / reply-search jump — not flush against the top edge.
-            virt.scrollToOffset(Math.max(0, markerOffset - scroller.clientHeight / 3), { behavior: 'smooth' })
             return
           }
         }
@@ -1811,22 +1804,18 @@ export function useMessageListScroll({
               reassertBottom()
               return
             }
-            // Position the marker row ~1/3 down from the top (per this branch's intent, matching
-            // the non-virtualized path and the reply/search targetMessageId jump). Two-step:
-            // scrollToIndex('start') FIRST to window the marker region in (mount + measure) — a raw
-            // scrollToOffset to the ESTIMATED offset lands SHORT and never mounts the row, so its
-            // height never sharpens and the loop converges on a wrong target with the marker
-            // stranded below the fold (the bug). Then shift up by viewportHeight/3 using the now
-            // measurement-aware offset. Re-asserting each frame converges as rows settle. The
-            // offset <= viewportHeight/3 case already fell back to the bottom above, so the shift
-            // here is always positive (no scroll-to-0 load-older churn).
-            if (v) {
-              v.scrollToIndex(markerIndex!, { align: 'start' })
-              const markerStart = v.getOffsetForMessageId(markerId)
-              if (markerStart != null) v.scrollToOffset(Math.max(0, markerStart - viewportHeight / 3))
-            } else {
-              s.scrollTop = Math.max(0, offset - viewportHeight / 3)
-            }
+            // Position the marker row via the virtualizer's measurement-aware scrollToIndex.
+            // A raw scrollToOffset to the ESTIMATED offset lands SHORT and never windows the marker
+            // row in, so its height never measures and the offset estimate never sharpens — the loop
+            // then sees a "stable" (wrong) target and stops with the marker stranded below the fold
+            // (the bug). scrollToIndex windows the marker region in (mount + measure), so each frame
+            // lands closer and re-asserting converges, exactly like pinVirtualizedBottom. align:'start'
+            // puts the divider near the top to read forward, and clamps to the bottom when the marker
+            // is the last message (so a single new message lands at the bottom, fully visible — do NOT
+            // shift up by viewportHeight/3 here: getOffsetForMessageId clamps to the scrollable range
+            // for a near-bottom marker, so the shift would scroll past the new message and hide it).
+            if (v) v.scrollToIndex(markerIndex!, { align: 'start' })
+            else s.scrollTop = Math.max(0, offset - viewportHeight / 3)
 
             const st = s.scrollTop
             // Converged when the landing position stops moving (rows have finished measuring).
@@ -2057,22 +2046,14 @@ export function useMessageListScroll({
           return
         }
 
-        // Position the target ~1/3 down from the top rather than flush against the top edge
-        // (align:'start'), which tucks it under the sticky date header — where it reads as
-        // misaligned and the highlight flash is easy to miss. Matches the non-virtualized path,
-        // the search-context preview, and the pre-#734 behavior.
-        //
-        // Two-step, mirroring pinVirtualizedAnchor: scrollToIndex('start') FIRST to window the
-        // (possibly far-out-of-window) target row in and measure it — a raw scrollToOffset to the
-        // ESTIMATED offset would land short, never mount the row, so its height never sharpens and
-        // the loop would converge on a wrong target with the message stranded below the fold (see
-        // the marker loop's note). Then shift up by clientHeight/3 using the now-measurement-aware
-        // offset. Re-asserting each frame lands it as rows settle their real heights.
-        v.scrollToIndex(currentIdx, { align: 'start' })
-        const start = v.getOffsetForMessageId(targetMessageId)
-        if (start !== null) {
-          v.scrollToOffset(Math.max(0, start - s.clientHeight / 3))
-        }
+        // Center the target rather than pinning it to the top edge (align:'start'), which tucks it
+        // under the sticky date header where it reads as misaligned and the highlight flash is easy
+        // to miss. scrollToIndex('center') windows the (possibly far-out-of-window) row in, measures
+        // it, and clamps internally — so a near-bottom target stays visible instead of being scrolled
+        // past the fold (the failure mode of a manual getOffsetForMessageId − clientHeight/3 shift,
+        // since getOffsetForMessageId returns an offset already clamped to the scrollable range).
+        // Re-asserting each frame converges as rows settle. Matches the reply-scroll block:'center'.
+        v.scrollToIndex(currentIdx, { align: 'center' })
         const st = s.scrollTop
         const distFromBottom = s.scrollHeight - st - s.clientHeight
         isAtBottomRef.current = distFromBottom < AT_BOTTOM_THRESHOLD
@@ -2124,12 +2105,12 @@ export function useMessageListScroll({
         }
         return
       }
-      const elementTop = (el as HTMLElement).offsetTop
-      const targetScrollTop = Math.max(0, elementTop - scroller.clientHeight / 3)
-      scroller.scrollTop = targetScrollTop
-      isAtBottomRef.current = (scroller.scrollHeight - targetScrollTop - scroller.clientHeight) < AT_BOTTOM_THRESHOLD
+      // Center the target (matches the virtualized path above and the reply-scroll convention);
+      // the browser clamps scrollTop, so a near-bottom target stays fully visible.
+      ;(el as HTMLElement).scrollIntoView({ block: 'center' })
+      isAtBottomRef.current = (scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight) < AT_BOTTOM_THRESHOLD
       highlight(el)
-      debugLog('TARGET MESSAGE: scrolled to target', { targetMessageId, elementTop, targetScrollTop })
+      debugLog('TARGET MESSAGE: scrolled to target (center)', { targetMessageId })
       onTargetMessageConsumed?.()
     }
 
