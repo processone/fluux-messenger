@@ -153,6 +153,9 @@
         "startConversation": "Začať konverzáciu",
         "addToContacts": "Pridať do kontaktov",
         "connectedDevices": "Pripojené zariadenia",
+        "about": "O kontakte",
+        "shared": "Spoločné",
+        "securityDetailsTitle": "Detaily zabezpečenia",
         "nameCannotBeEmpty": "Meno nemôže byť prázdne",
         "removeConfirm": "Odstrániť {{name}} z vašich kontaktov?",
         "remove": "Odstrániť",
@@ -184,7 +187,12 @@
             "unavailableNowTitle": "Šifrovanie momentálne nie je k dispozícii",
             "unavailableNowDescription": "Znova sa pripojte alebo povoľte šifrovanie v nastaveniach.",
             "rejectedTitle": "Neplatný certifikát",
-            "rejectedDescription": "Tento kontakt zverejnil kľúč OpenPGP, ale jeho overenie zlyhalo. Správy sa odošlú v čistom texte."
+            "rejectedDescription": "Tento kontakt zverejnil kľúč OpenPGP, ale jeho overenie zlyhalo. Správy sa odošlú v čistom texte.",
+            "glanceVerified": "Overené a šifrované",
+            "glanceEncrypted": "Šifrované, neoverené",
+            "glanceNotEncrypted": "Nešifrované",
+            "glanceDisabled": "Šifrovanie vypnuté",
+            "glanceLocked": "Šifrované, uzamknuté"
         },
         "tabs": {
             "profile": "Profil",

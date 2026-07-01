@@ -152,6 +152,9 @@
         "startConversation": "بدء محادثة",
         "addToContacts": "إضافة إلى جهات الاتصال",
         "connectedDevices": "الأجهزة المتصلة",
+        "about": "نبذة",
+        "shared": "مشترك",
+        "securityDetailsTitle": "تفاصيل الأمان",
         "nameCannotBeEmpty": "لا يمكن أن يكون الاسم فارغًا",
         "removeConfirm": "إزالة {{name}} من جهات الاتصال؟",
         "remove": "إزالة",
@@ -183,7 +186,12 @@
             "unavailableNowTitle": "التشفير غير متاح حاليًا",
             "unavailableNowDescription": "أعد الاتصال أو فعّل التشفير في الإعدادات.",
             "rejectedTitle": "شهادة غير صالحة",
-            "rejectedDescription": "نشرت جهة الاتصال هذه مفتاح OpenPGP، لكنه فشل في التحقق. ستُرسل الرسائل بنص عادي."
+            "rejectedDescription": "نشرت جهة الاتصال هذه مفتاح OpenPGP، لكنه فشل في التحقق. ستُرسل الرسائل بنص عادي.",
+            "glanceVerified": "موثّق ومشفّر",
+            "glanceEncrypted": "مشفّر، غير موثّق",
+            "glanceNotEncrypted": "غير مشفّر",
+            "glanceDisabled": "التشفير معطّل",
+            "glanceLocked": "مشفّر، مقفل"
         },
         "tabs": {
             "profile": "الملف الشخصي",

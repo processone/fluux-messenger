@@ -154,6 +154,9 @@
         "startConversation": "Unterhaltung starten",
         "addToContacts": "Zu Kontakten hinzufügen",
         "connectedDevices": "Verbundene Geräte",
+        "about": "Info",
+        "shared": "Gemeinsam",
+        "securityDetailsTitle": "Sicherheitsdetails",
         "nameCannotBeEmpty": "Name darf nicht leer sein",
         "removeConfirm": "{{name}} aus Ihren Kontakten entfernen?",
         "remove": "Entfernen",
@@ -185,7 +188,12 @@
             "unavailableNowTitle": "Verschlüsselung derzeit nicht verfügbar",
             "unavailableNowDescription": "Verbinde dich erneut oder aktiviere die Verschlüsselung in den Einstellungen.",
             "rejectedTitle": "Ungültiges Zertifikat",
-            "rejectedDescription": "Dieser Kontakt hat einen OpenPGP-Schlüssel veröffentlicht, aber die Überprüfung ist fehlgeschlagen. Nachrichten werden im Klartext gesendet."
+            "rejectedDescription": "Dieser Kontakt hat einen OpenPGP-Schlüssel veröffentlicht, aber die Überprüfung ist fehlgeschlagen. Nachrichten werden im Klartext gesendet.",
+            "glanceVerified": "Verifiziert und verschlüsselt",
+            "glanceEncrypted": "Verschlüsselt, nicht verifiziert",
+            "glanceNotEncrypted": "Nicht verschlüsselt",
+            "glanceDisabled": "Verschlüsselung aus",
+            "glanceLocked": "Verschlüsselt, gesperrt"
         },
         "tabs": {
             "profile": "Profil",

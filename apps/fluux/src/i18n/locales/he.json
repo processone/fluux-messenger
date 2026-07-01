@@ -152,6 +152,9 @@
         "startConversation": "התחל שיחה",
         "addToContacts": "הוסף לאנשי קשר",
         "connectedDevices": "מכשירים מחוברים",
+        "about": "אודות",
+        "shared": "משותף",
+        "securityDetailsTitle": "פרטי אבטחה",
         "nameCannotBeEmpty": "השם לא יכול להיות ריק",
         "removeConfirm": "להסיר את {{name}} מאנשי הקשר שלך?",
         "remove": "הסר",
@@ -183,7 +186,12 @@
             "unavailableNowTitle": "ההצפנה אינה זמינה כרגע",
             "unavailableNowDescription": "התחבר/י מחדש או הפעל/י את ההצפנה בהגדרות.",
             "rejectedTitle": "אישור לא תקף",
-            "rejectedDescription": "איש קשר זה פרסם מפתח OpenPGP, אך האימות נכשל. ההודעות יישלחו ללא הצפנה."
+            "rejectedDescription": "איש קשר זה פרסם מפתח OpenPGP, אך האימות נכשל. ההודעות יישלחו ללא הצפנה.",
+            "glanceVerified": "מאומת ומוצפן",
+            "glanceEncrypted": "מוצפן, לא מאומת",
+            "glanceNotEncrypted": "לא מוצפן",
+            "glanceDisabled": "הצפנה כבויה",
+            "glanceLocked": "מוצפן, נעול"
         },
         "tabs": {
             "profile": "פרופיל",

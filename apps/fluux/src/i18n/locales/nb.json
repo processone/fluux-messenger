@@ -152,6 +152,9 @@
         "startConversation": "Start samtale",
         "addToContacts": "Legg til i kontakter",
         "connectedDevices": "Tilkoblede enheter",
+        "about": "Om",
+        "shared": "Felles",
+        "securityDetailsTitle": "Sikkerhetsdetaljer",
         "nameCannotBeEmpty": "Navnet kan ikke være tomt",
         "removeConfirm": "Fjerne {{name}} fra kontaktene dine?",
         "remove": "Fjern",
@@ -183,7 +186,12 @@
             "unavailableNowTitle": "Kryptering er ikke tilgjengelig nå",
             "unavailableNowDescription": "Koble til på nytt eller aktiver kryptering i innstillinger.",
             "rejectedTitle": "Ugyldig sertifikat",
-            "rejectedDescription": "Denne kontakten har publisert en OpenPGP-nøkkel, men valideringen mislyktes. Meldinger sendes i klartekst."
+            "rejectedDescription": "Denne kontakten har publisert en OpenPGP-nøkkel, men valideringen mislyktes. Meldinger sendes i klartekst.",
+            "glanceVerified": "Bekreftet og kryptert",
+            "glanceEncrypted": "Kryptert, ikke bekreftet",
+            "glanceNotEncrypted": "Ikke kryptert",
+            "glanceDisabled": "Kryptering av",
+            "glanceLocked": "Kryptert, låst"
         },
         "tabs": {
             "profile": "Profil",

@@ -154,6 +154,9 @@
         "startConversation": "Inicia una conversa",
         "addToContacts": "Afegir als Contactes",
         "connectedDevices": "Dispositius connectats",
+        "about": "Sobre",
+        "shared": "En comú",
+        "securityDetailsTitle": "Detalls de seguretat",
         "nameCannotBeEmpty": "El nom no pot estar buit",
         "removeConfirm": "Eliminar {{name}} dels teus contactes?",
         "remove": "Elimina",
@@ -185,7 +188,12 @@
             "unavailableNowTitle": "Xifratge no disponible actualment",
             "unavailableNowDescription": "Torneu a connectar-vos o activeu el xifratge a la configuració.",
             "rejectedTitle": "Certificat no vàlid",
-            "rejectedDescription": "Aquest contacte ha publicat una clau OpenPGP, però no ha superat la validació. Els missatges s'enviaran en text pla."
+            "rejectedDescription": "Aquest contacte ha publicat una clau OpenPGP, però no ha superat la validació. Els missatges s'enviaran en text pla.",
+            "glanceVerified": "Verificat i xifrat",
+            "glanceEncrypted": "Xifrat, no verificat",
+            "glanceNotEncrypted": "No xifrat",
+            "glanceDisabled": "Xifratge desactivat",
+            "glanceLocked": "Xifrat, bloquejat"
         },
         "tabs": {
             "profile": "Perfil",

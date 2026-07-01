@@ -152,6 +152,9 @@
         "startConversation": "Aloita keskustelu",
         "addToContacts": "Lisää yhteystietoihin",
         "connectedDevices": "Yhdistetyt laitteet",
+        "about": "Tietoja",
+        "shared": "Yhteiset",
+        "securityDetailsTitle": "Turvatiedot",
         "nameCannotBeEmpty": "Nimi ei voi olla tyhjä",
         "removeConfirm": "Poista {{name}} yhteystiedoistasi?",
         "remove": "Poista",
@@ -183,7 +186,12 @@
             "unavailableNowTitle": "Salaus ei ole tällä hetkellä käytettävissä",
             "unavailableNowDescription": "Yhdistä uudelleen tai ota salaus käyttöön asetuksista.",
             "rejectedTitle": "Virheellinen varmenne",
-            "rejectedDescription": "Tämä yhteystieto on julkaissut OpenPGP-avaimen, mutta sen vahvistus epäonnistui. Viestit lähetetään selkokielisinä."
+            "rejectedDescription": "Tämä yhteystieto on julkaissut OpenPGP-avaimen, mutta sen vahvistus epäonnistui. Viestit lähetetään selkokielisinä.",
+            "glanceVerified": "Vahvistettu ja salattu",
+            "glanceEncrypted": "Salattu, ei vahvistettu",
+            "glanceNotEncrypted": "Ei salattu",
+            "glanceDisabled": "Salaus pois käytöstä",
+            "glanceLocked": "Salattu, lukittu"
         },
         "tabs": {
             "profile": "Profiili",

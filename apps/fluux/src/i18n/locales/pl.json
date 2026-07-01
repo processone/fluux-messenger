@@ -154,6 +154,9 @@
         "startConversation": "Rozpocznij rozmowę",
         "addToContacts": "Dodaj do kontaktów",
         "connectedDevices": "Połączone urządzenia",
+        "about": "Informacje",
+        "shared": "Wspólne",
+        "securityDetailsTitle": "Szczegóły bezpieczeństwa",
         "nameCannotBeEmpty": "Nazwa nie może być pusta",
         "removeConfirm": "Usunąć {{name}} z kontaktów?",
         "remove": "Usuń",
@@ -185,7 +188,12 @@
             "unavailableNowTitle": "Szyfrowanie obecnie niedostępne",
             "unavailableNowDescription": "Połącz się ponownie lub włącz szyfrowanie w ustawieniach.",
             "rejectedTitle": "Nieprawidłowy certyfikat",
-            "rejectedDescription": "Ten kontakt opublikował klucz OpenPGP, ale nie przeszedł on walidacji. Wiadomości będą wysyłane jawnym tekstem."
+            "rejectedDescription": "Ten kontakt opublikował klucz OpenPGP, ale nie przeszedł on walidacji. Wiadomości będą wysyłane jawnym tekstem.",
+            "glanceVerified": "Zweryfikowane i zaszyfrowane",
+            "glanceEncrypted": "Zaszyfrowane, niezweryfikowane",
+            "glanceNotEncrypted": "Niezaszyfrowane",
+            "glanceDisabled": "Szyfrowanie wyłączone",
+            "glanceLocked": "Zaszyfrowane, zablokowane"
         },
         "tabs": {
             "profile": "Profil",

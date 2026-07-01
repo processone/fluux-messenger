@@ -154,6 +154,9 @@
         "startConversation": "Iniciar Conversacion",
         "addToContacts": "Agregar a Contactos",
         "connectedDevices": "Dispositivos Conectados",
+        "about": "Información",
+        "shared": "En común",
+        "securityDetailsTitle": "Detalles de seguridad",
         "nameCannotBeEmpty": "El nombre no puede estar vacio",
         "removeConfirm": "Eliminar a {{name}} de tus contactos?",
         "remove": "Eliminar",
@@ -185,7 +188,12 @@
             "unavailableNowTitle": "Cifrado actualmente no disponible",
             "unavailableNowDescription": "Vuelve a conectarte o activa el cifrado en los ajustes.",
             "rejectedTitle": "Certificado no válido",
-            "rejectedDescription": "Este contacto ha publicado una clave OpenPGP, pero no superó la validación. Los mensajes se enviarán en texto plano."
+            "rejectedDescription": "Este contacto ha publicado una clave OpenPGP, pero no superó la validación. Los mensajes se enviarán en texto plano.",
+            "glanceVerified": "Verificado y cifrado",
+            "glanceEncrypted": "Cifrado, sin verificar",
+            "glanceNotEncrypted": "Sin cifrar",
+            "glanceDisabled": "Cifrado desactivado",
+            "glanceLocked": "Cifrado, bloqueado"
         },
         "tabs": {
             "profile": "Perfil",

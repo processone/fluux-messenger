@@ -152,6 +152,9 @@
         "startConversation": "Пачаць размову",
         "addToContacts": "Дадаць у кантакты",
         "connectedDevices": "Падлучаныя прылады",
+        "about": "Пра",
+        "shared": "Агульнае",
+        "securityDetailsTitle": "Дэталі бяспекі",
         "nameCannotBeEmpty": "Імя не можа быць пустым",
         "removeConfirm": "Выдаліць {{name}} з вашых кантактаў?",
         "remove": "Выдаліць",
@@ -183,7 +186,12 @@
             "unavailableNowTitle": "Шыфраванне зараз недаступнае",
             "unavailableNowDescription": "Перападключыцеся або ўключыце шыфраванне ў наладах.",
             "rejectedTitle": "Несапраўдны сертыфікат",
-            "rejectedDescription": "Гэты кантакт апублікаваў ключ OpenPGP, але ён не прайшоў праверку. Паведамленні будуць адпраўлены адкрытым тэкстам."
+            "rejectedDescription": "Гэты кантакт апублікаваў ключ OpenPGP, але ён не прайшоў праверку. Паведамленні будуць адпраўлены адкрытым тэкстам.",
+            "glanceVerified": "Праверана і зашыфравана",
+            "glanceEncrypted": "Зашыфравана, не праверана",
+            "glanceNotEncrypted": "Не зашыфравана",
+            "glanceDisabled": "Шыфраванне адключана",
+            "glanceLocked": "Зашыфравана, заблакавана"
         },
         "tabs": {
             "profile": "Профіль",

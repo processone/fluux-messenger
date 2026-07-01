@@ -152,6 +152,9 @@
         "startConversation": "Hefja samtal",
         "addToContacts": "Bæta við tengiliði",
         "connectedDevices": "Tengd tæki",
+        "about": "Um",
+        "shared": "Sameiginlegt",
+        "securityDetailsTitle": "Öryggisupplýsingar",
         "nameCannotBeEmpty": "Nafn má ekki vera autt",
         "removeConfirm": "Fjarlægja {{name}} úr tengiliðum þínum?",
         "remove": "Fjarlægja",
@@ -183,7 +186,12 @@
             "unavailableNowTitle": "Dulritun er ekki tiltæk núna",
             "unavailableNowDescription": "Tengstu aftur eða kveiktu á dulritun í stillingum.",
             "rejectedTitle": "Ógilt vottorð",
-            "rejectedDescription": "Þessi tengiliður hefur birt OpenPGP-lykil, en staðfesting mistókst. Skilaboð verða send ódulrituð."
+            "rejectedDescription": "Þessi tengiliður hefur birt OpenPGP-lykil, en staðfesting mistókst. Skilaboð verða send ódulrituð.",
+            "glanceVerified": "Staðfest og dulkóðað",
+            "glanceEncrypted": "Dulkóðað, ekki staðfest",
+            "glanceNotEncrypted": "Ekki dulkóðað",
+            "glanceDisabled": "Dulkóðun slökkt",
+            "glanceLocked": "Dulkóðað, læst"
         },
         "tabs": {
             "profile": "Notandasnið",

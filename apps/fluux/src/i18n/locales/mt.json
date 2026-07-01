@@ -154,6 +154,9 @@
         "startConversation": "Ibda Konversazzjoni",
         "addToContacts": "Żid mal-Kuntatti",
         "connectedDevices": "Apparat Ikkonnettjati",
+        "about": "Dwar",
+        "shared": "Kondiviż",
+        "securityDetailsTitle": "Dettalji tas-sigurtà",
         "nameCannotBeEmpty": "L-isem ma jistax ikun vojt",
         "removeConfirm": "Neħħi {{name}} mill-kuntatti tiegħek?",
         "remove": "Neħħi",
@@ -185,7 +188,12 @@
             "unavailableNowTitle": "Il-kriptaġġ bħalissa mhux disponibbli",
             "unavailableNowDescription": "Erġa’ qabbad jew attiva l-kriptaġġ fis-settings.",
             "rejectedTitle": "Ċertifikat mhux validu",
-            "rejectedDescription": "Dan il-kuntatt ippubblika ċavetta OpenPGP, iżda l-validazzjoni fallit. Il-messaġġi se jintbagħtu f’test ċar."
+            "rejectedDescription": "Dan il-kuntatt ippubblika ċavetta OpenPGP, iżda l-validazzjoni fallit. Il-messaġġi se jintbagħtu f’test ċar.",
+            "glanceVerified": "Ivverifikat u kriptat",
+            "glanceEncrypted": "Kriptat, mhux ivverifikat",
+            "glanceNotEncrypted": "Mhux kriptat",
+            "glanceDisabled": "Kriptaġġ mitfi",
+            "glanceLocked": "Kriptat, imsakkar"
         },
         "tabs": {
             "profile": "Profil",

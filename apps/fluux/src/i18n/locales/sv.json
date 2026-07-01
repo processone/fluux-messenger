@@ -152,6 +152,9 @@
         "startConversation": "Starta konversation",
         "addToContacts": "Lägg till i kontakter",
         "connectedDevices": "Anslutna enheter",
+        "about": "Om",
+        "shared": "Gemensamt",
+        "securityDetailsTitle": "Säkerhetsdetaljer",
         "nameCannotBeEmpty": "Namnet kan inte vara tomt",
         "removeConfirm": "Ta bort {{name}} från dina kontakter?",
         "remove": "Ta bort",
@@ -183,7 +186,12 @@
             "unavailableNowTitle": "Kryptering är inte tillgänglig just nu",
             "unavailableNowDescription": "Återanslut eller aktivera kryptering i inställningarna.",
             "rejectedTitle": "Ogiltigt certifikat",
-            "rejectedDescription": "Den här kontakten har publicerat en OpenPGP-nyckel, men valideringen misslyckades. Meddelanden skickas i klartext."
+            "rejectedDescription": "Den här kontakten har publicerat en OpenPGP-nyckel, men valideringen misslyckades. Meddelanden skickas i klartext.",
+            "glanceVerified": "Verifierat och krypterat",
+            "glanceEncrypted": "Krypterat, ej verifierat",
+            "glanceNotEncrypted": "Inte krypterat",
+            "glanceDisabled": "Kryptering av",
+            "glanceLocked": "Krypterat, låst"
         },
         "tabs": {
             "profile": "Profil",
