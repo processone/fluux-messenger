@@ -11,6 +11,7 @@ import {
   type Conversation,
 } from '@fluux/sdk'
 import { formatLocalizedPreview } from '@/utils/messagePreviewText'
+import { shouldReplaceOnSelect } from '@/utils/navigationHistory'
 import { useChatStore, useConnectionStore, useRosterStore, useRoomStore } from '@fluux/sdk/react'
 import { Avatar, TypingIndicator } from '../Avatar'
 import { Tooltip } from '../Tooltip'
@@ -64,10 +65,12 @@ export function ConversationList() {
   if (!clickRef.current) {
     clickRef.current = (convId: string) => {
       const L = latestNavRef.current
-      const hasActive = !!chatStore.getState().activeConversationId
+      // Standard back stack: switching to a different conversation pushes a
+      // history entry; re-selecting the active one dedups (replace).
+      const current = chatStore.getState().activeConversationId
       void roomStore.getState().activateRoom(null)
       void chatStore.getState().activateConversation(convId)
-      L.navigateToMessages(convId, { replace: hasActive })
+      L.navigateToMessages(convId, { replace: shouldReplaceOnSelect(convId, current) })
     }
   }
   const handleConversationClick = clickRef.current
@@ -137,10 +140,12 @@ export function ArchiveList() {
   if (!clickRef.current) {
     clickRef.current = (convId: string) => {
       const L = latestNavRef.current
-      const hasActive = !!chatStore.getState().activeConversationId
+      // Standard back stack: switching to a different conversation pushes a
+      // history entry; re-selecting the active one dedups (replace).
+      const current = chatStore.getState().activeConversationId
       void roomStore.getState().activateRoom(null)
       void chatStore.getState().activateConversation(convId)
-      L.navigateToMessages(convId, { replace: hasActive })
+      L.navigateToMessages(convId, { replace: shouldReplaceOnSelect(convId, current) })
     }
   }
   const handleConversationClick = clickRef.current

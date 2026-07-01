@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, useLocation, useNavigate } from 'react-router-dom'
 import { ChatLayout } from './ChatLayout'
 import type { Contact, PresenceStatus } from '@fluux/sdk'
 
@@ -20,6 +20,7 @@ const {
     activeRoomJid: null as string | null,
     activationPending: false,
     isArchivedResult: false,
+    conversations: new Map<string, { id: string }>(),
   }
 
   const mockContact: Contact = {
@@ -62,6 +63,28 @@ function ChatLayoutWithRouter({ initialRoute = '/messages' }: { initialRoute?: s
   return (
     <MemoryRouter initialEntries={[initialRoute]}>
       <ChatLayout />
+    </MemoryRouter>
+  )
+}
+
+// Probe to observe the router history stack: renders the current path and a
+// button that goes back one entry, so tests can assert push vs replace.
+function HistoryProbe() {
+  const location = useLocation()
+  const navigate = useNavigate()
+  return (
+    <>
+      <span data-testid="probe-path">{location.pathname}</span>
+      <button data-testid="probe-back" onClick={() => navigate(-1)}>back</button>
+    </>
+  )
+}
+
+function ChatLayoutWithProbe({ initialRoute = '/messages' }: { initialRoute?: string }) {
+  return (
+    <MemoryRouter initialEntries={[initialRoute]}>
+      <ChatLayout />
+      <HistoryProbe />
     </MemoryRouter>
   )
 }
@@ -181,6 +204,7 @@ vi.mock('@fluux/sdk', () => ({
       clearFirstNewMessageId: vi.fn(),
       setActiveConversation: mockSetActiveConversation,
       activateConversation: mockActivateConversation,
+      conversations: getMockState().conversations,
     }),
   },
   roomStore: {
@@ -241,7 +265,7 @@ vi.mock('@fluux/sdk/react', () => ({
         hasConversation: vi.fn(() => false),
         isArchived: vi.fn(() => getMockState().isArchivedResult),
         updateConversationName: vi.fn(),
-        conversations: new Map(),
+        conversations: getMockState().conversations,
       }
       return selector(state)
     },
@@ -504,6 +528,33 @@ describe('ChatLayout - Tab Memory', () => {
       activeConversationId: null,
       activeRoomJid: null,
       isArchivedResult: false,
+      conversations: new Map(),
+    })
+  })
+
+  describe('history stack (standard back behaviour)', () => {
+    it('replaces (no back entry) when auto-selecting the first conversation on connect', async () => {
+      // A conversation exists but none is active yet: ChatLayout auto-selects
+      // the first one. That is programmatic, not a user navigation, so it must
+      // NOT create a back-able entry — otherwise Back lands on an empty list
+      // and the back button lights up for a navigation the user never made.
+      setMockState({
+        activeConversationId: null,
+        conversations: new Map([['bob@example.com', { id: 'bob@example.com' }]]),
+      })
+
+      render(<ChatLayoutWithProbe initialRoute="/messages" />)
+
+      const path = () => decodeURIComponent(screen.getByTestId('probe-path').textContent ?? '')
+
+      await waitFor(() => {
+        expect(path()).toBe('/messages/bob@example.com')
+      })
+
+      fireEvent.click(screen.getByTestId('probe-back'))
+
+      // With replace there is nothing behind the auto-selected conversation.
+      expect(path()).toBe('/messages/bob@example.com')
     })
   })
 
@@ -892,6 +943,30 @@ describe('ChatLayout - Session Storage Restore (Dual-Persistence Bug Prevention)
       activeRoomJid: null,
       isArchivedResult: false,
     })
+  })
+
+  it('replaces (no back entry) when restoring the saved view on mount', async () => {
+    // Restoring the persisted view is programmatic, not a user navigation, so
+    // it must not push a duplicate history entry — Back after a reload should
+    // not pop to a phantom empty list.
+    vi.mocked(sessionPersistence.getSavedViewState).mockReturnValue({
+      sidebarView: 'messages',
+      activeConversationId: 'carol@example.com',
+      activeRoomJid: null,
+      selectedContactJid: null,
+    })
+
+    render(<ChatLayoutWithProbe initialRoute="/messages" />)
+
+    const path = () => decodeURIComponent(screen.getByTestId('probe-path').textContent ?? '')
+
+    await waitFor(() => {
+      expect(path()).toBe('/messages/carol@example.com')
+    })
+
+    fireEvent.click(screen.getByTestId('probe-back'))
+
+    expect(path()).toBe('/messages/carol@example.com')
   })
 
   it('should always set activeConversationId from session storage, even when null', async () => {

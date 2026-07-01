@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState } from 're
 import { useTranslation } from 'react-i18next'
 import { detectRenderLoop } from '@/utils/renderLoopDetector'
 import { navDebugLog } from '@/utils/scrollDebug'
+import { shouldReplaceOnSelect } from '@/utils/navigationHistory'
 import { Sidebar, type SidebarView } from './Sidebar'
 import { ChatView } from './ChatView'
 import { RoomView } from './RoomView'
@@ -362,22 +363,24 @@ function ChatLayoutContent() {
         setShowRoomOccupants(savedViewState.showRoomOccupants)
       }
 
-      // Navigate to the saved sidebar view (including settings)
+      // Navigate to the saved sidebar view (including settings). Restoring is
+      // programmatic reconstruction of prior state, not a user navigation, so
+      // replace the current entry rather than pushing a duplicate.
       switch (savedViewState.sidebarView) {
         case 'messages':
-          navigateToMessages(savedViewState.activeConversationId ?? undefined)
+          navigateToMessages(savedViewState.activeConversationId ?? undefined, { replace: true })
           break
         case 'rooms':
-          navigateToRooms(savedViewState.activeRoomJid ?? undefined)
+          navigateToRooms(savedViewState.activeRoomJid ?? undefined, { replace: true })
           break
         case 'directory':
-          navigateToContacts(savedViewState.selectedContactJid ?? undefined)
+          navigateToContacts(savedViewState.selectedContactJid ?? undefined, { replace: true })
           break
         case 'admin':
-          navigateToAdmin()
+          navigateToAdmin(undefined, { replace: true })
           break
         case 'settings':
-          navigateToSettings()
+          navigateToSettings(undefined, { replace: true })
           break
       }
     }
@@ -491,7 +494,9 @@ function ChatLayoutContent() {
     if (firstConversation) {
       hasAutoSelectedRef.current = true
       void activateConversation(firstConversation.id)
-      navigateToMessages(firstConversation.id)
+      // Auto-select is programmatic, not a user navigation: replace so it
+      // doesn't leave a back-able "empty list" entry behind the conversation.
+      navigateToMessages(firstConversation.id, { replace: true })
     }
   }, [status, sidebarView, activeConversationId, conversationCount, activateConversation, navigateToMessages])
 
@@ -521,7 +526,9 @@ function ChatLayoutContent() {
     if (firstRoom) {
       hasAutoSelectedRoomRef.current = true
       void activateRoom(firstRoom.jid)
-      navigateToRooms(firstRoom.jid)
+      // Programmatic auto-select: replace so it leaves no phantom back entry
+      // (mirrors the messages auto-select above).
+      navigateToRooms(firstRoom.jid, { replace: true })
     }
   }, [status, sidebarView, activeRoomJid, roomCount, activateRoom, navigateToRooms])
 
@@ -552,8 +559,10 @@ function ChatLayoutContent() {
     // Clear active conversation/room to show the contact profile
     setActiveConversation(null)
     setActiveRoom(null)
+    // Standard back stack: opening a different contact pushes; re-opening dedups.
+    const replace = shouldReplaceOnSelect(contact.jid, selectedContactJid)
     setSelectedContactJid(contact.jid)
-    navigateToContacts(contact.jid, { replace: true })
+    navigateToContacts(contact.jid, { replace })
     clearAdminSession()
     setAdminCategory(null)
   }

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { renderHook, act } from '@testing-library/react'
-import { MemoryRouter, useLocation } from 'react-router-dom'
+import { MemoryRouter, useLocation, useNavigate } from 'react-router-dom'
 import { useEffect, type ReactNode } from 'react'
 import { useViewNavigation } from './useViewNavigation'
 
@@ -214,6 +214,26 @@ describe('useViewNavigation', () => {
       expect(currentLocation.current.pathname).toBe('/admin')
       expect(mockSetActiveConversation).toHaveBeenCalledWith(null)
       expect(mockSetActiveRoom).toHaveBeenCalledWith(null)
+    })
+  })
+
+  describe('history stack (standard back behaviour)', () => {
+    it('pushes a history entry when switching tabs so Back returns to the previous view', () => {
+      const { result } = renderHook(
+        () => ({ nav: useViewNavigation(null), navigate: useNavigate() }),
+        { wrapper: createWrapper('/messages') }
+      )
+
+      act(() => {
+        result.current.nav.navigateToView('rooms')
+      })
+      expect(currentLocation.current.pathname).toBe('/rooms')
+
+      // Going back must return to Messages — a replace would have discarded it.
+      act(() => {
+        result.current.navigate(-1)
+      })
+      expect(currentLocation.current.pathname).toBe('/messages')
     })
   })
 
