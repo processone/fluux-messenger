@@ -229,6 +229,11 @@ export function MessageList<T extends BaseMessage>({
   const showFooter = hasContent
 
   // Disabled in staticMode (search/activity previews manage their own scroll).
+  // NOTE: the non-virtualized path this forces is a hard dependency of the search
+  // result preview (SearchContextView) and StrangerRequestPreviewView, which mount
+  // one MessageList per result and rely on every message rendering directly (no
+  // virtualizer cache to leak between results). Removing this guard breaks them —
+  // MessageList.staticMode.test.tsx pins the invariant.
   const virtualized = isFeatureEnabled('enableMessageVirtualization') && !staticMode
 
   // Built unconditionally (hooks rule); empty when not virtualized, so the
