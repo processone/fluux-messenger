@@ -82,5 +82,9 @@ export interface DemoData {
   activityEvents: ActivityEventInput[]
   /** Bare JIDs that have sent a presence-subscription (add-contact) request. Seeded into eventsStore. */
   subscriptionRequests?: string[]
+  /** Pending room invitations to seed into eventsStore (Rooms "Invitations" banner). */
+  mucInvitations?: Array<{ roomJid: string; from: string; reason?: string }>
+  /** Stranger (non-roster) messages to seed into eventsStore (Messages "Message requests" banner). */
+  strangerMessages?: Array<{ from: string; body: string }>
   ownResources?: DemoOwnResource[]
 }

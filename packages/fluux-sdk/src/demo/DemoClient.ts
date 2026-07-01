@@ -398,6 +398,16 @@ export class DemoClient extends XMPPClient {
     for (const from of data.subscriptionRequests ?? []) {
       eventsStore.getState().addSubscriptionRequest(from)
     }
+
+    // Seed room invitations so the Rooms "Invitations" banner is visible in demo.
+    for (const inv of data.mucInvitations ?? []) {
+      eventsStore.getState().addMucInvitation(inv.roomJid, inv.from, inv.reason)
+    }
+
+    // Seed stranger messages so the Messages "Message requests" banner is visible in demo.
+    for (const sm of data.strangerMessages ?? []) {
+      eventsStore.getState().addStrangerMessage(sm.from, sm.body)
+    }
   }
 
   /**
