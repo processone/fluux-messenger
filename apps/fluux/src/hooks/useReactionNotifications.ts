@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { useXMPP } from '@fluux/sdk'
 import { chatStore, roomStore, connectionStore, getBareJid } from '@fluux/sdk'
 import { findMessageById } from '@fluux/sdk'
+import { getMessage as getCachedMessage, getMessageByStanzaId as getCachedMessageByStanzaId } from '@fluux/sdk'
 import { useToastStore } from '@/stores/toastStore'
 import { useReactionMentionStore } from '@/stores/reactionMentionStore'
 import { useRouteSync } from '@/hooks'
@@ -62,20 +63,32 @@ export function useReactionNotifications(): void {
       }
     }
 
-    const unsubChat = client.subscribe('chat:reactions', ({ conversationId, messageId, reactorJid, emojis, isLive }) => {
+    const unsubChat = client.subscribe('chat:reactions', async ({ conversationId, messageId, reactorJid, emojis, isLive }) => {
       // Skip own reactions
       const myJid = getBareJid(connectionStore.getState().jid ?? '')
       if (getBareJid(reactorJid) === myJid) return
 
-      // Only notify for our own outgoing messages
-      const messages = chatStore.getState().messages.get(conversationId)
-      const message = messages ? findMessageById([...messages], messageId) : undefined
+      // Only notify for our own outgoing messages. The resident array holds only
+      // the active conversation's messages (deactivation evicts the rest), and even
+      // the active conversation keeps only its latest window. When the reacted
+      // message isn't resident — the toast case (conversation not active) or a
+      // reaction on an off-screen older message — fall back to the durable cache.
+      const residentMessages = chatStore.getState().messages.get(conversationId)
+      let message = residentMessages ? findMessageById([...residentMessages], messageId) : undefined
+      if (!message) {
+        message = (await getCachedMessage(messageId)) ?? (await getCachedMessageByStanzaId(messageId)) ?? undefined
+      }
       if (!message?.isOutgoing) return
 
-      const isLastMessage = messages && messages.length > 0 ? messages[messages.length - 1].id === messageId : false
+      // "Last message" only applies while the conversation is active and the message
+      // is resident; a cache-recovered message is either non-active (→ toast) or
+      // off-screen in the active conversation (→ mention), never the last message.
+      const isLastMessage =
+        residentMessages && residentMessages.length > 0 ? residentMessages[residentMessages.length - 1].id === messageId : false
 
+      const reactorName = getBareJid(reactorJid).split('@')[0]
       const decision = decideReactionNotification(
-        { conversationId, messageId, reactorName: getBareJid(reactorJid).split('@')[0], emojis, isLive },
+        { conversationId, messageId, reactorName, emojis, isLive },
         {
           activeConversationId: chatStore.getState().activeConversationId,
           isLastMessage,
@@ -86,7 +99,7 @@ export function useReactionNotifications(): void {
       dispatchDecision(decision, {
         conversationId,
         messageId,
-        reactorName: getBareJid(reactorJid).split('@')[0],
+        reactorName,
         emoji: emojis[0] ?? '',
         preview: message.body?.slice(0, 80) ?? '',
         isRoom: false,
