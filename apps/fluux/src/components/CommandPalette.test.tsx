@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, beforeAll } from 'vitest'
-import { render, screen, fireEvent, act } from '@testing-library/react'
+import { render, screen, fireEvent, act, within } from '@testing-library/react'
 import { CommandPalette } from './CommandPalette'
 import { useAdvancedModeStore } from '@/stores/advancedModeStore'
 
@@ -808,10 +808,12 @@ describe('CommandPalette', () => {
 
         const container = screen.getByPlaceholderText('Go to...').closest('div')?.parentElement
 
-        // Select first item (Bob, in the Unread section) without navigating
+        // Navigate down to the second item (Alice, Messages section) then select —
+        // exercises index-tracking under rapid reopen, not just Enter-on-first.
+        fireEvent.keyDown(container!, { key: 'ArrowDown' })
         fireEvent.keyDown(container!, { key: 'Enter' })
 
-        expect(mockSetActiveConversation).toHaveBeenCalledWith('bob@example.com')
+        expect(mockSetActiveConversation).toHaveBeenCalledWith('alice@example.com')
 
         // Close and reopen
         rerender(<CommandPalette {...defaultProps} isOpen={false} />)
@@ -1263,8 +1265,10 @@ describe('CommandPalette', () => {
   describe('Unread badge', () => {
     it('shows a count badge for unread DMs in the default view', () => {
       render(<CommandPalette {...defaultProps} />)
-      // Bob Jones has unreadCount 2
-      expect(screen.getByText('2')).toBeInTheDocument()
+      // Bob Jones has unreadCount 2 — scope to his row so the assertion can't
+      // accidentally match a "2" elsewhere if the fixture changes.
+      const bobRow = screen.getByText('Bob Jones').closest('button')
+      expect(within(bobRow!).getByText('2')).toBeInTheDocument()
     })
 
     it('does not show unread badges once the user types a query', () => {
