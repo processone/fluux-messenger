@@ -528,7 +528,7 @@ export function AdminView({ activeCategory, onBack }: AdminViewProps) {
   }
 
   return (
-    <div className="flex-1 flex flex-col min-h-0 bg-fluux-sidebar">
+    <div className="flex-1 flex flex-col min-h-0 bg-fluux-chat">
       {/* Header */}
       <div className="h-14 flex items-center px-4 border-b border-fluux-bg">
         {/* Back button - mobile only */}
