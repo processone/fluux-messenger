@@ -43,6 +43,7 @@ export default {
           // Badge
           'badge': 'var(--fluux-badge-bg)',
           'badge-text': 'var(--fluux-badge-text)',
+          'badge-strong': 'var(--fluux-badge-strong)',
           // Aurora identity tokens
           'accent-2': 'var(--fluux-accent-2)',
           // Encryption affordance (shields, locks) — single source of truth so
