@@ -124,6 +124,7 @@
         "delete": "Dzēst",
         "deleteConfirmMessage": "Ziņojumu vēsture tiks neatgriezeniski dzēsta.",
         "draft": "Melnraksts",
+        "messageRequestPreview": "Ziņojuma pieprasījums",
         "messageRequestsHeading": "Ziņojumu pieprasījumi"
     },
     "contacts": {

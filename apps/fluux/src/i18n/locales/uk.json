@@ -123,6 +123,7 @@
         "delete": "Видалити",
         "deleteConfirmMessage": "Історія повідомлень буде остаточно видалена.",
         "draft": "Чернетка",
+        "messageRequestPreview": "Запит повідомлення",
         "messageRequestsHeading": "Запити повідомлень"
     },
     "contacts": {

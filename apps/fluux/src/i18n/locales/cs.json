@@ -125,6 +125,7 @@
         "delete": "Smazat",
         "deleteConfirmMessage": "Historie zpráv bude trvale smazána.",
         "draft": "Koncept",
+        "messageRequestPreview": "Žádost o zprávu",
         "messageRequestsHeading": "Žádosti o zprávy"
     },
     "contacts": {

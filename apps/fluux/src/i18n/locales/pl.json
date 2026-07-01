@@ -125,6 +125,7 @@
         "delete": "Usuń",
         "deleteConfirmMessage": "Historia wiadomości zostanie trwale usunięta.",
         "draft": "Szkic",
+        "messageRequestPreview": "Prośba o wiadomość",
         "messageRequestsHeading": "Prośby o wiadomości"
     },
     "contacts": {

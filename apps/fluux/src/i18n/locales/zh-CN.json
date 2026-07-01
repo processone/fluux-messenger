@@ -123,6 +123,7 @@
         "delete": "删除",
         "deleteConfirmMessage": "消息历史记录将被永久删除。",
         "draft": "草稿",
+        "messageRequestPreview": "消息请求",
         "messageRequestsHeading": "消息请求"
     },
     "contacts": {

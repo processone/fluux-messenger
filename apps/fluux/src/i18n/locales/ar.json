@@ -123,6 +123,7 @@
         "delete": "حذف",
         "deleteConfirmMessage": "سيتم حذف سجل الرسائل نهائيًا.",
         "draft": "مسودة",
+        "messageRequestPreview": "طلب رسالة",
         "messageRequestsHeading": "طلبات الرسائل"
     },
     "contacts": {

@@ -125,6 +125,7 @@
         "delete": "Ħassar",
         "deleteConfirmMessage": "L-istorja tal-messaġġi se titħassar b'mod permanenti.",
         "draft": "Abbozz",
+        "messageRequestPreview": "Talba għal messaġġ",
         "messageRequestsHeading": "Talbiet ta' messaġġi"
     },
     "contacts": {

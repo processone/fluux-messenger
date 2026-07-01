@@ -123,6 +123,7 @@
         "delete": "Scrios",
         "deleteConfirmMessage": "Scriosfar stair na dteachtaireachtaí go buan.",
         "draft": "Dréacht",
+        "messageRequestPreview": "Iarratas teachtaireachta",
         "messageRequestsHeading": "Iarratais teachtaireachtaí"
     },
     "contacts": {

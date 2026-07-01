@@ -123,6 +123,7 @@
         "delete": "Slet",
         "deleteConfirmMessage": "Beskedhistorikken vil blive permanent slettet.",
         "draft": "Kladde",
+        "messageRequestPreview": "Beskedanmodning",
         "messageRequestsHeading": "Beskedsanmodninger"
     },
     "contacts": {

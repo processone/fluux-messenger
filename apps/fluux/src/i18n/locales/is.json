@@ -123,6 +123,7 @@
         "delete": "Eyða",
         "deleteConfirmMessage": "Skilaboðaferillinn verður endanlega eytt.",
         "draft": "Drög",
+        "messageRequestPreview": "Skilaboðabeiðni",
         "messageRequestsHeading": "Skilaboðabeiðnir"
     },
     "contacts": {

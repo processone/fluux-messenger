@@ -161,10 +161,15 @@ vi.mock('@fluux/sdk', () => ({
   useEvents: () => ({
     subscriptionRequests: [],
     strangerMessages: [],
+    strangerConversations: {},
     mucInvitations: [],
     systemNotifications: [],
     pendingCount: 0,
+    acceptStranger: vi.fn().mockResolvedValue(undefined),
+    ignoreStranger: vi.fn(),
   }),
+  useBlocking: () => ({ blockJid: vi.fn().mockResolvedValue(undefined) }),
+  getBareJid: (jid: string) => jid.split('/')[0],
   // Vanilla stores (for imperative .getState() access)
   chatStore: {
     getState: () => ({

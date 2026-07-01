@@ -123,6 +123,7 @@
         "delete": "Выдаліць",
         "deleteConfirmMessage": "Гісторыя паведамленняў будзе канчаткова выдалена.",
         "draft": "Чарнавік",
+        "messageRequestPreview": "Запыт паведамлення",
         "messageRequestsHeading": "Запыты паведамленняў"
     },
     "contacts": {

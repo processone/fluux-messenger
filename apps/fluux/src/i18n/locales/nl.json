@@ -123,6 +123,7 @@
         "delete": "Verwijderen",
         "deleteConfirmMessage": "De berichtgeschiedenis wordt permanent verwijderd.",
         "draft": "Concept",
+        "messageRequestPreview": "Berichtverzoek",
         "messageRequestsHeading": "Berichtverzoeken"
     },
     "contacts": {

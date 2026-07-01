@@ -123,6 +123,7 @@
         "delete": "Obriši",
         "deleteConfirmMessage": "Povijest poruka bit će trajno obrisana.",
         "draft": "Skica",
+        "messageRequestPreview": "Zahtjev za poruku",
         "messageRequestsHeading": "Zahtjevi za poruke"
     },
     "contacts": {

@@ -125,6 +125,7 @@
         "delete": "Eliminar",
         "deleteConfirmMessage": "El historial de mensajes sera eliminado permanentemente.",
         "draft": "Borrador",
+        "messageRequestPreview": "Solicitud de mensaje",
         "messageRequestsHeading": "Solicitudes de mensaje"
     },
     "contacts": {

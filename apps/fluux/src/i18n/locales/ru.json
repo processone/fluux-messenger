@@ -123,6 +123,7 @@
         "delete": "Удалить",
         "deleteConfirmMessage": "История сообщений будет удалена навсегда.",
         "draft": "Черновик",
+        "messageRequestPreview": "Запрос сообщения",
         "messageRequestsHeading": "Запросы сообщений"
     },
     "contacts": {

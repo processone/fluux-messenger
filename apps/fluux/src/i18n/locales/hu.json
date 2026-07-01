@@ -123,6 +123,7 @@
         "delete": "Törlés",
         "deleteConfirmMessage": "Az üzenetelőzmények véglegesen törlődnek.",
         "draft": "Piszkozat",
+        "messageRequestPreview": "Üzenetkérés",
         "messageRequestsHeading": "Üzenetkérések"
     },
     "contacts": {

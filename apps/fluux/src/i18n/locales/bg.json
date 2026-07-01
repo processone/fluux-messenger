@@ -123,6 +123,7 @@
         "delete": "Изтрий",
         "deleteConfirmMessage": "Историята на съобщенията ще бъде изтрита завинаги.",
         "draft": "Чернова",
+        "messageRequestPreview": "Заявка за съобщение",
         "messageRequestsHeading": "Заявки за съобщения"
     },
     "contacts": {

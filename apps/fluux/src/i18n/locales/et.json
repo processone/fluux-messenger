@@ -125,6 +125,7 @@
         "delete": "Kustuta",
         "deleteConfirmMessage": "Sõnumite ajalugu kustutatakse jäädavalt.",
         "draft": "Mustand",
+        "messageRequestPreview": "Sõnumitaotlus",
         "messageRequestsHeading": "Sõnumitaotlused"
     },
     "contacts": {

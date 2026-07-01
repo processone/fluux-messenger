@@ -125,6 +125,7 @@
         "delete": "Izbriši",
         "deleteConfirmMessage": "Zgodovina sporočil bo trajno izbrisana.",
         "draft": "Osnutek",
+        "messageRequestPreview": "Zahteva za sporočilo",
         "messageRequestsHeading": "Zahteve za sporočila"
     },
     "contacts": {

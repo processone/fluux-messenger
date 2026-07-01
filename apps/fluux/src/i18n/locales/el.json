@@ -124,6 +124,7 @@
         "delete": "Διαγραφή",
         "deleteConfirmMessage": "Το ιστορικό μηνυμάτων θα διαγραφεί οριστικά.",
         "draft": "Πρόχειρο",
+        "messageRequestPreview": "Αίτημα μηνύματος",
         "messageRequestsHeading": "Αιτήματα μηνυμάτων"
     },
     "contacts": {

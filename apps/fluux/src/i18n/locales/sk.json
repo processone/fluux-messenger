@@ -124,6 +124,7 @@
         "delete": "Vymazať",
         "deleteConfirmMessage": "História správ bude natrvalo vymazaná.",
         "draft": "Koncept",
+        "messageRequestPreview": "Žiadosť o správu",
         "messageRequestsHeading": "Žiadosti o správy"
     },
     "contacts": {

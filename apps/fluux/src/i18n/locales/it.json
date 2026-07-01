@@ -125,6 +125,7 @@
         "delete": "Elimina",
         "deleteConfirmMessage": "La cronologia dei messaggi sara eliminata definitivamente.",
         "draft": "Bozza",
+        "messageRequestPreview": "Richiesta di messaggio",
         "messageRequestsHeading": "Richieste di messaggio"
     },
     "contacts": {

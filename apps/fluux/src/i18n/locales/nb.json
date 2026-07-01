@@ -123,6 +123,7 @@
         "delete": "Slett",
         "deleteConfirmMessage": "Meldingshistorikken vil bli permanent slettet.",
         "draft": "Utkast",
+        "messageRequestPreview": "Meldingsforespørsel",
         "messageRequestsHeading": "Meldingsforespørsler"
     },
     "contacts": {

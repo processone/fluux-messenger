@@ -123,6 +123,7 @@
         "delete": "Ta bort",
         "deleteConfirmMessage": "Meddelandehistoriken kommer att tas bort permanent.",
         "draft": "Utkast",
+        "messageRequestPreview": "Meddelandeförfrågan",
         "messageRequestsHeading": "Meddelandeförfrågningar"
     },
     "contacts": {

@@ -123,6 +123,7 @@
         "delete": "Ištrinti",
         "deleteConfirmMessage": "Žinučių istorija bus visam laikui ištrinta.",
         "draft": "Juodraštis",
+        "messageRequestPreview": "Žinutės užklausa",
         "messageRequestsHeading": "Pranešimų užklausos"
     },
     "contacts": {

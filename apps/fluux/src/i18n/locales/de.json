@@ -125,6 +125,7 @@
         "delete": "Löschen",
         "deleteConfirmMessage": "Der Nachrichtenverlauf wird dauerhaft gelöscht.",
         "draft": "Entwurf",
+        "messageRequestPreview": "Nachrichtenanfrage",
         "messageRequestsHeading": "Nachrichtenanfragen"
     },
     "contacts": {

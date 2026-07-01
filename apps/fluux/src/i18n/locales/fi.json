@@ -123,6 +123,7 @@
         "delete": "Poista",
         "deleteConfirmMessage": "Viestihistoria poistetaan pysyvästi.",
         "draft": "Luonnos",
+        "messageRequestPreview": "Viestipyyntö",
         "messageRequestsHeading": "Viestipyynnöt"
     },
     "contacts": {

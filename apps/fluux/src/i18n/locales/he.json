@@ -123,6 +123,7 @@
         "delete": "מחק",
         "deleteConfirmMessage": "היסטוריית ההודעות תימחק לצמיתות.",
         "draft": "טיוטה",
+        "messageRequestPreview": "בקשת הודעה",
         "messageRequestsHeading": "בקשות הודעה"
     },
     "contacts": {

@@ -15,6 +15,7 @@ const AdminView = lazy(() => import('./AdminView').then(m => ({ default: m.Admin
 const XmppConsole = lazy(() => import('./XmppConsole').then(m => ({ default: m.XmppConsole })))
 const SearchContextView = lazy(() => import('./SearchContextView').then(m => ({ default: m.SearchContextView })))
 const ActivityContextView = lazy(() => import('./ActivityContextView').then(m => ({ default: m.ActivityContextView })))
+const StrangerRequestPreviewView = lazy(() => import('./StrangerRequestPreviewView').then(m => ({ default: m.StrangerRequestPreviewView })))
 import { ShortcutHelp } from './ShortcutHelp'
 import { CommandPalette } from './CommandPalette'
 import { AppBar } from './AppBar'
@@ -23,9 +24,10 @@ import { CreateRoomModal } from './CreateRoomModal'
 import {
   // Vanilla stores for imperative .getState() access
   chatStore, roomStore, consoleStore, adminStore, rosterStore, searchStore, activityLogStore,
-  useRosterActions, useContactIdentities,
+  useRosterActions, useContactIdentities, useEvents, useBlocking, getBareJid,
   type Contact, type Conversation, type AdminCategory
 } from '@fluux/sdk'
+import { useMessageRequestPreviewStore } from '@/stores/messageRequestPreviewStore'
 // React hook wrappers for reactive subscriptions
 import { useChatStore, useRoomStore, useRosterStore, useConnectionStore, useConsoleStore, useAdminStore, useSearchStore, useActivityLogStore } from '@fluux/sdk/react'
 import { useNotificationBadge } from '@/hooks/useNotificationBadge'
@@ -192,6 +194,11 @@ function ChatLayoutContent() {
   const activationPending = chatActivationPending || roomActivationPending
   const searchPreviewResult = useSearchStore((s) => s.previewResult)
   const activityPreviewEvent = useActivityLogStore((s) => s.previewEvent)
+  // Read-only message-request preview (transient; set by the Message-requests banner).
+  const previewJid = useMessageRequestPreviewStore((s) => s.previewJid)
+  const setPreviewJid = useMessageRequestPreviewStore((s) => s.setPreviewJid)
+  const { acceptStranger, ignoreStranger } = useEvents()
+  const { blockJid } = useBlocking()
 
   // NOTE: Don't use useRoster() hook here - it subscribes to ALL contacts and triggers
   // re-renders when ANY contact's presence changes. Use useRosterActions() for actions
@@ -560,7 +567,7 @@ function ChatLayoutContent() {
   const adminHasMainContent = adminSession || adminCategory === 'users' || adminCategory === 'rooms' || adminCategory === 'stats'
   // Settings: only show content when a category is explicitly selected (on mobile, let user choose from sidebar first)
   const settingsHasContent = sidebarView === 'settings' && !!settingsCategory
-  const hasActiveContent = !!(activeConversationId || activeRoomJid || selectedContact || adminHasMainContent || settingsHasContent || searchPreviewResult || activityPreviewEvent)
+  const hasActiveContent = !!(activeConversationId || activeRoomJid || selectedContact || adminHasMainContent || settingsHasContent || searchPreviewResult || activityPreviewEvent || previewJid)
 
   // Toggle shortcut help overlay
   const toggleShortcutHelp = () => {
@@ -756,6 +763,38 @@ function ChatLayoutContent() {
     navigateToMessages(jid, { replace: true })
   }
 
+  // Message-request preview actions (read-only stranger thread in the main pane).
+  const handleAcceptStrangerRequest = async () => {
+    const jid = previewJid
+    if (!jid) return
+    setPreviewJid(null)
+    await acceptStranger(jid)
+    const bareJid = getBareJid(jid)
+    handleSidebarViewChange('messages')
+    void activateConversation(bareJid)
+    setActiveRoom(null)
+    navigateToMessages(bareJid, { replace: true })
+  }
+  const handleIgnoreStrangerRequest = () => {
+    if (!previewJid) return
+    const jid = previewJid
+    setPreviewJid(null)
+    ignoreStranger(jid)
+  }
+  const handleBlockStrangerRequest = async () => {
+    if (!previewJid) return
+    const jid = previewJid
+    setPreviewJid(null)
+    ignoreStranger(jid)
+    await blockJid(jid)
+  }
+
+  // Close the message-request preview whenever the user navigates to a
+  // conversation/room/contact or changes the sidebar view.
+  useEffect(() => {
+    setPreviewJid(null)
+  }, [activeConversationId, activeRoomJid, selectedContactJid, sidebarView, setPreviewJid])
+
   // Handle showing user profile from occupant panel context menu
   const handleShowProfileFromRoom = (jid: string) => {
     setActiveConversation(null)
@@ -860,6 +899,16 @@ function ChatLayoutContent() {
           {sidebarView === 'settings' ? (
             <Suspense fallback={<ViewLoadingFallback />}>
               <SettingsView onBack={handleSettingsBack} />
+            </Suspense>
+          ) : previewJid ? (
+            <Suspense fallback={<ViewLoadingFallback />}>
+              <StrangerRequestPreviewView
+                strangerJid={previewJid}
+                onAccept={handleAcceptStrangerRequest}
+                onIgnore={handleIgnoreStrangerRequest}
+                onBlock={handleBlockStrangerRequest}
+                onBack={() => setPreviewJid(null)}
+              />
             </Suspense>
           ) : activeRoomJid && showRoomOccupants && isSmallScreen() ? (
             <FullScreenOccupantPanel onClose={() => setShowRoomOccupants(false)} onStartChat={handleStartChatWithJid} onShowProfile={handleShowProfileFromRoom} />

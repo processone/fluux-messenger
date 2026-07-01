@@ -125,6 +125,7 @@
         "delete": "Elimina",
         "deleteConfirmMessage": "L'historial de missatges s'eliminarà permanentment.",
         "draft": "Esborrany",
+        "messageRequestPreview": "Sol·licitud de missatge",
         "messageRequestsHeading": "Sol·licituds de missatge"
     },
     "contacts": {
