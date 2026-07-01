@@ -60,6 +60,7 @@
         "advancedMode": "Geavanceerde modus"
     },
     "sidebar": {
+        "updateAvailable": "Update beschikbaar",
         "messages": "Berichten",
         "rooms": "Groepen",
         "connections": "Contacten",

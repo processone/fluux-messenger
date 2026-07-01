@@ -1,68 +1,84 @@
 /**
- * Service worker registration + auto-reload-on-update (browser/PWA only).
+ * Service worker registration + user-triggered update (browser/PWA only).
  *
- * The custom service worker (`sw.ts`) calls `skipWaiting()` on install and
- * `clients.claim()` on activate, so a freshly deployed build activates and
- * caches its assets immediately. But activating a new SW does NOT reload the
- * page that is already running — it only changes what future fetches return.
- * On a desktop tab you eventually get a fresh navigation (close/reopen), so the
- * gap is invisible; on an installed Android PWA the activity persists and even
- * a cold tap is served the old precached `index.html` by the still-current SW,
- * so the app stays pinned to a stale version until the user uninstalls and
- * reinstalls it.
+ * The custom service worker (`sw.ts`) no longer calls `skipWaiting()` on install:
+ * a freshly deployed build installs and then PARKS in the `waiting` state instead
+ * of seizing control. That keeps the running page on its current (matching) build
+ * — no mixed old/new assets, no surprise reload — until the user opts in.
  *
- * vite-plugin-pwa's `autoUpdate` registration normally closes this gap by
- * reloading the page once the new SW takes control. We register manually
- * (`injectRegister: false`) so we can skip the SW entirely under Tauri, which
- * means we also have to wire that reload ourselves — that is what
- * `installServiceWorkerAutoReload` does.
+ * Previously we reloaded the page automatically as soon as the new worker took
+ * control. On an installed PWA that fires on nearly every foreground-after-deploy
+ * (see the focus update check below), so the app reloaded out from under the user
+ * mid-session. Now, when a waiting worker is detected we flag
+ * `appUpdateStore.webUpdateReady` so the sidebar surfaces an "update available"
+ * button; clicking it runs `applyWaitingUpdate`, which tells the waiting worker to
+ * `skipWaiting()` and reloads once it takes control.
  *
- * Reloading on activation only helps once a new SW is *detected*, though. The
- * browser only checks for an updated `sw.js` on the initial `register()` call,
- * on navigations within scope, and on its own ~24h timer — none of which fire
- * for a backgrounded, installed PWA that is merely brought back to the
- * foreground. So we also force an update check (`registration.update()`) when
- * the document becomes visible again, throttled by `createFocusUpdateChecker`.
- * A check that finds a new build flows straight into the activation reload
- * above, so the app refreshes to the latest version shortly after refocus.
+ * The browser only checks for an updated `sw.js` on `register()`, on navigations
+ * within scope, and on its own ~24h timer — none of which fire for a backgrounded,
+ * installed PWA merely brought back to the foreground. So we also force an update
+ * check (`registration.update()`) when the document becomes visible again,
+ * throttled by `createFocusUpdateChecker`. A found update now flows into the
+ * button, not a reload.
  */
+
+import { useAppUpdateStore } from '@/stores/appUpdateStore'
 
 /** Minimum gap between focus-triggered update checks (one short network probe). */
 export const FOCUS_UPDATE_MIN_INTERVAL_MS = 60_000
 
 /**
- * Reload the page once an updated service worker takes control.
+ * Watch a registration for an update that is ready to activate, and invoke
+ * `onReady` when one is.
  *
- * `controllerchange` fires whenever the active SW changes. There are two
- * cases we must distinguish:
- *
- *  - **Fresh install** (no prior controller): the very first `controllerchange`
- *    is just the new SW's initial `clients.claim()`. The page was already
- *    loaded from the network, so reloading here would be a pointless refresh on
- *    first visit. We adopt the controller silently and arm for later updates.
- *  - **Update** (page was already controlled, or a second change after install):
- *    a new build has taken over — reload so the running page picks it up.
- *
- * Reload is guarded so repeated `controllerchange` events can only ever trigger
- * a single reload.
+ * "Ready" means a worker is `waiting` — either already (from a check on a prior
+ * page load) or after a fresh `updatefound` reaches the `installed` state while a
+ * controller exists. The controller check is what distinguishes a genuine update
+ * from the very first install (which has no prior controller and must not prompt).
  */
-export function installServiceWorkerAutoReload(
-  container: ServiceWorkerContainer,
-  reload: () => void
+export function installUpdateReadyDetection(
+  registration: ServiceWorkerRegistration,
+  hasController: () => boolean,
+  onReady: () => void,
 ): void {
-  let hasController = container.controller !== null
-  let reloading = false
+  if (registration.waiting) {
+    onReady()
+    return
+  }
+  registration.addEventListener('updatefound', () => {
+    const installing = registration.installing
+    if (!installing) return
+    installing.addEventListener('statechange', () => {
+      if (installing.state === 'installed' && hasController()) {
+        onReady()
+      }
+    })
+  })
+}
 
+/**
+ * Activate a waiting service worker and reload once it takes control.
+ *
+ * Posts `SKIP_WAITING` to the waiting worker (which triggers `self.skipWaiting()`
+ * in `sw.ts`); the resulting `controllerchange` reloads the page into the new
+ * build. The reload listener is attached only here (never at registration), so a
+ * first-install `clients.claim()` can never trigger a reload, and it fires at
+ * most once. No-op when nothing is waiting.
+ */
+export function applyWaitingUpdate(
+  registration: ServiceWorkerRegistration,
+  container: ServiceWorkerContainer,
+  reload: () => void,
+): void {
+  const waiting = registration.waiting
+  if (!waiting) return
+  let reloaded = false
   container.addEventListener('controllerchange', () => {
-    if (!hasController) {
-      // Initial install's clients.claim() — adopt the controller, don't reload.
-      hasController = true
-      return
-    }
-    if (reloading) return
-    reloading = true
+    if (reloaded) return
+    reloaded = true
     reload()
   })
+  waiting.postMessage({ type: 'SKIP_WAITING' })
 }
 
 /** Decides whether a focus-triggered update check should run right now. */
@@ -93,24 +109,34 @@ export function createFocusUpdateChecker(options: { minIntervalMs: number }): Fo
 }
 
 /**
- * Register the service worker and wire auto-reload-on-update plus a
+ * Register the service worker and wire user-triggered update detection plus a
  * focus-triggered update check. No-op when the runtime has no service worker
  * support (e.g. the Tauri webview, which serves the app over a custom protocol
- * that doesn't support service workers).
+ * that doesn't support service workers) — so `webUpdateReady` stays false there.
  */
 export function registerServiceWorker(): void {
   if (!('serviceWorker' in navigator)) return
-
-  installServiceWorkerAutoReload(navigator.serviceWorker, () => window.location.reload())
 
   window.addEventListener('load', () => {
     navigator.serviceWorker
       .register('./sw.js')
       .then((registration) => {
+        // A waiting worker means a new build is ready. Surface the button and
+        // register the apply action (skipWaiting + one reload) for it.
+        installUpdateReadyDetection(
+          registration,
+          () => navigator.serviceWorker.controller !== null,
+          () => {
+            useAppUpdateStore.getState().setWebUpdateReady(true, () =>
+              applyWaitingUpdate(registration, navigator.serviceWorker, () => window.location.reload()),
+            )
+          },
+        )
+
         const checker = createFocusUpdateChecker({ minIntervalMs: FOCUS_UPDATE_MIN_INTERVAL_MS })
         // Re-check for a new build whenever the app is brought back to the
         // foreground — the only reliable signal for an installed PWA that never
-        // navigates. A found update activates and reloads via the listener above.
+        // navigates. A found update surfaces the button via the detection above.
         document.addEventListener('visibilitychange', () => {
           if (checker.shouldCheck(document.visibilityState, Date.now())) {
             registration.update().catch(() => {

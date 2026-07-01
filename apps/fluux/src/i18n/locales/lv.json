@@ -60,6 +60,7 @@
         "advancedMode": "Papildu režīms"
     },
     "sidebar": {
+        "updateAvailable": "Pieejams atjauninājums",
         "messages": "Ziņojumi",
         "rooms": "Istabas",
         "connections": "Savienojumi",

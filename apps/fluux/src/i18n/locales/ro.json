@@ -60,6 +60,7 @@
         "advancedMode": "Mod avansat"
     },
     "sidebar": {
+        "updateAvailable": "Actualizare disponibilă",
         "messages": "Mesaje",
         "rooms": "Camere",
         "connections": "Conexiuni",

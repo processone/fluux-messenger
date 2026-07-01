@@ -1,15 +1,51 @@
 import { describe, it, expect, vi } from 'vitest'
-import { installServiceWorkerAutoReload, createFocusUpdateChecker } from './serviceWorkerUpdate'
+import {
+  installUpdateReadyDetection,
+  applyWaitingUpdate,
+  createFocusUpdateChecker,
+} from './serviceWorkerUpdate'
 
 /**
- * Minimal stand-in for the browser's ServiceWorkerContainer: captures the
- * `controllerchange` listener so the test can fire it, and lets us set the
- * initial `controller` to model "fresh install" (null) vs "already controlled".
+ * Minimal stand-in for a ServiceWorker: exposes a mutable `state`, records the
+ * `statechange` listener, and spies `postMessage`.
  */
-function createFakeContainer(initialController: object | null) {
+function createFakeWorker(initialState: string) {
+  let stateChange: (() => void) | null = null
+  return {
+    state: initialState,
+    postMessage: vi.fn(),
+    addEventListener(type: string, cb: () => void) {
+      if (type === 'statechange') stateChange = cb
+    },
+    setState(next: string) {
+      this.state = next
+      stateChange?.()
+    },
+  }
+}
+
+/**
+ * Minimal stand-in for a ServiceWorkerRegistration: `waiting`/`installing`
+ * workers plus a fireable `updatefound` event.
+ */
+function createFakeRegistration() {
+  let updateFound: (() => void) | null = null
+  return {
+    waiting: null as ReturnType<typeof createFakeWorker> | null,
+    installing: null as ReturnType<typeof createFakeWorker> | null,
+    addEventListener(type: string, cb: () => void) {
+      if (type === 'updatefound') updateFound = cb
+    },
+    fireUpdateFound() {
+      updateFound?.()
+    },
+  }
+}
+
+/** Minimal stand-in for ServiceWorkerContainer's controllerchange event. */
+function createFakeContainer() {
   let listener: (() => void) | null = null
   return {
-    controller: initialController,
     addEventListener(type: string, cb: () => void) {
       if (type === 'controllerchange') listener = cb
     },
@@ -19,48 +55,115 @@ function createFakeContainer(initialController: object | null) {
   }
 }
 
-describe('installServiceWorkerAutoReload', () => {
-  it('reloads when an updated worker takes control of an already-controlled page', () => {
-    const reload = vi.fn()
-    const container = createFakeContainer({})
-    installServiceWorkerAutoReload(container as unknown as ServiceWorkerContainer, reload)
+describe('installUpdateReadyDetection', () => {
+  it('reports ready immediately when a worker is already waiting', () => {
+    const onReady = vi.fn()
+    const reg = createFakeRegistration()
+    reg.waiting = createFakeWorker('installed')
 
+    installUpdateReadyDetection(reg as unknown as ServiceWorkerRegistration, () => true, onReady)
+
+    expect(onReady).toHaveBeenCalledTimes(1)
+  })
+
+  it('reports ready when an installing worker finishes while a controller exists (an update)', () => {
+    const onReady = vi.fn()
+    const reg = createFakeRegistration()
+    installUpdateReadyDetection(reg as unknown as ServiceWorkerRegistration, () => true, onReady)
+
+    reg.installing = createFakeWorker('installing')
+    reg.fireUpdateFound()
+    reg.installing.setState('installed')
+
+    expect(onReady).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not report ready on a first install (installed with no controller)', () => {
+    const onReady = vi.fn()
+    const reg = createFakeRegistration()
+    installUpdateReadyDetection(reg as unknown as ServiceWorkerRegistration, () => false, onReady)
+
+    reg.installing = createFakeWorker('installing')
+    reg.fireUpdateFound()
+    reg.installing.setState('installed')
+
+    expect(onReady).not.toHaveBeenCalled()
+  })
+
+  it('ignores non-installed state transitions', () => {
+    const onReady = vi.fn()
+    const reg = createFakeRegistration()
+    installUpdateReadyDetection(reg as unknown as ServiceWorkerRegistration, () => true, onReady)
+
+    reg.installing = createFakeWorker('installing')
+    reg.fireUpdateFound()
+    reg.installing.setState('redundant')
+
+    expect(onReady).not.toHaveBeenCalled()
+  })
+})
+
+describe('applyWaitingUpdate', () => {
+  it('posts SKIP_WAITING to the waiting worker', () => {
+    const reg = createFakeRegistration()
+    reg.waiting = createFakeWorker('installed')
+    const container = createFakeContainer()
+
+    applyWaitingUpdate(
+      reg as unknown as ServiceWorkerRegistration,
+      container as unknown as ServiceWorkerContainer,
+      vi.fn(),
+    )
+
+    expect(reg.waiting.postMessage).toHaveBeenCalledWith({ type: 'SKIP_WAITING' })
+  })
+
+  it('reloads once when the new worker takes control', () => {
+    const reload = vi.fn()
+    const reg = createFakeRegistration()
+    reg.waiting = createFakeWorker('installed')
+    const container = createFakeContainer()
+
+    applyWaitingUpdate(
+      reg as unknown as ServiceWorkerRegistration,
+      container as unknown as ServiceWorkerContainer,
+      reload,
+    )
     container.fireControllerChange()
-
-    expect(reload).toHaveBeenCalledTimes(1)
-  })
-
-  it('does not reload on the initial install (first controllerchange with no prior controller)', () => {
-    const reload = vi.fn()
-    const container = createFakeContainer(null)
-    installServiceWorkerAutoReload(container as unknown as ServiceWorkerContainer, reload)
-
-    container.fireControllerChange() // initial clients.claim()
-
-    expect(reload).not.toHaveBeenCalled()
-  })
-
-  it('reloads on an update that follows a fresh install', () => {
-    const reload = vi.fn()
-    const container = createFakeContainer(null)
-    installServiceWorkerAutoReload(container as unknown as ServiceWorkerContainer, reload)
-
-    container.fireControllerChange() // initial install — adopt the controller, no reload
-    container.fireControllerChange() // later update — reload
 
     expect(reload).toHaveBeenCalledTimes(1)
   })
 
   it('reloads at most once across repeated controllerchange events', () => {
     const reload = vi.fn()
-    const container = createFakeContainer({})
-    installServiceWorkerAutoReload(container as unknown as ServiceWorkerContainer, reload)
+    const reg = createFakeRegistration()
+    reg.waiting = createFakeWorker('installed')
+    const container = createFakeContainer()
 
-    container.fireControllerChange()
+    applyWaitingUpdate(
+      reg as unknown as ServiceWorkerRegistration,
+      container as unknown as ServiceWorkerContainer,
+      reload,
+    )
     container.fireControllerChange()
     container.fireControllerChange()
 
     expect(reload).toHaveBeenCalledTimes(1)
+  })
+
+  it('does nothing when there is no waiting worker (no reload on unrelated controllerchange)', () => {
+    const reload = vi.fn()
+    const reg = createFakeRegistration()
+    const container = createFakeContainer()
+
+    applyWaitingUpdate(
+      reg as unknown as ServiceWorkerRegistration,
+      container as unknown as ServiceWorkerContainer,
+      reload,
+    )
+    container.fireControllerChange()
+
+    expect(reload).not.toHaveBeenCalled()
   })
 })
 

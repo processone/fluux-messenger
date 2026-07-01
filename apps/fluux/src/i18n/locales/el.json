@@ -60,6 +60,7 @@
         "advancedMode": "Σύνθετη λειτουργία"
     },
     "sidebar": {
+        "updateAvailable": "Διαθέσιμη ενημέρωση",
         "messages": "Μηνύματα",
         "rooms": "Δωμάτια",
         "connections": "Επαφές",

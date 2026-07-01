@@ -60,6 +60,7 @@
         "advancedMode": "Расширенный режим"
     },
     "sidebar": {
+        "updateAvailable": "Доступно обновление",
         "messages": "Сообщения",
         "rooms": "Конференции",
         "connections": "Контакты",

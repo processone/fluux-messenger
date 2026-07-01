@@ -60,6 +60,7 @@
         "advancedMode": "高级模式"
     },
     "sidebar": {
+        "updateAvailable": "有可用更新",
         "messages": "消息",
         "rooms": "房间",
         "connections": "连接",

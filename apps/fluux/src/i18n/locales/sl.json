@@ -60,6 +60,7 @@
         "advancedMode": "Napredni način"
     },
     "sidebar": {
+        "updateAvailable": "Posodobitev je na voljo",
         "messages": "Sporočila",
         "rooms": "Sobe",
         "connections": "Povezave",

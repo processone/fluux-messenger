@@ -60,6 +60,7 @@
         "advancedMode": "Speciális mód"
     },
     "sidebar": {
+        "updateAvailable": "Frissítés érhető el",
         "messages": "Üzenetek",
         "rooms": "Szobák",
         "connections": "Kapcsolatok",

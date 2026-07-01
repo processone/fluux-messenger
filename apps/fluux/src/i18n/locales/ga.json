@@ -60,6 +60,7 @@
         "advancedMode": "Mód ardleibhéil"
     },
     "sidebar": {
+        "updateAvailable": "Nuashonrú ar fáil",
         "messages": "Teachtaireachtaí",
         "rooms": "Seomraí",
         "connections": "Ceangail",

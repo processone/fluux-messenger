@@ -60,6 +60,7 @@
         "advancedMode": "Edistynyt tila"
     },
     "sidebar": {
+        "updateAvailable": "Päivitys saatavilla",
         "messages": "Viestit",
         "rooms": "Huoneet",
         "connections": "Yhteydet",

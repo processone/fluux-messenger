@@ -60,6 +60,7 @@
         }
     },
     "sidebar": {
+        "updateAvailable": "Update available",
         "messages": "Messages",
         "rooms": "Rooms",
         "connections": "Connections",

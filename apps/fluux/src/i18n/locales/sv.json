@@ -60,6 +60,7 @@
         "advancedMode": "Avancerat läge"
     },
     "sidebar": {
+        "updateAvailable": "Uppdatering tillgänglig",
         "messages": "Meddelanden",
         "rooms": "Rum",
         "connections": "Anslutningar",
