@@ -41,6 +41,11 @@ vi.mock('@fluux/sdk', () => ({
     },
   }),
   hasFastToken: vi.fn(() => false),
+  // App mounts startSystemNotificationEffect(), which reads eventsStore.
+  eventsStore: {
+    getState: () => ({ systemNotifications: [], removeSystemNotification: vi.fn() }),
+    subscribe: () => () => {},
+  },
 }))
 
 vi.mock('./hooks/useSessionPersistence', () => ({

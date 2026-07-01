@@ -37,6 +37,11 @@ vi.mock('@fluux/sdk', () => ({
   })),
   // Consumed at module load by e2ee/verificationSync.ts (VERIFICATIONS_NODE).
   NS_FLUUX_VERIFICATIONS: 'urn:xmpp:fluux:verifications:0',
+  // App mounts startSystemNotificationEffect(), which reads eventsStore.
+  eventsStore: {
+    getState: () => ({ systemNotifications: [], removeSystemNotification: vi.fn() }),
+    subscribe: () => () => {},
+  },
 }))
 
 // Mock session persistence
