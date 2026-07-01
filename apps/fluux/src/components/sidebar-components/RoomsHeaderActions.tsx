@@ -93,6 +93,11 @@ function RoomsCreateSplitButton({ onQuickChat, onPermanentRoom, onJoinRoom, onBr
             </button>
           </Tooltip>
           <Tooltip content={t('rooms.createRoom')} position="bottom">
+            {/* Narrow secondary affordance of the split button — intentionally
+                NOT the 44px SIDEBAR_HEADER_ICON_BTN. A full-size chevron glued to
+                the 44px primary would form an ~88px control dominating the 56px
+                header; the primary "+" (the common path) already meets the touch
+                target. */}
             <button
               type="button"
               onClick={toggle}
