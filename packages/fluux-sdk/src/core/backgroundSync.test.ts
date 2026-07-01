@@ -48,8 +48,9 @@ import { connectionStore } from '../stores/connectionStore'
 import { chatStore } from '../stores/chatStore'
 import { roomStore } from '../stores/roomStore'
 import { NS_MAM } from './namespaces'
-import { createMockClient, simulateFreshSession } from './sideEffects.testHelpers'
+import { createMockClient, simulateFreshSession, simulateSmResumption } from './sideEffects.testHelpers'
 import { _resetStorageScopeForTesting } from '../utils/storageScope'
+import type { RoomMessage } from './types'
 
 describe('setupBackgroundSyncSideEffects', () => {
   const ARCHIVED_CHECK_KEY = 'fluux:lastArchivedPreviewCheck'
@@ -611,6 +612,100 @@ describe('setupBackgroundSyncSideEffects', () => {
       await vi.advanceTimersByTimeAsync(100)
 
       expect(mockClient.mam.catchUpRoom).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('resume preview seeding (SM resumption)', () => {
+    beforeEach(() => {
+      vi.useFakeTimers()
+    })
+
+    afterEach(() => {
+      vi.useRealTimers()
+      roomStore.getState().setActiveRoom(null)
+      roomStore.getState().reset()
+    })
+
+    const addRoom = (
+      jid: string,
+      opts: { supportsMAM?: boolean; isQuickChat?: boolean } = {},
+    ) =>
+      roomStore.getState().addRoom({
+        jid, name: jid, nickname: 'me', joined: true, isBookmarked: true,
+        supportsMAM: opts.supportsMAM ?? true,
+        isQuickChat: opts.isQuickChat,
+        occupants: new Map(), messages: [], unreadCount: 0, mentionsCount: 0, typingUsers: new Set(),
+      })
+
+    const seedPreview = (jid: string) =>
+      roomStore.getState().updateLastMessagePreview(jid, {
+        type: 'groupchat', id: 'm1', roomJid: jid,
+        from: `${jid}/alice`, nick: 'alice', body: 'hi',
+        timestamp: new Date(), isOutgoing: false,
+      } as RoomMessage)
+
+    it('catches up a joined MAM room with no preview on SM resumption', async () => {
+      addRoom('unseeded@conference.example.com')
+      connectionStore.getState().setStatus('disconnected')
+      cleanup = setupBackgroundSyncSideEffects(mockClient)
+
+      simulateSmResumption(mockClient)
+
+      await vi.waitFor(() => {
+        expect(mockClient.mam.catchUpRoom).toHaveBeenCalledTimes(1)
+      })
+      expect(
+        (mockClient.mam.catchUpRoom as ReturnType<typeof vi.fn>).mock.calls[0][0],
+      ).toBe('unseeded@conference.example.com')
+    })
+
+    it('does not catch up a room that already has a sidebar preview', async () => {
+      addRoom('seeded@conference.example.com')
+      seedPreview('seeded@conference.example.com')
+      connectionStore.getState().setStatus('disconnected')
+      cleanup = setupBackgroundSyncSideEffects(mockClient)
+
+      simulateSmResumption(mockClient)
+      await vi.advanceTimersByTimeAsync(100)
+
+      expect(mockClient.mam.catchUpRoom).not.toHaveBeenCalled()
+    })
+
+    it('does not catch up QuickChat rooms', async () => {
+      addRoom('quick@conference.example.com', { isQuickChat: true })
+      connectionStore.getState().setStatus('disconnected')
+      cleanup = setupBackgroundSyncSideEffects(mockClient)
+
+      simulateSmResumption(mockClient)
+      await vi.advanceTimersByTimeAsync(100)
+
+      expect(mockClient.mam.catchUpRoom).not.toHaveBeenCalled()
+    })
+
+    it('does not catch up rooms that do not support MAM', async () => {
+      addRoom('nomam@conference.example.com', { supportsMAM: false })
+      connectionStore.getState().setStatus('disconnected')
+      cleanup = setupBackgroundSyncSideEffects(mockClient)
+
+      simulateSmResumption(mockClient)
+      await vi.advanceTimersByTimeAsync(100)
+
+      expect(mockClient.mam.catchUpRoom).not.toHaveBeenCalled()
+    })
+
+    it('does not catch up the active room (handled by roomSideEffects)', async () => {
+      addRoom('active@conference.example.com')
+      roomStore.getState().setActiveRoom('active@conference.example.com')
+      connectionStore.getState().setStatus('disconnected')
+      cleanup = setupBackgroundSyncSideEffects(mockClient)
+
+      simulateSmResumption(mockClient)
+      await vi.advanceTimersByTimeAsync(100)
+
+      expect(mockClient.mam.catchUpRoom).not.toHaveBeenCalledWith(
+        'active@conference.example.com',
+        expect.anything(),
+      )
     })
   })
 
