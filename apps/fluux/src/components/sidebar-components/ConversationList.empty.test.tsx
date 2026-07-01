@@ -80,6 +80,9 @@ vi.mock('@fluux/sdk', async (importOriginal) => {
     roomStore: { getState: () => ({ activateRoom: vi.fn() }) },
     generateConsistentColorHexSync: () => '#888',
     isPreviewableMessage: () => true,
+    useEvents: () => ({ strangerConversations: {}, acceptStranger: vi.fn(), ignoreStranger: vi.fn() }),
+    useBlocking: () => ({ blockJid: vi.fn() }),
+    getBareJid: (jid: string) => jid.split('/')[0],
   }
 })
 

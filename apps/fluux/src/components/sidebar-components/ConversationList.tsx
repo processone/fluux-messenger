@@ -20,6 +20,7 @@ import { useSettingsStore } from '@/stores/settingsStore'
 import { Hash, Trash2, Archive, ArchiveRestore, MessageCircle } from 'lucide-react'
 import { ListEmpty } from '../ui/ListEmpty'
 import { ConfirmDialog } from '../ConfirmDialog'
+import { MessageRequestsBanner } from './MessageRequestsBanner'
 import {
   SidebarListMenuProvider,
   SidebarListMenuPortal,
@@ -86,26 +87,27 @@ export function ConversationList() {
     activeItemId: activeConversationId,
   })
 
-  if (conversationIds.length === 0) {
-    return <ListEmpty icon={MessageCircle} title={t('conversations.noConversations')} />
-  }
-
   return (
     <SidebarListMenuProvider<Conversation>>
-      <div ref={listRef} className="px-2 space-y-0.5" {...getContainerProps()}>
-        {conversationIds.map((id, index) => (
-          <ConversationItem
-            key={id}
-            conversationId={id}
-            isActive={id === activeConversationId}
-            isSelected={index === selectedIndex}
-            isKeyboardNav={isKeyboardNav}
-            onClick={handleConversationClick}
-            {...getItemAttribute(index)}
-            {...getItemProps(index)}
-          />
-        ))}
-      </div>
+      <MessageRequestsBanner />
+      {conversationIds.length === 0 ? (
+        <ListEmpty icon={MessageCircle} title={t('conversations.noConversations')} />
+      ) : (
+        <div ref={listRef} className="px-2 space-y-0.5" {...getContainerProps()}>
+          {conversationIds.map((id, index) => (
+            <ConversationItem
+              key={id}
+              conversationId={id}
+              isActive={id === activeConversationId}
+              isSelected={index === selectedIndex}
+              isKeyboardNav={isKeyboardNav}
+              onClick={handleConversationClick}
+              {...getItemAttribute(index)}
+              {...getItemProps(index)}
+            />
+          ))}
+        </div>
+      )}
       <ConversationContextMenu
         isArchived={false}
         onArchive={archiveConversation}
