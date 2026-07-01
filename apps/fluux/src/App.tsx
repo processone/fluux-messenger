@@ -8,6 +8,7 @@ import { attemptCachedUnlockOrPrompt } from '@/e2ee/silentRestore'
 import { probeRemoteIdentityState } from './e2ee/secretKeyProbe'
 import { isOpenpgpEnabled } from './stores/encryptionSettingsStore'
 import { useToastStore } from './stores/toastStore'
+import { useAppUpdateStore } from './stores/appUpdateStore'
 import { UnlockEncryptionDialog } from './components/UnlockEncryptionDialog'
 import { IdentityChoiceDialog } from './components/IdentityChoiceDialog'
 import { RestorePassphraseDialog } from './components/RestorePassphraseDialog'
@@ -140,10 +141,22 @@ function App() {
     }
   }, [update.available, updateDismissed, showUpdateModal])
 
+  // Mirror desktop (Tauri) update availability into the shared app-update store so
+  // the sidebar rail button can surface it and reopen this modal on click. The
+  // platform action is registered here so the store stays free of Tauri specifics.
+  useEffect(() => {
+    useAppUpdateStore.getState().setDesktopUpdateAvailable(
+      update.available && update.updaterEnabled,
+      () => setShowUpdateModal(true),
+    )
+  }, [update.available, update.updaterEnabled])
+
   const handleUpdateDismiss = () => {
+    // Only close the modal and stop it auto-reshowing this session — deliberately
+    // do NOT wipe the update state, so the persistent rail button can reopen this
+    // modal later (it renders only while `update.available` is true).
     setShowUpdateModal(false)
     setUpdateDismissed(true)
-    update.dismissUpdate()
   }
 
   // Track if we're attempting auto-reconnect from saved session on page load

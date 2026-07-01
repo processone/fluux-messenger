@@ -60,6 +60,7 @@
         "advancedMode": "Tryb zaawansowany"
     },
     "sidebar": {
+        "updateAvailable": "Dostępna aktualizacja",
         "messages": "Wiadomości",
         "rooms": "Pokoje",
         "connections": "Kontakty",

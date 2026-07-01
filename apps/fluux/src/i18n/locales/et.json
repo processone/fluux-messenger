@@ -60,6 +60,7 @@
         "advancedMode": "Täpsem režiim"
     },
     "sidebar": {
+        "updateAvailable": "Uuendus saadaval",
         "messages": "Sõnumid",
         "rooms": "Toad",
         "connections": "Ühendused",

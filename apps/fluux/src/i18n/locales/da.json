@@ -60,6 +60,7 @@
         "advancedMode": "Avanceret tilstand"
     },
     "sidebar": {
+        "updateAvailable": "Opdatering tilgængelig",
         "messages": "Beskeder",
         "rooms": "Rum",
         "connections": "Forbindelser",

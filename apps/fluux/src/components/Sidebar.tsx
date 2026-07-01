@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { detectRenderLoop, trackSelectorChange } from '@/utils/renderLoopDetector'
 import { useClickOutside, useWindowDrag, useRouteSync } from '@/hooks'
 import { useModalStore } from '@/stores/modalStore'
+import { useUpdateAffordance } from '@/stores/appUpdateStore'
 import {
   useXMPP,
   type Contact,
@@ -34,6 +35,7 @@ import {
   Ban,
   UserPlus,
   RefreshCw,
+  CircleArrowUp,
 } from 'lucide-react'
 import { performLogout } from '@/utils/performLogout'
 
@@ -46,6 +48,7 @@ import {
   SIDEBAR_DEFAULT_WIDTH,
   SIDEBAR_WIDTH_KEY,
   IconRailNavLink,
+  IconRailButton,
   StatusOrPresence,
   ConversationList,
   ArchiveList,
@@ -126,6 +129,10 @@ export function Sidebar({ onSelectContact, onStartChat, onManageUser, adminCateg
   const showPresenceMenu = useModalStore((s) => s.presenceMenu)
   const modalOpen = useModalStore((s) => s.open)
   const modalClose = useModalStore((s) => s.close)
+
+  // Cross-platform "an update is available" affordance (web PWA reload / desktop
+  // update modal). Hidden unless an update is actually ready.
+  const { visible: updateAvailable, activate: activateUpdate } = useUpdateAffordance()
 
   // Local UI state (not shared)
   const [showCreateRoom, setShowCreateRoom] = useState(false)
@@ -278,6 +285,16 @@ export function Sidebar({ onSelectContact, onStartChat, onManageUser, adminCateg
           onNavigate={onViewChange}
         />
         <div className="flex-1" />
+        {/* Update available — user-triggered (web reload / desktop update modal) */}
+        {updateAvailable && (
+          <IconRailButton
+            icon={CircleArrowUp}
+            label={t('sidebar.updateAvailable')}
+            active={false}
+            accent
+            onClick={activateUpdate}
+          />
+        )}
         {/* Admin - only visible for server administrators */}
         {isAdmin && (
           <IconRailNavLink

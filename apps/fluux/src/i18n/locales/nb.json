@@ -60,6 +60,7 @@
         "advancedMode": "Avansert modus"
     },
     "sidebar": {
+        "updateAvailable": "Oppdatering tilgjengelig",
         "messages": "Meldinger",
         "rooms": "Rom",
         "connections": "Tilkoblinger",

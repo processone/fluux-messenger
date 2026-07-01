@@ -95,12 +95,22 @@ self.addEventListener('notificationclick', (event) => {
 // Lifecycle
 // ============================================================================
 
-// Skip waiting on install for immediate activation
-self.addEventListener('install', (event) => {
-  event.waitUntil(self.skipWaiting())
+// Do NOT skipWaiting on install. A freshly deployed build installs and then
+// parks in the `waiting` state instead of seizing control, so the running page
+// stays on its current (matching) build until the user opts in. The app detects
+// the waiting worker and shows an "update available" button (see
+// serviceWorkerUpdate.ts); clicking it posts SKIP_WAITING below.
+//
+// A first install still activates immediately (there is no active worker to wait
+// behind), so offline precaching works on first visit without any prompt.
+self.addEventListener('message', (event) => {
+  if ((event.data as { type?: string })?.type === 'SKIP_WAITING') {
+    void self.skipWaiting()
+  }
 })
 
-// Claim all clients immediately
+// Claim all clients immediately on activation (first install, and after a
+// user-approved SKIP_WAITING).
 self.addEventListener('activate', (event) => {
   event.waitUntil(self.clients.claim())
 })

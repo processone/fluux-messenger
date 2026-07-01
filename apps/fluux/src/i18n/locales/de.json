@@ -60,6 +60,7 @@
         "advancedMode": "Erweiterter Modus"
     },
     "sidebar": {
+        "updateAvailable": "Update verfügbar",
         "messages": "Nachrichten",
         "rooms": "Räume",
         "connections": "Kontakte",

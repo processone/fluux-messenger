@@ -60,6 +60,7 @@
         "advancedMode": "Išplėstinis režimas"
     },
     "sidebar": {
+        "updateAvailable": "Yra atnaujinimas",
         "messages": "Žinutės",
         "rooms": "Kambariai",
         "connections": "Ryšiai",

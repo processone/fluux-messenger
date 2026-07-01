@@ -60,6 +60,7 @@
         "advancedMode": "Modalità avanzata"
     },
     "sidebar": {
+        "updateAvailable": "Aggiornamento disponibile",
         "messages": "Messaggi",
         "rooms": "Stanze",
         "connections": "Contatti",

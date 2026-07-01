@@ -60,6 +60,7 @@
         "advancedMode": "Разширен режим"
     },
     "sidebar": {
+        "updateAvailable": "Налична актуализация",
         "messages": "Съобщения",
         "rooms": "Стаи",
         "connections": "Връзки",

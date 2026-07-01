@@ -60,6 +60,7 @@
         "advancedMode": "Розширений режим"
     },
     "sidebar": {
+        "updateAvailable": "Доступне оновлення",
         "messages": "Повідомлення",
         "rooms": "Кімнати",
         "connections": "Контакти",
