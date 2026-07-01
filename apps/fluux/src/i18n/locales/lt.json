@@ -1179,6 +1179,7 @@
         }
     },
     "commandPalette": {
+        "open": "Atverti komandų paletę",
         "placeholder": "Eiti į...",
         "noResults": "Rezultatų nerasta",
         "views": "Rodiniai",

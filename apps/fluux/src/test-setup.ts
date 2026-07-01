@@ -423,6 +423,7 @@ vi.mock('@fluux/sdk/react', () => ({
       getDraft: () => '',
       clearDraft: vi.fn(),
       roomsWithUnreadCount: () => 0,
+      roomTabIndicator: () => 'none',
       getMAMQueryState: () => ({ isLoading: false, hasMoreHistory: false }),
     }
     return selector ? selector(state) : state

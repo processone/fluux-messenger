@@ -1181,6 +1181,7 @@
         }
     },
     "commandPalette": {
+        "open": "Odpri ukazno paleto",
         "placeholder": "Pojdi na...",
         "noResults": "Ni najdenih rezultatov",
         "views": "Pogledi",

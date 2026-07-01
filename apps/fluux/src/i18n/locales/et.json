@@ -1181,6 +1181,7 @@
         }
     },
     "commandPalette": {
+        "open": "Ava käsupalett",
         "placeholder": "Mine...",
         "noResults": "Tulemusi ei leitud",
         "views": "Vaated",

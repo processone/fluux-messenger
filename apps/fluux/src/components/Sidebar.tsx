@@ -1,7 +1,7 @@
-import React, { useState, useRef, useEffect, type RefObject } from 'react'
+import React, { useState, useRef, useEffect, useCallback, type RefObject } from 'react'
 import { useTranslation } from 'react-i18next'
 import { detectRenderLoop, trackSelectorChange } from '@/utils/renderLoopDetector'
-import { useWindowDrag, useRouteSync } from '@/hooks'
+import { useWindowDrag, useRouteSync, useFollowUnarchivedActive } from '@/hooks'
 import { useModalStore } from '@/stores/modalStore'
 import { useUpdateAffordance } from '@/stores/appUpdateStore'
 import {
@@ -95,8 +95,7 @@ export function Sidebar({ onSelectContact, onStartChat, onStartChatWithJid, onMa
     return sum
   })
   const pendingRequestCount = useEventsStore((s) => s.subscriptionRequests.length)
-  const totalMentionsCount = useRoomStore((s) => s.totalMentionsCount())
-  const totalNotifiableUnreadCount = useRoomStore((s) => s.totalNotifiableUnreadCount())
+  const roomTabTone = useRoomStore((s) => s.roomTabIndicator())
 
   // Diagnostic: track every selector value per render. Dev-only (guarded inside
   // trackSelectorChange). Helps pinpoint unstable selectors causing render loops.
@@ -105,8 +104,7 @@ export function Sidebar({ onSelectContact, onStartChat, onStartChatWithJid, onMa
   trackSelectorChange('Sidebar', 'ownNickname', ownNickname)
   trackSelectorChange('Sidebar', 'isAdmin', isAdmin)
   trackSelectorChange('Sidebar', 'totalUnread', totalUnread)
-  trackSelectorChange('Sidebar', 'totalMentionsCount', totalMentionsCount)
-  trackSelectorChange('Sidebar', 'totalNotifiableUnreadCount', totalNotifiableUnreadCount)
+  trackSelectorChange('Sidebar', 'roomTabTone', roomTabTone)
   const { dragRegionProps } = useWindowDrag()
 
   // Per-modal subscriptions: the Sidebar owns these three modals and re-renders
@@ -128,6 +126,16 @@ export function Sidebar({ onSelectContact, onStartChat, onStartChatWithJid, onMa
   useEffect(() => {
     if (sidebarView !== 'messages') setShowArchived(false)
   }, [sidebarView])
+
+  // When the conversation you're viewing gets unarchived (by writing in it or
+  // receiving a message), return to the active list so it stays in context
+  // instead of vanishing from the filtered archive list.
+  const activeConversationId = useChatStore((s) => s.activeConversationId)
+  const isActiveArchived = useChatStore(
+    (s) => s.activeConversationId != null && s.archivedConversations.has(s.activeConversationId),
+  )
+  const showActiveList = useCallback(() => setShowArchived(false), [])
+  useFollowUnarchivedActive({ activeConversationId, isActiveArchived, showArchived, onShowActive: showActiveList })
 
   // Local UI state (not shared)
   const [showCreateRoom, setShowCreateRoom] = useState(false)
@@ -228,6 +236,7 @@ export function Sidebar({ onSelectContact, onStartChat, onStartChatWithJid, onMa
           pathPrefix="/messages"
           onNavigate={onViewChange}
           showBadge={totalUnread > 0}
+          tone="strong"
         />
         <IconRailNavLink
           icon={Hash}
@@ -235,7 +244,8 @@ export function Sidebar({ onSelectContact, onStartChat, onStartChatWithJid, onMa
           view="rooms"
           pathPrefix="/rooms"
           onNavigate={onViewChange}
-          showBadge={totalMentionsCount > 0 || totalNotifiableUnreadCount > 0}
+          showBadge={roomTabTone !== 'none'}
+          tone={roomTabTone === 'accent' ? 'accent' : 'neutral'}
         />
         {/* Search */}
         <IconRailNavLink

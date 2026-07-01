@@ -1180,6 +1180,7 @@
         }
     },
     "commandPalette": {
+        "open": "Atvērt komandu paleti",
         "placeholder": "Doties uz...",
         "noResults": "Rezultāti nav atrasti",
         "views": "Skati",

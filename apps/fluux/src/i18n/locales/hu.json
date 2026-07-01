@@ -1179,6 +1179,7 @@
         }
     },
     "commandPalette": {
+        "open": "Parancspaletta megnyitása",
         "placeholder": "Ugrás...",
         "noResults": "Nincs találat",
         "views": "Nézetek",

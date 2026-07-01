@@ -1181,6 +1181,7 @@
         }
     },
     "commandPalette": {
+        "open": "Abrir la paleta de comandos",
         "placeholder": "Ir a...",
         "noResults": "No se encontraron resultados",
         "views": "Vistas",

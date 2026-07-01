@@ -1179,6 +1179,7 @@
         }
     },
     "commandPalette": {
+        "open": "Open command palette",
         "placeholder": "Go to...",
         "noResults": "No results found",
         "views": "Views",

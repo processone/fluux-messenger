@@ -1179,6 +1179,7 @@
         }
     },
     "commandPalette": {
+        "open": "Opdrachtenpalet openen",
         "placeholder": "Ga naar...",
         "noResults": "Geen resultaten gevonden",
         "views": "Weergaven",
