@@ -10,7 +10,7 @@
  * - Auto-select first item when switching to content views
  */
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { chatStore, roomStore, searchStore, activityLogStore, type Contact } from '@fluux/sdk'
+import { chatStore, roomStore, searchStore, type Contact } from '@fluux/sdk'
 import { useChatStore, useRoomStore } from '@fluux/sdk/react'
 import { useRouteSync, type NavigateOptions } from './useRouteSync'
 import { isSmallScreen } from './useIsMobileWeb'
@@ -40,7 +40,6 @@ export interface ViewNavigationResult {
   navigateToMessages: (jid?: string, options?: NavigateOptions) => void
   navigateToRooms: (jid?: string, options?: NavigateOptions) => void
   navigateToContacts: (jid?: string, options?: NavigateOptions) => void
-  navigateToEvents: (options?: NavigateOptions) => void
   navigateToAdmin: (category?: string, options?: NavigateOptions) => void
   navigateToSettings: (category?: string, options?: NavigateOptions) => void
   navigateToSearch: (options?: NavigateOptions) => void
@@ -72,7 +71,6 @@ export function useViewNavigation(selectedContact: Contact | null): ViewNavigati
     navigateToMessages,
     navigateToRooms,
     navigateToContacts,
-    navigateToEvents,
     navigateToAdmin,
     navigateToSettings,
     navigateToSearch,
@@ -95,9 +93,8 @@ export function useViewNavigation(selectedContact: Contact | null): ViewNavigati
     // Skip on initial render or same view
     if (prevView === null || prevView === sidebarView) return
 
-    // Clear preview states when leaving search or events views
+    // Clear preview states when leaving search view
     if (prevView === 'search') searchStore.getState().setPreviewResult(null)
-    if (prevView === 'events') activityLogStore.getState().setPreviewEvent(null)
 
     // Read current state directly from stores to avoid stale closures
     const currentRoomJid = roomStore.getState().activeRoomJid
@@ -125,7 +122,6 @@ export function useViewNavigation(selectedContact: Contact | null): ViewNavigati
         if (currentConversationId) setActiveConversation(null)
         if (currentRoomJid) setActiveRoom(null)
         break
-      // events: no clearing needed
     }
   }, [sidebarView, setActiveConversation, setActiveRoom])
 
@@ -156,8 +152,6 @@ export function useViewNavigation(selectedContact: Contact | null): ViewNavigati
       setLastDirectoryContact(selectedContact)
     } else if (sidebarView === 'search') {
       searchStore.getState().setPreviewResult(null)
-    } else if (sidebarView === 'events') {
-      activityLogStore.getState().setPreviewEvent(null)
     }
 
     // Navigate to the new view via router
@@ -213,12 +207,6 @@ export function useViewNavigation(selectedContact: Contact | null): ViewNavigati
         // On small screens, don't auto-restore last contact - let user choose
         navigateToContacts(skipAutoSelect ? undefined : (lastDirectoryContact?.jid ?? undefined), { replace: true })
         break
-      case 'events':
-        // Events view has no main content - just show sidebar
-        setActiveConversation(null)
-        setActiveRoom(null)
-        navigateToEvents({ replace: true })
-        break
       case 'admin':
         setActiveConversation(null)
         setActiveRoom(null)
@@ -239,7 +227,7 @@ export function useViewNavigation(selectedContact: Contact | null): ViewNavigati
   }, [sidebarView, selectedContact, lastMessagesConversation, lastRoomsRoom, lastDirectoryContact,
       setActiveConversation, setActiveRoom, activateConversation, activateRoom,
       navigateToMessages, navigateToRooms, navigateToContacts,
-      navigateToEvents, navigateToAdmin, navigateToSettings, navigateToSearch])
+      navigateToAdmin, navigateToSettings, navigateToSearch])
 
   const perTabMemory: PerTabMemory = {
     lastMessagesConversation,
@@ -259,7 +247,6 @@ export function useViewNavigation(selectedContact: Contact | null): ViewNavigati
     navigateToMessages,
     navigateToRooms,
     navigateToContacts,
-    navigateToEvents,
     navigateToAdmin,
     navigateToSettings,
     navigateToSearch,

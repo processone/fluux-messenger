@@ -202,18 +202,6 @@ describe('useViewNavigation', () => {
       expect(mockSetActiveRoom).toHaveBeenCalledWith(null)
     })
 
-    it('should navigate to events view', () => {
-      const { result } = renderHook(() => useViewNavigation(null), {
-        wrapper: createWrapper('/messages'),
-      })
-
-      act(() => {
-        result.current.navigateToView('events')
-      })
-
-      expect(currentLocation.current.pathname).toBe('/events')
-    })
-
     it('should navigate to admin view', () => {
       const { result } = renderHook(() => useViewNavigation(null), {
         wrapper: createWrapper('/messages'),

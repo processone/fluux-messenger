@@ -161,7 +161,6 @@ describe('useSessionPersistence', () => {
         'messages',
         'rooms',
         'directory',
-        'events',
         'admin',
         'settings',
       ]
@@ -233,6 +232,20 @@ describe('useSessionPersistence', () => {
       mockStorage[VIEW_STATE_KEY] = JSON.stringify(legacyState)
       delete mockStorage[ACTIVE_SESSION_JID_KEY]
       // 'archive' is normalized to 'messages' on read
+      expect(getSavedViewState()?.sidebarView).toBe('messages')
+    })
+
+    it('should normalize persisted "events" view to "messages" (events rail removed)', () => {
+      const legacyState = {
+        sidebarView: 'events',
+        activeConversationId: null,
+        activeRoomJid: null,
+        selectedContactJid: null,
+      }
+
+      mockStorage[VIEW_STATE_KEY] = JSON.stringify(legacyState)
+      delete mockStorage[ACTIVE_SESSION_JID_KEY]
+      // 'events' is normalized to 'messages' on read
       expect(getSavedViewState()?.sidebarView).toBe('messages')
     })
 

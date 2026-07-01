@@ -14,7 +14,7 @@ export interface ShortcutDefinition {
   displayOnly?: boolean
 }
 
-type SidebarView = 'messages' | 'rooms' | 'directory' | 'events' | 'admin' | 'settings' | 'search'
+type SidebarView = 'messages' | 'rooms' | 'directory' | 'admin' | 'settings' | 'search'
 
 interface UseKeyboardShortcutsOptions {
   onToggleShortcutHelp: () => void
@@ -395,13 +395,6 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions): Shor
       description: 'shortcuts.connectionsView',
       category: 'navigation',
       action: () => onSidebarViewChange('directory'),
-    },
-    {
-      key: '4',
-      modifiers: ['alt'],
-      description: 'shortcuts.eventsView',
-      category: 'navigation',
-      action: () => onSidebarViewChange('events'),
     },
     {
       key: '0',

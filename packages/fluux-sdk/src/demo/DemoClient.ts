@@ -27,9 +27,7 @@ import { XMPPClient } from '../core/XMPPClient'
 import { connectionStore } from '../stores/connectionStore'
 import { chatStore } from '../stores/chatStore'
 import { roomStore } from '../stores/roomStore'
-import { activityLogStore } from '../stores/activityLogStore'
 import { eventsStore } from '../stores/eventsStore'
-import type { ActivityEventInput } from '../core/types/activity'
 import type { Contact } from '../core/types/roster'
 import type { Room, RoomMessage, RoomOccupant } from '../core/types/room'
 import type { DemoData, DemoAnimationStep } from './types'
@@ -386,12 +384,6 @@ export class DemoClient extends XMPPClient {
     }
     roomStore.setState({ mamQueryStates: roomMAM })
 
-    // Activity log: seed with demo events (direct store access since
-    // ActivityLogHook may not be registered yet at this point)
-    for (const event of data.activityEvents) {
-      activityLogStore.getState().addEvent(event)
-    }
-
     // Events store: seed pending subscription (add-contact) requests so the Contacts
     // destination shows them (badge + Requests section). Direct store access, same as
     // the activity-log seed above.
@@ -518,9 +510,6 @@ export class DemoClient extends XMPPClient {
         break
       case 'room-message-updated':
         this.emitSDK('room:message-updated', step.data as Parameters<typeof this.emitSDK<'room:message-updated'>>[1])
-        break
-      case 'activity-event':
-        activityLogStore.getState().addEvent(step.data as ActivityEventInput)
         break
       case 'custom':
         this.emitSDK('demo:custom', step.data as Parameters<typeof this.emitSDK<'demo:custom'>>[1])

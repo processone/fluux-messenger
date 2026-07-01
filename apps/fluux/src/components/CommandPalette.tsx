@@ -8,7 +8,6 @@ import {
   Settings,
   HelpCircle,
   Terminal,
-  Bell,
   Users,
   Search,
 } from 'lucide-react'
@@ -394,7 +393,6 @@ function CommandPaletteContent({
       { id: 'view-messages', label: t('sidebar.messages'), icon: <MessageSquare />, view: 'messages', keywords: ['messages', 'conversations', 'chat'] },
       { id: 'view-rooms', label: t('sidebar.rooms'), icon: <Hash />, view: 'rooms', keywords: ['rooms', 'channels', 'muc'] },
       { id: 'view-connections', label: t('sidebar.contacts'), icon: <Users />, view: 'directory', keywords: ['connections', 'contacts', 'roster'] },
-      { id: 'view-events', label: t('sidebar.events'), icon: <Bell />, view: 'events', keywords: ['events', 'notifications', 'requests'] },
     ]
 
     for (const v of views) {

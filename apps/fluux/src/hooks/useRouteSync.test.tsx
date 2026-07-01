@@ -78,11 +78,11 @@ describe('useRouteSync', () => {
       expect(result.current.sidebarView).toBe('messages')
     })
 
-    it('returns "events" for /events', () => {
+    it('returns "messages" for /events (removed view, falls back to messages)', () => {
       const { result } = renderHook(() => useRouteSync(), {
         wrapper: createWrapper(['/events']),
       })
-      expect(result.current.sidebarView).toBe('events')
+      expect(result.current.sidebarView).toBe('messages')
     })
 
     it('returns "admin" for /admin', () => {
@@ -291,24 +291,6 @@ describe('useRouteSync', () => {
       expect(currentPath).toBe('/contacts')
     })
 
-    it('navigateToEvents navigates to /events', () => {
-      let currentPath = '/messages'
-      const wrapper = ({ children }: { children: ReactNode }) => (
-        <MemoryRouter initialEntries={['/messages']}>
-          {children}
-          <LocationCapture onPathChange={(p) => (currentPath = p)} />
-        </MemoryRouter>
-      )
-
-      const { result } = renderHook(() => useRouteSync(), { wrapper })
-
-      act(() => {
-        result.current.navigateToEvents()
-      })
-
-      expect(currentPath).toBe('/events')
-    })
-
     it('navigateToAdmin navigates to /admin', () => {
       let currentPath = '/messages'
       const wrapper = ({ children }: { children: ReactNode }) => (
@@ -462,10 +444,6 @@ describe('useRouteSync', () => {
 
     it('returns /contacts for directory view', () => {
       expect(getViewPath('directory')).toBe('/contacts')
-    })
-
-    it('returns /events for events view', () => {
-      expect(getViewPath('events')).toBe('/events')
     })
 
     it('returns /admin for admin view', () => {

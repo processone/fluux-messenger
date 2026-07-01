@@ -18,7 +18,6 @@ import {
   adminStore,
   blockingStore,
   ignoreStore,
-  activityLogStore,
   searchStore,
 } from '../stores'
 import type { ConnectionState } from '../stores/connectionStore'
@@ -30,7 +29,6 @@ import type { RoomState } from '../stores/roomStore'
 import type { AdminState } from '../stores/adminStore'
 import type { BlockingState } from '../stores/blockingStore'
 import type { IgnoreState } from '../stores/ignoreStore'
-import type { ActivityLogState } from '../stores/activityLogStore'
 import type { SearchState } from '../stores/searchStore'
 
 /**
@@ -121,16 +119,6 @@ export function useIgnoreStore<T = IgnoreState>(
   selector: (state: IgnoreState) => T = (state) => state as unknown as T
 ): T {
   return useStore(ignoreStore, selector)
-}
-
-/**
- * React hook for the activity log store.
- * @param selector - Optional selector function to pick specific state
- */
-export function useActivityLogStore<T = ActivityLogState>(
-  selector: (state: ActivityLogState) => T = (state) => state as unknown as T
-): T {
-  return useStore(activityLogStore, selector)
 }
 
 /**

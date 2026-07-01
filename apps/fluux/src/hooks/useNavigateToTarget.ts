@@ -4,7 +4,6 @@
  * Used by:
  * - useDeepLink: when opening xmpp: URIs
  * - useDesktopNotifications: when clicking notifications
- * - ActivityLogView: when clicking an activity event
  *
  * Phase 2.4: Uses React Router for navigation instead of callback handlers.
  */

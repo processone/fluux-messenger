@@ -24,7 +24,6 @@ vi.mock('./sidebar-components', () => ({
   ArchiveList: () => <div data-testid="archived-list" />,
   ContactList: () => null,
   RoomsList: () => null,
-  ActivityLogView: () => null,
   SearchView: () => null,
   UserMenu: () => null,
 }))

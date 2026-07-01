@@ -12,7 +12,6 @@
 import type { Contact } from '../core/types/roster'
 import type { Message, Conversation } from '../core/types/chat'
 import type { Room, RoomMessage, RoomOccupant } from '../core/types/room'
-import type { ActivityEventInput } from '../core/types/activity'
 
 /** Identity of the demo user (self). */
 export interface DemoSelf {
@@ -54,7 +53,6 @@ export interface DemoAnimationStep {
     | 'room-typing'
     | 'message-updated'
     | 'room-message-updated'
-    | 'activity-event'
     | 'custom'
   data: Record<string, unknown>
 }
@@ -79,7 +77,6 @@ export interface DemoData {
   conversations: Conversation[]
   messages: Map<string, Message[]>
   rooms: DemoRoomData[]
-  activityEvents: ActivityEventInput[]
   /** Bare JIDs that have sent a presence-subscription (add-contact) request. Seeded into eventsStore. */
   subscriptionRequests?: string[]
   /** Pending room invitations to seed into eventsStore (Rooms "Invitations" banner). */

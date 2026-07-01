@@ -632,12 +632,12 @@ describe('CommandPalette', () => {
       render(<CommandPalette {...defaultProps} />)
       const input = screen.getByPlaceholderText('Go to...')
 
-      fireEvent.change(input, { target: { value: 'events' } })
+      fireEvent.change(input, { target: { value: 'rooms' } })
 
-      const eventsItem = screen.getByText('Events').closest('button')
-      fireEvent.click(eventsItem!)
+      const roomsItem = screen.getByText('Rooms').closest('button')
+      fireEvent.click(roomsItem!)
 
-      expect(defaultProps.onSidebarViewChange).toHaveBeenCalledWith('events')
+      expect(defaultProps.onSidebarViewChange).toHaveBeenCalledWith('rooms')
       expect(defaultProps.onClose).toHaveBeenCalled()
     })
   })

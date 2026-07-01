@@ -97,7 +97,6 @@ export {
   useAdminStore,
   useBlockingStore,
   useIgnoreStore,
-  useActivityLogStore,
   useSearchStore,
 } from './storeHooks'
 

@@ -27,7 +27,6 @@ import {
   Settings,
   Plus,
   Users,
-  Bell,
   Archive,
   Server,
   Zap,
@@ -55,7 +54,6 @@ import {
   ArchiveList,
   ContactList,
   RoomsList,
-  ActivityLogView,
   SearchView,
   UserMenu,
 } from './sidebar-components'
@@ -254,14 +252,6 @@ export function Sidebar({ onSelectContact, onStartChat, onStartChatWithJid, onMa
           onNavigate={onViewChange}
           showBadge={totalMentionsCount > 0 || totalNotifiableUnreadCount > 0}
         />
-        {/* Events/Notifications */}
-        <IconRailNavLink
-          icon={Bell}
-          label={t('sidebar.events')}
-          view="events"
-          pathPrefix="/events"
-          onNavigate={onViewChange}
-        />
         {/* Search */}
         <IconRailNavLink
           icon={Search}
@@ -321,8 +311,7 @@ export function Sidebar({ onSelectContact, onStartChat, onStartChatWithJid, onMa
               : sidebarView === 'directory' ? t('sidebar.contacts')
               : sidebarView === 'admin' ? t('sidebar.admin')
               : sidebarView === 'settings' ? t('sidebar.settings')
-              : sidebarView === 'search' ? t('sidebar.search', 'Search')
-              : t('sidebar.events')}
+              : t('sidebar.search', 'Search')}
           </h1>
           {sidebarView === 'directory' && (
             <div className="relative ms-auto" ref={contactDropdownRef}>
@@ -471,9 +460,7 @@ export function Sidebar({ onSelectContact, onStartChat, onStartChatWithJid, onMa
                   activeCategory={(settingsCategory as SettingsCategory) || DEFAULT_SETTINGS_CATEGORY}
                   onCategoryChange={(category) => navigateToSettings(category)}
                 />
-              ) : (
-                <ActivityLogView />
-              )}
+              ) : null}
               </div>
             </SidebarZoneContext.Provider>
           </div>

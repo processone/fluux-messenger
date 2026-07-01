@@ -216,12 +216,6 @@ vi.mock('@fluux/sdk', () => ({
       setPendingSelectedUserJid: vi.fn(),
     }),
   },
-  activityLogStore: {
-    getState: () => ({
-      previewEvent: null,
-      setPreviewEvent: vi.fn(),
-    }),
-  },
 }))
 
 // Mock React store hooks (from @fluux/sdk/react)
@@ -325,9 +319,6 @@ vi.mock('@fluux/sdk/react', () => ({
   useSearchStore: (selector: (state: { previewResult: null }) => unknown) => {
     return selector({ previewResult: null })
   },
-  useActivityLogStore: (selector: (state: { previewEvent: null }) => unknown) => {
-    return selector({ previewEvent: null })
-  },
 }))
 
 // Mock app hooks
@@ -412,7 +403,6 @@ vi.mock('./Sidebar', () => ({
       '/messages': 'messages',
       '/rooms': 'rooms',
       '/contacts': 'directory',
-      '/events': 'events',
       '/admin': 'admin',
     }
     const activeView = pathToView[location.pathname.split('/')[1] ? `/${location.pathname.split('/')[1]}` : '/messages'] || 'messages'
@@ -423,7 +413,6 @@ vi.mock('./Sidebar', () => ({
         <NavLink to="/rooms" data-testid="rooms-tab">Rooms</NavLink>
         <NavLink to="/contacts" data-testid="directory-tab">Connections</NavLink>
         <NavLink to="/archive" data-testid="archive-tab">Archive</NavLink>
-        <NavLink to="/events" data-testid="events-tab">Events</NavLink>
         {/* Deep links simulate a URL-only change (browser back/forward, edge-swipe popstate):
             the URL moves to a detail route without any click handler updating the store */}
         <NavLink to="/messages/bob@example.com" data-testid="deep-conversation-link">Deep Conversation</NavLink>
@@ -663,25 +652,6 @@ describe('ChatLayout - Tab Memory', () => {
         expect(screen.getByTestId('contact-profile-view')).toBeInTheDocument()
         expect(screen.getByText('Contact: Alice Smith')).toBeInTheDocument()
       })
-    })
-  })
-
-  describe('Events tab', () => {
-    it('should preserve content when switching to Events tab', async () => {
-      // Start with an active conversation
-      setMockState({ activeConversationId: 'bob@example.com' })
-
-      render(<ChatLayoutWithRouter />)
-
-      expect(screen.getByTestId('chat-view')).toBeInTheDocument()
-
-      // Switch to Events tab
-      fireEvent.click(screen.getByTestId('events-tab'))
-
-      // Content should be preserved (conversation still visible)
-      expect(screen.getByTestId('chat-view')).toBeInTheDocument()
-      // Should NOT have cleared the conversation
-      expect(mockSetActiveConversation).not.toHaveBeenCalledWith(null)
     })
   })
 

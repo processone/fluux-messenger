@@ -10,7 +10,6 @@ import { SELF, DOMAIN, CONFERENCE } from './constants'
 import { DEMO_CONTACTS, DEMO_PRESENCES } from './contacts'
 import { getDemoConversations, getDemoMessages } from './conversations'
 import { getDemoRooms } from './rooms'
-import { getDemoActivityEvents } from './activityEvents'
 import { buildDemoAnimation } from './animation'
 
 /** Build all demo data with fresh relative timestamps. */
@@ -22,7 +21,6 @@ export function buildDemoData(): DemoData {
     conversations: getDemoConversations(),
     messages: getDemoMessages(),
     rooms: getDemoRooms(),
-    activityEvents: getDemoActivityEvents(),
     subscriptionRequests: [`olivia@${DOMAIN}`, `alex@${DOMAIN}`],
     mucInvitations: [
       { roomJid: `design-team@${CONFERENCE}`, from: `ava@${DOMAIN}`, reason: 'Join us for the redesign kickoff' },

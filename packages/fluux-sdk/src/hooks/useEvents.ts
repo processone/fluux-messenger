@@ -1,10 +1,9 @@
 import { useCallback, useMemo } from 'react'
-import { connectionStore, chatStore, activityLogStore } from '../stores'
+import { connectionStore, chatStore } from '../stores'
 import { useEventsStore } from '../react/storeHooks'
 import { useXMPPContext } from '../provider'
 import { getLocalPart } from '../core/jid'
 import type { Conversation } from '../core'
-import type { ActivityPayload } from '../core/types/activity'
 
 /**
  * Hook for managing pending events and notifications.
@@ -86,21 +85,6 @@ import type { ActivityPayload } from '../core/types/activity'
  *
  * @category Hooks
  */
-/**
- * Resolve a matching activity log event by payload predicate.
- */
-function resolveActivityEvent(
-  predicate: (payload: ActivityPayload) => boolean,
-  resolution: 'accepted' | 'rejected' | 'dismissed'
-): void {
-  const event = activityLogStore.getState().findEvent(
-    (e) => e.resolution === 'pending' && predicate(e.payload)
-  )
-  if (event) {
-    activityLogStore.getState().resolveEvent(event.id, resolution)
-  }
-}
-
 export function useEvents() {
   const { client } = useXMPPContext()
   const subscriptionRequests = useEventsStore((s) => s.subscriptionRequests)
@@ -114,10 +98,6 @@ export function useEvents() {
   const acceptSubscription = useCallback(
     async (jid: string) => {
       await client.roster.acceptSubscription(jid)
-      resolveActivityEvent(
-        (p) => p.type === 'subscription-request' && p.from === jid,
-        'accepted'
-      )
     },
     [client]
   )
@@ -125,10 +105,6 @@ export function useEvents() {
   const rejectSubscription = useCallback(
     async (jid: string) => {
       await client.roster.rejectSubscription(jid)
-      resolveActivityEvent(
-        (p) => p.type === 'subscription-request' && p.from === jid,
-        'rejected'
-      )
     },
     [client]
   )
@@ -164,10 +140,6 @@ export function useEvents() {
 
       // Remove from stranger messages
       removeStrangerMessages(jid)
-      resolveActivityEvent(
-        (p) => p.type === 'stranger-message' && p.from === jid,
-        'accepted'
-      )
     },
     [client, strangerMessages, removeStrangerMessages]
   )
@@ -176,10 +148,6 @@ export function useEvents() {
   const ignoreStranger = useCallback(
     (jid: string) => {
       removeStrangerMessages(jid)
-      resolveActivityEvent(
-        (p) => p.type === 'stranger-message' && p.from === jid,
-        'dismissed'
-      )
     },
     [removeStrangerMessages]
   )
@@ -198,18 +166,9 @@ export function useEvents() {
   // Dismiss a system notification
   const dismissNotification = useCallback(
     (id: string) => {
-      // Find the notification before removing to get its type for activity log resolution
-      const notification = systemNotifications.find((n) => n.id === id)
       removeSystemNotification(id)
-      if (notification) {
-        resolveActivityEvent(
-          (p) => (p.type === 'resource-conflict' || p.type === 'auth-error' || p.type === 'connection-error')
-            && p.title === notification.title,
-          'dismissed'
-        )
-      }
     },
-    [removeSystemNotification, systemNotifications]
+    [removeSystemNotification]
   )
 
   // Accept MUC invitation: join the room with optional password
@@ -229,10 +188,6 @@ export function useEvents() {
 
       // Remove from invitations
       removeMucInvitation(roomJid)
-      resolveActivityEvent(
-        (p) => p.type === 'muc-invitation' && p.roomJid === roomJid,
-        'accepted'
-      )
     },
     [client, mucInvitations, removeMucInvitation]
   )
@@ -241,10 +196,6 @@ export function useEvents() {
   const declineInvitation = useCallback(
     (roomJid: string) => {
       removeMucInvitation(roomJid)
-      resolveActivityEvent(
-        (p) => p.type === 'muc-invitation' && p.roomJid === roomJid,
-        'rejected'
-      )
     },
     [removeMucInvitation]
   )

@@ -26,7 +26,6 @@ function makeMinimalDemoData(
     conversations: [],
     messages: new Map(),
     rooms: [],
-    activityEvents: [],
     ...overrides,
   }
 }

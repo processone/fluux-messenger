@@ -14,7 +14,6 @@ const SettingsView = lazy(() => import('./SettingsView').then(m => ({ default: m
 const AdminView = lazy(() => import('./AdminView').then(m => ({ default: m.AdminView })))
 const XmppConsole = lazy(() => import('./XmppConsole').then(m => ({ default: m.XmppConsole })))
 const SearchContextView = lazy(() => import('./SearchContextView').then(m => ({ default: m.SearchContextView })))
-const ActivityContextView = lazy(() => import('./ActivityContextView').then(m => ({ default: m.ActivityContextView })))
 const StrangerRequestPreviewView = lazy(() => import('./StrangerRequestPreviewView').then(m => ({ default: m.StrangerRequestPreviewView })))
 import { ShortcutHelp } from './ShortcutHelp'
 import { CommandPalette } from './CommandPalette'
@@ -23,13 +22,13 @@ import { ToastContainer } from './ToastContainer'
 import { CreateRoomModal } from './CreateRoomModal'
 import {
   // Vanilla stores for imperative .getState() access
-  chatStore, roomStore, consoleStore, adminStore, rosterStore, searchStore, activityLogStore,
+  chatStore, roomStore, consoleStore, adminStore, rosterStore, searchStore,
   useRosterActions, useContactIdentities, useEvents, useBlocking, getBareJid,
   type Contact, type Conversation, type AdminCategory
 } from '@fluux/sdk'
 import { useMessageRequestPreviewStore } from '@/stores/messageRequestPreviewStore'
 // React hook wrappers for reactive subscriptions
-import { useChatStore, useRoomStore, useRosterStore, useConnectionStore, useConsoleStore, useAdminStore, useSearchStore, useActivityLogStore } from '@fluux/sdk/react'
+import { useChatStore, useRoomStore, useRosterStore, useConnectionStore, useConsoleStore, useAdminStore, useSearchStore } from '@fluux/sdk/react'
 import { useNotificationBadge } from '@/hooks/useNotificationBadge'
 import { useDesktopNotifications } from '@/hooks/useDesktopNotifications'
 import { useWebPush } from '@/hooks/useWebPush'
@@ -43,7 +42,7 @@ import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
 import { useDeepLink } from '@/hooks/useDeepLink'
 import { saveViewState, getSavedViewState, type ViewStateData } from '@/hooks/useSessionPersistence'
 import { useModalStore } from '@/stores/modalStore'
-import { Server, ShieldOff, MessageCircle, Hash, Users, Bell, Search, Settings, Plus, type LucideIcon } from 'lucide-react'
+import { Server, ShieldOff, MessageCircle, Hash, Users, Search, Settings, Plus, type LucideIcon } from 'lucide-react'
 
 /**
  * ChatLayout wrapper. The actual layout logic is in ChatLayoutContent; modal state
@@ -197,7 +196,6 @@ function ChatLayoutContent() {
   const roomActivationPending = useRoomStore((s) => s.activationPending)
   const activationPending = chatActivationPending || roomActivationPending
   const searchPreviewResult = useSearchStore((s) => s.previewResult)
-  const activityPreviewEvent = useActivityLogStore((s) => s.previewEvent)
   // Read-only message-request preview (transient; set by the Message-requests banner).
   const previewJid = useMessageRequestPreviewStore((s) => s.previewJid)
   const setPreviewJid = useMessageRequestPreviewStore((s) => s.setPreviewJid)
@@ -280,7 +278,6 @@ function ChatLayoutContent() {
     navigateToMessages,
     navigateToRooms,
     navigateToContacts,
-    navigateToEvents,
     navigateToAdmin,
     navigateToSettings,
     navigateToSearch,
@@ -376,9 +373,6 @@ function ChatLayoutContent() {
         case 'directory':
           navigateToContacts(savedViewState.selectedContactJid ?? undefined)
           break
-        case 'events':
-          navigateToEvents()
-          break
         case 'admin':
           navigateToAdmin()
           break
@@ -387,7 +381,7 @@ function ChatLayoutContent() {
           break
       }
     }
-  }, [activateConversation, activateRoom, navigateToMessages, navigateToRooms, navigateToContacts, navigateToEvents, navigateToAdmin, navigateToSettings])
+  }, [activateConversation, activateRoom, navigateToMessages, navigateToRooms, navigateToContacts, navigateToAdmin, navigateToSettings])
 
   // Save view state when it changes (only when online)
   useEffect(() => {
@@ -571,7 +565,7 @@ function ChatLayoutContent() {
   const adminHasMainContent = adminSession || adminCategory === 'users' || adminCategory === 'rooms' || adminCategory === 'stats'
   // Settings: only show content when a category is explicitly selected (on mobile, let user choose from sidebar first)
   const settingsHasContent = sidebarView === 'settings' && !!settingsCategory
-  const hasActiveContent = !!(activeConversationId || activeRoomJid || selectedContact || adminHasMainContent || settingsHasContent || searchPreviewResult || activityPreviewEvent || previewJid)
+  const hasActiveContent = !!(activeConversationId || activeRoomJid || selectedContact || adminHasMainContent || settingsHasContent || searchPreviewResult || previewJid)
 
   // Toggle shortcut help overlay
   const toggleShortcutHelp = () => {
@@ -944,10 +938,6 @@ function ChatLayoutContent() {
             <Suspense fallback={<ViewLoadingFallback />}>
               <SearchContextView onBack={() => searchStore.getState().setPreviewResult(null)} />
             </Suspense>
-          ) : activityPreviewEvent ? (
-            <Suspense fallback={<ViewLoadingFallback />}>
-              <ActivityContextView onBack={() => activityLogStore.getState().setPreviewEvent(null)} />
-            </Suspense>
           ) : activationPending ? (
             // A hydrating activation is in flight (cache load before the active id
             // lands). Hold the neutral loading surface — matching the lazy views
@@ -1060,12 +1050,6 @@ function EmptyState({ sidebarView, primaryAction }: { sidebarView: SidebarView; 
           title: t('emptyState.directory.title'),
           description: t('emptyState.directory.description'),
           hint: t('emptyState.directory.hint'),
-        }
-      case 'events':
-        return {
-          Icon: Bell,
-          title: t('emptyState.events.title'),
-          description: t('emptyState.events.description'),
         }
       case 'admin':
         return {

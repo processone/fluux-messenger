@@ -23,7 +23,6 @@ function makeMinimalDemoData(subscriptionRequests: string[]): DemoData {
     conversations: [],
     messages: new Map(),
     rooms: [],
-    activityEvents: [],
     subscriptionRequests,
   }
 }

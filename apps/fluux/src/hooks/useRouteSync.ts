@@ -13,7 +13,6 @@
  * - /contacts/:jid      → directory view, contact profile selected
  * - /archive            → archive view, no selection
  * - /archive/:jid       → archive view, archived conversation selected
- * - /events             → events view
  * - /admin              → admin view, no category
  * - /admin/:category    → admin view, category selected
  * - /settings           → settings view
@@ -53,8 +52,6 @@ export interface RouteActions {
   navigateToRooms: (jid?: string, options?: NavigateOptions) => void
   /** Navigate to contacts/directory view, optionally selecting a contact */
   navigateToContacts: (jid?: string, options?: NavigateOptions) => void
-  /** Navigate to events view */
-  navigateToEvents: (options?: NavigateOptions) => void
   /** Navigate to admin view, optionally selecting a category */
   navigateToAdmin: (category?: string, options?: NavigateOptions) => void
   /** Navigate to settings view, optionally selecting a category */
@@ -78,9 +75,6 @@ function parseRoute(pathname: string): SidebarView {
   }
   if (pathname.startsWith('/contacts')) {
     return 'directory'
-  }
-  if (pathname.startsWith('/events')) {
-    return 'events'
   }
   if (pathname.startsWith('/admin')) {
     return 'admin'
@@ -217,11 +211,6 @@ export function useRouteSync(): RouteState & RouteActions {
     }
   }, [navigate])
 
-  const navigateToEvents = useCallback((options?: NavigateOptions) => {
-    const opts = options?.replace ? { replace: true } : undefined
-    void navigate('/events', opts)
-  }, [navigate])
-
   const navigateToAdmin = useCallback((category?: string, options?: NavigateOptions) => {
     const opts = options?.replace ? { replace: true } : undefined
     if (category) {
@@ -273,7 +262,6 @@ export function useRouteSync(): RouteState & RouteActions {
     navigateToMessages,
     navigateToRooms,
     navigateToContacts,
-    navigateToEvents,
     navigateToAdmin,
     navigateToSettings,
     navigateToSearch,
