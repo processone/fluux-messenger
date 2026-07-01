@@ -1,9 +1,5 @@
 import { useEffect, useRef, type RefObject } from 'react'
-
-// Tab-order focusable elements, excluding programmatically-removed ones.
-const FOCUSABLE_SELECTOR =
-  'input:not([disabled]), textarea:not([disabled]), select:not([disabled]), ' +
-  'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])'
+import { FOCUSABLE_SELECTOR } from './focusable'
 
 /**
  * Keeps keyboard focus inside an open modal/overlay across OS window blur and
