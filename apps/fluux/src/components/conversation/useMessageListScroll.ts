@@ -516,10 +516,22 @@ export function useMessageListScroll({
       const element = contentRef.current
       if (!scroller || !element || contentObserverRef.current) return
 
-      const { staticMode, isAtBottomRef } = latestRef.current
+      const { staticMode, isAtBottomRef, virtualizer } = latestRef.current
 
-      // On mount: if we should be at bottom, scroll there immediately
-      if (isAtBottomRef.current && !staticMode) {
+      // On mount: if we should be at bottom, scroll there immediately.
+      //
+      // NON-VIRTUALIZED ONLY. Under virtualization the conversation-switch layout effect (which
+      // also runs on this same fresh mount — MessageList is keyed by conversation id, so every
+      // entry remounts and prevConversationRef starts null) owns the initial bottom positioning
+      // via pinVirtualizedBottom() → scrollToIndex(last,'end'). That target is MEASUREMENT-AWARE;
+      // this legacy raw `scrollTop = scrollHeight` predates virtualization and lands on the
+      // @tanstack spacer's ESTIMATED total instead — a different pixel. Running both on entry (the
+      // raw write here, plus its one-frame-later rAF, against the pin's scrollToIndex) positions
+      // the view twice at two slightly different bottoms, so it visibly nudges up/down before it
+      // settles. Gating on !virtualizer leaves the non-virtualized path byte-identical while
+      // letting the (virtualization-aware) switch effect be the single source of bottom positioning
+      // — the same migration already applied to the switch effect's own else branch.
+      if (isAtBottomRef.current && !staticMode && !virtualizer) {
         void scroller.offsetHeight // Force reflow
         scroller.scrollTop = scroller.scrollHeight
         requestAnimationFrame(() => {
