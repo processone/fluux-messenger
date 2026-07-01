@@ -848,26 +848,17 @@ html, body {
   -webkit-overflow-scrolling: touch;
 }
 
-/* First-level quote — a recessed card with an accent edge and a single opening
-   mark (Aurora). Nested levels use a plain accent line (.blockquote-nested). */
+/* First-level quote — a recessed card with a single accent edge (Aurora). The
+   card + bar is the sole "quote" cue; no quotation glyph, so short quotes don't
+   float beside an empty gutter and the block never doubles its own signal.
+   Nested levels use a plain accent line (.blockquote-nested). */
 .blockquote-decorated {
   position: relative;
   border-left: 2px solid var(--fluux-brand);
   background: var(--fluux-bg-secondary);
   border-radius: 0 var(--fluux-radius-m) var(--fluux-radius-m) 0;
-  padding: 0.4rem 0.7rem 0.45rem 2.1rem;
+  padding: 0.4rem 0.75rem 0.45rem;
   margin-block: 0.25rem;
-}
-.blockquote-decorated::before {
-  content: '\201C';
-  position: absolute;
-  left: 0.55rem;
-  top: 0.15rem;
-  font-size: 1.4rem;
-  line-height: 1;
-  color: var(--fluux-brand);
-  opacity: 0.55;
-  font-family: Georgia, 'Times New Roman', serif;
 }
 /* Nested blockquote level — indented with a thin left border, no extra quote marks */
 .blockquote-nested {
