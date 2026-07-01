@@ -32,12 +32,15 @@ void i18n.use(initReactI18next).init({
           dismiss: 'Dismiss',
           back: 'Back',
           forward: 'Forward',
+          options: 'Options',
         },
         // Sidebar labels reused by the AppBar (search / settings)
         sidebar: {
           search: 'Search',
           settings: 'Settings',
           contacts: 'Contacts',
+          addContact: 'Add contact',
+          blockedUsers: 'Blocked users',
         },
         newMessage: {
           title: 'New message',
