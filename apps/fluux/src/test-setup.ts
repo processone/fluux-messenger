@@ -58,6 +58,13 @@ void i18n.use(initReactI18next).init({
         rooms: {
           backToRooms: 'Back to rooms',
           invitationsHeading: 'Invitations',
+          createQuickChat: 'Create Quick Chat',
+          createRoom: 'Create Room',
+          quickChat: 'Quick Chat',
+          permanentRoom: 'Permanent Room',
+          joinRoom: 'Join room',
+          browseRooms: 'Browse Rooms',
+          catchUpAll: 'Catch up all rooms',
         },
         messages: {
           showArchived: 'Show archived conversations',

@@ -112,4 +112,48 @@ describe('OverflowMenu', () => {
     const item = screen.getByRole('menuitemcheckbox', { name: 'Advanced mode' })
     expect(item).toHaveAttribute('aria-checked', 'false')
   })
+
+  it('renders a custom trigger instead of the kebab and toggles the menu', () => {
+    render(
+      <OverflowMenu
+        ariaLabel="Create room"
+        items={makeItems()}
+        renderTrigger={({ isOpen, toggle }) => (
+          <button type="button" onClick={toggle} aria-expanded={isOpen}>
+            Custom trigger
+          </button>
+        )}
+      />,
+    )
+
+    // Default kebab (named by ariaLabel) is not rendered when renderTrigger is provided.
+    expect(screen.queryByRole('button', { name: 'Create room' })).not.toBeInTheDocument()
+
+    const trigger = screen.getByRole('button', { name: 'Custom trigger' })
+    expect(screen.queryByText('View profile')).not.toBeInTheDocument()
+
+    fireEvent.click(trigger)
+    expect(screen.getByText('View profile')).toBeInTheDocument()
+  })
+
+  it('closes the menu via the close helper passed to a custom trigger', () => {
+    render(
+      <OverflowMenu
+        ariaLabel="Create room"
+        items={makeItems()}
+        renderTrigger={({ isOpen, toggle, close }) => (
+          <>
+            <button type="button" onClick={toggle} aria-expanded={isOpen}>Toggle</button>
+            <button type="button" onClick={close}>Close it</button>
+          </>
+        )}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Toggle' }))
+    expect(screen.getByText('View profile')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Close it' }))
+    expect(screen.queryByText('View profile')).not.toBeInTheDocument()
+  })
 })
