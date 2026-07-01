@@ -764,6 +764,47 @@ export function useMessageListScroll({
       }
     }
 
+    // ---- DIAGNOSTIC (temporary — cold-open send-stick root-cause) --------------------------------
+    // distFromBottom (scrollHeight - scrollTop - clientHeight) reads 0 even while the send is visibly
+    // stranded, so it is the wrong probe. The USER-VISIBLE metric is how far the LAST message row's
+    // bottom sits below the viewport bottom (overflowBelow > 0 = stranded). Log that plus the DOM
+    // spacer height, the virtualizer's getTotalSize, scrollTop and clientHeight so we can see whether
+    // the spacer under-counts the rendered content, and WHEN it grows.
+    const tailGeo = () => {
+      const ss = scrollerRef.current
+      const rows = ss?.querySelectorAll('[data-message-id]')
+      const last = rows && rows.length ? (rows[rows.length - 1] as HTMLElement) : null
+      const sBottom = ss ? ss.getBoundingClientRect().bottom : 0
+      return {
+        lastId: last?.getAttribute('data-message-id')?.slice(0, 8) ?? null,
+        overflowBelow: last ? Math.round(last.getBoundingClientRect().bottom - sBottom) : null,
+        scrollHeight: ss?.scrollHeight ?? -1,
+        totalSize: Math.round(virtualizerRef.current?.getTotalSize() ?? -1),
+        scrollTop: Math.round(ss?.scrollTop ?? -1),
+        clientHeight: ss?.clientHeight ?? -1,
+      }
+    }
+    // After the pin settles, watch the tail geometry for ~2s (read-only). Logs the first frame the
+    // last row's bottom-overflow jumps (the late growth that strands the just-sent message) and a
+    // final reading, so we can time the growth and see what the spacer/getTotalSize did.
+    const watchStrandAfterSettle = () => {
+      const base = tailGeo().overflowBelow ?? 0
+      let frames = 0
+      let logged = false
+      const tick = () => {
+        frames++
+        const g = tailGeo()
+        if (!logged && g.overflowBelow != null && g.overflowBelow - base > 8) {
+          logged = true
+          debugLog('POST-SETTLE STRAND', { framesAfterSettle: frames, deltaOverflow: (g.overflowBelow ?? 0) - base, ...g })
+        }
+        if (frames < 120) requestAnimationFrame(tick)
+        else debugLog('POST-SETTLE final', { frames, ...g })
+      }
+      requestAnimationFrame(tick)
+    }
+    // ---------------------------------------------------------------------------------------------
+
     // Immediate pin (pre-paint when called from a layout effect).
     flushTailLayout()
     virt.scrollToIndex(virt.itemCount - 1, { align: 'end' })
@@ -828,7 +869,8 @@ export function useMessageListScroll({
       else framesLeft = BOTTOM_REASSERT_FRAMES
       if (hardFramesLeft-- <= 0 || (converged && framesLeft <= 0)) {
         isAtBottomRef.current = trueDist < AT_BOTTOM_THRESHOLD
-        debugLog('PIN settled', { distFromBottom: trueDist, converged })
+        debugLog('PIN settled', { distFromBottom: trueDist, converged, ...tailGeo() })
+        watchStrandAfterSettle() // DIAGNOSTIC (temporary)
         finish()
         return
       }
