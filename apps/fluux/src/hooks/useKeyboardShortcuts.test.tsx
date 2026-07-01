@@ -900,7 +900,7 @@ describe('useKeyboardShortcuts', () => {
     })
   })
 
-  describe('Search View (Cmd+Shift+F / Alt+6)', () => {
+  describe('Search View (Cmd+Shift+F / Alt+3)', () => {
     it('should include Cmd+Shift+F shortcut for search view', () => {
       const options = createDefaultOptions()
       const { result } = renderHook(() => useKeyboardShortcuts(options))
@@ -923,26 +923,60 @@ describe('useKeyboardShortcuts', () => {
       expect(options.onSidebarViewChange).toHaveBeenCalledWith('search')
     })
 
-    it('should include Alt+6 shortcut for search view', () => {
+    it('should include Alt+3 shortcut for search view', () => {
       const options = createDefaultOptions()
       const { result } = renderHook(() => useKeyboardShortcuts(options))
 
-      const alt6 = result.current.find(
-        s => s.key === '6' && s.modifiers?.includes('alt')
+      const alt3 = result.current.find(
+        s => s.key === '3' && s.modifiers?.includes('alt')
       )
-      expect(alt6).toBeDefined()
-      expect(alt6!.description).toBe('shortcuts.searchView')
+      expect(alt3).toBeDefined()
+      expect(alt3!.description).toBe('shortcuts.searchView')
     })
 
-    it('should switch to search sidebar view via Alt+6', () => {
+    it('should switch to search sidebar view via Alt+3', () => {
+      const options = createDefaultOptions()
+      const { result } = renderHook(() => useKeyboardShortcuts(options))
+
+      const alt3 = result.current.find(
+        s => s.key === '3' && s.modifiers?.includes('alt')
+      )
+      alt3!.action()
+      expect(options.onSidebarViewChange).toHaveBeenCalledWith('search')
+    })
+
+    it('should no longer bind Alt+6 to any shortcut', () => {
       const options = createDefaultOptions()
       const { result } = renderHook(() => useKeyboardShortcuts(options))
 
       const alt6 = result.current.find(
         s => s.key === '6' && s.modifiers?.includes('alt')
       )
-      alt6!.action()
-      expect(options.onSidebarViewChange).toHaveBeenCalledWith('search')
+      expect(alt6).toBeUndefined()
+    })
+  })
+
+  describe('Contacts View (Alt+9)', () => {
+    it('should include Alt+9 shortcut for the contacts (directory) view', () => {
+      const options = createDefaultOptions()
+      const { result } = renderHook(() => useKeyboardShortcuts(options))
+
+      const alt9 = result.current.find(
+        s => s.key === '9' && s.modifiers?.includes('alt')
+      )
+      expect(alt9).toBeDefined()
+      expect(alt9!.description).toBe('shortcuts.connectionsView')
+    })
+
+    it('should switch to the directory sidebar view via Alt+9', () => {
+      const options = createDefaultOptions()
+      const { result } = renderHook(() => useKeyboardShortcuts(options))
+
+      const alt9 = result.current.find(
+        s => s.key === '9' && s.modifiers?.includes('alt')
+      )
+      alt9!.action()
+      expect(options.onSidebarViewChange).toHaveBeenCalledWith('directory')
     })
   })
 

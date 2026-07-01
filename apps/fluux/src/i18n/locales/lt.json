@@ -152,6 +152,10 @@
         "startConversation": "Pradėti pokalbį",
         "addToContacts": "Pridėti prie kontaktų",
         "connectedDevices": "Prijungti įrenginiai",
+        "about": "Apie",
+        "groups": "Grupės",
+        "securityDetailsTitle": "Saugos informacija",
+        "noDetails": "Nėra papildomos informacijos",
         "nameCannotBeEmpty": "Vardas negali būti tuščias",
         "removeConfirm": "Pašalinti {{name}} iš jūsų kontaktų?",
         "remove": "Pašalinti",
@@ -183,11 +187,12 @@
             "unavailableNowTitle": "Šifravimas šiuo metu neprieinamas",
             "unavailableNowDescription": "Iš naujo prisijunkite arba įjunkite šifravimą nustatymuose.",
             "rejectedTitle": "Negaliojantis sertifikatas",
-            "rejectedDescription": "Šis kontaktas paskelbė OpenPGP raktą, tačiau jo patvirtinimas nepavyko. Pranešimai bus siunčiami atviru tekstu."
-        },
-        "tabs": {
-            "profile": "Profilis",
-            "security": "Saugumas"
+            "rejectedDescription": "Šis kontaktas paskelbė OpenPGP raktą, tačiau jo patvirtinimas nepavyko. Pranešimai bus siunčiami atviru tekstu.",
+            "glanceVerified": "Patvirtinta ir užšifruota",
+            "glanceEncrypted": "Užšifruota, nepatvirtinta",
+            "glanceNotEncrypted": "Neužšifruota",
+            "glanceDisabled": "Šifravimas išjungtas",
+            "glanceLocked": "Užšifruota, užrakinta"
         },
         "actionsMenu": "Daugiau veiksmų",
         "requestsHeading": "Prašymai"

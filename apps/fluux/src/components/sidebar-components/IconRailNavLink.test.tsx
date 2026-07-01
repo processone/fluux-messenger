@@ -111,7 +111,7 @@ describe('IconRailNavLink', () => {
       )
 
       // Badge should be visible (small red dot)
-      const badge = container.querySelector('.bg-fluux-red')
+      const badge = container.querySelector('.bg-fluux-badge-strong')
       expect(badge).toBeInTheDocument()
     })
 
@@ -129,8 +129,60 @@ describe('IconRailNavLink', () => {
         { wrapper: Wrapper }
       )
 
-      const badge = container.querySelector('.bg-fluux-red')
+      const badge = container.querySelector('.bg-fluux-badge-strong')
       expect(badge).not.toBeInTheDocument()
+    })
+
+    it('renders a strong (red) dot by default', () => {
+      const Wrapper = createWrapper('/')
+      const { container } = render(
+        <IconRailNavLink
+          icon={MessageCircle}
+          label="Messages"
+          view="messages"
+          pathPrefix="/messages"
+          onNavigate={vi.fn()}
+          showBadge={true}
+        />,
+        { wrapper: Wrapper }
+      )
+      expect(container.querySelector('.bg-fluux-badge-strong')).toBeInTheDocument()
+    })
+
+    it('renders a neutral (grey) dot when tone="neutral"', () => {
+      const Wrapper = createWrapper('/')
+      const { container } = render(
+        <IconRailNavLink
+          icon={Hash}
+          label="Rooms"
+          view="rooms"
+          pathPrefix="/rooms"
+          onNavigate={vi.fn()}
+          showBadge={true}
+          tone="neutral"
+        />,
+        { wrapper: Wrapper }
+      )
+      expect(container.querySelector('.bg-fluux-gray')).toBeInTheDocument()
+      expect(container.querySelector('.bg-fluux-badge-strong')).toBeNull()
+    })
+
+    it('renders an accent (blue) dot when tone="accent"', () => {
+      const Wrapper = createWrapper('/')
+      const { container } = render(
+        <IconRailNavLink
+          icon={Hash}
+          label="Rooms"
+          view="rooms"
+          pathPrefix="/rooms"
+          onNavigate={vi.fn()}
+          showBadge={true}
+          tone="accent"
+        />,
+        { wrapper: Wrapper }
+      )
+      const dot = container.querySelector('span.bg-fluux-brand')
+      expect(dot).toBeInTheDocument()
     })
   })
 

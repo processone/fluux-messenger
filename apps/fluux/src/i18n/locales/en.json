@@ -153,6 +153,10 @@
         "startConversation": "Start Conversation",
         "addToContacts": "Add to Contacts",
         "connectedDevices": "Connected Devices",
+        "about": "About",
+        "groups": "Groups",
+        "securityDetailsTitle": "Security details",
+        "noDetails": "No additional details",
         "nameCannotBeEmpty": "Name cannot be empty",
         "removeConfirm": "Remove {{name}} from your contacts?",
         "remove": "Remove",
@@ -184,11 +188,12 @@
             "unavailableNowTitle": "Encryption currently unavailable",
             "unavailableNowDescription": "Reconnect or enable encryption in settings.",
             "rejectedTitle": "Invalid certificate",
-            "rejectedDescription": "This contact has published an OpenPGP key, but it failed validation. Messages will be sent in plaintext."
-        },
-        "tabs": {
-            "profile": "Profile",
-            "security": "Security"
+            "rejectedDescription": "This contact has published an OpenPGP key, but it failed validation. Messages will be sent in plaintext.",
+            "glanceVerified": "Verified and encrypted",
+            "glanceEncrypted": "Encrypted, not verified",
+            "glanceNotEncrypted": "Not encrypted",
+            "glanceDisabled": "Encryption off",
+            "glanceLocked": "Encrypted, locked"
         },
         "actionsMenu": "More actions"
     },

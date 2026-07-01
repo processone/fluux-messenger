@@ -392,6 +392,13 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions): Shor
     {
       key: '3',
       modifiers: ['alt'],
+      description: 'shortcuts.searchView',
+      category: 'navigation',
+      action: () => onSidebarViewChange('search'),
+    },
+    {
+      key: '9',
+      modifiers: ['alt'],
       description: 'shortcuts.connectionsView',
       category: 'navigation',
       action: () => onSidebarViewChange('directory'),
@@ -427,13 +434,6 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions): Shor
     {
       key: 'f',
       modifiers: ['meta', 'shift'],
-      description: 'shortcuts.searchView',
-      category: 'navigation',
-      action: () => onSidebarViewChange('search'),
-    },
-    {
-      key: '6',
-      modifiers: ['alt'],
       description: 'shortcuts.searchView',
       category: 'navigation',
       action: () => onSidebarViewChange('search'),

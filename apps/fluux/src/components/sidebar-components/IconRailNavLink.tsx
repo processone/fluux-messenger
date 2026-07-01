@@ -11,6 +11,8 @@ interface IconRailNavLinkProps {
   /** Path prefix to match for active state (e.g., '/messages', '/rooms') */
   pathPrefix: string
   showBadge?: boolean
+  /** Dot colour when showBadge is true. Defaults to 'strong' (red) to preserve prior behaviour. */
+  tone?: 'neutral' | 'accent' | 'strong'
   /** When > 0, renders a red numeric badge (clamped to 99+). Takes precedence over showBadge. */
   badgeCount?: number
   /** Overrides the button aria-label (the tooltip still shows `label`). */
@@ -30,6 +32,7 @@ export function IconRailNavLink({
   view,
   pathPrefix,
   showBadge,
+  tone = 'strong',
   badgeCount,
   badgeLabel,
   onNavigate,
@@ -37,6 +40,12 @@ export function IconRailNavLink({
   const location = useLocation()
   const isActive = location.pathname === pathPrefix || location.pathname.startsWith(pathPrefix + '/')
   const hasCount = typeof badgeCount === 'number' && badgeCount > 0
+  const dotToneClass =
+    tone === 'neutral'
+      ? 'bg-fluux-gray'
+      : tone === 'accent'
+        ? 'bg-fluux-brand'
+        : 'bg-fluux-badge-strong'
 
   return (
     <Tooltip content={label} position="right" delay={500}>
@@ -59,7 +68,7 @@ export function IconRailNavLink({
             {badgeCount > 99 ? '99+' : badgeCount}
           </span>
         ) : showBadge ? (
-          <span className="absolute top-0 end-0 size-3 bg-fluux-red rounded-full border-2 border-fluux-sidebar" />
+          <span className={`absolute top-0 end-0 size-3 ${dotToneClass} rounded-full border-2 border-fluux-sidebar`} />
         ) : null}
       </button>
     </Tooltip>

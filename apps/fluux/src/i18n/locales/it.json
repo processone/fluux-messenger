@@ -154,6 +154,10 @@
         "startConversation": "Inizia conversazione",
         "addToContacts": "Aggiungi ai Contatti",
         "connectedDevices": "Dispositivi connessi",
+        "about": "Informazioni",
+        "groups": "Gruppi",
+        "securityDetailsTitle": "Dettagli sicurezza",
+        "noDetails": "Nessun dettaglio aggiuntivo",
         "nameCannotBeEmpty": "Il nome non puo essere vuoto",
         "removeConfirm": "Rimuovere {{name}} dai tuoi contatti?",
         "remove": "Rimuovi",
@@ -185,11 +189,12 @@
             "unavailableNowTitle": "Crittografia momentaneamente non disponibile",
             "unavailableNowDescription": "Riconnettiti o attiva la crittografia nelle impostazioni.",
             "rejectedTitle": "Certificato non valido",
-            "rejectedDescription": "Questo contatto ha pubblicato una chiave OpenPGP, ma la convalida è fallita. I messaggi verranno inviati in chiaro."
-        },
-        "tabs": {
-            "profile": "Profilo",
-            "security": "Sicurezza"
+            "rejectedDescription": "Questo contatto ha pubblicato una chiave OpenPGP, ma la convalida è fallita. I messaggi verranno inviati in chiaro.",
+            "glanceVerified": "Verificato e cifrato",
+            "glanceEncrypted": "Cifrato, non verificato",
+            "glanceNotEncrypted": "Non cifrato",
+            "glanceDisabled": "Cifratura disattivata",
+            "glanceLocked": "Cifrato, bloccato"
         },
         "actionsMenu": "Altre azioni",
         "requestsHeading": "Richieste"

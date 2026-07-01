@@ -56,6 +56,7 @@ vi.mock('@fluux/sdk/react', () => ({
     sel({
       conversationMeta: new Map(),
       activeConversationId: null,
+      archivedConversations: new Set(),
       typingStates: new Map(),
       drafts: new Map(),
       conversations: new Map(),
@@ -64,8 +65,7 @@ vi.mock('@fluux/sdk/react', () => ({
     }),
   useRoomStore: (sel: (s: Record<string, unknown>) => unknown) =>
     sel({
-      totalMentionsCount: () => 0,
-      totalNotifiableUnreadCount: () => 0,
+      roomTabIndicator: () => 'none',
     }),
   useEventsStore: (sel: (s: Record<string, unknown>) => unknown) =>
     sel({ subscriptionRequests: [] }),
@@ -96,6 +96,7 @@ vi.mock('@/hooks', () => ({
     navigateToContacts: vi.fn(),
     navigateToMessages: vi.fn(),
   }),
+  useFollowUnarchivedActive: vi.fn(),
 }))
 
 import React from 'react'

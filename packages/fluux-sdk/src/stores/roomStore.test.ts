@@ -1703,6 +1703,71 @@ describe('roomStore', () => {
     })
   })
 
+  describe('roomTabIndicator', () => {
+    it("returns 'none' when there are no rooms", () => {
+      expect(roomStore.getState().roomTabIndicator()).toBe('none')
+    })
+
+    it("returns 'neutral' for plain unread in a non-muted joined room", () => {
+      roomStore.getState().addRoom(createRoom('r1@conference.example.com', {
+        joined: true,
+        unreadCount: 3,
+      }))
+      expect(roomStore.getState().roomTabIndicator()).toBe('neutral')
+    })
+
+    it("returns 'accent' when a room has a mention", () => {
+      roomStore.getState().addRoom(createRoom('r1@conference.example.com', {
+        joined: true,
+        unreadCount: 3,
+        mentionsCount: 1,
+      }))
+      expect(roomStore.getState().roomTabIndicator()).toBe('accent')
+    })
+
+    it("returns 'accent' for unread in a notifyAll room (no mention)", () => {
+      roomStore.getState().addRoom(createRoom('r1@conference.example.com', {
+        joined: true,
+        unreadCount: 2,
+        notifyAllPersistent: true,
+      }))
+      expect(roomStore.getState().roomTabIndicator()).toBe('accent')
+    })
+
+    it('lets accent win over neutral across rooms', () => {
+      roomStore.getState().addRoom(createRoom('plain@conference.example.com', {
+        joined: true,
+        unreadCount: 5,
+      }))
+      roomStore.getState().addRoom(createRoom('mention@conference.example.com', {
+        joined: true,
+        unreadCount: 1,
+        mentionsCount: 1,
+      }))
+      expect(roomStore.getState().roomTabIndicator()).toBe('accent')
+    })
+
+    it("keeps muted rooms silent, even with a mention ('none')", () => {
+      roomStore.getState().addRoom(createRoom('muted@conference.example.com', {
+        joined: true,
+        unreadCount: 4,
+        mentionsCount: 2,
+        muted: true,
+      }))
+      expect(roomStore.getState().roomTabIndicator()).toBe('none')
+    })
+
+    it('ignores non-joined rooms', () => {
+      roomStore.getState().addRoom(createRoom('bookmarked@conference.example.com', {
+        joined: false,
+        isBookmarked: true,
+        unreadCount: 9,
+        mentionsCount: 3,
+      }))
+      expect(roomStore.getState().roomTabIndicator()).toBe('none')
+    })
+  })
+
   describe('setActiveRoom', () => {
     it('should set the active room', () => {
       roomStore.getState().addRoom(createRoom('test@conference.example.com'))

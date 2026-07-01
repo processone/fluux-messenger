@@ -546,6 +546,7 @@ export interface RoomState {
   totalUnreadCount: () => number // Total unread messages across all joined rooms
   totalNotifiableUnreadCount: () => number // Total unread in rooms with notifyAll enabled
   roomsWithUnreadCount: () => number // Number of rooms with unread activity (for dock badge)
+  roomTabIndicator: () => 'none' | 'neutral' | 'accent' // Rooms tab dot tone
 }
 
 function createEmptyRoomState(
@@ -2484,6 +2485,21 @@ export const roomStore = createStore<RoomState>()(
       }
     }
     return count
+  },
+  roomTabIndicator: () => {
+    let hasNeutral = false
+    for (const [jid, entity] of get().roomEntities) {
+      if (!entity.joined) continue
+      if (entity.muted) continue
+      const meta = get().roomMeta.get(jid)
+      if (!meta) continue
+      const notifyAll = meta.notifyAll || meta.notifyAllPersistent
+      if (meta.mentionsCount > 0 || (notifyAll && meta.unreadCount > 0)) {
+        return 'accent'
+      }
+      if (meta.unreadCount > 0) hasNeutral = true
+    }
+    return hasNeutral ? 'neutral' : 'none'
   },
 }))
 )

@@ -13,9 +13,8 @@ import { ConfirmDialog } from './ConfirmDialog'
 import { VerifyPeerDialog } from './VerifyPeerDialog'
 import { ContactActionsMenu } from './contact-profile/ContactActionsMenu'
 import { ContactProfileHero } from './contact-profile/ContactProfileHero'
-import { ContactProfileTabs, type ContactProfileTab } from './contact-profile/ContactProfileTabs'
-import { ProfileTab } from './contact-profile/tabs/ProfileTab'
-import { SecurityTab } from './contact-profile/tabs/SecurityTab'
+import { ContactProfileGrid } from './contact-profile/ContactProfileGrid'
+import { ContactSecurityDetail } from './contact-profile/ContactSecurityDetail'
 
 interface ContactProfileViewProps {
   contact: Contact
@@ -49,7 +48,7 @@ export function ContactProfileView({
   const forceOffline = connectionStatus !== 'online'
   const { dragRegionProps } = useWindowDrag()
 
-  const [activeTab, setActiveTab] = useState<ContactProfileTab>('profile')
+  const [securityOpen, setSecurityOpen] = useState(false)
   const [isEditing, setIsEditing] = useState(false)
   const [editName, setEditName] = useState(contact.name)
   const [saving, setSaving] = useState(false)
@@ -82,7 +81,7 @@ export function ContactProfileView({
 
   // Reset transient state when the displayed contact changes.
   useEffect(() => {
-    setActiveTab('profile')
+    setSecurityOpen(false)
     setEditName(contact.name)
     setIsEditing(false)
     setError(null)
@@ -249,32 +248,27 @@ export function ContactProfileView({
               }
             />
 
-            <ContactProfileTabs
-              active={activeTab}
-              onChange={setActiveTab}
+            <ContactProfileGrid
+              contact={contact}
+              vcard={vcard}
+              isInRoster={isInRoster}
+              forceOffline={forceOffline}
               encryptionState={encryptionState}
+              onOpenSecurity={() => setSecurityOpen(true)}
             />
-
-            <div
-              role="tabpanel"
-              id={`contact-tab-panel-${activeTab}`}
-              aria-labelledby={`contact-tab-${activeTab}`}
-            >
-              {activeTab === 'profile' && (
-                <ProfileTab contact={contact} vcard={vcard} forceOffline={forceOffline} />
-              )}
-              {activeTab === 'security' && (
-                <SecurityTab
-                  state={encryptionState}
-                  onVerify={() => setShowVerifyDialog(true)}
-                  onRequestRevoke={() => setPendingConfirm('revokeVerify')}
-                  onDisableEncryption={handleDisableEncryption}
-                  onEnableEncryption={handleEnableEncryption}
-                />
-              )}
-            </div>
           </div>
         </div>
+
+        {securityOpen && (
+          <ContactSecurityDetail
+            state={encryptionState}
+            onVerify={() => setShowVerifyDialog(true)}
+            onRequestRevoke={() => setPendingConfirm('revokeVerify')}
+            onDisableEncryption={handleDisableEncryption}
+            onEnableEncryption={handleEnableEncryption}
+            onClose={() => setSecurityOpen(false)}
+          />
+        )}
       </div>
 
       {confirmConfig && (

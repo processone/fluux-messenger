@@ -431,12 +431,12 @@ const RoomItem = memo(function RoomItem({
             {/* Activity dot for unread (non-mention) activity */}
             {room.joined && room.unreadCount > 0 && room.mentionsCount === 0 && (
               <Tooltip content={`${room.unreadCount} unread`} position="top">
-                <div className="size-2.5 rounded-full bg-fluux-brand flex-shrink-0" />
+                <div className="size-2.5 rounded-full bg-fluux-gray flex-shrink-0" />
               </Tooltip>
             )}
             {/* Mentions count badge */}
             {room.mentionsCount > 0 && (
-              <span className="min-w-5 h-5 px-1.5 bg-fluux-red text-white text-xs font-bold rounded-full flex-shrink-0 flex items-center justify-center">
+              <span className="min-w-5 h-5 px-1.5 bg-fluux-badge text-fluux-badge-text text-xs font-bold rounded-full flex-shrink-0 flex items-center justify-center">
                 @{room.mentionsCount}
               </span>
             )}

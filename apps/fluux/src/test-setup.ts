@@ -47,6 +47,25 @@ void i18n.use(initReactI18next).init({
         contacts: {
           addContact: 'Add contact',
           requestsHeading: 'Requests',
+          contact: 'Contact',
+          startConversation: 'Start conversation',
+          rename: 'Rename',
+          about: 'About',
+          groups: 'Groups',
+          connectedDevices: 'Connected devices',
+          securityDetailsTitle: 'Security details',
+          noDetails: 'No additional details',
+          encryption: {
+            glanceVerified: 'Verified and encrypted',
+            glanceEncrypted: 'Encrypted, not verified',
+            glanceNotEncrypted: 'Not encrypted',
+            glanceDisabled: 'Encryption off',
+            glanceLocked: 'Encrypted, locked',
+            verified: 'Verified',
+            tofu: 'Encrypted (not verified)',
+            fingerprintLabel: 'OpenPGP fingerprint',
+            verifyButton: 'Verify fingerprint',
+          },
         },
         conversations: {
           backToConversations: 'Back to conversations',
@@ -413,6 +432,7 @@ vi.mock('@fluux/sdk/react', () => ({
       getDraft: () => '',
       clearDraft: vi.fn(),
       roomsWithUnreadCount: () => 0,
+      roomTabIndicator: () => 'none',
       getMAMQueryState: () => ({ isLoading: false, hasMoreHistory: false }),
     }
     return selector ? selector(state) : state

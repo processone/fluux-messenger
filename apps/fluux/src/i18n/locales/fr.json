@@ -153,6 +153,10 @@
         "startConversation": "Démarrer une conversation",
         "addToContacts": "Ajouter aux contacts",
         "connectedDevices": "Appareils connectés",
+        "about": "À propos",
+        "groups": "Groupes",
+        "securityDetailsTitle": "Détails de sécurité",
+        "noDetails": "Aucun détail supplémentaire",
         "nameCannotBeEmpty": "Le nom ne peut pas être vide",
         "removeConfirm": "Supprimer {{name}} de vos contacts ?",
         "remove": "Supprimer",
@@ -184,11 +188,12 @@
             "unavailableNowTitle": "Chiffrement actuellement indisponible",
             "unavailableNowDescription": "Reconnectez-vous ou activez le chiffrement dans les paramètres.",
             "rejectedTitle": "Certificat invalide",
-            "rejectedDescription": "Ce contact a publié une clé OpenPGP, mais la validation a échoué. Les messages seront envoyés en clair."
-        },
-        "tabs": {
-            "profile": "Profil",
-            "security": "Sécurité"
+            "rejectedDescription": "Ce contact a publié une clé OpenPGP, mais la validation a échoué. Les messages seront envoyés en clair.",
+            "glanceVerified": "Vérifié et chiffré",
+            "glanceEncrypted": "Chiffré, non vérifié",
+            "glanceNotEncrypted": "Non chiffré",
+            "glanceDisabled": "Chiffrement désactivé",
+            "glanceLocked": "Chiffré, verrouillé"
         },
         "actionsMenu": "Plus d'actions",
         "requestsHeading": "Demandes"

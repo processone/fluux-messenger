@@ -154,6 +154,10 @@
         "startConversation": "Začni pogovor",
         "addToContacts": "Dodaj med stike",
         "connectedDevices": "Povezane naprave",
+        "about": "O osebi",
+        "groups": "Skupine",
+        "securityDetailsTitle": "Podrobnosti varnosti",
+        "noDetails": "Ni dodatnih podrobnosti",
         "nameCannotBeEmpty": "Ime ne sme biti prazno",
         "removeConfirm": "Odstraniti {{name}} iz vaših stikov?",
         "remove": "Odstrani",
@@ -185,11 +189,12 @@
             "unavailableNowTitle": "Šifriranje trenutno ni na voljo",
             "unavailableNowDescription": "Znova se povežite ali omogočite šifriranje v nastavitvah.",
             "rejectedTitle": "Neveljavno potrdilo",
-            "rejectedDescription": "Ta stik je objavil ključ OpenPGP, vendar preverjanje ni uspelo. Sporočila bodo poslana v navadnem besedilu."
-        },
-        "tabs": {
-            "profile": "Profil",
-            "security": "Varnost"
+            "rejectedDescription": "Ta stik je objavil ključ OpenPGP, vendar preverjanje ni uspelo. Sporočila bodo poslana v navadnem besedilu.",
+            "glanceVerified": "Preverjeno in šifrirano",
+            "glanceEncrypted": "Šifrirano, ni preverjeno",
+            "glanceNotEncrypted": "Ni šifrirano",
+            "glanceDisabled": "Šifriranje izklopljeno",
+            "glanceLocked": "Šifrirano, zaklenjeno"
         },
         "actionsMenu": "Več dejanj",
         "requestsHeading": "Zahteve"
