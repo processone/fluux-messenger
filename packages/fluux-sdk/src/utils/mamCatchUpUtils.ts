@@ -168,28 +168,29 @@ export function selectCatchUpQuery(
 }
 
 /**
- * Pick the joined rooms that need a preview/catch-up seed on SM resumption.
+ * Pick the joined rooms that need a MAM catch-up on SM resumption.
  *
  * The fresh-session background room catch-up (`catchUpAllRooms`) runs only on a
- * fresh `'online'` event, never on an SM `'resumed'` one. So an autojoined room
- * that never completed catch-up keeps an empty sidebar preview (and stale
- * ordering) until the user opens it manually. This picks exactly those rooms so
- * a resume handler can seed them.
+ * fresh `'online'` event, never on an SM `'resumed'` one. So a room not caught up
+ * to live this session — an autojoined room the user never opened, or a room whose
+ * forward catch-up left an open gap — keeps an empty or stale sidebar preview (and
+ * stale ordering) until the user opens it manually. This picks exactly those rooms
+ * so a resume handler can catch them up.
  *
- * Stays out of Stream Management's way: it targets ONLY rooms with no preview
- * AND no completed MAM query, so a room already seeded (`lastMessage` present)
- * or already known-empty (queried, no messages) is skipped — SM already replays
- * undelivered stanzas for any room we hold history for, and a seeded/empty room
- * must not be re-queried on every resume.
+ * Stays out of Stream Management's way: it targets ONLY rooms NOT caught up to live
+ * (`isCaughtUpToLive` false). A room already synced to the live edge is skipped — SM
+ * replays undelivered stanzas for it — so a caught-up room is never re-queried on
+ * every resume. Both a never-fetched room and a gap-open room qualify; a
+ * genuinely-empty room caught up via a completed `before:''` query has
+ * `isCaughtUpToLive` true and is skipped.
  *
  * @param rooms - Candidate rooms (typically `roomStore.joinedRooms()`)
- * @param hasQueried - Predicate: has this room a completed MAM query this session
- *   (`getRoomMAMQueryState(jid).hasQueried`)? `hasQueried` flips true on any
- *   completed query (even an empty result), so a genuinely-empty room seeds at
- *   most once per session.
+ * @param isCaughtUpToLive - Predicate: is this room synced to the live edge with no
+ *   open forward gap (`getRoomMAMQueryState(jid).isCaughtUpToLive`)? Session-scoped,
+ *   so it resets false on each app load and a reload correctly re-catches-up.
  * @param activeRoomJid - The active room, skipped here because roomSideEffects
  *   drives its own catch-up.
- * @returns The subset of `rooms` needing a seed, preserving element type.
+ * @returns The subset of `rooms` needing catch-up, preserving element type.
  */
 export function selectRoomsNeedingResumeSeed<
   R extends {
@@ -197,11 +198,10 @@ export function selectRoomsNeedingResumeSeed<
     joined?: boolean
     supportsMAM?: boolean
     isQuickChat?: boolean
-    lastMessage?: unknown
   },
 >(
   rooms: R[],
-  hasQueried: (jid: string) => boolean,
+  isCaughtUpToLive: (jid: string) => boolean,
   activeRoomJid: string | null | undefined,
 ): R[] {
   return rooms.filter((r) => {
@@ -209,8 +209,7 @@ export function selectRoomsNeedingResumeSeed<
     if (!r.supportsMAM) return false
     if (r.isQuickChat) return false
     if (r.jid === activeRoomJid) return false
-    if (r.lastMessage) return false
-    if (hasQueried(r.jid)) return false
+    if (isCaughtUpToLive(r.jid)) return false
     return true
   })
 }
