@@ -156,6 +156,7 @@
         "about": "Par",
         "groups": "Grupas",
         "securityDetailsTitle": "Drošības informācija",
+        "noDetails": "Nav papildu informācijas",
         "nameCannotBeEmpty": "Vārds nevar būt tukšs",
         "removeConfirm": "Noņemt {{name}} no jūsu kontaktiem?",
         "remove": "Noņemt",

@@ -155,6 +155,7 @@
         "about": "Maidir le",
         "groups": "Grúpaí",
         "securityDetailsTitle": "Sonraí slándála",
+        "noDetails": "Gan sonraí breise",
         "nameCannotBeEmpty": "Ní féidir leis an ainm a bheith folamh",
         "removeConfirm": "Bain {{name}} ó do theagmhálacha?",
         "remove": "Bain",

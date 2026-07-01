@@ -157,6 +157,7 @@
         "about": "O kontaktu",
         "groups": "Skupiny",
         "securityDetailsTitle": "Podrobnosti zabezpečení",
+        "noDetails": "Žádné další podrobnosti",
         "nameCannotBeEmpty": "Jméno nemůže být prázdné",
         "removeConfirm": "Odebrat {{name}} z vašich kontaktů?",
         "remove": "Odebrat",

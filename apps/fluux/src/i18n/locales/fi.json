@@ -155,6 +155,7 @@
         "about": "Tietoja",
         "groups": "Ryhmät",
         "securityDetailsTitle": "Turvatiedot",
+        "noDetails": "Ei lisätietoja",
         "nameCannotBeEmpty": "Nimi ei voi olla tyhjä",
         "removeConfirm": "Poista {{name}} yhteystiedoistasi?",
         "remove": "Poista",

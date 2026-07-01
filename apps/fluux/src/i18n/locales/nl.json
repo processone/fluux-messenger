@@ -155,6 +155,7 @@
         "about": "Over",
         "groups": "Groepen",
         "securityDetailsTitle": "Beveiligingsdetails",
+        "noDetails": "Geen aanvullende gegevens",
         "nameCannotBeEmpty": "Naam mag niet leeg zijn",
         "removeConfirm": "{{name}} verwijderen uit je contacten?",
         "remove": "Verwijderen",

@@ -155,6 +155,7 @@
         "about": "نبذة",
         "groups": "المجموعات",
         "securityDetailsTitle": "تفاصيل الأمان",
+        "noDetails": "لا توجد تفاصيل إضافية",
         "nameCannotBeEmpty": "لا يمكن أن يكون الاسم فارغًا",
         "removeConfirm": "إزالة {{name}} من جهات الاتصال؟",
         "remove": "إزالة",

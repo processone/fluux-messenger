@@ -157,6 +157,7 @@
         "about": "Info",
         "groups": "Rühmad",
         "securityDetailsTitle": "Turvaandmed",
+        "noDetails": "Lisateave puudub",
         "nameCannotBeEmpty": "Nimi ei saa olla tühi",
         "removeConfirm": "Eemalda {{name}} oma kontaktidest?",
         "remove": "Eemalda",

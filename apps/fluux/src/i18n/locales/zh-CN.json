@@ -155,6 +155,7 @@
         "about": "关于",
         "groups": "分组",
         "securityDetailsTitle": "安全详情",
+        "noDetails": "暂无更多信息",
         "nameCannotBeEmpty": "名称不能为空",
         "removeConfirm": "从您的联系人中移除 {{name}}？",
         "remove": "移除",

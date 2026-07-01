@@ -155,6 +155,7 @@
         "about": "Névjegy",
         "groups": "Csoportok",
         "securityDetailsTitle": "Biztonsági részletek",
+        "noDetails": "Nincsenek további részletek",
         "nameCannotBeEmpty": "A név nem lehet üres",
         "removeConfirm": "Eltávolítja {{name}} nevű névjegyét?",
         "remove": "Eltávolítás",

@@ -155,6 +155,7 @@
         "about": "Пра",
         "groups": "Групы",
         "securityDetailsTitle": "Дэталі бяспекі",
+        "noDetails": "Няма дадатковых звестак",
         "nameCannotBeEmpty": "Імя не можа быць пустым",
         "removeConfirm": "Выдаліць {{name}} з вашых кантактаў?",
         "remove": "Выдаліць",

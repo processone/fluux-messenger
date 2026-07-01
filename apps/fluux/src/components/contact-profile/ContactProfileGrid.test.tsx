@@ -40,4 +40,32 @@ describe('ContactProfileGrid', () => {
     )
     expect(screen.queryByText('Groups')).not.toBeInTheDocument()
   })
+
+  it('shows an empty-state message when the contact has no details', () => {
+    render(
+      <ContactProfileGrid
+        contact={{ jid: 'x@y', name: 'X', presence: 'offline', subscription: 'none' } as Contact}
+        vcard={null}
+        isInRoster={false}
+        forceOffline={false}
+        encryptionState={{ kind: 'disabled' }}
+        onOpenSecurity={() => {}}
+      />,
+    )
+    expect(screen.getByText('No additional details')).toBeInTheDocument()
+  })
+
+  it('does not show the empty-state message when a card has content', () => {
+    render(
+      <ContactProfileGrid
+        contact={contact}
+        vcard={{ org: 'ProcessOne' }}
+        isInRoster={true}
+        forceOffline={false}
+        encryptionState={{ kind: 'encrypted', fingerprint: 'AB', trust: 'verified' }}
+        onOpenSecurity={() => {}}
+      />,
+    )
+    expect(screen.queryByText('No additional details')).not.toBeInTheDocument()
+  })
 })

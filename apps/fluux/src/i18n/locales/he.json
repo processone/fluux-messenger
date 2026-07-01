@@ -155,6 +155,7 @@
         "about": "אודות",
         "groups": "קבוצות",
         "securityDetailsTitle": "פרטי אבטחה",
+        "noDetails": "אין פרטים נוספים",
         "nameCannotBeEmpty": "השם לא יכול להיות ריק",
         "removeConfirm": "להסיר את {{name}} מאנשי הקשר שלך?",
         "remove": "הסר",

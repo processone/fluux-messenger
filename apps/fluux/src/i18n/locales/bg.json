@@ -155,6 +155,7 @@
         "about": "За",
         "groups": "Групи",
         "securityDetailsTitle": "Детайли за сигурност",
+        "noDetails": "Няма допълнителни данни",
         "nameCannotBeEmpty": "Името не може да е празно",
         "removeConfirm": "Премахване на {{name}} от вашите контакти?",
         "remove": "Премахни",

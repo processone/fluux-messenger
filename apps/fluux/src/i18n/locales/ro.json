@@ -157,6 +157,7 @@
         "about": "Despre",
         "groups": "Grupuri",
         "securityDetailsTitle": "Detalii de securitate",
+        "noDetails": "Fără detalii suplimentare",
         "nameCannotBeEmpty": "Numele nu poate fi gol",
         "removeConfirm": "Elimini pe {{name}} din contactele tale?",
         "remove": "Elimină",

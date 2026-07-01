@@ -156,6 +156,7 @@
         "about": "O kontakte",
         "groups": "Skupiny",
         "securityDetailsTitle": "Detaily zabezpečenia",
+        "noDetails": "Žiadne ďalšie podrobnosti",
         "nameCannotBeEmpty": "Meno nemôže byť prázdne",
         "removeConfirm": "Odstrániť {{name}} z vašich kontaktov?",
         "remove": "Odstrániť",

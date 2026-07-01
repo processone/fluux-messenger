@@ -54,6 +54,7 @@ void i18n.use(initReactI18next).init({
           groups: 'Groups',
           connectedDevices: 'Connected devices',
           securityDetailsTitle: 'Security details',
+          noDetails: 'No additional details',
           encryption: {
             glanceVerified: 'Verified and encrypted',
             glanceEncrypted: 'Encrypted, not verified',

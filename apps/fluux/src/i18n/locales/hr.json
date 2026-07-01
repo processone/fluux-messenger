@@ -155,6 +155,7 @@
         "about": "O kontaktu",
         "groups": "Grupe",
         "securityDetailsTitle": "Detalji sigurnosti",
+        "noDetails": "Nema dodatnih pojedinosti",
         "nameCannotBeEmpty": "Ime ne može biti prazno",
         "removeConfirm": "Ukloniti {{name}} iz vaših kontakata?",
         "remove": "Ukloni",

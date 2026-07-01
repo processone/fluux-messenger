@@ -155,6 +155,7 @@
         "about": "Om",
         "groups": "Grupper",
         "securityDetailsTitle": "Sikkerhedsdetaljer",
+        "noDetails": "Ingen yderligere oplysninger",
         "nameCannotBeEmpty": "Navnet kan ikke være tomt",
         "removeConfirm": "Fjern {{name}} fra dine kontakter?",
         "remove": "Fjern",

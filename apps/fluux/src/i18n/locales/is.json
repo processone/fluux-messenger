@@ -155,6 +155,7 @@
         "about": "Um",
         "groups": "Hópar",
         "securityDetailsTitle": "Öryggisupplýsingar",
+        "noDetails": "Engar frekari upplýsingar",
         "nameCannotBeEmpty": "Nafn má ekki vera autt",
         "removeConfirm": "Fjarlægja {{name}} úr tengiliðum þínum?",
         "remove": "Fjarlægja",

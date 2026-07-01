@@ -157,6 +157,7 @@
         "about": "Información",
         "groups": "Grupos",
         "securityDetailsTitle": "Detalles de seguridad",
+        "noDetails": "Sin detalles adicionales",
         "nameCannotBeEmpty": "El nombre no puede estar vacio",
         "removeConfirm": "Eliminar a {{name}} de tus contactos?",
         "remove": "Eliminar",

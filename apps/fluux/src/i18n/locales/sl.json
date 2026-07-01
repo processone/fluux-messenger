@@ -157,6 +157,7 @@
         "about": "O osebi",
         "groups": "Skupine",
         "securityDetailsTitle": "Podrobnosti varnosti",
+        "noDetails": "Ni dodatnih podrobnosti",
         "nameCannotBeEmpty": "Ime ne sme biti prazno",
         "removeConfirm": "Odstraniti {{name}} iz vaših stikov?",
         "remove": "Odstrani",

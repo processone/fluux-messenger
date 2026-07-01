@@ -156,6 +156,7 @@
         "about": "Σχετικά",
         "groups": "Ομάδες",
         "securityDetailsTitle": "Λεπτομέρειες ασφαλείας",
+        "noDetails": "Δεν υπάρχουν επιπλέον στοιχεία",
         "nameCannotBeEmpty": "Το όνομα δεν μπορεί να είναι κενό",
         "removeConfirm": "Αφαίρεση {{name}} από τις επαφές σας;",
         "remove": "Αφαίρεση",

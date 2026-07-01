@@ -157,6 +157,7 @@
         "about": "Dwar",
         "groups": "Gruppi",
         "securityDetailsTitle": "Dettalji tas-sigurtà",
+        "noDetails": "L-ebda dettall addizzjonali",
         "nameCannotBeEmpty": "L-isem ma jistax ikun vojt",
         "removeConfirm": "Neħħi {{name}} mill-kuntatti tiegħek?",
         "remove": "Neħħi",

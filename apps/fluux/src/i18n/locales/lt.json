@@ -155,6 +155,7 @@
         "about": "Apie",
         "groups": "Grupės",
         "securityDetailsTitle": "Saugos informacija",
+        "noDetails": "Nėra papildomos informacijos",
         "nameCannotBeEmpty": "Vardas negali būti tuščias",
         "removeConfirm": "Pašalinti {{name}} iš jūsų kontaktų?",
         "remove": "Pašalinti",
