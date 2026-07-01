@@ -7,6 +7,9 @@ export { ContactList } from './ContactList'
 export { RoomsList } from './RoomsList'
 export { SearchView } from './SearchView'
 export { UserMenu } from './UserMenu'
+export { MessagesHeaderActions } from './MessagesHeaderActions'
+export { ContactsHeaderActions } from './ContactsHeaderActions'
+export { RoomsHeaderActions } from './RoomsHeaderActions'
 
 // Types and utilities
 export {
