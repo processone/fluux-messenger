@@ -20,7 +20,7 @@ import { connectionStore, chatStore, roomStore } from '../stores'
 import { NS_MAM } from './namespaces'
 import { logInfo } from './logger'
 import { buildScopedStorageKey } from '../utils/storageScope'
-import { MAM_ROOM_CATCHUP_DELAY_MS } from '../utils/mamCatchUpUtils'
+import { MAM_ROOM_CATCHUP_DELAY_MS, selectRoomsNeedingResumeSeed } from '../utils/mamCatchUpUtils'
 
 /**
  * Sets up background sync side effects that run after a fresh session.
@@ -282,10 +282,40 @@ export function setupBackgroundSyncSideEffects(
     // If MAM not yet known, the serverInfo subscription below will catch it
   })
 
-  // SM resumption: no MAM queries needed, just log
+  // SM resumption: the server replays undelivered stanzas, so no bulk MAM sync
+  // is needed. But the fresh-session room catch-up (`catchUpAllRooms`) never runs
+  // here, so an autojoined room that never completed catch-up keeps an empty
+  // sidebar preview until opened manually (e.g. after a mobile network change, or
+  // when a flaky connection dropped before the 10s fresh-session room pass fired).
+  // Seed exactly those rooms — no preview AND no completed MAM query — reusing
+  // catchUpRoom (its no-cursor path is a `{ before: '' }` fetch-latest that both
+  // populates the archive and sets the preview). Rooms we already hold history for
+  // are skipped, so this stays out of SM's "server replays, no MAM" path.
   const unsubscribeResumed = client.on('resumed', () => {
     isFreshSession = false
-    logInfo('Background sync: SM resumption — skipping')
+
+    const state = roomStore.getState()
+    const eligible = selectRoomsNeedingResumeSeed(
+      state.joinedRooms(),
+      (jid) => state.getRoomMAMQueryState(jid).hasQueried,
+      state.activeRoomJid,
+    )
+    if (eligible.length === 0) {
+      logInfo('Background sync: SM resumption — no rooms need seeding')
+      return
+    }
+
+    logInfo(`Background sync: SM resumption — seeding ${eligible.length} room(s) without preview`)
+    void (async () => {
+      for (const room of eligible) {
+        if (!client.isConnected()) break
+        try {
+          await client.mam.catchUpRoom(room.jid, sessionStartTime)
+        } catch {
+          // Best-effort — a per-room failure shouldn't block the others.
+        }
+      }
+    })()
   })
 
   // When going offline, cancel any pending room catch-up timer.

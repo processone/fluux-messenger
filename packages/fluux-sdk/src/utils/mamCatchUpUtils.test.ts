@@ -4,6 +4,7 @@ import {
   findCatchUpCursorMessage,
   findContinueCatchUpCursor,
   selectCatchUpQuery,
+  selectRoomsNeedingResumeSeed,
   buildCatchUpStartTime,
   isConnectionError,
   MAM_ROOM_FORWARD_MAX_PAGES_MANUAL,
@@ -298,6 +299,82 @@ describe('isConnectionError', () => {
   it('returns false for unrelated errors', () => {
     expect(isConnectionError(new Error('timeout'))).toBe(false)
     expect(isConnectionError(new Error('item-not-found'))).toBe(false)
+  })
+})
+
+// ============================================================================
+// selectRoomsNeedingResumeSeed
+// ============================================================================
+
+describe('selectRoomsNeedingResumeSeed', () => {
+  const neverQueried = () => false
+
+  const room = (
+    over: Partial<{
+      jid: string
+      joined: boolean
+      supportsMAM: boolean
+      isQuickChat: boolean
+      lastMessage: unknown
+    }> = {},
+  ) => ({
+    jid: 'room@conf.example.com',
+    joined: true,
+    supportsMAM: true,
+    isQuickChat: false,
+    lastMessage: undefined as unknown,
+    ...over,
+  })
+
+  it('includes a joined MAM room with no preview that was never queried', () => {
+    const r = room({ jid: 'unseeded@conf.example.com' })
+    expect(selectRoomsNeedingResumeSeed([r], neverQueried, null)).toEqual([r])
+  })
+
+  it('excludes a room that already has a preview (lastMessage set)', () => {
+    const r = room({ jid: 'seeded@conf.example.com', lastMessage: { id: 'm1' } })
+    expect(selectRoomsNeedingResumeSeed([r], neverQueried, null)).toEqual([])
+  })
+
+  it('excludes a room already queried this session (known-empty)', () => {
+    const r = room({ jid: 'queried@conf.example.com' })
+    const hasQueried = (jid: string) => jid === 'queried@conf.example.com'
+    expect(selectRoomsNeedingResumeSeed([r], hasQueried, null)).toEqual([])
+  })
+
+  it('excludes QuickChat rooms', () => {
+    const r = room({ jid: 'quick@conf.example.com', isQuickChat: true })
+    expect(selectRoomsNeedingResumeSeed([r], neverQueried, null)).toEqual([])
+  })
+
+  it('excludes rooms that do not support MAM', () => {
+    const r = room({ jid: 'nomam@conf.example.com', supportsMAM: false })
+    expect(selectRoomsNeedingResumeSeed([r], neverQueried, null)).toEqual([])
+  })
+
+  it('excludes rooms that are not joined', () => {
+    const r = room({ jid: 'left@conf.example.com', joined: false })
+    expect(selectRoomsNeedingResumeSeed([r], neverQueried, null)).toEqual([])
+  })
+
+  it('excludes the active room (handled by roomSideEffects)', () => {
+    const r = room({ jid: 'active@conf.example.com' })
+    expect(
+      selectRoomsNeedingResumeSeed([r], neverQueried, 'active@conf.example.com'),
+    ).toEqual([])
+  })
+
+  it('returns only the eligible rooms from a mixed set', () => {
+    const eligible = room({ jid: 'a@conf.example.com' })
+    const previewed = room({ jid: 'b@conf.example.com', lastMessage: { id: 'm' } })
+    const quick = room({ jid: 'c@conf.example.com', isQuickChat: true })
+    const active = room({ jid: 'd@conf.example.com' })
+    const result = selectRoomsNeedingResumeSeed(
+      [eligible, previewed, quick, active],
+      neverQueried,
+      'd@conf.example.com',
+    )
+    expect(result).toEqual([eligible])
   })
 })
 

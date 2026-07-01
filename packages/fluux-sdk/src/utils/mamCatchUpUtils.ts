@@ -168,6 +168,54 @@ export function selectCatchUpQuery(
 }
 
 /**
+ * Pick the joined rooms that need a preview/catch-up seed on SM resumption.
+ *
+ * The fresh-session background room catch-up (`catchUpAllRooms`) runs only on a
+ * fresh `'online'` event, never on an SM `'resumed'` one. So an autojoined room
+ * that never completed catch-up keeps an empty sidebar preview (and stale
+ * ordering) until the user opens it manually. This picks exactly those rooms so
+ * a resume handler can seed them.
+ *
+ * Stays out of Stream Management's way: it targets ONLY rooms with no preview
+ * AND no completed MAM query, so a room already seeded (`lastMessage` present)
+ * or already known-empty (queried, no messages) is skipped — SM already replays
+ * undelivered stanzas for any room we hold history for, and a seeded/empty room
+ * must not be re-queried on every resume.
+ *
+ * @param rooms - Candidate rooms (typically `roomStore.joinedRooms()`)
+ * @param hasQueried - Predicate: has this room a completed MAM query this session
+ *   (`getRoomMAMQueryState(jid).hasQueried`)? `hasQueried` flips true on any
+ *   completed query (even an empty result), so a genuinely-empty room seeds at
+ *   most once per session.
+ * @param activeRoomJid - The active room, skipped here because roomSideEffects
+ *   drives its own catch-up.
+ * @returns The subset of `rooms` needing a seed, preserving element type.
+ */
+export function selectRoomsNeedingResumeSeed<
+  R extends {
+    jid: string
+    joined?: boolean
+    supportsMAM?: boolean
+    isQuickChat?: boolean
+    lastMessage?: unknown
+  },
+>(
+  rooms: R[],
+  hasQueried: (jid: string) => boolean,
+  activeRoomJid: string | null | undefined,
+): R[] {
+  return rooms.filter((r) => {
+    if (!r.joined) return false
+    if (!r.supportsMAM) return false
+    if (r.isQuickChat) return false
+    if (r.jid === activeRoomJid) return false
+    if (r.lastMessage) return false
+    if (hasQueried(r.jid)) return false
+    return true
+  })
+}
+
+/**
  * Pick the cursor for a user-initiated "continue catch-up" (the "Load missing
  * messages" button).
  *
