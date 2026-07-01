@@ -134,6 +134,8 @@ export interface ChatEvents {
     messageId: string
     reactorJid: string
     emojis: string[]
+    /** true = live delivery or own-echo; false = MAM history replay */
+    isLive: boolean
     /** When the reaction was sent (from XEP-0203 delay tag if present) */
     timestamp?: Date
   }
@@ -308,6 +310,8 @@ export interface RoomEvents {
     messageId: string
     reactorNick: string
     emojis: string[]
+    /** true = live delivery or own-echo; false = MAM history replay */
+    isLive: boolean
     /** When the reaction was sent (from XEP-0203 delay tag if present) */
     timestamp?: Date
   }

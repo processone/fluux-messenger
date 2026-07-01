@@ -1253,10 +1253,10 @@ export class Chat extends BaseModule {
     // Use the original messageId for local store updates (store matches by both id and stanzaId)
     if (type === 'groupchat') {
       const room = this.deps.stores?.room.getRoom(to)
-      if (room) this.deps.emitSDK('room:reactions', { roomJid: to, messageId, reactorNick: room.nickname, emojis })
+      if (room) this.deps.emitSDK('room:reactions', { roomJid: to, messageId, reactorNick: room.nickname, emojis, isLive: true })
     } else {
       const myBareJid = getBareJid(this.deps.getCurrentJid() ?? '')
-      if (myBareJid) this.deps.emitSDK('chat:reactions', { conversationId: to, messageId, reactorJid: myBareJid, emojis })
+      if (myBareJid) this.deps.emitSDK('chat:reactions', { conversationId: to, messageId, reactorJid: myBareJid, emojis, isLive: true })
     }
   }
 
@@ -1837,10 +1837,10 @@ export class Chat extends BaseModule {
     if (type === 'groupchat') {
       const roomNick = getResource(from)
       if (roomNick) {
-        this.deps.emitSDK('room:reactions', { roomJid: conversationId, messageId, reactorNick: roomNick, emojis, ...(timestamp && { timestamp }) })
+        this.deps.emitSDK('room:reactions', { roomJid: conversationId, messageId, reactorNick: roomNick, emojis, isLive: true, ...(timestamp && { timestamp }) })
       }
     } else {
-      this.deps.emitSDK('chat:reactions', { conversationId, messageId, reactorJid: bareFrom, emojis, ...(timestamp && { timestamp }) })
+      this.deps.emitSDK('chat:reactions', { conversationId, messageId, reactorJid: bareFrom, emojis, isLive: true, ...(timestamp && { timestamp }) })
     }
   }
 

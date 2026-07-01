@@ -1671,6 +1671,7 @@ export class MAM extends BaseModule {
         messageId: reaction.targetId,
         reactorJid: reaction.from,
         emojis: reaction.emojis,
+        isLive: false,
         ...(reaction.timestamp && { timestamp: reaction.timestamp }),
       })
     }
@@ -1735,6 +1736,7 @@ export class MAM extends BaseModule {
         messageId: reaction.targetId,
         reactorNick: getResource(reaction.from) || reaction.from,
         emojis: reaction.emojis,
+        isLive: false,
         ...(reaction.timestamp && { timestamp: reaction.timestamp }),
       })
     }

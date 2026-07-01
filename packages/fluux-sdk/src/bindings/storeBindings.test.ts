@@ -124,6 +124,7 @@ describe('createStoreBindings', () => {
         messageId: 'msg1',
         reactorJid: 'bob@example.com',
         emojis: ['thumbsup'],
+        isLive: true,
       })
       expect(mockStores.chat.updateReactions).toHaveBeenCalledWith(
         'bob@example.com', 'msg1', 'bob@example.com', ['thumbsup']
@@ -381,6 +382,7 @@ describe('createStoreBindings', () => {
         messageId: 'msg1',
         reactorNick: 'Alice',
         emojis: ['heart'],
+        isLive: true,
       })
       expect(mockStores.room.updateReactions).toHaveBeenCalledWith(
         'room@conference.example.com', 'msg1', 'Alice', ['heart']

@@ -105,6 +105,7 @@ describe('ActivityLogHook', () => {
         messageId: 'msg-1',
         reactorJid: 'alice@example.com',
         emojis: ['👍'],
+        isLive: true,
       })
 
       const payload = getLastReactionPayload()
@@ -125,6 +126,7 @@ describe('ActivityLogHook', () => {
         messageId: 'msg-1',
         reactorJid: 'alice@example.com',
         emojis: ['👍'],
+        isLive: true,
       })
 
       expect(activityLogStore.getState().events).toHaveLength(0)
@@ -139,6 +141,7 @@ describe('ActivityLogHook', () => {
         messageId: 'msg-1',
         reactorJid: MY_JID,
         emojis: ['👍'],
+        isLive: true,
       })
 
       expect(activityLogStore.getState().events).toHaveLength(0)
@@ -150,6 +153,7 @@ describe('ActivityLogHook', () => {
         messageId: 'msg-1',
         reactorJid: 'alice@example.com',
         emojis: [],
+        isLive: true,
       })
 
       expect(activityLogStore.getState().events).toHaveLength(0)
@@ -176,6 +180,7 @@ describe('ActivityLogHook', () => {
         messageId: 'poll-msg-1',
         reactorJid: 'alice@example.com',
         emojis: ['1️⃣'],
+        isLive: true,
       })
 
       const payload = getLastReactionPayload()
@@ -192,6 +197,7 @@ describe('ActivityLogHook', () => {
         messageId: 'msg-1',
         reactorJid: 'alice@example.com',
         emojis: ['❤️'],
+        isLive: true,
       })
 
       const payload = getLastReactionPayload()
@@ -207,12 +213,14 @@ describe('ActivityLogHook', () => {
         messageId: 'msg-1',
         reactorJid: 'alice@example.com',
         emojis: ['👍'],
+        isLive: true,
       })
       client.fire('chat:reactions', {
         conversationId: 'alice@example.com',
         messageId: 'msg-1',
         reactorJid: 'bob@example.com',
         emojis: ['❤️'],
+        isLive: true,
       })
 
       // Should have exactly 1 event (grouped), not 2
@@ -238,12 +246,14 @@ describe('ActivityLogHook', () => {
         messageId: 'poll-msg-1',
         reactorJid: 'alice@example.com',
         emojis: ['1️⃣'],
+        isLive: true,
       })
       client.fire('chat:reactions', {
         conversationId: 'alice@example.com',
         messageId: 'poll-msg-1',
         reactorJid: 'bob@example.com',
         emojis: ['2️⃣'],
+        isLive: true,
       })
 
       const payload = getLastReactionPayload()
@@ -278,6 +288,7 @@ describe('ActivityLogHook', () => {
         messageId: 'room-msg-1',
         reactorNick: 'alice',
         emojis: ['👍'],
+        isLive: true,
       })
 
       const payload = getLastReactionPayload()
@@ -296,6 +307,7 @@ describe('ActivityLogHook', () => {
         messageId: 'room-msg-1',
         reactorNick: 'alice',
         emojis: ['👍'],
+        isLive: true,
       })
 
       expect(activityLogStore.getState().events).toHaveLength(0)
@@ -310,6 +322,7 @@ describe('ActivityLogHook', () => {
         messageId: 'room-msg-1',
         reactorNick: 'me',
         emojis: ['👍'],
+        isLive: true,
       })
 
       expect(activityLogStore.getState().events).toHaveLength(0)
@@ -333,6 +346,7 @@ describe('ActivityLogHook', () => {
         messageId: 'room-poll-1',
         reactorNick: 'alice',
         emojis: ['1️⃣'],
+        isLive: true,
       })
 
       const payload = getLastReactionPayload()
@@ -353,6 +367,7 @@ describe('ActivityLogHook', () => {
         reactorJid: 'alice@example.com',
         emojis: ['👍'],
         timestamp: sentAt,
+        isLive: true,
       })
 
       const event = activityLogStore.getState().events.find((e) => e.type === 'reaction-received')
@@ -370,6 +385,7 @@ describe('ActivityLogHook', () => {
         messageId: 'msg-1',
         reactorJid: 'alice@example.com',
         emojis: ['👍'],
+        isLive: true,
       })
       const after = new Date()
 
@@ -392,6 +408,7 @@ describe('ActivityLogHook', () => {
         reactorJid: 'alice@example.com',
         emojis: ['👍'],
         timestamp: older,
+        isLive: true,
       })
       client.fire('chat:reactions', {
         conversationId: 'alice@example.com',
@@ -399,6 +416,7 @@ describe('ActivityLogHook', () => {
         reactorJid: 'bob@example.com',
         emojis: ['❤️'],
         timestamp: newer,
+        isLive: true,
       })
 
       const event = activityLogStore.getState().events.find((e) => e.type === 'reaction-received')
@@ -419,6 +437,7 @@ describe('ActivityLogHook', () => {
         reactorJid: 'alice@example.com',
         emojis: ['👍'],
         timestamp: newer,
+        isLive: true,
       })
       client.fire('chat:reactions', {
         conversationId: 'alice@example.com',
@@ -426,6 +445,7 @@ describe('ActivityLogHook', () => {
         reactorJid: 'bob@example.com',
         emojis: ['❤️'],
         timestamp: older,
+        isLive: true,
       })
 
       const event = activityLogStore.getState().events.find((e) => e.type === 'reaction-received')
@@ -447,6 +467,7 @@ describe('ActivityLogHook', () => {
         messageId: 'msg-1',
         reactorJid: 'alice@example.com',
         emojis: ['👍'],
+        isLive: true,
       })
 
       expect(activityLogStore.getState().events).toHaveLength(0)
