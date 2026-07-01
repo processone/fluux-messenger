@@ -16,7 +16,7 @@ import {
 import { useChat, useRoom, useRoster, matchNameOrJid, getLocalPart, searchStore } from '@fluux/sdk'
 import { formatLocalizedPreview } from '@/utils/messagePreviewText'
 import { detectRenderLoop } from '@/utils/renderLoopDetector'
-import { useChatStore, useConnectionStore } from '@fluux/sdk/react'
+import { useChatStore, useConnectionStore, useRoomStore } from '@fluux/sdk/react'
 import type { PresenceStatus } from '@fluux/sdk'
 import type { SidebarView } from './Sidebar'
 import { Avatar } from './Avatar'
@@ -258,6 +258,11 @@ function CommandPaletteContent({
   const connectionStatus = useConnectionStore((s) => s.status)
   const forceOffline = connectionStatus !== 'online'
   const { setActiveConversation } = useChatStore()
+  // The entity currently open in the main pane — never propose "go to where you
+  // already are". Read as narrow selectors (change only on navigation, which
+  // closes the palette anyway).
+  const activeConversationId = useChatStore((s) => s.activeConversationId)
+  const activeRoomJid = useRoomStore((s) => s.activeRoomJid)
   // Narrow read: only re-render on a density change. Drives the entity avatar
   // size and the action/view icon box; row padding + gap come from CSS keyed on
   // `[data-density]` (the `.command-row` class) so a flip needs no row work.
@@ -302,6 +307,7 @@ function CommandPaletteContent({
     // 1. Conversations (contacts with active chats, sorted by recency)
     for (const conv of conversations) {
       if (conv.type !== 'chat') continue
+      if (conv.id === activeConversationId) continue // don't propose the open conversation
       const contact = contacts.find((c) => c.jid === conv.id)
       const preview = conv.lastMessage ? formatLocalizedPreview(conv.lastMessage, t) : undefined
       items.push({
@@ -353,6 +359,7 @@ function CommandPaletteContent({
 
     // 3. Joined rooms
     for (const room of joinedRooms) {
+      if (room.jid === activeRoomJid) continue // don't propose the open room
       const preview = room.lastMessage ? formatLocalizedPreview(room.lastMessage, t) : undefined
       items.push({
         id: `room-${room.jid}`,

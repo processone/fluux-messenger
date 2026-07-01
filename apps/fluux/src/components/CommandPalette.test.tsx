@@ -33,6 +33,8 @@ const mockSetActiveConversation = vi.fn()
 const mockSetActiveRoom = vi.fn()
 const mockIsArchived = vi.fn((_jid: string) => false)
 let mockArchivedConversations: typeof mockConversations = []
+let mockActiveConversationId: string | null = null
+let mockActiveRoomJid: string | null = null
 
 // Mock SDK hooks
 const mockSearchFn = vi.fn()
@@ -66,14 +68,24 @@ vi.mock('@fluux/sdk', () => ({
 }))
 
 // Mock React store hooks (from @fluux/sdk/react)
-vi.mock('@fluux/sdk/react', () => ({
-  useChatStore: () => ({
+vi.mock('@fluux/sdk/react', () => {
+  // Selector-aware: called bare (`useChatStore()`) returns the state object;
+  // called with a selector returns the selected slice.
+  const chatState = () => ({
     setActiveConversation: mockSetActiveConversation,
-  }),
-  useConnectionStore: (selector: (state: { status: string }) => unknown) =>
-    selector({ status: 'online' }),
-  useContactTime: () => null, useLastActivity: vi.fn(),
-}))
+    activeConversationId: mockActiveConversationId,
+  })
+  const roomState = () => ({ activeRoomJid: mockActiveRoomJid })
+  return {
+    useChatStore: (selector?: (s: ReturnType<typeof chatState>) => unknown) =>
+      selector ? selector(chatState()) : chatState(),
+    useRoomStore: (selector?: (s: ReturnType<typeof roomState>) => unknown) =>
+      selector ? selector(roomState()) : roomState(),
+    useConnectionStore: (selector: (state: { status: string }) => unknown) =>
+      selector({ status: 'online' }),
+    useContactTime: () => null, useLastActivity: vi.fn(),
+  }
+})
 
 // Mock i18n
 vi.mock('react-i18next', () => ({
@@ -135,6 +147,8 @@ describe('CommandPalette', () => {
     vi.clearAllMocks()
     mockIsArchived.mockReturnValue(false)
     mockArchivedConversations = []
+    mockActiveConversationId = null
+    mockActiveRoomJid = null
     useAdvancedModeStore.setState({ advancedMode: false })
   })
 
@@ -1274,6 +1288,32 @@ describe('CommandPalette', () => {
       expect(announce.compareDocumentPosition(general) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
       // General Chat before Development
       expect(general.compareDocumentPosition(dev) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    })
+  })
+
+  describe('Active entity hidden', () => {
+    it('does not propose the currently-open conversation', () => {
+      mockActiveConversationId = 'bob@example.com'
+      render(<CommandPalette {...defaultProps} />)
+      // Bob is the open conversation — hidden everywhere, including the Unread section
+      expect(screen.queryByText('Bob Jones')).not.toBeInTheDocument()
+      // Other conversations still listed
+      expect(screen.getByText('Alice Smith')).toBeInTheDocument()
+    })
+
+    it('does not propose the open conversation even when the user searches for it', () => {
+      mockActiveConversationId = 'bob@example.com'
+      render(<CommandPalette {...defaultProps} />)
+      fireEvent.change(screen.getByPlaceholderText('Go to...'), { target: { value: 'Bob' } })
+      expect(screen.queryByText('Bob Jones')).not.toBeInTheDocument()
+    })
+
+    it('does not propose the currently-open room', () => {
+      mockActiveRoomJid = 'dev@conference.example.com'
+      render(<CommandPalette {...defaultProps} />)
+      // Development is the open room — hidden; other joined rooms still listed
+      expect(screen.queryByText('Development')).not.toBeInTheDocument()
+      expect(screen.getByText('General Chat')).toBeInTheDocument()
     })
   })
 
