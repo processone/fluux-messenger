@@ -1246,6 +1246,22 @@ describe('CommandPalette', () => {
     })
   })
 
+  describe('Unread badge', () => {
+    it('shows a count badge for unread DMs in the default view', () => {
+      render(<CommandPalette {...defaultProps} />)
+      // Bob Jones has unreadCount 2
+      expect(screen.getByText('2')).toBeInTheDocument()
+    })
+
+    it('does not show unread badges once the user types a query', () => {
+      render(<CommandPalette {...defaultProps} />)
+      fireEvent.change(screen.getByPlaceholderText('Go to...'), { target: { value: 'Bob' } })
+      // Bob still listed, but no "2" badge in search results
+      expect(screen.getByText('Bob Jones')).toBeInTheDocument()
+      expect(screen.queryByText('2')).not.toBeInTheDocument()
+    })
+  })
+
   describe('Room ordering', () => {
     it('orders rooms mentions-first, then unread, then read', () => {
       render(<CommandPalette {...defaultProps} />)

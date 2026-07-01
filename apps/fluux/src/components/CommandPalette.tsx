@@ -433,7 +433,7 @@ function CommandPaletteContent({
   // Filter and group items (combined into single memo for simplicity)
   // =============================================================================
 
-  const { flatItems, groupedItems, filterMode, isDefaultView: _isDefaultView } = (() => {
+  const { flatItems, groupedItems, filterMode, isDefaultView } = (() => {
     const { filterMode, searchQuery } = parseQuery(query)
     const allowedTypes = getTypesForMode(filterMode)
     const isDefaultView = !searchQuery && filterMode === 'all'
@@ -673,6 +673,17 @@ function CommandPaletteContent({
                           </div>
                         )}
                       </div>
+                      {isDefaultView && (item.unreadCount ?? 0) > 0 && (
+                        <span
+                          className={`ms-2 flex-shrink-0 inline-flex items-center justify-center min-w-5 h-5 px-1.5 rounded-full text-xs font-semibold ${
+                            (item.mentionsCount ?? 0) > 0
+                              ? 'bg-fluux-brand text-white'
+                              : 'bg-fluux-hover text-fluux-text'
+                          }`}
+                        >
+                          {item.unreadCount}
+                        </span>
+                      )}
                       {isSelected && (
                         <kbd className="hidden sm:inline-flex items-center px-1.5 py-0.5 text-xs text-fluux-muted bg-fluux-bg rounded border border-fluux-hover">
                           ↵
