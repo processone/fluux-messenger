@@ -40,7 +40,6 @@ export interface ViewNavigationResult {
   navigateToMessages: (jid?: string, options?: NavigateOptions) => void
   navigateToRooms: (jid?: string, options?: NavigateOptions) => void
   navigateToContacts: (jid?: string, options?: NavigateOptions) => void
-  navigateToArchive: (jid?: string, options?: NavigateOptions) => void
   navigateToEvents: (options?: NavigateOptions) => void
   navigateToAdmin: (category?: string, options?: NavigateOptions) => void
   navigateToSettings: (category?: string, options?: NavigateOptions) => void
@@ -73,7 +72,6 @@ export function useViewNavigation(selectedContact: Contact | null): ViewNavigati
     navigateToMessages,
     navigateToRooms,
     navigateToContacts,
-    navigateToArchive,
     navigateToEvents,
     navigateToAdmin,
     navigateToSettings,
@@ -116,9 +114,6 @@ export function useViewNavigation(selectedContact: Contact | null): ViewNavigati
         break
       case 'directory':
         if (currentConversationId) setActiveConversation(null)
-        if (currentRoomJid) setActiveRoom(null)
-        break
-      case 'archive':
         if (currentRoomJid) setActiveRoom(null)
         break
       case 'admin':
@@ -218,32 +213,6 @@ export function useViewNavigation(selectedContact: Contact | null): ViewNavigati
         // On small screens, don't auto-restore last contact - let user choose
         navigateToContacts(skipAutoSelect ? undefined : (lastDirectoryContact?.jid ?? undefined), { replace: true })
         break
-      case 'archive': {
-        setActiveRoom(null)
-        // Use per-tab memory (from archive), or fall back to first archived conversation (sorted by most recent)
-        // On small screens, skip auto-selection so user sees the sidebar first
-        const targetArchive = skipAutoSelect ? undefined : (() => {
-          const chatState = chatStore.getState()
-          const conversations = chatState.conversations
-          if (!conversations || typeof conversations.values !== 'function') return undefined
-          // Sort by lastMessage timestamp descending (most recent first) to match sidebar order
-          const sorted = Array.from(conversations.values())
-            .filter(c => chatState.isArchived?.(c.id))
-            .sort((a, b) => {
-              const aTimestamp = a.lastMessage?.timestamp
-              const bTimestamp = b.lastMessage?.timestamp
-              const aTime = aTimestamp instanceof Date ? aTimestamp.getTime() : (aTimestamp ? new Date(aTimestamp).getTime() : 0)
-              const bTime = bTimestamp instanceof Date ? bTimestamp.getTime() : (bTimestamp ? new Date(bTimestamp).getTime() : 0)
-              return bTime - aTime
-            })
-          return sorted[0]?.id
-        })()
-        // Set store state AND navigate to URL
-        // Always set conversation (even null) to clear any leftover non-archived conversation
-        void activateConversation(targetArchive ?? null)
-        navigateToArchive(targetArchive, { replace: true })
-        break
-      }
       case 'events':
         // Events view has no main content - just show sidebar
         setActiveConversation(null)
@@ -269,7 +238,7 @@ export function useViewNavigation(selectedContact: Contact | null): ViewNavigati
     }
   }, [sidebarView, selectedContact, lastMessagesConversation, lastRoomsRoom, lastDirectoryContact,
       setActiveConversation, setActiveRoom, activateConversation, activateRoom,
-      navigateToMessages, navigateToRooms, navigateToContacts, navigateToArchive,
+      navigateToMessages, navigateToRooms, navigateToContacts,
       navigateToEvents, navigateToAdmin, navigateToSettings, navigateToSearch])
 
   const perTabMemory: PerTabMemory = {
@@ -290,7 +259,6 @@ export function useViewNavigation(selectedContact: Contact | null): ViewNavigati
     navigateToMessages,
     navigateToRooms,
     navigateToContacts,
-    navigateToArchive,
     navigateToEvents,
     navigateToAdmin,
     navigateToSettings,

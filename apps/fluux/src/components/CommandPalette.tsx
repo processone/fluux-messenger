@@ -8,7 +8,6 @@ import {
   Settings,
   HelpCircle,
   Terminal,
-  Archive,
   Bell,
   Users,
   Search,
@@ -252,7 +251,7 @@ function CommandPaletteContent({
   }
 
   // Data from stores
-  const { conversations, archivedConversations, isArchived } = useChat()
+  const { conversations, archivedConversations } = useChat()
   const { joinedRooms, bookmarkedRooms, setActiveRoom } = useRoom()
   const { contacts } = useRoster()
   const connectionStatus = useConnectionStore((s) => s.status)
@@ -281,9 +280,8 @@ function CommandPaletteContent({
   const selectConversation = (jid: string) => {
     // Navigate first, THEN set conversation - otherwise handleSidebarViewChange
     // will overwrite our selection with the "last conversation" restore logic
-    // Archived conversations open in the archive tab
-    const targetView = isArchived(jid) ? 'archive' : 'messages'
-    closeAndNavigate(targetView)
+    // Archived conversations open in the messages tab (via the archive toggle)
+    closeAndNavigate('messages')
     void setActiveConversation(jid)
     void setActiveRoom(null)
   }
@@ -396,7 +394,6 @@ function CommandPaletteContent({
       { id: 'view-messages', label: t('sidebar.messages'), icon: <MessageSquare />, view: 'messages', keywords: ['messages', 'conversations', 'chat'] },
       { id: 'view-rooms', label: t('sidebar.rooms'), icon: <Hash />, view: 'rooms', keywords: ['rooms', 'channels', 'muc'] },
       { id: 'view-connections', label: t('sidebar.contacts'), icon: <Users />, view: 'directory', keywords: ['connections', 'contacts', 'roster'] },
-      { id: 'view-archive', label: t('sidebar.archive'), icon: <Archive />, view: 'archive', keywords: ['archive', 'hidden', 'old'] },
       { id: 'view-events', label: t('sidebar.events'), icon: <Bell />, view: 'events', keywords: ['events', 'notifications', 'requests'] },
     ]
 

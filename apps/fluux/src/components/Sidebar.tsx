@@ -254,14 +254,6 @@ export function Sidebar({ onSelectContact, onStartChat, onStartChatWithJid, onMa
           onNavigate={onViewChange}
           showBadge={totalMentionsCount > 0 || totalNotifiableUnreadCount > 0}
         />
-        {/* Archive */}
-        <IconRailNavLink
-          icon={Archive}
-          label={t('sidebar.archive')}
-          view="archive"
-          pathPrefix="/archive"
-          onNavigate={onViewChange}
-        />
         {/* Events/Notifications */}
         <IconRailNavLink
           icon={Bell}
@@ -327,7 +319,6 @@ export function Sidebar({ onSelectContact, onStartChat, onStartChatWithJid, onMa
             {sidebarView === 'messages' ? (showArchived ? t('messages.archivedTitle') : t('sidebar.messages'))
               : sidebarView === 'rooms' ? t('sidebar.rooms')
               : sidebarView === 'directory' ? t('sidebar.contacts')
-              : sidebarView === 'archive' ? t('sidebar.archive')
               : sidebarView === 'admin' ? t('sidebar.admin')
               : sidebarView === 'settings' ? t('sidebar.settings')
               : sidebarView === 'search' ? t('sidebar.search', 'Search')
@@ -468,8 +459,6 @@ export function Sidebar({ onSelectContact, onStartChat, onStartChatWithJid, onMa
                 <ContactList onStartChat={onStartChat} onSelectContact={onSelectContact} onManageUser={onManageUser} activeContactJid={activeContactJid} />
               ) : sidebarView === 'rooms' ? (
                 <RoomsList />
-              ) : sidebarView === 'archive' ? (
-                <ArchiveList />
               ) : sidebarView === 'admin' ? (
                 <AdminDashboard
                   activeCategory={adminCategory ?? null}

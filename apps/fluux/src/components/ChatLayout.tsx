@@ -40,7 +40,7 @@ import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
 import { useDeepLink } from '@/hooks/useDeepLink'
 import { saveViewState, getSavedViewState, type ViewStateData } from '@/hooks/useSessionPersistence'
 import { useModalStore } from '@/stores/modalStore'
-import { Server, ShieldOff, MessageCircle, Hash, Users, Archive, Bell, Search, Settings, Plus, type LucideIcon } from 'lucide-react'
+import { Server, ShieldOff, MessageCircle, Hash, Users, Bell, Search, Settings, Plus, type LucideIcon } from 'lucide-react'
 
 /**
  * ChatLayout wrapper. The actual layout logic is in ChatLayoutContent; modal state
@@ -269,7 +269,6 @@ function ChatLayoutContent() {
     navigateToMessages,
     navigateToRooms,
     navigateToContacts,
-    navigateToArchive,
     navigateToEvents,
     navigateToAdmin,
     navigateToSettings,
@@ -366,9 +365,6 @@ function ChatLayoutContent() {
         case 'directory':
           navigateToContacts(savedViewState.selectedContactJid ?? undefined)
           break
-        case 'archive':
-          navigateToArchive(savedViewState.activeConversationId ?? undefined)
-          break
         case 'events':
           navigateToEvents()
           break
@@ -380,7 +376,7 @@ function ChatLayoutContent() {
           break
       }
     }
-  }, [activateConversation, activateRoom, navigateToMessages, navigateToRooms, navigateToContacts, navigateToArchive, navigateToEvents, navigateToAdmin, navigateToSettings])
+  }, [activateConversation, activateRoom, navigateToMessages, navigateToRooms, navigateToContacts, navigateToEvents, navigateToAdmin, navigateToSettings])
 
   // Save view state when it changes (only when online)
   useEffect(() => {
@@ -440,11 +436,6 @@ function ChatLayoutContent() {
     } else if (sidebarView === 'directory') {
       if (activeJid !== selectedContactJid) {
         setSelectedContactJid(activeJid)
-      }
-    } else if (sidebarView === 'archive') {
-      const currentStoreId = chatStore.getState().activeConversationId
-      if (activeJid !== currentStoreId) {
-        void activateConversation(activeJid)
       }
     }
   }, [activeJid, sidebarView, activateConversation, activateRoom, selectedContactJid])
@@ -708,13 +699,12 @@ function ChatLayoutContent() {
   const handleStartConversation = (contact: Contact) => {
     const chatState = chatStore.getState()
 
-    // Check if conversation is archived - if so, open in archive view
+    // Check if conversation is archived - open in messages view (archive toggle handles display)
     if (chatState.isArchived(contact.jid)) {
-      // Navigate to archive view to show the archived conversation
-      handleSidebarViewChange('archive')
+      handleSidebarViewChange('messages')
       void activateConversation(contact.jid)
       setActiveRoom(null)
-      navigateToArchive(contact.jid, { replace: true })
+      navigateToMessages(contact.jid, { replace: true })
       return
     }
 
@@ -745,10 +735,10 @@ function ChatLayoutContent() {
   const handleStartChatWithJid = (jid: string) => {
     const chatState = chatStore.getState()
     if (chatState.isArchived(jid)) {
-      handleSidebarViewChange('archive')
+      handleSidebarViewChange('messages')
       void activateConversation(jid)
       setActiveRoom(null)
-      navigateToArchive(jid, { replace: true })
+      navigateToMessages(jid, { replace: true })
       return
     }
     if (!chatState.hasConversation(jid)) {
@@ -1017,12 +1007,6 @@ function EmptyState({ sidebarView, primaryAction }: { sidebarView: SidebarView; 
           title: t('emptyState.directory.title'),
           description: t('emptyState.directory.description'),
           hint: t('emptyState.directory.hint'),
-        }
-      case 'archive':
-        return {
-          Icon: Archive,
-          title: t('emptyState.archive.title'),
-          description: t('emptyState.archive.description'),
         }
       case 'events':
         return {

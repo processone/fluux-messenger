@@ -121,7 +121,7 @@ interface ProfileData {
  * View state for restoring UI on page reload.
  */
 export interface ViewStateData {
-  sidebarView: 'messages' | 'rooms' | 'directory' | 'archive' | 'events' | 'admin' | 'settings' | 'search'
+  sidebarView: 'messages' | 'rooms' | 'directory' | 'events' | 'admin' | 'settings' | 'search'
   activeConversationId: string | null
   activeRoomJid: string | null
   selectedContactJid: string | null
@@ -224,12 +224,19 @@ export function saveViewState(viewState: ViewStateData, jid?: string | null): vo
 
 /**
  * Gets stored view state.
+ * Normalizes legacy/removed view names to valid current views on read,
+ * so stale sessionStorage values never surface a removed view type.
  */
 export function getSavedViewState(jid?: string | null): ViewStateData | null {
   try {
     const stored = getScopedSessionItem(VIEW_STATE_KEY, jid)
     if (!stored) return null
-    return JSON.parse(stored) as ViewStateData
+    const parsed = JSON.parse(stored) as { sidebarView: string } & Omit<ViewStateData, 'sidebarView'>
+    // Normalize removed view names to 'messages' (forward compat)
+    if (parsed.sidebarView === 'archive') {
+      parsed.sidebarView = 'messages'
+    }
+    return parsed as ViewStateData
   } catch {
     return null
   }

@@ -53,8 +53,6 @@ export interface RouteActions {
   navigateToRooms: (jid?: string, options?: NavigateOptions) => void
   /** Navigate to contacts/directory view, optionally selecting a contact */
   navigateToContacts: (jid?: string, options?: NavigateOptions) => void
-  /** Navigate to archive view, optionally selecting an archived conversation */
-  navigateToArchive: (jid?: string, options?: NavigateOptions) => void
   /** Navigate to events view */
   navigateToEvents: (options?: NavigateOptions) => void
   /** Navigate to admin view, optionally selecting a category */
@@ -81,9 +79,6 @@ function parseRoute(pathname: string): SidebarView {
   if (pathname.startsWith('/contacts')) {
     return 'directory'
   }
-  if (pathname.startsWith('/archive')) {
-    return 'archive'
-  }
   if (pathname.startsWith('/events')) {
     return 'events'
   }
@@ -103,8 +98,8 @@ function parseRoute(pathname: string): SidebarView {
  * JIDs need URL decoding since they contain @ characters.
  */
 function extractJidFromPath(pathname: string): string | null {
-  // Match patterns like /messages/:jid, /rooms/:jid, /contacts/:jid, /archive/:jid
-  const viewPaths = ['/messages/', '/rooms/', '/contacts/', '/archive/']
+  // Match patterns like /messages/:jid, /rooms/:jid, /contacts/:jid
+  const viewPaths = ['/messages/', '/rooms/', '/contacts/']
   for (const prefix of viewPaths) {
     if (pathname.startsWith(prefix)) {
       const encoded = pathname.slice(prefix.length)
@@ -222,15 +217,6 @@ export function useRouteSync(): RouteState & RouteActions {
     }
   }, [navigate])
 
-  const navigateToArchive = useCallback((jid?: string, options?: NavigateOptions) => {
-    const opts = options?.replace ? { replace: true } : undefined
-    if (jid) {
-      void navigate(`/archive/${encodeURIComponent(jid)}`, opts)
-    } else {
-      void navigate('/archive', opts)
-    }
-  }, [navigate])
-
   const navigateToEvents = useCallback((options?: NavigateOptions) => {
     const opts = options?.replace ? { replace: true } : undefined
     void navigate('/events', opts)
@@ -287,7 +273,6 @@ export function useRouteSync(): RouteState & RouteActions {
     navigateToMessages,
     navigateToRooms,
     navigateToContacts,
-    navigateToArchive,
     navigateToEvents,
     navigateToAdmin,
     navigateToSettings,

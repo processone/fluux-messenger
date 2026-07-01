@@ -632,12 +632,12 @@ describe('CommandPalette', () => {
       render(<CommandPalette {...defaultProps} />)
       const input = screen.getByPlaceholderText('Go to...')
 
-      fireEvent.change(input, { target: { value: 'archive' } })
+      fireEvent.change(input, { target: { value: 'events' } })
 
-      const archiveItem = screen.getByText('Archive').closest('button')
-      fireEvent.click(archiveItem!)
+      const eventsItem = screen.getByText('Events').closest('button')
+      fireEvent.click(eventsItem!)
 
-      expect(defaultProps.onSidebarViewChange).toHaveBeenCalledWith('archive')
+      expect(defaultProps.onSidebarViewChange).toHaveBeenCalledWith('events')
       expect(defaultProps.onClose).toHaveBeenCalled()
     })
   })
@@ -1319,8 +1319,8 @@ describe('CommandPalette', () => {
   })
 
   describe('Archived conversations', () => {
-    it('should navigate to archive view when selecting an archived conversation', () => {
-      // Make Bob's conversation archived
+    it('should navigate to messages view when selecting an archived conversation', () => {
+      // Make Bob's conversation archived — now always opens in messages view
       mockIsArchived.mockImplementation(jid => jid === 'bob@example.com')
 
       const trackingProps = {
@@ -1334,7 +1334,7 @@ describe('CommandPalette', () => {
       const bobItem = screen.getByText('Bob Jones').closest('button')
       fireEvent.click(bobItem!)
 
-      expect(trackingProps.onSidebarViewChange).toHaveBeenCalledWith('archive')
+      expect(trackingProps.onSidebarViewChange).toHaveBeenCalledWith('messages')
       expect(mockSetActiveConversation).toHaveBeenCalledWith('bob@example.com')
     })
 
@@ -1355,8 +1355,8 @@ describe('CommandPalette', () => {
       expect(mockSetActiveConversation).toHaveBeenCalledWith('alice@example.com')
     })
 
-    it('should navigate to archive view when pressing Enter on an archived conversation', () => {
-      // Make Alice's conversation archived
+    it('should navigate to messages view when pressing Enter on an archived conversation', () => {
+      // Make Alice's conversation archived — now always opens in messages view
       mockIsArchived.mockImplementation(jid => jid === 'alice@example.com')
 
       const trackingProps = {
@@ -1371,11 +1371,11 @@ describe('CommandPalette', () => {
       fireEvent.keyDown(container!, { key: 'ArrowDown' })
       fireEvent.keyDown(container!, { key: 'Enter' })
 
-      expect(trackingProps.onSidebarViewChange).toHaveBeenCalledWith('archive')
+      expect(trackingProps.onSidebarViewChange).toHaveBeenCalledWith('messages')
       expect(mockSetActiveConversation).toHaveBeenCalledWith('alice@example.com')
     })
 
-    it('should open archived conversation when selecting a contact with archived history', () => {
+    it('should open archived conversation in messages view when selecting a contact with archived history', () => {
       // Charlie has an archived conversation (not in mockConversations but in archivedConversations)
       mockArchivedConversations = [
         { id: 'charlie@example.com', name: 'Charlie Brown', unreadCount: 0, type: 'chat' as const },
@@ -1397,8 +1397,8 @@ describe('CommandPalette', () => {
       const charlieItem = screen.getByText('Charlie Brown').closest('button')
       fireEvent.click(charlieItem!)
 
-      // Should navigate to archive view and open the archived conversation
-      expect(trackingProps.onSidebarViewChange).toHaveBeenCalledWith('archive')
+      // Should navigate to messages view (archive rail is gone) and open the archived conversation
+      expect(trackingProps.onSidebarViewChange).toHaveBeenCalledWith('messages')
       expect(mockSetActiveConversation).toHaveBeenCalledWith('charlie@example.com')
       // Should NOT call onStartConversation (no new conversation created)
       expect(trackingProps.onStartConversation).not.toHaveBeenCalled()
