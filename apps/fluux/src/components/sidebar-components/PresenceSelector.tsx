@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useClickOutside, useAnchoredMenu } from '@/hooks'
 import { usePresence, useXMPP, type PresenceStatus } from '@fluux/sdk'
-import { useConnectionStore } from '@fluux/sdk/react'
+import { useConnectionStore, useEventsStore } from '@fluux/sdk/react'
 import { ChevronDown, Check, RefreshCw, X } from 'lucide-react'
 import { TextInput } from '../ui/TextInput'
 import { Tooltip } from '../Tooltip'
@@ -228,6 +228,14 @@ export function StatusDisplay({ status }: StatusDisplayProps) {
   const reconnectTargetTime = useConnectionStore((s) => s.reconnectTargetTime)
   const reconnectAttempt = useConnectionStore((s) => s.reconnectAttempt)
   const { client } = useXMPP()
+  const persistentAlert = useEventsStore((s) => {
+    // Latest (newest) persistent alert — addSystemNotification appends, so scan from the end.
+    for (let i = s.systemNotifications.length - 1; i >= 0; i--) {
+      const n = s.systemNotifications[i]
+      if (n.type === 'auth-error' || n.type === 'resource-conflict') return n
+    }
+    return null
+  })
 
   // Local countdown state — only this component re-renders every second,
   // not the entire Sidebar tree.
@@ -246,8 +254,10 @@ export function StatusDisplay({ status }: StatusDisplayProps) {
     return () => clearInterval(interval)
   }, [status, reconnectTargetTime])
 
+  let statusLine: React.ReactNode
+
   if (status === 'reconnecting') {
-    return (
+    statusLine = (
       <div className="flex items-center gap-1 min-w-0">
         <p className="text-xs text-fluux-yellow truncate flex items-center gap-1 min-w-0">
           <RefreshCw className="size-3 animate-spin flex-shrink-0" />
@@ -269,31 +279,36 @@ export function StatusDisplay({ status }: StatusDisplayProps) {
         </Tooltip>
       </div>
     )
-  }
-
-  if (status === 'verifying') {
-    return (
+  } else if (status === 'verifying') {
+    statusLine = (
       <p className="text-xs text-fluux-yellow truncate flex items-center gap-1">
         <RefreshCw className="size-3 animate-spin flex-shrink-0" />
         <span className="truncate">{t('status.verifying')}</span>
       </p>
     )
-  }
-
-  if (status === 'connecting') {
-    return (
+  } else if (status === 'connecting') {
+    statusLine = (
       <p className="text-xs text-fluux-yellow truncate flex items-center gap-1">
         <RefreshCw className="size-3 animate-spin flex-shrink-0" />
         <span className="truncate">{t('status.connecting')}</span>
       </p>
     )
+  } else if (status === 'error') {
+    statusLine = <p className="text-xs text-fluux-error truncate">{t('status.connectionError')}</p>
+  } else {
+    statusLine = <p className="text-xs text-fluux-muted truncate">{t('status.disconnected')}</p>
   }
 
-  if (status === 'error') {
-    return <p className="text-xs text-fluux-error truncate">{t('status.connectionError')}</p>
-  }
-
-  return <p className="text-xs text-fluux-muted truncate">{t('status.disconnected')}</p>
+  return (
+    <>
+      {statusLine}
+      {persistentAlert && (
+        <p className="text-xs text-fluux-error truncate px-2" title={persistentAlert.message}>
+          {persistentAlert.title}
+        </p>
+      )}
+    </>
+  )
 }
 
 interface StatusOrPresenceProps {

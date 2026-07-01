@@ -31,6 +31,7 @@ import { usePlatformState } from './hooks/usePlatformState'
 import { useAccountScopeRehydration } from './hooks/useAccountScopeRehydration'
 import { clearLocalData } from './utils/clearLocalData'
 import { startMemoryProbe } from './utils/memoryProbe'
+import { startSystemNotificationEffect } from '@/effects/systemNotificationEffect'
 import { markConnectActive } from './utils/reconnectIntent'
 
 // Tauri detection
@@ -79,6 +80,9 @@ function App() {
   const { displayActive } = usePlatformState()
   useAccountScopeRehydration()
   const update = useAutoUpdate({ autoCheck: true })
+
+  // Route system notifications: transient → toast, persistent → status line.
+  useEffect(() => startSystemNotificationEffect(), [])
 
   // Opt-in memory/blob-pool probe (no-op unless localStorage['fluux:mem-probe']='1').
   // Diagnostic for the SM-resume avatar blob-URL leak class — see utils/memoryProbe.ts.
