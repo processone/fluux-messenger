@@ -462,6 +462,11 @@ function ChatLayoutContent() {
     // Only run once when we're online, on messages view, with conversations available
     if (status !== 'online' || hasAutoSelectedRef.current) return
     if (sidebarView !== 'messages') return
+    // The URL already names a conversation (deep link, session restore, or a
+    // reaction-toast click): let the URL→store sync activate it. activateConversation
+    // is async — activeConversationId is still null on this commit — so without this
+    // guard auto-select would hijack the URL to the first conversation.
+    if (activeJid) return
     // Only check the value owned by this tab — cross-tab clearing is handled by
     // useViewNavigation. A stale activeRoomJid/selectedContactJid from another tab
     // shouldn't block Messages auto-select.
@@ -498,7 +503,7 @@ function ChatLayoutContent() {
       // doesn't leave a back-able "empty list" entry behind the conversation.
       navigateToMessages(firstConversation.id, { replace: true })
     }
-  }, [status, sidebarView, activeConversationId, conversationCount, activateConversation, navigateToMessages])
+  }, [status, sidebarView, activeJid, activeConversationId, conversationCount, activateConversation, navigateToMessages])
 
   // Auto-select first joined room on initial connection if none selected.
   // Mirrors the messages auto-select above. Required because navigateToView('rooms')
@@ -511,6 +516,11 @@ function ChatLayoutContent() {
   useEffect(() => {
     if (status !== 'online' || hasAutoSelectedRoomRef.current) return
     if (sidebarView !== 'rooms') return
+    // The URL already names a room (deep link, session restore, or a reaction-toast
+    // click): let the URL→store sync activate it. activateRoom is async — activeRoomJid
+    // is still null on this commit — so without this guard auto-select would hijack the
+    // URL to the first joined room, landing on the wrong room.
+    if (activeJid) return
     if (activeRoomJid) return
     if (roomCount === 0) return
 
@@ -530,7 +540,7 @@ function ChatLayoutContent() {
       // (mirrors the messages auto-select above).
       navigateToRooms(firstRoom.jid, { replace: true })
     }
-  }, [status, sidebarView, activeRoomJid, roomCount, activateRoom, navigateToRooms])
+  }, [status, sidebarView, activeJid, activeRoomJid, roomCount, activateRoom, navigateToRooms])
 
   // Ensure container has focus for keyboard shortcuts on mount and when window becomes visible
   useEffect(() => {
