@@ -1041,3 +1041,100 @@ describe('MAM forward catch-up — cross-page modification resolution (1:1)', ()
     expect(target!.reactions!['👍']).toContain(PEER)
   })
 })
+
+describe('MAM preview refresh E2EE (sidebar preview)', () => {
+  const ME = 'me@example.com'
+  const PEER = 'bob@example.com'
+
+  /**
+   * Drive {@link MAM.refreshConversationPreviews} for a single conversation,
+   * feed it one archive entry, and return the message handed to
+   * `updateLastMessagePreview` (the sidebar preview), or null if none was set.
+   */
+  async function runPreviewWithEntry(
+    manager: E2EEManager,
+    conversationId: string,
+    archiveEntry: Element,
+  ): Promise<{ body: string; from: string; encryptedPayload?: string } | null> {
+    const collectors = new Map<string, (stanza: Element) => void>()
+    let pendingResolve: ((v: Element) => void) | null = null
+    let pendingReady: (() => void) | null = null
+    const ready = new Promise<void>((r) => {
+      pendingReady = r
+    })
+    let captured: { body: string; from: string; encryptedPayload?: string } | null = null
+
+    const deps: ModuleDependencies = {
+      stores: {
+        chat: {
+          getAllConversations: () => [{ id: conversationId }],
+          updateLastMessagePreview: (_id: string, message: { body: string; from: string; encryptedPayload?: string }) => {
+            captured = {
+              body: message.body,
+              from: message.from,
+              ...(message.encryptedPayload && { encryptedPayload: message.encryptedPayload }),
+            }
+          },
+        },
+      } as unknown as ModuleDependencies['stores'],
+      sendStanza: async () => {},
+      sendIQ: () =>
+        new Promise<Element>((resolve) => {
+          pendingResolve = resolve
+          pendingReady?.()
+        }),
+      getCurrentJid: () => ME,
+      emit: () => {},
+      emitSDK: (() => {}) as ModuleDependencies['emitSDK'],
+      getXmpp: () => null,
+      getE2EEManager: () => manager,
+      registerMAMCollector: (queryId, collector) => {
+        collectors.set(queryId, collector)
+        return () => collectors.delete(queryId)
+      },
+    }
+
+    const mam = new MAM(deps)
+    const done = mam.refreshConversationPreviews()
+    await ready
+    const [queryId, collector] = [...collectors.entries()][0]
+    archiveEntry.getChild('result', 'urn:xmpp:mam:2')!.attrs.queryid = queryId
+    collector(archiveEntry)
+    pendingResolve!(xml('iq', {}, xml('fin', { xmlns: 'urn:xmpp:mam:2', complete: 'true' })))
+    await done
+    return captured
+  }
+
+  it('decrypts a self-outgoing encrypted entry before setting the sidebar preview', async () => {
+    // Regression: the sidebar preview for our OWN sent message showed the
+    // sender's cleartext fallback ("[OpenPGP-encrypted message]") until the
+    // conversation was opened, because the preview-refresh path parsed the
+    // archive entry WITHOUT decrypting it (unlike the catch-up path).
+    const manager = await makeManagerWithDummyPlugin(ME)
+    const payload = await manager.encryptOutbound(
+      { kind: 'direct', peer: PEER },
+      new TextEncoder().encode('my own secret message'),
+    )
+    if (!payload) throw new Error('Test setup: encryptOutbound returned null')
+
+    const forwardedMessage = xml(
+      'message',
+      { from: ME + '/res', to: PEER, type: 'chat', id: 'mam-self-preview' },
+      xml('body', {}, payload.payload.fallbackBody ?? '[encrypted]'),
+      xml(
+        payload.payload.stanzaElement.name,
+        payload.payload.stanzaElement.attrs,
+        ...(payload.payload.stanzaElement.children as (string | Element)[]),
+      ),
+    )
+    const archiveEntry = buildMAMResult({ archiveId: 'arch-self-preview', forwardedMessage })
+
+    const preview = await runPreviewWithEntry(manager, PEER, archiveEntry)
+
+    expect(preview).not.toBeNull()
+    // The sidebar preview text is derived from the message body, so it must be
+    // the decrypted plaintext — never the sender's cleartext fallback.
+    expect(preview!.body).toBe('my own secret message')
+    expect(preview!.body).not.toContain('payload')
+  })
+})

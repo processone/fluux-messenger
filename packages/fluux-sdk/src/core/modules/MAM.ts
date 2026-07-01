@@ -1198,11 +1198,16 @@ export class MAM extends BaseModule {
       // This handles the case where recent messages are modifications that can't be previewed
       const iq = this.buildMAMQuery(queryId, formFields, 5, '')
 
-      let latestMessage: Message | null = null
-
-      const collectMessage = this.createMessageCollector(queryId, (forwarded, _messageEl, archiveId) => {
-        const msg = this.parseArchiveMessage(forwarded, conversationId, archiveId)
-        if (msg) latestMessage = msg
+      // Buffer raw entries and decrypt each BEFORE parsing (mirrors the
+      // catch-up drain loop). Parsing an encrypted entry without decrypting
+      // first surfaces the sender's cleartext XEP-0380/0428 fallback body
+      // (e.g. "[OpenPGP-encrypted message]") as the sidebar preview — and for
+      // our own sent messages that never self-heals via the deferred-decrypt
+      // path (the local echo carries no stashed encryptedPayload), so the
+      // preview stayed stuck on the fallback until the conversation was opened.
+      const rawEntries: RawArchiveEntry[] = []
+      const collectMessage = this.createMessageCollector(queryId, (forwarded, messageEl, archiveId) => {
+        rawEntries.push({ forwarded, messageEl, archiveId })
       })
 
       // Use the collector registry if available, otherwise fall back to direct listeners
@@ -1217,8 +1222,16 @@ export class MAM extends BaseModule {
 
       try {
         const response = await this.deps.sendIQ(iq)
-        // latestMessage is mutated by the collector callback; TS CFA can't track this
-        const message = latestMessage as Message | null
+
+        let latestMessage: Message | null = null
+        for (const { forwarded, messageEl, archiveId } of rawEntries) {
+          const forwardedTimestamp = this.extractForwardedTimestamp(forwarded)
+          await this.decryptArchiveEntryIfNeeded(messageEl, conversationId, forwardedTimestamp)
+          const msg = this.parseArchiveMessage(forwarded, conversationId, archiveId)
+          if (msg) latestMessage = msg
+        }
+
+        const message = latestMessage
         if (response && message) {
           // For archived conversations: check if we should unarchive BEFORE updating preview
           // (updateLastMessagePreview uses shouldUpdateLastMessage internally)
