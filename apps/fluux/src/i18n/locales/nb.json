@@ -1179,6 +1179,7 @@
         }
     },
     "commandPalette": {
+        "open": "Åpne kommandopalett",
         "placeholder": "Gå til...",
         "noResults": "Ingen resultater funnet",
         "views": "Visninger",

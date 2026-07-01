@@ -1181,6 +1181,7 @@
         }
     },
     "commandPalette": {
+        "open": "Otevřít příkazovou paletu",
         "placeholder": "Přejít na...",
         "noResults": "Žádné výsledky nenalezeny",
         "views": "Zobrazení",

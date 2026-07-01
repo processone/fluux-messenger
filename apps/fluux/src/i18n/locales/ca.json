@@ -1181,6 +1181,7 @@
         }
     },
     "commandPalette": {
+        "open": "Obre la paleta d'ordres",
         "placeholder": "Ves a...",
         "noResults": "No s'han trobat resultats",
         "views": "Vistes",

@@ -1179,6 +1179,7 @@
         }
     },
     "commandPalette": {
+        "open": "פתיחת לוח הפקודות",
         "placeholder": "עבור אל...",
         "noResults": "לא נמצאו תוצאות",
         "views": "תצוגות",

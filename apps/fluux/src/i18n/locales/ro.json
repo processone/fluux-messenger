@@ -1181,6 +1181,7 @@
         }
     },
     "commandPalette": {
+        "open": "Deschide paleta de comenzi",
         "placeholder": "Mergi la...",
         "noResults": "Niciun rezultat găsit",
         "views": "Vizualizări",

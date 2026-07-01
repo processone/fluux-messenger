@@ -1179,6 +1179,7 @@
         }
     },
     "commandPalette": {
+        "open": "打开命令面板",
         "placeholder": "转到…",
         "noResults": "未找到结果",
         "views": "视图",

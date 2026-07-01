@@ -1179,6 +1179,7 @@
         }
     },
     "commandPalette": {
+        "open": "Opna skipanaspjald",
         "placeholder": "Fara í...",
         "noResults": "Engar niðurstöður fundust",
         "views": "Sýnir",
