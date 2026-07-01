@@ -187,7 +187,7 @@ function buildDefaultGroups(items: CommandItem[], t: (key: string) => string): I
 
   const contacts = items.filter((i) => i.type === 'contact').slice(0, 3)
   if (contacts.length > 0) {
-    groups.push({ key: 'contact', type: 'contact', label: t('sidebar.connections'), items: contacts })
+    groups.push({ key: 'contact', type: 'contact', label: t('sidebar.contacts'), items: contacts })
   }
 
   const views = items.filter((i) => i.type === 'view').slice(0, 3)
