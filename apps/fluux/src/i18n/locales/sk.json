@@ -65,8 +65,6 @@
         "rooms": "Miestnosti",
         "connections": "Pripojenia",
         "contacts": "Kontakty",
-        "archive": "Archív",
-        "events": "Udalosti",
         "settings": "Nastavenia",
         "admin": "Správa",
         "addContact": "Pridať kontakt",
@@ -433,35 +431,6 @@
         "invitedBy": "Pozval {{name}}",
         "join": "Pripojiť sa",
         "decline": "Odmietnuť"
-    },
-    "activityLog": {
-        "title": "Protokol aktivity",
-        "noActivity": "Zatiaľ žiadna aktivita",
-        "markAllRead": "Označiť všetko ako prečítané",
-        "today": "Dnes",
-        "yesterday": "Včera",
-        "subscriptionRequest": "Žiadosť o kontakt od {{name}}",
-        "subscriptionAccepted": "{{name}} prijal(a) vašu žiadosť",
-        "subscriptionDenied": "{{name}} zamietol(a) vašu žiadosť",
-        "mucInvitation": "Pozvánka do miestnosti {{room}}",
-        "reactionReceived": "{{name}} reagoval(a) {{emojis}}",
-        "reactionReceivedTo": " na \"{{preview}}\"",
-        "pollVoteReceived": "{{name}} hlasoval(a) {{emojis}} v ankete \"{{title}}\"",
-        "inConversation": " v {{conversation}}",
-        "strangerMessage": "Správa od {{name}}",
-        "resourceConflict": "Relácia nahradená",
-        "authError": "Chyba overenia",
-        "connectionError": "Chyba pripojenia",
-        "accepted": "Prijaté",
-        "rejected": "Zamietnuté",
-        "dismissed": "Zamietnuté",
-        "pending": "Čaká",
-        "muted": "Stlmené",
-        "muteReactions": "Stlmiť reakcie",
-        "muteConversationReactions": "Stlmiť reakcie z tohto chatu",
-        "unmuteConversationReactions": "Zapnúť reakcie z tohto chatu",
-        "muteMessageReactions": "Stlmiť reakcie na túto správu",
-        "unmuteMessageReactions": "Zapnúť reakcie na túto správu"
     },
     "chat": {
         "selection": {
@@ -1042,14 +1011,6 @@
             "title": "Informácie o kontakte",
             "description": "Kliknite na kontakt pre zobrazenie profilu, pripojených zariadení alebo začatie konverzácie.",
             "hint": "Dvojklikom priamo začnete konverzáciu."
-        },
-        "archive": {
-            "title": "Archivované konverzácie",
-            "description": "Archivované konverzácie sa zobrazia tu. Kedykoľvek ich môžete obnoviť do zoznamu správ."
-        },
-        "events": {
-            "title": "Čakajúce udalosti",
-            "description": "Žiadosti o odber, pozvánky do miestností a správy od neznámych kontaktov sa zobrazia tu."
         },
         "admin": {
             "title": "Správa servera",

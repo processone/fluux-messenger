@@ -65,8 +65,6 @@
         "rooms": "Salas",
         "connections": "Ligações",
         "contacts": "Contactos",
-        "archive": "Arquivo",
-        "events": "Eventos",
         "settings": "Definições",
         "admin": "Administração",
         "addContact": "Adicionar contacto",
@@ -434,35 +432,6 @@
         "invitedBy": "Convidado por {{name}}",
         "join": "Entrar",
         "decline": "Recusar"
-    },
-    "activityLog": {
-        "title": "Registo de atividade",
-        "noActivity": "Sem atividade ainda",
-        "markAllRead": "Marcar tudo como lido",
-        "today": "Hoje",
-        "yesterday": "Ontem",
-        "subscriptionRequest": "Pedido de contacto de {{name}}",
-        "subscriptionAccepted": "{{name}} aceitou o seu pedido",
-        "subscriptionDenied": "{{name}} recusou o seu pedido",
-        "mucInvitation": "Convite para a sala {{room}}",
-        "reactionReceived": "{{name}} reagiu {{emojis}}",
-        "reactionReceivedTo": " a \"{{preview}}\"",
-        "pollVoteReceived": "{{name}} votou {{emojis}} na enquete \"{{title}}\"",
-        "inConversation": " em {{conversation}}",
-        "strangerMessage": "Mensagem de {{name}}",
-        "resourceConflict": "Sessão substituída",
-        "authError": "Erro de autenticação",
-        "connectionError": "Erro de ligação",
-        "accepted": "Aceite",
-        "rejected": "Rejeitado",
-        "dismissed": "Dispensado",
-        "pending": "Pendente",
-        "muted": "Silenciado",
-        "muteReactions": "Silenciar reações",
-        "muteConversationReactions": "Silenciar reações deste chat",
-        "unmuteConversationReactions": "Ativar reações deste chat",
-        "muteMessageReactions": "Silenciar reações nesta mensagem",
-        "unmuteMessageReactions": "Ativar reações nesta mensagem"
     },
     "chat": {
         "selection": {
@@ -1043,14 +1012,6 @@
             "title": "Informação do contacto",
             "description": "Clique num contacto para ver o perfil, dispositivos ligados ou iniciar uma conversa.",
             "hint": "Duplo clique para iniciar diretamente uma conversa."
-        },
-        "archive": {
-            "title": "Conversas arquivadas",
-            "description": "As conversas arquivadas aparecerão aqui. Pode restaurá-las a qualquer momento."
-        },
-        "events": {
-            "title": "Eventos pendentes",
-            "description": "Pedidos de subscrição, convites para salas e mensagens de contactos desconhecidos aparecerão aqui."
         },
         "admin": {
             "title": "Administração do servidor",

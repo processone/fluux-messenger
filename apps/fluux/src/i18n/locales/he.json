@@ -65,8 +65,6 @@
         "rooms": "חדרים",
         "connections": "אנשי קשר",
         "contacts": "אנשי קשר",
-        "archive": "ארכיון",
-        "events": "אירועים",
         "settings": "הגדרות",
         "admin": "ניהול",
         "addContact": "הוסף איש קשר",
@@ -432,35 +430,6 @@
         "invitedBy": "הוזמן על ידי {{name}}",
         "join": "הצטרף",
         "decline": "דחה"
-    },
-    "activityLog": {
-        "title": "יומן פעילות",
-        "noActivity": "אין פעילות עדיין",
-        "markAllRead": "סמן הכל כנקרא",
-        "today": "היום",
-        "yesterday": "אתמול",
-        "subscriptionRequest": "בקשת קשר מ-{{name}}",
-        "subscriptionAccepted": "{{name}} אישר/ה את הבקשה שלך",
-        "subscriptionDenied": "{{name}} דחה/תה את הבקשה שלך",
-        "mucInvitation": "הזמנה לחדר {{room}}",
-        "reactionReceived": "{{name}} הגיב/ה {{emojis}}",
-        "reactionReceivedTo": " על \"{{preview}}\"",
-        "pollVoteReceived": "{{name}} הצביע/ה {{emojis}} בסקר \"{{title}}\"",
-        "inConversation": " ב-{{conversation}}",
-        "strangerMessage": "הודעה מ-{{name}}",
-        "resourceConflict": "הסשן הוחלף",
-        "authError": "שגיאת אימות",
-        "connectionError": "שגיאת חיבור",
-        "accepted": "אושר",
-        "rejected": "נדחה",
-        "dismissed": "בוטל",
-        "pending": "ממתין",
-        "muted": "מושתק",
-        "muteReactions": "השתק תגובות",
-        "muteConversationReactions": "השתק תגובות משיחה זו",
-        "unmuteConversationReactions": "בטל השתקת תגובות משיחה זו",
-        "muteMessageReactions": "השתק תגובות על הודעה זו",
-        "unmuteMessageReactions": "בטל השתקת תגובות על הודעה זו"
     },
     "chat": {
         "selection": {
@@ -1041,14 +1010,6 @@
             "title": "מידע על איש קשר",
             "description": "לחץ על איש קשר לצפייה בפרופיל, במכשירים מחוברים, או להתחלת שיחה.",
             "hint": "לחיצה כפולה להתחלת שיחה ישירות."
-        },
-        "archive": {
-            "title": "שיחות בארכיון",
-            "description": "שיחות שהועברו לארכיון יופיעו כאן. ניתן לשחזר אותן לרשימת ההודעות בכל עת."
-        },
-        "events": {
-            "title": "אירועים ממתינים",
-            "description": "בקשות מנוי, הזמנות לחדרים והודעות מאנשי קשר לא מוכרים יופיעו כאן."
         },
         "admin": {
             "title": "ניהול שרת",

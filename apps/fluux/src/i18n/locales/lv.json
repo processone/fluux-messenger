@@ -65,8 +65,6 @@
         "rooms": "Istabas",
         "connections": "Savienojumi",
         "contacts": "Kontakti",
-        "archive": "Arhīvs",
-        "events": "Notikumi",
         "settings": "Iestatījumi",
         "admin": "Administrēšana",
         "addContact": "Pievienot kontaktu",
@@ -433,35 +431,6 @@
         "invitedBy": "Uzaicināja {{name}}",
         "join": "Pievienoties",
         "decline": "Noraidīt"
-    },
-    "activityLog": {
-        "title": "Darbību žurnāls",
-        "noActivity": "Pagaidām nav darbību",
-        "markAllRead": "Atzīmēt visu kā lasītu",
-        "today": "Šodien",
-        "yesterday": "Vakar",
-        "subscriptionRequest": "Kontakta pieprasījums no {{name}}",
-        "subscriptionAccepted": "{{name}} pieņēma jūsu pieprasījumu",
-        "subscriptionDenied": "{{name}} noraidīja jūsu pieprasījumu",
-        "mucInvitation": "Istabas uzaicinājums uz {{room}}",
-        "reactionReceived": "{{name}} reaģēja {{emojis}}",
-        "reactionReceivedTo": " uz \"{{preview}}\"",
-        "pollVoteReceived": "{{name}} nobalsoja {{emojis}} aptaujā \"{{title}}\"",
-        "inConversation": " sarunā {{conversation}}",
-        "strangerMessage": "Ziņojums no {{name}}",
-        "resourceConflict": "Sesija aizstāta",
-        "authError": "Autentifikācijas kļūda",
-        "connectionError": "Savienojuma kļūda",
-        "accepted": "Pieņemts",
-        "rejected": "Noraidīts",
-        "dismissed": "Noraidīts",
-        "pending": "Gaida",
-        "muted": "Apklusināts",
-        "muteReactions": "Apklusināt reakcijas",
-        "muteConversationReactions": "Apklusināt reakcijas no šī čata",
-        "unmuteConversationReactions": "Ieslēgt reakcijas no šī čata",
-        "muteMessageReactions": "Apklusināt reakcijas uz šo ziņojumu",
-        "unmuteMessageReactions": "Ieslēgt reakcijas uz šo ziņojumu"
     },
     "chat": {
         "selection": {
@@ -1042,14 +1011,6 @@
             "title": "Kontakta informācija",
             "description": "Noklikšķiniet uz kontakta, lai skatītu viņa profilu, pievienotās ierīces vai sāktu sarunu.",
             "hint": "Dubultklikšķis, lai sāktu sarunu uzreiz."
-        },
-        "archive": {
-            "title": "Arhivētās sarunas",
-            "description": "Arhivētās sarunas parādīsies šeit. Jūs varat tās jebkurā laikā atjaunot ziņojumu sarakstā."
-        },
-        "events": {
-            "title": "Neapstiprināti notikumi",
-            "description": "Abonēšanas pieprasījumi, istabu uzaicinājumi un ziņojumi no nezināmiem kontaktiem parādīsies šeit."
         },
         "admin": {
             "title": "Servera administrēšana",

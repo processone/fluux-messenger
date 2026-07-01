@@ -65,8 +65,6 @@
         "rooms": "Toad",
         "connections": "Ühendused",
         "contacts": "Kontaktid",
-        "archive": "Arhiiv",
-        "events": "Sündmused",
         "settings": "Seaded",
         "admin": "Haldus",
         "addContact": "Lisa kontakt",
@@ -434,35 +432,6 @@
         "invitedBy": "Kutsuja {{name}}",
         "join": "Liitu",
         "decline": "Keeldu"
-    },
-    "activityLog": {
-        "title": "Tegevuslogi",
-        "noActivity": "Tegevust pole veel",
-        "markAllRead": "Märgi kõik loetuks",
-        "today": "Täna",
-        "yesterday": "Eile",
-        "subscriptionRequest": "Kontaktipäring kasutajalt {{name}}",
-        "subscriptionAccepted": "{{name}} nõustus teie päringuga",
-        "subscriptionDenied": "{{name}} keeldus teie päringust",
-        "mucInvitation": "Ruumikutse kohta {{room}}",
-        "reactionReceived": "{{name}} reageeris {{emojis}}",
-        "reactionReceivedTo": " sõnumile \"{{preview}}\"",
-        "pollVoteReceived": "{{name}} hääletas {{emojis}} küsitluses \"{{title}}\"",
-        "inConversation": " vestluses {{conversation}}",
-        "strangerMessage": "Sõnum kasutajalt {{name}}",
-        "resourceConflict": "Seanss asendatud",
-        "authError": "Autentimise viga",
-        "connectionError": "Ühenduse viga",
-        "accepted": "Aktsepteeritud",
-        "rejected": "Tagasi lükatud",
-        "dismissed": "Eiratud",
-        "pending": "Ootel",
-        "muted": "Vaigistatud",
-        "muteReactions": "Vaigista reaktsioonid",
-        "muteConversationReactions": "Vaigista selle vestluse reaktsioonid",
-        "unmuteConversationReactions": "Lülita selle vestluse reaktsioonid sisse",
-        "muteMessageReactions": "Vaigista selle sõnumi reaktsioonid",
-        "unmuteMessageReactions": "Lülita selle sõnumi reaktsioonid sisse"
     },
     "chat": {
         "selection": {
@@ -1043,14 +1012,6 @@
             "title": "Kontakti teave",
             "description": "Klõpsa kontaktil, et vaadata tema profiili, ühendatud seadmeid või alustada vestlust.",
             "hint": "Topeltklõps vestluse alustamiseks otse."
-        },
-        "archive": {
-            "title": "Arhiveeritud vestlused",
-            "description": "Arhiveeritud vestlused ilmuvad siia. Saad need igal ajal sõnumite nimekirja taastada."
-        },
-        "events": {
-            "title": "Ootel sündmused",
-            "description": "Tellimistaotlused, toa kutsed ja sõnumid tundmatutelt kontaktidelt ilmuvad siia."
         },
         "admin": {
             "title": "Serveri haldus",

@@ -65,8 +65,6 @@
         "rooms": "Sales",
         "connections": "Connexions",
         "contacts": "Contactes",
-        "archive": "Arxiu",
-        "events": "Esdeveniments",
         "settings": "Configuració",
         "admin": "Administració",
         "addContact": "Afegeix un contacte",
@@ -434,35 +432,6 @@
         "invitedBy": "Convidat per {{name}}",
         "join": "Uneix-te",
         "decline": "Declina"
-    },
-    "activityLog": {
-        "title": "Registre d'activitat",
-        "noActivity": "Encara no hi ha activitat",
-        "markAllRead": "Marcar-ho tot com a llegit",
-        "today": "Avui",
-        "yesterday": "Ahir",
-        "subscriptionRequest": "Sol·licitud de contacte de {{name}}",
-        "subscriptionAccepted": "{{name}} ha acceptat la teva sol·licitud",
-        "subscriptionDenied": "{{name}} ha rebutjat la teva sol·licitud",
-        "mucInvitation": "Invitació a la sala {{room}}",
-        "reactionReceived": "{{name}} ha reaccionat {{emojis}}",
-        "reactionReceivedTo": " a \"{{preview}}\"",
-        "pollVoteReceived": "{{name}} ha votat {{emojis}} a l'enquesta \"{{title}}\"",
-        "inConversation": " a {{conversation}}",
-        "strangerMessage": "Missatge de {{name}}",
-        "resourceConflict": "Sessió substituïda",
-        "authError": "Error d'autenticació",
-        "connectionError": "Error de connexió",
-        "accepted": "Acceptat",
-        "rejected": "Rebutjat",
-        "dismissed": "Descartat",
-        "pending": "Pendent",
-        "muted": "Silenciat",
-        "muteReactions": "Silenciar reaccions",
-        "muteConversationReactions": "Silenciar reaccions d'aquest xat",
-        "unmuteConversationReactions": "Activar reaccions d'aquest xat",
-        "muteMessageReactions": "Silenciar reaccions en aquest missatge",
-        "unmuteMessageReactions": "Activar reaccions en aquest missatge"
     },
     "chat": {
         "selection": {
@@ -1043,14 +1012,6 @@
             "title": "Informació de contacte",
             "description": "Clica en un contacte per veure el seu perfil, dispositius connectats o iniciar una conversa.",
             "hint": "Doble clic per iniciar una conversa directament."
-        },
-        "archive": {
-            "title": "Converses arxivades",
-            "description": "Les converses arxivades apareixeran aquí. Les pots restaurar a la teva llista de missatges en qualsevol moment."
-        },
-        "events": {
-            "title": "Esdeveniments pendents",
-            "description": "Les sol·licituds de subscripció, invitacions a sales i missatges de contactes desconeguts apareixeran aquí."
         },
         "admin": {
             "title": "Administració del servidor",

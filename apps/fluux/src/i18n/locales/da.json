@@ -65,8 +65,6 @@
         "rooms": "Rum",
         "connections": "Forbindelser",
         "contacts": "Kontakter",
-        "archive": "Arkiv",
-        "events": "Begivenheder",
         "settings": "Indstillinger",
         "admin": "Administration",
         "addContact": "Tilføj kontakt",
@@ -432,35 +430,6 @@
         "invitedBy": "Inviteret af {{name}}",
         "join": "Deltag",
         "decline": "Afvis"
-    },
-    "activityLog": {
-        "title": "Aktivitetslog",
-        "noActivity": "Ingen aktivitet endnu",
-        "markAllRead": "Markér alle som læst",
-        "today": "I dag",
-        "yesterday": "I går",
-        "subscriptionRequest": "Kontaktanmodning fra {{name}}",
-        "subscriptionAccepted": "{{name}} accepterede din anmodning",
-        "subscriptionDenied": "{{name}} afviste din anmodning",
-        "mucInvitation": "Ruminvitation til {{room}}",
-        "reactionReceived": "{{name}} reagerede {{emojis}}",
-        "reactionReceivedTo": " på \"{{preview}}\"",
-        "pollVoteReceived": "{{name}} stemte {{emojis}} i afstemning \"{{title}}\"",
-        "inConversation": " i {{conversation}}",
-        "strangerMessage": "Besked fra {{name}}",
-        "resourceConflict": "Session erstattet",
-        "authError": "Godkendelsesfejl",
-        "connectionError": "Forbindelsesfejl",
-        "accepted": "Accepteret",
-        "rejected": "Afvist",
-        "dismissed": "Afvist",
-        "pending": "Afventer",
-        "muted": "Lydløs",
-        "muteReactions": "Slå reaktioner fra",
-        "muteConversationReactions": "Slå reaktioner fra denne chat fra",
-        "unmuteConversationReactions": "Slå reaktioner fra denne chat til",
-        "muteMessageReactions": "Slå reaktioner på denne besked fra",
-        "unmuteMessageReactions": "Slå reaktioner på denne besked til"
     },
     "chat": {
         "selection": {
@@ -1041,14 +1010,6 @@
             "title": "Kontaktinformation",
             "description": "Klik på en kontakt for at se deres profil, tilsluttede enheder eller starte en samtale.",
             "hint": "Dobbeltklik for at starte en samtale direkte."
-        },
-        "archive": {
-            "title": "Arkiverede samtaler",
-            "description": "Arkiverede samtaler vises her. Du kan gendanne dem til din beskedliste når som helst."
-        },
-        "events": {
-            "title": "Ventende begivenheder",
-            "description": "Abonnementsanmodninger, ruminvitationer og beskeder fra ukendte kontakter vises her."
         },
         "admin": {
             "title": "Serveradministration",

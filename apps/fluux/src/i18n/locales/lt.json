@@ -65,8 +65,6 @@
         "rooms": "Kambariai",
         "connections": "Ryšiai",
         "contacts": "Kontaktai",
-        "archive": "Archyvas",
-        "events": "Įvykiai",
         "settings": "Nustatymai",
         "admin": "Administravimas",
         "addContact": "Pridėti kontaktą",
@@ -432,35 +430,6 @@
         "invitedBy": "Pakvietė {{name}}",
         "join": "Prisijungti",
         "decline": "Atmesti"
-    },
-    "activityLog": {
-        "title": "Veiklos žurnalas",
-        "noActivity": "Dar nėra veiklos",
-        "markAllRead": "Pažymėti viską kaip skaitytą",
-        "today": "Šiandien",
-        "yesterday": "Vakar",
-        "subscriptionRequest": "Kontakto užklausa nuo {{name}}",
-        "subscriptionAccepted": "{{name}} priėmė jūsų užklausą",
-        "subscriptionDenied": "{{name}} atmetė jūsų užklausą",
-        "mucInvitation": "Kvietimas į kambarį {{room}}",
-        "reactionReceived": "{{name}} sureagavo {{emojis}}",
-        "reactionReceivedTo": " į \"{{preview}}\"",
-        "pollVoteReceived": "{{name}} balsavo {{emojis}} apklausoje \"{{title}}\"",
-        "inConversation": " pokalbyje {{conversation}}",
-        "strangerMessage": "Žinutė nuo {{name}}",
-        "resourceConflict": "Sesija pakeista",
-        "authError": "Autentifikacijos klaida",
-        "connectionError": "Ryšio klaida",
-        "accepted": "Priimta",
-        "rejected": "Atmesta",
-        "dismissed": "Atmesta",
-        "pending": "Laukiama",
-        "muted": "Nutildyta",
-        "muteReactions": "Nutildyti reakcijas",
-        "muteConversationReactions": "Nutildyti reakcijas iš šio pokalbio",
-        "unmuteConversationReactions": "Įjungti reakcijas iš šio pokalbio",
-        "muteMessageReactions": "Nutildyti reakcijas į šią žinutę",
-        "unmuteMessageReactions": "Įjungti reakcijas į šią žinutę"
     },
     "chat": {
         "selection": {
@@ -1041,14 +1010,6 @@
             "title": "Kontakto informacija",
             "description": "Spustelėkite kontaktą peržiūrėti profilį, prijungtus įrenginius arba pradėti pokalbį.",
             "hint": "Dukart spustelėkite tiesiogiai pradėti pokalbį."
-        },
-        "archive": {
-            "title": "Archyvuoti pokalbiai",
-            "description": "Archyvuoti pokalbiai bus rodomi čia. Galite juos grąžinti į žinučių sąrašą bet kada."
-        },
-        "events": {
-            "title": "Laukiantys įvykiai",
-            "description": "Prenumeratos užklausos, pakvietimai į kambarius ir žinutės iš nežinomų kontaktų bus rodomos čia."
         },
         "admin": {
             "title": "Serverio administravimas",

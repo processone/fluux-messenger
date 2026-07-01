@@ -65,8 +65,6 @@
         "rooms": "Rom",
         "connections": "Tilkoblinger",
         "contacts": "Kontakter",
-        "archive": "Arkiv",
-        "events": "Hendelser",
         "settings": "Innstillinger",
         "admin": "Administrasjon",
         "addContact": "Legg til kontakt",
@@ -432,35 +430,6 @@
         "invitedBy": "Invitert av {{name}}",
         "join": "Bli med",
         "decline": "Avslå"
-    },
-    "activityLog": {
-        "title": "Aktivitetslogg",
-        "noActivity": "Ingen aktivitet ennå",
-        "markAllRead": "Merk alle som lest",
-        "today": "I dag",
-        "yesterday": "I går",
-        "subscriptionRequest": "Kontaktforespørsel fra {{name}}",
-        "subscriptionAccepted": "{{name}} godtok forespørselen din",
-        "subscriptionDenied": "{{name}} avviste forespørselen din",
-        "mucInvitation": "Rominvitasjon til {{room}}",
-        "reactionReceived": "{{name}} reagerte {{emojis}}",
-        "reactionReceivedTo": " på \"{{preview}}\"",
-        "pollVoteReceived": "{{name}} stemte {{emojis}} i avstemning \"{{title}}\"",
-        "inConversation": " i {{conversation}}",
-        "strangerMessage": "Melding fra {{name}}",
-        "resourceConflict": "Økt erstattet",
-        "authError": "Autentiseringsfeil",
-        "connectionError": "Tilkoblingsfeil",
-        "accepted": "Godtatt",
-        "rejected": "Avvist",
-        "dismissed": "Avvist",
-        "pending": "Venter",
-        "muted": "Dempet",
-        "muteReactions": "Demp reaksjoner",
-        "muteConversationReactions": "Demp reaksjoner fra denne chatten",
-        "unmuteConversationReactions": "Slå på reaksjoner fra denne chatten",
-        "muteMessageReactions": "Demp reaksjoner på denne meldingen",
-        "unmuteMessageReactions": "Slå på reaksjoner på denne meldingen"
     },
     "chat": {
         "selection": {
@@ -1041,14 +1010,6 @@
             "title": "Kontaktinformasjon",
             "description": "Klikk på en kontakt for å se profilen deres, tilkoblede enheter eller starte en samtale.",
             "hint": "Dobbeltklikk for å starte en samtale direkte."
-        },
-        "archive": {
-            "title": "Arkiverte samtaler",
-            "description": "Arkiverte samtaler vises her. Du kan gjenopprette dem til meldingslisten din når som helst."
-        },
-        "events": {
-            "title": "Ventende hendelser",
-            "description": "Abonnementsforespørsler, rominvitasjoner og meldinger fra ukjente kontakter vises her."
         },
         "admin": {
             "title": "Serveradministrasjon",

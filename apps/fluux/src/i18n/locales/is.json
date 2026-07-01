@@ -65,8 +65,6 @@
         "rooms": "Herbergi",
         "connections": "Tengingar",
         "contacts": "Tengiliðir",
-        "archive": "Skjalasafn",
-        "events": "Atburðir",
         "settings": "Stillingar",
         "admin": "Stjórnun",
         "addContact": "Bæta við tengilið",
@@ -432,35 +430,6 @@
         "invitedBy": "Boðið af {{name}}",
         "join": "Ganga inn",
         "decline": "Hafna"
-    },
-    "activityLog": {
-        "title": "Virknisskrá",
-        "noActivity": "Engin virkni enn sem komið er",
-        "markAllRead": "Merkja allt lesið",
-        "today": "Í dag",
-        "yesterday": "Í gær",
-        "subscriptionRequest": "Tengiliðabeiðni frá {{name}}",
-        "subscriptionAccepted": "{{name}} samþykkti beiðni þína",
-        "subscriptionDenied": "{{name}} hafnaði beiðni þinni",
-        "mucInvitation": "Boð í spjallrás {{room}}",
-        "reactionReceived": "{{name}} brást við {{emojis}}",
-        "reactionReceivedTo": " við \"{{preview}}\"",
-        "pollVoteReceived": "{{name}} kaus {{emojis}} í könnun \"{{title}}\"",
-        "inConversation": " í {{conversation}}",
-        "strangerMessage": "Skilaboð frá {{name}}",
-        "resourceConflict": "Setu var skipt út",
-        "authError": "Auðkenningarvilla",
-        "connectionError": "Tengingarvilla",
-        "accepted": "Samþykkt",
-        "rejected": "Hafnað",
-        "dismissed": "Vísað frá",
-        "pending": "Bíður",
-        "muted": "Þaggað",
-        "muteReactions": "Þagga viðbrögð",
-        "muteConversationReactions": "Þagga viðbrögð frá þessu spjalli",
-        "unmuteConversationReactions": "Virkja viðbrögð frá þessu spjalli",
-        "muteMessageReactions": "Þagga viðbrögð við þessu skilaboði",
-        "unmuteMessageReactions": "Virkja viðbrögð við þessu skilaboði"
     },
     "chat": {
         "selection": {
@@ -1041,14 +1010,6 @@
             "title": "Tengiliðaupplýsingar",
             "description": "Smelltu á tengilið til að skoða prófílinn þeirra, tengd tæki eða hefja samtal.",
             "hint": "Tvísmelltu til að hefja samtal strax."
-        },
-        "archive": {
-            "title": "Safnvistuð samtöl",
-            "description": "Safnvistuð samtöl birtast hér. Þú getur endurheimt þau í skilaboðalistann hvenær sem er."
-        },
-        "events": {
-            "title": "Atburðir í bið",
-            "description": "Áskriftarbeiðnir, herbergisboð og skilaboð frá óþekktum tengiliðum birtast hér."
         },
         "admin": {
             "title": "Þjónastjórnun",

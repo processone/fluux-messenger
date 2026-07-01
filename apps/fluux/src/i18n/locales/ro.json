@@ -65,8 +65,6 @@
         "rooms": "Camere",
         "connections": "Conexiuni",
         "contacts": "Contacte",
-        "archive": "Arhivă",
-        "events": "Evenimente",
         "settings": "Setări",
         "admin": "Administrare",
         "addContact": "Adaugă contact",
@@ -434,35 +432,6 @@
         "invitedBy": "Invitat de {{name}}",
         "join": "Intră",
         "decline": "Refuză"
-    },
-    "activityLog": {
-        "title": "Jurnal de activitate",
-        "noActivity": "Nicio activitate încă",
-        "markAllRead": "Marchează tot ca citit",
-        "today": "Astăzi",
-        "yesterday": "Ieri",
-        "subscriptionRequest": "Cerere de contact de la {{name}}",
-        "subscriptionAccepted": "{{name}} a acceptat cererea ta",
-        "subscriptionDenied": "{{name}} a refuzat cererea ta",
-        "mucInvitation": "Invitație în camera {{room}}",
-        "reactionReceived": "{{name}} a reacționat {{emojis}}",
-        "reactionReceivedTo": " la \"{{preview}}\"",
-        "pollVoteReceived": "{{name}} a votat {{emojis}} în sondajul \"{{title}}\"",
-        "inConversation": " în {{conversation}}",
-        "strangerMessage": "Mesaj de la {{name}}",
-        "resourceConflict": "Sesiune înlocuită",
-        "authError": "Eroare de autentificare",
-        "connectionError": "Eroare de conexiune",
-        "accepted": "Acceptat",
-        "rejected": "Respins",
-        "dismissed": "Respins",
-        "pending": "În așteptare",
-        "muted": "Dezactivat",
-        "muteReactions": "Dezactivează reacțiile",
-        "muteConversationReactions": "Dezactivează reacțiile din acest chat",
-        "unmuteConversationReactions": "Activează reacțiile din acest chat",
-        "muteMessageReactions": "Dezactivează reacțiile la acest mesaj",
-        "unmuteMessageReactions": "Activează reacțiile la acest mesaj"
     },
     "chat": {
         "selection": {
@@ -1043,14 +1012,6 @@
             "title": "Informații contact",
             "description": "Apasă pe un contact pentru a-i vedea profilul, dispozitivele conectate sau pentru a începe o conversație.",
             "hint": "Dublu-clic pentru a începe o conversație direct."
-        },
-        "archive": {
-            "title": "Conversații arhivate",
-            "description": "Conversațiile arhivate vor apărea aici. Le poți restaura în lista de mesaje oricând."
-        },
-        "events": {
-            "title": "Evenimente în așteptare",
-            "description": "Cererile de abonare, invitațiile în camere și mesajele de la contacte necunoscute vor apărea aici."
         },
         "admin": {
             "title": "Administrare server",

@@ -65,8 +65,6 @@
         "rooms": "Стаи",
         "connections": "Връзки",
         "contacts": "Контакти",
-        "archive": "Архив",
-        "events": "Събития",
         "settings": "Настройки",
         "admin": "Администрация",
         "addContact": "Добави контакт",
@@ -432,35 +430,6 @@
         "invitedBy": "Поканен от {{name}}",
         "join": "Присъедини се",
         "decline": "Откажи"
-    },
-    "activityLog": {
-        "title": "Дневник на активността",
-        "noActivity": "Няма активност все още",
-        "markAllRead": "Маркирай всичко като прочетено",
-        "today": "Днес",
-        "yesterday": "Вчера",
-        "subscriptionRequest": "Заявка за контакт от {{name}}",
-        "subscriptionAccepted": "{{name}} прие заявката ви",
-        "subscriptionDenied": "{{name}} отхвърли заявката ви",
-        "mucInvitation": "Покана за стая {{room}}",
-        "reactionReceived": "{{name}} реагира {{emojis}}",
-        "reactionReceivedTo": " на \"{{preview}}\"",
-        "pollVoteReceived": "{{name}} гласува {{emojis}} в анкета \"{{title}}\"",
-        "inConversation": " в {{conversation}}",
-        "strangerMessage": "Съобщение от {{name}}",
-        "resourceConflict": "Сесията е заменена",
-        "authError": "Грешка при удостоверяване",
-        "connectionError": "Грешка при свързване",
-        "accepted": "Прието",
-        "rejected": "Отхвърлено",
-        "dismissed": "Отхвърлено",
-        "pending": "Изчакване",
-        "muted": "Заглушено",
-        "muteReactions": "Заглушаване на реакции",
-        "muteConversationReactions": "Заглушаване на реакции от този чат",
-        "unmuteConversationReactions": "Включване на реакции от този чат",
-        "muteMessageReactions": "Заглушаване на реакции на това съобщение",
-        "unmuteMessageReactions": "Включване на реакции на това съобщение"
     },
     "chat": {
         "selection": {
@@ -1041,14 +1010,6 @@
             "title": "Информация за контакт",
             "description": "Щракнете върху контакт за да видите профила му, свързаните устройства или да започнете разговор.",
             "hint": "Щракнете двукратно за да започнете разговор директно."
-        },
-        "archive": {
-            "title": "Архивирани разговори",
-            "description": "Архивираните разговори ще се появят тук. Можете да ги възстановите в списъка си със съобщения по всяко време."
-        },
-        "events": {
-            "title": "Чакащи събития",
-            "description": "Заявки за абонамент, покани за стаи и съобщения от непознати контакти ще се появят тук."
         },
         "admin": {
             "title": "Администриране на сървър",

@@ -65,8 +65,6 @@
         "rooms": "Salas",
         "connections": "Conexiones",
         "contacts": "Contactos",
-        "archive": "Archivo",
-        "events": "Eventos",
         "settings": "Ajustes",
         "admin": "Administración",
         "addContact": "Anadir contacto",
@@ -434,35 +432,6 @@
         "invitedBy": "Invitado por {{name}}",
         "join": "Unirse",
         "decline": "Rechazar"
-    },
-    "activityLog": {
-        "title": "Registro de actividad",
-        "noActivity": "Sin actividad todavía",
-        "markAllRead": "Marcar todo como leído",
-        "today": "Hoy",
-        "yesterday": "Ayer",
-        "subscriptionRequest": "Solicitud de contacto de {{name}}",
-        "subscriptionAccepted": "{{name}} aceptó tu solicitud",
-        "subscriptionDenied": "{{name}} rechazó tu solicitud",
-        "mucInvitation": "Invitación a la sala {{room}}",
-        "reactionReceived": "{{name}} reaccionó {{emojis}}",
-        "reactionReceivedTo": " a \"{{preview}}\"",
-        "pollVoteReceived": "{{name}} votó {{emojis}} en la encuesta \"{{title}}\"",
-        "inConversation": " en {{conversation}}",
-        "strangerMessage": "Mensaje de {{name}}",
-        "resourceConflict": "Sesión reemplazada",
-        "authError": "Error de autenticación",
-        "connectionError": "Error de conexión",
-        "accepted": "Aceptado",
-        "rejected": "Rechazado",
-        "dismissed": "Descartado",
-        "pending": "Pendiente",
-        "muted": "Silenciado",
-        "muteReactions": "Silenciar reacciones",
-        "muteConversationReactions": "Silenciar reacciones de este chat",
-        "unmuteConversationReactions": "Activar reacciones de este chat",
-        "muteMessageReactions": "Silenciar reacciones de este mensaje",
-        "unmuteMessageReactions": "Activar reacciones de este mensaje"
     },
     "chat": {
         "selection": {
@@ -1043,14 +1012,6 @@
             "title": "Informacion de Contacto",
             "description": "Haz clic en un contacto para ver su perfil, dispositivos conectados o iniciar una conversacion.",
             "hint": "Doble clic para iniciar una conversacion directamente."
-        },
-        "archive": {
-            "title": "Conversaciones Archivadas",
-            "description": "Las conversaciones archivadas apareceran aqui. Puedes restaurarlas a tu lista de mensajes en cualquier momento."
-        },
-        "events": {
-            "title": "Eventos Pendientes",
-            "description": "Las solicitudes de suscripcion, invitaciones a salas y mensajes de contactos desconocidos apareceran aqui."
         },
         "admin": {
             "title": "Administración del Servidor",

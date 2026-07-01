@@ -65,8 +65,6 @@
         "rooms": "Δωμάτια",
         "connections": "Επαφές",
         "contacts": "Επαφές",
-        "archive": "Αρχείο",
-        "events": "Συμβάντα",
         "settings": "Ρυθμίσεις",
         "admin": "Διαχείριση",
         "addContact": "Προσθήκη επαφής",
@@ -433,35 +431,6 @@
         "invitedBy": "Πρόσκληση από {{name}}",
         "join": "Είσοδος",
         "decline": "Απόρριψη"
-    },
-    "activityLog": {
-        "title": "Αρχείο δραστηριότητας",
-        "noActivity": "Δεν υπάρχει δραστηριότητα ακόμα",
-        "markAllRead": "Σήμανση όλων ως αναγνωσμένα",
-        "today": "Σήμερα",
-        "yesterday": "Χθες",
-        "subscriptionRequest": "Αίτημα επαφής από {{name}}",
-        "subscriptionAccepted": "Ο/Η {{name}} αποδέχτηκε το αίτημά σας",
-        "subscriptionDenied": "Ο/Η {{name}} απέρριψε το αίτημά σας",
-        "mucInvitation": "Πρόσκληση σε δωμάτιο {{room}}",
-        "reactionReceived": "Ο/Η {{name}} αντέδρασε {{emojis}}",
-        "reactionReceivedTo": " στο \"{{preview}}\"",
-        "pollVoteReceived": "{{name}} ψήφισε {{emojis}} στη δημοσκόπηση \"{{title}}\"",
-        "inConversation": " σε {{conversation}}",
-        "strangerMessage": "Μήνυμα από {{name}}",
-        "resourceConflict": "Η συνεδρία αντικαταστάθηκε",
-        "authError": "Σφάλμα ελέγχου ταυτότητας",
-        "connectionError": "Σφάλμα σύνδεσης",
-        "accepted": "Αποδεκτό",
-        "rejected": "Απορρίφθηκε",
-        "dismissed": "Απορρίφθηκε",
-        "pending": "Σε αναμονή",
-        "muted": "Σε σίγαση",
-        "muteReactions": "Σίγαση αντιδράσεων",
-        "muteConversationReactions": "Σίγαση αντιδράσεων από αυτή τη συνομιλία",
-        "unmuteConversationReactions": "Ενεργοποίηση αντιδράσεων από αυτή τη συνομιλία",
-        "muteMessageReactions": "Σίγαση αντιδράσεων σε αυτό το μήνυμα",
-        "unmuteMessageReactions": "Ενεργοποίηση αντιδράσεων σε αυτό το μήνυμα"
     },
     "chat": {
         "selection": {
@@ -1042,14 +1011,6 @@
             "title": "Πληροφορίες επαφών",
             "description": "Κάντε κλικ σε μια επαφή για να δείτε το προφίλ της, τις συνδεδεμένες συσκευές ή να ξεκινήσετε μια συνομιλία.",
             "hint": "Διπλό κλικ για άμεση έναρξη συνομιλίας."
-        },
-        "archive": {
-            "title": "Αρχειοθετημένες συνομιλίες",
-            "description": "Οι αρχειοθετημένες συνομιλίες θα εμφανίζονται εδώ. Μπορείτε να τις επαναφέρετε στη λίστα μηνυμάτων σας ανά πάσα στιγμή."
-        },
-        "events": {
-            "title": "Εκκρεμή συμβάντα",
-            "description": "Αιτήματα εγγραφής, προσκλήσεις σε δωμάτια και μηνύματα από άγνωστες επαφές θα εμφανίζονται εδώ."
         },
         "admin": {
             "title": "Διαχείριση διακομιστή",

@@ -65,8 +65,6 @@
         "rooms": "Kmamar",
         "connections": "Konnessjonijiet",
         "contacts": "Kuntatti",
-        "archive": "Arkivju",
-        "events": "Avvenimenti",
         "settings": "Issettjar",
         "admin": "Amministrazzjoni",
         "addContact": "Żid kuntatt",
@@ -434,35 +432,6 @@
         "invitedBy": "Mistieden minn {{name}}",
         "join": "Idħol",
         "decline": "Irrifjuta"
-    },
-    "activityLog": {
-        "title": "Log tal-attività",
-        "noActivity": "Għadha m'hemm attività",
-        "markAllRead": "Immarka kollox bħala moqri",
-        "today": "Illum",
-        "yesterday": "Ilbieraħ",
-        "subscriptionRequest": "Talba ta' kuntatt minn {{name}}",
-        "subscriptionAccepted": "{{name}} aċċetta t-talba tiegħek",
-        "subscriptionDenied": "{{name}} irrifjuta t-talba tiegħek",
-        "mucInvitation": "Stedina għall-kamra {{room}}",
-        "reactionReceived": "{{name}} irreaġixxa {{emojis}}",
-        "reactionReceivedTo": " għal \"{{preview}}\"",
-        "pollVoteReceived": "{{name}} ivvota {{emojis}} fil-poll \"{{title}}\"",
-        "inConversation": " fi {{conversation}}",
-        "strangerMessage": "Messaġġ minn {{name}}",
-        "resourceConflict": "Sessjoni sostitwita",
-        "authError": "Żball fl-awtentikazzjoni",
-        "connectionError": "Żball fil-konnessjoni",
-        "accepted": "Aċċettat",
-        "rejected": "Irrifjutat",
-        "dismissed": "Skartat",
-        "pending": "Pendenti",
-        "muted": "Maqtugħ",
-        "muteReactions": "Iskot ir-reazzjonijiet",
-        "muteConversationReactions": "Iskot ir-reazzjonijiet minn dan il-chat",
-        "unmuteConversationReactions": "Ixgħel ir-reazzjonijiet minn dan il-chat",
-        "muteMessageReactions": "Iskot ir-reazzjonijiet fuq dan il-messaġġ",
-        "unmuteMessageReactions": "Ixgħel ir-reazzjonijiet fuq dan il-messaġġ"
     },
     "chat": {
         "selection": {
@@ -1043,14 +1012,6 @@
             "title": "Informazzjoni tal-Kuntatt",
             "description": "Ikklikkja fuq kuntatt biex tara l-profil tagħhom, apparat konnessi, jew tibda konversazzjoni.",
             "hint": "Ikklikkja darbtejn biex tibda konversazzjoni direttament."
-        },
-        "archive": {
-            "title": "Konversazzjonijiet Arkivjati",
-            "description": "Konversazzjonijiet arkivjati se jidhru hawn. Tista' tirristawrahom fil-lista tal-messaġġi tiegħek kull meta trid."
-        },
-        "events": {
-            "title": "Avvenimenti Pendenti",
-            "description": "Talbiet ta' abbonament, stedini għal kmamar, u messaġġi minn kuntatti mhux magħrufa se jidhru hawn."
         },
         "admin": {
             "title": "Amministrazzjoni tas-Server",

@@ -65,8 +65,6 @@
         "rooms": "Конференции",
         "connections": "Контакты",
         "contacts": "Контакты",
-        "archive": "Архив",
-        "events": "События",
         "settings": "Настройки",
         "admin": "Администрирование",
         "addContact": "Добавить контакт",
@@ -432,35 +430,6 @@
         "invitedBy": "Пригласил(а) {{name}}",
         "join": "Войти",
         "decline": "Отклонить"
-    },
-    "activityLog": {
-        "title": "Журнал активности",
-        "noActivity": "Пока нет активности",
-        "markAllRead": "Отметить всё как прочитанное",
-        "today": "Сегодня",
-        "yesterday": "Вчера",
-        "subscriptionRequest": "Запрос на контакт от {{name}}",
-        "subscriptionAccepted": "{{name}} принял(а) ваш запрос",
-        "subscriptionDenied": "{{name}} отклонил(а) ваш запрос",
-        "mucInvitation": "Приглашение в комнату {{room}}",
-        "reactionReceived": "{{name}} отреагировал(а) {{emojis}}",
-        "reactionReceivedTo": " на \"{{preview}}\"",
-        "pollVoteReceived": "{{name}} проголосовал(а) {{emojis}} в опросе \"{{title}}\"",
-        "inConversation": " в {{conversation}}",
-        "strangerMessage": "Сообщение от {{name}}",
-        "resourceConflict": "Сессия заменена",
-        "authError": "Ошибка аутентификации",
-        "connectionError": "Ошибка подключения",
-        "accepted": "Принято",
-        "rejected": "Отклонено",
-        "dismissed": "Отклонено",
-        "pending": "Ожидает",
-        "muted": "Отключено",
-        "muteReactions": "Заглушить реакции",
-        "muteConversationReactions": "Заглушить реакции из этого чата",
-        "unmuteConversationReactions": "Включить реакции из этого чата",
-        "muteMessageReactions": "Заглушить реакции на это сообщение",
-        "unmuteMessageReactions": "Включить реакции на это сообщение"
     },
     "chat": {
         "selection": {
@@ -1041,14 +1010,6 @@
             "title": "Информация о контакте",
             "description": "Кликните на контакт, чтобы посмотреть его профиль, подключённые устройства или начать беседу.",
             "hint": "Двойной клик, чтобы начать беседу напрямую."
-        },
-        "archive": {
-            "title": "Архивированные беседы",
-            "description": "Архивированные беседы будут отображаться здесь. Вы можете восстановить их в список сообщений в любое время."
-        },
-        "events": {
-            "title": "Ожидающие события",
-            "description": "Здесь будут отображаться запросы на подписку, приглашения в комнаты и сообщения от неизвестных контактов."
         },
         "admin": {
             "title": "Администрирование сервера",

@@ -65,8 +65,6 @@
         "rooms": "Salons",
         "connections": "Contacts",
         "contacts": "Contacts",
-        "archive": "Archives",
-        "events": "Événements",
         "settings": "Paramètres",
         "admin": "Administration",
         "addContact": "Ajouter un contact",
@@ -433,35 +431,6 @@
         "invitedBy": "Invité par {{name}}",
         "join": "Rejoindre",
         "decline": "Refuser"
-    },
-    "activityLog": {
-        "title": "Journal d'activité",
-        "noActivity": "Aucune activité pour le moment",
-        "markAllRead": "Tout marquer comme lu",
-        "today": "Aujourd'hui",
-        "yesterday": "Hier",
-        "subscriptionRequest": "Demande de contact de {{name}}",
-        "subscriptionAccepted": "{{name}} a accepté votre demande",
-        "subscriptionDenied": "{{name}} a refusé votre demande",
-        "mucInvitation": "Invitation au salon {{room}}",
-        "reactionReceived": "{{name}} a réagi {{emojis}}",
-        "reactionReceivedTo": " à \"{{preview}}\"",
-        "pollVoteReceived": "{{name}} a voté {{emojis}} au sondage \"{{title}}\"",
-        "inConversation": " dans {{conversation}}",
-        "strangerMessage": "Message de {{name}}",
-        "resourceConflict": "Session remplacée",
-        "authError": "Erreur d'authentification",
-        "connectionError": "Erreur de connexion",
-        "accepted": "Accepté",
-        "rejected": "Rejeté",
-        "dismissed": "Ignoré",
-        "pending": "En attente",
-        "muted": "Mis en sourdine",
-        "muteReactions": "Mettre les réactions en sourdine",
-        "muteConversationReactions": "Mettre les réactions de cette discussion en sourdine",
-        "unmuteConversationReactions": "Réactiver les réactions de cette discussion",
-        "muteMessageReactions": "Mettre les réactions de ce message en sourdine",
-        "unmuteMessageReactions": "Réactiver les réactions de ce message"
     },
     "chat": {
         "selection": {
@@ -1042,14 +1011,6 @@
             "title": "Informations de contact",
             "description": "Cliquez sur un contact pour voir son profil, ses appareils connectés ou démarrer une conversation.",
             "hint": "Double-cliquez pour converser directement."
-        },
-        "archive": {
-            "title": "Conversations archivées",
-            "description": "Les conversations archivées apparaîtront ici. Vous pouvez les restaurer dans votre liste de messages à tout moment."
-        },
-        "events": {
-            "title": "Événements en attente",
-            "description": "Les demandes d'abonnement, invitations aux salons et messages de contacts inconnus apparaîtront ici."
         },
         "admin": {
             "title": "Administration du serveur",

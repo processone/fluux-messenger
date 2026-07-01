@@ -65,8 +65,6 @@
         "rooms": "Rum",
         "connections": "Anslutningar",
         "contacts": "Kontakter",
-        "archive": "Arkiv",
-        "events": "Händelser",
         "settings": "Inställningar",
         "admin": "Administration",
         "addContact": "Lägg till kontakt",
@@ -432,35 +430,6 @@
         "invitedBy": "Inbjuden av {{name}}",
         "join": "Gå med",
         "decline": "Avböj"
-    },
-    "activityLog": {
-        "title": "Aktivitetslogg",
-        "noActivity": "Ingen aktivitet ännu",
-        "markAllRead": "Markera alla som lästa",
-        "today": "Idag",
-        "yesterday": "Igår",
-        "subscriptionRequest": "Kontaktförfrågan från {{name}}",
-        "subscriptionAccepted": "{{name}} accepterade din förfrågan",
-        "subscriptionDenied": "{{name}} nekade din förfrågan",
-        "mucInvitation": "Rumsinbjudan till {{room}}",
-        "reactionReceived": "{{name}} reagerade {{emojis}}",
-        "reactionReceivedTo": " på \"{{preview}}\"",
-        "pollVoteReceived": "{{name}} röstade {{emojis}} i omröstning \"{{title}}\"",
-        "inConversation": " i {{conversation}}",
-        "strangerMessage": "Meddelande från {{name}}",
-        "resourceConflict": "Session ersatt",
-        "authError": "Autentiseringsfel",
-        "connectionError": "Anslutningsfel",
-        "accepted": "Accepterad",
-        "rejected": "Avvisad",
-        "dismissed": "Avfärdad",
-        "pending": "Väntande",
-        "muted": "Tystad",
-        "muteReactions": "Tysta reaktioner",
-        "muteConversationReactions": "Tysta reaktioner från denna chatt",
-        "unmuteConversationReactions": "Slå på reaktioner från denna chatt",
-        "muteMessageReactions": "Tysta reaktioner på detta meddelande",
-        "unmuteMessageReactions": "Slå på reaktioner på detta meddelande"
     },
     "chat": {
         "selection": {
@@ -1041,14 +1010,6 @@
             "title": "Kontaktinformation",
             "description": "Klicka på en kontakt för att visa deras profil, anslutna enheter eller starta en konversation.",
             "hint": "Dubbelklicka för att starta en konversation direkt."
-        },
-        "archive": {
-            "title": "Arkiverade konversationer",
-            "description": "Arkiverade konversationer visas här. Du kan återställa dem till din meddelandelista när som helst."
-        },
-        "events": {
-            "title": "Väntande händelser",
-            "description": "Prenumerationsförfrågningar, rumsinbjudningar och meddelanden från okända kontakter visas här."
         },
         "admin": {
             "title": "Serveradministration",

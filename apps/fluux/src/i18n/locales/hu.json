@@ -65,8 +65,6 @@
         "rooms": "Szobák",
         "connections": "Kapcsolatok",
         "contacts": "Névjegyek",
-        "archive": "Archívum",
-        "events": "Események",
         "settings": "Beállítások",
         "admin": "Adminisztráció",
         "addContact": "Névjegy hozzáadása",
@@ -432,35 +430,6 @@
         "invitedBy": "Meghívta: {{name}}",
         "join": "Csatlakozás",
         "decline": "Elutasítás"
-    },
-    "activityLog": {
-        "title": "Tevékenységnapló",
-        "noActivity": "Még nincs tevékenység",
-        "markAllRead": "Összes olvasottnak jelölése",
-        "today": "Ma",
-        "yesterday": "Tegnap",
-        "subscriptionRequest": "Kapcsolatfelvételi kérés tőle: {{name}}",
-        "subscriptionAccepted": "{{name}} elfogadta a kérését",
-        "subscriptionDenied": "{{name}} elutasította a kérését",
-        "mucInvitation": "Szobameghívó ide: {{room}}",
-        "reactionReceived": "{{name}} reagált {{emojis}}",
-        "reactionReceivedTo": " erre: \"{{preview}}\"",
-        "pollVoteReceived": "{{name}} szavazott {{emojis}} a szavazásban: \"{{title}}\"",
-        "inConversation": " itt: {{conversation}}",
-        "strangerMessage": "Üzenet tőle: {{name}}",
-        "resourceConflict": "Munkamenet lecserélve",
-        "authError": "Hitelesítési hiba",
-        "connectionError": "Kapcsolódási hiba",
-        "accepted": "Elfogadva",
-        "rejected": "Elutasítva",
-        "dismissed": "Elvetve",
-        "pending": "Függőben",
-        "muted": "Némítva",
-        "muteReactions": "Reakciók némítása",
-        "muteConversationReactions": "Reakciók némítása ebből a csevegésből",
-        "unmuteConversationReactions": "Reakciók bekapcsolása ebből a csevegésből",
-        "muteMessageReactions": "Reakciók némítása ezen az üzeneten",
-        "unmuteMessageReactions": "Reakciók bekapcsolása ezen az üzeneten"
     },
     "chat": {
         "selection": {
@@ -1041,14 +1010,6 @@
             "title": "Névjegy információ",
             "description": "Kattintson egy névjegyre a profil, csatlakozott eszközök megtekintéséhez, vagy beszélgetés indításához.",
             "hint": "Dupla kattintással közvetlenül indíthat beszélgetést."
-        },
-        "archive": {
-            "title": "Archivált beszélgetések",
-            "description": "Az archivált beszélgetések itt jelennek meg. Bármikor visszaállíthatja őket az üzenetlistájába."
-        },
-        "events": {
-            "title": "Függő események",
-            "description": "A feliratkozási kérelmek, szobameghívók és ismeretlen névjegyektől érkező üzenetek itt jelennek meg."
         },
         "admin": {
             "title": "Szerver adminisztráció",

@@ -65,8 +65,6 @@
         "rooms": "الغرف",
         "connections": "جهات الاتصال",
         "contacts": "جهات الاتصال",
-        "archive": "الأرشيف",
-        "events": "الأحداث",
         "settings": "الإعدادات",
         "admin": "الإدارة",
         "addContact": "إضافة جهة اتصال",
@@ -432,35 +430,6 @@
         "invitedBy": "دعوة من {{name}}",
         "join": "انضم",
         "decline": "رفض"
-    },
-    "activityLog": {
-        "title": "سجل النشاط",
-        "noActivity": "لا يوجد نشاط بعد",
-        "markAllRead": "تعليم الكل كمقروء",
-        "today": "اليوم",
-        "yesterday": "أمس",
-        "subscriptionRequest": "طلب اتصال من {{name}}",
-        "subscriptionAccepted": "قبِل {{name}} طلبك",
-        "subscriptionDenied": "رفض {{name}} طلبك",
-        "mucInvitation": "دعوة إلى الغرفة {{room}}",
-        "reactionReceived": "تفاعل {{name}} بـ {{emojis}}",
-        "reactionReceivedTo": " على \"{{preview}}\"",
-        "pollVoteReceived": "صوّت {{name}} بـ {{emojis}} على استطلاع \"{{title}}\"",
-        "inConversation": " في {{conversation}}",
-        "strangerMessage": "رسالة من {{name}}",
-        "resourceConflict": "تم استبدال الجلسة",
-        "authError": "خطأ في المصادقة",
-        "connectionError": "خطأ في الاتصال",
-        "accepted": "مقبول",
-        "rejected": "مرفوض",
-        "dismissed": "تم التجاهل",
-        "pending": "معلّق",
-        "muted": "مكتوم",
-        "muteReactions": "كتم التفاعلات",
-        "muteConversationReactions": "كتم التفاعلات من هذه المحادثة",
-        "unmuteConversationReactions": "إلغاء كتم التفاعلات من هذه المحادثة",
-        "muteMessageReactions": "كتم التفاعلات على هذه الرسالة",
-        "unmuteMessageReactions": "إلغاء كتم التفاعلات على هذه الرسالة"
     },
     "chat": {
         "selection": {
@@ -1041,14 +1010,6 @@
             "title": "معلومات جهة الاتصال",
             "description": "انقر على جهة اتصال لعرض ملفها الشخصي أو الأجهزة المتصلة أو بدء محادثة.",
             "hint": "انقر مرتين لبدء محادثة مباشرة."
-        },
-        "archive": {
-            "title": "المحادثات المؤرشفة",
-            "description": "ستظهر المحادثات المؤرشفة هنا. يمكنك استعادتها إلى قائمة الرسائل في أي وقت."
-        },
-        "events": {
-            "title": "الأحداث المعلّقة",
-            "description": "ستظهر هنا طلبات الاشتراك ودعوات الغرف والرسائل من جهات اتصال غير معروفة."
         },
         "admin": {
             "title": "إدارة الخادم",

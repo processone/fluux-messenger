@@ -65,8 +65,6 @@
         "rooms": "Pokoje",
         "connections": "Kontakty",
         "contacts": "Kontakty",
-        "archive": "Archiwum",
-        "events": "Zdarzenia",
         "settings": "Ustawienia",
         "admin": "Administracja",
         "addContact": "Dodaj kontakt",
@@ -434,35 +432,6 @@
         "invitedBy": "Zaproszony przez {{name}}",
         "join": "Dołącz",
         "decline": "Odrzuć"
-    },
-    "activityLog": {
-        "title": "Dziennik aktywności",
-        "noActivity": "Brak aktywności",
-        "markAllRead": "Oznacz wszystko jako przeczytane",
-        "today": "Dzisiaj",
-        "yesterday": "Wczoraj",
-        "subscriptionRequest": "Prośba o kontakt od {{name}}",
-        "subscriptionAccepted": "{{name}} zaakceptował(a) Twoją prośbę",
-        "subscriptionDenied": "{{name}} odrzucił(a) Twoją prośbę",
-        "mucInvitation": "Zaproszenie do pokoju {{room}}",
-        "reactionReceived": "{{name}} zareagował(a) {{emojis}}",
-        "reactionReceivedTo": " na \"{{preview}}\"",
-        "pollVoteReceived": "{{name}} zagłosował(a) {{emojis}} w ankiecie \"{{title}}\"",
-        "inConversation": " w {{conversation}}",
-        "strangerMessage": "Wiadomość od {{name}}",
-        "resourceConflict": "Sesja zastąpiona",
-        "authError": "Błąd uwierzytelniania",
-        "connectionError": "Błąd połączenia",
-        "accepted": "Zaakceptowano",
-        "rejected": "Odrzucono",
-        "dismissed": "Odrzucono",
-        "pending": "Oczekuje",
-        "muted": "Wyciszono",
-        "muteReactions": "Wycisz reakcje",
-        "muteConversationReactions": "Wycisz reakcje z tego czatu",
-        "unmuteConversationReactions": "Włącz reakcje z tego czatu",
-        "muteMessageReactions": "Wycisz reakcje na tę wiadomość",
-        "unmuteMessageReactions": "Włącz reakcje na tę wiadomość"
     },
     "chat": {
         "selection": {
@@ -1043,14 +1012,6 @@
             "title": "Informacje o kontakcie",
             "description": "Kliknij kontakt, aby zobaczyć profil, połączone urządzenia lub rozpocząć rozmowę.",
             "hint": "Kliknij dwukrotnie, aby rozpocząć rozmowę bezpośrednio."
-        },
-        "archive": {
-            "title": "Zarchiwizowane rozmowy",
-            "description": "Zarchiwizowane rozmowy pojawią się tutaj. Możesz je przywrócić do listy wiadomości w każdej chwili."
-        },
-        "events": {
-            "title": "Oczekujące zdarzenia",
-            "description": "Prośba o subskrypcję, zaproszenia do pokoi i wiadomości od nieznanych kontaktów pojawią się tutaj."
         },
         "admin": {
             "title": "Administracja serwera",

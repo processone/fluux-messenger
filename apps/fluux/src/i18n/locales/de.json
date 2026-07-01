@@ -65,8 +65,6 @@
         "rooms": "Räume",
         "connections": "Kontakte",
         "contacts": "Kontakte",
-        "archive": "Archiv",
-        "events": "Ereignisse",
         "settings": "Einstellungen",
         "admin": "Administration",
         "addContact": "Kontakt hinzufügen",
@@ -434,35 +432,6 @@
         "invitedBy": "Eingeladen von {{name}}",
         "join": "Beitreten",
         "decline": "Ablehnen"
-    },
-    "activityLog": {
-        "title": "Aktivitätsprotokoll",
-        "noActivity": "Noch keine Aktivität",
-        "markAllRead": "Alle als gelesen markieren",
-        "today": "Heute",
-        "yesterday": "Gestern",
-        "subscriptionRequest": "Kontaktanfrage von {{name}}",
-        "subscriptionAccepted": "{{name}} hat Ihre Anfrage akzeptiert",
-        "subscriptionDenied": "{{name}} hat Ihre Anfrage abgelehnt",
-        "mucInvitation": "Raumeinladung zu {{room}}",
-        "reactionReceived": "{{name}} hat reagiert {{emojis}}",
-        "reactionReceivedTo": " auf \"{{preview}}\"",
-        "pollVoteReceived": "{{name}} hat {{emojis}} bei Umfrage \"{{title}}\" abgestimmt",
-        "inConversation": " in {{conversation}}",
-        "strangerMessage": "Nachricht von {{name}}",
-        "resourceConflict": "Sitzung ersetzt",
-        "authError": "Authentifizierungsfehler",
-        "connectionError": "Verbindungsfehler",
-        "accepted": "Akzeptiert",
-        "rejected": "Abgelehnt",
-        "dismissed": "Verworfen",
-        "pending": "Ausstehend",
-        "muted": "Stummgeschaltet",
-        "muteReactions": "Reaktionen stummschalten",
-        "muteConversationReactions": "Reaktionen aus diesem Chat stummschalten",
-        "unmuteConversationReactions": "Reaktionen aus diesem Chat aktivieren",
-        "muteMessageReactions": "Reaktionen auf diese Nachricht stummschalten",
-        "unmuteMessageReactions": "Reaktionen auf diese Nachricht aktivieren"
     },
     "chat": {
         "selection": {
@@ -1043,14 +1012,6 @@
             "title": "Kontaktinformationen",
             "description": "Klicken Sie auf einen Kontakt, um sein Profil, verbundene Geräte anzuzeigen oder eine Unterhaltung zu starten.",
             "hint": "Doppelklick um direkt eine Unterhaltung zu starten."
-        },
-        "archive": {
-            "title": "Archivierte Unterhaltungen",
-            "description": "Archivierte Unterhaltungen werden hier angezeigt. Sie können sie jederzeit in Ihre Nachrichtenliste zurückholen."
-        },
-        "events": {
-            "title": "Ausstehende Ereignisse",
-            "description": "Abonnementanfragen, Raumeinladungen und Nachrichten von unbekannten Kontakten werden hier angezeigt."
         },
         "admin": {
             "title": "Server-Administration",

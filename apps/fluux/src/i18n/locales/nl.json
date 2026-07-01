@@ -65,8 +65,6 @@
         "rooms": "Groepen",
         "connections": "Contacten",
         "contacts": "Contacten",
-        "archive": "Archief",
-        "events": "Gebeurtenissen",
         "settings": "Instellingen",
         "admin": "Beheer",
         "addContact": "Contact toevoegen",
@@ -432,35 +430,6 @@
         "invitedBy": "Uitgenodigd door {{name}}",
         "join": "Joinen",
         "decline": "Weigeren"
-    },
-    "activityLog": {
-        "title": "Activiteitenlogboek",
-        "noActivity": "Nog geen activiteit",
-        "markAllRead": "Alles als gelezen markeren",
-        "today": "Vandaag",
-        "yesterday": "Gisteren",
-        "subscriptionRequest": "Contactverzoek van {{name}}",
-        "subscriptionAccepted": "{{name}} heeft uw verzoek geaccepteerd",
-        "subscriptionDenied": "{{name}} heeft uw verzoek geweigerd",
-        "mucInvitation": "Uitnodiging voor kamer {{room}}",
-        "reactionReceived": "{{name}} reageerde {{emojis}}",
-        "reactionReceivedTo": " op \"{{preview}}\"",
-        "pollVoteReceived": "{{name}} stemde {{emojis}} op peiling \"{{title}}\"",
-        "inConversation": " in {{conversation}}",
-        "strangerMessage": "Bericht van {{name}}",
-        "resourceConflict": "Sessie vervangen",
-        "authError": "Authenticatiefout",
-        "connectionError": "Verbindingsfout",
-        "accepted": "Geaccepteerd",
-        "rejected": "Geweigerd",
-        "dismissed": "Genegeerd",
-        "pending": "In afwachting",
-        "muted": "Gedempt",
-        "muteReactions": "Reacties dempen",
-        "muteConversationReactions": "Reacties uit deze chat dempen",
-        "unmuteConversationReactions": "Reacties uit deze chat inschakelen",
-        "muteMessageReactions": "Reacties op dit bericht dempen",
-        "unmuteMessageReactions": "Reacties op dit bericht inschakelen"
     },
     "chat": {
         "selection": {
@@ -1041,14 +1010,6 @@
             "title": "Contactinformatie",
             "description": "Klik op een contact om hun profiel, verbonden apparaten te bekijken of een gesprek te starten.",
             "hint": "Dubbelklik om direct een gesprek te starten."
-        },
-        "archive": {
-            "title": "Gearchiveerde gesprekken",
-            "description": "Gearchiveerde gesprekken verschijnen hier. Je kunt ze altijd terugzetten naar je berichtenlijst."
-        },
-        "events": {
-            "title": "Openstaande gebeurtenissen",
-            "description": "Abonnementsverzoeken, groepsuitnodigingen en berichten van onbekende contacten verschijnen hier."
         },
         "admin": {
             "title": "Serverbeheer",

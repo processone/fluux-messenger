@@ -65,8 +65,6 @@
         "rooms": "Пакоі",
         "connections": "Кантакты",
         "contacts": "Кантакты",
-        "archive": "Архіў",
-        "events": "Падзеі",
         "settings": "Налады",
         "admin": "Адміністраванне",
         "addContact": "Дадаць кантакт",
@@ -432,35 +430,6 @@
         "invitedBy": "Запрошаны {{name}}",
         "join": "Далучыцца",
         "decline": "Адхіліць"
-    },
-    "activityLog": {
-        "title": "Журнал актыўнасці",
-        "noActivity": "Пакуль няма актыўнасці",
-        "markAllRead": "Пазначыць усё як прачытанае",
-        "today": "Сёння",
-        "yesterday": "Учора",
-        "subscriptionRequest": "Запыт на кантакт ад {{name}}",
-        "subscriptionAccepted": "{{name}} прыняў(-ла) ваш запыт",
-        "subscriptionDenied": "{{name}} адхіліў(-ла) ваш запыт",
-        "mucInvitation": "Запрашэнне ў пакой {{room}}",
-        "reactionReceived": "{{name}} адрэагаваў(-ла) {{emojis}}",
-        "reactionReceivedTo": " на \"{{preview}}\"",
-        "pollVoteReceived": "{{name}} прагаласаваў(-ла) {{emojis}} у апытанні \"{{title}}\"",
-        "inConversation": " у {{conversation}}",
-        "strangerMessage": "Паведамленне ад {{name}}",
-        "resourceConflict": "Сесія заменена",
-        "authError": "Памылка аўтэнтыфікацыі",
-        "connectionError": "Памылка злучэння",
-        "accepted": "Прынята",
-        "rejected": "Адхілена",
-        "dismissed": "Адхілена",
-        "pending": "Чакае",
-        "muted": "Выключана",
-        "muteReactions": "Заглушыць рэакцыі",
-        "muteConversationReactions": "Заглушыць рэакцыі з гэтага чата",
-        "unmuteConversationReactions": "Уключыць рэакцыі з гэтага чата",
-        "muteMessageReactions": "Заглушыць рэакцыі на гэта паведамленне",
-        "unmuteMessageReactions": "Уключыць рэакцыі на гэта паведамленне"
     },
     "chat": {
         "selection": {
@@ -1041,14 +1010,6 @@
             "title": "Інфармацыя пра кантакт",
             "description": "Націсніце на кантакт, каб праглядзець яго профіль, падлучаныя прылады альбо пачаць размову.",
             "hint": "Падвойнае пстрык, каб пачаць размову непасрэдна."
-        },
-        "archive": {
-            "title": "Архіваваныя размовы",
-            "description": "Архіваваныя размовы з'явяцца тут. Вы можаце аднавіць іх у ваш спіс паведамленняў у любы час."
-        },
-        "events": {
-            "title": "Чакаючыя падзеі",
-            "description": "Запыты на падпіску, запрашэнні ў пакоі і паведамленні ад невядомых кантактаў з'явяцца тут."
         },
         "admin": {
             "title": "Адміністраванне сервера",

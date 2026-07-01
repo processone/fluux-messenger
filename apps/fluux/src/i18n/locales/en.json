@@ -65,8 +65,6 @@
         "rooms": "Rooms",
         "connections": "Connections",
         "contacts": "Contacts",
-        "archive": "Archive",
-        "events": "Events",
         "settings": "Settings",
         "admin": "Admin",
         "addContact": "Add contact",
@@ -432,35 +430,6 @@
         "invitedBy": "Invited by {{name}}",
         "join": "Join",
         "decline": "Decline"
-    },
-    "activityLog": {
-        "title": "Activity Log",
-        "noActivity": "No activity yet",
-        "markAllRead": "Mark all read",
-        "today": "Today",
-        "yesterday": "Yesterday",
-        "subscriptionRequest": "Contact request from {{name}}",
-        "subscriptionAccepted": "{{name}} accepted your request",
-        "subscriptionDenied": "{{name}} denied your request",
-        "mucInvitation": "Room invitation to {{room}}",
-        "reactionReceived": "{{name}} reacted {{emojis}}",
-        "reactionReceivedTo": " to \"{{preview}}\"",
-        "pollVoteReceived": "{{name}} voted {{emojis}} on poll \"{{title}}\"",
-        "inConversation": " in {{conversation}}",
-        "strangerMessage": "Message from {{name}}",
-        "resourceConflict": "Session replaced",
-        "authError": "Authentication error",
-        "connectionError": "Connection error",
-        "accepted": "Accepted",
-        "rejected": "Rejected",
-        "dismissed": "Dismissed",
-        "pending": "Pending",
-        "muted": "Muted",
-        "muteReactions": "Mute reactions",
-        "muteConversationReactions": "Mute reactions from this chat",
-        "unmuteConversationReactions": "Unmute reactions from this chat",
-        "muteMessageReactions": "Mute reactions on this message",
-        "unmuteMessageReactions": "Unmute reactions on this message"
     },
     "chat": {
         "selection": {
@@ -1041,14 +1010,6 @@
             "title": "Contact Information",
             "description": "Click on a contact to view their profile, connected devices, or start a conversation.",
             "hint": "Double-click to start a conversation directly."
-        },
-        "archive": {
-            "title": "Archived Conversations",
-            "description": "Archived conversations will appear here. You can restore them to your message list anytime."
-        },
-        "events": {
-            "title": "Pending Events",
-            "description": "Subscription requests, room invitations, and messages from unknown contacts will appear here."
         },
         "admin": {
             "title": "Server Administration",
