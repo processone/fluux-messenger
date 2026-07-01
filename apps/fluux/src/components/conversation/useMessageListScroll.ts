@@ -784,19 +784,26 @@ export function useMessageListScroll({
         clientHeight: ss?.clientHeight ?? -1,
       }
     }
-    // After the pin settles, watch the tail geometry for ~2s (read-only). Logs the first frame the
-    // last row's bottom-overflow jumps (the late growth that strands the just-sent message) and a
-    // final reading, so we can time the growth and see what the spacer/getTotalSize did.
+    // After the pin settles, watch the tail geometry for ~2s (read-only) and log the FULL trajectory:
+    // any change to overflowBelow (either direction — below-the-fold OR floating-above), clientHeight
+    // (viewport resize) or scrollHeight (content grow), each with its frame number. This shows exactly
+    // when the just-sent message leaves the bottom and WHY — a viewport shrink (clientHeight) vs a
+    // late content grow (scrollHeight). overflowBelow > 0 = below the fold (the reported symptom).
     const watchStrandAfterSettle = () => {
-      const base = tailGeo().overflowBelow ?? 0
       let frames = 0
-      let logged = false
+      let logs = 0
+      let prev = tailGeo()
+      const moved = (g: ReturnType<typeof tailGeo>) =>
+        Math.abs((g.overflowBelow ?? 0) - (prev.overflowBelow ?? 0)) > 8 ||
+        Math.abs(g.clientHeight - prev.clientHeight) > 8 ||
+        Math.abs(g.scrollHeight - prev.scrollHeight) > 8
       const tick = () => {
         frames++
         const g = tailGeo()
-        if (!logged && g.overflowBelow != null && g.overflowBelow - base > 8) {
-          logged = true
-          debugLog('POST-SETTLE STRAND', { framesAfterSettle: frames, deltaOverflow: (g.overflowBelow ?? 0) - base, ...g })
+        if (logs < 8 && moved(g)) {
+          logs++
+          debugLog('POST-SETTLE change', { frame: frames, ...g })
+          prev = g
         }
         if (frames < 120) requestAnimationFrame(tick)
         else debugLog('POST-SETTLE final', { frames, ...g })
@@ -811,6 +818,7 @@ export function useMessageListScroll({
     debugLog('PIN start', {
       itemCount: virt.itemCount,
       distFromBottom: scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight,
+      ...tailGeo(), // DIAGNOSTIC (temporary)
     })
 
     const startedAt = Date.now()
