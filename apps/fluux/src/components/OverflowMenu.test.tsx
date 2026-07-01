@@ -156,4 +156,19 @@ describe('OverflowMenu', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Close it' }))
     expect(screen.queryByText('View profile')).not.toBeInTheDocument()
   })
+
+  it('renders a separator above an item marked dividerBefore', () => {
+    render(
+      <OverflowMenu
+        ariaLabel="More actions"
+        items={[
+          { key: 'a', label: 'First', icon: User, onClick: vi.fn() },
+          { key: 'b', label: 'Second', icon: Archive, onClick: vi.fn(), dividerBefore: true },
+        ]}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'More actions' }))
+    expect(screen.getByRole('separator')).toBeInTheDocument()
+  })
 })

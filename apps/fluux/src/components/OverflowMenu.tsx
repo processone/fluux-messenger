@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react'
 import { MoreVertical, Check, type LucideIcon } from 'lucide-react'
 import { useClickOutside } from '@/hooks/useClickOutside'
 
@@ -20,6 +20,8 @@ export interface OverflowMenuItem {
    * trailing check mark when `true`. Leave undefined for a plain action item.
    */
   active?: boolean
+  /** Renders a separator line above this item, to group menu sections. */
+  dividerBefore?: boolean
 }
 
 interface OverflowMenuProps {
@@ -99,23 +101,25 @@ export function OverflowMenu({
 
       {isOpen && (
         <div role="menu" className={menuClassName}>
-          {items.map(({ key, label, icon: Icon, onClick, danger, disabled, active }) => (
-            <button
-              key={key}
-              role={active === undefined ? 'menuitem' : 'menuitemcheckbox'}
-              aria-checked={active === undefined ? undefined : active}
-              type="button"
-              disabled={disabled}
-              onClick={() => {
-                setIsOpen(false)
-                onClick()
-              }}
-              className={`w-full flex items-center gap-2 px-3 py-2.5 text-start text-sm transition-colors hover:bg-fluux-active disabled:opacity-50 disabled:cursor-not-allowed ${danger ? 'text-fluux-error' : 'text-fluux-text'}`}
-            >
-              <Icon className="size-4 flex-shrink-0" />
-              <span>{label}</span>
-              {active && <Check className="size-4 flex-shrink-0 ms-auto" aria-hidden="true" />}
-            </button>
+          {items.map(({ key, label, icon: Icon, onClick, danger, disabled, active, dividerBefore }) => (
+            <Fragment key={key}>
+              {dividerBefore && <div role="separator" className="my-1 border-t border-fluux-hover" />}
+              <button
+                role={active === undefined ? 'menuitem' : 'menuitemcheckbox'}
+                aria-checked={active === undefined ? undefined : active}
+                type="button"
+                disabled={disabled}
+                onClick={() => {
+                  setIsOpen(false)
+                  onClick()
+                }}
+                className={`w-full flex items-center gap-2 px-3 py-2.5 text-start text-sm transition-colors hover:bg-fluux-active disabled:opacity-50 disabled:cursor-not-allowed ${danger ? 'text-fluux-error' : 'text-fluux-text'}`}
+              >
+                <Icon className="size-4 flex-shrink-0" />
+                <span>{label}</span>
+                {active && <Check className="size-4 flex-shrink-0 ms-auto" aria-hidden="true" />}
+              </button>
+            </Fragment>
           ))}
         </div>
       )}
