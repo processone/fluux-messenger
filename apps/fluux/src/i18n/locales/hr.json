@@ -190,7 +190,7 @@
             "glanceVerified": "Potvrđeno i šifrirano",
             "glanceEncrypted": "Šifrirano, nije potvrđeno",
             "glanceNotEncrypted": "Nije šifrirano",
-            "glanceDisabled": "Enkripcija isključena",
+            "glanceDisabled": "Šifriranje isključeno",
             "glanceLocked": "Šifrirano, zaključano"
         },
         "tabs": {
