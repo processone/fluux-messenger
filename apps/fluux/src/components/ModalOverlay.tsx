@@ -8,6 +8,7 @@ import {
 } from 'react'
 import { useRestoreFocus } from '@/hooks/useRestoreFocus'
 import { useModalTransition } from '@/hooks/useModalTransition'
+import { useFocusTrap } from '@/hooks/useFocusTrap'
 
 /** A panel keyboard handler that also receives the transition-aware `close`. */
 type PanelKeyDown = (
@@ -96,6 +97,8 @@ export function ModalOverlay({
   // the implicit backdrop-click and Escape affordances below, not this.
   const close = useCallback(() => requestClose(onClose), [requestClose, onClose])
 
+  // Trap Tab focus inside the panel and return focus to the opener on close.
+  useFocusTrap(panelRef, { initialFocusRef: focusRef })
   // Keep keyboard focus inside the modal across OS window blur/refocus.
   useRestoreFocus(panelRef, focusRef)
 
