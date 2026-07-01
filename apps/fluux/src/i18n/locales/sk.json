@@ -60,6 +60,7 @@
         "advancedMode": "Pokročilý režim"
     },
     "sidebar": {
+        "updateAvailable": "Aktualizácia k dispozícii",
         "messages": "Správy",
         "rooms": "Miestnosti",
         "connections": "Pripojenia",

@@ -60,6 +60,7 @@
         "advancedMode": "מצב מתקדם"
     },
     "sidebar": {
+        "updateAvailable": "עדכון זמין",
         "messages": "הודעות",
         "rooms": "חדרים",
         "connections": "אנשי קשר",

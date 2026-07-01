@@ -60,6 +60,7 @@
         "advancedMode": "الوضع المتقدم"
     },
     "sidebar": {
+        "updateAvailable": "تحديث متوفر",
         "messages": "الرسائل",
         "rooms": "الغرف",
         "connections": "جهات الاتصال",

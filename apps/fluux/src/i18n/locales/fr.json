@@ -60,6 +60,7 @@
         }
     },
     "sidebar": {
+        "updateAvailable": "Mise à jour disponible",
         "messages": "Messages",
         "rooms": "Salons",
         "connections": "Contacts",

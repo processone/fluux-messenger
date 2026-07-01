@@ -8,6 +8,12 @@ interface IconRailButtonProps {
   onClick: () => void
   disabled?: boolean
   showBadge?: boolean
+  /**
+   * Calm brand-tinted resting state (brand-colored icon, subtle hover), for a
+   * gentle attention-drawing action like "update available" — distinct from the
+   * loud filled `active` state and without an alarm badge.
+   */
+  accent?: boolean
 }
 
 export function IconRailButton({
@@ -16,7 +22,8 @@ export function IconRailButton({
   active,
   onClick,
   disabled,
-  showBadge
+  showBadge,
+  accent
 }: IconRailButtonProps) {
   return (
     <Tooltip content={label} position="right" delay={500}>
@@ -30,7 +37,9 @@ export function IconRailButton({
             ? 'bg-fluux-brand text-fluux-text-on-accent'
             : disabled
               ? 'text-fluux-muted/50 cursor-not-allowed'
-              : 'text-fluux-muted hover:bg-fluux-hover hover:text-fluux-text'
+              : accent
+                ? 'text-fluux-brand hover:bg-fluux-hover'
+                : 'text-fluux-muted hover:bg-fluux-hover hover:text-fluux-text'
           }`}
       >
         <Icon className="size-5" />

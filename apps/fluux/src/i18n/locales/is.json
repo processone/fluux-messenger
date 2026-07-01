@@ -60,6 +60,7 @@
         "advancedMode": "Ítarlegur hamur"
     },
     "sidebar": {
+        "updateAvailable": "Uppfærsla í boði",
         "messages": "Skilaboð",
         "rooms": "Herbergi",
         "connections": "Tengingar",

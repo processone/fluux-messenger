@@ -60,6 +60,7 @@
         "advancedMode": "Пашыраны рэжым"
     },
     "sidebar": {
+        "updateAvailable": "Даступнае абнаўленне",
         "messages": "Паведамленні",
         "rooms": "Пакоі",
         "connections": "Кантакты",

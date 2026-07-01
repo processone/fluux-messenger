@@ -60,6 +60,7 @@
         "advancedMode": "Modalità avvanzata"
     },
     "sidebar": {
+        "updateAvailable": "Aġġornament disponibbli",
         "messages": "Messaġġi",
         "rooms": "Kmamar",
         "connections": "Konnessjonijiet",
