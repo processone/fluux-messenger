@@ -307,7 +307,7 @@ describe('isConnectionError', () => {
 // ============================================================================
 
 describe('selectRoomsNeedingResumeSeed', () => {
-  const neverQueried = () => false
+  const notCaughtUp = () => false
 
   const room = (
     over: Partial<{
@@ -326,52 +326,56 @@ describe('selectRoomsNeedingResumeSeed', () => {
     ...over,
   })
 
-  it('includes a joined MAM room with no preview that was never queried', () => {
+  it('includes a joined MAM room that is not caught up to live', () => {
     const r = room({ jid: 'unseeded@conf.example.com' })
-    expect(selectRoomsNeedingResumeSeed([r], neverQueried, null)).toEqual([r])
+    expect(selectRoomsNeedingResumeSeed([r], notCaughtUp, null)).toEqual([r])
   })
 
-  it('excludes a room that already has a preview (lastMessage set)', () => {
-    const r = room({ jid: 'seeded@conf.example.com', lastMessage: { id: 'm1' } })
-    expect(selectRoomsNeedingResumeSeed([r], neverQueried, null)).toEqual([])
+  it('includes a previewed room with an open gap (has lastMessage but not caught up to live)', () => {
+    // The widened scope: a previously-seeded room whose forward catch-up never
+    // completed (isCaughtUpToLive false) is refreshed on resume, not left stale
+    // until the user opens it. #784 excluded it because it had a preview.
+    const r = room({ jid: 'gap@conf.example.com', lastMessage: { id: 'm1' } })
+    expect(selectRoomsNeedingResumeSeed([r], notCaughtUp, null)).toEqual([r])
   })
 
-  it('excludes a room already queried this session (known-empty)', () => {
-    const r = room({ jid: 'queried@conf.example.com' })
-    const hasQueried = (jid: string) => jid === 'queried@conf.example.com'
-    expect(selectRoomsNeedingResumeSeed([r], hasQueried, null)).toEqual([])
+  it('excludes a room already caught up to live', () => {
+    const r = room({ jid: 'live@conf.example.com' })
+    const isCaughtUpToLive = (jid: string) => jid === 'live@conf.example.com'
+    expect(selectRoomsNeedingResumeSeed([r], isCaughtUpToLive, null)).toEqual([])
   })
 
   it('excludes QuickChat rooms', () => {
     const r = room({ jid: 'quick@conf.example.com', isQuickChat: true })
-    expect(selectRoomsNeedingResumeSeed([r], neverQueried, null)).toEqual([])
+    expect(selectRoomsNeedingResumeSeed([r], notCaughtUp, null)).toEqual([])
   })
 
   it('excludes rooms that do not support MAM', () => {
     const r = room({ jid: 'nomam@conf.example.com', supportsMAM: false })
-    expect(selectRoomsNeedingResumeSeed([r], neverQueried, null)).toEqual([])
+    expect(selectRoomsNeedingResumeSeed([r], notCaughtUp, null)).toEqual([])
   })
 
   it('excludes rooms that are not joined', () => {
     const r = room({ jid: 'left@conf.example.com', joined: false })
-    expect(selectRoomsNeedingResumeSeed([r], neverQueried, null)).toEqual([])
+    expect(selectRoomsNeedingResumeSeed([r], notCaughtUp, null)).toEqual([])
   })
 
   it('excludes the active room (handled by roomSideEffects)', () => {
     const r = room({ jid: 'active@conf.example.com' })
     expect(
-      selectRoomsNeedingResumeSeed([r], neverQueried, 'active@conf.example.com'),
+      selectRoomsNeedingResumeSeed([r], notCaughtUp, 'active@conf.example.com'),
     ).toEqual([])
   })
 
   it('returns only the eligible rooms from a mixed set', () => {
     const eligible = room({ jid: 'a@conf.example.com' })
-    const previewed = room({ jid: 'b@conf.example.com', lastMessage: { id: 'm' } })
+    const live = room({ jid: 'b@conf.example.com' })
     const quick = room({ jid: 'c@conf.example.com', isQuickChat: true })
     const active = room({ jid: 'd@conf.example.com' })
+    const isCaughtUpToLive = (jid: string) => jid === 'b@conf.example.com'
     const result = selectRoomsNeedingResumeSeed(
-      [eligible, previewed, quick, active],
-      neverQueried,
+      [eligible, live, quick, active],
+      isCaughtUpToLive,
       'd@conf.example.com',
     )
     expect(result).toEqual([eligible])

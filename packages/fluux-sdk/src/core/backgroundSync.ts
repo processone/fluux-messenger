@@ -282,14 +282,15 @@ export function setupBackgroundSyncSideEffects(
     // If MAM not yet known, the serverInfo subscription below will catch it
   })
 
-  // SM resumption: the server replays undelivered stanzas, so no bulk MAM sync
-  // is needed. But the fresh-session room catch-up (`catchUpAllRooms`) never runs
-  // here, so an autojoined room that never completed catch-up keeps an empty
-  // sidebar preview until opened manually (e.g. after a mobile network change, or
-  // when a flaky connection dropped before the 10s fresh-session room pass fired).
-  // Seed exactly those rooms — no preview AND no completed MAM query — reusing
-  // catchUpRoom (its no-cursor path is a `{ before: '' }` fetch-latest that both
-  // populates the archive and sets the preview). Rooms we already hold history for
+  // SM resumption: the server replays undelivered stanzas, so no bulk MAM sync is
+  // needed for rooms already caught up to live. But the fresh-session room catch-up
+  // (`catchUpAllRooms`) never runs here, so a room NOT caught up to live this
+  // session — an autojoined room the user never opened, or one whose forward
+  // catch-up left an open gap (e.g. a flaky connection dropped before the 10s
+  // fresh-session pass fired) — keeps an empty or stale sidebar preview until opened
+  // manually. Catch up exactly those rooms, reusing catchUpRoom (its no-cursor path
+  // is a `{ before: '' }` fetch-latest that populates the archive and sets the
+  // preview; a gap-open room forward-fills from its recorded gap). Caught-up rooms
   // are skipped, so this stays out of SM's "server replays, no MAM" path.
   const unsubscribeResumed = client.on('resumed', () => {
     isFreshSession = false
@@ -297,15 +298,15 @@ export function setupBackgroundSyncSideEffects(
     const state = roomStore.getState()
     const eligible = selectRoomsNeedingResumeSeed(
       state.joinedRooms(),
-      (jid) => state.getRoomMAMQueryState(jid).hasQueried,
+      (jid) => state.getRoomMAMQueryState(jid).isCaughtUpToLive,
       state.activeRoomJid,
     )
     if (eligible.length === 0) {
-      logInfo('Background sync: SM resumption — no rooms need seeding')
+      logInfo('Background sync: SM resumption — all rooms caught up')
       return
     }
 
-    logInfo(`Background sync: SM resumption — seeding ${eligible.length} room(s) without preview`)
+    logInfo(`Background sync: SM resumption — catching up ${eligible.length} not-caught-up room(s)`)
     void (async () => {
       for (const room of eligible) {
         if (!client.isConnected()) break

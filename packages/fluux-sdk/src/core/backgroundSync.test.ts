@@ -644,6 +644,14 @@ describe('setupBackgroundSyncSideEffects', () => {
         timestamp: new Date(), isOutgoing: false,
       } as RoomMessage)
 
+    const markCaughtUp = (jid: string) =>
+      roomStore.setState((s) => ({
+        mamQueryStates: new Map(s.mamQueryStates).set(jid, {
+          isLoading: false, error: null, hasQueried: true,
+          isHistoryComplete: false, isCaughtUpToLive: true,
+        }),
+      }))
+
     it('catches up a joined MAM room with no preview on SM resumption', async () => {
       addRoom('unseeded@conference.example.com')
       connectionStore.getState().setStatus('disconnected')
@@ -659,9 +667,9 @@ describe('setupBackgroundSyncSideEffects', () => {
       ).toBe('unseeded@conference.example.com')
     })
 
-    it('does not catch up a room that already has a sidebar preview', async () => {
-      addRoom('seeded@conference.example.com')
-      seedPreview('seeded@conference.example.com')
+    it('does not catch up a room already caught up to live', async () => {
+      addRoom('live@conference.example.com')
+      markCaughtUp('live@conference.example.com')
       connectionStore.getState().setStatus('disconnected')
       cleanup = setupBackgroundSyncSideEffects(mockClient)
 
@@ -669,6 +677,24 @@ describe('setupBackgroundSyncSideEffects', () => {
       await vi.advanceTimersByTimeAsync(100)
 
       expect(mockClient.mam.catchUpRoom).not.toHaveBeenCalled()
+    })
+
+    it('catches up a previewed room that is not caught up to live (open gap)', async () => {
+      // Widened scope: a room with a preview but an unfilled forward gap
+      // (isCaughtUpToLive false) is refreshed on resume, not left stale until opened.
+      addRoom('gap@conference.example.com')
+      seedPreview('gap@conference.example.com')
+      connectionStore.getState().setStatus('disconnected')
+      cleanup = setupBackgroundSyncSideEffects(mockClient)
+
+      simulateSmResumption(mockClient)
+
+      await vi.waitFor(() => {
+        expect(mockClient.mam.catchUpRoom).toHaveBeenCalledTimes(1)
+      })
+      expect(
+        (mockClient.mam.catchUpRoom as ReturnType<typeof vi.fn>).mock.calls[0][0],
+      ).toBe('gap@conference.example.com')
     })
 
     it('does not catch up QuickChat rooms', async () => {
