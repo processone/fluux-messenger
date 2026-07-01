@@ -64,8 +64,7 @@ vi.mock('@fluux/sdk/react', () => ({
     }),
   useRoomStore: (sel: (s: Record<string, unknown>) => unknown) =>
     sel({
-      totalMentionsCount: () => 0,
-      totalNotifiableUnreadCount: () => 0,
+      roomTabIndicator: () => 'none',
     }),
   useEventsStore: (sel: (s: Record<string, unknown>) => unknown) =>
     sel({ subscriptionRequests: [] }),
