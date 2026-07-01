@@ -1,7 +1,7 @@
-import React, { useState, useRef, useEffect, type RefObject } from 'react'
+import React, { useState, useRef, useEffect, useCallback, type RefObject } from 'react'
 import { useTranslation } from 'react-i18next'
 import { detectRenderLoop, trackSelectorChange } from '@/utils/renderLoopDetector'
-import { useClickOutside, useWindowDrag, useRouteSync } from '@/hooks'
+import { useClickOutside, useWindowDrag, useRouteSync, useFollowUnarchivedActive } from '@/hooks'
 import { useModalStore } from '@/stores/modalStore'
 import { useUpdateAffordance } from '@/stores/appUpdateStore'
 import {
@@ -131,6 +131,16 @@ export function Sidebar({ onSelectContact, onStartChat, onStartChatWithJid, onMa
   useEffect(() => {
     if (sidebarView !== 'messages') setShowArchived(false)
   }, [sidebarView])
+
+  // When the conversation you're viewing gets unarchived (by writing in it or
+  // receiving a message), return to the active list so it stays in context
+  // instead of vanishing from the filtered archive list.
+  const activeConversationId = useChatStore((s) => s.activeConversationId)
+  const isActiveArchived = useChatStore(
+    (s) => s.activeConversationId != null && s.archivedConversations.has(s.activeConversationId),
+  )
+  const showActiveList = useCallback(() => setShowArchived(false), [])
+  useFollowUnarchivedActive({ activeConversationId, isActiveArchived, showArchived, onShowActive: showActiveList })
 
   // Local UI state (not shared)
   const [showCreateRoom, setShowCreateRoom] = useState(false)
