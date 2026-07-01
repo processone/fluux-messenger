@@ -1782,7 +1782,9 @@ export function useMessageListScroll({
             // (the bug). scrollToIndex windows the marker region in (mount + measure), so each frame
             // lands closer and re-asserting converges, exactly like pinVirtualizedBottom. align:'start'
             // puts the divider near the top to read forward, and clamps to the bottom when the marker
-            // is the last message (so a single new message lands at the bottom, fully visible).
+            // is the last message (so a single new message lands at the bottom, fully visible — do NOT
+            // shift up by viewportHeight/3 here: getOffsetForMessageId clamps to the scrollable range
+            // for a near-bottom marker, so the shift would scroll past the new message and hide it).
             if (v) v.scrollToIndex(markerIndex!, { align: 'start' })
             else s.scrollTop = Math.max(0, offset - viewportHeight / 3)
 
@@ -2015,7 +2017,14 @@ export function useMessageListScroll({
           return
         }
 
-        v.scrollToIndex(currentIdx, { align: 'start' })
+        // Center the target rather than pinning it to the top edge (align:'start'), which tucks it
+        // under the sticky date header where it reads as misaligned and the highlight flash is easy
+        // to miss. scrollToIndex('center') windows the (possibly far-out-of-window) row in, measures
+        // it, and clamps internally — so a near-bottom target stays visible instead of being scrolled
+        // past the fold (the failure mode of a manual getOffsetForMessageId − clientHeight/3 shift,
+        // since getOffsetForMessageId returns an offset already clamped to the scrollable range).
+        // Re-asserting each frame converges as rows settle. Matches the reply-scroll block:'center'.
+        v.scrollToIndex(currentIdx, { align: 'center' })
         const st = s.scrollTop
         const distFromBottom = s.scrollHeight - st - s.clientHeight
         isAtBottomRef.current = distFromBottom < AT_BOTTOM_THRESHOLD
@@ -2067,12 +2076,12 @@ export function useMessageListScroll({
         }
         return
       }
-      const elementTop = (el as HTMLElement).offsetTop
-      const targetScrollTop = Math.max(0, elementTop - scroller.clientHeight / 3)
-      scroller.scrollTop = targetScrollTop
-      isAtBottomRef.current = (scroller.scrollHeight - targetScrollTop - scroller.clientHeight) < AT_BOTTOM_THRESHOLD
+      // Center the target (matches the virtualized path above and the reply-scroll convention);
+      // the browser clamps scrollTop, so a near-bottom target stays fully visible.
+      ;(el as HTMLElement).scrollIntoView({ block: 'center' })
+      isAtBottomRef.current = (scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight) < AT_BOTTOM_THRESHOLD
       highlight(el)
-      debugLog('TARGET MESSAGE: scrolled to target', { targetMessageId, elementTop, targetScrollTop })
+      debugLog('TARGET MESSAGE: scrolled to target (center)', { targetMessageId })
       onTargetMessageConsumed?.()
     }
 

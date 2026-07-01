@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { groupMessagesByDate, shouldShowAvatar, whisperThreadPosition, whisperCounterpartPresent, scrollToMessage, isActionMessage, canClosePoll } from './messageGrouping'
+import { setActiveMessageListController } from './activeMessageListController'
 
 // Mock CSS.escape since it's not available in JSDOM
 // This implementation matches the browser's CSS.escape behavior
@@ -452,14 +453,53 @@ describe('scrollToMessage', () => {
     expect(querySelectorSpy).toHaveBeenCalledWith('[data-message-id="non-existent-id"]')
     expect(mockElement.scrollIntoView).not.toHaveBeenCalled()
 
-    // scrollToMessage retries 3 times via requestAnimationFrame before warning
-    // Flush all pending rAF callbacks (jsdom polyfills rAF as setTimeout)
-    vi.advanceTimersByTime(100)
+    // scrollToMessage retries several times via requestAnimationFrame before warning.
+    // Flush all pending rAF callbacks (jsdom polyfills rAF as setTimeout ~16ms/frame).
+    vi.advanceTimersByTime(300)
 
     // Should log warning for debugging after retries exhausted
     expect(consoleWarnSpy).toHaveBeenCalledWith(
       '[scrollToMessage] Message not found in DOM: id="non-existent-id"'
     )
+  })
+
+  it('windows an off-screen (virtualized) target in via the active controller, then scrolls to it', () => {
+    // The target row is NOT in the DOM until the active list mounts it — the failure mode a plain
+    // querySelector retry can never recover from. scrollToMessage must ask the controller to window
+    // it in, then scroll once it mounts.
+    let mounted = false
+    querySelectorSpy.mockImplementation(() => (mounted ? (mockElement as unknown as Element) : null))
+    const ensureMessageMounted = vi.fn(() => { mounted = true })
+    setActiveMessageListController({ hasMessage: () => true, ensureMessageMounted })
+    try {
+      scrollToMessage('windowed-out-id')
+
+      // Not in the DOM on the first pass → controller asked to window it in (exactly once).
+      expect(ensureMessageMounted).toHaveBeenCalledTimes(1)
+      expect(ensureMessageMounted).toHaveBeenCalledWith('windowed-out-id')
+
+      // Next frame: the row is now mounted → scrolled + highlighted, no warning.
+      vi.advanceTimersByTime(50)
+      expect(mockElement.scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth', block: 'center' })
+      expect(mockElement.classList.add).toHaveBeenCalledWith('message-highlight')
+      expect(consoleWarnSpy).not.toHaveBeenCalled()
+    } finally {
+      setActiveMessageListController(null)
+    }
+  })
+
+  it('does not ask the controller to mount an id it does not have (no churn on a truly missing id)', () => {
+    querySelectorSpy.mockReturnValue(null)
+    const ensureMessageMounted = vi.fn()
+    setActiveMessageListController({ hasMessage: () => false, ensureMessageMounted })
+    try {
+      scrollToMessage('unknown-id')
+      vi.advanceTimersByTime(300)
+      expect(ensureMessageMounted).not.toHaveBeenCalled()
+      expect(consoleWarnSpy).toHaveBeenCalled()
+    } finally {
+      setActiveMessageListController(null)
+    }
   })
 
   it('should handle special characters in message ID by escaping them', () => {

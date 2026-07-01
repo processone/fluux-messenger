@@ -146,21 +146,27 @@ describe('MessageList — virtualized scroll integration (ensureMessageMounted)'
     expect(ensureMessageMounted).toHaveBeenCalledWith('msg-40')
   })
 
-  it('scrolls to the target row via virtualizer index when a targetMessageId is set (reply / search jump)', () => {
-    // targetMessageId (reply-to jump, search result open) previously used ensureMessageMounted
-    // + DOM querySelector + 4 retry timeouts to find the row. The new path uses
-    // getIndexForMessageId + scrollToIndex('start') which resolves unmounted rows directly —
-    // no DOM query, no async waits. ensureMessageMounted is no longer called for this path.
+  it('centers the target row via scrollToIndex when a targetMessageId is set (reply / search jump)', () => {
+    // targetMessageId (reply-to jump, search result open) resolves the row through the virtualizer
+    // index (works for unmounted rows — no DOM query, no async waits) and centers it via
+    // scrollToIndex('center'). Center — not align:'start' — so the row does NOT sit flush against
+    // the top edge (under the sticky date header) where it reads as misaligned and the highlight
+    // flash is easy to miss; scrollToIndex also windows + measures + clamps, so a near-bottom
+    // target stays visible instead of being scrolled past the fold. ensureMessageMounted is not
+    // used for this path.
     scrollToIndexCalls.length = 0
     renderList({ targetMessageId: 'msg-30' })
-    expect(scrollToIndexCalls).toContain('start')
+    expect(scrollToIndexCalls).toContain('center')
+    expect(scrollToIndexCalls).not.toContain('start') // not tucked flush against the top edge
     expect(ensureMessageMounted).not.toHaveBeenCalledWith('msg-30')
   })
 
   it('scrolls to the marker row via scrollToIndex when FAB is clicked with an unread marker', () => {
     // FAB previously used ensureMessageMounted + querySelector + offsetTop (which fails when the
     // marker is windowed out). New path: getIndexForMessageId + scrollToIndex('start', smooth),
-    // no DOM dependency. ensureMessageMounted is no longer called for the FAB.
+    // no DOM dependency. align:'start' clamps to the bottom when the marker is the last message,
+    // keeping a just-arrived new message fully visible (do not shift up by vh/3 — see the marker
+    // loop). ensureMessageMounted is no longer called for the FAB.
     getOffsetForMessageId.mockImplementation((id) => (id === 'msg-40' ? 1600 : null))
     const { container, getByLabelText } = renderList({ firstNewMessageId: 'msg-40' })
     const scroller = container.querySelector('[data-message-list]') as HTMLElement
@@ -384,7 +390,7 @@ describe('MessageList — virtualized bottom-stick re-asserts as rows measure', 
   const props = { renderMessage: (m: BaseMessage) => <div>{m.body}</div> }
 
   it('reasserts target-message jumps while virtualized rows settle', () => {
-    // Reply/search/activity jumps used to call scrollToIndex('start') once. If rows above the
+    // Reply/search/activity jumps used to call scrollToIndex('center') once. If rows above the
     // target measured taller after that first landing, the target could drift. The target path now
     // reasserts for a short settle window, mirroring the unread-marker path.
     scrollToIndexStartOffsets.push(1200, 1400, 1400, 1400, 1400, 1400, 1400, 1400)
@@ -404,7 +410,7 @@ describe('MessageList — virtualized bottom-stick re-asserts as rows measure', 
     scrollToIndexCalls.length = 0
     flush(8)
 
-    expect(scrollToIndexCalls.filter((align) => align === 'start').length).toBeGreaterThan(1)
+    expect(scrollToIndexCalls.filter((align) => align === 'center').length).toBeGreaterThan(1)
     expect(onConsumed).toHaveBeenCalledTimes(1)
   })
 
