@@ -69,4 +69,21 @@ describe('useFocusTrap', () => {
     expect(document.activeElement).toBe(opener)
     opener.remove()
   })
+
+  it('focuses initialFocusRef element instead of the first focusable', () => {
+    function TrapWithInitial() {
+      const containerRef = useRef<HTMLDivElement>(null)
+      const initialRef = useRef<HTMLButtonElement>(null)
+      useFocusTrap(containerRef, { initialFocusRef: initialRef })
+      return (
+        <div ref={containerRef}>
+          <button>first</button>
+          <button ref={initialRef}>second</button>
+          <button>third</button>
+        </div>
+      )
+    }
+    const { getByText } = render(<TrapWithInitial />)
+    expect(document.activeElement).toBe(getByText('second'))
+  })
 })
