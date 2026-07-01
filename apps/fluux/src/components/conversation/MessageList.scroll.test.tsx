@@ -93,10 +93,11 @@ class MockResizeObserver {
     if (index > -1) MockResizeObserver.instances.splice(index, 1)
   }
 
-  // Helper to trigger resize
-  triggerResize(height: number) {
+  // Helper to trigger resize. Width is optional so existing height-only callers
+  // are unaffected (contentRect.width stays undefined → the width branch is inert).
+  triggerResize(height: number, width?: number) {
     this.callback(
-      [{ contentRect: { height } } as ResizeObserverEntry],
+      [{ contentRect: { height, width } } as ResizeObserverEntry],
       this
     )
   }
@@ -461,6 +462,97 @@ describe('MessageList scroll behavior', () => {
         }
 
         // Should NOT have scrolled
+        expect(scrollSpy).not.toHaveBeenCalled()
+      }
+    })
+
+    it('should scroll to bottom when only the WIDTH changes (occupant sidebar toggle) and user is at bottom', () => {
+      // Toggling the occupant sidebar at lg+ narrows the message column (width change,
+      // same height) which re-wraps text and grows content height, but fires no window
+      // 'resize' event — so only the container observer can re-pin. Regression guard for
+      // the list drifting off the bottom on sidebar expand.
+      const messages = createTestMessages(5)
+      const scrollSpy = vi.fn()
+
+      render(
+        <MessageList
+          messages={messages}
+          conversationId="conv-1"
+          clearFirstNewMessageId={vi.fn()}
+          renderMessage={(msg) => <div key={msg.id}>{msg.body}</div>}
+        />
+      )
+
+      const container = document.querySelector('.overflow-y-auto') as HTMLDivElement
+      if (container) {
+        let scrollTopValue = 500 // at bottom
+        Object.defineProperty(container, 'scrollHeight', { value: 1000, configurable: true })
+        Object.defineProperty(container, 'clientHeight', { value: 500, configurable: true })
+        Object.defineProperty(container, 'scrollTop', {
+          get: () => scrollTopValue,
+          set: (v) => {
+            scrollTopValue = v
+            scrollSpy(v)
+          },
+          configurable: true,
+        })
+
+        const observer = MockResizeObserver.observing(container)
+        if (observer) {
+          act(() => { observer.triggerResize(500, 800) }) // baseline: width 800, height 500
+        }
+
+        scrollSpy.mockClear()
+
+        // Width shrinks (sidebar appears) but height is unchanged.
+        if (observer) {
+          act(() => { observer.triggerResize(500, 600) })
+        }
+
+        expect(scrollSpy).toHaveBeenCalledWith(1000)
+      }
+    })
+
+    it('should NOT scroll on a WIDTH change when the user is scrolled up', () => {
+      const messages = createTestMessages(5)
+      const scrollSpy = vi.fn()
+
+      render(
+        <MessageList
+          messages={messages}
+          conversationId="conv-1"
+          clearFirstNewMessageId={vi.fn()}
+          renderMessage={(msg) => <div key={msg.id}>{msg.body}</div>}
+        />
+      )
+
+      const container = document.querySelector('.overflow-y-auto') as HTMLDivElement
+      if (container) {
+        let scrollTopValue = 200 // scrolled up
+        Object.defineProperty(container, 'scrollHeight', { value: 1000, configurable: true })
+        Object.defineProperty(container, 'clientHeight', { value: 500, configurable: true })
+        Object.defineProperty(container, 'scrollTop', {
+          get: () => scrollTopValue,
+          set: (v) => {
+            scrollTopValue = v
+            scrollSpy(v)
+          },
+          configurable: true,
+        })
+
+        act(() => { container.dispatchEvent(new Event('scroll')) })
+
+        const observer = MockResizeObserver.observing(container)
+        if (observer) {
+          act(() => { observer.triggerResize(500, 800) }) // baseline
+        }
+
+        scrollSpy.mockClear()
+
+        if (observer) {
+          act(() => { observer.triggerResize(500, 600) }) // width change while scrolled up
+        }
+
         expect(scrollSpy).not.toHaveBeenCalled()
       }
     })
