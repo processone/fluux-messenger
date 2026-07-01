@@ -155,6 +155,13 @@ function groupItemsByType(items: CommandItem[], t: (key: string) => string): Ite
   return groups
 }
 
+// Unread ranking tier for a room row: mentions outrank plain unread, which outrank read.
+function roomTier(item: CommandItem): number {
+  if ((item.mentionsCount ?? 0) > 0) return 0
+  if ((item.unreadCount ?? 0) > 0) return 1
+  return 2
+}
+
 // =============================================================================
 // Helper: Build groups for the empty-query default view (unread-first)
 // =============================================================================
@@ -172,7 +179,10 @@ function buildDefaultGroups(items: CommandItem[], t: (key: string) => string): I
     groups.push({ key: 'conversation', type: 'conversation', label: t('sidebar.messages'), items: readConvs })
   }
 
-  const rooms = items.filter((i) => i.type === 'room').slice(0, 4)
+  const rooms = items
+    .filter((i) => i.type === 'room')
+    .sort((a, b) => roomTier(a) - roomTier(b))
+    .slice(0, 4)
   if (rooms.length > 0) {
     groups.push({ key: 'room', type: 'room', label: t('sidebar.rooms'), items: rooms })
   }

@@ -14,9 +14,10 @@ const mockConversations: Array<{ id: string; name: string; unreadCount: number; 
   { id: 'bob@example.com', name: 'Bob Jones', unreadCount: 2, type: 'chat', lastMessage: { body: 'The exponential backoff is working now' } },
 ]
 
-const mockRooms: Array<{ jid: string; name: string; joined: boolean; lastMessage?: { body: string } }> = [
-  { jid: 'dev@conference.example.com', name: 'Development', joined: true, lastMessage: { body: 'PR merged successfully' } },
-  { jid: 'general@conference.example.com', name: 'General Chat', joined: true },
+const mockRooms: Array<{ jid: string; name: string; joined: boolean; unreadCount?: number; mentionsCount?: number; lastMessage?: { body: string } }> = [
+  { jid: 'dev@conference.example.com', name: 'Development', joined: true, unreadCount: 0, mentionsCount: 0, lastMessage: { body: 'PR merged successfully' } },
+  { jid: 'general@conference.example.com', name: 'General Chat', joined: true, unreadCount: 3, mentionsCount: 0 },
+  { jid: 'announce@conference.example.com', name: 'Announcements', joined: true, unreadCount: 1, mentionsCount: 1 },
 ]
 
 const mockBookmarkedRooms = [
@@ -774,14 +775,14 @@ describe('CommandPalette', () => {
       fireEvent.keyDown(container!, { key: 'ArrowDown' })
       fireEvent.keyDown(container!, { key: 'ArrowUp' })
 
-      // Third item in the list should be a room (Development)
-      // Order: Bob (Unread), Alice (Messages), Development (Rooms), General Chat...
-      const devRoom = screen.getByText('Development').closest('button')
-      expect(devRoom).toHaveAttribute('data-selected', 'true')
+      // Third item in the list should be a room (Announcements — tier 0, has mention)
+      // Order: Bob (Unread), Alice (Messages), Announcements (Rooms tier 0), General Chat (tier 1), Development (tier 2)...
+      const announceRoom = screen.getByText('Announcements').closest('button')
+      expect(announceRoom).toHaveAttribute('data-selected', 'true')
 
       fireEvent.keyDown(container!, { key: 'Enter' })
 
-      expect(mockSetActiveRoom).toHaveBeenCalledWith('dev@conference.example.com')
+      expect(mockSetActiveRoom).toHaveBeenCalledWith('announce@conference.example.com')
     })
 
     it('should work correctly with rapid consecutive selections', () => {
@@ -1242,6 +1243,21 @@ describe('CommandPalette', () => {
       const bob = screen.getByText('Bob Jones')
       const alice = screen.getByText('Alice Smith')
       expect(bob.compareDocumentPosition(alice) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    })
+  })
+
+  describe('Room ordering', () => {
+    it('orders rooms mentions-first, then unread, then read', () => {
+      render(<CommandPalette {...defaultProps} />)
+
+      const announce = screen.getByText('Announcements') // mention (tier 0)
+      const general = screen.getByText('General Chat')    // unread (tier 1)
+      const dev = screen.getByText('Development')          // read (tier 2)
+
+      // Announcements before General Chat
+      expect(announce.compareDocumentPosition(general) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+      // General Chat before Development
+      expect(general.compareDocumentPosition(dev) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     })
   })
 
