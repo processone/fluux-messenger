@@ -153,7 +153,7 @@
         "addToContacts": "添加到联系人",
         "connectedDevices": "已连接设备",
         "about": "关于",
-        "shared": "共同",
+        "groups": "分组",
         "securityDetailsTitle": "安全详情",
         "nameCannotBeEmpty": "名称不能为空",
         "removeConfirm": "从您的联系人中移除 {{name}}？",

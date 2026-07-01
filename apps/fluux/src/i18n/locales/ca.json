@@ -155,7 +155,7 @@
         "addToContacts": "Afegir als Contactes",
         "connectedDevices": "Dispositius connectats",
         "about": "Sobre",
-        "shared": "En comú",
+        "groups": "Grups",
         "securityDetailsTitle": "Detalls de seguretat",
         "nameCannotBeEmpty": "El nom no pot estar buit",
         "removeConfirm": "Eliminar {{name}} dels teus contactes?",

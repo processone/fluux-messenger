@@ -153,7 +153,7 @@
         "addToContacts": "Lisää yhteystietoihin",
         "connectedDevices": "Yhdistetyt laitteet",
         "about": "Tietoja",
-        "shared": "Yhteiset",
+        "groups": "Ryhmät",
         "securityDetailsTitle": "Turvatiedot",
         "nameCannotBeEmpty": "Nimi ei voi olla tyhjä",
         "removeConfirm": "Poista {{name}} yhteystiedoistasi?",

@@ -155,7 +155,7 @@
         "addToContacts": "Agregar a Contactos",
         "connectedDevices": "Dispositivos Conectados",
         "about": "Información",
-        "shared": "En común",
+        "groups": "Grupos",
         "securityDetailsTitle": "Detalles de seguridad",
         "nameCannotBeEmpty": "El nombre no puede estar vacio",
         "removeConfirm": "Eliminar a {{name}} de tus contactos?",

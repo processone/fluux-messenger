@@ -153,7 +153,7 @@
         "addToContacts": "Tilføj til Kontakter",
         "connectedDevices": "Tilsluttede enheder",
         "about": "Om",
-        "shared": "Fælles",
+        "groups": "Grupper",
         "securityDetailsTitle": "Sikkerhedsdetaljer",
         "nameCannotBeEmpty": "Navnet kan ikke være tomt",
         "removeConfirm": "Fjern {{name}} fra dine kontakter?",

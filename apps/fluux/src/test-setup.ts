@@ -51,7 +51,7 @@ void i18n.use(initReactI18next).init({
           startConversation: 'Start conversation',
           rename: 'Rename',
           about: 'About',
-          shared: 'Shared',
+          groups: 'Groups',
           connectedDevices: 'Connected devices',
           securityDetailsTitle: 'Security details',
           encryption: {

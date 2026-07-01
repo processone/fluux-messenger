@@ -153,7 +153,7 @@
         "addToContacts": "إضافة إلى جهات الاتصال",
         "connectedDevices": "الأجهزة المتصلة",
         "about": "نبذة",
-        "shared": "مشترك",
+        "groups": "المجموعات",
         "securityDetailsTitle": "تفاصيل الأمان",
         "nameCannotBeEmpty": "لا يمكن أن يكون الاسم فارغًا",
         "removeConfirm": "إزالة {{name}} من جهات الاتصال؟",

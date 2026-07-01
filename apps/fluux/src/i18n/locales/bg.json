@@ -153,7 +153,7 @@
         "addToContacts": "Добавяне в контакти",
         "connectedDevices": "Свързани устройства",
         "about": "За",
-        "shared": "Общо",
+        "groups": "Групи",
         "securityDetailsTitle": "Детайли за сигурност",
         "nameCannotBeEmpty": "Името не може да е празно",
         "removeConfirm": "Премахване на {{name}} от вашите контакти?",

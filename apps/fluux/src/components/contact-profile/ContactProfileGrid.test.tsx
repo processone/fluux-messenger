@@ -38,6 +38,6 @@ describe('ContactProfileGrid', () => {
         onOpenSecurity={() => {}}
       />,
     )
-    expect(screen.queryByText('Shared')).not.toBeInTheDocument()
+    expect(screen.queryByText('Groups')).not.toBeInTheDocument()
   })
 })

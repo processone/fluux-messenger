@@ -153,7 +153,7 @@
         "addToContacts": "Lägg till i kontakter",
         "connectedDevices": "Anslutna enheter",
         "about": "Om",
-        "shared": "Gemensamt",
+        "groups": "Grupper",
         "securityDetailsTitle": "Säkerhetsdetaljer",
         "nameCannotBeEmpty": "Namnet kan inte vara tomt",
         "removeConfirm": "Ta bort {{name}} från dina kontakter?",
