@@ -976,7 +976,7 @@ describe('useKeyboardShortcuts', () => {
         s => s.key === '9' && s.modifiers?.includes('alt')
       )
       alt9!.action()
-      expect(options.onSidebarViewChange).toHaveBeenCalledWith('directory')
+      expect(options.onSidebarViewChange).toHaveBeenCalledWith('contacts')
     })
   })
 

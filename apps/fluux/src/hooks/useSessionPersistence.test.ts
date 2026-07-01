@@ -160,7 +160,7 @@ describe('useSessionPersistence', () => {
       const views: ViewStateData['sidebarView'][] = [
         'messages',
         'rooms',
-        'directory',
+        'contacts',
         'admin',
         'settings',
       ]
@@ -247,6 +247,20 @@ describe('useSessionPersistence', () => {
       delete mockStorage[ACTIVE_SESSION_JID_KEY]
       // 'events' is normalized to 'messages' on read
       expect(getSavedViewState()?.sidebarView).toBe('messages')
+    })
+
+    it('should normalize the old "directory" view key to "contacts"', () => {
+      const legacyState = {
+        sidebarView: 'directory',
+        activeConversationId: null,
+        activeRoomJid: null,
+        selectedContactJid: 'bob@example.com',
+      }
+
+      mockStorage[VIEW_STATE_KEY] = JSON.stringify(legacyState)
+      delete mockStorage[ACTIVE_SESSION_JID_KEY]
+      // 'directory' was renamed to 'contacts'
+      expect(getSavedViewState()?.sidebarView).toBe('contacts')
     })
 
     it('should not read legacy unscoped view state when account scope is known', () => {

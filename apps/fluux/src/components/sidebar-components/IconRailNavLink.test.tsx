@@ -351,7 +351,7 @@ describe('IconRailNavLink', () => {
         <IconRailNavLink
           icon={Hash}
           label="Contacts"
-          view="directory"
+          view="contacts"
           pathPrefix="/contacts"
           onNavigate={vi.fn()}
           badgeCount={2}
@@ -369,7 +369,7 @@ describe('IconRailNavLink', () => {
         <IconRailNavLink
           icon={Hash}
           label="Contacts"
-          view="directory"
+          view="contacts"
           pathPrefix="/contacts"
           onNavigate={vi.fn()}
           badgeCount={150}
@@ -387,7 +387,7 @@ describe('IconRailNavLink', () => {
         <IconRailNavLink
           icon={Hash}
           label="Contacts"
-          view="directory"
+          view="contacts"
           pathPrefix="/contacts"
           onNavigate={vi.fn()}
           badgeCount={0}

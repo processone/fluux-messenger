@@ -392,7 +392,7 @@ function CommandPaletteContent({
     const views: Array<{ id: string; label: string; icon: React.ReactNode; view: SidebarView; keywords: string[] }> = [
       { id: 'view-messages', label: t('sidebar.messages'), icon: <MessageSquare />, view: 'messages', keywords: ['messages', 'conversations', 'chat'] },
       { id: 'view-rooms', label: t('sidebar.rooms'), icon: <Hash />, view: 'rooms', keywords: ['rooms', 'channels', 'muc'] },
-      { id: 'view-connections', label: t('sidebar.contacts'), icon: <Users />, view: 'directory', keywords: ['connections', 'contacts', 'roster'] },
+      { id: 'view-connections', label: t('sidebar.contacts'), icon: <Users />, view: 'contacts', keywords: ['connections', 'contacts', 'roster'] },
     ]
 
     for (const v of views) {

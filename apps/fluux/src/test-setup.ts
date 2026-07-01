@@ -32,12 +32,15 @@ void i18n.use(initReactI18next).init({
           dismiss: 'Dismiss',
           back: 'Back',
           forward: 'Forward',
+          options: 'Options',
         },
         // Sidebar labels reused by the AppBar (search / settings)
         sidebar: {
           search: 'Search',
           settings: 'Settings',
           contacts: 'Contacts',
+          addContact: 'Add contact',
+          blockedUsers: 'Blocked users',
         },
         newMessage: {
           title: 'New message',
@@ -74,6 +77,13 @@ void i18n.use(initReactI18next).init({
         rooms: {
           backToRooms: 'Back to rooms',
           invitationsHeading: 'Invitations',
+          createQuickChat: 'Create Quick Chat',
+          createRoom: 'Create Room',
+          quickChat: 'Quick Chat',
+          permanentRoom: 'Permanent Room',
+          joinRoom: 'Join room',
+          browseRooms: 'Browse Rooms',
+          catchUpAll: 'Catch up all rooms',
         },
         messages: {
           showArchived: 'Show archived conversations',

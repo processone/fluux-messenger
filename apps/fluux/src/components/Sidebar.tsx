@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback, type RefObject } from 'react'
 import { useTranslation } from 'react-i18next'
 import { detectRenderLoop, trackSelectorChange } from '@/utils/renderLoopDetector'
-import { useClickOutside, useWindowDrag, useRouteSync, useFollowUnarchivedActive } from '@/hooks'
+import { useWindowDrag, useRouteSync, useFollowUnarchivedActive } from '@/hooks'
 import { useModalStore } from '@/stores/modalStore'
 import { useUpdateAffordance } from '@/stores/appUpdateStore'
 import {
@@ -23,18 +23,10 @@ import { SettingsSidebar, type SettingsCategory, DEFAULT_SETTINGS_CATEGORY } fro
 import {
   MessageCircle,
   Hash,
-  ChevronDown,
   Settings,
-  Plus,
   Users,
-  Archive,
   Server,
-  Zap,
   Search,
-  LogIn,
-  Ban,
-  UserPlus,
-  RefreshCw,
   CircleArrowUp,
 } from 'lucide-react'
 import { performLogout } from '@/utils/performLogout'
@@ -56,6 +48,9 @@ import {
   RoomsList,
   SearchView,
   UserMenu,
+  MessagesHeaderActions,
+  ContactsHeaderActions,
+  RoomsHeaderActions,
 } from './sidebar-components'
 
 // Re-export SidebarView for external use
@@ -146,11 +141,7 @@ export function Sidebar({ onSelectContact, onStartChat, onStartChatWithJid, onMa
   const [showCreateRoom, setShowCreateRoom] = useState(false)
   const [showBrowseRooms, setShowBrowseRooms] = useState(false)
   const [showJoinRoom, setShowJoinRoom] = useState(false)
-  const [showRoomDropdown, setShowRoomDropdown] = useState(false)
   const [isCatchingUpRooms, setIsCatchingUpRooms] = useState(false)
-  const roomDropdownRef = useRef<HTMLDivElement>(null)
-  const [showContactDropdown, setShowContactDropdown] = useState(false)
-  const contactDropdownRef = useRef<HTMLDivElement>(null)
 
   // Sidebar resize state
   const [sidebarWidth, setSidebarWidth] = useState(() => {
@@ -217,12 +208,6 @@ export function Sidebar({ onSelectContact, onStartChat, onStartChatWithJid, onMa
     localStorage.setItem(SIDEBAR_WIDTH_KEY, SIDEBAR_DEFAULT_WIDTH.toString())
   }
 
-  // Close dropdowns when clicking outside
-  const closeRoomDropdown = () => setShowRoomDropdown(false)
-  useClickOutside(roomDropdownRef, closeRoomDropdown, showRoomDropdown)
-  const closeContactDropdown = () => setShowContactDropdown(false)
-  useClickOutside(contactDropdownRef, closeContactDropdown, showContactDropdown)
-
   // totalUnread is computed directly via useChatStore selector above
 
   return (
@@ -285,7 +270,7 @@ export function Sidebar({ onSelectContact, onStartChat, onStartChatWithJid, onMa
         <IconRailNavLink
           icon={Users}
           label={t('sidebar.contacts')}
-          view="directory"
+          view="contacts"
           pathPrefix="/contacts"
           onNavigate={onViewChange}
           badgeCount={pendingRequestCount}
@@ -318,128 +303,37 @@ export function Sidebar({ onSelectContact, onStartChat, onStartChatWithJid, onMa
           <h1 className="flex-1 font-semibold text-fluux-text truncate">
             {sidebarView === 'messages' ? (showArchived ? t('messages.archivedTitle') : t('sidebar.messages'))
               : sidebarView === 'rooms' ? t('sidebar.rooms')
-              : sidebarView === 'directory' ? t('sidebar.contacts')
+              : sidebarView === 'contacts' ? t('sidebar.contacts')
               : sidebarView === 'admin' ? t('sidebar.admin')
               : sidebarView === 'settings' ? t('sidebar.settings')
               : t('sidebar.search', 'Search')}
           </h1>
-          {sidebarView === 'directory' && (
-            <div className="relative ms-auto" ref={contactDropdownRef}>
-              <Tooltip content={t('common.options')} position="bottom">
-                <button
-                  onClick={() => setShowContactDropdown(!showContactDropdown)}
-                  className="p-1 text-fluux-muted hover:text-fluux-text flex items-center"
-                >
-                  <Users className="size-5" />
-                  <ChevronDown className="size-3 -ms-0.5" />
-                </button>
-              </Tooltip>
-              {showContactDropdown && (
-                <div className="absolute end-0 mt-1 w-52 fluux-popover rounded-lg py-1 z-50">
-                  <button
-                    onClick={() => { setShowContactDropdown(false); modalOpen('addContact') }}
-                    className="w-full px-3 py-2 text-start text-sm hover:bg-fluux-hover flex items-center gap-2"
-                  >
-                    <UserPlus className="size-4 text-fluux-muted" />
-                    <span>{t('sidebar.addContact')}</span>
-                  </button>
-                  <div className="border-t border-fluux-hover my-1" />
-                  <button
-                    onClick={() => { setShowContactDropdown(false); navigateToSettings('blocked') }}
-                    className="w-full px-3 py-2 text-start text-sm hover:bg-fluux-hover flex items-center gap-2"
-                  >
-                    <Ban className="size-4 text-fluux-muted" />
-                    <span>{t('sidebar.blockedUsers')}</span>
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
           {sidebarView === 'messages' && (
-            <>
-              <Tooltip content={showArchived ? t('messages.showActive') : t('messages.showArchived')} position="bottom">
-                <button
-                  type="button"
-                  onClick={() => setShowArchived((v) => !v)}
-                  aria-label={showArchived ? t('messages.showActive') : t('messages.showArchived')}
-                  className={`p-1 flex items-center ${showArchived ? 'text-fluux-brand' : 'text-fluux-muted hover:text-fluux-text'}`}
-                >
-                  <Archive className="size-5" />
-                </button>
-              </Tooltip>
-              <Tooltip content={t('newMessage.title')} position="bottom">
-                <button
-                  type="button"
-                  onClick={() => modalOpen('newMessage')}
-                  aria-label={t('newMessage.title')}
-                  className="ms-auto p-1 text-fluux-muted hover:text-fluux-text flex items-center"
-                >
-                  <Plus className="size-5" />
-                </button>
-              </Tooltip>
-            </>
+            <MessagesHeaderActions
+              showArchived={showArchived}
+              onToggleArchived={() => setShowArchived((v) => !v)}
+              onNewMessage={() => modalOpen('newMessage')}
+            />
           )}
           {sidebarView === 'rooms' && (
-            <div className="relative ms-auto" ref={roomDropdownRef}>
-              <Tooltip content={t('sidebar.joinRoom')} position="bottom">
-                <button
-                  onClick={() => setShowRoomDropdown(!showRoomDropdown)}
-                  className="p-1 text-fluux-muted hover:text-fluux-text flex items-center"
-                >
-                  <Plus className="size-5" />
-                  <ChevronDown className="size-3 -ms-0.5" />
-                </button>
-              </Tooltip>
-              {showRoomDropdown && (
-                <div className="absolute end-0 mt-1 w-52 fluux-popover rounded-lg py-1 z-50">
-                  <button
-                    onClick={() => { setShowRoomDropdown(false); modalOpen('quickChat') }}
-                    className="w-full px-3 py-2 text-start text-sm hover:bg-fluux-hover flex items-center gap-2"
-                  >
-                    <Zap className="size-4 text-amber-500" />
-                    <span>{t('rooms.quickChat')}</span>
-                  </button>
-                  <button
-                    onClick={() => { setShowRoomDropdown(false); setShowCreateRoom(true) }}
-                    className="w-full px-3 py-2 text-start text-sm hover:bg-fluux-hover flex items-center gap-2"
-                  >
-                    <Hash className="size-4 text-fluux-muted" />
-                    <span>{t('rooms.permanentRoom')}</span>
-                  </button>
-                  <div className="border-t border-fluux-hover my-1" />
-                  <button
-                    onClick={() => { setShowRoomDropdown(false); setShowJoinRoom(true) }}
-                    className="w-full px-3 py-2 text-start text-sm hover:bg-fluux-hover flex items-center gap-2"
-                  >
-                    <LogIn className="size-4 text-fluux-muted" />
-                    <span>{t('rooms.joinRoom')}</span>
-                  </button>
-                  <button
-                    onClick={() => { setShowRoomDropdown(false); setShowBrowseRooms(true) }}
-                    className="w-full px-3 py-2 text-start text-sm hover:bg-fluux-hover flex items-center gap-2"
-                  >
-                    <Search className="size-4 text-fluux-muted" />
-                    <span>{t('rooms.browseRooms')}</span>
-                  </button>
-                  <div className="border-t border-fluux-hover my-1" />
-                  <button
-                    onClick={() => {
-                      setShowRoomDropdown(false)
-                      if (isCatchingUpRooms) return
-                      setIsCatchingUpRooms(true)
-                      void client.mam.forceCatchUpAllRooms().finally(() => setIsCatchingUpRooms(false))
-                    }}
-                    disabled={isCatchingUpRooms}
-                    className={`w-full px-3 py-2 text-start text-sm flex items-center gap-2 ${
-                      isCatchingUpRooms ? 'text-fluux-muted cursor-wait' : 'hover:bg-fluux-hover'
-                    }`}
-                  >
-                    <RefreshCw className={`size-4 text-fluux-muted ${isCatchingUpRooms ? 'animate-spin' : ''}`} />
-                    <span>{t('rooms.catchUpAll')}</span>
-                  </button>
-                </div>
-              )}
-            </div>
+            <RoomsHeaderActions
+              onQuickChat={() => modalOpen('quickChat')}
+              onPermanentRoom={() => setShowCreateRoom(true)}
+              onJoinRoom={() => setShowJoinRoom(true)}
+              onBrowseRooms={() => setShowBrowseRooms(true)}
+              onCatchUpAll={() => {
+                if (isCatchingUpRooms) return
+                setIsCatchingUpRooms(true)
+                void client.mam.forceCatchUpAllRooms().finally(() => setIsCatchingUpRooms(false))
+              }}
+              isCatchingUp={isCatchingUpRooms}
+            />
+          )}
+          {sidebarView === 'contacts' && (
+            <ContactsHeaderActions
+              onAddContact={() => modalOpen('addContact')}
+              onOpenBlocked={() => navigateToSettings('blocked')}
+            />
           )}
         </div>
 
@@ -454,7 +348,7 @@ export function Sidebar({ onSelectContact, onStartChat, onStartChatWithJid, onMa
               <div key={sidebarView} className="h-full md:h-auto" style={{ animation: 'sidebar-view-enter var(--fluux-duration-fast) var(--fluux-ease-standard)' }}>
               {sidebarView === 'messages' ? (
                 showArchived ? <ArchiveList /> : <ConversationList />
-              ) : sidebarView === 'directory' ? (
+              ) : sidebarView === 'contacts' ? (
                 <ContactList onStartChat={onStartChat} onSelectContact={onSelectContact} onManageUser={onManageUser} activeContactJid={activeContactJid} />
               ) : sidebarView === 'rooms' ? (
                 <RoomsList />

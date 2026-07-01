@@ -194,7 +194,7 @@ describe('useViewNavigation', () => {
       })
 
       act(() => {
-        result.current.navigateToView('directory')
+        result.current.navigateToView('contacts')
       })
 
       expect(currentLocation.current.pathname).toBe('/contacts')
@@ -621,7 +621,7 @@ describe('useViewNavigation', () => {
       })
 
       act(() => {
-        result.current.navigateToView('directory')
+        result.current.navigateToView('contacts')
       })
 
       expect(mockSetActiveConversation).toHaveBeenCalledWith(null)
@@ -702,7 +702,7 @@ describe('useViewNavigation', () => {
 
       // Now navigate back to directory
       act(() => {
-        result.current.navigateToView('directory')
+        result.current.navigateToView('contacts')
       })
 
       // On mobile, should navigate to /contacts without auto-restoring the contact

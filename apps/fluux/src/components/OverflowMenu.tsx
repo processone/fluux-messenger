@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { MoreVertical, Check, type LucideIcon } from 'lucide-react'
 import { useClickOutside } from '@/hooks/useClickOutside'
 
@@ -33,6 +33,13 @@ interface OverflowMenuProps {
   iconClassName?: string
   /** Override the dropdown container classes. */
   menuClassName?: string
+  /**
+   * Custom trigger renderer. When provided it replaces the default kebab
+   * button and receives the open state plus toggle/close helpers. Click-outside
+   * and Escape dismissal still apply. `ariaLabel` is then unused (the custom
+   * trigger supplies its own accessible name).
+   */
+  renderTrigger?: (state: { isOpen: boolean; toggle: () => void; close: () => void }) => ReactNode
 }
 
 const DEFAULT_BUTTON_CLASS =
@@ -52,6 +59,7 @@ export function OverflowMenu({
   buttonClassName = DEFAULT_BUTTON_CLASS,
   iconClassName = 'size-5',
   menuClassName = DEFAULT_MENU_CLASS,
+  renderTrigger,
 }: OverflowMenuProps) {
   const [isOpen, setIsOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
@@ -67,20 +75,27 @@ export function OverflowMenu({
     return () => document.removeEventListener('keydown', handleEscape)
   }, [isOpen])
 
+  const toggle = () => setIsOpen((open) => !open)
+  const close = () => setIsOpen(false)
+
   if (items.length === 0) return null
 
   return (
     <div className="relative" ref={menuRef}>
-      <button
-        type="button"
-        onClick={() => setIsOpen((open) => !open)}
-        aria-label={ariaLabel}
-        aria-haspopup="menu"
-        aria-expanded={isOpen}
-        className={buttonClassName}
-      >
-        <MoreVertical className={iconClassName} />
-      </button>
+      {renderTrigger ? (
+        renderTrigger({ isOpen, toggle, close })
+      ) : (
+        <button
+          type="button"
+          onClick={toggle}
+          aria-label={ariaLabel}
+          aria-haspopup="menu"
+          aria-expanded={isOpen}
+          className={buttonClassName}
+        >
+          <MoreVertical className={iconClassName} />
+        </button>
+      )}
 
       {isOpen && (
         <div role="menu" className={menuClassName}>
