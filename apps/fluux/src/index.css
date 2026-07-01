@@ -133,6 +133,10 @@
   /* ── Aurora identity additions ── */
   --fluux-accent-2: #38E0C4;
   --fluux-grad: linear-gradient(135deg, #38E0C4, #7C8CFF, #A78BFA);
+  /* Opacity of the soft brand-mark glow (login). The bright gradient bloom reads
+     much stronger against the dark canvas than the light one, so it is themed:
+     calmer here, fuller under .light (which keeps its current, subtler look). */
+  --fluux-brand-glow-opacity: 0.35;
   --fluux-glass-blur: 12px;
 
   /* ── Motion language: duration + easing tokens (global, never themed) ──
@@ -481,6 +485,8 @@
      this darker teal clears 3.58:1 (non-text floor is 3:1, target 3.5+). */
   --fluux-text-encryption: #0D8872;
   --fluux-grad: linear-gradient(135deg, #11A88C, #5B6CF0, #7C6CF0);
+  /* Light canvas absorbs the bloom, so it can stay fuller without reading strong. */
+  --fluux-brand-glow-opacity: 0.6;
   /* 0.12 (not 0.10) so the hairline clears the >=1.25:1 perceptibility floor on
      the lightest theme glass surfaces (tokyo-night/kanagawa light were near-miss
      at 0.10); guarded by glass.test.ts. */
