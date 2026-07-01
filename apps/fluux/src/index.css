@@ -361,7 +361,10 @@
   --fluux-badge-text: var(--fluux-text-on-accent);
   /* Strong badge (direct messages) — the loudest unread tone. Separate from the
      error red so themes can retune notification urgency without touching danger
-     buttons/toasts. Defaults to the status-error red. */
+     buttons/toasts. Defaults to the status-error red. Consumers pair this fill
+     with white text, so a theme overriding --fluux-badge-strong must keep the
+     fill dark enough for white to clear AA (the default status-error red is
+     tuned that way). */
   --fluux-badge-strong: var(--fluux-status-error);
 
   /* Avatar presence */
