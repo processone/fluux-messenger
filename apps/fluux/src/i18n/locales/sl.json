@@ -1134,6 +1134,7 @@
             "delete": "Izbriši uporabnika",
             "changePassword": "Spremeni geslo",
             "endSessions": "Končaj seje",
+            "banAccount": "Blokiraj račun",
             "online": "Online",
             "offline": "Offline",
             "onlineNow": "Online zdaj",
@@ -1148,7 +1149,9 @@
             "confirmDelete": "Izbriši uporabnika",
             "confirmDeleteMessage": "Ali ste prepričani, da želite izbrisati {{jid}}? Tega dejanja ni mogoče razveljaviti.",
             "confirmEndSessions": "Končaj seje",
-            "confirmEndSessionsMessage": "Ali ste prepričani, da želite končati vse seje za {{jid}}? Uporabnik bo takoj odklopljen."
+            "confirmEndSessionsMessage": "Ali ste prepričani, da želite končati vse seje za {{jid}}? Uporabnik bo takoj odklopljen.",
+            "confirmBan": "Blokiraj račun",
+            "confirmBanMessage": "Ali ste prepričani, da želite blokirati {{jid}}? To bo odklopilo uporabnika in mu preprečilo ponovno prijavo."
         },
         "roomView": {
             "options": "Možnosti sobe",

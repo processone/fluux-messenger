@@ -1134,6 +1134,7 @@
             "delete": "Benutzer löschen",
             "changePassword": "Passwort ändern",
             "endSessions": "Sitzungen beenden",
+            "banAccount": "Konto sperren",
             "online": "Online",
             "offline": "Offline",
             "onlineNow": "Jetzt online",
@@ -1148,7 +1149,9 @@
             "confirmDelete": "Benutzer löschen",
             "confirmDeleteMessage": "Sind Sie sicher, dass Sie {{jid}} löschen möchten? Diese Aktion kann nicht rückgängig gemacht werden.",
             "confirmEndSessions": "Sitzungen beenden",
-            "confirmEndSessionsMessage": "Sind Sie sicher, dass Sie alle Sitzungen für {{jid}} beenden möchten? Der Benutzer wird sofort getrennt."
+            "confirmEndSessionsMessage": "Sind Sie sicher, dass Sie alle Sitzungen für {{jid}} beenden möchten? Der Benutzer wird sofort getrennt.",
+            "confirmBan": "Konto sperren",
+            "confirmBanMessage": "Sind Sie sicher, dass Sie {{jid}} sperren möchten? Dadurch wird der Benutzer getrennt und kann sich nicht mehr anmelden."
         },
         "roomView": {
             "options": "Raumoptionen",

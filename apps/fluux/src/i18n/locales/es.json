@@ -1134,6 +1134,7 @@
             "delete": "Eliminar usuario",
             "changePassword": "Cambiar contrasena",
             "endSessions": "Cerrar sesiones",
+            "banAccount": "Bloquear cuenta",
             "online": "En línea",
             "offline": "Sin conexión",
             "onlineNow": "En línea ahora",
@@ -1148,7 +1149,9 @@
             "confirmDelete": "Eliminar Usuario",
             "confirmDeleteMessage": "Estas seguro de que quieres eliminar a {{jid}}? Esta accion no se puede deshacer.",
             "confirmEndSessions": "Cerrar Sesiones",
-            "confirmEndSessionsMessage": "Estas seguro de que quieres cerrar todas las sesiones de {{jid}}? El usuario sera desconectado inmediatamente."
+            "confirmEndSessionsMessage": "Estas seguro de que quieres cerrar todas las sesiones de {{jid}}? El usuario sera desconectado inmediatamente.",
+            "confirmBan": "Bloquear cuenta",
+            "confirmBanMessage": "Estas seguro de que quieres bloquear a {{jid}}? Esto desconectara al usuario y le impedira volver a iniciar sesion."
         },
         "roomView": {
             "options": "Opciones de Sala",

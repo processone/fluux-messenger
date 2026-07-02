@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ArrowLeft, Trash2, Power, Key } from 'lucide-react'
+import { ArrowLeft, Trash2, Power, Key, ShieldOff } from 'lucide-react'
 import type { AdminUser } from '@fluux/sdk'
 import { Tooltip } from './Tooltip'
 import { ConfirmDialog } from './ConfirmDialog'
@@ -11,6 +11,9 @@ interface AdminUserViewProps {
   onDeleteUser: (jid: string) => void
   onEndSessions: (jid: string) => void
   onChangePassword: (jid: string) => void
+  onBanAccount: (jid: string) => void
+  /** Discovery-driven: only render the Ban action when the server advertises it. */
+  canBanAccount: boolean
   isExecuting: boolean
 }
 
@@ -20,11 +23,14 @@ export function AdminUserView({
   onDeleteUser,
   onEndSessions,
   onChangePassword,
+  onBanAccount,
+  canBanAccount,
   isExecuting,
 }: AdminUserViewProps) {
   const { t } = useTranslation()
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [showEndSessionsConfirm, setShowEndSessionsConfirm] = useState(false)
+  const [showBanConfirm, setShowBanConfirm] = useState(false)
 
   const handleDelete = () => {
     onDeleteUser(user.jid)
@@ -34,6 +40,11 @@ export function AdminUserView({
   const handleEndSessions = () => {
     onEndSessions(user.jid)
     setShowEndSessionsConfirm(false)
+  }
+
+  const handleBan = () => {
+    onBanAccount(user.jid)
+    setShowBanConfirm(false)
   }
 
   return (
@@ -88,6 +99,20 @@ export function AdminUserView({
               <span className="text-sm">{t('admin.users.endSessions')}</span>
             </button>
 
+            {/* Ban Account */}
+            {canBanAccount && (
+              <button
+                onClick={() => setShowBanConfirm(true)}
+                disabled={isExecuting}
+                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg
+                           bg-fluux-red/10 hover:bg-fluux-red/20 text-fluux-red
+                           disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                <ShieldOff className="size-4" />
+                <span className="text-sm">{t('admin.users.banAccount')}</span>
+              </button>
+            )}
+
             {/* Delete User */}
             <button
               onClick={() => setShowDeleteConfirm(true)}
@@ -121,6 +146,16 @@ export function AdminUserView({
           variant="warning"
           onConfirm={handleEndSessions}
           onCancel={() => setShowEndSessionsConfirm(false)}
+        />
+      )}
+
+      {showBanConfirm && (
+        <ConfirmDialog
+          title={t('admin.userView.confirmBan')}
+          message={t('admin.userView.confirmBanMessage', { jid: user.jid })}
+          confirmLabel={t('admin.userView.confirmBan')}
+          onConfirm={handleBan}
+          onCancel={() => setShowBanConfirm(false)}
         />
       )}
     </div>

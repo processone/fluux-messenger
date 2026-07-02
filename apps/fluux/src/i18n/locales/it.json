@@ -1134,6 +1134,7 @@
             "delete": "Elimina utente",
             "changePassword": "Cambia password",
             "endSessions": "Termina sessioni",
+            "banAccount": "Blocca account",
             "online": "Online",
             "offline": "Offline",
             "onlineNow": "Online ora",
@@ -1148,7 +1149,9 @@
             "confirmDelete": "Elimina utente",
             "confirmDeleteMessage": "Sei sicuro di voler eliminare {{jid}}? Questa azione non puo essere annullata.",
             "confirmEndSessions": "Termina sessioni",
-            "confirmEndSessionsMessage": "Sei sicuro di voler terminare tutte le sessioni per {{jid}}? L'utente sara disconnesso immediatamente."
+            "confirmEndSessionsMessage": "Sei sicuro di voler terminare tutte le sessioni per {{jid}}? L'utente sara disconnesso immediatamente.",
+            "confirmBan": "Blocca account",
+            "confirmBanMessage": "Sei sicuro di voler bloccare {{jid}}? Questo disconnettera l'utente e gli impedira di accedere di nuovo."
         },
         "roomView": {
             "options": "Opzioni stanza",

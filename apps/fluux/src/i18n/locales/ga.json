@@ -1132,6 +1132,7 @@
             "delete": "Scrios úsáideoir",
             "changePassword": "Athraigh pasfhocal",
             "endSessions": "Críochnaigh seisiúin",
+            "banAccount": "Cuir cosc ar chuntas",
             "online": "Ar líne",
             "offline": "As líne",
             "onlineNow": "Ar líne anois",
@@ -1146,7 +1147,9 @@
             "confirmDelete": "Scrios Úsáideoir",
             "confirmDeleteMessage": "An bhfuil tú cinnte gur mian leat {{jid}} a scriosadh? Ní féidir an gníomh seo a chur ar ceal.",
             "confirmEndSessions": "Críochnaigh Seisiúin",
-            "confirmEndSessionsMessage": "An bhfuil tú cinnte gur mian leat gach seisiún de {{jid}} a chríochnú? Dícheanglfar an t-úsáideoir láithreach."
+            "confirmEndSessionsMessage": "An bhfuil tú cinnte gur mian leat gach seisiún de {{jid}} a chríochnú? Dícheanglfar an t-úsáideoir láithreach.",
+            "confirmBan": "Cuir Cosc ar Chuntas",
+            "confirmBanMessage": "An bhfuil tú cinnte gur mian leat cosc a chur ar {{jid}}? Dícheanglófar an t-úsáideoir agus ní bheidh sé in ann logáil isteach arís."
         },
         "roomView": {
             "options": "Roghanna an tSeomra",

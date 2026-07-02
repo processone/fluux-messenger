@@ -1133,6 +1133,7 @@
             "delete": "Vymazať používateľa",
             "changePassword": "Zmeniť heslo",
             "endSessions": "Ukončiť relácie",
+            "banAccount": "Zablokovať účet",
             "online": "Online",
             "offline": "Offline",
             "onlineNow": "Online teraz",
@@ -1147,7 +1148,9 @@
             "confirmDelete": "Vymazať používateľa",
             "confirmDeleteMessage": "Ste si istí, že chcete vymazať {{jid}}? Túto akciu nie je možné vrátiť späť.",
             "confirmEndSessions": "Ukončiť relácie",
-            "confirmEndSessionsMessage": "Ste si istí, že chcete ukončiť všetky relácie pre {{jid}}? Používateľ bude okamžite odpojený."
+            "confirmEndSessionsMessage": "Ste si istí, že chcete ukončiť všetky relácie pre {{jid}}? Používateľ bude okamžite odpojený.",
+            "confirmBan": "Zablokovať účet",
+            "confirmBanMessage": "Naozaj chcete zablokovať {{jid}}? Tým sa používateľ odpojí a znemožní sa mu opätovné prihlásenie."
         },
         "roomView": {
             "options": "Možnosti miestnosti",

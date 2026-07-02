@@ -1134,6 +1134,7 @@
             "delete": "Ħassar utent",
             "changePassword": "Ibdel password",
             "endSessions": "Temm sessjonijiet",
+            "banAccount": "Ipprojbixxi kont",
             "online": "Online",
             "offline": "Offline",
             "onlineNow": "Online issa",
@@ -1148,7 +1149,9 @@
             "confirmDelete": "Ħassar Utent",
             "confirmDeleteMessage": "Żgur li trid tħassar {{jid}}? Din l-azzjoni ma tistax tiġi rriversjata.",
             "confirmEndSessions": "Temm Sessjonijiet",
-            "confirmEndSessionsMessage": "Żgur li trid ttemm is-sessjonijiet kollha għal {{jid}}? L-utent se jiġi diskonnettjat immedjatament."
+            "confirmEndSessionsMessage": "Żgur li trid ttemm is-sessjonijiet kollha għal {{jid}}? L-utent se jiġi diskonnettjat immedjatament.",
+            "confirmBan": "Ipprojbixxi Kont",
+            "confirmBanMessage": "Żgur li trid tipprojbixxi lil {{jid}}? Dan se jiddiskonnettja lill-utent u jimpedih milli jidħol mill-ġdid."
         },
         "roomView": {
             "options": "Għażliet tal-Kamra",

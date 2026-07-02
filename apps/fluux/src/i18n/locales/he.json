@@ -1132,6 +1132,7 @@
             "delete": "מחיקת משתמש",
             "changePassword": "שינוי סיסמה",
             "endSessions": "סיום סשנים",
+            "banAccount": "חסימת חשבון",
             "online": "מחובר",
             "offline": "לא מחובר",
             "onlineNow": "מחובר עכשיו",
@@ -1146,7 +1147,9 @@
             "confirmDelete": "מחיקת משתמש",
             "confirmDeleteMessage": "האם אתה בטוח שברצונך למחוק את {{jid}}? לא ניתן לבטל פעולה זו.",
             "confirmEndSessions": "סיום סשנים",
-            "confirmEndSessionsMessage": "האם אתה בטוח שברצונך לסיים את כל הסשנים של {{jid}}? המשתמש ינותק מיידית."
+            "confirmEndSessionsMessage": "האם אתה בטוח שברצונך לסיים את כל הסשנים של {{jid}}? המשתמש ינותק מיידית.",
+            "confirmBan": "חסימת חשבון",
+            "confirmBanMessage": "האם אתה בטוח שברצונך לחסום את {{jid}}? פעולה זו תנתק את המשתמש ותמנע ממנו להתחבר שוב."
         },
         "roomView": {
             "options": "אפשרויות חדר",

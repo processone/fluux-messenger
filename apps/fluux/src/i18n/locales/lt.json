@@ -1132,6 +1132,7 @@
             "delete": "Ištrinti vartotoją",
             "changePassword": "Keisti slaptažodį",
             "endSessions": "Baigti sesijas",
+            "banAccount": "Blokuoti paskyrą",
             "online": "Online",
             "offline": "Offline",
             "onlineNow": "Online dabar",
@@ -1146,7 +1147,9 @@
             "confirmDelete": "Ištrinti vartotoją",
             "confirmDeleteMessage": "Ar tikrai norite ištrinti {{jid}}? Šio veiksmo negalima atšaukti.",
             "confirmEndSessions": "Baigti sesijas",
-            "confirmEndSessionsMessage": "Ar tikrai norite baigti visas {{jid}} sesijas? Vartotojas bus nedelsiant atjungtas."
+            "confirmEndSessionsMessage": "Ar tikrai norite baigti visas {{jid}} sesijas? Vartotojas bus nedelsiant atjungtas.",
+            "confirmBan": "Blokuoti paskyrą",
+            "confirmBanMessage": "Ar tikrai norite blokuoti {{jid}}? Tai atjungs vartotoją ir neleis jam vėl prisijungti."
         },
         "roomView": {
             "options": "Kambario parinktys",

@@ -244,6 +244,10 @@ export function AdminView({ activeCategory, onBack }: AdminViewProps) {
     void executeCommandForUser('http://jabber.org/protocol/admin#end-user-session', jid)
   }
 
+  const handleBanAccount = (jid: string) => {
+    void executeCommandForUser('api-commands/ban_account', jid)
+  }
+
   const handleAddUser = () => {
     setShowAddUserModal(true)
   }
@@ -351,6 +355,8 @@ export function AdminView({ activeCategory, onBack }: AdminViewProps) {
           onDeleteUser={handleDeleteUser}
           onEndSessions={handleEndSessions}
           onChangePassword={handleChangePassword}
+          onBanAccount={handleBanAccount}
+          canBanAccount={hasCommand('ban_account')}
           isExecuting={isExecuting}
         />
       )
