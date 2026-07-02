@@ -9,7 +9,7 @@ import * as mamState from './shared/mamState'
 import type { MAMQueryDirection } from './shared/mamState'
 import { computeGapEnd, syncGap, type GapInterval } from './shared/mamGap'
 import * as draftState from './shared/draftState'
-import { buildMessageKeySet, isMessageDuplicate, sortMessagesByTimestamp, trimMessages, prependOlderMessages, mergeAndProcessMessages, backfillArchiveIds } from './shared/messageArrayUtils'
+import { buildMessageKeySet, isMessageDuplicate, sortMessagesByTimestamp, trimMessages, trimMessagesKeepOldest, prependOlderMessages, mergeAndProcessMessages, backfillArchiveIds } from './shared/messageArrayUtils'
 import { isPreviewableMessage, findLastPreviewableMessage, shouldReplaceLastMessage, isResolvedSamePreview } from './shared/lastMessageUtils'
 import * as notifState from './shared/notificationState'
 import { markerDebugLog } from '../utils/markerDebug'
@@ -25,7 +25,7 @@ import { buildScopedStorageKey } from '../utils/storageScope'
 // in time"). Removal needs an estimate strategy that keeps getTotalSize/scrollbar accurate on
 // a huge mostly-estimated array (a running-average estimate was tried but collapsed — see
 // tanstackMessageVirtualizer); Phase-1 conversation-switch eviction bounds RAM. 5000 is interim.
-const MAX_MESSAGES_PER_CONVERSATION = 5000
+const RESIDENT_WINDOW_SIZE = 5000
 const STORAGE_KEY_BASE = 'xmpp-chat-storage'
 
 /**
@@ -99,7 +99,7 @@ function mergeCachedChatMessages(
   if (newMessages.length === 0) return null
 
   const merged = sortMessagesByTimestamp([...existingMessages, ...newMessages])
-  const trimmed = trimMessages(merged, MAX_MESSAGES_PER_CONVERSATION)
+  const trimmed = trimMessages(merged, RESIDENT_WINDOW_SIZE)
 
   const newMessagesMap = new Map(state.messages)
   newMessagesMap.set(conversationId, trimmed)
@@ -1535,13 +1535,13 @@ export const chatStore = createStore<ChatState>()(
                   existingMessages,
                   mamMessages,
                   getChatMessageKeys,
-                  MAX_MESSAGES_PER_CONVERSATION
+                  RESIDENT_WINDOW_SIZE
                 )
               : mergeAndProcessMessages(
                   existingMessages,
                   mamMessages,
                   getChatMessageKeys,
-                  MAX_MESSAGES_PER_CONVERSATION
+                  RESIDENT_WINDOW_SIZE
                 )
           mergedForMarker = trimmed
 
@@ -1775,9 +1775,10 @@ export const chatStore = createStore<ChatState>()(
             set((state) => {
               const currentMessages = state.messages.get(conversationId) || []
 
-              // Merge older messages at the beginning and trim using shared utility
+              // Merge older messages at the beginning and trim using shared utility.
+              // Load-older slides the window (keep oldest) so scroll-back past the bound works.
               const merged = [...olderMessages, ...currentMessages]
-              const trimmed = trimMessages(merged, MAX_MESSAGES_PER_CONVERSATION)
+              const trimmed = trimMessagesKeepOldest(merged, RESIDENT_WINDOW_SIZE)
 
               const newMessagesMap = new Map(state.messages)
               newMessagesMap.set(conversationId, trimmed)

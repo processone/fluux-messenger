@@ -3130,6 +3130,61 @@ describe('chatStore', () => {
     })
   })
 
+  describe('loadOlderMessagesFromCache (sliding window)', () => {
+    const conversationId = 'alice@example.com'
+    // Mirrors chatStore's RESIDENT_WINDOW_SIZE (formerly MAX_MESSAGES_PER_CONVERSATION).
+    const RESIDENT_WINDOW_SIZE = 5000
+
+    beforeEach(() => {
+      vi.mocked(messageCache.getMessages).mockReset()
+      chatStore.getState().addConversation(createConversation(conversationId))
+    })
+
+    function chatMsgAt(id: string, minuteOffset: number): Message {
+      return {
+        type: 'chat',
+        id,
+        conversationId,
+        from: conversationId,
+        body: id,
+        // minuteOffset is relative to a fixed epoch so older-batch ids sort before resident ids.
+        timestamp: new Date(Date.UTC(2024, 0, 1, 0, 0, 0) + minuteOffset * 60000),
+        isOutgoing: false,
+      }
+    }
+
+    it('slides the window: keeps the just-loaded older batch and evicts the newest tail', async () => {
+      // Seed the conversation at the resident cap - minutes 50..5049 so ids are 'resident-0'..'resident-4999'.
+      const resident: Message[] = []
+      for (let i = 0; i < RESIDENT_WINDOW_SIZE; i++) {
+        resident.push(chatMsgAt(`resident-${i}`, 50 + i))
+      }
+      chatStore.setState((state) => {
+        const newMessages = new Map(state.messages)
+        newMessages.set(conversationId, resident)
+        return { messages: newMessages }
+      })
+
+      // Cache returns 50 messages older than the current oldest resident message (minute 50).
+      const olderBatch: Message[] = []
+      for (let i = 0; i < 50; i++) {
+        olderBatch.push(chatMsgAt(`older-${i}`, i))
+      }
+      vi.mocked(messageCache.getMessages).mockResolvedValue(olderBatch)
+
+      await chatStore.getState().loadOlderMessagesFromCache(conversationId, 50)
+
+      const messages = chatStore.getState().messages.get(conversationId)
+      // Window size is preserved...
+      expect(messages?.length).toBe(RESIDENT_WINDOW_SIZE)
+      // ...but the just-loaded older batch is now resident (oldest id is from the older batch)...
+      expect(messages?.[0].id).toBe('older-0')
+      // ...which means the window slid: the newest 50 resident messages were evicted.
+      expect(messages?.some((m) => m.id === 'resident-4999')).toBe(false)
+      expect(messages?.[messages.length - 1].id).toBe('resident-4949')
+    })
+  })
+
   describe('activeConversations', () => {
     it('should return only non-archived conversations', () => {
       // Create multiple conversations
