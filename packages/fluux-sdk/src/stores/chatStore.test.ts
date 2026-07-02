@@ -2396,8 +2396,16 @@ describe('chatStore', () => {
         const messages = chatStore.getState().messages.get('alice@example.com')
         expect(messages?.length).toBeLessThanOrEqual(5000)
 
-        // Should keep the most recent messages
-        expect(messages?.[messages.length - 1].body).toBe(`Message ${total - 1}`)
+        // A backward (load-older) merge slides the window: it keeps the OLDEST
+        // maxCount messages so the just-loaded older batch survives instead of
+        // being evicted at the bound. In production a single backward MAM merge
+        // never approaches this scale (auto-pagination caps at 5 pages x 50 = 250
+        // messages for chats, 50 for rooms - see MAM.ts), so this 5100-message
+        // direct call is a synthetic stress case exercising the trim DIRECTION,
+        // not a realistic overflow scenario.
+        expect(messages?.length).toBe(5000)
+        expect(messages?.[0].body).toBe('Message 0')
+        expect(messages?.[messages!.length - 1].body).toBe('Message 4999')
       })
 
       it('should create conversation messages array if it does not exist', () => {
