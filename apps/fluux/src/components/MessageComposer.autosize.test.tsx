@@ -132,6 +132,44 @@ describe('MessageComposer autosize', () => {
     expect(roDisconnected).toBeGreaterThan(0)
   })
 
+  // --- Scrollbar only past the 8-line cap -----------------------------------
+  // With overflow-y:auto always on, Blink (mobile Brave) paints a scrollbar for
+  // a single line because the integer height we write can round under the
+  // fractional content height. Keep overflow-y hidden until content genuinely
+  // exceeds the 8-line cap (192px), where a scrollbar is actually needed.
+  it('keeps overflow-y hidden below the max height', () => {
+    mockScrollHeight = 48 // one line
+    const { container } = renderComposer('Hello world test')
+    const textarea = container.querySelector('textarea') as HTMLTextAreaElement
+    expect(textarea.style.overflowY).toBe('hidden')
+  })
+
+  it('switches overflow-y to auto once content exceeds the 8-line cap', () => {
+    mockScrollHeight = 240 // taller than the 192px cap
+    const { container } = renderComposer('Nine\nlines\nof\ntext\nthat\noverflow\nthe\ncomposer\ncap')
+    const textarea = container.querySelector('textarea') as HTMLTextAreaElement
+    expect(textarea.style.height).toBe('192px')
+    expect(textarea.style.overflowY).toBe('auto')
+  })
+
+  it('restores overflow-y hidden when a tall draft shrinks back under the cap', () => {
+    mockScrollHeight = 240
+    const { container, rerender } = renderComposer('a\nb\nc\nd\ne\nf\ng\nh\ni')
+    const textarea = container.querySelector('textarea') as HTMLTextAreaElement
+    expect(textarea.style.overflowY).toBe('auto')
+
+    mockScrollHeight = 48 // deleted back to one line
+    rerender(
+      <MessageComposer
+        placeholder="Type a message"
+        onSend={vi.fn().mockResolvedValue(true)}
+        value="a"
+        onValueChange={() => {}}
+      />
+    )
+    expect(textarea.style.overflowY).toBe('hidden')
+  })
+
   // --- Per-keystroke forced-layout avoidance --------------------------------
   // resizeToContent ran on every keystroke and unconditionally (a) reset the
   // textarea to height:auto and (b) called onInputResize. The auto-reset
