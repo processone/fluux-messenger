@@ -5,6 +5,7 @@ import {
   isMessageDuplicate,
   sortMessagesByTimestamp,
   trimMessages,
+  trimMessagesKeepOldest,
   mergeAndProcessMessages,
   prependOlderMessages,
   backfillArchiveIds,
@@ -248,6 +249,21 @@ describe('messageArrayUtils', () => {
       const messages = [createMessage('msg-1', 'First', new Date())]
       const trimmed = trimMessages(messages, 0)
       expect(trimmed).toHaveLength(0)
+    })
+  })
+
+  describe('trimMessagesKeepOldest', () => {
+    it('keeps the oldest maxCount (evicts the newest tail)', () => {
+      const msgs = [1, 2, 3, 4, 5].map((n) => ({ timestamp: new Date(n) }))
+      expect(trimMessagesKeepOldest(msgs, 3)).toEqual(msgs.slice(0, 3))
+    })
+    it('returns input unchanged when under the limit', () => {
+      const msgs = [1, 2].map((n) => ({ timestamp: new Date(n) }))
+      expect(trimMessagesKeepOldest(msgs, 3)).toBe(msgs)
+    })
+    it('returns [] for maxCount <= 0', () => {
+      const msgs = [{ timestamp: new Date(1) }]
+      expect(trimMessagesKeepOldest(msgs, 0)).toEqual([])
     })
   })
 

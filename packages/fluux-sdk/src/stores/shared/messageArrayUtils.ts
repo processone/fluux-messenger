@@ -204,6 +204,22 @@ export function trimMessages<T>(messages: T[], maxCount: number): T[] {
 }
 
 /**
+ * Keep the OLDEST `maxCount` messages (front of a timestamp-ascending array),
+ * evicting the newest tail. Used by the sliding window's load-older path so that
+ * scrolling up past the window bound slides the window instead of dropping the
+ * just-loaded older batch (the mirror of {@link trimMessages}, which keeps newest).
+ *
+ * @param messages - Array of messages (should be sorted by timestamp ascending)
+ * @param maxCount - Maximum number of messages to keep
+ * @returns Trimmed array with at most maxCount messages (oldest)
+ */
+export function trimMessagesKeepOldest<T>(messages: T[], maxCount: number): T[] {
+  if (maxCount <= 0) return []
+  if (messages.length <= maxCount) return messages
+  return messages.slice(0, maxCount)
+}
+
+/**
  * Merge two message arrays, deduplicate, sort by timestamp, and trim.
  * This is a convenience function that combines the common operations.
  *
