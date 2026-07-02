@@ -81,7 +81,7 @@ export function AdminUserView({
   }
 
   return (
-    <div className="flex-1 flex flex-col min-h-0">
+    <div className="flex-1 flex flex-col min-h-0 w-full max-w-2xl mx-auto">
       {/* Header with back button */}
       <div className="flex items-center gap-3 mb-6">
         <Tooltip content={t('common.close')} position="right">
@@ -112,7 +112,7 @@ export function AdminUserView({
       {/* Actions section */}
       <div className="flex-1 min-h-0 overflow-y-auto">
         {(isLoadingLastLogin || lastLogin) && (
-          <SettingsSection title={t('admin.userView.account')} className="w-full max-w-md mb-4">
+          <SettingsSection title={t('admin.userView.account')} className="mb-4">
             <SettingsGroup>
               <SettingsRow
                 label={t('admin.userView.lastLogin')}
@@ -128,7 +128,7 @@ export function AdminUserView({
           </SettingsSection>
         )}
 
-        <SettingsSection title={t('admin.userView.actions')} className="w-full max-w-md">
+        <SettingsSection title={t('admin.userView.actions')}>
           <SettingsGroup>
             <SettingsRow
               label={t('admin.users.changePassword')}

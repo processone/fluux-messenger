@@ -93,10 +93,9 @@ describe('AdminUserView', () => {
   })
 
   describe('actions', () => {
-    it('constrains the actions section to a settings-panel width, not the full panel', () => {
-      renderView()
-      const section = screen.getByText('Actions').closest('section')
-      expect(section).toHaveClass('w-full', 'max-w-md')
+    it('centers the whole view at the same width as the user/room lists, not left-aligned', () => {
+      const { container } = renderView()
+      expect(container.firstElementChild).toHaveClass('w-full', 'max-w-2xl', 'mx-auto')
     })
 
     it('renders all four action rows when canBanAccount is true', () => {
