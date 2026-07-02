@@ -1144,6 +1144,8 @@
             "title": "用户",
             "manageUser": "管理用户账号",
             "actions": "操作",
+            "account": "账户",
+            "lastLogin": "上次登录",
             "confirmDelete": "删除用户",
             "confirmDeleteMessage": "确定要删除 {{jid}} 吗？此操作无法撤销。",
             "confirmEndSessions": "结束会话",

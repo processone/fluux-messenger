@@ -1144,6 +1144,8 @@
             "title": "Úsáideoir",
             "manageUser": "Bainistigh cuntas úsáideora",
             "actions": "Gníomhartha",
+            "account": "Cuntas",
+            "lastLogin": "Logáil isteach dheireanach",
             "confirmDelete": "Scrios Úsáideoir",
             "confirmDeleteMessage": "An bhfuil tú cinnte gur mian leat {{jid}} a scriosadh? Ní féidir an gníomh seo a chur ar ceal.",
             "confirmEndSessions": "Críochnaigh Seisiúin",

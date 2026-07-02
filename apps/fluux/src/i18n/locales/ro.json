@@ -1146,6 +1146,8 @@
             "title": "Utilizator",
             "manageUser": "Administrează contul de utilizator",
             "actions": "Acțiuni",
+            "account": "Cont",
+            "lastLogin": "Ultima conectare",
             "confirmDelete": "Șterge utilizatorul",
             "confirmDeleteMessage": "Ești sigur că vrei să ștergi {{jid}}? Această acțiune nu poate fi anulată.",
             "confirmEndSessions": "Închide sesiunile",

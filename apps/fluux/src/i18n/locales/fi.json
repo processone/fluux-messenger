@@ -1144,6 +1144,8 @@
             "title": "Käyttäjä",
             "manageUser": "Hallitse käyttäjätiliä",
             "actions": "Toiminnot",
+            "account": "Tili",
+            "lastLogin": "Viimeisin kirjautuminen",
             "confirmDelete": "Poista käyttäjä",
             "confirmDeleteMessage": "Haluatko varmasti poistaa käyttäjän {{jid}}? Tätä toimintoa ei voi perua.",
             "confirmEndSessions": "Lopeta istunnot",

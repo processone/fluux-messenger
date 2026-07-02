@@ -1146,6 +1146,8 @@
             "title": "Uporabnik",
             "manageUser": "Upravljaj uporabniški račun",
             "actions": "Dejanja",
+            "account": "Račun",
+            "lastLogin": "Zadnja prijava",
             "confirmDelete": "Izbriši uporabnika",
             "confirmDeleteMessage": "Ali ste prepričani, da želite izbrisati {{jid}}? Tega dejanja ni mogoče razveljaviti.",
             "confirmEndSessions": "Končaj seje",

@@ -1144,6 +1144,8 @@
             "title": "Gebruiker",
             "manageUser": "Gebruikersaccount beheren",
             "actions": "Acties",
+            "account": "Account",
+            "lastLogin": "Laatste keer ingelogd",
             "confirmDelete": "Gebruiker verwijderen",
             "confirmDeleteMessage": "Weet je zeker dat je {{jid}} wilt verwijderen? Deze actie kan niet ongedaan worden gemaakt.",
             "confirmEndSessions": "Sessies beeindigen",

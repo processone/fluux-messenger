@@ -466,17 +466,37 @@ export class Admin extends BaseModule {
     commandName: string,
     overrides?: Record<string, string | string[]>
   ): Promise<DataForm | null> {
+    return this.executeTwoStepCommand(`api-commands/${commandName}`, overrides)
+  }
+
+  /**
+   * Execute a two-step XEP-0050 ad-hoc command (execute → server asks for a
+   * form → complete with submitted values → result form). Shared by
+   * ejabberd's api-commands/* bridge (`executeApiCommand`) and standard
+   * XEP-0133 admin commands that require input (e.g. get-user-lastlogin).
+   * @param node - Full command node, e.g. `api-commands/stats` or
+   *   `http://jabber.org/protocol/admin#get-user-lastlogin`
+   * @param overrides - Field values to submit, keyed by field var; falls back
+   *   to the server-supplied default value when a field has no override
+   * @param lang - Optional `xml:lang` to request localized result text
+   */
+  private async executeTwoStepCommand(
+    node: string,
+    overrides?: Record<string, string | string[]>,
+    lang?: string
+  ): Promise<DataForm | null> {
     const currentJid = this.deps.getCurrentJid()
     if (!currentJid) return null
 
     const domain = getDomain(currentJid)
-    const node = `api-commands/${commandName}`
 
     try {
       // Step 1: Execute command
+      const executeAttrs: Record<string, string> = { type: 'set', to: domain, id: `cmd_${generateUUID()}` }
+      if (lang) executeAttrs['xml:lang'] = lang
       const iq = xml(
         'iq',
-        { type: 'set', to: domain, id: `api_cmd_${generateUUID()}` },
+        executeAttrs,
         xml('command', { xmlns: NS_COMMANDS, node, action: 'execute' })
       )
 
@@ -519,9 +539,11 @@ export class Admin extends BaseModule {
         )
 
         // Step 2: Complete the command with the form
+        const completeAttrs: Record<string, string> = { type: 'set', to: domain, id: `cmd_${generateUUID()}` }
+        if (lang) completeAttrs['xml:lang'] = lang
         const completeIq = xml(
           'iq',
-          { type: 'set', to: domain, id: `api_cmd_${generateUUID()}` },
+          completeAttrs,
           xml('command', { xmlns: NS_COMMANDS, node, sessionid: sessionId, action: 'complete' },
             submitForm
           )
@@ -535,6 +557,28 @@ export class Admin extends BaseModule {
       }
 
       return formEl ? parseDataForm(formEl) : null
+    } catch {
+      return null
+    }
+  }
+
+  /**
+   * Fetch a user's last-login value via XEP-0133 get-user-lastlogin.
+   * The result is a free-form, server-localized string (e.g. "En ligne" for
+   * an online user, or a formatted date/time for an offline one) — displayed
+   * as-is, never parsed as a duration or timestamp.
+   * @param jid - The account JID to query
+   * @param lang - Optional UI locale to request a localized result (xml:lang)
+   */
+  async fetchUserLastLogin(jid: string, lang?: string): Promise<string | null> {
+    try {
+      const form = await this.executeTwoStepCommand(
+        `${NS_ADMIN}#get-user-lastlogin`,
+        { accountjid: jid },
+        lang
+      )
+      if (!form) return null
+      return getFormFieldValue(form, 'lastlogin') ?? null
     } catch {
       return null
     }

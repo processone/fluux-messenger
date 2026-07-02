@@ -1146,6 +1146,8 @@
             "title": "Utent",
             "manageUser": "Immaniġġja kont tal-utent",
             "actions": "Azzjonijiet",
+            "account": "Kont",
+            "lastLogin": "L-aħħar login",
             "confirmDelete": "Ħassar Utent",
             "confirmDeleteMessage": "Żgur li trid tħassar {{jid}}? Din l-azzjoni ma tistax tiġi rriversjata.",
             "confirmEndSessions": "Temm Sessjonijiet",

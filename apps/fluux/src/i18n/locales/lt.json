@@ -1144,6 +1144,8 @@
             "title": "Vartotojas",
             "manageUser": "Valdyti vartotojo paskyrą",
             "actions": "Veiksmai",
+            "account": "Paskyra",
+            "lastLogin": "Paskutinis prisijungimas",
             "confirmDelete": "Ištrinti vartotoją",
             "confirmDeleteMessage": "Ar tikrai norite ištrinti {{jid}}? Šio veiksmo negalima atšaukti.",
             "confirmEndSessions": "Baigti sesijas",

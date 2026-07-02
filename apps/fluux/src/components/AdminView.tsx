@@ -64,6 +64,7 @@ export function AdminView({ activeCategory, onBack }: AdminViewProps) {
     hasCommand,
     // Last activity
     requestLastActivity,
+    fetchUserLastLogin,
   } = useAdmin()
 
   const usersTruncated = useAdminStore((s) => s.usersTruncated)
@@ -355,6 +356,8 @@ export function AdminView({ activeCategory, onBack }: AdminViewProps) {
           onBanAccount={handleBanAccount}
           canBanAccount={hasCommand('ban_account')}
           isExecuting={isExecuting}
+          fetchLastLogin={fetchUserLastLogin}
+          hasLastLoginCommand={hasCommand('get-user-lastlogin')}
         />
       )
     }

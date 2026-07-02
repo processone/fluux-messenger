@@ -424,6 +424,12 @@ export function useAdmin() {
     return client.admin.fetchRoomOptions(roomJid)
   }, [client])
 
+  // Fetch a user's last-login value (XEP-0133 get-user-lastlogin). The
+  // result is a free-form, server-localized string — displayed as-is.
+  const fetchUserLastLogin = useCallback(async (jid: string, lang?: string) => {
+    return client.admin.fetchUserLastLogin(jid, lang)
+  }, [client])
+
   // Check if a specific admin command is available
   const hasCommand = useCallback((commandName: string) => {
     return commands.some(cmd =>
@@ -520,6 +526,7 @@ export function useAdmin() {
       loadMoreRooms,
       resetRoomList,
       getRoomOptions,
+      fetchUserLastLogin,
       hasCommand,
     }),
     [
@@ -549,6 +556,7 @@ export function useAdmin() {
       loadMoreRooms,
       resetRoomList,
       getRoomOptions,
+      fetchUserLastLogin,
       hasCommand,
     ]
   )

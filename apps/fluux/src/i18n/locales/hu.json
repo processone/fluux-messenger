@@ -1144,6 +1144,8 @@
             "title": "Felhasználó",
             "manageUser": "Felhasználói fiók kezelése",
             "actions": "Műveletek",
+            "account": "Fiók",
+            "lastLogin": "Utolsó bejelentkezés",
             "confirmDelete": "Felhasználó törlése",
             "confirmDeleteMessage": "Biztosan törölni szeretné a következőt: {{jid}}? Ez a művelet nem vonható vissza.",
             "confirmEndSessions": "Munkamenetek befejezése",

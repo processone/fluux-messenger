@@ -1145,6 +1145,8 @@
             "title": "Utilisateur",
             "manageUser": "Gérer le compte utilisateur",
             "actions": "Actions",
+            "account": "Compte",
+            "lastLogin": "Dernière connexion",
             "confirmDelete": "Supprimer l'utilisateur",
             "confirmDeleteMessage": "Êtes-vous sûr de vouloir supprimer {{jid}} ? Cette action est irréversible.",
             "confirmEndSessions": "Terminer les sessions",

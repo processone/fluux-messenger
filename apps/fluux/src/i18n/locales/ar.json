@@ -1144,6 +1144,8 @@
             "title": "المستخدم",
             "manageUser": "إدارة حساب المستخدم",
             "actions": "الإجراءات",
+            "account": "الحساب",
+            "lastLogin": "آخر تسجيل دخول",
             "confirmDelete": "حذف المستخدم",
             "confirmDeleteMessage": "هل أنت متأكد أنك تريد حذف {{jid}}؟ لا يمكن التراجع عن هذا الإجراء.",
             "confirmEndSessions": "إنهاء الجلسات",
