@@ -659,7 +659,7 @@ export function MessageComposer({
       spellCheck={true}
       autoCorrect="on"
       autoCapitalize="sentences"
-      className={`${MESSAGE_INPUT_BASE_CLASSES} ${MESSAGE_INPUT_TEXT_CLASSES}`}
+      className={`${MESSAGE_INPUT_BASE_CLASSES} ${MESSAGE_INPUT_TEXT_CLASSES} [grid-area:input]`}
     />
   )
 
@@ -856,7 +856,7 @@ export function MessageComposer({
         </button>
       )}
 
-      <div className="flex items-center">
+      <div className="composer-actions">
         {/* Hidden file input */}
         <input
           ref={fileInputRef}
@@ -866,7 +866,7 @@ export function MessageComposer({
         />
 
         {/* Attach menu — combines attachment + poll into a single "+" button */}
-        <div className="relative" ref={attachMenuRef}>
+        <div className="relative [grid-area:add]" ref={attachMenuRef}>
           {uploadState?.isUploading ? (
             /* During upload, show spinner directly instead of the menu toggle */
             <button type="button" disabled className="p-3 text-fluux-brand">
@@ -931,12 +931,12 @@ export function MessageComposer({
               data-encryption-lock
               onClick={onEncryptionClick}
               aria-label={lockInfo.label}
-              className="p-1.5 flex-shrink-0 rounded-lg hover:bg-fluux-bg transition-colors"
+              className="p-1.5 flex-shrink-0 rounded-lg hover:bg-fluux-bg transition-colors [grid-area:lock]"
             >
               <lockInfo.Icon className="size-4" style={{ color: lockInfo.color }} />
             </button>
           ) : (
-            <span data-encryption-lock aria-label={lockInfo.label} className="p-1.5 flex-shrink-0">
+            <span data-encryption-lock aria-label={lockInfo.label} className="p-1.5 flex-shrink-0 [grid-area:lock]">
               <lockInfo.Icon className="size-4" style={{ color: lockInfo.color }} />
             </span>
           )
@@ -944,7 +944,7 @@ export function MessageComposer({
 
         {/* Text input - either custom or default */}
         {renderInput ? (
-          <div className="flex-1 min-w-0 flex items-center relative">
+          <div className="[grid-area:input] min-w-0 flex items-center relative">
             {renderInput({
               inputRef,
               mergedRef: mergedInputRef,
@@ -961,7 +961,7 @@ export function MessageComposer({
         )}
 
         {/* Emoji button */}
-        <div className="relative" ref={emojiPickerRef}>
+        <div className="relative [grid-area:emoji]" ref={emojiPickerRef}>
           <button
             type="button"
             onClick={() => setShowEmojiPicker(!showEmojiPicker)}
@@ -992,7 +992,7 @@ export function MessageComposer({
           className="group/send relative m-1 p-2.5 rounded-xl tap-target flex items-center justify-center
                      bg-fluux-brand text-white hover:bg-fluux-brand-hover
                      disabled:bg-transparent disabled:text-fluux-muted disabled:cursor-not-allowed
-                     transition-colors"
+                     transition-colors [grid-area:send]"
         >
           <Send className="rtl-mirror icon-optical-send size-5" />
           {sendBadge}
