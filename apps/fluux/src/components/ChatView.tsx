@@ -49,7 +49,7 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
   const { t } = useTranslation()
   // Use useChatActive instead of useChat to avoid subscribing to the conversation list.
   // This prevents re-renders during background MAM sync of other conversations.
-  const { activeConversation, firstNewMessageId, activeMessages, activeTypingUsers, sendMessage, sendReaction, sendCorrection, retractMessage, retryMessage, sendChatState, isArchived, archiveConversation, unarchiveConversation, setDraft, getDraft, clearDraft, activeAnimation, sendEasterEgg, clearAnimation, clearFirstNewMessageId, updateLastSeenMessageId, activeMAMState, fetchOlderHistory, loadMessagesAround, continueChatCatchUp, targetMessageId, clearTargetMessageId } = useChatActive()
+  const { activeConversation, firstNewMessageId, activeMessages, activeTypingUsers, sendMessage, sendReaction, sendCorrection, retractMessage, retryMessage, sendChatState, isArchived, archiveConversation, unarchiveConversation, setDraft, getDraft, clearDraft, activeAnimation, sendEasterEgg, clearAnimation, clearFirstNewMessageId, updateLastSeenMessageId, activeMAMState, fetchOlderHistory, loadMessagesAround, loadNewer, windowAtLiveEdge, continueChatCatchUp, targetMessageId, clearTargetMessageId } = useChatActive()
   // Use useContactIdentities instead of useRoster() to avoid re-renders on
   // presence changes. ChatView only needs contact names and avatars for display.
   const contactsByJid = useContactIdentities()
@@ -501,6 +501,8 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
           onScrollToTop={fetchOlderHistory}
           onLoadAround={loadMessagesAround}
           isLoadingOlder={activeMAMState?.isLoading ?? false}
+          onLoadNewer={loadNewer}
+          windowAtLiveEdge={windowAtLiveEdge}
           isHistoryComplete={activeMAMState?.isHistoryComplete ?? false}
           forwardGapTimestamp={activeMAMState?.forwardGapTimestamp}
           onCatchUpHistory={continueChatCatchUp}
@@ -603,6 +605,8 @@ export const ChatMessageList = memo(function ChatMessageList({
   onScrollToTop,
   onLoadAround,
   isLoadingOlder,
+  onLoadNewer,
+  windowAtLiveEdge,
   isHistoryComplete,
   isInitialLoading,
   highlightTerms,
@@ -643,6 +647,8 @@ export const ChatMessageList = memo(function ChatMessageList({
   onScrollToTop?: () => void
   onLoadAround?: (anchorMessageId: string) => Promise<unknown> | void
   isLoadingOlder?: boolean
+  onLoadNewer?: () => void
+  windowAtLiveEdge?: boolean
   isHistoryComplete?: boolean
   isInitialLoading?: boolean
   highlightTerms?: string[]
@@ -748,6 +754,8 @@ export const ChatMessageList = memo(function ChatMessageList({
       onScrollToTop={onScrollToTop}
       onLoadAround={onLoadAround}
       isLoadingOlder={isLoadingOlder}
+      onLoadNewer={onLoadNewer}
+      windowAtLiveEdge={windowAtLiveEdge}
       isHistoryComplete={isHistoryComplete}
       forwardGapTimestamp={forwardGapTimestamp}
       onCatchUpHistory={onCatchUpHistory}

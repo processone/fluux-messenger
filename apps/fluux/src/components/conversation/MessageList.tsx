@@ -101,6 +101,14 @@ export interface MessageListProps<T extends BaseMessage> {
   onLoadAround?: (anchorMessageId: string) => Promise<unknown> | void
   /** If true, show loading indicator at top while fetching older messages */
   isLoadingOlder?: boolean
+  /** Sliding window: load the next-newer cache slice when the reader scrolls back down to the
+   *  bottom of a slid-up window. Fired only when windowAtLiveEdge is false. */
+  onLoadNewer?: () => void
+  /** If true, a newer-slice load is already in flight (throttles the load-newer trigger) */
+  isLoadingNewer?: boolean
+  /** Sliding window: whether the resident window includes the newest message. false = slid up
+   *  (enables the load-newer trigger); absent/true = at the live edge (unchanged behavior). */
+  windowAtLiveEdge?: boolean
   /** If true, all history has been fetched - disable scroll-to-top trigger */
   isHistoryComplete?: boolean
   /** Callback when the bottom-most visible message changes (viewport tracking) */
@@ -149,6 +157,9 @@ export function MessageList<T extends BaseMessage>({
   onScrollToTop,
   onLoadAround,
   isLoadingOlder,
+  onLoadNewer,
+  isLoadingNewer,
+  windowAtLiveEdge,
   isHistoryComplete,
   onMessageSeen,
   staticMode,
@@ -441,6 +452,9 @@ export function MessageList<T extends BaseMessage>({
     onScrollToTop,
     onLoadAround,
     isLoadingOlder,
+    onLoadNewer,
+    isLoadingNewer,
+    windowAtLiveEdge,
     isHistoryComplete,
     typingUsersCount: typingUsers.length,
     lastMessageReactionsKey,
