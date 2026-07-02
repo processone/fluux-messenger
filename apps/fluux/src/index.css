@@ -950,23 +950,52 @@ html, body {
   box-shadow: 0 0 0 3px hsla(var(--fluux-accent-h), var(--fluux-accent-s), var(--fluux-accent-l), 0.22);
 }
 
-/* Composer action row. One row when the card is wide enough; on narrow widths
- * (phone, narrowed pane) the text field takes the full first line and the
- * controls drop to a toolbar row below — `add`/`lock` at the inline-start,
- * `emoji`/`send` grouped at the inline-end (same order as the wide row).
- * Container-query driven off `.composer-card`; no JS. RTL mirrors automatically
- * because grid-template-areas follows the inline axis. */
+/* Composer action row. On narrow widths (phone, narrowed pane) the input + send
+ * sit on a top row and the secondary controls (+ / lock / emoji) form a drawer
+ * beneath it that is collapsed while idle and extends on focus. On wide widths
+ * it is the single comfortable row. Container-query + :focus-within driven off
+ * `.composer-card`; no JS. RTL mirrors automatically (areas follow the inline
+ * axis). */
 .composer-actions {
   display: grid;
   align-items: center;
-  grid-template-columns: auto auto 1fr auto auto;
+  grid-template-columns: auto 1fr auto;
   grid-template-areas:
-    "input input input input input"
-    "add   lock  .     emoji send";
+    "input input send"
+    "add   lock  emoji";
 }
+
+/* The drawer controls. Expanded height by default; collapsed to zero while the
+ * card is idle. `overflow: hidden` is applied ONLY in the collapsed state so it
+ * clips the shrinking icons without ever clipping the (focus-only) attach/emoji
+ * popovers, which open upward out of these wrappers. */
+.composer-drawer-item {
+  max-height: 3.5rem;
+  opacity: 1;
+  transition: max-height 160ms ease, opacity 160ms ease;
+}
+.composer-card:not(:focus-within) .composer-drawer-item {
+  max-height: 0;
+  opacity: 0;
+  overflow: hidden;
+}
+
 @container (min-width: 420px) {
   .composer-actions {
+    grid-template-columns: auto auto 1fr auto auto;
     grid-template-areas: "add lock input emoji send";
+  }
+  /* Wide is a comfortable single row — the drawer is never collapsed. */
+  .composer-card:not(:focus-within) .composer-drawer-item {
+    max-height: none;
+    opacity: 1;
+    overflow: visible;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .composer-drawer-item {
+    transition: none;
   }
 }
 
