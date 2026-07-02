@@ -581,7 +581,11 @@ function ChatLayoutContent() {
   // For admin: 'users', 'rooms', and 'stats' categories have main view content
   // ('stats' renders the ServerOverview dashboard); 'announcements' just expands
   // to show commands in the sidebar
-  const adminHasMainContent = adminSession || adminCategory === 'users' || adminCategory === 'rooms' || adminCategory === 'stats'
+  // Gate on the admin route: after backing out of admin (popstate), the admin
+  // store may still hold a stale category. Without this guard that stale value
+  // would keep the mobile layout in "content" mode and hide the sidebar on the
+  // page we backed into.
+  const adminHasMainContent = sidebarView === 'admin' && (adminSession || adminCategory === 'users' || adminCategory === 'rooms' || adminCategory === 'stats')
   // Settings: only show content when a category is explicitly selected (on mobile, let user choose from sidebar first)
   const settingsHasContent = sidebarView === 'settings' && !!settingsCategory
   const hasActiveContent = !!(activeConversationId || activeRoomJid || selectedContact || adminHasMainContent || settingsHasContent || searchPreviewResult || previewJid)
@@ -654,11 +658,15 @@ function ChatLayoutContent() {
     navigateToContacts(undefined, { replace: true })
   }
 
-  // Handle mobile back from admin view - clear category to show sidebar
+  // Handle mobile back from the admin overview (the top of the admin stack).
+  // Leave admin entirely and return to the home screen. Navigating back to
+  // /admin here would be re-trapped by the "admin home" layout effect below,
+  // which re-selects the stats overview whenever we sit on /admin with no
+  // category — so the user could never step out of the dashboard.
   const handleAdminBack = () => {
     clearAdminSession()
     setAdminCategory(null)
-    navigateToAdmin(undefined, { replace: true })
+    navigateToMessages(undefined, { replace: true })
   }
 
   // Handle mobile back from settings view - go back to settings sidebar (no category selected)
@@ -947,7 +955,7 @@ function ChatLayoutContent() {
                 onBack={handleContactBack}
               />
             </Suspense>
-          ) : (adminSession || adminCategory) ? (
+          ) : (sidebarView === 'admin' && (adminSession || adminCategory)) ? (
             <Suspense fallback={<ViewLoadingFallback />}>
               <AdminView activeCategory={adminCategory} onBack={handleAdminBack} />
             </Suspense>
