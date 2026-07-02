@@ -91,7 +91,7 @@ export function AdminCommandForm({
 
       {/* Target user display (when pre-filled) */}
       {targetJid && (
-        <div className="flex items-center gap-2 p-3 rounded-lg bg-fluux-bg border border-fluux-hover mb-4">
+        <div className="flex items-center gap-2 p-3 rounded-lg bg-fluux-bg border border-fluux-border mb-4">
           <User className="size-5 text-fluux-muted flex-shrink-0" />
           <div className="flex-1 min-w-0">
             <p className="text-xs text-fluux-muted">{t('admin.targetUser')}</p>

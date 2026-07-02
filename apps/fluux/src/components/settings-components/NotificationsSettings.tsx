@@ -148,7 +148,7 @@ export function NotificationsSettings() {
     <section className="w-full max-w-md">
       <SettingsSection title={t('settings.notifications')}>
       <div className="space-y-3">
-        <div className="flex items-center justify-between p-4 rounded-lg border-2 border-fluux-hover bg-fluux-bg">
+        <div className="flex items-center justify-between p-4 rounded-lg border-2 border-fluux-border bg-fluux-bg">
           <div className="flex items-center gap-3">
             {notificationStatus === 'granted' ? (
               <Bell className="size-5 text-fluux-green" />
@@ -223,7 +223,7 @@ export function NotificationsSettings() {
 
         {/* Web Push registration (browser only, when connected) */}
         {isWebPushSupported && isConnected && (
-          <div className="flex items-center justify-between p-4 rounded-lg border-2 border-fluux-hover bg-fluux-bg">
+          <div className="flex items-center justify-between p-4 rounded-lg border-2 border-fluux-border bg-fluux-bg">
             <div className="flex items-center gap-3">
               <Send className={`size-5 ${
                 webPushStatus === 'registered' ? 'text-fluux-green'

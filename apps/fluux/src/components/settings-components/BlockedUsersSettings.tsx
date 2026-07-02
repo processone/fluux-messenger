@@ -95,7 +95,7 @@ export function BlockedUsersSettings() {
 
       {/* Add block form */}
       {showAddForm ? (
-        <div className="mb-4 p-3 rounded-lg border border-fluux-hover bg-fluux-bg">
+        <div className="mb-4 p-3 rounded-lg border border-fluux-border bg-fluux-bg">
           <div className="flex items-center gap-2 mb-2">
             <TextInput
               type="text"
@@ -247,7 +247,7 @@ function BlockedUserItem({ jid, isUnblocking, onUnblock }: BlockedUserItemProps)
   const displayName = getLocalPart(jid)
 
   return (
-    <div className="flex items-center gap-3 p-3 rounded-lg border border-fluux-hover bg-fluux-bg hover:bg-fluux-hover transition-colors">
+    <div className="flex items-center gap-3 p-3 rounded-lg border border-fluux-border bg-fluux-bg hover:bg-fluux-hover transition-colors">
       <Avatar
         identifier={jid}
         name={displayName}

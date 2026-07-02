@@ -116,7 +116,7 @@ export function UpdateModal({ state, onDownload, onRelaunch, onDismiss }: Update
               <>
                 <button
                   onClick={close}
-                  className="flex-1 px-4 py-2 text-fluux-muted hover:text-fluux-text border border-fluux-hover rounded-lg hover:bg-fluux-hover transition-colors"
+                  className="flex-1 px-4 py-2 text-fluux-muted hover:text-fluux-text border border-fluux-border rounded-lg hover:bg-fluux-hover transition-colors"
                 >
                   {t('update.later')}
                 </button>

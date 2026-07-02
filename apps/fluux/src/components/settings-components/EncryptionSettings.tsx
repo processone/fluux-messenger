@@ -923,7 +923,7 @@ export function EncryptionSettings() {
 
         {/* Web locked banner — shown when key exists but no session passphrase */}
         {webLocked && (
-          <div className="flex items-center justify-between gap-3 p-3 rounded-lg bg-fluux-bg border border-fluux-hover">
+          <div className="flex items-center justify-between gap-3 p-3 rounded-lg bg-fluux-bg border border-fluux-border">
             <p className="text-xs text-fluux-text leading-snug flex-1">
               {t('settings.encryption.lockedBannerBody')}
             </p>
@@ -946,7 +946,7 @@ export function EncryptionSettings() {
               className={`rounded-lg border-2 p-3 space-y-2 ${
                 pluginStatus === 'generation-failed' || pluginStatus === 'registration-failed'
                   ? 'border-fluux-red/40 bg-fluux-red/5'
-                  : 'border-fluux-hover bg-fluux-bg'
+                  : 'border-fluux-border bg-fluux-bg'
               }`}
             >
               <div

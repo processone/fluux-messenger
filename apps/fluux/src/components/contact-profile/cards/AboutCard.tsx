@@ -13,7 +13,7 @@ export function AboutCard({ vcard }: AboutCardProps) {
   if (!hasVcard || !vcard) return null
 
   return (
-    <section className="rounded-xl border border-fluux-hover bg-fluux-surface p-3">
+    <section className="rounded-xl border border-fluux-border bg-fluux-surface p-3">
       <h3 className="text-xs font-semibold text-fluux-muted uppercase tracking-wide mb-1 px-1">
         {t('contacts.about')}
       </h3>

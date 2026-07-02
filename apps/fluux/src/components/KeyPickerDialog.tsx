@@ -70,7 +70,7 @@ export function KeyPickerDialog({ candidates, onConfirm, onCancel }: KeyPickerDi
                 className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
                   selected === bundle.fingerprint
                     ? 'border-fluux-brand bg-fluux-brand/10'
-                    : 'border-fluux-hover bg-fluux-bg hover:border-fluux-active'
+                    : 'border-fluux-border bg-fluux-bg hover:border-fluux-active'
                 } ${isInstalling ? 'opacity-50 cursor-not-allowed' : ''}`}
               >
                 <input

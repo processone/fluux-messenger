@@ -11,7 +11,7 @@ export function UpdatesSettings() {
     <section className="w-full max-w-md">
       <SettingsSection title={t('settings.updates')}>
         <div className="space-y-3">
-        <div className="flex items-center justify-between p-4 rounded-lg border-2 border-fluux-hover bg-fluux-bg">
+        <div className="flex items-center justify-between p-4 rounded-lg border-2 border-fluux-border bg-fluux-bg">
           <div className="flex items-center gap-3">
             {update.downloaded ? (
               <CheckCircle className="size-5 text-fluux-green" />

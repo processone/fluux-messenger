@@ -93,14 +93,14 @@ export function ServerOverview() {
                   key={String(card.key)}
                   type="button"
                   onClick={() => adminStore.getState().setActiveCategory(target)}
-                  className="p-4 rounded-xl bg-fluux-bg border border-fluux-hover text-start hover:bg-fluux-hover hover:border-fluux-brand/40 transition-colors tap-target"
+                  className="p-4 rounded-xl bg-fluux-surface border border-fluux-border text-start hover:bg-fluux-hover hover:border-fluux-brand/40 transition-colors tap-target"
                 >
                   {inner}
                 </button>
               )
             }
             return (
-              <div key={String(card.key)} className="p-4 rounded-xl bg-fluux-bg border border-fluux-hover">
+              <div key={String(card.key)} className="p-4 rounded-xl bg-fluux-surface border border-fluux-border">
                 {inner}
               </div>
             )
