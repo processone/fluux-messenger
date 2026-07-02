@@ -1,16 +1,13 @@
 import { useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
-  ChevronRight,
   Users,
-  Megaphone,
   Loader2,
   Server,
   Hash,
-  Settings,
   ShieldOff,
 } from 'lucide-react'
-import { useAdmin, type AdminCategory, type AdminCommand } from '@fluux/sdk'
+import { useAdmin, type AdminCategory } from '@fluux/sdk'
 
 interface AdminDashboardProps {
   activeCategory: AdminCategory | null
@@ -25,11 +22,8 @@ export function AdminDashboard({ activeCategory, onCategoryChange }: AdminDashbo
   const { t } = useTranslation()
   const {
     commands,
-    commandsByCategory,
     serverStats,
     isDiscovering,
-    isExecuting,
-    executeCommand,
     fetchServerStats,
     discoverMucService,
     isAdmin,
@@ -42,21 +36,6 @@ export function AdminDashboard({ activeCategory, onCategoryChange }: AdminDashbo
       void discoverMucService()
     }
   }, [commands.length, fetchServerStats, discoverMucService])
-
-  // Check if we have announcement commands
-  const hasAnnouncements = commandsByCategory.announcement.length > 0
-
-  // Handle command execution (for stats and announcement commands)
-  const handleExecuteCommand = async (node: string) => {
-    try {
-      await executeCommand(node)
-    } catch (error) {
-      console.error('Failed to execute command:', error)
-    }
-  }
-
-  // Check if we have other/uncategorized commands
-  const hasOther = commandsByCategory.other.length > 0
 
   // Show access denied message if user is not an admin
   if (!isAdmin) {
@@ -98,7 +77,6 @@ export function AdminDashboard({ activeCategory, onCategoryChange }: AdminDashbo
         count={serverStats?.registeredUsers}
         isActive={activeCategory === 'users'}
         onClick={() => onCategoryChange(activeCategory === 'users' ? null : 'users')}
-        hasExpandableContent={false}
       />
 
       {/* Rooms Category */}
@@ -108,61 +86,7 @@ export function AdminDashboard({ activeCategory, onCategoryChange }: AdminDashbo
         count={serverStats?.onlineRooms}
         isActive={activeCategory === 'rooms'}
         onClick={() => onCategoryChange(activeCategory === 'rooms' ? null : 'rooms')}
-        hasExpandableContent={false}
       />
-
-      {/* Announcements Category */}
-      {hasAnnouncements && (
-        <>
-          <CategoryButton
-            icon={Megaphone}
-            label={t('admin.categories.announcements')}
-            isActive={activeCategory === 'announcements'}
-            onClick={() => onCategoryChange(activeCategory === 'announcements' ? null : 'announcements')}
-          />
-
-          {/* Announcement commands (shown when announcements is active) */}
-          {activeCategory === 'announcements' && (
-            <div className="ms-6 space-y-0.5 mb-2">
-              {commandsByCategory.announcement.map(cmd => (
-                <CommandButton
-                  key={cmd.node}
-                  command={cmd}
-                  onClick={() => handleExecuteCommand(cmd.node)}
-                  disabled={isExecuting}
-                  highlight
-                />
-              ))}
-            </div>
-          )}
-        </>
-      )}
-
-      {/* Other/Uncategorized Commands */}
-      {hasOther && (
-        <>
-          <CategoryButton
-            icon={Settings}
-            label={t('admin.categories.other')}
-            isActive={activeCategory === 'other'}
-            onClick={() => onCategoryChange(activeCategory === 'other' ? null : 'other')}
-          />
-
-          {/* Other commands (shown when other is active) */}
-          {activeCategory === 'other' && (
-            <div className="ms-6 space-y-0.5 mb-2">
-              {commandsByCategory.other.map(cmd => (
-                <CommandButton
-                  key={cmd.node}
-                  command={cmd}
-                  onClick={() => handleExecuteCommand(cmd.node)}
-                  disabled={isExecuting}
-                />
-              ))}
-            </div>
-          )}
-        </>
-      )}
     </div>
   )
 }
@@ -174,14 +98,12 @@ function CategoryButton({
   count,
   isActive,
   onClick,
-  hasExpandableContent = true,
 }: {
   icon: React.ComponentType<{ className?: string }>
   label: string
   count?: number
   isActive: boolean
   onClick: () => void
-  hasExpandableContent?: boolean
 }) {
   return (
     <button
@@ -203,39 +125,6 @@ function CategoryButton({
           {count.toLocaleString()}
         </span>
       )}
-      {hasExpandableContent && (
-        <ChevronRight className={`size-4 flex-shrink-0 transition-transform
-                                 ${isActive ? 'rotate-90 text-fluux-brand' : 'text-fluux-muted'}`} />
-      )}
-    </button>
-  )
-}
-
-// Command button component
-function CommandButton({
-  command,
-  onClick,
-  disabled,
-  highlight = false,
-}: {
-  command: AdminCommand
-  onClick: () => void
-  disabled: boolean
-  highlight?: boolean
-}) {
-  return (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      className={`w-full px-2 py-1.5 rounded flex items-center justify-between text-start
-                 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed group
-                 ${highlight
-                   ? 'text-fluux-text hover:bg-fluux-brand hover:text-fluux-text-on-accent'
-                   : 'text-fluux-muted hover:bg-fluux-hover hover:text-fluux-text'
-                 }`}
-    >
-      <span className="truncate text-sm">{command.name}</span>
-      <ChevronRight className="size-4 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
     </button>
   )
 }
