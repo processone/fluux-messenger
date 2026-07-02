@@ -424,6 +424,10 @@ vi.mock('@/hooks', () => ({
   // Mirrors the real hook: false when not whispering, otherwise nick presence.
   useWhisperCounterpartPresent: (_roomJid: string, target: { nick: string } | null | undefined) =>
     !!target && !!mockActiveRoom?.occupants?.has(target.nick),
+  // Composer gates typing notifications on "room small enough?" — mirrors the real
+  // hook: occupant count strictly below the threshold.
+  useRoomOccupantCountBelow: (_roomJid: string, threshold: number) =>
+    (mockActiveRoom?.occupants?.size ?? 0) < threshold,
 }))
 
 vi.mock('@/hooks/useRoomJoinWarning', () => ({
