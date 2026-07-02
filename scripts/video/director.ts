@@ -314,18 +314,77 @@ export class Director {
     await this.hold(1200)
   }
 
-  /** Typing → message from a room participant. */
-  async roomBeat(opts: { roomJid: string; nick: string; body: string }): Promise<void> {
-    const id = `demo-vid-room-${this.n}`
+  /** Typing → message from a room participant (optionally a quoted reply). Returns the message id. */
+  async roomBeat(opts: {
+    roomJid: string; nick: string; body: string
+    id?: string
+    replyTo?: { id: string; to: string; fallbackBody: string }
+  }): Promise<string> {
+    const id = opts.id ?? `demo-vid-room-${this.n}`
     await this.fire([{ delayMs: 0, action: 'room-typing', data: { roomJid: opts.roomJid, nick: opts.nick, isTyping: true } }])
     await this.page.waitForTimeout(80)
     await this.hold(1000)
     await this.fire([
       { delayMs: 0, action: 'room-typing', data: { roomJid: opts.roomJid, nick: opts.nick, isTyping: false } },
-      { delayMs: 0, action: 'room-message', data: { roomJid: opts.roomJid, message: { type: 'groupchat', id, from: `${opts.roomJid}/${opts.nick}`, nick: opts.nick, body: opts.body, timestamp: new Date(), isOutgoing: false, roomJid: opts.roomJid }, incrementUnread: true } },
+      { delayMs: 0, action: 'room-message', data: {
+        roomJid: opts.roomJid,
+        message: {
+          type: 'groupchat', id, from: `${opts.roomJid}/${opts.nick}`, nick: opts.nick,
+          body: opts.body, timestamp: new Date(), isOutgoing: false, roomJid: opts.roomJid,
+          ...(opts.replyTo ? { replyTo: opts.replyTo } : {}),
+        },
+        incrementUnread: true,
+      } },
     ])
     await this.page.waitForTimeout(80)
     await this.hold(1300)
+    return id
+  }
+
+  /** Inject a completed outgoing message that carries an image/file attachment. */
+  async attachmentBeat(opts: {
+    conversationId: string; body: string
+    attachment: { url: string; name: string; mediaType: string; size: number; width?: number; height?: number }
+  }): Promise<void> {
+    const id = `demo-vid-file-${this.n}`
+    await this.fire([{ delayMs: 0, action: 'message', data: {
+      message: {
+        type: 'chat', id, from: SELF_JID, body: opts.body,
+        timestamp: new Date(), isOutgoing: true, conversationId: opts.conversationId,
+        attachment: opts.attachment,
+      },
+    } }])
+    await this.page.waitForTimeout(80)
+    await this.hold(1400)
+  }
+
+  /** XEP-0308: correct a message in place (shows the "edited" indicator). */
+  async editMessage(opts: { conversationId: string; messageId: string; body: string }): Promise<void> {
+    await this.fire([{ delayMs: 0, action: 'message-updated', data: {
+      conversationId: opts.conversationId, messageId: opts.messageId,
+      updates: { body: opts.body, isEdited: true },
+    } }])
+    await this.page.waitForTimeout(80)
+    await this.hold(1300)
+  }
+
+  /** XEP-0424: retract (unsend) a message. */
+  async retractMessage(opts: { conversationId: string; messageId: string }): Promise<void> {
+    await this.fire([{ delayMs: 0, action: 'message-updated', data: {
+      conversationId: opts.conversationId, messageId: opts.messageId,
+      updates: { isRetracted: true, retractedAt: new Date() },
+    } }])
+    await this.page.waitForTimeout(80)
+    await this.hold(1500)
+  }
+
+  /** A roster presence change (e.g. a contact coming online). */
+  async presence(opts: { fullJid: string; show: 'chat' | 'away' | 'xa' | 'dnd' | null; priority?: number; client?: string }): Promise<void> {
+    await this.fire([{ delayMs: 0, action: 'presence', data: {
+      fullJid: opts.fullJid, show: opts.show, priority: opts.priority ?? 5, client: opts.client ?? 'Fluux',
+    } }])
+    await this.page.waitForTimeout(80)
+    await this.hold(900)
   }
 
   // ── assembly ─────────────────────────────────────────────────────
