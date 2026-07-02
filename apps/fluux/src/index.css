@@ -950,23 +950,65 @@ html, body {
   box-shadow: 0 0 0 3px hsla(var(--fluux-accent-h), var(--fluux-accent-s), var(--fluux-accent-l), 0.22);
 }
 
-/* Composer action row. One row when the card is wide enough; on narrow widths
- * (phone, narrowed pane) the text field takes the full first line and the
- * controls drop to a toolbar row below — `add`/`lock` at the inline-start,
- * `emoji`/`send` grouped at the inline-end (same order as the wide row).
- * Container-query driven off `.composer-card`; no JS. RTL mirrors automatically
- * because grid-template-areas follows the inline axis. */
+/* Composer action row. On narrow widths (phone, narrowed pane) the input + send
+ * sit on a top row and the secondary controls (+ / lock / emoji) form a drawer
+ * beneath it that is collapsed while idle and extends on focus. On wide widths
+ * it is the single comfortable row. Container-query + :focus-within driven off
+ * `.composer-card`; no JS. RTL mirrors automatically (areas follow the inline
+ * axis). */
 .composer-actions {
   display: grid;
   align-items: center;
-  grid-template-columns: auto auto 1fr auto auto;
+  grid-template-columns: auto 1fr auto;
   grid-template-areas:
-    "input input input input input"
-    "add   lock  .     emoji send";
+    "input input send"
+    "add   lock  emoji";
 }
+
+/* The drawer controls. Expanded height by default; collapsed to zero while the
+ * card is idle. `overflow: hidden` and `visibility: hidden` apply ONLY in the
+ * collapsed state: overflow clips the shrinking icons without ever clipping the
+ * (focus-only) attach/emoji popovers, and visibility removes the collapsed
+ * controls from the tab order / a11y tree so the first Tab into the idle
+ * composer lands on the input (matching the single-row look), not an invisible
+ * `+`. Focusing the input or the always-visible send button reveals the drawer.
+ * 3.5rem must exceed the tallest drawer-row control (an icon button). */
+.composer-drawer-item {
+  max-height: 3.5rem;
+  opacity: 1;
+  visibility: visible;
+  transition: max-height 160ms ease, opacity 160ms ease;
+}
+.composer-card:not(:focus-within) .composer-drawer-item {
+  max-height: 0;
+  opacity: 0;
+  overflow: hidden;
+  pointer-events: none;
+  /* visibility flips to hidden only after the 160ms fade-out completes */
+  visibility: hidden;
+  transition: max-height 160ms ease, opacity 160ms ease, visibility 0s linear 160ms;
+}
+
 @container (min-width: 420px) {
   .composer-actions {
+    grid-template-columns: auto auto 1fr auto auto;
     grid-template-areas: "add lock input emoji send";
+  }
+  /* Wide is a comfortable single row — the drawer is never collapsed. */
+  .composer-card:not(:focus-within) .composer-drawer-item {
+    max-height: none;
+    opacity: 1;
+    overflow: visible;
+    pointer-events: auto;
+    visibility: visible;
+    transition: max-height 160ms ease, opacity 160ms ease;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .composer-drawer-item,
+  .composer-card:not(:focus-within) .composer-drawer-item {
+    transition: none;
   }
 }
 

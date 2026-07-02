@@ -34,4 +34,35 @@ describe('MessageComposer responsive layout', () => {
     const row = screen.getByPlaceholderText('Type a message').closest('.composer-actions')
     expect(row!.innerHTML).toContain('grid-area:lock')
   })
+
+  it('marks the +/emoji controls as collapsible drawer items', () => {
+    render(<MessageComposer placeholder="Type a message" onSend={onSend} />)
+
+    const row = screen.getByPlaceholderText('Type a message').closest('.composer-actions')!
+
+    // No encryption → only the + and emoji wrappers are drawer items.
+    const drawerItems = row.querySelectorAll('.composer-drawer-item')
+    expect(drawerItems.length).toBe(2)
+
+    const add = row.querySelector('[class*="grid-area:add"]')
+    const emoji = row.querySelector('[class*="grid-area:emoji"]')
+    expect(add?.classList.contains('composer-drawer-item')).toBe(true)
+    expect(emoji?.classList.contains('composer-drawer-item')).toBe(true)
+  })
+
+  it('marks the encryption lock as a drawer item when encrypted', () => {
+    render(
+      <MessageComposer
+        placeholder="Type a message"
+        onSend={onSend}
+        encryptionState={{ kind: 'encrypted', fingerprint: 'ABCD1234', trust: 'unverified' }}
+      />
+    )
+
+    const row = screen.getByPlaceholderText('Type a message').closest('.composer-actions')!
+    const lock = row.querySelector('[class*="grid-area:lock"]')
+    expect(lock?.classList.contains('composer-drawer-item')).toBe(true)
+    // + / lock / emoji are all drawer items now.
+    expect(row.querySelectorAll('.composer-drawer-item').length).toBe(3)
+  })
 })
