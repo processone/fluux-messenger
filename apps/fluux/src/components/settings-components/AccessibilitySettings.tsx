@@ -48,7 +48,7 @@ export function AccessibilitySettings() {
                   className={`flex min-h-24 min-w-0 flex-col items-center justify-center gap-2 rounded-lg border-2 p-4 text-center transition-all
                     ${isSelected
                       ? 'border-fluux-brand bg-fluux-brand/10'
-                      : 'border-fluux-hover bg-fluux-bg hover:border-fluux-muted'
+                      : 'border-fluux-border bg-fluux-bg hover:border-fluux-muted'
                     }`}
                 >
                   <Icon className={`size-6 ${isSelected ? 'text-fluux-brand' : 'text-fluux-muted'}`} />
@@ -80,7 +80,7 @@ export function AccessibilitySettings() {
                   className={`flex min-h-24 min-w-0 flex-col items-center justify-center gap-2 rounded-lg border-2 p-4 text-center transition-all
                     ${isSelected
                       ? 'border-fluux-brand bg-fluux-brand/10'
-                      : 'border-fluux-hover bg-fluux-bg hover:border-fluux-muted'
+                      : 'border-fluux-border bg-fluux-bg hover:border-fluux-muted'
                     }`}
                 >
                   <Icon className={`size-6 ${isSelected ? 'text-fluux-brand' : 'text-fluux-muted'}`} />

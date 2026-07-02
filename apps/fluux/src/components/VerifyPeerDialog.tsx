@@ -129,7 +129,7 @@ export function VerifyPeerDialog({
             <label className="block text-sm font-medium text-fluux-text mb-1">
               {t('chat.verifyPeer.myCodeLabel', { name: peerName })}
             </label>
-            <div className="rounded-lg border border-fluux-hover bg-fluux-bg p-3 mb-1 text-center">
+            <div className="rounded-lg border border-fluux-border bg-fluux-bg p-3 mb-1 text-center">
               <code className="text-2xl font-mono font-semibold text-fluux-text tracking-widest">
                 {sas.mine}
               </code>
@@ -175,7 +175,7 @@ export function VerifyPeerDialog({
             )}
           </>
         ) : (
-          <div className="rounded-lg border border-fluux-hover bg-fluux-bg p-3 mb-4">
+          <div className="rounded-lg border border-fluux-border bg-fluux-bg p-3 mb-4">
             <p className="text-xs text-fluux-muted italic">
               {t('chat.verifyPeer.codeUnavailable')}
             </p>
@@ -202,7 +202,7 @@ export function VerifyPeerDialog({
             <label className="block text-sm font-medium text-fluux-text mb-1">
               {t('chat.verifyPeer.peerFingerprintLabel', { name: peerName })}
             </label>
-            <div className="rounded-lg border border-fluux-hover bg-fluux-bg p-2 mb-3">
+            <div className="rounded-lg border border-fluux-border bg-fluux-bg p-2 mb-3">
               <code className="block text-xs font-mono text-fluux-text break-all leading-relaxed">
                 {formatFingerprint(peerFingerprint)}
               </code>
@@ -211,7 +211,7 @@ export function VerifyPeerDialog({
             <label className="block text-sm font-medium text-fluux-text mb-1">
               {t('chat.verifyPeer.ownFingerprintLabel')}
             </label>
-            <div className="rounded-lg border border-fluux-hover bg-fluux-bg p-2 mb-3">
+            <div className="rounded-lg border border-fluux-border bg-fluux-bg p-2 mb-3">
               {ownFingerprint ? (
                 <code className="block text-xs font-mono text-fluux-text break-all leading-relaxed">
                   {formatFingerprint(ownFingerprint)}
@@ -225,7 +225,7 @@ export function VerifyPeerDialog({
 
             <button
               onClick={() => onConfirm(peerFingerprint)}
-              className="w-full flex items-center justify-center gap-1.5 px-4 py-2 text-sm text-fluux-text border border-fluux-hover hover:bg-fluux-hover rounded-lg transition-colors"
+              className="w-full flex items-center justify-center gap-1.5 px-4 py-2 text-sm text-fluux-text border border-fluux-border hover:bg-fluux-hover rounded-lg transition-colors"
             >
               <ShieldCheck className="size-3.5" />
               {t('chat.verifyPeer.confirmByFingerprint')}

@@ -59,7 +59,7 @@ function ThemeCard({
       className={`relative flex flex-col items-center gap-2 p-3 rounded-lg border-2 transition-all text-start
         ${isActive
           ? 'border-fluux-brand bg-fluux-brand/10'
-          : 'border-fluux-hover bg-fluux-bg hover:border-fluux-muted'
+          : 'border-fluux-border bg-fluux-bg hover:border-fluux-muted'
         }`}
     >
       <ThemeSwatches colors={swatches} />
@@ -259,7 +259,7 @@ export function AppearanceSettings() {
                     className={`flex min-h-24 min-w-0 flex-col items-center justify-center gap-2 rounded-lg border-2 p-4 text-center transition-all
                       ${isSelected
                         ? 'border-fluux-brand bg-fluux-brand/10'
-                        : 'border-fluux-hover bg-fluux-bg hover:border-fluux-muted'
+                        : 'border-fluux-border bg-fluux-bg hover:border-fluux-muted'
                       }`}
                   >
                     <Icon className={`size-6 ${isSelected ? 'text-fluux-brand' : 'text-fluux-muted'}`} />
@@ -288,7 +288,7 @@ export function AppearanceSettings() {
                     onClick={() => setDensityMode(option.value)}
                     aria-pressed={isSelected}
                     className={`flex min-h-16 min-w-0 flex-col items-center justify-center gap-2 rounded-lg border-2 p-4 text-center transition-all
-                      ${isSelected ? 'border-fluux-brand bg-fluux-brand/10' : 'border-fluux-hover bg-fluux-bg hover:border-fluux-muted'}`}
+                      ${isSelected ? 'border-fluux-brand bg-fluux-brand/10' : 'border-fluux-border bg-fluux-bg hover:border-fluux-muted'}`}
                   >
                     <span className={`min-w-0 text-sm font-medium leading-tight ${isSelected ? 'text-fluux-text' : 'text-fluux-muted'}`}>
                       {t(option.labelKey)}

@@ -166,7 +166,7 @@ export function BackupPassphraseDialog({
         </div>
 
         {/* Passphrase display */}
-        <div className="rounded-lg border border-fluux-hover bg-fluux-bg p-3 mb-2 min-h-[3.5rem] flex items-center justify-center">
+        <div className="rounded-lg border border-fluux-border bg-fluux-bg p-3 mb-2 min-h-[3.5rem] flex items-center justify-center">
           {passphrase ? (
             isBackupCode ? (
               <code className="text-base font-mono text-fluux-text tracking-wider select-all">

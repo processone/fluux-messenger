@@ -31,7 +31,7 @@ export function PrivacySettings() {
                 className={`w-full text-start px-4 py-2.5 rounded-lg border-2 transition-all
                   ${isSelected
                     ? 'border-fluux-brand bg-fluux-brand/10'
-                    : 'border-fluux-hover bg-fluux-bg hover:border-fluux-muted'
+                    : 'border-fluux-border bg-fluux-bg hover:border-fluux-muted'
                   }`}
               >
                 <span className={`text-sm font-medium ${isSelected ? 'text-fluux-text' : 'text-fluux-muted'}`}>

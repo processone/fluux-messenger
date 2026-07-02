@@ -82,7 +82,7 @@ export function SecurityTab({
             <button
               type="button"
               onClick={onEnableEncryption}
-              className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-fluux-bg hover:bg-fluux-hover text-fluux-text border border-fluux-hover rounded-lg transition-colors text-sm min-h-[44px]"
+              className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-fluux-bg hover:bg-fluux-hover text-fluux-text border border-fluux-border rounded-lg transition-colors text-sm min-h-[44px]"
             >
               <Lock className="size-4" />
               {t('chat.encryption.enableEncryption')}
@@ -132,7 +132,7 @@ export function SecurityTab({
               <button
                 type="button"
                 onClick={onVerify}
-                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-fluux-bg hover:bg-fluux-hover text-fluux-text border border-fluux-hover rounded-lg transition-colors text-sm min-h-[44px]"
+                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-fluux-bg hover:bg-fluux-hover text-fluux-text border border-fluux-border rounded-lg transition-colors text-sm min-h-[44px]"
               >
                 <ShieldCheck className="size-4" />
                 {t('contacts.encryption.verifyButton')}
@@ -153,7 +153,7 @@ export function SecurityTab({
             <button
               type="button"
               onClick={onDisableEncryption}
-              className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-fluux-bg hover:bg-fluux-hover text-fluux-muted border border-fluux-hover rounded-lg transition-colors text-sm min-h-[44px]"
+              className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-fluux-bg hover:bg-fluux-hover text-fluux-muted border border-fluux-border rounded-lg transition-colors text-sm min-h-[44px]"
             >
               <ShieldOff className="size-4" />
               {t('contacts.encryption.disableForContact')}

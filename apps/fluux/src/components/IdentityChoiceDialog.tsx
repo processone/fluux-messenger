@@ -155,7 +155,7 @@ export function IdentityChoiceDialog({
 
         <div className="flex-1 overflow-y-auto min-h-0 px-5">
           {publishedFingerprints.length > 0 && (
-            <div className="mb-4 p-3 rounded-lg bg-fluux-bg/50 border border-fluux-hover">
+            <div className="mb-4 p-3 rounded-lg bg-fluux-bg/50 border border-fluux-border">
               <p className="text-xs text-fluux-muted mb-1">
                 {t('settings.encryption.identityChoice.publishedFingerprintLabel')}
               </p>
@@ -317,10 +317,10 @@ function ChoiceButton({ icon, title, description, onClick, disabled, danger }: C
       disabled={disabled}
       className={`flex items-start gap-3 text-left px-3 py-3 rounded-lg border transition-colors ${
         disabled
-          ? 'opacity-50 cursor-not-allowed border-fluux-hover'
+          ? 'opacity-50 cursor-not-allowed border-fluux-border'
           : danger
           ? 'border-yellow-500/30 hover:bg-yellow-500/5'
-          : 'border-fluux-hover hover:bg-fluux-hover/50'
+          : 'border-fluux-border hover:bg-fluux-hover/50'
       }`}
     >
       <span className="flex-shrink-0 mt-0.5 text-fluux-text">{icon}</span>
