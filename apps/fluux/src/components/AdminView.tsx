@@ -50,6 +50,7 @@ export function AdminView({ activeCategory, onBack }: AdminViewProps) {
     fetchRooms,
     loadMoreRooms,
     resetRoomList,
+    fetchServerStats,
     executeCommandForUser,
     addUser,
     // Vhost support
@@ -265,6 +266,9 @@ export function AdminView({ activeCategory, onBack }: AdminViewProps) {
       setSelectedRoom(null)
       resetRoomList()
       void fetchRooms()
+      // Refresh server stats too: the title/sidebar room counts derive from
+      // serverStats.onlineRooms, which would otherwise stay stale after delete.
+      void fetchServerStats()
     } catch (err) {
       console.error('Failed to destroy room:', err)
     }

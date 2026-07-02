@@ -66,10 +66,11 @@ const adminState = {
 }
 
 const setActiveCategory = vi.fn()
+const destroyRoom = vi.fn().mockResolvedValue(undefined)
 
 vi.mock('@fluux/sdk', () => ({
   useAdmin: () => adminState,
-  useXMPP: () => ({ client: { muc: { destroyRoom: vi.fn() } } }),
+  useXMPP: () => ({ client: { muc: { destroyRoom } } }),
   adminStore: { getState: () => ({ setActiveCategory }) },
 }))
 
@@ -117,6 +118,31 @@ describe('AdminView header back button', () => {
     fireEvent.click(screen.getByLabelText('common.back'))
 
     expect(onBack).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('AdminView room deletion', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    adminState.currentSession = null
+  })
+
+  it('refreshes the server stats after destroying a room so the counts update', async () => {
+    render(<AdminView activeCategory="rooms" onBack={vi.fn()} />)
+
+    // Drill into the room, then open the destroy confirmation.
+    fireEvent.click(screen.getByText('Test Room'))
+    fireEvent.click(screen.getByRole('button', { name: 'admin.roomView.destroy' }))
+
+    // Confirm the destructive action (dialog confirm button shares the label).
+    const confirmButtons = screen.getAllByRole('button', { name: 'admin.roomView.destroy' })
+    fireEvent.click(confirmButtons[confirmButtons.length - 1])
+
+    // The room list is refreshed AND the stats (which back the title/sidebar
+    // counts) are re-fetched so the counts don't go stale.
+    expect(destroyRoom).toHaveBeenCalledWith('testroom@conference.example.com')
+    await vi.waitFor(() => expect(adminState.fetchRooms).toHaveBeenCalled())
+    expect(adminState.fetchServerStats).toHaveBeenCalled()
   })
 })
 
