@@ -73,6 +73,13 @@ export function useRoomActive() {
     return s.roomRuntime.get(s.activeRoomJid)
   })
 
+  // Sliding window: whether the resident window includes the newest message. `false` = slid up
+  // (the load-newer scroll trigger and the jump-to-latest affordance turn on). Absent ⇒ at edge.
+  const activeWindowAtLiveEdge = useRoomStore((s) => {
+    if (!s.activeRoomJid) return true
+    return s.roomRuntime.get(s.activeRoomJid)?.windowAtLiveEdge ?? true
+  })
+
   // Reconstruct the full Room object from entity + meta + runtime.
   // Room extends RoomEntity, RoomMetadata, RoomRuntime — so spreading works.
   const activeRoom = useMemo((): Room | undefined => {
@@ -444,6 +451,21 @@ export function useRoomActive() {
     []
   )
 
+  // Sliding window: load the next-newer cache slice for the active room and append it (evicting
+  // the oldest). Driven by the load-newer scroll trigger when the reader scrolls back down.
+  const loadNewer = useCallback(() => {
+    const id = roomStore.getState().activeRoomJid
+    if (!id) return Promise.resolve([])
+    return roomStore.getState().loadNewerMessagesFromCache(id)
+  }, [])
+
+  // Sliding window: reset the resident window to the newest slice (jump-to-latest affordance).
+  const recenterToLatest = useCallback(() => {
+    const id = roomStore.getState().activeRoomJid
+    if (!id) return Promise.resolve()
+    return roomStore.getState().recenterToLatest(id)
+  }, [])
+
   // --- Return ---
 
   // Memoize actions object to prevent re-renders when only state changes
@@ -480,6 +502,8 @@ export function useRoomActive() {
       updateLastSeenMessageId,
       fetchOlderHistory,
       loadMessagesAround,
+      loadNewer,
+      recenterToLatest,
       continueRoomCatchUp,
       submitRoomConfig,
       setSubject,
@@ -519,6 +543,8 @@ export function useRoomActive() {
       updateLastSeenMessageId,
       fetchOlderHistory,
       loadMessagesAround,
+      loadNewer,
+      recenterToLatest,
       continueRoomCatchUp,
       submitRoomConfig,
       setSubject,
@@ -540,6 +566,7 @@ export function useRoomActive() {
       targetMessageId,
       activeMAMState,
       firstNewMessageId: activeFirstNewMessageId,
+      windowAtLiveEdge: activeWindowAtLiveEdge,
 
       // Actions (spread memoized actions)
       ...actions,
@@ -553,6 +580,7 @@ export function useRoomActive() {
       targetMessageId,
       activeMAMState,
       activeFirstNewMessageId,
+      activeWindowAtLiveEdge,
       actions,
     ]
   )

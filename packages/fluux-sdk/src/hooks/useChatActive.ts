@@ -385,6 +385,28 @@ export function useChatActive() {
     []
   )
 
+  // Sliding window: load the next-newer cache slice for the active conversation and append it
+  // (evicting the oldest). Driven by the load-newer scroll trigger when scrolled back down.
+  const loadNewer = useCallback(() => {
+    const id = chatStore.getState().activeConversationId
+    if (!id) return Promise.resolve([])
+    return chatStore.getState().loadNewerMessagesFromCache(id)
+  }, [])
+
+  // Sliding window: reset the resident window to the newest slice (jump-to-latest affordance).
+  const recenterToLatest = useCallback(() => {
+    const id = chatStore.getState().activeConversationId
+    if (!id) return Promise.resolve()
+    return chatStore.getState().recenterToLatest(id)
+  }, [])
+
+  // Sliding window: whether the resident window includes the newest message. The chat flag is a
+  // Map keyed by conversation; absent ⇒ at edge. `false` = slid up (load-newer trigger + jump-to-latest on).
+  const activeWindowAtLiveEdge = useChatStore((s) => {
+    if (!s.activeConversationId) return true
+    return s.windowAtLiveEdge.get(s.activeConversationId) !== false
+  })
+
   // --- Return ---
 
   const actions = useMemo(
@@ -413,6 +435,8 @@ export function useChatActive() {
       fetchHistory,
       fetchOlderHistory,
       loadMessagesAround,
+      loadNewer,
+      recenterToLatest,
       continueChatCatchUp,
     }),
     [
@@ -421,7 +445,7 @@ export function useChatActive() {
       sendChatState, sendReaction, sendCorrection, retractMessage, retryMessage,
       sendEasterEgg, clearAnimation, clearTargetMessageId, setDraft, getDraft, clearDraft,
       clearFirstNewMessageId, updateLastSeenMessageId, fetchHistory, fetchOlderHistory,
-      loadMessagesAround, continueChatCatchUp,
+      loadMessagesAround, loadNewer, recenterToLatest, continueChatCatchUp,
     ]
   )
 
@@ -436,12 +460,13 @@ export function useChatActive() {
       targetMessageId,
       supportsMAM,
       activeMAMState,
+      windowAtLiveEdge: activeWindowAtLiveEdge,
       ...actions,
     }),
     [
       activeConversationId, activeConversation, activeFirstNewMessageId, activeMessages,
       activeTypingUsers, activeAnimation, targetMessageId, supportsMAM, activeMAMState,
-      actions,
+      activeWindowAtLiveEdge, actions,
     ]
   )
 }
