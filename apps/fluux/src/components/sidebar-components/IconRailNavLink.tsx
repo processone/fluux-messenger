@@ -64,11 +64,11 @@ export function IconRailNavLink({
       >
         <Icon className="size-5" />
         {hasCount ? (
-          <span className="absolute -top-0.5 -end-0.5 min-w-4 h-4 px-1 flex items-center justify-center bg-fluux-red text-white text-[10px] leading-none font-semibold rounded-full border-2 border-fluux-sidebar">
+          <span className="absolute -top-0.5 -end-0.5 min-w-4 h-4 px-1 flex items-center justify-center bg-fluux-red text-white text-[10px] leading-none font-semibold rounded-full ring-2 ring-fluux-sidebar">
             {badgeCount > 99 ? '99+' : badgeCount}
           </span>
         ) : showBadge ? (
-          <span className={`absolute top-0 end-0 size-3 ${dotToneClass} rounded-full border-2 border-fluux-sidebar`} />
+          <span className={`absolute top-0.5 end-0.5 size-2.5 ${dotToneClass} rounded-full ring-2 ring-fluux-sidebar`} />
         ) : null}
       </button>
     </Tooltip>
