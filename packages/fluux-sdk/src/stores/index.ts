@@ -58,7 +58,8 @@ export type { SubscriptionRequest, StrangerMessage, MucInvitation } from '../cor
 
 export { roomStore } from './roomStore'
 export type { RoomState } from './roomStore'
-export { roomSelectors } from './roomSelectors'
+export { roomSelectors, roomActivityTone } from './roomSelectors'
+export type { RoomActivityTone } from './roomSelectors'
 
 export { adminStore } from './adminStore'
 export type { AdminState, AdminCommand, AdminSession, DataForm, DataFormField, AdminNote } from './adminStore'

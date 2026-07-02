@@ -6,6 +6,7 @@ import { detectRenderLoop, trackSelectorChange } from '@/utils/renderLoopDetecto
 import {
   useRoomActions,
   roomStore,
+  roomActivityTone,
   generateConsistentColorHexSync,
 } from '@fluux/sdk'
 import { useChatStore, useRoomStore } from '@fluux/sdk/react'
@@ -428,10 +429,15 @@ const RoomItem = memo(function RoomItem({
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
             <p dir="auto" className={`truncate ${room.unreadCount > 0 ? 'font-semibold text-fluux-text' : 'font-medium'}`}>{room.name}</p>
-            {/* Activity dot for unread (non-mention) activity */}
+            {/* Activity dot for unread (non-mention) activity. Blue for a
+                notify-all room (matches the icon-rail indicator), grey otherwise. */}
             {room.joined && room.unreadCount > 0 && room.mentionsCount === 0 && (
               <Tooltip content={`${room.unreadCount} unread`} position="top">
-                <div className="size-2.5 rounded-full bg-fluux-gray flex-shrink-0" />
+                <div
+                  className={`size-2.5 rounded-full flex-shrink-0 ${
+                    roomActivityTone(room) === 'accent' ? 'bg-fluux-brand' : 'bg-fluux-gray'
+                  }`}
+                />
               </Tooltip>
             )}
             {/* Mentions count badge */}
