@@ -21,8 +21,9 @@ import { xml } from '@xmpp/client'
 import type { Element } from '@xmpp/client'
 import { BaseModule } from './BaseModule'
 import { getBareJid } from '../jid'
-import { NS_PUBSUB, NS_NICK, NS_OPENPGP_PUBLIC_KEYS, NS_BOOKMARKS, NS_MDS } from '../namespaces'
+import { NS_PUBSUB, NS_NICK, NS_OPENPGP_PUBLIC_KEYS, NS_BOOKMARKS, NS_MDS, NS_CONVERSATIONS } from '../namespaces'
 import { parseMdsItems } from './Mds'
+import { parseConversationsItem } from './ConversationSync'
 import { generateUUID } from '../../utils/uuid'
 import { dataToElement, elementToData } from '../e2ee/stanzaAdapter'
 import type { PEPItem, Subscription, XMLElementData } from '../e2ee'
@@ -146,6 +147,13 @@ export class PubSub extends BaseModule {
     // conversation — sync the read position across devices.
     if (node === NS_MDS) {
       this.handleMdsUpdate(bareFrom, items)
+    }
+
+    // Fluux private conversation list. A headline here means another of our
+    // own clients archived/unarchived (or added) a 1:1 conversation — keep
+    // the list in sync live instead of only on the next reconnect's fetch.
+    if (node === NS_CONVERSATIONS) {
+      this.handleConversationsUpdate(bareFrom, items)
     }
 
     // Dispatch to any user-registered subscribers for (bareFrom, node).
@@ -374,6 +382,24 @@ export class PubSub extends BaseModule {
         stanzaId,
       })
     }
+  }
+
+  /**
+   * Fluux private PEP: apply an incoming conversation-list notification from
+   * our own node. Other entities' nodes are ignored (own-account PEP only).
+   * The list is published as a single item (id="current") holding the full
+   * set, so we emit the whole parsed list for the consumer to reconcile.
+   */
+  private handleConversationsUpdate(bareFrom: string, items: Element): void {
+    const ownBareJid = getBareJid(this.deps.getCurrentJid() ?? '')
+    if (!ownBareJid || bareFrom !== ownBareJid) return
+
+    const item = items.getChild('item')
+    if (!item) return
+
+    this.deps.emitSDK('conversation:list-synced', {
+      conversations: parseConversationsItem(item),
+    })
   }
 
   private dispatchToSubscribers(bareFrom: string, node: string, items: Element): void {

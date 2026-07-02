@@ -331,6 +331,86 @@ describe('PubSub Module', () => {
     })
   })
 
+  describe('conversation list incoming notify (Fluux private PEP live sync)', () => {
+    const convEvent = (from: string, convChildren: Array<Record<string, unknown>>) =>
+      createMockElement('message', { from, to: 'user@example.com' }, [
+        {
+          name: 'event',
+          attrs: { xmlns: 'http://jabber.org/protocol/pubsub#event' },
+          children: [
+            {
+              name: 'items',
+              attrs: { node: 'urn:xmpp:fluux:conversations:0' },
+              children: [
+                {
+                  name: 'item',
+                  attrs: { id: 'current' },
+                  children: [
+                    {
+                      name: 'conversations',
+                      attrs: { xmlns: 'urn:xmpp:fluux:conversations:0' },
+                      children: convChildren,
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ])
+
+    it('emits conversation:list-synced for own conversations node notifications', async () => {
+      await connectClient()
+
+      mockXmppClientInstance._emit('stanza', convEvent('user@example.com', [
+        { name: 'conversation', attrs: { jid: 'alice@example.com' } },
+        { name: 'conversation', attrs: { jid: 'bob@example.com', archived: 'true' } },
+      ]))
+
+      expect(emitSDKSpy).toHaveBeenCalledWith('conversation:list-synced', {
+        conversations: [
+          { jid: 'alice@example.com', archived: false },
+          { jid: 'bob@example.com', archived: true },
+        ],
+      })
+    })
+
+    it('ignores conversations notifications that are not from our own bare JID', async () => {
+      await connectClient()
+
+      mockXmppClientInstance._emit('stanza', convEvent('attacker@evil.example', [
+        { name: 'conversation', attrs: { jid: 'bob@example.com', archived: 'true' } },
+      ]))
+
+      expect(emitSDKSpy).not.toHaveBeenCalledWith('conversation:list-synced', expect.anything())
+    })
+
+    it('returns true (handled) for conversations PubSub event messages', async () => {
+      await connectClient()
+
+      const result = xmppClient.pubsub.handle(convEvent('user@example.com', [
+        { name: 'conversation', attrs: { jid: 'alice@example.com' } },
+      ]))
+
+      expect(result).toBe(true)
+    })
+
+    it('applies an incoming archived conversation to the chat store live', async () => {
+      await connectClient()
+
+      mockXmppClientInstance._emit('stanza', convEvent('user@example.com', [
+        { name: 'conversation', attrs: { jid: 'bob@example.com', archived: 'true' } },
+      ]))
+
+      // hasConversation() is mocked false → merge takes the "new conversation"
+      // branch: add it, then archive it, matching the remote device's state.
+      expect(mockStores.chat.addConversation).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'bob@example.com' })
+      )
+      expect(mockStores.chat.archiveConversation).toHaveBeenCalledWith('bob@example.com')
+    })
+  })
+
   describe('stanza handling', () => {
     it('should return true (handled) for PubSub event messages', async () => {
       await connectClient()

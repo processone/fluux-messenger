@@ -790,6 +790,14 @@ export class XMPPClient {
       this.on('rosterLoaded', () => {
         this.profile.restoreAllContactAvatarHashes().catch(() => {})
       })
+
+      // Live conversation-list sync: another of our own devices archived/
+      // unarchived (or added) a 1:1 conversation and the server pushed the
+      // updated PEP list. Reconcile it into the local store immediately,
+      // reusing the same merge path as the fresh-session fetch.
+      this.subscribe('conversation:list-synced', ({ conversations }) => {
+        this.mergeServerConversations(conversations)
+      })
     }
 
     // Start the snapshot subscriber so SM-resumable state (rooms, roster,
