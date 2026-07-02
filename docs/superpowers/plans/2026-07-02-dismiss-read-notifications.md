@@ -14,7 +14,8 @@
 
 - **Worktree path:** all edits go under `/Users/mremond/AIProjects/fluux-messenger/.claude/worktrees/bold-torvalds-ed4819/`. Tool-reported absolute paths may point at the protected MAIN repo — verify the path contains `.claude/worktrees/bold-torvalds-ed4819/` before editing.
 - **macOS notification identifier scheme:** `` `${navType}:${navTarget}` `` — e.g. `conversation:alice@example.com`, `room:team@conf.example.com` (from `macos.rs::encode_identifier`; `navType` never contains `:`).
-- **Plugin / web tag scheme:** conversation → `navTarget` (the conversation id); room → `` `room-${navTarget}` `` (from `useDesktopNotifications.ts:182,238`).
+- **Web tag scheme:** conversation → `navTarget` (the conversation id); room → `` `room-${navTarget}` `` (from `useDesktopNotifications.ts:182,238` — the web `showWebNotification` branch).
+- **Windows/Linux Tauri dismissal is a no-op.** The notification plugin can only reference a sent notification by a 32-bit integer `id` (its send `Options` has no `tag`), so per-conversation removal is not possible there; the notification auto-expires. Only macOS (native) and web (service worker) dismiss.
 - **`navType` values:** the string literals `'conversation'` and `'room'` only.
 - **Best-effort posture:** all removal is a nice-to-have; swallow errors, never surface them to the user (matches the code being replaced).
 - **Rust command is macOS-only:** gate every new Rust item with `#[cfg(target_os = "macos")]`, matching the sibling notification commands. Non-macOS builds compile with `-D warnings`.
@@ -126,16 +127,13 @@ Create `apps/fluux/src/utils/dismissNotification.test.ts`:
 ```ts
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
-const { isMacOSDesktop, invoke, active, removeActive } = vi.hoisted(() => ({
+const { isMacOSDesktop, invoke } = vi.hoisted(() => ({
   isMacOSDesktop: vi.fn(),
   invoke: vi.fn().mockResolvedValue(undefined),
-  active: vi.fn().mockResolvedValue([]),
-  removeActive: vi.fn().mockResolvedValue(undefined),
 }))
 
 vi.mock('@/utils/tauriPlatform', () => ({ isMacOSDesktop }))
 vi.mock('@tauri-apps/api/core', () => ({ invoke }))
-vi.mock('@tauri-apps/plugin-notification', () => ({ active, removeActive }))
 
 import { dismissNotification } from './dismissNotification'
 
@@ -147,7 +145,6 @@ function setTauri(on: boolean) {
 describe('dismissNotification', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    active.mockResolvedValue([])
   })
   afterEach(() => setTauri(false))
 
@@ -169,34 +166,14 @@ describe('dismissNotification', () => {
     })
   })
 
-  it('Windows/Linux Tauri: removes plugin notifications matching the tag', async () => {
+  it('Windows/Linux Tauri: no-op (no native command, no throw)', async () => {
     isMacOSDesktop.mockResolvedValue(false)
     setTauri(true)
-    const match = { id: 1, tag: 'alice@example.com' }
-    active.mockResolvedValue([match, { id: 2, tag: 'room-other@conf' }])
-    await dismissNotification('conversation', 'alice@example.com')
+    await expect(dismissNotification('conversation', 'alice@example.com')).resolves.toBeUndefined()
     expect(invoke).not.toHaveBeenCalled()
-    expect(removeActive).toHaveBeenCalledWith([match])
   })
 
-  it('Windows/Linux Tauri: maps rooms to the room-<jid> tag', async () => {
-    isMacOSDesktop.mockResolvedValue(false)
-    setTauri(true)
-    const match = { id: 3, tag: 'room-team@conf.example.com' }
-    active.mockResolvedValue([match, { id: 4, tag: 'alice@example.com' }])
-    await dismissNotification('room', 'team@conf.example.com')
-    expect(removeActive).toHaveBeenCalledWith([match])
-  })
-
-  it('Windows/Linux Tauri: no-op when no notification matches the tag', async () => {
-    isMacOSDesktop.mockResolvedValue(false)
-    setTauri(true)
-    active.mockResolvedValue([{ id: 9, tag: 'bob@example.com' }])
-    await dismissNotification('conversation', 'alice@example.com')
-    expect(removeActive).not.toHaveBeenCalled()
-  })
-
-  it('Web: closes service-worker notifications matching the tag', async () => {
+  it('Web: closes service-worker notifications matching the conversation tag', async () => {
     isMacOSDesktop.mockResolvedValue(false)
     setTauri(false)
     const close = vi.fn()
@@ -208,6 +185,20 @@ describe('dismissNotification', () => {
     await dismissNotification('conversation', 'alice@example.com')
     expect(getNotifications).toHaveBeenCalledWith({ tag: 'alice@example.com' })
     expect(close).toHaveBeenCalledTimes(2)
+    delete (navigator as unknown as Record<string, unknown>).serviceWorker
+  })
+
+  it('Web: uses the room- tag for rooms', async () => {
+    isMacOSDesktop.mockResolvedValue(false)
+    setTauri(false)
+    const close = vi.fn()
+    const getNotifications = vi.fn().mockResolvedValue([{ close }])
+    Object.defineProperty(navigator, 'serviceWorker', {
+      configurable: true,
+      value: { ready: Promise.resolve({ getNotifications }) },
+    })
+    await dismissNotification('room', 'team@conf.example.com')
+    expect(getNotifications).toHaveBeenCalledWith({ tag: 'room-team@conf.example.com' })
     delete (navigator as unknown as Record<string, unknown>).serviceWorker
   })
 
@@ -240,9 +231,9 @@ function inTauri(): boolean {
   return typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
 }
 
-/** Tag used by the Tauri notification plugin and the web Notification API
- *  (see useDesktopNotifications.ts). Differs from the macOS native identifier. */
-function pluginTag(navType: NavType, navTarget: string): string {
+/** Tag used by the web Notification API (see useDesktopNotifications.ts's
+ *  showWebNotification branch). Differs from the macOS native identifier. */
+function webTag(navType: NavType, navTarget: string): string {
   return navType === 'room' ? `room-${navTarget}` : navTarget
 }
 
@@ -252,7 +243,10 @@ function pluginTag(navType: NavType, navTarget: string): string {
  * and platform-specific:
  * - macOS Tauri: native UNUserNotificationCenter command, keyed by identifier
  *   `"<navType>:<navTarget>"`.
- * - Windows/Linux Tauri: notification plugin, keyed by tag.
+ * - Windows/Linux Tauri: no-op. The notification plugin can only reference a
+ *   sent notification by a 32-bit integer id, not by our JID-based tag, so
+ *   there is no reliable way to remove a single conversation's notification;
+ *   it is left to auto-expire.
  * - Web (PWA): service worker registration, keyed by tag.
  */
 export async function dismissNotification(navType: NavType, navTarget: string): Promise<void> {
@@ -265,18 +259,14 @@ export async function dismissNotification(navType: NavType, navTarget: string): 
       return
     }
 
-    const tag = pluginTag(navType, navTarget)
-
     if (inTauri()) {
-      const { active, removeActive } = await import('@tauri-apps/plugin-notification')
-      const delivered = await active()
-      const matches = delivered.filter((n) => n.tag === tag)
-      if (matches.length > 0) await removeActive(matches)
+      // Windows/Linux Tauri: no per-conversation removal available (see above).
       return
     }
 
     // Web PWA: notifications were posted via ServiceWorkerRegistration.showNotification.
     if (typeof navigator !== 'undefined' && navigator.serviceWorker) {
+      const tag = webTag(navType, navTarget)
       const registration = await navigator.serviceWorker.ready
       const notifications = await registration.getNotifications({ tag })
       notifications.forEach((n) => n.close())
@@ -290,7 +280,7 @@ export async function dismissNotification(navType: NavType, navTarget: string): 
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `cd apps/fluux && npx vitest run src/utils/dismissNotification.test.ts`
-Expected: PASS — all 7 tests green.
+Expected: PASS — all 6 tests green.
 
 - [ ] **Step 5: Commit**
 

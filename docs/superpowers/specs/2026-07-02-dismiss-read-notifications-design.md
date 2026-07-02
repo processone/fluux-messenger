@@ -76,23 +76,27 @@ notification. `clearAllNotifications()` and its `removeAllActive()` call are
 **deleted entirely** (it is the only `removeAllActive` caller in the app) and
 replaced by the scoped, per-platform helper below. No remove-all call remains.
 
-The helper mirrors the **posting** path, which already branches per platform
-(`isMacOSDesktop()` → native command; else plugin; web → service worker). The
+The helper branches per platform, mirroring the **posting** path. The
 `(navType, navTarget)` pair maps to a different token per mechanism:
 
 | Platform / mechanism | Removal token | Source of the scheme |
 | --- | --- | --- |
 | macOS Tauri — native | identifier `` `${navType}:${navTarget}` `` — e.g. `conversation:alice@x`, `room:team@x` | `macos.rs::encode_identifier` |
-| Windows/Linux Tauri — plugin | tag: `navTarget` (conversation) / `` `room-${navTarget}` `` (room) | `useDesktopNotifications.ts:182,238` |
-| Web (PWA) — service worker | same tag as the plugin row | `useDesktopNotifications.ts:182,238` |
+| Windows/Linux Tauri | **no-op** (see note) | — |
+| Web (PWA) — service worker | tag: `navTarget` (conversation) / `` `room-${navTarget}` `` (room) | `useDesktopNotifications.ts:182,238` |
 
-Behaviour — three branches matching the posting logic (reuse the existing
-`isMacOSDesktop()` from `@/utils/tauriPlatform` and the module-local `isTauri`):
+**Why Windows/Linux is a no-op:** the Tauri notification plugin can only
+reference a sent notification by a 32-bit integer `id` (its send `Options` has
+no `tag` field, and the app's `sendNotification` calls set neither). There is no
+reliable way to map a JID to a stable id and remove a single conversation's
+notification, so on Windows/Linux the read simply leaves the OS notification to
+auto-expire. macOS (the primary target) and web PWA both dismiss precisely.
+
+Behaviour — three branches (reuse the existing `isMacOSDesktop()` from
+`@/utils/tauriPlatform`; check Tauri at call time via a local `inTauri()`):
 - **macOS Tauri:** `invoke('remove_delivered_notifications', { identifiers: [\`${navType}:${navTarget}\`] })`.
-- **Windows/Linux Tauri:** plugin — `active()` → filter to entries whose `tag`
-  matches the mapped tag → `removeActive(matches)`. (`removeActive` takes
-  `{ id, tag }[]`; the entries from `active()` carry real ids. No-op if none match.)
-- **Web (`!isTauri`):** `navigator.serviceWorker.ready` →
+- **Windows/Linux Tauri (`inTauri()` && !macOS):** return — no-op.
+- **Web (`!inTauri()`):** `navigator.serviceWorker.ready` →
   `registration.getNotifications({ tag }).then(ns => ns.forEach(n => n.close()))`.
 
 Wrapped in try/catch, best-effort — matching the "silently ignore, nice-to-have"
@@ -130,7 +134,7 @@ user reads conversation
        → dismissNotification('conversation', <jid>)
             ├─ macOS Tauri → invoke remove_delivered_notifications([conversation:<jid>])
             │                  → center.removeDeliveredNotificationsWithIdentifiers([...])
-            ├─ Win/Linux   → plugin active() → filter tag=<jid> → removeActive(matches)
+            ├─ Win/Linux   → no-op (plugin cannot remove by JID; auto-expires)
             └─ web         → registration.getNotifications({tag:<jid>}) → n.close()
   → only that conversation's entry is removed; others remain
 ```
@@ -150,12 +154,11 @@ user reads conversation
   - macOS Tauri branch: mock `isMacOSDesktop → true` + `invoke`, assert it is
     called with `{ identifiers: ['conversation:alice@x'] }` for a conversation
     and `['room:team@x']` for a room.
-  - Win/Linux Tauri branch: mock `isMacOSDesktop → false` + `isTauri` + plugin
-    `active`/`removeActive`; assert it filters by the correct tag
-    (`conv.id` vs `room-<jid>`) and passes the matching entries to `removeActive`.
+  - Win/Linux Tauri branch: mock `isMacOSDesktop → false` + `inTauri → true`;
+    assert it resolves without calling `invoke` (no-op).
   - Web branch: mock `navigator.serviceWorker.ready` / `getNotifications`,
-    assert it queries the correct tag and calls `close()` on the returned
-    notifications.
+    assert it queries the correct tag (`navTarget` vs `room-<jid>`) and calls
+    `close()` on the returned notifications.
   - Assert errors from any branch are swallowed.
 - **Call sites:** assert `navigateToConversation`/`navigateToRoom` invoke the
   helper with the right `(navType, navTarget)`; assert `navigateToContact` no
