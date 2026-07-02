@@ -1132,6 +1132,7 @@
             "delete": "删除用户",
             "changePassword": "更改密码",
             "endSessions": "结束会话",
+            "banAccount": "封禁账户",
             "online": "在线",
             "offline": "离线",
             "onlineNow": "当前在线",
@@ -1146,7 +1147,9 @@
             "confirmDelete": "删除用户",
             "confirmDeleteMessage": "确定要删除 {{jid}} 吗？此操作无法撤销。",
             "confirmEndSessions": "结束会话",
-            "confirmEndSessionsMessage": "确定要结束 {{jid}} 的所有会话吗？用户将被立即断开连接。"
+            "confirmEndSessionsMessage": "确定要结束 {{jid}} 的所有会话吗？用户将被立即断开连接。",
+            "confirmBan": "封禁账户",
+            "confirmBanMessage": "确定要封禁 {{jid}} 吗？这将断开该用户的连接并阻止其再次登录。"
         },
         "roomView": {
             "options": "房间选项",

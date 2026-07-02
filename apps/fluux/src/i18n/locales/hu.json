@@ -1132,6 +1132,7 @@
             "delete": "Felhasználó törlése",
             "changePassword": "Jelszó módosítása",
             "endSessions": "Munkamenetek befejezése",
+            "banAccount": "Fiók letiltása",
             "online": "Online",
             "offline": "Offline",
             "onlineNow": "Online most",
@@ -1146,7 +1147,9 @@
             "confirmDelete": "Felhasználó törlése",
             "confirmDeleteMessage": "Biztosan törölni szeretné a következőt: {{jid}}? Ez a művelet nem vonható vissza.",
             "confirmEndSessions": "Munkamenetek befejezése",
-            "confirmEndSessionsMessage": "Biztosan befejezi {{jid}} összes munkamenetét? A felhasználó azonnal lecsatlakozik."
+            "confirmEndSessionsMessage": "Biztosan befejezi {{jid}} összes munkamenetét? A felhasználó azonnal lecsatlakozik.",
+            "confirmBan": "Fiók letiltása",
+            "confirmBanMessage": "Biztosan letiltja a következőt: {{jid}}? Ez lecsatlakoztatja a felhasználót, és megakadályozza az újbóli bejelentkezést."
         },
         "roomView": {
             "options": "Szobabeállítások",

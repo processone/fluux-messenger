@@ -1132,6 +1132,7 @@
             "delete": "Ta bort användare",
             "changePassword": "Ändra lösenord",
             "endSessions": "Avsluta sessioner",
+            "banAccount": "Blockera konto",
             "online": "Online",
             "offline": "Offline",
             "onlineNow": "Online nu",
@@ -1146,7 +1147,9 @@
             "confirmDelete": "Ta bort användare",
             "confirmDeleteMessage": "Är du säker på att du vill ta bort {{jid}}? Denna åtgärd kan inte ångras.",
             "confirmEndSessions": "Avsluta sessioner",
-            "confirmEndSessionsMessage": "Är du säker på att du vill avsluta alla sessioner för {{jid}}? Användaren kommer att kopplas från omedelbart."
+            "confirmEndSessionsMessage": "Är du säker på att du vill avsluta alla sessioner för {{jid}}? Användaren kommer att kopplas från omedelbart.",
+            "confirmBan": "Blockera konto",
+            "confirmBanMessage": "Är du säker på att du vill blockera {{jid}}? Detta kopplar från användaren och hindrar dem från att logga in igen."
         },
         "roomView": {
             "options": "Rumsalternativ",

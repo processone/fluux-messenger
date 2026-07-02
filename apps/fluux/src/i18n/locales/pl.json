@@ -1134,6 +1134,7 @@
             "delete": "Usuń użytkownika",
             "changePassword": "Zmień hasło",
             "endSessions": "Zakończ sesje",
+            "banAccount": "Zablokuj konto",
             "online": "Online",
             "offline": "Offline",
             "onlineNow": "Online teraz",
@@ -1148,7 +1149,9 @@
             "confirmDelete": "Usuń użytkownika",
             "confirmDeleteMessage": "Czy na pewno chcesz usunąć {{jid}}? Tej akcji nie można cofnąć.",
             "confirmEndSessions": "Zakończ sesje",
-            "confirmEndSessionsMessage": "Czy na pewno chcesz zakończyć wszystkie sesje dla {{jid}}? Użytkownik zostanie natychmiast rozłączony."
+            "confirmEndSessionsMessage": "Czy na pewno chcesz zakończyć wszystkie sesje dla {{jid}}? Użytkownik zostanie natychmiast rozłączony.",
+            "confirmBan": "Zablokuj konto",
+            "confirmBanMessage": "Czy na pewno chcesz zablokować {{jid}}? To rozłączy użytkownika i uniemożliwi mu ponowne zalogowanie."
         },
         "roomView": {
             "options": "Opcje pokoju",

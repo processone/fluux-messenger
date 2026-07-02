@@ -1132,6 +1132,7 @@
             "delete": "Poista käyttäjä",
             "changePassword": "Vaihda salasana",
             "endSessions": "Lopeta istunnot",
+            "banAccount": "Estä tili",
             "online": "Online",
             "offline": "Offline",
             "onlineNow": "Paikalla nyt",
@@ -1146,7 +1147,9 @@
             "confirmDelete": "Poista käyttäjä",
             "confirmDeleteMessage": "Haluatko varmasti poistaa käyttäjän {{jid}}? Tätä toimintoa ei voi perua.",
             "confirmEndSessions": "Lopeta istunnot",
-            "confirmEndSessionsMessage": "Haluatko varmasti lopettaa kaikki istunnot käyttäjälle {{jid}}? Käyttäjä katkaistaan välittömästi."
+            "confirmEndSessionsMessage": "Haluatko varmasti lopettaa kaikki istunnot käyttäjälle {{jid}}? Käyttäjä katkaistaan välittömästi.",
+            "confirmBan": "Estä tili",
+            "confirmBanMessage": "Haluatko varmasti estää käyttäjän {{jid}}? Tämä katkaisee käyttäjän yhteyden ja estää häntä kirjautumasta uudelleen sisään."
         },
         "roomView": {
             "options": "Huoneen asetukset",

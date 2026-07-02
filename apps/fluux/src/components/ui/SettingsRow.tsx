@@ -11,15 +11,30 @@ interface SettingsRowProps {
    * HTML, so do NOT combine `onClick` with an interactive child (Toggle/Select).
    */
   onClick?: () => void
+  /** Renders the label in the destructive (red) color. Caller is responsible for tinting any icon passed as `children` to match. */
+  danger?: boolean
+  /** Disables the row: renders a real disabled `<button>` (native `disabled` attribute), dimmed and unclickable. Only meaningful together with `onClick`. */
+  disabled?: boolean
   children?: ReactNode
   className?: string
 }
 
-export function SettingsRow({ label, description, htmlFor, onClick, children, className = '' }: SettingsRowProps) {
+export function SettingsRow({
+  label,
+  description,
+  htmlFor,
+  onClick,
+  danger = false,
+  disabled = false,
+  children,
+  className = '',
+}: SettingsRowProps) {
   const inner = (
     <>
       <div className="min-w-0">
-        <label htmlFor={htmlFor} className="block text-sm text-fluux-text">{label}</label>
+        <label htmlFor={htmlFor} className={`block text-sm ${danger ? 'text-fluux-error' : 'text-fluux-text'}`}>
+          {label}
+        </label>
         {description && <p className="text-xs text-fluux-muted mt-0.5">{description}</p>}
       </div>
       {children != null && <div className="flex-shrink-0">{children}</div>}
@@ -31,7 +46,8 @@ export function SettingsRow({ label, description, htmlFor, onClick, children, cl
       <button
         type="button"
         onClick={onClick}
-        className={`w-full text-start flex items-center justify-between gap-4 px-4 py-3 hover:bg-fluux-hover transition-colors cursor-pointer ${className}`}
+        disabled={disabled}
+        className={`w-full text-start flex items-center justify-between gap-4 px-4 py-3 hover:bg-fluux-hover transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent ${className}`}
       >
         {inner}
       </button>

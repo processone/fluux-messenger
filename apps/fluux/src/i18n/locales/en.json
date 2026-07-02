@@ -1132,6 +1132,7 @@
             "delete": "Delete user",
             "changePassword": "Change password",
             "endSessions": "End sessions",
+            "banAccount": "Ban account",
             "online": "Online",
             "offline": "Offline",
             "onlineNow": "Online now",
@@ -1146,7 +1147,9 @@
             "confirmDelete": "Delete User",
             "confirmDeleteMessage": "Are you sure you want to delete {{jid}}? This action cannot be undone.",
             "confirmEndSessions": "End Sessions",
-            "confirmEndSessionsMessage": "Are you sure you want to end all sessions for {{jid}}? The user will be disconnected immediately."
+            "confirmEndSessionsMessage": "Are you sure you want to end all sessions for {{jid}}? The user will be disconnected immediately.",
+            "confirmBan": "Ban Account",
+            "confirmBanMessage": "Are you sure you want to ban {{jid}}? This will disconnect the user and prevent them from logging in again."
         },
         "roomView": {
             "options": "Room Options",

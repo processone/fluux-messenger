@@ -1132,6 +1132,7 @@
             "delete": "Slet bruger",
             "changePassword": "Skift adgangskode",
             "endSessions": "Afslut sessioner",
+            "banAccount": "Bloker konto",
             "online": "Online",
             "offline": "Offline",
             "onlineNow": "Online nu",
@@ -1146,7 +1147,9 @@
             "confirmDelete": "Slet bruger",
             "confirmDeleteMessage": "Er du sikker på, at du vil slette {{jid}}? Denne handling kan ikke fortrydes.",
             "confirmEndSessions": "Afslut sessioner",
-            "confirmEndSessionsMessage": "Er du sikker på, at du vil afslutte alle sessioner for {{jid}}? Brugeren vil blive afbrudt øjeblikkeligt."
+            "confirmEndSessionsMessage": "Er du sikker på, at du vil afslutte alle sessioner for {{jid}}? Brugeren vil blive afbrudt øjeblikkeligt.",
+            "confirmBan": "Bloker konto",
+            "confirmBanMessage": "Er du sikker på, at du vil blokere {{jid}}? Dette vil afbryde brugeren og forhindre dem i at logge ind igen."
         },
         "roomView": {
             "options": "Rumindstillinger",

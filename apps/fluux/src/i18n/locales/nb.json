@@ -1132,6 +1132,7 @@
             "delete": "Slett bruker",
             "changePassword": "Endre passord",
             "endSessions": "Avslutt økter",
+            "banAccount": "Blokker konto",
             "online": "Online",
             "offline": "Offline",
             "onlineNow": "Online nå",
@@ -1146,7 +1147,9 @@
             "confirmDelete": "Slett bruker",
             "confirmDeleteMessage": "Er du sikker på at du vil slette {{jid}}? Denne handlingen kan ikke angres.",
             "confirmEndSessions": "Avslutt økter",
-            "confirmEndSessionsMessage": "Er du sikker på at du vil avslutte alle økter for {{jid}}? Brukeren vil bli koblet fra umiddelbart."
+            "confirmEndSessionsMessage": "Er du sikker på at du vil avslutte alle økter for {{jid}}? Brukeren vil bli koblet fra umiddelbart.",
+            "confirmBan": "Blokker konto",
+            "confirmBanMessage": "Er du sikker på at du vil blokkere {{jid}}? Dette vil koble fra brukeren og hindre dem i å logge inn igjen."
         },
         "roomView": {
             "options": "Romalternativer",

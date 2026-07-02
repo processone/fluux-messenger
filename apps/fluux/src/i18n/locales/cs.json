@@ -1134,6 +1134,7 @@
             "delete": "Smazat uživatele",
             "changePassword": "Změnit heslo",
             "endSessions": "Ukončit relace",
+            "banAccount": "Zablokovat účet",
             "online": "Online",
             "offline": "Offline",
             "onlineNow": "Online nyní",
@@ -1148,7 +1149,9 @@
             "confirmDelete": "Smazat uživatele",
             "confirmDeleteMessage": "Opravdu chcete smazat {{jid}}? Tuto akci nelze vrátit zpět.",
             "confirmEndSessions": "Ukončit relace",
-            "confirmEndSessionsMessage": "Opravdu chcete ukončit všechny relace uživatele {{jid}}? Uživatel bude okamžitě odpojen."
+            "confirmEndSessionsMessage": "Opravdu chcete ukončit všechny relace uživatele {{jid}}? Uživatel bude okamžitě odpojen.",
+            "confirmBan": "Zablokovat účet",
+            "confirmBanMessage": "Opravdu chcete zablokovat uživatele {{jid}}? Uživatel bude odpojen a nebude se moci znovu přihlásit."
         },
         "roomView": {
             "options": "Možnosti místnosti",

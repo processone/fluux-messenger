@@ -1134,6 +1134,7 @@
             "delete": "Elimina l'usuari",
             "changePassword": "Canvia el mot de pas",
             "endSessions": "Finalitza sessions",
+            "banAccount": "Bloca el compte",
             "online": "En línia",
             "offline": "Fora de línia",
             "onlineNow": "En línia ara",
@@ -1148,7 +1149,9 @@
             "confirmDelete": "Elimina l'usuari",
             "confirmDeleteMessage": "Segur que vols eliminar {{jid}}? Aquesta acció no es pot desfer.",
             "confirmEndSessions": "Finalitza sessions",
-            "confirmEndSessionsMessage": "Segur que vols finalitzar totes les sessions de {{jid}}? L'usuari serà desconnectat immediatament."
+            "confirmEndSessionsMessage": "Segur que vols finalitzar totes les sessions de {{jid}}? L'usuari serà desconnectat immediatament.",
+            "confirmBan": "Bloca el compte",
+            "confirmBanMessage": "Segur que vols blocar {{jid}}? Aixo desconnectara l'usuari i li impedira tornar a iniciar sessio."
         },
         "roomView": {
             "options": "Opcions de la sala",

@@ -1133,6 +1133,7 @@
             "delete": "Dzēst lietotāju",
             "changePassword": "Mainīt paroli",
             "endSessions": "Beigt sesijas",
+            "banAccount": "Bloķēt kontu",
             "online": "Tiešsaistē",
             "offline": "Bezsaistē",
             "onlineNow": "Tiešsaistē tagad",
@@ -1147,7 +1148,9 @@
             "confirmDelete": "Dzēst lietotāju",
             "confirmDeleteMessage": "Vai tiešām vēlaties dzēst {{jid}}? Šo darbību nevar atsaukt.",
             "confirmEndSessions": "Beigt sesijas",
-            "confirmEndSessionsMessage": "Vai tiešām vēlaties beigt visas sesijas lietotājam {{jid}}? Lietotājs tiks nekavējoties atvienots."
+            "confirmEndSessionsMessage": "Vai tiešām vēlaties beigt visas sesijas lietotājam {{jid}}? Lietotājs tiks nekavējoties atvienots.",
+            "confirmBan": "Bloķēt kontu",
+            "confirmBanMessage": "Vai tiešām vēlaties bloķēt {{jid}}? Tas atvienos lietotāju un neļaus viņam atkal pieteikties."
         },
         "roomView": {
             "options": "Istabas opcijas",

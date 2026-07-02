@@ -1133,6 +1133,7 @@
             "delete": "Supprimer l'utilisateur",
             "changePassword": "Changer le mot de passe",
             "endSessions": "Terminer les sessions",
+            "banAccount": "Bannir le compte",
             "online": "En ligne",
             "offline": "Hors ligne",
             "onlineNow": "En ligne maintenant",
@@ -1147,7 +1148,9 @@
             "confirmDelete": "Supprimer l'utilisateur",
             "confirmDeleteMessage": "Êtes-vous sûr de vouloir supprimer {{jid}} ? Cette action est irréversible.",
             "confirmEndSessions": "Terminer les sessions",
-            "confirmEndSessionsMessage": "Êtes-vous sûr de vouloir terminer toutes les sessions de {{jid}} ? L'utilisateur sera déconnecté immédiatement."
+            "confirmEndSessionsMessage": "Êtes-vous sûr de vouloir terminer toutes les sessions de {{jid}} ? L'utilisateur sera déconnecté immédiatement.",
+            "confirmBan": "Bannir le compte",
+            "confirmBanMessage": "Êtes-vous sûr de vouloir bannir {{jid}} ? Cela déconnectera l'utilisateur et l'empêchera de se reconnecter."
         },
         "roomView": {
             "options": "Options du salon",

@@ -1132,6 +1132,7 @@
             "delete": "Gebruiker verwijderen",
             "changePassword": "Wachtwoord wijzigen",
             "endSessions": "Sessies beeindigen",
+            "banAccount": "Account blokkeren",
             "online": "Online",
             "offline": "Offline",
             "onlineNow": "Nu online",
@@ -1146,7 +1147,9 @@
             "confirmDelete": "Gebruiker verwijderen",
             "confirmDeleteMessage": "Weet je zeker dat je {{jid}} wilt verwijderen? Deze actie kan niet ongedaan worden gemaakt.",
             "confirmEndSessions": "Sessies beeindigen",
-            "confirmEndSessionsMessage": "Weet je zeker dat je alle sessies voor {{jid}} wilt beeindigen? De gebruiker wordt direct losgekoppeld."
+            "confirmEndSessionsMessage": "Weet je zeker dat je alle sessies voor {{jid}} wilt beeindigen? De gebruiker wordt direct losgekoppeld.",
+            "confirmBan": "Account blokkeren",
+            "confirmBanMessage": "Weet je zeker dat je {{jid}} wilt blokkeren? Dit koppelt de gebruiker los en voorkomt dat deze opnieuw kan inloggen."
         },
         "roomView": {
             "options": "Groepsopties",

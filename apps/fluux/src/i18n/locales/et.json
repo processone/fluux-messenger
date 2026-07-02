@@ -1134,6 +1134,7 @@
             "delete": "Kustuta kasutaja",
             "changePassword": "Muuda parooli",
             "endSessions": "Lõpeta seansid",
+            "banAccount": "Blokeeri konto",
             "online": "Online",
             "offline": "Offline",
             "onlineNow": "Praegu online",
@@ -1148,7 +1149,9 @@
             "confirmDelete": "Kustuta kasutaja",
             "confirmDeleteMessage": "Kas oled kindel, et soovid kustutada kasutaja {{jid}}? Seda tegevust ei saa tagasi võtta.",
             "confirmEndSessions": "Lõpeta seansid",
-            "confirmEndSessionsMessage": "Kas oled kindel, et soovid lõpetada kõik kasutaja {{jid}} seansid? Kasutaja ühendus katkestatakse kohe."
+            "confirmEndSessionsMessage": "Kas oled kindel, et soovid lõpetada kõik kasutaja {{jid}} seansid? Kasutaja ühendus katkestatakse kohe.",
+            "confirmBan": "Blokeeri konto",
+            "confirmBanMessage": "Kas oled kindel, et soovid blokeerida kasutaja {{jid}}? See katkestab kasutaja ühenduse ja takistab tal uuesti sisse logimast."
         },
         "roomView": {
             "options": "Toa valikud",

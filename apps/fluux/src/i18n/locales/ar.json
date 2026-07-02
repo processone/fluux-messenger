@@ -1132,6 +1132,7 @@
             "delete": "حذف المستخدم",
             "changePassword": "تغيير كلمة المرور",
             "endSessions": "إنهاء الجلسات",
+            "banAccount": "حظر الحساب",
             "online": "متصل",
             "offline": "غير متصل",
             "onlineNow": "متصل الآن",
@@ -1146,7 +1147,9 @@
             "confirmDelete": "حذف المستخدم",
             "confirmDeleteMessage": "هل أنت متأكد أنك تريد حذف {{jid}}؟ لا يمكن التراجع عن هذا الإجراء.",
             "confirmEndSessions": "إنهاء الجلسات",
-            "confirmEndSessionsMessage": "هل أنت متأكد أنك تريد إنهاء جميع جلسات {{jid}}؟ سيتم قطع اتصال المستخدم فورًا."
+            "confirmEndSessionsMessage": "هل أنت متأكد أنك تريد إنهاء جميع جلسات {{jid}}؟ سيتم قطع اتصال المستخدم فورًا.",
+            "confirmBan": "حظر الحساب",
+            "confirmBanMessage": "هل أنت متأكد أنك تريد حظر {{jid}}؟ سيؤدي هذا إلى قطع اتصال المستخدم ومنعه من تسجيل الدخول مرة أخرى."
         },
         "roomView": {
             "options": "خيارات الغرفة",
