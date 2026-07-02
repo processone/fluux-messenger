@@ -70,13 +70,13 @@ export class Director {
     }
   }
 
-  private setTitle(title: string, sub: string): Promise<void> {
-    return this.page.evaluate(({ title, sub }) => {
+  private setTitle(_title: string, sub: string): Promise<void> {
+    return this.page.evaluate((sub) => {
       const el = document.getElementById('vid-title')
       if (!el) return
-      ;(el.querySelector('.tt') as HTMLElement).textContent = title
-      ;(el.querySelector('.ts') as HTMLElement).textContent = sub
-    }, { title, sub })
+      const s = el.querySelector('.ts') as HTMLElement | null
+      if (s) s.textContent = sub
+    }, sub)
   }
   private setOpacity(id: string, o: number): Promise<void> {
     return this.page.evaluate(({ id, o }) => {

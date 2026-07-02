@@ -8,6 +8,11 @@
  */
 
 import { type Page } from '@playwright/test'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
+
+/** Aurora logo lockup (bubble + wordmark), inlined so it renders with no font/network dependency. */
+const LOCKUP_SVG = readFileSync(resolve('assets/readme/fluux-logo.svg'), 'utf8')
 
 // ── Constants ──────────────────────────────────────────────────────
 
@@ -89,7 +94,7 @@ export async function waitForAppReady(page: Page): Promise<void> {
  * the (frozen) CSS transitions here don't matter — only the initial styles do.
  */
 export async function installPolishLayers(page: Page): Promise<void> {
-  await page.evaluate(() => {
+  await page.evaluate((lockupSvg) => {
     if (document.getElementById('vid-cursor')) return
     const NS = 'http://www.w3.org/2000/svg'
 
@@ -117,8 +122,7 @@ export async function installPolishLayers(page: Page): Promise<void> {
         background: radial-gradient(120% 120% at 50% 30%, #2b2f63 0%, #14152b 55%, #0b0c18 100%);
         font-family: Inter, system-ui, -apple-system, sans-serif; color: #fff;
       }
-      #vid-title img { width: 104px; height: 104px; border-radius: 24px; box-shadow: 0 12px 48px rgba(0,0,0,.5); }
-      #vid-title .tt { font-size: 68px; font-weight: 800; letter-spacing: -1px; }
+      #vid-title .lockup svg { width: 380px; height: auto; filter: drop-shadow(0 12px 48px rgba(0,0,0,.5)); }
       #vid-title .ts { font-size: 26px; font-weight: 500; color: rgba(255,255,255,.82); }
       #vid-veil {
         z-index: 2147483643; inset: 0; opacity: 0;
@@ -142,7 +146,7 @@ export async function installPolishLayers(page: Page): Promise<void> {
 
     const title = document.createElement('div')
     title.id = 'vid-title'
-    title.innerHTML = '<img src="/logo.png" alt=""><div class="tt"></div><div class="ts"></div>'
+    title.innerHTML = `<div class="lockup">${lockupSvg}</div><div class="ts"></div>`
     document.body.appendChild(title)
 
     const veil = document.createElement('div')
@@ -154,6 +158,6 @@ export async function installPolishLayers(page: Page): Promise<void> {
       cursor.style.left = `${e.clientX}px`
       cursor.style.top = `${e.clientY}px`
     }, true)
-  })
+  }, LOCKUP_SVG)
   await page.mouse.move(RENDER_SIZE.width * 0.5, RENDER_SIZE.height * 0.5)
 }
