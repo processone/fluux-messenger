@@ -1144,6 +1144,8 @@
             "title": "Korisnik",
             "manageUser": "Upravljaj korisničkim računom",
             "actions": "Radnje",
+            "account": "Račun",
+            "lastLogin": "Zadnja prijava",
             "confirmDelete": "Obriši korisnika",
             "confirmDeleteMessage": "Jeste li sigurni da želite obrisati {{jid}}? Ova radnja se ne može poništiti.",
             "confirmEndSessions": "Završi sesije",

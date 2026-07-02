@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { AdminUserView } from './AdminUserView'
 import type { AdminUser } from '@fluux/sdk'
 
@@ -10,6 +10,8 @@ vi.mock('react-i18next', () => ({
         'common.close': 'Close',
         'admin.userView.manageUser': 'Manage user account',
         'admin.userView.actions': 'Actions',
+        'admin.userView.account': 'Account',
+        'admin.userView.lastLogin': 'Last login',
         'admin.users.changePassword': 'Change password',
         'admin.users.endSessions': 'End sessions',
         'admin.users.delete': 'Delete user',
@@ -26,6 +28,7 @@ vi.mock('react-i18next', () => ({
       }
       return translations[key] || key
     },
+    i18n: { language: 'en' },
   }),
 }))
 
@@ -40,9 +43,11 @@ describe('AdminUserView', () => {
   const mockOnEndSessions = vi.fn()
   const mockOnChangePassword = vi.fn()
   const mockOnBanAccount = vi.fn()
+  const mockFetchLastLogin = vi.fn()
 
   beforeEach(() => {
     vi.clearAllMocks()
+    mockFetchLastLogin.mockResolvedValue(null)
     document.documentElement.setAttribute('data-motion', 'reduced')
   })
   afterEach(() => {
@@ -60,6 +65,8 @@ describe('AdminUserView', () => {
         onBanAccount={mockOnBanAccount}
         canBanAccount={true}
         isExecuting={false}
+        fetchLastLogin={mockFetchLastLogin}
+        hasLastLoginCommand={true}
         {...overrides}
       />
     )
@@ -86,6 +93,11 @@ describe('AdminUserView', () => {
   })
 
   describe('actions', () => {
+    it('centers the whole view at the same width as the user/room lists, not left-aligned', () => {
+      const { container } = renderView()
+      expect(container.firstElementChild).toHaveClass('w-full', 'max-w-2xl', 'mx-auto')
+    })
+
     it('renders all four action rows when canBanAccount is true', () => {
       renderView()
       expect(screen.getByRole('button', { name: /change password/i })).toBeInTheDocument()
@@ -190,6 +202,50 @@ describe('AdminUserView', () => {
         )
       ).not.toBeInTheDocument()
       expect(mockOnBanAccount).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('last login', () => {
+    it('does not fetch or render when hasLastLoginCommand is false', () => {
+      renderView({ hasLastLoginCommand: false, user: { ...mockUser, isOnline: false } })
+      expect(mockFetchLastLogin).not.toHaveBeenCalled()
+      expect(screen.queryByText('Last login')).not.toBeInTheDocument()
+    })
+
+    it('does not fetch or render when the user is online', () => {
+      renderView({ user: { ...mockUser, isOnline: true } })
+      expect(mockFetchLastLogin).not.toHaveBeenCalled()
+      expect(screen.queryByText('Last login')).not.toBeInTheDocument()
+    })
+
+    it('fetches and shows the raw value for an offline user', async () => {
+      mockFetchLastLogin.mockResolvedValue('2026-06-30 11:45:28')
+      renderView({ user: { ...mockUser, isOnline: false } })
+
+      expect(mockFetchLastLogin).toHaveBeenCalledWith('testuser@example.com', 'en')
+      await waitFor(() => {
+        expect(screen.getByText('2026-06-30 11:45:28')).toBeInTheDocument()
+      })
+      expect(screen.getByText('Last login')).toBeInTheDocument()
+    })
+
+    it('fetches when isOnline is undefined (unknown)', async () => {
+      mockFetchLastLogin.mockResolvedValue('En ligne')
+      renderView({ user: { ...mockUser, isOnline: undefined } })
+
+      await waitFor(() => {
+        expect(screen.getByText('En ligne')).toBeInTheDocument()
+      })
+    })
+
+    it('renders nothing once loaded when the value is unavailable', async () => {
+      mockFetchLastLogin.mockResolvedValue(null)
+      renderView({ user: { ...mockUser, isOnline: false } })
+
+      await waitFor(() => {
+        expect(mockFetchLastLogin).toHaveBeenCalled()
+      })
+      expect(screen.queryByText('Last login')).not.toBeInTheDocument()
     })
   })
 })

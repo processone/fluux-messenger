@@ -5,6 +5,7 @@ import { generateUUID } from '../../utils/uuid'
 import { parseDataForm, getFormFieldValue, getFormFieldValues } from '../../utils/dataForm'
 import { parseRSMResponse, buildRSMElement } from '../../utils/rsm'
 import { HIDDEN_ADMIN_COMMANDS } from '../config'
+import { parseAdminLastLoginTimestamp } from '../admin/parseLastLoginTimestamp'
 import {
   NS_DISCO_ITEMS,
   NS_DISCO_INFO,
@@ -466,17 +467,37 @@ export class Admin extends BaseModule {
     commandName: string,
     overrides?: Record<string, string | string[]>
   ): Promise<DataForm | null> {
+    return this.executeTwoStepCommand(`api-commands/${commandName}`, overrides)
+  }
+
+  /**
+   * Execute a two-step XEP-0050 ad-hoc command (execute → server asks for a
+   * form → complete with submitted values → result form). Shared by
+   * ejabberd's api-commands/* bridge (`executeApiCommand`) and standard
+   * XEP-0133 admin commands that require input (e.g. get-user-lastlogin).
+   * @param node - Full command node, e.g. `api-commands/stats` or
+   *   `http://jabber.org/protocol/admin#get-user-lastlogin`
+   * @param overrides - Field values to submit, keyed by field var; falls back
+   *   to the server-supplied default value when a field has no override
+   * @param lang - Optional `xml:lang` to request localized result text
+   */
+  private async executeTwoStepCommand(
+    node: string,
+    overrides?: Record<string, string | string[]>,
+    lang?: string
+  ): Promise<DataForm | null> {
     const currentJid = this.deps.getCurrentJid()
     if (!currentJid) return null
 
     const domain = getDomain(currentJid)
-    const node = `api-commands/${commandName}`
 
     try {
       // Step 1: Execute command
+      const executeAttrs: Record<string, string> = { type: 'set', to: domain, id: `cmd_${generateUUID()}` }
+      if (lang) executeAttrs['xml:lang'] = lang
       const iq = xml(
         'iq',
-        { type: 'set', to: domain, id: `api_cmd_${generateUUID()}` },
+        executeAttrs,
         xml('command', { xmlns: NS_COMMANDS, node, action: 'execute' })
       )
 
@@ -519,9 +540,11 @@ export class Admin extends BaseModule {
         )
 
         // Step 2: Complete the command with the form
+        const completeAttrs: Record<string, string> = { type: 'set', to: domain, id: `cmd_${generateUUID()}` }
+        if (lang) completeAttrs['xml:lang'] = lang
         const completeIq = xml(
           'iq',
-          { type: 'set', to: domain, id: `api_cmd_${generateUUID()}` },
+          completeAttrs,
           xml('command', { xmlns: NS_COMMANDS, node, sessionid: sessionId, action: 'complete' },
             submitForm
           )
@@ -538,6 +561,46 @@ export class Admin extends BaseModule {
     } catch {
       return null
     }
+  }
+
+  /**
+   * Fetch a user's last-login value via XEP-0133 get-user-lastlogin.
+   * The result is a free-form, server-localized string (e.g. "En ligne" for
+   * an online user, or a formatted date/time for an offline one) — displayed
+   * as-is, never parsed as a duration or timestamp.
+   * @param jid - The account JID to query
+   * @param lang - Optional UI locale to request a localized result (xml:lang)
+   */
+  async fetchUserLastLogin(jid: string, lang?: string): Promise<string | null> {
+    try {
+      const form = await this.executeTwoStepCommand(
+        `${NS_ADMIN}#get-user-lastlogin`,
+        { accountjid: jid },
+        lang
+      )
+      if (!form) return null
+      return getFormFieldValue(form, 'lastlogin') ?? null
+    } catch {
+      return null
+    }
+  }
+
+  /**
+   * Admin-authenticated equivalent of {@link fetchLastActivity}: derives a
+   * seconds-ago value from get-user-lastlogin instead of a peer-to-peer
+   * XEP-0012 query, so it isn't subject to the target server's presence-
+   * subscription privacy gating. Always reports `unsupported: false` — unlike
+   * fetchLastActivity, callers only reach this method after confirming the
+   * command is discovered (hasCommand), so a per-item miss here means "no
+   * data for this account", not "the server lacks the feature".
+   */
+  async fetchUserLastLoginActivity(jid: string, lang?: string): Promise<LastActivityResult> {
+    const raw = await this.fetchUserLastLogin(jid, lang)
+    if (raw == null) return { seconds: null, unsupported: false, raw: null }
+    const ms = parseAdminLastLoginTimestamp(raw)
+    if (ms == null) return { seconds: null, unsupported: false, raw }
+    const seconds = Math.max(0, Math.floor((Date.now() - ms) / 1000))
+    return { seconds, unsupported: false, raw }
   }
 
   // ============================================================================

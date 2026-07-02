@@ -1144,6 +1144,8 @@
             "title": "User",
             "manageUser": "Manage user account",
             "actions": "Actions",
+            "account": "Account",
+            "lastLogin": "Last login",
             "confirmDelete": "Delete User",
             "confirmDeleteMessage": "Are you sure you want to delete {{jid}}? This action cannot be undone.",
             "confirmEndSessions": "End Sessions",

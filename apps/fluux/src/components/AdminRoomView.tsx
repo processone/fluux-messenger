@@ -4,6 +4,7 @@ import { ArrowLeft, Trash2, Settings, Loader2 } from 'lucide-react'
 import type { AdminRoom, DataForm } from '@fluux/sdk'
 import { Tooltip } from './Tooltip'
 import { ConfirmDialog } from './ConfirmDialog'
+import { AdminContentWidth } from './AdminContentWidth'
 
 interface RoomOption {
   name: string
@@ -89,7 +90,7 @@ export function AdminRoomView({
   }
 
   return (
-    <div className="flex-1 flex flex-col min-h-0">
+    <AdminContentWidth className="flex-1 flex flex-col min-h-0">
       {/* Header with back button */}
       <div className="flex items-center gap-3 mb-6">
         <Tooltip content={t('common.close')} position="right">
@@ -180,6 +181,6 @@ export function AdminRoomView({
           onCancel={() => setShowDeleteConfirm(false)}
         />
       )}
-    </div>
+    </AdminContentWidth>
   )
 }

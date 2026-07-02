@@ -1144,6 +1144,8 @@
             "title": "Notandi",
             "manageUser": "Stjórna notandareikningi",
             "actions": "Aðgerðir",
+            "account": "Reikningur",
+            "lastLogin": "Síðasta innskráning",
             "confirmDelete": "Eyða notanda",
             "confirmDeleteMessage": "Ertu viss um að þú viljir eyða {{jid}}? Þessa aðgerð er ekki hægt að afturkalla.",
             "confirmEndSessions": "Ljúka lotum",

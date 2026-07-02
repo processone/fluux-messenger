@@ -1,12 +1,13 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ArrowLeft, Trash2, Power, Key, ShieldOff } from 'lucide-react'
+import { ArrowLeft, Trash2, Power, Key, ShieldOff, Clock } from 'lucide-react'
 import type { AdminUser } from '@fluux/sdk'
 import { Tooltip } from './Tooltip'
 import { ConfirmDialog } from './ConfirmDialog'
 import { SettingsSection } from './ui/SettingsSection'
 import { SettingsGroup } from './ui/SettingsGroup'
 import { SettingsRow } from './ui/SettingsRow'
+import { AdminContentWidth } from './AdminContentWidth'
 
 interface AdminUserViewProps {
   user: AdminUser
@@ -18,6 +19,10 @@ interface AdminUserViewProps {
   /** Discovery-driven: only render the Ban action when the server advertises it. */
   canBanAccount: boolean
   isExecuting: boolean
+  /** Fetch a user's last-login value (raw, server-localized string — not parsed). */
+  fetchLastLogin: (jid: string, lang: string) => Promise<string | null>
+  /** Discovery-driven: only fetch/render last login when the server advertises it. */
+  hasLastLoginCommand: boolean
 }
 
 export function AdminUserView({
@@ -29,11 +34,37 @@ export function AdminUserView({
   onBanAccount,
   canBanAccount,
   isExecuting,
+  fetchLastLogin,
+  hasLastLoginCommand,
 }: AdminUserViewProps) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [showEndSessionsConfirm, setShowEndSessionsConfirm] = useState(false)
   const [showBanConfirm, setShowBanConfirm] = useState(false)
+  const [lastLogin, setLastLogin] = useState<string | null>(null)
+  const [isLoadingLastLogin, setIsLoadingLastLogin] = useState(false)
+
+  // Fetch last login for offline/unknown-status users only — when the user is
+  // online we already show that via the status dot, and showing it again here
+  // (the server's own "lastlogin" value for an online user is a redundant
+  // "online now" string) would just duplicate it.
+  useEffect(() => {
+    setLastLogin(null)
+    if (!hasLastLoginCommand || user.isOnline === true) return
+
+    let cancelled = false
+    setIsLoadingLastLogin(true)
+    void fetchLastLogin(user.jid, i18n.language)
+      .then((value) => {
+        if (!cancelled) setLastLogin(value)
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoadingLastLogin(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [user.jid, user.isOnline, hasLastLoginCommand, fetchLastLogin, i18n.language])
 
   const handleDelete = () => {
     onDeleteUser(user.jid)
@@ -51,7 +82,7 @@ export function AdminUserView({
   }
 
   return (
-    <div className="flex-1 flex flex-col min-h-0">
+    <AdminContentWidth className="flex-1 flex flex-col min-h-0">
       {/* Header with back button */}
       <div className="flex items-center gap-3 mb-6">
         <Tooltip content={t('common.close')} position="right">
@@ -81,6 +112,23 @@ export function AdminUserView({
 
       {/* Actions section */}
       <div className="flex-1 min-h-0 overflow-y-auto">
+        {(isLoadingLastLogin || lastLogin) && (
+          <SettingsSection title={t('admin.userView.account')} className="mb-4">
+            <SettingsGroup>
+              <SettingsRow
+                label={t('admin.userView.lastLogin')}
+                description={isLoadingLastLogin ? undefined : (lastLogin ?? undefined)}
+              >
+                {isLoadingLastLogin ? (
+                  <span className="inline-block h-3 w-16 rounded bg-fluux-hover animate-pulse" aria-hidden="true" />
+                ) : (
+                  <Clock className="size-4 text-fluux-muted" aria-hidden />
+                )}
+              </SettingsRow>
+            </SettingsGroup>
+          </SettingsSection>
+        )}
+
         <SettingsSection title={t('admin.userView.actions')}>
           <SettingsGroup>
             <SettingsRow
@@ -152,6 +200,6 @@ export function AdminUserView({
           onCancel={() => setShowBanConfirm(false)}
         />
       )}
-    </div>
+    </AdminContentWidth>
   )
 }

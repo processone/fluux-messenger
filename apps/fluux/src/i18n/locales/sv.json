@@ -1144,6 +1144,8 @@
             "title": "Användare",
             "manageUser": "Hantera användarkonto",
             "actions": "Åtgärder",
+            "account": "Konto",
+            "lastLogin": "Senaste inloggning",
             "confirmDelete": "Ta bort användare",
             "confirmDeleteMessage": "Är du säker på att du vill ta bort {{jid}}? Denna åtgärd kan inte ångras.",
             "confirmEndSessions": "Avsluta sessioner",

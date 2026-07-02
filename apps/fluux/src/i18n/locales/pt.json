@@ -1146,6 +1146,8 @@
             "title": "Utilizador",
             "manageUser": "Gerir conta do utilizador",
             "actions": "Ações",
+            "account": "Conta",
+            "lastLogin": "Ultimo inicio de sessao",
             "confirmDelete": "Eliminar utilizador",
             "confirmDeleteMessage": "Tem a certeza que pretende eliminar {{jid}}? Esta ação não pode ser anulada.",
             "confirmEndSessions": "Terminar sessões",

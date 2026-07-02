@@ -1146,6 +1146,8 @@
             "title": "Uživatel",
             "manageUser": "Spravovat uživatelský účet",
             "actions": "Akce",
+            "account": "Účet",
+            "lastLogin": "Poslední přihlášení",
             "confirmDelete": "Smazat uživatele",
             "confirmDeleteMessage": "Opravdu chcete smazat {{jid}}? Tuto akci nelze vrátit zpět.",
             "confirmEndSessions": "Ukončit relace",

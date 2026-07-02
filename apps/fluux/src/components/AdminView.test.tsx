@@ -4,7 +4,7 @@ import type { AdminRoom } from '@fluux/sdk'
 
 // Identity translation so we can query by key.
 vi.mock('react-i18next', () => ({
-  useTranslation: () => ({ t: (key: string) => key }),
+  useTranslation: () => ({ t: (key: string) => key, i18n: { language: 'en' } }),
 }))
 
 vi.mock('@/hooks', () => ({
@@ -49,6 +49,7 @@ const adminState = {
   pendingSelectedUserJid: null,
   clearPendingSelectedUserJid: vi.fn(),
   getRoomOptions: vi.fn().mockResolvedValue({ type: 'result', fields: [] }),
+  fetchUserLastLogin: vi.fn().mockResolvedValue(null),
   hasCommand: () => false,
   commands: [{ node: 'stat-node', name: 'Stat', category: 'stats' }],
   commandsByCategory: {
@@ -191,5 +192,47 @@ describe('AdminView breadcrumb', () => {
     // admin.userView.title ("User") must NOT appear as a header — it is only a
     // fallback crumb label for other categories, never the users-list header.
     expect(screen.queryByText('admin.userView.title')).not.toBeInTheDocument()
+  })
+})
+
+// Every admin drill-in screen shares one width/centering treatment
+// (AdminContentWidth) so none of them stretch full-width or sit flush-left
+// on wide panels — see the AdminUserView/AdminRoomView left-align bug.
+describe('AdminView content width', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    adminState.currentSession = null
+  })
+
+  it('centers the users list at the shared admin content width', () => {
+    render(<AdminView activeCategory="users" onBack={vi.fn()} />)
+    const wrapper = screen.getByText('alice@example.com').closest('.max-w-2xl')
+    expect(wrapper).toHaveClass('w-full', 'max-w-2xl', 'mx-auto')
+  })
+
+  it('centers the rooms list at the shared admin content width', () => {
+    render(<AdminView activeCategory="rooms" onBack={vi.fn()} />)
+    const wrapper = screen.getByText('Test Room').closest('.max-w-2xl')
+    expect(wrapper).toHaveClass('w-full', 'max-w-2xl', 'mx-auto')
+  })
+
+  it('centers an executing command form at the shared admin content width', () => {
+    adminState.currentSession = {
+      status: 'executing',
+      form: { title: 'Change password', fields: [] },
+    } as never
+    render(<AdminView activeCategory="users" onBack={vi.fn()} />)
+    const wrapper = screen.getByText('Change password').closest('.max-w-2xl')
+    expect(wrapper).toHaveClass('w-full', 'max-w-2xl', 'mx-auto')
+  })
+
+  it('centers a completed command result at the shared admin content width', () => {
+    adminState.currentSession = {
+      status: 'completed',
+      form: { title: 'Password changed', fields: [] },
+    } as never
+    render(<AdminView activeCategory="users" onBack={vi.fn()} />)
+    const wrapper = screen.getByText('Password changed').closest('.max-w-2xl')
+    expect(wrapper).toHaveClass('w-full', 'max-w-2xl', 'mx-auto')
   })
 })

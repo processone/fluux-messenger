@@ -1146,6 +1146,8 @@
             "title": "Usuari",
             "manageUser": "Gestiona el compte d'usuari",
             "actions": "Accions",
+            "account": "Compte",
+            "lastLogin": "Darrer inici de sessio",
             "confirmDelete": "Elimina l'usuari",
             "confirmDeleteMessage": "Segur que vols eliminar {{jid}}? Aquesta acció no es pot desfer.",
             "confirmEndSessions": "Finalitza sessions",

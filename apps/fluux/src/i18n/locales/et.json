@@ -1146,6 +1146,8 @@
             "title": "Kasutaja",
             "manageUser": "Halda kasutajakontot",
             "actions": "Tegevused",
+            "account": "Konto",
+            "lastLogin": "Viimane sisselogimine",
             "confirmDelete": "Kustuta kasutaja",
             "confirmDeleteMessage": "Kas oled kindel, et soovid kustutada kasutaja {{jid}}? Seda tegevust ei saa tagasi võtta.",
             "confirmEndSessions": "Lõpeta seansid",

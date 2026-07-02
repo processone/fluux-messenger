@@ -1035,6 +1035,22 @@ export class DemoClient extends XMPPClient {
       )
     }
 
+    // get-user-lastlogin: execute → form requiring accountjid; complete →
+    // a raw, server-formatted string (mirrors real ejabberd traffic: "Online"
+    // for an online user, a "YYYY-MM-DD HH:MM:SS" timestamp otherwise).
+    if (node.endsWith('#get-user-lastlogin')) {
+      if (action === 'execute') {
+        return this.buildExecutingFormResponse(node, 'lastlogin-sess', 'accountjid')
+      }
+      const accountjid = this.extractSubmittedFieldValue(commandChild, 'accountjid')
+      const user = accountjid ? this.demoAdminUsers().find((u) => u.jid === accountjid) : undefined
+      if (user?.online) {
+        return this.buildStatFormResponse('lastlogin', 'Online')
+      }
+      const seconds = accountjid ? this.demoLastActivitySeconds(accountjid) : 86400
+      return this.buildStatFormResponse('lastlogin', this.formatDemoTimestamp(Date.now() - seconds * 1000))
+    }
+
     // --- ejabberd two-step api-commands ---
     // muc_online_rooms_count: execute → form requiring `service`; complete → count.
     if (node === 'api-commands/muc_online_rooms_count') {
@@ -1075,6 +1091,22 @@ export class DemoClient extends XMPPClient {
    * requires a single field, so executeApiCommand() submits the override
    * value and then issues the `complete` step.
    */
+  /** Read a submitted field's value from a two-step command's `complete` request. */
+  private extractSubmittedFieldValue(commandChild: any, fieldVar: string): string | undefined {
+    const submittedForm = commandChild?.getChild?.('x', NS_DATA_FORMS)
+    const field = submittedForm
+      ?.getChildren?.('field')
+      ?.find((f: any) => f?.attrs?.var === fieldVar)
+    return field?.getChild?.('value')?.text?.()
+  }
+
+  /** Format an epoch ms as `YYYY-MM-DD HH:MM:SS` (the raw shape ejabberd's get-user-lastlogin returns). */
+  private formatDemoTimestamp(epochMs: number): string {
+    const d = new Date(epochMs)
+    const pad = (n: number) => String(n).padStart(2, '0')
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+  }
+
   private buildExecutingFormResponse(
     node: string,
     sessionId: string,

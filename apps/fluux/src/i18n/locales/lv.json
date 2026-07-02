@@ -1145,6 +1145,8 @@
             "title": "Lietotājs",
             "manageUser": "Pārvaldīt lietotāja kontu",
             "actions": "Darbības",
+            "account": "Konts",
+            "lastLogin": "Pēdējā pieteikšanās",
             "confirmDelete": "Dzēst lietotāju",
             "confirmDeleteMessage": "Vai tiešām vēlaties dzēst {{jid}}? Šo darbību nevar atsaukt.",
             "confirmEndSessions": "Beigt sesijas",

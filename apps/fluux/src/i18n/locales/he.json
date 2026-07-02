@@ -1144,6 +1144,8 @@
             "title": "משתמש",
             "manageUser": "ניהול חשבון משתמש",
             "actions": "פעולות",
+            "account": "חשבון",
+            "lastLogin": "התחברות אחרונה",
             "confirmDelete": "מחיקת משתמש",
             "confirmDeleteMessage": "האם אתה בטוח שברצונך למחוק את {{jid}}? לא ניתן לבטל פעולה זו.",
             "confirmEndSessions": "סיום סשנים",
