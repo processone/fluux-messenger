@@ -10,27 +10,7 @@
 import { useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useChatStore, useRoomStore } from '@fluux/sdk/react'
-
-// Check if we're running in Tauri
-const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
-
-/**
- * Clear all active notifications from the notification center.
- * Called when navigating to a conversation/room so stale notifications are dismissed.
- *
- * Note: removeAllActive() is not available on all platforms (e.g., may not work on macOS).
- * We silently ignore errors since this is a "nice to have" feature.
- */
-async function clearAllNotifications(): Promise<void> {
-  if (!isTauri) return
-
-  try {
-    const { removeAllActive } = await import('@tauri-apps/plugin-notification')
-    await removeAllActive()
-  } catch {
-    // Silently ignore - removeAllActive is not available on all platforms
-  }
-}
+import { dismissNotification } from '@/utils/dismissNotification'
 
 /**
  * Hook that provides navigation functions for switching to conversations and rooms.
@@ -67,7 +47,7 @@ export function useNavigateToTarget() {
    * Navigate to a 1:1 conversation.
    * Uses URL-based navigation (/messages/:jid) and sets active conversation.
    * Optionally scrolls to a specific message.
-   * Clears all active notifications.
+   * Dismisses this conversation's notification.
    */
   const navigateToConversation = (conversationId: string, messageId?: string) => {
     if (messageId) {
@@ -77,26 +57,24 @@ export function useNavigateToTarget() {
     void navigateRef.current(`/messages/${encodeURIComponent(conversationId)}`)
     // Also set active conversation in state
     void activateConversationRef.current(conversationId)
-    void clearAllNotifications()
+    void dismissNotification('conversation', conversationId)
   }
 
   /**
    * Navigate to a contact's profile.
    * Uses URL-based navigation (/contacts/:jid) and clears active conversation/room.
-   * Clears all active notifications.
    */
   const navigateToContact = (jid: string) => {
     void activateConversationRef.current(null)
     void activateRoomRef.current(null)
     void navigateRef.current(`/contacts/${encodeURIComponent(jid)}`)
-    void clearAllNotifications()
   }
 
   /**
    * Navigate to a MUC room.
    * Uses URL-based navigation (/rooms/:jid) and sets active room.
    * Optionally scrolls to a specific message.
-   * Clears all active notifications.
+   * Dismisses this room's notification.
    */
   const navigateToRoom = (roomJid: string, messageId?: string) => {
     if (messageId) {
@@ -106,7 +84,7 @@ export function useNavigateToTarget() {
     void navigateRef.current(`/rooms/${encodeURIComponent(roomJid)}`)
     // Also set active room in state
     void activateRoomRef.current(roomJid)
-    void clearAllNotifications()
+    void dismissNotification('room', roomJid)
   }
 
   return { navigateToConversation, navigateToContact, navigateToRoom }
