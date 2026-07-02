@@ -81,7 +81,7 @@ export function AdminUserView({
 
       {/* Actions section */}
       <div className="flex-1 min-h-0 overflow-y-auto">
-        <SettingsSection title={t('admin.userView.actions')}>
+        <SettingsSection title={t('admin.userView.actions')} className="w-full max-w-md">
           <SettingsGroup>
             <SettingsRow
               label={t('admin.users.changePassword')}
