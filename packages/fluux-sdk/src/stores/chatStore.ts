@@ -208,6 +208,15 @@ interface ChatState {
   // Session-only new-message divider per conversation (jid -> messageId). Derived
   // at activation from lastSeenMessageId; never persisted (absent from serializeState).
   firstNewMessageMarkers: Map<string, string>
+  // Sliding window: whether a conversation's resident `messages` array is at the live
+  // edge (holds the newest history) so an incoming live message can be appended.
+  // Semantics: ABSENT or `true` = at the live edge (append); only an explicit `false`
+  // gates the append in addMessage. Load-older that evicts the newest tail sets `false`;
+  // (re)loading the latest window sets it back true (or deletes the entry).
+  // EPHEMERAL: never persisted (absent from partialize) — on reload the resident array
+  // is rebuilt from the newest window, so a stale `false` would wrongly gate live
+  // messages. This is why the flag lives here and NOT in the persisted conversationMeta.
+  windowAtLiveEdge: Map<string, boolean>
 
   // Computed
   activeConversation: () => Conversation | null
@@ -496,7 +505,7 @@ function deserializeState(persisted: PersistedState): Pick<ChatState, 'conversat
   }
 }
 
-function createEmptyChatState(): Pick<ChatState, 'conversationEntities' | 'conversationMeta' | 'conversations' | 'messages' | 'activeConversationId' | 'activationPending' | 'archivedConversations' | 'typingStates' | 'activeAnimation' | 'drafts' | 'mamQueryStates' | 'conversationGaps' | 'targetMessageId' | 'firstNewMessageMarkers'> {
+function createEmptyChatState(): Pick<ChatState, 'conversationEntities' | 'conversationMeta' | 'conversations' | 'messages' | 'activeConversationId' | 'activationPending' | 'archivedConversations' | 'typingStates' | 'activeAnimation' | 'drafts' | 'mamQueryStates' | 'conversationGaps' | 'targetMessageId' | 'firstNewMessageMarkers' | 'windowAtLiveEdge'> {
   return {
     conversationEntities: new Map(),
     conversationMeta: new Map(),
@@ -512,6 +521,7 @@ function createEmptyChatState(): Pick<ChatState, 'conversationEntities' | 'conve
     conversationGaps: new Map(),
     targetMessageId: null,
     firstNewMessageMarkers: new Map(),
+    windowAtLiveEdge: new Map(),
   }
 }
 
@@ -521,7 +531,7 @@ function createEmptyChatState(): Pick<ChatState, 'conversationEntities' | 'conve
  * Legacy versions stored chat data under a single unscoped key. For safety, we only migrate
  * conversation lists (active + archived classification) and intentionally skip drafts/messages.
  */
-function migrateLegacyConversationListsToScoped(jid: string | null): Pick<ChatState, 'conversationEntities' | 'conversationMeta' | 'conversations' | 'messages' | 'activeConversationId' | 'archivedConversations' | 'typingStates' | 'activeAnimation' | 'drafts' | 'mamQueryStates' | 'conversationGaps' | 'targetMessageId' | 'firstNewMessageMarkers'> | null {
+function migrateLegacyConversationListsToScoped(jid: string | null): Pick<ChatState, 'conversationEntities' | 'conversationMeta' | 'conversations' | 'messages' | 'activeConversationId' | 'archivedConversations' | 'typingStates' | 'activeAnimation' | 'drafts' | 'mamQueryStates' | 'conversationGaps' | 'targetMessageId' | 'firstNewMessageMarkers' | 'windowAtLiveEdge'> | null {
   if (!jid) return null
 
   const legacyKey = getLegacyStorageKey()
@@ -560,7 +570,7 @@ function migrateLegacyConversationListsToScoped(jid: string | null): Pick<ChatSt
   }
 }
 
-function loadScopedChatState(jid: string | null): Pick<ChatState, 'conversationEntities' | 'conversationMeta' | 'conversations' | 'messages' | 'activeConversationId' | 'archivedConversations' | 'typingStates' | 'activeAnimation' | 'drafts' | 'mamQueryStates' | 'conversationGaps' | 'targetMessageId' | 'firstNewMessageMarkers'> {
+function loadScopedChatState(jid: string | null): Pick<ChatState, 'conversationEntities' | 'conversationMeta' | 'conversations' | 'messages' | 'activeConversationId' | 'archivedConversations' | 'typingStates' | 'activeAnimation' | 'drafts' | 'mamQueryStates' | 'conversationGaps' | 'targetMessageId' | 'firstNewMessageMarkers' | 'windowAtLiveEdge'> {
   const baseState = createEmptyChatState()
   const scopedStorageKey = getScopedStorageKey(jid)
 
@@ -872,14 +882,23 @@ export const chatStore = createStore<ChatState>()(
             return { messages: patchedMap }
           }
 
-          // Save to IndexedDB + search index only if the message is locally persistable
+          // Save to IndexedDB + search index only if the message is locally persistable.
+          // This runs regardless of the live-edge gate below: a gated message is still
+          // durable in the cache and reloads on jump-to-latest.
           if (!msg.noLocalStore) {
             void messageCache.saveMessage(msg)
             searchIndex.indexMessage(msg).catch((e) => console.warn('[searchIndex] indexMessage failed:', e))
           }
 
+          // Sliding window: only append the live message to the resident array when the
+          // window is at the live edge. If load-older slid the window up (evicting the
+          // newest tail), appending here would splice a fresh message directly after an
+          // OLD one — a visible false-adjacency gap. When gated we leave the resident
+          // array untouched (the cache write above + the meta/preview/unread updates
+          // below still run). ABSENT or true = at the live edge; only explicit false gates.
+          const atLiveEdge = state.windowAtLiveEdge.get(msg.conversationId) !== false
           const newMessages = new Map(state.messages)
-          newMessages.set(msg.conversationId, [...convMessages, msg])
+          newMessages.set(msg.conversationId, atLiveEdge ? [...convMessages, msg] : convMessages)
 
           const conv = state.conversations.get(msg.conversationId)
           const meta = state.conversationMeta.get(msg.conversationId)
@@ -1626,15 +1645,27 @@ export const chatStore = createStore<ChatState>()(
           const newMessagesMap = new Map(state.messages)
           newMessagesMap.set(conversationId, trimmed)
 
+          // A backward (scroll-up) merge uses keep-oldest and can evict the newest tail,
+          // sliding the window off the live edge (same gate as loadOlderMessagesFromCache).
+          // Forward catch-up keeps the newest, so it never slides.
+          const newestEvicted =
+            direction === 'backward' &&
+            trimmed[trimmed.length - 1]?.id !== existingMessages[existingMessages.length - 1]?.id
+          let newWindowAtLiveEdge = state.windowAtLiveEdge
+          if (newestEvicted) {
+            newWindowAtLiveEdge = new Map(state.windowAtLiveEdge)
+            newWindowAtLiveEdge.set(conversationId, false)
+          }
+
           if (previewUpdate) {
             const newMeta = new Map(state.conversationMeta)
             newMeta.set(conversationId, { ...meta!, lastMessage })
             const newConversations = new Map(state.conversations)
             newConversations.set(conversationId, { ...conv!, lastMessage })
-            return { messages: newMessagesMap, mamQueryStates: newStates, conversationMeta: newMeta, conversations: newConversations, conversationGaps: newGaps }
+            return { messages: newMessagesMap, mamQueryStates: newStates, conversationMeta: newMeta, conversations: newConversations, conversationGaps: newGaps, windowAtLiveEdge: newWindowAtLiveEdge }
           }
 
-          return { messages: newMessagesMap, mamQueryStates: newStates, conversationGaps: newGaps }
+          return { messages: newMessagesMap, mamQueryStates: newStates, conversationGaps: newGaps, windowAtLiveEdge: newWindowAtLiveEdge }
         })
 
         // XEP-0490: a remote displayed marker may have arrived before its message.
@@ -1732,7 +1763,18 @@ export const chatStore = createStore<ChatState>()(
           // used to compute a catch-up cursor for a non-active conversation without
           // pulling its history into RAM (only the active conversation is resident).
           if (!peek && cachedMessages.length > 0) {
-            set((state) => mergeCachedChatMessages(state, conversationId, cachedMessages) ?? state)
+            // A latest-N load (no `before` cursor) makes the newest window resident —
+            // this is the activation / recenter path, so the window is back at the live
+            // edge. Clear any explicit `false` (absent = at the edge). A `before`-anchored
+            // load (deep scroll-back restore) is NOT the live edge and leaves the flag.
+            const recenter = !before
+            set((state) => {
+              const update = mergeCachedChatMessages(state, conversationId, cachedMessages)
+              if (!recenter || !state.windowAtLiveEdge.has(conversationId)) return update ?? state
+              const newWindowAtLiveEdge = new Map(state.windowAtLiveEdge)
+              newWindowAtLiveEdge.delete(conversationId)
+              return { ...(update ?? {}), windowAtLiveEdge: newWindowAtLiveEdge }
+            })
           }
 
           return cachedMessages
@@ -1783,7 +1825,16 @@ export const chatStore = createStore<ChatState>()(
               const newMessagesMap = new Map(state.messages)
               newMessagesMap.set(conversationId, trimmed)
 
-              return { messages: newMessagesMap }
+              // If keep-oldest evicted the newest resident message, the window has slid
+              // off the live edge → gate live appends in addMessage. If the batch fit
+              // under the bound (newest unchanged), leave the flag as-is.
+              const newestEvicted =
+                trimmed[trimmed.length - 1]?.id !== currentMessages[currentMessages.length - 1]?.id
+              if (!newestEvicted) return { messages: newMessagesMap }
+
+              const newWindowAtLiveEdge = new Map(state.windowAtLiveEdge)
+              newWindowAtLiveEdge.set(conversationId, false)
+              return { messages: newMessagesMap, windowAtLiveEdge: newWindowAtLiveEdge }
             })
           }
 

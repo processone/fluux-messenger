@@ -622,6 +622,8 @@ export const roomStore = createStore<RoomState>()(
         nickToJidCache: room.nickToJidCache,
         selfOccupant: room.selfOccupant,
         messages: room.messages,
+        // A room upsert seeds the newest window → at the live edge by default.
+        windowAtLiveEdge: room.windowAtLiveEdge ?? true,
       }
 
       const newRooms = new Map(state.rooms)
@@ -730,6 +732,9 @@ export const roomStore = createStore<RoomState>()(
             affiliatedMembers: updatedRoom.affiliatedMembers,
             selfOccupant: updatedRoom.selfOccupant,
             messages: updatedRoom.messages,
+            // Preserve the live-edge flag across an entity/meta update (a plain field
+            // update must not silently recenter the window).
+            windowAtLiveEdge: existingRuntime.windowAtLiveEdge,
           })
         }
         result.roomRuntime = newRuntime
@@ -1168,8 +1173,17 @@ export const roomStore = createStore<RoomState>()(
         return state // Don't add duplicate message
       }
 
-      // Add message and trim to max count (older ones remain in IndexedDB)
-      const newMessages = trimMessages([...existing.messages, messageToAdd], RESIDENT_WINDOW_SIZE)
+      // Sliding window: only append the live message to the resident array when the
+      // window is at the live edge. If load-older slid the window up (evicting the
+      // newest tail), appending here would splice a fresh message directly after an
+      // OLD one — a visible false-adjacency gap. When gated we leave the resident
+      // array untouched; the message is still persisted to IndexedDB (above) and the
+      // sidebar preview / unread badge still update. It reloads on jump-to-latest.
+      const atLiveEdge = state.roomRuntime.get(roomJid)?.windowAtLiveEdge !== false
+      // The append is also the basis for the newest-message preview; compute it either
+      // way (it is only STORED when at the live edge).
+      const appendedMessages = trimMessages([...existing.messages, messageToAdd], RESIDENT_WINDOW_SIZE)
+      const newMessages = atLiveEdge ? appendedMessages : existing.messages
 
       // Delegate notification state to pure function
       const isActive = state.activeRoomJid === roomJid
@@ -1197,8 +1211,10 @@ export const roomStore = createStore<RoomState>()(
         { incrementUnread, incrementMentions }
       )
 
-      // Get the last non-ignored message for sidebar preview
-      const lastMessage = findLastNonIgnoredMessage(newMessages, roomJid, existing.nickToJidCache) ?? existing.lastMessage
+      // Get the last non-ignored message for sidebar preview. Use the appended set
+      // (not the possibly-gated resident array) so the preview still advances to the
+      // incoming message even when the window has slid off the live edge.
+      const lastMessage = findLastNonIgnoredMessage(appendedMessages, roomJid, existing.nickToJidCache) ?? existing.lastMessage
 
       // Update lastInteractedAt so the room bubbles up in the sidebar:
       // - Active room: always update (user is viewing it)
@@ -1820,6 +1836,7 @@ export const roomStore = createStore<RoomState>()(
           notifyAllPersistent: bookmark.notifyAll,
           occupants: new Map(),
           messages: [],
+          windowAtLiveEdge: true,
           unreadCount: 0,
           mentionsCount: 0,
           typingUsers: new Set(),
@@ -1849,6 +1866,7 @@ export const roomStore = createStore<RoomState>()(
         newRuntime.set(roomJid, {
           occupants: new Map(),
           messages: [],
+          windowAtLiveEdge: true,
         })
       }
       return { rooms: newRooms, roomEntities: newEntities, roomMeta: newMeta, roomRuntime: newRuntime }
@@ -2046,8 +2064,23 @@ export const roomStore = createStore<RoomState>()(
       // store. Used to compute a catch-up cursor for a non-active room without
       // breaking the invariant that only the active room is resident in RAM.
       if (!options.peek && cachedMessages.length > 0) {
+        // A latest-N load (no `before` cursor) makes the newest window resident — this
+        // is the activation / recenter path, so the window is back at the live edge.
+        // A `before`-anchored load (deep scroll-back restore) is NOT the live edge.
+        const recenter = queryOptions.latest
         // Merge with existing messages in memory using the shared helper
-        set((state) => mergeCachedRoomMessages(state, roomJid, cachedMessages) ?? state)
+        set((state) => {
+          const update = mergeCachedRoomMessages(state, roomJid, cachedMessages)
+          if (!recenter) return update ?? state
+          // Recenter: force the flag true (even when the merge was a no-op because the
+          // newest window was already resident).
+          const baseRuntime = update?.roomRuntime ?? state.roomRuntime
+          const runtime = baseRuntime.get(roomJid)
+          if (!runtime) return update ?? state
+          const newRuntime = new Map(baseRuntime)
+          newRuntime.set(roomJid, { ...runtime, windowAtLiveEdge: true })
+          return { ...(update ?? {}), roomRuntime: newRuntime }
+        })
       }
       return cachedMessages
     } catch (error) {
@@ -2115,13 +2148,23 @@ export const roomStore = createStore<RoomState>()(
           const sorted = sortMessagesByTimestamp(combined)
           const merged = trimMessagesKeepOldest(sorted, RESIDENT_WINDOW_SIZE)
 
+          // If keep-oldest evicted the newest resident message, the window has slid off
+          // the live edge → gate live appends in addMessage. If the batch fit under the
+          // bound (newest unchanged), leave the flag as-is.
+          const newestEvicted =
+            merged[merged.length - 1]?.id !== existing.messages[existing.messages.length - 1]?.id
+
           newRooms.set(roomJid, { ...existing, messages: merged })
 
           // Update runtime
           const newRuntime = new Map(state.roomRuntime)
           const existingRuntime = newRuntime.get(roomJid)
           if (existingRuntime) {
-            newRuntime.set(roomJid, { ...existingRuntime, messages: merged })
+            newRuntime.set(roomJid, {
+              ...existingRuntime,
+              messages: merged,
+              ...(newestEvicted ? { windowAtLiveEdge: false } : {}),
+            })
           }
 
           return { rooms: newRooms, roomRuntime: newRuntime }
@@ -2298,10 +2341,21 @@ export const roomStore = createStore<RoomState>()(
       const newRooms = new Map(state.rooms)
       newRooms.set(roomJid, { ...room, messages: merged, lastMessage })
 
+      // A backward (scroll-up) merge uses keep-oldest and can evict the newest tail,
+      // sliding the window off the live edge (same gate as loadOlderMessagesFromCache).
+      // Forward catch-up keeps the newest, so it never slides.
+      const newestEvicted =
+        direction === 'backward' &&
+        merged[merged.length - 1]?.id !== existingMessages[existingMessages.length - 1]?.id
+
       const newRuntime = new Map(state.roomRuntime)
       const existingRuntime = newRuntime.get(roomJid)
       if (existingRuntime) {
-        newRuntime.set(roomJid, { ...existingRuntime, messages: merged })
+        newRuntime.set(roomJid, {
+          ...existingRuntime,
+          messages: merged,
+          ...(newestEvicted ? { windowAtLiveEdge: false } : {}),
+        })
       }
 
       return { rooms: newRooms, roomRuntime: newRuntime, roomMeta: newMeta, mamQueryStates: newStates, roomGaps: newGaps }
