@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import type { DataForm } from '@fluux/sdk'
+import { getLocalPart, getDomain, type DataForm } from '@fluux/sdk'
 import { AlertCircle, Info, AlertTriangle, User, X } from 'lucide-react'
 import { Tooltip } from './Tooltip'
 import { FormField } from './DataFormFields'
@@ -34,14 +34,24 @@ export function AdminCommandForm({
 }: AdminCommandFormProps) {
   const { t } = useTranslation()
 
-  // Initialize form state from field values, pre-filling accountjid if targetJid is set
+  // Some commands (XEP-0133) take a single `accountjid` field; ejabberd's own
+  // api-commands (ban_account, unban_account, kick_session, ...) instead take
+  // separate `user`/`host` fields. Only treat user/host as JID-derived when
+  // both are present — a lone `user` field on some other command shouldn't be
+  // guessed at.
+  const hasSplitJidFields = form.fields.some(f => f.var === 'user') && form.fields.some(f => f.var === 'host')
+
+  // Initialize form state from field values, pre-filling target-JID fields if targetJid is set
   const [formData, setFormData] = useState<Record<string, string | string[]>>(() => {
     const initial: Record<string, string | string[]> = {}
     for (const field of form.fields) {
       if (field.type === 'hidden' || field.type === 'fixed') continue
-      // Pre-fill accountjid with targetJid
       if (field.var === 'accountjid' && targetJid) {
         initial[field.var] = targetJid
+      } else if (field.var === 'user' && targetJid && hasSplitJidFields) {
+        initial[field.var] = getLocalPart(targetJid)
+      } else if (field.var === 'host' && targetJid && hasSplitJidFields) {
+        initial[field.var] = getDomain(targetJid)
       } else {
         initial[field.var] = field.value ?? (field.type === 'list-multi' || field.type === 'jid-multi' || field.type === 'text-multi' ? [] : '')
       }
@@ -67,11 +77,13 @@ export function AdminCommandForm({
     onSubmit(submitData)
   }
 
-  // Filter out hidden fields for display
-  // Also filter out accountjid when targetJid is set (shown separately at top)
+  // Filter out hidden fields for display. Also filter out the target-JID
+  // field(s) — accountjid, or user+host together — when targetJid is set
+  // (shown separately at top instead).
   const visibleFields = form.fields.filter(f => {
     if (f.type === 'hidden') return false
     if (f.var === 'accountjid' && targetJid) return false
+    if ((f.var === 'user' || f.var === 'host') && targetJid && hasSplitJidFields) return false
     return true
   })
 
