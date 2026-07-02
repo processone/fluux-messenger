@@ -367,7 +367,7 @@ export function AdminView({ activeCategory, onBack }: AdminViewProps) {
     // Show entity lists based on active category
     if (activeCategory === 'users') {
       return (
-        <div className="flex-1 flex flex-col min-h-0">
+        <div className="flex-1 flex flex-col min-h-0 w-full max-w-2xl mx-auto">
           {/* Vhost selector - only show when multiple vhosts available */}
           {vhosts.length > 1 && (
             <div className="mb-3">
@@ -453,24 +453,26 @@ export function AdminView({ activeCategory, onBack }: AdminViewProps) {
       }
 
       return (
-        <EntityListView
-          title={t('admin.roomList.title')}
-          items={filteredRooms}
-          isLoading={roomList.isLoading}
-          hasMore={hasMoreRooms && !roomSearchQuery}
-          searchValue={roomSearchQuery}
-          totalCount={serverStats?.onlineRooms}
-          onSearchChange={setRoomSearchQuery}
-          onLoadMore={loadMoreRooms}
-          emptyMessage={t('admin.roomList.noRooms')}
-          keyExtractor={(room) => room.jid}
-          renderItem={(room) => (
-            <RoomListItem
-              room={room}
-              onSelect={setSelectedRoom}
-            />
-          )}
-        />
+        <div className="flex-1 flex flex-col min-h-0 w-full max-w-2xl mx-auto">
+          <EntityListView
+            title={t('admin.roomList.title')}
+            items={filteredRooms}
+            isLoading={roomList.isLoading}
+            hasMore={hasMoreRooms && !roomSearchQuery}
+            searchValue={roomSearchQuery}
+            totalCount={serverStats?.onlineRooms}
+            onSearchChange={setRoomSearchQuery}
+            onLoadMore={loadMoreRooms}
+            emptyMessage={t('admin.roomList.noRooms')}
+            keyExtractor={(room) => room.jid}
+            renderItem={(room) => (
+              <RoomListItem
+                room={room}
+                onSelect={setSelectedRoom}
+              />
+            )}
+          />
+        </div>
       )
     }
 

@@ -69,12 +69,16 @@ function UserListItemImpl({ user, onSelect, requestLastActivity }: UserListItemP
       className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-fluux-hover
                  transition-colors text-start"
     >
-      {showDot && (
-        <span
-          className={`size-2 rounded-full shrink-0 ${isOnline ? 'bg-fluux-green' : 'bg-fluux-muted'}`}
-          aria-label={isOnline ? t('admin.users.online') : t('admin.users.offline')}
-        />
-      )}
+      {showDot &&
+        (isOnline ? (
+          <span
+            className="size-2 rounded-full shrink-0 bg-fluux-green"
+            aria-label={t('admin.users.online')}
+          />
+        ) : (
+          // Offline is implicit: no grey dot, just a spacer to keep JIDs aligned.
+          <span className="size-2 shrink-0" aria-hidden="true" />
+        ))}
       <div className="flex-1 min-w-0">
         <p className="text-sm text-fluux-text truncate">{user.jid}</p>
       </div>
