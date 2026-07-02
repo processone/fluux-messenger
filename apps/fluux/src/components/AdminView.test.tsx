@@ -4,7 +4,7 @@ import type { AdminRoom } from '@fluux/sdk'
 
 // Identity translation so we can query by key.
 vi.mock('react-i18next', () => ({
-  useTranslation: () => ({ t: (key: string) => key }),
+  useTranslation: () => ({ t: (key: string) => key, i18n: { language: 'en' } }),
 }))
 
 vi.mock('@/hooks', () => ({
@@ -49,6 +49,7 @@ const adminState = {
   pendingSelectedUserJid: null,
   clearPendingSelectedUserJid: vi.fn(),
   getRoomOptions: vi.fn().mockResolvedValue({ type: 'result', fields: [] }),
+  fetchUserLastLogin: vi.fn().mockResolvedValue(null),
   hasCommand: () => false,
   commands: [{ node: 'stat-node', name: 'Stat', category: 'stats' }],
   commandsByCategory: {

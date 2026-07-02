@@ -1145,6 +1145,8 @@
             "title": "Používateľ",
             "manageUser": "Spravovať používateľský účet",
             "actions": "Akcie",
+            "account": "Účet",
+            "lastLogin": "Posledné prihlásenie",
             "confirmDelete": "Vymazať používateľa",
             "confirmDeleteMessage": "Ste si istí, že chcete vymazať {{jid}}? Túto akciu nie je možné vrátiť späť.",
             "confirmEndSessions": "Ukončiť relácie",

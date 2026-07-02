@@ -1144,6 +1144,8 @@
             "title": "Bruger",
             "manageUser": "Administrer brugerkonto",
             "actions": "Handlinger",
+            "account": "Konto",
+            "lastLogin": "Sidste login",
             "confirmDelete": "Slet bruger",
             "confirmDeleteMessage": "Er du sikker på, at du vil slette {{jid}}? Denne handling kan ikke fortrydes.",
             "confirmEndSessions": "Afslut sessioner",

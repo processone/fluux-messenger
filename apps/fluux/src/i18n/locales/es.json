@@ -1146,6 +1146,8 @@
             "title": "Usuario",
             "manageUser": "Gestionar cuenta de usuario",
             "actions": "Acciones",
+            "account": "Cuenta",
+            "lastLogin": "Ultimo inicio de sesion",
             "confirmDelete": "Eliminar Usuario",
             "confirmDeleteMessage": "Estas seguro de que quieres eliminar a {{jid}}? Esta accion no se puede deshacer.",
             "confirmEndSessions": "Cerrar Sesiones",

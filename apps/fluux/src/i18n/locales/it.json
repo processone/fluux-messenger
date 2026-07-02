@@ -1146,6 +1146,8 @@
             "title": "Utente",
             "manageUser": "Gestisci account utente",
             "actions": "Azioni",
+            "account": "Account",
+            "lastLogin": "Ultimo accesso",
             "confirmDelete": "Elimina utente",
             "confirmDeleteMessage": "Sei sicuro di voler eliminare {{jid}}? Questa azione non puo essere annullata.",
             "confirmEndSessions": "Termina sessioni",

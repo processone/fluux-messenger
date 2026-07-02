@@ -1146,6 +1146,8 @@
             "title": "Użytkownik",
             "manageUser": "Zarządzaj kontem użytkownika",
             "actions": "Akcje",
+            "account": "Konto",
+            "lastLogin": "Ostatnie logowanie",
             "confirmDelete": "Usuń użytkownika",
             "confirmDeleteMessage": "Czy na pewno chcesz usunąć {{jid}}? Tej akcji nie można cofnąć.",
             "confirmEndSessions": "Zakończ sesje",
