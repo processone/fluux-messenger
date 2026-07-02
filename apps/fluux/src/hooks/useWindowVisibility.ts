@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { connectionStore, chatStore, roomStore } from '@fluux/sdk'
+import { dismissNotification } from '@/utils/dismissNotification'
 
 /**
  * Hook to track window focus and update the SDK store.
@@ -28,10 +29,12 @@ export function useWindowVisibility(): void {
         const activeConversationId = chatStore.getState().activeConversationId
         if (activeConversationId) {
           chatStore.getState().markAsRead(activeConversationId)
+          void dismissNotification('conversation', activeConversationId)
         }
         const activeRoomJid = roomStore.getState().activeRoomJid
         if (activeRoomJid) {
           roomStore.getState().markAsRead(activeRoomJid)
+          void dismissNotification('room', activeRoomJid)
         }
       }
     }
