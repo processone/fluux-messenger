@@ -122,10 +122,8 @@ vi.mock('@tauri-apps/plugin-deep-link', () => ({
   getCurrent: () => mockGetCurrent(),
 }))
 
-// Mock the notification plugin to prevent errors from clearAllNotifications
-vi.mock('@tauri-apps/plugin-notification', () => ({
-  removeAllActive: vi.fn().mockResolvedValue(undefined),
-}))
+// Mock the dismissal helper (useNavigateToTarget calls it on navigation)
+vi.mock('@/utils/dismissNotification', () => ({ dismissNotification: vi.fn() }))
 
 // Track location changes
 const currentLocation = { current: { pathname: '/', search: '' } }
@@ -153,9 +151,6 @@ function createWrapper(initialPath = '/') {
 describe('useDeepLink', () => {
   let useDeepLink: typeof import('./useDeepLink').useDeepLink
 
-  // Suppress expected console.warn from clearAllNotifications in test environment
-  const originalWarn = console.warn
-
   beforeEach(() => {
     vi.clearAllMocks()
     mockHasConversation.mockReturnValue(false)
@@ -163,13 +158,10 @@ describe('useDeepLink', () => {
     mockJoinRoom.mockResolvedValue(undefined)
     mockJoinResult.mockResolvedValue(undefined)
     currentLocation.current = { pathname: '/', search: '' }
-    // Suppress "[Navigation] Failed to clear notifications" warnings in tests
-    console.warn = vi.fn()
   })
 
   afterEach(() => {
     vi.resetModules()
-    console.warn = originalWarn
   })
 
   describe('in non-Tauri environment', () => {

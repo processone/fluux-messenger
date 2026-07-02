@@ -36,10 +36,9 @@ vi.mock('@fluux/sdk/react', () => ({
   useContactTime: () => null, useLastActivity: vi.fn(),
 }))
 
-// Mock Tauri notification plugin (avoid import errors)
-vi.mock('@tauri-apps/plugin-notification', () => ({
-  removeAllActive: vi.fn(),
-}))
+// Mock the per-conversation dismissal helper
+const { dismissNotification } = vi.hoisted(() => ({ dismissNotification: vi.fn() }))
+vi.mock('@/utils/dismissNotification', () => ({ dismissNotification }))
 
 // Track location changes
 const currentLocation = { current: { pathname: '/', search: '' } }
@@ -114,6 +113,16 @@ describe('useNavigateToTarget', () => {
       expect(currentLocation.current.pathname).toContain('/messages/')
       expect(mockState.activateConversation).toHaveBeenCalledWith('user+tag@example.com/resource')
     })
+
+    it('dismisses the conversation notification', () => {
+      const { result } = renderHook(() => useNavigateToTarget(), {
+        wrapper: createWrapper('/messages'),
+      })
+      act(() => {
+        result.current.navigateToConversation('alice@example.com')
+      })
+      expect(dismissNotification).toHaveBeenCalledWith('conversation', 'alice@example.com')
+    })
   })
 
   describe('navigateToRoom', () => {
@@ -167,6 +176,16 @@ describe('useNavigateToTarget', () => {
 
       expect(mockState.setRoomTargetMessageId).not.toHaveBeenCalled()
     })
+
+    it('dismisses the room notification', () => {
+      const { result } = renderHook(() => useNavigateToTarget(), {
+        wrapper: createWrapper('/rooms'),
+      })
+      act(() => {
+        result.current.navigateToRoom('general@conference.example.com')
+      })
+      expect(dismissNotification).toHaveBeenCalledWith('room', 'general@conference.example.com')
+    })
   })
 
   describe('navigateToContact', () => {
@@ -194,6 +213,16 @@ describe('useNavigateToTarget', () => {
       expect(mockState.activateConversation).toHaveBeenCalledWith(null)
       expect(mockState.activateRoom).toHaveBeenCalledWith(null)
       expect(currentLocation.current.pathname).toBe('/contacts/bob%40example.com')
+    })
+
+    it('does not dismiss any notification (not a conversation read)', () => {
+      const { result } = renderHook(() => useNavigateToTarget(), {
+        wrapper: createWrapper('/messages'),
+      })
+      act(() => {
+        result.current.navigateToContact('bob@example.com')
+      })
+      expect(dismissNotification).not.toHaveBeenCalled()
     })
   })
 
