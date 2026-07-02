@@ -212,6 +212,9 @@ export function parseOobData(stanza: Element): FileAttachment | undefined {
       'wmv': 'video/x-ms-wmv', '3gp': 'video/3gpp', 'ogv': 'video/ogg',
       // Documents
       'pdf': 'application/pdf',
+      // DjVu: registered under image/* by IANA but browsers cannot render it,
+      // so map straight to the application/ type used for the file card.
+      'djvu': 'application/x-djvu', 'djv': 'application/x-djvu',
     }
     mediaType = ext ? mimeMap[ext] : undefined
   }
