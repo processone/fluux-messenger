@@ -866,7 +866,7 @@ export function MessageComposer({
         />
 
         {/* Attach menu — combines attachment + poll into a single "+" button */}
-        <div className="relative [grid-area:add]" ref={attachMenuRef}>
+        <div className="relative [grid-area:add] composer-drawer-item" ref={attachMenuRef}>
           {uploadState?.isUploading ? (
             /* During upload, show spinner directly instead of the menu toggle */
             <button type="button" disabled className="p-3 text-fluux-brand">
@@ -931,12 +931,12 @@ export function MessageComposer({
               data-encryption-lock
               onClick={onEncryptionClick}
               aria-label={lockInfo.label}
-              className="p-1.5 flex-shrink-0 rounded-lg hover:bg-fluux-bg transition-colors [grid-area:lock]"
+              className="p-1.5 flex-shrink-0 rounded-lg hover:bg-fluux-bg transition-colors [grid-area:lock] composer-drawer-item"
             >
               <lockInfo.Icon className="size-4" style={{ color: lockInfo.color }} />
             </button>
           ) : (
-            <span data-encryption-lock aria-label={lockInfo.label} className="p-1.5 flex-shrink-0 [grid-area:lock]">
+            <span data-encryption-lock aria-label={lockInfo.label} className="p-1.5 flex-shrink-0 [grid-area:lock] composer-drawer-item">
               <lockInfo.Icon className="size-4" style={{ color: lockInfo.color }} />
             </span>
           )
@@ -961,7 +961,7 @@ export function MessageComposer({
         )}
 
         {/* Emoji button */}
-        <div className="relative [grid-area:emoji]" ref={emojiPickerRef}>
+        <div className="relative [grid-area:emoji] composer-drawer-item" ref={emojiPickerRef}>
           <button
             type="button"
             onClick={() => setShowEmojiPicker(!showEmojiPicker)}
