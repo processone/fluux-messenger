@@ -38,7 +38,12 @@ const COMPOSING_UI_TIMEOUT_MS = 1500
 // outline (index.css): the composer card's own `:focus-within` accent edge is the
 // focus affordance now, so the textarea's inner outline would be a doubled ring.
 // The action buttons keep their outlines for keyboard navigation.
-export const MESSAGE_INPUT_BASE_CLASSES = 'message-input no-focus-ring flex-1 px-2 py-3 bg-transparent resize-none overflow-y-auto'
+// Default to overflow-y-hidden: a scrollbar is only meaningful once the content
+// reaches the 8-line cap. resizeToContent() flips overflow-y to `auto` at max
+// height. Starting at `auto` makes Blink (mobile Brave) paint a scrollbar track
+// for even a single line, since the integer height we write can round below the
+// fractional content height. Desktop WebKit hides this behind overlay scrollbars.
+export const MESSAGE_INPUT_BASE_CLASSES = 'message-input no-focus-ring flex-1 px-2 py-3 bg-transparent resize-none overflow-y-hidden'
 export const MESSAGE_INPUT_TEXT_CLASSES = 'text-fluux-text placeholder:text-fluux-muted'
 // For overlay-based inputs (e.g., mention highlighting) - text is transparent, caret visible via style
 export const MESSAGE_INPUT_OVERLAY_CLASSES = 'text-transparent placeholder:text-fluux-muted'
@@ -358,9 +363,10 @@ export function MessageComposer({
     const mayShrink = forceRemeasure || (couldShrink && lastSetHeightRef.current > minHeight)
 
     const savedScrollTop = textarea.scrollTop
-    // Only collapse to `auto` when a shrink is possible. With overflow-y:auto,
-    // scrollHeight reflects the full content height even without the reset, so
-    // growth is still detected — without dirtying the surrounding layout.
+    // Only collapse to `auto` when a shrink is possible. Even with overflow-y
+    // hidden, scrollHeight still reflects the full content height without the
+    // reset, so growth is still detected — without dirtying the surrounding
+    // layout.
     if (mayShrink) textarea.style.height = 'auto'
     const scrollHeight = textarea.scrollHeight
     const newHeight = Math.min(Math.max(scrollHeight, minHeight), maxHeight)
@@ -368,9 +374,15 @@ export function MessageComposer({
     // Fast path: a non-shrinking edit that leaves the height unchanged touched
     // nothing, so there is no height to write, no scroll to restore, and no
     // listener to notify. This is what keeps continuous typing off the
-    // message-list reflow path.
+    // message-list reflow path. Overflow only flips at the max-height boundary,
+    // which always changes newHeight, so it never needs updating on this path.
     if (!mayShrink && newHeight === lastSetHeightRef.current) return
 
+    // Only allow scrolling once content reaches the cap. Below the cap the
+    // textarea grows to fit, so a scrollbar is spurious (and Blink/mobile Brave
+    // paints one for a single line when the integer height rounds under the real
+    // content height). At the cap the content genuinely overflows → auto.
+    textarea.style.overflowY = scrollHeight > maxHeight ? 'auto' : 'hidden'
     textarea.style.height = `${newHeight}px`
     lastSetHeightRef.current = newHeight
 
