@@ -14,6 +14,8 @@ vi.mock('react-i18next', () => ({
         'admin.users.endSessions': 'End sessions',
         'admin.users.delete': 'Delete user',
         'admin.users.banAccount': 'Ban account',
+        'admin.users.online': 'Online',
+        'admin.users.offline': 'Offline',
         'admin.userView.confirmDelete': 'Delete User',
         'admin.userView.confirmDeleteMessage': `Are you sure you want to delete ${params?.jid}? This action cannot be undone.`,
         'admin.userView.confirmEndSessions': 'End Sessions',
@@ -62,20 +64,104 @@ describe('AdminUserView', () => {
       />
     )
 
-  describe('ban account', () => {
-    it('does not render the ban action when the command is not available', () => {
+  describe('status indicator', () => {
+    it('shows Online with a dot when isOnline is true', () => {
+      renderView({ user: { ...mockUser, isOnline: true } })
+      expect(screen.getByText('Online')).toBeInTheDocument()
+      expect(screen.queryByText('Manage user account')).not.toBeInTheDocument()
+    })
+
+    it('shows Offline with a dot when isOnline is false', () => {
+      renderView({ user: { ...mockUser, isOnline: false } })
+      expect(screen.getByText('Offline')).toBeInTheDocument()
+      expect(screen.queryByText('Manage user account')).not.toBeInTheDocument()
+    })
+
+    it('falls back to the generic caption when isOnline is undefined', () => {
+      renderView({ user: { ...mockUser, isOnline: undefined } })
+      expect(screen.getByText('Manage user account')).toBeInTheDocument()
+      expect(screen.queryByText('Online')).not.toBeInTheDocument()
+      expect(screen.queryByText('Offline')).not.toBeInTheDocument()
+    })
+  })
+
+  describe('actions', () => {
+    it('renders all four action rows when canBanAccount is true', () => {
+      renderView()
+      expect(screen.getByRole('button', { name: /change password/i })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /end sessions/i })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /ban account/i })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /delete user/i })).toBeInTheDocument()
+    })
+
+    it('omits the ban row when canBanAccount is false', () => {
       renderView({ canBanAccount: false })
       expect(screen.queryByText('Ban account')).not.toBeInTheDocument()
     })
 
-    it('renders the ban action when the command is available', () => {
+    it('calls onChangePassword directly with the JID, no confirmation', () => {
       renderView()
-      expect(screen.getByText('Ban account')).toBeInTheDocument()
+      fireEvent.click(screen.getByRole('button', { name: /change password/i }))
+      expect(mockOnChangePassword).toHaveBeenCalledWith('testuser@example.com')
     })
 
+    it('disables all action rows while isExecuting', () => {
+      renderView({ isExecuting: true })
+      expect(screen.getByRole('button', { name: /change password/i })).toBeDisabled()
+      expect(screen.getByRole('button', { name: /end sessions/i })).toBeDisabled()
+      expect(screen.getByRole('button', { name: /ban account/i })).toBeDisabled()
+      expect(screen.getByRole('button', { name: /delete user/i })).toBeDisabled()
+    })
+  })
+
+  describe('end sessions', () => {
     it('shows a confirmation dialog when clicked', () => {
       renderView()
-      fireEvent.click(screen.getByText('Ban account'))
+      fireEvent.click(screen.getByRole('button', { name: /end sessions/i }))
+      expect(
+        screen.getByText(
+          'Are you sure you want to end all sessions for testuser@example.com? The user will be disconnected immediately.'
+        )
+      ).toBeInTheDocument()
+    })
+
+    it('calls onEndSessions with the JID when confirmed', () => {
+      renderView()
+      fireEvent.click(screen.getByRole('button', { name: /end sessions/i }))
+      const confirmButton = screen
+        .getAllByRole('button')
+        .find(btn => btn.textContent === 'End sessions' && btn.className.includes('bg-orange-500'))
+      expect(confirmButton).toBeDefined()
+      fireEvent.click(confirmButton!)
+      expect(mockOnEndSessions).toHaveBeenCalledWith('testuser@example.com')
+    })
+  })
+
+  describe('delete user', () => {
+    it('shows a confirmation dialog when clicked', () => {
+      renderView()
+      fireEvent.click(screen.getByRole('button', { name: /delete user/i }))
+      expect(
+        screen.getByText('Are you sure you want to delete testuser@example.com? This action cannot be undone.')
+      ).toBeInTheDocument()
+    })
+
+    it('calls onDeleteUser with the JID when confirmed', () => {
+      renderView()
+      fireEvent.click(screen.getByRole('button', { name: /delete user/i }))
+      const confirmButton = screen
+        .getAllByRole('button')
+        .find(btn => btn.textContent === 'Delete user' && btn.className.includes('bg-red-500'))
+      expect(confirmButton).toBeDefined()
+      fireEvent.click(confirmButton!)
+      expect(mockOnDeleteUser).toHaveBeenCalledWith('testuser@example.com')
+    })
+  })
+
+  describe('ban account', () => {
+    it('shows a confirmation dialog when clicked', () => {
+      renderView()
+      fireEvent.click(screen.getByRole('button', { name: /ban account/i }))
       expect(
         screen.getByText(
           'Are you sure you want to ban testuser@example.com? This will disconnect the user and prevent them from logging in again.'
@@ -85,35 +171,25 @@ describe('AdminUserView', () => {
 
     it('calls onBanAccount with the JID when confirmed', () => {
       renderView()
-      fireEvent.click(screen.getByText('Ban account'))
-
-      const allButtons = screen.getAllByRole('button')
-      const confirmButton = allButtons.find(
-        btn => btn.textContent === 'Ban Account' && btn.className.includes('bg-red-500 ')
-      )
+      fireEvent.click(screen.getByRole('button', { name: /ban account/i }))
+      const confirmButton = screen
+        .getAllByRole('button')
+        .find(btn => btn.textContent === 'Ban Account' && btn.className.includes('bg-red-500'))
       expect(confirmButton).toBeDefined()
       fireEvent.click(confirmButton!)
-
       expect(mockOnBanAccount).toHaveBeenCalledWith('testuser@example.com')
     })
 
     it('closes the dialog on cancel without calling onBanAccount', () => {
       renderView()
-      fireEvent.click(screen.getByText('Ban account'))
+      fireEvent.click(screen.getByRole('button', { name: /ban account/i }))
       fireEvent.click(screen.getByText('Cancel'))
-
       expect(
         screen.queryByText(
           'Are you sure you want to ban testuser@example.com? This will disconnect the user and prevent them from logging in again.'
         )
       ).not.toBeInTheDocument()
       expect(mockOnBanAccount).not.toHaveBeenCalled()
-    })
-
-    it('disables the ban button while isExecuting', () => {
-      renderView({ isExecuting: true })
-      const banButton = screen.getByText('Ban account').closest('button')
-      expect(banButton).toBeDisabled()
     })
   })
 })

@@ -4,6 +4,9 @@ import { ArrowLeft, Trash2, Power, Key, ShieldOff } from 'lucide-react'
 import type { AdminUser } from '@fluux/sdk'
 import { Tooltip } from './Tooltip'
 import { ConfirmDialog } from './ConfirmDialog'
+import { SettingsSection } from './ui/SettingsSection'
+import { SettingsGroup } from './ui/SettingsGroup'
+import { SettingsRow } from './ui/SettingsRow'
 
 interface AdminUserViewProps {
   user: AdminUser
@@ -63,69 +66,60 @@ export function AdminUserView({
         </Tooltip>
         <div className="flex-1 min-w-0">
           <h2 className="text-lg font-semibold font-display text-fluux-text truncate">{user.jid}</h2>
-          <p className="text-sm text-fluux-muted">{t('admin.userView.manageUser')}</p>
+          {user.isOnline === undefined ? (
+            <p className="text-sm text-fluux-muted">{t('admin.userView.manageUser')}</p>
+          ) : (
+            <div className="flex items-center gap-2">
+              <span className={`size-2 rounded-full ${user.isOnline ? 'bg-fluux-green' : 'bg-fluux-muted'}`} />
+              <span className="text-sm text-fluux-text">
+                {t(user.isOnline ? 'admin.users.online' : 'admin.users.offline')}
+              </span>
+            </div>
+          )}
         </div>
       </div>
 
       {/* Actions section */}
       <div className="flex-1 min-h-0 overflow-y-auto">
-        <div className="bg-fluux-bg rounded-lg p-4">
-          <h3 className="text-sm font-medium text-fluux-muted mb-3">
-            {t('admin.userView.actions')}
-          </h3>
-
-          <div className="space-y-2">
-            {/* Change Password */}
-            <button
+        <SettingsSection title={t('admin.userView.actions')}>
+          <SettingsGroup>
+            <SettingsRow
+              label={t('admin.users.changePassword')}
               onClick={() => onChangePassword(user.jid)}
               disabled={isExecuting}
-              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg
-                         bg-fluux-hover hover:bg-fluux-sidebar text-fluux-text
-                         disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
-              <Key className="size-4 text-fluux-muted" />
-              <span className="text-sm">{t('admin.users.changePassword')}</span>
-            </button>
+              <Key className="size-4 text-fluux-muted" aria-hidden />
+            </SettingsRow>
 
-            {/* End Sessions */}
-            <button
+            <SettingsRow
+              label={t('admin.users.endSessions')}
               onClick={() => setShowEndSessionsConfirm(true)}
               disabled={isExecuting}
-              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg
-                         bg-fluux-hover hover:bg-fluux-sidebar text-fluux-text
-                         disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
-              <Power className="size-4 text-fluux-muted" />
-              <span className="text-sm">{t('admin.users.endSessions')}</span>
-            </button>
+              <Power className="size-4 text-fluux-muted" aria-hidden />
+            </SettingsRow>
 
-            {/* Ban Account */}
             {canBanAccount && (
-              <button
+              <SettingsRow
+                label={t('admin.users.banAccount')}
                 onClick={() => setShowBanConfirm(true)}
                 disabled={isExecuting}
-                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg
-                           bg-fluux-red/10 hover:bg-fluux-red/20 text-fluux-red
-                           disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                danger
               >
-                <ShieldOff className="size-4" />
-                <span className="text-sm">{t('admin.users.banAccount')}</span>
-              </button>
+                <ShieldOff className="size-4 text-fluux-error" aria-hidden />
+              </SettingsRow>
             )}
 
-            {/* Delete User */}
-            <button
+            <SettingsRow
+              label={t('admin.users.delete')}
               onClick={() => setShowDeleteConfirm(true)}
               disabled={isExecuting}
-              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg
-                         bg-fluux-red/10 hover:bg-fluux-red/20 text-fluux-red
-                         disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              danger
             >
-              <Trash2 className="size-4" />
-              <span className="text-sm">{t('admin.users.delete')}</span>
-            </button>
-          </div>
-        </div>
+              <Trash2 className="size-4 text-fluux-error" aria-hidden />
+            </SettingsRow>
+          </SettingsGroup>
+        </SettingsSection>
       </div>
 
       {showDeleteConfirm && (
