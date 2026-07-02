@@ -237,6 +237,23 @@ pub fn post(n: NativeNotification) -> Result<(), String> {
     Ok(())
 }
 
+/// Remove already-delivered notifications from Notification Center by their
+/// identifiers (see `encode_identifier`). Called when a conversation/room is
+/// read so its stale entry disappears. Best-effort: no-op when the process is
+/// not app-bundled (`current_center()` returns `None`) or when an identifier
+/// has no matching delivered notification.
+pub fn remove_delivered(identifiers: Vec<String>) {
+    let Some(center) = current_center() else {
+        return;
+    };
+    use objc2_foundation::NSArray;
+    // Keep the NSStrings alive in `ids` while `refs` borrows them for the call.
+    let ids: Vec<Retained<NSString>> = identifiers.iter().map(|s| NSString::from_str(s)).collect();
+    let refs: Vec<&NSString> = ids.iter().map(|s| &**s).collect();
+    let array = NSArray::from_slice(&refs);
+    center.removeDeliveredNotificationsWithIdentifiers(&array);
+}
+
 fn map_status(status: UNAuthorizationStatus) -> AuthState {
     // Provisional/Ephemeral both permit delivery, so treat them as granted.
     if status == UNAuthorizationStatus::Authorized

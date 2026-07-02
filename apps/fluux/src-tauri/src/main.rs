@@ -1429,7 +1429,9 @@ fn main() {
             #[cfg(target_os = "macos")]
             notifications::take_pending_notification_target,
             #[cfg(target_os = "macos")]
-            notifications::set_notification_listener_ready
+            notifications::set_notification_listener_ready,
+            #[cfg(target_os = "macos")]
+            notifications::remove_delivered_notifications
         ])
         .on_page_load(move |webview, payload| {
             // Always inject console-forwarding script so SDK diagnostic logs
