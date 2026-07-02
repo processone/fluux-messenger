@@ -59,7 +59,7 @@ export function SecurityGlanceCard({ state, onOpen }: SecurityGlanceCardProps) {
     <button
       type="button"
       onClick={onOpen}
-      className="w-full flex items-center gap-2 rounded-xl border border-fluux-hover bg-fluux-surface p-3 text-start hover:bg-fluux-hover transition-colors min-h-[44px]"
+      className="w-full flex items-center gap-2 rounded-xl border border-fluux-border bg-fluux-surface p-3 text-start hover:bg-fluux-hover transition-colors min-h-[44px]"
     >
       <Icon className={`size-5 flex-shrink-0 ${TONE_CLASS[glance.tone]} ${spin ? 'animate-spin' : ''}`} aria-hidden />
       <span className="text-sm text-fluux-text flex-1 min-w-0">{glance.label}</span>
