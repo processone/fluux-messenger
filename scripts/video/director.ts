@@ -387,6 +387,28 @@ export class Director {
     await this.hold(1300)
   }
 
+  /**
+   * Drive the real message composer: glide to it, focus, type a message
+   * character-by-character, then send it (Enter). The 1:1 ChatView composer is a
+   * single textarea; sending optimistically renders the outgoing bubble even in
+   * demo mode (Chat.sendMessage emits chat:message after the dropped stanza).
+   */
+  async composeBeat(opts: { text: string; perCharMs?: number }): Promise<void> {
+    const box = this.page.locator('textarea[placeholder^="Message"]').first()
+    await this.glideTo(box)
+    await box.click({ timeout: 15_000 })
+    await this.hold(650) // focused, empty composer
+    for (const ch of opts.text) {
+      await this.page.keyboard.type(ch)
+      await this.page.waitForTimeout(30)
+      await this.hold(opts.perCharMs ?? 95)
+    }
+    await this.hold(850) // the composed message, ready to send
+    await this.page.keyboard.press('Enter')
+    await this.page.waitForTimeout(100)
+    await this.hold(1800) // the sent bubble
+  }
+
   // ── assembly ─────────────────────────────────────────────────────
 
   /** Assemble the captured frames into a constant-fps MP4 (+ best-effort WebM). */

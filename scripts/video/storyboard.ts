@@ -26,7 +26,9 @@ export const storyboard: Scene[] = [
     variant: 'reel',
     run: async (d) => {
       await d.crossfade(async () => { await d.navigateTo('messages'); await d.selectItem('Emma Wilson') })
-      await d.caption('Fast, modern messaging', 'Typing indicators, reactions & replies — built in')
+      await d.caption('Fast, modern messaging', 'Compose, react & reply in real time')
+      await d.composeBeat({ text: 'Just wrapped the redesign, sending it over 🚀' })
+      await d.absorb()
       const msgId = await d.typeBeat({ conversationId: `emma@${DOMAIN}`, from: `emma@${DOMAIN}`, body: 'Perfect — see you at 4! 🎉' })
       await d.chatReaction({ conversationId: `emma@${DOMAIN}`, messageId: msgId, reactorJid: SELF_JID, emojis: ['👍'] })
       await d.absorb()
@@ -63,7 +65,7 @@ export const storyboard: Scene[] = [
     variant: 'reel',
     run: async (d) => {
       await d.crossfade(async () => { await d.navigateTo('messages'); await d.selectItem('Emma Wilson') })
-      await d.caption('Share files & images', 'Images, PDFs & voice notes — with inline previews')
+      await d.caption('Share files & images', 'Images, PDFs & voice notes with inline previews')
       await d.attachmentBeat({
         conversationId: `emma@${DOMAIN}`,
         body: 'Here’s the latest mockup 👇',
@@ -98,7 +100,7 @@ export const storyboard: Scene[] = [
     id: 'command-palette',
     variant: 'reel',
     run: async (d) => {
-      await d.caption('Jump anywhere', 'Command palette — ⌘K')
+      await d.caption('Jump anywhere', 'Command palette · ⌘K')
       await d.press('Meta+k', 800)
       await d.typeText('design')
       await d.dwell(900)
