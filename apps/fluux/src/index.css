@@ -688,6 +688,15 @@ em-emoji-picker {
 }
 .icon-rail-btn { width: 40px; height: 40px; }
 .icon-rail-btn svg { width: 20px; height: 20px; }
+/* Status/count badges use a border as a "cutout" ring so they read as detached
+   from the icon. That ring must match the surface behind the badge — and rail
+   badges sit on the rail, which is darker than the sidebar (see the 14% overlay
+   above). Ringing them in the sidebar color leaves a faint lighter halo that
+   makes small dots look lumpy rather than perfectly round, so match the rail.
+   (Falls back to the utility's border-fluux-sidebar where color-mix is absent.) */
+.icon-rail button > span {
+  border-color: color-mix(in srgb, #000 14%, var(--fluux-sidebar-bg));
+}
 /* Divider between the sidebar column and the main message view. */
 .chrome-sidebar { border-inline-end: 1px solid var(--fluux-surface-divider); }
 
