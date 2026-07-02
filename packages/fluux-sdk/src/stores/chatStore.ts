@@ -345,6 +345,21 @@ interface ChatState {
    */
   loadMessagesAroundFromCache: (conversationId: string, anchorMessageId: string, options?: { before?: number; after?: number }) => Promise<Message[]>
   loadOlderMessagesFromCache: (conversationId: string, limit?: number) => Promise<Message[]>
+  /**
+   * Mirror of {@link loadOlderMessagesFromCache} for the opposite direction: loads the next-newer
+   * cache slice AFTER the resident newest message and appends it, evicting the OLDEST resident
+   * messages at the bound (keep-newest) instead of the newest. Used to slide the window back down
+   * after a scroll-back has moved it off the live edge. Sets the conversation's live-edge flag when
+   * the cache has nothing newer left (the window has reached the tail).
+   */
+  loadNewerMessagesFromCache: (conversationId: string, limit?: number) => Promise<Message[]>
+  /**
+   * Jump-to-latest: reset the resident window to the newest slice from cache and mark the window
+   * at the live edge. Thin wrapper around {@link loadMessagesFromCache}'s latest-N path (which
+   * already clears the slid flag on recenter); kept as its own action for the UI's jump-to-latest
+   * affordance.
+   */
+  recenterToLatest: (conversationId: string) => Promise<void>
   setTargetMessageId: (id: string | null) => void
   switchAccount: (jid: string | null) => void
   reset: () => void
@@ -1843,6 +1858,77 @@ export const chatStore = createStore<ChatState>()(
           console.warn('Failed to load older messages from cache:', error)
           return []
         }
+      },
+
+      loadNewerMessagesFromCache: async (conversationId, limit = 50) => {
+        const state = get()
+        const existingMessages = state.messages.get(conversationId) || []
+        const newestMessage = existingMessages[existingMessages.length - 1]
+
+        if (!newestMessage) {
+          return []
+        }
+
+        try {
+          const newerMessages = await messageCache.getMessages(conversationId, {
+            after: newestMessage.timestamp,
+            limit,
+          })
+
+          // Fewer than the requested limit came back ⇒ nothing more newer remains in the
+          // cache, so the window has reached the tail (live edge) regardless of whether the
+          // batch was empty or partial.
+          const reachedTail = newerMessages.length < limit
+
+          if (newerMessages.length > 0) {
+            set((state) => {
+              const currentMessages = state.messages.get(conversationId) || []
+
+              // Merge newer messages at the end and trim using shared utility.
+              // Load-newer slides the window (keep newest) so sliding back down works.
+              const merged = [...currentMessages, ...newerMessages]
+              const trimmed = trimMessages(merged, RESIDENT_WINDOW_SIZE)
+
+              const newMessagesMap = new Map(state.messages)
+              newMessagesMap.set(conversationId, trimmed)
+
+              if (!reachedTail) return { messages: newMessagesMap }
+
+              // Reached the tail: clear any slid flag (absent = at the edge).
+              if (!state.windowAtLiveEdge.has(conversationId)) return { messages: newMessagesMap }
+              const newWindowAtLiveEdge = new Map(state.windowAtLiveEdge)
+              newWindowAtLiveEdge.delete(conversationId)
+              return { messages: newMessagesMap, windowAtLiveEdge: newWindowAtLiveEdge }
+            })
+          } else if (reachedTail) {
+            // Empty batch: still need to clear the flag if the conversation isn't already at the edge.
+            set((state) => {
+              if (!state.windowAtLiveEdge.has(conversationId)) return state
+              const newWindowAtLiveEdge = new Map(state.windowAtLiveEdge)
+              newWindowAtLiveEdge.delete(conversationId)
+              return { windowAtLiveEdge: newWindowAtLiveEdge }
+            })
+          }
+
+          return newerMessages
+        } catch (error) {
+          console.warn('Failed to load newer messages from cache:', error)
+          return []
+        }
+      },
+
+      recenterToLatest: async (conversationId) => {
+        await get().loadMessagesFromCache(conversationId, { limit: RESIDENT_WINDOW_SIZE })
+        // loadMessagesFromCache's latest-N path (no `before`) already clears the slid flag
+        // when the merge changed the resident array. Clear it here too so a jump-to-latest
+        // is unambiguously at the live edge even when the cache had nothing new to merge
+        // (the newest window was already fully resident).
+        set((state) => {
+          if (!state.windowAtLiveEdge.has(conversationId)) return state
+          const newWindowAtLiveEdge = new Map(state.windowAtLiveEdge)
+          newWindowAtLiveEdge.delete(conversationId)
+          return { windowAtLiveEdge: newWindowAtLiveEdge }
+        })
       },
 
       switchAccount: (jid) => {
