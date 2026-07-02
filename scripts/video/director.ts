@@ -26,8 +26,8 @@ import {
 const FPS = 30
 const FRAME_SEC = 1 / FPS
 
-const READ_BEAT = 1700 // ms a caption holds before the scene's feature action fires
-const ABSORB = 1800    // ms to hold on a result before clearing the caption
+const READ_BEAT = 2400 // ms a caption holds before the scene's feature action fires
+const ABSORB = 2600    // ms to hold on a result before clearing the caption
 const VEIL_MAX = 0.55  // peak opacity of the scene-transition veil
 const VEIL_IN = 5      // frames to dip the veil in
 const VEIL_OUT = 7     // frames to lift the veil out
@@ -298,20 +298,20 @@ export class Director {
     const id = `demo-vid-${this.n}`
     await this.fire([{ delayMs: 0, action: 'typing', data: { conversationId: opts.conversationId, jid: opts.from, isTyping: true } }])
     await this.page.waitForTimeout(80)
-    await this.hold(1100) // "typing…"
+    await this.hold(1500) // "typing…"
     await this.fire([
       { delayMs: 0, action: 'stop-typing', data: { conversationId: opts.conversationId, jid: opts.from, isTyping: false } },
       { delayMs: 0, action: 'message', data: { message: { type: 'chat', id, from: opts.from, body: opts.body, timestamp: new Date(), isOutgoing: false, conversationId: opts.conversationId } } },
     ])
     await this.page.waitForTimeout(80)
-    await this.hold(1300) // message shown
+    await this.hold(1900) // message shown
     return id
   }
 
   async chatReaction(opts: { conversationId: string; messageId: string; reactorJid: string; emojis: string[] }): Promise<void> {
     await this.fire([{ delayMs: 0, action: 'chat-reaction', data: opts }])
     await this.page.waitForTimeout(80)
-    await this.hold(1200)
+    await this.hold(1700)
   }
 
   /** Typing → message from a room participant (optionally a quoted reply). Returns the message id. */
@@ -323,7 +323,7 @@ export class Director {
     const id = opts.id ?? `demo-vid-room-${this.n}`
     await this.fire([{ delayMs: 0, action: 'room-typing', data: { roomJid: opts.roomJid, nick: opts.nick, isTyping: true } }])
     await this.page.waitForTimeout(80)
-    await this.hold(1000)
+    await this.hold(1400)
     await this.fire([
       { delayMs: 0, action: 'room-typing', data: { roomJid: opts.roomJid, nick: opts.nick, isTyping: false } },
       { delayMs: 0, action: 'room-message', data: {
@@ -337,7 +337,7 @@ export class Director {
       } },
     ])
     await this.page.waitForTimeout(80)
-    await this.hold(1300)
+    await this.hold(1900)
     return id
   }
 
@@ -355,7 +355,7 @@ export class Director {
       },
     } }])
     await this.page.waitForTimeout(80)
-    await this.hold(1400)
+    await this.hold(2100)
   }
 
   /** XEP-0308: correct a message in place (shows the "edited" indicator). */
@@ -365,7 +365,7 @@ export class Director {
       updates: { body: opts.body, isEdited: true },
     } }])
     await this.page.waitForTimeout(80)
-    await this.hold(1300)
+    await this.hold(2000)
   }
 
   /** XEP-0424: retract (unsend) a message. */
@@ -375,7 +375,7 @@ export class Director {
       updates: { isRetracted: true, retractedAt: new Date() },
     } }])
     await this.page.waitForTimeout(80)
-    await this.hold(1500)
+    await this.hold(2100)
   }
 
   /** A roster presence change (e.g. a contact coming online). */
@@ -384,7 +384,7 @@ export class Director {
       fullJid: opts.fullJid, show: opts.show, priority: opts.priority ?? 5, client: opts.client ?? 'Fluux',
     } }])
     await this.page.waitForTimeout(80)
-    await this.hold(900)
+    await this.hold(1300)
   }
 
   // ── assembly ─────────────────────────────────────────────────────
