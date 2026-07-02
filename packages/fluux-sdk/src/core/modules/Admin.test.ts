@@ -1308,6 +1308,99 @@ describe('XMPPClient Admin', () => {
     })
   })
 
+  describe('fetchUserLastLoginActivity', () => {
+    function wrapInIqResponse(commandEl: ReturnType<typeof createAdminMockElement>) {
+      return {
+        name: 'iq',
+        attrs: { type: 'result' },
+        getChild: (name: string, xmlns?: string) => {
+          if (name === 'command' && xmlns === 'http://jabber.org/protocol/commands') {
+            return commandEl
+          }
+          return undefined
+        },
+      }
+    }
+
+    function formWithField(
+      formType: string,
+      fieldVar: string,
+      fieldValue: string | null
+    ): AdminMockChild {
+      const valueChildren: AdminMockChild[] =
+        fieldValue != null ? [{ name: 'value', text: () => fieldValue }] : []
+      return {
+        name: 'x',
+        attrs: { xmlns: 'jabber:x:data', type: formType },
+        getChildren: (name: string) => {
+          if (name === 'field') {
+            return [{
+              name: 'field',
+              attrs: { var: fieldVar, type: 'text-single' },
+              getChild: () => undefined,
+              getChildren: (n: string) => (n === 'value' ? valueChildren : []),
+            }]
+          }
+          return []
+        },
+        getChild: () => undefined,
+      }
+    }
+
+    const executing = createAdminMockElement('command', {
+      xmlns: 'http://jabber.org/protocol/commands',
+      node: 'http://jabber.org/protocol/admin#get-user-lastlogin',
+      status: 'executing',
+      sessionid: 'sess-lastlogin-activity',
+    }, [formWithField('form', 'accountjid', null)])
+
+    it('derives seconds-ago from the confirmed timestamp shape', async () => {
+      await connectClient()
+      vi.useFakeTimers()
+      vi.setSystemTime(new Date(2026, 5, 30, 12, 45, 28)) // 1h after the sample below
+
+      const completed = createAdminMockElement('command', {
+        xmlns: 'http://jabber.org/protocol/commands',
+        node: 'http://jabber.org/protocol/admin#get-user-lastlogin',
+        status: 'completed',
+      }, [formWithField('result', 'lastlogin', '2026-06-30 11:45:28')])
+
+      mockXmppClientInstance.iqCaller.request
+        .mockResolvedValueOnce(wrapInIqResponse(executing))
+        .mockResolvedValueOnce(wrapInIqResponse(completed))
+
+      const result = await xmppClient.admin.fetchUserLastLoginActivity('mrtest@process-one.net')
+      vi.useRealTimers()
+
+      expect(result).toEqual({ seconds: 3600, unsupported: false, raw: '2026-06-30 11:45:28' })
+    })
+
+    it('falls back to raw with null seconds for an unparseable value (e.g. online phrase)', async () => {
+      await connectClient()
+
+      const completed = createAdminMockElement('command', {
+        xmlns: 'http://jabber.org/protocol/commands',
+        node: 'http://jabber.org/protocol/admin#get-user-lastlogin',
+        status: 'completed',
+      }, [formWithField('result', 'lastlogin', 'En ligne')])
+
+      mockXmppClientInstance.iqCaller.request
+        .mockResolvedValueOnce(wrapInIqResponse(executing))
+        .mockResolvedValueOnce(wrapInIqResponse(completed))
+
+      const result = await xmppClient.admin.fetchUserLastLoginActivity('mremond@process-one.net')
+      expect(result).toEqual({ seconds: null, unsupported: false, raw: 'En ligne' })
+    })
+
+    it('never reports unsupported, even when the command yields nothing', async () => {
+      await connectClient()
+      mockXmppClientInstance.iqCaller.request.mockRejectedValue(new Error('not found'))
+
+      const result = await xmppClient.admin.fetchUserLastLoginActivity('ghost@process-one.net')
+      expect(result).toEqual({ seconds: null, unsupported: false, raw: null })
+    })
+  })
+
   describe('fetchServerStats', () => {
     // Wrap a <command> element in an IQ response exposing getChild('command', NS).
     function wrapCommand(commandEl: ReturnType<typeof createAdminMockElement>) {

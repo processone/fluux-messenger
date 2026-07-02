@@ -478,24 +478,33 @@ export function useAdmin() {
   }, [client, hasCommand])
 
   // Lazily fetch a single user's last activity, behind a bounded queue.
-  const requestLastActivity = useCallback((jid: string) => {
+  // Prefers the admin-authenticated get-user-lastlogin command (not subject
+  // to the target's presence-subscription privacy gating) when the server
+  // advertises it; falls back to the peer-to-peer XEP-0012 query otherwise.
+  // The fetcher (and requested `lang`) is captured once, at first call — it
+  // won't pick up a `hasCommand`/language change made after the queue is
+  // constructed, matching this ref's existing lazy-init pattern.
+  const requestLastActivity = useCallback((jid: string, lang?: string) => {
     const store = adminStore.getState()
     if (!store.lastActivitySupported) return
     if (store.onlineJids.has(jid)) return        // online overrides last-login
     if (store.lastActivity.has(jid)) return       // already loading/loaded
 
     if (!lastActivityQueueRef.current) {
+      const useAdminCommand = hasCommand('get-user-lastlogin')
       lastActivityQueueRef.current = new LastActivityQueue({
-        fetch: (j) => client.admin.fetchLastActivity(j),
-        onResult: (j, seconds) =>
-          adminStore.getState().setLastActivity(j, { state: 'loaded', seconds }),
+        fetch: (j) => useAdminCommand
+          ? client.admin.fetchUserLastLoginActivity(j, lang)
+          : client.admin.fetchLastActivity(j),
+        onResult: (j, seconds, raw) =>
+          adminStore.getState().setLastActivity(j, { state: 'loaded', seconds, raw }),
         onUnsupported: () => adminStore.getState().setLastActivitySupported(false),
       })
     }
 
     store.setLastActivity(jid, { state: 'loading', seconds: null })
     lastActivityQueueRef.current.enqueue(jid)
-  }, [client])
+  }, [client, hasCommand])
 
   // Memoize actions object to prevent re-renders when only state changes
   const actions = useMemo(
