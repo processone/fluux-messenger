@@ -192,6 +192,10 @@ export {
 // Granular selectors for reduced re-renders (use with shallow comparison)
 export { chatSelectors, roomSelectors, rosterSelectors } from './stores'
 
+// Per-room sidebar activity tone (shared by the icon-rail indicator and the room list)
+export { roomActivityTone } from './stores'
+export type { RoomActivityTone } from './stores'
+
 // Admin dashboard types
 export type { AdminStats } from './stores/adminStore'
 

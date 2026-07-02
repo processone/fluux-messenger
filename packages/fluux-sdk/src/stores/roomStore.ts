@@ -26,6 +26,7 @@ import * as draftState from './shared/draftState'
 import { buildMessageKeySet, isMessageDuplicate, sortMessagesByTimestamp, trimMessages, prependOlderMessages, mergeAndProcessMessages } from './shared/messageArrayUtils'
 import { shouldUpdateLastMessage, shouldReplaceLastMessage, isPreviewableMessage, findLastNonIgnoredMessage } from './shared/lastMessageUtils'
 import { ignoreStore, isMessageFromIgnoredUser } from './ignoreStore'
+import { roomActivityTone } from './roomSelectors'
 import * as notifState from './shared/notificationState'
 import { markerDebugLog } from '../utils/markerDebug'
 import { connectionStore } from './connectionStore'
@@ -2489,15 +2490,12 @@ export const roomStore = createStore<RoomState>()(
   roomTabIndicator: () => {
     let hasNeutral = false
     for (const [jid, entity] of get().roomEntities) {
-      if (!entity.joined) continue
-      if (entity.muted) continue
       const meta = get().roomMeta.get(jid)
       if (!meta) continue
-      const notifyAll = meta.notifyAll || meta.notifyAllPersistent
-      if (meta.mentionsCount > 0 || (notifyAll && meta.unreadCount > 0)) {
-        return 'accent'
-      }
-      if (meta.unreadCount > 0) hasNeutral = true
+      // Same per-room predicate the room list uses, so rail and list agree.
+      const tone = roomActivityTone({ ...entity, ...meta })
+      if (tone === 'accent') return 'accent'
+      if (tone === 'neutral') hasNeutral = true
     }
     return hasNeutral ? 'neutral' : 'none'
   },

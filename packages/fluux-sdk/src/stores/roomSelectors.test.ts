@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { roomSelectors } from './roomSelectors'
+import { roomSelectors, roomActivityTone } from './roomSelectors'
 import type { RoomState } from './roomStore'
 import type { Room, RoomEntity, RoomMetadata, RoomRuntime, RoomOccupant, RoomMessage, MAMQueryState } from '../core/types'
 
@@ -702,5 +702,45 @@ describe('roomSelectors', () => {
       const state = createMockState({ roomRuntime: new Map() })
       expect(roomSelectors.runtimeOccupantCountFor('missing@conference.example.com')(state)).toBe(0)
     })
+  })
+})
+
+describe('roomActivityTone', () => {
+  const base = { joined: true, muted: false, unreadCount: 0, mentionsCount: 0 }
+
+  it("returns 'none' for a joined room with no unread", () => {
+    expect(roomActivityTone({ ...base })).toBe('none')
+  })
+
+  it("returns 'neutral' for plain unread (no mention, no notifyAll)", () => {
+    expect(roomActivityTone({ ...base, unreadCount: 3 })).toBe('neutral')
+  })
+
+  it("returns 'accent' for a mention", () => {
+    expect(roomActivityTone({ ...base, unreadCount: 3, mentionsCount: 1 })).toBe('accent')
+  })
+
+  it("returns 'accent' for unread in a notifyAll (session) room", () => {
+    expect(roomActivityTone({ ...base, unreadCount: 2, notifyAll: true })).toBe('accent')
+  })
+
+  it("returns 'accent' for unread in a notifyAllPersistent room", () => {
+    expect(roomActivityTone({ ...base, unreadCount: 2, notifyAllPersistent: true })).toBe('accent')
+  })
+
+  it("returns 'none' for a notifyAll room with zero unread", () => {
+    expect(roomActivityTone({ ...base, notifyAllPersistent: true, unreadCount: 0 })).toBe('none')
+  })
+
+  it("returns 'none' for a muted room even with a mention", () => {
+    expect(roomActivityTone({ ...base, unreadCount: 4, mentionsCount: 2, muted: true })).toBe('none')
+  })
+
+  it("returns 'none' for a muted notifyAll room with unread", () => {
+    expect(roomActivityTone({ ...base, unreadCount: 4, notifyAllPersistent: true, muted: true })).toBe('none')
+  })
+
+  it("returns 'none' for a non-joined room", () => {
+    expect(roomActivityTone({ ...base, joined: false, unreadCount: 9, mentionsCount: 3 })).toBe('none')
   })
 })

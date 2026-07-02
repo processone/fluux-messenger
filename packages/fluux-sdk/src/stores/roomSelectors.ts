@@ -39,6 +39,38 @@ const EMPTY_TYPING_SET: Set<string> = new Set()
  *
  * @category Selectors
  */
+
+/**
+ * Sidebar activity tone for a single room.
+ *
+ * Shared by the icon-rail indicator ({@link roomStore.roomTabIndicator}) and
+ * the room-list activity dot so the two can never disagree on when a room is
+ * "blue" vs "grey":
+ * - `'accent'`  → a mention, or a notify-all room with unread ("blue pill")
+ * - `'neutral'` → other unread ("grey pill")
+ * - `'none'`    → nothing to signal
+ *
+ * Muted and non-joined rooms contribute no tone, matching the rail indicator.
+ *
+ * @category Selectors
+ */
+export type RoomActivityTone = 'accent' | 'neutral' | 'none'
+
+export function roomActivityTone(room: {
+  joined?: boolean
+  muted?: boolean
+  unreadCount: number
+  mentionsCount: number
+  notifyAll?: boolean
+  notifyAllPersistent?: boolean
+}): RoomActivityTone {
+  if (!room.joined || room.muted) return 'none'
+  const notifyAll = room.notifyAll || room.notifyAllPersistent
+  if (room.mentionsCount > 0 || (notifyAll && room.unreadCount > 0)) return 'accent'
+  if (room.unreadCount > 0) return 'neutral'
+  return 'none'
+}
+
 export const roomSelectors = {
   /**
    * Get all room JIDs.
