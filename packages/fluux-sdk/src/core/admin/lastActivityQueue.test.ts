@@ -62,4 +62,13 @@ describe('LastActivityQueue', () => {
     await Promise.resolve(); await Promise.resolve()
     expect(onResult).toHaveBeenCalledWith('a@x.com', null)
   })
+
+  it('passes the raw fallback value through to onResult on success', async () => {
+    const fetch = vi.fn().mockResolvedValue({ seconds: null, unsupported: false, raw: 'En ligne' })
+    const onResult = vi.fn()
+    const q = new LastActivityQueue({ fetch, onResult, onUnsupported: vi.fn() }, 6)
+    q.enqueue('a@x.com')
+    await Promise.resolve(); await Promise.resolve()
+    expect(onResult).toHaveBeenCalledWith('a@x.com', null, 'En ligne')
+  })
 })

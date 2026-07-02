@@ -6,8 +6,12 @@ export const LAST_ACTIVITY_CONCURRENCY = 6
 export interface LastActivityQueueCallbacks {
   /** Perform the actual query for a bare JID. */
   fetch: (jid: string) => Promise<LastActivityResult>
-  /** Called with the resolved seconds (or null when unknown for this user). */
-  onResult: (jid: string, seconds: number | null) => void
+  /**
+   * Called with the resolved seconds (or null when unknown for this user).
+   * `raw` is a display fallback for when seconds is null but a value is
+   * otherwise known (e.g. an unparseable admin last-login string).
+   */
+  onResult: (jid: string, seconds: number | null, raw?: string | null) => void
   /** Called once when the server reports the feature is unsupported. */
   onUnsupported: () => void
 }
@@ -52,7 +56,7 @@ export class LastActivityQueue {
             this.stop()
             this.cb.onUnsupported()
           } else {
-            this.cb.onResult(jid, res.seconds)
+            this.cb.onResult(jid, res.seconds, res.raw)
           }
         })
         .catch(() => this.cb.onResult(jid, null))

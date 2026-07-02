@@ -59,6 +59,20 @@ describe('UserListItem', () => {
     expect(screen.queryByText(/ago/)).not.toBeInTheDocument()
   })
 
+  it('shows the raw fallback text when seconds is null but a raw value is present', () => {
+    setAdminState({
+      lastActivity: new Map([['a@x.com', { state: 'loaded', seconds: null, raw: 'En ligne' }]]),
+    })
+    render(
+      <UserListItem
+        user={{ jid: 'a@x.com', username: 'a', isOnline: false }}
+        onSelect={vi.fn()}
+        requestLastActivity={vi.fn()}
+      />
+    )
+    expect(screen.getByText('En ligne')).toBeInTheDocument()
+  })
+
   it('hides the presence dot when online info is unavailable (isOnline undefined)', () => {
     setAdminState({})
     render(

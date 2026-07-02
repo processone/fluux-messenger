@@ -5,6 +5,7 @@ import { generateUUID } from '../../utils/uuid'
 import { parseDataForm, getFormFieldValue, getFormFieldValues } from '../../utils/dataForm'
 import { parseRSMResponse, buildRSMElement } from '../../utils/rsm'
 import { HIDDEN_ADMIN_COMMANDS } from '../config'
+import { parseAdminLastLoginTimestamp } from '../admin/parseLastLoginTimestamp'
 import {
   NS_DISCO_ITEMS,
   NS_DISCO_INFO,
@@ -582,6 +583,24 @@ export class Admin extends BaseModule {
     } catch {
       return null
     }
+  }
+
+  /**
+   * Admin-authenticated equivalent of {@link fetchLastActivity}: derives a
+   * seconds-ago value from get-user-lastlogin instead of a peer-to-peer
+   * XEP-0012 query, so it isn't subject to the target server's presence-
+   * subscription privacy gating. Always reports `unsupported: false` — unlike
+   * fetchLastActivity, callers only reach this method after confirming the
+   * command is discovered (hasCommand), so a per-item miss here means "no
+   * data for this account", not "the server lacks the feature".
+   */
+  async fetchUserLastLoginActivity(jid: string, lang?: string): Promise<LastActivityResult> {
+    const raw = await this.fetchUserLastLogin(jid, lang)
+    if (raw == null) return { seconds: null, unsupported: false, raw: null }
+    const ms = parseAdminLastLoginTimestamp(raw)
+    if (ms == null) return { seconds: null, unsupported: false, raw }
+    const seconds = Math.max(0, Math.floor((Date.now() - ms) / 1000))
+    return { seconds, unsupported: false, raw }
   }
 
   // ============================================================================

@@ -8,7 +8,7 @@ interface UserListItemProps {
   user: AdminUser
   onSelect: (user: AdminUser) => void
   /** Passed down from AdminView (not via useAdmin here) to avoid per-row list subscriptions. */
-  requestLastActivity: (jid: string) => void
+  requestLastActivity: (jid: string, lang?: string) => void
 }
 
 function UserListItemImpl({ user, onSelect, requestLastActivity }: UserListItemProps) {
@@ -31,7 +31,7 @@ function UserListItemImpl({ user, onSelect, requestLastActivity }: UserListItemP
       (entries) => {
         if (entries[0].isIntersecting && !requested.current) {
           requested.current = true
-          requestLastActivity(user.jid)
+          requestLastActivity(user.jid, i18n.language)
           observer.disconnect()
         }
       },
@@ -39,7 +39,7 @@ function UserListItemImpl({ user, onSelect, requestLastActivity }: UserListItemP
     )
     observer.observe(el)
     return () => observer.disconnect()
-  }, [user.jid, isOnline, supported, requestLastActivity])
+  }, [user.jid, isOnline, supported, requestLastActivity, i18n.language])
 
   const renderCell = () => {
     if (isOnline === true) {
@@ -53,7 +53,16 @@ function UserListItemImpl({ user, onSelect, requestLastActivity }: UserListItemP
         <span className="inline-block h-3 w-12 rounded bg-fluux-hover animate-pulse" aria-hidden="true" />
       )
     }
-    if (entry.seconds == null) return null
+    if (entry.seconds == null) {
+      if (entry.raw) {
+        return (
+          <span className="text-xs text-fluux-muted truncate max-w-[8rem]" title={entry.raw}>
+            {entry.raw}
+          </span>
+        )
+      }
+      return null
+    }
     const absolute = formatDateTime(Date.now() - entry.seconds * 1000)
     return (
       <span className="text-xs text-fluux-muted" title={absolute}>

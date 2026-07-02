@@ -197,6 +197,12 @@ export interface LastActivityResult {
   seconds: number | null
   /** True only when the server returns feature-not-implemented (no mod_last). */
   unsupported: boolean
+  /**
+   * Raw, unparsed source value (e.g. an admin get-user-lastlogin string that
+   * didn't match the known timestamp shape). Display fallback when seconds
+   * is null but the account is otherwise known.
+   */
+  raw?: string | null
 }
 
 /**
@@ -209,6 +215,8 @@ export interface LastActivityEntry {
   state: 'loading' | 'loaded'
   /** Seconds since last logout; null = unknown/unavailable. */
   seconds: number | null
+  /** Raw fallback value when seconds couldn't be derived — see LastActivityResult.raw. */
+  raw?: string | null
 }
 
 /**
