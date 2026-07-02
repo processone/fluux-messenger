@@ -11,6 +11,8 @@ import {
   getVideoDimensions,
   getAudioDuration,
   getEffectiveMimeType,
+  effectiveMediaType,
+  isRenderableImageMime,
   isPdfFile,
   isPdfMimeType,
   isDocumentMimeType,
@@ -144,6 +146,39 @@ describe('isImageFile', () => {
   it('should return false for files without type', () => {
     const file = new File([''], 'unknown')
     expect(isImageFile(file)).toBe(false)
+  })
+})
+
+describe('isRenderableImageMime', () => {
+  it('returns true for real image types', () => {
+    expect(isRenderableImageMime('image/jpeg')).toBe(true)
+    expect(isRenderableImageMime('image/png')).toBe(true)
+    expect(isRenderableImageMime('image/webp')).toBe(true)
+  })
+
+  it('returns false for DjVu even though it is registered under image/*', () => {
+    // Old messages carry the IANA type verbatim; the browser cannot render it.
+    expect(isRenderableImageMime('image/vnd.djvu')).toBe(false)
+    expect(isRenderableImageMime('image/x-djvu')).toBe(false)
+  })
+
+  it('returns false for non-image and missing types', () => {
+    expect(isRenderableImageMime('application/pdf')).toBe(false)
+    expect(isRenderableImageMime('application/x-djvu')).toBe(false)
+    expect(isRenderableImageMime(undefined)).toBe(false)
+  })
+})
+
+describe('effectiveMediaType', () => {
+  it('remaps non-renderable image types to their application/ equivalent', () => {
+    expect(effectiveMediaType('image/vnd.djvu')).toBe('application/x-djvu')
+    expect(effectiveMediaType('image/x-djvu')).toBe('application/x-djvu')
+  })
+
+  it('passes through renderable and unrelated types unchanged', () => {
+    expect(effectiveMediaType('image/png')).toBe('image/png')
+    expect(effectiveMediaType('application/pdf')).toBe('application/pdf')
+    expect(effectiveMediaType(undefined)).toBeUndefined()
   })
 })
 
@@ -813,6 +848,10 @@ describe('isDocumentMimeType', () => {
     expect(isDocumentMimeType('text/plain')).toBe(true)
   })
 
+  it('should return true for DjVu', () => {
+    expect(isDocumentMimeType('application/x-djvu')).toBe(true)
+  })
+
   it('should return false for images', () => {
     expect(isDocumentMimeType('image/png')).toBe(false)
   })
@@ -899,6 +938,10 @@ describe('getFileTypeLabel', () => {
 
   it('should return "RTF" for RTF files', () => {
     expect(getFileTypeLabel('application/rtf')).toBe('RTF')
+  })
+
+  it('should return "DjVu" for DjVu files', () => {
+    expect(getFileTypeLabel('application/x-djvu')).toBe('DjVu')
   })
 
   it('should return "ZIP" for ZIP archives', () => {

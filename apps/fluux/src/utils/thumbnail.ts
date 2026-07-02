@@ -110,6 +110,28 @@ const NON_RENDERABLE_IMAGE_TYPES: Record<string, string> = {
 }
 
 /**
+ * Remap a MIME type string that is registered under image/* but which browsers
+ * cannot render (e.g. DjVu) to its application/ equivalent. Returns the input
+ * unchanged for everything else.
+ *
+ * Unlike getEffectiveMimeType this works on a bare MIME string, so it applies to
+ * received attachments — not just files being uploaded — and makes the DjVu fix
+ * retroactive for messages that were sent before it existed.
+ */
+export function effectiveMediaType(mediaType: string | undefined): string | undefined {
+  if (!mediaType) return mediaType
+  return NON_RENDERABLE_IMAGE_TYPES[mediaType] ?? mediaType
+}
+
+/**
+ * Whether a MIME type should render as an inline <img>. False for image/* types
+ * the browser cannot actually decode (DjVu), so they fall through to a file card.
+ */
+export function isRenderableImageMime(mediaType: string | undefined): boolean {
+  return effectiveMediaType(mediaType)?.startsWith('image/') ?? false
+}
+
+/**
  * Get effective MIME type for a file.
  * Uses browser-detected type if valid, otherwise falls back to extension lookup.
  */
@@ -471,6 +493,7 @@ export function isDocumentMimeType(mimeType: string | undefined): boolean {
     mimeType === 'application/msword' ||
     mimeType.includes('officedocument') ||
     mimeType === 'application/rtf' ||
+    mimeType === 'application/x-djvu' ||
     mimeType === 'text/plain'
 }
 
@@ -511,6 +534,7 @@ export function getFileTypeLabel(mimeType: string | undefined): string {
   if (mimeType === 'application/x-7z-compressed') return '7Z'
   if (mimeType === 'application/x-tar' || mimeType === 'application/gzip') return 'Archive'
   if (mimeType === 'application/epub+zip') return 'EPUB'
+  if (mimeType === 'application/x-djvu') return 'DjVu'
 
   return 'File'
 }

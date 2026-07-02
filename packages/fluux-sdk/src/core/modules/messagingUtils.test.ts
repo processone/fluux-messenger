@@ -227,6 +227,23 @@ describe('messagingUtils', () => {
       expect(result?.mediaType).toBeUndefined()
     })
 
+    it('should map .djvu extension to application/x-djvu (not a renderable image)', () => {
+      const stanza = createMockElement('message', { id: 'msg-1' }, [
+        {
+          name: 'x',
+          attrs: { xmlns: 'jabber:x:oob' },
+          children: [
+            { name: 'url', text: 'https://example.com/uploads/scan.djvu' },
+          ],
+        },
+      ])
+
+      const result = parseOobData(stanza)
+
+      expect(result?.name).toBe('scan.djvu')
+      expect(result?.mediaType).toBe('application/x-djvu')
+    })
+
     it('should return undefined when no OOB element', () => {
       const stanza = createMockElement('message', { id: 'msg-1' }, [
         { name: 'body', text: 'No attachment' },

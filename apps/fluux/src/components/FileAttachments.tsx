@@ -8,7 +8,7 @@ import { formatBytes, useAttachmentUrl, useCachedMediaUrl } from '@/hooks'
 import { DeferredMediaPlaceholder } from './DeferredMediaPlaceholder'
 import { useDeferredMedia } from '@/hooks/useDeferredMedia'
 import { useContextMenu } from '@/hooks/useContextMenu'
-import { isPdfMimeType, isDocumentMimeType, isArchiveMimeType, isEbookMimeType, getFileTypeLabel } from '@/utils/thumbnail'
+import { isPdfMimeType, isDocumentMimeType, isArchiveMimeType, isEbookMimeType, getFileTypeLabel, isRenderableImageMime } from '@/utils/thumbnail'
 import type { FileAttachment } from '@fluux/sdk'
 
 /**
@@ -37,7 +37,7 @@ interface AttachmentProps {
  */
 export const ImageAttachment = memo(function ImageAttachment({ attachment, onLoad, isOwnMessage }: AttachmentProps) {
   const { t } = useTranslation()
-  const isImage = attachment.mediaType?.startsWith('image/') ?? false
+  const isImage = isRenderableImageMime(attachment.mediaType)
   const [lightboxOpen, setLightboxOpen] = useState(false)
   const imageMenu = useContextMenu()
 
@@ -534,7 +534,7 @@ export function FileAttachmentCard({ attachment }: AttachmentProps) {
  */
 export function shouldShowFileCard(attachment: FileAttachment | undefined, canPreviewAsText: boolean): boolean {
   if (!attachment) return false
-  if (attachment.mediaType?.startsWith('image/')) return false
+  if (isRenderableImageMime(attachment.mediaType)) return false
   if (attachment.mediaType?.startsWith('video/')) return false
   if (attachment.mediaType?.startsWith('audio/')) return false
   if (canPreviewAsText) return false
