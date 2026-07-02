@@ -646,7 +646,8 @@ function AddUserModal({ vhost, onSubmit, onClose }: AddUserModalProps) {
           <label htmlFor="add-user-username" className="block text-xs font-semibold text-fluux-muted uppercase mb-2">
             {t('admin.addUser.username')}
           </label>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 px-3 py-2 bg-fluux-bg text-fluux-text rounded
+                          border border-transparent focus-within:border-fluux-brand">
             <TextInput
               ref={inputRef}
               id="add-user-username"
@@ -655,11 +656,10 @@ function AddUserModal({ vhost, onSubmit, onClose }: AddUserModalProps) {
               onChange={(e) => setUsername(e.target.value)}
               placeholder={t('admin.addUser.usernamePlaceholder')}
               disabled={isSubmitting}
-              className="flex-1 px-3 py-2 bg-fluux-bg text-fluux-text rounded
-                         border border-transparent focus:border-fluux-brand
-                         placeholder:text-fluux-muted disabled:opacity-50"
+              className="flex-1 min-w-0 bg-transparent
+                         placeholder:text-fluux-muted disabled:opacity-50 focus:outline-none"
             />
-            <span className="text-fluux-muted">@{vhost}</span>
+            <span className="text-fluux-muted whitespace-nowrap flex-shrink-0">@{vhost}</span>
           </div>
         </div>
 
