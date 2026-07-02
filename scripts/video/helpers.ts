@@ -95,7 +95,7 @@ export async function installPolishLayers(page: Page): Promise<void> {
 
     const style = document.createElement('style')
     style.textContent = `
-      #vid-cursor, #vid-caption, #vid-title { position: fixed; pointer-events: none; }
+      #vid-cursor, #vid-caption, #vid-title, #vid-veil { position: fixed; pointer-events: none; }
       #vid-cursor {
         z-index: 2147483647; left: 0; top: 0; width: 28px; height: 28px;
         margin: -2px 0 0 -2px; filter: drop-shadow(0 2px 3px rgba(0,0,0,.45));
@@ -120,6 +120,10 @@ export async function installPolishLayers(page: Page): Promise<void> {
       #vid-title img { width: 104px; height: 104px; border-radius: 24px; box-shadow: 0 12px 48px rgba(0,0,0,.5); }
       #vid-title .tt { font-size: 68px; font-weight: 800; letter-spacing: -1px; }
       #vid-title .ts { font-size: 26px; font-weight: 500; color: rgba(255,255,255,.82); }
+      #vid-veil {
+        z-index: 2147483643; inset: 0; opacity: 0;
+        background: #0b0c18;
+      }
     `
     document.head.appendChild(style)
 
@@ -140,6 +144,10 @@ export async function installPolishLayers(page: Page): Promise<void> {
     title.id = 'vid-title'
     title.innerHTML = '<img src="/logo.png" alt=""><div class="tt"></div><div class="ts"></div>'
     document.body.appendChild(title)
+
+    const veil = document.createElement('div')
+    veil.id = 'vid-veil'
+    document.body.appendChild(veil)
 
     // The synthetic cursor follows the real (CDP) mouse.
     window.addEventListener('mousemove', (e) => {

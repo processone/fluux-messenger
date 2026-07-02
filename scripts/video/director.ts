@@ -26,6 +26,12 @@ import {
 const FPS = 30
 const FRAME_SEC = 1 / FPS
 
+const READ_BEAT = 1700 // ms a caption holds before the scene's feature action fires
+const ABSORB = 1800    // ms to hold on a result before clearing the caption
+const VEIL_MAX = 0.55  // peak opacity of the scene-transition veil
+const VEIL_IN = 5      // frames to dip the veil in
+const VEIL_OUT = 7     // frames to lift the veil out
+
 interface Frame { file: string; durationSec: number }
 
 const easeInOut = (t: number): number => (t < 0.5 ? 2 * t * t : 1 - (-2 * t + 2) ** 2 / 2)
@@ -127,6 +133,7 @@ export class Director {
         if (el) { el.style.opacity = String(o); el.style.transform = `translate(0, ${10 * (1 - o)}px)` }
       }, o)
     })
+    await this.hold(READ_BEAT) // read before the feature moves
   }
 
   async clearCaption(): Promise<void> {
@@ -137,6 +144,18 @@ export class Director {
 
   async dwell(ms: number): Promise<void> {
     await this.hold(ms)
+  }
+
+  /** Hold on the current frame long enough for the result to land. */
+  async absorb(): Promise<void> {
+    await this.hold(ABSORB)
+  }
+
+  /** Dip a dark veil, run `fn` while covered (a settle beat), then lift it. */
+  async crossfade(fn: () => Promise<void>): Promise<void> {
+    await this.steps(VEIL_IN, (i) => this.setOpacity('vid-veil', VEIL_MAX * ((i + 1) / VEIL_IN)))
+    await fn()
+    await this.steps(VEIL_OUT, (i) => this.setOpacity('vid-veil', VEIL_MAX * (1 - (i + 1) / VEIL_OUT)))
   }
 
   // ── pointer + clicks ─────────────────────────────────────────────
