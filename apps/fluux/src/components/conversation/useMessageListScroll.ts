@@ -76,6 +76,7 @@ function debugLog(action: string, data?: Record<string, unknown>) {
 // AT_BOTTOM_THRESHOLD is imported from scrollStateManager (shared with wasAtBottom persistence).
 const FAB_THRESHOLD = 300 // pixels from bottom to show "scroll to bottom" button
 const LOAD_COOLDOWN_MS = 500 // minimum time between load triggers
+const LOAD_NEWER_THRESHOLD = 4 // px from the resident-window bottom to auto-load newer (slid-up windows)
 const SAVE_THROTTLE_MS = 100 // minimum time between position saves
 const PREPEND_COOLDOWN_MS = 500 // time to keep prepend flag after restore (prevents re-trigger)
 const MEDIA_LOAD_DEBOUNCE_MS = 150 // debounce time for batching image load events
@@ -233,6 +234,15 @@ export interface UseMessageListScrollOptions {
    */
   onLoadAround?: (anchorMessageId: string) => Promise<unknown> | void
   isLoadingOlder?: boolean
+  /** Sliding window: load the next-newer cache slice when the reader scrolls back down to the
+   *  bottom of a slid-up window (mirror of onScrollToTop for the newer direction). Fired only
+   *  when windowAtLiveEdge is false. */
+  onLoadNewer?: () => void
+  isLoadingNewer?: boolean
+  /** Sliding window: whether the resident window includes the newest message. `false` = slid up,
+   *  which enables the load-newer trigger (the resident bottom is NOT the live edge). Absent/true
+   *  ⇒ at the live edge — unchanged behavior. */
+  windowAtLiveEdge?: boolean
   isHistoryComplete?: boolean
   typingUsersCount: number
   lastMessageReactionsKey: string
@@ -286,6 +296,9 @@ export function useMessageListScroll({
   onScrollToTop,
   onLoadAround,
   isLoadingOlder,
+  onLoadNewer,
+  isLoadingNewer,
+  windowAtLiveEdge,
   isHistoryComplete,
   typingUsersCount,
   lastMessageReactionsKey,
@@ -401,6 +414,9 @@ export function useMessageListScroll({
   const lastLoadTimeRef = useRef(0)
   const lastRestoreTimeRef = useRef(0) // Track when we last restored position
   const scrolledAwayFromTopRef = useRef(false)
+  // Mirror of scrolledAwayFromTopRef for the newer direction: only auto-load newer once the reader
+  // has genuinely scrolled away from the resident bottom and returned to it (guards spurious fires).
+  const scrolledAwayFromBottomRef = useRef(false)
   // Timestamp of the last DELIBERATE user scroll (FAB click / wheel). The prepend re-assert
   // loop yields to a deliberate scroll recorded after it starts, but keeps re-pinning the
   // anchor through a content-shrink clamp (which records no such intent).
@@ -434,6 +450,9 @@ export function useMessageListScroll({
   // ==========================================================================
 
   const canLoadMore = !isHistoryComplete && !isLoadingOlder && !!onScrollToTop
+  // Sliding window: load-newer is possible only when the window is slid up (windowAtLiveEdge === false)
+  // — otherwise the resident bottom IS the live edge and there is nothing newer to fetch.
+  const canLoadNewer = windowAtLiveEdge === false && !isLoadingNewer && !!onLoadNewer
 
   const getDistanceFromBottom = (el: HTMLElement) =>
     el.scrollHeight - el.scrollTop - el.clientHeight
@@ -1333,6 +1352,24 @@ export function useMessageListScroll({
     }
   }
 
+  // Sliding window: mirror of triggerLoadOlder for the newer direction. Fires when the reader
+  // scrolls back down to the bottom of a slid-up window (canLoadNewer gates on windowAtLiveEdge ===
+  // false). The anchor save + restore for the append-then-evict-oldest shift is Task 8; this only
+  // fires the fetch, throttled by the shared load cooldown.
+  const triggerLoadNewer = () => {
+    if (!canLoadNewer) return
+    const scroller = scrollerRef.current
+    if (!scroller) return
+
+    const now = Date.now()
+    const cooldownOk = now - lastLoadTimeRef.current > LOAD_COOLDOWN_MS
+    if (!cooldownOk && !scrolledAwayFromBottomRef.current) return
+
+    lastLoadTimeRef.current = now
+    scrolledAwayFromBottomRef.current = false
+    onLoadNewer?.()
+  }
+
   const handleLoadEarlier = () => {
     if (!canLoadMore) return
     const scroller = scrollerRef.current
@@ -1585,6 +1622,8 @@ export function useMessageListScroll({
 
     // Track if user scrolled away from top (allows re-trigger of load)
     if (scrollTop > 50) scrolledAwayFromTopRef.current = true
+    // Mirror for the newer direction (sliding window): away from the resident bottom.
+    if (distFromBottom > 50) scrolledAwayFromBottomRef.current = true
 
     // Auto-trigger load when at top (disabled in static mode — preview starts at scrollTop=0).
     // Gate on scrolledAwayFromTop: a PASSIVE scroll reaching the top must only auto-load when the
@@ -1594,6 +1633,11 @@ export function useMessageListScroll({
     // bottom-stick for the next incoming message. A wheel-up (handleWheel) is explicit intent and
     // is intentionally NOT gated this way.
     if (scrollTop === 0 && !staticMode && scrolledAwayFromTopRef.current) triggerLoadOlder()
+
+    // Sliding window: when the window is slid up (canLoadNewer ⇒ windowAtLiveEdge === false),
+    // reaching the resident bottom means newer messages exist in cache below — load them. Gated by
+    // canLoadNewer, so at the live edge this is inert and bottom-stick is unchanged.
+    if (distFromBottom <= LOAD_NEWER_THRESHOLD && !staticMode) triggerLoadNewer()
   }
 
   const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
@@ -1604,9 +1648,15 @@ export function useMessageListScroll({
     // Genuine user scroll → open the save gate (see userHasScrolledSinceEntryRef). Mirrors the
     // native wheel listener; kept here so it fires even when wheel arrives via the React handler.
     userHasScrolledSinceEntryRef.current = true
-    const { scrollTop } = e.currentTarget
+    const { scrollTop, scrollHeight, clientHeight } = e.currentTarget
+    const distFromBottom = scrollHeight - scrollTop - clientHeight
     if (scrollTop === 0 && e.deltaY < 0 && !staticMode) triggerLoadOlder()
     if (scrollTop === 0 && e.deltaY > 0) scrolledAwayFromTopRef.current = true
+    // Sliding window mirror: a wheel-DOWN pinned at the resident bottom fires no scroll event
+    // (already at max scrollTop), so trigger load-newer here — same reason handleWheel handles the
+    // pinned-top load-older case above.
+    if (distFromBottom <= LOAD_NEWER_THRESHOLD && e.deltaY > 0 && !staticMode) triggerLoadNewer()
+    if (distFromBottom > 50 && e.deltaY < 0) scrolledAwayFromBottomRef.current = true
   }
 
   // Mount marker (diagnostic). Fires once when the message view is freshly created — i.e. after a
