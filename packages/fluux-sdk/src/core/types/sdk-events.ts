@@ -155,6 +155,15 @@ export interface ChatEvents {
     stanzaId: string
   }
 
+  /**
+   * Fluux private PEP: another device of the same account published an
+   * updated conversation list (archive/unarchive/add). Carries the full
+   * list; consumers reconcile local archive state against it.
+   */
+  'conversation:list-synced': {
+    conversations: Array<{ jid: string; archived: boolean }>
+  }
+
   /** Message delivery error received from server */
   'chat:message-error': {
     conversationId: string

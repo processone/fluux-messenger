@@ -1,4 +1,5 @@
 import { xml } from '@xmpp/client'
+import type { Element } from '@xmpp/client'
 import { getBareJid } from '../jid'
 import { generateUUID } from '../../utils/uuid'
 import { NS_PUBSUB, NS_CONVERSATIONS } from '../namespaces'
@@ -11,6 +12,28 @@ import type { ModuleDependencies } from './BaseModule'
 export interface SyncedConversation {
   jid: string
   archived: boolean
+}
+
+/**
+ * Parse a PEP `<item>` (id="current") holding the conversation list into
+ * {@link SyncedConversation} entries. Shared by the IQ fetch path and the
+ * live PEP-notify handler so both interpret the wire format identically.
+ * Returns an empty array if the item has no `<conversations>` container.
+ */
+export function parseConversationsItem(item: Element | undefined): SyncedConversation[] {
+  const container = item?.getChild('conversations', NS_CONVERSATIONS)
+  if (!container) return []
+
+  const conversations: SyncedConversation[] = []
+  for (const convEl of container.getChildren('conversation')) {
+    const jid = convEl.attrs.jid
+    if (!jid) continue
+    conversations.push({
+      jid,
+      archived: convEl.attrs.archived === 'true',
+    })
+  }
+  return conversations
 }
 
 /**
@@ -50,19 +73,7 @@ export class ConversationSync {
     try {
       const result = await this.deps.sendIQ(iq, timeoutMs)
       const item = result.getChild('pubsub', NS_PUBSUB)?.getChild('items')?.getChild('item')
-      const container = item?.getChild('conversations', NS_CONVERSATIONS)
-      if (!container) return []
-
-      const conversations: SyncedConversation[] = []
-      for (const convEl of container.getChildren('conversation')) {
-        const jid = convEl.attrs.jid
-        if (!jid) continue
-        conversations.push({
-          jid,
-          archived: convEl.attrs.archived === 'true',
-        })
-      }
-      return conversations
+      return parseConversationsItem(item)
     } catch {
       // Node may not exist yet, or item not found
       return []

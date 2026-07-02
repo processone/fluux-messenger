@@ -6,7 +6,7 @@ import {
   getClientIdentity,
   getCapsNode,
 } from './caps'
-import { NS_MDS_NOTIFY } from './namespaces'
+import { NS_MDS_NOTIFY, NS_CONVERSATIONS_NOTIFY } from './namespaces'
 
 describe('caps (XEP-0115)', () => {
   describe('CLIENT_FEATURES', () => {
@@ -59,6 +59,14 @@ describe('caps (XEP-0115)', () => {
       expect(CLIENT_FEATURES).toContain(NS_MDS_NOTIFY)
       // feature appears in the (sorted) XEP-0115 verification string
       expect(calculateVerificationString()).toContain(`${NS_MDS_NOTIFY}<`)
+    })
+
+    it('includes the Fluux conversation-list +notify so the server pushes archive/unarchive changes', () => {
+      // Without this, ejabberd will not push PEP headlines when another
+      // device of the same account archives/unarchives a conversation —
+      // the change would only surface on the next fresh-session fetch.
+      expect(CLIENT_FEATURES).toContain(NS_CONVERSATIONS_NOTIFY)
+      expect(calculateVerificationString()).toContain(`${NS_CONVERSATIONS_NOTIFY}<`)
     })
 
     it('should include XEP-0374 OX-IM discovery feature', () => {

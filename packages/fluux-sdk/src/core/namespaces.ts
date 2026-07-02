@@ -121,8 +121,11 @@ export const NS_APPEARANCE = 'urn:xmpp:fluux:appearance:0'
 // Custom: Fluux ignored users per-room (XEP-0223 private storage)
 export const NS_IGNORED_USERS = 'urn:xmpp:fluux:ignored-users:0'
 
-// Custom: Fluux conversation list sync (XEP-0223 private storage)
+// Custom: Fluux conversation list sync (XEP-0223 private storage).
+// The +notify variant is advertised in caps so the server pushes headlines
+// when another device of the same account archives/unarchives a conversation.
 export const NS_CONVERSATIONS = 'urn:xmpp:fluux:conversations:0'
+export const NS_CONVERSATIONS_NOTIFY = 'urn:xmpp:fluux:conversations:0+notify'
 
 // XEP-0334: Message Processing Hints
 export const NS_HINTS = 'urn:xmpp:hints'
