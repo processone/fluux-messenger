@@ -1937,7 +1937,6 @@ export function useMessageListScroll({
 
     const virt = latestRef.current.virtualizer
     const escapedId = CSS.escape(targetMessageId)
-    let highlightRafId: number | null = null
 
     const highlight = (el: Element) => {
       el.classList.add('message-highlight')
@@ -1988,10 +1987,13 @@ export function useMessageListScroll({
       const consumeAndHighlight = () => {
         if (consumed) return
         consumed = true
-        highlightRafId = requestAnimationFrame(() => {
-          const el = scrollerRef.current?.querySelector(`[data-message-id="${escapedId}"]`)
-          if (el) highlight(el)
-        })
+        // Apply the highlight synchronously BEFORE clearing the target (mirrors the non-virtualized
+        // branch below). onTargetMessageConsumed clears targetMessageId, which re-runs this effect and
+        // fires its cleanup in the same tick; a deferred (rAF) highlight got cancelled by that cleanup
+        // before it could paint, so the "go to message" flash silently vanished. The reassert loop has
+        // already settled the target row into the window, so it is mounted and queryable now.
+        const el = scrollerRef.current?.querySelector(`[data-message-id="${escapedId}"]`)
+        if (el) highlight(el)
         onTargetMessageConsumed?.()
       }
 
@@ -2060,7 +2062,6 @@ export function useMessageListScroll({
 
       return () => {
         finishTarget()
-        if (highlightRafId !== null) cancelAnimationFrame(highlightRafId)
       }
     } else {
       // Non-virtualized: all rows are always in the DOM.
@@ -2084,8 +2085,6 @@ export function useMessageListScroll({
       debugLog('TARGET MESSAGE: scrolled to target (center)', { targetMessageId })
       onTargetMessageConsumed?.()
     }
-
-    return () => { if (highlightRafId !== null) cancelAnimationFrame(highlightRafId) }
 
     // messageCount is in deps so this re-fires when messages load from async sources
     // (e.g., IndexedDB in search context view)

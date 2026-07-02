@@ -841,3 +841,91 @@ describe('MessageList — virtualized bottom-stick re-asserts as rows measure', 
     expect(scrollToIndexCalls).not.toContain('end')       // ...and did not jump to the bottom
   })
 })
+
+/**
+ * Target-message HIGHLIGHT (the "go to message" flash) must land on the row even though consuming
+ * the target synchronously clears targetMessageId in the same tick. Regression: search "go to
+ * message" stopped flashing the arrived row. In the virtualized path the highlight was scheduled in
+ * a requestAnimationFrame, but consuming the target (onTargetMessageConsumed -> clearTargetMessageId)
+ * nulls targetMessageId, which re-runs the scroll effect and fires its cleanup BEFORE that rAF —
+ * cancelling the pending highlight so it never painted.
+ *
+ * This harness mocks requestAnimationFrame/cancelAnimationFrame with an id->cb map (the shared
+ * bottom-stick mock above does not model cancellation, which is exactly the mechanism under test)
+ * and drives the target clear through real component state, flushing ONE frame per act() so the
+ * clear's re-render + effect cleanup interleave between frames the way the production microtask does.
+ */
+describe('MessageList — target-message highlight survives the target clear (virtualized)', () => {
+  let realRaf: typeof requestAnimationFrame
+  let realCaf: typeof cancelAnimationFrame
+  let rafCbs: Map<number, FrameRequestCallback>
+  let nextRafId: number
+  const flush = () => {
+    const entries = [...rafCbs.entries()]
+    rafCbs.clear()
+    entries.forEach(([, cb]) => cb(0))
+  }
+
+  beforeEach(() => {
+    localStorage.setItem('fluux:flags:enableMessageVirtualization', 'true')
+    HTMLElement.prototype.scrollTo = vi.fn()
+    scrollStateManager.reset()
+    scrollToIndexCalls.length = 0
+    scrollToOffsetCalls.length = 0
+    scrollToIndexStartOffsets.length = 0
+    rafCbs = new Map()
+    nextRafId = 0
+    realRaf = globalThis.requestAnimationFrame
+    realCaf = globalThis.cancelAnimationFrame
+    globalThis.requestAnimationFrame = ((cb: FrameRequestCallback) => {
+      const id = ++nextRafId
+      rafCbs.set(id, cb)
+      return id
+    }) as typeof requestAnimationFrame
+    globalThis.cancelAnimationFrame = ((id: number) => { rafCbs.delete(id) }) as typeof cancelAnimationFrame
+  })
+  afterEach(() => {
+    globalThis.requestAnimationFrame = realRaf
+    globalThis.cancelAnimationFrame = realCaf
+    localStorage.clear()
+  })
+
+  function Harness() {
+    // Mirrors the real wiring: onTargetMessageConsumed = clearTargetMessageId, which nulls the
+    // store's targetMessageId, so the prop transitions to undefined the instant the jump is consumed.
+    const [target, setTarget] = React.useState<string | undefined>('msg-30')
+    const onConsumed = React.useCallback(() => setTarget(undefined), [])
+    return (
+      <MessageList
+        messages={makeMessages(50)}
+        conversationId="conv-highlight"
+        targetMessageId={target}
+        onTargetMessageConsumed={onConsumed}
+        renderMessage={(m: BaseMessage) => <div>{m.body}</div>}
+      />
+    )
+  }
+
+  it('applies .message-highlight to the target row even though consuming it clears the target', () => {
+    // Hold scrollTop steady so the reassert loop reaches TARGET_STABLE_FRAMES and consumes.
+    scrollToIndexStartOffsets.push(1200, 1400, 1400, 1400, 1400, 1400, 1400, 1400, 1400, 1400)
+    const { container } = render(<Harness />)
+    const scroller = container.querySelector('[data-message-list]') as HTMLElement
+    let top = 5000
+    Object.defineProperty(scroller, 'scrollHeight', { get: () => 8000, configurable: true })
+    Object.defineProperty(scroller, 'clientHeight', { value: 500, configurable: true })
+    Object.defineProperty(scroller, 'scrollTop', {
+      get: () => top,
+      set: (v: number) => { top = v },
+      configurable: true,
+    })
+
+    // One frame per act() so the target-clear re-render + effect cleanup land between frames — the
+    // window in which the buggy cleanup cancels the not-yet-fired highlight rAF.
+    for (let i = 0; i < 10; i++) act(() => flush())
+
+    const targetRow = container.querySelector('[data-message-id="msg-30"]')
+    expect(targetRow).not.toBeNull()
+    expect(targetRow?.classList.contains('message-highlight')).toBe(true)
+  })
+})
