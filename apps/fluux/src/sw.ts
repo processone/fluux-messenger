@@ -17,6 +17,10 @@
 /// <reference lib="webworker" />
 
 import { precacheAndRoute } from 'workbox-precaching'
+import {
+  resolveNotificationTarget,
+  notificationNavigateMessage,
+} from './utils/notificationNavigation'
 
 declare const self: ServiceWorkerGlobalScope
 
@@ -65,27 +69,37 @@ self.addEventListener('push', (event) => {
 self.addEventListener('notificationclick', (event) => {
   event.notification.close()
 
-  // Build a hash-router deep link from notification data
-  const data = event.notification.data as { from?: string; type?: string } | undefined
-  let deepLink = './'
-  if (data?.from) {
-    const jid = encodeURIComponent(data.from)
-    const route = data.type === 'room' ? 'rooms' : 'messages'
-    deepLink = `./#/${route}/${jid}`
-  }
+  // Resolve the target conversation/room from the notification's routing data
+  // (attached by showWebNotification, or by the push handler above from the
+  // server payload). Null when the payload carried no `from` — then we just
+  // focus/open the app at its default view instead of deep-linking nowhere.
+  const target = resolveNotificationTarget(
+    event.notification.data as { from?: string; type?: string } | undefined,
+  )
+  const deepLink = target?.deepLink ?? './'
+
+  console.log('[SW Click] notification data:', event.notification.data, '-> deepLink:', deepLink)
 
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
-      // Focus existing window and navigate to the conversation
       for (const client of clients) {
-        if (client.url.includes(self.location.origin) && 'focus' in client) {
-          if (data?.from) {
-            void (client as WindowClient).navigate(deepLink)
+        if (client.url.startsWith(self.location.origin) && 'focus' in client) {
+          if (target) {
+            // Primary path for a live document: hand the route to the running
+            // SPA so it navigates through its OWN router (see
+            // useServiceWorkerNavigation). This is reliable on Android, where
+            // WindowClient.navigate() to a hash route is not.
+            client.postMessage(notificationNavigateMessage(target))
+            // Fallback for a discarded/frozen document that focus() reloads: set
+            // the URL so it boots straight at the deep link. Ignored (harmless
+            // fragment nav) when the document is alive.
+            void (client as WindowClient).navigate(deepLink).catch(() => {})
           }
-          return client.focus()
+          return (client as WindowClient).focus()
         }
       }
-      // Open new window at the deep link URL
+      // No live client (app was killed): open a fresh window at the deep link;
+      // HashRouter routes to the conversation on boot.
       return self.clients.openWindow(deepLink)
     })
   )

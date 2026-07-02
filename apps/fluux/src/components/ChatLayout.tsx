@@ -33,6 +33,7 @@ import { useChatStore, useRoomStore, useRosterStore, useConnectionStore, useCons
 import { useNotificationBadge } from '@/hooks/useNotificationBadge'
 import { useDesktopNotifications } from '@/hooks/useDesktopNotifications'
 import { useWebPush } from '@/hooks/useWebPush'
+import { useServiceWorkerNavigation } from '@/hooks/useServiceWorkerNavigation'
 import { useSoundNotification } from '@/hooks/useSoundNotification'
 import { useEventsSoundNotification } from '@/hooks/useEventsSoundNotification'
 import { useEventsDesktopNotifications } from '@/hooks/useEventsDesktopNotifications'
@@ -81,6 +82,10 @@ function GlobalEffects() {
 
   // Register for web push notifications (browser only, skipped in Tauri)
   useWebPush()
+
+  // Route to the conversation when a web-push notification is clicked while the
+  // app is already running (service worker posts a navigate message).
+  useServiceWorkerNavigation()
 
   // Track window visibility for new message markers
   useWindowVisibility()
