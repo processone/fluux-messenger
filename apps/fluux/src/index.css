@@ -966,18 +966,27 @@ html, body {
 }
 
 /* The drawer controls. Expanded height by default; collapsed to zero while the
- * card is idle. `overflow: hidden` is applied ONLY in the collapsed state so it
- * clips the shrinking icons without ever clipping the (focus-only) attach/emoji
- * popovers, which open upward out of these wrappers. */
+ * card is idle. `overflow: hidden` and `visibility: hidden` apply ONLY in the
+ * collapsed state: overflow clips the shrinking icons without ever clipping the
+ * (focus-only) attach/emoji popovers, and visibility removes the collapsed
+ * controls from the tab order / a11y tree so the first Tab into the idle
+ * composer lands on the input (matching the single-row look), not an invisible
+ * `+`. Focusing the input or the always-visible send button reveals the drawer.
+ * 3.5rem must exceed the tallest drawer-row control (an icon button). */
 .composer-drawer-item {
   max-height: 3.5rem;
   opacity: 1;
+  visibility: visible;
   transition: max-height 160ms ease, opacity 160ms ease;
 }
 .composer-card:not(:focus-within) .composer-drawer-item {
   max-height: 0;
   opacity: 0;
   overflow: hidden;
+  pointer-events: none;
+  /* visibility flips to hidden only after the 160ms fade-out completes */
+  visibility: hidden;
+  transition: max-height 160ms ease, opacity 160ms ease, visibility 0s linear 160ms;
 }
 
 @container (min-width: 420px) {
@@ -990,11 +999,15 @@ html, body {
     max-height: none;
     opacity: 1;
     overflow: visible;
+    pointer-events: auto;
+    visibility: visible;
+    transition: max-height 160ms ease, opacity 160ms ease;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .composer-drawer-item {
+  .composer-drawer-item,
+  .composer-card:not(:focus-within) .composer-drawer-item {
     transition: none;
   }
 }
