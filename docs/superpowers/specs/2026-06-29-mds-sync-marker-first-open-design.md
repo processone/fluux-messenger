@@ -68,3 +68,40 @@ the desktop build:
 - e2e (`scripts/scroll-invariants.ts`): the "new message while away → divider visible on re-entry"
   invariant passes (chromium verified locally; webkit via CI).
 - App scroll unit suite unchanged behavior (the scroll-layer marker branch is not gated).
+
+## Addendum (2026-07-02): the seed lands AFTER first open (race)
+
+Approach B assumes the pending `pendingRemoteDisplayedStanzaId` is present when
+`activateConversation`/`activateRoom` runs, so the entry fold can consume it before the
+divider is derived. But the fresh-session seed (`mdsSideEffects` `online` handler →
+`client.mds.fetchAllDisplayed()`) is a fire-and-forget async PEP fetch that is NOT awaited by
+activation. If the user opens a conversation before that IQ round-trips back, `pending` is
+undefined at the fold, so:
+
+1. the divider is derived from the STALE local read position (first open lands at the last
+   *local* place, not the synced read), and
+2. the seed lands moments later and advances `lastSeenMessageId` **live** — but the old code only
+   updated the badge, never the divider, so the corrected position only surfaced on the NEXT open
+   ("jumps to the end only on re-open").
+
+### Fix (two layers, provenance stays in the SDK)
+
+- **SDK — `applyRemoteDisplayed` recomputes the divider for the ACTIVE conversation.** When a
+  marker advances `lastSeenMessageId` and `activeConversationId`/`activeRoomJid` matches, re-derive
+  `firstNewMessageMarkers[id]` via `notifState.onActivate` (chat: `treatDelayedAsNew:true`; rooms:
+  default). Inactive entities are left untouched (recomputed on their next activation). This extends
+  the doc's existing "applied live" path from the badge to the divider. Tests:
+  `chatStore.mds.test.ts` / `roomStore.mds.test.ts` — "recomputes … when a late marker advances the
+  ACTIVE conversation/room past the divider" + a non-active gate (RED → GREEN).
+- **App — settle-window re-scroll (`useMessageListScroll`).** The conversation-switch effect captures
+  the marker id at entry and its re-assert loop chases that stale target, so the SDK divider clear
+  needs a companion `useLayoutEffect`: on a live divider CLEAR (defined → undefined) for the SAME
+  conversation, while the user has NOT scrolled since entry (`userHasScrolledSinceEntryRef`), call
+  `reassertBottom()` (single-flight → supersedes the stale marker loop). Self-contained prev-conv ref
+  so a genuine switch is excluded. Not verifiable in jsdom/preview (rAF gated); verify on device /
+  via `scripts/scroll-invariants.ts`.
+
+Note: the divider recompute is deliberately NOT gated by `mdsConsumedThisSession` — that gate is only
+about re-*folding* a stale marker at ENTRY. A genuine forward read-sync arriving live SHOULD move the
+divider (that is what "keep loaded conversations current" means); the settle-window/user-scroll gate
+in the app is what prevents yanking a user who has taken over the scroll.

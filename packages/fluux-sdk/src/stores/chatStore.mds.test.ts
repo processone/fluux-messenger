@@ -258,6 +258,68 @@ describe('chatStore — new-message divider is session-only', () => {
   })
 })
 
+describe('chatStore.applyRemoteDisplayed — late marker corrects the ACTIVE divider', () => {
+  beforeEach(() => chatStore.getState().reset())
+
+  // Reproduces the fresh-session seed race: the conversation is activated (divider
+  // derived from the STALE local read position) BEFORE the async MDS seed lands, so
+  // the marker arrives via applyRemoteDisplayed while the conversation is already
+  // active. The divider must be recomputed to reflect the synced read position, not
+  // left frozen at the stale local one (which is what made the view open at the last
+  // local place and only jump to the synced place on the next open).
+  it('recomputes firstNewMessageMarkers when a late marker advances the active conversation past the divider', () => {
+    const cid = 'juliet@capulet.example'
+    const messages = [msg('m1', 's1'), msg('m2', 's2'), msg('m3', 's3'), msg('m4', 's4')]
+    seedMessages(cid, messages)
+
+    // Post-activation state: local read stale at m2, divider parked at m3 (first unread),
+    // conversation is the active one. No pending marker yet (seed hasn't landed).
+    chatStore.setState((state) => {
+      const newMeta = new Map(state.conversationMeta)
+      newMeta.set(cid, { unreadCount: 0, lastSeenMessageId: 'm2' })
+      const newConvs = new Map(state.conversations)
+      newConvs.set(cid, { id: cid, name: cid, type: 'chat', unreadCount: 0, lastSeenMessageId: 'm2' })
+      const newMarkers = new Map(state.firstNewMessageMarkers)
+      newMarkers.set(cid, 'm3')
+      return { conversationMeta: newMeta, conversations: newConvs, firstNewMessageMarkers: newMarkers, activeConversationId: cid }
+    })
+
+    // The MDS seed lands late: the other device had read to s4 (the last message).
+    chatStore.getState().applyRemoteDisplayed(cid, 's4')
+
+    // Read position advanced to m4 …
+    expect(chatStore.getState().conversationMeta.get(cid)?.lastSeenMessageId).toBe('m4')
+    // … and because m4 is the last message, there is nothing new: the divider clears
+    // (the UI then settles to the bottom instead of holding the stale m3 marker).
+    expect(chatSelectors.firstNewMessageIdFor(cid)(chatStore.getState())).toBeUndefined()
+  })
+
+  it('does NOT recompute the divider for a non-active conversation (it is derived fresh on activation)', () => {
+    const cid = 'juliet@capulet.example'
+    const messages = [msg('m1', 's1'), msg('m2', 's2'), msg('m3', 's3'), msg('m4', 's4')]
+    seedMessages(cid, messages)
+
+    chatStore.setState((state) => {
+      const newMeta = new Map(state.conversationMeta)
+      newMeta.set(cid, { unreadCount: 0, lastSeenMessageId: 'm2' })
+      const newConvs = new Map(state.conversations)
+      newConvs.set(cid, { id: cid, name: cid, type: 'chat', unreadCount: 0, lastSeenMessageId: 'm2' })
+      const newMarkers = new Map(state.firstNewMessageMarkers)
+      newMarkers.set(cid, 'm3')
+      // Some OTHER conversation is active, not cid.
+      return { conversationMeta: newMeta, conversations: newConvs, firstNewMessageMarkers: newMarkers, activeConversationId: 'romeo@montague.example' }
+    })
+
+    chatStore.getState().applyRemoteDisplayed(cid, 's4')
+
+    // Read position still advances (forward-only sync is unconditional) …
+    expect(chatStore.getState().conversationMeta.get(cid)?.lastSeenMessageId).toBe('m4')
+    // … but the session divider for the inactive conversation is left untouched;
+    // it is recomputed the next time the conversation is activated.
+    expect(chatStore.getState().firstNewMessageMarkers.get(cid)).toBe('m3')
+  })
+})
+
 describe('chatStore.activateConversation — XEP-0490 divider sync', () => {
   beforeEach(() => chatStore.getState().reset())
 

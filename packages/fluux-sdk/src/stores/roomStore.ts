@@ -1693,6 +1693,31 @@ export const roomStore = createStore<RoomState>()(
         lastSeenMessageId: updated.lastSeenMessageId,
         pendingRemoteDisplayedStanzaId: undefined,
       })
+
+      // XEP-0490: if this marker advances the CURRENTLY ACTIVE room, its new-message
+      // divider was already derived at activation from the (now stale) local read
+      // position — the fresh-session seed can land just after the room opens, so the
+      // fold at activation missed it. Recompute the divider from the advanced position
+      // (rooms treat delayed messages as history replay, so no treatDelayedAsNew) so it
+      // reflects the synced read instead of freezing at the local one. Inactive rooms
+      // recompute on their next activation, so leave the map untouched.
+      let newMarkers = state.firstNewMessageMarkers
+      if (state.activeRoomJid === roomJid) {
+        const divider = notifState.onActivate(
+          {
+            unreadCount: 0,
+            mentionsCount: 0,
+            lastReadAt: meta.lastReadAt,
+            lastSeenMessageId: updated.lastSeenMessageId,
+            firstNewMessageId: undefined,
+          },
+          messages
+        ).firstNewMessageId
+        newMarkers = new Map(state.firstNewMessageMarkers)
+        if (divider) newMarkers.set(roomJid, divider)
+        else newMarkers.delete(roomJid)
+      }
+
       if (existing) {
         const newRooms = new Map(state.rooms)
         newRooms.set(roomJid, {
@@ -1700,9 +1725,9 @@ export const roomStore = createStore<RoomState>()(
           lastSeenMessageId: updated.lastSeenMessageId,
           pendingRemoteDisplayedStanzaId: undefined,
         })
-        return { roomMeta: newMeta, rooms: newRooms }
+        return { roomMeta: newMeta, rooms: newRooms, firstNewMessageMarkers: newMarkers }
       }
-      return { roomMeta: newMeta }
+      return { roomMeta: newMeta, firstNewMessageMarkers: newMarkers }
     })
   },
 
