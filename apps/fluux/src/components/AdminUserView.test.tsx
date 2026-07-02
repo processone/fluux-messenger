@@ -86,6 +86,12 @@ describe('AdminUserView', () => {
   })
 
   describe('actions', () => {
+    it('constrains the actions section to a settings-panel width, not the full panel', () => {
+      renderView()
+      const section = screen.getByText('Actions').closest('section')
+      expect(section).toHaveClass('w-full', 'max-w-md')
+    })
+
     it('renders all four action rows when canBanAccount is true', () => {
       renderView()
       expect(screen.getByRole('button', { name: /change password/i })).toBeInTheDocument()
