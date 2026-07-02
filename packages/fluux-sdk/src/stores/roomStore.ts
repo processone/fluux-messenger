@@ -23,7 +23,7 @@ import * as mamState from './shared/mamState'
 import type { MAMQueryDirection } from './shared/mamState'
 import { computeGapEnd, syncGap, serializeGaps, deserializeGaps, type GapInterval } from './shared/mamGap'
 import * as draftState from './shared/draftState'
-import { buildMessageKeySet, isMessageDuplicate, sortMessagesByTimestamp, trimMessages, prependOlderMessages, mergeAndProcessMessages } from './shared/messageArrayUtils'
+import { buildMessageKeySet, isMessageDuplicate, sortMessagesByTimestamp, trimMessages, trimMessagesKeepOldest, prependOlderMessages, mergeAndProcessMessages } from './shared/messageArrayUtils'
 import { shouldUpdateLastMessage, shouldReplaceLastMessage, isPreviewableMessage, findLastNonIgnoredMessage } from './shared/lastMessageUtils'
 import { ignoreStore, isMessageFromIgnoredUser } from './ignoreStore'
 import { roomActivityTone } from './roomSelectors'
@@ -47,7 +47,7 @@ import { buildScopedStorageKey } from '../utils/storageScope'
  * a huge mostly-estimated array (a running-average estimate was tried but collapsed — see
  * tanstackMessageVirtualizer); Phase-1 conversation-switch eviction bounds RAM. 5000 is interim.
  */
-const MAX_MESSAGES_PER_ROOM = 5000
+const RESIDENT_WINDOW_SIZE = 5000
 
 /**
  * Carry a previously-resolved avatar across a presence update.
@@ -310,7 +310,7 @@ function mergeCachedRoomMessages(
   // Merge, sort, and trim using shared utilities
   const combined = [...newFromCache, ...existing.messages]
   const sorted = sortMessagesByTimestamp(combined)
-  const merged = trimMessages(sorted, MAX_MESSAGES_PER_ROOM)
+  const merged = trimMessages(sorted, RESIDENT_WINDOW_SIZE)
 
   // Get last non-ignored message from merged messages for sidebar preview
   const lastMessage = (merged.length > 0 ? findLastNonIgnoredMessage(merged, roomJid, existing.nickToJidCache) : undefined) ?? existing.lastMessage
@@ -1169,7 +1169,7 @@ export const roomStore = createStore<RoomState>()(
       }
 
       // Add message and trim to max count (older ones remain in IndexedDB)
-      const newMessages = trimMessages([...existing.messages, messageToAdd], MAX_MESSAGES_PER_ROOM)
+      const newMessages = trimMessages([...existing.messages, messageToAdd], RESIDENT_WINDOW_SIZE)
 
       // Delegate notification state to pure function
       const isActive = state.activeRoomJid === roomJid
@@ -1473,7 +1473,7 @@ export const roomStore = createStore<RoomState>()(
     // resident — the durable copy stays in IndexedDB and is rehydrated by
     // activateRoom on return. Entity / meta / lastMessage / occupants are kept,
     // so the sidebar preview and unread badge are unaffected. This bounds memory
-    // (no longer every visited room holds up to MAX_MESSAGES_PER_ROOM) and shrinks
+    // (no longer every visited room holds up to RESIDENT_WINDOW_SIZE) and shrinks
     // the DOM mounted on the next switch into a large room.
     if (prevJid && prevJid !== roomJid) {
       const hadMarker = get().firstNewMessageMarkers.has(prevJid)
@@ -2109,10 +2109,11 @@ export const roomStore = createStore<RoomState>()(
             (msg) => !isMessageDuplicate(msg, existingKeys, getRoomMessageKeys)
           )
 
-          // Merge, sort, and trim using shared utilities
+          // Merge, sort, and trim using shared utilities.
+          // Load-older slides the window (keep oldest) so scroll-back past the bound works.
           const combined = [...newFromCache, ...existing.messages]
           const sorted = sortMessagesByTimestamp(combined)
-          const merged = trimMessages(sorted, MAX_MESSAGES_PER_ROOM)
+          const merged = trimMessagesKeepOldest(sorted, RESIDENT_WINDOW_SIZE)
 
           newRooms.set(roomJid, { ...existing, messages: merged })
 
@@ -2219,13 +2220,13 @@ export const roomStore = createStore<RoomState>()(
               existingMessages,
               mamMessages,
               getRoomMessageKeys,
-              MAX_MESSAGES_PER_ROOM
+              RESIDENT_WINDOW_SIZE
             )
           : mergeAndProcessMessages(
               existingMessages,
               mamMessages,
               getRoomMessageKeys,
-              MAX_MESSAGES_PER_ROOM
+              RESIDENT_WINDOW_SIZE
             )
       mergedForMarker = merged
 
