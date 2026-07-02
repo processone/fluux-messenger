@@ -202,13 +202,10 @@ export function AdminView({ activeCategory, onBack }: AdminViewProps) {
     }
   }
 
-  // Section sheet (mobile): main-content sections navigate and close the sheet;
-  // announcements/other only expand inline, so the sheet stays open.
+  // Section sheet (mobile): selecting a section navigates and closes the sheet.
   const handleSheetCategoryChange = (category: AdminCategory | null) => {
     adminStore.getState().setActiveCategory(category)
-    if (category === null || category === 'stats' || category === 'users' || category === 'rooms') {
-      setSectionsSheetOpen(false)
-    }
+    setSectionsSheetOpen(false)
   }
 
   // Executing a command from the sheet opens a session in the main area — close the sheet.
