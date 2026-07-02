@@ -26,6 +26,12 @@ import {
 const FPS = 30
 const FRAME_SEC = 1 / FPS
 
+const READ_BEAT = 2400 // ms a caption holds before the scene's feature action fires
+const ABSORB = 2600    // ms to hold on a result before clearing the caption
+const VEIL_MAX = 0.55  // peak opacity of the scene-transition veil
+const VEIL_IN = 5      // frames to dip the veil in
+const VEIL_OUT = 7     // frames to lift the veil out
+
 interface Frame { file: string; durationSec: number }
 
 const easeInOut = (t: number): number => (t < 0.5 ? 2 * t * t : 1 - (-2 * t + 2) ** 2 / 2)
@@ -64,13 +70,13 @@ export class Director {
     }
   }
 
-  private setTitle(title: string, sub: string): Promise<void> {
-    return this.page.evaluate(({ title, sub }) => {
+  private setTitle(_title: string, sub: string): Promise<void> {
+    return this.page.evaluate((sub) => {
       const el = document.getElementById('vid-title')
       if (!el) return
-      ;(el.querySelector('.tt') as HTMLElement).textContent = title
-      ;(el.querySelector('.ts') as HTMLElement).textContent = sub
-    }, { title, sub })
+      const s = el.querySelector('.ts') as HTMLElement | null
+      if (s) s.textContent = sub
+    }, sub)
   }
   private setOpacity(id: string, o: number): Promise<void> {
     return this.page.evaluate(({ id, o }) => {
@@ -127,6 +133,7 @@ export class Director {
         if (el) { el.style.opacity = String(o); el.style.transform = `translate(0, ${10 * (1 - o)}px)` }
       }, o)
     })
+    await this.hold(READ_BEAT) // read before the feature moves
   }
 
   async clearCaption(): Promise<void> {
@@ -137,6 +144,18 @@ export class Director {
 
   async dwell(ms: number): Promise<void> {
     await this.hold(ms)
+  }
+
+  /** Hold on the current frame long enough for the result to land. */
+  async absorb(): Promise<void> {
+    await this.hold(ABSORB)
+  }
+
+  /** Dip a dark veil, run `fn` while covered (a settle beat), then lift it. */
+  async crossfade(fn: () => Promise<void>): Promise<void> {
+    await this.steps(VEIL_IN, (i) => this.setOpacity('vid-veil', VEIL_MAX * ((i + 1) / VEIL_IN)))
+    await fn()
+    await this.steps(VEIL_OUT, (i) => this.setOpacity('vid-veil', VEIL_MAX * (1 - (i + 1) / VEIL_OUT)))
   }
 
   // ── pointer + clicks ─────────────────────────────────────────────
@@ -279,34 +298,115 @@ export class Director {
     const id = `demo-vid-${this.n}`
     await this.fire([{ delayMs: 0, action: 'typing', data: { conversationId: opts.conversationId, jid: opts.from, isTyping: true } }])
     await this.page.waitForTimeout(80)
-    await this.hold(1100) // "typing…"
+    await this.hold(1500) // "typing…"
     await this.fire([
       { delayMs: 0, action: 'stop-typing', data: { conversationId: opts.conversationId, jid: opts.from, isTyping: false } },
       { delayMs: 0, action: 'message', data: { message: { type: 'chat', id, from: opts.from, body: opts.body, timestamp: new Date(), isOutgoing: false, conversationId: opts.conversationId } } },
     ])
     await this.page.waitForTimeout(80)
-    await this.hold(1300) // message shown
+    await this.hold(1900) // message shown
     return id
   }
 
   async chatReaction(opts: { conversationId: string; messageId: string; reactorJid: string; emojis: string[] }): Promise<void> {
     await this.fire([{ delayMs: 0, action: 'chat-reaction', data: opts }])
     await this.page.waitForTimeout(80)
-    await this.hold(1200)
+    await this.hold(1700)
   }
 
-  /** Typing → message from a room participant. */
-  async roomBeat(opts: { roomJid: string; nick: string; body: string }): Promise<void> {
-    const id = `demo-vid-room-${this.n}`
+  /** Typing → message from a room participant (optionally a quoted reply). Returns the message id. */
+  async roomBeat(opts: {
+    roomJid: string; nick: string; body: string
+    id?: string
+    replyTo?: { id: string; to: string; fallbackBody: string }
+  }): Promise<string> {
+    const id = opts.id ?? `demo-vid-room-${this.n}`
     await this.fire([{ delayMs: 0, action: 'room-typing', data: { roomJid: opts.roomJid, nick: opts.nick, isTyping: true } }])
     await this.page.waitForTimeout(80)
-    await this.hold(1000)
+    await this.hold(1400)
     await this.fire([
       { delayMs: 0, action: 'room-typing', data: { roomJid: opts.roomJid, nick: opts.nick, isTyping: false } },
-      { delayMs: 0, action: 'room-message', data: { roomJid: opts.roomJid, message: { type: 'groupchat', id, from: `${opts.roomJid}/${opts.nick}`, nick: opts.nick, body: opts.body, timestamp: new Date(), isOutgoing: false, roomJid: opts.roomJid }, incrementUnread: true } },
+      { delayMs: 0, action: 'room-message', data: {
+        roomJid: opts.roomJid,
+        message: {
+          type: 'groupchat', id, from: `${opts.roomJid}/${opts.nick}`, nick: opts.nick,
+          body: opts.body, timestamp: new Date(), isOutgoing: false, roomJid: opts.roomJid,
+          ...(opts.replyTo ? { replyTo: opts.replyTo } : {}),
+        },
+        incrementUnread: true,
+      } },
     ])
     await this.page.waitForTimeout(80)
+    await this.hold(1900)
+    return id
+  }
+
+  /** Inject a completed outgoing message that carries an image/file attachment. */
+  async attachmentBeat(opts: {
+    conversationId: string; body: string
+    attachment: { url: string; name: string; mediaType: string; size: number; width?: number; height?: number }
+  }): Promise<void> {
+    const id = `demo-vid-file-${this.n}`
+    await this.fire([{ delayMs: 0, action: 'message', data: {
+      message: {
+        type: 'chat', id, from: SELF_JID, body: opts.body,
+        timestamp: new Date(), isOutgoing: true, conversationId: opts.conversationId,
+        attachment: opts.attachment,
+      },
+    } }])
+    await this.page.waitForTimeout(80)
+    await this.hold(2100)
+  }
+
+  /** XEP-0308: correct a message in place (shows the "edited" indicator). */
+  async editMessage(opts: { conversationId: string; messageId: string; body: string }): Promise<void> {
+    await this.fire([{ delayMs: 0, action: 'message-updated', data: {
+      conversationId: opts.conversationId, messageId: opts.messageId,
+      updates: { body: opts.body, isEdited: true },
+    } }])
+    await this.page.waitForTimeout(80)
+    await this.hold(2000)
+  }
+
+  /** XEP-0424: retract (unsend) a message. */
+  async retractMessage(opts: { conversationId: string; messageId: string }): Promise<void> {
+    await this.fire([{ delayMs: 0, action: 'message-updated', data: {
+      conversationId: opts.conversationId, messageId: opts.messageId,
+      updates: { isRetracted: true, retractedAt: new Date() },
+    } }])
+    await this.page.waitForTimeout(80)
+    await this.hold(2100)
+  }
+
+  /** A roster presence change (e.g. a contact coming online). */
+  async presence(opts: { fullJid: string; show: 'chat' | 'away' | 'xa' | 'dnd' | null; priority?: number; client?: string }): Promise<void> {
+    await this.fire([{ delayMs: 0, action: 'presence', data: {
+      fullJid: opts.fullJid, show: opts.show, priority: opts.priority ?? 5, client: opts.client ?? 'Fluux',
+    } }])
+    await this.page.waitForTimeout(80)
     await this.hold(1300)
+  }
+
+  /**
+   * Drive the real message composer: glide to it, focus, type a message
+   * character-by-character, then send it (Enter). The 1:1 ChatView composer is a
+   * single textarea; sending optimistically renders the outgoing bubble even in
+   * demo mode (Chat.sendMessage emits chat:message after the dropped stanza).
+   */
+  async composeBeat(opts: { text: string; perCharMs?: number }): Promise<void> {
+    const box = this.page.locator('textarea[placeholder^="Message"]').first()
+    await this.glideTo(box)
+    await box.click({ timeout: 15_000 })
+    await this.hold(650) // focused, empty composer
+    for (const ch of opts.text) {
+      await this.page.keyboard.type(ch)
+      await this.page.waitForTimeout(30)
+      await this.hold(opts.perCharMs ?? 95)
+    }
+    await this.hold(850) // the composed message, ready to send
+    await this.page.keyboard.press('Enter')
+    await this.page.waitForTimeout(100)
+    await this.hold(1800) // the sent bubble
   }
 
   // ── assembly ─────────────────────────────────────────────────────

@@ -50,13 +50,13 @@ async function record(browser: Browser, variant: Variant): Promise<void> {
   let ok = false
   try {
     await d.setup('Fluux Messenger', 'A modern XMPP client')
-    await d.intro(1600)
+    await d.intro(2700)
     for (const scene of scenesFor(variant)) {
       // eslint-disable-next-line no-console
       console.log(`  ▶ ${variant}: ${scene.id}`)
       await scene.run(d)
     }
-    await d.outro('Fluux Messenger', 'Open. Secure. Yours.', 2600)
+    await d.outro('Fluux Messenger', 'Open. Secure. Yours.', 3800)
     ok = true
   } finally {
     await context.close()
