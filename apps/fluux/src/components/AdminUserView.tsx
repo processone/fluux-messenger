@@ -7,6 +7,7 @@ import { ConfirmDialog } from './ConfirmDialog'
 import { SettingsSection } from './ui/SettingsSection'
 import { SettingsGroup } from './ui/SettingsGroup'
 import { SettingsRow } from './ui/SettingsRow'
+import { AdminContentWidth } from './AdminContentWidth'
 
 interface AdminUserViewProps {
   user: AdminUser
@@ -81,7 +82,7 @@ export function AdminUserView({
   }
 
   return (
-    <div className="flex-1 flex flex-col min-h-0 w-full max-w-2xl mx-auto">
+    <AdminContentWidth className="flex-1 flex flex-col min-h-0">
       {/* Header with back button */}
       <div className="flex items-center gap-3 mb-6">
         <Tooltip content={t('common.close')} position="right">
@@ -199,6 +200,6 @@ export function AdminUserView({
           onCancel={() => setShowBanConfirm(false)}
         />
       )}
-    </div>
+    </AdminContentWidth>
   )
 }

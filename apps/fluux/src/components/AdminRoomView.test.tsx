@@ -53,6 +53,20 @@ describe('AdminRoomView', () => {
       expect(screen.getByText('testroom@conference.example.com')).toBeInTheDocument()
     })
 
+    it('centers the whole view at the same width as the user/room lists, not left-aligned', () => {
+      const { container } = render(
+        <AdminRoomView
+          room={mockRoom}
+          onBack={mockOnBack}
+          onDestroyRoom={mockOnDestroyRoom}
+          isExecuting={false}
+          getRoomOptions={mockGetRoomOptions}
+          hasGetRoomOptionsCommand={false}
+        />
+      )
+      expect(container.firstElementChild).toHaveClass('w-full', 'max-w-2xl', 'mx-auto')
+    })
+
     it('should render back button', () => {
       render(
         <AdminRoomView

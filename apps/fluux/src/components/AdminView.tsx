@@ -8,6 +8,7 @@ import { useWindowedList } from '../hooks/useWindowedList'
 import { Tooltip } from './Tooltip'
 import { ModalShell } from './ModalShell'
 import { AdminCommandForm, AdminCommandResult } from './AdminCommandForm'
+import { AdminContentWidth } from './AdminContentWidth'
 import { TextInput } from './ui/TextInput'
 import { EntityListView } from './EntityListView'
 import { UserListItem } from './UserListItem'
@@ -319,28 +320,32 @@ export function AdminView({ activeCategory, onBack }: AdminViewProps) {
     // If there's an active command session, show the form/result
     if (currentSession?.status === 'executing' && currentSession.form) {
       return (
-        <AdminCommandForm
-          form={currentSession.form}
-          onSubmit={handleSubmitForm}
-          onCancel={handleCancel}
-          onPrev={handlePrev}
-          isSubmitting={isExecuting}
-          note={currentSession.note}
-          canGoBack={canGoBack}
-          canGoNext={canGoNext}
-          targetJid={targetJid}
-          onClearTargetJid={clearTargetJid}
-        />
+        <AdminContentWidth className="flex-1 flex flex-col min-h-0">
+          <AdminCommandForm
+            form={currentSession.form}
+            onSubmit={handleSubmitForm}
+            onCancel={handleCancel}
+            onPrev={handlePrev}
+            isSubmitting={isExecuting}
+            note={currentSession.note}
+            canGoBack={canGoBack}
+            canGoNext={canGoNext}
+            targetJid={targetJid}
+            onClearTargetJid={clearTargetJid}
+          />
+        </AdminContentWidth>
       )
     }
 
     if (currentSession?.status === 'completed' && currentSession.form) {
       return (
-        <AdminCommandResult
-          form={currentSession.form}
-          note={currentSession.note}
-          onClose={handleCloseSession}
-        />
+        <AdminContentWidth className="flex-1 flex flex-col min-h-0">
+          <AdminCommandResult
+            form={currentSession.form}
+            note={currentSession.note}
+            onClose={handleCloseSession}
+          />
+        </AdminContentWidth>
       )
     }
 
@@ -370,7 +375,7 @@ export function AdminView({ activeCategory, onBack }: AdminViewProps) {
     // Show entity lists based on active category
     if (activeCategory === 'users') {
       return (
-        <div className="flex-1 flex flex-col min-h-0 w-full max-w-2xl mx-auto">
+        <AdminContentWidth className="flex-1 flex flex-col min-h-0">
           {/* Vhost selector - only show when multiple vhosts available */}
           {vhosts.length > 1 && (
             <div className="mb-3">
@@ -436,7 +441,7 @@ export function AdminView({ activeCategory, onBack }: AdminViewProps) {
               </Tooltip>
             }
           />
-        </div>
+        </AdminContentWidth>
       )
     }
 
@@ -456,7 +461,7 @@ export function AdminView({ activeCategory, onBack }: AdminViewProps) {
       }
 
       return (
-        <div className="flex-1 flex flex-col min-h-0 w-full max-w-2xl mx-auto">
+        <AdminContentWidth className="flex-1 flex flex-col min-h-0">
           <EntityListView
             title={t('admin.roomList.title')}
             items={filteredRooms}
@@ -475,7 +480,7 @@ export function AdminView({ activeCategory, onBack }: AdminViewProps) {
               />
             )}
           />
-        </div>
+        </AdminContentWidth>
       )
     }
 
