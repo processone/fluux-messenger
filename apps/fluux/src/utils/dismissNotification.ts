@@ -8,9 +8,9 @@ function inTauri(): boolean {
   return typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
 }
 
-/** Tag used by the Tauri notification plugin and the web Notification API
- *  (see useDesktopNotifications.ts). Differs from the macOS native identifier. */
-function pluginTag(navType: NavType, navTarget: string): string {
+/** Tag used by the web Notification API (see useDesktopNotifications.ts's
+ *  showWebNotification branch). Differs from the macOS native identifier. */
+function webTag(navType: NavType, navTarget: string): string {
   return navType === 'room' ? `room-${navTarget}` : navTarget
 }
 
@@ -20,7 +20,10 @@ function pluginTag(navType: NavType, navTarget: string): string {
  * and platform-specific:
  * - macOS Tauri: native UNUserNotificationCenter command, keyed by identifier
  *   `"<navType>:<navTarget>"`.
- * - Windows/Linux Tauri: notification plugin, keyed by tag.
+ * - Windows/Linux Tauri: no-op. The notification plugin can only reference a
+ *   sent notification by a 32-bit integer id, not by our JID-based tag, so
+ *   there is no reliable way to remove a single conversation's notification;
+ *   it is left to auto-expire.
  * - Web (PWA): service worker registration, keyed by tag.
  */
 export async function dismissNotification(navType: NavType, navTarget: string): Promise<void> {
@@ -33,18 +36,14 @@ export async function dismissNotification(navType: NavType, navTarget: string): 
       return
     }
 
-    const tag = pluginTag(navType, navTarget)
-
     if (inTauri()) {
-      const { active, removeActive } = await import('@tauri-apps/plugin-notification')
-      const delivered = await active()
-      const matches = delivered.filter((n) => n.tag === tag)
-      if (matches.length > 0) await removeActive(matches)
+      // Windows/Linux Tauri: no per-conversation removal available (see above).
       return
     }
 
     // Web PWA: notifications were posted via ServiceWorkerRegistration.showNotification.
     if (typeof navigator !== 'undefined' && navigator.serviceWorker) {
+      const tag = webTag(navType, navTarget)
       const registration = await navigator.serviceWorker.ready
       const notifications = await registration.getNotifications({ tag })
       notifications.forEach((n) => n.close())
