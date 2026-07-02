@@ -139,6 +139,38 @@ describe('roomStore.applyRemoteDisplayed', () => {
     expect(after?.lastSeenMessageId).toBe('m2')
   })
 
+  // Fresh-session seed race (MUC): the room is activated (divider derived from the
+  // stale local read) BEFORE the async MDS seed lands, so the marker arrives while the
+  // room is already active. The divider must be recomputed from the advanced position,
+  // not frozen at the stale local one.
+  it('recomputes firstNewMessageMarkers when a late marker advances the ACTIVE room past the divider', () => {
+    seedRoom(ROOM, [rmsg('m1', 's1', 1), rmsg('m2', 's2', 2), rmsg('m3', 's3', 3), rmsg('m4', 's4', 4)], 'm2')
+    roomStore.setState((s) => {
+      const markers = new Map(s.firstNewMessageMarkers)
+      markers.set(ROOM, 'm3')
+      return { firstNewMessageMarkers: markers, activeRoomJid: ROOM }
+    })
+
+    roomStore.getState().applyRemoteDisplayed(ROOM, 's4')
+
+    expect(roomStore.getState().roomMeta.get(ROOM)?.lastSeenMessageId).toBe('m4')
+    expect(roomSelectors.firstNewMessageIdFor(ROOM)(roomStore.getState())).toBeUndefined()
+  })
+
+  it('does NOT recompute the divider for a non-active room', () => {
+    seedRoom(ROOM, [rmsg('m1', 's1', 1), rmsg('m2', 's2', 2), rmsg('m3', 's3', 3), rmsg('m4', 's4', 4)], 'm2')
+    roomStore.setState((s) => {
+      const markers = new Map(s.firstNewMessageMarkers)
+      markers.set(ROOM, 'm3')
+      return { firstNewMessageMarkers: markers, activeRoomJid: 'other@conference.example' }
+    })
+
+    roomStore.getState().applyRemoteDisplayed(ROOM, 's4')
+
+    expect(roomStore.getState().roomMeta.get(ROOM)?.lastSeenMessageId).toBe('m4')
+    expect(roomStore.getState().firstNewMessageMarkers.get(ROOM)).toBe('m3')
+  })
+
   it('resolves a pending room marker once the message arrives via room MAM merge', () => {
     seedRoom(ROOM, [rmsg('m1', 's1', 1)], 'm1')
     roomStore.getState().applyRemoteDisplayed(ROOM, 's5') // not loaded → pending

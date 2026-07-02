@@ -1863,6 +1863,41 @@ export function useMessageListScroll({
 
   }, [conversationId, messageCount, firstNewMessageId, targetMessageId, lastMessageId, isAtBottomRef, staticMode, pinVirtualizedBottom, reassertBottom, restoreSavedPosition])
 
+  // XEP-0490 settle window: the fresh-session read-sync seed can land just AFTER a
+  // conversation is opened. The SDK's entry fold races the async PEP fetch, so at
+  // activation the divider was derived from the STALE local read position and the
+  // conversation-switch effect above already positioned the view (and armed a re-assert
+  // loop) against it. When the seed lands, the SDK advances lastSeenMessageId and
+  // recomputes the divider live for the ACTIVE conversation (chatStore/roomStore
+  // applyRemoteDisplayed); when the synced read caught the conversation up, the divider
+  // clears. Settle the view to the bottom so the FIRST open lands where a later re-open
+  // would — otherwise it stays stranded at the stale marker and appears to "jump to the
+  // end" only on re-open.
+  //
+  // Tightly gated so it never fights the user or a genuine unread marker:
+  //  - only a live divider CLEAR (a defined marker -> undefined) on the SAME conversation
+  //    already open (a real conversation switch is owned by the effect above; we detect it
+  //    via our OWN previous-conversation ref, since that effect updates prevConversationRef
+  //    before this one runs),
+  //  - only while the settle window is open (the user hasn't scrolled since entry),
+  //  - never in static/preview mode.
+  // reassertBottom() supersedes the stale marker re-assert loop (single-flight).
+  const prevSettleRef = useRef({ conv: conversationId, divider: firstNewMessageId })
+  useLayoutEffect(() => {
+    const prev = prevSettleRef.current
+    prevSettleRef.current = { conv: conversationId, divider: firstNewMessageId }
+    if (staticMode) return
+    if (prev.conv !== conversationId) return
+    if (prev.divider === undefined || firstNewMessageId !== undefined) return
+    if (userHasScrolledSinceEntryRef.current) return
+    debugLog('MDS SETTLE: divider cleared by late read-sync → settle to bottom', {
+      conversationId,
+      prevMarker: prev.divider,
+    })
+    isAtBottomRef.current = true
+    reassertBottom()
+  }, [conversationId, firstNewMessageId, staticMode, isAtBottomRef, reassertBottom])
+
   // Retry a saved-position restore that entered before any rows were mounted.
   // This is common for rooms: the MessageList mounts in a loading state, then
   // cache/MAM rows arrive in the same conversation id. Until the restore lands,

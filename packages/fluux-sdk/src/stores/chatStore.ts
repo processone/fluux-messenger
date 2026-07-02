@@ -1116,6 +1116,33 @@ export const chatStore = createStore<ChatState>()(
             pendingRemoteDisplayedStanzaId: undefined,
           })
 
+          // XEP-0490: if this marker advances the CURRENTLY ACTIVE conversation, the
+          // new-message divider was already derived at activation from the (now stale)
+          // local read position — e.g. the fresh-session seed landed just after the
+          // conversation opened, so the fold at activation missed it. Recompute the
+          // divider from the advanced position so it reflects the synced read instead
+          // of freezing at the local one (the view otherwise stays at the last local
+          // place and only jumps to the synced place on the next open). Reuse
+          // onActivate's forward-scan derivation. For a non-active conversation the
+          // divider is recomputed on its next activation, so leave the map untouched.
+          let newMarkers = state.firstNewMessageMarkers
+          if (state.activeConversationId === conversationId) {
+            const divider = notifState.onActivate(
+              {
+                unreadCount: 0,
+                mentionsCount: 0,
+                lastReadAt: meta.lastReadAt,
+                lastSeenMessageId: updated.lastSeenMessageId,
+                firstNewMessageId: undefined,
+              },
+              messages,
+              { treatDelayedAsNew: true }
+            ).firstNewMessageId
+            newMarkers = new Map(state.firstNewMessageMarkers)
+            if (divider) newMarkers.set(conversationId, divider)
+            else newMarkers.delete(conversationId)
+          }
+
           if (conv) {
             const newConversations = new Map(state.conversations)
             newConversations.set(conversationId, {
@@ -1124,10 +1151,10 @@ export const chatStore = createStore<ChatState>()(
               // Keep the combined map coherent with conversationMeta.
               pendingRemoteDisplayedStanzaId: undefined,
             })
-            return { conversationMeta: newMeta, conversations: newConversations }
+            return { conversationMeta: newMeta, conversations: newConversations, firstNewMessageMarkers: newMarkers }
           }
 
-          return { conversationMeta: newMeta }
+          return { conversationMeta: newMeta, firstNewMessageMarkers: newMarkers }
         })
       },
 
