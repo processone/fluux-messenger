@@ -20,23 +20,80 @@ export interface Scene {
 }
 
 export const storyboard: Scene[] = [
-  // 1 — Direct messaging + reactions (reel)
+  // 1 — Direct messaging + typing + reaction (reel)
   {
     id: 'messaging',
     variant: 'reel',
     run: async (d) => {
-      await d.navigateTo('messages')
-      await d.selectItem('Emma Wilson')
-      await d.caption('Fast, modern messaging', 'Reactions, replies & rich text — built in')
-      await d.dwell(1800)
+      await d.crossfade(async () => { await d.navigateTo('messages'); await d.selectItem('Emma Wilson') })
+      await d.caption('Fast, modern messaging', 'Typing indicators, reactions & replies — built in')
       const msgId = await d.typeBeat({ conversationId: `emma@${DOMAIN}`, from: `emma@${DOMAIN}`, body: 'Perfect — see you at 4! 🎉' })
       await d.chatReaction({ conversationId: `emma@${DOMAIN}`, messageId: msgId, reactorJid: SELF_JID, emojis: ['👍'] })
-      await d.dwell(1200)
+      await d.absorb()
       await d.clearCaption()
     },
   },
 
-  // 2 — Command palette (reel)
+  // 2 — Replies & rich text / markdown (reel)
+  {
+    id: 'replies-richtext',
+    variant: 'reel',
+    run: async (d) => {
+      await d.crossfade(async () => { await d.navigateTo('rooms'); await d.selectItem('Team Chat') })
+      await d.caption('Replies & rich text', 'Markdown, code blocks & quoted replies')
+      const codeId = 'demo-vid-code'
+      await d.roomBeat({
+        roomJid: ROOM_JID, nick: 'Sophia', id: codeId,
+        body: 'Optimized the XML parser:\n\n```rust\npub fn parse(input: &[u8]) -> Result<Stanza, Error> {\n    let mut r = Reader::from_reader(input);\n    r.config_mut().trim_text(true);\n    Stanza::read(&mut r)\n}\n```\n\n3× faster than before 🏎️',
+      })
+      await d.absorb()
+      await d.roomBeat({
+        roomJid: ROOM_JID, nick: 'Emma',
+        body: 'Nice catch — that explains the heap growth I saw in the profiler',
+        replyTo: { id: codeId, to: `${ROOM_JID}/Sophia`, fallbackBody: 'Optimized the XML parser' },
+      })
+      await d.absorb()
+      await d.clearCaption()
+    },
+  },
+
+  // 3 — File & image sharing (reel)
+  {
+    id: 'file-sharing',
+    variant: 'reel',
+    run: async (d) => {
+      await d.crossfade(async () => { await d.navigateTo('messages'); await d.selectItem('Emma Wilson') })
+      await d.caption('Share files & images', 'Images, PDFs & voice notes — with inline previews')
+      await d.attachmentBeat({
+        conversationId: `emma@${DOMAIN}`,
+        body: 'Here’s the latest mockup 👇',
+        attachment: { url: './demo/screenshot-chat-dark.png', name: 'mockup-v2.png', mediaType: 'image/png', size: 384_000, width: 1280, height: 800 },
+      })
+      await d.absorb()
+      await d.clearCaption()
+    },
+  },
+
+  // 4 — Edit & retraction (reel)
+  {
+    id: 'edit-retract',
+    variant: 'reel',
+    run: async (d) => {
+      await d.crossfade(async () => { await d.navigateTo('messages'); await d.selectItem('Emma Wilson') })
+      await d.caption('Edit & unsend', 'Fix a typo or retract a message (XEP-0308 / XEP-0424)')
+      const editId = await d.typeBeat({ conversationId: `emma@${DOMAIN}`, from: `emma@${DOMAIN}`, body: 'Lunch at 12:30 sharp!' })
+      await d.absorb()
+      await d.editMessage({ conversationId: `emma@${DOMAIN}`, messageId: editId, body: 'Lunch at 1:00 sharp!' })
+      await d.absorb()
+      const dropId = await d.typeBeat({ conversationId: `emma@${DOMAIN}`, from: `emma@${DOMAIN}`, body: 'Wrong chat, ignore that 🙈' })
+      await d.absorb()
+      await d.retractMessage({ conversationId: `emma@${DOMAIN}`, messageId: dropId })
+      await d.absorb()
+      await d.clearCaption()
+    },
+  },
+
+  // 5 — Command palette (reel)
   {
     id: 'command-palette',
     variant: 'reel',
@@ -45,32 +102,57 @@ export const storyboard: Scene[] = [
       await d.press('Meta+k', 800)
       await d.typeText('design')
       await d.dwell(900)
-      // Click the result to jump straight into it (the Design Review room).
-      // A room result is unique to the palette (rooms aren't in the messages
-      // sidebar), so the click isn't blocked by the modal backdrop — and it's
-      // a different destination from the Team Chat rooms scene, so no repeat.
       await d.glideClick(d.page.getByText('Design Review', { exact: true }).first(), 1500)
       await d.clearCaption()
     },
   },
 
-  // 3 — Group rooms + members + live room message (reel)
+  // 6 — Group rooms + presence + members (reel)
   {
-    id: 'rooms',
+    id: 'rooms-presence',
     variant: 'reel',
     run: async (d) => {
-      await d.navigateTo('rooms')
-      await d.selectItem('Team Chat')
+      await d.crossfade(async () => { await d.navigateTo('rooms'); await d.selectItem('Team Chat') })
       await d.caption('Group chat & rooms', 'MUC rooms with presence, roles & members')
       const membersBtn = d.page.locator('button[aria-label="Show members"]')
       if (await membersBtn.isVisible().catch(() => false)) await d.glideClick(membersBtn, 1000)
+      await d.presence({ fullJid: `sophia@${DOMAIN}/laptop`, show: null })
       await d.roomBeat({ roomJid: ROOM_JID, nick: 'James', body: 'Pushed the fix — CI is green ✅' })
+      await d.absorb()
+      await d.clearCaption()
+    },
+  },
+
+  // 7 — End-to-end encryption (reel)
+  {
+    id: 'encryption',
+    variant: 'reel',
+    run: async (d) => {
+      await d.crossfade(async () => { await d.navigateTo('messages'); await d.selectItem('Ava Martinez') })
+      await d.caption('End-to-end encryption', 'OpenPGP with verified / TOFU trust states')
+      await d.absorb()
       await d.dwell(1400)
       await d.clearCaption()
     },
   },
 
-  // 4 — Polls & code blocks (full only)
+  // 8 — Themes & dark/light (reel)
+  {
+    id: 'themes',
+    variant: 'reel',
+    run: async (d) => {
+      await d.crossfade(async () => { await d.navigateTo('messages'); await d.selectItem('Emma Wilson') })
+      await d.caption('Make it yours', 'Light & dark, plus curated themes')
+      await d.setColorScheme('light', 1400)
+      await d.setTheme('nord', 1300)
+      await d.setTheme('dracula', 1300)
+      await d.setTheme('fluux')
+      await d.setColorScheme('dark', 900)
+      await d.clearCaption()
+    },
+  },
+
+  // 9 — Polls & code blocks (full only)
   {
     id: 'poll-code',
     variant: 'full',
@@ -84,7 +166,7 @@ export const storyboard: Scene[] = [
     },
   },
 
-  // 5 — Whispers (full only)
+  // 10 — Whispers (full only)
   {
     id: 'whisper',
     variant: 'full',
@@ -97,20 +179,7 @@ export const storyboard: Scene[] = [
     },
   },
 
-  // 6 — End-to-end encryption badges (reel)
-  {
-    id: 'encryption',
-    variant: 'reel',
-    run: async (d) => {
-      await d.navigateTo('messages')
-      await d.selectItem('Ava Martinez')
-      await d.caption('End-to-end encryption', 'OpenPGP with verified / TOFU trust states')
-      await d.dwell(3000)
-      await d.clearCaption()
-    },
-  },
-
-  // 7 — Encryption settings (full only)
+  // 11 — Encryption settings (full only)
   {
     id: 'encryption-settings',
     variant: 'full',
@@ -124,24 +193,7 @@ export const storyboard: Scene[] = [
     },
   },
 
-  // 8 — Themes & dark/light (reel)
-  {
-    id: 'themes',
-    variant: 'reel',
-    run: async (d) => {
-      await d.navigateTo('messages')
-      await d.selectItem('Emma Wilson')
-      await d.caption('Make it yours', 'Light & dark, plus curated themes')
-      await d.setColorScheme('light', 1400)
-      await d.setTheme('nord', 1300)
-      await d.setTheme('dracula', 1300)
-      await d.setTheme('fluux')
-      await d.setColorScheme('dark', 900)
-      await d.clearCaption()
-    },
-  },
-
-  // 9 — Global search (full only)
+  // 12 — Global search (full only)
   {
     id: 'search',
     variant: 'full',
@@ -157,7 +209,7 @@ export const storyboard: Scene[] = [
     },
   },
 
-  // 10 — i18n / RTL (full only)
+  // 13 — i18n / RTL (full only)
   {
     id: 'i18n',
     variant: 'full',
@@ -171,7 +223,7 @@ export const storyboard: Scene[] = [
     },
   },
 
-  // 11 — Admin console (full only)
+  // 14 — Admin console (full only)
   {
     id: 'admin',
     variant: 'full',
