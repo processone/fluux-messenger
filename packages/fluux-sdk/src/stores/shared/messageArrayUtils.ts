@@ -291,9 +291,11 @@ export function prependOlderMessages<T extends TimestampedMessage>(
   // Prepend to existing - no full re-sort needed since new messages are all older
   let merged = [...sortedNew, ...existing]
 
-  // Trim if maxCount provided (removes oldest from front)
+  // Load-older slides the window: keep the OLDEST maxCount so the just-loaded older
+  // batch survives and the newest tail is evicted (was trimMessages = keep-newest,
+  // which dropped the loaded batch at the bound — the old scroll-back "wall").
   if (maxCount !== undefined) {
-    merged = trimMessages(merged, maxCount)
+    merged = trimMessagesKeepOldest(merged, maxCount)
   }
 
   return { merged, newMessages }
