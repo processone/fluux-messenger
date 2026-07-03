@@ -3491,6 +3491,113 @@ describe('roomStore', () => {
     })
   })
 
+  describe('hydratePreviewsFromCache', () => {
+    const roomA = 'a@conference.example.com'
+    const roomB = 'b@conference.example.com'
+
+    function makeMsg(roomJid: string, iso: string, body: string): RoomMessage {
+      return {
+        type: 'groupchat',
+        id: `${roomJid}-${iso}`,
+        roomJid,
+        from: `${roomJid}/alice`,
+        nick: 'alice',
+        body,
+        timestamp: new Date(iso),
+        isOutgoing: false,
+      }
+    }
+
+    function addBookmarkedRoom(jid: string): void {
+      roomStore.getState().addRoom({
+        jid,
+        name: jid,
+        nickname: 'me',
+        joined: false,
+        isJoining: false,
+        isBookmarked: true,
+        supportsMAM: true,
+        occupants: new Map(),
+        messages: [],
+        unreadCount: 0,
+        mentionsCount: 0,
+        typingUsers: new Set(),
+      })
+    }
+
+    beforeEach(() => {
+      roomStore.getState().reset()
+      vi.mocked(messageCache.getRoomMessages).mockReset()
+      vi.mocked(messageCache.isMessageCacheAvailable).mockReturnValue(true)
+    })
+
+    // Restore the shared cache mocks so overrides here don't leak into later blocks.
+    afterEach(() => {
+      vi.mocked(messageCache.getRoomMessages).mockReset()
+      vi.mocked(messageCache.getRoomMessages).mockResolvedValue([])
+      vi.mocked(messageCache.isMessageCacheAvailable).mockReturnValue(true)
+    })
+
+    it('orders the sidebar from cache at launch and only writes the store ONCE', async () => {
+      // Added in A-then-B order with no lastMessage -> both would sort at epoch 0.
+      addBookmarkedRoom(roomA)
+      addBookmarkedRoom(roomB)
+      expect(roomStore.getState().rooms.get(roomA)?.lastMessage).toBeUndefined()
+      expect(roomStore.getState().rooms.get(roomB)?.lastMessage).toBeUndefined()
+
+      // B's newest cached message is more recent than A's.
+      vi.mocked(messageCache.getRoomMessages).mockImplementation((jid) =>
+        Promise.resolve(
+          jid === roomB
+            ? [makeMsg(roomB, '2024-01-15T12:00:00Z', 'newer')]
+            : [makeMsg(roomA, '2024-01-15T09:00:00Z', 'older')],
+        ),
+      )
+
+      let writes = 0
+      const unsub = roomStore.subscribe(() => { writes++ })
+      await roomStore.getState().hydratePreviewsFromCache()
+      unsub()
+
+      // Both previews populated from cache...
+      expect(roomStore.getState().rooms.get(roomA)?.lastMessage?.body).toBe('older')
+      expect(roomStore.getState().rooms.get(roomB)?.lastMessage?.body).toBe('newer')
+      // ...and B (most recent) now sorts above A, without ever opening a room.
+      expect(roomStore.getState().allRooms().map((r) => r.jid)).toEqual([roomB, roomA])
+      // Batched: a single store write regardless of room count (one sidebar re-sort).
+      expect(writes).toBe(1)
+    })
+
+    it('never downgrades a fresher preview already set by join/catch-up', async () => {
+      addBookmarkedRoom(roomA)
+      const fresh = makeMsg(roomA, '2024-01-15T15:00:00Z', 'fresh from join')
+      roomStore.getState().updateLastMessagePreview(roomA, fresh)
+
+      // Cache only has an older message.
+      vi.mocked(messageCache.getRoomMessages).mockResolvedValue([
+        makeMsg(roomA, '2024-01-15T08:00:00Z', 'stale cache'),
+      ])
+
+      let writes = 0
+      const unsub = roomStore.subscribe(() => { writes++ })
+      await roomStore.getState().hydratePreviewsFromCache()
+      unsub()
+
+      expect(roomStore.getState().rooms.get(roomA)?.lastMessage?.body).toBe('fresh from join')
+      // Nothing to update -> no store write at all.
+      expect(writes).toBe(0)
+    })
+
+    it('is a no-op when the message cache is unavailable', async () => {
+      addBookmarkedRoom(roomA)
+      vi.mocked(messageCache.isMessageCacheAvailable).mockReturnValue(false)
+
+      await roomStore.getState().hydratePreviewsFromCache()
+
+      expect(messageCache.getRoomMessages).not.toHaveBeenCalled()
+    })
+  })
+
   describe('loadMessagesAroundFromCache', () => {
     const roomJid = 'room@conference.example.com'
 
