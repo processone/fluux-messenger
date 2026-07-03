@@ -17,6 +17,10 @@
 - Web: opt-in 24-hour passphrase cache so OpenPGP unlock is not required on every page reload
 - Login: prefill account details from xmpp: links (desktop) and URL parameters (web)
 - Bulk message copy (Cmd/Ctrl-A and shift-click) that works with virtualized message lists
+- Sliding-window message history: scroll back through unlimited conversation history instead of a fixed 5,000-message cap, loaded incrementally from the local cache and MAM
+- Composer adapts to narrow widths: the text field takes the full row, with secondary controls (attach, encryption, emoji) tucked into a drawer that expands while typing
+- Desktop: the native right-click menu (Reload, Inspect Element, …) is suppressed outside text fields on packaged builds
+- Archived and unarchived conversations now sync live across your devices instead of only on the next reconnect
 
 ### Changed
 
@@ -30,6 +34,9 @@
 - Sidebar header actions are unified across tabs, and the navigation-tab notification badges are calmer
 - A 1:1 contact name in the chat header is no longer clickable: open the profile from the header overflow menu
 - Rooms header: Quick Chat is now a dedicated bolt button, and room creation options fold into a single overflow menu alongside Catch up all
+- Unread badges across the icon rail and room list follow a two-tier model: red for what needs attention (DMs, mentions, contact requests), grey for ambient room activity
+- Admin: the raw ad-hoc command list is replaced by purpose-built screens; the user detail view adds a Ban account action and adopts the shared settings layout; the offline presence dot is dropped from user lists; user/room lists and detail panels are capped to a readable width
+- Login screen footer condensed to a single credit line
 
 ### Fixed
 
@@ -58,6 +65,16 @@
 - Own-sent encrypted messages no longer show the "[OpenPGP-encrypted message]" placeholder as the sidebar preview
 - Clicking a reaction toast now opens the correct room or conversation
 - Blockquotes no longer double up their quote cue with an extra serif mark
+- Group chats and DMs: the synced read position (XEP-0490) now lands correctly on the very first open of a conversation, not only after reopening it
+- Search "go to message" highlight flash restored in virtualized conversations
+- Icon-rail unread badges render as full filled circles and stay visible when their tab is selected
+- Contact detail and admin overview cards: borders are visible again in dark mode
+- DjVu attachments render as a document instead of a broken image, including previously received messages
+- Composer no longer shows a spurious scrollbar on mobile Blink browsers
+- Web (PWA): clicking a notification on Android now opens the right conversation instead of a blank page
+- macOS: reading a conversation dismisses only its own notification instead of clearing all of them
+- Admin: room counts refresh after deleting a room, and the Ban account form pre-fills user/host from the selected account
+- Rooms are ordered by their last message immediately at launch instead of jumping into place only after being opened
 
 ---
 [Full Changelog](https://github.com/processone/fluux-messenger/blob/main/CHANGELOG.md)
