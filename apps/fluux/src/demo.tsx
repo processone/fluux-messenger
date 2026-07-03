@@ -11,7 +11,7 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { HashRouter } from 'react-router-dom'
-import { XMPPProvider, DemoClient, E2EEManager, InMemoryStorageBackend } from '@fluux/sdk'
+import { XMPPProvider, DemoClient, E2EEManager, InMemoryStorageBackend, setResidentWindowSize } from '@fluux/sdk'
 import { adminStore, chatStore, ignoreStore, roomStore } from '@fluux/sdk/stores'
 import { DemoOpenPGPPlugin, DEMO_AVA_FINGERPRINT } from './demo/DemoOpenPGPPlugin'
 import { ThemeProvider } from './providers/ThemeProvider'
@@ -33,6 +33,14 @@ import './index.css'
 // Parse URL parameters
 const params = new URLSearchParams(window.location.search)
 const tutorialEnabled = params.get('tutorial') !== 'false'
+
+// Query-param seam: ?window=N shrinks the sliding-window bound (default 5000) BEFORE any seeding,
+// so the scroll-invariants e2e can exercise the slide / load-newer / jump-to-latest paths with a
+// few hundred messages instead of 5000+ (reaching the real cap by scrolling would take ~100 loads).
+const windowParam = Number(params.get('window'))
+if (Number.isFinite(windowParam) && windowParam > 0) {
+  setResidentWindowSize(windowParam)
+}
 
 // Clear all persisted state to prevent stale data from real/previous sessions.
 // Demo uses its own transient state — we don't want leftover data from the

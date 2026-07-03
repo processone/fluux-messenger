@@ -517,6 +517,9 @@ export { isPreviewableMessage } from './stores/shared/lastMessageUtils'
 // Configuration constants
 export { WELL_KNOWN_MUC_SERVERS } from './core/config'
 export type { WellKnownMucServer } from './core/config'
+// Sliding-window bound. getResidentWindowSize() is the current cap; setResidentWindowSize() is a
+// DEV/DEMO/TEST seam to shrink it so the slide/load-newer paths are testable with a small backlog.
+export { getResidentWindowSize, setResidentWindowSize } from './stores/shared/residentWindow'
 
 // =============================================================================
 // XMPP NAMESPACE CONSTANTS

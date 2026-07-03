@@ -31,23 +31,9 @@ import * as notifState from './shared/notificationState'
 import { markerDebugLog } from '../utils/markerDebug'
 import { connectionStore } from './connectionStore'
 import { buildScopedStorageKey } from '../utils/storageScope'
-
-/**
- * Maximum messages to keep in memory per room.
- * Older messages are still available in IndexedDB and can be loaded on demand.
- *
- * This is purely an in-memory bound (messages live in IndexedDB, not localStorage).
- * Before view virtualization it mainly capped DOM nodes; now the message list windows
- * its DOM regardless of array size, so the limit is raised to allow real scroll-back —
- * at the old 1000 a `prependOlderMessages` at the cap trimmed the just-loaded older
- * batch straight back off (load-older became a no-op past 1000).
- *
- * FUTURE: the goal is to remove this cap entirely (unlimited scroll-back — "go back anywhere
- * in time"). Removal needs an estimate strategy that keeps getTotalSize/scrollbar accurate on
- * a huge mostly-estimated array (a running-average estimate was tried but collapsed — see
- * tanstackMessageVirtualizer); Phase-1 conversation-switch eviction bounds RAM. 5000 is interim.
- */
-const RESIDENT_WINDOW_SIZE = 5000
+// Sliding-window bound (messages kept resident per room; rest live in IndexedDB + MAM). Read via
+// getResidentWindowSize() so a DEV/DEMO/TEST caller can shrink it — see shared/residentWindow.ts.
+import { getResidentWindowSize } from './shared/residentWindow'
 
 /**
  * Carry a previously-resolved avatar across a presence update.
@@ -310,7 +296,7 @@ function mergeCachedRoomMessages(
   // Merge, sort, and trim using shared utilities
   const combined = [...newFromCache, ...existing.messages]
   const sorted = sortMessagesByTimestamp(combined)
-  const merged = trimMessages(sorted, RESIDENT_WINDOW_SIZE)
+  const merged = trimMessages(sorted, getResidentWindowSize())
 
   // Get last non-ignored message from merged messages for sidebar preview
   const lastMessage = (merged.length > 0 ? findLastNonIgnoredMessage(merged, roomJid, existing.nickToJidCache) : undefined) ?? existing.lastMessage
@@ -1197,7 +1183,7 @@ export const roomStore = createStore<RoomState>()(
       const atLiveEdge = state.roomRuntime.get(roomJid)?.windowAtLiveEdge !== false
       // The append is also the basis for the newest-message preview; compute it either
       // way (it is only STORED when at the live edge).
-      const appendedMessages = trimMessages([...existing.messages, messageToAdd], RESIDENT_WINDOW_SIZE)
+      const appendedMessages = trimMessages([...existing.messages, messageToAdd], getResidentWindowSize())
       const newMessages = atLiveEdge ? appendedMessages : existing.messages
 
       // Delegate notification state to pure function
@@ -1504,7 +1490,7 @@ export const roomStore = createStore<RoomState>()(
     // resident — the durable copy stays in IndexedDB and is rehydrated by
     // activateRoom on return. Entity / meta / lastMessage / occupants are kept,
     // so the sidebar preview and unread badge are unaffected. This bounds memory
-    // (no longer every visited room holds up to RESIDENT_WINDOW_SIZE) and shrinks
+    // (no longer every visited room holds up to getResidentWindowSize()) and shrinks
     // the DOM mounted on the next switch into a large room.
     if (prevJid && prevJid !== roomJid) {
       const hadMarker = get().firstNewMessageMarkers.has(prevJid)
@@ -2161,7 +2147,7 @@ export const roomStore = createStore<RoomState>()(
           // Load-older slides the window (keep oldest) so scroll-back past the bound works.
           const combined = [...newFromCache, ...existing.messages]
           const sorted = sortMessagesByTimestamp(combined)
-          const merged = trimMessagesKeepOldest(sorted, RESIDENT_WINDOW_SIZE)
+          const merged = trimMessagesKeepOldest(sorted, getResidentWindowSize())
 
           // If keep-oldest evicted the newest resident message, the window has slid off
           // the live edge → gate live appends in addMessage. If the batch fit under the
@@ -2238,7 +2224,7 @@ export const roomStore = createStore<RoomState>()(
           // Load-newer slides the window (keep newest) so sliding back down works.
           const combined = [...existing.messages, ...newFromCache]
           const sorted = sortMessagesByTimestamp(combined)
-          const merged = trimMessages(sorted, RESIDENT_WINDOW_SIZE)
+          const merged = trimMessages(sorted, getResidentWindowSize())
 
           newRooms.set(roomJid, { ...existing, messages: merged })
 
@@ -2274,7 +2260,7 @@ export const roomStore = createStore<RoomState>()(
   },
 
   recenterToLatest: async (roomJid) => {
-    await get().loadMessagesFromCache(roomJid, { limit: RESIDENT_WINDOW_SIZE })
+    await get().loadMessagesFromCache(roomJid, { limit: getResidentWindowSize() })
     // loadMessagesFromCache's latest-N path (no `before`) already sets the flag true when
     // the merge changed the resident array. Force it true here too so a jump-to-latest is
     // unambiguously at the live edge even when the cache had nothing new to merge (the
@@ -2373,13 +2359,13 @@ export const roomStore = createStore<RoomState>()(
               existingMessages,
               mamMessages,
               getRoomMessageKeys,
-              RESIDENT_WINDOW_SIZE
+              getResidentWindowSize()
             )
           : mergeAndProcessMessages(
               existingMessages,
               mamMessages,
               getRoomMessageKeys,
-              RESIDENT_WINDOW_SIZE
+              getResidentWindowSize()
             )
       mergedForMarker = merged
 

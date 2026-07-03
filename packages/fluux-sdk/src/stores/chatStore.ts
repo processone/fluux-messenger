@@ -15,17 +15,10 @@ import * as notifState from './shared/notificationState'
 import { markerDebugLog } from '../utils/markerDebug'
 import { connectionStore } from './connectionStore'
 import { buildScopedStorageKey } from '../utils/storageScope'
+// Sliding-window bound (messages kept resident per conversation; rest live in IndexedDB + MAM).
+// Read via getResidentWindowSize() so a DEV/DEMO/TEST caller can shrink it — see shared/residentWindow.ts.
+import { getResidentWindowSize } from './shared/residentWindow'
 
-// Maximum messages to keep in memory per conversation (display buffer)
-// Purely an in-memory bound (messages live in IndexedDB, not localStorage). Before view
-// virtualization this mainly capped DOM nodes; now the message list windows its DOM
-// regardless of array size, so the limit is raised to allow real scroll-back — at the old
-// 1000 a prepend at the cap trimmed the just-loaded older batch straight back off.
-// FUTURE: the goal is to remove this cap entirely (unlimited scroll-back — "go back anywhere
-// in time"). Removal needs an estimate strategy that keeps getTotalSize/scrollbar accurate on
-// a huge mostly-estimated array (a running-average estimate was tried but collapsed — see
-// tanstackMessageVirtualizer); Phase-1 conversation-switch eviction bounds RAM. 5000 is interim.
-const RESIDENT_WINDOW_SIZE = 5000
 const STORAGE_KEY_BASE = 'xmpp-chat-storage'
 
 /**
@@ -99,7 +92,7 @@ function mergeCachedChatMessages(
   if (newMessages.length === 0) return null
 
   const merged = sortMessagesByTimestamp([...existingMessages, ...newMessages])
-  const trimmed = trimMessages(merged, RESIDENT_WINDOW_SIZE)
+  const trimmed = trimMessages(merged, getResidentWindowSize())
 
   const newMessagesMap = new Map(state.messages)
   newMessagesMap.set(conversationId, trimmed)
@@ -1569,13 +1562,13 @@ export const chatStore = createStore<ChatState>()(
                   existingMessages,
                   mamMessages,
                   getChatMessageKeys,
-                  RESIDENT_WINDOW_SIZE
+                  getResidentWindowSize()
                 )
               : mergeAndProcessMessages(
                   existingMessages,
                   mamMessages,
                   getChatMessageKeys,
-                  RESIDENT_WINDOW_SIZE
+                  getResidentWindowSize()
                 )
           mergedForMarker = trimmed
 
@@ -1835,7 +1828,7 @@ export const chatStore = createStore<ChatState>()(
               // Merge older messages at the beginning and trim using shared utility.
               // Load-older slides the window (keep oldest) so scroll-back past the bound works.
               const merged = [...olderMessages, ...currentMessages]
-              const trimmed = trimMessagesKeepOldest(merged, RESIDENT_WINDOW_SIZE)
+              const trimmed = trimMessagesKeepOldest(merged, getResidentWindowSize())
 
               const newMessagesMap = new Map(state.messages)
               newMessagesMap.set(conversationId, trimmed)
@@ -1887,7 +1880,7 @@ export const chatStore = createStore<ChatState>()(
               // Merge newer messages at the end and trim using shared utility.
               // Load-newer slides the window (keep newest) so sliding back down works.
               const merged = [...currentMessages, ...newerMessages]
-              const trimmed = trimMessages(merged, RESIDENT_WINDOW_SIZE)
+              const trimmed = trimMessages(merged, getResidentWindowSize())
 
               const newMessagesMap = new Map(state.messages)
               newMessagesMap.set(conversationId, trimmed)
@@ -1918,7 +1911,7 @@ export const chatStore = createStore<ChatState>()(
       },
 
       recenterToLatest: async (conversationId) => {
-        await get().loadMessagesFromCache(conversationId, { limit: RESIDENT_WINDOW_SIZE })
+        await get().loadMessagesFromCache(conversationId, { limit: getResidentWindowSize() })
         // loadMessagesFromCache's latest-N path (no `before`) already clears the slid flag
         // when the merge changed the resident array. Clear it here too so a jump-to-latest
         // is unambiguously at the live edge even when the cache had nothing new to merge
