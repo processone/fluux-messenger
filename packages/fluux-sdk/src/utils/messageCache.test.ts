@@ -295,6 +295,58 @@ describe('messageCache', () => {
       })
     })
 
+    describe('updateMessageReactions', () => {
+      it('should add reactions to a message found by id', async () => {
+        const message = createMockMessage(conversationId, { id: 'react-1' })
+        await messageCache.saveMessage(message)
+
+        const found = await messageCache.updateMessageReactions('react-1', 'bob@example.com', ['👍'])
+
+        expect(found).toBe(true)
+        const retrieved = await messageCache.getMessage('react-1')
+        expect(retrieved?.reactions).toEqual({ '👍': ['bob@example.com'] })
+      })
+
+      it('should find the message by stanzaId when the reaction references the server-assigned id', async () => {
+        const message = createMockMessage(conversationId, { id: 'react-2', stanzaId: 'server-stanza-id-1' })
+        await messageCache.saveMessage(message)
+
+        const found = await messageCache.updateMessageReactions('server-stanza-id-1', 'bob@example.com', ['👍'])
+
+        expect(found).toBe(true)
+        const retrieved = await messageCache.getMessage('react-2')
+        expect(retrieved?.reactions).toEqual({ '👍': ['bob@example.com'] })
+      })
+
+      it('should replace reactions from the same reactor', async () => {
+        const message = createMockMessage(conversationId, { id: 'react-3', reactions: { '👍': ['bob@example.com'] } })
+        await messageCache.saveMessage(message)
+
+        await messageCache.updateMessageReactions('react-3', 'bob@example.com', ['❤️'])
+
+        const retrieved = await messageCache.getMessage('react-3')
+        expect(retrieved?.reactions).toEqual({ '❤️': ['bob@example.com'] })
+      })
+
+      it('should remove all reactions from the reactor when an empty array is passed', async () => {
+        const message = createMockMessage(conversationId, {
+          id: 'react-4',
+          reactions: { '👍': ['bob@example.com', 'carol@example.com'] },
+        })
+        await messageCache.saveMessage(message)
+
+        await messageCache.updateMessageReactions('react-4', 'bob@example.com', [])
+
+        const retrieved = await messageCache.getMessage('react-4')
+        expect(retrieved?.reactions).toEqual({ '👍': ['carol@example.com'] })
+      })
+
+      it('should return false when the message is not found', async () => {
+        const found = await messageCache.updateMessageReactions('nonexistent', 'bob@example.com', ['👍'])
+        expect(found).toBe(false)
+      })
+    })
+
     describe('deleteMessage', () => {
       it('should delete a message', async () => {
         const message = createMockMessage(conversationId, { id: 'delete-1' })

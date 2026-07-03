@@ -3,6 +3,7 @@ import { persist, subscribeWithSelector } from 'zustand/middleware'
 import type { Message, Conversation, ConversationEntity, ConversationMetadata, MAMQueryState, RSMResponse } from '../core'
 import { setTypingTimeout, clearTypingTimeout, clearAllTypingTimeouts } from './typingTimeout'
 import { findMessageById, findMessageIndexById } from '../utils/messageLookup'
+import { logInfo } from '../core/logger'
 import * as messageCache from '../utils/messageCache'
 import * as searchIndex from '../utils/searchIndex'
 import * as mamState from './shared/mamState'
@@ -1293,7 +1294,15 @@ export const chatStore = createStore<ChatState>()(
       updateReactions: (conversationId, messageId, reactorJid, emojis) => {
         set((state) => {
           const convMessages = state.messages.get(conversationId)
-          if (!convMessages) return state
+          if (!convMessages) {
+            // Conversation isn't active — its messages aren't resident in RAM
+            // (evicted on deactivation). Update reactions directly in the
+            // durable cache so the correct state loads when the conversation
+            // is reactivated, instead of silently dropping the reaction.
+            logInfo(`Reaction for message ${messageId} not in memory — updating in cache`)
+            void messageCache.updateMessageReactions(messageId, reactorJid, emojis)
+            return state
+          }
 
           // Resolve by id/stanzaId first, origin-id only as fallback (reactions
           // may reference any tier; origin-id must not shadow a real id).

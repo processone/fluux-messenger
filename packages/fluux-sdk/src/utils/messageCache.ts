@@ -633,6 +633,60 @@ export async function updateMessage(
 }
 
 /**
+ * Update reactions for a chat message in IndexedDB.
+ * Used as a fallback when the message is not currently loaded in memory
+ * (e.g. a reaction arrives for a conversation that isn't the active one).
+ * Looks up by client ID or stanza-id (reactions may reference either).
+ *
+ * @returns true if the message was found and updated, false otherwise.
+ */
+export async function updateMessageReactions(
+  messageId: string,
+  reactorJid: string,
+  emojis: string[],
+): Promise<boolean> {
+  try {
+    const db = await getDB(getStorageScopeJid())
+
+    let existing = await db.get(MESSAGES_STORE, messageId)
+    if (!existing) {
+      existing = await db.getFromIndex(MESSAGES_STORE, 'stanzaId', messageId)
+    }
+    if (!existing) return false
+
+    // Build new reactions map: remove reactor from all, then add to new emojis
+    const newReactions: Record<string, string[]> = {}
+    if (existing.reactions) {
+      for (const [emoji, reactors] of Object.entries(existing.reactions)) {
+        const filtered = (reactors as string[]).filter((jid: string) => jid !== reactorJid)
+        if (filtered.length > 0) {
+          newReactions[emoji] = filtered
+        }
+      }
+    }
+    for (const emoji of emojis) {
+      if (!newReactions[emoji]) {
+        newReactions[emoji] = []
+      }
+      newReactions[emoji].push(reactorJid)
+    }
+
+    const updated = {
+      ...existing,
+      reactions: Object.keys(newReactions).length > 0 ? newReactions : undefined,
+    }
+
+    await db.put(MESSAGES_STORE, updated)
+    return true
+  } catch (error) {
+    if (isIndexedDBAvailable()) {
+      console.warn('Failed to update message reactions in cache:', error)
+    }
+    return false
+  }
+}
+
+/**
  * Delete a message by ID.
  */
 export async function deleteMessage(id: string): Promise<void> {

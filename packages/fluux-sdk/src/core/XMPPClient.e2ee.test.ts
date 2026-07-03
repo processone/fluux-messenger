@@ -27,6 +27,7 @@ vi.mock('../utils/messageCache', () => ({
   getMessage: vi.fn().mockResolvedValue(null),
   getMessageByStanzaId: vi.fn().mockResolvedValue(null),
   updateMessage: vi.fn().mockResolvedValue(undefined),
+  updateMessageReactions: vi.fn().mockResolvedValue(false),
   deleteMessage: vi.fn().mockResolvedValue(undefined),
   deleteConversationMessages: vi.fn().mockResolvedValue(undefined),
   clearAllMessages: vi.fn().mockResolvedValue(undefined),

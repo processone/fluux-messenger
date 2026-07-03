@@ -40,6 +40,7 @@ vi.mock('../utils/messageCache', async (importOriginal) => {
     getMessages: vi.fn().mockResolvedValue([]),
     getMessagesAround: vi.fn().mockResolvedValue([]),
     updateMessage: vi.fn().mockResolvedValue(undefined),
+    updateMessageReactions: vi.fn().mockResolvedValue(true),
   }
 })
 
@@ -1515,6 +1516,28 @@ describe('chatStore', () => {
 
       const messages = chatStore.getState().messages.get('nonexistent@example.com')
       expect(messages).toBeUndefined()
+    })
+
+    it('should fall back to the durable cache when the conversation is not active (messages evicted from RAM)', () => {
+      chatStore.getState().addConversation(createConversation('alice@example.com'))
+      chatStore.getState().addConversation(createConversation('carol@example.com'))
+      const msg = createMessage('alice@example.com', 'Hello!')
+      chatStore.getState().addMessage(msg)
+
+      // Switch away from alice's conversation — deactivation evicts her
+      // resident messages array, mirroring what happens when a reaction
+      // arrives for a conversation that isn't the active one.
+      chatStore.getState().setActiveConversation('alice@example.com')
+      chatStore.getState().setActiveConversation('carol@example.com')
+      expect(chatStore.getState().messages.get('alice@example.com')).toBeUndefined()
+
+      vi.mocked(messageCache.updateMessageReactions).mockClear()
+      chatStore.getState().updateReactions('alice@example.com', msg.id, 'bob@example.com', ['👍'])
+
+      expect(messageCache.updateMessageReactions).toHaveBeenCalledWith(msg.id, 'bob@example.com', ['👍'])
+      // No resident array to update — the reaction lands in the cache only,
+      // to be picked up next time the conversation is activated.
+      expect(chatStore.getState().messages.get('alice@example.com')).toBeUndefined()
     })
 
     it('should not modify state if message does not exist', () => {
