@@ -22,6 +22,9 @@ const {
     isArchivedResult: false,
     conversations: new Map<string, { id: string }>(),
     rooms: new Map<string, { jid: string; joined: boolean }>(),
+    adminCategory: null as string | null,
+    adminSession: null as unknown,
+    adminIsAdmin: false,
   }
 
   const mockContact: Contact = {
@@ -235,9 +238,9 @@ vi.mock('@fluux/sdk', () => ({
   },
   adminStore: {
     getState: () => ({
-      setCurrentSession: vi.fn(),
+      setCurrentSession: (v: unknown) => setMockState({ adminSession: v }),
       setTargetJid: vi.fn(),
-      setActiveCategory: vi.fn(),
+      setActiveCategory: (v: string | null) => setMockState({ adminCategory: v }),
       vhosts: [],
       setSelectedVhost: vi.fn(),
       setPendingSelectedUserJid: vi.fn(),
@@ -328,8 +331,12 @@ vi.mock('@fluux/sdk/react', () => ({
     }
   ),
   useAdminStore: Object.assign(
-    (selector: (state: { currentSession: null; activeCategory: null }) => unknown) => {
-      return selector({ currentSession: null, activeCategory: null })
+    (selector: (state: { currentSession: unknown; activeCategory: string | null; isAdmin: boolean }) => unknown) => {
+      return selector({
+        currentSession: getMockState().adminSession ?? null,
+        activeCategory: getMockState().adminCategory ?? null,
+        isAdmin: getMockState().adminIsAdmin ?? false,
+      })
     },
     {
       getState: () => ({
@@ -492,7 +499,12 @@ vi.mock('./SettingsView', () => ({
 }))
 
 vi.mock('./AdminView', () => ({
-  AdminView: () => <div data-testid="admin-view">Admin</div>,
+  AdminView: ({ onBack }: { onBack?: () => void }) => (
+    <div data-testid="admin-view">
+      Admin
+      <button data-testid="admin-back" onClick={() => onBack?.()}>back</button>
+    </div>
+  ),
 }))
 
 vi.mock('./MemberList', () => ({
@@ -1264,5 +1276,54 @@ describe('ChatLayout - activation gap (no empty-state flash)', () => {
     render(<ChatLayoutWithRouter initialRoute="/messages" />)
 
     expect(screen.getByText('Start a conversation')).toBeInTheDocument()
+  })
+})
+
+describe('ChatLayout - admin back navigation (mobile)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    setMockState({
+      activeConversationId: null,
+      activeRoomJid: null,
+      activationPending: false,
+      isArchivedResult: false,
+      conversations: new Map(),
+      rooms: new Map(),
+      adminIsAdmin: true,
+      adminCategory: 'stats',
+      adminSession: null,
+    })
+  })
+
+  afterEach(() => {
+    setMockState({ adminIsAdmin: false, adminCategory: null, adminSession: null })
+  })
+
+  it('renders the admin view when the URL is /admin', async () => {
+    render(<ChatLayoutWithRouter initialRoute="/admin" />)
+    // AdminView is lazy-loaded behind Suspense.
+    expect(await screen.findByTestId('admin-view')).toBeInTheDocument()
+  })
+
+  // System/browser back pops the URL off /admin, but the admin store state can
+  // still hold a category (nothing clears it on popstate). The admin panel must
+  // NOT render over the route we backed into — it is gated on the admin route.
+  it('does not render the admin view when the URL left /admin, even with a stale category', async () => {
+    render(<ChatLayoutWithRouter initialRoute="/messages" />)
+    // The page underneath (messages home) is visible instead. With the bug the
+    // stale category renders AdminView's Suspense fallback and this never shows.
+    expect(await screen.findByText('Start a conversation')).toBeInTheDocument()
+    expect(screen.queryByTestId('admin-view')).not.toBeInTheDocument()
+  })
+
+  // In-app header back arrow from the admin overview must leave admin entirely
+  // and return to the home screen, not bounce back to the overview.
+  it('mobile back from the admin overview navigates home (messages)', async () => {
+    render(<ChatLayoutWithProbe initialRoute="/admin" />)
+    fireEvent.click(await screen.findByTestId('admin-back'))
+
+    expect(await screen.findByText('Start a conversation')).toBeInTheDocument()
+    expect(screen.getByTestId('probe-path').textContent).toBe('/messages')
+    expect(screen.queryByTestId('admin-view')).not.toBeInTheDocument()
   })
 })
