@@ -354,6 +354,46 @@ describe('MessageList — virtualized scroll integration (ensureMessageMounted)'
     expect(scrollTopSets).toContain(1000)
   })
 
+  it('restores (does not strand the view) when load-newer appends + evicts the oldest — count-constant slide DOWN', () => {
+    // Sliding window, NEWER direction: the reader is near the resident bottom; load-newer APPENDS
+    // newer AND EVICTS the oldest, so count stays constant and firstId becomes NEWER (the opposite
+    // of load-older). triggerLoadNewer captures the top-visible anchor and the shared restore
+    // repositions it. The exact anchor row depends on windowing, so we assert the OBSERVABLE Task-8
+    // property: on the count-constant slide the restore FIRES (consults the virtualizer + repositions
+    // via scrollToOffset) — the old countIncreased gate would have left scrollToOffsetCalls empty.
+    const onLoadNewer = vi.fn()
+    getOffsetForMessageId.mockImplementation(() => 600)
+    const props = { conversationId: 'conv-newer', windowAtLiveEdge: false, onLoadNewer, isHistoryComplete: false, renderMessage: (m: BaseMessage) => <div>{m.body}</div> }
+
+    const { container, rerender } = render(<MessageList messages={makeMessages(20)} {...props} />)
+    const scroller = container.querySelector('[data-message-list]') as HTMLElement
+    let scrollTopVal = 600
+    Object.defineProperty(scroller, 'scrollHeight', { get: () => 800, configurable: true })
+    Object.defineProperty(scroller, 'clientHeight', { value: 200, configurable: true })
+    Object.defineProperty(scroller, 'scrollTop', {
+      get: () => scrollTopVal,
+      set: (v: number) => { scrollTopVal = v },
+      configurable: true,
+    })
+
+    // Near the bottom (distFromBottom = 800-600-200 = 0): a scroll fires triggerLoadNewer, which
+    // captures the top-visible anchor and calls onLoadNewer.
+    scrollTopVal = 600
+    fireEvent.scroll(scroller)
+    expect(onLoadNewer).toHaveBeenCalledTimes(1)
+
+    scrollToOffsetCalls.length = 0
+    getOffsetForMessageId.mockClear()
+    getOffsetForMessageId.mockImplementation(() => 400) // the captured anchor now sits at 400
+
+    // Append 5 newer (msg-20..24), evict the oldest 5 (msg-0..4) → msg-5..msg-24: count stays 20,
+    // firstId msg-0 → msg-5. The restore fires on the firstId change (count unchanged) and repositions.
+    rerender(<MessageList messages={makeMessages(25).slice(5)} {...props} />)
+
+    expect(getOffsetForMessageId).toHaveBeenCalled()
+    expect(scrollToOffsetCalls.length).toBeGreaterThan(0)
+  })
+
   it('positions the unread marker via the virtualizer scrollToIndex on entry, not the windowed-out DOM row', async () => {
     // Entering an unread conversation, the marker row is typically windowed OUT and the
     // messages may still be rehydrating from cache, so querySelector(marker).offsetTop is
