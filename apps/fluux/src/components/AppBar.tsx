@@ -10,9 +10,9 @@ import { useModalStore } from '@/stores/modalStore'
 // Minimal shape of the Tauri window methods we drive for window dragging.
 type DraggableWindow = { startDragging: () => Promise<void>; toggleMaximize: () => Promise<void> }
 
-// Tauri / macOS detection — only macOS overlays native traffic lights onto the
-// webview, so only there does the bar need to reserve space at its start.
-const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
+// macOS detection — only macOS overlays native traffic lights onto the webview,
+// so only there does the bar need to reserve space at its start. Tauri detection
+// is read at render time (see component body) so tests can toggle it.
 const isMacOS = typeof navigator !== 'undefined' && /Mac/.test(navigator.platform)
 
 // Width reserved at the bar's start for the macOS traffic lights so the first
@@ -38,7 +38,11 @@ const TRAFFIC_LIGHT_INSET = 84
  *  - Windows / Linux (Tauri): the OS keeps its native title bar above; this bar
  *    renders below it as a normal toolbar (left edge free) and is also draggable.
  *  - Web desktop: a plain toolbar (no window dragging).
- *  - Mobile (< md): not rendered — the single-pane layout owns navigation.
+ *  - Web mobile (< md): not rendered — the single-pane layout owns navigation.
+ *
+ * On the native desktop app (Tauri) the bar always renders, even in a narrow
+ * window, so it keeps hosting the macOS traffic lights (off the rail seam) and
+ * the window stays draggable. The width gate below applies only on the web.
  *
  * Dragging calls Tauri's startDragging() on mousedown rather than using
  * `-webkit-app-region: drag` (data-tauri-drag-region), whose macOS WebKit
@@ -57,6 +61,9 @@ export const AppBar = memo(function AppBar() {
   const { t } = useTranslation()
   const toggleModal = useModalStore((s) => s.toggle)
 
+  // Read at render time (not module scope) so tests can toggle it per case.
+  const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
+
   // Pre-resolve the Tauri window so the mousedown drag handler stays synchronous
   // (an async import there would miss the gesture). Null in the browser.
   const dragWindowRef = useRef<DraggableWindow | null>(null)
@@ -69,7 +76,7 @@ export const AppBar = memo(function AppBar() {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [isTauri])
 
   // React Router stores a numeric index in history state; re-read it on every
   // navigation (useLocation re-renders us). `currentIdx` is the position in the
@@ -88,12 +95,14 @@ export const AppBar = memo(function AppBar() {
     setMaxIdx((prev) => (navigationType === 'PUSH' ? currentIdx : Math.max(prev, currentIdx)))
   }, [location, navigationType, currentIdx])
 
-  // App bar is desktop window chrome: render only on a wide viewport AND a
-  // hovering, fine pointer (mouse/trackpad). The hover gate keeps it hidden on
-  // touch devices even when they're wide — e.g. a phone in landscape (>768px)
-  // or a tablet — where its mouse-sized controls would be hard to tap and the
-  // single-pane touch affordances own navigation.
-  if (!isDesktop || !hasHover) return null
+  // App bar is desktop window chrome. On the native desktop app (Tauri) it always
+  // renders — even in a narrow window — so the macOS traffic lights keep a surface
+  // to sit on and the window stays draggable. On the web it's gated to a wide
+  // viewport AND a hovering, fine pointer (mouse/trackpad): the hover gate keeps it
+  // hidden on touch devices even when they're wide — e.g. a phone in landscape
+  // (>768px) or a tablet — where its mouse-sized controls would be hard to tap and
+  // the single-pane touch affordances own navigation.
+  if (!isTauri && (!isDesktop || !hasHover)) return null
 
   const needsTrafficLightInset = isTauri && isMacOS && !isFullscreen
 

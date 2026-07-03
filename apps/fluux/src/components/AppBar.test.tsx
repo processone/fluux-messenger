@@ -42,11 +42,13 @@ describe('AppBar', () => {
     mockHasHover = true
     navigateSpy.mockClear()
     toggleSpy.mockClear()
+    // Default to the web build; the desktop-app tests opt in explicitly.
+    delete (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__
     // Reset history position so each test starts at index 0 (start = end).
     window.history.replaceState(null, '')
   })
 
-  it('renders nothing on mobile (below the desktop breakpoint)', () => {
+  it('renders nothing on mobile web (below the desktop breakpoint)', () => {
     mockIsDesktop = false
     const { container } = renderAppBar()
     expect(container).toBeEmptyDOMElement()
@@ -57,6 +59,15 @@ describe('AppBar', () => {
     mockHasHover = false
     const { container } = renderAppBar()
     expect(container).toBeEmptyDOMElement()
+  })
+
+  it('still renders on the desktop app in a narrow window (Tauri, below the breakpoint)', () => {
+    ;(window as unknown as Record<string, unknown>).__TAURI_INTERNALS__ = {}
+    mockIsDesktop = false
+    mockHasHover = false
+    renderAppBar()
+    expect(screen.getByRole('button', { name: 'Back' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Open command palette' })).toBeInTheDocument()
   })
 
   it('renders back, forward and command-palette controls on desktop', () => {
