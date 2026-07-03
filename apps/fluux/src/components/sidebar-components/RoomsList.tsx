@@ -429,20 +429,21 @@ const RoomItem = memo(function RoomItem({
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
             <p dir="auto" className={`truncate ${room.unreadCount > 0 ? 'font-semibold text-fluux-text' : 'font-medium'}`}>{room.name}</p>
-            {/* Activity dot for unread (non-mention) activity. Blue for a
-                notify-all room (matches the icon-rail indicator), grey otherwise. */}
+            {/* Activity dot for unread (non-mention) activity. Red for a
+                notify-all room — the attention tier, matching the icon-rail
+                indicator and mention badge — grey for plain unread. */}
             {room.joined && room.unreadCount > 0 && room.mentionsCount === 0 && (
               <Tooltip content={`${room.unreadCount} unread`} position="top">
                 <div
                   className={`size-2.5 rounded-full flex-shrink-0 ${
-                    roomActivityTone(room) === 'accent' ? 'bg-fluux-brand' : 'bg-fluux-gray'
+                    roomActivityTone(room) === 'accent' ? 'bg-fluux-badge-strong' : 'bg-fluux-gray'
                   }`}
                 />
               </Tooltip>
             )}
-            {/* Mentions count badge */}
+            {/* Mentions count badge — red, the loud "wants your attention" tier. */}
             {room.mentionsCount > 0 && (
-              <span className="min-w-5 h-5 px-1.5 bg-fluux-badge text-fluux-badge-text text-xs font-bold rounded-full flex-shrink-0 flex items-center justify-center">
+              <span className="min-w-5 h-5 px-1.5 bg-fluux-badge-strong text-white text-xs font-bold rounded-full flex-shrink-0 flex items-center justify-center">
                 @{room.mentionsCount}
               </span>
             )}

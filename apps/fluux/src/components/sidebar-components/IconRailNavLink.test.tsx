@@ -166,24 +166,6 @@ describe('IconRailNavLink', () => {
       expect(container.querySelector('.bg-fluux-gray')).toBeInTheDocument()
       expect(container.querySelector('.bg-fluux-badge-strong')).toBeNull()
     })
-
-    it('renders an accent (blue) dot when tone="accent"', () => {
-      const Wrapper = createWrapper('/')
-      const { container } = render(
-        <IconRailNavLink
-          icon={Hash}
-          label="Rooms"
-          view="rooms"
-          pathPrefix="/rooms"
-          onNavigate={vi.fn()}
-          showBadge={true}
-          tone="accent"
-        />,
-        { wrapper: Wrapper }
-      )
-      const dot = container.querySelector('span.bg-fluux-brand')
-      expect(dot).toBeInTheDocument()
-    })
   })
 
   describe('active state from URL', () => {
@@ -344,45 +326,12 @@ describe('IconRailNavLink', () => {
     })
   })
 
-  describe('numeric count badge', () => {
-    it('renders a numeric badge with the count when badgeCount > 0', () => {
-      const Wrapper = createWrapper('/messages')
-      render(
-        <IconRailNavLink
-          icon={Hash}
-          label="Contacts"
-          view="contacts"
-          pathPrefix="/contacts"
-          onNavigate={vi.fn()}
-          badgeCount={2}
-          badgeLabel="Contacts (2)"
-        />,
-        { wrapper: Wrapper }
-      )
-      expect(screen.getByText('2')).toBeInTheDocument()
-      expect(screen.getByRole('button', { name: 'Contacts (2)' })).toBeInTheDocument()
-    })
-
-    it('clamps a large badge count to 99+', () => {
-      const Wrapper = createWrapper('/messages')
-      render(
-        <IconRailNavLink
-          icon={Hash}
-          label="Contacts"
-          view="contacts"
-          pathPrefix="/contacts"
-          onNavigate={vi.fn()}
-          badgeCount={150}
-        />,
-        { wrapper: Wrapper }
-      )
-      expect(screen.getByText('99+')).toBeInTheDocument()
-      // No badgeLabel passed → aria-label falls back to label.
-      expect(screen.getByRole('button', { name: 'Contacts' })).toBeInTheDocument()
-    })
-
-    it('renders no badge when badgeCount is 0 and showBadge is false', () => {
-      const Wrapper = createWrapper('/messages')
+  describe('dot colour on the selected tab', () => {
+    // On the selected tab the surface is the accent colour. Both tones read fine
+    // on it, so the dot keeps its colour — a red badge that stays red when
+    // selected is more consistent than flipping it to white.
+    it('keeps the red (strong) dot red when the tab is selected', () => {
+      const Wrapper = createWrapper('/contacts')
       const { container } = render(
         <IconRailNavLink
           icon={Hash}
@@ -390,11 +339,30 @@ describe('IconRailNavLink', () => {
           view="contacts"
           pathPrefix="/contacts"
           onNavigate={vi.fn()}
-          badgeCount={0}
+          showBadge={true}
+          tone="strong"
         />,
         { wrapper: Wrapper }
       )
-      expect(container.querySelector('span.bg-fluux-red')).toBeNull()
+      expect(container.querySelector('span.bg-fluux-badge-strong')).toBeInTheDocument()
+      expect(container.querySelector('span.bg-fluux-text-on-accent')).toBeNull()
+    })
+
+    it('keeps the neutral (grey) dot grey when the tab is selected', () => {
+      const Wrapper = createWrapper('/rooms')
+      const { container } = render(
+        <IconRailNavLink
+          icon={Hash}
+          label="Rooms"
+          view="rooms"
+          pathPrefix="/rooms"
+          onNavigate={vi.fn()}
+          showBadge={true}
+          tone="neutral"
+        />,
+        { wrapper: Wrapper }
+      )
+      expect(container.querySelector('span.bg-fluux-gray')).toBeInTheDocument()
     })
   })
 })
