@@ -41,7 +41,6 @@
         "showPassword": "Prikaži lozinku",
         "hidePassword": "Sakrij lozinku",
         "madeBy": "Izradio",
-        "ejabberdCreator": ", tvrtka iza",
         "poweredBy": "Pokreće",
         "errors": {
             "tlsCertTitle": "Nije moguće provjeriti sigurnosni certifikat poslužitelja",

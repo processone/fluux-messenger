@@ -41,7 +41,6 @@
         "showPassword": "Rodyti slaptažodį",
         "hidePassword": "Slėpti slaptažodį",
         "madeBy": "Sukūrė",
-        "ejabberdCreator": ", įmonė už",
         "poweredBy": "Veikia su",
         "errors": {
             "tlsCertTitle": "Nepavyko patikrinti serverio saugos sertifikato",

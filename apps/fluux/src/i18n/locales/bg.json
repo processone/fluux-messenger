@@ -41,7 +41,6 @@
         "showPassword": "Покажи парола",
         "hidePassword": "Скрий парола",
         "madeBy": "Създадено от",
-        "ejabberdCreator": ", компанията зад",
         "poweredBy": "Задвижвано от",
         "errors": {
             "tlsCertTitle": "Не можа да се провери сертификатът за сигурност на сървъра",

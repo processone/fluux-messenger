@@ -41,7 +41,6 @@
         "showPassword": "Prikaži geslo",
         "hidePassword": "Skrij geslo",
         "madeBy": "Ustvaril",
-        "ejabberdCreator": ", podjetje za",
         "poweredBy": "Poganja",
         "errors": {
             "tlsCertTitle": "Varnostnega potrdila strežnika ni mogoče preveriti",

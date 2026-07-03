@@ -41,7 +41,6 @@
         "showPassword": "Sýna lykilorð",
         "hidePassword": "Fela lykilorð",
         "madeBy": "Búið til af",
-        "ejabberdCreator": ", fyrirtækið á bak við",
         "poweredBy": "Keyrt af",
         "errors": {
             "tlsCertTitle": "Ekki tókst að staðfesta öryggisvistunarskírteini þjónsins",

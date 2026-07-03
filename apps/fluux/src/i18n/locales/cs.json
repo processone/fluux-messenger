@@ -41,7 +41,6 @@
         "showPassword": "Zobrazit heslo",
         "hidePassword": "Skrýt heslo",
         "madeBy": "Vytvořeno společností",
-        "ejabberdCreator": ", společností stojící za",
         "poweredBy": "Poháněno technologií",
         "errors": {
             "tlsCertTitle": "Nelze ověřit bezpečnostní certifikát serveru",
