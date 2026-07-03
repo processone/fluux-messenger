@@ -245,7 +245,9 @@ export function Sidebar({ onSelectContact, onStartChat, onStartChatWithJid, onMa
           pathPrefix="/rooms"
           onNavigate={onViewChange}
           showBadge={roomTabTone !== 'none'}
-          tone={roomTabTone === 'accent' ? 'accent' : 'neutral'}
+          // A room mention/highlight ('accent' from the SDK) is the loud tier, so
+          // it shows red — same as DMs and contact requests. Plain unread stays grey.
+          tone={roomTabTone === 'accent' ? 'strong' : 'neutral'}
         />
         {/* Search */}
         <IconRailNavLink
@@ -273,7 +275,8 @@ export function Sidebar({ onSelectContact, onStartChat, onStartChatWithJid, onMa
           view="contacts"
           pathPrefix="/contacts"
           onNavigate={onViewChange}
-          badgeCount={pendingRequestCount}
+          showBadge={pendingRequestCount > 0}
+          tone="strong"
           badgeLabel={pendingRequestCount > 0 ? `${t('sidebar.contacts')} (${pendingRequestCount})` : undefined}
         />
         {/* Admin - only visible for server administrators */}
