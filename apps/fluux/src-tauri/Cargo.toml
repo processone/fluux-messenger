@@ -30,6 +30,8 @@ tauri-plugin-decorum = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 async-trait = "0.1"
+axum = "0.8"
+uuid = { version = "1", features = ["v4"] }
 
 # XMPP WebSocket-to-TCP proxy dependencies
 tokio = { version = "1", features = ["full"] }
@@ -76,6 +78,7 @@ unicode-normalization = "0.1"
 # used to make the Happy Eyeballs connection-racing tests deterministic without real waits.
 # Test-only: not pulled into release builds.
 tokio = { version = "1", features = ["test-util"] }
+tower = { version = "0.5", features = ["util"] }
 
 # Updater plugin for auto-updates (desktop only)
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
