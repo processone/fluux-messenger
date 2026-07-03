@@ -417,6 +417,9 @@ export function useMessageListScroll({
   // Mirror of scrolledAwayFromTopRef for the newer direction: only auto-load newer once the reader
   // has genuinely scrolled away from the resident bottom and returned to it (guards spurious fires).
   const scrolledAwayFromBottomRef = useRef(false)
+  // Tracks the previous windowAtLiveEdge so we can detect the false→true transition (returning to
+  // the live edge) and drop a stale prepend/append anchor — see the effect below.
+  const prevWindowAtLiveEdgeRef = useRef(windowAtLiveEdge)
   // Timestamp of the last DELIBERATE user scroll (FAB click / wheel). The prepend re-assert
   // loop yields to a deliberate scroll recorded after it starts, but keeps re-pinning the
   // anchor through a content-shrink clamp (which records no such intent).
@@ -2210,6 +2213,27 @@ export function useMessageListScroll({
   }, [])
 
   // ==========================================================================
+  // EFFECT: Returned to the live edge → drop any stale directional-load anchor.
+  // ==========================================================================
+  // A directional load that returns NOTHING never changes firstMessageId, so the restore effect
+  // below never fires and never clears its prependRef — the anchor lingers. The reachable case is
+  // load-newer hitting the tail: windowAtLiveEdge flips false→true with a stashed (never-restored)
+  // anchor. Left in place, a LATER unrelated firstMessageId change — e.g. a live message evicting
+  // the oldest at the cap — would fire that stale restore. Clearing on the false→true TRANSITION
+  // targets exactly "we just returned to the live edge": normal under-cap load-older keeps
+  // windowAtLiveEdge true (no transition) and a slide keeps it false, so their in-flight restores
+  // are untouched. This is a passive useEffect so it runs AFTER the restore useLayoutEffect — a
+  // load-newer that both slides AND reaches the tail in one batch still restores first, then this
+  // clears the already-`restored` ref harmlessly.
+  useEffect(() => {
+    if (windowAtLiveEdge === true && prevWindowAtLiveEdgeRef.current === false) {
+      if (prependRef.current && !prependRef.current.restored) {
+        prependRef.current = null
+      }
+    }
+    prevWindowAtLiveEdgeRef.current = windowAtLiveEdge
+  }, [windowAtLiveEdge])
+
   // EFFECT: Prepend complete (older messages loaded)
   // ==========================================================================
   //

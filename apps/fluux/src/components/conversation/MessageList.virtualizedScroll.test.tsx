@@ -394,6 +394,41 @@ describe('MessageList — virtualized scroll integration (ensureMessageMounted)'
     expect(scrollToOffsetCalls.length).toBeGreaterThan(0)
   })
 
+  it('drops a stale anchor when the window returns to the live edge — no stale restore on a later live message', () => {
+    // #3 fix: a load-newer that reaches the TAIL is a no-op (nothing appended, firstId unchanged) but
+    // triggerLoadNewer already stashed an anchor. When the window returns to the live edge
+    // (windowAtLiveEdge false→true) that anchor is stale; leaving it, a LATER live message evicting
+    // the oldest at the cap (firstId change) would fire a stale restore. Assert the anchor is dropped:
+    // the live-message rerender must NOT reposition (contrast the slide-DOWN test above, which keeps
+    // windowAtLiveEdge false and DOES reposition).
+    const onLoadNewer = vi.fn()
+    getOffsetForMessageId.mockImplementation(() => 400)
+    const base = { conversationId: 'conv-stale', onLoadNewer, isHistoryComplete: false, renderMessage: (m: BaseMessage) => <div>{m.body}</div> }
+
+    const { container, rerender } = render(<MessageList messages={makeMessages(20)} windowAtLiveEdge={false} {...base} />)
+    const scroller = container.querySelector('[data-message-list]') as HTMLElement
+    let scrollTopVal = 600
+    Object.defineProperty(scroller, 'scrollHeight', { get: () => 800, configurable: true })
+    Object.defineProperty(scroller, 'clientHeight', { value: 200, configurable: true })
+    Object.defineProperty(scroller, 'scrollTop', { get: () => scrollTopVal, set: (v: number) => { scrollTopVal = v }, configurable: true })
+
+    // Load-newer fires near the bottom → stashes an anchor (no message change here = tail no-op).
+    scrollTopVal = 600
+    fireEvent.scroll(scroller)
+    expect(onLoadNewer).toHaveBeenCalledTimes(1)
+
+    // Tail reached: windowAtLiveEdge flips false→true → the stale anchor must be dropped.
+    rerender(<MessageList messages={makeMessages(20)} windowAtLiveEdge={true} {...base} />)
+
+    scrollToOffsetCalls.length = 0
+
+    // Live message at the cap: append newer + evict oldest → firstId changes (count constant). With
+    // the anchor dropped, the restore must NOT fire (no scrollToOffset reposition).
+    rerender(<MessageList messages={makeMessages(25).slice(5)} windowAtLiveEdge={true} {...base} />)
+
+    expect(scrollToOffsetCalls.length).toBe(0)
+  })
+
   it('positions the unread marker via the virtualizer scrollToIndex on entry, not the windowed-out DOM row', async () => {
     // Entering an unread conversation, the marker row is typically windowed OUT and the
     // messages may still be rehydrating from cache, so querySelector(marker).offsetTop is
