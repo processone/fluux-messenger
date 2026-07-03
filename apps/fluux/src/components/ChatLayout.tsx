@@ -902,7 +902,8 @@ function ChatLayoutContent() {
       <GlobalEffects />
 
       {/* Desktop window app bar — hosts macOS traffic lights + nav/search/settings.
-          Renders null on mobile; the single-pane layout owns navigation there. */}
+          On the desktop app it always renders (even in a narrow window); on the
+          web it renders null on mobile, where the single-pane layout owns nav. */}
       <AppBar />
 
       {/* Main content area */}
