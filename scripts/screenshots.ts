@@ -135,7 +135,7 @@ test('3y — Chat Compact (dark)', async ({ page }) => {
 
 test('04 — Contact Directory (dark)', async ({ page }) => {
   await waitForDemoReady(page)
-  await navigateTo(page, 'directory')
+  await navigateTo(page, 'contacts')
   // Select a contact to show the profile panel
   await selectItem(page, 'Emma Wilson')
   await capture(page, '04-contacts-dark')
@@ -1276,7 +1276,7 @@ for (const theme of emptyStateThemes) {
       await setTheme(page, theme.id)
     }
     // Navigate to directory without selecting a contact.
-    await navigateTo(page, 'directory')
+    await navigateTo(page, 'contacts')
     await capture(page, `6x-empty-directory-${theme.label}`)
     if (theme.id) await setTheme(page, 'aurora')
   })
