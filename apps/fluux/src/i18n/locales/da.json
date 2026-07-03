@@ -41,7 +41,6 @@
         "showPassword": "Vis adgangskode",
         "hidePassword": "Skjul adgangskode",
         "madeBy": "Lavet af",
-        "ejabberdCreator": ", virksomheden bag",
         "poweredBy": "Drevet af",
         "errors": {
             "tlsCertTitle": "Serverens sikkerhedscertifikat kunne ikke bekræftes",

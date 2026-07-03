@@ -41,7 +41,6 @@
         "showPassword": "显示密码",
         "hidePassword": "隐藏密码",
         "madeBy": "开发者是",
-        "ejabberdCreator": "，本公司还开发了",
         "poweredBy": "采用",
         "errors": {
             "tlsCertTitle": "无法验证服务器的安全证书",

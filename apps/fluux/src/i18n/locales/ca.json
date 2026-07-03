@@ -41,7 +41,6 @@
         "showPassword": "Mostra el mot de pas",
         "hidePassword": "Amaga el mot de pas",
         "madeBy": "Fet per",
-        "ejabberdCreator": ", l'empresa darrere de",
         "poweredBy": "Funciona amb",
         "errors": {
             "tlsCertTitle": "No s'ha pogut verificar el certificat de seguretat del servidor",

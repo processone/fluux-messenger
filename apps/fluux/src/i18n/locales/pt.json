@@ -41,7 +41,6 @@
         "showPassword": "Mostrar palavra-passe",
         "hidePassword": "Ocultar palavra-passe",
         "madeBy": "Criado por",
-        "ejabberdCreator": ", a empresa por trás do",
         "poweredBy": "Desenvolvido com",
         "errors": {
             "tlsCertTitle": "Não foi possível verificar o certificado de segurança do servidor",

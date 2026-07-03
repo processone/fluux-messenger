@@ -41,7 +41,6 @@
         "showPassword": "Arată parola",
         "hidePassword": "Ascunde parola",
         "madeBy": "Realizat de",
-        "ejabberdCreator": ", compania din spatele",
         "poweredBy": "Oferit de",
         "errors": {
             "tlsCertTitle": "Nu s-a putut verifica certificatul de securitate al serverului",

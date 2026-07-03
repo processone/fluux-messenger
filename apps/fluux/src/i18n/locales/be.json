@@ -41,7 +41,6 @@
         "showPassword": "Паказаць пароль",
         "hidePassword": "Схаваць пароль",
         "madeBy": "Распрацавана",
-        "ejabberdCreator": ", кампаніяй, што стаіць за",
         "poweredBy": "Працуе на",
         "errors": {
             "tlsCertTitle": "Не ўдалося праверыць сертыфікат бяспекі сервера",

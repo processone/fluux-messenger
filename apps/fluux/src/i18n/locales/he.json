@@ -41,7 +41,6 @@
         "showPassword": "הצג סיסמה",
         "hidePassword": "הסתר סיסמה",
         "madeBy": "נוצר על ידי",
-        "ejabberdCreator": ", החברה מאחורי",
         "poweredBy": "מופעל באמצעות",
         "errors": {
             "tlsCertTitle": "לא ניתן לאמת את אישור האבטחה של השרת",

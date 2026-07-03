@@ -41,7 +41,6 @@
         "showPassword": "Uri password",
         "hidePassword": "Aħbi password",
         "madeBy": "Magħmul minn",
-        "ejabberdCreator": ", il-kumpanija wara",
         "poweredBy": "Ipprovdut minn",
         "errors": {
             "tlsCertTitle": "Ma setax jiġi vverifikat iċ-ċertifikat tas-sigurtà tal-server",

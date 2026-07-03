@@ -41,7 +41,6 @@
         "showPassword": "Visa lösenord",
         "hidePassword": "Dölj lösenord",
         "madeBy": "Skapat av",
-        "ejabberdCreator": ", företaget bakom",
         "poweredBy": "Drivs av",
         "errors": {
             "tlsCertTitle": "Det gick inte att verifiera serverns säkerhetscertifikat",

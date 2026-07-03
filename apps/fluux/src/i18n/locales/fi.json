@@ -41,7 +41,6 @@
         "showPassword": "Näytä salasana",
         "hidePassword": "Piilota salasana",
         "madeBy": "Tekijä",
-        "ejabberdCreator": ", yrityksen takana",
         "poweredBy": "Käyttää",
         "errors": {
             "tlsCertTitle": "Palvelimen turvasertifikaattia ei voitu varmentaa",

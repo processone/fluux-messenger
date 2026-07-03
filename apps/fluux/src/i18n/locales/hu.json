@@ -41,7 +41,6 @@
         "showPassword": "Jelszó megjelenítése",
         "hidePassword": "Jelszó elrejtése",
         "madeBy": "Készítette:",
-        "ejabberdCreator": ", az alkotója:",
         "poweredBy": "Hajtja:",
         "errors": {
             "tlsCertTitle": "A szerver biztonsági tanúsítványa nem ellenőrizhető",

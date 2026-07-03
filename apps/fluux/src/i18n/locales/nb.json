@@ -41,7 +41,6 @@
         "showPassword": "Vis passord",
         "hidePassword": "Skjul passord",
         "madeBy": "Laget av",
-        "ejabberdCreator": ", selskapet bak",
         "poweredBy": "Drevet av",
         "errors": {
             "tlsCertTitle": "Kunne ikke bekrefte serverens sikkerhetssertifikat",

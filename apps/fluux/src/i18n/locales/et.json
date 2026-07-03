@@ -41,7 +41,6 @@
         "showPassword": "Näita parooli",
         "hidePassword": "Peida parool",
         "madeBy": "Tegi",
-        "ejabberdCreator": ", ettevõte, mis lõi",
         "poweredBy": "Töötab",
         "errors": {
             "tlsCertTitle": "Serveri turvasertifikaati ei õnnestunud kontrollida",

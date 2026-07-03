@@ -638,7 +638,7 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
         </form>
 
         {/* Footer */}
-        <div className="text-center text-fluux-muted text-sm mt-6 space-y-1">
+        <div className="text-center text-fluux-muted text-sm mt-6">
           <p>
             {t('login.madeBy')}{' '}
             <a
@@ -649,17 +649,7 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
             >
               ProcessOne
             </a>
-            {t('login.ejabberdCreator')}{' '}
-            <a
-              href="https://www.ejabberd.im"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-fluux-brand hover:underline"
-            >
-              ejabberd
-            </a>
-          </p>
-          <p>
+            {' · '}
             {t('login.poweredBy')}{' '}
             <a
               href="https://xmpp.org"

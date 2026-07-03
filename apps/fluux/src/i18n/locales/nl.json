@@ -41,7 +41,6 @@
         "showPassword": "Wachtwoord tonen",
         "hidePassword": "Wachtwoord verbergen",
         "madeBy": "Gemaakt door",
-        "ejabberdCreator": ", het bedrijf achter",
         "poweredBy": "Mogelijk gemaakt door",
         "errors": {
             "tlsCertTitle": "Het beveiligingscertificaat van de server kon niet worden geverifieerd",

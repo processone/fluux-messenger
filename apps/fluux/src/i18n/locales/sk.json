@@ -41,7 +41,6 @@
         "showPassword": "Zobraziť heslo",
         "hidePassword": "Skryť heslo",
         "madeBy": "Vytvoril",
-        "ejabberdCreator": ", spoločnosť za",
         "poweredBy": "Poháňané",
         "errors": {
             "tlsCertTitle": "Nepodarilo sa overiť bezpečnostný certifikát servera",

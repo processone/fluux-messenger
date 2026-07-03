@@ -41,7 +41,6 @@
         "showPassword": "Pokaż hasło",
         "hidePassword": "Ukryj hasło",
         "madeBy": "Stworzone przez",
-        "ejabberdCreator": ", firmę stojącą za",
         "poweredBy": "Napędzane przez",
         "errors": {
             "tlsCertTitle": "Nie można zweryfikować certyfikatu zabezpieczeń serwera",

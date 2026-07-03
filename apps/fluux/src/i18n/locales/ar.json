@@ -41,7 +41,6 @@
         "showPassword": "إظهار كلمة المرور",
         "hidePassword": "إخفاء كلمة المرور",
         "madeBy": "من تطوير",
-        "ejabberdCreator": "، الشركة المطورة لـ",
         "poweredBy": "مدعوم بواسطة",
         "errors": {
             "tlsCertTitle": "تعذّر التحقق من شهادة أمان الخادم",

@@ -41,7 +41,6 @@
         "showPassword": "Rādīt paroli",
         "hidePassword": "Slēpt paroli",
         "madeBy": "Izveidoja",
-        "ejabberdCreator": ", uzņēmums, kas radīja",
         "poweredBy": "Darbina",
         "errors": {
             "tlsCertTitle": "Neizdevās pārbaudīt servera drošības sertifikātu",
