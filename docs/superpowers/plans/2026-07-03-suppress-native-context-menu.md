@@ -1,4 +1,4 @@
-# Suppress Native Context Menu on Desktop — Implementation Plan
+# Suppress Native Context Menu on Desktop - Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -12,7 +12,7 @@
 
 - All work lives in `apps/fluux`. Run all commands from `apps/fluux`.
 - Test env is happy-dom by default (`vitest.config.ts`); no per-file env override needed here.
-- Reuse the existing `isTauri()` helper from `apps/fluux/src/utils/tauri.ts` — do not re-implement Tauri detection.
+- Reuse the existing `isTauri()` helper from `apps/fluux/src/utils/tauri.ts` - do not re-implement Tauri detection.
 - No changes to `tauri.conf.json`.
 - No em-dashes or en-dashes in any user-facing string (none are introduced here, but keep code comments plain too).
 
@@ -20,9 +20,9 @@
 
 ## File Structure
 
-- **Create** `apps/fluux/src/hooks/useNativeContextMenuSuppression.ts` — the pure predicate `shouldSuppressNativeMenu` plus the `useNativeContextMenuSuppression` hook.
-- **Create** `apps/fluux/src/hooks/useNativeContextMenuSuppression.test.ts` — unit tests for the predicate.
-- **Modify** `apps/fluux/src/App.tsx` — call the hook once in the top-level `App` component.
+- **Create** `apps/fluux/src/hooks/useNativeContextMenuSuppression.ts` - the pure predicate `shouldSuppressNativeMenu` plus the `useNativeContextMenuSuppression` hook.
+- **Create** `apps/fluux/src/hooks/useNativeContextMenuSuppression.test.ts` - unit tests for the predicate.
+- **Modify** `apps/fluux/src/App.tsx` - call the hook once in the top-level `App` component.
 
 ---
 
@@ -34,7 +34,7 @@
 
 **Interfaces:**
 - Consumes: nothing.
-- Produces: `export function shouldSuppressNativeMenu(target: EventTarget | null, selection: Selection | null, defaultPrevented: boolean): boolean` — returns `true` when the native context menu should be suppressed.
+- Produces: `export function shouldSuppressNativeMenu(target: EventTarget | null, selection: Selection | null, defaultPrevented: boolean): boolean` - returns `true` when the native context menu should be suppressed.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -137,7 +137,7 @@ describe('shouldSuppressNativeMenu', () => {
 - [ ] **Step 2: Run the test to verify it fails**
 
 Run: `cd apps/fluux && npx vitest run src/hooks/useNativeContextMenuSuppression.test.ts`
-Expected: FAIL — `shouldSuppressNativeMenu` is not exported / module not found.
+Expected: FAIL - `shouldSuppressNativeMenu` is not exported / module not found.
 
 - [ ] **Step 3: Write the minimal implementation**
 
@@ -212,7 +212,7 @@ git commit -m "feat(app): add shouldSuppressNativeMenu predicate for desktop con
 
 **Interfaces:**
 - Consumes: `shouldSuppressNativeMenu` (Task 1); `isTauri` from `apps/fluux/src/utils/tauri.ts`.
-- Produces: `export function useNativeContextMenuSuppression(): void` — registers/cleans up the global listener under the platform gate.
+- Produces: `export function useNativeContextMenuSuppression(): void` - registers/cleans up the global listener under the platform gate.
 
 - [ ] **Step 1: Add the hook to the module**
 

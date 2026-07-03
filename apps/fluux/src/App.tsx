@@ -34,9 +34,7 @@ import { clearLocalData } from './utils/clearLocalData'
 import { startMemoryProbe } from './utils/memoryProbe'
 import { startSystemNotificationEffect } from '@/effects/systemNotificationEffect'
 import { markConnectActive } from './utils/reconnectIntent'
-
-// Tauri detection
-const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
+import { isTauri } from './utils/tauri'
 
 // macOS detection (for title bar overlay - only applies on macOS)
 const isMacOS = typeof navigator !== 'undefined' && /Mac/.test(navigator.platform)
@@ -49,7 +47,7 @@ function TitleBar() {
 
   // Only render on macOS in Tauri (for traffic light spacing)
   // Windows and Linux use native title bars
-  if (!isTauri || !isMacOS || isFullscreen) return null
+  if (!isTauri() || !isMacOS || isFullscreen) return null
 
   return (
     <div
@@ -93,7 +91,7 @@ function App() {
   // Listen for --clear-storage CLI flag (Tauri only)
   // This clears all local data on startup when the flag is passed
   useEffect(() => {
-    if (!isTauri) return
+    if (!isTauri()) return
 
     let disposed = false
     let unlisten: (() => void) | null = null
@@ -298,7 +296,7 @@ function App() {
         // Web-only: a stored-but-locked key needs the session passphrase.
         // Try the opt-in 24h cache first so the user skips re-entry; fall back
         // to the interactive dialog on miss or any failure (e.g. rotated key).
-        if (!isTauri && isKeyLocked()) {
+        if (!isTauri() && isKeyLocked()) {
           await attemptCachedUnlockOrPrompt({
             accountJid,
             getUnlockPlugin: () =>
@@ -415,7 +413,7 @@ function App() {
   }
 
   // Show tab coordination screen when blocked or taken over (web only)
-  if (!isTauri && (tabCoordination.blocked || tabCoordination.takenOver)) {
+  if (!isTauri() && (tabCoordination.blocked || tabCoordination.takenOver)) {
     return (
       <>
         <TitleBar />

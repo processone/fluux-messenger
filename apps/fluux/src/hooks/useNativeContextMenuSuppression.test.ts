@@ -61,6 +61,14 @@ describe('shouldSuppressNativeMenu', () => {
     expect(shouldSuppressNativeMenu(span, null, false)).toBe(true)
   })
 
+  it('suppresses on an SVG element (Element but not HTMLElement)', () => {
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
+    document.body.appendChild(svg)
+    expect(svg instanceof Element).toBe(true)
+    expect(svg instanceof HTMLElement).toBe(false)
+    expect(shouldSuppressNativeMenu(svg, null, false)).toBe(true)
+  })
+
   it('allows when a non-collapsed selection intersects the target', () => {
     const p = document.createElement('p')
     p.textContent = 'some words'
