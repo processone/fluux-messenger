@@ -28,6 +28,8 @@ tauri-plugin-process = "2"
 # fullscreen transitions, which a hand-rolled objc2 reposition would not.
 tauri-plugin-decorum = "1"
 serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+async-trait = "0.1"
 
 # XMPP WebSocket-to-TCP proxy dependencies
 tokio = { version = "1", features = ["full"] }
@@ -86,7 +88,6 @@ tauri-plugin-updater = "2"
 # than starting a second copy. macOS already enforces single-instance for the
 # app bundle natively, so the plugin is effectively a no-op there.
 tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
-serde_json = "1"
 keyring = { version = "3", features = ["apple-native", "windows-native", "sync-secret-service", "crypto-rust"] }
 reqwest = { version = "0.13", features = ["blocking"] }
 scraper = "0.27"

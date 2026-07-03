@@ -201,6 +201,7 @@ mod openpgp;
 mod openpgp_backup;
 mod openpgp_storage;
 mod notifications;
+mod mcp;
 
 // Linux tray-functionality detection (pure combiner compiled everywhere; the
 // DBus probe inside is Linux-only).

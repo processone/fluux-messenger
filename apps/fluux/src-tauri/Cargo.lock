@@ -1893,6 +1893,7 @@ name = "fluux"
 version = "0.17.0"
 dependencies = [
  "anyhow",
+ "async-trait",
  "base64 0.22.1",
  "block2",
  "ctor 1.0.8",
