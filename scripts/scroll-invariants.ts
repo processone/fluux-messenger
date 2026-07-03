@@ -1639,3 +1639,71 @@ test.describe('Media-growth drift while scrolled up', () => {
     expect(drift, `reading position drifted ${Math.round(drift)}px after media grew above (grew ${GROW_PX}px)`).toBeLessThan(120)
   })
 })
+
+// ── 13: Sliding window — load-older AT THE CAP slides (evicts newest) and holds the anchor ────────
+//
+// The whole feature: past the resident cap, scrolling up must keep loading (the window slides)
+// rather than hitting a wall, WITHOUT growing RAM unbounded. We shrink the cap to 100 via
+// ?window=100 so the slide happens after a handful of messages instead of 5000+. Seed 250 so the
+// resident array is solidly AT the cap (100) after activation, with older + newer available.
+// A single load-older at the cap must: (a) NOT grow the resident array past the cap (the newest
+// were evicted — proof of the slide, not an unbounded append); (b) flip windowAtLiveEdge to false
+// (the resident bottom is no longer the newest); (c) restore the anchor off the top (not blank,
+// not stuck at 0). Then the jump-to-latest FAB must recenter back to the live edge.
+test.describe('Sliding window (load-older past the cap)', () => {
+  const readState = (page: Page) => page.evaluate((jid) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const rs = (window as any).__roomStore.getState()
+    const room = rs.getRoom(jid)
+    const scroller = document.querySelector('[data-message-list]') as HTMLElement | null
+    return {
+      count: room?.messages?.length ?? 0,
+      atLiveEdge: rs.roomRuntime.get(jid)?.windowAtLiveEdge ?? true,
+      scrollTop: scroller?.scrollTop ?? 0,
+    }
+  }, STRESS_ROOM_JID)
+
+  test('invariant-13: load-older at the cap slides (evicts newest, flips windowAtLiveEdge), jump-to-latest recenters', async ({ page }) => {
+    // ?window=100 shrinks the resident cap; stress seeds 250 so the window is full at the live edge.
+    await page.goto('/demo.html?tutorial=false&virt=1&window=100&stress=rooms:1,messages:250,msgStep:0', { waitUntil: 'domcontentloaded' })
+    await page.waitForSelector('[data-nav="messages"]', { timeout: 20_000 })
+    await page.waitForTimeout(1800) // 250-msg seed + IndexedDB writes
+    await navigateToStressRoom(page)
+    await page.waitForTimeout(2000) // activation loads the latest window from cache + settles
+
+    const before = await readState(page)
+    expect(before.atLiveEdge, `expected to start at the live edge — ${JSON.stringify(before)}`).toBe(true)
+    // Resident array is bounded by the window AND full (at the cap), so load-older will slide.
+    expect(before.count, `resident not bounded by the window — ${JSON.stringify(before)}`).toBeLessThanOrEqual(100)
+    expect(before.count, `resident not full (not at the cap) — ${JSON.stringify(before)}`).toBeGreaterThanOrEqual(90)
+
+    // Scroll to the top → load-older. AT THE CAP this SLIDES: prepend a batch + evict the newest.
+    await scrollToTopAndLoad(page)
+    // Wait until the slide has actually applied: windowAtLiveEdge flips false once the newest are evicted.
+    await page.waitForFunction((jid) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const rs = (window as any).__roomStore.getState()
+      return (rs.roomRuntime.get(jid)?.windowAtLiveEdge ?? true) === false
+    }, STRESS_ROOM_JID, { timeout: 6_000 }).catch(() => { /* asserted below with context */ })
+    await page.waitForTimeout(800) // anchor-restore re-assert settle
+
+    const after = await readState(page)
+    // (a) The window SLID, it did not grow past the cap (the newest were evicted).
+    expect(after.count, `resident grew past the cap — window did not slide: ${JSON.stringify(after)}`).toBeLessThanOrEqual(100)
+    // (b) The resident bottom is no longer the newest message.
+    expect(after.atLiveEdge, `windowAtLiveEdge did not flip false after load-older at the cap: ${JSON.stringify(after)}`).toBe(false)
+    // (c) The anchor restore moved us off the top (not blank, not stuck at scrollTop 0).
+    expect(after.scrollTop, `anchor not restored (stuck at top) after slide: ${JSON.stringify(after)}`).toBeGreaterThan(5)
+
+    // Jump-to-latest: the FAB recenters the resident window to the newest slice and returns to the live edge.
+    await page.locator('[data-fab="scroll-to-bottom"]').first().click()
+    await page.waitForFunction((jid) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const rs = (window as any).__roomStore.getState()
+      return (rs.roomRuntime.get(jid)?.windowAtLiveEdge ?? true) === true
+    }, STRESS_ROOM_JID, { timeout: 6_000 }).catch(() => { /* asserted below */ })
+    const recentered = await readState(page)
+    expect(recentered.atLiveEdge, `jump-to-latest did not recenter to the live edge: ${JSON.stringify(recentered)}`).toBe(true)
+    expect(recentered.count, `resident not bounded after recenter: ${JSON.stringify(recentered)}`).toBeLessThanOrEqual(100)
+  })
+})

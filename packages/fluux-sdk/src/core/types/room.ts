@@ -284,6 +284,25 @@ export interface RoomRuntime {
   selfOccupant?: RoomOccupant
   /** Messages in this room */
   messages: RoomMessage[]
+  /**
+   * Whether the resident `messages` array is currently at the live edge (holds the
+   * newest history) so an incoming live message can be appended. Sliding the window
+   * up via load-older (which evicts the newest tail) sets this `false`, gating the
+   * append in {@link RoomState.addMessage}: appending a fresh message onto a window
+   * that no longer touches the tail would create a visible false-adjacency gap. The
+   * gated message is still persisted to IndexedDB and updates the sidebar preview /
+   * unread badge; it reloads on jump-to-latest / recenter.
+   *
+   * EPHEMERAL: this lives only on the (non-persisted) runtime. On reload the resident
+   * array is rebuilt from the newest window (= live edge), so a persisted "scrolled-up"
+   * value would wrongly gate live messages.
+   *
+   * OPTIONAL with "absent or `true` = at the live edge; only an explicit `false` gates"
+   * (parity with chatStore's `windowAtLiveEdge` map). The store's own rooms are seeded
+   * `true` on creation; the `!== false` read means an unset value behaves as the live
+   * edge, so ad-hoc `Room` literals don't have to specify it.
+   */
+  windowAtLiveEdge?: boolean
 }
 
 /**

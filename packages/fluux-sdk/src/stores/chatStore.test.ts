@@ -88,6 +88,7 @@ describe('chatStore', () => {
       // Reset other ephemeral state
       typingStates: new Map(),
       drafts: new Map(),
+      windowAtLiveEdge: new Map(),
     })
     vi.clearAllMocks()
   })
@@ -2396,8 +2397,16 @@ describe('chatStore', () => {
         const messages = chatStore.getState().messages.get('alice@example.com')
         expect(messages?.length).toBeLessThanOrEqual(5000)
 
-        // Should keep the most recent messages
-        expect(messages?.[messages.length - 1].body).toBe(`Message ${total - 1}`)
+        // A backward (load-older) merge slides the window: it keeps the OLDEST
+        // maxCount messages so the just-loaded older batch survives instead of
+        // being evicted at the bound. In production a single backward MAM merge
+        // never approaches this scale (auto-pagination caps at 5 pages x 50 = 250
+        // messages for chats, 50 for rooms - see MAM.ts), so this 5100-message
+        // direct call is a synthetic stress case exercising the trim DIRECTION,
+        // not a realistic overflow scenario.
+        expect(messages?.length).toBe(5000)
+        expect(messages?.[0].body).toBe('Message 0')
+        expect(messages?.[messages!.length - 1].body).toBe('Message 4999')
       })
 
       it('should create conversation messages array if it does not exist', () => {
@@ -3119,6 +3128,313 @@ describe('chatStore', () => {
       chatStore.getState().mergeMAMMessages(conversationId, [decrypted], {}, true, 'forward')
 
       expect(chatStore.getState().conversationMeta.get(conversationId)?.lastMessage?.body).toBe('now decrypted')
+    })
+  })
+
+  describe('loadOlderMessagesFromCache (sliding window)', () => {
+    const conversationId = 'alice@example.com'
+    // Mirrors chatStore's RESIDENT_WINDOW_SIZE (formerly MAX_MESSAGES_PER_CONVERSATION).
+    const RESIDENT_WINDOW_SIZE = 5000
+
+    beforeEach(() => {
+      vi.mocked(messageCache.getMessages).mockReset()
+      chatStore.getState().addConversation(createConversation(conversationId))
+    })
+
+    function chatMsgAt(id: string, minuteOffset: number): Message {
+      return {
+        type: 'chat',
+        id,
+        conversationId,
+        from: conversationId,
+        body: id,
+        // minuteOffset is relative to a fixed epoch so older-batch ids sort before resident ids.
+        timestamp: new Date(Date.UTC(2024, 0, 1, 0, 0, 0) + minuteOffset * 60000),
+        isOutgoing: false,
+      }
+    }
+
+    it('slides the window: keeps the just-loaded older batch and evicts the newest tail', async () => {
+      // Seed the conversation at the resident cap - minutes 50..5049 so ids are 'resident-0'..'resident-4999'.
+      const resident: Message[] = []
+      for (let i = 0; i < RESIDENT_WINDOW_SIZE; i++) {
+        resident.push(chatMsgAt(`resident-${i}`, 50 + i))
+      }
+      chatStore.setState((state) => {
+        const newMessages = new Map(state.messages)
+        newMessages.set(conversationId, resident)
+        return { messages: newMessages }
+      })
+
+      // Cache returns 50 messages older than the current oldest resident message (minute 50).
+      const olderBatch: Message[] = []
+      for (let i = 0; i < 50; i++) {
+        olderBatch.push(chatMsgAt(`older-${i}`, i))
+      }
+      vi.mocked(messageCache.getMessages).mockResolvedValue(olderBatch)
+
+      await chatStore.getState().loadOlderMessagesFromCache(conversationId, 50)
+
+      const messages = chatStore.getState().messages.get(conversationId)
+      // Window size is preserved...
+      expect(messages?.length).toBe(RESIDENT_WINDOW_SIZE)
+      // ...but the just-loaded older batch is now resident (oldest id is from the older batch)...
+      expect(messages?.[0].id).toBe('older-0')
+      // ...which means the window slid: the newest 50 resident messages were evicted.
+      expect(messages?.some((m) => m.id === 'resident-4999')).toBe(false)
+      expect(messages?.[messages.length - 1].id).toBe('resident-4949')
+    })
+  })
+
+  describe('windowAtLiveEdge gating (sliding window)', () => {
+    const conversationId = 'alice@example.com'
+    const RESIDENT_WINDOW_SIZE = 5000
+
+    beforeEach(() => {
+      vi.mocked(messageCache.getMessages).mockReset()
+      vi.mocked(messageCache.saveMessage).mockClear()
+      chatStore.getState().addConversation(createConversation(conversationId))
+    })
+
+    function chatMsgAt(id: string, minuteOffset: number): Message {
+      return {
+        type: 'chat',
+        id,
+        conversationId,
+        from: conversationId,
+        body: id,
+        timestamp: new Date(Date.UTC(2024, 0, 1, 0, 0, 0) + minuteOffset * 60000),
+        isOutgoing: false,
+      }
+    }
+
+    // Seed the conversation at the resident cap and slide the window up so its newest tail is evicted.
+    function seedSlidWindow() {
+      const resident: Message[] = []
+      for (let i = 0; i < RESIDENT_WINDOW_SIZE; i++) {
+        resident.push(chatMsgAt(`resident-${i}`, 50 + i))
+      }
+      chatStore.setState((state) => {
+        const newMessages = new Map(state.messages)
+        newMessages.set(conversationId, resident)
+        return { messages: newMessages }
+      })
+
+      const olderBatch: Message[] = []
+      for (let i = 0; i < 50; i++) {
+        olderBatch.push(chatMsgAt(`older-${i}`, i))
+      }
+      vi.mocked(messageCache.getMessages).mockResolvedValue(olderBatch)
+    }
+
+    it('appends a live message when the window is at the live edge (default/absent)', () => {
+      const live = chatMsgAt('live-1', 10000)
+      chatStore.getState().addMessage(live)
+
+      const messages = chatStore.getState().messages.get(conversationId)
+      expect(messages?.some((m) => m.id === 'live-1')).toBe(true)
+      expect(chatStore.getState().conversationMeta.get(conversationId)?.lastMessage?.id).toBe('live-1')
+    })
+
+    it('sets windowAtLiveEdge false after a load-older that evicts the newest tail', async () => {
+      seedSlidWindow()
+      await chatStore.getState().loadOlderMessagesFromCache(conversationId, 50)
+      expect(chatStore.getState().windowAtLiveEdge.get(conversationId)).toBe(false)
+    })
+
+    it('does not append a live message when the window has slid off the live edge, but still persists to cache and updates meta', async () => {
+      seedSlidWindow()
+      await chatStore.getState().loadOlderMessagesFromCache(conversationId, 50)
+      expect(chatStore.getState().windowAtLiveEdge.get(conversationId)).toBe(false)
+
+      vi.mocked(messageCache.saveMessage).mockClear()
+      const before = chatStore.getState().messages.get(conversationId)!
+      const live = chatMsgAt('live-1', 10000)
+      chatStore.getState().addMessage(live)
+
+      const messages = chatStore.getState().messages.get(conversationId)!
+      // Resident array is unchanged (no false-adjacency gap appended)...
+      expect(messages.some((m) => m.id === 'live-1')).toBe(false)
+      expect(messages.length).toBe(before.length)
+      expect(messages[messages.length - 1].id).toBe(before[before.length - 1].id)
+      // ...but the message is still persisted to IndexedDB...
+      expect(messageCache.saveMessage).toHaveBeenCalledWith(expect.objectContaining({ id: 'live-1' }))
+      // ...and meta (sidebar preview + unread badge) still update.
+      expect(chatStore.getState().conversationMeta.get(conversationId)?.lastMessage?.id).toBe('live-1')
+      expect(chatStore.getState().conversationMeta.get(conversationId)?.unreadCount).toBe(1)
+    })
+
+    it('recenters to the live edge when the latest window is (re)loaded', async () => {
+      seedSlidWindow()
+      await chatStore.getState().loadOlderMessagesFromCache(conversationId, 50)
+      expect(chatStore.getState().windowAtLiveEdge.get(conversationId)).toBe(false)
+
+      // A latest-N load (activation path) makes the newest messages resident again.
+      vi.mocked(messageCache.getMessages).mockResolvedValue([chatMsgAt('latest-1', 9000)])
+      await chatStore.getState().loadMessagesFromCache(conversationId, { limit: 100 })
+      expect(chatStore.getState().windowAtLiveEdge.get(conversationId) ?? true).toBe(true)
+    })
+
+    it('does not include windowAtLiveEdge in the persisted partialize output', () => {
+      chatStore.getState().addMessage(chatMsgAt('live-1', 10000))
+      const persisted = chatStore.persist.getOptions().partialize!(chatStore.getState())
+      expect('windowAtLiveEdge' in persisted).toBe(false)
+    })
+  })
+
+  describe('loadNewerMessagesFromCache (sliding window)', () => {
+    const conversationId = 'alice@example.com'
+    const RESIDENT_WINDOW_SIZE = 5000
+
+    beforeEach(() => {
+      vi.mocked(messageCache.getMessages).mockReset()
+      chatStore.getState().addConversation(createConversation(conversationId))
+    })
+
+    function chatMsgAt(id: string, minuteOffset: number): Message {
+      return {
+        type: 'chat',
+        id,
+        conversationId,
+        from: conversationId,
+        body: id,
+        timestamp: new Date(Date.UTC(2024, 0, 1, 0, 0, 0) + minuteOffset * 60000),
+        isOutgoing: false,
+      }
+    }
+
+    // Seed the conversation at the resident cap with a slid-up window (oldest resident is 'resident-0').
+    function seedResidentWindow() {
+      const resident: Message[] = []
+      for (let i = 0; i < RESIDENT_WINDOW_SIZE; i++) {
+        resident.push(chatMsgAt(`resident-${i}`, i))
+      }
+      chatStore.setState((state) => {
+        const newMessages = new Map(state.messages)
+        newMessages.set(conversationId, resident)
+        const newWindowAtLiveEdge = new Map(state.windowAtLiveEdge)
+        newWindowAtLiveEdge.set(conversationId, false)
+        return { messages: newMessages, windowAtLiveEdge: newWindowAtLiveEdge }
+      })
+    }
+
+    it('appends the newer batch and evicts the oldest at the bound', async () => {
+      seedResidentWindow()
+
+      // Cache returns 50 messages newer than the current newest resident message (minute 4999).
+      const newerBatch: Message[] = []
+      for (let i = 0; i < 50; i++) {
+        newerBatch.push(chatMsgAt(`newer-${i}`, RESIDENT_WINDOW_SIZE + i))
+      }
+      vi.mocked(messageCache.getMessages).mockResolvedValue(newerBatch)
+
+      await chatStore.getState().loadNewerMessagesFromCache(conversationId, 50)
+
+      const messages = chatStore.getState().messages.get(conversationId)
+      // Window size is preserved...
+      expect(messages?.length).toBe(RESIDENT_WINDOW_SIZE)
+      // ...the just-loaded newer batch is now resident (newest id is from the newer batch)...
+      expect(messages?.[messages.length - 1].id).toBe('newer-49')
+      // ...which means the window slid down: the oldest 50 resident messages were evicted.
+      expect(messages?.some((m) => m.id === 'resident-0')).toBe(false)
+      expect(messages?.[0].id).toBe('resident-50')
+    })
+
+    it('queries the cache with an after-cursor at the newest resident timestamp', async () => {
+      seedResidentWindow()
+      vi.mocked(messageCache.getMessages).mockResolvedValue([])
+
+      await chatStore.getState().loadNewerMessagesFromCache(conversationId, 50)
+
+      const newestInMemory = chatMsgAt(`resident-${RESIDENT_WINDOW_SIZE - 1}`, RESIDENT_WINDOW_SIZE - 1)
+      expect(messageCache.getMessages).toHaveBeenCalledWith(conversationId, {
+        after: newestInMemory.timestamp,
+        limit: 50,
+      })
+    })
+
+    it('sets windowAtLiveEdge true when the cache returns fewer than the limit (reached the tail)', async () => {
+      seedResidentWindow()
+      // Fewer than the requested limit ⇒ no more newer messages remain in the cache.
+      const newerBatch = [chatMsgAt('newer-0', RESIDENT_WINDOW_SIZE)]
+      vi.mocked(messageCache.getMessages).mockResolvedValue(newerBatch)
+
+      await chatStore.getState().loadNewerMessagesFromCache(conversationId, 50)
+
+      expect(chatStore.getState().windowAtLiveEdge.get(conversationId) ?? true).toBe(true)
+    })
+
+    it('leaves windowAtLiveEdge slid (false) when a full batch returns (more newer remain)', async () => {
+      seedResidentWindow()
+      const newerBatch: Message[] = []
+      for (let i = 0; i < 50; i++) {
+        newerBatch.push(chatMsgAt(`newer-${i}`, RESIDENT_WINDOW_SIZE + i))
+      }
+      vi.mocked(messageCache.getMessages).mockResolvedValue(newerBatch)
+
+      await chatStore.getState().loadNewerMessagesFromCache(conversationId, 50)
+
+      expect(chatStore.getState().windowAtLiveEdge.get(conversationId)).toBe(false)
+    })
+
+    it('returns an empty array and does nothing when the conversation has no resident messages', async () => {
+      const returned = await chatStore.getState().loadNewerMessagesFromCache(conversationId, 50)
+      expect(returned).toEqual([])
+      expect(messageCache.getMessages).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('recenterToLatest (sliding window)', () => {
+    const conversationId = 'alice@example.com'
+    const RESIDENT_WINDOW_SIZE = 5000
+
+    beforeEach(() => {
+      vi.mocked(messageCache.getMessages).mockReset()
+      chatStore.getState().addConversation(createConversation(conversationId))
+    })
+
+    function chatMsgAt(id: string, minuteOffset: number): Message {
+      return {
+        type: 'chat',
+        id,
+        conversationId,
+        from: conversationId,
+        body: id,
+        timestamp: new Date(Date.UTC(2024, 0, 1, 0, 0, 0) + minuteOffset * 60000),
+        isOutgoing: false,
+      }
+    }
+
+    it('reloads the newest window and sets windowAtLiveEdge true', async () => {
+      // Seed a slid-up window (evicted the newest tail via load-older).
+      const resident: Message[] = []
+      for (let i = 0; i < RESIDENT_WINDOW_SIZE; i++) {
+        resident.push(chatMsgAt(`resident-${i}`, 50 + i))
+      }
+      chatStore.setState((state) => {
+        const newMessages = new Map(state.messages)
+        newMessages.set(conversationId, resident)
+        const newWindowAtLiveEdge = new Map(state.windowAtLiveEdge)
+        newWindowAtLiveEdge.set(conversationId, false)
+        return { messages: newMessages, windowAtLiveEdge: newWindowAtLiveEdge }
+      })
+
+      const latestBatch = [chatMsgAt('latest-1', 90000)]
+      vi.mocked(messageCache.getMessages).mockResolvedValue(latestBatch)
+
+      await chatStore.getState().recenterToLatest(conversationId)
+
+      expect(chatStore.getState().windowAtLiveEdge.get(conversationId) ?? true).toBe(true)
+      const messages = chatStore.getState().messages.get(conversationId)
+      expect(messages?.some((m) => m.id === 'latest-1')).toBe(true)
+    })
+
+    it('sets windowAtLiveEdge true even when the cache has nothing newer (already-resident latest window)', async () => {
+      vi.mocked(messageCache.getMessages).mockResolvedValue([])
+
+      await chatStore.getState().recenterToLatest(conversationId)
+
+      expect(chatStore.getState().windowAtLiveEdge.get(conversationId) ?? true).toBe(true)
     })
   })
 

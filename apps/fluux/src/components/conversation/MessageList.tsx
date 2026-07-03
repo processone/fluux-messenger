@@ -101,6 +101,17 @@ export interface MessageListProps<T extends BaseMessage> {
   onLoadAround?: (anchorMessageId: string) => Promise<unknown> | void
   /** If true, show loading indicator at top while fetching older messages */
   isLoadingOlder?: boolean
+  /** Sliding window: load the next-newer cache slice when the reader scrolls back down to the
+   *  bottom of a slid-up window. Fired only when windowAtLiveEdge is false. */
+  onLoadNewer?: () => void
+  /** If true, a newer-slice load is already in flight (throttles the load-newer trigger) */
+  isLoadingNewer?: boolean
+  /** Sliding window: whether the resident window includes the newest message. false = slid up
+   *  (enables the load-newer trigger); absent/true = at the live edge (unchanged behavior). */
+  windowAtLiveEdge?: boolean
+  /** Sliding window: reset the resident window to the newest slice (jump-to-latest). Invoked by the
+   *  scroll-to-bottom FAB when the window is slid up, before scrolling to the bottom. */
+  onJumpToLatest?: () => Promise<unknown> | void
   /** If true, all history has been fetched - disable scroll-to-top trigger */
   isHistoryComplete?: boolean
   /** Callback when the bottom-most visible message changes (viewport tracking) */
@@ -149,6 +160,10 @@ export function MessageList<T extends BaseMessage>({
   onScrollToTop,
   onLoadAround,
   isLoadingOlder,
+  onLoadNewer,
+  isLoadingNewer,
+  windowAtLiveEdge,
+  onJumpToLatest,
   isHistoryComplete,
   onMessageSeen,
   staticMode,
@@ -441,6 +456,9 @@ export function MessageList<T extends BaseMessage>({
     onScrollToTop,
     onLoadAround,
     isLoadingOlder,
+    onLoadNewer,
+    isLoadingNewer,
+    windowAtLiveEdge,
     isHistoryComplete,
     typingUsersCount: typingUsers.length,
     lastMessageReactionsKey,
@@ -590,6 +608,23 @@ export function MessageList<T extends BaseMessage>({
     }
   }
 
+  // Sliding window: when the window is slid up (not at the live edge) the FAB becomes "jump to
+  // latest" — recenter the resident window to the newest slice, then scroll to the bottom. Shown
+  // whenever the window is slid up (newer content exists off-screen), not only past the FAB threshold.
+  const windowSlidUp = windowAtLiveEdge === false
+  const fabVisible = showScrollToBottom || windowSlidUp
+  const handleJumpToBottom = () => {
+    if (windowSlidUp && onJumpToLatest) {
+      // Recenter the resident window to the newest slice, then scroll to the bottom. If the
+      // recenter rejects, still scroll to the current resident bottom rather than doing nothing.
+      Promise.resolve(onJumpToLatest())
+        .then(() => scrollToBottom())
+        .catch(() => scrollToBottom())
+    } else {
+      scrollToBottom()
+    }
+  }
+
   return (
     <MessageWidthProvider containerRef={scrollContainerRef}>
     <div className="relative flex-1 flex flex-col min-h-0">
@@ -730,19 +765,19 @@ export function MessageList<T extends BaseMessage>({
       {/* Scroll to bottom FAB with spring animation */}
       <div
         className={`absolute bottom-4 end-4 z-40 ${
-          showScrollToBottom
+          fabVisible
             ? 'animate-[fab-spring-in_0.4s_var(--fluux-ease-spring)_forwards]'
             : 'animate-[fab-spring-out_0.25s_ease-in_forwards] pointer-events-none'
         }`}
-        inert={!showScrollToBottom}
+        inert={!fabVisible}
       >
         <Tooltip content={t('chat.scrollToBottom') + ` (${isMac ? '⌘↓' : 'Ctrl+↓'})`} position="left">
           <button
-            onClick={scrollToBottom}
+            onClick={handleJumpToBottom}
             data-fab="scroll-to-bottom"
             className="size-10 rounded-full bg-fluux-float border border-fluux-border shadow-lg flex items-center justify-center text-fluux-muted hover:text-fluux-text hover:bg-fluux-float-hover transition-colors duration-200 hover:scale-105 active:scale-95"
             aria-label={t('chat.scrollToBottom')}
-            tabIndex={showScrollToBottom ? 0 : -1}
+            tabIndex={fabVisible ? 0 : -1}
           >
             {markerUnreadCount > 0 && (
               <span className="absolute -top-1.5 -end-1.5 min-w-5 h-5 px-1 rounded-full bg-fluux-badge text-fluux-badge-text text-xs font-semibold flex items-center justify-center">

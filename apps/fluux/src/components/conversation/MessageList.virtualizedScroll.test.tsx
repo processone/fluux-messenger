@@ -198,6 +198,32 @@ describe('MessageList — virtualized scroll integration (ensureMessageMounted)'
     expect(scrollToIndexCalls).toContain('end')
   })
 
+  it('recenters to latest via onJumpToLatest when the FAB is clicked while the window is slid up', () => {
+    // Sliding window: windowAtLiveEdge false ⇒ the resident bottom is NOT the newest. The FAB
+    // becomes "jump to latest" — it recenters the resident window before scrolling to the bottom.
+    const onJumpToLatest = vi.fn(() => Promise.resolve([]))
+    const { container, getByLabelText } = renderList({ windowAtLiveEdge: false, onJumpToLatest })
+    const scroller = container.querySelector('[data-message-list]') as HTMLElement
+    Object.defineProperty(scroller, 'scrollHeight', { value: 2000, configurable: true })
+    Object.defineProperty(scroller, 'clientHeight', { value: 500, configurable: true })
+    Object.defineProperty(scroller, 'scrollTop', { value: 0, writable: true, configurable: true })
+
+    fireEvent.click(getByLabelText('chat.scrollToBottom'))
+    expect(onJumpToLatest).toHaveBeenCalledTimes(1)
+  })
+
+  it('does NOT recenter on FAB click at the live edge (plain scroll-to-bottom)', () => {
+    const onJumpToLatest = vi.fn(() => Promise.resolve([]))
+    const { container, getByLabelText } = renderList({ onJumpToLatest }) // windowAtLiveEdge omitted = at edge
+    const scroller = container.querySelector('[data-message-list]') as HTMLElement
+    Object.defineProperty(scroller, 'scrollHeight', { value: 2000, configurable: true })
+    Object.defineProperty(scroller, 'clientHeight', { value: 500, configurable: true })
+    Object.defineProperty(scroller, 'scrollTop', { value: 0, writable: true, configurable: true })
+
+    fireEvent.click(getByLabelText('chat.scrollToBottom'))
+    expect(onJumpToLatest).not.toHaveBeenCalled()
+  })
+
   it('routes media-load bottom correction through the virtualizer bottom reassert path', () => {
     vi.useFakeTimers()
     try {
@@ -286,6 +312,121 @@ describe('MessageList — virtualized scroll integration (ensureMessageMounted)'
     // set scrollTop = newOffset - savedOffset = 1000 - 0 = 1000.
     expect(getOffsetForMessageId).toHaveBeenCalledWith('msg-0')
     expect(scrollTopSets).toContain(1000)
+  })
+
+  it('restores the scroll on a count-constant slide (load-older at the cap evicts the newest)', () => {
+    // Sliding window: at the RESIDENT_WINDOW_SIZE cap, load-older prepends a batch AND evicts the
+    // same number of NEWEST messages, so messageCount stays CONSTANT. The old gate required the
+    // count to GROW and left the view stranded (the reported jump); the restore must now fire on
+    // the firstId change alone. The anchor (msg-0, top-visible) survives — only the newest tail is
+    // evicted, far below the viewport.
+    getOffsetForMessageId.mockImplementation((id) => (id === 'msg-0' ? 0 : null))
+    const older: BaseMessage[] = Array.from({ length: 10 }, (_, i) => ({
+      id: `older-${i}`, from: 'user@example.com', body: `Older ${i}`,
+      timestamp: new Date(2024, 0, 1, 11, i), isOutgoing: false, type: 'chat' as const,
+    }))
+    const props = { conversationId: 'conv-slide', onScrollToTop: vi.fn(), isHistoryComplete: false, renderMessage: (m: BaseMessage) => <div>{m.body}</div> }
+
+    const { container, getByText, rerender } = render(<MessageList messages={makeMessages(50)} {...props} />)
+
+    const scroller = container.querySelector('[data-message-list]') as HTMLElement
+    let scrollTopVal = 0
+    const scrollTopSets: number[] = []
+    Object.defineProperty(scroller, 'scrollHeight', { get: () => 5000, configurable: true })
+    Object.defineProperty(scroller, 'clientHeight', { value: 500, configurable: true })
+    Object.defineProperty(scroller, 'scrollTop', {
+      get: () => scrollTopVal,
+      set: (v: number) => { scrollTopVal = v; scrollTopSets.push(v) },
+      configurable: true,
+    })
+
+    // Capture the anchor (msg-0 at absolutePos=0 → offsetFromTop=0 at scrollTop=0).
+    fireEvent.click(getByText('chat.loadEarlierMessages'))
+    getOffsetForMessageId.mockClear()
+    scrollTopSets.length = 0
+    getOffsetForMessageId.mockImplementation((id) => (id === 'msg-0' ? 1000 : null))
+
+    // SLIDE: prepend 10 older AND drop the newest 10 (msg-40..msg-49) → count stays 50,
+    // firstId msg-0 → older-0. Under the OLD gate this would have been ignored (count unchanged).
+    rerender(<MessageList messages={[...older, ...makeMessages(40)]} {...props} />)
+
+    expect(getOffsetForMessageId).toHaveBeenCalledWith('msg-0')
+    expect(scrollTopSets).toContain(1000)
+  })
+
+  it('restores (does not strand the view) when load-newer appends + evicts the oldest — count-constant slide DOWN', () => {
+    // Sliding window, NEWER direction: the reader is near the resident bottom; load-newer APPENDS
+    // newer AND EVICTS the oldest, so count stays constant and firstId becomes NEWER (the opposite
+    // of load-older). triggerLoadNewer captures the top-visible anchor and the shared restore
+    // repositions it. The exact anchor row depends on windowing, so we assert the OBSERVABLE Task-8
+    // property: on the count-constant slide the restore FIRES (consults the virtualizer + repositions
+    // via scrollToOffset) — the old countIncreased gate would have left scrollToOffsetCalls empty.
+    const onLoadNewer = vi.fn()
+    getOffsetForMessageId.mockImplementation(() => 600)
+    const props = { conversationId: 'conv-newer', windowAtLiveEdge: false, onLoadNewer, isHistoryComplete: false, renderMessage: (m: BaseMessage) => <div>{m.body}</div> }
+
+    const { container, rerender } = render(<MessageList messages={makeMessages(20)} {...props} />)
+    const scroller = container.querySelector('[data-message-list]') as HTMLElement
+    let scrollTopVal = 600
+    Object.defineProperty(scroller, 'scrollHeight', { get: () => 800, configurable: true })
+    Object.defineProperty(scroller, 'clientHeight', { value: 200, configurable: true })
+    Object.defineProperty(scroller, 'scrollTop', {
+      get: () => scrollTopVal,
+      set: (v: number) => { scrollTopVal = v },
+      configurable: true,
+    })
+
+    // Near the bottom (distFromBottom = 800-600-200 = 0): a scroll fires triggerLoadNewer, which
+    // captures the top-visible anchor and calls onLoadNewer.
+    scrollTopVal = 600
+    fireEvent.scroll(scroller)
+    expect(onLoadNewer).toHaveBeenCalledTimes(1)
+
+    scrollToOffsetCalls.length = 0
+    getOffsetForMessageId.mockClear()
+    getOffsetForMessageId.mockImplementation(() => 400) // the captured anchor now sits at 400
+
+    // Append 5 newer (msg-20..24), evict the oldest 5 (msg-0..4) → msg-5..msg-24: count stays 20,
+    // firstId msg-0 → msg-5. The restore fires on the firstId change (count unchanged) and repositions.
+    rerender(<MessageList messages={makeMessages(25).slice(5)} {...props} />)
+
+    expect(getOffsetForMessageId).toHaveBeenCalled()
+    expect(scrollToOffsetCalls.length).toBeGreaterThan(0)
+  })
+
+  it('drops a stale anchor when the window returns to the live edge — no stale restore on a later live message', () => {
+    // #3 fix: a load-newer that reaches the TAIL is a no-op (nothing appended, firstId unchanged) but
+    // triggerLoadNewer already stashed an anchor. When the window returns to the live edge
+    // (windowAtLiveEdge false→true) that anchor is stale; leaving it, a LATER live message evicting
+    // the oldest at the cap (firstId change) would fire a stale restore. Assert the anchor is dropped:
+    // the live-message rerender must NOT reposition (contrast the slide-DOWN test above, which keeps
+    // windowAtLiveEdge false and DOES reposition).
+    const onLoadNewer = vi.fn()
+    getOffsetForMessageId.mockImplementation(() => 400)
+    const base = { conversationId: 'conv-stale', onLoadNewer, isHistoryComplete: false, renderMessage: (m: BaseMessage) => <div>{m.body}</div> }
+
+    const { container, rerender } = render(<MessageList messages={makeMessages(20)} windowAtLiveEdge={false} {...base} />)
+    const scroller = container.querySelector('[data-message-list]') as HTMLElement
+    let scrollTopVal = 600
+    Object.defineProperty(scroller, 'scrollHeight', { get: () => 800, configurable: true })
+    Object.defineProperty(scroller, 'clientHeight', { value: 200, configurable: true })
+    Object.defineProperty(scroller, 'scrollTop', { get: () => scrollTopVal, set: (v: number) => { scrollTopVal = v }, configurable: true })
+
+    // Load-newer fires near the bottom → stashes an anchor (no message change here = tail no-op).
+    scrollTopVal = 600
+    fireEvent.scroll(scroller)
+    expect(onLoadNewer).toHaveBeenCalledTimes(1)
+
+    // Tail reached: windowAtLiveEdge flips false→true → the stale anchor must be dropped.
+    rerender(<MessageList messages={makeMessages(20)} windowAtLiveEdge={true} {...base} />)
+
+    scrollToOffsetCalls.length = 0
+
+    // Live message at the cap: append newer + evict oldest → firstId changes (count constant). With
+    // the anchor dropped, the restore must NOT fire (no scrollToOffset reposition).
+    rerender(<MessageList messages={makeMessages(25).slice(5)} windowAtLiveEdge={true} {...base} />)
+
+    expect(scrollToOffsetCalls.length).toBe(0)
   })
 
   it('positions the unread marker via the virtualizer scrollToIndex on entry, not the windowed-out DOM row', async () => {

@@ -5,6 +5,7 @@ import {
   isMessageDuplicate,
   sortMessagesByTimestamp,
   trimMessages,
+  trimMessagesKeepOldest,
   mergeAndProcessMessages,
   prependOlderMessages,
   backfillArchiveIds,
@@ -248,6 +249,21 @@ describe('messageArrayUtils', () => {
       const messages = [createMessage('msg-1', 'First', new Date())]
       const trimmed = trimMessages(messages, 0)
       expect(trimmed).toHaveLength(0)
+    })
+  })
+
+  describe('trimMessagesKeepOldest', () => {
+    it('keeps the oldest maxCount (evicts the newest tail)', () => {
+      const msgs = [1, 2, 3, 4, 5].map((n) => ({ timestamp: new Date(n) }))
+      expect(trimMessagesKeepOldest(msgs, 3)).toEqual(msgs.slice(0, 3))
+    })
+    it('returns input unchanged when under the limit', () => {
+      const msgs = [1, 2].map((n) => ({ timestamp: new Date(n) }))
+      expect(trimMessagesKeepOldest(msgs, 3)).toBe(msgs)
+    })
+    it('returns [] for maxCount <= 0', () => {
+      const msgs = [{ timestamp: new Date(1) }]
+      expect(trimMessagesKeepOldest(msgs, 0)).toEqual([])
     })
   })
 
@@ -627,13 +643,13 @@ describe('messageArrayUtils', () => {
         existing,
         older,
         (m) => [m.id],
-        2 // maxCount - keep only newest 2
+        2 // maxCount - keep only oldest 2 (sliding window)
       )
 
       expect(merged).toHaveLength(2)
-      // Should keep newest 2: msg-3 and msg-4
-      expect(merged[0].id).toBe('msg-3')
-      expect(merged[1].id).toBe('msg-4')
+      // Should keep oldest 2: msg-1 and msg-2 (window slides up, evicts msg-3 and msg-4)
+      expect(merged[0].id).toBe('msg-1')
+      expect(merged[1].id).toBe('msg-2')
     })
 
     it('should handle empty older array', () => {
@@ -714,6 +730,18 @@ describe('messageArrayUtils', () => {
       expect(merged[0].id).toBe('msg-3') // Wrong: should be at end
       expect(merged[1].id).toBe('msg-1')
       expect(merged[2].id).toBe('msg-2')
+    })
+
+    describe('prependOlderMessages sliding window', () => {
+      const keys = (m: { id: string }) => [m.id]
+      const at = (id: string, t: number) => ({ id, timestamp: new Date(t) })
+      it('at the bound, keeps the just-loaded older batch and evicts the newest', () => {
+        const existing = [at('c', 3), at('d', 4)]            // resident window (bound 2)
+        const older = [at('a', 1), at('b', 2)]               // scroll-up loads these
+        const { merged, newMessages } = prependOlderMessages(existing, older, keys, 2)
+        expect(merged.map((m) => m.id)).toEqual(['a', 'b'])  // slid up: oldest 2 kept, c/d evicted
+        expect(newMessages.map((m) => m.id)).toEqual(['a', 'b'])
+      })
     })
   })
 

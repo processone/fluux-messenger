@@ -3540,6 +3540,381 @@ describe('roomStore', () => {
     })
   })
 
+  describe('loadOlderMessagesFromCache (sliding window)', () => {
+    const roomJid = 'room@conference.example.com'
+    // Mirrors roomStore's RESIDENT_WINDOW_SIZE (formerly MAX_MESSAGES_PER_ROOM).
+    const RESIDENT_WINDOW_SIZE = 5000
+
+    beforeEach(() => {
+      roomStore.getState().reset()
+      vi.mocked(messageCache.getRoomMessages).mockReset()
+      roomStore.getState().addRoom({
+        jid: roomJid,
+        name: 'Test Room',
+        nickname: 'testuser',
+        joined: true,
+        isJoining: false,
+        isBookmarked: false,
+        supportsMAM: true,
+        occupants: new Map(),
+        messages: [],
+        unreadCount: 0,
+        mentionsCount: 0,
+        typingUsers: new Set(),
+      })
+    })
+
+    function roomMsgAt(id: string, minuteOffset: number): RoomMessage {
+      return {
+        type: 'groupchat',
+        id,
+        roomJid,
+        from: `${roomJid}/alice`,
+        nick: 'alice',
+        body: id,
+        // minuteOffset is relative to a fixed epoch so older-batch ids sort before resident ids.
+        timestamp: new Date(Date.UTC(2024, 0, 1, 0, 0, 0) + minuteOffset * 60000),
+        isOutgoing: false,
+      }
+    }
+
+    it('slides the window: keeps the just-loaded older batch and evicts the newest tail', async () => {
+      // Seed the room at the resident cap - minutes 50..5049 so ids are 'resident-0'..'resident-4999'.
+      const resident: RoomMessage[] = []
+      for (let i = 0; i < RESIDENT_WINDOW_SIZE; i++) {
+        resident.push(roomMsgAt(`resident-${i}`, 50 + i))
+      }
+      roomStore.setState((state) => {
+        const newRooms = new Map(state.rooms)
+        const existing = newRooms.get(roomJid)!
+        newRooms.set(roomJid, { ...existing, messages: resident })
+        return { rooms: newRooms }
+      })
+
+      // Cache returns 50 messages older than the current oldest resident message (minute 50).
+      const olderBatch: RoomMessage[] = []
+      for (let i = 0; i < 50; i++) {
+        olderBatch.push(roomMsgAt(`older-${i}`, i))
+      }
+      vi.mocked(messageCache.getRoomMessages).mockResolvedValue(olderBatch)
+
+      await roomStore.getState().loadOlderMessagesFromCache(roomJid, 50)
+
+      const room = roomStore.getState().rooms.get(roomJid)
+      // Window size is preserved...
+      expect(room?.messages.length).toBe(RESIDENT_WINDOW_SIZE)
+      // ...but the just-loaded older batch is now resident (oldest id is from the older batch)...
+      expect(room?.messages[0].id).toBe('older-0')
+      // ...which means the window slid: the newest 50 resident messages were evicted.
+      expect(room?.messages.some((m) => m.id === 'resident-4999')).toBe(false)
+      expect(room?.messages[room.messages.length - 1].id).toBe('resident-4949')
+    })
+  })
+
+  describe('windowAtLiveEdge gating (sliding window)', () => {
+    const roomJid = 'room@conference.example.com'
+    const RESIDENT_WINDOW_SIZE = 5000
+
+    beforeEach(() => {
+      roomStore.getState().reset()
+      vi.mocked(messageCache.getRoomMessages).mockReset()
+      vi.mocked(messageCache.saveRoomMessage).mockClear()
+      roomStore.getState().addRoom({
+        jid: roomJid,
+        name: 'Test Room',
+        nickname: 'testuser',
+        joined: true,
+        isJoining: false,
+        isBookmarked: false,
+        supportsMAM: true,
+        occupants: new Map(),
+        messages: [],
+        unreadCount: 0,
+        mentionsCount: 0,
+        typingUsers: new Set(),
+      })
+    })
+
+    function roomMsgAt(id: string, minuteOffset: number): RoomMessage {
+      return {
+        type: 'groupchat',
+        id,
+        roomJid,
+        from: `${roomJid}/alice`,
+        nick: 'alice',
+        body: id,
+        timestamp: new Date(Date.UTC(2024, 0, 1, 0, 0, 0) + minuteOffset * 60000),
+        isOutgoing: false,
+      }
+    }
+
+    // Seed the room at the resident cap and slide the window up so its newest tail is evicted.
+    function seedSlidWindow() {
+      const resident: RoomMessage[] = []
+      for (let i = 0; i < RESIDENT_WINDOW_SIZE; i++) {
+        resident.push(roomMsgAt(`resident-${i}`, 50 + i))
+      }
+      roomStore.setState((state) => {
+        const newRooms = new Map(state.rooms)
+        const existing = newRooms.get(roomJid)!
+        newRooms.set(roomJid, { ...existing, messages: resident })
+        const newRuntime = new Map(state.roomRuntime)
+        const existingRuntime = newRuntime.get(roomJid)!
+        newRuntime.set(roomJid, { ...existingRuntime, messages: resident })
+        return { rooms: newRooms, roomRuntime: newRuntime }
+      })
+
+      const olderBatch: RoomMessage[] = []
+      for (let i = 0; i < 50; i++) {
+        olderBatch.push(roomMsgAt(`older-${i}`, i))
+      }
+      vi.mocked(messageCache.getRoomMessages).mockResolvedValue(olderBatch)
+    }
+
+    it('a fresh room seeded via addRoom is at the live edge', () => {
+      expect(roomStore.getState().roomRuntime.get(roomJid)?.windowAtLiveEdge).toBe(true)
+    })
+
+    it('appends a live message when the window is at the live edge (default)', () => {
+      const live = roomMsgAt('live-1', 10000)
+      roomStore.getState().addMessage(roomJid, live)
+
+      const room = roomStore.getState().getRoom(roomJid)!
+      expect(room.messages.some((m) => m.id === 'live-1')).toBe(true)
+      expect(room.lastMessage?.id).toBe('live-1')
+    })
+
+    it('sets windowAtLiveEdge false after a load-older that evicts the newest tail', async () => {
+      seedSlidWindow()
+      await roomStore.getState().loadOlderMessagesFromCache(roomJid, 50)
+      expect(roomStore.getState().roomRuntime.get(roomJid)?.windowAtLiveEdge).toBe(false)
+    })
+
+    it('does not append a live message when the window has slid off the live edge, but still persists to cache and updates meta', async () => {
+      seedSlidWindow()
+      await roomStore.getState().loadOlderMessagesFromCache(roomJid, 50)
+      expect(roomStore.getState().roomRuntime.get(roomJid)?.windowAtLiveEdge).toBe(false)
+
+      vi.mocked(messageCache.saveRoomMessage).mockClear()
+      const before = roomStore.getState().getRoom(roomJid)!.messages
+      const live = roomMsgAt('live-1', 10000)
+      roomStore.getState().addMessage(roomJid, live)
+
+      const room = roomStore.getState().getRoom(roomJid)!
+      // Resident array is unchanged (no false-adjacency gap appended)...
+      expect(room.messages.some((m) => m.id === 'live-1')).toBe(false)
+      expect(room.messages.length).toBe(before.length)
+      expect(room.messages[room.messages.length - 1].id).toBe(before[before.length - 1].id)
+      // ...but the message is still persisted to IndexedDB...
+      expect(messageCache.saveRoomMessage).toHaveBeenCalledWith(expect.objectContaining({ id: 'live-1' }))
+      // ...and meta (sidebar preview + unread badge) still update.
+      expect(room.lastMessage?.id).toBe('live-1')
+      expect(roomStore.getState().roomMeta.get(roomJid)?.lastMessage?.id).toBe('live-1')
+      expect(room.unreadCount).toBe(1)
+    })
+
+    it('recenters to the live edge when the latest window is (re)loaded', async () => {
+      seedSlidWindow()
+      await roomStore.getState().loadOlderMessagesFromCache(roomJid, 50)
+      expect(roomStore.getState().roomRuntime.get(roomJid)?.windowAtLiveEdge).toBe(false)
+
+      // A latest-N load (activation path) makes the newest messages resident again.
+      vi.mocked(messageCache.getRoomMessages).mockResolvedValue([roomMsgAt('latest-1', 9000)])
+      await roomStore.getState().loadMessagesFromCache(roomJid, { limit: 100 })
+      expect(roomStore.getState().roomRuntime.get(roomJid)?.windowAtLiveEdge).toBe(true)
+    })
+  })
+
+  describe('loadNewerMessagesFromCache (sliding window)', () => {
+    const roomJid = 'room@conference.example.com'
+    const RESIDENT_WINDOW_SIZE = 5000
+
+    beforeEach(() => {
+      roomStore.getState().reset()
+      vi.mocked(messageCache.getRoomMessages).mockReset()
+      roomStore.getState().addRoom({
+        jid: roomJid,
+        name: 'Test Room',
+        nickname: 'testuser',
+        joined: true,
+        isJoining: false,
+        isBookmarked: false,
+        supportsMAM: true,
+        occupants: new Map(),
+        messages: [],
+        unreadCount: 0,
+        mentionsCount: 0,
+        typingUsers: new Set(),
+      })
+    })
+
+    function roomMsgAt(id: string, minuteOffset: number): RoomMessage {
+      return {
+        type: 'groupchat',
+        id,
+        roomJid,
+        from: `${roomJid}/alice`,
+        nick: 'alice',
+        body: id,
+        timestamp: new Date(Date.UTC(2024, 0, 1, 0, 0, 0) + minuteOffset * 60000),
+        isOutgoing: false,
+      }
+    }
+
+    // Seed the room at the resident cap with a slid-up window (oldest resident is 'resident-0').
+    function seedResidentWindow() {
+      const resident: RoomMessage[] = []
+      for (let i = 0; i < RESIDENT_WINDOW_SIZE; i++) {
+        resident.push(roomMsgAt(`resident-${i}`, i))
+      }
+      roomStore.setState((state) => {
+        const newRooms = new Map(state.rooms)
+        const existing = newRooms.get(roomJid)!
+        newRooms.set(roomJid, { ...existing, messages: resident })
+        const newRuntime = new Map(state.roomRuntime)
+        const existingRuntime = newRuntime.get(roomJid)!
+        newRuntime.set(roomJid, { ...existingRuntime, messages: resident, windowAtLiveEdge: false })
+        return { rooms: newRooms, roomRuntime: newRuntime }
+      })
+    }
+
+    it('appends the newer batch and evicts the oldest at the bound', async () => {
+      seedResidentWindow()
+
+      // Cache returns 50 messages newer than the current newest resident message (minute 4999).
+      const newerBatch: RoomMessage[] = []
+      for (let i = 0; i < 50; i++) {
+        newerBatch.push(roomMsgAt(`newer-${i}`, RESIDENT_WINDOW_SIZE + i))
+      }
+      vi.mocked(messageCache.getRoomMessages).mockResolvedValue(newerBatch)
+
+      await roomStore.getState().loadNewerMessagesFromCache(roomJid, 50)
+
+      const room = roomStore.getState().rooms.get(roomJid)
+      // Window size is preserved...
+      expect(room?.messages.length).toBe(RESIDENT_WINDOW_SIZE)
+      // ...the just-loaded newer batch is now resident (newest id is from the newer batch)...
+      expect(room?.messages[room.messages.length - 1].id).toBe('newer-49')
+      // ...which means the window slid down: the oldest 50 resident messages were evicted.
+      expect(room?.messages.some((m) => m.id === 'resident-0')).toBe(false)
+      expect(room?.messages[0].id).toBe('resident-50')
+    })
+
+    it('queries the cache with an after-cursor at the newest resident timestamp', async () => {
+      seedResidentWindow()
+      vi.mocked(messageCache.getRoomMessages).mockResolvedValue([])
+
+      await roomStore.getState().loadNewerMessagesFromCache(roomJid, 50)
+
+      const newestInMemory = roomMsgAt(`resident-${RESIDENT_WINDOW_SIZE - 1}`, RESIDENT_WINDOW_SIZE - 1)
+      expect(messageCache.getRoomMessages).toHaveBeenCalledWith(roomJid, {
+        after: newestInMemory.timestamp,
+        limit: 50,
+      })
+    })
+
+    it('sets windowAtLiveEdge true when the cache returns fewer than the limit (reached the tail)', async () => {
+      seedResidentWindow()
+      // Fewer than the requested limit ⇒ no more newer messages remain in the cache.
+      const newerBatch = [roomMsgAt('newer-0', RESIDENT_WINDOW_SIZE)]
+      vi.mocked(messageCache.getRoomMessages).mockResolvedValue(newerBatch)
+
+      await roomStore.getState().loadNewerMessagesFromCache(roomJid, 50)
+
+      expect(roomStore.getState().roomRuntime.get(roomJid)?.windowAtLiveEdge).toBe(true)
+    })
+
+    it('leaves windowAtLiveEdge slid (false) when a full batch returns (more newer remain)', async () => {
+      seedResidentWindow()
+      const newerBatch: RoomMessage[] = []
+      for (let i = 0; i < 50; i++) {
+        newerBatch.push(roomMsgAt(`newer-${i}`, RESIDENT_WINDOW_SIZE + i))
+      }
+      vi.mocked(messageCache.getRoomMessages).mockResolvedValue(newerBatch)
+
+      await roomStore.getState().loadNewerMessagesFromCache(roomJid, 50)
+
+      expect(roomStore.getState().roomRuntime.get(roomJid)?.windowAtLiveEdge).toBe(false)
+    })
+
+    it('returns an empty array and does nothing when the room has no resident messages', async () => {
+      const returned = await roomStore.getState().loadNewerMessagesFromCache(roomJid, 50)
+      expect(returned).toEqual([])
+      expect(messageCache.getRoomMessages).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('recenterToLatest (sliding window)', () => {
+    const roomJid = 'room@conference.example.com'
+    const RESIDENT_WINDOW_SIZE = 5000
+
+    beforeEach(() => {
+      roomStore.getState().reset()
+      vi.mocked(messageCache.getRoomMessages).mockReset()
+      roomStore.getState().addRoom({
+        jid: roomJid,
+        name: 'Test Room',
+        nickname: 'testuser',
+        joined: true,
+        isJoining: false,
+        isBookmarked: false,
+        supportsMAM: true,
+        occupants: new Map(),
+        messages: [],
+        unreadCount: 0,
+        mentionsCount: 0,
+        typingUsers: new Set(),
+      })
+    })
+
+    function roomMsgAt(id: string, minuteOffset: number): RoomMessage {
+      return {
+        type: 'groupchat',
+        id,
+        roomJid,
+        from: `${roomJid}/alice`,
+        nick: 'alice',
+        body: id,
+        timestamp: new Date(Date.UTC(2024, 0, 1, 0, 0, 0) + minuteOffset * 60000),
+        isOutgoing: false,
+      }
+    }
+
+    it('reloads the newest window and sets windowAtLiveEdge true', async () => {
+      // Seed a slid-up window (evicted the newest tail via load-older).
+      const resident: RoomMessage[] = []
+      for (let i = 0; i < RESIDENT_WINDOW_SIZE; i++) {
+        resident.push(roomMsgAt(`resident-${i}`, 50 + i))
+      }
+      roomStore.setState((state) => {
+        const newRooms = new Map(state.rooms)
+        const existing = newRooms.get(roomJid)!
+        newRooms.set(roomJid, { ...existing, messages: resident })
+        const newRuntime = new Map(state.roomRuntime)
+        const existingRuntime = newRuntime.get(roomJid)!
+        newRuntime.set(roomJid, { ...existingRuntime, messages: resident, windowAtLiveEdge: false })
+        return { rooms: newRooms, roomRuntime: newRuntime }
+      })
+
+      const latestBatch = [roomMsgAt('latest-1', 90000)]
+      vi.mocked(messageCache.getRoomMessages).mockResolvedValue(latestBatch)
+
+      await roomStore.getState().recenterToLatest(roomJid)
+
+      expect(roomStore.getState().roomRuntime.get(roomJid)?.windowAtLiveEdge).toBe(true)
+      const room = roomStore.getState().rooms.get(roomJid)
+      expect(room?.messages.some((m) => m.id === 'latest-1')).toBe(true)
+    })
+
+    it('sets windowAtLiveEdge true even when the cache has nothing newer (already-resident latest window)', async () => {
+      vi.mocked(messageCache.getRoomMessages).mockResolvedValue([])
+
+      await roomStore.getState().recenterToLatest(roomJid)
+
+      expect(roomStore.getState().roomRuntime.get(roomJid)?.windowAtLiveEdge).toBe(true)
+    })
+  })
+
   describe('mergeRoomMembers', () => {
     const roomJid = 'room@conference.example.com'
 
