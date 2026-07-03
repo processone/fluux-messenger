@@ -1,3 +1,6 @@
+import { useEffect } from 'react'
+import { isTauri } from '../utils/tauri'
+
 /**
  * Native context-menu suppression for the desktop app.
  *
@@ -41,4 +44,26 @@ export function shouldSuppressNativeMenu(
   if (isTargetWithinSelection(target, selection)) return false
 
   return true
+}
+
+/**
+ * Install a global `contextmenu` listener that suppresses the native WebView
+ * menu on packaged desktop builds. No-op on web / PWA and on `tauri:dev`.
+ *
+ * The listener is attached to `document` in the bubble phase, so React's own
+ * `onContextMenu` handlers (attached on the `#root` container) run first; any
+ * component that already called `preventDefault` is respected via the
+ * `defaultPrevented` check in `shouldSuppressNativeMenu`.
+ */
+export function useNativeContextMenuSuppression(): void {
+  useEffect(() => {
+    if (!isTauri() || !import.meta.env.PROD) return
+    const handler = (event: MouseEvent) => {
+      if (shouldSuppressNativeMenu(event.target, window.getSelection(), event.defaultPrevented)) {
+        event.preventDefault()
+      }
+    }
+    document.addEventListener('contextmenu', handler)
+    return () => document.removeEventListener('contextmenu', handler)
+  }, [])
 }

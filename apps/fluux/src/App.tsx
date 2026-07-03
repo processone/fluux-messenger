@@ -29,6 +29,7 @@ import { useIgnoreSync } from './hooks/useIgnoreSync'
 import { useExternalLinkHandler } from './hooks/useExternalLinkHandler'
 import { usePlatformState } from './hooks/usePlatformState'
 import { useAccountScopeRehydration } from './hooks/useAccountScopeRehydration'
+import { useNativeContextMenuSuppression } from './hooks/useNativeContextMenuSuppression'
 import { clearLocalData } from './utils/clearLocalData'
 import { startMemoryProbe } from './utils/memoryProbe'
 import { startSystemNotificationEffect } from '@/effects/systemNotificationEffect'
@@ -75,6 +76,7 @@ function App() {
   useTauriFocusRestore()
   useIgnoreSync()
   useExternalLinkHandler()
+  useNativeContextMenuSuppression()
   // Must stay mounted even during the full-screen auto-reconnect spinner:
   // native keepalive / wake listeners are what unstick reconnect after long sleep.
   const { displayActive } = usePlatformState()
