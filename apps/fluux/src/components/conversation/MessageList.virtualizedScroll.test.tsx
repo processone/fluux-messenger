@@ -198,6 +198,32 @@ describe('MessageList — virtualized scroll integration (ensureMessageMounted)'
     expect(scrollToIndexCalls).toContain('end')
   })
 
+  it('recenters to latest via onJumpToLatest when the FAB is clicked while the window is slid up', () => {
+    // Sliding window: windowAtLiveEdge false ⇒ the resident bottom is NOT the newest. The FAB
+    // becomes "jump to latest" — it recenters the resident window before scrolling to the bottom.
+    const onJumpToLatest = vi.fn(() => Promise.resolve([]))
+    const { container, getByLabelText } = renderList({ windowAtLiveEdge: false, onJumpToLatest })
+    const scroller = container.querySelector('[data-message-list]') as HTMLElement
+    Object.defineProperty(scroller, 'scrollHeight', { value: 2000, configurable: true })
+    Object.defineProperty(scroller, 'clientHeight', { value: 500, configurable: true })
+    Object.defineProperty(scroller, 'scrollTop', { value: 0, writable: true, configurable: true })
+
+    fireEvent.click(getByLabelText('chat.scrollToBottom'))
+    expect(onJumpToLatest).toHaveBeenCalledTimes(1)
+  })
+
+  it('does NOT recenter on FAB click at the live edge (plain scroll-to-bottom)', () => {
+    const onJumpToLatest = vi.fn(() => Promise.resolve([]))
+    const { container, getByLabelText } = renderList({ onJumpToLatest }) // windowAtLiveEdge omitted = at edge
+    const scroller = container.querySelector('[data-message-list]') as HTMLElement
+    Object.defineProperty(scroller, 'scrollHeight', { value: 2000, configurable: true })
+    Object.defineProperty(scroller, 'clientHeight', { value: 500, configurable: true })
+    Object.defineProperty(scroller, 'scrollTop', { value: 0, writable: true, configurable: true })
+
+    fireEvent.click(getByLabelText('chat.scrollToBottom'))
+    expect(onJumpToLatest).not.toHaveBeenCalled()
+  })
+
   it('routes media-load bottom correction through the virtualizer bottom reassert path', () => {
     vi.useFakeTimers()
     try {
