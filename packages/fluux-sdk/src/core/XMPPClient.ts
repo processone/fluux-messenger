@@ -2433,6 +2433,12 @@ export class XMPPClient {
     const { roomsToAutojoin } = await this.muc.fetchBookmarks(iqTimeout)
     if (this.isSessionSuperseded(gen, 'Fresh session aborted after fetchBookmarks')) return
 
+    // Order the sidebar from the durable cache immediately (network-free, single
+    // batched write). Without this, freshly-added bookmarked rooms all sort at
+    // epoch-0 until each room's preview lands on join / the delayed catch-up, so
+    // the active room visibly "jumps" to the top once opened.
+    this.stores?.room.hydratePreviewsFromCache().catch(() => {})
+
     // Fetch and merge server-side conversation list (XEP-0223)
     try {
       const serverConversations = await this.conversationSync.fetchConversations(iqTimeout)

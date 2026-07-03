@@ -734,6 +734,7 @@ export const createMockStores = (): MockStoreBindings => ({
     updateLastMessagePreview: vi.fn(),
     loadMessagesFromCache: vi.fn().mockResolvedValue([]),
     loadPreviewFromCache: vi.fn().mockResolvedValue(null),
+    hydratePreviewsFromCache: vi.fn().mockResolvedValue(undefined),
     mergeRoomMembers: vi.fn(),
     updateMemberAffiliation: vi.fn(),
   },

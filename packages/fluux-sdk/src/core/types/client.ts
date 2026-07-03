@@ -208,6 +208,10 @@ export interface StoreBindings {
     loadMessagesFromCache: (roomJid: string, options?: { limit?: number; before?: Date; after?: Date; peek?: boolean }) => Promise<RoomMessage[]>
     // Load preview from cache for non-MAM rooms (only updates lastMessage, not messages array)
     loadPreviewFromCache: (roomJid: string) => Promise<RoomMessage | null>
+    // Batched launch-time preview hydration: populate lastMessage for all bookmarked/joined
+    // rooms from the durable cache in a single store write so the sidebar orders correctly
+    // immediately, instead of each room sitting at epoch-0 order until its preview lands.
+    hydratePreviewsFromCache: () => Promise<void>
     // XEP-0045: Merge affiliated members (for offline member display, avatar resolution, mentions)
     mergeRoomMembers: (roomJid: string, members: RoomMember[], contactAvatarLookup?: (jid: string) => string | null) => void
     // XEP-0045: Apply a single affiliation change to the cached member list (none/outcast remove, owner/admin/member upsert)

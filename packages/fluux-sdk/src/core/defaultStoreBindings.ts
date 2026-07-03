@@ -224,6 +224,7 @@ export function createDefaultStoreBindings(options: DefaultStoreBindingsOptions 
       updateLastMessagePreview: roomStore.getState().updateLastMessagePreview,
       loadMessagesFromCache: roomStore.getState().loadMessagesFromCache,
       loadPreviewFromCache: roomStore.getState().loadPreviewFromCache,
+      hydratePreviewsFromCache: roomStore.getState().hydratePreviewsFromCache,
       mergeRoomMembers: roomStore.getState().mergeRoomMembers,
       updateMemberAffiliation: roomStore.getState().updateMemberAffiliation,
     },

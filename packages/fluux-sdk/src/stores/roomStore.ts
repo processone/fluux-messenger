@@ -506,6 +506,19 @@ export interface RoomState {
   loadOlderMessagesFromCache: (roomJid: string, limit?: number) => Promise<RoomMessage[]>
   /** Load only the latest message from cache for sidebar preview (doesn't modify messages array) */
   loadPreviewFromCache: (roomJid: string) => Promise<RoomMessage | null>
+  /**
+   * Populate sidebar-ordering previews for all bookmarked/joined rooms from the
+   * durable IndexedDB cache in a SINGLE batched store write.
+   *
+   * At launch the room list is rebuilt from bookmarks with no `lastMessage`, so
+   * every room sorts at epoch 0 until its per-room preview lands (on join, or the
+   * delayed catch-up) - leaving the sidebar mis-ordered and making the active room
+   * "jump" to the top once opened. This reads each room's newest cached message in
+   * parallel (network-free) and applies all previews at once, so the sidebar
+   * re-sorts a single time instead of once per room. Never downgrades a fresher
+   * preview, so it is safe alongside the join / catch-up preview paths.
+   */
+  hydratePreviewsFromCache: () => Promise<void>
 
   // MAM state management (XEP-0313 for MUC rooms)
   setRoomMAMLoading: (roomJid: string, isLoading: boolean) => void
@@ -2184,6 +2197,54 @@ export const roomStore = createStore<RoomState>()(
       console.error('Failed to load room preview from IndexedDB:', error)
       return null
     }
+  },
+
+  // Batched sidebar-preview hydration from the durable cache (see interface doc).
+  // Reads every bookmarked/joined room's newest cached message in parallel, then
+  // applies all previews in ONE set() so the sidebar re-sorts exactly once.
+  hydratePreviewsFromCache: async () => {
+    if (!messageCache.isMessageCacheAvailable()) return
+
+    // Snapshot the rooms the sidebar actually orders (bookmarked or joined).
+    const rooms = Array.from(get().rooms.values()).filter((r) => r.isBookmarked || r.joined)
+    if (rooms.length === 0) return
+
+    // Read caches in parallel (IndexedDB reads are cheap and non-blocking).
+    const previews = await Promise.all(
+      rooms.map(async (room) => {
+        try {
+          const cachedMessages = await messageCache.getRoomMessages(room.jid, { limit: 10, latest: true })
+          if (cachedMessages.length === 0) return null
+          const latest = findLastNonIgnoredMessage(cachedMessages, room.jid, room.nickToJidCache)
+          return latest ? { roomJid: room.jid, latest } : null
+        } catch {
+          // Best-effort per room - one room's cache failure shouldn't block others.
+          return null
+        }
+      })
+    )
+
+    const updates = previews.filter((p): p is { roomJid: string; latest: RoomMessage } => p !== null)
+    if (updates.length === 0) return
+
+    // Apply every preview in a single write. shouldUpdateLastMessage guards against
+    // clobbering a fresher preview that a join/catch-up may have set in the meantime.
+    set((state) => {
+      const newMeta = new Map(state.roomMeta)
+      const newRooms = new Map(state.rooms)
+      let changed = false
+      for (const { roomJid, latest } of updates) {
+        const room = state.rooms.get(roomJid)
+        const meta = state.roomMeta.get(roomJid)
+        if (!room || !meta) continue
+        if (!shouldUpdateLastMessage(meta.lastMessage, latest)) continue
+        newMeta.set(roomJid, { ...meta, lastMessage: latest })
+        newRooms.set(roomJid, { ...room, lastMessage: latest })
+        changed = true
+      }
+      if (!changed) return state
+      return { roomMeta: newMeta, rooms: newRooms }
+    })
   },
 
   // MAM state management (XEP-0313 for MUC rooms)
