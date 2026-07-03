@@ -68,4 +68,4 @@ fluux-messenger (0.17.0-1) unstable; urgency=medium
   * Admin: room counts refresh after deleting a room, and the Ban account form pre-fills user/host from the selected account
   * Rooms are ordered by their last message immediately at launch instead of jumping into place only after being opened
 
- -- ProcessOne <contact@process-one.net>  Wed, 01 Jul 2026 12:00:00 +0000
+ -- ProcessOne <contact@process-one.net>  Mon, 06 Jul 2026 12:00:00 +0000
