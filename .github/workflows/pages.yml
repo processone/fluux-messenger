@@ -62,3 +62,10 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v5
+
+      # GitHub Pages occasionally fails a deployment with "Deployment failed,
+      # try again later." even for isolated, non-concurrent runs. Retry once
+      # against the same already-uploaded artifact to absorb that flakiness.
+      - name: Retry deploy once on transient Pages failure
+        if: failure() && steps.deployment.outcome == 'failure'
+        uses: actions/deploy-pages@v5
