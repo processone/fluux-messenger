@@ -1354,8 +1354,10 @@ export function useMessageListScroll({
 
   // Sliding window: mirror of triggerLoadOlder for the newer direction. Fires when the reader
   // scrolls back down to the bottom of a slid-up window (canLoadNewer gates on windowAtLiveEdge ===
-  // false). The anchor save + restore for the append-then-evict-oldest shift is Task 8; this only
-  // fires the fetch, throttled by the shared load cooldown.
+  // false). Loading newer APPENDS a batch and EVICTS the oldest (opposite end), so it shifts every
+  // offset up; we save the same anchor prepend uses and let the shared restore effect hold the
+  // viewport steady. The evicted rows are the OLDEST — far above the viewport — so the top-visible
+  // anchor survives, making the anchor-based restore direction-agnostic.
   const triggerLoadNewer = () => {
     if (!canLoadNewer) return
     const scroller = scrollerRef.current
@@ -1367,6 +1369,16 @@ export function useMessageListScroll({
 
     lastLoadTimeRef.current = now
     scrolledAwayFromBottomRef.current = false
+
+    const anchor = findAnchorElement()
+    prependRef.current = {
+      anchorMessageId: anchor?.id || '',
+      anchorOffsetFromTop: anchor?.offsetFromTop || 0,
+      distanceFromBottom: getDistanceFromBottom(scroller),
+      oldFirstId: firstMessageId || '',
+      oldMessageCount: messageCount,
+    }
+
     onLoadNewer?.()
   }
 
@@ -2214,19 +2226,22 @@ export function useMessageListScroll({
     // Already restored? Skip.
     if (saved.restored) return
 
-    // Check if messages were actually prepended:
-    // 1. Message count must have increased
-    // 2. First message ID must have changed (new messages at the beginning)
-    const countIncreased = messageCount > saved.oldMessageCount
+    // A directional load (older OR newer) landed iff the FIRST message id changed. Sliding window:
+    // a load-older OR load-newer at the resident cap prepends/appends a batch AND evicts the
+    // opposite end, so messageCount stays CONSTANT — the old `countIncreased` gate then waited
+    // forever and the view jumped. firstId is the reliable signal: load-older makes it older;
+    // load-newer evicts the oldest so it becomes newer. The anchor-based restore below is
+    // direction-agnostic (it repositions the top-visible anchor, which survives either eviction —
+    // the evicted rows are at the far, off-screen end). Under the cap, load-older still changes
+    // firstId AND grows the count, so this is unchanged for the common case.
     const firstIdChanged = firstMessageId !== saved.oldFirstId
 
-    if (!countIncreased || !firstIdChanged) {
+    if (!firstIdChanged) {
       debugLog('PREPEND WAITING', {
         messageCount,
         oldMessageCount: saved.oldMessageCount,
         firstMessageId,
         oldFirstId: saved.oldFirstId,
-        countIncreased,
         firstIdChanged,
       })
       return

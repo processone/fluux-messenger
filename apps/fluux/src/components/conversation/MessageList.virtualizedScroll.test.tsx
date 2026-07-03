@@ -288,6 +288,46 @@ describe('MessageList — virtualized scroll integration (ensureMessageMounted)'
     expect(scrollTopSets).toContain(1000)
   })
 
+  it('restores the scroll on a count-constant slide (load-older at the cap evicts the newest)', () => {
+    // Sliding window: at the RESIDENT_WINDOW_SIZE cap, load-older prepends a batch AND evicts the
+    // same number of NEWEST messages, so messageCount stays CONSTANT. The old gate required the
+    // count to GROW and left the view stranded (the reported jump); the restore must now fire on
+    // the firstId change alone. The anchor (msg-0, top-visible) survives — only the newest tail is
+    // evicted, far below the viewport.
+    getOffsetForMessageId.mockImplementation((id) => (id === 'msg-0' ? 0 : null))
+    const older: BaseMessage[] = Array.from({ length: 10 }, (_, i) => ({
+      id: `older-${i}`, from: 'user@example.com', body: `Older ${i}`,
+      timestamp: new Date(2024, 0, 1, 11, i), isOutgoing: false, type: 'chat' as const,
+    }))
+    const props = { conversationId: 'conv-slide', onScrollToTop: vi.fn(), isHistoryComplete: false, renderMessage: (m: BaseMessage) => <div>{m.body}</div> }
+
+    const { container, getByText, rerender } = render(<MessageList messages={makeMessages(50)} {...props} />)
+
+    const scroller = container.querySelector('[data-message-list]') as HTMLElement
+    let scrollTopVal = 0
+    const scrollTopSets: number[] = []
+    Object.defineProperty(scroller, 'scrollHeight', { get: () => 5000, configurable: true })
+    Object.defineProperty(scroller, 'clientHeight', { value: 500, configurable: true })
+    Object.defineProperty(scroller, 'scrollTop', {
+      get: () => scrollTopVal,
+      set: (v: number) => { scrollTopVal = v; scrollTopSets.push(v) },
+      configurable: true,
+    })
+
+    // Capture the anchor (msg-0 at absolutePos=0 → offsetFromTop=0 at scrollTop=0).
+    fireEvent.click(getByText('chat.loadEarlierMessages'))
+    getOffsetForMessageId.mockClear()
+    scrollTopSets.length = 0
+    getOffsetForMessageId.mockImplementation((id) => (id === 'msg-0' ? 1000 : null))
+
+    // SLIDE: prepend 10 older AND drop the newest 10 (msg-40..msg-49) → count stays 50,
+    // firstId msg-0 → older-0. Under the OLD gate this would have been ignored (count unchanged).
+    rerender(<MessageList messages={[...older, ...makeMessages(40)]} {...props} />)
+
+    expect(getOffsetForMessageId).toHaveBeenCalledWith('msg-0')
+    expect(scrollTopSets).toContain(1000)
+  })
+
   it('positions the unread marker via the virtualizer scrollToIndex on entry, not the windowed-out DOM row', async () => {
     // Entering an unread conversation, the marker row is typically windowed OUT and the
     // messages may still be rehydrating from cache, so querySelector(marker).offsetTop is
