@@ -56,16 +56,40 @@ jobs:
 
     environment:
       name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+      url: ${{ steps.deploy4.outputs.page_url || steps.deploy3.outputs.page_url || steps.deploy2.outputs.page_url || steps.deploy1.outputs.page_url }}
 
     steps:
-      - name: Deploy to GitHub Pages
-        id: deployment
+      # Retry transient "Deployment failed, try again later." with back-off.
+      - name: Deploy to GitHub Pages (attempt 1)
+        id: deploy1
+        continue-on-error: true
         uses: actions/deploy-pages@v5
 
-      # GitHub Pages occasionally fails a deployment with "Deployment failed,
-      # try again later." even for isolated, non-concurrent runs. Retry once
-      # against the same already-uploaded artifact to absorb that flakiness.
-      - name: Retry deploy once on transient Pages failure
-        if: failure() && steps.deployment.outcome == 'failure'
+      - name: Back off before attempt 2
+        if: steps.deploy1.outcome == 'failure'
+        run: sleep 20
+
+      - name: Deploy to GitHub Pages (attempt 2)
+        id: deploy2
+        if: steps.deploy1.outcome == 'failure'
+        continue-on-error: true
+        uses: actions/deploy-pages@v5
+
+      - name: Back off before attempt 3
+        if: steps.deploy2.outcome == 'failure'
+        run: sleep 40
+
+      - name: Deploy to GitHub Pages (attempt 3)
+        id: deploy3
+        if: steps.deploy2.outcome == 'failure'
+        continue-on-error: true
+        uses: actions/deploy-pages@v5
+
+      - name: Back off before attempt 4
+        if: steps.deploy3.outcome == 'failure'
+        run: sleep 60
+
+      - name: Deploy to GitHub Pages (attempt 4)
+        id: deploy4
+        if: steps.deploy3.outcome == 'failure'
         uses: actions/deploy-pages@v5
