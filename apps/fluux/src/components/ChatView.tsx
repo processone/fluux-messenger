@@ -64,7 +64,7 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
   const { uploadFile, isUploading, progress, isSupported, error: uploadError, clearError: clearUploadError } = useFileUpload()
   const { processMessageForLinkPreview } = useLinkPreview()
   const { resolvedMode } = useMode()
-  const myBareJid = jid?.split('/')[0]
+  const myBareJid = jid ? getBareJid(jid) : undefined
 
   // Reply state - which message are we replying to
   const [replyingTo, setReplyingTo] = useState<Message | null>(null)

@@ -23,8 +23,8 @@ import * as mamState from './shared/mamState'
 import type { MAMQueryDirection } from './shared/mamState'
 import { computeGapEnd, syncGap, serializeGaps, deserializeGaps, type GapInterval } from './shared/mamGap'
 import * as draftState from './shared/draftState'
-import { buildMessageKeySet, isMessageDuplicate, sortMessagesByTimestamp, trimMessages, trimMessagesKeepOldest, prependOlderMessages, mergeAndProcessMessages } from './shared/messageArrayUtils'
-import { shouldUpdateLastMessage, shouldReplaceLastMessage, isPreviewableMessage, findLastNonIgnoredMessage } from './shared/lastMessageUtils'
+import { buildMessageKeySet, isMessageDuplicate, sortMessagesByTimestamp, trimMessages, trimMessagesKeepOldest, prependOlderMessages, mergeAndProcessMessages, backfillArchiveIds } from './shared/messageArrayUtils'
+import { shouldUpdateLastMessage, shouldReplaceLastMessage, isPreviewableMessage, isResolvedSamePreview, findLastNonIgnoredMessage } from './shared/lastMessageUtils'
 import { ignoreStore, isMessageFromIgnoredUser } from './ignoreStore'
 import { roomActivityTone } from './roomSelectors'
 import * as notifState from './shared/notificationState'
@@ -1184,7 +1184,23 @@ export const roomStore = createStore<RoomState>()(
       // XEP-0359: Deduplicate messages using shared utility
       const existingKeys = buildMessageKeySet(existing.messages, getRoomMessageKeys)
       if (isMessageDuplicate(messageToAdd, existingKeys, getRoomMessageKeys)) {
-        return state // Don't add duplicate message
+        // The duplicate may be the archived/reflected copy of an outgoing
+        // message that has no stanzaId yet. Backfill the server archive id
+        // onto the in-memory copy (matched by originId) so backward MAM
+        // pagination has a valid cursor — then still skip adding the dup
+        // (parity with chatStore.addMessage).
+        const { messages: backfilled, patched } = backfillArchiveIds(existing.messages, [messageToAdd], getRoomMessageKeys)
+        if (patched.length === 0) return state
+        for (const p of patched) {
+          void messageCache.updateRoomMessage(p.id, { stanzaId: p.stanzaId!, ...(p.originId ? { originId: p.originId } : {}) })
+        }
+        newRooms.set(roomJid, { ...existing, messages: backfilled })
+        const patchedRuntime = new Map(state.roomRuntime)
+        const runtimeEntry = patchedRuntime.get(roomJid)
+        if (runtimeEntry) {
+          patchedRuntime.set(roomJid, { ...runtimeEntry, messages: backfilled })
+        }
+        return { rooms: newRooms, roomRuntime: patchedRuntime }
       }
 
       // Sliding window: only append the live message to the resident array when the
@@ -2473,8 +2489,17 @@ export const roomStore = createStore<RoomState>()(
         searchIndex.indexMessages(persistableMessages).catch((e) => console.warn('[searchIndex] indexMessages failed:', e))
       }
 
-      // Sidebar preview = newest non-ignored across the merged set.
-      const lastMessage = (merged.length > 0 ? findLastNonIgnoredMessage(merged, roomJid, room.nickToJidCache) : undefined) ?? room.lastMessage
+      // Sidebar preview: newest non-ignored message across the merged set — but only
+      // when it genuinely supersedes the current preview. A backward (scroll-up) merge
+      // whose keep-oldest trim evicted the newest tail yields a candidate OLDER than
+      // the current preview; replacing would regress the sidebar (parity with
+      // chatStore.mergeMAMMessages). isResolvedSamePreview heals a preview stuck on
+      // an encrypted fallback after its deferred decrypt.
+      const previewCandidate = merged.length > 0 ? findLastNonIgnoredMessage(merged, roomJid, room.nickToJidCache) : undefined
+      const lastMessage = previewCandidate &&
+        (shouldReplaceLastMessage(room.lastMessage, previewCandidate) || isResolvedSamePreview(room.lastMessage, previewCandidate))
+        ? previewCandidate
+        : room.lastMessage
 
       const newMeta = new Map(state.roomMeta)
       const existingMeta = newMeta.get(roomJid)

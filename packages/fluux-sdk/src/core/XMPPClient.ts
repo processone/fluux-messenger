@@ -26,6 +26,7 @@ import {
 } from './presenceMachine'
 import type { ConnectionActor, ConnectionStateValue } from './connectionMachine'
 import { generateUUID } from '../utils/uuid'
+import { ensureCryptoRandomUUID } from './polyfill'
 import { createStoreBindings } from '../bindings/storeBindings'
 import { setupStoreSideEffects } from './sideEffects'
 import {
@@ -484,6 +485,11 @@ export class XMPPClient {
    * ```
    */
   constructor(config: XMPPClientConfig = {}) {
+    // Legacy webviews lack crypto.randomUUID, which @xmpp/client calls when
+    // generating ids. Installed here (not as an import-time side effect) so
+    // it survives tree-shaking and covers the /core entry point too.
+    ensureCryptoRandomUUID()
+
     // Detect platform early for caps/client identification
     // This is async but we fire-and-forget; the result is cached for later use
     void detectPlatform()
@@ -1538,25 +1544,52 @@ export class XMPPClient {
    * ```
    */
   async sendRawXml(xmlString: string): Promise<void> {
-    const xmpp = this.getXmpp()
-    if (!xmpp) {
-      // Defensive check: if client is null but status says 'online', fix the inconsistency
-      const currentStatus = this.stores?.connection.getStatus?.()
-      if (currentStatus === 'online') {
-        this.stores?.console.addEvent('Client null but status online - triggering reconnect', 'error')
-        this.connection.handleDeadSocket()
-      }
-      throw new Error('Not connected')
-    }
+    const xmpp = this.requireTransport()
     try {
       await (xmpp as any).write(xmlString)
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : String(err)
-      if (isDeadSocketError(errorMessage)) {
-        this.connection.handleDeadSocket()
-      }
-      throw err
+      this.repairAndRethrowSendError(err)
     }
+  }
+
+  /**
+   * Fetch the live transport for an outbound write, or throw.
+   *
+   * Repairs the "status says online but the client/socket is gone" race by
+   * triggering a reconnect before throwing. `label` distinguishes the console
+   * diagnostics (e.g. 'IQ'); `checkSocket` additionally verifies the
+   * underlying socket exists (the client object can outlive a dead socket).
+   */
+  private requireTransport(label = '', options: { checkSocket?: boolean } = {}): Client {
+    const suffix = label ? ` (${label})` : ''
+    const xmpp = this.getXmpp()
+    if (!xmpp) {
+      this.reconnectIfStatusOnline(`Client null but status online${suffix} - triggering reconnect`)
+      throw new Error('Not connected')
+    }
+    if (options.checkSocket && !(xmpp as any).socket) {
+      this.reconnectIfStatusOnline(`Socket null but status online${suffix} - triggering reconnect`)
+      throw new Error('Socket not available')
+    }
+    return xmpp
+  }
+
+  /** Trigger a dead-socket reconnect when the store still believes we are online. */
+  private reconnectIfStatusOnline(message: string): void {
+    const currentStatus = this.stores?.connection.getStatus?.()
+    if (currentStatus === 'online') {
+      this.stores?.console.addEvent(message, 'error')
+      this.connection.handleDeadSocket()
+    }
+  }
+
+  /** Classify an outbound-write failure, kick off a reconnect on a dead socket, and rethrow. */
+  private repairAndRethrowSendError(err: unknown): never {
+    const errorMessage = err instanceof Error ? err.message : String(err)
+    if (isDeadSocketError(errorMessage)) {
+      this.connection.handleDeadSocket()
+    }
+    throw err
   }
 
   // ============================================================================
@@ -2589,62 +2622,16 @@ export class XMPPClient {
   }
 
   protected async sendStanza(stanza: Element): Promise<void> {
-    const xmpp = this.getXmpp()
-    if (!xmpp) {
-      // Defensive check: if client is null but status says 'online', fix the inconsistency
-      // This can happen in rare race conditions (e.g., socket died but status not yet updated)
-      const currentStatus = this.stores?.connection.getStatus?.()
-      if (currentStatus === 'online') {
-        this.stores?.console.addEvent('Client null but status online - triggering reconnect', 'error')
-        this.connection.handleDeadSocket()
-      }
-      throw new Error('Not connected')
-    }
-
-    // Additional socket health check: verify the underlying socket exists
-    // This catches the race condition where xmpp client exists but socket is dead
-    const socket = (xmpp as any).socket
-    if (!socket) {
-      const currentStatus = this.stores?.connection.getStatus?.()
-      if (currentStatus === 'online') {
-        this.stores?.console.addEvent('Socket null but status online - triggering reconnect', 'error')
-        this.connection.handleDeadSocket()
-      }
-      throw new Error('Socket not available')
-    }
-
+    const xmpp = this.requireTransport('', { checkSocket: true })
     try {
       await xmpp.send(stanza)
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : String(err)
-      if (isDeadSocketError(errorMessage)) {
-        this.connection.handleDeadSocket()
-      }
-      throw err
+      this.repairAndRethrowSendError(err)
     }
   }
 
   protected async sendIQ(iq: Element, timeoutMs?: number): Promise<Element> {
-    const xmpp = this.getXmpp()
-    if (!xmpp) {
-      const currentStatus = this.stores?.connection.getStatus?.()
-      if (currentStatus === 'online') {
-        this.stores?.console.addEvent('Client null but status online (IQ) - triggering reconnect', 'error')
-        this.connection.handleDeadSocket()
-      }
-      throw new Error('Not connected')
-    }
-
-    const socket = (xmpp as any).socket
-    if (!socket) {
-      const currentStatus = this.stores?.connection.getStatus?.()
-      if (currentStatus === 'online') {
-        this.stores?.console.addEvent('Socket null but status online (IQ) - triggering reconnect', 'error')
-        this.connection.handleDeadSocket()
-      }
-      throw new Error('Socket not available')
-    }
-
+    const xmpp = this.requireTransport('IQ', { checkSocket: true })
     try {
       const request = (xmpp as any).iqCaller.request(iq)
       if (timeoutMs != null) {
@@ -2657,11 +2644,7 @@ export class XMPPClient {
       }
       return await request
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : String(err)
-      if (isDeadSocketError(errorMessage)) {
-        this.connection.handleDeadSocket()
-      }
-      throw err
+      this.repairAndRethrowSendError(err)
     }
   }
 

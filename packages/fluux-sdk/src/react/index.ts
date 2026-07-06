@@ -25,7 +25,7 @@
  * ```
  *
  * For framework-agnostic usage (bots, CLI tools, other frameworks),
- * use the core SDK: `import { XMPPClient } from '@fluux/sdk'`
+ * use the core SDK: `import { XMPPClient } from '@fluux/sdk/core'`
  *
  * @packageDocumentation
  * @module React
@@ -40,14 +40,20 @@ export { useConnection } from '../hooks/useConnection'
 export { useConnectionStatus } from '../hooks/useConnectionStatus'
 export { useConnectionActions } from '../hooks/useConnectionActions'
 export { useChat } from '../hooks/useChat'
+export { useChatActive } from '../hooks/useChatActive'
+export { useChatActions } from '../hooks/useChatActions'
 export { useRoster } from '../hooks/useRoster'
 export { useRosterActions } from '../hooks/useRosterActions'
+export { useContactIdentities, type ContactIdentity } from '../hooks/useContactIdentities'
 export { useConsole } from '../hooks/useConsole'
 export { useEvents } from '../hooks/useEvents'
 export { useRoom } from '../hooks/useRoom'
 export { useRoomActive } from '../hooks/useRoomActive'
+export { useRoomActions } from '../hooks/useRoomActions'
+export { useReferencedMessage, type ReferencedMessageParams } from '../hooks/useReferencedMessage'
 export { useXMPP } from '../hooks/useXMPP'
 export { useAdmin } from '../hooks/useAdmin'
+export { useAdminPermissions } from '../hooks/useAdminPermissions'
 export { useBlocking } from '../hooks/useBlocking'
 export { useIgnore } from '../hooks/useIgnore'
 export { usePresence } from '../hooks/usePresence'
@@ -59,7 +65,7 @@ export type { NotificationEventHandlers } from '../hooks/useNotificationEvents'
 export { useContactTime } from '../hooks/useContactTime'
 export { useLastActivity } from '../hooks/useLastActivity'
 export { useSearch } from '../hooks/useSearch'
-export type { SearchResult } from '../hooks/useSearch'
+export type { SearchResult, SearchResultContext, SearchFilterType, InPrefixSuggestion } from '../hooks/useSearch'
 
 // Fine-grained metadata subscription hooks
 export {
@@ -76,6 +82,7 @@ export {
   useRoomRuntime,
   useRoomMessages,
   useRoomOccupants,
+  useRoomOccupantCount,
   useAllRoomSidebarItems,
   useRoomSidebarItems,
   useRoomTotalMentionsCount,

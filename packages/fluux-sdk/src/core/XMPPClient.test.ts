@@ -105,6 +105,25 @@ describe('XMPPClient', () => {
       expect(typeof client.roster.addContact).toBe('function')
     })
 
+    it('installs the crypto.randomUUID polyfill in the constructor (legacy webviews)', () => {
+      // The polyfill must NOT rely on an import-time side effect (the package
+      // is sideEffects:false, so bundlers may drop those) — constructing a
+      // client must be enough, on any entry point.
+      vi.stubGlobal('crypto', {
+        getRandomValues: (arr: Uint8Array) => {
+          for (let i = 0; i < arr.length; i++) arr[i] = i
+          return arr
+        },
+      })
+      try {
+        expect(typeof (globalThis.crypto as Crypto).randomUUID).toBe('undefined')
+        new XMPPClient({ debug: false })
+        expect(typeof (globalThis.crypto as Crypto).randomUUID).toBe('function')
+      } finally {
+        vi.unstubAllGlobals()
+      }
+    })
+
     it('should allow bindStores to override default bindings (backwards compatibility)', () => {
       const client = new XMPPClient({ debug: false })
 
