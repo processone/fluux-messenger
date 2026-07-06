@@ -7,6 +7,7 @@ import {
   onClearMarker,
   onWindowBecameVisible,
   onMessageSeen,
+  recomputeCountsFromPointer,
   shouldNotifyConversation,
   shouldNotifyRoom,
   computeBadgeCount,
@@ -1051,5 +1052,74 @@ describe('lifecycle sequences', () => {
     // No new messages after m5 → no marker (not the stale marker at m2!)
     expect(state.firstNewMessageId).toBeUndefined()
     expect(state.lastSeenMessageId).toBe('m5')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// recomputeCountsFromPointer
+// ---------------------------------------------------------------------------
+
+describe('recomputeCountsFromPointer', () => {
+  const msg = (id: string, minutesAgo: number, opts: Partial<NotificationMessage> = {}): NotificationMessage => ({
+    id,
+    timestamp: new Date(Date.now() - minutesAgo * 60_000),
+    isOutgoing: false,
+    isDelayed: true, // catch-up context: everything is archive-delivered
+    ...opts,
+  })
+
+  it('fresh entity (no pointer, no lastReadAt) is caught up: snaps pointer to newest, zero counts', () => {
+    const state = createInitialNotificationState()
+    const messages = [msg('a', 30), msg('b', 20), msg('c', 10)]
+    const out = recomputeCountsFromPointer(state, messages, { countMentions: true })
+    expect(out.unreadCount).toBe(0)
+    expect(out.mentionsCount).toBe(0)
+    expect(out.lastSeenMessageId).toBe('c')
+  })
+
+  it('counts incoming messages after the pointer, including delayed ones, with mentions', () => {
+    const state = { ...createInitialNotificationState(), lastSeenMessageId: 'a' }
+    const messages = [msg('a', 30), msg('b', 20, { isMention: true }), msg('c', 10)]
+    const out = recomputeCountsFromPointer(state, messages, { countMentions: true })
+    expect(out.unreadCount).toBe(2)
+    expect(out.mentionsCount).toBe(1)
+    expect(out.lastSeenMessageId).toBe('a') // pointer untouched
+  })
+
+  it('pointer missing from slice: falls back to lastReadAt timestamp', () => {
+    const state = {
+      ...createInitialNotificationState(),
+      lastSeenMessageId: 'gone',
+      lastReadAt: new Date(Date.now() - 25 * 60_000),
+    }
+    const messages = [msg('a', 30), msg('b', 20), msg('c', 10)]
+    const out = recomputeCountsFromPointer(state, messages)
+    expect(out.unreadCount).toBe(2) // b and c are newer than lastReadAt
+  })
+
+  it('pointer missing and no usable lastReadAt: counts the whole slice (lower bound)', () => {
+    const state = { ...createInitialNotificationState(), lastSeenMessageId: 'gone', lastReadAt: new Date(0) }
+    const messages = [msg('a', 30), msg('b', 20)]
+    const out = recomputeCountsFromPointer(state, messages)
+    expect(out.unreadCount).toBe(2)
+  })
+
+  it('an outgoing message in range marks everything before it read and advances the pointer', () => {
+    const state = { ...createInitialNotificationState(), lastSeenMessageId: 'a' }
+    const messages = [msg('a', 40), msg('b', 30), msg('mine', 20, { isOutgoing: true }), msg('c', 10)]
+    const out = recomputeCountsFromPointer(state, messages)
+    expect(out.unreadCount).toBe(1) // only c
+    expect(out.lastSeenMessageId).toBe('mine')
+  })
+
+  it('returns the same reference when nothing changes', () => {
+    const state = { ...createInitialNotificationState(), lastSeenMessageId: 'b', unreadCount: 0 }
+    const messages = [msg('a', 30), msg('b', 20)]
+    expect(recomputeCountsFromPointer(state, messages)).toBe(state)
+  })
+
+  it('empty slice returns the same reference', () => {
+    const state = { ...createInitialNotificationState(), lastSeenMessageId: 'x', unreadCount: 3 }
+    expect(recomputeCountsFromPointer(state, [])).toBe(state)
   })
 })

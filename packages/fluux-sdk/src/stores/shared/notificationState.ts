@@ -429,6 +429,88 @@ export function onMessageSeen(
   return state
 }
 
+/** Options for {@link recomputeCountsFromPointer}. */
+export interface RecomputeCountsOptions {
+  /** Count `isMention` messages into mentionsCount (rooms). */
+  countMentions?: boolean
+}
+
+/**
+ * Recompute unreadCount/mentionsCount from the persisted read pointer against
+ * a freshly merged message slice (sorted oldest → newest). Used by MAM
+ * catch-up hydration and inbound XEP-0490 marker handling — never by the live
+ * message path (onMessageReceived owns incremental counting).
+ *
+ * Fresh-entity guard: an entity with NO read state (no lastSeenMessageId, no
+ * lastReadAt) is caught up — the pointer snaps to the newest message and
+ * counts stay zero. History replay of a newly joined room, or a new device
+ * with no MDS position, never manufactures unread debt.
+ *
+ * An outgoing message inside the counted range is a read boundary (the user
+ * replied, here or on another device): counting restarts after the last one
+ * and the pointer advances to it.
+ */
+export function recomputeCountsFromPointer(
+  state: EntityNotificationState,
+  messages: NotificationMessage[],
+  options?: RecomputeCountsOptions
+): EntityNotificationState {
+  const { countMentions = false } = options ?? {}
+  if (messages.length === 0) return state
+
+  if (!state.lastSeenMessageId && !state.lastReadAt) {
+    const newest = messages[messages.length - 1]
+    if (state.unreadCount === 0 && state.mentionsCount === 0 && state.lastSeenMessageId === newest.id) {
+      return state
+    }
+    return { ...state, unreadCount: 0, mentionsCount: 0, lastSeenMessageId: newest.id }
+  }
+
+  let startIdx: number
+  const pointerIdx = state.lastSeenMessageId
+    ? messages.findIndex((m) => m.id === state.lastSeenMessageId)
+    : -1
+  if (pointerIdx !== -1) {
+    startIdx = pointerIdx + 1
+  } else {
+    const readAt = state.lastReadAt instanceof Date
+      ? state.lastReadAt
+      : state.lastReadAt ? new Date(state.lastReadAt as unknown as string) : undefined
+    if (readAt && readAt.getTime() > 0) {
+      const idx = messages.findIndex((m) => m.timestamp > readAt)
+      startIdx = idx === -1 ? messages.length : idx
+    } else {
+      // Pointer resolves nowhere and no usable timestamp: the slice is
+      // entirely past the read horizon — count it all (a lower bound).
+      startIdx = 0
+    }
+  }
+
+  let newPointer = state.lastSeenMessageId
+  for (let i = messages.length - 1; i >= startIdx; i--) {
+    if (messages[i].isOutgoing) {
+      newPointer = messages[i].id
+      startIdx = i + 1
+      break
+    }
+  }
+
+  let unread = 0
+  let mentions = 0
+  for (let i = startIdx; i < messages.length; i++) {
+    const m = messages[i]
+    if (m.isOutgoing) continue
+    unread++
+    if (countMentions && m.isMention) mentions++
+  }
+
+  const mentionsOut = countMentions ? mentions : state.mentionsCount
+  if (unread === state.unreadCount && mentionsOut === state.mentionsCount && newPointer === state.lastSeenMessageId) {
+    return state
+  }
+  return { ...state, unreadCount: unread, mentionsCount: mentionsOut, lastSeenMessageId: newPointer }
+}
+
 // ---------------------------------------------------------------------------
 // Should-Notify Functions
 // ---------------------------------------------------------------------------
