@@ -85,7 +85,14 @@ impl ToolExecutor for TauriBridgeExecutor {
             Ok(Err(_)) => Err("MCP bridge dropped the request".to_string()),
             Err(_) => {
                 self.pending.forget(&id);
-                Err(format!("Tool call timed out after {}s", TOOL_CALL_TIMEOUT.as_secs()))
+                // The webview-side dispatch is not cancelled by this timeout and
+                // may still complete (e.g. a slow send_message that already went
+                // out) — say so, or an LLM client will blindly retry and send a
+                // duplicate message to a real recipient.
+                Err(format!(
+                    "Tool call timed out after {}s. The operation may still have completed; do not retry a send_message call without checking the conversation history first.",
+                    TOOL_CALL_TIMEOUT.as_secs()
+                ))
             }
         }
     }

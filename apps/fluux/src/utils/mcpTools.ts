@@ -62,7 +62,11 @@ export async function getHistory(
   limit?: number,
   before?: string
 ): Promise<McpHistoryMessage[]> {
-  const cappedLimit = Math.min(limit ?? DEFAULT_HISTORY_LIMIT, MAX_HISTORY_LIMIT)
+  // Clamp into [1, MAX]: messageCache treats a falsy limit as "no limit", so
+  // letting 0 through would return the ENTIRE history instead of zero messages.
+  // NaN/Infinity/negatives from an untrusted MCP caller fall back to the default.
+  const requested = Number.isFinite(limit) ? Math.floor(limit as number) : DEFAULT_HISTORY_LIMIT
+  const cappedLimit = Math.min(Math.max(1, requested), MAX_HISTORY_LIMIT)
   const beforeDate = before ? new Date(before) : undefined
   const isRoom = roomStore.getState().rooms.has(conversationId)
 
@@ -98,11 +102,18 @@ export async function sendMessageTool(
 ): Promise<{ messageId: string }> {
   checkSendRateLimit()
 
-  const isRoom = roomStore.getState().rooms.has(conversationId)
+  const room = roomStore.getState().rooms.get(conversationId)
   const isChat = chatStore.getState().conversations.has(conversationId)
-  if (!isRoom && !isChat) {
+  if (!room && !isChat) {
     throw new Error(`Unknown conversationId: ${conversationId}`)
   }
+  // A known-but-unjoined room (bookmarked, or left earlier) would accept the
+  // stanza at the transport level and only bounce asynchronously server-side,
+  // so sendMessage would report a false success. Reject it up front instead.
+  if (room && !room.joined) {
+    throw new Error(`Not joined to room: ${conversationId}`)
+  }
+  const isRoom = room !== undefined
 
   const messageId = await client.chat.sendMessage(conversationId, body, isRoom ? 'groupchat' : 'chat')
   return { messageId }

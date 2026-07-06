@@ -124,6 +124,26 @@ describe('mcpTools', () => {
         peek: true,
       })
     })
+
+    it('clamps zero, negative, and non-finite limits instead of passing them through', async () => {
+      chatStore.setState({
+        conversations: new Map([['alice@example.com', { id: 'alice@example.com' } as Conversation]]),
+      })
+      const loadSpy = vi.spyOn(chatStore.getState(), 'loadMessagesFromCache').mockResolvedValue([])
+
+      // limit 0 must NOT reach the cache layer, which treats falsy limits as "unlimited"
+      await getHistory('alice@example.com', 0)
+      expect(loadSpy).toHaveBeenLastCalledWith('alice@example.com', { limit: 1, before: undefined, peek: true })
+
+      await getHistory('alice@example.com', -5)
+      expect(loadSpy).toHaveBeenLastCalledWith('alice@example.com', { limit: 1, before: undefined, peek: true })
+
+      await getHistory('alice@example.com', Number.NaN)
+      expect(loadSpy).toHaveBeenLastCalledWith('alice@example.com', { limit: 50, before: undefined, peek: true })
+
+      await getHistory('alice@example.com', Number.POSITIVE_INFINITY)
+      expect(loadSpy).toHaveBeenLastCalledWith('alice@example.com', { limit: 50, before: undefined, peek: true })
+    })
   })
 
   describe('sendMessageTool', () => {
@@ -142,14 +162,27 @@ describe('mcpTools', () => {
       expect(result).toEqual({ messageId: 'msg-123' })
     })
 
-    it('sends to a known room as type groupchat', async () => {
-      roomStore.setState({ rooms: new Map([['room@conference.example.com', { jid: 'room@conference.example.com' } as Room]]) })
+    it('sends to a joined room as type groupchat', async () => {
+      roomStore.setState({
+        rooms: new Map([['room@conference.example.com', { jid: 'room@conference.example.com', joined: true } as Room]]),
+      })
       const sendMessage = vi.fn().mockResolvedValue('msg-456')
       const client = { chat: { sendMessage } } as unknown as XMPPClient
 
       await sendMessageTool(client, 'room@conference.example.com', 'hi room')
 
       expect(sendMessage).toHaveBeenCalledWith('room@conference.example.com', 'hi room', 'groupchat')
+    })
+
+    it('rejects sending to a known room the user is not joined to', async () => {
+      roomStore.setState({
+        rooms: new Map([['room@conference.example.com', { jid: 'room@conference.example.com', joined: false } as Room]]),
+      })
+      const sendMessage = vi.fn()
+      const client = { chat: { sendMessage } } as unknown as XMPPClient
+
+      await expect(sendMessageTool(client, 'room@conference.example.com', 'hi')).rejects.toThrow('Not joined to room')
+      expect(sendMessage).not.toHaveBeenCalled()
     })
 
     it('rejects an unknown conversationId', async () => {

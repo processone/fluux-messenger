@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { renderHook, waitFor } from '@testing-library/react'
 import { chatStore } from '@fluux/sdk'
 import type { XMPPClient } from '@fluux/sdk/core'
-import { useMcpBridge } from './useMcpBridge'
+import { useMcpBridge, __resetServerOpQueueForTests } from './useMcpBridge'
 import { useMcpBridgeStore } from '@/stores/mcpBridgeStore'
 
 vi.mock('@/utils/tauri', () => ({ isTauri: () => true }))
@@ -35,6 +35,7 @@ describe('useMcpBridge', () => {
     listenMock.mockResolvedValue(unlistenMock)
     useMcpBridgeStore.setState({ enabled: true, serverInfo: null, activityLog: [] })
     chatStore.getState().reset()
+    __resetServerOpQueueForTests()
   })
 
   it('starts the MCP server and subscribes to tool-call events when enabled', async () => {
@@ -81,13 +82,77 @@ describe('useMcpBridge', () => {
     })
   })
 
-  it('stops the server when disabled', () => {
+  it('stops the server when disabled', async () => {
     useMcpBridgeStore.setState({ enabled: false })
     const client = { chat: { sendMessage: vi.fn() } } as unknown as XMPPClient
 
     renderHook(() => useMcpBridge(client))
 
-    expect(invokeMock).toHaveBeenCalledWith('mcp_stop_server')
+    // The stop is routed through the lifecycle-op queue, so it lands a microtask later.
+    await waitFor(() => {
+      expect(invokeMock).toHaveBeenCalledWith('mcp_stop_server')
+    })
+  })
+
+  it('does not let a stop overtake an in-flight start (disable-during-startup race)', async () => {
+    const client = { chat: { sendMessage: vi.fn() } } as unknown as XMPPClient
+
+    // Control exactly when mcp_start_server resolves.
+    let resolveStart: (info: { port: number; token: string }) => void = () => {}
+    invokeMock.mockImplementation((cmd: string) => {
+      if (cmd === 'mcp_start_server') {
+        return new Promise((resolve) => {
+          resolveStart = resolve
+        })
+      }
+      return Promise.resolve(undefined)
+    })
+
+    renderHook(() => useMcpBridge(client))
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith('mcp_start_server'))
+
+    // Disable while the start is still in flight. Without the op queue, the
+    // stop IPC call fires immediately and can reach Rust before the start,
+    // leaving the server running while the UI shows disabled.
+    useMcpBridgeStore.getState().setEnabled(false)
+
+    // Give the disabled-branch effect a chance to run; the stop must NOT have
+    // been issued yet, because the start it needs to cancel hasn't resolved.
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(invokeMock).not.toHaveBeenCalledWith('mcp_stop_server')
+
+    // Once the start resolves, the queued stop runs after it — correct order.
+    resolveStart({ port: 4123, token: 'secret' })
+    await waitFor(() => {
+      expect(invokeMock).toHaveBeenCalledWith('mcp_stop_server')
+    })
+  })
+
+  it('does not report a tool error when responding fails after a successful dispatch', async () => {
+    const client = { chat: { sendMessage: vi.fn() } } as unknown as XMPPClient
+    invokeMock.mockImplementation((cmd: string) => {
+      if (cmd === 'mcp_start_server') return Promise.resolve({ port: 4123, token: 'secret' })
+      if (cmd === 'mcp_respond') return Promise.reject(new Error('IPC hiccup'))
+      return Promise.resolve(undefined)
+    })
+
+    renderHook(() => useMcpBridge(client))
+    await waitFor(() => expect(listenMock).toHaveBeenCalled())
+
+    const handler = listenMock.mock.calls[0][1] as (event: { payload: unknown }) => void
+    await handler({ payload: { id: 'req-3', name: 'list_conversations', arguments: {} } })
+
+    // The successful result respond was attempted once...
+    await waitFor(() => {
+      expect(invokeMock).toHaveBeenCalledWith('mcp_respond', { id: 'req-3', result: [] })
+    })
+    // ...and its failure must NOT be converted into an {error} respond, which
+    // would tell the MCP client an already-executed tool call failed.
+    const errorResponds = invokeMock.mock.calls.filter(
+      ([cmd, args]) =>
+        cmd === 'mcp_respond' && (args as { result?: { error?: string } })?.result?.error !== undefined
+    )
+    expect(errorResponds).toHaveLength(0)
   })
 
   it('calls the unlisten function even when unmounted before listen() resolves', async () => {
