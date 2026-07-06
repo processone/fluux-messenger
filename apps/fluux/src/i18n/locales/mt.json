@@ -893,7 +893,7 @@
             "copy": "Ikkopja d-dettalji tal-konnessjoni",
             "copied": "Ikkopjat",
             "activityTitle": "Attività riċenti",
-            "activityEmpty": "Għadha ma teżisti l-ebda attività ta' Claude.",
+            "activityEmpty": "Għad m'hemm l-ebda attività ta' Claude.",
             "activityClear": "Ħassar",
             "tool": {
                 "list_conversations": "Konverżazzjonijiet elenkati",

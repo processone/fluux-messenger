@@ -882,7 +882,7 @@
         "mediaAutoDownloadStrangerNote": "Medien von Personen, die nicht in Ihren Kontakten sind, erfordern immer einen Tipp zum Laden, unabhängig von Ihrer Auswahl hier.",
         "mcp": {
             "title": "Claude-Integration (MCP)",
-            "description": "Erlaube Claude, deinen Gesprächsverlauf zu lesen und Nachrichten über Fluux mittels Model Context Protocol zu senden. Jede Anfrage wird weiterhin einzeln in deinem MCP-Client (z. B. Claude Desktop) bestätigt, bevor sie ausgeführt wird.",
+            "description": "Erlauben Sie Claude, Ihren Gesprächsverlauf zu lesen und Nachrichten über Fluux mittels Model Context Protocol zu senden. Jede Anfrage wird weiterhin einzeln in Ihrem MCP-Client (z. B. Claude Desktop) bestätigt, bevor sie ausgeführt wird.",
             "enable": "Claude-Zugriff aktivieren",
             "disable": "Claude-Zugriff deaktivieren",
             "statusStarting": "Lokaler Server wird gestartet…",
