@@ -274,6 +274,106 @@ function roomTimelineConfig(): timeline.TimelineConfig<RoomMessage> {
   return { getKeys: getRoomMessageKeys, windowSize: getResidentWindowSize() }
 }
 
+// ============================================================================
+// Split-map field routing (single source of truth for the entity/meta/runtime
+// fan-out). Exhaustive by construction: the `satisfies Record<keyof X, …>`
+// clauses error when a field is missing or extra, so adding a field to a type
+// forces a routing decision here. The previous hand-maintained lists silently
+// went stale — `lastMessage` was missing, so `updateRoom({ lastMessage })`
+// never reached roomMeta, and the full-projection rebuild wiped the fields the
+// list didn't know about.
+// ============================================================================
+
+const ROOM_ENTITY_FIELDS = Object.keys({
+  jid: true, name: true, nickname: true, joined: true, isJoining: true,
+  subject: true, avatar: true, avatarHash: true, avatarFromPresence: true,
+  isBookmarked: true, autojoin: true, password: true, isQuickChat: true,
+  supportsMAM: true, supportsReactions: true, supportsHats: true,
+  supportsModeration: true, isIrcGateway: true, isNonAnonymous: true,
+  isPrivate: true, muted: true,
+} satisfies Record<keyof RoomEntity, true>) as readonly (keyof RoomEntity)[]
+
+const ROOM_META_FIELDS = Object.keys({
+  unreadCount: true, mentionsCount: true, typingUsers: true, notifyAll: true,
+  notifyAllPersistent: true, lastReadAt: true, lastSeenMessageId: true,
+  pendingRemoteDisplayedStanzaId: true, lastMessage: true, lastInteractedAt: true,
+} satisfies Record<keyof RoomMetadata, true>) as readonly (keyof RoomMetadata)[]
+
+const ROOM_RUNTIME_FIELD_ROUTING = {
+  occupants: 'sync', nickToJidCache: 'sync', nickToAvatarCache: 'sync',
+  affiliatedMembers: 'sync', selfOccupant: 'sync', messages: 'sync',
+  // A plain field update must never silently recenter the window — the
+  // live-edge flag only changes through window operations (see
+  // RoomRuntime.windowAtLiveEdge).
+  windowAtLiveEdge: 'preserve',
+} satisfies Record<keyof RoomRuntime, 'sync' | 'preserve'>
+
+const ROOM_RUNTIME_FIELDS = (Object.keys(ROOM_RUNTIME_FIELD_ROUTING) as readonly (keyof RoomRuntime)[])
+  .filter((key) => ROOM_RUNTIME_FIELD_ROUTING[key] === 'sync')
+
+/** The subset of `source`'s own keys that appear in `fields`. */
+function pickFields<T extends object>(source: object, fields: readonly (keyof T & string)[]): Partial<T> {
+  const picked: Record<string, unknown> = {}
+  for (const field of fields) {
+    if (field in source) picked[field] = (source as Record<string, unknown>)[field]
+  }
+  return picked as Partial<T>
+}
+
+/**
+ * Fan a Partial<Room> update out to the four room maps: the combined `rooms`
+ * map always, and each split map only when the patch carries one of its
+ * fields — merging the patched fields onto the EXISTING split value (never a
+ * full projection from the combined map, which regresses fresher split state
+ * and wipes fields the projection forgets).
+ *
+ * Returns the partial state update, or null when the room is unknown.
+ */
+function commitRoomUpdate(
+  state: RoomState,
+  roomJid: string,
+  update: Partial<Room>
+): Partial<RoomState> | null {
+  const existing = state.rooms.get(roomJid)
+  if (!existing) return null
+
+  const newRooms = new Map(state.rooms)
+  newRooms.set(roomJid, { ...existing, ...update })
+  const result: Partial<RoomState> = { rooms: newRooms }
+
+  const entityPatch = pickFields<RoomEntity>(update, ROOM_ENTITY_FIELDS as readonly (keyof RoomEntity & string)[])
+  if (Object.keys(entityPatch).length > 0) {
+    const existingEntity = state.roomEntities.get(roomJid)
+    if (existingEntity) {
+      const newEntities = new Map(state.roomEntities)
+      newEntities.set(roomJid, { ...existingEntity, ...entityPatch })
+      result.roomEntities = newEntities
+    }
+  }
+
+  const metaPatch = pickFields<RoomMetadata>(update, ROOM_META_FIELDS as readonly (keyof RoomMetadata & string)[])
+  if (Object.keys(metaPatch).length > 0) {
+    const existingMeta = state.roomMeta.get(roomJid)
+    if (existingMeta) {
+      const newMeta = new Map(state.roomMeta)
+      newMeta.set(roomJid, { ...existingMeta, ...metaPatch })
+      result.roomMeta = newMeta
+    }
+  }
+
+  const runtimePatch = pickFields<RoomRuntime>(update, ROOM_RUNTIME_FIELDS as readonly (keyof RoomRuntime & string)[])
+  if (Object.keys(runtimePatch).length > 0) {
+    const existingRuntime = state.roomRuntime.get(roomJid)
+    if (existingRuntime) {
+      const newRuntime = new Map(state.roomRuntime)
+      newRuntime.set(roomJid, { ...existingRuntime, ...runtimePatch })
+      result.roomRuntime = newRuntime
+    }
+  }
+
+  return result
+}
+
 /**
  * Merge a batch of cached room messages into a room's resident array (and runtime mirror),
  * returning the partial state update (or `null` when the room is not present). Shared by
@@ -662,100 +762,7 @@ export const roomStore = createStore<RoomState>()(
   },
 
   updateRoom: (roomJid, update) => {
-    set((state) => {
-      const newRooms = new Map(state.rooms)
-      const existing = newRooms.get(roomJid)
-      if (!existing) return state
-
-      const updatedRoom = { ...existing, ...update }
-      newRooms.set(roomJid, updatedRoom)
-
-      // Update entity fields if any changed
-      const entityFields = ['name', 'nickname', 'joined', 'isJoining', 'subject', 'avatar',
-        'avatarHash', 'avatarFromPresence', 'isBookmarked', 'autojoin', 'password', 'isQuickChat',
-        'supportsMAM', 'supportsReactions', 'supportsHats', 'supportsModeration', 'isIrcGateway', 'isNonAnonymous', 'isPrivate', 'muted'] as const
-      const hasEntityUpdate = entityFields.some((f) => f in update)
-
-      // Update metadata fields if any changed
-      const metaFields = ['unreadCount', 'mentionsCount', 'typingUsers', 'notifyAll',
-        'notifyAllPersistent', 'lastReadAt', 'lastInteractedAt'] as const
-      const hasMetaUpdate = metaFields.some((f) => f in update)
-
-      // Update runtime fields if any changed
-      const runtimeFields = ['occupants', 'nickToJidCache', 'nickToAvatarCache', 'affiliatedMembers', 'selfOccupant', 'messages'] as const
-      const hasRuntimeUpdate = runtimeFields.some((f) => f in update)
-
-      const result: Partial<RoomState> = { rooms: newRooms }
-
-      if (hasEntityUpdate) {
-        const newEntities = new Map(state.roomEntities)
-        const existingEntity = newEntities.get(roomJid)
-        if (existingEntity) {
-          newEntities.set(roomJid, {
-            jid: updatedRoom.jid,
-            name: updatedRoom.name,
-            nickname: updatedRoom.nickname,
-            joined: updatedRoom.joined,
-            isJoining: updatedRoom.isJoining,
-            subject: updatedRoom.subject,
-            avatar: updatedRoom.avatar,
-            avatarHash: updatedRoom.avatarHash,
-            avatarFromPresence: updatedRoom.avatarFromPresence,
-            isBookmarked: updatedRoom.isBookmarked,
-            autojoin: updatedRoom.autojoin,
-            password: updatedRoom.password,
-            isQuickChat: updatedRoom.isQuickChat,
-            supportsMAM: updatedRoom.supportsMAM,
-            supportsReactions: updatedRoom.supportsReactions,
-            supportsHats: updatedRoom.supportsHats,
-            supportsModeration: updatedRoom.supportsModeration,
-            isIrcGateway: updatedRoom.isIrcGateway,
-            isNonAnonymous: updatedRoom.isNonAnonymous,
-            isPrivate: updatedRoom.isPrivate,
-            muted: updatedRoom.muted,
-          })
-        }
-        result.roomEntities = newEntities
-      }
-
-      if (hasMetaUpdate) {
-        const newMeta = new Map(state.roomMeta)
-        const existingMeta = newMeta.get(roomJid)
-        if (existingMeta) {
-          newMeta.set(roomJid, {
-            unreadCount: updatedRoom.unreadCount,
-            mentionsCount: updatedRoom.mentionsCount,
-            typingUsers: updatedRoom.typingUsers,
-            notifyAll: updatedRoom.notifyAll,
-            notifyAllPersistent: updatedRoom.notifyAllPersistent,
-            lastReadAt: updatedRoom.lastReadAt,
-            lastInteractedAt: updatedRoom.lastInteractedAt,
-          })
-        }
-        result.roomMeta = newMeta
-      }
-
-      if (hasRuntimeUpdate) {
-        const newRuntime = new Map(state.roomRuntime)
-        const existingRuntime = newRuntime.get(roomJid)
-        if (existingRuntime) {
-          newRuntime.set(roomJid, {
-            occupants: updatedRoom.occupants,
-            nickToJidCache: updatedRoom.nickToJidCache,
-            nickToAvatarCache: updatedRoom.nickToAvatarCache,
-            affiliatedMembers: updatedRoom.affiliatedMembers,
-            selfOccupant: updatedRoom.selfOccupant,
-            messages: updatedRoom.messages,
-            // Preserve the live-edge flag across an entity/meta update (a plain field
-            // update must not silently recenter the window).
-            windowAtLiveEdge: existingRuntime.windowAtLiveEdge,
-          })
-        }
-        result.roomRuntime = newRuntime
-      }
-
-      return result
-    })
+    set((state) => commitRoomUpdate(state, roomJid, update) ?? state)
   },
 
   removeRoom: (roomJid) => {

@@ -4853,6 +4853,43 @@ describe('roomStore parity drift regressions', () => {
       expect(roomStore.getState().roomMeta.get(roomJid)?.lastMessage?.id).toBe('new-1')
     })
 
+    it('updateRoom routes lastMessage to roomMeta (was dropped by the hard-coded field list)', () => {
+      const preview = messageAt('prev-1', 'alice', 'preview', '2024-01-15T10:00:00Z')
+
+      roomStore.getState().updateRoom(roomJid, { lastMessage: preview })
+
+      expect(roomStore.getState().rooms.get(roomJid)?.lastMessage?.id).toBe('prev-1')
+      expect(roomStore.getState().roomMeta.get(roomJid)?.lastMessage?.id).toBe('prev-1')
+    })
+
+    it('updateRoom preserves untouched meta fields (full rebuild wiped lastMessage/lastSeen)', () => {
+      const preview = messageAt('prev-1', 'alice', 'preview', '2024-01-15T10:00:00Z')
+      roomStore.setState((state) => {
+        const roomMeta = new Map(state.roomMeta)
+        roomMeta.set(roomJid, { ...roomMeta.get(roomJid)!, lastMessage: preview, lastSeenMessageId: 'seen-1' })
+        return { roomMeta }
+      })
+
+      roomStore.getState().updateRoom(roomJid, { unreadCount: 5 })
+
+      const meta = roomStore.getState().roomMeta.get(roomJid)
+      expect(meta?.unreadCount).toBe(5)
+      expect(meta?.lastMessage?.id).toBe('prev-1')
+      expect(meta?.lastSeenMessageId).toBe('seen-1')
+    })
+
+    it('updateRoom never recenters the window: windowAtLiveEdge survives a runtime update', () => {
+      roomStore.setState((state) => {
+        const roomRuntime = new Map(state.roomRuntime)
+        roomRuntime.set(roomJid, { ...roomRuntime.get(roomJid)!, windowAtLiveEdge: false })
+        return { roomRuntime }
+      })
+
+      roomStore.getState().updateRoom(roomJid, { occupants: new Map() })
+
+      expect(roomStore.getState().roomRuntime.get(roomJid)?.windowAtLiveEdge).toBe(false)
+    })
+
     it('MAM merge backfills the archive stanzaId onto resident messages (parity with chatStore)', () => {
       roomStore.setState({ activeRoomJid: roomJid })
       const own: RoomMessage = {
