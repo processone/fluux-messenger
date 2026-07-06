@@ -113,12 +113,24 @@ export function setupMdsSideEffects(
       const seenId = roomStore.getState().roomMeta.get(jid)?.lastSeenMessageId
       if (!seenId) return undefined
       const messages = roomStore.getState().roomRuntime.get(jid)?.messages ?? []
-      return messages.find((m) => m.id === seenId)?.stanzaId
+      const fromSlice = messages.find((m) => m.id === seenId)?.stanzaId
+      if (fromSlice) return fromSlice
+      // Non-active rooms keep no resident array (memory windowing); mark-all-read
+      // points at the newest known message, whose stanza-id survives on the
+      // lastMessage preview.
+      const last = roomStore.getState().roomMeta.get(jid)?.lastMessage
+        ?? roomStore.getState().rooms.get(jid)?.lastMessage
+      return last?.id === seenId ? last.stanzaId : undefined
     }
     const seenId = chatStore.getState().conversationMeta.get(jid)?.lastSeenMessageId
     if (!seenId) return undefined
     const messages = chatStore.getState().messages.get(jid) || []
-    return messages.find((m) => m.id === seenId)?.stanzaId
+    const fromSlice = messages.find((m) => m.id === seenId)?.stanzaId
+    if (fromSlice) return fromSlice
+    // Same eviction fallback for backgrounded 1:1 conversations.
+    const last = chatStore.getState().conversationMeta.get(jid)?.lastMessage
+      ?? chatStore.getState().conversations.get(jid)?.lastMessage
+    return last?.id === seenId ? last.stanzaId : undefined
   }
 
   /**

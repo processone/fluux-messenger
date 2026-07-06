@@ -1742,6 +1742,34 @@ export const roomStore = createStore<RoomState>()(
       const newMeta = new Map(state.roomMeta)
       newMeta.set(roomJid, { ...meta, ...metaPatch })
 
+      // Inbound read-state sync (spec §4): a marker published by another client
+      // clears this room's badge now, not on the next activation. 'advanced' is
+      // exactly the non-active pointer-advance kind (the active room's counts
+      // are already zero and resolves as 'advanced-with-divider'). Only the
+      // counts are folded — the pointer keeps the forward-only position
+      // resolved above (the helper's outgoing-boundary rule never regresses
+      // it: the pointer resolves inside `messages`, so its internal scan only
+      // ever looks past it).
+      let recomputed: notifState.EntityNotificationState | undefined
+      if (resolution.kind === 'advanced') {
+        recomputed = notifState.recomputeCountsFromPointer(
+          {
+            unreadCount: meta.unreadCount,
+            mentionsCount: meta.mentionsCount,
+            lastReadAt: meta.lastReadAt,
+            lastSeenMessageId: resolution.lastSeenMessageId,
+            firstNewMessageId: state.firstNewMessageMarkers.get(roomJid),
+          },
+          messages,
+          { countMentions: true }
+        )
+        newMeta.set(roomJid, {
+          ...newMeta.get(roomJid)!,
+          unreadCount: recomputed.unreadCount,
+          mentionsCount: recomputed.mentionsCount,
+        })
+      }
+
       // The divider is recomputed only for the active room; inactive rooms
       // recompute on their next activation.
       let newMarkers = state.firstNewMessageMarkers
@@ -1754,7 +1782,14 @@ export const roomStore = createStore<RoomState>()(
       if (existing) {
         // Keep the combined map coherent with roomMeta.
         const newRooms = new Map(state.rooms)
-        newRooms.set(roomJid, { ...existing, ...metaPatch })
+        newRooms.set(roomJid, {
+          ...existing,
+          ...metaPatch,
+          // Keep the combined map coherent with the recomputed roomMeta counts.
+          ...(recomputed
+            ? { unreadCount: recomputed.unreadCount, mentionsCount: recomputed.mentionsCount }
+            : {}),
+        })
         return { roomMeta: newMeta, rooms: newRooms, firstNewMessageMarkers: newMarkers }
       }
       return { roomMeta: newMeta, firstNewMessageMarkers: newMarkers }

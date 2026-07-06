@@ -1121,6 +1121,33 @@ export const chatStore = createStore<ChatState>()(
           const newMeta = new Map(state.conversationMeta)
           newMeta.set(conversationId, { ...meta, ...metaPatch })
 
+          // Inbound read-state sync (spec §4): a marker published by another
+          // client clears this conversation's badge now, not on the next
+          // activation. 'advanced' is exactly the non-active pointer-advance
+          // kind (the active conversation resolves as 'advanced-with-divider'
+          // and its counts are already zero). Only the count is folded — the
+          // pointer keeps the forward-only position resolved above.
+          // countMentions is omitted (default false) and mentionsCount is an
+          // inert 0: conversations don't track mentions the way rooms do
+          // (parity with the hydration path in mergeMAMMessages).
+          let recomputed: notifState.EntityNotificationState | undefined
+          if (resolution.kind === 'advanced') {
+            recomputed = notifState.recomputeCountsFromPointer(
+              {
+                unreadCount: meta.unreadCount,
+                mentionsCount: 0,
+                lastReadAt: meta.lastReadAt,
+                lastSeenMessageId: resolution.lastSeenMessageId,
+                firstNewMessageId: state.firstNewMessageMarkers.get(conversationId),
+              },
+              messages
+            )
+            newMeta.set(conversationId, {
+              ...newMeta.get(conversationId)!,
+              unreadCount: recomputed.unreadCount,
+            })
+          }
+
           // The divider is recomputed only for the active conversation; inactive
           // ones recompute on their next activation.
           let newMarkers = state.firstNewMessageMarkers
@@ -1133,7 +1160,12 @@ export const chatStore = createStore<ChatState>()(
           if (conv) {
             // Keep the combined map coherent with conversationMeta.
             const newConversations = new Map(state.conversations)
-            newConversations.set(conversationId, { ...conv, ...metaPatch })
+            newConversations.set(conversationId, {
+              ...conv,
+              ...metaPatch,
+              // Keep the combined map coherent with the recomputed count.
+              ...(recomputed ? { unreadCount: recomputed.unreadCount } : {}),
+            })
             return { conversationMeta: newMeta, conversations: newConversations, firstNewMessageMarkers: newMarkers }
           }
           return { conversationMeta: newMeta, firstNewMessageMarkers: newMarkers }

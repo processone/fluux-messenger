@@ -336,6 +336,90 @@ describe('setupMdsSideEffects', () => {
     cleanup()
   })
 
+  it('resolves the seen stanza-id from lastMessage when the resident array is evicted', async () => {
+    const ROOM = 'room@conference.example'
+    const client = makeClient()
+    connectionStore.setState({ status: 'online', jid: 'romeo@montague.example/phone' } as never)
+
+    // Backgrounded room: the resident array is evicted (memory windowing), but
+    // the newest message survives on the lastMessage preview (both maps, as
+    // mergeRoomMAMMessages maintains them).
+    seedRoom(ROOM, [])
+    const newest = rmsg(ROOM, 'm9', 's9', 9)
+    roomStore.setState((s) => {
+      const meta = new Map(s.roomMeta)
+      meta.set(ROOM, { ...meta.get(ROOM)!, lastMessage: newest })
+      const rooms = new Map(s.rooms)
+      rooms.set(ROOM, { ...rooms.get(ROOM)!, lastMessage: newest })
+      return { roomMeta: meta, rooms }
+    })
+
+    const cleanup = setupMdsSideEffects(client as never)
+    client._emit('online')
+    await vi.runOnlyPendingTimersAsync() // settle the async seed
+
+    // Mark-all-read on a backgrounded room: the pointer advances to the newest
+    // known message id with NO resident messages loaded to resolve it from.
+    roomStore.setState((s) => {
+      const meta = new Map(s.roomMeta)
+      meta.set(ROOM, { ...meta.get(ROOM)!, lastSeenMessageId: 'm9' })
+      return { roomMeta: meta }
+    })
+
+    await vi.advanceTimersByTimeAsync(2_000)
+
+    expect(client.mds.publishDisplayed).toHaveBeenCalledTimes(1)
+    expect(client.mds.publishDisplayed).toHaveBeenCalledWith(ROOM, 's9', ROOM)
+    cleanup()
+  })
+
+  // Spec §5 pin: our own publish comes back as a PEP node echo. Unlike the
+  // remote-marker echo tests above (which start from a peer's publish), this
+  // exercises the post-publish suppression: lastKnownNodeStanzaId was recorded
+  // by doPublish itself and lastConsideredSeenId already holds the position.
+  //
+  // The room keeps m9/s9 RESIDENT (unlike the eviction test above) so the
+  // simulated echo's applyRemoteDisplayed(ROOM, 's9') actually resolves a
+  // match: onMessageSeen sees the marker's id === the already-current
+  // lastSeenMessageId, so it takes the no-advance-with-match branch (clears
+  // any stale pendingRemoteDisplayedStanzaId, pointer unchanged) rather than
+  // the no-match branch (which would only ever stash a pending marker and
+  // never touch lastSeenMessageId at all). That in turn fires the roomMeta
+  // subscription → consider() → resolveSeenStanzaId('s9') → the
+  // lastKnownNodeStanzaId exact-equal skip in doPublish. Without that dedup,
+  // this would enqueue and flush a second publish.
+  it('own PEP echo never re-publishes (no loop)', async () => {
+    const ROOM = 'room@conference.example'
+    const client = makeClient()
+    connectionStore.setState({ status: 'online', jid: 'romeo@montague.example/phone' } as never)
+
+    seedRoom(ROOM, [rmsg(ROOM, 'm9', 's9', 9)])
+
+    const cleanup = setupMdsSideEffects(client as never)
+    client._emit('online')
+    await vi.runOnlyPendingTimersAsync()
+
+    // Advance the read position and let the publish of s9 resolve.
+    roomStore.getState().updateLastSeenMessageId(ROOM, 'm9')
+    await vi.advanceTimersByTimeAsync(2_000)
+    expect(client.mds.publishDisplayed).toHaveBeenCalledTimes(1)
+    expect(client.mds.publishDisplayed).toHaveBeenCalledWith(ROOM, 's9', ROOM)
+
+    // The node echoes our own publish: the read:displayed-synced path records
+    // the high-water mark, and the binding applies the SAME position back.
+    // m9 is resident, so this resolves a real match (id === current
+    // lastSeenMessageId) — the no-advance-with-match branch — and still
+    // re-fires the roomMeta subscription (pendingRemoteDisplayedStanzaId
+    // toggles from undefined to undefined via a fresh map, no-op value but a
+    // new object), driving consider() to re-check s9 against the node.
+    client._emit('read:displayed-synced', { conversationId: ROOM, stanzaId: 's9' })
+    roomStore.getState().applyRemoteDisplayed(ROOM, 's9')
+
+    await vi.advanceTimersByTimeAsync(2_000)
+    expect(client.mds.publishDisplayed).toHaveBeenCalledTimes(1) // no loop
+    cleanup()
+  })
+
   it('retracts the MDS marker when a conversation is deleted while online+synced', async () => {
     const cid = 'juliet@capulet.example'
     const client = makeClient()
