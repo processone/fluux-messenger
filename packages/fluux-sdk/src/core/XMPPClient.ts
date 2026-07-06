@@ -2273,6 +2273,14 @@ export class XMPPClient {
       }
     } catch { /* ignore storage errors (e.g., SSR environments) */ }
 
+    // Repopulate sidebar ordering from the durable cache. On a reload that resumes
+    // via SM, the room list is rebuilt from persisted state where every non-active
+    // room's messages were evicted before save, so it carries no lastMessage and
+    // would sort at epoch-0 until opened. This mirrors the fresh-session hydration;
+    // it is network-free, batched, and never downgrades a fresher preview, so it is
+    // a cheap no-op for in-process resumes whose store is still intact.
+    this.stores?.room.hydratePreviewsFromCache().catch(() => {})
+
     const SM_SHORT_DISCONNECT_MS = 120_000
     const isShortDisconnect = disconnectDurationMs != null
       && disconnectDurationMs < SM_SHORT_DISCONNECT_MS
