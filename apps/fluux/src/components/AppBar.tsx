@@ -1,7 +1,7 @@
 import { memo, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
 import { useNavigate, useLocation, useNavigationType } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { ChevronLeft, ChevronRight, Zap } from 'lucide-react'
+import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { useIsDesktop } from '@/hooks/useIsDesktop'
 import { useHasHover } from '@/hooks/useHasHover'
 import { useFullscreen } from '@/hooks/useFullscreen'
@@ -156,7 +156,7 @@ export const AppBar = memo(function AppBar() {
         </button>
       </div>
 
-      {/* Global command palette (⌘K) — a compact quick-launcher. Deliberately
+      {/* Global command palette (⌘K) — a plain shortcut pill. Deliberately
           not a magnifier, so it doesn't read as the sidebar's message search. */}
       <div className="flex-1 flex justify-end">
         <button
@@ -164,12 +164,9 @@ export const AppBar = memo(function AppBar() {
           onClick={() => toggleModal('commandPalette')}
           aria-label={t('commandPalette.open', 'Open command palette')}
           title={t('commandPalette.open', 'Open command palette')}
-          className="flex items-center gap-1.5 h-6 px-2 rounded-md bg-fluux-bg/50 border border-fluux-bg text-fluux-muted hover:bg-fluux-bg/80 transition-colors"
+          className="flex items-center justify-center h-6 px-2.5 rounded-md bg-fluux-bg/50 border border-fluux-bg text-fluux-muted hover:bg-fluux-bg/80 transition-colors"
         >
-          <Zap className="size-3.5 flex-shrink-0" />
-          <kbd className="text-[10px] leading-none border border-fluux-muted/30 rounded px-1 py-0.5">
-            {shortcutMod}K
-          </kbd>
+          <kbd className="text-[11px] leading-none font-sans">{shortcutMod}K</kbd>
         </button>
       </div>
 
