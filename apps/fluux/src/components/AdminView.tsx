@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Server, Plus, ArrowLeft, Menu } from 'lucide-react'
-import { useAdmin, useXMPP, adminStore, getLocalPart, type AdminCategory, type AdminUser, type AdminRoom } from '@fluux/sdk'
-import { useAdminStore } from '@fluux/sdk/react'
+import { useAdmin, useXMPP, adminStore, getBareJid, getLocalPart, type AdminCategory, type AdminUser, type AdminRoom } from '@fluux/sdk'
+import { useAdminStore, useConnectionStore } from '@fluux/sdk/react'
 import { useModalInput } from '@/hooks'
 import { useWindowedList } from '../hooks/useWindowedList'
 import { Tooltip } from './Tooltip'
@@ -70,6 +70,7 @@ export function AdminView({ activeCategory, onBack }: AdminViewProps) {
   } = useAdmin()
 
   const usersTruncated = useAdminStore((s) => s.usersTruncated)
+  const ownJid = useConnectionStore((s) => s.jid)
 
   // Local state
   const [userSearchQuery, setUserSearchQuery] = useState('')
@@ -364,6 +365,9 @@ export function AdminView({ activeCategory, onBack }: AdminViewProps) {
           onChangePassword={handleChangePassword}
           onBanAccount={handleBanAccount}
           canBanAccount={hasCommand('ban_account')}
+          isOwnAccount={
+            ownJid != null && getBareJid(ownJid).toLowerCase() === selectedUser.jid.toLowerCase()
+          }
           isExecuting={isExecuting}
           fetchLastLogin={fetchUserLastLogin}
           hasLastLoginCommand={hasCommand('get-user-lastlogin')}
