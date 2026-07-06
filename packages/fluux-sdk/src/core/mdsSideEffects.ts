@@ -23,6 +23,7 @@
  */
 
 import type { XMPPClient } from './XMPPClient'
+import type { DisplayedMarker } from './modules/Mds'
 import type { SideEffectsOptions } from './chatSideEffects'
 import { chatStore, connectionStore, roomStore } from '../stores'
 import { createKeyedCoalescer } from '../utils/keyedCoalescer'
@@ -55,11 +56,12 @@ export function setupMdsSideEffects(
   const lastKnownNodeStanzaId = new Map<string, string>()
   // The lastSeenMessageId we last considered per JID, to detect advances.
   const lastConsideredSeenId = new Map<string, string | undefined>()
-  // Seed markers (jid → stanzaId) whose JID was NOT a known room at seed time.
+  // Seed markers (jid → marker) whose JID was NOT a known room at seed time.
   // The fresh-session seed runs before bookmarks load (roomStore.rooms is empty),
   // so a room's marker would otherwise route to chat and be dropped. We stash it
-  // here and re-apply it when roomStore.rooms gains the JID (self-heal).
-  const unroutedSeedMarkers = new Map<string, string>()
+  // here and re-apply it when roomStore.rooms gains the JID (self-heal). A stashed
+  // marker also remembers whether it still needs a legacy-format migration.
+  const unroutedSeedMarkers = new Map<string, { stanzaId: string; legacy: boolean }>()
   // Live conversation/room JIDs, to detect user deletes (retraction). Maintained
   // while disarmed; the removed delta is retracted only while armed (syncEnabled).
   let trackedJids = new Set<string>()
@@ -67,6 +69,33 @@ export function setupMdsSideEffects(
   /** Is this JID a known room (bookmarked or joined)? Routes accessors per-store. */
   function isRoom(jid: string): boolean {
     return roomStore.getState().rooms.has(jid)
+  }
+
+  /** Our own bare JID, or '' before the connection JID is known. */
+  function ownBareJid(): string {
+    const jid = connectionStore.getState().jid
+    return jid ? getBareJid(jid) : ''
+  }
+
+  /**
+   * XEP-0359 `by` for a conversation's stanza-ids: the archive that assigned
+   * them — the room itself for MUC, our own server (bare JID) for 1:1.
+   */
+  function stanzaIdBy(jid: string): string {
+    return isRoom(jid) ? jid : ownBareJid()
+  }
+
+  /**
+   * Republish a legacy-format marker (pre-0.18 payload) in XEP-0490 format so
+   * other clients can read it. Best-effort; the value is already correct
+   * locally and on the node, only its shape is wrong.
+   */
+  function migrateLegacyMarker(jid: string, stanzaId: string): void {
+    const by = stanzaIdBy(jid)
+    if (!by) return
+    client.mds.publishDisplayed(jid, stanzaId, by).catch(() => {
+      // Best-effort — an unconverted marker is republished on the next advance.
+    })
   }
 
   /** Index of a stanza-id in a conversation's/room's loaded messages, or -1. */
@@ -123,8 +152,10 @@ export function setupMdsSideEffects(
       // below) or a redundant re-enqueue. The local marker is forward-only, so
       // re-asserting a value the node already has is always pointless.
       if (lastKnownNodeStanzaId.get(jid) === stanzaId) continue
+      const by = stanzaIdBy(jid)
+      if (!by) continue // own JID unknown (should not happen while online) — retry next advance
       try {
-        await client.mds.publishDisplayed(jid, stanzaId)
+        await client.mds.publishDisplayed(jid, stanzaId, by)
         lastKnownNodeStanzaId.set(jid, stanzaId)
       } catch {
         // Best-effort — localStorage keeps the read position; reconnect re-publishes.
@@ -254,13 +285,15 @@ export function setupMdsSideEffects(
       // Collect-then-apply: applyRemoteDisplayed writes the combined `rooms` map,
       // which re-fires this subscription synchronously. Delete each entry from the
       // stash BEFORE applying so a re-entrant pass finds nothing to redo.
-      const drainable: Array<[string, string]> = []
-      for (const [jid, stanzaId] of unroutedSeedMarkers) {
-        if (rooms.has(jid)) drainable.push([jid, stanzaId])
+      const drainable: Array<[string, { stanzaId: string; legacy: boolean }]> = []
+      for (const [jid, marker] of unroutedSeedMarkers) {
+        if (rooms.has(jid)) drainable.push([jid, marker])
       }
       for (const [jid] of drainable) unroutedSeedMarkers.delete(jid)
-      for (const [jid, stanzaId] of drainable) {
+      for (const [jid, { stanzaId, legacy }] of drainable) {
         roomStore.getState().applyRemoteDisplayed(jid, stanzaId)
+        // The JID is now classified as a room → a legacy item can be migrated.
+        if (legacy) migrateLegacyMarker(jid, stanzaId)
       }
     }
   )
@@ -283,7 +316,7 @@ export function setupMdsSideEffects(
   const unsubscribeOnline = client.on('online', () => {
     syncEnabled = false
     void (async () => {
-      let markers: Array<{ conversationJid: string; stanzaId: string }> = []
+      let markers: DisplayedMarker[] = []
       try {
         markers = await client.mds.fetchAllDisplayed()
       } catch {
@@ -293,7 +326,7 @@ export function setupMdsSideEffects(
       // Reset the unrouted-marker stash for this seed (mirrors dirty.drop below).
       unroutedSeedMarkers.clear()
 
-      for (const { conversationJid, stanzaId } of markers) {
+      for (const { conversationJid, stanzaId, legacy } of markers) {
         const bare = getBareJid(conversationJid)
         lastKnownNodeStanzaId.set(bare, stanzaId)
         // Route the seed by membership. The fresh-session seed runs BEFORE
@@ -303,11 +336,21 @@ export function setupMdsSideEffects(
         // entity) AND is stashed so the rooms subscription below re-applies it
         // once the bookmark lands. A genuine 1:1 JID also lands in the else
         // branch and simply never drains — cleared on the next seed.
+        //
+        // Legacy-format items (pre-0.18 payload) are additionally republished
+        // in spec format once the JID can be classified (`by` differs for
+        // rooms vs 1:1): known rooms and known 1:1 entities migrate here;
+        // stashed room markers migrate when their bookmark drains below. A
+        // JID we can never classify keeps its legacy item until the next
+        // local read advance overwrites it.
         if (isRoom(bare)) {
           roomStore.getState().applyRemoteDisplayed(bare, stanzaId)
+          if (legacy) migrateLegacyMarker(bare, stanzaId)
         } else {
           chatStore.getState().applyRemoteDisplayed(bare, stanzaId)
-          unroutedSeedMarkers.set(bare, stanzaId)
+          const migrateNow = !!legacy && chatStore.getState().conversationEntities.has(bare)
+          if (migrateNow) migrateLegacyMarker(bare, stanzaId)
+          unroutedSeedMarkers.set(bare, { stanzaId, legacy: !!legacy && !migrateNow })
         }
       }
 

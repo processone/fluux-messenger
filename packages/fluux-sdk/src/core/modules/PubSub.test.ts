@@ -270,7 +270,37 @@ describe('PubSub Module', () => {
         },
       ])
 
-    it('emits read:displayed-synced for own MDS node notifications', async () => {
+    it('emits read:displayed-synced for own MDS node notifications (XEP-0490 payload)', async () => {
+      await connectClient()
+
+      // Spec payload, as published by other compliant clients (Conversations,
+      // Gajim, …): mds-namespaced <displayed/> wrapping a XEP-0359 stanza-id.
+      mockXmppClientInstance._emit('stanza', mdsEvent('user@example.com', [
+        {
+          name: 'item',
+          attrs: { id: 'juliet@capulet.example' },
+          children: [
+            {
+              name: 'displayed',
+              attrs: { xmlns: 'urn:xmpp:mds:displayed:0' },
+              children: [
+                {
+                  name: 'stanza-id',
+                  attrs: { xmlns: 'urn:xmpp:sid:0', id: 'stanza-99', by: 'user@example.com' },
+                },
+              ],
+            },
+          ],
+        },
+      ]))
+
+      expect(emitSDKSpy).toHaveBeenCalledWith('read:displayed-synced', {
+        conversationId: 'juliet@capulet.example',
+        stanzaId: 'stanza-99',
+      })
+    })
+
+    it('emits read:displayed-synced for legacy pre-0.18 Fluux payloads (migration read path)', async () => {
       await connectClient()
 
       mockXmppClientInstance._emit('stanza', mdsEvent('user@example.com', [

@@ -148,7 +148,7 @@ describe('setupMdsSideEffects', () => {
   it('publishes the resolved stanza-id once, debounced, on a local read advance', async () => {
     const cid = 'juliet@capulet.example'
     const client = makeClient()
-    connectionStore.setState({ status: 'online' } as never)
+    connectionStore.setState({ status: 'online', jid: 'romeo@montague.example/phone' } as never)
     const cleanup = setupMdsSideEffects(client as never)
 
     client._emit('online')
@@ -162,14 +162,15 @@ describe('setupMdsSideEffects', () => {
     await vi.advanceTimersByTimeAsync(2_000)
 
     expect(client.mds.publishDisplayed).toHaveBeenCalledTimes(1)
-    expect(client.mds.publishDisplayed).toHaveBeenCalledWith(cid, 's2')
+    // 1:1 → by is our own bare JID (the archive that assigned the stanza-id).
+    expect(client.mds.publishDisplayed).toHaveBeenCalledWith(cid, 's2', 'romeo@montague.example')
     cleanup()
   })
 
   it('does not publish a marker with no stanza-id', async () => {
     const cid = 'juliet@capulet.example'
     const client = makeClient()
-    connectionStore.setState({ status: 'online' } as never)
+    connectionStore.setState({ status: 'online', jid: 'romeo@montague.example/phone' } as never)
     const cleanup = setupMdsSideEffects(client as never)
     client._emit('online')
     await vi.runOnlyPendingTimersAsync()
@@ -186,7 +187,7 @@ describe('setupMdsSideEffects', () => {
   it('drops pending publishes on disconnect', async () => {
     const cid = 'juliet@capulet.example'
     const client = makeClient()
-    connectionStore.setState({ status: 'online' } as never)
+    connectionStore.setState({ status: 'online', jid: 'romeo@montague.example/phone' } as never)
     const cleanup = setupMdsSideEffects(client as never)
     client._emit('online')
     await vi.runOnlyPendingTimersAsync()
@@ -204,7 +205,7 @@ describe('setupMdsSideEffects', () => {
   it('does not re-publish the echo of a live incoming remote marker', async () => {
     const cid = 'juliet@capulet.example'
     const client = makeClient()
-    connectionStore.setState({ status: 'online' } as never)
+    connectionStore.setState({ status: 'online', jid: 'romeo@montague.example/phone' } as never)
 
     // Conversation already exists with a settled local read position at m1 before
     // the side effect starts, so the fresh-session seed snapshots m1 as the last
@@ -235,7 +236,7 @@ describe('setupMdsSideEffects', () => {
   it('publishes the room-archive stanza-id on a local room read advance, debounced', async () => {
     const ROOM = 'room@conference.example'
     const client = makeClient()
-    connectionStore.setState({ status: 'online' } as never)
+    connectionStore.setState({ status: 'online', jid: 'romeo@montague.example/phone' } as never)
 
     // Seed the room (rooms + roomRuntime + roomMeta) so isRoom()/routing works.
     seedRoom(ROOM, [rmsg(ROOM, 'm1', 's1', 1), rmsg(ROOM, 'm2', 's2', 2)], 'm1')
@@ -249,7 +250,8 @@ describe('setupMdsSideEffects', () => {
     await vi.advanceTimersByTimeAsync(2_000)
 
     expect(client.mds.publishDisplayed).toHaveBeenCalledTimes(1)
-    expect(client.mds.publishDisplayed).toHaveBeenCalledWith(ROOM, 's2')
+    // MUC → by is the room JID (the room's archive assigned the stanza-id).
+    expect(client.mds.publishDisplayed).toHaveBeenCalledWith(ROOM, 's2', ROOM)
     cleanup()
   })
 
@@ -259,7 +261,7 @@ describe('setupMdsSideEffects', () => {
     client.mds.fetchAllDisplayed = vi
       .fn()
       .mockResolvedValue([{ conversationJid: ROOM, stanzaId: 's2' }])
-    connectionStore.setState({ status: 'online' } as never)
+    connectionStore.setState({ status: 'online', jid: 'romeo@montague.example/phone' } as never)
 
     // roomStore.rooms must contain ROOM with its messages so the seed routes to
     // the room and applyRemoteDisplayed can resolve the stanza-id to a local id.
@@ -281,7 +283,7 @@ describe('setupMdsSideEffects', () => {
     client.mds.fetchAllDisplayed = vi
       .fn()
       .mockResolvedValue([{ conversationJid: ROOM, stanzaId: 's2' }])
-    connectionStore.setState({ status: 'online' } as never)
+    connectionStore.setState({ status: 'online', jid: 'romeo@montague.example/phone' } as never)
 
     const cleanup = setupMdsSideEffects(client as never)
     client._emit('online')
@@ -310,7 +312,7 @@ describe('setupMdsSideEffects', () => {
   it('does not re-publish the echo of a live incoming remote marker for a known room', async () => {
     const ROOM = 'room@conference.example'
     const client = makeClient()
-    connectionStore.setState({ status: 'online' } as never)
+    connectionStore.setState({ status: 'online', jid: 'romeo@montague.example/phone' } as never)
 
     // Known room with a settled local read position at m1 before the side effect
     // starts, so the seed snapshots m1 as the last considered position.
@@ -337,7 +339,7 @@ describe('setupMdsSideEffects', () => {
   it('retracts the MDS marker when a conversation is deleted while online+synced', async () => {
     const cid = 'juliet@capulet.example'
     const client = makeClient()
-    connectionStore.setState({ status: 'online' } as never)
+    connectionStore.setState({ status: 'online', jid: 'romeo@montague.example/phone' } as never)
     const cleanup = setupMdsSideEffects(client as never)
     client._emit('online')
     await vi.runOnlyPendingTimersAsync() // seed completes → syncEnabled true, baseline built
@@ -354,7 +356,7 @@ describe('setupMdsSideEffects', () => {
 
   it('does NOT retract on a wholesale clear (logout/reset)', async () => {
     const client = makeClient()
-    connectionStore.setState({ status: 'online' } as never)
+    connectionStore.setState({ status: 'online', jid: 'romeo@montague.example/phone' } as never)
     const cleanup = setupMdsSideEffects(client as never)
     client._emit('online')
     await vi.runOnlyPendingTimersAsync()
@@ -367,6 +369,105 @@ describe('setupMdsSideEffects', () => {
     await vi.advanceTimersByTimeAsync(0)
 
     expect(client.mds.retractDisplayed).not.toHaveBeenCalled()
+    cleanup()
+  })
+
+  it('migrates a legacy-format 1:1 seed marker by republishing it in spec format', async () => {
+    const cid = 'juliet@capulet.example'
+    const client = makeClient()
+    client.mds.fetchAllDisplayed = vi
+      .fn()
+      .mockResolvedValue([{ conversationJid: cid, stanzaId: 's1', legacy: true }])
+    connectionStore.setState({ status: 'online', jid: 'romeo@montague.example/phone' } as never)
+
+    // Known 1:1 conversation entity → the seed can classify the JID and migrate.
+    addConversation(cid)
+
+    const cleanup = setupMdsSideEffects(client as never)
+    client._emit('online')
+    await vi.runOnlyPendingTimersAsync()
+
+    expect(client.mds.publishDisplayed).toHaveBeenCalledWith(cid, 's1', 'romeo@montague.example')
+
+    // Migration is one-shot: nothing further is pending or debounced.
+    await vi.advanceTimersByTimeAsync(2_000)
+    expect(client.mds.publishDisplayed).toHaveBeenCalledTimes(1)
+    cleanup()
+  })
+
+  it('a failed legacy migration does not break the seed or later publishing', async () => {
+    const cid = 'juliet@capulet.example'
+    const client = makeClient()
+    client.mds.fetchAllDisplayed = vi
+      .fn()
+      .mockResolvedValue([{ conversationJid: cid, stanzaId: 's1', legacy: true }])
+    // The migration republish fails (e.g. transient IQ error)…
+    client.mds.publishDisplayed = vi.fn().mockRejectedValueOnce(new Error('timeout'))
+    connectionStore.setState({ status: 'online', jid: 'romeo@montague.example/phone' } as never)
+    addConversation(cid)
+
+    const cleanup = setupMdsSideEffects(client as never)
+    client._emit('online')
+    await vi.runOnlyPendingTimersAsync()
+
+    expect(client.mds.publishDisplayed).toHaveBeenCalledTimes(1) // the failed migration
+
+    // …and a later local read advance still publishes normally.
+    client.mds.publishDisplayed = vi.fn().mockResolvedValue(undefined)
+    seedMessages(cid, [msg('m1', 's1'), msg('m2', 's2')])
+    seedMeta(cid, 'm1')
+    chatStore.getState().updateLastSeenMessageId(cid, 'm2')
+    await vi.advanceTimersByTimeAsync(2_000)
+
+    expect(client.mds.publishDisplayed).toHaveBeenCalledWith(cid, 's2', 'romeo@montague.example')
+    cleanup()
+  })
+
+  it('does NOT republish spec-format seed markers', async () => {
+    const cid = 'juliet@capulet.example'
+    const client = makeClient()
+    client.mds.fetchAllDisplayed = vi
+      .fn()
+      .mockResolvedValue([{ conversationJid: cid, stanzaId: 's1' }])
+    connectionStore.setState({ status: 'online', jid: 'romeo@montague.example/phone' } as never)
+    addConversation(cid)
+
+    const cleanup = setupMdsSideEffects(client as never)
+    client._emit('online')
+    await vi.runOnlyPendingTimersAsync()
+    await vi.advanceTimersByTimeAsync(2_000)
+
+    expect(client.mds.publishDisplayed).not.toHaveBeenCalled()
+    cleanup()
+  })
+
+  it('migrates a legacy room marker when the room becomes known after the seed', async () => {
+    const ROOM = 'room@conference.example'
+    const client = makeClient()
+    client.mds.fetchAllDisplayed = vi
+      .fn()
+      .mockResolvedValue([{ conversationJid: ROOM, stanzaId: 's2', legacy: true }])
+    connectionStore.setState({ status: 'online', jid: 'romeo@montague.example/phone' } as never)
+
+    const cleanup = setupMdsSideEffects(client as never)
+    client._emit('online')
+    await vi.runOnlyPendingTimersAsync()
+
+    // Unknown JID at seed time (bookmarks not loaded, no conversation entity):
+    // cannot classify → no migration yet.
+    expect(client.mds.publishDisplayed).not.toHaveBeenCalled()
+
+    // The bookmark lands: the room appears, the stashed marker drains, and the
+    // legacy marker is republished in spec format with by = room JID.
+    seedRoom(ROOM, [rmsg(ROOM, 'm1', 's1', 1), rmsg(ROOM, 'm2', 's2', 2)])
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(client.mds.publishDisplayed).toHaveBeenCalledWith(ROOM, 's2', ROOM)
+    expect(roomStore.getState().roomMeta.get(ROOM)?.lastSeenMessageId).toBe('m2')
+
+    // And no echo republish on top of the migration.
+    await vi.advanceTimersByTimeAsync(2_000)
+    expect(client.mds.publishDisplayed).toHaveBeenCalledTimes(1)
     cleanup()
   })
 
