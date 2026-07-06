@@ -18,6 +18,8 @@ interface AdminUserViewProps {
   onBanAccount: (jid: string) => void
   /** Discovery-driven: only render the Ban action when the server advertises it. */
   canBanAccount: boolean
+  /** Self-protection: hide Ban/Delete when the viewed user is the signed-in admin. */
+  isOwnAccount: boolean
   isExecuting: boolean
   /** Fetch a user's last-login value (raw, server-localized string — not parsed). */
   fetchLastLogin: (jid: string, lang: string) => Promise<string | null>
@@ -33,6 +35,7 @@ export function AdminUserView({
   onChangePassword,
   onBanAccount,
   canBanAccount,
+  isOwnAccount,
   isExecuting,
   fetchLastLogin,
   hasLastLoginCommand,
@@ -147,7 +150,7 @@ export function AdminUserView({
               <Power className="size-4 text-fluux-muted" aria-hidden />
             </SettingsRow>
 
-            {canBanAccount && (
+            {canBanAccount && !isOwnAccount && (
               <SettingsRow
                 label={t('admin.users.banAccount')}
                 onClick={() => setShowBanConfirm(true)}
@@ -158,14 +161,16 @@ export function AdminUserView({
               </SettingsRow>
             )}
 
-            <SettingsRow
-              label={t('admin.users.delete')}
-              onClick={() => setShowDeleteConfirm(true)}
-              disabled={isExecuting}
-              danger
-            >
-              <Trash2 className="size-4 text-fluux-error" aria-hidden />
-            </SettingsRow>
+            {!isOwnAccount && (
+              <SettingsRow
+                label={t('admin.users.delete')}
+                onClick={() => setShowDeleteConfirm(true)}
+                disabled={isExecuting}
+                danger
+              >
+                <Trash2 className="size-4 text-fluux-error" aria-hidden />
+              </SettingsRow>
+            )}
           </SettingsGroup>
         </SettingsSection>
       </div>

@@ -64,6 +64,7 @@ describe('AdminUserView', () => {
         onChangePassword={mockOnChangePassword}
         onBanAccount={mockOnBanAccount}
         canBanAccount={true}
+        isOwnAccount={false}
         isExecuting={false}
         fetchLastLogin={mockFetchLastLogin}
         hasLastLoginCommand={true}
@@ -123,6 +124,16 @@ describe('AdminUserView', () => {
       expect(screen.getByRole('button', { name: /end sessions/i })).toBeDisabled()
       expect(screen.getByRole('button', { name: /ban account/i })).toBeDisabled()
       expect(screen.getByRole('button', { name: /delete user/i })).toBeDisabled()
+    })
+  })
+
+  describe('own account', () => {
+    it('hides the ban and delete rows when viewing your own account', () => {
+      renderView({ isOwnAccount: true })
+      expect(screen.getByRole('button', { name: /change password/i })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /end sessions/i })).toBeInTheDocument()
+      expect(screen.queryByText('Ban account')).not.toBeInTheDocument()
+      expect(screen.queryByText('Delete user')).not.toBeInTheDocument()
     })
   })
 
