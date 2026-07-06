@@ -55,6 +55,15 @@ C 24 45 55 18 100 18 Z
 
 Gradient runs along the silhouette diagonal (tail → top-right), `gradientUnits="userSpaceOnUse"`, uneven stops so the first hue dominates: 0 / 0.45 / 0.72 / 1.
 
+### Light-mode adaptations (validated naive-vs-adapted in mockups)
+
+Light mode is never a palette swap — the same structural lesson as the contrast audit's light-mode findings. On pale backgrounds, additive glow doesn't read and white speculars vanish, so:
+
+1. **Rim** uses deeper light-tuned dawn stops (`--fluux-aurora-rim-*`, see §4) so the silhouette holds on the pale login background; the white specular hairline is replaced by an ink hairline (`rgba(30,42,70,0.30)`, ~0.8px). White highlights survive only *inside* the pane as the diagonal sheen.
+2. **Depth comes from shadow, not glow** — a soft drop shadow under the pane (navy ~14%, blurred) grounds the glass object.
+3. **Backlight** blobs use more saturated, slightly darker dawn hues at higher opacity (~0.5 vs ~0.4): on white, the blobs must carry pigment rather than light.
+4. **Pane** is a white gradient fill (0.72 → 0.42 top-to-bottom); no stars.
+
 ## 4. Theming
 
 Four new foundation tokens in `index.css`, consumed by the SVG gradient stops and halos:
@@ -65,6 +74,8 @@ Four new foundation tokens in `index.css`, consumed by the SVG gradient stops an
 | `--fluux-aurora-2` | `#4FB6E8` | `#D66F8E` |
 | `--fluux-aurora-3` | `#7C8CFF` | `#8F7BE8` |
 | `--fluux-aurora-4` | `#A78BFA` | `#4E8FD9` |
+
+Plus a rim quartet, `--fluux-aurora-rim-1..4`: in dark mode these equal the aurora stops; light mode overrides them with deeper dawn values (`#C67428 / #C25579 / #7862D8 / #3A78C2`) so strokes hold contrast on pale surfaces while the softer base stops keep serving the backlight. Same one-hue-two-jobs pattern as the `--fluux-status-error` / `--fluux-text-error` split.
 
 - Backlight hues derive from stops 1, 3 and 4 (dark) and the dawn stops in light mode; overall backlight intensity keeps scaling with the existing `--fluux-brand-glow-opacity` (0.35 dark / 0.6 light).
 - Other builtin themes inherit these Aurora defaults, exactly as they inherit `--fluux-grad` today. Theme authors may override; documented in THEMES.md as optional identity tokens.
@@ -87,7 +98,7 @@ Two chrome-level applications of the aurora tokens, both validated against flat 
 
 **Aurora horizon hairline.** A 1px overlay on the conversation/room header divider: `linear-gradient(90deg, transparent, aurora-1 12%, aurora-2 40%, aurora-3 70%, transparent)` at ~0.65 opacity, drawn via a pseudo-element on top of the existing divider — the standard `--fluux-chat-header-border` hairline stays underneath, so the seam-visibility guarantees from the contrast audit are unaffected. Fades at both ends; light mode uses the dawn stops.
 
-**Glass send button.** The composer send control becomes state-dependent: while the input is empty it stays the current muted icon; once there is content to send it becomes a ~34px circular liquid-glass button — translucent fill (`rgba(255,255,255,0.10)`), `backdrop-filter: blur(9px) saturate(1.6)`, 1px `rgba(255,255,255,0.28)` border, inset top specular, white plane icon — with a small blurred aurora glow element (stop-1 + stop-4 radials) positioned behind it inside the composer, shining through the glass. The aurora appears exactly when the user is about to speak — identity tied to the brand action, not permanent decoration. Fallback: under `data-transparency="reduced"` (and on platforms where the glass tier is disabled, see §5c) the button falls back to a solid aurora-gradient fill with dark-ink icon (`--fluux-aurora-ink: #08111F`) — the validated solid variant. Existing aria-label and keyboard behavior unchanged.
+**Glass send button.** The composer send control becomes state-dependent: while the input is empty it stays the current muted icon; once there is content to send it becomes a ~34px circular liquid-glass button — translucent fill (`rgba(255,255,255,0.10)`), `backdrop-filter: blur(9px) saturate(1.6)`, 1px `rgba(255,255,255,0.28)` border, inset top specular, white plane icon — with a small blurred aurora glow element (stop-1 + stop-4 radials) positioned behind it inside the composer, shining through the glass. In light mode the button flips its physics: dark-alpha border (`rgba(30,42,70,0.18)`), higher-opacity white fill (~0.5), ink icon (`--fluux-aurora-ink`) instead of white, dawn glow behind. The aurora appears exactly when the user is about to speak — identity tied to the brand action, not permanent decoration. Fallback: under `data-transparency="reduced"` (and on platforms where the glass tier is disabled, see §5c) the button falls back to a solid aurora-gradient fill with dark-ink icon (`--fluux-aurora-ink: #08111F`) — the validated solid variant. Existing aria-label and keyboard behavior unchanged.
 
 Both consume the §4 tokens; other builtin themes inherit them (same precedent as the login mark), and THEMES.md documents how theme authors override or disable them.
 
@@ -99,6 +110,8 @@ The existing `.fluux-glass` surface (modals + command palette; tokens, `data-tra
 - **Deeper translucency** — panel alpha drops (~0.86 → ~0.60) while blur/saturation rise (`blur(22px) saturate(1.65)`), new tokens `--fluux-glass-blur-strong` and `--fluux-glass-specular`.
 - **Aurora backlight in the scrim** — a soft aurora glow rendered in the modal scrim behind the panel, so the glass has real light to refract (this is what separates the effect from generic glassmorphism).
 - **Primary buttons on glass** — translucent accent fill with inset specular (as validated in the mockup).
+
+**Light mode:** panel opacity stays higher than dark (~0.66 vs ~0.60 — legibility over light content), the border stays dark-alpha (the light glass pattern already established after the audit), the inset white specular reads well and stays, the outer shadow deepens, and the scrim backlight uses the dawn stops.
 
 **Gating:** the liquid tier applies on macOS/Windows/web; Linux (WebKitGTK) keeps the current lighter frost — heavy `backdrop-filter` is the known compositing weak point there. `data-transparency="reduced"` keeps returning fully opaque panels. Both gates reuse the existing mechanism in `index.css:542-560`.
 
