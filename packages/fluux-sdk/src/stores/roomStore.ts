@@ -2489,6 +2489,39 @@ export const roomStore = createStore<RoomState>()(
       if (state.activeRoomJid !== roomJid) {
         const newRooms = new Map(state.rooms)
         newRooms.set(roomJid, { ...room, lastMessage })
+
+        // Badge hydration (spec §1): a forward merge extends contiguous
+        // history past the read pointer — recompute unread/mention counts so
+        // an unopened room regains its badge after catch-up. Backward merges
+        // only prepend older history (nothing after the pointer changes).
+        // The live path (addMessage/onMessageReceived) keeps owning
+        // incremental counting; this reconciles bulk archive delivery.
+        if (direction === 'forward' && existingMeta) {
+          const recomputed = notifState.recomputeCountsFromPointer(
+            {
+              unreadCount: existingMeta.unreadCount,
+              mentionsCount: existingMeta.mentionsCount,
+              lastReadAt: existingMeta.lastReadAt,
+              lastSeenMessageId: existingMeta.lastSeenMessageId,
+              firstNewMessageId: state.firstNewMessageMarkers.get(roomJid),
+            },
+            mergedForMarker,
+            { countMentions: true }
+          )
+          newMeta.set(roomJid, {
+            ...newMeta.get(roomJid)!,
+            unreadCount: recomputed.unreadCount,
+            mentionsCount: recomputed.mentionsCount,
+            lastSeenMessageId: recomputed.lastSeenMessageId,
+          })
+          newRooms.set(roomJid, {
+            ...newRooms.get(roomJid)!,
+            unreadCount: recomputed.unreadCount,
+            mentionsCount: recomputed.mentionsCount,
+            lastSeenMessageId: recomputed.lastSeenMessageId,
+          })
+        }
+
         // roomRuntime deliberately untouched.
         return { rooms: newRooms, roomMeta: newMeta, mamQueryStates: newStates, roomGaps: newGaps }
       }

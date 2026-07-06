@@ -3179,6 +3179,176 @@ describe('roomStore', () => {
     })
   })
 
+  describe('mergeRoomMAMMessages badge hydration', () => {
+    const roomJid = 'room@conference.example.com'
+
+    beforeEach(() => {
+      roomStore.getState().addRoom(createRoom(roomJid, { joined: true }))
+      // Background catch-up hydration only applies to a NON-active room —
+      // point activeRoomJid elsewhere unless a test explicitly marks roomJid active.
+      roomStore.setState({ activeRoomJid: 'other@conference.example.com' })
+    })
+
+    it('forward merge into a non-active room recomputes unread and mention counts from the pointer', () => {
+      roomStore.setState((state) => {
+        const meta = new Map(state.roomMeta)
+        meta.set(roomJid, { ...meta.get(roomJid)!, lastSeenMessageId: 'm1' })
+        return { roomMeta: meta }
+      })
+
+      const mamMessages: RoomMessage[] = [
+        {
+          type: 'groupchat',
+          id: 'm1',
+          roomJid,
+          from: `${roomJid}/alice`,
+          nick: 'alice',
+          body: 'Already read',
+          timestamp: new Date('2024-01-15T10:00:00Z'),
+          isOutgoing: false,
+          isDelayed: true,
+        },
+        {
+          type: 'groupchat',
+          id: 'm2',
+          roomJid,
+          from: `${roomJid}/bob`,
+          nick: 'bob',
+          body: '@me hi',
+          timestamp: new Date('2024-01-15T10:01:00Z'),
+          isOutgoing: false,
+          isDelayed: true,
+          isMention: true,
+        },
+        {
+          type: 'groupchat',
+          id: 'm3',
+          roomJid,
+          from: `${roomJid}/charlie`,
+          nick: 'charlie',
+          body: 'Also new',
+          timestamp: new Date('2024-01-15T10:02:00Z'),
+          isOutgoing: false,
+          isDelayed: true,
+        },
+      ]
+
+      roomStore.getState().mergeRoomMAMMessages(roomJid, mamMessages, {}, true, 'forward')
+
+      const meta = roomStore.getState().roomMeta.get(roomJid)
+      expect(meta?.unreadCount).toBe(2)
+      expect(meta?.mentionsCount).toBe(1)
+      // Combined map mirrors meta.
+      const room = roomStore.getState().rooms.get(roomJid)
+      expect(room?.unreadCount).toBe(2)
+      expect(room?.mentionsCount).toBe(1)
+    })
+
+    it('forward merge into a room with NO read state snaps the pointer (fresh-join guard)', () => {
+      // No lastSeenMessageId/lastReadAt seeded — fresh room, never read.
+      const mamMessages: RoomMessage[] = [
+        {
+          type: 'groupchat',
+          id: 'f1',
+          roomJid,
+          from: `${roomJid}/alice`,
+          nick: 'alice',
+          body: 'History 1',
+          timestamp: new Date('2024-01-15T10:00:00Z'),
+          isOutgoing: false,
+          isDelayed: true,
+        },
+        {
+          type: 'groupchat',
+          id: 'f2',
+          roomJid,
+          from: `${roomJid}/bob`,
+          nick: 'bob',
+          body: 'History 2',
+          timestamp: new Date('2024-01-15T10:01:00Z'),
+          isOutgoing: false,
+          isDelayed: true,
+        },
+        {
+          type: 'groupchat',
+          id: 'f3',
+          roomJid,
+          from: `${roomJid}/charlie`,
+          nick: 'charlie',
+          body: 'History 3',
+          timestamp: new Date('2024-01-15T10:02:00Z'),
+          isOutgoing: false,
+          isDelayed: true,
+        },
+      ]
+
+      roomStore.getState().mergeRoomMAMMessages(roomJid, mamMessages, {}, true, 'forward')
+
+      const meta = roomStore.getState().roomMeta.get(roomJid)
+      expect(meta?.unreadCount).toBe(0)
+      expect(meta?.mentionsCount).toBe(0)
+      expect(meta?.lastSeenMessageId).toBe('f3')
+    })
+
+    it('backward merge does not touch counts', () => {
+      roomStore.setState((state) => {
+        const meta = new Map(state.roomMeta)
+        meta.set(roomJid, { ...meta.get(roomJid)!, lastSeenMessageId: 'm1', unreadCount: 5, mentionsCount: 1 })
+        return { roomMeta: meta }
+      })
+
+      const mamMessages: RoomMessage[] = [
+        {
+          type: 'groupchat',
+          id: 'older-1',
+          roomJid,
+          from: `${roomJid}/alice`,
+          nick: 'alice',
+          body: 'Older history',
+          timestamp: new Date('2024-01-15T09:00:00Z'),
+          isOutgoing: false,
+          isDelayed: true,
+        },
+      ]
+
+      roomStore.getState().mergeRoomMAMMessages(roomJid, mamMessages, {}, true, 'backward')
+
+      const meta = roomStore.getState().roomMeta.get(roomJid)
+      expect(meta?.unreadCount).toBe(5)
+      expect(meta?.mentionsCount).toBe(1)
+    })
+
+    it('forward merge into the ACTIVE room does not touch counts', () => {
+      roomStore.setState({ activeRoomJid: roomJid })
+      roomStore.setState((state) => {
+        const meta = new Map(state.roomMeta)
+        meta.set(roomJid, { ...meta.get(roomJid)!, lastSeenMessageId: 'm1', unreadCount: 0, mentionsCount: 0 })
+        return { roomMeta: meta }
+      })
+
+      const mamMessages: RoomMessage[] = [
+        {
+          type: 'groupchat',
+          id: 'm2',
+          roomJid,
+          from: `${roomJid}/bob`,
+          nick: 'bob',
+          body: '@me hi',
+          timestamp: new Date('2024-01-15T10:01:00Z'),
+          isOutgoing: false,
+          isDelayed: true,
+          isMention: true,
+        },
+      ]
+
+      roomStore.getState().mergeRoomMAMMessages(roomJid, mamMessages, {}, true, 'forward')
+
+      const meta = roomStore.getState().roomMeta.get(roomJid)
+      expect(meta?.unreadCount).toBe(0)
+      expect(meta?.mentionsCount).toBe(0)
+    })
+  })
+
   describe('mergeRoomMAMMessages gap tracking', () => {
     const roomJid = 'room@conference.example.com'
 

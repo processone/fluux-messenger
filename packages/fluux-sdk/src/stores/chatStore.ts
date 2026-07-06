@@ -1593,11 +1593,47 @@ export const chatStore = createStore<ChatState>()(
           // reconnect's forward catch-up can't refill a backgrounded conversation
           // toward the cap. It rehydrates from cache on open.
           if (!isActive) {
-            if (previewUpdate) {
+            // Badge hydration (spec §1): a forward merge extends contiguous
+            // history past the read pointer — recompute the unread count so an
+            // unopened conversation regains its badge after catch-up. Backward
+            // merges only prepend older history (nothing after the pointer
+            // changes). The live path (addMessage/onMessageReceived) keeps
+            // owning incremental counting; this reconciles bulk archive
+            // delivery. countMentions is omitted (default false) — conversations
+            // don't track mentionsCount the way rooms do.
+            let hydrated: notifState.EntityNotificationState | undefined
+            if (direction === 'forward' && meta && conv) {
+              const pointerState: notifState.EntityNotificationState = {
+                unreadCount: meta.unreadCount,
+                mentionsCount: 0,
+                lastReadAt: meta.lastReadAt,
+                lastSeenMessageId: meta.lastSeenMessageId,
+                firstNewMessageId: state.firstNewMessageMarkers.get(conversationId),
+              }
+              const recomputed = notifState.recomputeCountsFromPointer(pointerState, mergedForMarker)
+              // Same-reference return = nothing changed; skip the map churn.
+              if (recomputed !== pointerState) hydrated = recomputed
+            }
+
+            if (previewUpdate || hydrated) {
               const newMeta = new Map(state.conversationMeta)
-              newMeta.set(conversationId, { ...meta!, lastMessage })
+              newMeta.set(conversationId, {
+                ...meta!,
+                ...(previewUpdate ? { lastMessage } : {}),
+                ...(hydrated ? {
+                  unreadCount: hydrated.unreadCount,
+                  lastSeenMessageId: hydrated.lastSeenMessageId,
+                } : {}),
+              })
               const newConversations = new Map(state.conversations)
-              newConversations.set(conversationId, { ...conv!, lastMessage })
+              newConversations.set(conversationId, {
+                ...conv!,
+                ...(previewUpdate ? { lastMessage } : {}),
+                ...(hydrated ? {
+                  unreadCount: hydrated.unreadCount,
+                  lastSeenMessageId: hydrated.lastSeenMessageId,
+                } : {}),
+              })
               return { mamQueryStates: newStates, conversationMeta: newMeta, conversations: newConversations, conversationGaps: newGaps }
             }
             return { mamQueryStates: newStates, conversationGaps: newGaps }

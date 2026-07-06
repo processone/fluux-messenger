@@ -2729,6 +2729,108 @@ describe('chatStore', () => {
     })
   })
 
+  describe('mergeMAMMessages badge hydration', () => {
+    const conversationId = 'alice@example.com'
+
+    beforeEach(() => {
+      chatStore.getState().addConversation(createConversation(conversationId))
+      // Background catch-up hydration only applies to a NON-active conversation —
+      // point activeConversationId elsewhere.
+      chatStore.setState({ activeConversationId: 'other@example.com' })
+    })
+
+    it('forward merge into a non-active conversation recomputes unread count from the pointer', () => {
+      chatStore.setState((state) => {
+        const meta = new Map(state.conversationMeta)
+        meta.set(conversationId, { ...meta.get(conversationId)!, lastSeenMessageId: 'm1' })
+        return { conversationMeta: meta }
+      })
+
+      const mamMessages: Message[] = [
+        {
+          type: 'chat',
+          id: 'm1',
+          conversationId,
+          from: conversationId,
+          body: 'Already read',
+          timestamp: new Date('2024-01-15T10:00:00Z'),
+          isOutgoing: false,
+          isDelayed: true,
+        },
+        {
+          type: 'chat',
+          id: 'm2',
+          conversationId,
+          from: conversationId,
+          body: 'New 1',
+          timestamp: new Date('2024-01-15T10:01:00Z'),
+          isOutgoing: false,
+          isDelayed: true,
+        },
+        {
+          type: 'chat',
+          id: 'm3',
+          conversationId,
+          from: conversationId,
+          body: 'New 2',
+          timestamp: new Date('2024-01-15T10:02:00Z'),
+          isOutgoing: false,
+          isDelayed: true,
+        },
+      ]
+
+      chatStore.getState().mergeMAMMessages(conversationId, mamMessages, {}, true, 'forward')
+
+      const meta = chatStore.getState().conversationMeta.get(conversationId)
+      expect(meta?.unreadCount).toBe(2)
+      // Combined map mirrors meta.
+      const conv = chatStore.getState().conversations.get(conversationId)
+      expect(conv?.unreadCount).toBe(2)
+    })
+
+    it('forward merge into a conversation with NO read state snaps the pointer (fresh-join guard)', () => {
+      // No lastSeenMessageId/lastReadAt seeded — fresh conversation, never read.
+      const mamMessages: Message[] = [
+        {
+          type: 'chat',
+          id: 'f1',
+          conversationId,
+          from: conversationId,
+          body: 'History 1',
+          timestamp: new Date('2024-01-15T10:00:00Z'),
+          isOutgoing: false,
+          isDelayed: true,
+        },
+        {
+          type: 'chat',
+          id: 'f2',
+          conversationId,
+          from: conversationId,
+          body: 'History 2',
+          timestamp: new Date('2024-01-15T10:01:00Z'),
+          isOutgoing: false,
+          isDelayed: true,
+        },
+        {
+          type: 'chat',
+          id: 'f3',
+          conversationId,
+          from: conversationId,
+          body: 'History 3',
+          timestamp: new Date('2024-01-15T10:02:00Z'),
+          isOutgoing: false,
+          isDelayed: true,
+        },
+      ]
+
+      chatStore.getState().mergeMAMMessages(conversationId, mamMessages, {}, true, 'forward')
+
+      const meta = chatStore.getState().conversationMeta.get(conversationId)
+      expect(meta?.unreadCount).toBe(0)
+      expect(meta?.lastSeenMessageId).toBe('f3')
+    })
+  })
+
   describe('getMessage', () => {
     it('should find message by id', () => {
       const store = chatStore.getState()
