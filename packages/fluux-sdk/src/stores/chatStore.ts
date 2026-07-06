@@ -10,7 +10,7 @@ import * as mamState from './shared/mamState'
 import type { MAMQueryDirection } from './shared/mamState'
 import { computeGapEnd, syncGap, type GapInterval } from './shared/mamGap'
 import * as draftState from './shared/draftState'
-import { buildMessageKeySet, isMessageDuplicate, sortMessagesByTimestamp, trimMessages, trimMessagesKeepOldest, prependOlderMessages, mergeAndProcessMessages, backfillArchiveIds } from './shared/messageArrayUtils'
+import * as timeline from './shared/messageTimeline'
 import { isPreviewableMessage, findLastPreviewableMessage, shouldReplaceLastMessage, isResolvedSamePreview } from './shared/lastMessageUtils'
 import * as notifState from './shared/notificationState'
 import { markerDebugLog } from '../utils/markerDebug'
@@ -85,15 +85,12 @@ function mergeCachedChatMessages(
 ): Pick<ChatState, 'messages' | 'conversationMeta' | 'conversations'> | { messages: ChatState['messages'] } | null {
   const existingMessages = state.messages.get(conversationId) || []
 
-  const existingKeySet = buildMessageKeySet(existingMessages, getChatMessageKeys)
-  const newMessages = cachedMessages.filter(
-    (m) => !isMessageDuplicate(m, existingKeySet, getChatMessageKeys)
+  const { merged: trimmed, newMessages } = timeline.latestSlice(
+    existingMessages,
+    cachedMessages,
+    chatTimelineConfig()
   )
-
   if (newMessages.length === 0) return null
-
-  const merged = sortMessagesByTimestamp([...existingMessages, ...newMessages])
-  const trimmed = trimMessages(merged, getResidentWindowSize())
 
   const newMessagesMap = new Map(state.messages)
   newMessagesMap.set(conversationId, trimmed)
@@ -137,6 +134,11 @@ function getChatMessageKeys(m: Message): string[] {
   if (m.originId) keys.push(`originId:${m.originId}`)
   keys.push(`from:${m.from}:id:${m.id}`)
   return keys
+}
+
+/** Timeline config for the shared resident-window machine (see shared/messageTimeline.ts). */
+function chatTimelineConfig(): timeline.TimelineConfig<Message> {
+  return { getKeys: getChatMessageKeys, windowSize: getResidentWindowSize() }
 }
 
 /**
@@ -871,45 +873,37 @@ export const chatStore = createStore<ChatState>()(
         set((state) => {
           const convMessages = state.messages.get(msg.conversationId) || []
 
-          // XEP-0359: Deduplicate using shared utility that checks ANY matching key
-          // (stanzaId OR from+id), avoiding the pitfall of short-circuiting on mismatched stanzaIds
-          const existingKeys = buildMessageKeySet(convMessages, getChatMessageKeys)
-          const isDuplicate = isMessageDuplicate(msg, existingKeys, getChatMessageKeys)
+          // Shared timeline machine: dedupe (XEP-0359 keys), archive-id
+          // backfill on duplicate echoes, live-edge gating (ABSENT or true =
+          // at the live edge; a slid window gates the append so a fresh
+          // message never splices after an OLD one), and window trim.
+          const atLiveEdge = state.windowAtLiveEdge.get(msg.conversationId) !== false
+          const append = timeline.appendLive(convMessages, msg, atLiveEdge, chatTimelineConfig())
 
-          if (isDuplicate) {
-            // The duplicate may be the archived/carbon copy of an outgoing
-            // message that has no stanzaId yet. Backfill the server archive id
-            // onto the in-memory copy (matched by originId) so backward MAM
-            // pagination has a valid cursor — then still skip adding the dup.
-            const { messages: backfilled, patched } = backfillArchiveIds(convMessages, [msg], getChatMessageKeys)
-            if (patched.length === 0) return state
-            for (const p of patched) {
+          if (append.kind === 'duplicate-unchanged') return state
+          if (append.kind === 'duplicate-backfilled') {
+            // Persist the backfilled archive ids so pagination cursors survive a reload.
+            for (const p of append.patched) {
               void messageCache.updateMessage(p.id, { stanzaId: p.stanzaId!, ...(p.originId ? { originId: p.originId } : {}) })
             }
             const patchedMap = new Map(state.messages)
-            patchedMap.set(msg.conversationId, backfilled)
+            patchedMap.set(msg.conversationId, append.messages)
             return { messages: patchedMap }
           }
 
           // Save to IndexedDB + search index only if the message is locally persistable.
-          // This runs regardless of the live-edge gate below: a gated message is still
-          // durable in the cache and reloads on jump-to-latest.
+          // This runs regardless of the live-edge gate: a gated message is still
+          // durable in the cache (and the meta/preview/unread updates below still
+          // run); it reloads on jump-to-latest.
           if (!msg.noLocalStore) {
             void messageCache.saveMessage(msg)
             searchIndex.indexMessage(msg).catch((e) => console.warn('[searchIndex] indexMessage failed:', e))
           }
 
-          // Sliding window: only append the live message to the resident array when the
-          // window is at the live edge. If load-older slid the window up (evicting the
-          // newest tail), appending here would splice a fresh message directly after an
-          // OLD one — a visible false-adjacency gap. When gated we leave the resident
-          // array untouched (the cache write above + the meta/preview/unread updates
-          // below still run). ABSENT or true = at the live edge; only explicit false gates.
-          const atLiveEdge = state.windowAtLiveEdge.get(msg.conversationId) !== false
           const newMessages = new Map(state.messages)
           newMessages.set(
             msg.conversationId,
-            atLiveEdge ? trimMessages([...convMessages, msg], getResidentWindowSize()) : convMessages
+            append.kind === 'appended' ? append.messages : convMessages
           )
 
           const conv = state.conversations.get(msg.conversationId)
@@ -1563,32 +1557,19 @@ export const chatStore = createStore<ChatState>()(
           // Get existing messages for this conversation
           const rawExisting = state.messages.get(conversationId) || []
 
-          // Backfill server stanzaIds from archived copies onto stanzaId-less
-          // in-memory messages (e.g. outgoing messages) before merging, so the
-          // live copy gains a valid backward-pagination cursor. The archived
-          // copy itself still dedups away below.
-          const { messages: existingMessages, patched } = backfillArchiveIds(rawExisting, mamMessages, getChatMessageKeys)
+          // Shared timeline machine: archive-id backfill onto resident messages,
+          // direction-aware merge (backward = optimized prepend + keep-oldest,
+          // forward = full sort + keep-newest), dedupe, and eviction reporting.
+          const { merged: trimmed, newMessages, patched, newestEvicted } = timeline.mergeArchive(
+            rawExisting,
+            mamMessages,
+            direction,
+            chatTimelineConfig()
+          )
+          // Persist backfilled archive ids so pagination cursors survive a reload.
           for (const p of patched) {
             void messageCache.updateMessage(p.id, { stanzaId: p.stanzaId!, ...(p.originId ? { originId: p.originId } : {}) })
           }
-
-          // Choose merge strategy based on direction:
-          // - Backward (scroll up for older): optimized prepend avoids full re-sort
-          // - Forward (catching up with newer): requires full sort since messages are newer
-          const { merged: trimmed, newMessages } =
-            direction === 'backward'
-              ? prependOlderMessages(
-                  existingMessages,
-                  mamMessages,
-                  getChatMessageKeys,
-                  getResidentWindowSize()
-                )
-              : mergeAndProcessMessages(
-                  existingMessages,
-                  mamMessages,
-                  getChatMessageKeys,
-                  getResidentWindowSize()
-                )
           mergedForMarker = trimmed
 
           // Newest fetched message timestamp marks the gap edge for an incomplete
@@ -1675,9 +1656,6 @@ export const chatStore = createStore<ChatState>()(
           // A backward (scroll-up) merge uses keep-oldest and can evict the newest tail,
           // sliding the window off the live edge (same gate as loadOlderMessagesFromCache).
           // Forward catch-up keeps the newest, so it never slides.
-          const newestEvicted =
-            direction === 'backward' &&
-            trimmed[trimmed.length - 1]?.id !== existingMessages[existingMessages.length - 1]?.id
           let newWindowAtLiveEdge = state.windowAtLiveEdge
           if (newestEvicted) {
             newWindowAtLiveEdge = new Map(state.windowAtLiveEdge)
@@ -1844,17 +1822,14 @@ export const chatStore = createStore<ChatState>()(
             set((state) => {
               const currentMessages = state.messages.get(conversationId) || []
 
-              // Dedupe against the resident array (in-memory messages take precedence):
-              // a cache slice can overlap the window at the `before:` boundary.
-              const existingKeys = buildMessageKeySet(currentMessages, getChatMessageKeys)
-              const newFromCache = olderMessages.filter(
-                (msg) => !isMessageDuplicate(msg, existingKeys, getChatMessageKeys)
+              // Shared timeline machine: dedupe against the resident array (a cache
+              // slice can overlap at the `before:` boundary), sort, keep-oldest trim
+              // (load-older slides the window so scroll-back past the bound works).
+              const { merged: trimmed, newestEvicted } = timeline.loadOlderSlice(
+                currentMessages,
+                olderMessages,
+                chatTimelineConfig()
               )
-
-              // Merge older messages at the beginning, sort, and trim using shared utilities.
-              // Load-older slides the window (keep oldest) so scroll-back past the bound works.
-              const merged = sortMessagesByTimestamp([...newFromCache, ...currentMessages])
-              const trimmed = trimMessagesKeepOldest(merged, getResidentWindowSize())
 
               const newMessagesMap = new Map(state.messages)
               newMessagesMap.set(conversationId, trimmed)
@@ -1862,8 +1837,6 @@ export const chatStore = createStore<ChatState>()(
               // If keep-oldest evicted the newest resident message, the window has slid
               // off the live edge → gate live appends in addMessage. If the batch fit
               // under the bound (newest unchanged), leave the flag as-is.
-              const newestEvicted =
-                trimmed[trimmed.length - 1]?.id !== currentMessages[currentMessages.length - 1]?.id
               if (!newestEvicted) return { messages: newMessagesMap }
 
               const newWindowAtLiveEdge = new Map(state.windowAtLiveEdge)
@@ -1903,17 +1876,13 @@ export const chatStore = createStore<ChatState>()(
             set((state) => {
               const currentMessages = state.messages.get(conversationId) || []
 
-              // Dedupe against the resident array (in-memory messages take precedence):
-              // a cache slice can overlap the window at the `after:` boundary.
-              const existingKeys = buildMessageKeySet(currentMessages, getChatMessageKeys)
-              const newFromCache = newerMessages.filter(
-                (msg) => !isMessageDuplicate(msg, existingKeys, getChatMessageKeys)
+              // Shared timeline machine: dedupe (overlap at the `after:` boundary),
+              // sort, keep-newest trim (load-newer slides the window back down).
+              const { merged: trimmed } = timeline.loadNewerSlice(
+                currentMessages,
+                newerMessages,
+                chatTimelineConfig()
               )
-
-              // Merge newer messages at the end, sort, and trim using shared utilities.
-              // Load-newer slides the window (keep newest) so sliding back down works.
-              const merged = sortMessagesByTimestamp([...currentMessages, ...newFromCache])
-              const trimmed = trimMessages(merged, getResidentWindowSize())
 
               const newMessagesMap = new Map(state.messages)
               newMessagesMap.set(conversationId, trimmed)
