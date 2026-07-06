@@ -308,6 +308,21 @@ describe('ChatHeader', () => {
       const header = container.querySelector('header')
       expect(header).toHaveAttribute('data-tauri-drag-region', 'true')
     })
+
+    it('carries the aurora horizon hairline', () => {
+      const { container } = render(
+        <ChatHeader
+          name="Alice"
+          type="chat"
+          jid="alice@example.com"
+        />
+      )
+
+      const header = container.querySelector('header')
+      expect(header).not.toBeNull()
+      expect(header!.className).toContain('aurora-horizon')
+      expect(header!.className).toContain('relative')
+    })
   })
 
   describe('Conversation menu (kebab)', () => {

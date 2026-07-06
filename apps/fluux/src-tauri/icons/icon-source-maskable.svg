@@ -9,13 +9,47 @@
       <stop offset="0" stop-color="#FFFFFF"/>
       <stop offset="1" stop-color="#EAF0FF"/>
     </linearGradient>
+    <!-- Full-bleed maskable: same in-between glass treatment; no inset rim (the
+         platform mask clips the edges, so an edge stroke would be cut). -->
+    <radialGradient id="bloomTeal" cx="0.16" cy="0.9" r="0.6">
+      <stop offset="0" stop-color="#3FF0D6" stop-opacity="0.25"/>
+      <stop offset="1" stop-color="#3FF0D6" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="bloomViolet" cx="0.9" cy="0.1" r="0.6">
+      <stop offset="0" stop-color="#B79CFF" stop-opacity="0.22"/>
+      <stop offset="1" stop-color="#B79CFF" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="sheen" x1="512" y1="0" x2="512" y2="1024" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.22"/>
+      <stop offset="0.19" stop-color="#FFFFFF" stop-opacity="0.04"/>
+      <stop offset="0.34" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+    <radialGradient id="transmit" cx="0.5" cy="1.05" r="0.9">
+      <stop offset="0" stop-color="#7C8CFF" stop-opacity="0.32"/>
+      <stop offset="0.55" stop-color="#59D9C4" stop-opacity="0.134"/>
+      <stop offset="1" stop-color="#59D9C4" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="bubbleHi" x1="512" y1="315" x2="512" y2="560" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.5"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
     <filter id="depth" x="-20%" y="-20%" width="140%" height="150%">
       <feDropShadow dx="0" dy="16" stdDeviation="22" flood-color="#1A1145" flood-opacity="0.25"/>
     </filter>
+    <clipPath id="bubbleClip"><rect x="262" y="315" width="500" height="357" rx="132"/><path d="M405 665 L332 808 L548 665 Z"/></clipPath>
   </defs>
+
   <rect x="0" y="0" width="1024" height="1024" fill="url(#aurora)"/>
+  <rect x="0" y="0" width="1024" height="1024" fill="url(#bloomTeal)"/>
+  <rect x="0" y="0" width="1024" height="1024" fill="url(#bloomViolet)"/>
+  <rect x="0" y="0" width="1024" height="1024" fill="url(#sheen)"/>
+
   <g filter="url(#depth)" fill="url(#bubble)">
     <rect x="262" y="315" width="500" height="357" rx="132"/>
     <path d="M405 665 L332 808 L548 665 Z"/>
+  </g>
+  <g clip-path="url(#bubbleClip)">
+    <rect x="262" y="315" width="500" height="493" fill="url(#transmit)"/>
+    <rect x="262" y="315" width="500" height="245" fill="url(#bubbleHi)"/>
   </g>
 </svg>

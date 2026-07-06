@@ -116,6 +116,7 @@ export function ModalOverlay({
       data-modal="true"
       className={`fixed inset-0 modal-scrim flex ${ALIGN_CLASS[align]} justify-center z-50 ${scrimClass}`}
     >
+      <div aria-hidden="true" className="modal-scrim-aurora" />
       <button
         type="button"
         aria-hidden="true"

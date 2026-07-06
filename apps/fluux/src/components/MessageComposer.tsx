@@ -996,19 +996,24 @@ export function MessageComposer({
           )}
         </div>
 
-        {/* Send button — filled accent. Encryption state is shown by the leading lock (not here). */}
-        <button
-          type="submit"
-          disabled={(!text.trim() && !pendingAttachment) || sending || disabled || sendDisabled}
-          aria-label={t('chat.send', 'Send')}
-          className="group/send relative m-1 p-2.5 rounded-xl tap-target flex items-center justify-center
-                     bg-fluux-brand text-white hover:bg-fluux-brand-hover
-                     disabled:bg-transparent disabled:text-fluux-muted disabled:cursor-not-allowed
-                     transition-colors [grid-area:send]"
-        >
-          <Send className="rtl-mirror icon-optical-send size-5" />
-          {sendBadge}
-        </button>
+        {/* Send button — liquid glass lit by the aurora when a message is ready
+            to send (identity tied to the brand action); muted while empty.
+            Encryption state is shown by the leading lock (not here). */}
+        <div className="relative m-1 flex [grid-area:send]">
+          {!((!text.trim() && !pendingAttachment) || sending || disabled || sendDisabled) && (
+            <span className="send-aurora-glow" aria-hidden="true" />
+          )}
+          <button
+            type="submit"
+            disabled={(!text.trim() && !pendingAttachment) || sending || disabled || sendDisabled}
+            aria-label={t('chat.send', 'Send')}
+            className="group/send send-aurora relative z-10 p-2.5 rounded-xl tap-target flex items-center justify-center
+                       disabled:cursor-not-allowed transition-colors"
+          >
+            <Send className="rtl-mirror icon-optical-send size-5" />
+            {sendBadge}
+          </button>
+        </div>
       </div>
       </div>
     </form>

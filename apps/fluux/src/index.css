@@ -133,11 +133,26 @@
   /* ── Aurora identity additions ── */
   --fluux-accent-2: #38E0C4;
   --fluux-grad: linear-gradient(135deg, #38E0C4, #7C8CFF, #A78BFA);
-  /* Opacity of the soft brand-mark glow (login). The bright gradient bloom reads
-     much stronger against the dark canvas than the light one, so it is themed:
-     calmer here, fuller under .light (which keeps its current, subtler look). */
-  --fluux-brand-glow-opacity: 0.35;
+  /* Aurora light quartet — the identity light source (login mark backlight,
+     horizon hairline, send-button glow). Dark = night aurora. The rim quartet
+     equals the base in dark mode; light mode overrides it deeper so strokes
+     hold contrast on pale surfaces (same one-hue-two-jobs split as
+     --fluux-status-error / --fluux-text-error). */
+  --fluux-aurora-1: #2FE0C0;
+  --fluux-aurora-2: #4FB6E8;
+  --fluux-aurora-3: #7C8CFF;
+  --fluux-aurora-4: #A78BFA;
+  --fluux-aurora-rim-1: #2FE0C0;
+  --fluux-aurora-rim-2: #4FB6E8;
+  --fluux-aurora-rim-3: #7C8CFF;
+  --fluux-aurora-rim-4: #A78BFA;
+  /* Ink for icons sitting on aurora-gradient fills (send-button fallback). */
+  --fluux-aurora-ink: #08111F;
   --fluux-glass-blur: 12px;
+  /* Liquid-glass tier (macOS/Windows/web only — Linux keeps the base frost). */
+  --fluux-glass-blur-strong: 22px;
+  --fluux-glass-specular: inset 0 1px 0 rgba(255, 255, 255, 0.22), inset 1px 0 0 rgba(255, 255, 255, 0.07), inset 0 -1px 0 rgba(255, 255, 255, 0.04);
+  --fluux-glass-specular-sheen: linear-gradient(115deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0) 42%);
 
   /* ── Motion language: duration + easing tokens (global, never themed) ──
      Three durations and three easings form the app's motion vocabulary.
@@ -502,12 +517,22 @@
      this darker teal clears 3.58:1 (non-text floor is 3:1, target 3.5+). */
   --fluux-text-encryption: #0D8872;
   --fluux-grad: linear-gradient(135deg, #11A88C, #5B6CF0, #7C6CF0);
-  /* Light canvas absorbs the bloom, so it can stay fuller without reading strong. */
-  --fluux-brand-glow-opacity: 0.6;
+  /* Aurora light quartet (light) — muted dawn (D2): champagne whisper at the
+     tail, violet leads. The gold-heavy dawn was rejected as not subtle enough. */
+  --fluux-aurora-1: #E8C29A;
+  --fluux-aurora-2: #DE94AE;
+  --fluux-aurora-3: #9D8CE8;
+  --fluux-aurora-4: #6FA0DC;
+  --fluux-aurora-rim-1: #C08A52;
+  --fluux-aurora-rim-2: #C06A88;
+  --fluux-aurora-rim-3: #7862D8;
+  --fluux-aurora-rim-4: #4A82C6;
   /* 0.12 (not 0.10) so the hairline clears the >=1.25:1 perceptibility floor on
      the lightest theme glass surfaces (tokyo-night/kanagawa light were near-miss
      at 0.10); guarded by glass.test.ts. */
   --fluux-glass-border: rgba(0, 0, 0, 0.12);
+  --fluux-glass-specular: inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  --fluux-glass-specular-sheen: linear-gradient(115deg, rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0.1) 42%);
   --fluux-shadow-overlay: 0 20px 50px rgba(20, 27, 48, 0.18);
 
   /* Divider flips to black-alpha on the light canvas. The rail is derived by
@@ -555,12 +580,30 @@
       backdrop-filter: blur(var(--fluux-glass-blur)) saturate(1.4);
       -webkit-backdrop-filter: blur(var(--fluux-glass-blur)) saturate(1.4);
     }
+    /* Liquid tier: deeper translucency + specular edges + diagonal sheen.
+       Scoped away from Linux; reduced-transparency reverts below. */
+    :root:not([data-platform="linux"]) .fluux-glass {
+      background-color: color-mix(in srgb, var(--fluux-chat-bg), transparent 40%);
+      background-image: var(--fluux-glass-specular-sheen);
+      backdrop-filter: blur(var(--fluux-glass-blur-strong)) saturate(1.65);
+      -webkit-backdrop-filter: blur(var(--fluux-glass-blur-strong)) saturate(1.65);
+      box-shadow: var(--fluux-glass-specular), var(--fluux-shadow-overlay);
+    }
+    :root:not([data-platform="linux"]).light .fluux-glass {
+      background-color: color-mix(in srgb, var(--fluux-chat-bg), transparent 34%);
+    }
   }
-  /* Reduce-transparency: override back to the solid surface. */
-  [data-transparency="reduced"] .fluux-glass {
+  /* Reduce-transparency: override back to the solid surface. Selector uses
+     :root[data-transparency="reduced"] (0,3,0) rather than the bare attribute
+     selector (0,2,0) so it outranks the liquid tier's :root:not([data-platform=
+     "linux"]) .fluux-glass rule above (also (0,3,0)) via source-order-wins —
+     otherwise the liquid tier would defeat this a11y opt-out on non-Linux. */
+  :root[data-transparency="reduced"] .fluux-glass {
     background-color: var(--fluux-chat-bg);
+    background-image: none;
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
+    box-shadow: var(--fluux-shadow-overlay);
   }
 
   /* Scrim utility: reads the --fluux-modal-backdrop token so a theme can override
@@ -1322,6 +1365,143 @@ input[type="range"]::-moz-range-thumb {
 .command-palette-in { animation: command-palette-in var(--fluux-duration-base) var(--fluux-ease-emphasized); }
 .scrim-in  { animation: scrim-in var(--fluux-duration-base) var(--fluux-ease-standard); }
 .scrim-out { animation: scrim-out var(--fluux-duration-fast) var(--fluux-ease-standard) forwards; }
+
+/* ── Aurora brand mark (login) ─────────────────────────────────────────────
+   Mode-specific layers are all rendered by AuroraMark.tsx and toggled here,
+   so the component stays mode-agnostic. Motion is compositor-only opacity on
+   the three backlight blobs + rim glow ("the aurora slowly shifting behind
+   the glass"); [data-motion="reduced"] stills it — the static mark is the
+   complete design, not a degraded one. */
+.aurora-mark .aurora-light-only { display: none; }
+.light .aurora-mark .aurora-light-only { display: initial; }
+.light .aurora-mark .aurora-dark-only { display: none; }
+
+@keyframes aurora-backlight-breathe { from { opacity: 1; } to { opacity: 0.7; } }
+@keyframes aurora-rim-breathe { from { opacity: 0.35; } to { opacity: 0.28; } }
+
+.aurora-mark .aurora-breathe-1,
+.aurora-mark .aurora-breathe-2,
+.aurora-mark .aurora-breathe-3 {
+  animation: aurora-backlight-breathe 12s ease-in-out infinite alternate;
+}
+.aurora-mark .aurora-breathe-2 { animation-delay: -4s; }
+.aurora-mark .aurora-breathe-3 { animation-delay: -8s; }
+.aurora-mark .aurora-mark-rim-glow {
+  opacity: 0.35;
+  animation: aurora-rim-breathe 12s ease-in-out infinite alternate;
+}
+[data-motion="reduced"] .aurora-mark .aurora-breathe-1,
+[data-motion="reduced"] .aurora-mark .aurora-breathe-2,
+[data-motion="reduced"] .aurora-mark .aurora-breathe-3,
+[data-motion="reduced"] .aurora-mark .aurora-mark-rim-glow {
+  animation: none;
+}
+
+/* Aurora horizon: a 1px identity hairline riding ON TOP of the header's
+   standard divider (which stays underneath — the audit's seam-visibility
+   guarantees are untouched). Fades at both ends; the tokens flip to the
+   muted-dawn stops in light mode automatically. */
+.aurora-horizon::after {
+  content: '';
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: -1px;
+  height: 1px;
+  pointer-events: none;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--fluux-aurora-1) 12%,
+    var(--fluux-aurora-2) 40%,
+    var(--fluux-aurora-3) 70%,
+    transparent
+  );
+  opacity: 0.65;
+}
+
+/* Aurora send button: liquid glass over an aurora glow, only when a message is
+   ready to send. Disabled = the previous muted icon. Reduced transparency (and
+   thereby also the platforms where glass is off) falls back to the validated
+   solid aurora fill with ink icon. */
+.send-aurora {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  -webkit-backdrop-filter: blur(9px) saturate(1.6);
+  backdrop-filter: blur(9px) saturate(1.6);
+  color: #ffffff;
+}
+.send-aurora:not(:disabled):hover {
+  border-color: rgba(255, 255, 255, 0.45);
+}
+.light .send-aurora {
+  background: rgba(255, 255, 255, 0.5);
+  border-color: rgba(30, 42, 70, 0.18);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7), 0 2px 6px rgba(30, 42, 70, 0.1);
+  color: var(--fluux-aurora-ink);
+}
+.light .send-aurora:not(:disabled):hover {
+  border-color: rgba(30, 42, 70, 0.32);
+}
+.send-aurora:disabled {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  color: var(--fluux-text-muted);
+}
+.send-aurora-glow {
+  position: absolute;
+  inset: -12px;
+  z-index: 0;
+  border-radius: 9999px;
+  pointer-events: none;
+  filter: blur(10px);
+  background:
+    radial-gradient(50% 50% at 35% 65%, color-mix(in srgb, var(--fluux-aurora-1), transparent 25%), transparent 70%),
+    radial-gradient(50% 50% at 70% 30%, color-mix(in srgb, var(--fluux-aurora-4), transparent 25%), transparent 70%);
+}
+[data-transparency="reduced"] .send-aurora:not(:disabled) {
+  background: linear-gradient(130deg, var(--fluux-aurora-1), var(--fluux-aurora-2) 45%, var(--fluux-aurora-3) 75%, var(--fluux-aurora-4));
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  border-color: transparent;
+  color: var(--fluux-aurora-ink);
+}
+[data-transparency="reduced"] .send-aurora-glow {
+  display: none;
+}
+/* Linux (WebKitGTK): same solid fallback as reduced-transparency above — the
+   liquid glass tier is disabled there (documented compositing-freeze history
+   with heavy backdrop-filter), so the send button gets the validated solid
+   aurora fill with ink icon instead of the blurred glass treatment. */
+:root[data-platform="linux"] .send-aurora:not(:disabled) {
+  background: linear-gradient(130deg, var(--fluux-aurora-1), var(--fluux-aurora-2) 45%, var(--fluux-aurora-3) 75%, var(--fluux-aurora-4));
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  border-color: transparent;
+  color: var(--fluux-aurora-ink);
+}
+:root[data-platform="linux"] .send-aurora-glow {
+  display: none;
+}
+
+/* Aurora backlight in the modal scrim: gives the liquid glass something real
+   to refract (this is what separates it from generic glassmorphism). Sits
+   behind the opaque-ish panel, so panel text contrast is untouched. */
+.modal-scrim-aurora {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(42% 38% at 68% 22%, color-mix(in srgb, var(--fluux-aurora-3), transparent 72%), transparent 70%),
+    radial-gradient(40% 36% at 30% 78%, color-mix(in srgb, var(--fluux-aurora-1), transparent 74%), transparent 70%);
+}
+[data-transparency="reduced"] .modal-scrim-aurora {
+  display: none;
+}
 
 /* Bulk-copy selection highlight. Decoupled from native text selection (which cannot span
    virtualized/unmounted rows); driven by the `copy-selected` class on `.message-row`
