@@ -904,6 +904,47 @@ describe('XMPPClient', () => {
       expect(bookmarksSpy).not.toHaveBeenCalled()
     })
 
+    it('should hydrate sidebar previews from the durable cache on SM resumption', async () => {
+      // On a reload that resumes via SM, the room list is rebuilt from persisted
+      // state whose non-active rooms had their messages evicted before save, so they
+      // carry no lastMessage and would sort at epoch-0 until opened. The resume path
+      // must repopulate previews from the cache, same as a fresh session does.
+      const mockClientWithSM = createMockXmppClientWithSM('sm-id-hydrate')
+      mockClientFactory._setInstance(mockClientWithSM)
+
+      const stores = createMockStores()
+      const newXmppClient = new XMPPClient({ debug: false })
+      newXmppClient.bindStores(stores)
+
+      // Short disconnect keeps the path minimal (no bookmark fetch / catch-up).
+      // (In this node env localStorage.getItem throws, so the cache-marker check is
+      // swallowed and execution continues down the real SM-resume path.)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ;(newXmppClient.connection as any).disconnectedAtTimestamp = Date.now() - 30_000
+
+      const connectPromise = newXmppClient.connect({
+        jid: 'user@example.com',
+        password: 'secret',
+        server: 'example.com',
+        smState: { id: 'sm-id-hydrate', inbound: 5, outbound: 0 },
+        skipDiscovery: true,
+        previouslyJoinedRooms: [
+          { jid: 'room1@conference.example.com', nickname: 'testuser' },
+        ],
+      })
+
+      const resumedNonza = createMockElement('resumed', {
+        xmlns: 'urn:xmpp:sm:3',
+        previd: 'sm-id-hydrate',
+        h: '5',
+      })
+      mockClientWithSM._emit('nonza', resumedNonza)
+
+      await connectPromise
+
+      expect(stores.room.hydratePreviewsFromCache).toHaveBeenCalled()
+    })
+
     it('should skip MAM catch-up but fetch bookmarks on SM resumption for long disconnects', async () => {
       const mockClientWithSM = createMockXmppClientWithSM('sm-id-long')
       mockClientFactory._setInstance(mockClientWithSM)
