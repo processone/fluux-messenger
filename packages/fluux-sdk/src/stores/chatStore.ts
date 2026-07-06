@@ -1038,6 +1038,7 @@ export const chatStore = createStore<ChatState>()(
           if (!meta) return state
 
           const messages = state.messages.get(conversationId) || []
+          const atLiveEdge = state.windowAtLiveEdge.get(conversationId) !== false
           const updated = notifState.onMessageSeen(
             {
               unreadCount: meta.unreadCount,
@@ -1047,7 +1048,8 @@ export const chatStore = createStore<ChatState>()(
               firstNewMessageId: state.firstNewMessageMarkers.get(conversationId),
             },
             messageId,
-            messages
+            messages,
+            { atLiveEdge }
           )
 
           // No change (same reference or same value)

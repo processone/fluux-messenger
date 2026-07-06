@@ -4605,13 +4605,13 @@ describe('roomStore', () => {
   })
 })
 
-describe('setActiveRoom new-message marker — delayed = MUC/MAM history replay', () => {
-  // Regression guard: the marker (firstNewMessageId) drives scroll position on
-  // room open. For rooms, a delayed message is history replay (either MUC <history>
-  // for non-MAM rooms, or MAM-fetched archive — both carry isDelayed=true), NOT a
-  // new message. The marker must skip them, otherwise joining a room scrolls the
-  // user into the middle of replayed history instead of to the bottom.
-  // roomStore must call onActivate WITHOUT treatDelayedAsNew (unlike chatStore).
+describe('setActiveRoom new-message marker — delayed history unified with chats', () => {
+  // The marker (firstNewMessageId) drives scroll position on room open. Rooms now
+  // treat delayed (MUC <history> replay or MAM-fetched archive) messages the same
+  // way chats treat offline-delivered messages: as new relative to the read
+  // pointer. roomStore calls onActivate WITH treatDelayedAsNew (parity with
+  // chatStore). A fresh join (no prior read state) still derives no marker —
+  // that's guarded by the fresh-entity path, not by treatDelayedAsNew.
   const ROOM = 'room@conference.example.com'
 
   beforeEach(() => {
@@ -4655,7 +4655,9 @@ describe('setActiveRoom new-message marker — delayed = MUC/MAM history replay'
     return roomStore.getState().firstNewMessageMarkers.get(ROOM)
   }
 
-  it('sets no marker when only delayed history follows lastSeen (MAM/MUC join)', () => {
+  it('places the divider on delayed history after lastSeen (unified with chats)', () => {
+    // Reuse the existing test's setup verbatim, but expect a marker: rooms now
+    // treat delayed (MAM/history-replay) messages as new, same as chats.
     const marker = activateWith(
       [
         createMessage('seen', ROOM, 'alice', 'seen message'),
@@ -4665,6 +4667,21 @@ describe('setActiveRoom new-message marker — delayed = MUC/MAM history replay'
       'seen',
       2
     )
+    expect(marker).toBe('h-1')
+  })
+
+  it('fresh join (no read state) derives no marker from delayed history', () => {
+    // Same setup WITHOUT seeding lastSeenMessageId/lastReadAt/unreadCount — the
+    // fresh-entity path has nothing to resume from, so no marker is derived.
+    roomStore.getState().addRoom(createRoom(ROOM, {
+      joined: true,
+      messages: [
+        delayedMsg('h-1', 'bob', '2025-01-15T10:00:00Z'),
+        delayedMsg('h-2', 'carol', '2025-01-15T10:30:00Z'),
+      ],
+    }))
+    roomStore.getState().setActiveRoom(ROOM)
+    const marker = roomStore.getState().firstNewMessageMarkers.get(ROOM)
     expect(marker).toBeUndefined()
   })
 

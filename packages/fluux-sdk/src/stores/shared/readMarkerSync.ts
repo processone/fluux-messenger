@@ -77,8 +77,9 @@ export function resolveRemoteDisplayed<T extends NotificationMessage & { stanzaI
   }
 
   // Recompute the divider from the advanced position (reuses onActivate's
-  // forward scan). Chat treats delayed messages as offline delivery
-  // (treatDelayedAsNew); rooms treat them as history replay.
+  // forward scan). Both callers pass treatDelayedAsNew: chats because delayed
+  // means offline delivery, rooms because delayed history after the pointer
+  // is unread (unified divider semantics).
   const divider = notifState.onActivate(
     {
       unreadCount: 0,

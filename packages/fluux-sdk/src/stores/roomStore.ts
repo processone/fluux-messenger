@@ -1563,7 +1563,7 @@ export const roomStore = createStore<RoomState>()(
 
         const runtime = get().roomRuntime.get(roomJid)
         const messages = runtime?.messages ?? room.messages
-        const activated = notifState.onActivate(notifInput, messages)
+        const activated = notifState.onActivate(notifInput, messages, { treatDelayedAsNew: true })
 
         // Determine lastInteractedAt for sidebar sorting
         const lastMessage = room.messages?.[room.messages.length - 1]
@@ -1671,7 +1671,8 @@ export const roomStore = createStore<RoomState>()(
         lastSeenMessageId: meta?.lastSeenMessageId ?? existing.lastSeenMessageId,
         firstNewMessageId: state.firstNewMessageMarkers.get(roomJid),
       }
-      const updated = notifState.onMessageSeen(notifInput, messageId, messages)
+      const atLiveEdge = state.roomRuntime.get(roomJid)?.windowAtLiveEdge !== false
+      const updated = notifState.onMessageSeen(notifInput, messageId, messages, { atLiveEdge })
       if (updated === notifInput) return state
 
       const newRooms = new Map(state.rooms)
@@ -1709,8 +1710,9 @@ export const roomStore = createStore<RoomState>()(
         messages,
         state.firstNewMessageMarkers.get(roomJid),
         stanzaId,
-        // Rooms treat delayed messages as history replay, so no treatDelayedAsNew.
-        { isActive: state.activeRoomJid === roomJid }
+        // Rooms treat delayed history the same as chats treat offline delivery
+        // (unified divider semantics) — delayed messages after the pointer are new.
+        { isActive: state.activeRoomJid === roomJid, treatDelayedAsNew: true }
       )
       if (resolution.kind === 'unchanged') return state
 
