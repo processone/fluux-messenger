@@ -67,7 +67,16 @@ export async function getHistory(
   // NaN/Infinity/negatives from an untrusted MCP caller fall back to the default.
   const requested = Number.isFinite(limit) ? Math.floor(limit as number) : DEFAULT_HISTORY_LIMIT
   const cappedLimit = Math.min(Math.max(1, requested), MAX_HISTORY_LIMIT)
-  const beforeDate = before ? new Date(before) : undefined
+  // An Invalid Date becomes a NaN IndexedDB key whose DataError is swallowed
+  // deep in the cache layer, silently returning [] — indistinguishable from
+  // "no earlier messages". Fail loudly instead so the MCP caller can correct it.
+  let beforeDate: Date | undefined
+  if (before !== undefined) {
+    beforeDate = new Date(before)
+    if (Number.isNaN(beforeDate.getTime())) {
+      throw new Error(`Invalid 'before' timestamp: ${before} (expected an ISO 8601 date string)`)
+    }
+  }
   const isRoom = roomStore.getState().rooms.has(conversationId)
 
   const messages = isRoom

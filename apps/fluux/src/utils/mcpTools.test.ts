@@ -144,6 +144,25 @@ describe('mcpTools', () => {
       await getHistory('alice@example.com', Number.POSITIVE_INFINITY)
       expect(loadSpy).toHaveBeenLastCalledWith('alice@example.com', { limit: 50, before: undefined, peek: true })
     })
+
+    it('rejects a malformed before timestamp instead of silently returning empty history', async () => {
+      chatStore.setState({
+        conversations: new Map([['alice@example.com', { id: 'alice@example.com' } as Conversation]]),
+      })
+      const loadSpy = vi.spyOn(chatStore.getState(), 'loadMessagesFromCache').mockResolvedValue([])
+      loadSpy.mockClear() // the store mock is shared module state; drop calls from earlier tests
+
+      await expect(getHistory('alice@example.com', 10, 'not-a-date')).rejects.toThrow("Invalid 'before' timestamp")
+      expect(loadSpy).not.toHaveBeenCalled()
+
+      // A valid ISO string still goes through as a Date.
+      await getHistory('alice@example.com', 10, '2026-07-01T10:00:00Z')
+      expect(loadSpy).toHaveBeenCalledWith('alice@example.com', {
+        limit: 10,
+        before: new Date('2026-07-01T10:00:00Z'),
+        peek: true,
+      })
+    })
   })
 
   describe('sendMessageTool', () => {

@@ -1,4 +1,5 @@
 use axum::{
+    body::Bytes,
     extract::State,
     http::{header, HeaderMap, StatusCode},
     response::IntoResponse,
@@ -10,10 +11,12 @@ use std::sync::Arc;
 use tokio::net::TcpListener;
 use tokio::task::JoinHandle;
 
-use super::protocol::{handle_request, JsonRpcRequest, ToolExecutor};
+use super::protocol::{handle_request, JsonRpcRequest, JsonRpcResponse, ToolExecutor};
 
-/// Returned to the frontend (and written to the connection info file) when
-/// the server starts.
+/// Returned to the frontend when the server starts. Held in memory only and
+/// surfaced through the Settings panel's copy button — deliberately never
+/// written to disk, so there is no token-bearing file for another process
+/// (or a backup/sync tool) to pick up.
 #[derive(Debug, Clone, Serialize)]
 pub struct McpServerInfo {
     pub port: u16,
@@ -29,10 +32,16 @@ fn build_router(state: Arc<McpAppState>) -> Router {
     Router::new().route("/mcp", post(handle_mcp_request)).with_state(state)
 }
 
+/// Takes the body as raw `Bytes` (never rejects) instead of `Json<T>` so the
+/// bearer-token check runs BEFORE any parsing: with the `Json` extractor an
+/// unauthenticated caller sending a malformed body would get a 400/422 from
+/// the extractor instead of the intended 401, and would burn parse work
+/// pre-auth. Parse failures from AUTHORIZED callers get a proper JSON-RPC
+/// -32700 Parse error instead of axum's plain HTTP rejection.
 async fn handle_mcp_request(
     State(state): State<Arc<McpAppState>>,
     headers: HeaderMap,
-    Json(request): Json<JsonRpcRequest>,
+    body: Bytes,
 ) -> Result<axum::response::Response, StatusCode> {
     let expected = format!("Bearer {}", state.token);
     let authorized = headers
@@ -44,6 +53,18 @@ async fn handle_mcp_request(
     if !authorized {
         return Err(StatusCode::UNAUTHORIZED);
     }
+
+    let request: JsonRpcRequest = match serde_json::from_slice(&body) {
+        Ok(request) => request,
+        Err(e) => {
+            return Ok(Json(JsonRpcResponse::error(
+                serde_json::Value::Null,
+                -32700,
+                format!("Parse error: {e}"),
+            ))
+            .into_response())
+        }
+    };
 
     match handle_request(request, state.executor.as_ref()).await {
         Some(response) => Ok(Json(response).into_response()),
@@ -177,6 +198,34 @@ mod tests {
             .unwrap();
         let response = router.oneshot(request).await.unwrap();
         assert_eq!(response.status(), StatusCode::ACCEPTED);
+    }
+
+    #[tokio::test]
+    async fn malformed_body_without_token_gets_401_not_a_parse_rejection() {
+        let router = test_router("secret");
+        let request = Request::post("/mcp")
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(Body::from("this is not json"))
+            .unwrap();
+        let response = router.oneshot(request).await.unwrap();
+        // Auth must be checked before the body is parsed: an unauthenticated
+        // caller learns nothing about the expected request shape.
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn malformed_body_with_valid_token_gets_jsonrpc_parse_error() {
+        let router = test_router("secret");
+        let request = Request::post("/mcp")
+            .header(header::CONTENT_TYPE, "application/json")
+            .header(header::AUTHORIZATION, "Bearer secret")
+            .body(Body::from("this is not json"))
+            .unwrap();
+        let response = router.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let parsed: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(parsed["error"]["code"], -32700);
     }
 
     #[tokio::test]
