@@ -24,7 +24,9 @@ import type { MAMQueryDirection } from './shared/mamState'
 import { computeGapEnd, syncGap, serializeGaps, deserializeGaps, type GapInterval } from './shared/mamGap'
 import * as draftState from './shared/draftState'
 import * as timeline from './shared/messageTimeline'
-import { shouldUpdateLastMessage, shouldReplaceLastMessage, isPreviewableMessage, isResolvedSamePreview, findLastNonIgnoredMessage } from './shared/lastMessageUtils'
+import { shouldUpdateLastMessage, shouldReplaceLastMessage, isPreviewableMessage, findLastNonIgnoredMessage } from './shared/lastMessageUtils'
+import { derivePreviewAfterMerge } from './shared/previewState'
+import { resolveRemoteDisplayed, createMdsSessionGate } from './shared/readMarkerSync'
 import { ignoreStore, isMessageFromIgnoredUser } from './ignoreStore'
 import { roomActivityTone } from './roomSelectors'
 import * as notifState from './shared/notificationState'
@@ -233,11 +235,9 @@ const EMPTY_SIDEBAR_JIDS: string[] = []
 // can't overwrite a newer activation when it finally resolves
 let activationToken = 0
 
-// Rooms whose pending XEP-0490 read marker has already been consumed for divider positioning
-// THIS session (parity with chatStore). XEP-0490 markers broadcast live over PEP, so after the
-// first open's fold the live `read:displayed-synced` notifies keep us current; re-folding on
-// every open would reposition the divider on each return. Cleared on reset() (logout).
-const mdsConsumedThisSession = new Set<string>()
+// XEP-0490 first-open-per-session fold gate (see shared/readMarkerSync;
+// parity with chatStore). Reset on reset() (logout).
+const mdsGate = createMdsSessionGate()
 
 // Selector memoization caches.
 // Store selectors (joinedRooms, allRooms, etc.) are called on every Zustand subscription check.
@@ -294,8 +294,12 @@ function mergeCachedRoomMessages(
   // sort, and keep-newest trim.
   const { merged } = timeline.latestSlice(existing.messages, cachedMessages, roomTimelineConfig())
 
-  // Get last non-ignored message from merged messages for sidebar preview
-  const lastMessage = (merged.length > 0 ? findLastNonIgnoredMessage(merged, roomJid, existing.nickToJidCache) : undefined) ?? existing.lastMessage
+  // Sidebar preview via the shared policy: only replace when the merged set's
+  // newest non-ignored message genuinely supersedes (or heals) the current
+  // preview — a deep-history slice (scroll-position restore) must not regress it.
+  const { lastMessage } = derivePreviewAfterMerge(existing.lastMessage, merged, (msgs) =>
+    findLastNonIgnoredMessage(msgs, roomJid, existing.nickToJidCache)
+  )
 
   newRooms.set(roomJid, { ...existing, messages: merged, lastMessage })
 
@@ -1144,7 +1148,7 @@ export const roomStore = createStore<RoomState>()(
     // They will be cleared when rooms are explicitly removed or user logs out
     // (The connection store's reset handles full logout cleanup via clearAllMessages)
     // New session → the XEP-0490 synced read marker may be folded again on first open.
-    mdsConsumedThisSession.clear()
+    mdsGate.reset()
     // Clear persisted room drafts and poll state on logout
     localStorage.removeItem(getRoomDraftsStorageKey())
     localStorage.removeItem(getRoomVotedPollsStorageKey())
@@ -1608,8 +1612,7 @@ export const roomStore = createStore<RoomState>()(
       // derives the divider — but only on the FIRST open of this room this session (parity with
       // chatStore.activateConversation). XEP-0490 markers broadcast live over PEP, so re-folding on
       // every open would reposition the divider on each return.
-      const firstConsumeThisSession = !mdsConsumedThisSession.has(roomJid)
-      mdsConsumedThisSession.add(roomJid)
+      const firstConsumeThisSession = mdsGate.consume(roomJid)
       const pending = get().roomMeta.get(roomJid)?.pendingRemoteDisplayedStanzaId
       if (pending && firstConsumeThisSession) {
         const lastSeenBefore = get().roomMeta.get(roomJid)?.lastSeenMessageId
@@ -1685,84 +1688,48 @@ export const roomStore = createStore<RoomState>()(
       const runtime = state.roomRuntime.get(roomJid)
       // A non-active room keeps no resident array (memory windowing), so
       // mergeRoomMAMMessages passes the just-merged array here; else read runtime/rooms.
+      // The resolution state machine (stash / clear-pending / forward-only
+      // advance / active-divider recompute) is shared — see shared/readMarkerSync.
       const messages = messagesOverride ?? runtime?.messages ?? existing?.messages ?? []
-      const match = messages.find((m) => m.stanzaId === stanzaId)
-
-      if (!match) {
-        const newMeta = new Map(state.roomMeta)
-        newMeta.set(roomJid, { ...meta, pendingRemoteDisplayedStanzaId: stanzaId })
-        if (existing) {
-          const newRooms = new Map(state.rooms)
-          newRooms.set(roomJid, { ...existing, pendingRemoteDisplayedStanzaId: stanzaId })
-          return { roomMeta: newMeta, rooms: newRooms }
-        }
-        return { roomMeta: newMeta }
-      }
-
-      const updated = notifState.onMessageSeen(
+      const resolution = resolveRemoteDisplayed(
         {
           unreadCount: meta.unreadCount,
           mentionsCount: meta.mentionsCount,
           lastReadAt: meta.lastReadAt,
           lastSeenMessageId: meta.lastSeenMessageId,
-          firstNewMessageId: state.firstNewMessageMarkers.get(roomJid),
+          pendingRemoteDisplayedStanzaId: meta.pendingRemoteDisplayedStanzaId,
         },
-        match.id,
-        messages
+        messages,
+        state.firstNewMessageMarkers.get(roomJid),
+        stanzaId,
+        // Rooms treat delayed messages as history replay, so no treatDelayedAsNew.
+        { isActive: state.activeRoomJid === roomJid }
       )
+      if (resolution.kind === 'unchanged') return state
 
-      // No advance: the matching message is loaded and the local position is at
-      // or past it — the marker is resolved; clear any stale pending mark.
-      if (updated.lastSeenMessageId === meta.lastSeenMessageId) {
-        if (meta.pendingRemoteDisplayedStanzaId === undefined) return state
-        const newMeta = new Map(state.roomMeta)
-        newMeta.set(roomJid, { ...meta, pendingRemoteDisplayedStanzaId: undefined })
-        if (existing) {
-          const newRooms = new Map(state.rooms)
-          newRooms.set(roomJid, { ...existing, pendingRemoteDisplayedStanzaId: undefined })
-          return { roomMeta: newMeta, rooms: newRooms }
-        }
-        return { roomMeta: newMeta }
-      }
+      const metaPatch =
+        resolution.kind === 'stash-pending'
+          ? { pendingRemoteDisplayedStanzaId: stanzaId }
+          : resolution.kind === 'clear-pending'
+            ? { pendingRemoteDisplayedStanzaId: undefined }
+            : { lastSeenMessageId: resolution.lastSeenMessageId, pendingRemoteDisplayedStanzaId: undefined }
 
       const newMeta = new Map(state.roomMeta)
-      newMeta.set(roomJid, {
-        ...meta,
-        lastSeenMessageId: updated.lastSeenMessageId,
-        pendingRemoteDisplayedStanzaId: undefined,
-      })
+      newMeta.set(roomJid, { ...meta, ...metaPatch })
 
-      // XEP-0490: if this marker advances the CURRENTLY ACTIVE room, its new-message
-      // divider was already derived at activation from the (now stale) local read
-      // position — the fresh-session seed can land just after the room opens, so the
-      // fold at activation missed it. Recompute the divider from the advanced position
-      // (rooms treat delayed messages as history replay, so no treatDelayedAsNew) so it
-      // reflects the synced read instead of freezing at the local one. Inactive rooms
-      // recompute on their next activation, so leave the map untouched.
+      // The divider is recomputed only for the active room; inactive rooms
+      // recompute on their next activation.
       let newMarkers = state.firstNewMessageMarkers
-      if (state.activeRoomJid === roomJid) {
-        const divider = notifState.onActivate(
-          {
-            unreadCount: 0,
-            mentionsCount: 0,
-            lastReadAt: meta.lastReadAt,
-            lastSeenMessageId: updated.lastSeenMessageId,
-            firstNewMessageId: undefined,
-          },
-          messages
-        ).firstNewMessageId
+      if (resolution.kind === 'advanced-with-divider') {
         newMarkers = new Map(state.firstNewMessageMarkers)
-        if (divider) newMarkers.set(roomJid, divider)
+        if (resolution.firstNewMessageId) newMarkers.set(roomJid, resolution.firstNewMessageId)
         else newMarkers.delete(roomJid)
       }
 
       if (existing) {
+        // Keep the combined map coherent with roomMeta.
         const newRooms = new Map(state.rooms)
-        newRooms.set(roomJid, {
-          ...existing,
-          lastSeenMessageId: updated.lastSeenMessageId,
-          pendingRemoteDisplayedStanzaId: undefined,
-        })
+        newRooms.set(roomJid, { ...existing, ...metaPatch })
         return { roomMeta: newMeta, rooms: newRooms, firstNewMessageMarkers: newMarkers }
       }
       return { roomMeta: newMeta, firstNewMessageMarkers: newMarkers }
@@ -2475,17 +2442,13 @@ export const roomStore = createStore<RoomState>()(
         searchIndex.indexMessages(persistableMessages).catch((e) => console.warn('[searchIndex] indexMessages failed:', e))
       }
 
-      // Sidebar preview: newest non-ignored message across the merged set — but only
-      // when it genuinely supersedes the current preview. A backward (scroll-up) merge
-      // whose keep-oldest trim evicted the newest tail yields a candidate OLDER than
-      // the current preview; replacing would regress the sidebar (parity with
-      // chatStore.mergeMAMMessages). isResolvedSamePreview heals a preview stuck on
-      // an encrypted fallback after its deferred decrypt.
-      const previewCandidate = merged.length > 0 ? findLastNonIgnoredMessage(merged, roomJid, room.nickToJidCache) : undefined
-      const lastMessage = previewCandidate &&
-        (shouldReplaceLastMessage(room.lastMessage, previewCandidate) || isResolvedSamePreview(room.lastMessage, previewCandidate))
-        ? previewCandidate
-        : room.lastMessage
+      // Sidebar preview via the shared policy: only replace when the merged set's
+      // newest non-ignored message genuinely supersedes the current preview (a
+      // backward merge whose keep-oldest trim evicted the newest tail must not
+      // regress the sidebar) or heals its encrypted fallback after a deferred decrypt.
+      const { lastMessage } = derivePreviewAfterMerge(room.lastMessage, merged, (msgs) =>
+        findLastNonIgnoredMessage(msgs, roomJid, room.nickToJidCache)
+      )
 
       const newMeta = new Map(state.roomMeta)
       const existingMeta = newMeta.get(roomJid)
