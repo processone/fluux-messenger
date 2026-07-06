@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next'
-import { Zap, Hash, LogIn, Search, RefreshCw } from 'lucide-react'
+import { Zap, Hash, LogIn, Search, RefreshCw, CheckCheck } from 'lucide-react'
 import { Tooltip } from '../Tooltip'
 import { OverflowMenu, type OverflowMenuItem } from '../OverflowMenu'
 import { SIDEBAR_HEADER_ICON_BTN } from './types'
@@ -17,6 +17,8 @@ interface RoomsHeaderActionsProps {
   onCatchUpAll: () => void
   /** Whether a catch-up is currently running (disables the item). */
   isCatchingUp: boolean
+  /** Mark every joined room as read (clears unread badges/dividers). */
+  onMarkAllRead: () => void
 }
 
 /**
@@ -31,6 +33,7 @@ export function RoomsHeaderActions({
   onBrowseRooms,
   onCatchUpAll,
   isCatchingUp,
+  onMarkAllRead,
 }: RoomsHeaderActionsProps) {
   const { t } = useTranslation()
   const items: OverflowMenuItem[] = [
@@ -38,6 +41,7 @@ export function RoomsHeaderActions({
     { key: 'joinRoom', label: t('rooms.joinRoom'), icon: LogIn, onClick: onJoinRoom },
     { key: 'browseRooms', label: t('rooms.browseRooms'), icon: Search, onClick: onBrowseRooms },
     { key: 'catchup', label: t('rooms.catchUpAll'), icon: RefreshCw, onClick: onCatchUpAll, disabled: isCatchingUp, dividerBefore: true },
+    { key: 'markAllRead', label: t('rooms.markAllRead'), icon: CheckCheck, onClick: onMarkAllRead },
   ]
   return (
     <div className="flex items-center gap-0.5">

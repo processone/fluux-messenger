@@ -111,11 +111,15 @@ export function setupChatSideEffects(
       // Last-resort anchor: forward-fill from the persisted preview timestamp when
       // the cache is empty, instead of a before:'' fetch-latest that skips a gap.
       const lastTimestamp = chatStore.getState().getConversationLastTimestamp(conversationId)
-      const q = selectCatchUpQuery(cachedMessages, { sessionStartTime, forwardGapTimestamp: gapStart, fallbackNewestTimestamp: lastTimestamp })
+      // Last-but-one resort: the XEP-0490 MDS stanza-id (kept unresolved when the
+      // pointer can't be matched locally) seeds a forward `after` catch-up on an
+      // empty local cache, instead of a before:'' fetch-latest.
+      const pointerStanzaId = chatStore.getState().conversationMeta.get(conversationId)?.pendingRemoteDisplayedStanzaId
+      const q = selectCatchUpQuery(cachedMessages, { sessionStartTime, forwardGapTimestamp: gapStart, fallbackNewestTimestamp: lastTimestamp, pointerStanzaId })
       await client.chat.queryMAM({
         with: conversation.id,
         ...q,
-        ...(q.start ? { maxAutoPages: MAM_ROOM_FORWARD_MAX_PAGES } : {}),
+        ...((q.start || q.after) ? { maxAutoPages: MAM_ROOM_FORWARD_MAX_PAGES } : {}),
       })
       logInfo('Chat: MAM sync complete')
     } catch (error) {

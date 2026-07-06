@@ -1566,6 +1566,128 @@ describe('roomStore', () => {
     })
   })
 
+  describe('markReadToNewest / markAllRoomsRead', () => {
+    it('advances the pointer to the newest message, zeroes counts, clears the divider', () => {
+      const roomJid = 'test@conference.example.com'
+      const messages = [
+        createMessage('m1', roomJid, 'alice', 'first'),
+        createMessage('m2', roomJid, 'alice', 'second'),
+        createMessage('m3', roomJid, 'alice', 'third'),
+      ]
+      roomStore.getState().addRoom(createRoom(roomJid, {
+        joined: true,
+        messages,
+        lastMessage: messages[2],
+        unreadCount: 2,
+        mentionsCount: 1,
+        lastSeenMessageId: 'm1',
+      }))
+      roomStore.setState((state) => {
+        const newMarkers = new Map(state.firstNewMessageMarkers)
+        newMarkers.set(roomJid, 'm2')
+        return { firstNewMessageMarkers: newMarkers }
+      })
+
+      roomStore.getState().markReadToNewest(roomJid)
+
+      const meta = roomStore.getState().roomMeta.get(roomJid)
+      expect(meta?.lastSeenMessageId).toBe('m3')
+      expect(meta?.unreadCount).toBe(0)
+      expect(meta?.mentionsCount).toBe(0)
+      expect(roomStore.getState().firstNewMessageMarkers.has(roomJid)).toBe(false)
+    })
+
+    it('is a no-op (same Map references) when the room is already read to newest', () => {
+      const roomJid = 'test@conference.example.com'
+      const messages = [
+        createMessage('m1', roomJid, 'alice', 'first'),
+        createMessage('m2', roomJid, 'alice', 'second'),
+        createMessage('m3', roomJid, 'alice', 'third'),
+      ]
+      roomStore.getState().addRoom(createRoom(roomJid, {
+        joined: true,
+        messages,
+        lastMessage: messages[2],
+        unreadCount: 2,
+        mentionsCount: 1,
+        lastSeenMessageId: 'm1',
+      }))
+      roomStore.setState((state) => {
+        const newMarkers = new Map(state.firstNewMessageMarkers)
+        newMarkers.set(roomJid, 'm2')
+        return { firstNewMessageMarkers: newMarkers }
+      })
+
+      // First call actually advances the pointer and clears the divider.
+      roomStore.getState().markReadToNewest(roomJid)
+
+      const { roomMeta, rooms } = roomStore.getState()
+
+      // Second call: room is already fully read, nothing should change.
+      roomStore.getState().markReadToNewest(roomJid)
+
+      const stateAfter = roomStore.getState()
+      expect(stateAfter.roomMeta).toBe(roomMeta)
+      expect(stateAfter.rooms).toBe(rooms)
+    })
+
+    it('falls back to lastMessage for an evicted (non-active) room', () => {
+      const roomJid = 'evicted@conference.example.com'
+      const m9 = createMessage('m9', roomJid, 'alice', 'latest before eviction')
+      roomStore.getState().addRoom(createRoom(roomJid, {
+        joined: true,
+        messages: [],
+        lastMessage: m9,
+        unreadCount: 3,
+        mentionsCount: 1,
+      }))
+      // Simulate eviction: runtime messages array is empty (non-active room).
+      roomStore.setState((state) => {
+        const newRuntime = new Map(state.roomRuntime)
+        const existingRuntime = newRuntime.get(roomJid)
+        if (existingRuntime) newRuntime.set(roomJid, { ...existingRuntime, messages: [] })
+        return { roomRuntime: newRuntime }
+      })
+
+      roomStore.getState().markReadToNewest(roomJid)
+
+      const meta = roomStore.getState().roomMeta.get(roomJid)
+      expect(meta?.lastSeenMessageId).toBe('m9')
+      expect(meta?.unreadCount).toBe(0)
+      expect(meta?.mentionsCount).toBe(0)
+    })
+
+    it('markAllRoomsRead marks every joined room with unread, skips clean and unjoined rooms', () => {
+      const unreadJoined = 'unread-joined@conference.example.com'
+      const cleanJoined = 'clean-joined@conference.example.com'
+      const unreadUnjoined = 'unread-unjoined@conference.example.com'
+
+      const unreadMsgs = [createMessage('u1', unreadJoined, 'alice', 'hi')]
+      const cleanMsgs = [createMessage('c1', cleanJoined, 'alice', 'hi')]
+      const unjoinedMsgs = [createMessage('j1', unreadUnjoined, 'alice', 'hi')]
+
+      roomStore.getState().addRoom(createRoom(unreadJoined, {
+        joined: true, messages: unreadMsgs, lastMessage: unreadMsgs[0], unreadCount: 2,
+      }))
+      roomStore.getState().addRoom(createRoom(cleanJoined, {
+        joined: true, messages: cleanMsgs, lastMessage: cleanMsgs[0], unreadCount: 0, mentionsCount: 0,
+      }))
+      roomStore.getState().addRoom(createRoom(unreadUnjoined, {
+        joined: false, messages: unjoinedMsgs, lastMessage: unjoinedMsgs[0], unreadCount: 5,
+      }))
+
+      roomStore.getState().markAllRoomsRead()
+
+      expect(roomStore.getState().roomMeta.get(unreadJoined)?.unreadCount).toBe(0)
+      expect(roomStore.getState().roomMeta.get(unreadJoined)?.lastSeenMessageId).toBe('u1')
+      // Clean room was already at 0 — no change expected (and no crash).
+      expect(roomStore.getState().roomMeta.get(cleanJoined)?.unreadCount).toBe(0)
+      // Unjoined room is skipped even though it has unread messages.
+      expect(roomStore.getState().roomMeta.get(unreadUnjoined)?.unreadCount).toBe(5)
+      expect(roomStore.getState().roomMeta.get(unreadUnjoined)?.lastSeenMessageId).toBeUndefined()
+    })
+  })
+
   describe('mentions tracking', () => {
     it('should increment mentions count when incrementMentions option is true', () => {
       roomStore.getState().addRoom(createRoom('test@conference.example.com'))
@@ -1900,6 +2022,54 @@ describe('roomStore', () => {
 
       expect(roomStore.getState().activationPending).toBe(false)
       expect(roomStore.getState().activeRoomJid).toBeNull()
+    })
+
+    it('activateRoom reloads the window around a pointer deeper than the latest slice', async () => {
+      // Arrange: cache holds 300 messages; the latest-100 slice (returned by
+      // loadMessagesFromCache) does NOT contain meta.lastSeenMessageId
+      // ('msg-150') — the reader left off deep in history. Seeding
+      // roomMeta.lastSeenMessageId directly mimics a persisted read pointer
+      // from a prior session (no live activation has run yet in this test).
+      const roomJid = 'test@conference.example.com'
+      roomStore.getState().addRoom(createRoom(roomJid, { joined: true }))
+      roomStore.setState((state) => {
+        const meta = new Map(state.roomMeta)
+        meta.set(roomJid, { ...meta.get(roomJid)!, lastSeenMessageId: 'msg-150' })
+        return { roomMeta: meta }
+      })
+
+      // Base offsets in minutes-since-epoch so message order matches id order
+      // (msg-149 < msg-150 < msg-151 < ... < msg-299) with no collisions.
+      const roomMsgAt = (id: string, offsetMinutes: number): RoomMessage => ({
+        type: 'groupchat',
+        id,
+        roomJid,
+        from: `${roomJid}/alice`,
+        nick: 'alice',
+        body: id,
+        timestamp: new Date(offsetMinutes * 60_000),
+        isOutgoing: false,
+      })
+
+      const latestSlice: RoomMessage[] = Array.from({ length: 100 }, (_, i) => roomMsgAt(`msg-${200 + i}`, 200 + i))
+      const aroundSlice: RoomMessage[] = [
+        roomMsgAt('msg-149', 149),
+        roomMsgAt('msg-150', 150),
+        roomMsgAt('msg-151', 151),
+      ]
+      vi.mocked(messageCache.getRoomMessages).mockResolvedValue(latestSlice)
+      vi.mocked(messageCache.getRoomMessagesAround).mockResolvedValue(aroundSlice)
+
+      await roomStore.getState().activateRoom(roomJid)
+
+      expect(messageCache.getRoomMessagesAround).toHaveBeenCalledWith(
+        roomJid,
+        'msg-150',
+        expect.any(Object)
+      )
+      const resident = roomStore.getState().roomRuntime.get(roomJid)?.messages
+      expect(resident?.some((m) => m.id === 'msg-150')).toBe(true)
+      expect(roomStore.getState().firstNewMessageMarkers.get(roomJid)).toBe('msg-151')
     })
   })
 
@@ -3128,6 +3298,176 @@ describe('roomStore', () => {
       expect(messages[3].body).toBe('MAM at 16:00')
       // Newest message is last
       expect(messages[messages.length - 1].body).toBe('MAM at 16:00')
+    })
+  })
+
+  describe('mergeRoomMAMMessages badge hydration', () => {
+    const roomJid = 'room@conference.example.com'
+
+    beforeEach(() => {
+      roomStore.getState().addRoom(createRoom(roomJid, { joined: true }))
+      // Background catch-up hydration only applies to a NON-active room —
+      // point activeRoomJid elsewhere unless a test explicitly marks roomJid active.
+      roomStore.setState({ activeRoomJid: 'other@conference.example.com' })
+    })
+
+    it('forward merge into a non-active room recomputes unread and mention counts from the pointer', () => {
+      roomStore.setState((state) => {
+        const meta = new Map(state.roomMeta)
+        meta.set(roomJid, { ...meta.get(roomJid)!, lastSeenMessageId: 'm1' })
+        return { roomMeta: meta }
+      })
+
+      const mamMessages: RoomMessage[] = [
+        {
+          type: 'groupchat',
+          id: 'm1',
+          roomJid,
+          from: `${roomJid}/alice`,
+          nick: 'alice',
+          body: 'Already read',
+          timestamp: new Date('2024-01-15T10:00:00Z'),
+          isOutgoing: false,
+          isDelayed: true,
+        },
+        {
+          type: 'groupchat',
+          id: 'm2',
+          roomJid,
+          from: `${roomJid}/bob`,
+          nick: 'bob',
+          body: '@me hi',
+          timestamp: new Date('2024-01-15T10:01:00Z'),
+          isOutgoing: false,
+          isDelayed: true,
+          isMention: true,
+        },
+        {
+          type: 'groupchat',
+          id: 'm3',
+          roomJid,
+          from: `${roomJid}/charlie`,
+          nick: 'charlie',
+          body: 'Also new',
+          timestamp: new Date('2024-01-15T10:02:00Z'),
+          isOutgoing: false,
+          isDelayed: true,
+        },
+      ]
+
+      roomStore.getState().mergeRoomMAMMessages(roomJid, mamMessages, {}, true, 'forward')
+
+      const meta = roomStore.getState().roomMeta.get(roomJid)
+      expect(meta?.unreadCount).toBe(2)
+      expect(meta?.mentionsCount).toBe(1)
+      // Combined map mirrors meta.
+      const room = roomStore.getState().rooms.get(roomJid)
+      expect(room?.unreadCount).toBe(2)
+      expect(room?.mentionsCount).toBe(1)
+    })
+
+    it('forward merge into a room with NO read state snaps the pointer (fresh-join guard)', () => {
+      // No lastSeenMessageId/lastReadAt seeded — fresh room, never read.
+      const mamMessages: RoomMessage[] = [
+        {
+          type: 'groupchat',
+          id: 'f1',
+          roomJid,
+          from: `${roomJid}/alice`,
+          nick: 'alice',
+          body: 'History 1',
+          timestamp: new Date('2024-01-15T10:00:00Z'),
+          isOutgoing: false,
+          isDelayed: true,
+        },
+        {
+          type: 'groupchat',
+          id: 'f2',
+          roomJid,
+          from: `${roomJid}/bob`,
+          nick: 'bob',
+          body: 'History 2',
+          timestamp: new Date('2024-01-15T10:01:00Z'),
+          isOutgoing: false,
+          isDelayed: true,
+        },
+        {
+          type: 'groupchat',
+          id: 'f3',
+          roomJid,
+          from: `${roomJid}/charlie`,
+          nick: 'charlie',
+          body: 'History 3',
+          timestamp: new Date('2024-01-15T10:02:00Z'),
+          isOutgoing: false,
+          isDelayed: true,
+        },
+      ]
+
+      roomStore.getState().mergeRoomMAMMessages(roomJid, mamMessages, {}, true, 'forward')
+
+      const meta = roomStore.getState().roomMeta.get(roomJid)
+      expect(meta?.unreadCount).toBe(0)
+      expect(meta?.mentionsCount).toBe(0)
+      expect(meta?.lastSeenMessageId).toBe('f3')
+    })
+
+    it('backward merge does not touch counts', () => {
+      roomStore.setState((state) => {
+        const meta = new Map(state.roomMeta)
+        meta.set(roomJid, { ...meta.get(roomJid)!, lastSeenMessageId: 'm1', unreadCount: 5, mentionsCount: 1 })
+        return { roomMeta: meta }
+      })
+
+      const mamMessages: RoomMessage[] = [
+        {
+          type: 'groupchat',
+          id: 'older-1',
+          roomJid,
+          from: `${roomJid}/alice`,
+          nick: 'alice',
+          body: 'Older history',
+          timestamp: new Date('2024-01-15T09:00:00Z'),
+          isOutgoing: false,
+          isDelayed: true,
+        },
+      ]
+
+      roomStore.getState().mergeRoomMAMMessages(roomJid, mamMessages, {}, true, 'backward')
+
+      const meta = roomStore.getState().roomMeta.get(roomJid)
+      expect(meta?.unreadCount).toBe(5)
+      expect(meta?.mentionsCount).toBe(1)
+    })
+
+    it('forward merge into the ACTIVE room does not touch counts', () => {
+      roomStore.setState({ activeRoomJid: roomJid })
+      roomStore.setState((state) => {
+        const meta = new Map(state.roomMeta)
+        meta.set(roomJid, { ...meta.get(roomJid)!, lastSeenMessageId: 'm1', unreadCount: 0, mentionsCount: 0 })
+        return { roomMeta: meta }
+      })
+
+      const mamMessages: RoomMessage[] = [
+        {
+          type: 'groupchat',
+          id: 'm2',
+          roomJid,
+          from: `${roomJid}/bob`,
+          nick: 'bob',
+          body: '@me hi',
+          timestamp: new Date('2024-01-15T10:01:00Z'),
+          isOutgoing: false,
+          isDelayed: true,
+          isMention: true,
+        },
+      ]
+
+      roomStore.getState().mergeRoomMAMMessages(roomJid, mamMessages, {}, true, 'forward')
+
+      const meta = roomStore.getState().roomMeta.get(roomJid)
+      expect(meta?.unreadCount).toBe(0)
+      expect(meta?.mentionsCount).toBe(0)
     })
   })
 
@@ -4605,13 +4945,13 @@ describe('roomStore', () => {
   })
 })
 
-describe('setActiveRoom new-message marker — delayed = MUC/MAM history replay', () => {
-  // Regression guard: the marker (firstNewMessageId) drives scroll position on
-  // room open. For rooms, a delayed message is history replay (either MUC <history>
-  // for non-MAM rooms, or MAM-fetched archive — both carry isDelayed=true), NOT a
-  // new message. The marker must skip them, otherwise joining a room scrolls the
-  // user into the middle of replayed history instead of to the bottom.
-  // roomStore must call onActivate WITHOUT treatDelayedAsNew (unlike chatStore).
+describe('setActiveRoom new-message marker — delayed history unified with chats', () => {
+  // The marker (firstNewMessageId) drives scroll position on room open. Rooms now
+  // treat delayed (MUC <history> replay or MAM-fetched archive) messages the same
+  // way chats treat offline-delivered messages: as new relative to the read
+  // pointer. roomStore calls onActivate WITH treatDelayedAsNew (parity with
+  // chatStore). A fresh join (no prior read state) still derives no marker —
+  // that's guarded by the fresh-entity path, not by treatDelayedAsNew.
   const ROOM = 'room@conference.example.com'
 
   beforeEach(() => {
@@ -4655,7 +4995,9 @@ describe('setActiveRoom new-message marker — delayed = MUC/MAM history replay'
     return roomStore.getState().firstNewMessageMarkers.get(ROOM)
   }
 
-  it('sets no marker when only delayed history follows lastSeen (MAM/MUC join)', () => {
+  it('places the divider on delayed history after lastSeen (unified with chats)', () => {
+    // Reuse the existing test's setup verbatim, but expect a marker: rooms now
+    // treat delayed (MAM/history-replay) messages as new, same as chats.
     const marker = activateWith(
       [
         createMessage('seen', ROOM, 'alice', 'seen message'),
@@ -4665,6 +5007,21 @@ describe('setActiveRoom new-message marker — delayed = MUC/MAM history replay'
       'seen',
       2
     )
+    expect(marker).toBe('h-1')
+  })
+
+  it('fresh join (no read state) derives no marker from delayed history', () => {
+    // Same setup WITHOUT seeding lastSeenMessageId/lastReadAt/unreadCount — the
+    // fresh-entity path has nothing to resume from, so no marker is derived.
+    roomStore.getState().addRoom(createRoom(ROOM, {
+      joined: true,
+      messages: [
+        delayedMsg('h-1', 'bob', '2025-01-15T10:00:00Z'),
+        delayedMsg('h-2', 'carol', '2025-01-15T10:30:00Z'),
+      ],
+    }))
+    roomStore.getState().setActiveRoom(ROOM)
+    const marker = roomStore.getState().firstNewMessageMarkers.get(ROOM)
     expect(marker).toBeUndefined()
   })
 

@@ -241,6 +241,10 @@ interface ChatState {
   deleteConversation: (id: string) => void
   addMessage: (msg: Message) => void
   markAsRead: (conversationId: string) => void
+  /** Esc / mark-all-read: advance the read pointer to the newest known
+   *  message, zero the unread count, drop the divider. The MDS publisher
+   *  picks up the pointer advance via the conversationMeta watch. */
+  markReadToNewest: (conversationId: string) => void
   clearFirstNewMessageId: (conversationId: string) => void
   updateLastSeenMessageId: (conversationId: string, messageId: string) => void
   /**
@@ -761,6 +765,22 @@ export const chatStore = createStore<ChatState>()(
               pendingStanzaId: pending,
             })
           }
+
+          // Resume anchor: if the read pointer is deeper than the latest-100
+          // slice, reload the window AROUND it (IndexedDB only) so the divider
+          // derives inside the slice and the entry scroll can anchor on it. The
+          // fold above ran first — it may have advanced the pointer to the synced
+          // position. A cache miss keeps the latest slice; the divider then
+          // degrades via the stale-pointer fallback (spec §5) and MAM catch-up
+          // heals the cache for the next open.
+          const pointer = get().conversationMeta.get(id)?.lastSeenMessageId
+          if (pointer) {
+            const loaded = get().messages.get(id) ?? []
+            if (!loaded.some((m) => m.id === pointer)) {
+              await get().loadMessagesAroundFromCache(id, pointer)
+              if (token !== activationToken) return
+            }
+          }
         }
         // Set active and clear pending atomically (same React commit) so the view
         // swaps straight from loading surface to content with no empty-state frame.
@@ -1022,6 +1042,47 @@ export const chatStore = createStore<ChatState>()(
         })
       },
 
+      markReadToNewest: (conversationId) => {
+        set((state) => {
+          const existing = state.conversations.get(conversationId)
+          if (!existing) return state
+
+          const meta = state.conversationMeta.get(conversationId)
+          const messages = state.messages.get(conversationId)
+          const newest = messages?.[messages.length - 1] ?? meta?.lastMessage ?? existing.lastMessage
+          if (!newest) return state
+
+          // Skip update if already fully read: pointer at the computed newest id,
+          // no unread count, and no "new messages" divider to clear.
+          const currentLastSeenMessageId = meta?.lastSeenMessageId ?? existing.lastSeenMessageId
+          const currentUnreadCount = meta?.unreadCount ?? existing.unreadCount ?? 0
+          if (
+            currentLastSeenMessageId === newest.id &&
+            currentUnreadCount === 0 &&
+            !state.firstNewMessageMarkers.has(conversationId)
+          ) {
+            return state
+          }
+
+          const read = {
+            lastSeenMessageId: newest.id,
+            unreadCount: 0,
+            lastReadAt: newest.timestamp,
+          }
+
+          const newMeta = new Map(state.conversationMeta)
+          if (meta) newMeta.set(conversationId, { ...meta, ...read })
+
+          const newConversations = new Map(state.conversations)
+          newConversations.set(conversationId, { ...existing, ...read })
+
+          const newMarkers = new Map(state.firstNewMessageMarkers)
+          newMarkers.delete(conversationId)
+
+          return { conversationMeta: newMeta, conversations: newConversations, firstNewMessageMarkers: newMarkers }
+        })
+      },
+
       clearFirstNewMessageId: (conversationId) => {
         set((state) => {
           if (!state.firstNewMessageMarkers.has(conversationId)) return state
@@ -1038,6 +1099,7 @@ export const chatStore = createStore<ChatState>()(
           if (!meta) return state
 
           const messages = state.messages.get(conversationId) || []
+          const atLiveEdge = state.windowAtLiveEdge.get(conversationId) !== false
           const updated = notifState.onMessageSeen(
             {
               unreadCount: meta.unreadCount,
@@ -1047,7 +1109,8 @@ export const chatStore = createStore<ChatState>()(
               firstNewMessageId: state.firstNewMessageMarkers.get(conversationId),
             },
             messageId,
-            messages
+            messages,
+            { atLiveEdge }
           )
 
           // No change (same reference or same value)
@@ -1103,6 +1166,33 @@ export const chatStore = createStore<ChatState>()(
           const newMeta = new Map(state.conversationMeta)
           newMeta.set(conversationId, { ...meta, ...metaPatch })
 
+          // Inbound read-state sync (spec §4): a marker published by another
+          // client clears this conversation's badge now, not on the next
+          // activation. 'advanced' is exactly the non-active pointer-advance
+          // kind (the active conversation resolves as 'advanced-with-divider'
+          // and its counts are already zero). Only the count is folded — the
+          // pointer keeps the forward-only position resolved above.
+          // countMentions is omitted (default false) and mentionsCount is an
+          // inert 0: conversations don't track mentions the way rooms do
+          // (parity with the hydration path in mergeMAMMessages).
+          let recomputed: notifState.EntityNotificationState | undefined
+          if (resolution.kind === 'advanced') {
+            recomputed = notifState.recomputeCountsFromPointer(
+              {
+                unreadCount: meta.unreadCount,
+                mentionsCount: 0,
+                lastReadAt: meta.lastReadAt,
+                lastSeenMessageId: resolution.lastSeenMessageId,
+                firstNewMessageId: state.firstNewMessageMarkers.get(conversationId),
+              },
+              messages
+            )
+            newMeta.set(conversationId, {
+              ...newMeta.get(conversationId)!,
+              unreadCount: recomputed.unreadCount,
+            })
+          }
+
           // The divider is recomputed only for the active conversation; inactive
           // ones recompute on their next activation.
           let newMarkers = state.firstNewMessageMarkers
@@ -1115,7 +1205,12 @@ export const chatStore = createStore<ChatState>()(
           if (conv) {
             // Keep the combined map coherent with conversationMeta.
             const newConversations = new Map(state.conversations)
-            newConversations.set(conversationId, { ...conv, ...metaPatch })
+            newConversations.set(conversationId, {
+              ...conv,
+              ...metaPatch,
+              // Keep the combined map coherent with the recomputed count.
+              ...(recomputed ? { unreadCount: recomputed.unreadCount } : {}),
+            })
             return { conversationMeta: newMeta, conversations: newConversations, firstNewMessageMarkers: newMarkers }
           }
           return { conversationMeta: newMeta, firstNewMessageMarkers: newMarkers }
@@ -1575,11 +1670,47 @@ export const chatStore = createStore<ChatState>()(
           // reconnect's forward catch-up can't refill a backgrounded conversation
           // toward the cap. It rehydrates from cache on open.
           if (!isActive) {
-            if (previewUpdate) {
+            // Badge hydration (spec §1): a forward merge extends contiguous
+            // history past the read pointer — recompute the unread count so an
+            // unopened conversation regains its badge after catch-up. Backward
+            // merges only prepend older history (nothing after the pointer
+            // changes). The live path (addMessage/onMessageReceived) keeps
+            // owning incremental counting; this reconciles bulk archive
+            // delivery. countMentions is omitted (default false) — conversations
+            // don't track mentionsCount the way rooms do.
+            let hydrated: notifState.EntityNotificationState | undefined
+            if (direction === 'forward' && meta && conv) {
+              const pointerState: notifState.EntityNotificationState = {
+                unreadCount: meta.unreadCount,
+                mentionsCount: 0,
+                lastReadAt: meta.lastReadAt,
+                lastSeenMessageId: meta.lastSeenMessageId,
+                firstNewMessageId: state.firstNewMessageMarkers.get(conversationId),
+              }
+              const recomputed = notifState.recomputeCountsFromPointer(pointerState, mergedForMarker)
+              // Same-reference return = nothing changed; skip the map churn.
+              if (recomputed !== pointerState) hydrated = recomputed
+            }
+
+            if (previewUpdate || hydrated) {
               const newMeta = new Map(state.conversationMeta)
-              newMeta.set(conversationId, { ...meta!, lastMessage })
+              newMeta.set(conversationId, {
+                ...meta!,
+                ...(previewUpdate ? { lastMessage } : {}),
+                ...(hydrated ? {
+                  unreadCount: hydrated.unreadCount,
+                  lastSeenMessageId: hydrated.lastSeenMessageId,
+                } : {}),
+              })
               const newConversations = new Map(state.conversations)
-              newConversations.set(conversationId, { ...conv!, lastMessage })
+              newConversations.set(conversationId, {
+                ...conv!,
+                ...(previewUpdate ? { lastMessage } : {}),
+                ...(hydrated ? {
+                  unreadCount: hydrated.unreadCount,
+                  lastSeenMessageId: hydrated.lastSeenMessageId,
+                } : {}),
+              })
               return { mamQueryStates: newStates, conversationMeta: newMeta, conversations: newConversations, conversationGaps: newGaps }
             }
             return { mamQueryStates: newStates, conversationGaps: newGaps }

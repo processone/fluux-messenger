@@ -121,11 +121,15 @@ export function setupRoomSideEffects(
       // Last-resort anchor: forward-fill from the persisted preview timestamp when
       // the cache is empty, instead of a before:'' fetch-latest that skips a gap.
       const lastTimestamp = roomStore.getState().getRoomLastTimestamp(roomJid)
-      const q = selectCatchUpQuery(messages, { sessionStartTime, forwardGapTimestamp: gapStart, fallbackNewestTimestamp: lastTimestamp })
+      // Last-but-one resort: the XEP-0490 MDS stanza-id (kept unresolved when the
+      // pointer can't be matched locally) seeds a forward `after` catch-up on an
+      // empty local cache, instead of a before:'' fetch-latest.
+      const pointerStanzaId = roomStore.getState().roomMeta.get(roomJid)?.pendingRemoteDisplayedStanzaId
+      const q = selectCatchUpQuery(messages, { sessionStartTime, forwardGapTimestamp: gapStart, fallbackNewestTimestamp: lastTimestamp, pointerStanzaId })
       await client.chat.queryRoomMAM({
         roomJid,
         ...q,
-        max: q.start ? MAM_CATCHUP_FORWARD_MAX : MAM_CATCHUP_BACKWARD_MAX,
+        max: (q.start || q.after) ? MAM_CATCHUP_FORWARD_MAX : MAM_CATCHUP_BACKWARD_MAX,
       })
       logInfo('Room: MAM catch-up complete')
     } catch (error) {

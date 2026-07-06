@@ -143,6 +143,32 @@ describe('chatStore.applyRemoteDisplayed', () => {
     expect(chatStore.getState().conversations.get(cid)?.pendingRemoteDisplayedStanzaId).toBe(undefined)
   })
 
+  // Inbound read-state sync (spec §4): a marker published by another client
+  // clears a backgrounded conversation's badge immediately, not on the next
+  // activation (mirrors the roomStore behavior; conversations have no mentions).
+  it('applyRemoteDisplayed on a non-active conversation recomputes the unread badge', () => {
+    const cid = 'juliet@capulet.example'
+    const messages = [msg('m1', 's1'), msg('m2', 's2'), msg('m3', 's3'), msg('m4', 's4')]
+
+    // Backgrounded conversation: NO resident messages (evicted); the marker
+    // arrives with the just-merged messages (the mergeMAMMessages override path).
+    chatStore.setState((state) => {
+      const newMeta = new Map(state.conversationMeta)
+      newMeta.set(cid, { unreadCount: 3, lastSeenMessageId: 'm1' })
+      const newConvs = new Map(state.conversations)
+      newConvs.set(cid, { id: cid, name: cid, type: 'chat', unreadCount: 3, lastSeenMessageId: 'm1' })
+      return { conversationMeta: newMeta, conversations: newConvs }
+    })
+
+    chatStore.getState().applyRemoteDisplayed(cid, 's4', messages)
+
+    const meta = chatStore.getState().conversationMeta.get(cid)
+    expect(meta?.lastSeenMessageId).toBe('m4')
+    expect(meta?.unreadCount).toBe(0)
+    // The combined conversations mirror is kept coherent with conversationMeta.
+    expect(chatStore.getState().conversations.get(cid)?.unreadCount).toBe(0)
+  })
+
   it('resolves a pending remote marker once the message arrives via MAM merge', () => {
     const cid = 'juliet@capulet.example'
 

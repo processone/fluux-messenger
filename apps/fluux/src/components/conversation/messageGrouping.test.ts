@@ -510,7 +510,7 @@ describe('scrollToMessage', () => {
     let mounted = false
     querySelectorSpy.mockImplementation(() => (mounted ? (mockElement as unknown as Element) : null))
     const ensureMessageMounted = vi.fn(() => { mounted = true })
-    setActiveMessageListController({ hasMessage: () => true, ensureMessageMounted })
+    setActiveMessageListController({ hasMessage: () => true, ensureMessageMounted, scrollToBottom: vi.fn() })
     try {
       scrollToMessage('windowed-out-id')
 
@@ -531,7 +531,7 @@ describe('scrollToMessage', () => {
   it('does not ask the controller to mount an id it does not have (no churn on a truly missing id)', () => {
     querySelectorSpy.mockReturnValue(null)
     const ensureMessageMounted = vi.fn()
-    setActiveMessageListController({ hasMessage: () => false, ensureMessageMounted })
+    setActiveMessageListController({ hasMessage: () => false, ensureMessageMounted, scrollToBottom: vi.fn() })
     try {
       scrollToMessage('unknown-id')
       vi.advanceTimersByTime(300)

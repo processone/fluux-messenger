@@ -653,6 +653,7 @@ export const createMockStores = (): MockStoreBindings => ({
     // Composite getters
     getAllConversations: vi.fn().mockReturnValue([]),
     getConversationGapStart: vi.fn().mockReturnValue(undefined),
+    getConversationPendingStanzaId: vi.fn().mockReturnValue(undefined),
     getArchivedConversations: vi.fn().mockReturnValue([]),
     getLastMessage: vi.fn().mockReturnValue(undefined),
   },
@@ -679,6 +680,7 @@ export const createMockStores = (): MockStoreBindings => ({
     hydratePreviewsFromCache: vi.fn().mockResolvedValue(undefined),
     // Composite getter
     getRoomGapStart: vi.fn().mockReturnValue(undefined),
+    getRoomPendingStanzaId: vi.fn().mockReturnValue(undefined),
   },
   admin: {
     ...mockMethods(adminBindingMethodKeys),

@@ -6,6 +6,7 @@ import { useModalStore } from '@/stores/modalStore'
 import { useUpdateAffordance } from '@/stores/appUpdateStore'
 import {
   useXMPP,
+  useRoomActions,
   getLocalPart,
   type Contact,
   type AdminCategory,
@@ -84,6 +85,7 @@ export function Sidebar({ onSelectContact, onStartChat, onStartChatWithJid, onMa
   const ownNickname = useConnectionStore((s) => s.ownNickname)
   // Get methods from client (not from store)
   const { client } = useXMPP()
+  const { markAllRoomsRead } = useRoomActions()
   const disconnect = (options?: { invalidateFastToken?: boolean }) =>
     client.disconnect(options)
   const isAdmin = useAdminStore((s) => s.isAdmin)
@@ -331,6 +333,7 @@ export function Sidebar({ onSelectContact, onStartChat, onStartChatWithJid, onMa
                 void client.mam.forceCatchUpAllRooms().finally(() => setIsCatchingUpRooms(false))
               }}
               isCatchingUp={isCatchingUpRooms}
+              onMarkAllRead={markAllRoomsRead}
             />
           )}
           {sidebarView === 'contacts' && (

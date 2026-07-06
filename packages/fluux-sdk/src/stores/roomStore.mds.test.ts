@@ -171,6 +171,61 @@ describe('roomStore.applyRemoteDisplayed', () => {
     expect(roomStore.getState().firstNewMessageMarkers.get(ROOM)).toBe('m3')
   })
 
+  // Inbound read-state sync (spec §4): a marker published by another client
+  // clears a backgrounded room's badge immediately, not on the next activation.
+  it('applyRemoteDisplayed on a non-active room recomputes badge counts', () => {
+    const messages = [
+      rmsg('m1', 's1', 1),
+      rmsg('m2', 's2', 2),
+      { ...rmsg('m3', 's3', 3), isMention: true },
+      rmsg('m4', 's4', 4),
+    ]
+    // Backgrounded room: resident array evicted; the marker arrives with the
+    // just-merged messages (the mergeRoomMAMMessages messagesOverride path).
+    seedRoom(ROOM, [])
+    roomStore.setState((s) => {
+      const m = new Map(s.roomMeta)
+      m.set(ROOM, { ...m.get(ROOM)!, lastSeenMessageId: 'm1', unreadCount: 3, mentionsCount: 1 })
+      const rooms = new Map(s.rooms)
+      rooms.set(ROOM, { ...rooms.get(ROOM)!, lastSeenMessageId: 'm1', unreadCount: 3, mentionsCount: 1 })
+      return { roomMeta: m, rooms }
+    })
+
+    roomStore.getState().applyRemoteDisplayed(ROOM, 's4', messages)
+
+    const meta = roomStore.getState().roomMeta.get(ROOM)
+    expect(meta?.lastSeenMessageId).toBe('m4')
+    expect(meta?.unreadCount).toBe(0)
+    expect(meta?.mentionsCount).toBe(0)
+    // The combined rooms mirror is kept coherent with roomMeta.
+    const room = roomStore.getState().rooms.get(ROOM)
+    expect(room?.unreadCount).toBe(0)
+    expect(room?.mentionsCount).toBe(0)
+  })
+
+  it('applyRemoteDisplayed to a mid-history position leaves the honest remainder', () => {
+    const messages = [
+      rmsg('m1', 's1', 1),
+      rmsg('m2', 's2', 2),
+      { ...rmsg('m3', 's3', 3), isMention: true },
+      rmsg('m4', 's4', 4),
+    ]
+    seedRoom(ROOM, [])
+    roomStore.setState((s) => {
+      const m = new Map(s.roomMeta)
+      m.set(ROOM, { ...m.get(ROOM)!, lastSeenMessageId: 'm1', unreadCount: 3, mentionsCount: 1 })
+      return { roomMeta: m }
+    })
+
+    // The other device read only up to m2 — m3 (a mention) and m4 stay unread.
+    roomStore.getState().applyRemoteDisplayed(ROOM, 's2', messages)
+
+    const meta = roomStore.getState().roomMeta.get(ROOM)
+    expect(meta?.lastSeenMessageId).toBe('m2')
+    expect(meta?.unreadCount).toBe(2)
+    expect(meta?.mentionsCount).toBe(1)
+  })
+
   it('resolves a pending room marker once the message arrives via room MAM merge', () => {
     seedRoom(ROOM, [rmsg('m1', 's1', 1)], 'm1')
     roomStore.getState().applyRemoteDisplayed(ROOM, 's5') // not loaded → pending

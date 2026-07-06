@@ -84,6 +84,7 @@ void i18n.use(initReactI18next).init({
           joinRoom: 'Join room',
           browseRooms: 'Browse Rooms',
           catchUpAll: 'Catch up all rooms',
+          markAllRead: 'Mark all as read',
         },
         messages: {
           showArchived: 'Show archived conversations',
@@ -102,6 +103,10 @@ void i18n.use(initReactI18next).init({
             three: '{{name1}}, {{name2}}, and {{name3}} are typing...',
             many: '{{name1}}, {{name2}}, and {{count}} others are typing...',
           },
+          // Jump-to-last-read pill (JumpToLastReadPill component tests)
+          newMessagesCount: '{{count}} new message',
+          newMessagesCount_other: '{{count}} new messages',
+          youWereAway: 'You were away',
         },
         // Empty state primary actions (ChatLayout EmptyState tests)
         emptyState: {
@@ -235,6 +240,7 @@ vi.mock('@fluux/sdk', async (importOriginal) => {
         setActiveConversation: vi.fn(),
         activateConversation: vi.fn().mockResolvedValue(undefined),
         markAsRead: vi.fn(),
+        markReadToNewest: vi.fn(),
         clearFirstNewMessageId: vi.fn(),
         isArchived: () => false,
         applyRemoteDisplayed: vi.fn(),
@@ -249,6 +255,8 @@ vi.mock('@fluux/sdk', async (importOriginal) => {
         setActiveRoom: vi.fn(),
         activateRoom: vi.fn().mockResolvedValue(undefined),
         markAsRead: vi.fn(),
+        markReadToNewest: vi.fn(),
+        markAllRoomsRead: vi.fn(),
         clearFirstNewMessageId: vi.fn(),
         getRoom: () => undefined,
         getDraft: () => '',

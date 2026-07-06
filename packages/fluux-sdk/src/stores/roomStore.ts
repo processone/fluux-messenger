@@ -528,6 +528,12 @@ export interface RoomState {
    */
   getRoomLastTimestamp: (roomJid: string) => number | undefined
   markAsRead: (roomJid: string) => void
+  /** Esc / mark-all-read: advance the read pointer to the newest known
+   *  message, zero the counts, drop the divider. The MDS publisher picks up
+   *  the pointer advance via the roomMeta watch. */
+  markReadToNewest: (roomJid: string) => void
+  /** Bulk vacation-recovery: markReadToNewest for every joined room with unread. */
+  markAllRoomsRead: () => void
   setActiveRoom: (roomJid: string | null) => void
   /**
    * Hydrate the room's recent history from the IndexedDB cache, then mark it active.
@@ -1512,6 +1518,55 @@ export const roomStore = createStore<RoomState>()(
     })
   },
 
+  markReadToNewest: (roomJid) => {
+    set((state) => {
+      const existing = state.rooms.get(roomJid)
+      if (!existing) return state
+
+      const runtime = state.roomRuntime.get(roomJid)
+      const resident = runtime?.messages?.length ? runtime.messages : existing.messages
+      const newest = resident[resident.length - 1] ?? existing.lastMessage
+      if (!newest) return state
+
+      // Skip update if already fully read: pointer at the computed newest id,
+      // no unread/mentions, and no "new messages" divider to clear.
+      const meta = state.roomMeta.get(roomJid)
+      const currentLastSeenMessageId = meta?.lastSeenMessageId ?? existing.lastSeenMessageId
+      const currentUnreadCount = meta?.unreadCount ?? existing.unreadCount
+      const currentMentionsCount = meta?.mentionsCount ?? existing.mentionsCount
+      if (
+        currentLastSeenMessageId === newest.id &&
+        currentUnreadCount === 0 &&
+        currentMentionsCount === 0 &&
+        !state.firstNewMessageMarkers.has(roomJid)
+      ) {
+        return state
+      }
+
+      const read = {
+        lastSeenMessageId: newest.id,
+        unreadCount: 0,
+        mentionsCount: 0,
+        lastReadAt: newest.timestamp,
+      }
+      const committed = commitRoomUpdate(state, roomJid, read)
+      if (!committed) return state
+
+      const newMarkers = new Map(state.firstNewMessageMarkers)
+      newMarkers.delete(roomJid)
+
+      return { ...committed, firstNewMessageMarkers: newMarkers }
+    })
+  },
+
+  markAllRoomsRead: () => {
+    for (const room of get().joinedRooms()) {
+      const meta = get().roomMeta.get(room.jid)
+      const unread = (meta?.unreadCount ?? room.unreadCount ?? 0) + (meta?.mentionsCount ?? room.mentionsCount ?? 0)
+      if (unread > 0) get().markReadToNewest(room.jid)
+    }
+  },
+
   setActiveRoom: (roomJid) => {
     const prevJid = get().activeRoomJid
     // Skip if already the active room (prevents duplicate side effects)
@@ -1563,7 +1618,7 @@ export const roomStore = createStore<RoomState>()(
 
         const runtime = get().roomRuntime.get(roomJid)
         const messages = runtime?.messages ?? room.messages
-        const activated = notifState.onActivate(notifInput, messages)
+        const activated = notifState.onActivate(notifInput, messages, { treatDelayedAsNew: true })
 
         // Determine lastInteractedAt for sidebar sorting
         const lastMessage = room.messages?.[room.messages.length - 1]
@@ -1637,6 +1692,22 @@ export const roomStore = createStore<RoomState>()(
           pendingStanzaId: pending,
         })
       }
+
+      // Resume anchor: if the read pointer is deeper than the latest-100
+      // slice, reload the window AROUND it (IndexedDB only) so the divider
+      // derives inside the slice and the entry scroll can anchor on it. The
+      // fold above ran first — it may have advanced the pointer to the synced
+      // position. A cache miss keeps the latest slice; the divider then
+      // degrades via the stale-pointer fallback (spec §5) and MAM catch-up
+      // heals the cache for the next open.
+      const pointer = get().roomMeta.get(roomJid)?.lastSeenMessageId
+      if (pointer) {
+        const loaded = get().roomRuntime.get(roomJid)?.messages ?? get().rooms.get(roomJid)?.messages ?? []
+        if (!loaded.some((m) => m.id === pointer)) {
+          await get().loadMessagesAroundFromCache(roomJid, pointer)
+          if (token !== activationToken) return
+        }
+      }
     }
     // Set active and clear pending atomically (same React commit) so the view
     // swaps straight from loading surface to content with no empty-state frame.
@@ -1671,7 +1742,8 @@ export const roomStore = createStore<RoomState>()(
         lastSeenMessageId: meta?.lastSeenMessageId ?? existing.lastSeenMessageId,
         firstNewMessageId: state.firstNewMessageMarkers.get(roomJid),
       }
-      const updated = notifState.onMessageSeen(notifInput, messageId, messages)
+      const atLiveEdge = state.roomRuntime.get(roomJid)?.windowAtLiveEdge !== false
+      const updated = notifState.onMessageSeen(notifInput, messageId, messages, { atLiveEdge })
       if (updated === notifInput) return state
 
       const newRooms = new Map(state.rooms)
@@ -1709,8 +1781,9 @@ export const roomStore = createStore<RoomState>()(
         messages,
         state.firstNewMessageMarkers.get(roomJid),
         stanzaId,
-        // Rooms treat delayed messages as history replay, so no treatDelayedAsNew.
-        { isActive: state.activeRoomJid === roomJid }
+        // Rooms treat delayed history the same as chats treat offline delivery
+        // (unified divider semantics) — delayed messages after the pointer are new.
+        { isActive: state.activeRoomJid === roomJid, treatDelayedAsNew: true }
       )
       if (resolution.kind === 'unchanged') return state
 
@@ -1724,6 +1797,34 @@ export const roomStore = createStore<RoomState>()(
       const newMeta = new Map(state.roomMeta)
       newMeta.set(roomJid, { ...meta, ...metaPatch })
 
+      // Inbound read-state sync (spec §4): a marker published by another client
+      // clears this room's badge now, not on the next activation. 'advanced' is
+      // exactly the non-active pointer-advance kind (the active room's counts
+      // are already zero and resolves as 'advanced-with-divider'). Only the
+      // counts are folded — the pointer keeps the forward-only position
+      // resolved above (the helper's outgoing-boundary rule never regresses
+      // it: the pointer resolves inside `messages`, so its internal scan only
+      // ever looks past it).
+      let recomputed: notifState.EntityNotificationState | undefined
+      if (resolution.kind === 'advanced') {
+        recomputed = notifState.recomputeCountsFromPointer(
+          {
+            unreadCount: meta.unreadCount,
+            mentionsCount: meta.mentionsCount,
+            lastReadAt: meta.lastReadAt,
+            lastSeenMessageId: resolution.lastSeenMessageId,
+            firstNewMessageId: state.firstNewMessageMarkers.get(roomJid),
+          },
+          messages,
+          { countMentions: true }
+        )
+        newMeta.set(roomJid, {
+          ...newMeta.get(roomJid)!,
+          unreadCount: recomputed.unreadCount,
+          mentionsCount: recomputed.mentionsCount,
+        })
+      }
+
       // The divider is recomputed only for the active room; inactive rooms
       // recompute on their next activation.
       let newMarkers = state.firstNewMessageMarkers
@@ -1736,7 +1837,14 @@ export const roomStore = createStore<RoomState>()(
       if (existing) {
         // Keep the combined map coherent with roomMeta.
         const newRooms = new Map(state.rooms)
-        newRooms.set(roomJid, { ...existing, ...metaPatch })
+        newRooms.set(roomJid, {
+          ...existing,
+          ...metaPatch,
+          // Keep the combined map coherent with the recomputed roomMeta counts.
+          ...(recomputed
+            ? { unreadCount: recomputed.unreadCount, mentionsCount: recomputed.mentionsCount }
+            : {}),
+        })
         return { roomMeta: newMeta, rooms: newRooms, firstNewMessageMarkers: newMarkers }
       }
       return { roomMeta: newMeta, firstNewMessageMarkers: newMarkers }
@@ -2471,6 +2579,39 @@ export const roomStore = createStore<RoomState>()(
       if (state.activeRoomJid !== roomJid) {
         const newRooms = new Map(state.rooms)
         newRooms.set(roomJid, { ...room, lastMessage })
+
+        // Badge hydration (spec §1): a forward merge extends contiguous
+        // history past the read pointer — recompute unread/mention counts so
+        // an unopened room regains its badge after catch-up. Backward merges
+        // only prepend older history (nothing after the pointer changes).
+        // The live path (addMessage/onMessageReceived) keeps owning
+        // incremental counting; this reconciles bulk archive delivery.
+        if (direction === 'forward' && existingMeta) {
+          const recomputed = notifState.recomputeCountsFromPointer(
+            {
+              unreadCount: existingMeta.unreadCount,
+              mentionsCount: existingMeta.mentionsCount,
+              lastReadAt: existingMeta.lastReadAt,
+              lastSeenMessageId: existingMeta.lastSeenMessageId,
+              firstNewMessageId: state.firstNewMessageMarkers.get(roomJid),
+            },
+            mergedForMarker,
+            { countMentions: true }
+          )
+          newMeta.set(roomJid, {
+            ...newMeta.get(roomJid)!,
+            unreadCount: recomputed.unreadCount,
+            mentionsCount: recomputed.mentionsCount,
+            lastSeenMessageId: recomputed.lastSeenMessageId,
+          })
+          newRooms.set(roomJid, {
+            ...newRooms.get(roomJid)!,
+            unreadCount: recomputed.unreadCount,
+            mentionsCount: recomputed.mentionsCount,
+            lastSeenMessageId: recomputed.lastSeenMessageId,
+          })
+        }
+
         // roomRuntime deliberately untouched.
         return { rooms: newRooms, roomMeta: newMeta, mamQueryStates: newStates, roomGaps: newGaps }
       }

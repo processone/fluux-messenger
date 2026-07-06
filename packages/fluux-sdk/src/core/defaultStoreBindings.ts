@@ -126,6 +126,7 @@ export function createDefaultStoreBindings(options: DefaultStoreBindingsOptions 
         }))
       },
       getConversationGapStart: (conversationId: string) => chatStore.getState().conversationGaps.get(conversationId)?.start,
+      getConversationPendingStanzaId: (conversationId: string) => chatStore.getState().conversationMeta.get(conversationId)?.pendingRemoteDisplayedStanzaId,
       getArchivedConversations: () => {
         const state = chatStore.getState()
         const result = []
@@ -149,6 +150,7 @@ export function createDefaultStoreBindings(options: DefaultStoreBindingsOptions 
       ...bindStoreMethods(roomStore, roomBindingMethodKeys),
       // Composite getter
       getRoomGapStart: (roomJid: string) => roomStore.getState().roomGaps.get(roomJid)?.start,
+      getRoomPendingStanzaId: (roomJid: string) => roomStore.getState().roomMeta.get(roomJid)?.pendingRemoteDisplayedStanzaId,
     },
     admin: {
       ...bindStoreMethods(adminStore, adminBindingMethodKeys),

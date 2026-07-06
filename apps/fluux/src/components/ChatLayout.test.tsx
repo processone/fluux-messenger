@@ -12,6 +12,9 @@ const {
   mockSetActiveRoom,
   mockActivateConversation,
   mockActivateRoom,
+  mockMarkChatReadToNewest,
+  mockMarkRoomReadToNewest,
+  lastKeyboardShortcutsOptions,
   getMockState,
   setMockState,
 } = vi.hoisted(() => {
@@ -51,12 +54,23 @@ const {
     state.activeRoomJid = jid
   })
 
+  const mockMarkChatReadToNewest = vi.fn()
+  const mockMarkRoomReadToNewest = vi.fn()
+
+  // Holds the most recent options object ChatLayout passed to useKeyboardShortcuts
+  // (the hook itself is mocked below), so tests can invoke escapeHierarchy.onConversationEscape
+  // directly without needing a real window keydown listener.
+  const lastKeyboardShortcutsOptions: { current: unknown } = { current: null }
+
   return {
     mockContact,
     mockSetActiveConversation,
     mockSetActiveRoom,
     mockActivateConversation,
     mockActivateRoom,
+    mockMarkChatReadToNewest,
+    mockMarkRoomReadToNewest,
+    lastKeyboardShortcutsOptions,
     getMockState: () => state,
     setMockState: (newState: Partial<typeof state>) => Object.assign(state, newState),
   }
@@ -123,6 +137,13 @@ vi.mock('@fluux/sdk', () => ({
     restoreContactAvatarFromCache: vi.fn(),
     acceptSubscription: vi.fn(),
     rejectSubscription: vi.fn(),
+  }),
+  useChatActions: () => ({
+    markReadToNewest: mockMarkChatReadToNewest,
+  }),
+  useRoomActions: () => ({
+    markReadToNewest: mockMarkRoomReadToNewest,
+    markAllRoomsRead: vi.fn(),
   }),
   useXMPP: () => ({
     client: {
@@ -413,7 +434,14 @@ vi.mock('@/hooks/useDeepLink', () => ({
 }))
 
 vi.mock('@/hooks/useKeyboardShortcuts', () => ({
-  useKeyboardShortcuts: () => [],
+  // Capture the options ChatLayout passes in (notably escapeHierarchy.onConversationEscape)
+  // so tests can invoke the real callback directly — this mock stubs out the hook's own
+  // priority-chain/DOM-listener logic, which is covered separately in
+  // useKeyboardShortcuts.test.tsx.
+  useKeyboardShortcuts: (options: unknown) => {
+    lastKeyboardShortcutsOptions.current = options
+    return []
+  },
 }))
 
 vi.mock('@/hooks/useSessionPersistence', () => ({
@@ -1325,5 +1353,83 @@ describe('ChatLayout - admin back navigation (mobile)', () => {
     expect(await screen.findByText('Start a conversation')).toBeInTheDocument()
     expect(screen.getByTestId('probe-path').textContent).toBe('/messages')
     expect(screen.queryByTestId('admin-view')).not.toBeInTheDocument()
+  })
+})
+
+// Spec §3 step 3: Escape with nothing higher-priority open marks the active
+// conversation/room read and jumps to the present (lowest Escape priority,
+// behind modals/console/contact-profile — see useKeyboardShortcuts.test.tsx
+// for the priority-chain unit coverage and the window-level defaultPrevented
+// guard, which this file's useKeyboardShortcuts mock intentionally bypasses).
+// These tests cover the ChatLayout-level wiring: which store action fires for
+// which active view, and the guard that stops a backgrounded conversation (tab
+// memory) from being marked read while Settings is what's actually on screen.
+describe('ChatLayout - Escape marks the active conversation read (spec §3)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    setMockState({
+      activeConversationId: null,
+      activeRoomJid: null,
+      activationPending: false,
+      isArchivedResult: false,
+      conversations: new Map(),
+      rooms: new Map(),
+    })
+  })
+
+  // Invokes the real onConversationEscape callback ChatLayout builds and passes
+  // to useKeyboardShortcuts (captured by the mock above), the same way the hook's
+  // handleEscape would call it as the last step of its priority chain.
+  const escape = (): boolean | undefined => {
+    const options = lastKeyboardShortcutsOptions.current as {
+      escapeHierarchy?: { onConversationEscape?: () => boolean }
+    } | null
+    return options?.escapeHierarchy?.onConversationEscape?.()
+  }
+
+  it('marks the active conversation read on bare Escape when a chat is displayed', async () => {
+    setMockState({ activeConversationId: 'alice@example.com' })
+    render(<ChatLayoutWithRouter initialRoute="/messages/alice@example.com" />)
+    expect(await screen.findByTestId('chat-view')).toBeInTheDocument()
+
+    expect(escape()).toBe(true)
+
+    expect(mockMarkChatReadToNewest).toHaveBeenCalledWith('alice@example.com')
+    expect(mockMarkRoomReadToNewest).not.toHaveBeenCalled()
+  })
+
+  it('marks the active room read on bare Escape when a room is displayed', async () => {
+    setMockState({ activeRoomJid: 'room@conference.example.com' })
+    render(<ChatLayoutWithRouter initialRoute="/rooms/room@conference.example.com" />)
+    expect(await screen.findByTestId('room-view')).toBeInTheDocument()
+
+    expect(escape()).toBe(true)
+
+    expect(mockMarkRoomReadToNewest).toHaveBeenCalledWith('room@conference.example.com')
+    expect(mockMarkChatReadToNewest).not.toHaveBeenCalled()
+  })
+
+  it('does nothing when no conversation or room is active', async () => {
+    render(<ChatLayoutWithRouter initialRoute="/messages" />)
+    expect(await screen.findByText('Start a conversation')).toBeInTheDocument()
+
+    expect(escape()).toBe(false)
+
+    expect(mockMarkChatReadToNewest).not.toHaveBeenCalled()
+    expect(mockMarkRoomReadToNewest).not.toHaveBeenCalled()
+  })
+
+  // activeConversationId/activeRoomJid persist across other views (tab memory) —
+  // Settings taking the main content area must not mark a backgrounded
+  // conversation read out from under the user.
+  it('does not mark a backgrounded conversation read while Settings is displayed', async () => {
+    setMockState({ activeConversationId: 'alice@example.com' })
+    render(<ChatLayoutWithRouter initialRoute="/settings" />)
+    expect(await screen.findByTestId('settings-view')).toBeInTheDocument()
+
+    expect(escape()).toBe(false)
+
+    expect(mockMarkChatReadToNewest).not.toHaveBeenCalled()
+    expect(mockMarkRoomReadToNewest).not.toHaveBeenCalled()
   })
 })
