@@ -23,10 +23,12 @@ function getNewName(oldName, version) {
     { pattern: /^Fluux\.Messenger_[\d.]+_x64\.dmg$/, newName: `Fluux-Messenger_${v}_macOS_x64.dmg` },
 
     // macOS app.tar.gz (updater)
-    { pattern: /^Fluux\.Messenger_aarch64\.app\.tar\.gz$/, newName: `Fluux-Messenger_${v}_macOS_arm64.app.tar.gz` },
-    { pattern: /^Fluux\.Messenger_x64\.app\.tar\.gz$/, newName: `Fluux-Messenger_${v}_macOS_x64.app.tar.gz` },
-    { pattern: /^Fluux\.Messenger_aarch64\.app\.tar\.gz\.sig$/, newName: `Fluux-Messenger_${v}_macOS_arm64.app.tar.gz.sig` },
-    { pattern: /^Fluux\.Messenger_x64\.app\.tar\.gz\.sig$/, newName: `Fluux-Messenger_${v}_macOS_x64.app.tar.gz.sig` },
+    // tauri-action v1 embeds the version (Fluux.Messenger_0.17.0_aarch64.app.tar.gz);
+    // older versions omitted it (Fluux.Messenger_aarch64.app.tar.gz). Accept both.
+    { pattern: /^Fluux\.Messenger_(?:[\d.]+_)?aarch64\.app\.tar\.gz$/, newName: `Fluux-Messenger_${v}_macOS_arm64.app.tar.gz` },
+    { pattern: /^Fluux\.Messenger_(?:[\d.]+_)?x64\.app\.tar\.gz$/, newName: `Fluux-Messenger_${v}_macOS_x64.app.tar.gz` },
+    { pattern: /^Fluux\.Messenger_(?:[\d.]+_)?aarch64\.app\.tar\.gz\.sig$/, newName: `Fluux-Messenger_${v}_macOS_arm64.app.tar.gz.sig` },
+    { pattern: /^Fluux\.Messenger_(?:[\d.]+_)?x64\.app\.tar\.gz\.sig$/, newName: `Fluux-Messenger_${v}_macOS_x64.app.tar.gz.sig` },
 
     // Windows
     { pattern: /^Fluux\.Messenger_[\d.]+_x64-setup\.exe$/, newName: `Fluux-Messenger_${v}_Windows_x64-setup.exe` },
