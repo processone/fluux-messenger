@@ -2585,25 +2585,7 @@ export class XMPPClient {
       }
     })
 
-    if (chat.mergeServerConversations) {
-      chat.mergeServerConversations(batch)
-    } else {
-      // Fallback: add individually (for custom store implementations)
-      for (const entry of batch) {
-        if (chat.hasConversation(entry.id)) {
-          if (entry.archived) {
-            chat.archiveConversation?.(entry.id)
-          } else {
-            chat.unarchiveConversation?.(entry.id)
-          }
-        } else {
-          chat.addConversation({ id: entry.id, name: entry.name, type: entry.type, unreadCount: 0 })
-          if (entry.archived) {
-            chat.archiveConversation?.(entry.id)
-          }
-        }
-      }
-    }
+    chat.mergeServerConversations(batch)
     logInfo(`Conversation sync: merged ${serverConvs.length} conversations from server`)
   }
 

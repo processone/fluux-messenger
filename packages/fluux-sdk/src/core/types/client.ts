@@ -6,19 +6,35 @@
  */
 
 import type { Element } from '@xmpp/client'
-import type { ConnectionStatus, ConnectionMethod } from './connection'
-import type { Message, Conversation } from './chat'
-import type { PresenceStatus, PresenceShow, Contact, VCardInfo } from './roster'
-import type { Room, RoomOccupant, RoomMessage, RoomMember, RoomAffiliation } from './room'
-import type { SystemNotificationType } from './events'
+import type { ConnectionStatus } from './connection'
+import type { Message } from './chat'
+import type { PresenceStatus, Contact } from './roster'
 import type { ServerInfo } from './discovery'
 import type { HttpUploadService } from './upload'
-import type { WebPushService, WebPushStatus } from './webpush'
-import type { RSMResponse, MAMQueryState } from './pagination'
-import type { MAMQueryDirection } from '../../stores/shared/mamState'
-import type { AdminCommand, AdminSession, ServerStats } from './admin'
+import type { WebPushService } from './webpush'
+import type { AdminCommand, AdminSession } from './admin'
 import type { StorageAdapter } from './storage'
 import type { ProxyAdapter } from './proxy'
+import type {
+  ConnectionState,
+  ChatState,
+  RosterState,
+  ConsoleState,
+  EventsState,
+  RoomState,
+  AdminState,
+  BlockingState,
+} from '../../stores'
+import {
+  connectionBindingMethodKeys,
+  chatBindingMethodKeys,
+  rosterBindingMethodKeys,
+  consoleBindingMethodKeys,
+  eventsBindingMethodKeys,
+  roomBindingMethodKeys,
+  adminBindingMethodKeys,
+  blockingBindingMethodKeys,
+} from '../storeBindingKeys'
 
 // ============================================================================
 // Store Bindings (Internal)
@@ -27,6 +43,16 @@ import type { ProxyAdapter } from './proxy'
 /**
  * Store bindings interface for injecting store methods into XMPPClient.
  *
+ * The bulk of each namespace is DERIVED from the corresponding store state
+ * type via the key lists in storeBindingKeys.ts — the store's method
+ * signature is the binding's signature, by construction. Only three kinds of
+ * members are declared here by hand:
+ *
+ * - presence-machine bridge members (`Required<PresenceOptions>`) — they come
+ *   from an external state machine, not a store
+ * - plain state getters (`getStatus`, `getJid`, …)
+ * - composite getters with real logic (`getAllConversations`, …)
+ *
  * @internal
  * This interface is used internally by XMPPProvider to bind Zustand stores
  * to the XMPP client. Application code should use the React hooks instead.
@@ -34,214 +60,43 @@ import type { ProxyAdapter } from './proxy'
  * @category Internal
  */
 export interface StoreBindings {
-  connection: {
-    setStatus: (status: ConnectionStatus) => void
-    setIsVerifying: (isVerifying: boolean) => void
-    getStatus: () => ConnectionStatus
-    setJid: (jid: string | null) => void
-    setError: (error: string | null) => void
-    setReconnectState: (attempt: number, reconnectTargetTime: number | null) => void
-    setPresenceState: (show: PresenceStatus, message?: string | null) => void
-    setAutoAway: (isAuto: boolean) => void
-    setServerInfo: (info: ServerInfo | null) => void
-    setConnectionMethod: (method: ConnectionMethod | null) => void
-    setAuthMechanism: (mechanism: string | null) => void
-    setAuthMethod: (method: 'fast-token' | 'password' | null) => void
-    // Getters for presence preservation on reconnect
-    getPresenceShow: () => PresenceStatus
-    getStatusMessage: () => string | null
-    getIsAutoAway: () => boolean
-    // Pre-auto-away state (for restoring from auto-away/sleep)
-    getPreAutoAwayState: () => PresenceStatus | null
-    getPreAutoAwayStatusMessage: () => string | null
-    clearPreAutoAwayState: () => void
-    // Own profile state
-    setOwnAvatar: (avatar: string | null, hash?: string | null) => void
-    setOwnNickname: (nickname: string | null) => void
-    setOwnVCard: (vcard: VCardInfo | null) => void
-    getOwnNickname: () => string | null
-    updateOwnResource: (resource: string, show: PresenceShow | null, priority: number, status?: string, lastInteraction?: Date, client?: string) => void
-    removeOwnResource: (resource: string) => void
-    clearOwnResources: () => void
-    getJid: () => string | null
-    // HTTP Upload (XEP-0363)
-    setHttpUploadService: (service: HttpUploadService | null) => void
-    getHttpUploadService: () => HttpUploadService | null
-    // Web Push (p1:push)
-    setWebPushStatus: (status: WebPushStatus) => void
-    setWebPushServices: (services: WebPushService[]) => void
-    getWebPushServices: () => WebPushService[]
-    getWebPushEnabled: () => boolean
-    // Server info getter (for MAM support detection)
-    getServerInfo?: () => ServerInfo | null
-  }
-  chat: {
-    addMessage: (message: Message) => void
-    addConversation: (conversation: Conversation) => void
-    updateConversationName: (id: string, name: string) => void
-    hasConversation: (id: string) => boolean
-    setTyping: (conversationId: string, jid: string, isTyping: boolean) => void
-    updateReactions: (conversationId: string, messageId: string, reactorJid: string, emojis: string[]) => void
-    updateMessage: (conversationId: string, messageId: string, updates: Partial<Message>) => void
-    removeMessage: (conversationId: string, messageId: string) => void
-    getMessage: (conversationId: string, messageId: string) => Message | undefined
-    triggerAnimation?: (conversationId: string, animation: string) => void
-    // XEP-0313: MAM support
-    setMAMLoading: (conversationId: string, isLoading: boolean) => void
-    setMAMError: (conversationId: string, error: string | null) => void
-    mergeMAMMessages: (conversationId: string, messages: Message[], rsm: RSMResponse, complete: boolean, direction: MAMQueryDirection) => void
-    getMAMQueryState: (conversationId: string) => MAMQueryState
-    resetMAMStates: () => void
-    // Lazy MAM: mark conversations as needing catch-up after reconnect
-    markAllNeedsCatchUp: () => void
-    clearNeedsCatchUp: (conversationId: string) => void
-    // Update sidebar preview without affecting message history
-    updateLastMessagePreview: (conversationId: string, lastMessage: Message) => void
-    // Refresh the preview's content in place, but only when it is the referenced
-    // message — heals a deferred-decrypted lastMessage for an unopened conversation.
-    refreshLastMessageContent?: (conversationId: string, messageId: string, updates: Partial<Message>) => void
-    // Load messages from IndexedDB cache into the conversation's in-memory message
-    // array. `peek: true` returns the cached messages WITHOUT writing the store
-    // (a pure read for computing a catch-up cursor on a non-active conversation).
-    loadMessagesFromCache?: (conversationId: string, options?: { limit?: number; peek?: boolean }) => Promise<unknown>
+  connection: Pick<ConnectionState, (typeof connectionBindingMethodKeys)[number]> &
+    // Presence bridge to the external state machine (defaults for headless)
+    Required<PresenceOptions> & {
+      // State getters
+      getStatus: () => ConnectionStatus
+      getOwnNickname: () => string | null
+      getJid: () => string | null
+      getHttpUploadService: () => HttpUploadService | null
+      getWebPushServices: () => WebPushService[]
+      getWebPushEnabled: () => boolean
+      // Server info getter (for MAM support detection)
+      getServerInfo?: () => ServerInfo | null
+    }
+  chat: Pick<ChatState, (typeof chatBindingMethodKeys)[number]> & {
     // Get all conversations for MAM catch-up
     getAllConversations: () => Array<{ id: string; messages: Message[] }>
     // Persisted forward-gap boundary for automatic catch-up recovery
     getConversationGapStart?: (conversationId: string) => number | undefined
-    // Persisted last-known message timestamp (entity preview) — last-resort forward catch-up cursor
-    getConversationLastTimestamp?: (conversationId: string) => number | undefined
     // Smart MAM: archived conversation preview refresh
     getArchivedConversations?: () => Array<{ id: string; messages: Message[] }>
-    archiveConversation?: (id: string) => void
-    unarchiveConversation?: (id: string) => void
     getLastMessage?: (conversationId: string) => Message | undefined
-    /** Batch-add/update conversations from server sync in a single state update. */
-    mergeServerConversations?: (convs: Array<{ id: string; name: string; type: 'chat' | 'groupchat'; archived: boolean }>) => void
   }
-  roster: {
-    setContacts: (contacts: Contact[]) => void
-    addOrUpdateContact: (contact: Contact) => void
-    updateContact: (jid: string, update: Partial<Contact>) => void
-    updatePresence: (
-      fullJid: string,  // Full JID with resource (e.g., user@example.com/mobile)
-      show: PresenceShow | null,  // null = online, or 'away'/'xa'/'dnd'/'chat'
-      priority: number,
-      statusMessage?: string,
-      lastInteraction?: Date,
-      client?: string  // Client name from XEP-0115 Entity Capabilities
-    ) => void
-    removePresence: (fullJid: string) => void  // Called on unavailable presence
-    setPresenceError: (jid: string, error: string) => void
-    updateAvatar: (jid: string, avatar: string | null, avatarHash?: string) => void
-    removeContact: (jid: string) => void
-    hasContact: (jid: string) => boolean
-    getContact: (jid: string) => Contact | undefined
-    getOfflineContacts: () => Contact[]
-    sortedContacts: () => Contact[]
-    resetAllPresence: () => void
-  }
-  console: {
-    addPacket: (direction: 'incoming' | 'outgoing', xml: string) => void
-    addEvent: (message: string, category?: 'connection' | 'error' | 'sm' | 'presence' | 'e2ee') => void
-  }
-  events: {
-    addSubscriptionRequest: (from: string) => void
-    removeSubscriptionRequest: (from: string) => void
-    addStrangerMessage: (from: string, body: string) => void
-    removeStrangerMessages: (from: string) => void
-    addMucInvitation: (roomJid: string, from: string, reason?: string, password?: string, isDirect?: boolean, isQuickChat?: boolean) => void
-    removeMucInvitation: (roomJid: string) => void
-    addSystemNotification: (type: SystemNotificationType, title: string, message: string) => void
-    clearSystemNotifications: () => void
-  }
-  room: {
-    addRoom: (room: Room) => void
-    updateRoom: (roomJid: string, update: Partial<Room>) => void
-    removeRoom: (roomJid: string) => void
-    setRoomJoined: (roomJid: string, joined: boolean) => void
-    addOccupant: (roomJid: string, occupant: RoomOccupant) => void
-    batchAddOccupants: (roomJid: string, occupants: RoomOccupant[]) => void
-    removeOccupant: (roomJid: string, nick: string) => void
-    setSelfOccupant: (roomJid: string, occupant: RoomOccupant) => void
-    updateOccupantAvatars: (roomJid: string, updates: Array<{ nick: string; avatar: string | null; avatarHash: string | null }>) => void
-    getRoom: (roomJid: string) => Room | undefined
-    addMessage: (roomJid: string, message: RoomMessage, options?: {
-      incrementUnread?: boolean
-      incrementMentions?: boolean
-    }) => void
-    updateReactions: (roomJid: string, messageId: string, reactorNick: string, emojis: string[]) => void
-    updateMessage: (roomJid: string, messageId: string, updates: Partial<RoomMessage>) => void
-    getMessage: (roomJid: string, messageId: string) => RoomMessage | undefined
-    markAsRead: (roomJid: string) => void
-    getActiveRoomJid: () => string | null
-    setTyping: (roomJid: string, nick: string, isTyping: boolean) => void
-    // Bookmark methods
-    setBookmark: (roomJid: string, bookmark: { name: string; nick: string; autojoin?: boolean; password?: string; notifyAll?: boolean }) => void
-    removeBookmark: (roomJid: string) => void
-    // Non-anonymous room acknowledgement (issue #37)
-    isNonAnonymousRoomAcknowledged: (roomJid: string) => boolean
-    // Notification settings
-    setNotifyAll: (roomJid: string, notifyAll: boolean, persistent?: boolean) => void
-    // Query methods
-    joinedRooms: () => Room[]
+  roster: Pick<RosterState, (typeof rosterBindingMethodKeys)[number]>
+  console: Pick<ConsoleState, (typeof consoleBindingMethodKeys)[number]>
+  events: Pick<EventsState, (typeof eventsBindingMethodKeys)[number]>
+  room: Pick<RoomState, (typeof roomBindingMethodKeys)[number]> & {
     // Persisted forward-gap boundary for automatic catch-up recovery
     getRoomGapStart?: (roomJid: string) => number | undefined
-    // Persisted last-known message timestamp (entity preview) — last-resort forward catch-up cursor
-    getRoomLastTimestamp?: (roomJid: string) => number | undefined
-    // Easter egg animations
-    triggerAnimation?: (roomJid: string, animation: string) => void
-    // XEP-0313: MAM support for MUC rooms
-    setRoomMAMLoading: (roomJid: string, isLoading: boolean) => void
-    setRoomMAMError: (roomJid: string, error: string | null) => void
-    mergeRoomMAMMessages: (roomJid: string, messages: RoomMessage[], rsm: RSMResponse, complete: boolean, direction: MAMQueryDirection) => void
-    getRoomMAMQueryState: (roomJid: string) => MAMQueryState
-    resetRoomMAMStates: () => void
-    // Lazy MAM: mark rooms as needing catch-up after reconnect
-    markAllRoomsNeedsCatchUp: () => void
-    markAllRoomsNotJoined: () => void
-    clearRoomNeedsCatchUp: (roomJid: string) => void
-    // Preview refresh: update lastMessage without affecting message history
-    updateLastMessagePreview: (roomJid: string, lastMessage: RoomMessage) => void
-    // Load messages from IndexedDB cache into the room's in-memory message array.
-    // `peek: true` returns the cached messages WITHOUT writing the store (a pure
-    // read for computing a catch-up cursor on a non-active room).
-    loadMessagesFromCache: (roomJid: string, options?: { limit?: number; before?: Date; after?: Date; peek?: boolean }) => Promise<RoomMessage[]>
-    // Load preview from cache for non-MAM rooms (only updates lastMessage, not messages array)
-    loadPreviewFromCache: (roomJid: string) => Promise<RoomMessage | null>
-    // Batched launch-time preview hydration: populate lastMessage for all bookmarked/joined
-    // rooms from the durable cache in a single store write so the sidebar orders correctly
-    // immediately, instead of each room sitting at epoch-0 order until its preview lands.
-    hydratePreviewsFromCache: () => Promise<void>
-    // XEP-0045: Merge affiliated members (for offline member display, avatar resolution, mentions)
-    mergeRoomMembers: (roomJid: string, members: RoomMember[], contactAvatarLookup?: (jid: string) => string | null) => void
-    // XEP-0045: Apply a single affiliation change to the cached member list (none/outcast remove, owner/admin/member upsert)
-    updateMemberAffiliation: (roomJid: string, userJid: string, affiliation: RoomAffiliation) => void
   }
-  admin: {
-    setIsAdmin: (isAdmin: boolean) => void
-    setCommands: (commands: AdminCommand[]) => void
+  admin: Pick<AdminState, (typeof adminBindingMethodKeys)[number]> & {
+    // State getters
     getCommands: () => AdminCommand[]
-    setCurrentSession: (session: AdminSession | null) => void
-    setIsDiscovering: (loading: boolean) => void
-    setIsExecuting: (loading: boolean) => void
     getCurrentSession: () => AdminSession | null
-    setMucServiceJid: (jid: string | null) => void
-    setServerStats: (stats: ServerStats | null) => void
     getMucServiceJid: () => string | null
-    // Vhost management
-    setVhosts: (vhosts: string[]) => void
-    setSelectedVhost: (vhost: string | null) => void
     selectedVhost: string | null
-    reset: () => void
   }
-  blocking: {
-    setBlocklist: (jids: string[]) => void
-    addBlockedJids: (jids: string[]) => void
-    removeBlockedJids: (jids: string[]) => void
-    clearBlocklist: () => void
-    isBlocked: (jid: string) => boolean
-    getBlockedJids: () => string[]
-  }
+  blocking: Pick<BlockingState, (typeof blockingBindingMethodKeys)[number]>
 }
 
 // ============================================================================
