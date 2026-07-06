@@ -52,11 +52,11 @@ const EMPTY_IGNORED_ARRAY: IgnoredUser[] = []
 function getAffiliationBadge(affiliation: string, t: (key: string) => string) {
   switch (affiliation) {
     case 'owner':
-      return <span className="flex items-center text-fluux-yellow" title={t('rooms.affiliationOwner')}><Crown className="size-3" /></span>
+      return <span className="shrink-0 flex items-center text-fluux-yellow" title={t('rooms.affiliationOwner')}><Crown className="size-3" /></span>
     case 'admin':
-      return <span className="flex items-center text-fluux-brand" title={t('rooms.affiliationAdmin')}><Shield className="size-3" /></span>
+      return <span className="shrink-0 flex items-center text-fluux-brand" title={t('rooms.affiliationAdmin')}><Shield className="size-3" /></span>
     case 'member':
-      return <span className="flex items-center text-fluux-muted" title={t('rooms.affiliationMember')}><UserCheck className="size-3" /></span>
+      return <span className="shrink-0 flex items-center text-fluux-muted" title={t('rooms.affiliationMember')}><UserCheck className="size-3" /></span>
     default:
       return null
   }
@@ -191,11 +191,12 @@ const OccupantRow = memo(function OccupantRow({
           forceOffline={forceOffline}
         />
 
-        {/* Nick and badges */}
+        {/* Nick and badges — single nowrap line: the name shrinks and truncates so
+            badges/hats never wrap to a second line (which made row heights inconsistent) */}
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-1.5 flex-wrap">
+          <div className="flex items-center gap-1.5">
             {isMe ? (
-              <span className="truncate text-sm font-semibold" style={{ color: nameColor }}>
+              <span className="min-w-0 truncate text-sm font-semibold" style={{ color: nameColor }}>
                 {group.primaryNick}
                 <span className="text-fluux-muted font-normal"> {t('rooms.you')}</span>
               </span>
@@ -206,22 +207,23 @@ const OccupantRow = memo(function OccupantRow({
                 occupantJid={`${roomJid}/${group.primaryNick}`}
                 role={primaryOccupant.role}
                 affiliation={bestAffiliation as RoomAffiliation}
+                className="min-w-0"
               >
-                <span className="truncate text-sm" style={{ color: nameColor }}>
+                <span className="block truncate text-sm" style={{ color: nameColor }}>
                   {group.primaryNick}
                 </span>
               </UserInfoPopover>
             )}
             {/* Connection count badge */}
             {hasMultipleConnections && (
-              <span className="flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-medium rounded-full bg-fluux-muted/20 text-fluux-muted">
+              <span className="shrink-0 flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-medium rounded-full bg-fluux-muted/20 text-fluux-muted">
                 ×{group.connections.length}
               </span>
             )}
             {getAffiliationBadge(bestAffiliation, t)}
             {/* Ignored indicator */}
             {ignored && (
-              <EyeOff className="size-3 text-fluux-muted" />
+              <EyeOff className="size-3 shrink-0 text-fluux-muted" />
             )}
             {/* XEP-0317 Hats from all connections (max 3 inline, overflow in tooltip) */}
             {(() => {
@@ -234,7 +236,7 @@ const OccupantRow = memo(function OccupantRow({
                   {visible.map((hat) => (
                     <span
                       key={hat.uri}
-                      className="px-1.5 py-0.5 text-[10px] font-medium rounded"
+                      className="min-w-0 truncate px-1.5 py-0.5 text-[10px] font-medium rounded"
                       style={getHatColors(hat)}
                     >
                       {hat.title}
@@ -257,8 +259,9 @@ const OccupantRow = memo(function OccupantRow({
                       }
                       position="top"
                       delay={300}
+                      className="inline-flex shrink-0"
                     >
-                      <span className="px-1.5 py-0.5 text-[10px] font-medium rounded bg-fluux-muted/20 text-fluux-muted cursor-default">
+                      <span className="shrink-0 px-1.5 py-0.5 text-[10px] font-medium rounded bg-fluux-muted/20 text-fluux-muted cursor-default">
                         +{overflow.length}
                       </span>
                     </Tooltip>
@@ -586,8 +589,8 @@ export function OccupantPanel({
                 presenceBorderColor="border-fluux-chat"
               />
               <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  <span className="truncate text-sm text-fluux-text">
+                <div className="flex items-center gap-1.5">
+                  <span className="min-w-0 truncate text-sm text-fluux-text">
                     {displayName}
                   </span>
                   {getAffiliationBadge(member.affiliation, t)}
@@ -642,11 +645,11 @@ export function OccupantPanel({
                 presenceBorderColor="border-fluux-chat"
               />
               <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  <span className="truncate text-sm text-fluux-text">
+                <div className="flex items-center gap-1.5">
+                  <span className="min-w-0 truncate text-sm text-fluux-text">
                     {displayName}
                   </span>
-                  <EyeOff className="size-3 text-fluux-muted" />
+                  <EyeOff className="size-3 shrink-0 text-fluux-muted" />
                 </div>
                 {ignoredUser.jid && (
                   <p className="text-xs text-fluux-muted truncate">{ignoredUser.jid}</p>
