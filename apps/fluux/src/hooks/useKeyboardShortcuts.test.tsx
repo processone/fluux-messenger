@@ -330,6 +330,7 @@ describe('useKeyboardShortcuts', () => {
       onCloseConsole: vi.fn(),
       isContactProfileOpen: false,
       onCloseContactProfile: vi.fn(),
+      onConversationEscape: vi.fn(() => false),
       ...overrides,
     })
 
@@ -411,6 +412,58 @@ describe('useKeyboardShortcuts', () => {
       escapeShortcut!.action()
 
       expect(escapeHierarchy.onCloseContactProfile).toHaveBeenCalledTimes(1)
+    })
+
+    it('should mark the active conversation read (onConversationEscape) before blurring a focused input', () => {
+      // Conversation catch-up (spec §3 step 3) is priority 7, ahead of the
+      // input-blur fallback (priority 8) — an unconsumed Escape while a
+      // composer is focused should catch up the conversation, not just blur.
+      const onConversationEscape = vi.fn(() => true)
+      const escapeHierarchy = createEscapeHierarchy({ onConversationEscape })
+
+      const input = document.createElement('input')
+      document.body.appendChild(input)
+      input.focus()
+
+      const { result } = renderHook(() =>
+        useKeyboardShortcuts({
+          ...createDefaultOptions(),
+          escapeHierarchy,
+        })
+      )
+
+      const escapeShortcut = result.current.find(s => s.key === 'Escape')
+      escapeShortcut!.action()
+
+      expect(onConversationEscape).toHaveBeenCalledTimes(1)
+      // Focus is left untouched — onConversationEscape already handled the Escape.
+      expect(document.activeElement).toBe(input)
+
+      document.body.removeChild(input)
+    })
+
+    it('should fall through to blurring the input when onConversationEscape returns false (no conversation displayed)', () => {
+      const onConversationEscape = vi.fn(() => false)
+      const escapeHierarchy = createEscapeHierarchy({ onConversationEscape })
+
+      const input = document.createElement('input')
+      document.body.appendChild(input)
+      input.focus()
+
+      const { result } = renderHook(() =>
+        useKeyboardShortcuts({
+          ...createDefaultOptions(),
+          escapeHierarchy,
+        })
+      )
+
+      const escapeShortcut = result.current.find(s => s.key === 'Escape')
+      escapeShortcut!.action()
+
+      expect(onConversationEscape).toHaveBeenCalledTimes(1)
+      expect(document.activeElement).not.toBe(input)
+
+      document.body.removeChild(input)
     })
 
     it('should blur focused input when all panels/modals are closed', () => {
@@ -526,6 +579,62 @@ describe('useKeyboardShortcuts', () => {
 
       escape() // Console (non-modal, lower priority)
       expect(escapeHierarchy.onCloseConsole).toHaveBeenCalledTimes(1)
+    })
+  })
+
+  describe('Escape respects a component that already consumed the key (defaultPrevented)', () => {
+    // Unlike the "Escape Hierarchy" tests above (which call the shortcut's .action()
+    // directly), these dispatch real KeyboardEvents on window so the global
+    // handleKeyDown listener's e.defaultPrevented guard is exercised.
+    it('Escape with no overlay open marks the active entity read and scrolls to bottom', () => {
+      const onConversationEscape = vi.fn(() => true)
+      const escapeHierarchy = {
+        isConsoleOpen: false,
+        onCloseConsole: vi.fn(),
+        isContactProfileOpen: false,
+        onCloseContactProfile: vi.fn(),
+        onConversationEscape,
+      }
+
+      renderHook(() =>
+        useKeyboardShortcuts({ ...createDefaultOptions(), escapeHierarchy })
+      )
+
+      const event = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })
+      window.dispatchEvent(event)
+
+      expect(onConversationEscape).toHaveBeenCalledTimes(1)
+    })
+
+    it('Escape is ignored when a composer already consumed it (defaultPrevented)', () => {
+      const onConversationEscape = vi.fn(() => true)
+      const escapeHierarchy = {
+        isConsoleOpen: false,
+        onCloseConsole: vi.fn(),
+        isContactProfileOpen: false,
+        onCloseContactProfile: vi.fn(),
+        onConversationEscape,
+      }
+
+      renderHook(() =>
+        useKeyboardShortcuts({ ...createDefaultOptions(), escapeHierarchy })
+      )
+
+      // Simulate a child (e.g. the composer's reply/edit-cancel handler)
+      // calling preventDefault() on the Escape keydown before it reaches
+      // the global window listener.
+      const textarea = document.createElement('textarea')
+      document.body.appendChild(textarea)
+      textarea.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') e.preventDefault()
+      })
+
+      const event = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })
+      textarea.dispatchEvent(event)
+
+      expect(onConversationEscape).not.toHaveBeenCalled()
+
+      document.body.removeChild(textarea)
     })
   })
 
