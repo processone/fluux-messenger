@@ -90,4 +90,12 @@ describe('send-button fallback CSS', () => {
     expect(css).toMatch(/\[data-transparency="reduced"\]\s+\.send-aurora:not\(:disabled\)/)
     expect(css).toMatch(/\[data-transparency="reduced"\]\s+\.send-aurora-glow/)
   })
+
+  // Spec §5b: Linux (WebKitGTK) disables the liquid glass tier the same way
+  // reduced-transparency does, so the send button must get the identical solid
+  // aurora fallback there too, not just under the a11y opt-out.
+  it('Linux reverts the glass send button to the solid aurora fill', () => {
+    expect(css).toMatch(/:root\[data-platform="linux"\]\s+\.send-aurora:not\(:disabled\)/)
+    expect(css).toMatch(/:root\[data-platform="linux"\]\s+\.send-aurora-glow/)
+  })
 })

@@ -172,8 +172,27 @@ describe('liquid-glass tier', () => {
     // Linux keeps the base frost: the liquid override must be scoped away from data-platform="linux"
     expect(css).toMatch(/:root:not\(\[data-platform="linux"\]\)\s+\.fluux-glass/)
     // the reduced-transparency revert must also clear the liquid additions
-    const reduced = css.match(/\[data-transparency="reduced"\]\s+\.fluux-glass\s*\{([\s\S]*?)\}/)?.[1] ?? ''
+    const reduced = css.match(/:root\[data-transparency="reduced"\]\s+\.fluux-glass\s*\{([\s\S]*?)\}/)?.[1] ?? ''
     expect(reduced).toContain('background-image: none')
     expect(reduced).toContain('backdrop-filter: none')
+  })
+
+  // The liquid rule `:root:not([data-platform="linux"]) .fluux-glass` has
+  // specificity (0,3,0). The reduced-transparency revert must match or exceed
+  // that specificity, or the liquid rule wins on non-Linux platforms and the
+  // a11y opt-out is silently defeated. The bare-attribute form
+  // `[data-transparency="reduced"] .fluux-glass` is only (0,2,0) and loses;
+  // the `:root[data-transparency="reduced"]` form is (0,3,0) and — being later
+  // in source order — wins the cascade tie-break against the liquid rule.
+  it('reduced-transparency revert uses :root-qualified selector to outrank the liquid tier', () => {
+    expect(css).toMatch(/:root\[data-transparency="reduced"\]\s+\.fluux-glass\s*\{/)
+    // guard against regressing back to the weaker bare-attribute selector
+    expect(css).not.toMatch(/(?<!:root)\[data-transparency="reduced"\]\s+\.fluux-glass\s*\{/)
+    // and it must remain textually AFTER the liquid rule (source-order-wins for equal specificity)
+    const liquidIdx = css.indexOf(':root:not([data-platform="linux"]) .fluux-glass {')
+    const revertIdx = css.indexOf(':root[data-transparency="reduced"] .fluux-glass {')
+    expect(liquidIdx).toBeGreaterThan(-1)
+    expect(revertIdx).toBeGreaterThan(-1)
+    expect(revertIdx).toBeGreaterThan(liquidIdx)
   })
 })
