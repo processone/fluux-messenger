@@ -1901,6 +1901,54 @@ describe('roomStore', () => {
       expect(roomStore.getState().activationPending).toBe(false)
       expect(roomStore.getState().activeRoomJid).toBeNull()
     })
+
+    it('activateRoom reloads the window around a pointer deeper than the latest slice', async () => {
+      // Arrange: cache holds 300 messages; the latest-100 slice (returned by
+      // loadMessagesFromCache) does NOT contain meta.lastSeenMessageId
+      // ('msg-150') — the reader left off deep in history. Seeding
+      // roomMeta.lastSeenMessageId directly mimics a persisted read pointer
+      // from a prior session (no live activation has run yet in this test).
+      const roomJid = 'test@conference.example.com'
+      roomStore.getState().addRoom(createRoom(roomJid, { joined: true }))
+      roomStore.setState((state) => {
+        const meta = new Map(state.roomMeta)
+        meta.set(roomJid, { ...meta.get(roomJid)!, lastSeenMessageId: 'msg-150' })
+        return { roomMeta: meta }
+      })
+
+      // Base offsets in minutes-since-epoch so message order matches id order
+      // (msg-149 < msg-150 < msg-151 < ... < msg-299) with no collisions.
+      const roomMsgAt = (id: string, offsetMinutes: number): RoomMessage => ({
+        type: 'groupchat',
+        id,
+        roomJid,
+        from: `${roomJid}/alice`,
+        nick: 'alice',
+        body: id,
+        timestamp: new Date(offsetMinutes * 60_000),
+        isOutgoing: false,
+      })
+
+      const latestSlice: RoomMessage[] = Array.from({ length: 100 }, (_, i) => roomMsgAt(`msg-${200 + i}`, 200 + i))
+      const aroundSlice: RoomMessage[] = [
+        roomMsgAt('msg-149', 149),
+        roomMsgAt('msg-150', 150),
+        roomMsgAt('msg-151', 151),
+      ]
+      vi.mocked(messageCache.getRoomMessages).mockResolvedValue(latestSlice)
+      vi.mocked(messageCache.getRoomMessagesAround).mockResolvedValue(aroundSlice)
+
+      await roomStore.getState().activateRoom(roomJid)
+
+      expect(messageCache.getRoomMessagesAround).toHaveBeenCalledWith(
+        roomJid,
+        'msg-150',
+        expect.any(Object)
+      )
+      const resident = roomStore.getState().roomRuntime.get(roomJid)?.messages
+      expect(resident?.some((m) => m.id === 'msg-150')).toBe(true)
+      expect(roomStore.getState().firstNewMessageMarkers.get(roomJid)).toBe('msg-151')
+    })
   })
 
   describe('activeRoom', () => {

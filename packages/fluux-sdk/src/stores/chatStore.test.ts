@@ -316,6 +316,8 @@ describe('chatStore', () => {
       // Restore the factory default so later tests get a clean resolved-[] mock
       vi.mocked(messageCache.getMessages).mockReset()
       vi.mocked(messageCache.getMessages).mockResolvedValue([])
+      vi.mocked(messageCache.getMessagesAround).mockReset()
+      vi.mocked(messageCache.getMessagesAround).mockResolvedValue([])
     })
 
     it('should hydrate messages from cache before marking the conversation active', async () => {
@@ -407,6 +409,45 @@ describe('chatStore', () => {
 
       expect(chatStore.getState().activationPending).toBe(false)
       expect(chatStore.getState().activeConversationId).toBeNull()
+    })
+
+    it('activateConversation reloads the window around a pointer deeper than the latest slice', async () => {
+      // Arrange: cache holds 300 messages; the latest-100 slice (returned by
+      // loadMessagesFromCache) does NOT contain meta.lastSeenMessageId
+      // ('msg-150') — the reader left off deep in history. Seeding
+      // conversationMeta.lastSeenMessageId directly mimics a persisted read
+      // pointer from a prior session (no live activation has run yet here).
+      const A = 'alice@example.com'
+      chatStore.getState().addConversation(createConversation(A))
+      chatStore.setState((state) => {
+        const meta = new Map(state.conversationMeta)
+        meta.set(A, { ...meta.get(A)!, lastSeenMessageId: 'msg-150' })
+        return { conversationMeta: meta }
+      })
+
+      // Base offsets in minutes-since-epoch so message order matches id order
+      // (msg-149 < msg-150 < msg-151 < ... < msg-299) with no collisions.
+      const msgAt = (id: string, offsetMinutes: number): Message => ({
+        type: 'chat',
+        id,
+        conversationId: A,
+        from: A,
+        body: id,
+        timestamp: new Date(offsetMinutes * 60_000),
+        isOutgoing: false,
+      })
+
+      const latestSlice: Message[] = Array.from({ length: 100 }, (_, i) => msgAt(`msg-${200 + i}`, 200 + i))
+      const aroundSlice: Message[] = [msgAt('msg-149', 149), msgAt('msg-150', 150), msgAt('msg-151', 151)]
+      vi.mocked(messageCache.getMessages).mockResolvedValue(latestSlice)
+      vi.mocked(messageCache.getMessagesAround).mockResolvedValue(aroundSlice)
+
+      await chatStore.getState().activateConversation(A)
+
+      expect(messageCache.getMessagesAround).toHaveBeenCalledWith(A, 'msg-150', expect.any(Object))
+      const resident = chatStore.getState().messages.get(A)
+      expect(resident?.some((m) => m.id === 'msg-150')).toBe(true)
+      expect(chatStore.getState().firstNewMessageMarkers.get(A)).toBe('msg-151')
     })
   })
 

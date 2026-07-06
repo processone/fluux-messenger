@@ -761,6 +761,22 @@ export const chatStore = createStore<ChatState>()(
               pendingStanzaId: pending,
             })
           }
+
+          // Resume anchor: if the read pointer is deeper than the latest-100
+          // slice, reload the window AROUND it (IndexedDB only) so the divider
+          // derives inside the slice and the entry scroll can anchor on it. The
+          // fold above ran first — it may have advanced the pointer to the synced
+          // position. A cache miss keeps the latest slice; the divider then
+          // degrades via the stale-pointer fallback (spec §5) and MAM catch-up
+          // heals the cache for the next open.
+          const pointer = get().conversationMeta.get(id)?.lastSeenMessageId
+          if (pointer) {
+            const loaded = get().messages.get(id) ?? []
+            if (!loaded.some((m) => m.id === pointer)) {
+              await get().loadMessagesAroundFromCache(id, pointer)
+              if (token !== activationToken) return
+            }
+          }
         }
         // Set active and clear pending atomically (same React commit) so the view
         // swaps straight from loading surface to content with no empty-state frame.
