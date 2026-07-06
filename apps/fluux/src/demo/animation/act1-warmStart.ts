@@ -3,7 +3,7 @@
  * Orients the user, then shows the app is alive with typing and presence.
  */
 
-import type { DemoAnimationStep } from '@fluux/sdk'
+import type { DemoAnimationStep } from '@fluux/sdk/demo'
 import { DOMAIN } from '../constants'
 
 export const act1Steps: DemoAnimationStep[] = [

@@ -719,7 +719,6 @@ export {
 // DEMO MODE
 // =============================================================================
 
-export { DemoClient } from './demo/DemoClient'
-export type { DemoData, DemoSelf, DemoPresence, DemoOwnResource, DemoRoomData, DemoAnimationStep } from './demo/types'
-export type { StressScenario } from './demo/stress'
-export { minutesAgo, hoursAgo, daysAgo } from './demo/timeHelpers'
+// Demo mode is a dev-only tool and lives on the `@fluux/sdk/demo` subpath so it
+// is tree-shaken out of production app bundles. It is intentionally NOT
+// re-exported here — see src/demo/index.ts.

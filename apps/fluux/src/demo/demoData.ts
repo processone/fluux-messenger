@@ -5,7 +5,7 @@
  * Called from demo.tsx and passed to DemoClient.
  */
 
-import type { DemoData, DemoAnimationStep } from '@fluux/sdk'
+import type { DemoData, DemoAnimationStep } from '@fluux/sdk/demo'
 import { SELF, DOMAIN, CONFERENCE } from './constants'
 import { DEMO_CONTACTS, DEMO_PRESENCES } from './contacts'
 import { getDemoConversations, getDemoMessages } from './conversations'

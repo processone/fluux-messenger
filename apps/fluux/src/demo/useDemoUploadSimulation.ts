@@ -9,7 +9,7 @@
  */
 
 import { useEffect, useState, useRef, useCallback } from 'react'
-import type { DemoClient } from '@fluux/sdk'
+import type { DemoClient } from '@fluux/sdk/demo'
 
 export interface DemoUploadState {
   isUploading: boolean

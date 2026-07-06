@@ -1,4 +1,4 @@
-import type { StressScenario } from '@fluux/sdk'
+import type { StressScenario } from '@fluux/sdk/demo'
 import { chatStore, roomStore, rosterStore } from '@fluux/sdk/stores'
 
 /**

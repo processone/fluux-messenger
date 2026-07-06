@@ -3,7 +3,7 @@
  * Admin showcase, XMPP console, presence changes, narrative closure.
  */
 
-import type { DemoAnimationStep } from '@fluux/sdk'
+import type { DemoAnimationStep } from '@fluux/sdk/demo'
 import { DOMAIN, SELF_NICK, ROOM_JID } from '../constants'
 
 export const act6Steps: DemoAnimationStep[] = [

@@ -3,8 +3,8 @@
  */
 
 import type { Contact } from '@fluux/sdk'
-import type { DemoPresence } from '@fluux/sdk'
-import { hoursAgo } from '@fluux/sdk'
+import type { DemoPresence } from '@fluux/sdk/demo'
+import { hoursAgo } from '@fluux/sdk/demo'
 import { DOMAIN, AVATAR_BASE } from './constants'
 
 export const DEMO_CONTACTS: Contact[] = [

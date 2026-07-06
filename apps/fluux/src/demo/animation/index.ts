@@ -2,7 +2,7 @@
  * 5-minute demo animation timeline, assembled from 6 acts.
  */
 
-import type { DemoAnimationStep } from '@fluux/sdk'
+import type { DemoAnimationStep } from '@fluux/sdk/demo'
 import { act1Steps } from './act1-warmStart'
 import { act2Steps } from './act2-fileTransfer'
 import { act3Steps } from './act3-groupBurst'

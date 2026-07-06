@@ -3,7 +3,7 @@
  * Introduces group conversations with replies, reactions, and code sharing.
  */
 
-import type { DemoAnimationStep } from '@fluux/sdk'
+import type { DemoAnimationStep } from '@fluux/sdk/demo'
 import { DOMAIN, ROOM_JID } from '../constants'
 
 export const act2Steps: DemoAnimationStep[] = [

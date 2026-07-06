@@ -8,7 +8,7 @@
 
 import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
-import type { DemoClient, DemoAnimationStep } from '@fluux/sdk'
+import type { DemoClient, DemoAnimationStep } from '@fluux/sdk/demo'
 import { DemoTooltip } from './DemoTooltip'
 import { getTutorialStep } from './tutorialSteps'
 import { useDemoUploadSimulation, type DemoUploadState } from '../useDemoUploadSimulation'
