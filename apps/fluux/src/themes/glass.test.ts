@@ -159,3 +159,21 @@ describe('Glass surface cross-theme guard', () => {
     }
   }
 })
+
+describe('liquid-glass tier', () => {
+  it('defines the liquid tokens in both modes', () => {
+    for (const t of ['--fluux-glass-blur-strong', '--fluux-glass-specular', '--fluux-glass-specular-sheen']) {
+      expect(cssRoot[t], `${t} missing in :root`).toBeDefined()
+      expect(cssLight[t], `${t} missing in light resolution`).toBeDefined()
+    }
+  })
+
+  it('gates the liquid tier off on Linux and fully reverts under reduced transparency', () => {
+    // Linux keeps the base frost: the liquid override must be scoped away from data-platform="linux"
+    expect(css).toMatch(/:root:not\(\[data-platform="linux"\]\)\s+\.fluux-glass/)
+    // the reduced-transparency revert must also clear the liquid additions
+    const reduced = css.match(/\[data-transparency="reduced"\]\s+\.fluux-glass\s*\{([\s\S]*?)\}/)?.[1] ?? ''
+    expect(reduced).toContain('background-image: none')
+    expect(reduced).toContain('backdrop-filter: none')
+  })
+})

@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react'
 import { useSettingsStore, type ThemeMode } from '@/stores/settingsStore'
 import { useThemeStore } from '@/stores/themeStore'
 import type { AccentPreset } from '@/themes/types'
+import { isLinux } from '@/utils/tauri'
 
 const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
 
@@ -323,6 +324,14 @@ export function useTheme() {
     mq.addEventListener('change', apply)
     return () => mq.removeEventListener('change', apply)
   }, [motionPreference])
+
+  // Platform attribute for CSS gating: the liquid-glass tier is disabled on
+  // Linux (WebKitGTK compositing is the known weak point — heavy
+  // backdrop-filter caused the historical freeze class), which keeps the
+  // lighter base frost there.
+  useEffect(() => {
+    document.documentElement.dataset.platform = isLinux() ? 'linux' : 'default'
+  }, [])
 
   // Apply transparency preference. Sets data-transparency="full"|"reduced" on <html>;
   // CSS frosts .fluux-glass by default and the [data-transparency="reduced"] rule
