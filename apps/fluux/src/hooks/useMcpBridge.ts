@@ -49,13 +49,15 @@ export function useMcpBridge(client: XMPPClient): void {
       return
     }
 
+    let cancelled = false
     let unlisten: (() => void) | undefined
 
     void (async () => {
       const info = await invoke<{ port: number; token: string }>('mcp_start_server')
+      if (cancelled) return
       setServerInfo({ port: info.port, token: info.token })
 
-      unlisten = await listen<McpToolCallEvent>('mcp:tool-call', (tauriEvent) => {
+      const stop = await listen<McpToolCallEvent>('mcp:tool-call', (tauriEvent) => {
         void (async () => {
           const payload = tauriEvent.payload
           try {
@@ -72,9 +74,16 @@ export function useMcpBridge(client: XMPPClient): void {
           }
         })()
       })
+
+      if (cancelled) {
+        stop()
+        return
+      }
+      unlisten = stop
     })()
 
     return () => {
+      cancelled = true
       unlisten?.()
     }
   }, [client, enabled, setServerInfo, logActivity])

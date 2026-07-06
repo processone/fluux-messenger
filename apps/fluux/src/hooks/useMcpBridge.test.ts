@@ -9,6 +9,7 @@ vi.mock('@/utils/tauri', () => ({ isTauri: () => true }))
 
 const invokeMock = vi.fn()
 const listenMock = vi.fn()
+const unlistenMock = vi.fn()
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: (...args: unknown[]) => invokeMock(...args) }))
 vi.mock('@tauri-apps/api/event', () => ({ listen: (...args: unknown[]) => listenMock(...args) }))
@@ -29,8 +30,9 @@ describe('useMcpBridge', () => {
   beforeEach(() => {
     invokeMock.mockReset()
     listenMock.mockReset()
+    unlistenMock.mockReset()
     invokeMock.mockResolvedValue({ port: 4123, token: 'secret' })
-    listenMock.mockResolvedValue(() => {})
+    listenMock.mockResolvedValue(unlistenMock)
     useMcpBridgeStore.setState({ enabled: true, serverInfo: null, activityLog: [] })
     chatStore.getState().reset()
   })
@@ -86,5 +88,38 @@ describe('useMcpBridge', () => {
     renderHook(() => useMcpBridge(client))
 
     expect(invokeMock).toHaveBeenCalledWith('mcp_stop_server')
+  })
+
+  it('calls the unlisten function even when unmounted before listen() resolves', async () => {
+    const client = { chat: { sendMessage: vi.fn() } } as unknown as XMPPClient
+
+    // Control exactly when listen() resolves, so we can unmount while it's in flight
+    // (i.e. after invoke('mcp_start_server') has resolved but before listen() has).
+    let resolveListen: (unlisten: () => void) => void = () => {}
+    listenMock.mockReturnValue(
+      new Promise<() => void>((resolve) => {
+        resolveListen = resolve
+      })
+    )
+
+    const { unmount } = renderHook(() => useMcpBridge(client))
+
+    // Wait for mcp_start_server to resolve and listen() to be called, but not yet resolved.
+    await waitFor(() => {
+      expect(listenMock).toHaveBeenCalled()
+    })
+
+    // Unmount while listen(...) is still pending — this is the stale-closure race:
+    // cleanup runs (cancelled = true) before the async IIFE's `await listen(...)` settles.
+    unmount()
+
+    // Now let listen() resolve, simulating the stale run completing after cleanup already ran.
+    resolveListen(unlistenMock)
+
+    // The unlisten function returned by listen() must still be invoked immediately upon
+    // resolution, even though cleanup already ran and can never call it itself.
+    await waitFor(() => {
+      expect(unlistenMock).toHaveBeenCalled()
+    })
   })
 })
