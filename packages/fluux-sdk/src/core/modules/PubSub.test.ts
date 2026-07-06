@@ -432,12 +432,11 @@ describe('PubSub Module', () => {
         { name: 'conversation', attrs: { jid: 'bob@example.com', archived: 'true' } },
       ]))
 
-      // hasConversation() is mocked false → merge takes the "new conversation"
-      // branch: add it, then archive it, matching the remote device's state.
-      expect(mockStores.chat.addConversation).toHaveBeenCalledWith(
-        expect.objectContaining({ id: 'bob@example.com' })
-      )
-      expect(mockStores.chat.archiveConversation).toHaveBeenCalledWith('bob@example.com')
+      // The whole batch goes through mergeServerConversations (a single store
+      // update), carrying the remote device's archived flag.
+      expect(mockStores.chat.mergeServerConversations).toHaveBeenCalledWith([
+        expect.objectContaining({ id: 'bob@example.com', archived: true }),
+      ])
     })
   })
 

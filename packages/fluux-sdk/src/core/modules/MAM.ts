@@ -48,10 +48,7 @@ import {
   NS_DATA_FORMS,
   NS_FORWARD,
   NS_DELAY,
-  NS_RETRACT,
-  NS_CORRECTION,
   NS_FASTEN,
-  NS_REACTIONS,
   NS_OOB,
   NS_OCCUPANT_ID,
   NS_POLL,
@@ -69,7 +66,7 @@ import type {
   RoomMAMSearchOptions,
   MAMPagingSearchOptions,
 } from '../types'
-import { parseMessageContent, parseOgpFastening, applyRetraction, applyCorrection, parseStanzaId, hasRenderableContent } from './messagingUtils'
+import { parseMessageContent, parseOgpFastening, applyRetraction, applyCorrection, parseStanzaId, hasRenderableContent, parseReactionsSignal, parseRetractionSignal, parseCorrectionSignal, isMessageSignal } from './messagingUtils'
 import { getDomain } from '../jid'
 import { logInfo, logError as logErr } from '../logger'
 import {
@@ -1461,15 +1458,15 @@ export class MAM extends BaseModule {
     if (!from) return false
 
     // Retraction
-    const retractEl = messageEl.getChild('retract', NS_RETRACT)
-    if (retractEl?.attrs.id) {
-      modifications.retractions.push({ targetId: retractEl.attrs.id, from: normalizeFrom(from) })
+    const retraction = parseRetractionSignal(messageEl)
+    if (retraction?.targetId) {
+      modifications.retractions.push({ targetId: retraction.targetId, from: normalizeFrom(from) })
       return true
     }
 
     // Correction
-    const replaceEl = messageEl.getChild('replace', NS_CORRECTION)
-    if (replaceEl?.attrs.id) {
+    const correction = parseCorrectionSignal(messageEl)
+    if (correction?.targetId) {
       const bodyText = messageEl.getChildText('body')
       if (bodyText) {
         // Capture the correction stanza's own stanza-id so replies referencing
@@ -1478,7 +1475,7 @@ export class MAM extends BaseModule {
         // for 1:1, room JID for MUC) so it is a valid cross-client reference.
         const correctionStanzaId = parseStanzaId(messageEl, expectedStanzaIdBy)
         modifications.corrections.push({
-          targetId: replaceEl.attrs.id,
+          targetId: correction.targetId,
           from: normalizeFrom(from),
           body: bodyText,
           messageEl,
@@ -1496,13 +1493,12 @@ export class MAM extends BaseModule {
     }
 
     // Reactions (XEP-0444)
-    const reactionsEl = messageEl.getChild('reactions', NS_REACTIONS)
-    if (reactionsEl?.attrs.id) {
-      const emojis = reactionsEl.getChildren('reaction').map(r => r.getText()).filter(Boolean)
+    const reactions = parseReactionsSignal(messageEl)
+    if (reactions?.targetId) {
       modifications.reactions.push({
-        targetId: reactionsEl.attrs.id,
+        targetId: reactions.targetId,
         from: normalizeFrom(from),
-        emojis,
+        emojis: reactions.emojis,
         ...(timestamp && { timestamp }),
       })
       return true
@@ -1838,9 +1834,7 @@ export class MAM extends BaseModule {
 
     // Skip modification messages (retractions, corrections, reactions)
     // These are handled separately by detectAndCollectModification()
-    if (messageEl.getChild('retract', NS_RETRACT)) return null
-    if (messageEl.getChild('replace', NS_CORRECTION)) return null
-    if (messageEl.getChild('reactions', NS_REACTIONS)) return null
+    if (isMessageSignal(messageEl)) return null
 
     if (!from) return null
 
@@ -1924,9 +1918,7 @@ export class MAM extends BaseModule {
 
     // Skip modification messages (retractions, corrections, reactions)
     // These are handled separately by detectAndCollectModification()
-    if (messageEl.getChild('retract', NS_RETRACT)) return null
-    if (messageEl.getChild('replace', NS_CORRECTION)) return null
-    if (messageEl.getChild('reactions', NS_REACTIONS)) return null
+    if (isMessageSignal(messageEl)) return null
 
     if (!from) return null
 

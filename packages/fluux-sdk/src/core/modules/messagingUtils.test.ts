@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { applyRetraction, applyCorrection, parseOobData, parseMessageContent, parseOriginId, parseStanzaId, createOriginIdElement, hasRenderableContent } from './messagingUtils'
+import { applyRetraction, applyCorrection, parseOobData, parseMessageContent, parseOriginId, parseStanzaId, createOriginIdElement, hasRenderableContent, parseReactionsSignal, parseRetractionSignal, parseCorrectionSignal, isMessageSignal } from './messagingUtils'
 import { createMockElement } from '../test-utils'
 
 describe('messagingUtils', () => {
@@ -882,6 +882,99 @@ describe('messagingUtils', () => {
 
     it('returns true for an empty body that carries encrypted content (placeholder)', () => {
       expect(hasRenderableContent({ processedBody: '', hasEncryptedContent: true })).toBe(true)
+    })
+  })
+
+  describe('signal parsing (shared by Chat live path, MAM archive path, deferred-decrypt retry)', () => {
+    describe('parseReactionsSignal', () => {
+      it('extracts the target id and emoji list from a XEP-0444 reactions element', () => {
+        const stanza = createMockElement('message', {}, [
+          {
+            name: 'reactions',
+            attrs: { xmlns: 'urn:xmpp:reactions:0', id: 'target-1' },
+            children: [
+              { name: 'reaction', text: '👍' },
+              { name: 'reaction', text: '❤️' },
+            ],
+          },
+        ])
+
+        const parsed = parseReactionsSignal(stanza)
+        expect(parsed?.targetId).toBe('target-1')
+        expect(parsed?.emojis).toEqual(['👍', '❤️'])
+      })
+
+      it('returns an empty emoji list for a clear-all reactions element', () => {
+        const stanza = createMockElement('message', {}, [
+          { name: 'reactions', attrs: { xmlns: 'urn:xmpp:reactions:0', id: 'target-1' }, children: [] },
+        ])
+
+        expect(parseReactionsSignal(stanza)?.emojis).toEqual([])
+      })
+
+      it('keeps a missing id as undefined but still reports the element (legacy clients)', () => {
+        const stanza = createMockElement('message', {}, [
+          { name: 'reactions', attrs: { xmlns: 'urn:xmpp:reactions:0' }, children: [] },
+        ])
+
+        const parsed = parseReactionsSignal(stanza)
+        expect(parsed).not.toBeNull()
+        expect(parsed?.targetId).toBeUndefined()
+      })
+
+      it('returns null when there is no reactions element', () => {
+        const stanza = createMockElement('message', {}, [{ name: 'body', text: 'hello' }])
+        expect(parseReactionsSignal(stanza)).toBeNull()
+      })
+    })
+
+    describe('parseRetractionSignal', () => {
+      it('extracts the target id from a XEP-0424 retract element', () => {
+        const stanza = createMockElement('message', {}, [
+          { name: 'retract', attrs: { xmlns: 'urn:xmpp:message-retract:1', id: 'msg-9' } },
+        ])
+
+        const parsed = parseRetractionSignal(stanza)
+        expect(parsed?.targetId).toBe('msg-9')
+        expect(parsed?.el).toBeDefined()
+      })
+
+      it('returns null when there is no retract element', () => {
+        const stanza = createMockElement('message', {}, [{ name: 'body', text: 'hello' }])
+        expect(parseRetractionSignal(stanza)).toBeNull()
+      })
+    })
+
+    describe('parseCorrectionSignal', () => {
+      it('extracts the target id from a XEP-0308 replace element', () => {
+        const stanza = createMockElement('message', {}, [
+          { name: 'replace', attrs: { xmlns: 'urn:xmpp:message-correct:0', id: 'msg-5' } },
+          { name: 'body', text: 'fixed text' },
+        ])
+
+        expect(parseCorrectionSignal(stanza)?.targetId).toBe('msg-5')
+      })
+
+      it('returns null when there is no replace element', () => {
+        const stanza = createMockElement('message', {}, [{ name: 'body', text: 'hello' }])
+        expect(parseCorrectionSignal(stanza)).toBeNull()
+      })
+    })
+
+    describe('isMessageSignal', () => {
+      it.each([
+        ['reactions', { name: 'reactions', attrs: { xmlns: 'urn:xmpp:reactions:0', id: 't' }, children: [] }],
+        ['retract', { name: 'retract', attrs: { xmlns: 'urn:xmpp:message-retract:1', id: 't' } }],
+        ['replace', { name: 'replace', attrs: { xmlns: 'urn:xmpp:message-correct:0', id: 't' } }],
+      ])('detects a %s element as a signal', (_label, child) => {
+        const stanza = createMockElement('message', {}, [child])
+        expect(isMessageSignal(stanza)).toBe(true)
+      })
+
+      it('does not flag a plain body message', () => {
+        const stanza = createMockElement('message', {}, [{ name: 'body', text: 'hello' }])
+        expect(isMessageSignal(stanza)).toBe(false)
+      })
     })
   })
 })

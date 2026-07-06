@@ -20,6 +20,34 @@ import {
   blockingStore,
 } from '../stores'
 import type { StoreBindings, PresenceOptions } from './types/client'
+import {
+  connectionBindingMethodKeys,
+  chatBindingMethodKeys,
+  rosterBindingMethodKeys,
+  consoleBindingMethodKeys,
+  eventsBindingMethodKeys,
+  roomBindingMethodKeys,
+  adminBindingMethodKeys,
+  blockingBindingMethodKeys,
+} from './storeBindingKeys'
+
+/**
+ * Bind the listed store methods as late-bound delegates: each call reads the
+ * CURRENT store state, so bindings stay valid across store resets. The key
+ * lists live in storeBindingKeys.ts (single source of truth shared with the
+ * StoreBindings interface and the test mock).
+ */
+function bindStoreMethods<S, K extends keyof S>(
+  store: { getState(): S },
+  keys: readonly K[]
+): Pick<S, K> {
+  const bound = {} as Record<K, unknown>
+  for (const key of keys) {
+    bound[key] = (...args: unknown[]) =>
+      (store.getState()[key] as (...a: unknown[]) => unknown)(...args)
+  }
+  return bound as Pick<S, K>
+}
 
 /**
  * Options for creating default store bindings.
@@ -67,16 +95,15 @@ export function createDefaultStoreBindings(options: DefaultStoreBindingsOptions 
 
   return {
     connection: {
-      setStatus: connectionStore.getState().setStatus,
-      setIsVerifying: connectionStore.getState().setIsVerifying,
+      ...bindStoreMethods(connectionStore, connectionBindingMethodKeys),
+      // State getters
       getStatus: () => connectionStore.getState().status,
-      setJid: connectionStore.getState().setJid,
-      setError: connectionStore.getState().setError,
-      setReconnectState: connectionStore.getState().setReconnectState,
-      setServerInfo: connectionStore.getState().setServerInfo,
-      setConnectionMethod: connectionStore.getState().setConnectionMethod,
-      setAuthMechanism: connectionStore.getState().setAuthMechanism,
-      setAuthMethod: connectionStore.getState().setAuthMethod,
+      getOwnNickname: () => connectionStore.getState().ownNickname,
+      getJid: () => connectionStore.getState().jid,
+      getHttpUploadService: () => connectionStore.getState().httpUploadService,
+      getWebPushServices: () => connectionStore.getState().webPushServices,
+      getWebPushEnabled: () => connectionStore.getState().webPushEnabled,
+      getServerInfo: () => connectionStore.getState().serverInfo,
       // Presence from external machine (or defaults for headless)
       getPresenceShow,
       getStatusMessage,
@@ -86,48 +113,10 @@ export function createDefaultStoreBindings(options: DefaultStoreBindingsOptions 
       setPresenceState,
       setAutoAway,
       clearPreAutoAwayState,
-      // Own profile state
-      setOwnAvatar: connectionStore.getState().setOwnAvatar,
-      setOwnNickname: connectionStore.getState().setOwnNickname,
-      setOwnVCard: connectionStore.getState().setOwnVCard,
-      getOwnNickname: () => connectionStore.getState().ownNickname,
-      updateOwnResource: connectionStore.getState().updateOwnResource,
-      removeOwnResource: connectionStore.getState().removeOwnResource,
-      clearOwnResources: connectionStore.getState().clearOwnResources,
-      getJid: () => connectionStore.getState().jid,
-      // HTTP Upload (XEP-0363)
-      setHttpUploadService: connectionStore.getState().setHttpUploadService,
-      getHttpUploadService: () => connectionStore.getState().httpUploadService,
-      // Web Push (p1:push)
-      setWebPushStatus: connectionStore.getState().setWebPushStatus,
-      setWebPushServices: connectionStore.getState().setWebPushServices,
-      getWebPushServices: () => connectionStore.getState().webPushServices,
-      getWebPushEnabled: () => connectionStore.getState().webPushEnabled,
-      // Server info getter
-      getServerInfo: () => connectionStore.getState().serverInfo,
     },
     chat: {
-      addMessage: chatStore.getState().addMessage,
-      addConversation: chatStore.getState().addConversation,
-      updateConversationName: chatStore.getState().updateConversationName,
-      hasConversation: chatStore.getState().hasConversation,
-      setTyping: chatStore.getState().setTyping,
-      updateReactions: chatStore.getState().updateReactions,
-      updateMessage: chatStore.getState().updateMessage,
-      removeMessage: chatStore.getState().removeMessage,
-      getMessage: chatStore.getState().getMessage,
-      triggerAnimation: chatStore.getState().triggerAnimation,
-      // XEP-0313: MAM support
-      setMAMLoading: chatStore.getState().setMAMLoading,
-      setMAMError: chatStore.getState().setMAMError,
-      mergeMAMMessages: chatStore.getState().mergeMAMMessages,
-      getMAMQueryState: chatStore.getState().getMAMQueryState,
-      resetMAMStates: chatStore.getState().resetMAMStates,
-      markAllNeedsCatchUp: chatStore.getState().markAllNeedsCatchUp,
-      clearNeedsCatchUp: chatStore.getState().clearNeedsCatchUp,
-      updateLastMessagePreview: chatStore.getState().updateLastMessagePreview,
-      refreshLastMessageContent: chatStore.getState().refreshLastMessageContent,
-      loadMessagesFromCache: chatStore.getState().loadMessagesFromCache,
+      ...bindStoreMethods(chatStore, chatBindingMethodKeys),
+      // Composite getters
       getAllConversations: () => {
         const state = chatStore.getState()
         // Use activeConversations() which efficiently returns only non-archived
@@ -137,7 +126,6 @@ export function createDefaultStoreBindings(options: DefaultStoreBindingsOptions 
         }))
       },
       getConversationGapStart: (conversationId: string) => chatStore.getState().conversationGaps.get(conversationId)?.start,
-      getConversationLastTimestamp: (conversationId: string) => chatStore.getState().getConversationLastTimestamp(conversationId),
       getArchivedConversations: () => {
         const state = chatStore.getState()
         const result = []
@@ -149,109 +137,27 @@ export function createDefaultStoreBindings(options: DefaultStoreBindingsOptions 
         }
         return result
       },
-      archiveConversation: chatStore.getState().archiveConversation,
-      unarchiveConversation: chatStore.getState().unarchiveConversation,
-      mergeServerConversations: chatStore.getState().mergeServerConversations,
       getLastMessage: (conversationId: string) => {
         const meta = chatStore.getState().conversationMeta.get(conversationId)
         return meta?.lastMessage
       },
     },
-    roster: {
-      setContacts: rosterStore.getState().setContacts,
-      addOrUpdateContact: rosterStore.getState().addOrUpdateContact,
-      updateContact: rosterStore.getState().updateContact,
-      updatePresence: rosterStore.getState().updatePresence,
-      removePresence: rosterStore.getState().removePresence,
-      setPresenceError: rosterStore.getState().setPresenceError,
-      updateAvatar: rosterStore.getState().updateAvatar,
-      removeContact: rosterStore.getState().removeContact,
-      hasContact: rosterStore.getState().hasContact,
-      getContact: rosterStore.getState().getContact,
-      getOfflineContacts: rosterStore.getState().getOfflineContacts,
-      sortedContacts: rosterStore.getState().sortedContacts,
-      resetAllPresence: rosterStore.getState().resetAllPresence,
-    },
-    console: {
-      addPacket: consoleStore.getState().addPacket,
-      addEvent: consoleStore.getState().addEvent,
-    },
-    events: {
-      addSubscriptionRequest: eventsStore.getState().addSubscriptionRequest,
-      removeSubscriptionRequest: eventsStore.getState().removeSubscriptionRequest,
-      addStrangerMessage: eventsStore.getState().addStrangerMessage,
-      removeStrangerMessages: eventsStore.getState().removeStrangerMessages,
-      addMucInvitation: eventsStore.getState().addMucInvitation,
-      removeMucInvitation: eventsStore.getState().removeMucInvitation,
-      addSystemNotification: eventsStore.getState().addSystemNotification,
-      clearSystemNotifications: eventsStore.getState().clearSystemNotifications,
-    },
+    roster: bindStoreMethods(rosterStore, rosterBindingMethodKeys),
+    console: bindStoreMethods(consoleStore, consoleBindingMethodKeys),
+    events: bindStoreMethods(eventsStore, eventsBindingMethodKeys),
     room: {
-      addRoom: roomStore.getState().addRoom,
-      updateRoom: roomStore.getState().updateRoom,
-      removeRoom: roomStore.getState().removeRoom,
-      setRoomJoined: roomStore.getState().setRoomJoined,
-      addOccupant: roomStore.getState().addOccupant,
-      batchAddOccupants: roomStore.getState().batchAddOccupants,
-      removeOccupant: roomStore.getState().removeOccupant,
-      setSelfOccupant: roomStore.getState().setSelfOccupant,
-      updateOccupantAvatars: roomStore.getState().updateOccupantAvatars,
-      getRoom: roomStore.getState().getRoom,
-      addMessage: roomStore.getState().addMessage,
-      updateReactions: roomStore.getState().updateReactions,
-      updateMessage: roomStore.getState().updateMessage,
-      getMessage: roomStore.getState().getMessage,
-      markAsRead: roomStore.getState().markAsRead,
-      getActiveRoomJid: roomStore.getState().getActiveRoomJid,
-      setTyping: roomStore.getState().setTyping,
-      setBookmark: roomStore.getState().setBookmark,
-      removeBookmark: roomStore.getState().removeBookmark,
-      isNonAnonymousRoomAcknowledged: roomStore.getState().isNonAnonymousRoomAcknowledged,
-      setNotifyAll: roomStore.getState().setNotifyAll,
-      joinedRooms: roomStore.getState().joinedRooms,
+      ...bindStoreMethods(roomStore, roomBindingMethodKeys),
+      // Composite getter
       getRoomGapStart: (roomJid: string) => roomStore.getState().roomGaps.get(roomJid)?.start,
-      getRoomLastTimestamp: (roomJid: string) => roomStore.getState().getRoomLastTimestamp(roomJid),
-      triggerAnimation: roomStore.getState().triggerAnimation,
-      // XEP-0313: MAM support for MUC rooms
-      setRoomMAMLoading: roomStore.getState().setRoomMAMLoading,
-      setRoomMAMError: roomStore.getState().setRoomMAMError,
-      mergeRoomMAMMessages: roomStore.getState().mergeRoomMAMMessages,
-      getRoomMAMQueryState: roomStore.getState().getRoomMAMQueryState,
-      resetRoomMAMStates: roomStore.getState().resetRoomMAMStates,
-      markAllRoomsNeedsCatchUp: roomStore.getState().markAllRoomsNeedsCatchUp,
-      markAllRoomsNotJoined: roomStore.getState().markAllRoomsNotJoined,
-      clearRoomNeedsCatchUp: roomStore.getState().clearRoomNeedsCatchUp,
-      updateLastMessagePreview: roomStore.getState().updateLastMessagePreview,
-      loadMessagesFromCache: roomStore.getState().loadMessagesFromCache,
-      loadPreviewFromCache: roomStore.getState().loadPreviewFromCache,
-      hydratePreviewsFromCache: roomStore.getState().hydratePreviewsFromCache,
-      mergeRoomMembers: roomStore.getState().mergeRoomMembers,
-      updateMemberAffiliation: roomStore.getState().updateMemberAffiliation,
     },
     admin: {
-      setIsAdmin: adminStore.getState().setIsAdmin,
-      setCommands: adminStore.getState().setCommands,
+      ...bindStoreMethods(adminStore, adminBindingMethodKeys),
+      // State getters
       getCommands: () => adminStore.getState().commands,
-      setCurrentSession: adminStore.getState().setCurrentSession,
-      setIsDiscovering: adminStore.getState().setIsDiscovering,
-      setIsExecuting: adminStore.getState().setIsExecuting,
       getCurrentSession: () => adminStore.getState().currentSession,
-      setMucServiceJid: adminStore.getState().setMucServiceJid,
-      setServerStats: adminStore.getState().setServerStats,
       getMucServiceJid: () => adminStore.getState().mucServiceJid,
-      // Vhost management
-      setVhosts: adminStore.getState().setVhosts,
-      setSelectedVhost: adminStore.getState().setSelectedVhost,
       get selectedVhost() { return adminStore.getState().selectedVhost },
-      reset: adminStore.getState().reset,
     },
-    blocking: {
-      setBlocklist: blockingStore.getState().setBlocklist,
-      addBlockedJids: blockingStore.getState().addBlockedJids,
-      removeBlockedJids: blockingStore.getState().removeBlockedJids,
-      clearBlocklist: blockingStore.getState().clearBlocklist,
-      isBlocked: blockingStore.getState().isBlocked,
-      getBlockedJids: blockingStore.getState().getBlockedJids,
-    },
+    blocking: bindStoreMethods(blockingStore, blockingBindingMethodKeys),
   }
 }

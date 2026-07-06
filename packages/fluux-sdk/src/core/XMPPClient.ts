@@ -42,7 +42,7 @@ import {
 } from '../stores'
 import { detectPlatform, getCachedPlatform } from './platform'
 import { isDeadSocketError } from './modules/connectionUtils'
-import { parseMessageContent, applyRetraction } from './modules/messagingUtils'
+import { parseMessageContent, applyRetraction, parseReactionsSignal, parseRetractionSignal } from './modules/messagingUtils'
 import {
   FRESH_SESSION_IQ_TIMEOUT_MS,
   FRESH_SESSION_SETUP_TIMEOUT_MS,
@@ -116,7 +116,7 @@ import { Poll } from './modules/Poll'
 import { E2EEManager, InMemoryStorageBackend, type StorageBackend, type XMPPPrimitives } from './e2ee'
 import { dataToElement } from './e2ee/stanzaAdapter'
 import { decryptStanzaInPlace, COULD_NOT_DECRYPT_BODY, MESSAGE_REJECTED_BODY } from './e2ee/stanzaDecrypt'
-import { NS_CARBONS, NS_MAM, NS_P1_PUSH_WEBPUSH, NS_REACTIONS, NS_RETRACT } from './namespaces'
+import { NS_CARBONS, NS_MAM, NS_P1_PUSH_WEBPUSH } from './namespaces'
 import { createDefaultStoreBindings, type DefaultStoreBindingsOptions } from './defaultStoreBindings'
 import { logDebug, logInfo, logWarn } from './logger'
 import { SDK_VERSION } from '../version'
@@ -2005,20 +2005,16 @@ export class XMPPClient {
       // the key was locked; returning 'pending' here (the historical body-only
       // behaviour) silently dropped them. Surface them as a modification so the
       // caller applies the signal to its target and removes the placeholder.
-      const reactionsEl = stanza.getChild('reactions', NS_REACTIONS)
-      if (reactionsEl?.attrs.id) {
-        const emojis = reactionsEl
-          .getChildren('reaction')
-          .map((r) => r.getText())
-          .filter(Boolean)
+      const reactions = parseReactionsSignal(stanza)
+      if (reactions?.targetId) {
         return {
           kind: 'modification',
-          modification: { type: 'reactions', targetId: reactionsEl.attrs.id, emojis },
+          modification: { type: 'reactions', targetId: reactions.targetId, emojis: reactions.emojis },
         }
       }
-      const retractEl = stanza.getChild('retract', NS_RETRACT)
-      if (retractEl?.attrs.id) {
-        return { kind: 'modification', modification: { type: 'retract', targetId: retractEl.attrs.id } }
+      const retraction = parseRetractionSignal(stanza)
+      if (retraction?.targetId) {
+        return { kind: 'modification', modification: { type: 'retract', targetId: retraction.targetId } }
       }
 
       // Extract the decrypted body
@@ -2585,25 +2581,7 @@ export class XMPPClient {
       }
     })
 
-    if (chat.mergeServerConversations) {
-      chat.mergeServerConversations(batch)
-    } else {
-      // Fallback: add individually (for custom store implementations)
-      for (const entry of batch) {
-        if (chat.hasConversation(entry.id)) {
-          if (entry.archived) {
-            chat.archiveConversation?.(entry.id)
-          } else {
-            chat.unarchiveConversation?.(entry.id)
-          }
-        } else {
-          chat.addConversation({ id: entry.id, name: entry.name, type: entry.type, unreadCount: 0 })
-          if (entry.archived) {
-            chat.archiveConversation?.(entry.id)
-          }
-        }
-      }
-    }
+    chat.mergeServerConversations(batch)
     logInfo(`Conversation sync: merged ${serverConvs.length} conversations from server`)
   }
 
