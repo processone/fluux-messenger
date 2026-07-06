@@ -10,6 +10,8 @@ const MCP_ENABLED_KEY = 'fluux-mcp-enabled'
 const MAX_ACTIVITY_ENTRIES = 100
 
 export interface McpActivityEntry {
+  /** Store-assigned unique id; a stable React key for the prepend-ordered log. */
+  id: string
   tool: McpToolName
   conversationId?: string
   timestamp: Date
@@ -29,7 +31,7 @@ interface McpBridgeState {
   serverInfo: { port: number; token: string } | null
   setServerInfo: (info: { port: number; token: string } | null) => void
   activityLog: McpActivityEntry[]
-  logActivity: (entry: McpActivityEntry) => void
+  logActivity: (entry: Omit<McpActivityEntry, 'id'>) => void
   clearActivityLog: () => void
 }
 
@@ -49,7 +51,7 @@ export const useMcpBridgeStore = create<McpBridgeState>((set, get) => ({
 
   activityLog: [],
   logActivity: (entry) => {
-    const next = [entry, ...get().activityLog].slice(0, MAX_ACTIVITY_ENTRIES)
+    const next = [{ ...entry, id: crypto.randomUUID() }, ...get().activityLog].slice(0, MAX_ACTIVITY_ENTRIES)
     set({ activityLog: next })
   },
   clearActivityLog: () => set({ activityLog: [] }),

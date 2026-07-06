@@ -98,6 +98,27 @@ describe('mcpTools', () => {
       ])
     })
 
+    it('keeps message-less conversations in insertion order after ones with messages', () => {
+      chatStore.setState({
+        conversations: new Map([
+          ['empty-a@example.com', { id: 'empty-a@example.com', name: 'Empty A' } as Conversation],
+          ['empty-b@example.com', { id: 'empty-b@example.com', name: 'Empty B' } as Conversation],
+          [
+            'active@example.com',
+            { id: 'active@example.com', name: 'Active', lastMessage: makeMessage() } as Conversation,
+          ],
+        ]),
+      })
+
+      const result = listConversations()
+
+      expect(result.map((c) => c.conversationId)).toEqual([
+        'active@example.com',
+        'empty-a@example.com',
+        'empty-b@example.com',
+      ])
+    })
+
     it('returns groupchat rooms, falling back to the room jid for the display name', () => {
       const room = { jid: 'room@conference.example.com', name: undefined, lastMessage: undefined } as unknown as Room
       roomStore.setState({ rooms: new Map([[room.jid, room]]) })

@@ -1,23 +1,32 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { SettingsSection } from '@/components/ui/SettingsSection'
 import { useMcpBridgeStore } from '@/stores/mcpBridgeStore'
+import { copyToClipboard } from '@/utils/clipboard'
+import { useTimeFormat } from '@/hooks/useTimeFormat'
 
 export function McpSettings() {
   const { t } = useTranslation()
+  const { formatTime } = useTimeFormat()
   const enabled = useMcpBridgeStore((s) => s.enabled)
   const setEnabled = useMcpBridgeStore((s) => s.setEnabled)
   const serverInfo = useMcpBridgeStore((s) => s.serverInfo)
   const activityLog = useMcpBridgeStore((s) => s.activityLog)
   const clearActivityLog = useMcpBridgeStore((s) => s.clearActivityLog)
   const [copied, setCopied] = useState(false)
+  const copiedTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
 
-  const handleCopy = () => {
+  useEffect(() => () => clearTimeout(copiedTimeoutRef.current), [])
+
+  const handleCopy = async () => {
     if (!serverInfo) return
     const url = `http://127.0.0.1:${serverInfo.port}/mcp`
-    void navigator.clipboard.writeText(`${url}\n${serverInfo.token}`)
+    // copyToClipboard falls back to execCommand where the async Clipboard API
+    // is unavailable; only show "Copied" once it has actually run.
+    await copyToClipboard(`${url}\n${serverInfo.token}`)
     setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
+    clearTimeout(copiedTimeoutRef.current)
+    copiedTimeoutRef.current = setTimeout(() => setCopied(false), 2000)
   }
 
   return (
@@ -39,7 +48,11 @@ export function McpSettings() {
                 <p>{t('settings.mcp.statusRunning', { port: serverInfo.port })}</p>
                 <p className="font-mono text-xs mt-1 break-all">{`http://127.0.0.1:${serverInfo.port}/mcp`}</p>
                 <p className="font-mono text-xs break-all">{serverInfo.token}</p>
-                <button type="button" onClick={handleCopy} className="text-xs underline mt-1 tap-target transition-colors">
+                <button
+                  type="button"
+                  onClick={() => void handleCopy()}
+                  className="text-xs underline mt-1 tap-target transition-colors"
+                >
                   {copied ? t('settings.mcp.copied') : t('settings.mcp.copy')}
                 </button>
               </>
@@ -62,12 +75,12 @@ export function McpSettings() {
             <p className="text-sm text-fluux-muted mt-2">{t('settings.mcp.activityEmpty')}</p>
           ) : (
             <ul className="mt-2 space-y-1">
-              {activityLog.map((entry, index) => (
-                <li key={index} className="text-xs text-fluux-muted">
+              {activityLog.map((entry) => (
+                <li key={entry.id} className="text-xs text-fluux-muted">
                   {t(`settings.mcp.tool.${entry.tool}`)}
                   {entry.conversationId ? ` (${entry.conversationId})` : ''}
                   {' · '}
-                  {entry.timestamp.toLocaleTimeString()}
+                  {formatTime(entry.timestamp)}
                 </li>
               ))}
             </ul>

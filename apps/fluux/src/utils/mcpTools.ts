@@ -32,26 +32,44 @@ export interface McpHistoryMessage {
 const MAX_HISTORY_LIMIT = 200
 const DEFAULT_HISTORY_LIMIT = 50
 
+/**
+ * Presence of E2EE metadata on a message. For conversation summaries this
+ * reflects the LAST message only (the SDK has no per-thread encryption flag),
+ * so a mostly-encrypted conversation whose latest message was cleartext
+ * reports false at the summary level.
+ */
+function isEncryptedMessage(message: { securityContext?: unknown } | undefined): boolean {
+  return message?.securityContext !== undefined
+}
+
+function toConversationSummary(
+  conversationId: string,
+  displayName: string,
+  type: 'chat' | 'groupchat',
+  lastMessage: Message | RoomMessage | undefined
+): McpConversationSummary {
+  return {
+    conversationId,
+    displayName,
+    type,
+    isEncrypted: isEncryptedMessage(lastMessage),
+    lastMessageTimestamp: lastMessage?.timestamp.toISOString() ?? null,
+  }
+}
+
 export function listConversations(): McpConversationSummary[] {
-  // isEncrypted reflects the last message only (the SDK has no per-thread encryption flag),
-  // so a mostly-encrypted conversation whose latest message was cleartext reports false here.
-  const chats: McpConversationSummary[] = Array.from(chatStore.getState().conversations.values()).map((conv) => ({
-    conversationId: conv.id,
-    displayName: conv.name,
-    type: 'chat',
-    isEncrypted: conv.lastMessage?.securityContext !== undefined,
-    lastMessageTimestamp: conv.lastMessage?.timestamp.toISOString() ?? null,
-  }))
+  const chats = Array.from(chatStore.getState().conversations.values()).map((conv) =>
+    toConversationSummary(conv.id, conv.name, 'chat', conv.lastMessage)
+  )
+  const rooms = Array.from(roomStore.getState().rooms.values()).map((room) =>
+    toConversationSummary(room.jid, room.name ?? room.jid, 'groupchat', room.lastMessage)
+  )
 
-  const rooms: McpConversationSummary[] = Array.from(roomStore.getState().rooms.values()).map((room) => ({
-    conversationId: room.jid,
-    displayName: room.name ?? room.jid,
-    type: 'groupchat',
-    isEncrypted: room.lastMessage?.securityContext !== undefined,
-    lastMessageTimestamp: room.lastMessage?.timestamp.toISOString() ?? null,
-  }))
-
+  // Newest first; conversations without a message sort last. The explicit
+  // both-null branch keeps the comparator consistent (sort is stable, so
+  // message-less conversations retain their insertion order).
   return [...chats, ...rooms].sort((a, b) => {
+    if (!a.lastMessageTimestamp && !b.lastMessageTimestamp) return 0
     if (!a.lastMessageTimestamp) return 1
     if (!b.lastMessageTimestamp) return -1
     return b.lastMessageTimestamp.localeCompare(a.lastMessageTimestamp)
@@ -64,7 +82,7 @@ function toHistoryMessage(message: Message | RoomMessage): McpHistoryMessage {
     body: message.body,
     timestamp: message.timestamp.toISOString(),
     isOutgoing: message.isOutgoing,
-    isEncrypted: message.securityContext !== undefined,
+    isEncrypted: isEncryptedMessage(message),
   }
 }
 
