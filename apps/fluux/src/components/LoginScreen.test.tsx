@@ -504,13 +504,15 @@ describe('LoginScreen — Aurora branding', () => {
     mockUseConnection.mockReturnValue({ status: 'offline', error: null, connect: mockConnect })
   })
 
-  it('renders the Aurora gradient mark + display-font heading (no flat logo img)', () => {
+  it('renders the aurora glass mark + display-font heading (no flat logo img)', () => {
     render(<LoginScreen />)
     // display-font heading
     const heading = screen.getByRole('heading', { level: 1 })
     expect(heading.className).toMatch(/font-display/)
-    // the flat logo <img> is replaced by the gradient mark (no <img> for the brand)
+    // the brand mark is the AuroraMark svg — no <img>, no legacy gradient tile
     expect(screen.queryByRole('img')).toBeNull()
+    expect(document.querySelector('svg.aurora-mark')).not.toBeNull()
+    expect(document.querySelector('[style*="--fluux-grad"]')).toBeNull()
   })
 })
 
