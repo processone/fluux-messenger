@@ -30,7 +30,8 @@ const { mockJoinRoom, mockJoinResult, mockSetActiveRoom, mockSetActiveConversati
 let mockUserJid = 'testuser@example.com'
 let mockOwnNickname: string | null = null
 
-vi.mock('@fluux/sdk', () => ({
+vi.mock('@fluux/sdk', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@fluux/sdk')>()),
   useConnection: () => ({
     jid: mockUserJid,
     ownNickname: mockOwnNickname,

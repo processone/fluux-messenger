@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
-import { rosterStore, usePresence, useConnectionStatus } from '@fluux/sdk'
+import { rosterStore, usePresence, useConnectionStatus, getLocalPart } from '@fluux/sdk'
 import type { Conversation, Message, Room, RoomMessage } from '@fluux/sdk'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
@@ -133,14 +133,14 @@ export function useDesktopNotifications(): void {
     if (presenceStatusRef.current === 'dnd') return
     if (!getNotificationPermissionGranted()) {
       notificationDebug.desktopNotification({
-        title: conv.name || message.from.split('@')[0],
+        title: conv.name || getLocalPart(message.from),
         body: '(permission not granted)',
         conversationId: conv.id,
       })
       return
     }
 
-    const senderName = message.from.split('@')[0]
+    const senderName = getLocalPart(message.from)
     const baseTitle = conv.name || senderName
     // When a reconnect backlog collapsed into one notification, surface the count.
     const title = conv.unreadCount > 1 ? `${baseTitle} (${conv.unreadCount})` : baseTitle

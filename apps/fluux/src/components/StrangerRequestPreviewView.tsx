@@ -10,6 +10,8 @@ import { useTranslation } from 'react-i18next'
 import {
   useEvents,
   useContactIdentities,
+  getBareJid,
+  getLocalPart,
   type Message,
 } from '@fluux/sdk'
 import { useConnectionStore } from '@fluux/sdk/react'
@@ -43,7 +45,7 @@ export function StrangerRequestPreviewView({
   const jid = useConnectionStore((s) => s.jid)
   const ownAvatar = useConnectionStore((s) => s.ownAvatar)
   const ownNickname = useConnectionStore((s) => s.ownNickname)
-  const myBareJid = jid?.split('/')[0]
+  const myBareJid = jid ? getBareJid(jid) : undefined
 
   // Contact identities for sender resolution
   const contactsByJid = useContactIdentities()
@@ -67,7 +69,7 @@ export function StrangerRequestPreviewView({
   }, [strangerConversations, strangerJid])
 
   // Display name: local part of JID
-  const displayName = strangerJid.split('@')[0]
+  const displayName = getLocalPart(strangerJid)
 
   return (
     <div className="flex flex-col h-full bg-fluux-surface/50">

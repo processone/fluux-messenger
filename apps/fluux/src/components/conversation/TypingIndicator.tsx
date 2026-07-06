@@ -9,7 +9,7 @@ export interface TypingIndicatorProps {
   /**
    * Optional function to format user identifiers into display names.
    * If not provided, users are displayed as-is.
-   * @example (jid) => contacts.get(jid)?.name || jid.split('@')[0]
+   * @example (jid) => contacts.get(jid)?.name || getLocalPart(jid)
    */
   formatUser?: (user: string) => string
   /**
@@ -26,7 +26,7 @@ export interface TypingIndicatorProps {
  * // For 1:1 chats - format JIDs to display names
  * <TypingIndicator
  *   typingUsers={['alice@example.com']}
- *   formatUser={(jid) => contacts.get(jid)?.name || jid.split('@')[0]}
+ *   formatUser={(jid) => contacts.get(jid)?.name || getLocalPart(jid)}
  * />
  *
  * @example

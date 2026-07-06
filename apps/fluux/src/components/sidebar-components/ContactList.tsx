@@ -2,7 +2,7 @@ import React, { useState, useRef, memo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import { useContextMenu, useTypeToFocus, useListKeyboardNav } from '@/hooks'
-import { useContactIdentities, useRosterActions, useAdminPermissions, useEvents, useBlocking, rosterStore, type Contact } from '@fluux/sdk'
+import { useContactIdentities, useRosterActions, useAdminPermissions, useEvents, useBlocking, rosterStore, matchNameOrJid, type Contact } from '@fluux/sdk'
 import { useConnectionStore, useRosterStore } from '@fluux/sdk/react'
 import { SubscriptionRequestItem } from './SubscriptionRequestItem'
 import { Avatar } from '../Avatar'
@@ -53,8 +53,8 @@ export function ContactList({ onStartChat, onSelectContact, onManageUser, active
   const query = searchQuery.trim().toLowerCase()
   const matchesQuery = (jid: string) => {
     if (!query) return true
-    const name = identities.get(jid)?.name.toLowerCase() ?? ''
-    return name.includes(query) || jid.split('@')[0].toLowerCase().includes(query)
+    const name = identities.get(jid)?.name ?? ''
+    return matchNameOrJid(name, jid, query)
   }
 
   // Decode entries into display sections (jids). When disconnected (forceOffline),

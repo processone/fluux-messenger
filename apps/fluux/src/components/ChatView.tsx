@@ -669,8 +669,8 @@ export const ChatMessageList = memo(function ChatMessageList({
     useMessageHoverState({ scrollRef: scrollerRef, resetKey: conversationId })
 
   const formatTypingUser = (jid: string) => {
-    const bareJid = jid.split('/')[0]
-    return contactsByJid.get(bareJid)?.name || bareJid.split('@')[0]
+    const bareJid = getBareJid(jid)
+    return contactsByJid.get(bareJid)?.name || getLocalPart(bareJid)
   }
 
   // Clipboard metadata for a message, faithful to ChatMessageBubble's senderName so a
@@ -679,8 +679,8 @@ export const ChatMessageList = memo(function ChatMessageList({
   const formatMessageForCopy = (msg: Message): CopyMessageMeta => ({
     id: msg.id,
     from: msg.isOutgoing
-      ? (ownNickname || msg.from.split('@')[0])
-      : (contactsByJid.get(msg.from.split('/')[0])?.name || msg.from.split('@')[0]),
+      ? (ownNickname || getLocalPart(msg.from))
+      : (contactsByJid.get(getBareJid(msg.from))?.name || getLocalPart(msg.from)),
     time: formatTime(msg.timestamp),
     body: msg.body || '',
     date: format(msg.timestamp, 'yyyy-MM-dd'),
@@ -864,16 +864,16 @@ const ChatMessageBubble = memo(function ChatMessageBubble({
 
   // Use display name from roster, fall back to JID username
   // For outgoing messages, use own nickname if set
-  const senderContact = contactsByJid.get(message.from.split('/')[0])
+  const senderContact = contactsByJid.get(getBareJid(message.from))
   const senderName = message.isOutgoing
-    ? (ownNickname || message.from.split('@')[0])
-    : (senderContact?.name || message.from.split('@')[0])
+    ? (ownNickname || getLocalPart(message.from))
+    : (senderContact?.name || getLocalPart(message.from))
 
   // Get sender color: dedicated AA-safe self color for own messages, else the
   // Aurora-tuned per-person color (consistent for known + unknown senders).
   const senderColor = message.isOutgoing
     ? 'var(--fluux-text-self)'
-    : auroraSenderColor(message.from.split('/')[0], isDarkMode ?? true)
+    : auroraSenderColor(getBareJid(message.from), isDarkMode ?? true)
 
   // Get my current reactions to this message (1:1 chat — always uses bare JID)
   const myReactions = getMyReactions(message.reactions, undefined, myBareJid, false)
@@ -896,22 +896,22 @@ const ChatMessageBubble = memo(function ChatMessageBubble({
     (originalMsg, fallbackId) => {
       // Own messages: use ownNickname or JID username
       if (originalMsg?.isOutgoing) {
-        return ownNickname || originalMsg.from.split('@')[0]
+        return ownNickname || getLocalPart(originalMsg.from)
       }
       if (originalMsg) {
-        return contactsByJid.get(originalMsg.from.split('/')[0])?.name || originalMsg.from.split('@')[0]
+        return contactsByJid.get(getBareJid(originalMsg.from))?.name || getLocalPart(originalMsg.from)
       }
-      return fallbackId ? fallbackId.split('@')[0] : 'Unknown'
+      return fallbackId ? getLocalPart(fallbackId) : 'Unknown'
     },
     (originalMsg, fallbackId, dark) => {
       // Own messages: use the dedicated AA-safe self color
       if (originalMsg?.isOutgoing) return 'var(--fluux-text-self)'
-      const senderId = originalMsg?.from.split('/')[0] || fallbackId?.split('/')[0]
+      const senderId = (originalMsg ? getBareJid(originalMsg.from) : undefined) || (fallbackId ? getBareJid(fallbackId) : undefined)
       if (!senderId) return 'var(--fluux-brand)'
       return auroraSenderColor(senderId, dark ?? true)
     },
     (originalMsg, fallbackId) => {
-      const senderId = originalMsg?.from.split('/')[0] || fallbackId?.split('/')[0]
+      const senderId = (originalMsg ? getBareJid(originalMsg.from) : undefined) || (fallbackId ? getBareJid(fallbackId) : undefined)
       // If the quoted message is from the current user, use own avatar
       if (senderId === myBareJid) {
         return {
@@ -959,7 +959,7 @@ const ChatMessageBubble = memo(function ChatMessageBubble({
         avatarUrl={avatar}
         avatarIdentifier={message.from}
         avatarFallbackColor={senderColor}
-        senderJid={message.isOutgoing ? myBareJid : message.from.split('/')[0]}
+        senderJid={message.isOutgoing ? myBareJid : getBareJid(message.from)}
         senderContact={message.isOutgoing ? undefined : senderContact}
         myReactions={myReactions}
         onReaction={handleReaction}
@@ -1091,9 +1091,9 @@ export const MessageInput = memo(function MessageInput({
     ? {
         id: replyingTo.id,
         from: replyingTo.from,
-        senderName: contactsByJid.get(replyingTo.from.split('/')[0])?.name || replyingTo.from.split('@')[0],
+        senderName: contactsByJid.get(getBareJid(replyingTo.from))?.name || getLocalPart(replyingTo.from),
         body: replyingTo.body,
-        senderColor: auroraSenderColor(replyingTo.from.split('/')[0], isDarkMode ?? true),
+        senderColor: auroraSenderColor(getBareJid(replyingTo.from), isDarkMode ?? true),
       }
     : null
 
@@ -1153,7 +1153,7 @@ export const MessageInput = memo(function MessageInput({
     // SDK resolves stanzaId vs id for the protocol reference (XEP-0461)
     let replyTo: { id: string; to: string; fallback?: { author: string; body: string; fromEncrypted?: boolean } } | undefined
     if (replyingTo) {
-      const authorName = contactsByJid.get(replyingTo.from.split('/')[0])?.name || replyingTo.from.split('@')[0]
+      const authorName = contactsByJid.get(getBareJid(replyingTo.from))?.name || getLocalPart(replyingTo.from)
       replyTo = {
         id: replyingTo.id,
         to: replyingTo.from,

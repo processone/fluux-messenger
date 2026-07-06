@@ -12,7 +12,8 @@ const acknowledgeNonAnon = vi.fn()
 const isNonAnonAck = vi.fn(() => false)
 let mucInvitations: Array<{ id: string; roomJid: string; from: string; password?: string }> = []
 
-vi.mock('@fluux/sdk', () => ({
+vi.mock('@fluux/sdk', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@fluux/sdk')>()),
   useEvents: () => ({ mucInvitations, acceptInvitation, declineInvitation }),
   useRoomActions: () => ({ getRoomInfo, acknowledgeNonAnonymousRoom: acknowledgeNonAnon, isNonAnonymousRoomAcknowledged: isNonAnonAck }),
 }))

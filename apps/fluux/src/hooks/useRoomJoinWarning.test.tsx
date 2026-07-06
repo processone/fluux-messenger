@@ -6,7 +6,8 @@ const mockGetRoomInfo = vi.fn()
 const mockAcknowledge = vi.fn()
 const mockIsAcknowledged = vi.fn(() => false)
 
-vi.mock('@fluux/sdk', () => ({
+vi.mock('@fluux/sdk', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@fluux/sdk')>()),
   useRoomActions: () => ({
     getRoomInfo: mockGetRoomInfo,
     acknowledgeNonAnonymousRoom: mockAcknowledge,

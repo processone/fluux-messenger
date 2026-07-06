@@ -85,7 +85,7 @@ export function BrowseRoomsModal({ onClose }: BrowseRoomsModalProps) {
         setNickname(ownNickname)
         nicknameInitialized.current = true
       } else if (userJid) {
-        setNickname(userJid.split('@')[0])
+        setNickname(getLocalPart(userJid))
         nicknameInitialized.current = true
       }
     }

@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import { TextInput } from './ui/TextInput'
 import { useTranslation } from 'react-i18next'
 import { Zap } from 'lucide-react'
-import { useConnection, useRoomActions } from '@fluux/sdk'
+import { useConnection, useRoomActions, getLocalPart } from '@fluux/sdk'
 import { useChatStore } from '@fluux/sdk/react'
 import { useModalInput } from '@/hooks'
 import { ModalShell } from './ModalShell'
@@ -29,7 +29,7 @@ export function CreateQuickChatModal({ onClose }: CreateQuickChatModalProps) {
   // Default nickname from PEP nickname or JID (only once)
   useEffect(() => {
     if (!nicknameInitialized.current && (ownNickname || userJid)) {
-      setNickname(ownNickname || userJid?.split('@')[0] || '')
+      setNickname(ownNickname || (userJid ? getLocalPart(userJid) : ''))
       nicknameInitialized.current = true
     }
   }, [ownNickname, userJid])

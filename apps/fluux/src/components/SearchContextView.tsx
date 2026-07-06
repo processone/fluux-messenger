@@ -53,7 +53,7 @@ export function SearchContextView({ onBack }: { onBack?: () => void }) {
   const jid = useConnectionStore((s) => s.jid)
   const ownAvatar = useConnectionStore((s) => s.ownAvatar)
   const ownNickname = useConnectionStore((s) => s.ownNickname)
-  const myBareJid = jid?.split('/')[0]
+  const myBareJid = jid ? getBareJid(jid) : undefined
 
   // Contact identities for sender resolution
   const contactsByJid = useContactIdentities()
@@ -420,16 +420,17 @@ export const SearchContextMessageList = memo(function SearchContextMessageList({
         avatarUrl = ownAvatar || undefined
       }
     } else {
-      const contact = contactsByJid.get(msg.from.split('/')[0])
+      const senderBareJid = getBareJid(msg.from)
+      const contact = contactsByJid.get(senderBareJid)
       senderName = msg.isOutgoing
-        ? (ownNickname || msg.from.split('@')[0])
-        : (contact?.name || msg.from.split('@')[0])
+        ? (ownNickname || getLocalPart(msg.from))
+        : (contact?.name || getLocalPart(msg.from))
       senderColor = msg.isOutgoing
         ? 'var(--fluux-text-self)'
-        : auroraSenderColor(msg.from.split('/')[0], isDarkMode ?? true)
+        : auroraSenderColor(senderBareJid, isDarkMode ?? true)
       avatarUrl = msg.isOutgoing ? (ownAvatar || undefined) : contact?.avatar
-      avatarIdentifier = msg.from.split('/')[0]
-      senderJid = msg.from.split('/')[0]
+      avatarIdentifier = senderBareJid
+      senderJid = senderBareJid
     }
 
     // Build reply context. The search context is a fixed result set rendered
@@ -439,19 +440,19 @@ export const SearchContextMessageList = memo(function SearchContextMessageList({
       msg,
       msg.replyTo ? messagesById.get(msg.replyTo.id) : undefined,
       (originalMsg, fallbackId) => {
-        if (originalMsg?.isOutgoing) return ownNickname || originalMsg.from.split('@')[0]
+        if (originalMsg?.isOutgoing) return ownNickname || getLocalPart(originalMsg.from)
         if (isRoom && originalMsg?.type === 'groupchat') return (originalMsg as RoomMessage).nick
-        if (originalMsg) return contactsByJid.get(originalMsg.from.split('/')[0])?.name || originalMsg.from.split('@')[0]
-        return fallbackId ? fallbackId.split('@')[0] : 'Unknown'
+        if (originalMsg) return contactsByJid.get(getBareJid(originalMsg.from))?.name || getLocalPart(originalMsg.from)
+        return fallbackId ? getLocalPart(fallbackId) : 'Unknown'
       },
       (originalMsg, fallbackId, dark) => {
         if (originalMsg?.isOutgoing) return 'var(--fluux-text-self)'
-        const senderId = originalMsg?.from.split('/')[0] || fallbackId?.split('/')[0]
+        const senderId = (originalMsg ? getBareJid(originalMsg.from) : undefined) || (fallbackId ? getBareJid(fallbackId) : undefined)
         if (!senderId) return 'var(--fluux-brand)'
         return auroraSenderColor(senderId, dark ?? true)
       },
       (originalMsg, fallbackId) => {
-        const senderId = originalMsg?.from.split('/')[0] || fallbackId?.split('/')[0]
+        const senderId = (originalMsg ? getBareJid(originalMsg.from) : undefined) || (fallbackId ? getBareJid(fallbackId) : undefined)
         if (senderId === myBareJid) {
           return { avatarUrl: ownAvatar || undefined, avatarIdentifier: senderId || 'unknown' }
         }

@@ -5,6 +5,7 @@
  * Used to auto-fill the WebSocket URL field when the user types a JID
  * from a known domain.
  */
+import { getDomain } from '@fluux/sdk'
 
 export interface ServerConfig {
   websocketUrl: string
@@ -73,9 +74,5 @@ export function getWebsocketUrlForDomain(domain: string): string | null {
  * Extract domain from a JID
  */
 export function getDomainFromJid(jid: string): string | null {
-  if (!jid) return null
-  const atIndex = jid.indexOf('@')
-  if (atIndex === -1) return null
-  const domain = jid.slice(atIndex + 1).split('/')[0]
-  return domain || null
+  return getDomain(jid) || null
 }

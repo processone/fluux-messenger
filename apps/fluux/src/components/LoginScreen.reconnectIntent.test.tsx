@@ -6,7 +6,8 @@ import { markLoggedOut, markConnectActive } from '@/utils/reconnectIntent'
 const mockConnect = vi.fn().mockResolvedValue(undefined)
 
 // Tauri + saved keychain credentials => the keychain auto-connect effect arms.
-vi.mock('@fluux/sdk', () => ({
+vi.mock('@fluux/sdk', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@fluux/sdk')>()),
   useConnectionStatus: () => ({ status: 'offline', error: null }),
   useConnectionActions: () => ({ connect: mockConnect }),
   deleteFastToken: vi.fn(),

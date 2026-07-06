@@ -24,7 +24,7 @@ import { CreateRoomModal } from './CreateRoomModal'
 import {
   // Vanilla stores for imperative .getState() access
   chatStore, roomStore, consoleStore, adminStore, rosterStore, searchStore,
-  useRosterActions, useContactIdentities, useEvents, useBlocking, getBareJid,
+  useRosterActions, useContactIdentities, useEvents, useBlocking, getBareJid, getLocalPart, getDomain,
   type Contact, type Conversation, type AdminCategory
 } from '@fluux/sdk'
 import { useMessageRequestPreviewStore } from '@/stores/messageRequestPreviewStore'
@@ -234,7 +234,7 @@ function ChatLayoutContent() {
   }
   const navigateToUserAdmin = (userJid: string): string | null => {
     const store = adminStore.getState()
-    const domain = userJid.split('@')[1]?.split('/')[0]
+    const domain = getDomain(userJid)
     if (!domain) return null
     const adminVhosts = store.vhosts
     if (adminVhosts.length > 0 && !adminVhosts.includes(domain)) return null
@@ -270,7 +270,7 @@ function ChatLayoutContent() {
   // For non-roster users (e.g. room occupants), create a minimal Contact object
   const selectedContact = selectedRosterContact ?? (effectiveContactJid ? {
     jid: effectiveContactJid,
-    name: effectiveContactJid.split('@')[0],
+    name: getLocalPart(effectiveContactJid),
     presence: 'offline' as const,
     subscription: 'none' as const,
   } : null)
