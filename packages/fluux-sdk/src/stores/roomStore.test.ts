@@ -4828,6 +4828,31 @@ describe('roomStore parity drift regressions', () => {
       expect(roomStore.getState().roomMeta.get(roomJid)?.lastMessage?.body).toBe('decrypted at last')
     })
 
+    it('deep-history around-load does not regress the sidebar preview (parity with chatStore)', async () => {
+      // A room whose resident array was evicted (non-active) but whose preview
+      // tracks the newest message — the state a scroll-position restore finds.
+      const newest = messageAt('new-1', 'alice', 'newest', '2024-01-15T12:00:00Z')
+      roomStore.setState((state) => {
+        const rooms = new Map(state.rooms)
+        rooms.set(roomJid, { ...rooms.get(roomJid)!, messages: [], lastMessage: newest })
+        const roomMeta = new Map(state.roomMeta)
+        roomMeta.set(roomJid, { ...roomMeta.get(roomJid)!, lastMessage: newest })
+        return { rooms, roomMeta }
+      })
+
+      // Scroll-position restore loads an OLD slice around an anchor.
+      const oldSlice = [
+        messageAt('old-1', 'bob', 'deep 1', '2024-01-15T09:00:00Z'),
+        messageAt('old-2', 'bob', 'deep 2', '2024-01-15T09:30:00Z'),
+      ]
+      vi.mocked(messageCache.getRoomMessagesAround).mockResolvedValueOnce(oldSlice)
+      await roomStore.getState().loadMessagesAroundFromCache(roomJid, 'old-1')
+
+      // The old slice must not replace the newest preview.
+      expect(roomStore.getState().rooms.get(roomJid)?.lastMessage?.id).toBe('new-1')
+      expect(roomStore.getState().roomMeta.get(roomJid)?.lastMessage?.id).toBe('new-1')
+    })
+
     it('MAM merge backfills the archive stanzaId onto resident messages (parity with chatStore)', () => {
       roomStore.setState({ activeRoomJid: roomJid })
       const own: RoomMessage = {

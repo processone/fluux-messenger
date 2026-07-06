@@ -11,7 +11,9 @@ import type { MAMQueryDirection } from './shared/mamState'
 import { computeGapEnd, syncGap, type GapInterval } from './shared/mamGap'
 import * as draftState from './shared/draftState'
 import * as timeline from './shared/messageTimeline'
-import { isPreviewableMessage, findLastPreviewableMessage, shouldReplaceLastMessage, isResolvedSamePreview } from './shared/lastMessageUtils'
+import { isPreviewableMessage, findLastPreviewableMessage, shouldReplaceLastMessage } from './shared/lastMessageUtils'
+import { derivePreviewAfterMerge } from './shared/previewState'
+import { resolveRemoteDisplayed, createMdsSessionGate } from './shared/readMarkerSync'
 import * as notifState from './shared/notificationState'
 import { markerDebugLog } from '../utils/markerDebug'
 import { connectionStore } from './connectionStore'
@@ -57,14 +59,10 @@ function conversationIdsByActivity(
 // call can't overwrite a newer activation when it finally resolves
 let activationToken = 0
 
-// Conversations whose pending XEP-0490 (Message Displayed Synchronization) read marker has
-// already been consumed for divider positioning THIS session. XEP-0490 markers are broadcast
-// live over PEP, so once we fold the synced read position on the first open of a conversation
-// this session, later opens must NOT re-check/re-fold it — the live `read:displayed-synced`
-// notifies keep loaded conversations current, and re-folding on every open lets a synced read
-// position reposition the divider on each return. Cleared on reset() (logout/account switch);
-// module-level so it is naturally per app session.
-const mdsConsumedThisSession = new Set<string>()
+// XEP-0490 first-open-per-session fold gate (see shared/readMarkerSync).
+// Reset on reset() (logout/account switch); module-level so it is naturally
+// per app session.
+const mdsGate = createMdsSessionGate()
 
 function getScopedStorageKey(jid?: string | null): string {
   return buildScopedStorageKey(STORAGE_KEY_BASE, jid)
@@ -95,18 +93,13 @@ function mergeCachedChatMessages(
   const newMessagesMap = new Map(state.messages)
   newMessagesMap.set(conversationId, trimmed)
 
-  // Update lastMessage with the newest previewable message after merge/sort, skipping bodiless
-  // signal placeholders. Opening a conversation whose stored preview is a stuck placeholder heals
-  // it here: a real cached message supersedes the placeholder even though the placeholder's
-  // timestamp is newer.
-  const lastMessage = findLastPreviewableMessage(trimmed)
+  // Sidebar preview via the shared policy: the newest previewable message
+  // supersedes (or heals) the stored preview — e.g. opening a conversation
+  // whose stored preview is a stuck placeholder heals it here.
   const meta = state.conversationMeta.get(conversationId)
   const conv = state.conversations.get(conversationId)
-  if (
-    meta && conv && lastMessage &&
-    (shouldReplaceLastMessage(meta.lastMessage, lastMessage) ||
-      isResolvedSamePreview(meta.lastMessage, lastMessage))
-  ) {
+  const { lastMessage, changed } = derivePreviewAfterMerge(meta?.lastMessage, trimmed, findLastPreviewableMessage)
+  if (meta && conv && changed) {
     const newMeta = new Map(state.conversationMeta)
     newMeta.set(conversationId, { ...meta, lastMessage })
     const newConversations = new Map(state.conversations)
@@ -750,8 +743,7 @@ export const chatStore = createStore<ChatState>()(
           // conversation this session. XEP-0490 markers broadcast live over PEP, so after the
           // first consumption the live `read:displayed-synced` notifies keep us current; re-folding
           // on every open would let a synced read position reposition the divider on each return.
-          const firstConsumeThisSession = !mdsConsumedThisSession.has(id)
-          mdsConsumedThisSession.add(id)
+          const firstConsumeThisSession = mdsGate.consume(id)
           const pending = get().conversationMeta.get(id)?.pendingRemoteDisplayedStanzaId
           if (pending && firstConsumeThisSession) {
             const lastSeenBefore = get().conversationMeta.get(id)?.lastSeenMessageId
@@ -1082,103 +1074,50 @@ export const chatStore = createStore<ChatState>()(
 
           // A non-active conversation keeps no resident array (memory windowing), so
           // mergeMAMMessages passes the just-merged array here; otherwise read RAM.
+          // The resolution state machine (stash / clear-pending / forward-only
+          // advance / active-divider recompute) is shared — see shared/readMarkerSync.
           const messages = messagesOverride ?? (state.messages.get(conversationId) || [])
-          const match = messages.find((m) => m.stanzaId === stanzaId)
-
-          if (!match) {
-            // Message not yet loaded — remember the stanza-id as a high-water
-            // mark to be resolved when the message cache is loaded.
-            const newMeta = new Map(state.conversationMeta)
-            newMeta.set(conversationId, { ...meta, pendingRemoteDisplayedStanzaId: stanzaId })
-
-            if (conv) {
-              const newConversations = new Map(state.conversations)
-              newConversations.set(conversationId, { ...conv, pendingRemoteDisplayedStanzaId: stanzaId })
-              return { conversationMeta: newMeta, conversations: newConversations }
-            }
-
-            return { conversationMeta: newMeta }
-          }
-
-          // Forward-only advance using the shared comparator (compares by index).
-          const updated = notifState.onMessageSeen(
+          const resolution = resolveRemoteDisplayed(
             {
               unreadCount: meta.unreadCount,
               mentionsCount: 0,
               lastReadAt: meta.lastReadAt,
               lastSeenMessageId: meta.lastSeenMessageId,
-              firstNewMessageId: state.firstNewMessageMarkers.get(conversationId),
+              pendingRemoteDisplayedStanzaId: meta.pendingRemoteDisplayedStanzaId,
             },
-            match.id,
-            messages
+            messages,
+            state.firstNewMessageMarkers.get(conversationId),
+            stanzaId,
+            // 1:1 chats treat delayed messages as offline delivery.
+            { isActive: state.activeConversationId === conversationId, treatDelayedAsNew: true }
           )
+          if (resolution.kind === 'unchanged') return state
 
-          // No advance (same value or onMessageSeen guard prevented regression).
-          // The matching message IS loaded and the local position is at or past
-          // it, so this marker is resolved — clear any stale pending high-water
-          // mark so it doesn't re-fire a no-op applyRemoteDisplayed on every
-          // mergeMAMMessages. Leave lastSeenMessageId unchanged.
-          if (updated.lastSeenMessageId === meta.lastSeenMessageId) {
-            if (meta.pendingRemoteDisplayedStanzaId === undefined) return state
-            const newMeta = new Map(state.conversationMeta)
-            newMeta.set(conversationId, { ...meta, pendingRemoteDisplayedStanzaId: undefined })
-            if (conv) {
-              const newConversations = new Map(state.conversations)
-              newConversations.set(conversationId, {
-                ...conv,
-                pendingRemoteDisplayedStanzaId: undefined,
-              })
-              return { conversationMeta: newMeta, conversations: newConversations }
-            }
-            return { conversationMeta: newMeta }
-          }
+          const metaPatch =
+            resolution.kind === 'stash-pending'
+              ? { pendingRemoteDisplayedStanzaId: stanzaId }
+              : resolution.kind === 'clear-pending'
+                ? { pendingRemoteDisplayedStanzaId: undefined }
+                : { lastSeenMessageId: resolution.lastSeenMessageId, pendingRemoteDisplayedStanzaId: undefined }
 
           const newMeta = new Map(state.conversationMeta)
-          newMeta.set(conversationId, {
-            ...meta,
-            lastSeenMessageId: updated.lastSeenMessageId,
-            // Resolved → clear any stale pending marker.
-            pendingRemoteDisplayedStanzaId: undefined,
-          })
+          newMeta.set(conversationId, { ...meta, ...metaPatch })
 
-          // XEP-0490: if this marker advances the CURRENTLY ACTIVE conversation, the
-          // new-message divider was already derived at activation from the (now stale)
-          // local read position — e.g. the fresh-session seed landed just after the
-          // conversation opened, so the fold at activation missed it. Recompute the
-          // divider from the advanced position so it reflects the synced read instead
-          // of freezing at the local one (the view otherwise stays at the last local
-          // place and only jumps to the synced place on the next open). Reuse
-          // onActivate's forward-scan derivation. For a non-active conversation the
-          // divider is recomputed on its next activation, so leave the map untouched.
+          // The divider is recomputed only for the active conversation; inactive
+          // ones recompute on their next activation.
           let newMarkers = state.firstNewMessageMarkers
-          if (state.activeConversationId === conversationId) {
-            const divider = notifState.onActivate(
-              {
-                unreadCount: 0,
-                mentionsCount: 0,
-                lastReadAt: meta.lastReadAt,
-                lastSeenMessageId: updated.lastSeenMessageId,
-                firstNewMessageId: undefined,
-              },
-              messages,
-              { treatDelayedAsNew: true }
-            ).firstNewMessageId
+          if (resolution.kind === 'advanced-with-divider') {
             newMarkers = new Map(state.firstNewMessageMarkers)
-            if (divider) newMarkers.set(conversationId, divider)
+            if (resolution.firstNewMessageId) newMarkers.set(conversationId, resolution.firstNewMessageId)
             else newMarkers.delete(conversationId)
           }
 
           if (conv) {
+            // Keep the combined map coherent with conversationMeta.
             const newConversations = new Map(state.conversations)
-            newConversations.set(conversationId, {
-              ...conv,
-              lastSeenMessageId: updated.lastSeenMessageId,
-              // Keep the combined map coherent with conversationMeta.
-              pendingRemoteDisplayedStanzaId: undefined,
-            })
+            newConversations.set(conversationId, { ...conv, ...metaPatch })
             return { conversationMeta: newMeta, conversations: newConversations, firstNewMessageMarkers: newMarkers }
           }
-
           return { conversationMeta: newMeta, firstNewMessageMarkers: newMarkers }
         })
       },
@@ -1621,17 +1560,14 @@ export const chatStore = createStore<ChatState>()(
             searchIndex.indexMessages(persistableMessages).catch((e) => console.warn('[searchIndex] indexMessages failed:', e))
           }
 
-          // Sidebar preview: newest previewable message (skips bodiless signal
-          // placeholders; heals a stuck encrypted-fallback preview via
-          // shouldReplaceLastMessage / isResolvedSamePreview).
-          const lastMessage = findLastPreviewableMessage(trimmed)
+          // Sidebar preview via the shared policy: the newest previewable message
+          // supersedes (or heals) the stored preview — deep-history merges must
+          // not regress the sidebar.
           const meta = state.conversationMeta.get(conversationId)
           const conv = state.conversations.get(conversationId)
-          const previewUpdate = !!(
-            meta && conv && lastMessage &&
-            (shouldReplaceLastMessage(meta.lastMessage, lastMessage) ||
-              isResolvedSamePreview(meta.lastMessage, lastMessage))
-          )
+          const preview = derivePreviewAfterMerge(meta?.lastMessage, trimmed, findLastPreviewableMessage)
+          const lastMessage = preview.lastMessage
+          const previewUpdate = !!(meta && conv && preview.changed)
 
           // NON-ACTIVE conversation (background catch-up): the messages are durable
           // in IndexedDB and the preview/gap are updated, but we DON'T populate the
@@ -1934,7 +1870,7 @@ export const chatStore = createStore<ChatState>()(
       reset: () => {
         clearAllTypingTimeouts()
         // New session → the XEP-0490 synced read marker may be folded again on first open.
-        mdsConsumedThisSession.clear()
+        mdsGate.reset()
         // Clear persisted data on logout
         try {
           localStorage.removeItem(getScopedStorageKey())
