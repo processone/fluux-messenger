@@ -1,6 +1,6 @@
 import { useEffect, useRef, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
-import { connectionStore, useXMPPContext, getBareJid, hasFastToken, deleteFastToken } from '@fluux/sdk'
+import { connectionStore, useXMPPContext, getBareJid, getDomain, hasFastToken, deleteFastToken } from '@fluux/sdk'
 import { useRosterStore, useConnectionStore, useRoomStore } from '@fluux/sdk/react'
 import type { Contact, Room, RoomOccupant, ServerInfo, HttpUploadService, RoomMessage, ResourcePresence, JoinedRoomInfo } from '@fluux/sdk'
 import { getResource } from '@/utils/xmppResource'
@@ -657,7 +657,7 @@ export function useSessionPersistence(claimConnection?: (jid: string) => Promise
     const savedServer = localStorage.getItem('xmpp-last-server')
     // Fallback: derive server from JID domain when savedServer is empty
     // (backward compat with older sessions that stored '' for the server field)
-    const effectiveServer = savedServer || (savedJid ? savedJid.split('@')[1] : null)
+    const effectiveServer = savedServer || (savedJid ? getDomain(savedJid) : null)
     if (rememberMe && savedJid && effectiveServer && hasFastToken(savedJid)) {
       const resource = getResource()
 
@@ -752,7 +752,7 @@ export function useSessionPersistence(claimConnection?: (jid: string) => Promise
     if (!savedJid) return
 
     keychainRetryAttempted.current = true
-    const effectiveServer = savedServer || savedJid.split('@')[1]
+    const effectiveServer = savedServer || getDomain(savedJid)
 
     const retryWithKeychain = async () => {
       try {

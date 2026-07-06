@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { TextInput } from './ui/TextInput'
 import { useTranslation } from 'react-i18next'
-import { useConnection, useRoomActions, RoomJoinError } from '@fluux/sdk'
+import { useConnection, useRoomActions, RoomJoinError, getLocalPart } from '@fluux/sdk'
 import { useChatStore } from '@fluux/sdk/react'
 import { useModalInput } from '@/hooks'
 import { useRoomJoinWarning } from '@/hooks/useRoomJoinWarning'
@@ -37,7 +37,7 @@ export function JoinRoomModal({ onClose }: JoinRoomModalProps) {
         setNickname(ownNickname)
         nicknameInitialized.current = true
       } else if (userJid) {
-        setNickname(userJid.split('@')[0])
+        setNickname(getLocalPart(userJid))
         nicknameInitialized.current = true
       }
     }

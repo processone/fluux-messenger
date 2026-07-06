@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { getLocalPart, useConnection, usePresence } from '@fluux/sdk'
+import { getBareJid, getLocalPart, useConnection, usePresence } from '@fluux/sdk'
 import { AvatarCropModal } from '../AvatarCropModal'
 import { ChangePasswordModal } from '../ChangePasswordModal'
 import { OwnProfileHero } from './profile/OwnProfileHero'
@@ -30,7 +30,7 @@ export function ProfileSettings() {
   const [showAvatarModal, setShowAvatarModal] = useState(false)
   const [showPasswordModal, setShowPasswordModal] = useState(false)
 
-  const bareJid = jid ? jid.split('/')[0] : ''
+  const bareJid = jid ? getBareJid(jid) : ''
   const localPart = jid ? getLocalPart(jid) : ''
 
   return (

@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { Copy, Check, Lock, AlertTriangle, Trash2, CloudUpload, CloudDownload, RefreshCw, X, Info, ChevronDown, ChevronRight, FileDown, FileUp } from 'lucide-react'
 import { Toggle } from '@/components/ui/Toggle'
 import { SettingsSection } from '@/components/ui/SettingsSection'
-import { useConnection, useXMPPContext } from '@fluux/sdk'
+import { useConnection, useXMPPContext, getBareJid } from '@fluux/sdk'
 import { useEncryptionSettingsStore } from '@/stores/encryptionSettingsStore'
 import { registerE2EEPlugins, unregisterE2EEPlugins } from '@/e2ee/registerPlugins'
 import { useToastStore } from '@/stores/toastStore'
@@ -240,7 +240,7 @@ export function EncryptionSettings() {
       | null
       | undefined
     if (plugin?.isKeyRecoveryNeeded?.() !== true) return
-    const bareJid = jid ? jid.split('/')[0] : null
+    const bareJid = jid ? getBareJid(jid) : null
     if (!bareJid) return
     recoveryPromptedRef.current = true
     let cancelled = false
@@ -317,7 +317,7 @@ export function EncryptionSettings() {
         // connection anyway.
         return
       }
-      const bareJid = jid ? jid.split('/')[0] : null
+      const bareJid = jid ? getBareJid(jid) : null
       if (!isTauri()) {
         // Web: same defence-in-depth as desktop — never silently generate
         // when the server already advertises an OpenPGP identity for this

@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { useConnectionStatus } from '@fluux/sdk'
+import { useConnectionStatus, getBareJid } from '@fluux/sdk'
 import { rehydrateVerifiedPeerKeys } from '../stores/verifiedPeerKeysStore'
 import { rehydratePinnedPrimaryFingerprints } from '../stores/pinnedPrimaryFingerprintsStore'
 import { rehydrateKeyChangeAlerts } from '../stores/keyChangeAlertsStore'
@@ -21,7 +21,7 @@ import { rehydrateEncryptionSettings } from '../stores/encryptionSettingsStore'
  */
 export function useAccountScopeRehydration(): void {
   const { jid } = useConnectionStatus()
-  const bareJid = jid ? jid.split('/')[0] : null
+  const bareJid = jid ? getBareJid(jid) : null
   const prevJidRef = useRef<string | null>(null)
 
   useEffect(() => {

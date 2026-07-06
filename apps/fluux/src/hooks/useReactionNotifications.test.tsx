@@ -19,12 +19,12 @@ const mockGetCachedMessageByStanzaId = vi.fn()
 const mockGetCachedRoomMessage = vi.fn()
 const mockGetCachedRoomMessageByStanzaId = vi.fn()
 
-vi.mock('@fluux/sdk', () => ({
+vi.mock('@fluux/sdk', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@fluux/sdk')>()),
   useXMPP: () => ({ client: { subscribe: mockSubscribe } }),
   chatStore: { getState: () => chatState },
   roomStore: { getState: () => roomState },
   connectionStore: { getState: () => connectionState },
-  getBareJid: (jid: string) => jid.split('/')[0],
   findMessageById: (msgs: Array<{ id: string }>, id: string) => msgs.find((m) => m.id === id),
   getMessage: (...args: unknown[]) => mockGetCachedMessage(...args),
   getMessageByStanzaId: (...args: unknown[]) => mockGetCachedMessageByStanzaId(...args),

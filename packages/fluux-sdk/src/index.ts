@@ -475,8 +475,9 @@ export {
   matchJidUsername,
   matchNameOrJid,
   getUniqueOccupantCount,
+  validateBareJid,
 } from './core/jid'
-export type { ParsedJid } from './core/jid'
+export type { ParsedJid, JidValidation } from './core/jid'
 
 // Service discovery utilities (XEP-0030 / XEP-0163)
 export { discoSupportsPep } from './core/modules/Discovery'

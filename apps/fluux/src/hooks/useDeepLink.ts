@@ -7,7 +7,7 @@
  * Phase 2.4: Uses React Router for navigation instead of callback handlers.
  */
 import { useEffect, useRef, useCallback } from 'react'
-import { useChat, useRoom, useRoster, chatStore, type Conversation, parseXmppUri, isMucJid, getBareJid } from '@fluux/sdk'
+import { useChat, useRoom, useRoster, chatStore, type Conversation, parseXmppUri, isMucJid, getBareJid, getLocalPart } from '@fluux/sdk'
 import { useConnectionStore } from '@fluux/sdk/react'
 import { useNavigateToTarget } from './useNavigateToTarget'
 import { useTranslation } from 'react-i18next'
@@ -65,7 +65,7 @@ export function useDeepLink() {
       const password = parsed.params.password
 
       // Use provided nick, or fallback to local part of user's JID
-      const defaultNick = jidRef.current?.split('@')[0] || 'guest'
+      const defaultNick = getLocalPart(jidRef.current ?? '') || 'guest'
       const nickname = nick || defaultNick
 
       console.log('[DeepLink] Joining room:', roomJid, { nickname, password: password ? '***' : undefined })
@@ -110,7 +110,7 @@ export function useDeepLink() {
       if (!chatState.hasConversation(contactJid)) {
         // Find contact name from roster, or use JID
         const contact = contactsRef.current.find(c => c.jid === contactJid)
-        const name = contact?.name || contactJid.split('@')[0]
+        const name = contact?.name || getLocalPart(contactJid)
 
         // Create new conversation
         const conversation: Conversation = {
