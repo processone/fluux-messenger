@@ -1,5 +1,6 @@
 import { chatStore, roomStore } from '@fluux/sdk'
-import type { Message, RoomMessage, XMPPClient } from '@fluux/sdk'
+import type { Message, RoomMessage } from '@fluux/sdk'
+import type { XMPPClient } from '@fluux/sdk/core'
 
 export interface McpConversationSummary {
   conversationId: string

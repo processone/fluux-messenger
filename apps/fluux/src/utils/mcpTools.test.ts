@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { type Conversation, type Message, type Room, type XMPPClient } from '@fluux/sdk'
+import { type Conversation, type Message, type Room } from '@fluux/sdk'
+import type { XMPPClient } from '@fluux/sdk/core'
 import { listConversations, getHistory, sendMessageTool, __resetSendRateLimitForTests } from './mcpTools'
 
 // Override the SDK mock to provide setState on stores
