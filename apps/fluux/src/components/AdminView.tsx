@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Server, Plus, ArrowLeft, Menu } from 'lucide-react'
-import { useAdmin, useXMPP, adminStore, type AdminCategory, type AdminUser, type AdminRoom } from '@fluux/sdk'
+import { useAdmin, useXMPP, adminStore, getLocalPart, type AdminCategory, type AdminUser, type AdminRoom } from '@fluux/sdk'
 import { useAdminStore } from '@fluux/sdk/react'
 import { useModalInput } from '@/hooks'
 import { useWindowedList } from '../hooks/useWindowedList'
@@ -103,7 +103,7 @@ export function AdminView({ activeCategory, onBack }: AdminViewProps) {
       } else {
         // User not in current list - create a minimal AdminUser object
         // This handles cases where the user exists but wasn't in the first page
-        const username = pendingSelectedUserJid.split('@')[0]
+        const username = getLocalPart(pendingSelectedUserJid)
         setSelectedUser({
           jid: pendingSelectedUserJid,
           username,

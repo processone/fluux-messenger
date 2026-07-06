@@ -907,7 +907,10 @@ export const chatStore = createStore<ChatState>()(
           // below still run). ABSENT or true = at the live edge; only explicit false gates.
           const atLiveEdge = state.windowAtLiveEdge.get(msg.conversationId) !== false
           const newMessages = new Map(state.messages)
-          newMessages.set(msg.conversationId, atLiveEdge ? [...convMessages, msg] : convMessages)
+          newMessages.set(
+            msg.conversationId,
+            atLiveEdge ? trimMessages([...convMessages, msg], getResidentWindowSize()) : convMessages
+          )
 
           const conv = state.conversations.get(msg.conversationId)
           const meta = state.conversationMeta.get(msg.conversationId)
@@ -1307,7 +1310,14 @@ export const chatStore = createStore<ChatState>()(
           // Resolve by id/stanzaId first, origin-id only as fallback (reactions
           // may reference any tier; origin-id must not shadow a real id).
           const messageIndex = findMessageIndexById(convMessages, messageId)
-          if (messageIndex === -1) return state
+          if (messageIndex === -1) {
+            // The conversation is resident but the target message is not (the
+            // sliding window evicted it). Update the durable cache so the
+            // reaction survives instead of being silently dropped.
+            logInfo(`Reaction for message ${messageId} not in resident window — updating in cache`)
+            void messageCache.updateMessageReactions(messageId, reactorJid, emojis)
+            return state
+          }
 
           const message = convMessages[messageIndex]
           const currentReactions = message.reactions || {}
@@ -1834,9 +1844,16 @@ export const chatStore = createStore<ChatState>()(
             set((state) => {
               const currentMessages = state.messages.get(conversationId) || []
 
-              // Merge older messages at the beginning and trim using shared utility.
+              // Dedupe against the resident array (in-memory messages take precedence):
+              // a cache slice can overlap the window at the `before:` boundary.
+              const existingKeys = buildMessageKeySet(currentMessages, getChatMessageKeys)
+              const newFromCache = olderMessages.filter(
+                (msg) => !isMessageDuplicate(msg, existingKeys, getChatMessageKeys)
+              )
+
+              // Merge older messages at the beginning, sort, and trim using shared utilities.
               // Load-older slides the window (keep oldest) so scroll-back past the bound works.
-              const merged = [...olderMessages, ...currentMessages]
+              const merged = sortMessagesByTimestamp([...newFromCache, ...currentMessages])
               const trimmed = trimMessagesKeepOldest(merged, getResidentWindowSize())
 
               const newMessagesMap = new Map(state.messages)
@@ -1886,9 +1903,16 @@ export const chatStore = createStore<ChatState>()(
             set((state) => {
               const currentMessages = state.messages.get(conversationId) || []
 
-              // Merge newer messages at the end and trim using shared utility.
+              // Dedupe against the resident array (in-memory messages take precedence):
+              // a cache slice can overlap the window at the `after:` boundary.
+              const existingKeys = buildMessageKeySet(currentMessages, getChatMessageKeys)
+              const newFromCache = newerMessages.filter(
+                (msg) => !isMessageDuplicate(msg, existingKeys, getChatMessageKeys)
+              )
+
+              // Merge newer messages at the end, sort, and trim using shared utilities.
               // Load-newer slides the window (keep newest) so sliding back down works.
-              const merged = [...currentMessages, ...newerMessages]
+              const merged = sortMessagesByTimestamp([...currentMessages, ...newFromCache])
               const trimmed = trimMessages(merged, getResidentWindowSize())
 
               const newMessagesMap = new Map(state.messages)

@@ -3,6 +3,7 @@ import { chatStore } from './chatStore'
 import type { Message, Conversation } from '../core/types'
 import { getLocalPart } from '../core/jid'
 import { _resetStorageScopeForTesting, setStorageScopeJid } from '../utils/storageScope'
+import { setResidentWindowSize } from './shared/residentWindow'
 
 // Mock localStorage
 const localStorageMock = (() => {
@@ -3516,6 +3517,109 @@ describe('chatStore', () => {
       chatStore.getState().setTargetMessageId('msg-123')
       chatStore.getState().reset()
       expect(chatStore.getState().targetMessageId).toBeNull()
+    })
+  })
+})
+
+// Regression tests for chat/room parity drifts: each of these behaviors already
+// exists in roomStore and had silently diverged in chatStore (or vice versa).
+describe('chatStore parity drift regressions', () => {
+  const convId = 'peer@example.com'
+
+  beforeEach(() => {
+    _resetStorageScopeForTesting()
+    localStorageMock.clear()
+    chatStore.setState({
+      conversationEntities: new Map(),
+      conversationMeta: new Map(),
+      conversations: new Map(),
+      messages: new Map(),
+      activeConversationId: null,
+      archivedConversations: new Set(),
+      firstNewMessageMarkers: new Map(),
+      windowAtLiveEdge: new Map(),
+      mamQueryStates: new Map(),
+      conversationGaps: new Map(),
+    })
+    chatStore.getState().addConversation(createConversation(convId))
+    chatStore.setState({ activeConversationId: convId })
+  })
+
+  afterEach(() => {
+    setResidentWindowSize(5000)
+  })
+
+  function messageAt(id: string, body: string, iso: string): Message {
+    return {
+      type: 'chat',
+      id,
+      conversationId: convId,
+      from: convId,
+      body,
+      timestamp: new Date(iso),
+      isOutgoing: false,
+    }
+  }
+
+  describe('addMessage sliding-window trim (parity with roomStore)', () => {
+    it('trims the resident array to the window bound on live append', () => {
+      setResidentWindowSize(3)
+      for (let i = 1; i <= 4; i++) {
+        chatStore.getState().addMessage(messageAt(`m-${i}`, `m${i}`, `2024-01-15T10:0${i}:00Z`))
+      }
+      const resident = chatStore.getState().messages.get(convId) || []
+      expect(resident.map((m) => m.id)).toEqual(['m-2', 'm-3', 'm-4'])
+    })
+  })
+
+  describe('updateReactions cache fallback (parity with roomStore)', () => {
+    it('updates the durable cache when the conversation is resident but the message is not', () => {
+      chatStore.getState().addMessage(messageAt('resident-1', 'still here', '2024-01-15T10:00:00Z'))
+      vi.mocked(messageCache.updateMessageReactions).mockClear()
+      const residentBefore = chatStore.getState().messages.get(convId)
+
+      chatStore.getState().updateReactions(convId, 'evicted-1', 'bob@example.com', ['👍'])
+
+      expect(messageCache.updateMessageReactions).toHaveBeenCalledWith('evicted-1', 'bob@example.com', ['👍'])
+      // The resident array is untouched — only the durable copy is patched.
+      expect(chatStore.getState().messages.get(convId)).toBe(residentBefore)
+    })
+  })
+
+  describe('cache pagination dedupe (parity with roomStore)', () => {
+    it('loadOlderMessagesFromCache dedupes and sorts an overlapping, out-of-order batch', async () => {
+      const current = messageAt('cur-1', 'current', '2024-01-15T11:00:00Z')
+      chatStore.setState((state) => ({ messages: new Map(state.messages).set(convId, [current]) }))
+
+      // Batch overlaps the resident window (cur-1 again) and arrives out of order.
+      vi.mocked(messageCache.getMessages).mockReset()
+      vi.mocked(messageCache.getMessages).mockResolvedValue([
+        { ...current },
+        messageAt('old-2', 'older 2', '2024-01-15T10:30:00Z'),
+        messageAt('old-1', 'older 1', '2024-01-15T10:00:00Z'),
+      ])
+
+      await chatStore.getState().loadOlderMessagesFromCache(convId)
+
+      const resident = chatStore.getState().messages.get(convId) || []
+      expect(resident.map((m) => m.id)).toEqual(['old-1', 'old-2', 'cur-1'])
+    })
+
+    it('loadNewerMessagesFromCache dedupes and sorts an overlapping, out-of-order batch', async () => {
+      const current = messageAt('cur-1', 'current', '2024-01-15T11:00:00Z')
+      chatStore.setState((state) => ({ messages: new Map(state.messages).set(convId, [current]) }))
+
+      vi.mocked(messageCache.getMessages).mockReset()
+      vi.mocked(messageCache.getMessages).mockResolvedValue([
+        messageAt('new-2', 'newer 2', '2024-01-15T13:00:00Z'),
+        { ...current },
+        messageAt('new-1', 'newer 1', '2024-01-15T12:00:00Z'),
+      ])
+
+      await chatStore.getState().loadNewerMessagesFromCache(convId)
+
+      const resident = chatStore.getState().messages.get(convId) || []
+      expect(resident.map((m) => m.id)).toEqual(['cur-1', 'new-1', 'new-2'])
     })
   })
 })

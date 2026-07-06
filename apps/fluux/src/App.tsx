@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { useConnectionStatus, useXMPPContext, hasFastToken } from '@fluux/sdk'
+import { useConnectionStatus, useXMPPContext, hasFastToken, getBareJid, getDomain } from '@fluux/sdk'
 import { registerE2EEPlugins } from './e2ee/registerPlugins'
 import { isKeyLocked } from './e2ee/webPassphraseStore'
 import { attemptCachedUnlockOrPrompt } from '@/e2ee/silentRestore'
@@ -174,7 +174,7 @@ function App() {
     const savedServer = localStorage.getItem('xmpp-last-server')
     // Fallback: derive server from JID domain when savedServer is empty
     // (backward compat with older sessions that stored '' for the server field)
-    const effectiveServer = savedServer || (savedJid ? savedJid.split('@')[1] : null)
+    const effectiveServer = savedServer || (savedJid ? getDomain(savedJid) : null)
     return !!(rememberMe && savedJid && effectiveServer && hasFastToken(savedJid))
   })
 
@@ -244,7 +244,7 @@ function App() {
         //     advertises an identity (fresh device / cleared browser).
         //     Silent generation would fork the identity, so we route to a
         //     deliberate choice instead.
-        const accountJid = jid ? jid.split('/')[0] : null
+        const accountJid = jid ? getBareJid(jid) : null
         const plugin = client.e2ee?.getPlugin('openpgp') as
           | {
               hasNoLocalKey?: () => Promise<boolean>

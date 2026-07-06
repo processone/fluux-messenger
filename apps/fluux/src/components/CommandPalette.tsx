@@ -361,7 +361,7 @@ function CommandPaletteContent({
       items.push({
         id: `room-${room.jid}`,
         type: 'room',
-        label: room.name || room.jid.split('@')[0],
+        label: room.name || getLocalPart(room.jid),
         sublabel: room.jid,
         lastMessagePreview: preview,
         lastMessageBody: room.lastMessage?.body,
@@ -379,7 +379,7 @@ function CommandPaletteContent({
       items.push({
         id: `bookmark-${room.jid}`,
         type: 'room',
-        label: room.name || room.jid.split('@')[0],
+        label: room.name || getLocalPart(room.jid),
         sublabel: `${room.jid} (${t('rooms.bookmarked')})`,
         avatarIdentifier: room.jid,
         avatarUrl: room.avatar,

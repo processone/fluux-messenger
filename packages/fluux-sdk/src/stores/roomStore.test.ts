@@ -3,6 +3,7 @@ import { roomStore } from './roomStore'
 import type { Room, RoomMessage } from '../core/types'
 import { getLocalPart } from '../core/jid'
 import { _resetStorageScopeForTesting, setStorageScopeJid } from '../utils/storageScope'
+import { setResidentWindowSize } from './shared/residentWindow'
 
 // Mock localStorage
 const localStorageMock = (() => {
@@ -4713,5 +4714,118 @@ describe('acknowledged non-anonymous rooms', () => {
     } finally {
       _resetStorageScopeForTesting()
     }
+  })
+})
+
+// Regression tests for chat/room parity drifts: each of these behaviors already
+// exists in chatStore and had silently diverged in roomStore (or vice versa).
+describe('roomStore parity drift regressions', () => {
+  const roomJid = 'drift@conference.example.com'
+
+  beforeEach(() => {
+    _resetStorageScopeForTesting()
+    localStorageMock.clear()
+    roomStore.setState({
+      rooms: new Map(),
+      roomEntities: new Map(),
+      roomMeta: new Map(),
+      roomRuntime: new Map(),
+      activeRoomJid: null,
+      firstNewMessageMarkers: new Map(),
+      mamQueryStates: new Map(),
+      roomGaps: new Map(),
+    })
+    roomStore.getState().addRoom(createRoom(roomJid, { joined: true }))
+  })
+
+  afterEach(() => {
+    setResidentWindowSize(5000)
+  })
+
+  function messageAt(id: string, nick: string, body: string, iso: string): RoomMessage {
+    return {
+      type: 'groupchat',
+      id,
+      roomJid,
+      from: `${roomJid}/${nick}`,
+      nick,
+      body,
+      timestamp: new Date(iso),
+      isOutgoing: false,
+    }
+  }
+
+  describe('addMessage archive-id backfill (parity with chatStore)', () => {
+    it('backfills the server stanzaId from a dropped duplicate echo', () => {
+      const original: RoomMessage = {
+        ...messageAt('orig-1', 'testuser', 'hello', '2024-01-15T10:00:00Z'),
+        isOutgoing: true,
+        originId: 'origin-abc',
+      }
+      roomStore.getState().addMessage(roomJid, original)
+      vi.mocked(messageCache.updateRoomMessage).mockClear()
+
+      // The MAM/archive copy of the same message arrives with the server archive id.
+      const archived: RoomMessage = { ...original, stanzaId: 'archive-123' }
+      roomStore.getState().addMessage(roomJid, archived)
+
+      const messages = roomStore.getState().rooms.get(roomJid)?.messages || []
+      expect(messages).toHaveLength(1)
+      expect(messages[0].stanzaId).toBe('archive-123')
+      // The runtime mirror must receive the same patched array.
+      expect(roomStore.getState().roomRuntime.get(roomJid)?.messages[0]?.stanzaId).toBe('archive-123')
+      // The backfill must also persist so the cursor survives a reload.
+      expect(messageCache.updateRoomMessage).toHaveBeenCalledWith(
+        'orig-1',
+        expect.objectContaining({ stanzaId: 'archive-123' })
+      )
+    })
+  })
+
+  describe('backward MAM merge preview guard (parity with chatStore)', () => {
+    it('does not regress the sidebar preview when keep-oldest evicts the newest tail', () => {
+      setResidentWindowSize(2)
+      roomStore.setState({ activeRoomJid: roomJid })
+
+      const newest = messageAt('new-1', 'alice', 'newest', '2024-01-15T12:00:00Z')
+      roomStore.getState().addMessage(roomJid, newest)
+      expect(roomStore.getState().rooms.get(roomJid)?.lastMessage?.id).toBe('new-1')
+
+      // Scroll-up merge: two older messages + window of 2 → keep-oldest evicts 'new-1'.
+      const older = [
+        messageAt('old-1', 'bob', 'old 1', '2024-01-15T10:00:00Z'),
+        messageAt('old-2', 'bob', 'old 2', '2024-01-15T10:30:00Z'),
+      ]
+      roomStore.getState().mergeRoomMAMMessages(roomJid, older, { first: 'cursor-1' }, false, 'backward')
+
+      // The resident window slid, but the sidebar preview must stay on the newest message.
+      expect(roomStore.getState().rooms.get(roomJid)?.messages.map((m) => m.id)).toEqual(['old-1', 'old-2'])
+      expect(roomStore.getState().rooms.get(roomJid)?.lastMessage?.id).toBe('new-1')
+      expect(roomStore.getState().roomMeta.get(roomJid)?.lastMessage?.id).toBe('new-1')
+    })
+
+    it('still heals a preview stuck on an encrypted fallback (isResolvedSamePreview)', () => {
+      // A non-resident room whose preview holds the undecrypted fallback: the
+      // resolved copy arriving via MAM has the SAME id and timestamp, so the
+      // newer-only guard alone would refuse it — the heal path must let it through.
+      const encrypted: RoomMessage = {
+        ...messageAt('enc-1', 'alice', '[OpenPGP-encrypted message]', '2024-01-15T12:00:00Z'),
+        encryptedPayload: '<openpgp xmlns="urn:xmpp:openpgp:0">…</openpgp>',
+      }
+      roomStore.setState((state) => {
+        const rooms = new Map(state.rooms)
+        const room = rooms.get(roomJid)!
+        rooms.set(roomJid, { ...room, messages: [], lastMessage: encrypted })
+        const roomMeta = new Map(state.roomMeta)
+        roomMeta.set(roomJid, { ...roomMeta.get(roomJid)!, lastMessage: encrypted })
+        return { rooms, roomMeta }
+      })
+
+      const resolved: RoomMessage = { ...encrypted, body: 'decrypted at last', encryptedPayload: undefined }
+      roomStore.getState().mergeRoomMAMMessages(roomJid, [resolved], {}, true, 'forward')
+
+      expect(roomStore.getState().rooms.get(roomJid)?.lastMessage?.body).toBe('decrypted at last')
+      expect(roomStore.getState().roomMeta.get(roomJid)?.lastMessage?.body).toBe('decrypted at last')
+    })
   })
 })
