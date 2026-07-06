@@ -3,7 +3,7 @@
  * Stranger messages, polls, search, link previews, @mentions.
  */
 
-import type { DemoAnimationStep } from '@fluux/sdk'
+import type { DemoAnimationStep } from '@fluux/sdk/demo'
 import { DOMAIN, SELF_JID, SELF_NICK, ROOM_JID } from '../constants'
 
 export const act4Steps: DemoAnimationStep[] = [

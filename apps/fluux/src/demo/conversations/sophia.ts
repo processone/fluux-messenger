@@ -1,5 +1,5 @@
 import type { Message } from '@fluux/sdk'
-import { hoursAgo, daysAgo } from '@fluux/sdk'
+import { hoursAgo, daysAgo } from '@fluux/sdk/demo'
 import { DOMAIN, SELF_JID } from '../constants'
 
 const conv = `sophia@${DOMAIN}`
