@@ -1,7 +1,9 @@
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { type Conversation, type Message, type Room } from '@fluux/sdk'
 import type { XMPPClient } from '@fluux/sdk/core'
-import { listConversations, getHistory, sendMessageTool, __resetSendRateLimitForTests } from './mcpTools'
+import { listConversations, getHistory, sendMessageTool, MCP_TOOL_NAMES, __resetSendRateLimitForTests } from './mcpTools'
 
 // Override the SDK mock to provide setState on stores
 const mockChatState = {
@@ -51,6 +53,26 @@ describe('mcpTools', () => {
   beforeEach(() => {
     chatStore.setState({ conversations: new Map(), messages: new Map() })
     roomStore.setState({ rooms: new Map(), roomRuntime: new Map() })
+  })
+
+  describe('tool registry parity', () => {
+    it('matches the tool names advertised by the Rust tool_definitions()', () => {
+      // The Rust side owns the wire-visible tools/list; the JS side owns the
+      // dispatch map and activity-log types via MCP_TOOL_NAMES. This test is
+      // the tripwire that keeps the two languages from drifting apart.
+      const protocolRs = readFileSync(
+        resolve(__dirname, '../../src-tauri/src/mcp/protocol.rs'),
+        'utf-8'
+      )
+      const toolDefinitions = protocolRs.slice(
+        protocolRs.indexOf('pub fn tool_definitions'),
+        protocolRs.indexOf('const PROTOCOL_VERSION')
+      )
+      expect(toolDefinitions.length).toBeGreaterThan(0)
+
+      const rustToolNames = [...toolDefinitions.matchAll(/"name":\s*"([a-z_]+)"/g)].map((m) => m[1])
+      expect(rustToolNames.sort()).toEqual([...MCP_TOOL_NAMES].sort())
+    })
   })
 
   describe('listConversations', () => {

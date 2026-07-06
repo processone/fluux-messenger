@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import type { McpToolName } from '@/utils/mcpTools'
 
 /**
  * MCP bridge state — mirrors the pattern used by advancedModeStore.ts.
@@ -9,7 +10,7 @@ const MCP_ENABLED_KEY = 'fluux-mcp-enabled'
 const MAX_ACTIVITY_ENTRIES = 100
 
 export interface McpActivityEntry {
-  tool: 'list_conversations' | 'get_history' | 'send_message'
+  tool: McpToolName
   conversationId?: string
   timestamp: Date
 }

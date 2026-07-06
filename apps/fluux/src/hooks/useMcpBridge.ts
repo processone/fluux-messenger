@@ -4,7 +4,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import { isTauri } from '@/utils/tauri'
 import { useMcpBridgeStore, type McpActivityEntry } from '@/stores/mcpBridgeStore'
-import { listConversations, getHistory, sendMessageTool } from '@/utils/mcpTools'
+import { listConversations, getHistory, sendMessageTool, type McpToolName } from '@/utils/mcpTools'
 
 interface McpToolCallEvent {
   id: string
@@ -12,21 +12,33 @@ interface McpToolCallEvent {
   arguments: Record<string, unknown>
 }
 
+/**
+ * The reply envelope for `mcp_respond`, matched by `unwrap_envelope` on the
+ * Rust side (src-tauri/src/mcp/bridge.rs). A typed shape instead of sniffing
+ * the result for an "error" field, so a tool result that legitimately
+ * contains an `error` key can never be misread as a failure.
+ */
+type ToolResponseEnvelope = { ok: true; result: unknown } | { ok: false; error: string }
+
+/**
+ * Keyed by {@link McpToolName} so the compiler enforces that every tool the
+ * JS side knows about has a handler — adding a name to MCP_TOOL_NAMES without
+ * one is a type error, and the Rust/JS parity test in mcpTools.test.ts covers
+ * the cross-language half of the registry.
+ */
+const TOOL_HANDLERS: Record<McpToolName, (client: XMPPClient, args: Record<string, unknown>) => unknown> = {
+  list_conversations: () => listConversations(),
+  get_history: (_client, args) =>
+    getHistory(args.conversationId as string, args.limit as number | undefined, args.before as string | undefined),
+  send_message: (client, args) => sendMessageTool(client, args.conversationId as string, args.body as string),
+}
+
 async function dispatchTool(client: XMPPClient, event: McpToolCallEvent): Promise<unknown> {
-  switch (event.name) {
-    case 'list_conversations':
-      return listConversations()
-    case 'get_history':
-      return getHistory(
-        event.arguments.conversationId as string,
-        event.arguments.limit as number | undefined,
-        event.arguments.before as string | undefined
-      )
-    case 'send_message':
-      return sendMessageTool(client, event.arguments.conversationId as string, event.arguments.body as string)
-    default:
-      throw new Error(`Unknown MCP tool: ${event.name}`)
+  const handler = (TOOL_HANDLERS as Record<string, (typeof TOOL_HANDLERS)[McpToolName] | undefined>)[event.name]
+  if (!handler) {
+    throw new Error(`Unknown MCP tool: ${event.name}`)
   }
+  return handler(client, event.arguments)
 }
 
 /**
@@ -94,8 +106,9 @@ export function useMcpBridge(client: XMPPClient): void {
             result = await dispatchTool(client, payload)
           } catch (error) {
             const message = error instanceof Error ? error.message : String(error)
+            const envelope: ToolResponseEnvelope = { ok: false, error: message }
             try {
-              await invoke('mcp_respond', { id: payload.id, result: { error: message } })
+              await invoke('mcp_respond', { id: payload.id, result: envelope })
             } catch {
               // Responding failed; the Rust side times this request out.
             }
@@ -106,8 +119,9 @@ export function useMcpBridge(client: XMPPClient): void {
             conversationId: payload.arguments.conversationId as string | undefined,
             timestamp: new Date(),
           })
+          const envelope: ToolResponseEnvelope = { ok: true, result }
           try {
-            await invoke('mcp_respond', { id: payload.id, result })
+            await invoke('mcp_respond', { id: payload.id, result: envelope })
           } catch {
             // Do NOT convert a respond failure into a tool error: the tool
             // already executed, and for send_message an error response here

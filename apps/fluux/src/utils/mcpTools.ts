@@ -2,6 +2,17 @@ import { chatStore, roomStore } from '@fluux/sdk'
 import type { Message, RoomMessage } from '@fluux/sdk'
 import type { XMPPClient } from '@fluux/sdk/core'
 
+/**
+ * The JS-side source of truth for the MCP tool names. The Rust side declares
+ * the same list in `tool_definitions()` (src-tauri/src/mcp/protocol.rs) for
+ * the wire-visible `tools/list`; a parity test in mcpTools.test.ts asserts the
+ * two stay in sync, and the dispatch map in useMcpBridge.ts plus the activity
+ * log's type both derive from this constant so the JS side cannot drift
+ * internally.
+ */
+export const MCP_TOOL_NAMES = ['list_conversations', 'get_history', 'send_message'] as const
+export type McpToolName = (typeof MCP_TOOL_NAMES)[number]
+
 export interface McpConversationSummary {
   conversationId: string
   displayName: string

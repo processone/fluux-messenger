@@ -59,7 +59,7 @@ describe('useMcpBridge', () => {
     await handler({ payload: { id: 'req-1', name: 'list_conversations', arguments: {} } })
 
     await waitFor(() => {
-      expect(invokeMock).toHaveBeenCalledWith('mcp_respond', { id: 'req-1', result: [] })
+      expect(invokeMock).toHaveBeenCalledWith('mcp_respond', { id: 'req-1', result: { ok: true, result: [] } })
     })
     expect(useMcpBridgeStore.getState().activityLog).toHaveLength(1)
   })
@@ -77,7 +77,7 @@ describe('useMcpBridge', () => {
     await waitFor(() => {
       expect(invokeMock).toHaveBeenCalledWith('mcp_respond', {
         id: 'req-2',
-        result: { error: 'Unknown conversationId: ghost@example.com' },
+        result: { ok: false, error: 'Unknown conversationId: ghost@example.com' },
       })
     })
   })
@@ -144,13 +144,12 @@ describe('useMcpBridge', () => {
 
     // The successful result respond was attempted once...
     await waitFor(() => {
-      expect(invokeMock).toHaveBeenCalledWith('mcp_respond', { id: 'req-3', result: [] })
+      expect(invokeMock).toHaveBeenCalledWith('mcp_respond', { id: 'req-3', result: { ok: true, result: [] } })
     })
-    // ...and its failure must NOT be converted into an {error} respond, which
-    // would tell the MCP client an already-executed tool call failed.
+    // ...and its failure must NOT be converted into an {ok: false} respond,
+    // which would tell the MCP client an already-executed tool call failed.
     const errorResponds = invokeMock.mock.calls.filter(
-      ([cmd, args]) =>
-        cmd === 'mcp_respond' && (args as { result?: { error?: string } })?.result?.error !== undefined
+      ([cmd, args]) => cmd === 'mcp_respond' && (args as { result?: { ok?: boolean } })?.result?.ok === false
     )
     expect(errorResponds).toHaveLength(0)
   })
