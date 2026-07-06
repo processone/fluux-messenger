@@ -26,7 +26,8 @@ export function McpSettings() {
         <button
           type="button"
           onClick={() => setEnabled(!enabled)}
-          className="px-4 py-2 rounded-lg bg-fluux-brand text-fluux-text-on-accent"
+          className="px-4 py-2 rounded-lg bg-fluux-brand text-fluux-text-on-accent text-sm font-medium
+                     hover:bg-fluux-brand-hover transition-colors tap-target"
         >
           {enabled ? t('settings.mcp.disable') : t('settings.mcp.enable')}
         </button>
@@ -38,7 +39,7 @@ export function McpSettings() {
                 <p>{t('settings.mcp.statusRunning', { port: serverInfo.port })}</p>
                 <p className="font-mono text-xs mt-1 break-all">{`http://127.0.0.1:${serverInfo.port}/mcp`}</p>
                 <p className="font-mono text-xs break-all">{serverInfo.token}</p>
-                <button type="button" onClick={handleCopy} className="text-xs underline mt-1">
+                <button type="button" onClick={handleCopy} className="text-xs underline mt-1 tap-target transition-colors">
                   {copied ? t('settings.mcp.copied') : t('settings.mcp.copy')}
                 </button>
               </>
@@ -52,7 +53,7 @@ export function McpSettings() {
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-medium text-fluux-text">{t('settings.mcp.activityTitle')}</h3>
             {activityLog.length > 0 && (
-              <button type="button" onClick={clearActivityLog} className="text-xs text-fluux-muted underline">
+              <button type="button" onClick={clearActivityLog} className="text-xs text-fluux-muted underline tap-target transition-colors">
                 {t('settings.mcp.activityClear')}
               </button>
             )}
