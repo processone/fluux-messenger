@@ -14,6 +14,7 @@ import {
   EncryptionSettings,
   PrivacySettings,
   AdvancedSettings,
+  McpSettings,
   type SettingsCategory,
   SETTINGS_CATEGORIES,
   DEFAULT_SETTINGS_CATEGORY,
@@ -67,6 +68,8 @@ export function SettingsView({ onBack }: SettingsViewProps) {
         return <StorageSettings />
       case 'encryption':
         return <EncryptionSettings />
+      case 'mcp':
+        return <McpSettings />
       case 'advanced':
         return <AdvancedSettings />
       default:
