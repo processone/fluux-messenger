@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, within } from '@testing-library/react'
 import type { AdminRoom } from '@fluux/sdk'
 
@@ -72,6 +72,16 @@ vi.mock('@fluux/sdk', () => ({
   useAdmin: () => adminState,
   useXMPP: () => ({ client: { muc: { destroyRoom } } }),
   adminStore: { getState: () => ({ setActiveCategory }) },
+  getBareJid: (jid: string) => jid.split('/')[0],
+}))
+
+// Controllable connection JID (own account) for the self-protection tests.
+const conn = vi.hoisted(() => ({ jid: null as string | null }))
+vi.mock('@fluux/sdk/react', () => ({
+  useAdminStore: (selector: (s: Record<string, unknown>) => unknown) =>
+    selector({ usersTruncated: false, lastActivity: new Map(), lastActivitySupported: false }),
+  useConnectionStore: (selector: (s: { jid: string | null }) => unknown) =>
+    selector({ jid: conn.jid }),
 }))
 
 // Import after mocks are registered.
@@ -260,5 +270,45 @@ describe('AdminView content width', () => {
     render(<AdminView activeCategory="users" onBack={vi.fn()} />)
     const wrapper = screen.getByText('Password changed').closest('.max-w-2xl')
     expect(wrapper).toHaveClass('w-full', 'max-w-2xl', 'mx-auto')
+  })
+})
+
+// Self-protection: an admin must never be offered ban/delete on their own
+// account (resource and case differences in the connection JID must not
+// defeat the check).
+describe('AdminView own admin account protection', () => {
+  const originalHasCommand = adminState.hasCommand
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    adminState.currentSession = null
+    adminState.hasCommand = () => true
+    conn.jid = null
+  })
+
+  afterEach(() => {
+    adminState.hasCommand = originalHasCommand
+  })
+
+  it('hides ban and delete when the selected user is the signed-in account', () => {
+    conn.jid = 'Alice@Example.com/Fluux'
+    render(<AdminView activeCategory="users" onBack={vi.fn()} />)
+
+    fireEvent.click(screen.getByText('alice@example.com'))
+
+    expect(screen.getByText('admin.users.changePassword')).toBeInTheDocument()
+    expect(screen.getByText('admin.users.endSessions')).toBeInTheDocument()
+    expect(screen.queryByText('admin.users.banAccount')).not.toBeInTheDocument()
+    expect(screen.queryByText('admin.users.delete')).not.toBeInTheDocument()
+  })
+
+  it('keeps ban and delete for other accounts', () => {
+    conn.jid = 'admin@example.com/Fluux'
+    render(<AdminView activeCategory="users" onBack={vi.fn()} />)
+
+    fireEvent.click(screen.getByText('alice@example.com'))
+
+    expect(screen.getByText('admin.users.banAccount')).toBeInTheDocument()
+    expect(screen.getByText('admin.users.delete')).toBeInTheDocument()
   })
 })
