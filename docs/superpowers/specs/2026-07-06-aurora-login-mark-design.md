@@ -106,7 +106,7 @@ Both consume the §4 tokens; other builtin themes inherit them (same precedent a
 
 ## 8. Out of scope / follow-ups
 
-1. **App icon** — night-sky squircle containing the aurora-drawn bubble; per-size masters (full detail ≥128px, simplified bold stroke ≤48px). Mockup validated in brainstorm.
+1. **App icon** — adaptive set validated against light and dark dock backgrounds in brainstorm (a single dark tile dies on dark wallpapers): primary = luminous aurora-sky tile with a solid white bubble silhouette (best cross-context fit and small-size legibility); dark-appearance variant = night tile with the aurora-line bubble; light/tinted base = dawn tile with ink bubble; monochrome glyph (Android themed / iOS tinted) = the bare bubble silhouette. Per-size masters: full detail ≥128px, simplified bold stroke ≤48px.
 2. **Empty states** — small freestanding aurora ribbon (concept C).
 3. **Typing indicator** — dots shimmering through the aurora hues.
 4. **Aurora accent presets** — curated `accentPresets` for the Aurora theme incl. an Aurora Teal preset built from `--fluux-accent-2`.
