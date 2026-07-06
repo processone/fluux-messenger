@@ -395,6 +395,34 @@ describe('setupMdsSideEffects', () => {
     cleanup()
   })
 
+  it('a failed legacy migration does not break the seed or later publishing', async () => {
+    const cid = 'juliet@capulet.example'
+    const client = makeClient()
+    client.mds.fetchAllDisplayed = vi
+      .fn()
+      .mockResolvedValue([{ conversationJid: cid, stanzaId: 's1', legacy: true }])
+    // The migration republish fails (e.g. transient IQ error)…
+    client.mds.publishDisplayed = vi.fn().mockRejectedValueOnce(new Error('timeout'))
+    connectionStore.setState({ status: 'online', jid: 'romeo@montague.example/phone' } as never)
+    addConversation(cid)
+
+    const cleanup = setupMdsSideEffects(client as never)
+    client._emit('online')
+    await vi.runOnlyPendingTimersAsync()
+
+    expect(client.mds.publishDisplayed).toHaveBeenCalledTimes(1) // the failed migration
+
+    // …and a later local read advance still publishes normally.
+    client.mds.publishDisplayed = vi.fn().mockResolvedValue(undefined)
+    seedMessages(cid, [msg('m1', 's1'), msg('m2', 's2')])
+    seedMeta(cid, 'm1')
+    chatStore.getState().updateLastSeenMessageId(cid, 'm2')
+    await vi.advanceTimersByTimeAsync(2_000)
+
+    expect(client.mds.publishDisplayed).toHaveBeenCalledWith(cid, 's2', 'romeo@montague.example')
+    cleanup()
+  })
+
   it('does NOT republish spec-format seed markers', async () => {
     const cid = 'juliet@capulet.example'
     const client = makeClient()
