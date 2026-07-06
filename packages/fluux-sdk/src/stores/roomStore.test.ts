@@ -4827,5 +4827,29 @@ describe('roomStore parity drift regressions', () => {
       expect(roomStore.getState().rooms.get(roomJid)?.lastMessage?.body).toBe('decrypted at last')
       expect(roomStore.getState().roomMeta.get(roomJid)?.lastMessage?.body).toBe('decrypted at last')
     })
+
+    it('MAM merge backfills the archive stanzaId onto resident messages (parity with chatStore)', () => {
+      roomStore.setState({ activeRoomJid: roomJid })
+      const own: RoomMessage = {
+        ...messageAt('own-1', 'testuser', 'mine', '2024-01-15T10:00:00Z'),
+        isOutgoing: true,
+        originId: 'origin-merge',
+      }
+      roomStore.getState().addMessage(roomJid, own)
+      vi.mocked(messageCache.updateRoomMessage).mockClear()
+
+      // The archive copy of the same message arrives via MAM with the server id.
+      const archived: RoomMessage = { ...own, stanzaId: 'arch-merge' }
+      roomStore.getState().mergeRoomMAMMessages(roomJid, [archived], {}, true, 'forward')
+
+      const messages = roomStore.getState().rooms.get(roomJid)?.messages || []
+      expect(messages).toHaveLength(1)
+      expect(messages[0].stanzaId).toBe('arch-merge')
+      expect(roomStore.getState().roomRuntime.get(roomJid)?.messages[0]?.stanzaId).toBe('arch-merge')
+      expect(messageCache.updateRoomMessage).toHaveBeenCalledWith(
+        'own-1',
+        expect.objectContaining({ stanzaId: 'arch-merge' })
+      )
+    })
   })
 })

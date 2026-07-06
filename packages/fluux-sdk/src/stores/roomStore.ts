@@ -23,7 +23,7 @@ import * as mamState from './shared/mamState'
 import type { MAMQueryDirection } from './shared/mamState'
 import { computeGapEnd, syncGap, serializeGaps, deserializeGaps, type GapInterval } from './shared/mamGap'
 import * as draftState from './shared/draftState'
-import { buildMessageKeySet, isMessageDuplicate, sortMessagesByTimestamp, trimMessages, trimMessagesKeepOldest, prependOlderMessages, mergeAndProcessMessages, backfillArchiveIds } from './shared/messageArrayUtils'
+import * as timeline from './shared/messageTimeline'
 import { shouldUpdateLastMessage, shouldReplaceLastMessage, isPreviewableMessage, isResolvedSamePreview, findLastNonIgnoredMessage } from './shared/lastMessageUtils'
 import { ignoreStore, isMessageFromIgnoredUser } from './ignoreStore'
 import { roomActivityTone } from './roomSelectors'
@@ -269,6 +269,11 @@ function getRoomMessageKeys(m: RoomMessage): string[] {
   return keys
 }
 
+/** Timeline config for the shared resident-window machine (see shared/messageTimeline.ts). */
+function roomTimelineConfig(): timeline.TimelineConfig<RoomMessage> {
+  return { getKeys: getRoomMessageKeys, windowSize: getResidentWindowSize() }
+}
+
 /**
  * Merge a batch of cached room messages into a room's resident array (and runtime mirror),
  * returning the partial state update (or `null` when the room is not present). Shared by
@@ -285,18 +290,9 @@ function mergeCachedRoomMessages(
   const existing = newRooms.get(roomJid)
   if (!existing) return null
 
-  // Build key set from in-memory messages (they take precedence)
-  const existingKeys = buildMessageKeySet(existing.messages, getRoomMessageKeys)
-
-  // Filter out duplicates from cached messages
-  const newFromCache = cachedMessages.filter(
-    (msg) => !isMessageDuplicate(msg, existingKeys, getRoomMessageKeys)
-  )
-
-  // Merge, sort, and trim using shared utilities
-  const combined = [...newFromCache, ...existing.messages]
-  const sorted = sortMessagesByTimestamp(combined)
-  const merged = trimMessages(sorted, getResidentWindowSize())
+  // Shared timeline machine: dedupe (in-memory messages take precedence),
+  // sort, and keep-newest trim.
+  const { merged } = timeline.latestSlice(existing.messages, cachedMessages, roomTimelineConfig())
 
   // Get last non-ignored message from merged messages for sidebar preview
   const lastMessage = (merged.length > 0 ? findLastNonIgnoredMessage(merged, roomJid, existing.nickToJidCache) : undefined) ?? existing.lastMessage
@@ -1181,39 +1177,35 @@ export const roomStore = createStore<RoomState>()(
       const existing = newRooms.get(roomJid)
       if (!existing) return state
 
-      // XEP-0359: Deduplicate messages using shared utility
-      const existingKeys = buildMessageKeySet(existing.messages, getRoomMessageKeys)
-      if (isMessageDuplicate(messageToAdd, existingKeys, getRoomMessageKeys)) {
-        // The duplicate may be the archived/reflected copy of an outgoing
-        // message that has no stanzaId yet. Backfill the server archive id
-        // onto the in-memory copy (matched by originId) so backward MAM
-        // pagination has a valid cursor — then still skip adding the dup
-        // (parity with chatStore.addMessage).
-        const { messages: backfilled, patched } = backfillArchiveIds(existing.messages, [messageToAdd], getRoomMessageKeys)
-        if (patched.length === 0) return state
-        for (const p of patched) {
+      // Shared timeline machine: dedupe (XEP-0359 keys), archive-id backfill
+      // on duplicate reflected/archived echoes, live-edge gating (a slid
+      // window gates the append so a fresh message never splices after an OLD
+      // one), and window trim. Gated messages are still persisted to
+      // IndexedDB (above) and the preview/unread updates below still run;
+      // they reload on jump-to-latest.
+      const atLiveEdge = state.roomRuntime.get(roomJid)?.windowAtLiveEdge !== false
+      const append = timeline.appendLive(existing.messages, messageToAdd, atLiveEdge, roomTimelineConfig())
+
+      if (append.kind === 'duplicate-unchanged') return state
+      if (append.kind === 'duplicate-backfilled') {
+        // Persist the backfilled archive ids so pagination cursors survive a reload.
+        for (const p of append.patched) {
           void messageCache.updateRoomMessage(p.id, { stanzaId: p.stanzaId!, ...(p.originId ? { originId: p.originId } : {}) })
         }
-        newRooms.set(roomJid, { ...existing, messages: backfilled })
+        newRooms.set(roomJid, { ...existing, messages: append.messages })
         const patchedRuntime = new Map(state.roomRuntime)
         const runtimeEntry = patchedRuntime.get(roomJid)
         if (runtimeEntry) {
-          patchedRuntime.set(roomJid, { ...runtimeEntry, messages: backfilled })
+          patchedRuntime.set(roomJid, { ...runtimeEntry, messages: append.messages })
         }
         return { rooms: newRooms, roomRuntime: patchedRuntime }
       }
 
-      // Sliding window: only append the live message to the resident array when the
-      // window is at the live edge. If load-older slid the window up (evicting the
-      // newest tail), appending here would splice a fresh message directly after an
-      // OLD one — a visible false-adjacency gap. When gated we leave the resident
-      // array untouched; the message is still persisted to IndexedDB (above) and the
-      // sidebar preview / unread badge still update. It reloads on jump-to-latest.
-      const atLiveEdge = state.roomRuntime.get(roomJid)?.windowAtLiveEdge !== false
-      // The append is also the basis for the newest-message preview; compute it either
-      // way (it is only STORED when at the live edge).
-      const appendedMessages = trimMessages([...existing.messages, messageToAdd], getResidentWindowSize())
-      const newMessages = atLiveEdge ? appendedMessages : existing.messages
+      // The appended set is also the basis for the newest-message preview even
+      // when the append was gated (the preview must still advance to the
+      // incoming message after the window slid off the live edge).
+      const appendedMessages = append.kind === 'appended' ? append.messages : [...existing.messages, messageToAdd]
+      const newMessages = append.kind === 'appended' ? append.messages : existing.messages
 
       // Delegate notification state to pure function
       const isActive = state.activeRoomJid === roomJid
@@ -2158,31 +2150,21 @@ export const roomStore = createStore<RoomState>()(
       })
 
       if (cachedMessages.length > 0) {
-        // Prepend to existing messages using shared utilities
+        // Prepend to existing messages via the shared timeline machine
         set((state) => {
           const newRooms = new Map(state.rooms)
           const existing = newRooms.get(roomJid)
           if (!existing) return state
 
-          // Build key set from in-memory messages (they take precedence)
-          const existingKeys = buildMessageKeySet(existing.messages, getRoomMessageKeys)
-
-          // Filter out duplicates from cached messages
-          const newFromCache = cachedMessages.filter(
-            (msg) => !isMessageDuplicate(msg, existingKeys, getRoomMessageKeys)
+          // Dedupe (in-memory messages take precedence), sort, keep-oldest trim
+          // (load-older slides the window so scroll-back past the bound works).
+          // If keep-oldest evicted the newest resident message, the window has
+          // slid off the live edge → gate live appends in addMessage.
+          const { merged, newestEvicted } = timeline.loadOlderSlice(
+            existing.messages,
+            cachedMessages,
+            roomTimelineConfig()
           )
-
-          // Merge, sort, and trim using shared utilities.
-          // Load-older slides the window (keep oldest) so scroll-back past the bound works.
-          const combined = [...newFromCache, ...existing.messages]
-          const sorted = sortMessagesByTimestamp(combined)
-          const merged = trimMessagesKeepOldest(sorted, getResidentWindowSize())
-
-          // If keep-oldest evicted the newest resident message, the window has slid off
-          // the live edge → gate live appends in addMessage. If the batch fit under the
-          // bound (newest unchanged), leave the flag as-is.
-          const newestEvicted =
-            merged[merged.length - 1]?.id !== existing.messages[existing.messages.length - 1]?.id
 
           newRooms.set(roomJid, { ...existing, messages: merged })
 
@@ -2235,25 +2217,19 @@ export const roomStore = createStore<RoomState>()(
       const reachedTail = cachedMessages.length < limit
 
       if (cachedMessages.length > 0) {
-        // Append to existing messages using shared utilities
+        // Append to existing messages via the shared timeline machine
         set((state) => {
           const newRooms = new Map(state.rooms)
           const existing = newRooms.get(roomJid)
           if (!existing) return state
 
-          // Build key set from in-memory messages (they take precedence)
-          const existingKeys = buildMessageKeySet(existing.messages, getRoomMessageKeys)
-
-          // Filter out duplicates from cached messages
-          const newFromCache = cachedMessages.filter(
-            (msg) => !isMessageDuplicate(msg, existingKeys, getRoomMessageKeys)
+          // Dedupe (in-memory messages take precedence), sort, keep-newest trim
+          // (load-newer slides the window back down toward the live edge).
+          const { merged } = timeline.loadNewerSlice(
+            existing.messages,
+            cachedMessages,
+            roomTimelineConfig()
           )
-
-          // Merge, sort, and trim using shared utilities.
-          // Load-newer slides the window (keep newest) so sliding back down works.
-          const combined = [...existing.messages, ...newFromCache]
-          const sorted = sortMessagesByTimestamp(combined)
-          const merged = trimMessages(sorted, getResidentWindowSize())
 
           newRooms.set(roomJid, { ...existing, messages: merged })
 
@@ -2427,23 +2403,21 @@ export const roomStore = createStore<RoomState>()(
       // Get existing messages for this room
       const existingMessages = room.messages || []
 
-      // Choose merge strategy based on direction:
-      // - Backward (scroll up for older): optimized prepend avoids full re-sort
-      // - Forward (catching up with newer): requires full sort since messages are newer
-      const { merged, newMessages: newFromMAM } =
-        direction === 'backward'
-          ? prependOlderMessages(
-              existingMessages,
-              mamMessages,
-              getRoomMessageKeys,
-              getResidentWindowSize()
-            )
-          : mergeAndProcessMessages(
-              existingMessages,
-              mamMessages,
-              getRoomMessageKeys,
-              getResidentWindowSize()
-            )
+      // Shared timeline machine: archive-id backfill onto resident messages
+      // (so an outgoing reflection gains its MAM cursor — was a chat-only
+      // behavior before the extraction), direction-aware merge (backward =
+      // optimized prepend + keep-oldest, forward = full sort + keep-newest),
+      // dedupe, and eviction reporting.
+      const { merged, newMessages: newFromMAM, patched, newestEvicted } = timeline.mergeArchive(
+        existingMessages,
+        mamMessages,
+        direction,
+        roomTimelineConfig()
+      )
+      // Persist backfilled archive ids so pagination cursors survive a reload.
+      for (const p of patched) {
+        void messageCache.updateRoomMessage(p.id, { stanzaId: p.stanzaId!, ...(p.originId ? { originId: p.originId } : {}) })
+      }
       mergedForMarker = merged
 
       // Compute the newest fetched timestamp for gap marker positioning.
@@ -2476,9 +2450,21 @@ export const roomStore = createStore<RoomState>()(
       }
 
       // If no new messages (all duplicates), only update MAM state - skip room messages
-      // This prevents unnecessary re-renders when merging duplicates
+      // This prevents unnecessary re-renders when merging duplicates.
+      // Exception: a stanzaId backfill onto existing RAM messages must persist —
+      // but only for the ACTIVE room (non-active rooms keep no resident array).
       if (newFromMAM.length === 0) {
-        return { mamQueryStates: newStates, roomGaps: newGaps }
+        if (patched.length === 0 || state.activeRoomJid !== roomJid) {
+          return { mamQueryStates: newStates, roomGaps: newGaps }
+        }
+        const backfilledRooms = new Map(state.rooms)
+        backfilledRooms.set(roomJid, { ...room, messages: merged })
+        const backfilledRuntime = new Map(state.roomRuntime)
+        const runtimeEntry = backfilledRuntime.get(roomJid)
+        if (runtimeEntry) {
+          backfilledRuntime.set(roomJid, { ...runtimeEntry, messages: merged })
+        }
+        return { rooms: backfilledRooms, roomRuntime: backfilledRuntime, mamQueryStates: newStates, roomGaps: newGaps }
       }
 
       // Persist to IndexedDB regardless of active state — this is the durable
@@ -2523,13 +2509,10 @@ export const roomStore = createStore<RoomState>()(
       const newRooms = new Map(state.rooms)
       newRooms.set(roomJid, { ...room, messages: merged, lastMessage })
 
-      // A backward (scroll-up) merge uses keep-oldest and can evict the newest tail,
-      // sliding the window off the live edge (same gate as loadOlderMessagesFromCache).
-      // Forward catch-up keeps the newest, so it never slides.
-      const newestEvicted =
-        direction === 'backward' &&
-        merged[merged.length - 1]?.id !== existingMessages[existingMessages.length - 1]?.id
-
+      // A backward (scroll-up) merge uses keep-oldest and can evict the newest tail
+      // (newestEvicted from the timeline machine), sliding the window off the live
+      // edge (same gate as loadOlderMessagesFromCache). Forward catch-up keeps the
+      // newest, so it never slides.
       const newRuntime = new Map(state.roomRuntime)
       const existingRuntime = newRuntime.get(roomJid)
       if (existingRuntime) {
