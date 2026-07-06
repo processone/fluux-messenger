@@ -612,6 +612,7 @@
             "storage": "Úložiště",
             "encryption": "Šifrování",
             "privacy": "Soukromí",
+            "mcp": "Integrace Claude",
             "advanced": "Pokročilé"
         },
         "groups": {
@@ -881,6 +882,24 @@
         "mediaAutoDownloadNever": "Nikdy",
         "mediaAutoDownloadNeverDescription": "Nikdy nenačítat média automaticky. Klepněte pro načtení v jakékoli konverzaci.",
         "mediaAutoDownloadStrangerNote": "Média od lidí, kteří nejsou ve vašich kontaktech, vždy vyžadují klepnutí pro načtení, bez ohledu na vaše nastavení.",
+        "mcp": {
+            "title": "Integrace Claude (MCP)",
+            "description": "Umožněte Claude číst historii vašich konverzací a odesílat zprávy přes Fluux pomocí protokolu Model Context Protocol. Každý požadavek se přesto jednotlivě schvaluje ve vašem MCP klientovi (např. Claude Desktop) před spuštěním.",
+            "enable": "Povolit přístup Claude",
+            "disable": "Zakázat přístup Claude",
+            "statusStarting": "Spouštění místního serveru…",
+            "statusRunning": "Běží na 127.0.0.1:{{port}}",
+            "copy": "Kopírovat údaje o připojení",
+            "copied": "Zkopírováno",
+            "activityTitle": "Nedávná aktivita",
+            "activityEmpty": "Zatím žádná aktivita Claude.",
+            "activityClear": "Vymazat",
+            "tool": {
+                "list_conversations": "Zobrazeny konverzace",
+                "get_history": "Načtena historie",
+                "send_message": "Odeslána zpráva"
+            }
+        },
         "advanced": {
             "title": "Pokročilé",
             "warning": "Tyto možnosti jsou určeny pro pokročilé uživatele. Jejich změna může narušit připojení nebo oslabit zabezpečení.",

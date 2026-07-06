@@ -608,6 +608,7 @@
             "storage": "Tárhely",
             "encryption": "Titkosítás",
             "privacy": "Adatvédelem",
+            "mcp": "Claude-integráció",
             "advanced": "Speciális"
         },
         "groups": {
@@ -877,6 +878,24 @@
         "mediaAutoDownloadNever": "Soha",
         "mediaAutoDownloadNeverDescription": "Soha ne töltődjön be médiatartalom automatikusan. Érintse meg a betöltéshez bármelyik beszélgetésben.",
         "mediaAutoDownloadStrangerNote": "A névjegyei közt nem szereplő személyek médiái mindig érintést igényelnek a betöltéshez, függetlenül attól, mit választ itt.",
+        "mcp": {
+            "title": "Claude-integráció (MCP)",
+            "description": "Engedélyezd, hogy a Claude olvashassa a beszélgetési előzményeidet, és üzeneteket küldhessen a Fluuxon keresztül a Model Context Protocol segítségével. Minden kérést továbbra is egyenként kell jóváhagyni az MCP-kliensedben (pl. Claude Desktop), mielőtt lefutna.",
+            "enable": "Claude-hozzáférés engedélyezése",
+            "disable": "Claude-hozzáférés letiltása",
+            "statusStarting": "Helyi szerver indítása…",
+            "statusRunning": "Fut a 127.0.0.1:{{port}} címen",
+            "copy": "Kapcsolati adatok másolása",
+            "copied": "Másolva",
+            "activityTitle": "Legutóbbi tevékenység",
+            "activityEmpty": "Még nincs Claude-tevékenység.",
+            "activityClear": "Törlés",
+            "tool": {
+                "list_conversations": "Beszélgetések listázva",
+                "get_history": "Előzmények beolvasva",
+                "send_message": "Üzenet elküldve"
+            }
+        },
         "advanced": {
             "title": "Speciális",
             "warning": "Ezek a beállítások haladó felhasználóknak szólnak. Módosításuk megszakíthatja a kapcsolatot vagy gyengítheti a biztonságot.",

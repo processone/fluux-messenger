@@ -611,6 +611,7 @@
             "storage": "Emmagatzematge",
             "encryption": "Xifratge",
             "privacy": "Privadesa",
+            "mcp": "Integració amb Claude",
             "advanced": "Avançat"
         },
         "groups": {
@@ -880,6 +881,24 @@
         "mediaAutoDownloadNever": "Mai",
         "mediaAutoDownloadNeverDescription": "No carrega mai els multimèdia automàticament. Toca per carregar en qualsevol conversa.",
         "mediaAutoDownloadStrangerNote": "Els multimèdia de persones que no són als vostres contactes sempre requereixen un toc per carregar-se, sigui quin sigui el que trieu aquí.",
+        "mcp": {
+            "title": "Integració amb Claude (MCP)",
+            "description": "Permet que Claude llegeixi l'historial de converses i enviï missatges a través de Fluux mitjançant el Model Context Protocol. Cada sol·licitud s'ha d'aprovar individualment al vostre client MCP (p. ex. Claude Desktop) abans d'executar-se.",
+            "enable": "Activa l'accés de Claude",
+            "disable": "Desactiva l'accés de Claude",
+            "statusStarting": "S'està iniciant el servidor local…",
+            "statusRunning": "En execució a 127.0.0.1:{{port}}",
+            "copy": "Copia les dades de connexió",
+            "copied": "Copiat",
+            "activityTitle": "Activitat recent",
+            "activityEmpty": "Encara no hi ha activitat de Claude.",
+            "activityClear": "Neteja",
+            "tool": {
+                "list_conversations": "Converses llistades",
+                "get_history": "Historial llegit",
+                "send_message": "Missatge enviat"
+            }
+        },
         "advanced": {
             "title": "Avançat",
             "warning": "Aquestes opcions són per a usuaris avançats. Canviar-les pot interrompre la connexió o afeblir la seguretat.",

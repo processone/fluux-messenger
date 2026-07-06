@@ -610,12 +610,31 @@
             "storage": "Stockage",
             "encryption": "Chiffrement",
             "privacy": "Confidentialité",
+            "mcp": "Intégration Claude",
             "advanced": "Avancé"
         },
         "groups": {
             "general": "Général",
             "privacy": "Confidentialité et sécurité",
             "system": "Système"
+        },
+        "mcp": {
+            "title": "Intégration Claude (MCP)",
+            "description": "Autorisez Claude à lire l'historique de vos conversations et à envoyer des messages via Fluux grâce au Model Context Protocol. Chaque requête reste approuvée individuellement dans votre client MCP (par exemple Claude Desktop) avant son exécution.",
+            "enable": "Activer l'accès de Claude",
+            "disable": "Désactiver l'accès de Claude",
+            "statusStarting": "Démarrage du serveur local…",
+            "statusRunning": "En cours d'exécution sur 127.0.0.1:{{port}}",
+            "copy": "Copier les informations de connexion",
+            "copied": "Copié",
+            "activityTitle": "Activité récente",
+            "activityEmpty": "Aucune activité de Claude pour l'instant.",
+            "activityClear": "Effacer",
+            "tool": {
+                "list_conversations": "Conversations listées",
+                "get_history": "Historique lu",
+                "send_message": "Message envoyé"
+            }
         },
         "advanced": {
             "title": "Avancé",

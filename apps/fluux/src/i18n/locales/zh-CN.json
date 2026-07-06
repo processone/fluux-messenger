@@ -608,6 +608,7 @@
             "storage": "存储",
             "encryption": "加密",
             "privacy": "隐私",
+            "mcp": "Claude 集成",
             "advanced": "高级"
         },
         "groups": {
@@ -877,6 +878,24 @@
         "mediaAutoDownloadNever": "从不",
         "mediaAutoDownloadNeverDescription": "从不自动加载媒体。在任意对话中点击以加载。",
         "mediaAutoDownloadStrangerNote": "不在您联系人列表中的人发送的媒体始终需要点击才能加载，无论您在此选择什么。",
+        "mcp": {
+            "title": "Claude 集成（MCP）",
+            "description": "通过 Model Context Protocol，让 Claude 读取你的对话历史并通过 Fluux 发送消息。每个请求仍需在你的 MCP 客户端（例如 Claude Desktop）中单独批准后才会执行。",
+            "enable": "启用 Claude 访问",
+            "disable": "禁用 Claude 访问",
+            "statusStarting": "正在启动本地服务器…",
+            "statusRunning": "运行于 127.0.0.1:{{port}}",
+            "copy": "复制连接详情",
+            "copied": "已复制",
+            "activityTitle": "最近活动",
+            "activityEmpty": "暂无 Claude 活动。",
+            "activityClear": "清除",
+            "tool": {
+                "list_conversations": "已列出对话",
+                "get_history": "已读取历史记录",
+                "send_message": "已发送消息"
+            }
+        },
         "advanced": {
             "title": "高级",
             "warning": "这些选项面向高级用户。更改它们可能会中断连接或削弱安全性。",

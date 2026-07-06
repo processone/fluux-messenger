@@ -610,6 +610,7 @@
             "storage": "Krātuve",
             "encryption": "Šifrēšana",
             "privacy": "Privātums",
+            "mcp": "Claude integrācija",
             "advanced": "Papildu"
         },
         "groups": {
@@ -879,6 +880,24 @@
         "mediaAutoDownloadNever": "Nekad",
         "mediaAutoDownloadNeverDescription": "Nekad neielādēt multividi automātiski. Pieskarieties, lai ielādētu jebkurā sarunā.",
         "mediaAutoDownloadStrangerNote": "Multivide no cilvēkiem, kas nav jūsu kontaktos, vienmēr prasa pieskārienu ielādēšanai, neatkarīgi no šeit izvēlētā.",
+        "mcp": {
+            "title": "Claude integrācija (MCP)",
+            "description": "Ļaujiet Claude lasīt jūsu sarunu vēsturi un sūtīt ziņas caur Fluux, izmantojot Model Context Protocol. Katrs pieprasījums joprojām tiek apstiprināts atsevišķi jūsu MCP klientā (piemēram, Claude Desktop) pirms tā izpildes.",
+            "enable": "Iespējot Claude piekļuvi",
+            "disable": "Atspējot Claude piekļuvi",
+            "statusStarting": "Palaiž lokālo serveri…",
+            "statusRunning": "Darbojas adresē 127.0.0.1:{{port}}",
+            "copy": "Kopēt savienojuma datus",
+            "copied": "Nokopēts",
+            "activityTitle": "Nesenā aktivitāte",
+            "activityEmpty": "Claude aktivitātes vēl nav.",
+            "activityClear": "Notīrīt",
+            "tool": {
+                "list_conversations": "Sarunas parādītas",
+                "get_history": "Vēsture nolasīta",
+                "send_message": "Ziņa nosūtīta"
+            }
+        },
         "advanced": {
             "title": "Papildu",
             "warning": "Šīs opcijas ir paredzētas pieredzējušiem lietotājiem. To maiņa var pārtraukt savienojumu vai vājināt drošību.",

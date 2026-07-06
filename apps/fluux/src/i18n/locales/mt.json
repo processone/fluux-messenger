@@ -613,6 +613,7 @@
             "storage": "Ħażna",
             "encryption": "Kriptaġġ",
             "privacy": "Privatezza",
+            "mcp": "Integrazzjoni ta' Claude",
             "advanced": "Avvanzat"
         },
         "groups": {
@@ -882,6 +883,24 @@
         "mediaAutoDownloadNever": "Qatt",
         "mediaAutoDownloadNeverDescription": "Qatt titgħabba l-midja awtomatikament. Agħfas biex tgħabba f'kull konversazzjoni.",
         "mediaAutoDownloadStrangerNote": "Il-midja minn persuni li mhumiex fil-kuntatti tiegħek dejjem teħtieġ taps biex titgħabba, irrispettivament minn dak li tagħżel hawn.",
+        "mcp": {
+            "title": "Integrazzjoni ta' Claude (MCP)",
+            "description": "Ħalli lil Claude jaqra l-istorja tal-konverżazzjonijiet tiegħek u jibgħat messaġġi permezz ta' Fluux bl-użu tal-Model Context Protocol. Kull talba xorta trid tiġi approvata individwalment fil-klijent MCP tiegħek (eż. Claude Desktop) qabel titħaddem.",
+            "enable": "Attiva l-aċċess ta' Claude",
+            "disable": "Iddiżattiva l-aċċess ta' Claude",
+            "statusStarting": "Qed jinbeda s-server lokali…",
+            "statusRunning": "Qed jaħdem fuq 127.0.0.1:{{port}}",
+            "copy": "Ikkopja d-dettalji tal-konnessjoni",
+            "copied": "Ikkopjat",
+            "activityTitle": "Attività riċenti",
+            "activityEmpty": "Għadha ma teżisti l-ebda attività ta' Claude.",
+            "activityClear": "Ħassar",
+            "tool": {
+                "list_conversations": "Konverżazzjonijiet elenkati",
+                "get_history": "Storja moqrija",
+                "send_message": "Messaġġ mibgħut"
+            }
+        },
         "advanced": {
             "title": "Avvanzat",
             "warning": "Dawn l-għażliet huma għal utenti avvanzati. Il-bidla tagħhom tista' tkisser il-konnessjoni jew iddgħajjef is-sigurtà.",
