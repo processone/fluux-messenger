@@ -54,6 +54,7 @@ import {
   NS_POLL,
 } from '../namespaces'
 import { parsePollElement, parsePollClosedElement } from '../poll'
+import { isItemNotFoundError } from '../../hooks/shared/mamCursor'
 import type {
   Message,
   RoomMessage,
@@ -172,15 +173,18 @@ export class MAM extends BaseModule {
    * @returns Query result with messages, completion status, and pagination info
    */
   async queryArchive(options: MAMQueryOptions): Promise<MAMResult> {
-    const { with: withJid, max = 50, before = '', start, end, maxAutoPages: maxAutoPagesOpt } = options
+    const { with: withJid, max = 50, before = '', start, end, after, maxAutoPages: maxAutoPagesOpt } = options
     const conversationId = getBareJid(withJid)
     const mamStart = Date.now()
 
     // Opt-in forward catch-up: paginate OLDEST-first via the `after` cursor to
     // completion (parity with rooms). Only when a caller explicitly passes
-    // maxAutoPages alongside `start`; every other caller keeps the default
-    // single-page, newest-first, skip-non-displayable behavior.
-    const isForwardPaginate = !!start && maxAutoPagesOpt !== undefined && maxAutoPagesOpt > 0
+    // maxAutoPages alongside `start`/`after`; every other caller keeps the
+    // default single-page, newest-first, skip-non-displayable behavior.
+    // `after` alone (the XEP-0490 pointer-seed catch-up) selects forward mode
+    // exactly like `start` does — it is itself an archive-id cursor to page
+    // forward from.
+    const isForwardPaginate = !!(start || after) && maxAutoPagesOpt !== undefined && maxAutoPagesOpt > 0
 
     // Track total messages across automatic pagination
     const allMessages: Message[] = []
@@ -193,12 +197,20 @@ export class MAM extends BaseModule {
     // the store; the 1:1 path emits once, so it must defer modification
     // resolution until the whole catch-up has been collected.
     const modifications: MAMModifications = { retractions: [], corrections: [], fastenings: [], reactions: [] }
-    // Forward pagination ignores `before` (oldest-first from `start`); backward keeps it.
+    // Forward pagination ignores `before` (oldest-first from `start`/`after`); backward keeps it.
     let currentBefore = isForwardPaginate ? undefined : before
-    let currentAfter: string | undefined
+    // The pointer-seed catch-up starts the FIRST page from the given `after`
+    // cursor; a plain `start`-anchored catch-up has no initial cursor (the
+    // timestamp filter alone selects the first page) and only acquires one
+    // from `rsm.last` after that first page.
+    let currentAfter: string | undefined = after
     let isComplete = false
     let lastRsm: RSMResponse = {}
     const maxAutoPages = isForwardPaginate ? maxAutoPagesOpt : 5 // cap to avoid infinite loops
+    // True only for the very first page of an `after`-anchored query — used to
+    // detect a purged/expired archive id (item-not-found) and degrade once to
+    // a fetch-latest instead of failing the whole catch-up.
+    const isAfterAnchored = !!after
 
     this.deps.emitSDK('chat:mam-loading', { conversationId, isLoading: true })
 
@@ -245,9 +257,20 @@ export class MAM extends BaseModule {
 
         try {
           if (page === 0) {
-            logInfo(`MAM query: ...@${getDomain(conversationId) || '*'}, max=${max}, ${start ? 'forward' : 'backward'}${start ? ` from ${start}` : ''}`)
+            logInfo(`MAM query: ...@${getDomain(conversationId) || '*'}, max=${max}, ${(start || after) ? 'forward' : 'backward'}${start ? ` from ${start}` : ''}${after ? ` after ${after}` : ''}`)
           }
-          const response = await this.deps.sendIQ(iq)
+          let response: Element
+          try {
+            response = await this.deps.sendIQ(iq)
+          } catch (iqError) {
+            if (page === 0 && isAfterAnchored && isItemNotFoundError(iqError)) {
+              // The archive no longer holds the after-anchor (expired/purged):
+              // degrade to fetch-latest (spec §5 — degrade gracefully, never error).
+              logInfo(`MAM after-cursor purged for ...@${getDomain(conversationId) || '*'} — degrading to fetch-latest`)
+              return this.queryArchive({ with: withJid, max, before: '' })
+            }
+            throw iqError
+          }
           const { complete, rsm } = this.parseMAMResponse(response)
 
           // Drain the buffer: E2EE decrypt first (so modification bodies are
@@ -301,9 +324,10 @@ export class MAM extends BaseModule {
       }
 
       // Determine query direction:
-      // - Forward: has `start` filter (fetching messages after a timestamp, like catching up)
-      // - Backward: no `start` filter (fetching older history with `before` cursor)
-      const direction = start ? 'forward' : 'backward'
+      // - Forward: has a `start` filter or an `after` cursor (catching up, either
+      //   from a timestamp or a XEP-0490 pointer-seed archive id)
+      // - Backward: neither (fetching older history with a `before` cursor)
+      const direction = (start || after) ? 'forward' : 'backward'
 
       logInfo(`MAM result: ...@${getDomain(conversationId) || '*'} → ${allMessages.length} msg(s), complete=${isComplete}, ${Date.now() - mamStart}ms`)
 
@@ -360,7 +384,10 @@ export class MAM extends BaseModule {
   async queryRoomArchive(options: RoomMAMQueryOptions): Promise<RoomMAMResult> {
     const { roomJid, max = 50, before, after, start, preserveGapMarker, maxAutoPages: maxAutoPagesOpt } = options
     const roomMamStart = Date.now()
-    const isForward = !!start
+    // `after` alone (the XEP-0490 pointer-seed catch-up) selects forward mode
+    // exactly like `start` does — it is itself an archive-id cursor to page
+    // forward from.
+    const isForward = !!(start || after)
     const roomDirection = isForward ? 'forward' : 'backward'
 
     // For forward catch-up queries, auto-paginate to retrieve all missed messages.
@@ -372,6 +399,10 @@ export class MAM extends BaseModule {
     let isComplete = false
     let lastRsm: RSMResponse = {}
     let currentAfter = after
+    // True only for the very first page of an `after`-anchored query — used to
+    // detect a purged/expired archive id (item-not-found) and degrade once to
+    // a fetch-latest instead of failing the whole catch-up.
+    const isAfterAnchored = !!after
 
     const room = this.deps.stores?.room.getRoom(roomJid)
     const myNickname = room?.nickname || ''
@@ -418,7 +449,18 @@ export class MAM extends BaseModule {
           if (page === 0) {
             logInfo(`Room MAM query: ${roomJid}, max=${max}, ${roomDirection}${start ? ` from ${start}` : ''}`)
           }
-          const response = await this.deps.sendIQ(iq)
+          let response: Element
+          try {
+            response = await this.deps.sendIQ(iq)
+          } catch (iqError) {
+            if (page === 0 && isAfterAnchored && isItemNotFoundError(iqError)) {
+              // The archive no longer holds the after-anchor (expired/purged):
+              // degrade to fetch-latest (spec §5 — degrade gracefully, never error).
+              logInfo(`Room MAM after-cursor purged for ${roomJid} — degrading to fetch-latest`)
+              return this.queryRoomArchive({ roomJid, max, before: '', preserveGapMarker })
+            }
+            throw iqError
+          }
           const { complete, rsm } = this.parseMAMResponse(response)
 
           // Drain buffer: E2EE decrypt first, then modification detection, then parse.
@@ -942,12 +984,15 @@ export class MAM extends BaseModule {
           // from the persisted preview timestamp instead of a before:'' fetch-latest
           // that would skip a large offline gap (issue #135).
           const lastTimestamp = this.deps.stores?.chat.getConversationLastTimestamp?.(conv.id)
-          const q = selectCatchUpQuery(messages, { sessionStartTime, forwardGapTimestamp: gapStart, fallbackNewestTimestamp: lastTimestamp })
+          // Last-but-one resort: the XEP-0490 MDS stanza-id seeds a forward `after`
+          // catch-up on a new device whose local cache is empty.
+          const pointerStanzaId = this.deps.stores?.chat.getConversationPendingStanzaId?.(conv.id)
+          const q = selectCatchUpQuery(messages, { sessionStartTime, forwardGapTimestamp: gapStart, fallbackNewestTimestamp: lastTimestamp, pointerStanzaId })
           await this.queryArchive({
             with: conv.id,
             ...q,
-            max: q.start ? MAM_CATCHUP_FORWARD_MAX : MAM_CATCHUP_BACKWARD_MAX,
-            ...(q.start ? { maxAutoPages: MAM_ROOM_FORWARD_MAX_PAGES } : {}),
+            max: (q.start || q.after) ? MAM_CATCHUP_FORWARD_MAX : MAM_CATCHUP_BACKWARD_MAX,
+            ...((q.start || q.after) ? { maxAutoPages: MAM_ROOM_FORWARD_MAX_PAGES } : {}),
           })
         } catch (_error) {
           // Silently ignore — individual failures shouldn't affect others
@@ -1107,11 +1152,14 @@ export class MAM extends BaseModule {
     // Last-resort anchor: forward-fill from the persisted preview timestamp when the
     // cache is empty, instead of a before:'' fetch-latest that skips a large gap.
     const lastTimestamp = this.deps.stores?.room.getRoomLastTimestamp?.(roomJid)
-    const q = selectCatchUpQuery(messages, { sessionStartTime, forwardGapTimestamp: gapStart, fallbackNewestTimestamp: lastTimestamp })
+    // Last-but-one resort: the XEP-0490 MDS stanza-id seeds a forward `after`
+    // catch-up on a new device whose local cache is empty.
+    const pointerStanzaId = this.deps.stores?.room.getRoomPendingStanzaId?.(roomJid)
+    const q = selectCatchUpQuery(messages, { sessionStartTime, forwardGapTimestamp: gapStart, fallbackNewestTimestamp: lastTimestamp, pointerStanzaId })
     await this.queryRoomArchive({
       roomJid,
       ...q,
-      max: q.start ? MAM_CATCHUP_FORWARD_MAX : MAM_CATCHUP_BACKWARD_MAX,
+      max: (q.start || q.after) ? MAM_CATCHUP_FORWARD_MAX : MAM_CATCHUP_BACKWARD_MAX,
     })
   }
 

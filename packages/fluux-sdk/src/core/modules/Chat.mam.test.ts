@@ -2550,6 +2550,91 @@ describe('XMPPClient MAM', () => {
         direction: 'backward' // direction - store will set isHistoryComplete
       })
     })
+
+    it('should build a forward RSM <after> element and treat it as forward pagination (XEP-0490 pointer-seed catch-up)', async () => {
+      await connectClient()
+      let capturedIq: any = null
+
+      const mamResponse = createMockElement('iq', { type: 'result' }, [
+        {
+          name: 'fin',
+          attrs: { xmlns: 'urn:xmpp:mam:2', complete: 'true' },
+          children: [],
+        },
+      ])
+
+      mockXmppClientInstance.iqCaller.request = vi.fn().mockImplementation(async (iq) => {
+        capturedIq = iq
+        return mamResponse
+      })
+
+      // No `start` filter — only an `after` cursor, seeded from the MDS stanza-id.
+      const result = await xmppClient.chat.queryMAM({ with: 'alice@example.com', after: 'mds-stanza-id', maxAutoPages: 5 })
+
+      const queryEl = capturedIq.children?.find((c: any) => c.name === 'query')
+      const setEl = queryEl?.children?.find((c: any) => c.name === 'set')
+      const afterEl = setEl?.children?.find((c: any) => c.name === 'after')
+
+      expect(afterEl).toBeDefined()
+      expect(afterEl?.children?.[0]).toBe('mds-stanza-id')
+      // No <before/> should be emitted for an after-anchored forward query.
+      expect(setEl?.children?.find((c: any) => c.name === 'before')).toBeUndefined()
+
+      expect(result.complete).toBe(true)
+      // Forward direction (parity with `start`-anchored catch-up).
+      expect(emitSDKSpy).toHaveBeenCalledWith('chat:mam-messages', expect.objectContaining({
+        direction: 'forward',
+      }))
+    })
+
+    it('degrades to a fetch-latest when the after-anchor is purged (item-not-found)', async () => {
+      await connectClient()
+
+      // First page (after-anchored) rejects with item-not-found; the retry
+      // (before:'') must succeed and return its results instead of throwing.
+      const latestResponse = createMockElement('iq', { type: 'result' }, [
+        {
+          name: 'fin',
+          attrs: { xmlns: 'urn:xmpp:mam:2', complete: 'true' },
+          children: [],
+        },
+      ])
+
+      let callCount = 0
+      const capturedIqs: any[] = []
+      mockXmppClientInstance.iqCaller.request = vi.fn().mockImplementation(async (iq) => {
+        capturedIqs.push(iq)
+        callCount++
+        if (callCount === 1) {
+          return Promise.reject({ condition: 'item-not-found' })
+        }
+        return latestResponse
+      })
+
+      const result = await xmppClient.chat.queryMAM({ with: 'alice@example.com', after: 'purged-stanza-id', maxAutoPages: 5 })
+
+      // Degraded successfully instead of throwing.
+      expect(result.complete).toBe(true)
+      expect(callCount).toBe(2)
+
+      // The retry must be a plain fetch-latest (before:''), not another `after`.
+      const retryQueryEl = capturedIqs[1].children?.find((c: any) => c.name === 'query')
+      const retrySetEl = retryQueryEl?.children?.find((c: any) => c.name === 'set')
+      const retryBeforeEl = retrySetEl?.children?.find((c: any) => c.name === 'before')
+      expect(retryBeforeEl).toBeDefined()
+      expect(retrySetEl?.children?.find((c: any) => c.name === 'after')).toBeUndefined()
+    })
+
+    it('does not retry item-not-found when it occurs on a later page (not after-anchored first page)', async () => {
+      await connectClient()
+
+      // A `before`-anchored (backward) query hitting item-not-found should
+      // propagate the error as before — the fallback is scoped to the FIRST
+      // page of an `after`-anchored query only.
+      mockXmppClientInstance.iqCaller.request = vi.fn().mockRejectedValue({ condition: 'item-not-found' })
+
+      await expect(xmppClient.chat.queryMAM({ with: 'alice@example.com', before: 'stale-cursor' })).rejects.toBeTruthy()
+    })
   })
 
   describe('queryRoomMAM', () => {
@@ -2998,6 +3083,91 @@ describe('XMPPClient MAM', () => {
         complete: true, // complete from server
         direction: 'backward' // direction - store will set isHistoryComplete
       })
+    })
+
+    it('treats an after-only cursor as forward pagination (XEP-0490 pointer-seed catch-up)', async () => {
+      await connectClient()
+      let capturedIq: any = null
+
+      vi.mocked(mockStores.room.getRoom).mockReturnValue({
+        jid: roomJid,
+        name: 'Test Room',
+        nickname: 'MyNick',
+        joined: true,
+        isBookmarked: false,
+        occupants: new Map(),
+        messages: [],
+        unreadCount: 0,
+        mentionsCount: 0,
+        typingUsers: new Set<string>(),
+      })
+
+      const mamResponse = createMockElement('iq', { type: 'result' }, [
+        { name: 'fin', attrs: { xmlns: 'urn:xmpp:mam:2', complete: 'true' }, children: [] },
+      ])
+
+      mockXmppClientInstance.iqCaller.request = vi.fn().mockImplementation(async (iq) => {
+        capturedIq = iq
+        return mamResponse
+      })
+
+      // No `start` filter — only an `after` cursor, seeded from the MDS stanza-id.
+      const result = await xmppClient.chat.queryRoomMAM({ roomJid, after: 'mds-stanza-id' })
+
+      const queryEl = capturedIq.children?.find((c: any) => c.name === 'query')
+      const setEl = queryEl?.children?.find((c: any) => c.name === 'set')
+      const afterEl = setEl?.children?.find((c: any) => c.name === 'after')
+
+      expect(afterEl).toBeDefined()
+      expect(afterEl?.children?.[0]).toBe('mds-stanza-id')
+
+      expect(result.complete).toBe(true)
+      expect(emitSDKSpy).toHaveBeenCalledWith('room:mam-messages', expect.objectContaining({
+        direction: 'forward',
+      }))
+    })
+
+    it('degrades to a fetch-latest when the room after-anchor is purged (item-not-found)', async () => {
+      await connectClient()
+
+      vi.mocked(mockStores.room.getRoom).mockReturnValue({
+        jid: roomJid,
+        name: 'Test Room',
+        nickname: 'MyNick',
+        joined: true,
+        isBookmarked: false,
+        occupants: new Map(),
+        messages: [],
+        unreadCount: 0,
+        mentionsCount: 0,
+        typingUsers: new Set<string>(),
+      })
+
+      const latestResponse = createMockElement('iq', { type: 'result' }, [
+        { name: 'fin', attrs: { xmlns: 'urn:xmpp:mam:2', complete: 'true' }, children: [] },
+      ])
+
+      let callCount = 0
+      const capturedIqs: any[] = []
+      mockXmppClientInstance.iqCaller.request = vi.fn().mockImplementation(async (iq) => {
+        capturedIqs.push(iq)
+        callCount++
+        if (callCount === 1) {
+          return Promise.reject({ condition: 'item-not-found' })
+        }
+        return latestResponse
+      })
+
+      const result = await xmppClient.chat.queryRoomMAM({ roomJid, after: 'purged-stanza-id' })
+
+      expect(result.complete).toBe(true)
+      expect(callCount).toBe(2)
+
+      const retryQueryEl = capturedIqs[1].children?.find((c: any) => c.name === 'query')
+      const retrySetEl = retryQueryEl?.children?.find((c: any) => c.name === 'set')
+      const retryBeforeEl = retrySetEl?.children?.find((c: any) => c.name === 'before')
+      expect(retryBeforeEl).toBeDefined()
+      expect(retrySetEl?.children?.find((c: any) => c.name === 'after')).toBeUndefined()
     })
   })
 

@@ -78,6 +78,10 @@ export interface StoreBindings {
     getAllConversations: () => Array<{ id: string; messages: Message[] }>
     // Persisted forward-gap boundary for automatic catch-up recovery
     getConversationGapStart?: (conversationId: string) => number | undefined
+    // XEP-0490 stanza-id of the remote read position, kept unresolved when it
+    // can't be matched locally — seeds a forward `after` catch-up on an
+    // empty-cache new device.
+    getConversationPendingStanzaId?: (conversationId: string) => string | undefined
     // Smart MAM: archived conversation preview refresh
     getArchivedConversations?: () => Array<{ id: string; messages: Message[] }>
     getLastMessage?: (conversationId: string) => Message | undefined
@@ -88,6 +92,10 @@ export interface StoreBindings {
   room: Pick<RoomState, (typeof roomBindingMethodKeys)[number]> & {
     // Persisted forward-gap boundary for automatic catch-up recovery
     getRoomGapStart?: (roomJid: string) => number | undefined
+    // XEP-0490 stanza-id of the remote read position, kept unresolved when it
+    // can't be matched locally — seeds a forward `after` catch-up on an
+    // empty-cache new device.
+    getRoomPendingStanzaId?: (roomJid: string) => string | undefined
   }
   admin: Pick<AdminState, (typeof adminBindingMethodKeys)[number]> & {
     // State getters
