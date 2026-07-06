@@ -121,7 +121,9 @@ export const AppBar = memo(function AppBar() {
     void dragWindowRef.current?.toggleMaximize()
   }
 
-  const shortcutMod = isMacOS ? '⌘' : 'Ctrl'
+  // macOS convention omits the separator (⌘K); elsewhere join with '+' (Ctrl+K),
+  // matching formatShortcutKey used by the shortcut help pane.
+  const shortcutHint = isMacOS ? '⌘K' : 'Ctrl+K'
   const iconButton =
     'flex items-center justify-center size-7 rounded-md text-fluux-muted hover:text-fluux-text hover:bg-fluux-bg/60 transition-colors disabled:opacity-40 disabled:pointer-events-none'
 
@@ -166,7 +168,7 @@ export const AppBar = memo(function AppBar() {
           title={t('commandPalette.open', 'Open command palette')}
           className="flex items-center justify-center h-6 px-2.5 rounded-md bg-fluux-bg/50 border border-fluux-bg text-fluux-muted hover:bg-fluux-bg/80 transition-colors"
         >
-          <kbd className="text-[11px] leading-none font-sans">{shortcutMod}K</kbd>
+          <kbd className="text-[11px] leading-none font-sans">{shortcutHint}</kbd>
         </button>
       </div>
 
