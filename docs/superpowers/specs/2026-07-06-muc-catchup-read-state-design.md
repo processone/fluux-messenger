@@ -14,9 +14,11 @@ counts. Users who rely on small work/focus rooms lose their read position
 whenever they restart the client, and until #854 the wrong XEP-0490
 payload meant read state never reached other clients either.
 
-The design goal: keep the calm philosophy while never destroying read
-state — a distance-gated anchor, applied uniformly to all rooms, with
-no per-room settings.
+The design goal: never destroy read state, and adopt the anchoring
+behavior users know from every major client — open at the last-read
+position — as a single, predictable rule for all rooms, with no
+per-room settings. Calm is preserved through the Esc valve and
+jump-to-present, not by discarding read positions.
 
 ## Competitive background (verified 2026-07-06)
 
@@ -34,21 +36,23 @@ no per-room settings.
 
 ## Decisions (from brainstorming)
 
-1. **Distance-gated anchor, uniform for all rooms** — read state is
-   never destroyed on launch; where a room opens depends on backlog
-   size (see Section 2). No per-room mode flag, no settings.
+1. **Standard last-read anchor, one behavior for all rooms** — a room
+   with unread opens at the "New messages" divider; a caught-up room
+   opens at the bottom. Read state is never destroyed on launch. No
+   per-room mode flag, no settings, no distance gating (an earlier
+   distance-gated hybrid was rejected as unpredictable; an earlier
+   "always bottom, read-on-open" choice was superseded by this one).
 2. **Viewport-driven read progress** — the read pointer advances only
    by actually viewing messages (existing IntersectionObserver
-   machinery), by Esc, or by mark-all-read. Opening a big-backlog room
-   anchors at the bottom, so its pointer advances to newest on open
-   (Slack-style read-on-open emerges naturally); opening a small
-   backlog anchors at the divider and marks read as the user scrolls
-   (Telegram-grade fidelity). One rule, two emergent behaviors.
+   machinery), by Esc, or by mark-all-read. Opening a room does NOT
+   mark it read; reading it does. Jumping to present counts as viewing
+   the newest message, which advances the pointer (standard semantics —
+   Telegram behaves the same).
 3. **Derivation approach A** — unify room and chat semantics
    (`treatDelayedAsNew: true` for rooms) rather than a separate
    reconciliation pass or MDS-only boolean badges.
 4. **In scope:** Esc-marks-read, live inbound MDS consumption, deep
-   jump-to-last-read, mark-all-read bulk action.
+   last-read anchoring, mark-all-read bulk action.
 
 ## Section 1 — Core read-state model
 
@@ -81,42 +85,46 @@ indefinitely (#855's contract).
 
 ## Section 2 — Opening a room
 
-**Distance-gated anchor:**
+**One anchor rule:** a room with unread messages opens **at the "New
+messages" divider**, with the unread below it; a caught-up room opens
+at the bottom. Same for 1:1 chats.
 
-- If the divider (`firstNewMessageId`) falls **within the loaded
-  window** (~100 messages from cache), open **at the divider** — the
-  unread messages sit below it, and the pointer advances as they are
-  actually viewed. This covers virtually every small work/family room,
-  the catch-up-critical case. No deep-history load is needed: the
-  anchor target is already in the window.
-- If the backlog is **larger than the loaded window**, open **at the
-  bottom** with the jump pill — calm wins where calm matters. The
-  bottom viewport advances the pointer to newest (read-on-open), which
-  triggers the existing debounced (1.5 s) MDS publish.
-
-Both behaviors are the same viewport rule; only the anchor differs.
-The deep load-around path is exercised only by explicit pill clicks,
-never by merely opening a room.
-
+- **Anchor resolution:** if the divider is within the loaded window
+  (~100 cached messages), it is a plain scroll target. If it is deeper,
+  activation loads history *around the pointer* via the existing
+  search-jump path (`messageCache.getMessagesAround` →
+  `loadMessagesAroundFromCache` → MAM-around fallback, PR #746 infra)
+  before anchoring. Cache-first: MAM is only queried when the slice
+  isn't cached. If the pointer is unresolvable, anchor at the oldest
+  loaded message (Section 5).
+- **First activation vs revisit:** the divider anchor applies on the
+  first activation of a session — the same moment the divider is
+  derived and the MDS entry fold runs. In-session revisits keep the
+  existing `ScrollStateManager` restore behavior (saved content anchor,
+  or bottom if the user left at the bottom); the freshly re-derived
+  divider is then reachable on screen or via the pill.
 - The divider is derived once on activation from the read pointer — it
   now lands correctly for MAM-delivered unread. It is already decoupled
   from the pointer: it persists for the visit while the viewport
   advances `lastSeenMessageId` underneath, and clears on deactivation.
   No change to that machinery.
+- **Reading, not opening, marks read:** the pointer advances as unread
+  messages enter the viewport, each advance feeding the existing
+  debounced (1.5 s) MDS publish. **Jump to present** (existing FAB)
+  brings the newest message into view, which advances the pointer to
+  newest — one tap to skip the backlog, standard semantics.
 - **Badges vs pointer:** counts are always (re)derivable from the
-  pointer. Activation zeroes them for in-session calm (existing
-  behavior), but recompute events (launch hydration, inbound MDS)
-  reconverge to pointer-derived truth — abandoning a backlog mid-way
-  honestly resurfaces the remainder later (see Section 5).
-- **Jump pill:** when a divider exists above the viewport (or beyond the
-  loaded window), a pill at the top of the message area shows
-  **"N new · Jump to last read"**. Clicking scrolls to the divider via
-  the search-jump path (`scrollToMessage` →
-  `loadMessagesAroundFromCache` → MAM-around fallback, PR #746 infra),
-  so it works arbitrarily deep. If the count can't be derived from
-  cache, the pill degrades to "You were away · Jump to last read". The
-  pill hides when the divider is visible; the existing "jump to newest"
-  FAB returns the user to the bottom.
+  pointer. The active room shows no badge (existing behavior); on
+  deactivation and on recompute events (launch hydration, inbound MDS)
+  counts reconverge to pointer-derived truth — leaving a backlog
+  half-read honestly resurfaces the remainder (see Section 5).
+- **Jump pill (secondary affordance):** if the user moves away from the
+  divider toward the present without reading (e.g. via the FAB), a
+  pill at the top of the message area shows **"N new · Jump to last
+  read"** so the reading position stays one click away until the visit
+  ends. It hides while the divider is visible. If the count can't be
+  derived from cache, it degrades to "You were away · Jump to last
+  read".
 
 ## Section 3 — Esc and mark-all-read
 
@@ -153,18 +161,20 @@ shortcut in v1.
 ## Section 5 — Edge cases
 
 - **Pointer beyond retention:** if the last-read message resolves in
-  neither cache nor the MAM window, the divider anchors at the oldest
-  loaded message and the pill drops its count. Jump attempts a
-  MAM-around-stanza-id fetch; on failure it lands at oldest-loaded.
+  neither cache nor a MAM-around-stanza-id fetch, activation anchors at
+  the oldest loaded message, places the divider there, and the pill
+  drops its count. Opening must degrade gracefully, never error.
 - **Own echo:** our MDS publish returns via PEP; the existing
   `lastConsideredSeenId` dedup prevents publish loops (pin with a test).
 - **Muted rooms:** unread tracked silently (badge stays `none`); the
   divider still appears on open.
-- **Mid-backlog abandonment:** opening a small-backlog room at the
-  divider, reading half, and leaving keeps the pointer where reading
-  stopped. The next activation re-derives the divider there, and
-  recompute events restore the honest remaining count. Intentional —
-  this is #855's contract.
+- **Mid-backlog abandonment (resume):** reading half a backlog and
+  leaving keeps the pointer where reading stopped. The next activation
+  re-derives the divider there and anchors on it, and recompute events
+  restore the honest remaining count. Intentional — this is #855's
+  contract. Conversely, jumping to present or Esc before quitting
+  counts as caught up (standard semantics; the skip was the user's
+  choice).
 - **Count display:** capped at "99+"; counts come from the cached
   window only — never a MAM crawl to make a number precise.
 
@@ -176,9 +186,10 @@ shortcut in v1.
   remote-displayed badge recompute; Esc / mark-all-read pointer
   semantics; MDS echo no-loop.
 - **Scroll:** gate message-list changes on `npm run test:scroll`; new
-  e2e for the anchor gate (divider-in-window opens at divider;
-  beyond-window opens at bottom with pill) and for pill-jump to a deep
-  divider (fraction anchors are not verifiable in jsdom — e2e only).
+  e2e for anchoring (unread opens at divider — both in-window and deep
+  load-around cases; caught-up opens at bottom), for jump-to-present
+  advancing the pointer, and for the pill returning to the divider
+  (fraction anchors are not verifiable in jsdom — e2e only).
 - **App:** Esc precedence tests (reply-chip cancel beats mark-read;
   modal Esc untouched). New i18n keys translated into all 33 locales;
   asserted labels added to `test-setup.ts`.
