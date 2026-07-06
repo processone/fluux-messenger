@@ -114,10 +114,16 @@ persisted `firstNewMessageId`, so they stay in sync by construction.
 
 ## Edge cases
 
-- **Non-virtualized mode:** all rows are always mounted, so the removed
-  trim branch was never reachable there and pill visibility uses the DOM
-  `offsetTop` fallback. No behavior change. Virtualization is default-on,
-  so this path is secondary.
+- **Non-virtualized mode (opt-out only):** all rows are always mounted, so
+  the removed trim branch was never reachable there and pill visibility uses
+  the DOM `offsetTop` fallback. One benign difference: the FAB's second-click
+  path here falls through to a bare smooth `scrollTo` (no reassert loop), so
+  its landing at the bottom is not `programmaticScroll`-gated and trips the
+  reached-bottom clear, so the pill will not appear after a FAB jump in this
+  mode. This is acceptable: virtualization is default-on (this path is
+  opt-out only), and it is no worse than the pre-fix behavior where the pill
+  never appeared anywhere. If this path ever becomes non-secondary, route the
+  non-virtualized second click through the reassert loop.
 - **Prepend / append while anchor persists:** the divider is a fixed
   message id; loading older or newer messages does not change which
   message it points to. `markerUnreadCount` (messages from the divider to
