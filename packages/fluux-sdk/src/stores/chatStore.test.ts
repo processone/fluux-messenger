@@ -1158,6 +1158,41 @@ describe('chatStore', () => {
     })
   })
 
+  describe('markReadToNewest', () => {
+    it('advances the pointer to the newest message, zeroes unread, clears the divider', () => {
+      const conversationId = 'alice@example.com'
+      chatStore.getState().addConversation({
+        ...createConversation(conversationId),
+        unreadCount: 2,
+        lastSeenMessageId: 'm1',
+      })
+      chatStore.getState().addMessage({
+        type: 'chat', id: 'm1', conversationId, from: conversationId, body: 'first',
+        timestamp: new Date('2025-01-10T10:00:00Z'), isOutgoing: false,
+      })
+      chatStore.getState().addMessage({
+        type: 'chat', id: 'm2', conversationId, from: conversationId, body: 'second',
+        timestamp: new Date('2025-01-10T10:01:00Z'), isOutgoing: false,
+      })
+      chatStore.getState().addMessage({
+        type: 'chat', id: 'm3', conversationId, from: conversationId, body: 'third',
+        timestamp: new Date('2025-01-10T10:02:00Z'), isOutgoing: false,
+      })
+      chatStore.setState((state) => {
+        const newMarkers = new Map(state.firstNewMessageMarkers)
+        newMarkers.set(conversationId, 'm2')
+        return { firstNewMessageMarkers: newMarkers }
+      })
+
+      chatStore.getState().markReadToNewest(conversationId)
+
+      const meta = chatStore.getState().conversationMeta.get(conversationId)
+      expect(meta?.lastSeenMessageId).toBe('m3')
+      expect(meta?.unreadCount).toBe(0)
+      expect(chatStore.getState().firstNewMessageMarkers.has(conversationId)).toBe(false)
+    })
+  })
+
   describe('hasConversation', () => {
     it('should return true for existing conversation', () => {
       chatStore.getState().addConversation(createConversation('alice@example.com'))

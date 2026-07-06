@@ -241,6 +241,10 @@ interface ChatState {
   deleteConversation: (id: string) => void
   addMessage: (msg: Message) => void
   markAsRead: (conversationId: string) => void
+  /** Esc / mark-all-read: advance the read pointer to the newest known
+   *  message, zero the unread count, drop the divider. The MDS publisher
+   *  picks up the pointer advance via the conversationMeta watch. */
+  markReadToNewest: (conversationId: string) => void
   clearFirstNewMessageId: (conversationId: string) => void
   updateLastSeenMessageId: (conversationId: string, messageId: string) => void
   /**
@@ -1035,6 +1039,35 @@ export const chatStore = createStore<ChatState>()(
           newConversations.set(conversationId, { ...conv, unreadCount: updated.unreadCount, lastReadAt: updated.lastReadAt })
 
           return { conversationMeta: newMeta, conversations: newConversations }
+        })
+      },
+
+      markReadToNewest: (conversationId) => {
+        set((state) => {
+          const existing = state.conversations.get(conversationId)
+          if (!existing) return state
+
+          const meta = state.conversationMeta.get(conversationId)
+          const messages = state.messages.get(conversationId)
+          const newest = messages?.[messages.length - 1] ?? meta?.lastMessage ?? existing.lastMessage
+          if (!newest) return state
+
+          const read = {
+            lastSeenMessageId: newest.id,
+            unreadCount: 0,
+            lastReadAt: newest.timestamp,
+          }
+
+          const newMeta = new Map(state.conversationMeta)
+          if (meta) newMeta.set(conversationId, { ...meta, ...read })
+
+          const newConversations = new Map(state.conversations)
+          newConversations.set(conversationId, { ...existing, ...read })
+
+          const newMarkers = new Map(state.firstNewMessageMarkers)
+          newMarkers.delete(conversationId)
+
+          return { conversationMeta: newMeta, conversations: newConversations, firstNewMessageMarkers: newMarkers }
         })
       },
 

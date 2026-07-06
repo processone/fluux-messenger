@@ -109,6 +109,14 @@ export function useRoomActions() {
     roomStore.getState().markAsRead(roomJid)
   }, [])
 
+  const markReadToNewest = useCallback((roomJid: string) => {
+    roomStore.getState().markReadToNewest(roomJid)
+  }, [])
+
+  const markAllRoomsRead = useCallback(() => {
+    roomStore.getState().markAllRoomsRead()
+  }, [])
+
   const sendMessage = useCallback(
     async (
       roomJid: string,
@@ -426,6 +434,8 @@ export function useRoomActions() {
       getRoom,
       setActiveRoom,
       markAsRead,
+      markReadToNewest,
+      markAllRoomsRead,
       sendMessage,
       sendReaction,
       sendPoll,
@@ -479,6 +489,8 @@ export function useRoomActions() {
       getRoom,
       setActiveRoom,
       markAsRead,
+      markReadToNewest,
+      markAllRoomsRead,
       sendMessage,
       sendReaction,
       sendPoll,

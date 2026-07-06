@@ -528,6 +528,12 @@ export interface RoomState {
    */
   getRoomLastTimestamp: (roomJid: string) => number | undefined
   markAsRead: (roomJid: string) => void
+  /** Esc / mark-all-read: advance the read pointer to the newest known
+   *  message, zero the counts, drop the divider. The MDS publisher picks up
+   *  the pointer advance via the roomMeta watch. */
+  markReadToNewest: (roomJid: string) => void
+  /** Bulk vacation-recovery: markReadToNewest for every joined room with unread. */
+  markAllRoomsRead: () => void
   setActiveRoom: (roomJid: string | null) => void
   /**
    * Hydrate the room's recent history from the IndexedDB cache, then mark it active.
@@ -1510,6 +1516,40 @@ export const roomStore = createStore<RoomState>()(
 
       return { rooms: newRooms, roomMeta: newMeta }
     })
+  },
+
+  markReadToNewest: (roomJid) => {
+    set((state) => {
+      const existing = state.rooms.get(roomJid)
+      if (!existing) return state
+
+      const runtime = state.roomRuntime.get(roomJid)
+      const resident = runtime?.messages?.length ? runtime.messages : existing.messages
+      const newest = resident[resident.length - 1] ?? existing.lastMessage
+      if (!newest) return state
+
+      const read = {
+        lastSeenMessageId: newest.id,
+        unreadCount: 0,
+        mentionsCount: 0,
+        lastReadAt: newest.timestamp,
+      }
+      const committed = commitRoomUpdate(state, roomJid, read)
+      if (!committed) return state
+
+      const newMarkers = new Map(state.firstNewMessageMarkers)
+      newMarkers.delete(roomJid)
+
+      return { ...committed, firstNewMessageMarkers: newMarkers }
+    })
+  },
+
+  markAllRoomsRead: () => {
+    for (const room of get().joinedRooms()) {
+      const meta = get().roomMeta.get(room.jid)
+      const unread = (meta?.unreadCount ?? room.unreadCount ?? 0) + (meta?.mentionsCount ?? room.mentionsCount ?? 0)
+      if (unread > 0) get().markReadToNewest(room.jid)
+    }
   },
 
   setActiveRoom: (roomJid) => {

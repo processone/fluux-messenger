@@ -54,6 +54,10 @@ export function useChatActions() {
     chatStore.getState().markAsRead(conversationId)
   }, [])
 
+  const markReadToNewest = useCallback((conversationId: string) => {
+    chatStore.getState().markReadToNewest(conversationId)
+  }, [])
+
   const archiveConversation = useCallback((id: string) => {
     chatStore.getState().archiveConversation(id)
   }, [])
@@ -204,6 +208,7 @@ export function useChatActions() {
       addConversation,
       deleteConversation,
       markAsRead,
+      markReadToNewest,
       archiveConversation,
       unarchiveConversation,
       isArchived,
@@ -227,6 +232,7 @@ export function useChatActions() {
       addConversation,
       deleteConversation,
       markAsRead,
+      markReadToNewest,
       archiveConversation,
       unarchiveConversation,
       isArchived,

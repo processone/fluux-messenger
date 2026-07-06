@@ -1566,6 +1566,94 @@ describe('roomStore', () => {
     })
   })
 
+  describe('markReadToNewest / markAllRoomsRead', () => {
+    it('advances the pointer to the newest message, zeroes counts, clears the divider', () => {
+      const roomJid = 'test@conference.example.com'
+      const messages = [
+        createMessage('m1', roomJid, 'alice', 'first'),
+        createMessage('m2', roomJid, 'alice', 'second'),
+        createMessage('m3', roomJid, 'alice', 'third'),
+      ]
+      roomStore.getState().addRoom(createRoom(roomJid, {
+        joined: true,
+        messages,
+        lastMessage: messages[2],
+        unreadCount: 2,
+        mentionsCount: 1,
+        lastSeenMessageId: 'm1',
+      }))
+      roomStore.setState((state) => {
+        const newMarkers = new Map(state.firstNewMessageMarkers)
+        newMarkers.set(roomJid, 'm2')
+        return { firstNewMessageMarkers: newMarkers }
+      })
+
+      roomStore.getState().markReadToNewest(roomJid)
+
+      const meta = roomStore.getState().roomMeta.get(roomJid)
+      expect(meta?.lastSeenMessageId).toBe('m3')
+      expect(meta?.unreadCount).toBe(0)
+      expect(meta?.mentionsCount).toBe(0)
+      expect(roomStore.getState().firstNewMessageMarkers.has(roomJid)).toBe(false)
+    })
+
+    it('falls back to lastMessage for an evicted (non-active) room', () => {
+      const roomJid = 'evicted@conference.example.com'
+      const m9 = createMessage('m9', roomJid, 'alice', 'latest before eviction')
+      roomStore.getState().addRoom(createRoom(roomJid, {
+        joined: true,
+        messages: [],
+        lastMessage: m9,
+        unreadCount: 3,
+        mentionsCount: 1,
+      }))
+      // Simulate eviction: runtime messages array is empty (non-active room).
+      roomStore.setState((state) => {
+        const newRuntime = new Map(state.roomRuntime)
+        const existingRuntime = newRuntime.get(roomJid)
+        if (existingRuntime) newRuntime.set(roomJid, { ...existingRuntime, messages: [] })
+        return { roomRuntime: newRuntime }
+      })
+
+      roomStore.getState().markReadToNewest(roomJid)
+
+      const meta = roomStore.getState().roomMeta.get(roomJid)
+      expect(meta?.lastSeenMessageId).toBe('m9')
+      expect(meta?.unreadCount).toBe(0)
+      expect(meta?.mentionsCount).toBe(0)
+    })
+
+    it('markAllRoomsRead marks every joined room with unread, skips clean and unjoined rooms', () => {
+      const unreadJoined = 'unread-joined@conference.example.com'
+      const cleanJoined = 'clean-joined@conference.example.com'
+      const unreadUnjoined = 'unread-unjoined@conference.example.com'
+
+      const unreadMsgs = [createMessage('u1', unreadJoined, 'alice', 'hi')]
+      const cleanMsgs = [createMessage('c1', cleanJoined, 'alice', 'hi')]
+      const unjoinedMsgs = [createMessage('j1', unreadUnjoined, 'alice', 'hi')]
+
+      roomStore.getState().addRoom(createRoom(unreadJoined, {
+        joined: true, messages: unreadMsgs, lastMessage: unreadMsgs[0], unreadCount: 2,
+      }))
+      roomStore.getState().addRoom(createRoom(cleanJoined, {
+        joined: true, messages: cleanMsgs, lastMessage: cleanMsgs[0], unreadCount: 0, mentionsCount: 0,
+      }))
+      roomStore.getState().addRoom(createRoom(unreadUnjoined, {
+        joined: false, messages: unjoinedMsgs, lastMessage: unjoinedMsgs[0], unreadCount: 5,
+      }))
+
+      roomStore.getState().markAllRoomsRead()
+
+      expect(roomStore.getState().roomMeta.get(unreadJoined)?.unreadCount).toBe(0)
+      expect(roomStore.getState().roomMeta.get(unreadJoined)?.lastSeenMessageId).toBe('u1')
+      // Clean room was already at 0 — no change expected (and no crash).
+      expect(roomStore.getState().roomMeta.get(cleanJoined)?.unreadCount).toBe(0)
+      // Unjoined room is skipped even though it has unread messages.
+      expect(roomStore.getState().roomMeta.get(unreadUnjoined)?.unreadCount).toBe(5)
+      expect(roomStore.getState().roomMeta.get(unreadUnjoined)?.lastSeenMessageId).toBeUndefined()
+    })
+  })
+
   describe('mentions tracking', () => {
     it('should increment mentions count when incrementMentions option is true', () => {
       roomStore.getState().addRoom(createRoom('test@conference.example.com'))
