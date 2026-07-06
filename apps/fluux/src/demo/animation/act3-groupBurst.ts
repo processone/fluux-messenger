@@ -3,7 +3,7 @@
  * Demonstrates images, file sharing, and upload progress.
  */
 
-import type { DemoAnimationStep } from '@fluux/sdk'
+import type { DemoAnimationStep } from '@fluux/sdk/demo'
 import { DOMAIN, ROOM_JID } from '../constants'
 
 export const act3Steps: DemoAnimationStep[] = [

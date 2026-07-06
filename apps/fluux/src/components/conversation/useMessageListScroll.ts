@@ -21,6 +21,8 @@ import { createResizeLoopMonitor } from './resizeLoopMonitor'
 import { createSlowCorrectionMonitor } from './slowCorrectionMonitor'
 import { createReassertLoopMonitor } from './reassertLoopMonitor'
 import type { ReassertLoopHandle } from './reassertLoopMonitor'
+import { createPinRunTracker, readPinRepaintMode, shouldForceRepaint } from './pinBottomRun'
+import { createRenderCostProbe, type RenderCostProbe } from '@/utils/renderCostProbe'
 import { isProgrammaticScroll } from './scrollGate'
 import type { MessageVirtualizer } from './messageVirtualizer'
 import { notifyUserInput } from '@/utils/renderLoopDetector'
@@ -121,6 +123,10 @@ const RESTORE_DRIFT_PX = 8
 // no-op once truly pinned, so this converges and cannot oscillate. Sub-row tolerance keeps it from
 // firing on harmless subpixel rounding.
 const BOTTOM_PIN_TOLERANCE = 4
+// A pin run whose cumulative forced work (layout flushes + scroll writes + repaints) reaches this
+// is worth one rate-limited [PinLoopProbe] line in fluux.log — it attributes the layoutPaint cost
+// RenderCostProbe can only measure in aggregate. ~3 frame budgets; healthy runs stay far below.
+const PIN_PROBE_THRESHOLD_MS = 50
 
 // ============================================================================
 // KINETIC SCROLL
@@ -275,6 +281,13 @@ export interface UseMessageListScrollResult {
   scrollToBottom: () => void
   scrollToTop: () => void
   showScrollToBottom: boolean
+  /** Whether the first-new-message divider is currently scrolled above the viewport. Drives the
+   *  jump-to-last-read pill. */
+  markerAboveViewport: boolean
+  /** Scroll to (and re-assert toward) the first-new-message marker. Used by the jump-to-last-read
+   *  pill's click handler; also the routine the conversation-switch entry effect uses. No-op when
+   *  there is no current marker. */
+  scrollToMarker: () => void
 }
 
 type RestoreSavedPositionResult = 'restored' | 'pending' | 'bottom'
@@ -331,6 +344,12 @@ export function useMessageListScroll({
   // pin-bottom vs prepend target opposite positions (bottom vs a history anchor). Single-flight:
   // latest call wins with a fresh settle window.
   const reassertLoopRef = useRef<{ raf: number; handle: ReassertLoopHandle } | null>(null)
+  // True while a pin-bottom re-assert loop is in flight. The typing/reactions re-pin defers to an
+  // active loop (it re-checks scrollHeight every frame and picks the change up itself) instead of
+  // restarting it — the restart's synchronous forced layout + repaint is the WebKitGTK hot path.
+  const pinBottomActiveRef = useRef(false)
+  // Rate-limits the [PinLoopProbe] fluux.log line to one per cooldown (like RenderCostProbe).
+  const pinRunProbeRef = useRef<RenderCostProbe | null>(null)
   // Supersede any in-flight re-assert loop. Held in a ref (read as `.current()`) so callers in
   // useCallback / useLayoutEffect don't need it as a dependency — react-hooks treats refs as stable.
   const supersedeReassertLoopRef = useRef(() => {
@@ -339,6 +358,7 @@ export function useMessageListScroll({
       reassertLoopRef.current.handle.end()
       reassertLoopRef.current = null
     }
+    pinBottomActiveRef.current = false
   })
 
   // Track scroll position - always create internal ref to follow rules of hooks
@@ -447,6 +467,10 @@ export function useMessageListScroll({
   // ==========================================================================
 
   const [showScrollToBottom, setShowScrollToBottom] = useState(false)
+  // Whether the first-new-message divider currently sits ABOVE the viewport (scrolled past it, or
+  // it hasn't scrolled into view yet). Drives the jump-to-last-read pill. Recomputed in the same
+  // scroll-handler cadence as showScrollToBottom — no separate listener.
+  const [markerAboveViewport, setMarkerAboveViewport] = useState(false)
 
   // ==========================================================================
   // HELPERS
@@ -484,6 +508,7 @@ export function useMessageListScroll({
     lastAnchorRef.current = findBottomAnchor(scroller)
     isAtBottomRef.current = true
     setShowScrollToBottom(false)
+    setMarkerAboveViewport(false)
     scrollStateManager.clearSavedScrollState(conversationId)
   }, [conversationId, isAtBottomRef])
 
@@ -652,7 +677,7 @@ export function useMessageListScroll({
             isAtBottom: isAtBottomRef.current,
             scrollTopBefore: currentScrollTop,
           })
-          reassertBottom()
+          reassertBottom('content-growth')
         } else if (newHeight !== lastHeight) {
           debugLog('RESIZE NO SCROLL', {
             newHeight,
@@ -741,7 +766,7 @@ export function useMessageListScroll({
   // oscillation. Re-pins only when scrollHeight actually changed since the previous frame, and
   // yields the moment the user takes over (deliberate scroll intent, or simply scrolling away
   // from the bottom). No-op for the non-virtualized path — callers keep their direct scrollTop.
-  const pinVirtualizedBottom = useCallback(() => {
+  const pinVirtualizedBottom = useCallback((trigger: string = 'unknown') => {
     const virt = virtualizerRef.current
     const scroller = scrollerRef.current
     if (!virt || !scroller || virt.itemCount === 0) return
@@ -754,6 +779,14 @@ export function useMessageListScroll({
     // window — and a send can land mid-prepend — so re-entry is routine.
     supersedeReassertLoopRef.current()
 
+    // Per-run forced-work accounting + convergence tracking. On WebKitGTK the forced layouts and
+    // repaints below are the dominant main-thread cost in busy rooms (RenderCostProbe layoutPaint
+    // 189–359ms with react as low as 2ms) — the tracker attributes them in fluux.log.
+    const run = createPinRunTracker()
+    const repaintMode = readPinRepaintMode(
+      typeof window === 'undefined' ? undefined : window.localStorage
+    )
+
     // Prompt WebKit's LATE row measure. Rows are absolutely positioned, so scrollHeight is the spacer's
     // declared height (= @tanstack getTotalSize), which grows only once a just-added row's ResizeObserver
     // delivers — and WebKit (Safari + Tauri) delivers that late. Reading a row's getBoundingClientRect
@@ -763,11 +796,13 @@ export function useMessageListScroll({
     const flushTailLayout = () => {
       const ss = scrollerRef.current
       if (!ss) return
+      const started = performance.now()
       ss.getBoundingClientRect()
       const rows = ss.querySelectorAll('[data-message-id]')
       for (let i = Math.max(0, rows.length - 3); i < rows.length; i++) {
         rows[i].getBoundingClientRect()
       }
+      run.addMs('flush', performance.now() - started)
     }
 
     // THE ACTUAL SEND-STICK FIX — force a repaint after a programmatic scroll. On the Tauri WKWebView,
@@ -779,43 +814,73 @@ export function useMessageListScroll({
     // already-correctly-positioned message appear without any scroll). Toggling overflow forces the
     // scroll container to re-layout and repaint at the current position; `overflowY = ''` yields the
     // property back to the CSS class (overflow-y-auto) and scrollTop is preserved. A cheap extra reflow
-    // on Chromium, which repaints on its own.
+    // on Chromium, which repaints on its own — but a FULL re-layout + repaint of the scroller on
+    // WebKitGTK, which is why writePin gates it on the scroll actually having moved.
     const forceRepaint = () => {
       const ss = scrollerRef.current
       if (!ss) return
+      const started = performance.now()
       ss.style.overflowY = 'hidden'
       void ss.offsetHeight // forced reflow → WebKit repaints the scrolled content
       ss.style.overflowY = ''
+      run.addMs('repaint', performance.now() - started)
+    }
+
+    // Pin write + gated repaint. The stale-paint bug is specific to a PROGRAMMATIC SCROLL, so when
+    // scrollToIndex lands on the scrollTop the scroller already had (a no-op re-assert — typing
+    // toggles, resize re-pins) there is nothing stale to draw and the expensive repaint is skipped.
+    // `fluux:pin-repaint` = 'always' | 'off' overrides the gate for on-device A/B on Linux.
+    let wroteAny = false
+    const writePin = (): boolean => {
+      const ss = scrollerRef.current
+      const v = virtualizerRef.current
+      if (!ss || !v || v.itemCount === 0) return false
+      const before = ss.scrollTop
+      const started = performance.now()
+      v.scrollToIndex(v.itemCount - 1, { align: 'end' })
+      run.addMs('scroll', performance.now() - started)
+      const moved = ss.scrollTop !== before
+      if (moved) wroteAny = true
+      if (shouldForceRepaint(moved, repaintMode)) forceRepaint()
+      return moved
     }
 
     // Immediate pin (pre-paint when called from a layout effect).
     flushTailLayout()
-    virt.scrollToIndex(virt.itemCount - 1, { align: 'end' })
-    forceRepaint()
+    writePin()
     debugLog('PIN start', {
+      trigger,
       itemCount: virt.itemCount,
       distFromBottom: scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight,
     })
 
     const startedAt = Date.now()
     const loop = (reassertMonitorRef.current ??= createReassertLoopMonitor()).begin('pin-bottom', performance.now())
+    pinBottomActiveRef.current = true
     let framesLeft = BOTTOM_REASSERT_FRAMES
     let lastHeight = scroller.scrollHeight
     const finish = () => {
       loop.end()
       reassertLoopRef.current = null
+      pinBottomActiveRef.current = false
+      // One rate-limited fluux.log line attributing this run's forced work (flush/scroll/repaint),
+      // so the next on-device freeze report says which pin trigger paid what.
+      const probe = (pinRunProbeRef.current ??= createRenderCostProbe({ thresholdMs: PIN_PROBE_THRESHOLD_MS }))
+      if (probe.record(run.totalForcedMs(), performance.now())) {
+        console.warn(run.summaryLine(trigger))
+      }
     }
     const step = () => {
       const s = scrollerRef.current
       if (framesLeft-- <= 0) {
-        // Loop ran its full budget. Re-derive isAtBottom from geometry (accurate — the position is
-        // correct even when WebKit withheld the paint) and force one final repaint so the settled
-        // position is actually drawn.
+        // Loop ran its full budget without converging. Re-derive isAtBottom from geometry (accurate —
+        // the position is correct even when WebKit withheld the paint) and force one final repaint —
+        // if anything was written — so the settled position is actually drawn.
         if (s) {
           flushTailLayout()
           const dist = s.scrollHeight - s.scrollTop - s.clientHeight
           isAtBottomRef.current = dist < AT_BOTTOM_THRESHOLD
-          forceRepaint()
+          if (shouldForceRepaint(wroteAny, repaintMode)) forceRepaint()
           debugLog('PIN settled (frames exhausted)', { distFromBottom: dist })
         }
         finish()
@@ -841,19 +906,29 @@ export function useMessageListScroll({
       flushTailLayout()
       const h = s.scrollHeight
       // Re-pin when the layout grew/shrank OR we're still measurably short of the bottom. Idempotent
-      // once pinned. Every scrollToIndex is followed by forceRepaint because WebKit will not otherwise
-      // draw the programmatic scroll — the root cause of the send-stick.
+      // once pinned; the repaint is gated inside writePin on the scroll actually moving.
       const dist = h - s.scrollTop - s.clientHeight
       let wrote = false
       if (h !== lastHeight || dist > BOTTOM_PIN_TOLERANCE) {
         debugLog('PIN re-assert', { distFromBottom: dist, heightChanged: h !== lastHeight })
         lastHeight = h
-        v.scrollToIndex(v.itemCount - 1, { align: 'end' })
-        forceRepaint()
+        writePin()
         wrote = true
       }
       const warning = loop.frame(performance.now(), wrote)
       if (warning) console.warn(warning)
+      // CONVERGENCE EARLY-EXIT: once the geometry has been stable for a few consecutive frames the
+      // measurement settle is over — running out the remaining budget would only burn one forced
+      // layout per frame (the WebKitGTK freeze pattern). Late media loads re-pin via their own site.
+      if (run.frame(wrote) === 'settled') {
+        isAtBottomRef.current = dist < AT_BOTTOM_THRESHOLD
+        debugLog('PIN settled (converged)', {
+          distFromBottom: dist,
+          framesUsed: BOTTOM_REASSERT_FRAMES - framesLeft,
+        })
+        finish()
+        return
+      }
       reassertLoopRef.current = { raf: requestAnimationFrame(step), handle: loop }
     }
     reassertLoopRef.current = { raf: requestAnimationFrame(step), handle: loop }
@@ -865,9 +940,9 @@ export function useMessageListScroll({
   // preview). Routes through the virtualizer when active so the mounted window re-windows before
   // paint (a raw scrollTop write leaves @tanstack's offset stale → blank/clipped); otherwise a
   // direct scrollTop write. Callers must have already confirmed the user is at/near the bottom.
-  const reassertBottom = useCallback(() => {
+  const reassertBottom = useCallback((trigger: string = 'unknown') => {
     if (virtualizerRef.current) {
-      pinVirtualizedBottom()
+      pinVirtualizedBottom(trigger)
     } else {
       const s = scrollerRef.current
       if (s) s.scrollTop = s.scrollHeight
@@ -958,6 +1033,107 @@ export function useMessageListScroll({
     }
     reassertLoopRef.current = { raf: requestAnimationFrame(step), handle: loop }
   }, [isAtBottomRef, rememberCurrentScrollSnapshot])
+
+  // Scroll to (and keep re-asserting toward) the first-new-message marker, re-assert-loop style —
+  // shared by the conversation-switch entry effect AND the jump-to-last-read pill's click handler,
+  // so there is exactly one marker-positioning routine (see the loop body comment at its original
+  // call site for the full rationale: unmounted rows resolve via getOffsetForMessageId/scrollToIndex,
+  // re-applied each frame as rows measure over several frames after cache rehydrate).
+  const runMarkerReassertLoop = useCallback((markerId: string, markerConvId: string) => {
+    const startedAt = Date.now()
+    // Single-flight (shared with pin-bottom / prepend): the marker positioning loop owns
+    // scrollTop while it runs, so it supersedes any in-flight re-assert and registers itself.
+    supersedeReassertLoopRef.current()
+    const markerLoop = (reassertMonitorRef.current ??= createReassertLoopMonitor()).begin('marker', performance.now())
+    const finishMarker = () => {
+      markerLoop.end()
+      reassertLoopRef.current = null
+    }
+    let framesLeft = MARKER_REASSERT_FRAMES
+    let stableFrames = 0
+    let landedTarget = -1
+    let resolved = false
+    const stepToMarker = () => {
+      if (framesLeft-- <= 0) {
+        // Marker never resolved at all (e.g. trimmed from the loaded set) — don't strand the
+        // view at the top; fall back to the bottom. End first so the handoff to reassertBottom
+        // (which begins a pin-bottom loop) is not miscounted as an overlap.
+        finishMarker()
+        if (!resolved) reassertBottom('marker-fallback')
+        return
+      }
+      const s = scrollerRef.current
+      if (!s) { finishMarker(); return }
+      // Conversation switched away while this loop was still running → stop (a stale loop must
+      // never scroll the new conversation). prevConversationRef is set synchronously below.
+      if (prevConversationRef.current !== markerConvId) { finishMarker(); return }
+      // User took over (FAB/wheel) or scrolled away from where we landed → stop fighting them.
+      if (userScrollIntentAtRef.current > startedAt) { finishMarker(); return }
+      if (landedTarget >= 0 && Math.abs(s.scrollTop - landedTarget) > FAB_THRESHOLD) { finishMarker(); return }
+
+      const viewportHeight = s.clientHeight
+      const v = latestRef.current.virtualizer
+      const markerIndex = v ? v.getIndexForMessageId(markerId) : null
+      let offset: number | null = null
+      if (v) {
+        offset = v.getOffsetForMessageId(markerId)
+      } else {
+        const el = s.querySelector(`[data-message-id="${CSS.escape(markerId)}"]`) as HTMLElement | null
+        if (el) offset = el.offsetTop
+      }
+
+      let wrote = false
+      if (offset != null && (!v || markerIndex != null)) {
+        resolved = true
+        // Marker sits in the top third of the content (vh/3-from-top would be above the content
+        // top, so the only valid scroll target is 0). Scrolling to 0 would spuriously fire
+        // triggerLoadOlder (handleScroll keys load-older on scrollTop===0) and churn — the
+        // regression that consumed the older-message backlog on entry. This is the all/mostly-
+        // unread case; fall back to the bottom (the prior behavior) rather than paginating.
+        if (offset <= viewportHeight / 3) {
+          isAtBottomRef.current = true
+          finishMarker()
+          reassertBottom('marker-fallback')
+          return
+        }
+        // Position the marker row via the virtualizer's measurement-aware scrollToIndex.
+        // A raw scrollToOffset to the ESTIMATED offset lands SHORT and never windows the marker
+        // row in, so its height never measures and the offset estimate never sharpens — the loop
+        // then sees a "stable" (wrong) target and stops with the marker stranded below the fold
+        // (the bug). scrollToIndex windows the marker region in (mount + measure), so each frame
+        // lands closer and re-asserting converges, exactly like pinVirtualizedBottom. align:'start'
+        // puts the divider near the top to read forward, and clamps to the bottom when the marker
+        // is the last message (so a single new message lands at the bottom, fully visible — do NOT
+        // shift up by viewportHeight/3 here: getOffsetForMessageId clamps to the scrollable range
+        // for a near-bottom marker, so the shift would scroll past the new message and hide it).
+        if (v) v.scrollToIndex(markerIndex!, { align: 'start' })
+        else s.scrollTop = Math.max(0, offset - viewportHeight / 3)
+
+        const st = s.scrollTop
+        // Converged when the landing position stops moving (rows have finished measuring).
+        if (landedTarget >= 0 && Math.abs(st - landedTarget) <= MARKER_DRIFT_PX) {
+          if (++stableFrames >= MARKER_STABLE_FRAMES) {
+            finishMarker()
+            return
+          }
+        } else {
+          wrote = true
+          stableFrames = 0
+          const distFromBottom = s.scrollHeight - st - viewportHeight
+          isAtBottomRef.current = distFromBottom < AT_BOTTOM_THRESHOLD
+          debugLog('CONVERSATION SWITCH: scrolling to new message marker', {
+            firstNewMessageId: markerId, markerIndex, offset, scrollTop: st,
+            distFromBottom, isAtBottom: isAtBottomRef.current,
+          })
+        }
+        landedTarget = st
+      }
+      const warning = markerLoop.frame(performance.now(), wrote)
+      if (warning) console.warn(warning)
+      reassertLoopRef.current = { raf: requestAnimationFrame(stepToMarker), handle: markerLoop }
+    }
+    reassertLoopRef.current = { raf: requestAnimationFrame(stepToMarker), handle: markerLoop }
+  }, [isAtBottomRef, reassertBottom])
 
   const restoreSavedPosition = useCallback((source: 'entry' | 'retry'): RestoreSavedPositionResult => {
     const scroller = scrollerRef.current
@@ -1068,7 +1244,7 @@ export function useMessageListScroll({
       }
 
       debugLog('RESTORE: anchor not indexed, no savedPos, scrolling to bottom', { source, savedAnchor })
-      reassertBottom()
+      reassertBottom('restore-fallback')
       return 'bottom'
     }
 
@@ -1093,7 +1269,7 @@ export function useMessageListScroll({
     debugLog('RESTORE out of bounds / anchor missing, scrolling to bottom', {
       source, savedPos, maxScrollTop, scrollHeight: scroller.scrollHeight,
     })
-    reassertBottom()
+    reassertBottom('restore-fallback')
     return 'bottom'
   }, [
     conversationId,
@@ -1165,7 +1341,7 @@ export function useMessageListScroll({
 
     const virtFab = latestRef.current.virtualizer
     if (virtFab && virtFab.itemCount > 0) {
-      reassertBottom()
+      reassertBottom('fab')
       return
     }
 
@@ -1192,7 +1368,7 @@ export function useMessageListScroll({
   useEffect(() => {
     if (staticMode) return
     const onViewportResize = () => {
-      if (isAtBottomRef.current) reassertBottom()
+      if (isAtBottomRef.current) reassertBottom('viewport-resize')
     }
     window.addEventListener('resize', onViewportResize)
     const vv = window.visualViewport
@@ -1474,7 +1650,7 @@ export function useMessageListScroll({
             userScrolled,
             scrollHeight: currentScroller.scrollHeight,
           })
-          reassertBottom()
+          reassertBottom('media-load')
         } else {
           // User actively scrolled during the batch - respect their position
           debugLog('MEDIA LOAD: batch complete, user scrolled away', {
@@ -1561,6 +1737,30 @@ export function useMessageListScroll({
     // FAB visibility (only React state in scroll handler)
     const shouldShowFab = distFromBottom > FAB_THRESHOLD
     setShowScrollToBottom(prev => prev !== shouldShowFab ? shouldShowFab : prev)
+
+    // Jump-to-last-read pill visibility: is the first-new-message divider currently scrolled
+    // ABOVE the viewport? Same cadence as the FAB above — no separate listener. Compare the
+    // marker's pixel offset (content-relative, from the content top) against the live scrollTop
+    // — works whether or not the marker row is currently mounted. NOTE: this intentionally does
+    // NOT compare against getVirtualItems()[0].index: for a short/medium conversation the
+    // rendered window (visible range + overscan) can cover the ENTIRE item list, so the first
+    // rendered item's index stays 0 regardless of scroll position — an index comparison would
+    // never fire the pill for such conversations. The offset comparison is windowing-agnostic.
+    if (firstNewMessageId) {
+      const v = latestRef.current.virtualizer
+      let shouldShowMarkerPill = false
+      if (v) {
+        const offset = v.getOffsetForMessageId(firstNewMessageId)
+        shouldShowMarkerPill = offset != null && offset < scrollTop
+      } else {
+        const escapedId = CSS.escape(firstNewMessageId)
+        const markerEl = el.querySelector(`[data-message-id="${escapedId}"]`) as HTMLElement | null
+        shouldShowMarkerPill = markerEl != null && markerEl.offsetTop < scrollTop
+      }
+      setMarkerAboveViewport(prev => prev !== shouldShowMarkerPill ? shouldShowMarkerPill : prev)
+    } else {
+      setMarkerAboveViewport(prev => prev ? false : prev)
+    }
 
     // `programmaticScroll` (computed above) also gates the marker-clear and position-save below: a
     // re-assert loop owns scrollTop while it runs, so its scroll events must not (a) clear the marker
@@ -1726,6 +1926,7 @@ export function useMessageListScroll({
     userHasScrolledSinceEntryRef.current = false
     prevScrollHeightRef.current = null
     setShowScrollToBottom(false)
+    setMarkerAboveViewport(false)
 
     // Clear any pending media load batch
     if (mediaLoadDebounceRef.current) {
@@ -1784,99 +1985,9 @@ export function useMessageListScroll({
         // stranded below the fold. Resolving via getOffsetForMessageId (works for unmounted rows)
         // and re-applying each frame lands at the marker once the region mounts. Mirrors
         // pinVirtualizedBottom's re-assert loop; bails on user scroll or a conversation switch.
-        const startedAt = Date.now()
-        // Single-flight (shared with pin-bottom / prepend): the marker positioning loop owns
-        // scrollTop while it runs, so it supersedes any in-flight re-assert and registers itself.
-        supersedeReassertLoopRef.current()
-        const markerLoop = (reassertMonitorRef.current ??= createReassertLoopMonitor()).begin('marker', performance.now())
-        const finishMarker = () => {
-          markerLoop.end()
-          reassertLoopRef.current = null
-        }
-        let framesLeft = MARKER_REASSERT_FRAMES
-        let stableFrames = 0
-        let landedTarget = -1
-        let resolved = false
-        const stepToMarker = () => {
-          if (framesLeft-- <= 0) {
-            // Marker never resolved at all (e.g. trimmed from the loaded set) — don't strand the
-            // view at the top; fall back to the bottom. End first so the handoff to reassertBottom
-            // (which begins a pin-bottom loop) is not miscounted as an overlap.
-            finishMarker()
-            if (!resolved) reassertBottom()
-            return
-          }
-          const s = scrollerRef.current
-          if (!s) { finishMarker(); return }
-          // Conversation switched away while this loop was still running → stop (a stale loop must
-          // never scroll the new conversation). prevConversationRef is set synchronously below.
-          if (prevConversationRef.current !== markerConvId) { finishMarker(); return }
-          // User took over (FAB/wheel) or scrolled away from where we landed → stop fighting them.
-          if (userScrollIntentAtRef.current > startedAt) { finishMarker(); return }
-          if (landedTarget >= 0 && Math.abs(s.scrollTop - landedTarget) > FAB_THRESHOLD) { finishMarker(); return }
-
-          const viewportHeight = s.clientHeight
-          const v = latestRef.current.virtualizer
-          const markerIndex = v ? v.getIndexForMessageId(markerId) : null
-          let offset: number | null = null
-          if (v) {
-            offset = v.getOffsetForMessageId(markerId)
-          } else {
-            const el = s.querySelector(`[data-message-id="${CSS.escape(markerId)}"]`) as HTMLElement | null
-            if (el) offset = el.offsetTop
-          }
-
-          let wrote = false
-          if (offset != null && (!v || markerIndex != null)) {
-            resolved = true
-            // Marker sits in the top third of the content (vh/3-from-top would be above the content
-            // top, so the only valid scroll target is 0). Scrolling to 0 would spuriously fire
-            // triggerLoadOlder (handleScroll keys load-older on scrollTop===0) and churn — the
-            // regression that consumed the older-message backlog on entry. This is the all/mostly-
-            // unread case; fall back to the bottom (the prior behavior) rather than paginating.
-            if (offset <= viewportHeight / 3) {
-              isAtBottomRef.current = true
-              finishMarker()
-              reassertBottom()
-              return
-            }
-            // Position the marker row via the virtualizer's measurement-aware scrollToIndex.
-            // A raw scrollToOffset to the ESTIMATED offset lands SHORT and never windows the marker
-            // row in, so its height never measures and the offset estimate never sharpens — the loop
-            // then sees a "stable" (wrong) target and stops with the marker stranded below the fold
-            // (the bug). scrollToIndex windows the marker region in (mount + measure), so each frame
-            // lands closer and re-asserting converges, exactly like pinVirtualizedBottom. align:'start'
-            // puts the divider near the top to read forward, and clamps to the bottom when the marker
-            // is the last message (so a single new message lands at the bottom, fully visible — do NOT
-            // shift up by viewportHeight/3 here: getOffsetForMessageId clamps to the scrollable range
-            // for a near-bottom marker, so the shift would scroll past the new message and hide it).
-            if (v) v.scrollToIndex(markerIndex!, { align: 'start' })
-            else s.scrollTop = Math.max(0, offset - viewportHeight / 3)
-
-            const st = s.scrollTop
-            // Converged when the landing position stops moving (rows have finished measuring).
-            if (landedTarget >= 0 && Math.abs(st - landedTarget) <= MARKER_DRIFT_PX) {
-              if (++stableFrames >= MARKER_STABLE_FRAMES) {
-                finishMarker()
-                return
-              }
-            } else {
-              wrote = true
-              stableFrames = 0
-              const distFromBottom = s.scrollHeight - st - viewportHeight
-              isAtBottomRef.current = distFromBottom < AT_BOTTOM_THRESHOLD
-              debugLog('CONVERSATION SWITCH: scrolling to new message marker', {
-                firstNewMessageId: markerId, markerIndex, offset, scrollTop: st,
-                distFromBottom, isAtBottom: isAtBottomRef.current,
-              })
-            }
-            landedTarget = st
-          }
-          const warning = markerLoop.frame(performance.now(), wrote)
-          if (warning) console.warn(warning)
-          reassertLoopRef.current = { raf: requestAnimationFrame(stepToMarker), handle: markerLoop }
-        }
-        reassertLoopRef.current = { raf: requestAnimationFrame(stepToMarker), handle: markerLoop }
+        // Shared with the jump-to-last-read pill's click handler — see runMarkerReassertLoop's own
+        // comment.
+        runMarkerReassertLoop(markerId, markerConvId)
       } else if (targetMessageId) {
         // Has a target message to scroll to — skip scroll-to-bottom.
         // The targetMessageId effect will handle scrolling.
@@ -1901,7 +2012,7 @@ export function useMessageListScroll({
           // scrollHeight undershoots when bottom rows are taller than estimateSize.
           // pinVirtualizedBottom re-asserts across frames as those rows measure, so the
           // last message isn't left clipped (taller) or floating above empty space (shorter).
-          pinVirtualizedBottom()
+          pinVirtualizedBottom('switch')
         } else {
           void scroller.offsetHeight  // Force layout calculation
           scroller.scrollTop = scroller.scrollHeight
@@ -1926,7 +2037,7 @@ export function useMessageListScroll({
     prevMessageCountRef.current = messageCount
     prevLastMessageIdRef.current = lastMessageId
 
-  }, [conversationId, messageCount, firstNewMessageId, targetMessageId, lastMessageId, isAtBottomRef, staticMode, pinVirtualizedBottom, reassertBottom, restoreSavedPosition])
+  }, [conversationId, messageCount, firstNewMessageId, targetMessageId, lastMessageId, isAtBottomRef, staticMode, pinVirtualizedBottom, reassertBottom, restoreSavedPosition, runMarkerReassertLoop])
 
   // XEP-0490 settle window: the fresh-session read-sync seed can land just AFTER a
   // conversation is opened. The SDK's entry fold races the async PEP fetch, so at
@@ -1960,7 +2071,7 @@ export function useMessageListScroll({
       prevMarker: prev.divider,
     })
     isAtBottomRef.current = true
-    reassertBottom()
+    reassertBottom('mds-settle')
   }, [conversationId, firstNewMessageId, staticMode, isAtBottomRef, reassertBottom])
 
   // Retry a saved-position restore that entered before any rows were mounted.
@@ -2572,7 +2683,7 @@ export function useMessageListScroll({
           scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight,
       })
       isAtBottomRef.current = true // a send from a scrolled-up position lands us at the bottom
-      reassertBottom()
+      reassertBottom('new-message')
     } else if (newBottomRow) {
       debugLog('NEW MSG NO SCROLL (incoming, not at bottom)', {
         messageCount,
@@ -2627,7 +2738,12 @@ export function useMessageListScroll({
   // conversation switch (the stale "not at bottom" state gets persisted).
   useLayoutEffect(() => {
     if (!isAtBottomRef.current) return
-    reassertBottom()
+    // Defer to an in-flight pin-bottom loop: it re-reads scrollHeight every frame and re-pins on
+    // any change, so it picks this height change up by the next frame on its own. Restarting it
+    // here would add a synchronous forced layout (and possibly a full-scroller repaint) per typing
+    // toggle — in a busy room that is a keystroke-frequency event and the WebKitGTK freeze pattern.
+    if (pinBottomActiveRef.current) return
+    reassertBottom('typing-reactions')
   }, [typingUsersCount, lastMessageReactionsKey, isAtBottomRef, reassertBottom])
 
   // ==========================================================================
@@ -2667,7 +2783,7 @@ export function useMessageListScroll({
         const wasNear = getDistanceFromBottom(scrollerRef.current) <= shrunk + AT_BOTTOM_THRESHOLD
         // Route through reassertBottom so the virtualized path re-windows (scrollToIndex) rather
         // than a raw scrollTop write that would leave the mounted window stale → blank/clipped.
-        if (wasNear) reassertBottom()
+        if (wasNear) reassertBottom('container-shrink')
       } else if (
         newWidth !== null && lastWidth !== null && newWidth !== lastWidth &&
         scrollerRef.current && isAtBottomRef.current
@@ -2680,7 +2796,7 @@ export function useMessageListScroll({
         // drifted off the bottom. Re-assert while the user is following along, mirroring the
         // window-resize handler. The scroller's own width only changes on real layout changes,
         // not on row measurement, so this cannot feed back into the @tanstack spacer churn.
-        reassertBottom()
+        reassertBottom('width-change')
       }
 
       lastHeight = newHeight
@@ -2744,6 +2860,15 @@ export function useMessageListScroll({
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [scrollToBottom, scrollToTop])
 
+  // Public jump-to-last-read entry point: re-run the SAME re-assert loop the conversation-switch
+  // entry effect uses, targeting the CURRENT marker/conversation. No-op without a live marker.
+  const scrollToMarker = useCallback(() => {
+    if (!firstNewMessageId) return
+    userScrollIntentAtRef.current = Date.now()
+    userHasScrolledSinceEntryRef.current = true
+    runMarkerReassertLoop(firstNewMessageId, conversationId)
+  }, [firstNewMessageId, conversationId, runMarkerReassertLoop])
+
   // ==========================================================================
   // RETURN
   // ==========================================================================
@@ -2758,5 +2883,7 @@ export function useMessageListScroll({
     scrollToBottom,
     scrollToTop,
     showScrollToBottom,
+    markerAboveViewport,
+    scrollToMarker,
   }
 }

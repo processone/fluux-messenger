@@ -1,4 +1,5 @@
 import { useTranslation } from 'react-i18next'
+import { getLocalPart } from '@fluux/sdk'
 import { Check, X, Ban } from 'lucide-react'
 import { Avatar } from '../Avatar'
 import { Tooltip } from '../Tooltip'
@@ -15,7 +16,7 @@ interface StrangerMessageItemProps {
 
 export function StrangerMessageItem({ jid, messages, onSelect, onAccept, onIgnore, onBlock }: StrangerMessageItemProps) {
   const { t } = useTranslation()
-  const displayName = jid.split('@')[0]
+  const displayName = getLocalPart(jid)
   const latestMessage = messages[messages.length - 1]
   const messageCount = messages.length
 

@@ -6,6 +6,8 @@ import { useModalStore } from '@/stores/modalStore'
 import { useUpdateAffordance } from '@/stores/appUpdateStore'
 import {
   useXMPP,
+  useRoomActions,
+  getLocalPart,
   type Contact,
   type AdminCategory,
 } from '@fluux/sdk'
@@ -83,6 +85,7 @@ export function Sidebar({ onSelectContact, onStartChat, onStartChatWithJid, onMa
   const ownNickname = useConnectionStore((s) => s.ownNickname)
   // Get methods from client (not from store)
   const { client } = useXMPP()
+  const { markAllRoomsRead } = useRoomActions()
   const disconnect = (options?: { invalidateFastToken?: boolean }) =>
     client.disconnect(options)
   const isAdmin = useAdminStore((s) => s.isAdmin)
@@ -330,6 +333,7 @@ export function Sidebar({ onSelectContact, onStartChat, onStartChatWithJid, onMa
                 void client.mam.forceCatchUpAllRooms().finally(() => setIsCatchingUpRooms(false))
               }}
               isCatchingUp={isCatchingUpRooms}
+              onMarkAllRead={markAllRoomsRead}
             />
           )}
           {sidebarView === 'contacts' && (
@@ -387,7 +391,7 @@ export function Sidebar({ onSelectContact, onStartChat, onStartChatWithJid, onMa
               >
                 <Avatar
                   identifier={jid || ''}
-                  name={ownNickname || jid?.split('@')[0]}
+                  name={ownNickname || (jid ? getLocalPart(jid) : undefined)}
                   avatarUrl={ownAvatar || undefined}
                   size="lg"
                   fallbackColor="var(--fluux-bg-accent)"
@@ -402,7 +406,7 @@ export function Sidebar({ onSelectContact, onStartChat, onStartChatWithJid, onMa
                   onClick={() => { modalClose('presenceMenu'); navigateToSettings('profile') }}
                   className="block w-full text-start text-sm font-medium text-fluux-text truncate cursor-pointer hover:underline"
                 >
-                  {ownNickname || jid?.split('@')[0]}
+                  {ownNickname || (jid ? getLocalPart(jid) : undefined)}
                 </button>
               </Tooltip>
               <StatusOrPresence isOpen={showPresenceMenu} onOpenChange={(open) => open ? modalOpen('presenceMenu') : modalClose('presenceMenu')} />

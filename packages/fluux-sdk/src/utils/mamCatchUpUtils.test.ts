@@ -238,6 +238,26 @@ describe('selectCatchUpQuery', () => {
 })
 
 // ============================================================================
+// selectCatchUpQuery pointerStanzaId (XEP-0490 MDS marker as MAM after-cursor)
+// ============================================================================
+
+describe('selectCatchUpQuery pointerStanzaId', () => {
+  it('uses the MDS stanza-id as an RSM after-cursor when nothing else is available', () => {
+    expect(selectCatchUpQuery([], { pointerStanzaId: 'stanza-42' })).toEqual({ after: 'stanza-42' })
+  })
+  it('cached cursor still wins over the pointer', () => {
+    const messages = [{ timestamp: new Date(Date.now() - 60_000) }]
+    const q = selectCatchUpQuery(messages, { pointerStanzaId: 'stanza-42' })
+    expect(q.start).toBeDefined()
+    expect(q.after).toBeUndefined()
+  })
+  it('gap boundary still wins over everything', () => {
+    const q = selectCatchUpQuery([], { forwardGapTimestamp: Date.now() - 1000, pointerStanzaId: 's' })
+    expect(q.start).toBeDefined()
+  })
+})
+
+// ============================================================================
 // Manual repair pagination cap
 // ============================================================================
 

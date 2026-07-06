@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { detectRenderLoop } from '@/utils/renderLoopDetector'
 import { navDebugLog } from '@/utils/scrollDebug'
@@ -24,9 +24,11 @@ import { CreateRoomModal } from './CreateRoomModal'
 import {
   // Vanilla stores for imperative .getState() access
   chatStore, roomStore, consoleStore, adminStore, rosterStore, searchStore,
-  useRosterActions, useContactIdentities, useEvents, useBlocking, getBareJid,
+  useRosterActions, useContactIdentities, useEvents, useBlocking, getBareJid, getLocalPart, getDomain,
+  useChatActions, useRoomActions,
   type Contact, type Conversation, type AdminCategory
 } from '@fluux/sdk'
+import { getActiveMessageListController } from './conversation/activeMessageListController'
 import { useMessageRequestPreviewStore } from '@/stores/messageRequestPreviewStore'
 // React hook wrappers for reactive subscriptions
 import { useChatStore, useRoomStore, useRosterStore, useConnectionStore, useConsoleStore, useAdminStore, useSearchStore } from '@fluux/sdk/react'
@@ -234,7 +236,7 @@ function ChatLayoutContent() {
   }
   const navigateToUserAdmin = (userJid: string): string | null => {
     const store = adminStore.getState()
-    const domain = userJid.split('@')[1]?.split('/')[0]
+    const domain = getDomain(userJid)
     if (!domain) return null
     const adminVhosts = store.vhosts
     if (adminVhosts.length > 0 && !adminVhosts.includes(domain)) return null
@@ -270,7 +272,7 @@ function ChatLayoutContent() {
   // For non-roster users (e.g. room occupants), create a minimal Contact object
   const selectedContact = selectedRosterContact ?? (effectiveContactJid ? {
     jid: effectiveContactJid,
-    name: effectiveContactJid.split('@')[0],
+    name: getLocalPart(effectiveContactJid),
     presence: 'offline' as const,
     subscription: 'none' as const,
   } : null)
@@ -679,6 +681,36 @@ function ChatLayoutContent() {
     navigateToSettings(undefined, { replace: true })
   }
 
+  const { markReadToNewest: markChatRead } = useChatActions()
+  const { markReadToNewest: markRoomRead } = useRoomActions()
+
+  // Spec §3 step 3 (lowest Escape priority): nothing else consumed Escape — mark the
+  // active conversation/room read and jump to the present (same action as the
+  // ⌘/Ctrl+↓ shortcut and the scroll-to-bottom FAB, reached via the active list
+  // registry so ChatLayout doesn't need to thread a ref through ChatView/RoomView).
+  //
+  // activeRoomJid/activeConversationId persist across other views (tab memory), so
+  // they alone don't mean RoomView/ChatView is on screen — mirror the same guards
+  // the render switch below uses (sidebarView === 'settings' / previewJid take
+  // priority over the active room/conversation) so Escape doesn't mark a
+  // backgrounded conversation read while Settings or a stranger-request preview
+  // is what's actually displayed.
+  const isConversationViewDisplayed = sidebarView !== 'settings' && !previewJid
+  const onConversationEscape = useCallback((): boolean => {
+    if (!isConversationViewDisplayed) return false
+    if (activeRoomJid) {
+      markRoomRead(activeRoomJid)
+    } else if (activeConversationId) {
+      markChatRead(activeConversationId)
+    } else {
+      return false // no conversation displayed — let Escape fall through
+    }
+    getActiveMessageListController()?.scrollToBottom()
+    // Even when already read/at bottom: a no-op Escape must not bubble into
+    // surprise behavior (e.g. blurring the composer).
+    return true
+  }, [isConversationViewDisplayed, activeRoomJid, activeConversationId, markRoomRead, markChatRead])
+
   const shortcuts = useKeyboardShortcuts({
     onToggleShortcutHelp: toggleShortcutHelp,
     onToggleConsole: toggleConsole,
@@ -709,6 +741,7 @@ function ChatLayoutContent() {
       onCloseConsole: toggleConsole,
       isContactProfileOpen: selectedContact !== null,
       onCloseContactProfile: handleContactBack,
+      onConversationEscape,
     },
   })
 

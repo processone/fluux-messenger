@@ -84,7 +84,7 @@ export function shouldReplaceLastMessage<T extends PreviewableMessage & MessageW
 }
 
 /** Identity + encryption-state fields needed to recognise a resolved preview. */
-interface ResolvablePreview {
+export interface ResolvablePreview {
   id: string
   stanzaId?: string
   originId?: string

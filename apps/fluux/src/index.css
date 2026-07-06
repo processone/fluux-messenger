@@ -906,6 +906,10 @@ html, body {
    Nested levels use a plain accent line (.blockquote-nested). */
 .blockquote-decorated {
   position: relative;
+  /* Shrink-wrap to the longest line so the recessed card hugs its content
+     (like the reply chip) instead of stretching to the full row width. */
+  width: fit-content;
+  max-width: 100%;
   border-left: 2px solid var(--fluux-brand);
   background: var(--fluux-bg-secondary);
   border-radius: 0 var(--fluux-radius-m) var(--fluux-radius-m) 0;

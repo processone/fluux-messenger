@@ -7,6 +7,7 @@ import {
   onClearMarker,
   onWindowBecameVisible,
   onMessageSeen,
+  recomputeCountsFromPointer,
   shouldNotifyConversation,
   shouldNotifyRoom,
   computeBadgeCount,
@@ -319,10 +320,15 @@ describe('onActivate', () => {
       expect(result.firstNewMessageId).toBeUndefined()
     })
 
-    it('updates stale lastSeenMessageId to last message in array', () => {
+    it('resume-preserving: snaps stale lastSeenMessageId to the predecessor of the derived divider', () => {
+      // unreadCount=3: counting back 3 incoming from end → msg-5, msg-4, msg-2 (skips
+      // outgoing msg-3) → marker at msg-2. The pointer snaps to msg-2's predecessor
+      // (msg-1), NOT to the newest message (msg-5) — that would destroy the resume
+      // point the marker just derived.
       const state = makeState({ lastSeenMessageId: 'very-old-msg', unreadCount: 3 })
       const result = onActivate(state, messages)
-      expect(result.lastSeenMessageId).toBe('msg-5')
+      expect(result.firstNewMessageId).toBe('msg-2')
+      expect(result.lastSeenMessageId).toBe('msg-1')
     })
 
     it('lastReadAt fallback includes delayed messages (offline/MAM delivery)', () => {
@@ -464,6 +470,38 @@ describe('onActivate', () => {
       const result = onActivate(state, msgs)
       expect(result.firstNewMessageId).toBeUndefined()
     })
+  })
+})
+
+describe('onActivate stale pointer (resume-preserving)', () => {
+  it('snaps pointer to the message before the derived divider, not to the newest', () => {
+    const mkMsg = (id: string, minutesAgo: number): NotificationMessage => ({
+      id, timestamp: new Date(Date.now() - minutesAgo * 60_000), isOutgoing: false, isDelayed: true,
+    })
+    const state = {
+      ...createInitialNotificationState(),
+      lastSeenMessageId: 'evicted',
+      lastReadAt: new Date(Date.now() - 25 * 60_000),
+    }
+    const messages = [mkMsg('a', 30), mkMsg('b', 20), mkMsg('c', 10)]
+    const out = onActivate(state, messages, { treatDelayedAsNew: true })
+    expect(out.firstNewMessageId).toBe('b')
+    expect(out.lastSeenMessageId).toBe('a') // predecessor of divider — NOT 'c'
+  })
+})
+
+describe('onMessageSeen atLiveEdge advance', () => {
+  it('advances an unresolvable pointer when viewing the newest message at the live edge', () => {
+    const state = { ...createInitialNotificationState(), lastSeenMessageId: 'evicted' }
+    const messages = [{ id: 'a' }, { id: 'b' }]
+    const out = onMessageSeen(state, 'b', messages, { atLiveEdge: true })
+    expect(out.lastSeenMessageId).toBe('b')
+  })
+  it('stays guarded off the live edge (window slid up — no regression)', () => {
+    const state = { ...createInitialNotificationState(), lastSeenMessageId: 'newer-than-slice' }
+    const messages = [{ id: 'a' }, { id: 'b' }]
+    expect(onMessageSeen(state, 'b', messages, { atLiveEdge: false })).toBe(state)
+    expect(onMessageSeen(state, 'a', messages, { atLiveEdge: true })).toBe(state) // not the newest
   })
 })
 
@@ -888,7 +926,7 @@ describe('lifecycle sequences', () => {
     expect(state.firstNewMessageId).toBeUndefined()
   })
 
-  it('switching away and back does not regress marker (stale lastSeenMessageId)', () => {
+  it('switching away and back re-derives the same marker (resume-preserving stale lastSeenMessageId)', () => {
     const msgs: NotificationMessage[] = [
       makeMsg({ id: 'msg-100', timestamp: new Date('2025-01-15T09:00:00Z') }),
       makeMsg({ id: 'msg-101', timestamp: new Date('2025-01-15T09:30:00Z') }),
@@ -904,21 +942,24 @@ describe('lifecycle sequences', () => {
       lastReadAt: new Date('2025-01-15T10:15:00Z'),
     })
 
-    // First activation: marker at msg-103, lastSeenMessageId updated to msg-104
+    // First activation: marker at msg-103. Resume-preserving: the pointer snaps to
+    // msg-103's predecessor (msg-102), not to the newest (msg-104) — the user
+    // hasn't actually seen msg-103 yet, so snapping past it would destroy the
+    // resume point without the viewport ever confirming it was read.
     state = onActivate(state, msgs)
     expect(state.firstNewMessageId).toBe('msg-103')
-    expect(state.lastSeenMessageId).toBe('msg-104')
+    expect(state.lastSeenMessageId).toBe('msg-102')
 
     // User switches away
     state = onDeactivate(state)
     expect(state.firstNewMessageId).toBeUndefined()
 
-    // User switches back — lastSeenMessageId is now msg-104 (found in array)
+    // User switches back without ever having scrolled past the marker (no
+    // onMessageSeen calls) — the same unread content re-derives the same marker.
     state = onActivate(state, msgs)
-    // No new messages after msg-104, so no marker
-    expect(state.firstNewMessageId).toBeUndefined()
+    expect(state.firstNewMessageId).toBe('msg-103')
     // lastSeenMessageId preserved (found in array, not stale)
-    expect(state.lastSeenMessageId).toBe('msg-104')
+    expect(state.lastSeenMessageId).toBe('msg-102')
   })
 
   it('epoch lastReadAt does not place marker at beginning of history', () => {
@@ -1051,5 +1092,74 @@ describe('lifecycle sequences', () => {
     // No new messages after m5 → no marker (not the stale marker at m2!)
     expect(state.firstNewMessageId).toBeUndefined()
     expect(state.lastSeenMessageId).toBe('m5')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// recomputeCountsFromPointer
+// ---------------------------------------------------------------------------
+
+describe('recomputeCountsFromPointer', () => {
+  const msg = (id: string, minutesAgo: number, opts: Partial<NotificationMessage> = {}): NotificationMessage => ({
+    id,
+    timestamp: new Date(Date.now() - minutesAgo * 60_000),
+    isOutgoing: false,
+    isDelayed: true, // catch-up context: everything is archive-delivered
+    ...opts,
+  })
+
+  it('fresh entity (no pointer, no lastReadAt) is caught up: snaps pointer to newest, zero counts', () => {
+    const state = createInitialNotificationState()
+    const messages = [msg('a', 30), msg('b', 20), msg('c', 10)]
+    const out = recomputeCountsFromPointer(state, messages, { countMentions: true })
+    expect(out.unreadCount).toBe(0)
+    expect(out.mentionsCount).toBe(0)
+    expect(out.lastSeenMessageId).toBe('c')
+  })
+
+  it('counts incoming messages after the pointer, including delayed ones, with mentions', () => {
+    const state = { ...createInitialNotificationState(), lastSeenMessageId: 'a' }
+    const messages = [msg('a', 30), msg('b', 20, { isMention: true }), msg('c', 10)]
+    const out = recomputeCountsFromPointer(state, messages, { countMentions: true })
+    expect(out.unreadCount).toBe(2)
+    expect(out.mentionsCount).toBe(1)
+    expect(out.lastSeenMessageId).toBe('a') // pointer untouched
+  })
+
+  it('pointer missing from slice: falls back to lastReadAt timestamp', () => {
+    const state = {
+      ...createInitialNotificationState(),
+      lastSeenMessageId: 'gone',
+      lastReadAt: new Date(Date.now() - 25 * 60_000),
+    }
+    const messages = [msg('a', 30), msg('b', 20), msg('c', 10)]
+    const out = recomputeCountsFromPointer(state, messages)
+    expect(out.unreadCount).toBe(2) // b and c are newer than lastReadAt
+  })
+
+  it('pointer missing and no usable lastReadAt: counts the whole slice (lower bound)', () => {
+    const state = { ...createInitialNotificationState(), lastSeenMessageId: 'gone', lastReadAt: new Date(0) }
+    const messages = [msg('a', 30), msg('b', 20)]
+    const out = recomputeCountsFromPointer(state, messages)
+    expect(out.unreadCount).toBe(2)
+  })
+
+  it('an outgoing message in range marks everything before it read and advances the pointer', () => {
+    const state = { ...createInitialNotificationState(), lastSeenMessageId: 'a' }
+    const messages = [msg('a', 40), msg('b', 30), msg('mine', 20, { isOutgoing: true }), msg('c', 10)]
+    const out = recomputeCountsFromPointer(state, messages)
+    expect(out.unreadCount).toBe(1) // only c
+    expect(out.lastSeenMessageId).toBe('mine')
+  })
+
+  it('returns the same reference when nothing changes', () => {
+    const state = { ...createInitialNotificationState(), lastSeenMessageId: 'b', unreadCount: 0 }
+    const messages = [msg('a', 30), msg('b', 20)]
+    expect(recomputeCountsFromPointer(state, messages)).toBe(state)
+  })
+
+  it('empty slice returns the same reference', () => {
+    const state = { ...createInitialNotificationState(), lastSeenMessageId: 'x', unreadCount: 3 }
+    expect(recomputeCountsFromPointer(state, [])).toBe(state)
   })
 })

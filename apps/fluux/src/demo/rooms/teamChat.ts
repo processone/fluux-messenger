@@ -1,6 +1,6 @@
 import type { RoomMessage } from '@fluux/sdk'
-import type { DemoRoomData } from '@fluux/sdk'
-import { minutesAgo, hoursAgo } from '@fluux/sdk'
+import type { DemoRoomData } from '@fluux/sdk/demo'
+import { minutesAgo, hoursAgo } from '@fluux/sdk/demo'
 import { DOMAIN, SELF_JID, SELF_NICK, ROOM_JID } from '../constants'
 
 export const TEAM_ROOM_MESSAGES: RoomMessage[] = [

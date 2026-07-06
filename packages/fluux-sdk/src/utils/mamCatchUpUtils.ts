@@ -99,11 +99,13 @@ export function findCatchUpCursorMessage(
   return cursor
 }
 
-/** Result of {@link selectCatchUpQuery}: a forward `start` filter, or a backward
- *  `before: ''` (fetch latest) when there is no usable pre-session cursor. */
+/** Result of {@link selectCatchUpQuery}: a forward `start` filter, a forward RSM
+ *  `after` cursor (XEP-0490 pointer seed), or a backward `before: ''` (fetch
+ *  latest) when there is no usable pre-session cursor. */
 export interface CatchUpQuery {
   start?: string
   before?: string
+  after?: string
 }
 
 /**
@@ -124,6 +126,11 @@ export interface CatchUpQueryOptions {
    *  offline gap instead of a `{ before: '' }` fetch-latest that grabs only the
    *  newest page and silently skips a large gap (issue #135). */
   fallbackNewestTimestamp?: number
+  /** XEP-0490 stanza-id of the remote read position (pendingRemoteDisplayedStanzaId).
+   *  Last-but-one resort — the MDS marker IS an archive id, so an empty-cache
+   *  catch-up on a new device can forward-page `after` it instead of a
+   *  `before: ''` fetch-latest that manufactures a "pointer beyond window". */
+  pointerStanzaId?: string
 }
 
 /**
@@ -142,7 +149,7 @@ export function selectCatchUpQuery(
   messages: Array<{ timestamp?: Date }>,
   options: CatchUpQueryOptions = {},
 ): CatchUpQuery {
-  const { sessionStartTime, forwardGapTimestamp, fallbackNewestTimestamp } = options
+  const { sessionStartTime, forwardGapTimestamp, fallbackNewestTimestamp, pointerStanzaId } = options
 
   // A recorded forward gap wins: resume from the hole boundary.
   if (forwardGapTimestamp !== undefined) {
@@ -163,6 +170,13 @@ export function selectCatchUpQuery(
   ) {
     return { start: buildCatchUpStartTime(new Date(fallbackNewestTimestamp)) }
   }
+
+  // Last-but-one resort: the XEP-0490 MDS stanza-id is itself an archive id, so
+  // a new device with an empty local cache can forward-page `after` it instead
+  // of a `before: ''` fetch-latest that would manufacture a "pointer beyond
+  // window" degrade (the read marker points past whatever the fetch-latest page
+  // happens to return).
+  if (pointerStanzaId) return { after: pointerStanzaId }
 
   return { before: '' }
 }

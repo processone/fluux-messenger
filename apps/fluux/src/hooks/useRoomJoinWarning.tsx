@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useRoomActions, type RoomFeatures } from '@fluux/sdk'
+import { useRoomActions, getLocalPart, type RoomFeatures } from '@fluux/sdk'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 
 interface PendingWarning {
@@ -46,7 +46,7 @@ export function useRoomJoinWarning() {
         return true
       }
 
-      const roomName = features?.name || roomJid.split('@')[0]
+      const roomName = features?.name || getLocalPart(roomJid)
       const confirmed = await new Promise<boolean>((resolve) => {
         setPending({ roomName, resolve })
       })

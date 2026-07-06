@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next'
-import { type MucInvitation } from '@fluux/sdk'
+import { getLocalPart, type MucInvitation } from '@fluux/sdk'
 import { Check, X, DoorOpen } from 'lucide-react'
 import { Tooltip } from '../Tooltip'
 
@@ -11,8 +11,8 @@ interface MucInvitationItemProps {
 
 export function MucInvitationItem({ invitation, onAccept, onDecline }: MucInvitationItemProps) {
   const { t } = useTranslation()
-  const roomName = invitation.roomJid.split('@')[0]
-  const inviterName = invitation.from.split('@')[0]
+  const roomName = getLocalPart(invitation.roomJid)
+  const inviterName = getLocalPart(invitation.from)
 
   return (
     <div className="px-2 py-2 rounded hover:bg-fluux-hover transition-colors">

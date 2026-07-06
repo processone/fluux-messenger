@@ -3,7 +3,7 @@ import { TextInput } from './ui/TextInput'
 import { useTranslation } from 'react-i18next'
 import { AuroraMark } from './brand/AuroraMark'
 import { detectRenderLoop } from '@/utils/renderLoopDetector'
-import { useConnectionStatus, useConnectionActions, deleteFastToken, classifyConnectionError } from '@fluux/sdk'
+import { useConnectionStatus, useConnectionActions, deleteFastToken, classifyConnectionError, getBareJid, getDomain, validateBareJid } from '@fluux/sdk'
 import { Loader2, KeyRound, Eye, EyeOff, Wrench } from 'lucide-react'
 import { saveSession } from '@/hooks/useSessionPersistence'
 import { getResource } from '@/utils/xmppResource'
@@ -13,7 +13,6 @@ import { getDomainFromJid, getWebsocketUrlForDomain } from '@/config/wellKnownSe
 import { useWindowDrag } from '@/hooks'
 import { isOpenpgpEnabled } from '@/stores/encryptionSettingsStore'
 import { getReconnectIntent } from '@/utils/reconnectIntent'
-import { validateBareJid } from '@/utils/jidValidation'
 import { LoginErrorPanel } from './LoginErrorPanel'
 import { OverflowMenu } from './OverflowMenu'
 import { useAdvancedModeStore } from '@/stores/advancedModeStore'
@@ -37,7 +36,7 @@ const STORAGE_KEY_REMEMBER = 'xmpp-remember-me'
 async function prewarmOpenpgpUnlock(jid: string): Promise<void> {
   if (!isTauri()) return
   if (!isOpenpgpEnabled()) return
-  const bareJid = jid.split('/')[0]
+  const bareJid = getBareJid(jid)
   if (!bareJid || !bareJid.includes('@')) return
   try {
     const { invoke } = await import('@tauri-apps/api/core')
@@ -61,7 +60,7 @@ async function prewarmOpenpgpUnlock(jid: string): Promise<void> {
  */
 function resolveServerForConnection(jid: string, server: string): string {
   if (server) return server
-  const domain = getDomainFromJid(jid) || jid.split('@')[1] || ''
+  const domain = getDomainFromJid(jid) || getDomain(jid)
   if (!domain) return ''
   return getWebsocketUrlForDomain(domain) || domain
 }

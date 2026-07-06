@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useXMPP } from '@fluux/sdk'
-import { chatStore, roomStore, connectionStore, getBareJid } from '@fluux/sdk'
+import { chatStore, roomStore, connectionStore, getBareJid, getLocalPart } from '@fluux/sdk'
 import { findMessageById } from '@fluux/sdk'
 import { getMessage as getCachedMessage, getMessageByStanzaId as getCachedMessageByStanzaId } from '@fluux/sdk'
 import { getRoomMessage as getCachedRoomMessage, getRoomMessageByStanzaId as getCachedRoomMessageByStanzaId } from '@fluux/sdk'
@@ -91,7 +91,7 @@ export function useReactionNotifications(): void {
       const isLastMessage =
         residentMessages && residentMessages.length > 0 ? residentMessages[residentMessages.length - 1].id === messageId : false
 
-      const reactorName = getBareJid(reactorJid).split('@')[0]
+      const reactorName = getLocalPart(reactorJid)
       const decision = decideReactionNotification(
         { conversationId, messageId, reactorName, emojis, isLive },
         {

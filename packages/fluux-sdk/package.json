@@ -45,6 +45,16 @@
         "types": "./dist/stores/index.d.cts",
         "default": "./dist/stores/index.cjs"
       }
+    },
+    "./demo": {
+      "import": {
+        "types": "./dist/demo/index.d.ts",
+        "default": "./dist/demo/index.js"
+      },
+      "require": {
+        "types": "./dist/demo/index.d.cts",
+        "default": "./dist/demo/index.cjs"
+      }
     }
   },
   "files": [

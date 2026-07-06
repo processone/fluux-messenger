@@ -52,6 +52,10 @@ export interface MAMQueryOptions {
   max?: number
   /** Pagination cursor (empty string = get latest, ID = get messages before) */
   before?: string
+  /** RSM cursor for forward pagination (get messages after this archive id).
+   *  Also selects forward-pagination mode, like `start`. Used to seed a
+   *  catch-up from a XEP-0490 MDS stanza-id when the local cache is empty. */
+  after?: string
   /** Start timestamp - only fetch messages after this time (ISO 8601 format) */
   start?: string
   /** End timestamp - only fetch messages before this time (ISO 8601 format) */

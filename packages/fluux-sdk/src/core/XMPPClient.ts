@@ -26,6 +26,7 @@ import {
 } from './presenceMachine'
 import type { ConnectionActor, ConnectionStateValue } from './connectionMachine'
 import { generateUUID } from '../utils/uuid'
+import { ensureCryptoRandomUUID } from './polyfill'
 import { createStoreBindings } from '../bindings/storeBindings'
 import { setupStoreSideEffects } from './sideEffects'
 import {
@@ -41,7 +42,7 @@ import {
 } from '../stores'
 import { detectPlatform, getCachedPlatform } from './platform'
 import { isDeadSocketError } from './modules/connectionUtils'
-import { parseMessageContent, applyRetraction } from './modules/messagingUtils'
+import { parseMessageContent, applyRetraction, parseReactionsSignal, parseRetractionSignal } from './modules/messagingUtils'
 import {
   FRESH_SESSION_IQ_TIMEOUT_MS,
   FRESH_SESSION_SETUP_TIMEOUT_MS,
@@ -115,7 +116,7 @@ import { Poll } from './modules/Poll'
 import { E2EEManager, InMemoryStorageBackend, type StorageBackend, type XMPPPrimitives } from './e2ee'
 import { dataToElement } from './e2ee/stanzaAdapter'
 import { decryptStanzaInPlace, COULD_NOT_DECRYPT_BODY, MESSAGE_REJECTED_BODY } from './e2ee/stanzaDecrypt'
-import { NS_CARBONS, NS_MAM, NS_P1_PUSH_WEBPUSH, NS_REACTIONS, NS_RETRACT } from './namespaces'
+import { NS_CARBONS, NS_MAM, NS_P1_PUSH_WEBPUSH } from './namespaces'
 import { createDefaultStoreBindings, type DefaultStoreBindingsOptions } from './defaultStoreBindings'
 import { logDebug, logInfo, logWarn } from './logger'
 import { SDK_VERSION } from '../version'
@@ -484,6 +485,11 @@ export class XMPPClient {
    * ```
    */
   constructor(config: XMPPClientConfig = {}) {
+    // Legacy webviews lack crypto.randomUUID, which @xmpp/client calls when
+    // generating ids. Installed here (not as an import-time side effect) so
+    // it survives tree-shaking and covers the /core entry point too.
+    ensureCryptoRandomUUID()
+
     // Detect platform early for caps/client identification
     // This is async but we fire-and-forget; the result is cached for later use
     void detectPlatform()
@@ -1538,25 +1544,52 @@ export class XMPPClient {
    * ```
    */
   async sendRawXml(xmlString: string): Promise<void> {
-    const xmpp = this.getXmpp()
-    if (!xmpp) {
-      // Defensive check: if client is null but status says 'online', fix the inconsistency
-      const currentStatus = this.stores?.connection.getStatus?.()
-      if (currentStatus === 'online') {
-        this.stores?.console.addEvent('Client null but status online - triggering reconnect', 'error')
-        this.connection.handleDeadSocket()
-      }
-      throw new Error('Not connected')
-    }
+    const xmpp = this.requireTransport()
     try {
       await (xmpp as any).write(xmlString)
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : String(err)
-      if (isDeadSocketError(errorMessage)) {
-        this.connection.handleDeadSocket()
-      }
-      throw err
+      this.repairAndRethrowSendError(err)
     }
+  }
+
+  /**
+   * Fetch the live transport for an outbound write, or throw.
+   *
+   * Repairs the "status says online but the client/socket is gone" race by
+   * triggering a reconnect before throwing. `label` distinguishes the console
+   * diagnostics (e.g. 'IQ'); `checkSocket` additionally verifies the
+   * underlying socket exists (the client object can outlive a dead socket).
+   */
+  private requireTransport(label = '', options: { checkSocket?: boolean } = {}): Client {
+    const suffix = label ? ` (${label})` : ''
+    const xmpp = this.getXmpp()
+    if (!xmpp) {
+      this.reconnectIfStatusOnline(`Client null but status online${suffix} - triggering reconnect`)
+      throw new Error('Not connected')
+    }
+    if (options.checkSocket && !(xmpp as any).socket) {
+      this.reconnectIfStatusOnline(`Socket null but status online${suffix} - triggering reconnect`)
+      throw new Error('Socket not available')
+    }
+    return xmpp
+  }
+
+  /** Trigger a dead-socket reconnect when the store still believes we are online. */
+  private reconnectIfStatusOnline(message: string): void {
+    const currentStatus = this.stores?.connection.getStatus?.()
+    if (currentStatus === 'online') {
+      this.stores?.console.addEvent(message, 'error')
+      this.connection.handleDeadSocket()
+    }
+  }
+
+  /** Classify an outbound-write failure, kick off a reconnect on a dead socket, and rethrow. */
+  private repairAndRethrowSendError(err: unknown): never {
+    const errorMessage = err instanceof Error ? err.message : String(err)
+    if (isDeadSocketError(errorMessage)) {
+      this.connection.handleDeadSocket()
+    }
+    throw err
   }
 
   // ============================================================================
@@ -1972,20 +2005,16 @@ export class XMPPClient {
       // the key was locked; returning 'pending' here (the historical body-only
       // behaviour) silently dropped them. Surface them as a modification so the
       // caller applies the signal to its target and removes the placeholder.
-      const reactionsEl = stanza.getChild('reactions', NS_REACTIONS)
-      if (reactionsEl?.attrs.id) {
-        const emojis = reactionsEl
-          .getChildren('reaction')
-          .map((r) => r.getText())
-          .filter(Boolean)
+      const reactions = parseReactionsSignal(stanza)
+      if (reactions?.targetId) {
         return {
           kind: 'modification',
-          modification: { type: 'reactions', targetId: reactionsEl.attrs.id, emojis },
+          modification: { type: 'reactions', targetId: reactions.targetId, emojis: reactions.emojis },
         }
       }
-      const retractEl = stanza.getChild('retract', NS_RETRACT)
-      if (retractEl?.attrs.id) {
-        return { kind: 'modification', modification: { type: 'retract', targetId: retractEl.attrs.id } }
+      const retraction = parseRetractionSignal(stanza)
+      if (retraction?.targetId) {
+        return { kind: 'modification', modification: { type: 'retract', targetId: retraction.targetId } }
       }
 
       // Extract the decrypted body
@@ -2552,25 +2581,7 @@ export class XMPPClient {
       }
     })
 
-    if (chat.mergeServerConversations) {
-      chat.mergeServerConversations(batch)
-    } else {
-      // Fallback: add individually (for custom store implementations)
-      for (const entry of batch) {
-        if (chat.hasConversation(entry.id)) {
-          if (entry.archived) {
-            chat.archiveConversation?.(entry.id)
-          } else {
-            chat.unarchiveConversation?.(entry.id)
-          }
-        } else {
-          chat.addConversation({ id: entry.id, name: entry.name, type: entry.type, unreadCount: 0 })
-          if (entry.archived) {
-            chat.archiveConversation?.(entry.id)
-          }
-        }
-      }
-    }
+    chat.mergeServerConversations(batch)
     logInfo(`Conversation sync: merged ${serverConvs.length} conversations from server`)
   }
 
@@ -2589,62 +2600,16 @@ export class XMPPClient {
   }
 
   protected async sendStanza(stanza: Element): Promise<void> {
-    const xmpp = this.getXmpp()
-    if (!xmpp) {
-      // Defensive check: if client is null but status says 'online', fix the inconsistency
-      // This can happen in rare race conditions (e.g., socket died but status not yet updated)
-      const currentStatus = this.stores?.connection.getStatus?.()
-      if (currentStatus === 'online') {
-        this.stores?.console.addEvent('Client null but status online - triggering reconnect', 'error')
-        this.connection.handleDeadSocket()
-      }
-      throw new Error('Not connected')
-    }
-
-    // Additional socket health check: verify the underlying socket exists
-    // This catches the race condition where xmpp client exists but socket is dead
-    const socket = (xmpp as any).socket
-    if (!socket) {
-      const currentStatus = this.stores?.connection.getStatus?.()
-      if (currentStatus === 'online') {
-        this.stores?.console.addEvent('Socket null but status online - triggering reconnect', 'error')
-        this.connection.handleDeadSocket()
-      }
-      throw new Error('Socket not available')
-    }
-
+    const xmpp = this.requireTransport('', { checkSocket: true })
     try {
       await xmpp.send(stanza)
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : String(err)
-      if (isDeadSocketError(errorMessage)) {
-        this.connection.handleDeadSocket()
-      }
-      throw err
+      this.repairAndRethrowSendError(err)
     }
   }
 
   protected async sendIQ(iq: Element, timeoutMs?: number): Promise<Element> {
-    const xmpp = this.getXmpp()
-    if (!xmpp) {
-      const currentStatus = this.stores?.connection.getStatus?.()
-      if (currentStatus === 'online') {
-        this.stores?.console.addEvent('Client null but status online (IQ) - triggering reconnect', 'error')
-        this.connection.handleDeadSocket()
-      }
-      throw new Error('Not connected')
-    }
-
-    const socket = (xmpp as any).socket
-    if (!socket) {
-      const currentStatus = this.stores?.connection.getStatus?.()
-      if (currentStatus === 'online') {
-        this.stores?.console.addEvent('Socket null but status online (IQ) - triggering reconnect', 'error')
-        this.connection.handleDeadSocket()
-      }
-      throw new Error('Socket not available')
-    }
-
+    const xmpp = this.requireTransport('IQ', { checkSocket: true })
     try {
       const request = (xmpp as any).iqCaller.request(iq)
       if (timeoutMs != null) {
@@ -2657,11 +2622,7 @@ export class XMPPClient {
       }
       return await request
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : String(err)
-      if (isDeadSocketError(errorMessage)) {
-        this.connection.handleDeadSocket()
-      }
-      throw err
+      this.repairAndRethrowSendError(err)
     }
   }
 

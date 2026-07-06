@@ -23,8 +23,10 @@ import * as mamState from './shared/mamState'
 import type { MAMQueryDirection } from './shared/mamState'
 import { computeGapEnd, syncGap, serializeGaps, deserializeGaps, type GapInterval } from './shared/mamGap'
 import * as draftState from './shared/draftState'
-import { buildMessageKeySet, isMessageDuplicate, sortMessagesByTimestamp, trimMessages, trimMessagesKeepOldest, prependOlderMessages, mergeAndProcessMessages } from './shared/messageArrayUtils'
+import * as timeline from './shared/messageTimeline'
 import { shouldUpdateLastMessage, shouldReplaceLastMessage, isPreviewableMessage, findLastNonIgnoredMessage } from './shared/lastMessageUtils'
+import { derivePreviewAfterMerge } from './shared/previewState'
+import { resolveRemoteDisplayed, createMdsSessionGate } from './shared/readMarkerSync'
 import { ignoreStore, isMessageFromIgnoredUser } from './ignoreStore'
 import { roomActivityTone } from './roomSelectors'
 import * as notifState from './shared/notificationState'
@@ -233,11 +235,9 @@ const EMPTY_SIDEBAR_JIDS: string[] = []
 // can't overwrite a newer activation when it finally resolves
 let activationToken = 0
 
-// Rooms whose pending XEP-0490 read marker has already been consumed for divider positioning
-// THIS session (parity with chatStore). XEP-0490 markers broadcast live over PEP, so after the
-// first open's fold the live `read:displayed-synced` notifies keep us current; re-folding on
-// every open would reposition the divider on each return. Cleared on reset() (logout).
-const mdsConsumedThisSession = new Set<string>()
+// XEP-0490 first-open-per-session fold gate (see shared/readMarkerSync;
+// parity with chatStore). Reset on reset() (logout).
+const mdsGate = createMdsSessionGate()
 
 // Selector memoization caches.
 // Store selectors (joinedRooms, allRooms, etc.) are called on every Zustand subscription check.
@@ -269,6 +269,111 @@ function getRoomMessageKeys(m: RoomMessage): string[] {
   return keys
 }
 
+/** Timeline config for the shared resident-window machine (see shared/messageTimeline.ts). */
+function roomTimelineConfig(): timeline.TimelineConfig<RoomMessage> {
+  return { getKeys: getRoomMessageKeys, windowSize: getResidentWindowSize() }
+}
+
+// ============================================================================
+// Split-map field routing (single source of truth for the entity/meta/runtime
+// fan-out). Exhaustive by construction: the `satisfies Record<keyof X, …>`
+// clauses error when a field is missing or extra, so adding a field to a type
+// forces a routing decision here. The previous hand-maintained lists silently
+// went stale — `lastMessage` was missing, so `updateRoom({ lastMessage })`
+// never reached roomMeta, and the full-projection rebuild wiped the fields the
+// list didn't know about.
+// ============================================================================
+
+const ROOM_ENTITY_FIELDS = Object.keys({
+  jid: true, name: true, nickname: true, joined: true, isJoining: true,
+  subject: true, avatar: true, avatarHash: true, avatarFromPresence: true,
+  isBookmarked: true, autojoin: true, password: true, isQuickChat: true,
+  supportsMAM: true, supportsReactions: true, supportsHats: true,
+  supportsModeration: true, isIrcGateway: true, isNonAnonymous: true,
+  isPrivate: true, muted: true,
+} satisfies Record<keyof RoomEntity, true>) as readonly (keyof RoomEntity)[]
+
+const ROOM_META_FIELDS = Object.keys({
+  unreadCount: true, mentionsCount: true, typingUsers: true, notifyAll: true,
+  notifyAllPersistent: true, lastReadAt: true, lastSeenMessageId: true,
+  pendingRemoteDisplayedStanzaId: true, lastMessage: true, lastInteractedAt: true,
+} satisfies Record<keyof RoomMetadata, true>) as readonly (keyof RoomMetadata)[]
+
+const ROOM_RUNTIME_FIELD_ROUTING = {
+  occupants: 'sync', nickToJidCache: 'sync', nickToAvatarCache: 'sync',
+  affiliatedMembers: 'sync', selfOccupant: 'sync', messages: 'sync',
+  // A plain field update must never silently recenter the window — the
+  // live-edge flag only changes through window operations (see
+  // RoomRuntime.windowAtLiveEdge).
+  windowAtLiveEdge: 'preserve',
+} satisfies Record<keyof RoomRuntime, 'sync' | 'preserve'>
+
+const ROOM_RUNTIME_FIELDS = (Object.keys(ROOM_RUNTIME_FIELD_ROUTING) as readonly (keyof RoomRuntime)[])
+  .filter((key) => ROOM_RUNTIME_FIELD_ROUTING[key] === 'sync')
+
+/** The subset of `source`'s own keys that appear in `fields`. */
+function pickFields<T extends object>(source: object, fields: readonly (keyof T & string)[]): Partial<T> {
+  const picked: Record<string, unknown> = {}
+  for (const field of fields) {
+    if (field in source) picked[field] = (source as Record<string, unknown>)[field]
+  }
+  return picked as Partial<T>
+}
+
+/**
+ * Fan a Partial<Room> update out to the four room maps: the combined `rooms`
+ * map always, and each split map only when the patch carries one of its
+ * fields — merging the patched fields onto the EXISTING split value (never a
+ * full projection from the combined map, which regresses fresher split state
+ * and wipes fields the projection forgets).
+ *
+ * Returns the partial state update, or null when the room is unknown.
+ */
+function commitRoomUpdate(
+  state: RoomState,
+  roomJid: string,
+  update: Partial<Room>
+): Partial<RoomState> | null {
+  const existing = state.rooms.get(roomJid)
+  if (!existing) return null
+
+  const newRooms = new Map(state.rooms)
+  newRooms.set(roomJid, { ...existing, ...update })
+  const result: Partial<RoomState> = { rooms: newRooms }
+
+  const entityPatch = pickFields<RoomEntity>(update, ROOM_ENTITY_FIELDS as readonly (keyof RoomEntity & string)[])
+  if (Object.keys(entityPatch).length > 0) {
+    const existingEntity = state.roomEntities.get(roomJid)
+    if (existingEntity) {
+      const newEntities = new Map(state.roomEntities)
+      newEntities.set(roomJid, { ...existingEntity, ...entityPatch })
+      result.roomEntities = newEntities
+    }
+  }
+
+  const metaPatch = pickFields<RoomMetadata>(update, ROOM_META_FIELDS as readonly (keyof RoomMetadata & string)[])
+  if (Object.keys(metaPatch).length > 0) {
+    const existingMeta = state.roomMeta.get(roomJid)
+    if (existingMeta) {
+      const newMeta = new Map(state.roomMeta)
+      newMeta.set(roomJid, { ...existingMeta, ...metaPatch })
+      result.roomMeta = newMeta
+    }
+  }
+
+  const runtimePatch = pickFields<RoomRuntime>(update, ROOM_RUNTIME_FIELDS as readonly (keyof RoomRuntime & string)[])
+  if (Object.keys(runtimePatch).length > 0) {
+    const existingRuntime = state.roomRuntime.get(roomJid)
+    if (existingRuntime) {
+      const newRuntime = new Map(state.roomRuntime)
+      newRuntime.set(roomJid, { ...existingRuntime, ...runtimePatch })
+      result.roomRuntime = newRuntime
+    }
+  }
+
+  return result
+}
+
 /**
  * Merge a batch of cached room messages into a room's resident array (and runtime mirror),
  * returning the partial state update (or `null` when the room is not present). Shared by
@@ -285,21 +390,16 @@ function mergeCachedRoomMessages(
   const existing = newRooms.get(roomJid)
   if (!existing) return null
 
-  // Build key set from in-memory messages (they take precedence)
-  const existingKeys = buildMessageKeySet(existing.messages, getRoomMessageKeys)
+  // Shared timeline machine: dedupe (in-memory messages take precedence),
+  // sort, and keep-newest trim.
+  const { merged } = timeline.latestSlice(existing.messages, cachedMessages, roomTimelineConfig())
 
-  // Filter out duplicates from cached messages
-  const newFromCache = cachedMessages.filter(
-    (msg) => !isMessageDuplicate(msg, existingKeys, getRoomMessageKeys)
+  // Sidebar preview via the shared policy: only replace when the merged set's
+  // newest non-ignored message genuinely supersedes (or heals) the current
+  // preview — a deep-history slice (scroll-position restore) must not regress it.
+  const { lastMessage } = derivePreviewAfterMerge(existing.lastMessage, merged, (msgs) =>
+    findLastNonIgnoredMessage(msgs, roomJid, existing.nickToJidCache)
   )
-
-  // Merge, sort, and trim using shared utilities
-  const combined = [...newFromCache, ...existing.messages]
-  const sorted = sortMessagesByTimestamp(combined)
-  const merged = trimMessages(sorted, getResidentWindowSize())
-
-  // Get last non-ignored message from merged messages for sidebar preview
-  const lastMessage = (merged.length > 0 ? findLastNonIgnoredMessage(merged, roomJid, existing.nickToJidCache) : undefined) ?? existing.lastMessage
 
   newRooms.set(roomJid, { ...existing, messages: merged, lastMessage })
 
@@ -428,6 +528,12 @@ export interface RoomState {
    */
   getRoomLastTimestamp: (roomJid: string) => number | undefined
   markAsRead: (roomJid: string) => void
+  /** Esc / mark-all-read: advance the read pointer to the newest known
+   *  message, zero the counts, drop the divider. The MDS publisher picks up
+   *  the pointer advance via the roomMeta watch. */
+  markReadToNewest: (roomJid: string) => void
+  /** Bulk vacation-recovery: markReadToNewest for every joined room with unread. */
+  markAllRoomsRead: () => void
   setActiveRoom: (roomJid: string | null) => void
   /**
    * Hydrate the room's recent history from the IndexedDB cache, then mark it active.
@@ -662,100 +768,7 @@ export const roomStore = createStore<RoomState>()(
   },
 
   updateRoom: (roomJid, update) => {
-    set((state) => {
-      const newRooms = new Map(state.rooms)
-      const existing = newRooms.get(roomJid)
-      if (!existing) return state
-
-      const updatedRoom = { ...existing, ...update }
-      newRooms.set(roomJid, updatedRoom)
-
-      // Update entity fields if any changed
-      const entityFields = ['name', 'nickname', 'joined', 'isJoining', 'subject', 'avatar',
-        'avatarHash', 'avatarFromPresence', 'isBookmarked', 'autojoin', 'password', 'isQuickChat',
-        'supportsMAM', 'supportsReactions', 'supportsHats', 'supportsModeration', 'isIrcGateway', 'isNonAnonymous', 'isPrivate', 'muted'] as const
-      const hasEntityUpdate = entityFields.some((f) => f in update)
-
-      // Update metadata fields if any changed
-      const metaFields = ['unreadCount', 'mentionsCount', 'typingUsers', 'notifyAll',
-        'notifyAllPersistent', 'lastReadAt', 'lastInteractedAt'] as const
-      const hasMetaUpdate = metaFields.some((f) => f in update)
-
-      // Update runtime fields if any changed
-      const runtimeFields = ['occupants', 'nickToJidCache', 'nickToAvatarCache', 'affiliatedMembers', 'selfOccupant', 'messages'] as const
-      const hasRuntimeUpdate = runtimeFields.some((f) => f in update)
-
-      const result: Partial<RoomState> = { rooms: newRooms }
-
-      if (hasEntityUpdate) {
-        const newEntities = new Map(state.roomEntities)
-        const existingEntity = newEntities.get(roomJid)
-        if (existingEntity) {
-          newEntities.set(roomJid, {
-            jid: updatedRoom.jid,
-            name: updatedRoom.name,
-            nickname: updatedRoom.nickname,
-            joined: updatedRoom.joined,
-            isJoining: updatedRoom.isJoining,
-            subject: updatedRoom.subject,
-            avatar: updatedRoom.avatar,
-            avatarHash: updatedRoom.avatarHash,
-            avatarFromPresence: updatedRoom.avatarFromPresence,
-            isBookmarked: updatedRoom.isBookmarked,
-            autojoin: updatedRoom.autojoin,
-            password: updatedRoom.password,
-            isQuickChat: updatedRoom.isQuickChat,
-            supportsMAM: updatedRoom.supportsMAM,
-            supportsReactions: updatedRoom.supportsReactions,
-            supportsHats: updatedRoom.supportsHats,
-            supportsModeration: updatedRoom.supportsModeration,
-            isIrcGateway: updatedRoom.isIrcGateway,
-            isNonAnonymous: updatedRoom.isNonAnonymous,
-            isPrivate: updatedRoom.isPrivate,
-            muted: updatedRoom.muted,
-          })
-        }
-        result.roomEntities = newEntities
-      }
-
-      if (hasMetaUpdate) {
-        const newMeta = new Map(state.roomMeta)
-        const existingMeta = newMeta.get(roomJid)
-        if (existingMeta) {
-          newMeta.set(roomJid, {
-            unreadCount: updatedRoom.unreadCount,
-            mentionsCount: updatedRoom.mentionsCount,
-            typingUsers: updatedRoom.typingUsers,
-            notifyAll: updatedRoom.notifyAll,
-            notifyAllPersistent: updatedRoom.notifyAllPersistent,
-            lastReadAt: updatedRoom.lastReadAt,
-            lastInteractedAt: updatedRoom.lastInteractedAt,
-          })
-        }
-        result.roomMeta = newMeta
-      }
-
-      if (hasRuntimeUpdate) {
-        const newRuntime = new Map(state.roomRuntime)
-        const existingRuntime = newRuntime.get(roomJid)
-        if (existingRuntime) {
-          newRuntime.set(roomJid, {
-            occupants: updatedRoom.occupants,
-            nickToJidCache: updatedRoom.nickToJidCache,
-            nickToAvatarCache: updatedRoom.nickToAvatarCache,
-            affiliatedMembers: updatedRoom.affiliatedMembers,
-            selfOccupant: updatedRoom.selfOccupant,
-            messages: updatedRoom.messages,
-            // Preserve the live-edge flag across an entity/meta update (a plain field
-            // update must not silently recenter the window).
-            windowAtLiveEdge: existingRuntime.windowAtLiveEdge,
-          })
-        }
-        result.roomRuntime = newRuntime
-      }
-
-      return result
-    })
+    set((state) => commitRoomUpdate(state, roomJid, update) ?? state)
   },
 
   removeRoom: (roomJid) => {
@@ -1148,7 +1161,7 @@ export const roomStore = createStore<RoomState>()(
     // They will be cleared when rooms are explicitly removed or user logs out
     // (The connection store's reset handles full logout cleanup via clearAllMessages)
     // New session → the XEP-0490 synced read marker may be folded again on first open.
-    mdsConsumedThisSession.clear()
+    mdsGate.reset()
     // Clear persisted room drafts and poll state on logout
     localStorage.removeItem(getRoomDraftsStorageKey())
     localStorage.removeItem(getRoomVotedPollsStorageKey())
@@ -1181,23 +1194,35 @@ export const roomStore = createStore<RoomState>()(
       const existing = newRooms.get(roomJid)
       if (!existing) return state
 
-      // XEP-0359: Deduplicate messages using shared utility
-      const existingKeys = buildMessageKeySet(existing.messages, getRoomMessageKeys)
-      if (isMessageDuplicate(messageToAdd, existingKeys, getRoomMessageKeys)) {
-        return state // Don't add duplicate message
+      // Shared timeline machine: dedupe (XEP-0359 keys), archive-id backfill
+      // on duplicate reflected/archived echoes, live-edge gating (a slid
+      // window gates the append so a fresh message never splices after an OLD
+      // one), and window trim. Gated messages are still persisted to
+      // IndexedDB (above) and the preview/unread updates below still run;
+      // they reload on jump-to-latest.
+      const atLiveEdge = state.roomRuntime.get(roomJid)?.windowAtLiveEdge !== false
+      const append = timeline.appendLive(existing.messages, messageToAdd, atLiveEdge, roomTimelineConfig())
+
+      if (append.kind === 'duplicate-unchanged') return state
+      if (append.kind === 'duplicate-backfilled') {
+        // Persist the backfilled archive ids so pagination cursors survive a reload.
+        for (const p of append.patched) {
+          void messageCache.updateRoomMessage(p.id, { stanzaId: p.stanzaId!, ...(p.originId ? { originId: p.originId } : {}) })
+        }
+        newRooms.set(roomJid, { ...existing, messages: append.messages })
+        const patchedRuntime = new Map(state.roomRuntime)
+        const runtimeEntry = patchedRuntime.get(roomJid)
+        if (runtimeEntry) {
+          patchedRuntime.set(roomJid, { ...runtimeEntry, messages: append.messages })
+        }
+        return { rooms: newRooms, roomRuntime: patchedRuntime }
       }
 
-      // Sliding window: only append the live message to the resident array when the
-      // window is at the live edge. If load-older slid the window up (evicting the
-      // newest tail), appending here would splice a fresh message directly after an
-      // OLD one — a visible false-adjacency gap. When gated we leave the resident
-      // array untouched; the message is still persisted to IndexedDB (above) and the
-      // sidebar preview / unread badge still update. It reloads on jump-to-latest.
-      const atLiveEdge = state.roomRuntime.get(roomJid)?.windowAtLiveEdge !== false
-      // The append is also the basis for the newest-message preview; compute it either
-      // way (it is only STORED when at the live edge).
-      const appendedMessages = trimMessages([...existing.messages, messageToAdd], getResidentWindowSize())
-      const newMessages = atLiveEdge ? appendedMessages : existing.messages
+      // The appended set is also the basis for the newest-message preview even
+      // when the append was gated (the preview must still advance to the
+      // incoming message after the window slid off the live edge).
+      const appendedMessages = append.kind === 'appended' ? append.messages : [...existing.messages, messageToAdd]
+      const newMessages = append.kind === 'appended' ? append.messages : existing.messages
 
       // Delegate notification state to pure function
       const isActive = state.activeRoomJid === roomJid
@@ -1493,6 +1518,55 @@ export const roomStore = createStore<RoomState>()(
     })
   },
 
+  markReadToNewest: (roomJid) => {
+    set((state) => {
+      const existing = state.rooms.get(roomJid)
+      if (!existing) return state
+
+      const runtime = state.roomRuntime.get(roomJid)
+      const resident = runtime?.messages?.length ? runtime.messages : existing.messages
+      const newest = resident[resident.length - 1] ?? existing.lastMessage
+      if (!newest) return state
+
+      // Skip update if already fully read: pointer at the computed newest id,
+      // no unread/mentions, and no "new messages" divider to clear.
+      const meta = state.roomMeta.get(roomJid)
+      const currentLastSeenMessageId = meta?.lastSeenMessageId ?? existing.lastSeenMessageId
+      const currentUnreadCount = meta?.unreadCount ?? existing.unreadCount
+      const currentMentionsCount = meta?.mentionsCount ?? existing.mentionsCount
+      if (
+        currentLastSeenMessageId === newest.id &&
+        currentUnreadCount === 0 &&
+        currentMentionsCount === 0 &&
+        !state.firstNewMessageMarkers.has(roomJid)
+      ) {
+        return state
+      }
+
+      const read = {
+        lastSeenMessageId: newest.id,
+        unreadCount: 0,
+        mentionsCount: 0,
+        lastReadAt: newest.timestamp,
+      }
+      const committed = commitRoomUpdate(state, roomJid, read)
+      if (!committed) return state
+
+      const newMarkers = new Map(state.firstNewMessageMarkers)
+      newMarkers.delete(roomJid)
+
+      return { ...committed, firstNewMessageMarkers: newMarkers }
+    })
+  },
+
+  markAllRoomsRead: () => {
+    for (const room of get().joinedRooms()) {
+      const meta = get().roomMeta.get(room.jid)
+      const unread = (meta?.unreadCount ?? room.unreadCount ?? 0) + (meta?.mentionsCount ?? room.mentionsCount ?? 0)
+      if (unread > 0) get().markReadToNewest(room.jid)
+    }
+  },
+
   setActiveRoom: (roomJid) => {
     const prevJid = get().activeRoomJid
     // Skip if already the active room (prevents duplicate side effects)
@@ -1544,7 +1618,7 @@ export const roomStore = createStore<RoomState>()(
 
         const runtime = get().roomRuntime.get(roomJid)
         const messages = runtime?.messages ?? room.messages
-        const activated = notifState.onActivate(notifInput, messages)
+        const activated = notifState.onActivate(notifInput, messages, { treatDelayedAsNew: true })
 
         // Determine lastInteractedAt for sidebar sorting
         const lastMessage = room.messages?.[room.messages.length - 1]
@@ -1600,8 +1674,7 @@ export const roomStore = createStore<RoomState>()(
       // derives the divider — but only on the FIRST open of this room this session (parity with
       // chatStore.activateConversation). XEP-0490 markers broadcast live over PEP, so re-folding on
       // every open would reposition the divider on each return.
-      const firstConsumeThisSession = !mdsConsumedThisSession.has(roomJid)
-      mdsConsumedThisSession.add(roomJid)
+      const firstConsumeThisSession = mdsGate.consume(roomJid)
       const pending = get().roomMeta.get(roomJid)?.pendingRemoteDisplayedStanzaId
       if (pending && firstConsumeThisSession) {
         const lastSeenBefore = get().roomMeta.get(roomJid)?.lastSeenMessageId
@@ -1618,6 +1691,22 @@ export const roomStore = createStore<RoomState>()(
           roomJid,
           pendingStanzaId: pending,
         })
+      }
+
+      // Resume anchor: if the read pointer is deeper than the latest-100
+      // slice, reload the window AROUND it (IndexedDB only) so the divider
+      // derives inside the slice and the entry scroll can anchor on it. The
+      // fold above ran first — it may have advanced the pointer to the synced
+      // position. A cache miss keeps the latest slice; the divider then
+      // degrades via the stale-pointer fallback (spec §5) and MAM catch-up
+      // heals the cache for the next open.
+      const pointer = get().roomMeta.get(roomJid)?.lastSeenMessageId
+      if (pointer) {
+        const loaded = get().roomRuntime.get(roomJid)?.messages ?? get().rooms.get(roomJid)?.messages ?? []
+        if (!loaded.some((m) => m.id === pointer)) {
+          await get().loadMessagesAroundFromCache(roomJid, pointer)
+          if (token !== activationToken) return
+        }
       }
     }
     // Set active and clear pending atomically (same React commit) so the view
@@ -1653,7 +1742,8 @@ export const roomStore = createStore<RoomState>()(
         lastSeenMessageId: meta?.lastSeenMessageId ?? existing.lastSeenMessageId,
         firstNewMessageId: state.firstNewMessageMarkers.get(roomJid),
       }
-      const updated = notifState.onMessageSeen(notifInput, messageId, messages)
+      const atLiveEdge = state.roomRuntime.get(roomJid)?.windowAtLiveEdge !== false
+      const updated = notifState.onMessageSeen(notifInput, messageId, messages, { atLiveEdge })
       if (updated === notifInput) return state
 
       const newRooms = new Map(state.rooms)
@@ -1677,83 +1767,83 @@ export const roomStore = createStore<RoomState>()(
       const runtime = state.roomRuntime.get(roomJid)
       // A non-active room keeps no resident array (memory windowing), so
       // mergeRoomMAMMessages passes the just-merged array here; else read runtime/rooms.
+      // The resolution state machine (stash / clear-pending / forward-only
+      // advance / active-divider recompute) is shared — see shared/readMarkerSync.
       const messages = messagesOverride ?? runtime?.messages ?? existing?.messages ?? []
-      const match = messages.find((m) => m.stanzaId === stanzaId)
-
-      if (!match) {
-        const newMeta = new Map(state.roomMeta)
-        newMeta.set(roomJid, { ...meta, pendingRemoteDisplayedStanzaId: stanzaId })
-        if (existing) {
-          const newRooms = new Map(state.rooms)
-          newRooms.set(roomJid, { ...existing, pendingRemoteDisplayedStanzaId: stanzaId })
-          return { roomMeta: newMeta, rooms: newRooms }
-        }
-        return { roomMeta: newMeta }
-      }
-
-      const updated = notifState.onMessageSeen(
+      const resolution = resolveRemoteDisplayed(
         {
           unreadCount: meta.unreadCount,
           mentionsCount: meta.mentionsCount,
           lastReadAt: meta.lastReadAt,
           lastSeenMessageId: meta.lastSeenMessageId,
-          firstNewMessageId: state.firstNewMessageMarkers.get(roomJid),
+          pendingRemoteDisplayedStanzaId: meta.pendingRemoteDisplayedStanzaId,
         },
-        match.id,
-        messages
+        messages,
+        state.firstNewMessageMarkers.get(roomJid),
+        stanzaId,
+        // Rooms treat delayed history the same as chats treat offline delivery
+        // (unified divider semantics) — delayed messages after the pointer are new.
+        { isActive: state.activeRoomJid === roomJid, treatDelayedAsNew: true }
       )
+      if (resolution.kind === 'unchanged') return state
 
-      // No advance: the matching message is loaded and the local position is at
-      // or past it — the marker is resolved; clear any stale pending mark.
-      if (updated.lastSeenMessageId === meta.lastSeenMessageId) {
-        if (meta.pendingRemoteDisplayedStanzaId === undefined) return state
-        const newMeta = new Map(state.roomMeta)
-        newMeta.set(roomJid, { ...meta, pendingRemoteDisplayedStanzaId: undefined })
-        if (existing) {
-          const newRooms = new Map(state.rooms)
-          newRooms.set(roomJid, { ...existing, pendingRemoteDisplayedStanzaId: undefined })
-          return { roomMeta: newMeta, rooms: newRooms }
-        }
-        return { roomMeta: newMeta }
-      }
+      const metaPatch =
+        resolution.kind === 'stash-pending'
+          ? { pendingRemoteDisplayedStanzaId: stanzaId }
+          : resolution.kind === 'clear-pending'
+            ? { pendingRemoteDisplayedStanzaId: undefined }
+            : { lastSeenMessageId: resolution.lastSeenMessageId, pendingRemoteDisplayedStanzaId: undefined }
 
       const newMeta = new Map(state.roomMeta)
-      newMeta.set(roomJid, {
-        ...meta,
-        lastSeenMessageId: updated.lastSeenMessageId,
-        pendingRemoteDisplayedStanzaId: undefined,
-      })
+      newMeta.set(roomJid, { ...meta, ...metaPatch })
 
-      // XEP-0490: if this marker advances the CURRENTLY ACTIVE room, its new-message
-      // divider was already derived at activation from the (now stale) local read
-      // position — the fresh-session seed can land just after the room opens, so the
-      // fold at activation missed it. Recompute the divider from the advanced position
-      // (rooms treat delayed messages as history replay, so no treatDelayedAsNew) so it
-      // reflects the synced read instead of freezing at the local one. Inactive rooms
-      // recompute on their next activation, so leave the map untouched.
-      let newMarkers = state.firstNewMessageMarkers
-      if (state.activeRoomJid === roomJid) {
-        const divider = notifState.onActivate(
+      // Inbound read-state sync (spec §4): a marker published by another client
+      // clears this room's badge now, not on the next activation. 'advanced' is
+      // exactly the non-active pointer-advance kind (the active room's counts
+      // are already zero and resolves as 'advanced-with-divider'). Only the
+      // counts are folded — the pointer keeps the forward-only position
+      // resolved above (the helper's outgoing-boundary rule never regresses
+      // it: the pointer resolves inside `messages`, so its internal scan only
+      // ever looks past it).
+      let recomputed: notifState.EntityNotificationState | undefined
+      if (resolution.kind === 'advanced') {
+        recomputed = notifState.recomputeCountsFromPointer(
           {
-            unreadCount: 0,
-            mentionsCount: 0,
+            unreadCount: meta.unreadCount,
+            mentionsCount: meta.mentionsCount,
             lastReadAt: meta.lastReadAt,
-            lastSeenMessageId: updated.lastSeenMessageId,
-            firstNewMessageId: undefined,
+            lastSeenMessageId: resolution.lastSeenMessageId,
+            firstNewMessageId: state.firstNewMessageMarkers.get(roomJid),
           },
-          messages
-        ).firstNewMessageId
+          messages,
+          { countMentions: true }
+        )
+        newMeta.set(roomJid, {
+          ...newMeta.get(roomJid)!,
+          unreadCount: recomputed.unreadCount,
+          mentionsCount: recomputed.mentionsCount,
+        })
+      }
+
+      // The divider is recomputed only for the active room; inactive rooms
+      // recompute on their next activation.
+      let newMarkers = state.firstNewMessageMarkers
+      if (resolution.kind === 'advanced-with-divider') {
         newMarkers = new Map(state.firstNewMessageMarkers)
-        if (divider) newMarkers.set(roomJid, divider)
+        if (resolution.firstNewMessageId) newMarkers.set(roomJid, resolution.firstNewMessageId)
         else newMarkers.delete(roomJid)
       }
 
       if (existing) {
+        // Keep the combined map coherent with roomMeta.
         const newRooms = new Map(state.rooms)
         newRooms.set(roomJid, {
           ...existing,
-          lastSeenMessageId: updated.lastSeenMessageId,
-          pendingRemoteDisplayedStanzaId: undefined,
+          ...metaPatch,
+          // Keep the combined map coherent with the recomputed roomMeta counts.
+          ...(recomputed
+            ? { unreadCount: recomputed.unreadCount, mentionsCount: recomputed.mentionsCount }
+            : {}),
         })
         return { roomMeta: newMeta, rooms: newRooms, firstNewMessageMarkers: newMarkers }
       }
@@ -2142,31 +2232,21 @@ export const roomStore = createStore<RoomState>()(
       })
 
       if (cachedMessages.length > 0) {
-        // Prepend to existing messages using shared utilities
+        // Prepend to existing messages via the shared timeline machine
         set((state) => {
           const newRooms = new Map(state.rooms)
           const existing = newRooms.get(roomJid)
           if (!existing) return state
 
-          // Build key set from in-memory messages (they take precedence)
-          const existingKeys = buildMessageKeySet(existing.messages, getRoomMessageKeys)
-
-          // Filter out duplicates from cached messages
-          const newFromCache = cachedMessages.filter(
-            (msg) => !isMessageDuplicate(msg, existingKeys, getRoomMessageKeys)
+          // Dedupe (in-memory messages take precedence), sort, keep-oldest trim
+          // (load-older slides the window so scroll-back past the bound works).
+          // If keep-oldest evicted the newest resident message, the window has
+          // slid off the live edge → gate live appends in addMessage.
+          const { merged, newestEvicted } = timeline.loadOlderSlice(
+            existing.messages,
+            cachedMessages,
+            roomTimelineConfig()
           )
-
-          // Merge, sort, and trim using shared utilities.
-          // Load-older slides the window (keep oldest) so scroll-back past the bound works.
-          const combined = [...newFromCache, ...existing.messages]
-          const sorted = sortMessagesByTimestamp(combined)
-          const merged = trimMessagesKeepOldest(sorted, getResidentWindowSize())
-
-          // If keep-oldest evicted the newest resident message, the window has slid off
-          // the live edge → gate live appends in addMessage. If the batch fit under the
-          // bound (newest unchanged), leave the flag as-is.
-          const newestEvicted =
-            merged[merged.length - 1]?.id !== existing.messages[existing.messages.length - 1]?.id
 
           newRooms.set(roomJid, { ...existing, messages: merged })
 
@@ -2219,25 +2299,19 @@ export const roomStore = createStore<RoomState>()(
       const reachedTail = cachedMessages.length < limit
 
       if (cachedMessages.length > 0) {
-        // Append to existing messages using shared utilities
+        // Append to existing messages via the shared timeline machine
         set((state) => {
           const newRooms = new Map(state.rooms)
           const existing = newRooms.get(roomJid)
           if (!existing) return state
 
-          // Build key set from in-memory messages (they take precedence)
-          const existingKeys = buildMessageKeySet(existing.messages, getRoomMessageKeys)
-
-          // Filter out duplicates from cached messages
-          const newFromCache = cachedMessages.filter(
-            (msg) => !isMessageDuplicate(msg, existingKeys, getRoomMessageKeys)
+          // Dedupe (in-memory messages take precedence), sort, keep-newest trim
+          // (load-newer slides the window back down toward the live edge).
+          const { merged } = timeline.loadNewerSlice(
+            existing.messages,
+            cachedMessages,
+            roomTimelineConfig()
           )
-
-          // Merge, sort, and trim using shared utilities.
-          // Load-newer slides the window (keep newest) so sliding back down works.
-          const combined = [...existing.messages, ...newFromCache]
-          const sorted = sortMessagesByTimestamp(combined)
-          const merged = trimMessages(sorted, getResidentWindowSize())
 
           newRooms.set(roomJid, { ...existing, messages: merged })
 
@@ -2411,23 +2485,21 @@ export const roomStore = createStore<RoomState>()(
       // Get existing messages for this room
       const existingMessages = room.messages || []
 
-      // Choose merge strategy based on direction:
-      // - Backward (scroll up for older): optimized prepend avoids full re-sort
-      // - Forward (catching up with newer): requires full sort since messages are newer
-      const { merged, newMessages: newFromMAM } =
-        direction === 'backward'
-          ? prependOlderMessages(
-              existingMessages,
-              mamMessages,
-              getRoomMessageKeys,
-              getResidentWindowSize()
-            )
-          : mergeAndProcessMessages(
-              existingMessages,
-              mamMessages,
-              getRoomMessageKeys,
-              getResidentWindowSize()
-            )
+      // Shared timeline machine: archive-id backfill onto resident messages
+      // (so an outgoing reflection gains its MAM cursor — was a chat-only
+      // behavior before the extraction), direction-aware merge (backward =
+      // optimized prepend + keep-oldest, forward = full sort + keep-newest),
+      // dedupe, and eviction reporting.
+      const { merged, newMessages: newFromMAM, patched, newestEvicted } = timeline.mergeArchive(
+        existingMessages,
+        mamMessages,
+        direction,
+        roomTimelineConfig()
+      )
+      // Persist backfilled archive ids so pagination cursors survive a reload.
+      for (const p of patched) {
+        void messageCache.updateRoomMessage(p.id, { stanzaId: p.stanzaId!, ...(p.originId ? { originId: p.originId } : {}) })
+      }
       mergedForMarker = merged
 
       // Compute the newest fetched timestamp for gap marker positioning.
@@ -2460,9 +2532,21 @@ export const roomStore = createStore<RoomState>()(
       }
 
       // If no new messages (all duplicates), only update MAM state - skip room messages
-      // This prevents unnecessary re-renders when merging duplicates
+      // This prevents unnecessary re-renders when merging duplicates.
+      // Exception: a stanzaId backfill onto existing RAM messages must persist —
+      // but only for the ACTIVE room (non-active rooms keep no resident array).
       if (newFromMAM.length === 0) {
-        return { mamQueryStates: newStates, roomGaps: newGaps }
+        if (patched.length === 0 || state.activeRoomJid !== roomJid) {
+          return { mamQueryStates: newStates, roomGaps: newGaps }
+        }
+        const backfilledRooms = new Map(state.rooms)
+        backfilledRooms.set(roomJid, { ...room, messages: merged })
+        const backfilledRuntime = new Map(state.roomRuntime)
+        const runtimeEntry = backfilledRuntime.get(roomJid)
+        if (runtimeEntry) {
+          backfilledRuntime.set(roomJid, { ...runtimeEntry, messages: merged })
+        }
+        return { rooms: backfilledRooms, roomRuntime: backfilledRuntime, mamQueryStates: newStates, roomGaps: newGaps }
       }
 
       // Persist to IndexedDB regardless of active state — this is the durable
@@ -2473,8 +2557,13 @@ export const roomStore = createStore<RoomState>()(
         searchIndex.indexMessages(persistableMessages).catch((e) => console.warn('[searchIndex] indexMessages failed:', e))
       }
 
-      // Sidebar preview = newest non-ignored across the merged set.
-      const lastMessage = (merged.length > 0 ? findLastNonIgnoredMessage(merged, roomJid, room.nickToJidCache) : undefined) ?? room.lastMessage
+      // Sidebar preview via the shared policy: only replace when the merged set's
+      // newest non-ignored message genuinely supersedes the current preview (a
+      // backward merge whose keep-oldest trim evicted the newest tail must not
+      // regress the sidebar) or heals its encrypted fallback after a deferred decrypt.
+      const { lastMessage } = derivePreviewAfterMerge(room.lastMessage, merged, (msgs) =>
+        findLastNonIgnoredMessage(msgs, roomJid, room.nickToJidCache)
+      )
 
       const newMeta = new Map(state.roomMeta)
       const existingMeta = newMeta.get(roomJid)
@@ -2490,6 +2579,39 @@ export const roomStore = createStore<RoomState>()(
       if (state.activeRoomJid !== roomJid) {
         const newRooms = new Map(state.rooms)
         newRooms.set(roomJid, { ...room, lastMessage })
+
+        // Badge hydration (spec §1): a forward merge extends contiguous
+        // history past the read pointer — recompute unread/mention counts so
+        // an unopened room regains its badge after catch-up. Backward merges
+        // only prepend older history (nothing after the pointer changes).
+        // The live path (addMessage/onMessageReceived) keeps owning
+        // incremental counting; this reconciles bulk archive delivery.
+        if (direction === 'forward' && existingMeta) {
+          const recomputed = notifState.recomputeCountsFromPointer(
+            {
+              unreadCount: existingMeta.unreadCount,
+              mentionsCount: existingMeta.mentionsCount,
+              lastReadAt: existingMeta.lastReadAt,
+              lastSeenMessageId: existingMeta.lastSeenMessageId,
+              firstNewMessageId: state.firstNewMessageMarkers.get(roomJid),
+            },
+            mergedForMarker,
+            { countMentions: true }
+          )
+          newMeta.set(roomJid, {
+            ...newMeta.get(roomJid)!,
+            unreadCount: recomputed.unreadCount,
+            mentionsCount: recomputed.mentionsCount,
+            lastSeenMessageId: recomputed.lastSeenMessageId,
+          })
+          newRooms.set(roomJid, {
+            ...newRooms.get(roomJid)!,
+            unreadCount: recomputed.unreadCount,
+            mentionsCount: recomputed.mentionsCount,
+            lastSeenMessageId: recomputed.lastSeenMessageId,
+          })
+        }
+
         // roomRuntime deliberately untouched.
         return { rooms: newRooms, roomMeta: newMeta, mamQueryStates: newStates, roomGaps: newGaps }
       }
@@ -2498,13 +2620,10 @@ export const roomStore = createStore<RoomState>()(
       const newRooms = new Map(state.rooms)
       newRooms.set(roomJid, { ...room, messages: merged, lastMessage })
 
-      // A backward (scroll-up) merge uses keep-oldest and can evict the newest tail,
-      // sliding the window off the live edge (same gate as loadOlderMessagesFromCache).
-      // Forward catch-up keeps the newest, so it never slides.
-      const newestEvicted =
-        direction === 'backward' &&
-        merged[merged.length - 1]?.id !== existingMessages[existingMessages.length - 1]?.id
-
+      // A backward (scroll-up) merge uses keep-oldest and can evict the newest tail
+      // (newestEvicted from the timeline machine), sliding the window off the live
+      // edge (same gate as loadOlderMessagesFromCache). Forward catch-up keeps the
+      // newest, so it never slides.
       const newRuntime = new Map(state.roomRuntime)
       const existingRuntime = newRuntime.get(roomJid)
       if (existingRuntime) {

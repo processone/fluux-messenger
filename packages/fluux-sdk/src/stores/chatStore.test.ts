@@ -3,6 +3,7 @@ import { chatStore } from './chatStore'
 import type { Message, Conversation } from '../core/types'
 import { getLocalPart } from '../core/jid'
 import { _resetStorageScopeForTesting, setStorageScopeJid } from '../utils/storageScope'
+import { setResidentWindowSize } from './shared/residentWindow'
 
 // Mock localStorage
 const localStorageMock = (() => {
@@ -315,6 +316,8 @@ describe('chatStore', () => {
       // Restore the factory default so later tests get a clean resolved-[] mock
       vi.mocked(messageCache.getMessages).mockReset()
       vi.mocked(messageCache.getMessages).mockResolvedValue([])
+      vi.mocked(messageCache.getMessagesAround).mockReset()
+      vi.mocked(messageCache.getMessagesAround).mockResolvedValue([])
     })
 
     it('should hydrate messages from cache before marking the conversation active', async () => {
@@ -406,6 +409,45 @@ describe('chatStore', () => {
 
       expect(chatStore.getState().activationPending).toBe(false)
       expect(chatStore.getState().activeConversationId).toBeNull()
+    })
+
+    it('activateConversation reloads the window around a pointer deeper than the latest slice', async () => {
+      // Arrange: cache holds 300 messages; the latest-100 slice (returned by
+      // loadMessagesFromCache) does NOT contain meta.lastSeenMessageId
+      // ('msg-150') — the reader left off deep in history. Seeding
+      // conversationMeta.lastSeenMessageId directly mimics a persisted read
+      // pointer from a prior session (no live activation has run yet here).
+      const A = 'alice@example.com'
+      chatStore.getState().addConversation(createConversation(A))
+      chatStore.setState((state) => {
+        const meta = new Map(state.conversationMeta)
+        meta.set(A, { ...meta.get(A)!, lastSeenMessageId: 'msg-150' })
+        return { conversationMeta: meta }
+      })
+
+      // Base offsets in minutes-since-epoch so message order matches id order
+      // (msg-149 < msg-150 < msg-151 < ... < msg-299) with no collisions.
+      const msgAt = (id: string, offsetMinutes: number): Message => ({
+        type: 'chat',
+        id,
+        conversationId: A,
+        from: A,
+        body: id,
+        timestamp: new Date(offsetMinutes * 60_000),
+        isOutgoing: false,
+      })
+
+      const latestSlice: Message[] = Array.from({ length: 100 }, (_, i) => msgAt(`msg-${200 + i}`, 200 + i))
+      const aroundSlice: Message[] = [msgAt('msg-149', 149), msgAt('msg-150', 150), msgAt('msg-151', 151)]
+      vi.mocked(messageCache.getMessages).mockResolvedValue(latestSlice)
+      vi.mocked(messageCache.getMessagesAround).mockResolvedValue(aroundSlice)
+
+      await chatStore.getState().activateConversation(A)
+
+      expect(messageCache.getMessagesAround).toHaveBeenCalledWith(A, 'msg-150', expect.any(Object))
+      const resident = chatStore.getState().messages.get(A)
+      expect(resident?.some((m) => m.id === 'msg-150')).toBe(true)
+      expect(chatStore.getState().firstNewMessageMarkers.get(A)).toBe('msg-151')
     })
   })
 
@@ -1113,6 +1155,79 @@ describe('chatStore', () => {
 
       // Should have set the new messages marker since the message is after lastReadAt
       expect(chatStore.getState().firstNewMessageMarkers.get('alice@example.com')).toBe('msg1')
+    })
+  })
+
+  describe('markReadToNewest', () => {
+    it('advances the pointer to the newest message, zeroes unread, clears the divider', () => {
+      const conversationId = 'alice@example.com'
+      chatStore.getState().addConversation({
+        ...createConversation(conversationId),
+        unreadCount: 2,
+        lastSeenMessageId: 'm1',
+      })
+      chatStore.getState().addMessage({
+        type: 'chat', id: 'm1', conversationId, from: conversationId, body: 'first',
+        timestamp: new Date('2025-01-10T10:00:00Z'), isOutgoing: false,
+      })
+      chatStore.getState().addMessage({
+        type: 'chat', id: 'm2', conversationId, from: conversationId, body: 'second',
+        timestamp: new Date('2025-01-10T10:01:00Z'), isOutgoing: false,
+      })
+      chatStore.getState().addMessage({
+        type: 'chat', id: 'm3', conversationId, from: conversationId, body: 'third',
+        timestamp: new Date('2025-01-10T10:02:00Z'), isOutgoing: false,
+      })
+      chatStore.setState((state) => {
+        const newMarkers = new Map(state.firstNewMessageMarkers)
+        newMarkers.set(conversationId, 'm2')
+        return { firstNewMessageMarkers: newMarkers }
+      })
+
+      chatStore.getState().markReadToNewest(conversationId)
+
+      const meta = chatStore.getState().conversationMeta.get(conversationId)
+      expect(meta?.lastSeenMessageId).toBe('m3')
+      expect(meta?.unreadCount).toBe(0)
+      expect(chatStore.getState().firstNewMessageMarkers.has(conversationId)).toBe(false)
+    })
+
+    it('is a no-op (same Map references) when the conversation is already read to newest', () => {
+      const conversationId = 'alice@example.com'
+      chatStore.getState().addConversation({
+        ...createConversation(conversationId),
+        unreadCount: 2,
+        lastSeenMessageId: 'm1',
+      })
+      chatStore.getState().addMessage({
+        type: 'chat', id: 'm1', conversationId, from: conversationId, body: 'first',
+        timestamp: new Date('2025-01-10T10:00:00Z'), isOutgoing: false,
+      })
+      chatStore.getState().addMessage({
+        type: 'chat', id: 'm2', conversationId, from: conversationId, body: 'second',
+        timestamp: new Date('2025-01-10T10:01:00Z'), isOutgoing: false,
+      })
+      chatStore.getState().addMessage({
+        type: 'chat', id: 'm3', conversationId, from: conversationId, body: 'third',
+        timestamp: new Date('2025-01-10T10:02:00Z'), isOutgoing: false,
+      })
+      chatStore.setState((state) => {
+        const newMarkers = new Map(state.firstNewMessageMarkers)
+        newMarkers.set(conversationId, 'm2')
+        return { firstNewMessageMarkers: newMarkers }
+      })
+
+      // First call actually advances the pointer and clears the divider.
+      chatStore.getState().markReadToNewest(conversationId)
+
+      const { conversationMeta, conversations } = chatStore.getState()
+
+      // Second call: conversation is already fully read, nothing should change.
+      chatStore.getState().markReadToNewest(conversationId)
+
+      const stateAfter = chatStore.getState()
+      expect(stateAfter.conversationMeta).toBe(conversationMeta)
+      expect(stateAfter.conversations).toBe(conversations)
     })
   })
 
@@ -2687,6 +2802,108 @@ describe('chatStore', () => {
     })
   })
 
+  describe('mergeMAMMessages badge hydration', () => {
+    const conversationId = 'alice@example.com'
+
+    beforeEach(() => {
+      chatStore.getState().addConversation(createConversation(conversationId))
+      // Background catch-up hydration only applies to a NON-active conversation —
+      // point activeConversationId elsewhere.
+      chatStore.setState({ activeConversationId: 'other@example.com' })
+    })
+
+    it('forward merge into a non-active conversation recomputes unread count from the pointer', () => {
+      chatStore.setState((state) => {
+        const meta = new Map(state.conversationMeta)
+        meta.set(conversationId, { ...meta.get(conversationId)!, lastSeenMessageId: 'm1' })
+        return { conversationMeta: meta }
+      })
+
+      const mamMessages: Message[] = [
+        {
+          type: 'chat',
+          id: 'm1',
+          conversationId,
+          from: conversationId,
+          body: 'Already read',
+          timestamp: new Date('2024-01-15T10:00:00Z'),
+          isOutgoing: false,
+          isDelayed: true,
+        },
+        {
+          type: 'chat',
+          id: 'm2',
+          conversationId,
+          from: conversationId,
+          body: 'New 1',
+          timestamp: new Date('2024-01-15T10:01:00Z'),
+          isOutgoing: false,
+          isDelayed: true,
+        },
+        {
+          type: 'chat',
+          id: 'm3',
+          conversationId,
+          from: conversationId,
+          body: 'New 2',
+          timestamp: new Date('2024-01-15T10:02:00Z'),
+          isOutgoing: false,
+          isDelayed: true,
+        },
+      ]
+
+      chatStore.getState().mergeMAMMessages(conversationId, mamMessages, {}, true, 'forward')
+
+      const meta = chatStore.getState().conversationMeta.get(conversationId)
+      expect(meta?.unreadCount).toBe(2)
+      // Combined map mirrors meta.
+      const conv = chatStore.getState().conversations.get(conversationId)
+      expect(conv?.unreadCount).toBe(2)
+    })
+
+    it('forward merge into a conversation with NO read state snaps the pointer (fresh-join guard)', () => {
+      // No lastSeenMessageId/lastReadAt seeded — fresh conversation, never read.
+      const mamMessages: Message[] = [
+        {
+          type: 'chat',
+          id: 'f1',
+          conversationId,
+          from: conversationId,
+          body: 'History 1',
+          timestamp: new Date('2024-01-15T10:00:00Z'),
+          isOutgoing: false,
+          isDelayed: true,
+        },
+        {
+          type: 'chat',
+          id: 'f2',
+          conversationId,
+          from: conversationId,
+          body: 'History 2',
+          timestamp: new Date('2024-01-15T10:01:00Z'),
+          isOutgoing: false,
+          isDelayed: true,
+        },
+        {
+          type: 'chat',
+          id: 'f3',
+          conversationId,
+          from: conversationId,
+          body: 'History 3',
+          timestamp: new Date('2024-01-15T10:02:00Z'),
+          isOutgoing: false,
+          isDelayed: true,
+        },
+      ]
+
+      chatStore.getState().mergeMAMMessages(conversationId, mamMessages, {}, true, 'forward')
+
+      const meta = chatStore.getState().conversationMeta.get(conversationId)
+      expect(meta?.unreadCount).toBe(0)
+      expect(meta?.lastSeenMessageId).toBe('f3')
+    })
+  })
+
   describe('getMessage', () => {
     it('should find message by id', () => {
       const store = chatStore.getState()
@@ -3516,6 +3733,109 @@ describe('chatStore', () => {
       chatStore.getState().setTargetMessageId('msg-123')
       chatStore.getState().reset()
       expect(chatStore.getState().targetMessageId).toBeNull()
+    })
+  })
+})
+
+// Regression tests for chat/room parity drifts: each of these behaviors already
+// exists in roomStore and had silently diverged in chatStore (or vice versa).
+describe('chatStore parity drift regressions', () => {
+  const convId = 'peer@example.com'
+
+  beforeEach(() => {
+    _resetStorageScopeForTesting()
+    localStorageMock.clear()
+    chatStore.setState({
+      conversationEntities: new Map(),
+      conversationMeta: new Map(),
+      conversations: new Map(),
+      messages: new Map(),
+      activeConversationId: null,
+      archivedConversations: new Set(),
+      firstNewMessageMarkers: new Map(),
+      windowAtLiveEdge: new Map(),
+      mamQueryStates: new Map(),
+      conversationGaps: new Map(),
+    })
+    chatStore.getState().addConversation(createConversation(convId))
+    chatStore.setState({ activeConversationId: convId })
+  })
+
+  afterEach(() => {
+    setResidentWindowSize(5000)
+  })
+
+  function messageAt(id: string, body: string, iso: string): Message {
+    return {
+      type: 'chat',
+      id,
+      conversationId: convId,
+      from: convId,
+      body,
+      timestamp: new Date(iso),
+      isOutgoing: false,
+    }
+  }
+
+  describe('addMessage sliding-window trim (parity with roomStore)', () => {
+    it('trims the resident array to the window bound on live append', () => {
+      setResidentWindowSize(3)
+      for (let i = 1; i <= 4; i++) {
+        chatStore.getState().addMessage(messageAt(`m-${i}`, `m${i}`, `2024-01-15T10:0${i}:00Z`))
+      }
+      const resident = chatStore.getState().messages.get(convId) || []
+      expect(resident.map((m) => m.id)).toEqual(['m-2', 'm-3', 'm-4'])
+    })
+  })
+
+  describe('updateReactions cache fallback (parity with roomStore)', () => {
+    it('updates the durable cache when the conversation is resident but the message is not', () => {
+      chatStore.getState().addMessage(messageAt('resident-1', 'still here', '2024-01-15T10:00:00Z'))
+      vi.mocked(messageCache.updateMessageReactions).mockClear()
+      const residentBefore = chatStore.getState().messages.get(convId)
+
+      chatStore.getState().updateReactions(convId, 'evicted-1', 'bob@example.com', ['👍'])
+
+      expect(messageCache.updateMessageReactions).toHaveBeenCalledWith('evicted-1', 'bob@example.com', ['👍'])
+      // The resident array is untouched — only the durable copy is patched.
+      expect(chatStore.getState().messages.get(convId)).toBe(residentBefore)
+    })
+  })
+
+  describe('cache pagination dedupe (parity with roomStore)', () => {
+    it('loadOlderMessagesFromCache dedupes and sorts an overlapping, out-of-order batch', async () => {
+      const current = messageAt('cur-1', 'current', '2024-01-15T11:00:00Z')
+      chatStore.setState((state) => ({ messages: new Map(state.messages).set(convId, [current]) }))
+
+      // Batch overlaps the resident window (cur-1 again) and arrives out of order.
+      vi.mocked(messageCache.getMessages).mockReset()
+      vi.mocked(messageCache.getMessages).mockResolvedValue([
+        { ...current },
+        messageAt('old-2', 'older 2', '2024-01-15T10:30:00Z'),
+        messageAt('old-1', 'older 1', '2024-01-15T10:00:00Z'),
+      ])
+
+      await chatStore.getState().loadOlderMessagesFromCache(convId)
+
+      const resident = chatStore.getState().messages.get(convId) || []
+      expect(resident.map((m) => m.id)).toEqual(['old-1', 'old-2', 'cur-1'])
+    })
+
+    it('loadNewerMessagesFromCache dedupes and sorts an overlapping, out-of-order batch', async () => {
+      const current = messageAt('cur-1', 'current', '2024-01-15T11:00:00Z')
+      chatStore.setState((state) => ({ messages: new Map(state.messages).set(convId, [current]) }))
+
+      vi.mocked(messageCache.getMessages).mockReset()
+      vi.mocked(messageCache.getMessages).mockResolvedValue([
+        messageAt('new-2', 'newer 2', '2024-01-15T13:00:00Z'),
+        { ...current },
+        messageAt('new-1', 'newer 1', '2024-01-15T12:00:00Z'),
+      ])
+
+      await chatStore.getState().loadNewerMessagesFromCache(convId)
+
+      const resident = chatStore.getState().messages.get(convId) || []
+      expect(resident.map((m) => m.id)).toEqual(['cur-1', 'new-1', 'new-2'])
     })
   })
 })

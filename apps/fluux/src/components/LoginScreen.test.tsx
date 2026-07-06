@@ -18,7 +18,8 @@ const mockDeleteFastToken = vi.fn()
 // LoginScreen now reads status/error via useConnectionStatus() and the connect
 // action via useConnectionActions(). Both are driven from the single
 // mockUseConnection fixture so existing test cases keep setting one object.
-vi.mock('@fluux/sdk', () => ({
+vi.mock('@fluux/sdk', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('@fluux/sdk')>()),
     useConnectionStatus: () => {
         const { status, error } = mockUseConnection()
         return { status, error }

@@ -10,6 +10,8 @@ export default defineConfig({
     'core/index': 'src/core/index.ts',
     // Stores bundle (direct Zustand access)
     'stores/index': 'src/stores/index.ts',
+    // Demo bundle (dev-only DemoClient + seed helpers)
+    'demo/index': 'src/demo/index.ts',
   },
   format: ['cjs', 'esm'],
   dts: {

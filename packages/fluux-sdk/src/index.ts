@@ -1,24 +1,3 @@
-// Polyfill crypto.randomUUID for older browsers/webviews
-// Must run before @xmpp/client is imported (it uses crypto.randomUUID internally)
-// Supports: old Chromium (<92), old WebKitGTK, and other legacy environments
-if (typeof globalThis !== 'undefined') {
-  if (typeof globalThis.crypto === 'undefined') {
-    // @ts-expect-error - polyfill for environments without crypto
-    globalThis.crypto = {}
-  }
-  if (typeof globalThis.crypto.randomUUID !== 'function') {
-    globalThis.crypto.randomUUID = (): `${string}-${string}-${string}-${string}-${string}` => {
-      const bytes = new Uint8Array(16)
-      crypto.getRandomValues(bytes)
-      // Set version (4) and variant (RFC 4122)
-      bytes[6] = (bytes[6] & 0x0f) | 0x40
-      bytes[8] = (bytes[8] & 0x3f) | 0x80
-      const hex = [...bytes].map((b) => b.toString(16).padStart(2, '0')).join('')
-      return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}` as `${string}-${string}-${string}-${string}-${string}`
-    }
-  }
-}
-
 /**
  * # Fluux SDK
  *
@@ -63,8 +42,10 @@ if (typeof globalThis !== 'undefined') {
  * ## Headless Usage (Bots/CLI)
  *
  * ```typescript
- * import { XMPPClient, createDefaultStoreBindings } from '@fluux/sdk/core'
+ * import { XMPPClient } from '@fluux/sdk/core'
  *
+ * // The constructor wires the default store bindings automatically —
+ * // no React and no extra setup needed.
  * const client = new XMPPClient()
  * await client.connect({ jid: 'bot@example.com', password: 'secret', server: 'example.com' })
  * client.chat.sendMessage('user@example.com', 'Hello!')
@@ -475,8 +456,9 @@ export {
   matchJidUsername,
   matchNameOrJid,
   getUniqueOccupantCount,
+  validateBareJid,
 } from './core/jid'
-export type { ParsedJid } from './core/jid'
+export type { ParsedJid, JidValidation } from './core/jid'
 
 // Service discovery utilities (XEP-0030 / XEP-0163)
 export { discoSupportsPep } from './core/modules/Discovery'
@@ -737,7 +719,6 @@ export {
 // DEMO MODE
 // =============================================================================
 
-export { DemoClient } from './demo/DemoClient'
-export type { DemoData, DemoSelf, DemoPresence, DemoOwnResource, DemoRoomData, DemoAnimationStep } from './demo/types'
-export type { StressScenario } from './demo/stress'
-export { minutesAgo, hoursAgo, daysAgo } from './demo/timeHelpers'
+// Demo mode is a dev-only tool and lives on the `@fluux/sdk/demo` subpath so it
+// is tree-shaken out of production app bundles. It is intentionally NOT
+// re-exported here — see src/demo/index.ts.

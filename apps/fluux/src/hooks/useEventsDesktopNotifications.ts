@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { useEvents, usePresence } from '@fluux/sdk'
+import { useEvents, usePresence, getLocalPart } from '@fluux/sdk'
 import { sendNotification } from '@tauri-apps/plugin-notification'
 import {
   useNotificationPermission,
@@ -34,7 +34,7 @@ export function useEventsDesktopNotifications(): void {
       const isNew = !prevRequests.some(r => r.from === request.from)
 
       if (isNew) {
-        const senderName = request.from.split('@')[0]
+        const senderName = getLocalPart(request.from)
         const title = 'Contact Request'
         const body = `${senderName} wants to add you as a contact`
 

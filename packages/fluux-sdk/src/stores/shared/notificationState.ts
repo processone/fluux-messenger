@@ -169,11 +169,13 @@ export function onMessageReceived(
  *
  * The marker is placed at the first incoming message after the lastSeenMessageId
  * position. Whether a delayed message qualifies depends on `treatDelayedAsNew`,
- * mirroring `onMessageReceived`:
- * - 1:1 chats pass `true` — `isDelayed` means "delivered while offline" = new.
- * - Rooms pass `false` (default) — `isDelayed` means "MUC history replay" = not
- *   new, so the marker skips it (otherwise joining a room scrolls into the middle
- *   of replayed history instead of to the bottom).
+ * mirroring `onMessageReceived`. Both 1:1 chats and rooms now pass `true` —
+ * `isDelayed` means "delivered while offline" (1:1) or "MAM/MUC history replay"
+ * (rooms), and either way it counts as new relative to the read pointer, so the
+ * divider is unified across chats and rooms. A fresh join/conversation with no
+ * prior read state has nothing to resume from — the fresh-entity guard (see
+ * `recomputeCountsFromPointer` and the activation call sites) keeps that case
+ * marker-free rather than `treatDelayedAsNew` doing it.
  */
 export function onActivate(
   state: EntityNotificationState,
@@ -248,11 +250,20 @@ export function onActivate(
         }
       }
 
-      // Update stale lastSeenMessageId to the last message in the loaded array
-      // so subsequent activations don't repeat the stale-ID fallback path.
-      const lastMsg = messages[messages.length - 1]
-      if (lastMsg) {
-        updatedLastSeenMessageId = lastMsg.id
+      // Resume-preserving pointer placement: snap the pointer to the message
+      // just BEFORE the derived divider so viewport advance works inside this
+      // slice. Snapping to the NEWEST (previous behavior) destroyed the resume
+      // point whenever the backlog was deeper than the loaded window. When no
+      // divider could be derived there is nothing to resume — snap to newest
+      // as before so the stale-fallback doesn't repeat forever.
+      if (firstNewMessageId) {
+        const dividerIdx = messages.findIndex((m) => m.id === firstNewMessageId)
+        if (dividerIdx > 0) updatedLastSeenMessageId = messages[dividerIdx - 1].id
+        // dividerIdx === 0: whole slice is unread — keep the old pointer;
+        // onMessageSeen's atLiveEdge escape hatch prevents a stuck pointer.
+      } else {
+        const lastMsg = messages[messages.length - 1]
+        if (lastMsg) updatedLastSeenMessageId = lastMsg.id
       }
     }
   } else if (!state.lastSeenMessageId && state.lastReadAt) {
@@ -396,7 +407,8 @@ export function onWindowBecameVisible(
 export function onMessageSeen(
   state: EntityNotificationState,
   messageId: string,
-  messages: Array<{ id: string }>
+  messages: Array<{ id: string }>,
+  options?: { atLiveEdge?: boolean }
 ): EntityNotificationState {
   // If no current lastSeenMessageId, any message is an advancement
   if (!state.lastSeenMessageId) {
@@ -415,6 +427,13 @@ export function onMessageSeen(
   // Without this guard, any visible message would "win" against -1, potentially
   // regressing lastSeenMessageId to an earlier position.
   if (currentIdx === -1) {
+    // Unresolvable pointer (older than the slice, or evicted). Viewing the
+    // NEWEST message while the window is at the live edge is an unambiguous
+    // maximum — advancing cannot regress. Off the live edge the slice's last
+    // message may be older than the pointer, so stay guarded.
+    if (options?.atLiveEdge && newIdx !== -1 && newIdx === messages.length - 1) {
+      return { ...state, lastSeenMessageId: messageId }
+    }
     return state
   }
 
@@ -427,6 +446,88 @@ export function onMessageSeen(
   }
 
   return state
+}
+
+/** Options for {@link recomputeCountsFromPointer}. */
+export interface RecomputeCountsOptions {
+  /** Count `isMention` messages into mentionsCount (rooms). */
+  countMentions?: boolean
+}
+
+/**
+ * Recompute unreadCount/mentionsCount from the persisted read pointer against
+ * a freshly merged message slice (sorted oldest → newest). Used by MAM
+ * catch-up hydration and inbound XEP-0490 marker handling — never by the live
+ * message path (onMessageReceived owns incremental counting).
+ *
+ * Fresh-entity guard: an entity with NO read state (no lastSeenMessageId, no
+ * lastReadAt) is caught up — the pointer snaps to the newest message and
+ * counts stay zero. History replay of a newly joined room, or a new device
+ * with no MDS position, never manufactures unread debt.
+ *
+ * An outgoing message inside the counted range is a read boundary (the user
+ * replied, here or on another device): counting restarts after the last one
+ * and the pointer advances to it.
+ */
+export function recomputeCountsFromPointer(
+  state: EntityNotificationState,
+  messages: NotificationMessage[],
+  options?: RecomputeCountsOptions
+): EntityNotificationState {
+  const { countMentions = false } = options ?? {}
+  if (messages.length === 0) return state
+
+  if (!state.lastSeenMessageId && !state.lastReadAt) {
+    const newest = messages[messages.length - 1]
+    if (state.unreadCount === 0 && state.mentionsCount === 0 && state.lastSeenMessageId === newest.id) {
+      return state
+    }
+    return { ...state, unreadCount: 0, mentionsCount: 0, lastSeenMessageId: newest.id }
+  }
+
+  let startIdx: number
+  const pointerIdx = state.lastSeenMessageId
+    ? messages.findIndex((m) => m.id === state.lastSeenMessageId)
+    : -1
+  if (pointerIdx !== -1) {
+    startIdx = pointerIdx + 1
+  } else {
+    const readAt = state.lastReadAt instanceof Date
+      ? state.lastReadAt
+      : state.lastReadAt ? new Date(state.lastReadAt as unknown as string) : undefined
+    if (readAt && readAt.getTime() > 0) {
+      const idx = messages.findIndex((m) => m.timestamp > readAt)
+      startIdx = idx === -1 ? messages.length : idx
+    } else {
+      // Pointer resolves nowhere and no usable timestamp: the slice is
+      // entirely past the read horizon — count it all (a lower bound).
+      startIdx = 0
+    }
+  }
+
+  let newPointer = state.lastSeenMessageId
+  for (let i = messages.length - 1; i >= startIdx; i--) {
+    if (messages[i].isOutgoing) {
+      newPointer = messages[i].id
+      startIdx = i + 1
+      break
+    }
+  }
+
+  let unread = 0
+  let mentions = 0
+  for (let i = startIdx; i < messages.length; i++) {
+    const m = messages[i]
+    if (m.isOutgoing) continue
+    unread++
+    if (countMentions && m.isMention) mentions++
+  }
+
+  const mentionsOut = countMentions ? mentions : state.mentionsCount
+  if (unread === state.unreadCount && mentionsOut === state.mentionsCount && newPointer === state.lastSeenMessageId) {
+    return state
+  }
+  return { ...state, unreadCount: unread, mentionsCount: mentionsOut, lastSeenMessageId: newPointer }
 }
 
 // ---------------------------------------------------------------------------

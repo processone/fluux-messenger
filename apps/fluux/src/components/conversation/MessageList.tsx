@@ -31,6 +31,7 @@ import { useSettingsStore } from '@/stores/settingsStore'
 import type { CopyMessageMeta } from '@/utils/buildCopyText'
 import { buildMessageListItems, type RenderItem } from './messageListItems'
 import { FloatingDateHeader } from './FloatingDateHeader'
+import { JumpToLastReadPill } from './JumpToLastReadPill'
 import { getTopVisibleDate } from './getTopVisibleDate'
 import { useTanstackMessageVirtualizer } from './tanstackMessageVirtualizer'
 import {
@@ -390,23 +391,6 @@ export function MessageList<T extends BaseMessage>({
   }
   const getTopDate = useCallback(() => getTopVisibleDateRef.current(), [])
 
-  // Register this (virtualized) list so scrollToMessage — reply-quote taps, find-on-page, poll and
-  // reaction jumps — can window an off-screen target row in before its DOM read. Non-virtualized
-  // lists keep every row mounted, so they register nothing and scrollToMessage's plain DOM path
-  // works unchanged. Identity-checked cleanup so a fast conversation switch can't clear the newly
-  // mounted list's registration.
-  useEffect(() => {
-    if (!activeVirtualizer) return
-    const controller: ActiveMessageListController = {
-      hasMessage: (id) => activeVirtualizer.getIndexForMessageId(id) !== null,
-      ensureMessageMounted: (id) => { void activeVirtualizer.ensureMessageMounted(id) },
-    }
-    setActiveMessageListController(controller)
-    return () => {
-      if (getActiveMessageListController() === controller) setActiveMessageListController(null)
-    }
-  }, [activeVirtualizer])
-
   // Dev-only: expose virtualizer offset lookup for Playwright test assertions (invariant-1).
   // Allows tests to check anchor position without requiring the row to be in the DOM window.
   useEffect(() => {
@@ -443,6 +427,8 @@ export function MessageList<T extends BaseMessage>({
     handleMediaLoad,
     scrollToBottom,
     showScrollToBottom,
+    markerAboveViewport,
+    scrollToMarker,
   } = useMessageListScroll({
     conversationId,
     messageCount: messages.length,
@@ -473,6 +459,26 @@ export function MessageList<T extends BaseMessage>({
     (scrollContainerRef as React.MutableRefObject<HTMLDivElement | null>).current = element
     setScrollContainerRefFromHook(element)
   }
+
+  // Register this list so outside code can reach it without threading a prop through
+  // every caller: scrollToMessage (reply-quote taps, find-on-page, poll and reaction
+  // jumps) windows an off-screen row in before its DOM read, and ChatLayout's Escape
+  // handler (spec §3 step 3, conversation catch-up) triggers the same scroll-to-bottom
+  // as the ⌘/Ctrl+↓ shortcut and FAB. hasMessage/ensureMessageMounted are virtualized-only
+  // (non-virtualized lists keep every row mounted, so scrollToMessage's plain DOM path
+  // works unchanged); scrollToBottom is always available. Identity-checked cleanup so a
+  // fast conversation switch can't clear the newly mounted list's registration.
+  useEffect(() => {
+    const controller: ActiveMessageListController = {
+      hasMessage: (id) => activeVirtualizer ? activeVirtualizer.getIndexForMessageId(id) !== null : false,
+      ensureMessageMounted: (id) => { void activeVirtualizer?.ensureMessageMounted(id) },
+      scrollToBottom,
+    }
+    setActiveMessageListController(controller)
+    return () => {
+      if (getActiveMessageListController() === controller) setActiveMessageListController(null)
+    }
+  }, [activeVirtualizer, scrollToBottom])
 
   // Dev-only: expose the full load-earlier trigger (saves anchor + calls onScrollToTop)
   // so tests can fire it without scrolling to 0, which would change findAnchorElement's
@@ -761,6 +767,13 @@ export function MessageList<T extends BaseMessage>({
       {virtualized && hasContent && (
         <FloatingDateHeader scrollerRef={scrollContainerRef} getTopDate={getTopDate} />
       )}
+
+      {/* Jump-to-last-read pill — shown while the "New messages" divider sits above the viewport */}
+      <JumpToLastReadPill
+        visible={!!firstNewMessageId && markerAboveViewport}
+        count={markerUnreadCount}
+        onJump={scrollToMarker}
+      />
 
       {/* Scroll to bottom FAB with spring animation */}
       <div

@@ -336,6 +336,90 @@ describe('setupMdsSideEffects', () => {
     cleanup()
   })
 
+  it('resolves the seen stanza-id from lastMessage when the resident array is evicted', async () => {
+    const ROOM = 'room@conference.example'
+    const client = makeClient()
+    connectionStore.setState({ status: 'online', jid: 'romeo@montague.example/phone' } as never)
+
+    // Backgrounded room: the resident array is evicted (memory windowing), but
+    // the newest message survives on the lastMessage preview (both maps, as
+    // mergeRoomMAMMessages maintains them).
+    seedRoom(ROOM, [])
+    const newest = rmsg(ROOM, 'm9', 's9', 9)
+    roomStore.setState((s) => {
+      const meta = new Map(s.roomMeta)
+      meta.set(ROOM, { ...meta.get(ROOM)!, lastMessage: newest })
+      const rooms = new Map(s.rooms)
+      rooms.set(ROOM, { ...rooms.get(ROOM)!, lastMessage: newest })
+      return { roomMeta: meta, rooms }
+    })
+
+    const cleanup = setupMdsSideEffects(client as never)
+    client._emit('online')
+    await vi.runOnlyPendingTimersAsync() // settle the async seed
+
+    // Mark-all-read on a backgrounded room: the pointer advances to the newest
+    // known message id with NO resident messages loaded to resolve it from.
+    roomStore.setState((s) => {
+      const meta = new Map(s.roomMeta)
+      meta.set(ROOM, { ...meta.get(ROOM)!, lastSeenMessageId: 'm9' })
+      return { roomMeta: meta }
+    })
+
+    await vi.advanceTimersByTimeAsync(2_000)
+
+    expect(client.mds.publishDisplayed).toHaveBeenCalledTimes(1)
+    expect(client.mds.publishDisplayed).toHaveBeenCalledWith(ROOM, 's9', ROOM)
+    cleanup()
+  })
+
+  // Spec §5 pin: this exercises the lastKnownNodeStanzaId EXACT-EQUAL SKIP in
+  // doPublish directly, at the point where it actually matters — a publish
+  // still sitting in the debounced dirty buffer, not yet flushed. It is
+  // distinct from "does not re-publish the echo of a live incoming remote
+  // marker for a known room" above: that test pins post-publish echo
+  // suppression via consider()'s no-regressive-publish index guard (a
+  // SEPARATE guard, driven by a fresh applyRemoteDisplayed advance
+  // re-entering consider() after lastKnownNodeStanzaId is already current).
+  // This test instead pins the doPublish flush-time skip: the buffered entry
+  // is enqueued BEFORE the node value is recorded, and only doPublish's
+  // `lastKnownNodeStanzaId.get(jid) === stanzaId` check (not consider()'s
+  // index guard, which never re-runs here) prevents the flush from
+  // publishing. Deleting either (a) that skip in doPublish, or (b) the
+  // read:displayed-synced subscription's lastKnownNodeStanzaId.set(...), logs
+  // a spurious second publish.
+  it('buffered publish is skipped when the node already holds the same stanza-id (post-sync dedup — spec §5 no-loop pin)', async () => {
+    const ROOM = 'room@conference.example'
+    const client = makeClient()
+    connectionStore.setState({ status: 'online', jid: 'romeo@montague.example/phone' } as never)
+
+    // Resident m9/s9, read pointer BEHIND it (no lastSeenMessageId patch).
+    seedRoom(ROOM, [rmsg(ROOM, 'm9', 's9', 9)])
+
+    const cleanup = setupMdsSideEffects(client as never)
+    client._emit('online')
+    await vi.runOnlyPendingTimersAsync()
+
+    // Advance the pointer locally: consider() resolves s9 and buffers it in
+    // the dirty coalescer with the debounce still pending. Do NOT advance
+    // fake timers yet — the publish must still be sitting unflushed.
+    roomStore.getState().updateLastSeenMessageId(ROOM, 'm9')
+    expect(client.mds.publishDisplayed).not.toHaveBeenCalled()
+
+    // Before the debounce fires, another device publishes the SAME position:
+    // the read:displayed-synced subscription records
+    // lastKnownNodeStanzaId[ROOM] = 's9'. This does not touch the dirty
+    // buffer at all — s9 is still queued from the step above.
+    client._emit('read:displayed-synced', { conversationId: ROOM, stanzaId: 's9' })
+
+    // Now the debounce fires: doPublish flushes the buffered s9, hits the
+    // exact-equal skip against the just-recorded node value, and publishes
+    // nothing.
+    await vi.advanceTimersByTimeAsync(2_000)
+    expect(client.mds.publishDisplayed).not.toHaveBeenCalled()
+    cleanup()
+  })
+
   it('retracts the MDS marker when a conversation is deleted while online+synced', async () => {
     const cid = 'juliet@capulet.example'
     const client = makeClient()

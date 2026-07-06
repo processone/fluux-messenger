@@ -45,6 +45,8 @@ interface GroupableMessage {
   id: string
   timestamp: Date
   from: string
+  /** Message body — used to detect /me action messages for grouping. */
+  body?: string
   securityContext?: GroupingSecurityContext
   /** XEP-0045 §7.5: true if this is a private message ("whisper"). */
   isPrivate?: boolean
@@ -154,6 +156,7 @@ export function groupMessagesByDate<T extends GroupableMessage>(messages: T[]): 
  *   without any security-state cue).
  * - Whisper context differs from previous (public↔private or a different
  *   whisper counterpart forces a group break so the whisper badge re-shows).
+ * - Previous message was a /me action and this one is not (see below).
  */
 export function shouldShowAvatar<T extends GroupableMessage>(messages: T[], index: number): boolean {
   if (index === 0) return true
@@ -163,6 +166,13 @@ export function shouldShowAvatar<T extends GroupableMessage>(messages: T[], inde
 
   // Show avatar if different sender
   if (current.from !== previous.from) return true
+
+  // A /me action renders a timestamp in the avatar column with its nick inline —
+  // it never spends the avatar/name header. So a following non-action message from
+  // the same sender would otherwise render as a headerless continuation with no
+  // sender attribution at all, visually attaching to the PREVIOUS sender's group.
+  // Re-show the avatar when emerging from an action so the sender is identified.
+  if (isActionMessage(previous.body) && !isActionMessage(current.body)) return true
 
   // Show avatar if security context changed (encryption added/removed/trust shift)
   if (!sameSecurityContext(current.securityContext, previous.securityContext)) return true

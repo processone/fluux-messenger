@@ -44,6 +44,11 @@ interface UseKeyboardShortcutsOptions {
     onCloseConsole: () => void
     isContactProfileOpen: boolean
     onCloseContactProfile: () => void
+    /** Spec §3 step 3 (lowest priority): mark the active conversation/room read and
+     *  jump to the present. Return true when a conversation was displayed (even if
+     *  already read/at bottom — a no-op Escape must not fall through to blur/surprise
+     *  behavior); false when no conversation is displayed, letting Escape fall through. */
+    onConversationEscape?: () => boolean
   }
 }
 
@@ -308,6 +313,10 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions): Shor
       return true
     }
 
+    // 7. Conversation catch-up (spec §3): nothing above consumed Escape —
+    // mark the active chat/room read and jump to the present.
+    if (esc?.onConversationEscape?.()) return true
+
     // 8. Blur focused input (composer, search, etc.)
     const activeElement = document.activeElement as HTMLElement
     if (activeElement && (
@@ -504,6 +513,12 @@ export function useKeyboardShortcuts(options: UseKeyboardShortcutsOptions): Shor
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // A component-level handler (e.g. composer reply/edit-cancel) already consumed
+      // this key — don't let the global shortcut chain act on it too. In particular,
+      // this is what lets composer Escape (cancel reply/edit) keep winning over the
+      // conversation catch-up fallthrough below.
+      if (e.defaultPrevented) return
+
       // Don't trigger shortcuts when typing in input fields (except for specific ones)
       const target = e.target as HTMLElement
       const isInputField = target.tagName === 'INPUT' ||

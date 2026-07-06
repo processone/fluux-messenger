@@ -1,4 +1,4 @@
-import type { DemoRoomData } from '@fluux/sdk'
+import type { DemoRoomData } from '@fluux/sdk/demo'
 import { getTeamRoom } from './teamChat'
 import { getDesignRoom } from './designReview'
 
