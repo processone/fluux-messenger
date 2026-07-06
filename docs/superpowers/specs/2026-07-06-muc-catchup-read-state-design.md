@@ -126,6 +126,39 @@ at the bottom. Same for 1:1 chats.
   derived from cache, it degrades to "You were away · Jump to last
   read".
 
+## Section 2b — History loading (MAM direction)
+
+The existing catch-up is already **forward-first** and stays that way
+(`selectCatchUpQuery`): a forward `{start}` cursor from the recorded
+gap boundary → newest pre-session cached message → persisted preview
+timestamp, paging oldest-first via RSM `after` (50×100 stanzas
+background per room, 500 pages manual repair, forward-gap markers +
+"Load missing messages" on cap). `before:''` fetch-latest is the
+empty-cache last resort only. The separate fast preview path keeps
+sidebars current while crawls run.
+
+This is the right shape for the divider anchor: forward filling from
+the contiguity edge guarantees the unread slice (pointer → live edge)
+is cached, contiguous, and countable. The cursor deliberately stays at
+the newest *cached* message (data-completeness state), never the read
+pointer (UX state) — the cache persists across sessions, so an ignored
+big room fetches only its new delta each launch, regardless of how far
+its pointer lags.
+
+Two refinements:
+
+- **MDS pointer as MAM cursor (new device / empty cache):** when a
+  read pointer exists but no local cache does, forward-page
+  `after=<mds-stanza-id>` instead of `before:''` fetch-latest — the
+  XEP-0490 stanza-id (`by` = room JID for MUC, own bare JID for 1:1)
+  *is* the archive ID, hence a valid RSM cursor. Bounded by the usual
+  page caps; on `item-not-found` (purged ID), fall back to
+  fetch-latest with the degraded anchor of Section 5.
+- **Forward-gap interplay:** a recorded gap inside the unread slice
+  makes the pill count a lower bound ("N+ new"); the existing "Load
+  missing messages" action heals crossing it. Divider anchoring is
+  unaffected.
+
 ## Section 3 — Esc and mark-all-read
 
 **Esc precedence** (one `keydown` listener in the conversation view,
