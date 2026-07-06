@@ -177,6 +177,46 @@ describe('shouldShowAvatar', () => {
     expect(shouldShowAvatar(messages, 4)).toBe(true)  // same sender, but > 5 min gap
   })
 
+  describe('/me action grouping', () => {
+    // REGRESSION: a /me action renders a timestamp in the avatar column with its
+    // nick inline — it never spends the avatar/name header. A non-action message
+    // from the same sender that follows it must re-show the avatar, otherwise it
+    // renders as a headerless continuation with no sender attribution at all and
+    // reads as belonging to the PREVIOUS sender's group.
+    //
+    // Screenshot bug: stepforward posts, then meeson_ posts a `/me` action and a
+    // reply. Both of meeson_'s messages had no avatar, so the reply appeared to be
+    // written by stepforward.
+    it('re-shows the avatar for a normal message following a /me action from the same sender', () => {
+      const messages = [
+        { id: '1', timestamp: new Date('2024-01-15T10:00:00'), from: 'meeson', body: '/me waves' },
+        { id: '2', timestamp: new Date('2024-01-15T10:01:00'), from: 'meeson', body: 'This way...?' },
+      ]
+
+      expect(shouldShowAvatar(messages, 1)).toBe(true)
+    })
+
+    it('re-shows the avatar when the action opened a new sender run (full screenshot sequence)', () => {
+      const messages = [
+        { id: '1', timestamp: new Date('2024-01-15T10:00:00'), from: 'stepforward', body: '@meeson_ this way.' },
+        { id: '2', timestamp: new Date('2024-01-15T10:01:00'), from: 'meeson', body: '/me wants a LLM in the chat' },
+        { id: '3', timestamp: new Date('2024-01-15T10:02:00'), from: 'meeson', body: 'This way...?' },
+      ]
+
+      expect(shouldShowAvatar(messages, 1)).toBe(true) // sender changed → action row (nick shown inline)
+      expect(shouldShowAvatar(messages, 2)).toBe(true) // emerging from the action → avatar must return
+    })
+
+    it('keeps consecutive /me actions from the same sender grouped', () => {
+      const messages = [
+        { id: '1', timestamp: new Date('2024-01-15T10:00:00'), from: 'meeson', body: '/me waves' },
+        { id: '2', timestamp: new Date('2024-01-15T10:01:00'), from: 'meeson', body: '/me nods' },
+      ]
+
+      expect(shouldShowAvatar(messages, 1)).toBe(false)
+    })
+  })
+
   describe('security context grouping', () => {
     it('breaks the group when trust level changes', () => {
       const messages = [
