@@ -67,12 +67,18 @@ describe('MessageList — pin forces a repaint after a programmatic scroll (WebK
   // records the overflowY values set, so we can assert the toggle happened and was restored.
   const repaint = { offsetHeightReads: 0, overflowSets: [] as string[] }
 
+  // Mutable so the send can GROW the content, as it does in reality: the repaint is gated on the
+  // pin actually moving scrollTop, and a static scrollHeight would make the send pin a no-op.
+  const geo = { scrollHeight: 2000, clientHeight: 500 }
+
   function instrumentScroller(scroller: HTMLElement) {
     let top = 0
-    Object.defineProperty(scroller, 'scrollHeight', { get: () => 2000, configurable: true })
-    Object.defineProperty(scroller, 'clientHeight', { get: () => 500, configurable: true })
+    Object.defineProperty(scroller, 'scrollHeight', { get: () => geo.scrollHeight, configurable: true })
+    Object.defineProperty(scroller, 'clientHeight', { get: () => geo.clientHeight, configurable: true })
     Object.defineProperty(scroller, 'scrollTop', {
-      get: () => top, set: (v: number) => { top = Math.max(0, Math.min(v, 1500)) }, configurable: true,
+      get: () => top,
+      set: (v: number) => { top = Math.max(0, Math.min(v, geo.scrollHeight - geo.clientHeight)) },
+      configurable: true,
     })
     Object.defineProperty(scroller, 'offsetHeight', { get: () => { repaint.offsetHeightReads += 1; return 0 }, configurable: true })
     // Track overflowY writes (forceRepaint sets 'hidden' then '').
@@ -94,6 +100,8 @@ describe('MessageList — pin forces a repaint after a programmatic scroll (WebK
     scrollToEndCalls.count = 0
     repaint.offsetHeightReads = 0
     repaint.overflowSets = []
+    geo.scrollHeight = 2000
+    geo.clientHeight = 500
   })
   afterEach(() => { globalThis.requestAnimationFrame = realRaf; localStorage.clear() })
 
@@ -112,7 +120,8 @@ describe('MessageList — pin forces a repaint after a programmatic scroll (WebK
     repaint.overflowSets = []
     scrollToEndCalls.count = 0
 
-    // SEND — an outgoing message triggers the new-message pin.
+    // SEND — an outgoing message grows the content and triggers the new-message pin.
+    geo.scrollHeight = 2040
     rerender(<MessageList messages={[...makeMessages(50), sent]} conversationId="conv-repaint" isAtBottomRef={isAtBottomRef} {...props} />)
     flush(3)
 
