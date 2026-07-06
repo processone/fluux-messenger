@@ -137,6 +137,21 @@
      much stronger against the dark canvas than the light one, so it is themed:
      calmer here, fuller under .light (which keeps its current, subtler look). */
   --fluux-brand-glow-opacity: 0.35;
+  /* Aurora light quartet — the identity light source (login mark backlight,
+     horizon hairline, send-button glow). Dark = night aurora. The rim quartet
+     equals the base in dark mode; light mode overrides it deeper so strokes
+     hold contrast on pale surfaces (same one-hue-two-jobs split as
+     --fluux-status-error / --fluux-text-error). */
+  --fluux-aurora-1: #2FE0C0;
+  --fluux-aurora-2: #4FB6E8;
+  --fluux-aurora-3: #7C8CFF;
+  --fluux-aurora-4: #A78BFA;
+  --fluux-aurora-rim-1: #2FE0C0;
+  --fluux-aurora-rim-2: #4FB6E8;
+  --fluux-aurora-rim-3: #7C8CFF;
+  --fluux-aurora-rim-4: #A78BFA;
+  /* Ink for icons sitting on aurora-gradient fills (send-button fallback). */
+  --fluux-aurora-ink: #08111F;
   --fluux-glass-blur: 12px;
 
   /* ── Motion language: duration + easing tokens (global, never themed) ──
@@ -504,6 +519,16 @@
   --fluux-grad: linear-gradient(135deg, #11A88C, #5B6CF0, #7C6CF0);
   /* Light canvas absorbs the bloom, so it can stay fuller without reading strong. */
   --fluux-brand-glow-opacity: 0.6;
+  /* Aurora light quartet (light) — muted dawn (D2): champagne whisper at the
+     tail, violet leads. The gold-heavy dawn was rejected as not subtle enough. */
+  --fluux-aurora-1: #E8C29A;
+  --fluux-aurora-2: #DE94AE;
+  --fluux-aurora-3: #9D8CE8;
+  --fluux-aurora-4: #6FA0DC;
+  --fluux-aurora-rim-1: #C08A52;
+  --fluux-aurora-rim-2: #C06A88;
+  --fluux-aurora-rim-3: #7862D8;
+  --fluux-aurora-rim-4: #4A82C6;
   /* 0.12 (not 0.10) so the hairline clears the >=1.25:1 perceptibility floor on
      the lightest theme glass surfaces (tokyo-night/kanagawa light were near-miss
      at 0.10); guarded by glass.test.ts. */
