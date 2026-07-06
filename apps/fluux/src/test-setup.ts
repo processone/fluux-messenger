@@ -102,6 +102,10 @@ void i18n.use(initReactI18next).init({
             three: '{{name1}}, {{name2}}, and {{name3}} are typing...',
             many: '{{name1}}, {{name2}}, and {{count}} others are typing...',
           },
+          // Jump-to-last-read pill (JumpToLastReadPill component tests)
+          newMessagesCount: '{{count}} new message',
+          newMessagesCount_other: '{{count}} new messages',
+          youWereAway: 'You were away',
         },
         // Empty state primary actions (ChatLayout EmptyState tests)
         emptyState: {

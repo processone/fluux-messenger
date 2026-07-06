@@ -31,6 +31,7 @@ import { useSettingsStore } from '@/stores/settingsStore'
 import type { CopyMessageMeta } from '@/utils/buildCopyText'
 import { buildMessageListItems, type RenderItem } from './messageListItems'
 import { FloatingDateHeader } from './FloatingDateHeader'
+import { JumpToLastReadPill } from './JumpToLastReadPill'
 import { getTopVisibleDate } from './getTopVisibleDate'
 import { useTanstackMessageVirtualizer } from './tanstackMessageVirtualizer'
 import {
@@ -426,6 +427,8 @@ export function MessageList<T extends BaseMessage>({
     handleMediaLoad,
     scrollToBottom,
     showScrollToBottom,
+    markerAboveViewport,
+    scrollToMarker,
   } = useMessageListScroll({
     conversationId,
     messageCount: messages.length,
@@ -764,6 +767,13 @@ export function MessageList<T extends BaseMessage>({
       {virtualized && hasContent && (
         <FloatingDateHeader scrollerRef={scrollContainerRef} getTopDate={getTopDate} />
       )}
+
+      {/* Jump-to-last-read pill — shown while the "New messages" divider sits above the viewport */}
+      <JumpToLastReadPill
+        visible={!!firstNewMessageId && markerAboveViewport}
+        count={markerUnreadCount}
+        onJump={scrollToMarker}
+      />
 
       {/* Scroll to bottom FAB with spring animation */}
       <div
