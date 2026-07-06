@@ -1,5 +1,5 @@
 import { chatStore, roomStore } from '@fluux/sdk'
-import type { Message, RoomMessage } from '@fluux/sdk'
+import type { Message, RoomMessage, XMPPClient } from '@fluux/sdk'
 
 export interface McpConversationSummary {
   conversationId: string
@@ -68,4 +68,39 @@ export async function getHistory(
     : await chatStore.getState().loadMessagesFromCache(conversationId, { limit: cappedLimit, before: beforeDate, peek: true })
 
   return messages.map(toHistoryMessage)
+}
+
+const SEND_RATE_LIMIT = 10
+const SEND_RATE_WINDOW_MS = 60_000
+let sendTimestamps: number[] = []
+
+function checkSendRateLimit(): void {
+  const now = Date.now()
+  sendTimestamps = sendTimestamps.filter((t) => now - t < SEND_RATE_WINDOW_MS)
+  if (sendTimestamps.length >= SEND_RATE_LIMIT) {
+    throw new Error(`Rate limit exceeded: max ${SEND_RATE_LIMIT} messages per minute via MCP`)
+  }
+  sendTimestamps.push(now)
+}
+
+/** Test-only: clears the in-memory send-rate-limit window between tests. */
+export function __resetSendRateLimitForTests(): void {
+  sendTimestamps = []
+}
+
+export async function sendMessageTool(
+  client: XMPPClient,
+  conversationId: string,
+  body: string
+): Promise<{ messageId: string }> {
+  checkSendRateLimit()
+
+  const isRoom = roomStore.getState().rooms.has(conversationId)
+  const isChat = chatStore.getState().conversations.has(conversationId)
+  if (!isRoom && !isChat) {
+    throw new Error(`Unknown conversationId: ${conversationId}`)
+  }
+
+  const messageId = await client.chat.sendMessage(conversationId, body, isRoom ? 'groupchat' : 'chat')
+  return { messageId }
 }
