@@ -373,50 +373,50 @@ describe('setupMdsSideEffects', () => {
     cleanup()
   })
 
-  // Spec §5 pin: our own publish comes back as a PEP node echo. Unlike the
-  // remote-marker echo tests above (which start from a peer's publish), this
-  // exercises the post-publish suppression: lastKnownNodeStanzaId was recorded
-  // by doPublish itself and lastConsideredSeenId already holds the position.
-  //
-  // The room keeps m9/s9 RESIDENT (unlike the eviction test above) so the
-  // simulated echo's applyRemoteDisplayed(ROOM, 's9') actually resolves a
-  // match: onMessageSeen sees the marker's id === the already-current
-  // lastSeenMessageId, so it takes the no-advance-with-match branch (clears
-  // any stale pendingRemoteDisplayedStanzaId, pointer unchanged) rather than
-  // the no-match branch (which would only ever stash a pending marker and
-  // never touch lastSeenMessageId at all). That in turn fires the roomMeta
-  // subscription → consider() → resolveSeenStanzaId('s9') → the
-  // lastKnownNodeStanzaId exact-equal skip in doPublish. Without that dedup,
-  // this would enqueue and flush a second publish.
-  it('own PEP echo never re-publishes (no loop)', async () => {
+  // Spec §5 pin: this exercises the lastKnownNodeStanzaId EXACT-EQUAL SKIP in
+  // doPublish directly, at the point where it actually matters — a publish
+  // still sitting in the debounced dirty buffer, not yet flushed. It is
+  // distinct from "does not re-publish the echo of a live incoming remote
+  // marker for a known room" above: that test pins post-publish echo
+  // suppression via consider()'s no-regressive-publish index guard (a
+  // SEPARATE guard, driven by a fresh applyRemoteDisplayed advance
+  // re-entering consider() after lastKnownNodeStanzaId is already current).
+  // This test instead pins the doPublish flush-time skip: the buffered entry
+  // is enqueued BEFORE the node value is recorded, and only doPublish's
+  // `lastKnownNodeStanzaId.get(jid) === stanzaId` check (not consider()'s
+  // index guard, which never re-runs here) prevents the flush from
+  // publishing. Deleting either (a) that skip in doPublish, or (b) the
+  // read:displayed-synced subscription's lastKnownNodeStanzaId.set(...), logs
+  // a spurious second publish.
+  it('buffered publish is skipped when the node already holds the same stanza-id (post-sync dedup — spec §5 no-loop pin)', async () => {
     const ROOM = 'room@conference.example'
     const client = makeClient()
     connectionStore.setState({ status: 'online', jid: 'romeo@montague.example/phone' } as never)
 
+    // Resident m9/s9, read pointer BEHIND it (no lastSeenMessageId patch).
     seedRoom(ROOM, [rmsg(ROOM, 'm9', 's9', 9)])
 
     const cleanup = setupMdsSideEffects(client as never)
     client._emit('online')
     await vi.runOnlyPendingTimersAsync()
 
-    // Advance the read position and let the publish of s9 resolve.
+    // Advance the pointer locally: consider() resolves s9 and buffers it in
+    // the dirty coalescer with the debounce still pending. Do NOT advance
+    // fake timers yet — the publish must still be sitting unflushed.
     roomStore.getState().updateLastSeenMessageId(ROOM, 'm9')
-    await vi.advanceTimersByTimeAsync(2_000)
-    expect(client.mds.publishDisplayed).toHaveBeenCalledTimes(1)
-    expect(client.mds.publishDisplayed).toHaveBeenCalledWith(ROOM, 's9', ROOM)
+    expect(client.mds.publishDisplayed).not.toHaveBeenCalled()
 
-    // The node echoes our own publish: the read:displayed-synced path records
-    // the high-water mark, and the binding applies the SAME position back.
-    // m9 is resident, so this resolves a real match (id === current
-    // lastSeenMessageId) — the no-advance-with-match branch — and still
-    // re-fires the roomMeta subscription (pendingRemoteDisplayedStanzaId
-    // toggles from undefined to undefined via a fresh map, no-op value but a
-    // new object), driving consider() to re-check s9 against the node.
+    // Before the debounce fires, another device publishes the SAME position:
+    // the read:displayed-synced subscription records
+    // lastKnownNodeStanzaId[ROOM] = 's9'. This does not touch the dirty
+    // buffer at all — s9 is still queued from the step above.
     client._emit('read:displayed-synced', { conversationId: ROOM, stanzaId: 's9' })
-    roomStore.getState().applyRemoteDisplayed(ROOM, 's9')
 
+    // Now the debounce fires: doPublish flushes the buffered s9, hits the
+    // exact-equal skip against the just-recorded node value, and publishes
+    // nothing.
     await vi.advanceTimersByTimeAsync(2_000)
-    expect(client.mds.publishDisplayed).toHaveBeenCalledTimes(1) // no loop
+    expect(client.mds.publishDisplayed).not.toHaveBeenCalled()
     cleanup()
   })
 
