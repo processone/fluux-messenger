@@ -20,7 +20,7 @@ Decisions made with the user, each after visual comparison of rendered candidate
 | Mark form | Custom bubble silhouette (over ribbon-in-tile and freestanding ribbon) |
 | Mark finish | G2 — glass body with aurora rim (over pure aurora line and glass with white rim only) |
 | Motion | Subtle backlight breathing, CSS-only, gated on `prefers-reduced-motion` |
-| Light mode | D1 dawn palette — *aurora* is the goddess of dawn: gold → rose → lavender → sky |
+| Light mode | Muted dawn (D2) — *aurora* is the goddess of dawn: champagne whisper at the tail, violet leads (the gold-heavy first cut was rejected as not subtle enough) |
 | Header | Aurora horizon hairline (1px gradient line under the conversation header) — over a background wash |
 | Send button | Liquid-glass round button lit by aurora glow, shown only when a message is ready to send |
 | Material direction | Liquid glass throughout: modal/palette upgrade, glass send, OS-level icon glass |
@@ -61,21 +61,21 @@ Light mode is never a palette swap — the same structural lesson as the contras
 
 1. **Rim** uses deeper light-tuned dawn stops (`--fluux-aurora-rim-*`, see §4) so the silhouette holds on the pale login background; the white specular hairline is replaced by an ink hairline (`rgba(30,42,70,0.30)`, ~0.8px). White highlights survive only *inside* the pane as the diagonal sheen.
 2. **Depth comes from shadow, not glow** — a soft drop shadow under the pane (navy ~14%, blurred) grounds the glass object.
-3. **Backlight** blobs use more saturated, slightly darker dawn hues at higher opacity (~0.5 vs ~0.4): on white, the blobs must carry pigment rather than light.
+3. **Backlight** blobs must carry pigment rather than light on white — but weighted so the violet leads (~0.5 opacity) while champagne and rose stay at ~0.42: the warm note is a whisper at the tail, never a wash (the gold-dominant first cut failed review).
 4. **Pane** is a white gradient fill (0.72 → 0.42 top-to-bottom); no stars.
 
 ## 4. Theming
 
 Four new foundation tokens in `index.css`, consumed by the SVG gradient stops and halos:
 
-| Token | Dark (night) | Light (dawn) |
+| Token | Dark (night) | Light (muted dawn) |
 |---|---|---|
-| `--fluux-aurora-1` | `#2FE0C0` | `#D98A40` |
-| `--fluux-aurora-2` | `#4FB6E8` | `#D66F8E` |
-| `--fluux-aurora-3` | `#7C8CFF` | `#8F7BE8` |
-| `--fluux-aurora-4` | `#A78BFA` | `#4E8FD9` |
+| `--fluux-aurora-1` | `#2FE0C0` | `#E8C29A` |
+| `--fluux-aurora-2` | `#4FB6E8` | `#DE94AE` |
+| `--fluux-aurora-3` | `#7C8CFF` | `#9D8CE8` |
+| `--fluux-aurora-4` | `#A78BFA` | `#6FA0DC` |
 
-Plus a rim quartet, `--fluux-aurora-rim-1..4`: in dark mode these equal the aurora stops; light mode overrides them with deeper dawn values (`#C67428 / #C25579 / #7862D8 / #3A78C2`) so strokes hold contrast on pale surfaces while the softer base stops keep serving the backlight. Same one-hue-two-jobs pattern as the `--fluux-status-error` / `--fluux-text-error` split.
+Plus a rim quartet, `--fluux-aurora-rim-1..4`: in dark mode these equal the aurora stops; light mode overrides them with deeper values (`#C08A52 / #C06A88 / #7862D8 / #4A82C6`) so strokes hold contrast on pale surfaces while the softer base stops keep serving the backlight. Same one-hue-two-jobs pattern as the `--fluux-status-error` / `--fluux-text-error` split.
 
 - Backlight hues derive from stops 1, 3 and 4 (dark) and the dawn stops in light mode; overall backlight intensity keeps scaling with the existing `--fluux-brand-glow-opacity` (0.35 dark / 0.6 light).
 - Other builtin themes inherit these Aurora defaults, exactly as they inherit `--fluux-grad` today. Theme authors may override; documented in THEMES.md as optional identity tokens.
