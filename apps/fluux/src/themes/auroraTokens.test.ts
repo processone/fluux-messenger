@@ -84,3 +84,10 @@ describe('aurora identity tokens', () => {
     }
   })
 })
+
+describe('send-button fallback CSS', () => {
+  it('reduced transparency reverts the glass send button to the solid aurora fill', () => {
+    expect(css).toMatch(/\[data-transparency="reduced"\]\s+\.send-aurora:not\(:disabled\)/)
+    expect(css).toMatch(/\[data-transparency="reduced"\]\s+\.send-aurora-glow/)
+  })
+})

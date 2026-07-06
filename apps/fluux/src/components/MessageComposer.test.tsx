@@ -1383,7 +1383,7 @@ describe('MessageComposer', () => {
   })
 
   describe('Aurora send button', () => {
-    it('is a filled accent button when there is text, with no encryption badge on it', () => {
+    it('is a liquid-glass aurora button when there is text, with no encryption badge on it', () => {
       const { container } = render(
         <MessageComposer
           placeholder="Type a message"
@@ -1394,7 +1394,8 @@ describe('MessageComposer', () => {
       const textarea = screen.getByPlaceholderText('Type a message')
       fireEvent.change(textarea, { target: { value: 'hi' } })
       const send = container.querySelector('button[type="submit"]')!
-      expect(send.className).toContain('bg-fluux-brand')
+      // Spec: the send button is now the aurora glass button (was `bg-fluux-brand`).
+      expect(send.className).toContain('send-aurora')
       // The encryption badge no longer lives on the send button (moved to the leading lock).
       expect(send.querySelector('.lucide-shield-check')).toBeNull()
     })
@@ -1409,6 +1410,36 @@ describe('MessageComposer', () => {
       )
       const send = container.querySelector('button[type="submit"]')!
       expect(send.querySelector('[data-testid="whisper-badge"]')).not.toBeNull()
+    })
+
+    it('is muted (no glass glow) while the input is empty', () => {
+      const { container } = render(
+        <MessageComposer placeholder="Type a message" onSend={vi.fn().mockResolvedValue(true)} />
+      )
+      const send = container.querySelector('button[type="submit"]')!
+      expect(send).toBeDisabled()
+      expect(send.className).toContain('send-aurora')
+      expect(container.querySelector('.send-aurora-glow')).toBeNull()
+    })
+
+    it('lights up in aurora glass once there is content to send', () => {
+      const { container } = render(
+        <MessageComposer placeholder="Type a message" onSend={vi.fn().mockResolvedValue(true)} />
+      )
+      const textarea = screen.getByPlaceholderText('Type a message')
+      fireEvent.change(textarea, { target: { value: 'hello' } })
+      const send = container.querySelector('button[type="submit"]')!
+      expect(send).not.toBeDisabled()
+      expect(send.className).toContain('send-aurora')
+      expect(container.querySelector('.send-aurora-glow')).not.toBeNull()
+    })
+
+    it('keeps the accessible name', () => {
+      const { container } = render(
+        <MessageComposer placeholder="Type a message" onSend={vi.fn().mockResolvedValue(true)} />
+      )
+      const send = container.querySelector('button[type="submit"]')!
+      expect(send.getAttribute('aria-label')).toBe('Send')
     })
   })
 
