@@ -1,7 +1,7 @@
 # Aurora login mark — design
 
 **Date:** 2026-07-06
-**Scope:** Login screen brand mark only. App icon, README logo, blog hero, and in-app identity moments are follow-ups (see §8).
+**Scope:** Login screen brand mark, plus two restrained in-app identity touches decided during review: the aurora horizon hairline under the conversation header and the aurora send button (§5b). App icon, README logo, blog hero, and further identity moments are follow-ups (see §8).
 
 ## 1. Problem
 
@@ -19,7 +19,9 @@ Decisions made with the user, each after visual comparison of rendered candidate
 | Outline treatment | Aurora line only; no second aurora scene inside the bubble |
 | Motion | Subtle shimmer, CSS-only, gated on `prefers-reduced-motion` |
 | Light mode | D1 dawn palette — *aurora* is the goddess of dawn: gold → rose → lavender → sky |
-| Scope | Login screen only |
+| Header | Aurora horizon hairline (1px gradient line under the conversation header) — over a background wash |
+| Send button | Aurora-filled round button only when a message is ready to send — over an always-gradient icon |
+| Scope | Login mark + the two chrome touches above |
 
 The layer recipes in §3 are the source of truth — they capture the validated prototype values exactly (the throwaway HTML mockups lived in a session scratchpad and are not retained).
 
@@ -78,11 +80,23 @@ CSS-only, in the Aurora motion-language section of `index.css`:
 - `@media (prefers-reduced-motion: reduce)` disables all of it; the static mark is the complete design, not a degraded one.
 - No JS timers, no React re-renders, no layout/paint-heavy properties (opacity only).
 
+## 5b. In-app identity touches
+
+Two chrome-level applications of the aurora tokens, both validated against flat references in mockups:
+
+**Aurora horizon hairline.** A 1px overlay on the conversation/room header divider: `linear-gradient(90deg, transparent, aurora-1 12%, aurora-2 40%, aurora-3 70%, transparent)` at ~0.65 opacity, drawn via a pseudo-element on top of the existing divider — the standard `--fluux-chat-header-border` hairline stays underneath, so the seam-visibility guarantees from the contrast audit are unaffected. Fades at both ends; light mode uses the dawn stops.
+
+**Aurora send button.** The composer send control becomes state-dependent: while the input is empty it stays the current muted icon; once there is content to send it becomes a ~34px circular button filled with `linear-gradient(130deg, aurora-1, aurora-2 45%, aurora-3 75%, aurora-4)` and a dark-ink plane icon (new token `--fluux-aurora-ink: #08111F`, both modes). The aurora appears exactly when the user is about to speak — identity tied to the brand action, not permanent decoration. Existing aria-label and keyboard behavior unchanged.
+
+Both consume the §4 tokens; other builtin themes inherit them (same precedent as the login mark), and THEMES.md documents how theme authors override or disable them.
+
 ## 6. Testing
 
 - `auroraGeometry.test.ts`: bezier point/tangent correctness against hand-computed values; determinism (fixed seed → identical ray list); all emitted rays satisfy the upward-normal filter; ray count in expected range.
 - `AuroraMark.test.tsx`: renders with `aria-hidden`, expected layer groups and ray count for the default seed.
 - `LoginScreen.test.tsx`: update for the removed `MessageCircle` (verify no assertions reference it; login form behavior untouched).
+- `MessageComposer.test.tsx`: send control renders muted when the input is empty and switches to the aurora-ready state when content is present; aria-label preserved.
+- `themeContrast.test.ts`: guard that `--fluux-aurora-ink` clears 3:1 (WCAG AA for UI components) against the worst-case stop of the send-button gradient in both modes, per theme.
 - Visual: demo mode check in both modes; regenerate `8x-login-aurora-dark/light` via the screenshots script.
 - Pre-commit gates per project rules: full app tests, `npm run typecheck`, linter.
 
