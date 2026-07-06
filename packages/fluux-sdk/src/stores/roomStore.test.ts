@@ -1597,6 +1597,40 @@ describe('roomStore', () => {
       expect(roomStore.getState().firstNewMessageMarkers.has(roomJid)).toBe(false)
     })
 
+    it('is a no-op (same Map references) when the room is already read to newest', () => {
+      const roomJid = 'test@conference.example.com'
+      const messages = [
+        createMessage('m1', roomJid, 'alice', 'first'),
+        createMessage('m2', roomJid, 'alice', 'second'),
+        createMessage('m3', roomJid, 'alice', 'third'),
+      ]
+      roomStore.getState().addRoom(createRoom(roomJid, {
+        joined: true,
+        messages,
+        lastMessage: messages[2],
+        unreadCount: 2,
+        mentionsCount: 1,
+        lastSeenMessageId: 'm1',
+      }))
+      roomStore.setState((state) => {
+        const newMarkers = new Map(state.firstNewMessageMarkers)
+        newMarkers.set(roomJid, 'm2')
+        return { firstNewMessageMarkers: newMarkers }
+      })
+
+      // First call actually advances the pointer and clears the divider.
+      roomStore.getState().markReadToNewest(roomJid)
+
+      const { roomMeta, rooms } = roomStore.getState()
+
+      // Second call: room is already fully read, nothing should change.
+      roomStore.getState().markReadToNewest(roomJid)
+
+      const stateAfter = roomStore.getState()
+      expect(stateAfter.roomMeta).toBe(roomMeta)
+      expect(stateAfter.rooms).toBe(rooms)
+    })
+
     it('falls back to lastMessage for an evicted (non-active) room', () => {
       const roomJid = 'evicted@conference.example.com'
       const m9 = createMessage('m9', roomJid, 'alice', 'latest before eviction')

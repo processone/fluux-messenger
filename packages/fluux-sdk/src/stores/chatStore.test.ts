@@ -1191,6 +1191,44 @@ describe('chatStore', () => {
       expect(meta?.unreadCount).toBe(0)
       expect(chatStore.getState().firstNewMessageMarkers.has(conversationId)).toBe(false)
     })
+
+    it('is a no-op (same Map references) when the conversation is already read to newest', () => {
+      const conversationId = 'alice@example.com'
+      chatStore.getState().addConversation({
+        ...createConversation(conversationId),
+        unreadCount: 2,
+        lastSeenMessageId: 'm1',
+      })
+      chatStore.getState().addMessage({
+        type: 'chat', id: 'm1', conversationId, from: conversationId, body: 'first',
+        timestamp: new Date('2025-01-10T10:00:00Z'), isOutgoing: false,
+      })
+      chatStore.getState().addMessage({
+        type: 'chat', id: 'm2', conversationId, from: conversationId, body: 'second',
+        timestamp: new Date('2025-01-10T10:01:00Z'), isOutgoing: false,
+      })
+      chatStore.getState().addMessage({
+        type: 'chat', id: 'm3', conversationId, from: conversationId, body: 'third',
+        timestamp: new Date('2025-01-10T10:02:00Z'), isOutgoing: false,
+      })
+      chatStore.setState((state) => {
+        const newMarkers = new Map(state.firstNewMessageMarkers)
+        newMarkers.set(conversationId, 'm2')
+        return { firstNewMessageMarkers: newMarkers }
+      })
+
+      // First call actually advances the pointer and clears the divider.
+      chatStore.getState().markReadToNewest(conversationId)
+
+      const { conversationMeta, conversations } = chatStore.getState()
+
+      // Second call: conversation is already fully read, nothing should change.
+      chatStore.getState().markReadToNewest(conversationId)
+
+      const stateAfter = chatStore.getState()
+      expect(stateAfter.conversationMeta).toBe(conversationMeta)
+      expect(stateAfter.conversations).toBe(conversations)
+    })
   })
 
   describe('hasConversation', () => {

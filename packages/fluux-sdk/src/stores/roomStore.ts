@@ -1528,6 +1528,21 @@ export const roomStore = createStore<RoomState>()(
       const newest = resident[resident.length - 1] ?? existing.lastMessage
       if (!newest) return state
 
+      // Skip update if already fully read: pointer at the computed newest id,
+      // no unread/mentions, and no "new messages" divider to clear.
+      const meta = state.roomMeta.get(roomJid)
+      const currentLastSeenMessageId = meta?.lastSeenMessageId ?? existing.lastSeenMessageId
+      const currentUnreadCount = meta?.unreadCount ?? existing.unreadCount
+      const currentMentionsCount = meta?.mentionsCount ?? existing.mentionsCount
+      if (
+        currentLastSeenMessageId === newest.id &&
+        currentUnreadCount === 0 &&
+        currentMentionsCount === 0 &&
+        !state.firstNewMessageMarkers.has(roomJid)
+      ) {
+        return state
+      }
+
       const read = {
         lastSeenMessageId: newest.id,
         unreadCount: 0,

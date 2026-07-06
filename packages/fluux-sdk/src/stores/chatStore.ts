@@ -1052,6 +1052,18 @@ export const chatStore = createStore<ChatState>()(
           const newest = messages?.[messages.length - 1] ?? meta?.lastMessage ?? existing.lastMessage
           if (!newest) return state
 
+          // Skip update if already fully read: pointer at the computed newest id,
+          // no unread count, and no "new messages" divider to clear.
+          const currentLastSeenMessageId = meta?.lastSeenMessageId ?? existing.lastSeenMessageId
+          const currentUnreadCount = meta?.unreadCount ?? existing.unreadCount ?? 0
+          if (
+            currentLastSeenMessageId === newest.id &&
+            currentUnreadCount === 0 &&
+            !state.firstNewMessageMarkers.has(conversationId)
+          ) {
+            return state
+          }
+
           const read = {
             lastSeenMessageId: newest.id,
             unreadCount: 0,
