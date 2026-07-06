@@ -1,0 +1,40 @@
+/* Shared base for blog hero compositions (1200×675 CSS px, rendered at 2x). */
+@font-face {
+  font-family: 'Inter';
+  src: url('../../apps/fluux/public/fonts/Inter-Regular.woff2') format('woff2');
+  font-weight: 400;
+}
+@font-face {
+  font-family: 'Inter';
+  src: url('../../apps/fluux/public/fonts/Inter-Medium.woff2') format('woff2');
+  font-weight: 500;
+}
+@font-face {
+  font-family: 'Inter';
+  src: url('../../apps/fluux/public/fonts/Inter-SemiBold.woff2') format('woff2');
+  font-weight: 600;
+}
+@font-face {
+  font-family: 'Inter';
+  src: url('../../apps/fluux/public/fonts/Inter-Bold.woff2') format('woff2');
+  font-weight: 700;
+}
+@font-face {
+  font-family: 'Inter Tight';
+  src: url('../../apps/fluux/public/fonts/InterTight-Medium.woff2') format('woff2');
+  font-weight: 500;
+}
+@font-face {
+  font-family: 'Inter Tight';
+  src: url('../../apps/fluux/public/fonts/InterTight-SemiBold.woff2') format('woff2');
+  font-weight: 600;
+}
+@font-face {
+  font-family: 'Inter Tight';
+  src: url('../../apps/fluux/public/fonts/InterTight-Bold.woff2') format('woff2');
+  font-weight: 700;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { width: 1200px; height: 675px; overflow: hidden; }
+body { font-family: 'Inter', system-ui, sans-serif; position: relative; }
+.frame { position: absolute; inset: 0; overflow: hidden; }
