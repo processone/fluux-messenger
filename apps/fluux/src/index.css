@@ -897,20 +897,21 @@ html, body {
 }
 
 /* Focus zone styling - only show after user interaction.
- * Matches the composer card's focus treatment (1px accent line + soft glow) so
- * the sidebar / message / room focus rings read at the same weight as the
- * composer instead of a heavier 2px solid outline. Inset because these zones are
- * flush panels (no room for an outset glow); the solid 1px line keeps the
- * keyboard-focus indicator visible for accessibility. */
+ * Uses an `outline` (not an inset box-shadow) so the ring repaints reliably when
+ * the zone loses focus. In WKWebView (Tauri) an inset box-shadow is not always
+ * repainted away on blur — WebKit resets activeElement to <body> on window
+ * blur→refocus, and the stale ring lingered on a pane that no longer held
+ * keyboard focus, which read as a focus ring on an unfocused area. Outlines
+ * repaint on every focus/blur transition. Same 1px accent weight and inset
+ * treatment as the XMPP console-log ring below, so the sidebar / message / room
+ * focus edge stays calm rather than a heavier 2px solid outline. */
 .user-interacted .focus-zone:focus {
-  outline: none !important;
-  /* A small radius softens the inset ring's corners (box-shadow follows the
-     element's border-radius) so the zone focus edge reads as gently rounded
-     rather than a hard square. */
+  /* Inset because these zones are flush panels (no room for an outset ring); the
+     solid 1px line keeps the keyboard-focus indicator visible for accessibility.
+     A small radius softens the corners so the edge reads as gently rounded. */
+  outline: 1px solid var(--fluux-brand) !important;
+  outline-offset: -1px !important;
   border-radius: 4px;
-  box-shadow:
-    inset 0 0 0 1px var(--fluux-brand),
-    inset 0 0 0 3px hsla(var(--fluux-accent-h), var(--fluux-accent-s), var(--fluux-accent-l), 0.22) !important;
 }
 
 /* XMPP console log: the focus ring is an outline (not an inset box-shadow) so it
