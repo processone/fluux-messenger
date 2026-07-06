@@ -21,6 +21,9 @@ import {
   NS_STANZA_ID,
   NS_XHTML,
   NS_FASTEN,
+  NS_REACTIONS,
+  NS_RETRACT,
+  NS_CORRECTION,
 } from '../namespaces'
 import type { FileAttachment, FileEncryption, ThumbnailInfo, LinkPreview, ReplyInfo } from '../types'
 import { processFallback } from '../../utils/fallbackUtils'
@@ -535,4 +538,87 @@ export function applyCorrection(
     // encryptedPayload — see CorrectionResult.encryptedPayload.
     encryptedPayload: readStashedEncryptedPayload(messageEl),
   }
+}
+
+// ============================================================================
+// Message signals (XEP-0444 reactions, XEP-0424 retraction, XEP-0308 correction)
+//
+// One parser per signal, shared by the three inbound paths — the Chat live
+// path, the MAM archive path, and the E2EE deferred-decrypt retry. Parsing
+// drifted when each path hand-rolled its own getChild/extraction (e.g. the
+// emoji extraction existed in three copies); any change to signal parsing
+// lands here exactly once.
+// ============================================================================
+
+/** Parsed XEP-0444 `<reactions>` signal. */
+export interface ParsedReactionsSignal {
+  /** The raw element, for handlers that need attributes beyond the id. */
+  el: Element
+  /** Target message id. Undefined for malformed/legacy stanzas without `id`. */
+  targetId: string | undefined
+  /** Emoji list; empty means "clear all my reactions" (a valid signal). */
+  emojis: string[]
+}
+
+/**
+ * Parse a XEP-0444 `<reactions>` child of a message stanza.
+ * Returns null when the stanza carries no reactions element. A present
+ * element with a missing `id` is still reported (targetId undefined) so the
+ * live path can claim the stanza as handled instead of showing fallback text.
+ */
+export function parseReactionsSignal(messageEl: Element): ParsedReactionsSignal | null {
+  const el = messageEl.getChild('reactions', NS_REACTIONS)
+  if (!el) return null
+  const emojis = el.getChildren('reaction').map((r) => r.getText()).filter(Boolean)
+  return { el, targetId: el.attrs.id, emojis }
+}
+
+/** Parsed XEP-0424 `<retract>` signal. */
+export interface ParsedRetractionSignal {
+  /** The raw element — XEP-0425 v1 nests `<moderated>` inside it. */
+  el: Element
+  /** Target message id. Undefined for malformed stanzas without `id`. */
+  targetId: string | undefined
+}
+
+/**
+ * Parse a XEP-0424 `<retract>` child of a message stanza.
+ * Returns null when the stanza carries no retract element.
+ */
+export function parseRetractionSignal(messageEl: Element): ParsedRetractionSignal | null {
+  const el = messageEl.getChild('retract', NS_RETRACT)
+  if (!el) return null
+  return { el, targetId: el.attrs.id }
+}
+
+/** Parsed XEP-0308 `<replace>` signal. */
+export interface ParsedCorrectionSignal {
+  el: Element
+  /** Target message id. Undefined for malformed stanzas without `id`. */
+  targetId: string | undefined
+}
+
+/**
+ * Parse a XEP-0308 `<replace>` child of a message stanza.
+ * Returns null when the stanza carries no replace element. The corrected
+ * body itself stays with the caller (live path and archive path source it
+ * differently).
+ */
+export function parseCorrectionSignal(messageEl: Element): ParsedCorrectionSignal | null {
+  const el = messageEl.getChild('replace', NS_CORRECTION)
+  if (!el) return null
+  return { el, targetId: el.attrs.id }
+}
+
+/**
+ * Whether the stanza is a reaction/retraction/correction signal rather than
+ * new message content. Used to skip signal stanzas where only genuine
+ * messages are wanted (e.g. MAM preview/backfill scans).
+ */
+export function isMessageSignal(messageEl: Element): boolean {
+  return !!(
+    messageEl.getChild('reactions', NS_REACTIONS) ||
+    messageEl.getChild('retract', NS_RETRACT) ||
+    messageEl.getChild('replace', NS_CORRECTION)
+  )
 }

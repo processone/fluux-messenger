@@ -60,7 +60,7 @@ import type {
   RoomMAMResult,
   PollClosedData,
 } from '../types'
-import { parseMessageContent, parseOgpFastening, applyRetraction, applyCorrection, createOriginIdElement, parseStanzaId, hasRenderableContent } from './messagingUtils'
+import { parseMessageContent, parseOgpFastening, applyRetraction, applyCorrection, createOriginIdElement, parseStanzaId, hasRenderableContent, parseReactionsSignal, parseRetractionSignal, parseCorrectionSignal } from './messagingUtils'
 import { checkForMention } from '../mentionDetection'
 import { parsePollElement, parsePollClosedElement } from '../poll'
 import { logWarn } from '../logger'
@@ -256,26 +256,26 @@ export class Chat extends BaseModule {
     // type is 'chat' only per the private-message convention). Order matters:
     // check operations before the new-body fall-through.
     if (isWhisper) {
-      const whisperReactionsEl = stanza.getChild('reactions', NS_REACTIONS)
-      if (whisperReactionsEl) {
-        this.handleIncomingReaction(stanza, whisperReactionsEl, from!, bareFrom, bareTo, 'groupchat', isSentCarbon)
+      const whisperReactions = parseReactionsSignal(stanza)
+      if (whisperReactions) {
+        this.handleIncomingReaction(stanza, whisperReactions.el, from!, bareFrom, bareTo, 'groupchat', isSentCarbon)
         return { handled: true }
       }
 
-      const whisperRetractEl = stanza.getChild('retract', NS_RETRACT)
-      if (whisperRetractEl?.attrs.id) {
+      const whisperRetraction = parseRetractionSignal(stanza)
+      if (whisperRetraction?.targetId) {
         // Consume even if it matches no stored message — the body is just the
         // XEP-0428 fallback notice, never shown as a new whisper.
         this.handleIncomingRetraction(
-          whisperRetractEl.attrs.id, from!, bareFrom, bareTo, 'groupchat', isSentCarbon,
+          whisperRetraction.targetId, from!, bareFrom, bareTo, 'groupchat', isSentCarbon,
           stanza.getChild('occupant-id', NS_OCCUPANT_ID)?.attrs.id,
         )
         return { handled: true }
       }
 
-      const whisperReplaceEl = stanza.getChild('replace', NS_CORRECTION)
-      if (whisperReplaceEl?.attrs.id && body && this.handleIncomingCorrection(
-        stanza, whisperReplaceEl.attrs.id, from!, bareFrom, bareTo, body, 'groupchat', isSentCarbon,
+      const whisperCorrection = parseCorrectionSignal(stanza)
+      if (whisperCorrection?.targetId && body && this.handleIncomingCorrection(
+        stanza, whisperCorrection.targetId, from!, bareFrom, bareTo, body, 'groupchat', isSentCarbon,
       )) {
         return { handled: true }
       }
@@ -307,9 +307,9 @@ export class Chat extends BaseModule {
     }
 
     // Reactions
-    const reactionsEl = stanza.getChild('reactions', NS_REACTIONS)
-    if (reactionsEl) {
-      this.handleIncomingReaction(stanza, reactionsEl, from, bareFrom, bareTo, type, isSentCarbon)
+    const reactions = parseReactionsSignal(stanza)
+    if (reactions) {
+      this.handleIncomingReaction(stanza, reactions.el, from, bareFrom, bareTo, type, isSentCarbon)
       // Always treat reaction stanzas as handled — any body is fallback for legacy clients
       // (some clients may not include <fallback for="urn:xmpp:reactions:0"> indication)
       return { handled: true }
@@ -330,11 +330,11 @@ export class Chat extends BaseModule {
     }
 
     // Corrections
-    const replaceEl = stanza.getChild('replace', NS_CORRECTION)
-    if (replaceEl?.attrs.id && body) {
+    const correction = parseCorrectionSignal(stanza)
+    if (correction?.targetId && body) {
       const handled = this.handleIncomingCorrection(
         stanza,
-        replaceEl.attrs.id,
+        correction.targetId,
         from,
         bareFrom,
         bareTo,
@@ -346,17 +346,17 @@ export class Chat extends BaseModule {
     }
 
     // Retractions / XEP-0425 v1 Moderation (moderated inside retract)
-    const retractEl = stanza.getChild('retract', NS_RETRACT)
-    if (retractEl?.attrs.id) {
+    const retraction = parseRetractionSignal(stanza)
+    if (retraction?.targetId) {
       // XEP-0425 v1: <moderated> nested inside <retract>
-      const moderatedV1 = retractEl.getChild('moderated', NS_MESSAGE_MODERATE)
+      const moderatedV1 = retraction.el.getChild('moderated', NS_MESSAGE_MODERATE)
       if (moderatedV1) {
-        if (this.handleIncomingModeration(retractEl.attrs.id, moderatedV1, bareFrom, type)) {
+        if (this.handleIncomingModeration(retraction.targetId, moderatedV1, bareFrom, type)) {
           return { handled: true }
         }
       }
       if (this.handleIncomingRetraction(
-        retractEl.attrs.id,
+        retraction.targetId,
         from,
         bareFrom,
         bareTo,
