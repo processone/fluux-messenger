@@ -22,6 +22,8 @@ const MAX_HISTORY_LIMIT = 200
 const DEFAULT_HISTORY_LIMIT = 50
 
 export function listConversations(): McpConversationSummary[] {
+  // isEncrypted reflects the last message only (the SDK has no per-thread encryption flag),
+  // so a mostly-encrypted conversation whose latest message was cleartext reports false here.
   const chats: McpConversationSummary[] = Array.from(chatStore.getState().conversations.values()).map((conv) => ({
     conversationId: conv.id,
     displayName: conv.name,

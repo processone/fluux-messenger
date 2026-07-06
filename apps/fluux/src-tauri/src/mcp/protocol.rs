@@ -4,6 +4,9 @@ use serde_json::Value;
 /// A JSON-RPC 2.0 request, as sent by an MCP client.
 #[derive(Debug, Clone, Deserialize)]
 pub struct JsonRpcRequest {
+    /// Deserialized to keep the request shape complete, but not validated in v1 —
+    /// every MCP client we target sends "2.0" and there's no second protocol version to reject.
+    #[allow(dead_code)]
     pub jsonrpc: String,
     #[serde(default)]
     pub id: Value,
