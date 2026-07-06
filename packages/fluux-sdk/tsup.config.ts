@@ -12,6 +12,8 @@ export default defineConfig({
     'stores/index': 'src/stores/index.ts',
     // Demo bundle (dev-only DemoClient + seed helpers)
     'demo/index': 'src/demo/index.ts',
+    // Cache bundle (low-level IndexedDB escape hatch)
+    'cache/index': 'src/cache/index.ts',
   },
   format: ['cjs', 'esm'],
   dts: {

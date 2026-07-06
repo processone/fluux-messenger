@@ -7,12 +7,12 @@ import {
   consoleStore,
   adminStore,
   blockingStore,
-  clearAllAvatarData,
   getBareJid,
   deleteFastToken,
   clearSearchIndex,
   clearUserAgentIdentity,
 } from '@fluux/sdk'
+import { clearAllAvatarData } from '@fluux/sdk/cache'
 import { clearSession, getSession } from '@/hooks/useSessionPersistence'
 import { deleteCredentials } from '@/utils/keychain'
 import { clearMediaCache } from '@/utils/mediaCache'

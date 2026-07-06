@@ -674,46 +674,12 @@ export { shortcodeToEmoji, convertShortcodes } from './core/emoji'
 export { checkForMention, findMentionRanges, findIrcPrefixRange } from './core/mentionDetection'
 
 // =============================================================================
-// INDEXEDDB MESSAGE CACHE
+// INDEXEDDB MESSAGE / AVATAR CACHE
 // =============================================================================
 
-export {
-  // Chat message operations
-  saveMessage,
-  saveMessages,
-  getMessage,
-  getMessageByStanzaId,
-  getMessages,
-  getMessageCount,
-  updateMessage,
-  deleteMessage,
-  deleteConversationMessages,
-  getOldestMessageTimestamp,
-  // Room message operations
-  saveRoomMessage,
-  saveRoomMessages,
-  getRoomMessage,
-  getRoomMessageByStanzaId,
-  getRoomMessages,
-  getRoomMessageCount,
-  updateRoomMessage,
-  deleteRoomMessage,
-  deleteRoomMessages,
-  getOldestRoomMessageTimestamp,
-  // Utility
-  clearAllMessages,
-  isMessageCacheAvailable,
-} from './utils/messageCache'
-export type { GetMessagesOptions } from './utils/messageCache'
-
-// Avatar cache operations
-export {
-  clearAllAvatarData,
-  revokeAllBlobUrls,
-  getBlobUrlPoolSize,
-  bumpAvatarResumeCount,
-  getAvatarResumeCount,
-} from './utils/avatarCache'
+// The low-level IndexedDB cache accessors live on the `@fluux/sdk/cache`
+// subpath — an advanced escape hatch, kept off the curated main entry because
+// their write/delete ops bypass store invariants. See src/cache/index.ts.
 
 // =============================================================================
 // DEMO MODE

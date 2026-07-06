@@ -1,4 +1,4 @@
-import { getBlobUrlPoolSize, getAvatarResumeCount } from '@fluux/sdk'
+import { getBlobUrlPoolSize, getAvatarResumeCount } from '@fluux/sdk/cache'
 
 /**
  * Opt-in memory / blob-pool probe.
