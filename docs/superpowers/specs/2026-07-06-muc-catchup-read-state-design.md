@@ -97,12 +97,10 @@ at the bottom. Same for 1:1 chats.
   before anchoring. Cache-first: MAM is only queried when the slice
   isn't cached. If the pointer is unresolvable, anchor at the oldest
   loaded message (Section 5).
-- **First activation vs revisit:** the divider anchor applies on the
-  first activation of a session — the same moment the divider is
-  derived and the MDS entry fold runs. In-session revisits keep the
-  existing `ScrollStateManager` restore behavior (saved content anchor,
-  or bottom if the user left at the bottom); the freshly re-derived
-  divider is then reachable on screen or via the pill.
+- **First activation vs revisit:** entry scroll priority is (1) restore the
+  saved position when the user had scrolled up, (2) anchor at the divider
+  when one exists, (3) bottom. A revisit that left at the bottom and gained
+  new unread therefore re-anchors at the fresh divider — same as first open.
 - The divider is derived once on activation from the read pointer — it
   now lands correctly for MAM-delivered unread. It is already decoupled
   from the pointer: it persists for the visit while the viewport

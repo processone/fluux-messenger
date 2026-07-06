@@ -333,6 +333,7 @@
         "memberAdded": "用户已添加",
         "browseRooms": "浏览房间",
         "catchUpAll": "同步所有房间",
+        "markAllRead": "将所有内容标记为已读",
         "browseRoomsTitle": "浏览公开房间",
         "mucService": "MUC 服务",
         "yourServer": "您的服务器",

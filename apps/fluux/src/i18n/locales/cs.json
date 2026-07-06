@@ -335,6 +335,7 @@
         "memberAdded": "Uživatel přidán",
         "browseRooms": "Procházet místnosti",
         "catchUpAll": "Aktualizovat všechny místnosti",
+        "markAllRead": "Označit vše jako přečtené",
         "browseRoomsTitle": "Procházet veřejné místnosti",
         "mucService": "Služba MUC",
         "yourServer": "váš server",

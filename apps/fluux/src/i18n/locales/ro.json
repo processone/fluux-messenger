@@ -335,6 +335,7 @@
         "memberAdded": "Utilizator adăugat",
         "browseRooms": "Explorează camerele",
         "catchUpAll": "Actualizează toate camerele",
+        "markAllRead": "Marchează tot ca citit",
         "browseRoomsTitle": "Explorează camerele publice",
         "mucService": "Serviciu MUC",
         "yourServer": "serverul tău",

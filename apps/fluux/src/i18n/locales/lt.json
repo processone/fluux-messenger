@@ -333,6 +333,7 @@
         "memberAdded": "Naudotojas pridėtas",
         "browseRooms": "Naršyti kambarius",
         "catchUpAll": "Atnaujinti visus kambarius",
+        "markAllRead": "Pažymėti viską kaip skaityta",
         "browseRoomsTitle": "Naršyti viešus kambarius",
         "mucService": "MUC paslauga",
         "yourServer": "jūsų serveris",

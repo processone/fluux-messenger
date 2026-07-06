@@ -332,6 +332,7 @@
         "memberAdded": "Gebruiker toegevoegd",
         "browseRooms": "Groepen bladeren",
         "catchUpAll": "Alle kamers bijwerken",
+        "markAllRead": "Alles als gelezen markeren",
         "browseRoomsTitle": "Publieke groepen bladeren",
         "mucService": "MUC-service",
         "yourServer": "jouw server",

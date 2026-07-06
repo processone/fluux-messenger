@@ -84,6 +84,7 @@ void i18n.use(initReactI18next).init({
           joinRoom: 'Join room',
           browseRooms: 'Browse Rooms',
           catchUpAll: 'Catch up all rooms',
+          markAllRead: 'Mark all as read',
         },
         messages: {
           showArchived: 'Show archived conversations',

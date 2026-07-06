@@ -12,6 +12,7 @@ const baseProps = () => ({
   onBrowseRooms: vi.fn(),
   onCatchUpAll: vi.fn(),
   isCatchingUp: false,
+  onMarkAllRead: vi.fn(),
 })
 
 describe('RoomsHeaderActions', () => {
@@ -61,5 +62,13 @@ describe('RoomsHeaderActions', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Options' }))
     const item = screen.getByRole('menuitem', { name: 'Catch up all rooms' })
     expect(item).toBeDisabled()
+  })
+
+  it('offers Mark all as read and calls the action', () => {
+    const onMarkAllRead = vi.fn()
+    render(<RoomsHeaderActions {...baseProps()} onMarkAllRead={onMarkAllRead} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Options' }))
+    fireEvent.click(screen.getByText('Mark all as read'))
+    expect(onMarkAllRead).toHaveBeenCalled()
   })
 })

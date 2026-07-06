@@ -333,6 +333,7 @@
         "memberAdded": "Користувача додано",
         "browseRooms": "Переглянути кімнати",
         "catchUpAll": "Оновити всі кімнати",
+        "markAllRead": "Позначити все як прочитане",
         "browseRoomsTitle": "Перегляд публічних кімнат",
         "mucService": "Сервіс MUC",
         "yourServer": "ваш сервер",

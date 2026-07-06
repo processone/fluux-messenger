@@ -333,6 +333,7 @@
         "memberAdded": "Käyttäjä lisätty",
         "browseRooms": "Selaa huoneita",
         "catchUpAll": "Päivitä kaikki huoneet",
+        "markAllRead": "Merkitse kaikki luetuksi",
         "browseRoomsTitle": "Selaa julkisia huoneita",
         "mucService": "MUC-palvelu",
         "yourServer": "palvelimesi",

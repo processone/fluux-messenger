@@ -335,6 +335,7 @@
         "memberAdded": "Uporabnik dodan",
         "browseRooms": "Prebrskaj sobe",
         "catchUpAll": "Posodobi vse sobe",
+        "markAllRead": "Označi vse kot prebrano",
         "browseRoomsTitle": "Prebrskaj javne sobe",
         "mucService": "MUC storitev",
         "yourServer": "vaš strežnik",

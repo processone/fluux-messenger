@@ -334,6 +334,7 @@
         "memberAdded": "Utente aggiunto",
         "browseRooms": "Sfoglia stanze",
         "catchUpAll": "Aggiorna tutte le stanze",
+        "markAllRead": "Segna tutto come letto",
         "browseRoomsTitle": "Sfoglia stanze pubbliche",
         "mucService": "Servizio MUC",
         "yourServer": "il tuo server",

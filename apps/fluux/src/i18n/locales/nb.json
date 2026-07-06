@@ -333,6 +333,7 @@
         "memberAdded": "Bruker lagt til",
         "browseRooms": "Bla gjennom rom",
         "catchUpAll": "Oppdater alle rom",
+        "markAllRead": "Merk alt som lest",
         "browseRoomsTitle": "Bla gjennom offentlige rom",
         "mucService": "MUC-tjeneste",
         "yourServer": "din server",

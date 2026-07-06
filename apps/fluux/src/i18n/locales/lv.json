@@ -334,6 +334,7 @@
         "memberAdded": "Lietotājs pievienots",
         "browseRooms": "Pārlūkot istabas",
         "catchUpAll": "Atjaunināt visas istabas",
+        "markAllRead": "Atzīmēt visu kā izlasītu",
         "browseRoomsTitle": "Pārlūkot publiskās istabas",
         "mucService": "MUC serviss",
         "yourServer": "jūsu serveris",

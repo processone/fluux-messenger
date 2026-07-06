@@ -333,6 +333,7 @@
         "memberAdded": "Korisnik dodan",
         "browseRooms": "Pregledaj sobe",
         "catchUpAll": "Ažuriraj sve sobe",
+        "markAllRead": "Označi sve kao pročitano",
         "browseRoomsTitle": "Pregledaj javne sobe",
         "mucService": "MUC usluga",
         "yourServer": "vaš poslužitelj",

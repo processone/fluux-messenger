@@ -333,6 +333,7 @@
         "memberAdded": "Utilisateur ajouté",
         "browseRooms": "Parcourir les salons",
         "catchUpAll": "Rattraper tous les salons",
+        "markAllRead": "Tout marquer comme lu",
         "browseRoomsTitle": "Salons publics",
         "mucService": "Service MUC",
         "yourServer": "votre serveur",

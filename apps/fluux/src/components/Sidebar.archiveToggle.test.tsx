@@ -59,6 +59,7 @@ vi.mock('@/utils/performLogout', () => ({ performLogout: vi.fn() }))
 // Mock SDK stores and hooks
 vi.mock('@fluux/sdk', () => ({
   useXMPP: () => ({ client: { disconnect: vi.fn() } }),
+  useRoomActions: () => ({ markAllRoomsRead: vi.fn() }),
 }))
 vi.mock('@fluux/sdk/react', () => ({
   useConnectionStore: (sel: (s: Record<string, unknown>) => unknown) =>

@@ -333,6 +333,7 @@
         "memberAdded": "Felhasználó hozzáadva",
         "browseRooms": "Szobák böngészése",
         "catchUpAll": "Összes szoba frissítése",
+        "markAllRead": "Összes megjelölése olvasottként",
         "browseRoomsTitle": "Nyilvános szobák böngészése",
         "mucService": "MUC szolgáltatás",
         "yourServer": "az Ön szervere",

@@ -335,6 +335,7 @@
         "memberAdded": "Kasutaja lisatud",
         "browseRooms": "Sirvi tube",
         "catchUpAll": "Uuenda kõiki ruume",
+        "markAllRead": "Märgi kõik loetuks",
         "browseRoomsTitle": "Sirvi avalikke tube",
         "mucService": "MUC teenus",
         "yourServer": "sinu server",

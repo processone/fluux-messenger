@@ -333,6 +333,7 @@
         "memberAdded": "تمت إضافة المستخدم",
         "browseRooms": "تصفح الغرف",
         "catchUpAll": "تحديث جميع الغرف",
+        "markAllRead": "وضع علامة \"مقروء\" على الكل",
         "browseRoomsTitle": "تصفح الغرف العامة",
         "mucService": "خدمة MUC",
         "yourServer": "خادمك",

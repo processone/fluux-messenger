@@ -334,6 +334,7 @@
         "memberAdded": "Benutzer hinzugefügt",
         "browseRooms": "Räume durchsuchen",
         "catchUpAll": "Alle Räume aktualisieren",
+        "markAllRead": "Alles als gelesen markieren",
         "browseRoomsTitle": "Öffentliche Räume durchsuchen",
         "mucService": "MUC-Dienst",
         "yourServer": "Ihr Server",

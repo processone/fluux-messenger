@@ -330,6 +330,7 @@
         "memberAdded": "Usuario añadido",
         "browseRooms": "Explorar Salas",
         "catchUpAll": "Actualizar todas las salas",
+        "markAllRead": "Marcar todo como leído",
         "browseRoomsTitle": "Explorar Salas Publicas",
         "mucService": "Servicio MUC",
         "yourServer": "tu servidor",

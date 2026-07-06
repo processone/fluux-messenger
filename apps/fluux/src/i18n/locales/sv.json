@@ -333,6 +333,7 @@
         "memberAdded": "Användare tillagd",
         "browseRooms": "Bläddra bland rum",
         "catchUpAll": "Uppdatera alla rum",
+        "markAllRead": "Markera allt som läst",
         "browseRoomsTitle": "Bläddra bland offentliga rum",
         "mucService": "MUC-tjänst",
         "yourServer": "din server",

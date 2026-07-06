@@ -333,6 +333,7 @@
         "memberAdded": "Пользователь добавлен",
         "browseRooms": "Обзор конференций",
         "catchUpAll": "Обновить все комнаты",
+        "markAllRead": "Отметить всё как прочитанное",
         "browseRoomsTitle": "Обзор публичных конференций",
         "mucService": "MUC-сервис",
         "yourServer": "ваш сервер",

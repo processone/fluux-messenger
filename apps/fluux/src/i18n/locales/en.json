@@ -333,6 +333,7 @@
         "memberAdded": "User added",
         "browseRooms": "Browse Rooms",
         "catchUpAll": "Catch up all rooms",
+        "markAllRead": "Mark all as read",
         "browseRoomsTitle": "Browse Public Rooms",
         "mucService": "MUC Service",
         "yourServer": "your server",
