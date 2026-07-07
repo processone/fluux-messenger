@@ -178,6 +178,13 @@ interface MessageComposerProps {
   resolveInput?: (text: string) => Promise<string | 'consumed'>
   /** Classify current input for the send-button indicator. */
   classifyInput?: (text: string) => InputClass
+  /**
+   * When false, slash input is NOT interpreted as a command; it is sent as
+   * literal text. Set by callers for non-default send modes such as whisper,
+   * where a typed "/kick ..." must go to the recipient as text, never execute.
+   * Reply mode disables commands automatically (see {@link replyingTo}).
+   */
+  commandsEnabled?: boolean
 }
 
 export function MessageComposer({
@@ -214,6 +221,7 @@ export function MessageComposer({
   onEncryptionClick,
   resolveInput,
   classifyInput,
+  commandsEnabled,
   ref,
 }: MessageComposerProps & { ref?: Ref<MessageComposerHandle> }) {
   detectRenderLoop('MessageComposer')
@@ -431,7 +439,9 @@ export function MessageComposer({
     // the hard loop-break threshold is unaffected.
     notifyUserInput()
     setText(e.target.value)
-    setInputClass(classifyInput ? classifyInput(e.target.value) : 'send')
+    // Suppress the command indicator when commands are inert (reply/whisper),
+    // matching handleSubmit's gate so the button never implies a command will run.
+    setInputClass(commandsEnabled !== false && !replyingTo && classifyInput ? classifyInput(e.target.value) : 'send')
 
     // Update toolbar visibility based on typing activity
     onComposingChange?.(true)
@@ -490,10 +500,11 @@ export function MessageComposer({
     if (!trimmed && !isEmptyEdit && !hasAttachmentOnly && !pendingAttachment) return
     if (sending) return
 
-    // Slash commands (never while editing). resolveInput returns the text to send,
-    // or 'consumed' when the input triggered a command.
+    // Slash commands (never while editing, replying, or in a disabled mode such
+    // as whisper). resolveInput returns the text to send, or 'consumed' when the
+    // input triggered a command. When commands are off, the raw text is sent.
     let outgoingText = trimmed
-    if (!editingMessage && trimmed && resolveInput) {
+    if (commandsEnabled !== false && !replyingTo && !editingMessage && trimmed && resolveInput) {
       const outcome = await resolveInput(trimmed)
       if (outcome === 'consumed') {
         setText('')

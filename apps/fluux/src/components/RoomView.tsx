@@ -2266,6 +2266,7 @@ export const RoomMessageInput = memo(function RoomMessageInput({
         aboveInput={aboveInputNode}
         resolveInput={resolveInput}
         classifyInput={classifyInput}
+        commandsEnabled={!whisperTarget}
         value={text}
         onValueChange={setText}
         onSelectionChange={setCursorPosition}

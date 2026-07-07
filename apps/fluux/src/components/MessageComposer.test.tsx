@@ -7,6 +7,53 @@ const COMPOSING_THROTTLE_MS = 2000
 const PAUSED_TIMEOUT_MS = 5000
 
 describe('MessageComposer', () => {
+  describe('slash command gating', () => {
+    const setup = (props: Record<string, unknown>) => {
+      const onSend = vi.fn().mockResolvedValue(true)
+      const resolveInput = vi.fn().mockResolvedValue('consumed')
+      render(
+        <MessageComposer
+          placeholder="Type a message"
+          onSend={onSend}
+          resolveInput={resolveInput}
+          classifyInput={() => 'command'}
+          {...props}
+        />
+      )
+      const textarea = screen.getByPlaceholderText('Type a message') as HTMLTextAreaElement
+      return { onSend, resolveInput, textarea }
+    }
+
+    const submit = async (textarea: HTMLTextAreaElement, value: string) => {
+      fireEvent.change(textarea, { target: { value } })
+      await act(async () => {
+        fireEvent.submit(textarea.closest('form') as HTMLFormElement)
+      })
+    }
+
+    it('routes slash input through resolveInput when commands are enabled', async () => {
+      const { onSend, resolveInput, textarea } = setup({})
+      await submit(textarea, '/kick alice')
+      expect(resolveInput).toHaveBeenCalledWith('/kick alice')
+      expect(onSend).not.toHaveBeenCalled() // resolveInput returned 'consumed'
+    })
+
+    it('does NOT run commands in reply mode and sends the raw text instead', async () => {
+      const replyingTo = { id: 'm1', senderName: 'Bob', body: 'hi', from: 'bob@example.com' }
+      const { onSend, resolveInput, textarea } = setup({ replyingTo })
+      await submit(textarea, '/kick alice')
+      expect(resolveInput).not.toHaveBeenCalled()
+      expect(onSend).toHaveBeenCalledWith('/kick alice')
+    })
+
+    it('does NOT run commands when commandsEnabled is false (whisper) and sends the raw text', async () => {
+      const { onSend, resolveInput, textarea } = setup({ commandsEnabled: false })
+      await submit(textarea, '/kick alice')
+      expect(resolveInput).not.toHaveBeenCalled()
+      expect(onSend).toHaveBeenCalledWith('/kick alice')
+    })
+  })
+
   describe('typing notification throttling', () => {
     beforeEach(() => {
       vi.useFakeTimers()
