@@ -448,9 +448,10 @@ export function Avatar({
 export function TypingIndicator() {
   return (
     <div className="absolute -bottom-0.5 -end-0.5 w-5 h-3.5 bg-fluux-bg rounded-full border-2 border-fluux-sidebar flex items-center justify-center gap-0.5">
-      <span className="size-1 bg-fluux-muted rounded-full animate-typing-dot-1" />
-      <span className="size-1 bg-fluux-muted rounded-full animate-typing-dot-2" />
-      <span className="size-1 bg-fluux-muted rounded-full animate-typing-dot-3" />
+      {/* Aurora-shimmer dots, matching the room sidebar typing indicator (delays + colors in CSS). */}
+      <span className="size-1 rounded-full typing-dot" />
+      <span className="size-1 rounded-full typing-dot" />
+      <span className="size-1 rounded-full typing-dot" />
     </div>
   )
 }
