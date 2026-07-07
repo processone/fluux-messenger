@@ -18,13 +18,21 @@ vi.mock('@fluux/sdk', async (importOriginal) => {
   }
 })
 
-const h = vi.hoisted(() => ({ room: null as Room | null, ignored: [] as unknown[] }))
+const h = vi.hoisted(() => ({
+  room: null as Room | null,
+  ignored: [] as unknown[],
+  draft: undefined as string | undefined,
+}))
 
 vi.mock('@fluux/sdk/react', () => ({
   useRoomStore: (selector: (s: {
     getRoom: (jid: string) => Room | null
     drafts: Map<string, string>
-  }) => unknown) => selector({ getRoom: () => h.room, drafts: new Map() }),
+  }) => unknown) =>
+    selector({
+      getRoom: () => h.room,
+      drafts: h.draft === undefined ? new Map() : new Map([[h.room?.jid ?? '', h.draft]]),
+    }),
   useChatStore: (selector: (s: unknown) => unknown) => selector({}),
   useIgnoreStore: (selector: (s: { ignoredUsers: Record<string, unknown[]> }) => unknown) =>
     selector({ ignoredUsers: { 'team@conference.fluux.chat': h.ignored } }),
@@ -80,9 +88,14 @@ const makeRoom = (over: Partial<Room> = {}): Room =>
   }) as unknown as Room
 
 const noop = () => {}
-const renderRoom = (room: Room, isActive = false) => {
+const renderRoom = (
+  room: Room,
+  isActive = false,
+  { ignored = [], draft }: { ignored?: unknown[]; draft?: string } = {},
+) => {
   h.room = room
-  h.ignored = []
+  h.ignored = ignored
+  h.draft = draft
   return render(
     <RoomItem
       roomJid={room.jid}
@@ -120,5 +133,28 @@ describe('RoomItem sidebar typing', () => {
   it('hides typing when the only typist is the user themselves', () => {
     renderRoom(makeRoom({ typingUsers: new Set(['me']) }))
     expect(screen.queryByText('chat.typing.one')).toBeNull()
+  })
+
+  it('hides typing when the only typist is an ignored user', () => {
+    renderRoom(makeRoom({ typingUsers: new Set(['Troll']) }), false, {
+      ignored: [{ nick: 'Troll' }],
+    })
+    expect(screen.queryByText('chat.typing.one')).toBeNull()
+  })
+
+  it('shows typing instead of the draft line when someone is typing', () => {
+    renderRoom(makeRoom({ typingUsers: new Set(['Alice']) }), false, {
+      draft: 'hello there',
+    })
+    expect(screen.getByText('chat.typing.one')).toBeTruthy()
+    expect(screen.queryByText('conversations.draft', { exact: false })).toBeNull()
+  })
+
+  it('reverts to the draft line once typing stops', () => {
+    renderRoom(makeRoom({ typingUsers: new Set() }), false, {
+      draft: 'hello there',
+    })
+    expect(screen.queryByText('chat.typing.one')).toBeNull()
+    expect(screen.getByText('conversations.draft', { exact: false })).toBeTruthy()
   })
 })
