@@ -81,7 +81,7 @@ export function TypingIndicator({ typingUsers, formatUser, className = '', varia
         <span className="size-1.5 rounded-full typing-dot" />
         <span className="size-1.5 rounded-full typing-dot" />
       </span>
-      <span className={variant === 'compact' ? 'truncate' : ''}>{text}</span>
+      <span dir="auto" className={variant === 'compact' ? 'truncate' : ''}>{text}</span>
     </div>
   )
 }

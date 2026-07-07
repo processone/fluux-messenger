@@ -6,7 +6,9 @@ import type { IgnoredUser } from '@fluux/sdk/stores'
  * nick and any ignored users removed. Order-preserving. Returns [] when none apply.
  *
  * Mirrors the ignore filter RoomView applies to its live typing indicator so the
- * sidebar and the open room agree on who counts as typing.
+ * sidebar and the open room agree on who counts as typing, and additionally
+ * excludes the user's own nick (RoomView's live filter does not) — you never
+ * surface your own composing on your own row.
  */
 export function visibleRoomTypingNicks(room: Room, ignoredForRoom: IgnoredUser[]): string[] {
   if (!room.typingUsers || room.typingUsers.size === 0) return []

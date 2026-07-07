@@ -142,19 +142,21 @@ describe('RoomItem sidebar typing', () => {
     expect(screen.queryByText('chat.typing.one')).toBeNull()
   })
 
-  it('shows typing instead of the draft line when someone is typing', () => {
+  it('keeps the draft line and suppresses typing when a draft is present', () => {
+    // A pending draft is the user's own content — it wins over an occupant's
+    // transient composing, so typing is not shown while a draft exists.
     renderRoom(makeRoom({ typingUsers: new Set(['Alice']) }), false, {
-      draft: 'hello there',
-    })
-    expect(screen.getByText('chat.typing.one')).toBeTruthy()
-    expect(screen.queryByText('conversations.draft', { exact: false })).toBeNull()
-  })
-
-  it('reverts to the draft line once typing stops', () => {
-    renderRoom(makeRoom({ typingUsers: new Set() }), false, {
       draft: 'hello there',
     })
     expect(screen.queryByText('chat.typing.one')).toBeNull()
     expect(screen.getByText('conversations.draft', { exact: false })).toBeTruthy()
+  })
+
+  it('shows typing once the draft is cleared', () => {
+    renderRoom(makeRoom({ typingUsers: new Set(['Alice']) }), false, {
+      draft: undefined,
+    })
+    expect(screen.getByText('chat.typing.one')).toBeTruthy()
+    expect(screen.queryByText('conversations.draft', { exact: false })).toBeNull()
   })
 })
