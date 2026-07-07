@@ -161,12 +161,16 @@ export const AppBar = memo(function AppBar() {
       {/* Global command palette (⌘K) — a plain shortcut pill. Deliberately
           not a magnifier, so it doesn't read as the sidebar's message search. */}
       <div className="flex-1 flex justify-end">
+        {/* transition-[background-color], not transition-colors: only the fill
+            changes on hover. Transitioning border-color makes the full-opacity
+            fluux-bg border lag the instant theme-variable swap, so the stale
+            ring flashes against the already-repainted sidebar on light↔dark. */}
         <button
           type="button"
           onClick={() => toggleModal('commandPalette')}
           aria-label={t('commandPalette.open', 'Open command palette')}
           title={t('commandPalette.open', 'Open command palette')}
-          className="flex items-center justify-center h-6 px-2.5 rounded-md bg-fluux-bg/50 border border-fluux-bg text-fluux-muted hover:bg-fluux-bg/80 transition-colors"
+          className="flex items-center justify-center h-6 px-2.5 rounded-md bg-fluux-bg/50 border border-fluux-bg text-fluux-muted hover:bg-fluux-bg/80 transition-[background-color]"
         >
           <kbd className="text-[11px] leading-none font-sans">{shortcutHint}</kbd>
         </button>
