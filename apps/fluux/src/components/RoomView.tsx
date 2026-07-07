@@ -2033,6 +2033,7 @@ export const RoomMessageInput = memo(function RoomMessageInput({
           commandMenu.dismiss()
         }
       }}
+      onDismiss={commandMenu.dismiss}
     />
   ) : (
     mentionDropdown

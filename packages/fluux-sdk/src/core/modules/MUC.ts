@@ -120,12 +120,30 @@ interface JoinDeferred {
   settled: boolean
 }
 
+/**
+ * Awaitable outcome of an in-flight nick change (XEP-0045 §7.6), returned by
+ * {@link MUC.changeNick}. Distinct from {@link JoinDeferred} because a *failed*
+ * nick change (e.g. the new nick is taken) leaves the occupant still in the room
+ * under the old nick — it must never touch the room's `joined` state.
+ */
+interface NickChangeDeferred {
+  newNick: string
+  promise: Promise<void>
+  resolve: () => void
+  reject: (err: RoomJoinError) => void
+  settled: boolean
+  timeoutId: ReturnType<typeof setTimeout>
+}
+
 export class MUC extends BaseModule {
   /** Track pending room joins for timeout handling */
   private pendingJoins = new Map<string, PendingJoin>()
 
   /** Track the awaitable outcome of in-flight joins (see joinResult). */
   private joinDeferreds = new Map<string, JoinDeferred>()
+
+  /** Track in-flight nick changes (see changeNick), keyed by room JID. */
+  private pendingNickChanges = new Map<string, NickChangeDeferred>()
 
   /**
    * Buffer for occupant presences during room join.
@@ -150,12 +168,17 @@ export class MUC extends BaseModule {
         this.handleMUCPresence(stanza, mucUser)
         return true
       }
-      // Join-error presences echo <x muc> (or nothing), not muc#user, so they
-      // miss the gate above. Route them to fail the in-flight join.
+      // Join- and nick-change-error presences echo <x muc> (or nothing), not
+      // muc#user, so they miss the gate above. Route them to fail whichever
+      // request is in flight for the room.
       if (stanza.attrs.type === 'error') {
         const roomJid = getBareJid(stanza.attrs.from ?? '')
         if (roomJid && this.pendingJoins.has(roomJid)) {
           this.failJoin(stanza, roomJid)
+          return true
+        }
+        if (roomJid && this.pendingNickChanges.has(roomJid)) {
+          this.failNickChange(roomJid, stanza)
           return true
         }
       }
@@ -184,6 +207,10 @@ export class MUC extends BaseModule {
     if (type === 'error') {
       if (this.pendingJoins.has(roomJid)) {
         this.failJoin(stanza, roomJid)
+      } else if (this.pendingNickChanges.has(roomJid)) {
+        // A rejected nick change (e.g. conflict) — we stay in the room under the
+        // old nick, so only settle the changeNick() outcome; leave room state alone.
+        this.failNickChange(roomJid, stanza)
       } else {
         console.error(`[MUC] Presence error for ${from}`)
       }
@@ -201,6 +228,15 @@ export class MUC extends BaseModule {
     const isSelf = statuses.includes('110')
 
     if (type === 'unavailable') {
+      // XEP-0045 §7.6: a nick change is signalled by <status code="303"/> on the
+      // OLD nick's unavailable presence (the new nick rides in <item nick="…"/>).
+      // Drop the old-nick occupant; the paired available presence for the new nick
+      // re-adds it. This is NOT a room-leave — even for self, whose 303 presence
+      // also carries status 110 and must not flip the room to "not joined".
+      if (statuses.includes('303')) {
+        this.deps.emitSDK('room:occupant-left', { roomJid, nick })
+        return
+      }
       if (isSelf) {
         // SDK event only - binding calls store.setRoomJoined
         this.deps.emitSDK('room:joined', { roomJid, joined: false })
@@ -250,6 +286,21 @@ export class MUC extends BaseModule {
     }
 
     if (isSelf) {
+      // Nick change confirmed (XEP-0045 §7.6): the server echoes our new nick as a
+      // self-presence. We never left the room, so update our occupant + nickname and
+      // add the renamed occupant WITHOUT the full join completion (no MAM refetch,
+      // re-bookmark, or room:joined toggle).
+      const pendingNick = this.pendingNickChanges.get(roomJid)
+      if (pendingNick && pendingNick.newNick === nick) {
+        this.clearPendingNickChange(roomJid, 'resolve')
+        this.deps.emitSDK('room:self-occupant', { roomJid, occupant })
+        this.deps.emitSDK('room:occupant-joined', { roomJid, occupant })
+        if (avatarHash) {
+          this.deps.emit('occupantAvatarUpdate', roomJid, nick, avatarHash, realJid)
+        }
+        return
+      }
+
       // Clear the join timeout - we successfully joined
       this.clearPendingJoin(roomJid)
       this.settleJoinSuccess(roomJid)
@@ -458,6 +509,10 @@ export class MUC extends BaseModule {
       }
     }
     this.joinDeferreds.clear()
+    // Reject any unresolved nick changes so changeNick() awaiters don't hang.
+    for (const roomJid of Array.from(this.pendingNickChanges.keys())) {
+      this.clearPendingNickChange(roomJid, new RoomJoinError(roomJid, 'timeout'))
+    }
   }
 
   /**
@@ -727,6 +782,102 @@ export class MUC extends BaseModule {
     logInfo(`Room left: ${roomJid}`)
     // SDK event only - binding calls store.updateRoom
     this.deps.emitSDK('room:updated', { roomJid, updates: { joined: false, isJoining: false } })
+  }
+
+  /**
+   * Change your nickname in a room you're already in (XEP-0045 §7.6).
+   *
+   * Sends a directed presence to `room@service/newNick`. Unlike {@link joinRoom},
+   * this does NOT re-join, clear the occupant list, or request history — the room
+   * membership is preserved and the server reconciles the change via a status-303
+   * unavailable presence (old nick) followed by the new self-presence.
+   *
+   * @param roomJid - The room JID
+   * @param newNick - The desired new nickname
+   * @returns Resolves when the server confirms the new nick, rejects with a
+   *   {@link RoomJoinError} (condition `'conflict'` when the nick is taken, or
+   *   `'timeout'` if the server never responds).
+   *
+   * @remarks
+   * - No-op (resolves immediately) when `newNick` is empty or equals the current nick.
+   * - Rejects immediately if the room isn't currently joined.
+   */
+  async changeNick(roomJid: string, newNick: string): Promise<void> {
+    const trimmed = newNick.trim()
+    const room = this.deps.stores?.room.getRoom(roomJid)
+    if (!room || !room.joined) {
+      throw new RoomJoinError(roomJid, 'not-joined', 'cancel', 'Not in room')
+    }
+    if (!trimmed || trimmed === room.nickname) return
+
+    // Replace any in-flight nick change for this room (last request wins).
+    this.clearPendingNickChange(roomJid)
+
+    let resolve!: () => void
+    let reject!: (err: RoomJoinError) => void
+    const promise = new Promise<void>((res, rej) => {
+      resolve = res
+      reject = rej
+    })
+    // Swallow the rejection so an unawaited changeNick() doesn't surface as an
+    // unhandled promise rejection; direct callers still observe it via the return.
+    promise.catch(() => {})
+
+    const timeoutId = setTimeout(() => {
+      this.failNickChangeTimeout(roomJid)
+    }, JOIN_TIMEOUT_MS)
+
+    this.pendingNickChanges.set(roomJid, {
+      newNick: trimmed,
+      promise,
+      resolve,
+      reject,
+      settled: false,
+      timeoutId,
+    })
+
+    // Preserve current presence show/status on the directed presence.
+    const currentPresence = this.deps.stores?.connection.getPresenceShow()
+    const currentStatus = this.deps.stores?.connection.getStatusMessage()
+    const children: Element[] = []
+    if (currentPresence && currentPresence !== 'online' && currentPresence !== 'offline') {
+      const showValue = currentPresence === 'away' ? 'away' : currentPresence === 'dnd' ? 'dnd' : undefined
+      if (showValue) children.push(xml('show', {}, showValue))
+    }
+    if (currentStatus) children.push(xml('status', {}, currentStatus))
+
+    const presence = xml('presence', { to: `${roomJid}/${trimmed}` }, ...children)
+    logInfo(`Changing nick in ${roomJid} to ${trimmed}`)
+    await this.deps.sendStanza(presence)
+
+    return promise
+  }
+
+  /** Clear a pending nick change, optionally settling its deferred first. */
+  private clearPendingNickChange(roomJid: string, settle?: 'resolve' | RoomJoinError): void {
+    const pending = this.pendingNickChanges.get(roomJid)
+    if (!pending) return
+    clearTimeout(pending.timeoutId)
+    if (settle && !pending.settled) {
+      pending.settled = true
+      if (settle === 'resolve') pending.resolve()
+      else pending.reject(settle)
+    }
+    this.pendingNickChanges.delete(roomJid)
+  }
+
+  /** Reject an in-flight nick change from a server error presence (e.g. conflict). */
+  private failNickChange(roomJid: string, stanza: Element): void {
+    const error = parseXMPPError(stanza)
+    this.clearPendingNickChange(
+      roomJid,
+      new RoomJoinError(roomJid, error?.condition ?? 'undefined-condition', error?.type, error?.text)
+    )
+  }
+
+  /** Reject an in-flight nick change that the server never acknowledged. */
+  private failNickChangeTimeout(roomJid: string): void {
+    this.clearPendingNickChange(roomJid, new RoomJoinError(roomJid, 'timeout'))
   }
 
   /**

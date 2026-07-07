@@ -1096,6 +1096,7 @@ export const MessageInput = memo(function MessageInput({
       sdk: {
         joinRoom: notInRoom,
         joinResult: notInRoom,
+        changeNick: notInRoom,
         leaveRoom: notInRoom,
         setSubject: notInRoom,
         setRole: notInRoom,
