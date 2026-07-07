@@ -424,7 +424,9 @@
         "hatJidPlaceholder": "user@example.com",
         "userInfo": "Brukerinfo",
         "manageOccupant": "Administrer",
-        "invitationsHeading": "Invitasjoner"
+        "invitationsHeading": "Invitasjoner",
+        "nickEdgeWhitespace": "Navnet har ekstra mellomrom i kantene",
+        "nickHiddenChars": "Navnet inneholder skjulte tegn"
     },
     "events": {
         "invitedBy": "Invitert av {{name}}",

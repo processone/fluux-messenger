@@ -1,6 +1,7 @@
 import { xml, Element } from '@xmpp/client'
 import { BaseModule } from './BaseModule'
 import { getBareJid, getLocalPart, getResource, getDomain } from '../jid'
+import { stripNickWhitespace } from '../nick'
 import { generateUUID } from '../../utils/uuid'
 import { generateQuickChatSlug } from '../wordlist'
 import { hasStableOccupantIdentity, isNonAnonymousRoom, isPrivateRoom } from '../roomCapabilities'
@@ -570,9 +571,19 @@ export class MUC extends BaseModule {
    */
   async joinRoom(
     roomJid: string,
-    nickname: string,
+    rawNickname: string,
     options?: { maxHistory?: number; password?: string; isQuickChat?: boolean; knownFeatures?: RoomFeatures | null }
   ): Promise<void> {
+    // Normalize our OWN nick before it goes on the wire. Every self-nick path —
+    // the join modal, programmatic joins, the `/nick` command, and reconnection
+    // rejoin — routes through here, so this single choke point strips edge
+    // whitespace and invisible/bidi characters that MUC services (e.g. ejabberd)
+    // would otherwise accept, keeping our users from becoming impersonators.
+    // Fall back to the raw value if stripping empties it, so an all-whitespace
+    // input still produces a presence the server rejects meaningfully rather
+    // than a silently-changed one (the `/nick` handler already blocks empty).
+    const nickname = stripNickWhitespace(rawNickname) || rawNickname
+
     const existingRoom = this.deps.stores?.room.getRoom(roomJid)
 
     // If already joined, don't send another presence (avoids leave/rejoin issues)

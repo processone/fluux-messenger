@@ -426,7 +426,9 @@
         "hatJidPlaceholder": "user@example.com",
         "userInfo": "Informații utilizator",
         "manageOccupant": "Gestionează",
-        "invitationsHeading": "Invitații"
+        "invitationsHeading": "Invitații",
+        "nickEdgeWhitespace": "Numele are spații suplimentare la margini",
+        "nickHiddenChars": "Numele conține caractere ascunse"
     },
     "events": {
         "invitedBy": "Invitat de {{name}}",

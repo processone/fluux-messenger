@@ -426,7 +426,9 @@
         "hatJidPlaceholder": "user@example.com",
         "userInfo": "Info do utilizador",
         "manageOccupant": "Gerir",
-        "invitationsHeading": "Convites"
+        "invitationsHeading": "Convites",
+        "nickEdgeWhitespace": "O nome tem espaços extra nas extremidades",
+        "nickHiddenChars": "O nome contém caracteres ocultos"
     },
     "events": {
         "invitedBy": "Convidado por {{name}}",

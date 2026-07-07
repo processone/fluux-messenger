@@ -426,7 +426,9 @@
         "hatJidPlaceholder": "user@example.com",
         "userInfo": "Podatki o uporabniku",
         "manageOccupant": "Upravljaj",
-        "invitationsHeading": "Vabila"
+        "invitationsHeading": "Vabila",
+        "nickEdgeWhitespace": "Ime ima dodatne presledke na robovih",
+        "nickHiddenChars": "Ime vsebuje skrite znake"
     },
     "events": {
         "invitedBy": "Povabil {{name}}",

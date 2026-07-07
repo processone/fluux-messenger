@@ -1,6 +1,6 @@
 import { getBareJid, getPresenceFromShow, canModerate, canBan } from '@fluux/sdk'
 import { whisperCounterpartPresent } from './'
-import { auroraSenderColor } from '@/utils/senderColor'
+import { auroraSenderColor, nickColorSeed } from '@/utils/senderColor'
 import type { Room, RoomMessage, RoomRole, RoomAffiliation, ContactIdentity, RoomOccupant } from '@fluux/sdk'
 
 export interface ResolvedRoomSender {
@@ -126,7 +126,9 @@ export function resolveNickColor(
   const occupant = room.occupants.get(nick)
   const bareJid = occupant?.jid ? getBareJid(occupant.jid) : room.nickToJidCache?.get(nick)
   const contact = bareJid ? contactsByJid.get(bareJid) : undefined
-  return resolveSenderColor(nick, contact, isDarkMode)
+  // Seed on stable identity so a mention of an impersonating look-alike nick
+  // still matches the real person's color (or diverges from it).
+  return resolveSenderColor(nickColorSeed({ occupantId: occupant?.occupantId, bareJid, nick }), contact, isDarkMode)
 }
 
 export function selectSelfOccupant(

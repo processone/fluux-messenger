@@ -425,7 +425,9 @@
         "hatJidPlaceholder": "user@example.com",
         "userInfo": "Πληροφορίες χρήστη",
         "manageOccupant": "Διαχείριση",
-        "invitationsHeading": "Προσκλήσεις"
+        "invitationsHeading": "Προσκλήσεις",
+        "nickEdgeWhitespace": "Το όνομα έχει επιπλέον κενά στα άκρα",
+        "nickHiddenChars": "Το όνομα περιέχει κρυφούς χαρακτήρες"
     },
     "events": {
         "invitedBy": "Πρόσκληση από {{name}}",

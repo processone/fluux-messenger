@@ -424,7 +424,9 @@
         "hatJidPlaceholder": "user@example.com",
         "userInfo": "Gebruikersinfo",
         "manageOccupant": "Beheren",
-        "invitationsHeading": "Uitnodigingen"
+        "invitationsHeading": "Uitnodigingen",
+        "nickEdgeWhitespace": "De naam heeft extra spaties aan de randen",
+        "nickHiddenChars": "De naam bevat verborgen tekens"
     },
     "events": {
         "invitedBy": "Uitgenodigd door {{name}}",

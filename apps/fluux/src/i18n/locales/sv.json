@@ -424,7 +424,9 @@
         "hatJidPlaceholder": "user@example.com",
         "userInfo": "Användarinfo",
         "manageOccupant": "Hantera",
-        "invitationsHeading": "Inbjudningar"
+        "invitationsHeading": "Inbjudningar",
+        "nickEdgeWhitespace": "Namnet har extra mellanslag i kanterna",
+        "nickHiddenChars": "Namnet innehåller dolda tecken"
     },
     "events": {
         "invitedBy": "Inbjuden av {{name}}",

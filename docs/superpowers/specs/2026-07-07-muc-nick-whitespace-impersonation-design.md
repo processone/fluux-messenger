@@ -90,14 +90,29 @@ App component `apps/fluux/src/components/NickText.tsx`:
   ("contains hidden characters"). NBSP can't reveal zero-width chars — the badge
   does.
 
-Applied everywhere a **remote** nick is shown:
+Applied everywhere a **remote** nick is an authoritative occupant identity:
 
 - occupant list (`OccupantPanel.tsx`),
-- message author name (`RoomView.tsx` / message bubble via
-  `roomSenderResolution.ts`),
-- inline `@mention` pills,
-- reply-quote author,
-- **the PM / whisper header** — highest priority for this attack.
+- message author name (`MessageBubble.tsx`, incl. every whisper message),
+- reply-quote author (`MessageBubble.tsx`),
+- **whisper-thread header** ("Private with {{nick}}") and the counterpart-gone
+  footer, via `NickSentence` (see below).
+
+**`NickSentence` — revealing a nick interpolated into a translated sentence.**
+The whisper header interpolates the nick into a `t()` string, and the codebase
+uses `t()` exclusively (zero `<Trans>`). Rather than restructure 33 locale files
+with placeholder tags, `NickSentence` runs the existing `t(key, { nick })` with a
+private-use sentinel (`U+E000`) as the nick, splits the result on the sentinel,
+and splices a live `<NickText>` into the gap. The nick lands wherever the
+translation places it — correct for RTL and for locales that lead with the name —
+with no locale edits and no new i18n pattern.
+
+Deferred (implementation note):
+
+- **Inline `@mention` pills** come from the sender's *typed body text*
+  (`renderStyledMessage`), not an authoritative occupant identity, so revealing
+  whitespace there is a weaker signal; the mention *color* is still hardened via
+  Component C.
 
 ### C — Color nicks by stable identity (app)
 
@@ -141,3 +156,13 @@ users' colors once; acceptable.
 - Look-alike-occupant detection / active warning on PM start (considered, cut).
 - Normalizing stored bookmark nick data.
 - Server-side stripping (that is ejabberd's responsibility).
+- Inline @mention whitespace reveal (see Component B deferred note).
+
+## Precedence note
+
+Color seed precedence is `occupantId ?? bareJid ?? nick`. XEP-0421 occupant-id
+is stable per real user within a room and shared across their devices, so it
+both distinguishes an impersonator and unifies a user's connections into one
+color; the real bare JID is the fallback when occupant-id is unsupported, and
+the nick is the last resort (fully-anonymous room with no occupant-id — the
+color defense degrades gracefully there).

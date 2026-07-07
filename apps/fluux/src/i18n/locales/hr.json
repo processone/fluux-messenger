@@ -424,7 +424,9 @@
         "hatJidPlaceholder": "user@example.com",
         "userInfo": "Podaci o korisniku",
         "manageOccupant": "Upravljaj",
-        "invitationsHeading": "Pozivnice"
+        "invitationsHeading": "Pozivnice",
+        "nickEdgeWhitespace": "Ime sadrži dodatne razmake na rubovima",
+        "nickHiddenChars": "Ime sadrži skrivene znakove"
     },
     "events": {
         "invitedBy": "Pozvao {{name}}",

@@ -424,7 +424,9 @@
         "hatJidPlaceholder": "user@example.com",
         "userInfo": "Інфармацыя пра карыстальніка",
         "manageOccupant": "Кіраванне",
-        "invitationsHeading": "Запрашэнні"
+        "invitationsHeading": "Запрашэнні",
+        "nickEdgeWhitespace": "Імя змяшчае лішнія прабелы па краях",
+        "nickHiddenChars": "Імя змяшчае схаваныя сімвалы"
     },
     "events": {
         "invitedBy": "Запрошаны {{name}}",

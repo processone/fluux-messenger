@@ -426,7 +426,9 @@
         "hatJidPlaceholder": "user@example.com",
         "userInfo": "Informace o uživateli",
         "manageOccupant": "Spravovat",
-        "invitationsHeading": "Pozvánky"
+        "invitationsHeading": "Pozvánky",
+        "nickEdgeWhitespace": "Jméno obsahuje mezery na okrajích",
+        "nickHiddenChars": "Jméno obsahuje skryté znaky"
     },
     "events": {
         "invitedBy": "Pozval(a) {{name}}",

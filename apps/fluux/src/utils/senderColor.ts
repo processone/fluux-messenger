@@ -24,6 +24,20 @@ const DARK_ROW_LUMINANCE = 0.08
  * mode. Replaces the raw getConsistentTextColor for sender names so everyone
  * stays distinct in large rooms while harmonizing with Aurora.
  */
+/**
+ * The identity a nick's color is derived from. Prefer the XEP-0421 occupant-id
+ * (stable per real user within a room, shared across their devices, and present
+ * even in anonymous rooms), then the real bare JID, and only fall back to the
+ * nick string when no stable identity is known. Seeding on identity rather than
+ * the raw nick means an impersonator using a look-alike nick (padded / hidden
+ * characters) still renders in a *different* color than the person they mimic.
+ * A single precedence, used at every color site, keeps one person one color
+ * across the occupant list, message authors, mentions and reply quotes.
+ */
+export function nickColorSeed(opts: { occupantId?: string; bareJid?: string; nick: string }): string {
+  return opts.occupantId || opts.bareJid || opts.nick
+}
+
 export function auroraSenderColor(identifier: string, isDarkMode: boolean): string {
   if (isDarkMode) {
     // Luminous on near-black; lighten intrinsically-dark hues until they clear AA

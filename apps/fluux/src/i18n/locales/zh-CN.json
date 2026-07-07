@@ -424,7 +424,9 @@
         "hatJidPlaceholder": "user@example.com",
         "userInfo": "用户信息",
         "manageOccupant": "管理",
-        "invitationsHeading": "邀请"
+        "invitationsHeading": "邀请",
+        "nickEdgeWhitespace": "名称的首尾包含多余的空格",
+        "nickHiddenChars": "名称包含隐藏字符"
     },
     "events": {
         "invitedBy": "邀请者 {{name}}",

@@ -797,6 +797,21 @@ describe('MUC Module', () => {
       })
     })
 
+    it('strips edge whitespace from our nick before sending join presence (impersonation hardening)', async () => {
+      await muc.joinRoom('room@conference.example.org', '  admin  ')
+
+      const presence = mockSendStanza.mock.calls[0][0]
+      expect(presence.attrs.to).toBe('room@conference.example.org/admin')
+    })
+
+    it('stores the stripped nick as the room self-nickname', async () => {
+      await muc.joinRoom('room@conference.example.org', 'admin​')
+
+      expect(mockEmitSDK).toHaveBeenCalledWith('room:added', {
+        room: expect.objectContaining({ nickname: 'admin' }),
+      })
+    })
+
     it('preserves a known supportsModeration value when a re-join disco fails (F3: no clobber to unknown)', async () => {
       // Existing, not-yet-joined room a prior disco resolved as moderation-unsupported.
       mockStores.room.getRoom.mockReturnValue({

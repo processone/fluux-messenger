@@ -424,7 +424,9 @@
         "hatJidPlaceholder": "user@example.com",
         "userInfo": "Eolas úsáideora",
         "manageOccupant": "Bainistigh",
-        "invitationsHeading": "Cuirí"
+        "invitationsHeading": "Cuirí",
+        "nickEdgeWhitespace": "Tá spásanna breise ag imill an ainm",
+        "nickHiddenChars": "Tá carachtair fholaithe san ainm"
     },
     "events": {
         "invitedBy": "Cuireadh ag {{name}}",

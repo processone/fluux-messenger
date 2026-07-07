@@ -425,7 +425,9 @@
         "selectHat": "Sélectionner un badge",
         "hatJidPlaceholder": "user@example.com",
         "manageOccupant": "Gérer",
-        "invitationsHeading": "Invitations"
+        "invitationsHeading": "Invitations",
+        "nickEdgeWhitespace": "Le nom comporte des espaces au début ou à la fin",
+        "nickHiddenChars": "Le nom contient des caractères invisibles"
     },
     "events": {
         "invitedBy": "Invité par {{name}}",

@@ -426,7 +426,9 @@
         "hatJidPlaceholder": "user@example.com",
         "userInfo": "Kasutaja teave",
         "manageOccupant": "Halda",
-        "invitationsHeading": "Kutsed"
+        "invitationsHeading": "Kutsed",
+        "nickEdgeWhitespace": "Nimel on servades lisatühikud",
+        "nickHiddenChars": "Nimi sisaldab peidetud märke"
     },
     "events": {
         "invitedBy": "Kutsuja {{name}}",

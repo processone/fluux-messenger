@@ -426,7 +426,9 @@
         "hatJidPlaceholder": "user@example.com",
         "userInfo": "Info tal-utent",
         "manageOccupant": "Immaniġġja",
-        "invitationsHeading": "Stedini"
+        "invitationsHeading": "Stedini",
+        "nickEdgeWhitespace": "L-isem għandu spazji żejda fit-truf",
+        "nickHiddenChars": "L-isem fih karattri moħbija"
     },
     "events": {
         "invitedBy": "Mistieden minn {{name}}",

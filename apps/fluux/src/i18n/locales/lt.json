@@ -424,7 +424,9 @@
         "hatJidPlaceholder": "user@example.com",
         "userInfo": "Naudotojo informacija",
         "manageOccupant": "Valdyti",
-        "invitationsHeading": "Kvietimai"
+        "invitationsHeading": "Kvietimai",
+        "nickEdgeWhitespace": "Varde yra papildomų tarpų kraštuose",
+        "nickHiddenChars": "Varde yra paslėptų simbolių"
     },
     "events": {
         "invitedBy": "Pakvietė {{name}}",
