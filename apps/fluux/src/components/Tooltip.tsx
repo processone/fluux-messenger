@@ -103,7 +103,17 @@ export function Tooltip({
   useEffect(() => {
     if (!isVisible) return
 
-    const handleScroll = () => hideTooltip()
+    // Only dismiss on scrolls that could actually move the trigger — i.e. the
+    // scrolled element contains the trigger. A global capture listener would
+    // otherwise fire for any scroll anywhere (e.g. the message list
+    // auto-scrolling to bottom when the main view mounts), yanking the tooltip
+    // away for unrelated reasons.
+    const handleScroll = (e: Event) => {
+      const target = e.target
+      if (target instanceof Node && target.contains(triggerRef.current)) {
+        hideTooltip()
+      }
+    }
     const handleBlur = () => hideTooltip()
     const handlePointerDown = () => hideTooltip()
 
@@ -209,12 +219,16 @@ export function Tooltip({
     }
   }, [])
 
-  // Arrow styles based on position
+  // Arrow: a rotated square centred on the bubble edge and painted ON TOP of
+  // the bubble, so its fill covers the bubble's border at the junction (no
+  // "internal" line across the base). Only the two OUTER edges carry a border,
+  // so the visible half-diamond reads as a seamless continuation of the
+  // bubble's outline pointing at the trigger — not a separate diamond.
   const arrowStyles: Record<TooltipPosition, string> = {
-    top: 'bottom-0 left-1/2 -translate-x-1/2 translate-y-full border-t-[var(--tooltip-bg)] border-x-transparent border-b-transparent',
-    bottom: 'top-0 left-1/2 -translate-x-1/2 -translate-y-full border-b-[var(--tooltip-bg)] border-x-transparent border-t-transparent',
-    left: 'right-0 top-1/2 -translate-y-1/2 translate-x-full border-l-[var(--tooltip-bg)] border-y-transparent border-r-transparent',
-    right: 'left-0 top-1/2 -translate-y-1/2 -translate-x-full border-r-[var(--tooltip-bg)] border-y-transparent border-l-transparent',
+    top: 'left-1/2 top-full -translate-x-1/2 -translate-y-1/2 border-b border-r',
+    bottom: 'left-1/2 top-0 -translate-x-1/2 -translate-y-1/2 border-t border-l',
+    left: 'left-full top-1/2 -translate-x-1/2 -translate-y-1/2 border-t border-r',
+    right: 'left-0 top-1/2 -translate-x-1/2 -translate-y-1/2 border-b border-l',
   }
 
   return (
@@ -246,26 +260,28 @@ export function Tooltip({
 
       {isVisible && createPortal(
         <div
-          ref={tooltipRef}
-          role="tooltip"
           style={{
             position: 'fixed',
             left: coords.x,
             top: coords.y,
-            maxWidth,
             pointerEvents: 'none',
-            // CSS variable for arrow color matching
-            ['--tooltip-bg' as string]: 'var(--fluux-sidebar)',
             zIndex: 9999,
           }}
-          className="px-3 py-2 rounded-lg bg-fluux-sidebar text-fluux-text text-sm
-                     shadow-[0_4px_16px_rgba(0,0,0,0.25)] border border-fluux-border
-                     animate-tooltip-in"
+          className="animate-tooltip-in"
         >
-          {content}
-          {/* Arrow */}
           <div
-            className={`absolute size-0 border-[6px] ${arrowStyles[actualPosition]}`}
+            ref={tooltipRef}
+            role="tooltip"
+            style={{ maxWidth }}
+            className="relative px-3 py-2 rounded-lg bg-fluux-float text-fluux-text text-sm
+                       shadow-[0_4px_16px_rgba(0,0,0,0.25)] border border-fluux-border"
+          >
+            {content}
+          </div>
+          {/* Arrow — painted after (over) the bubble; see arrowStyles above. */}
+          <div
+            aria-hidden
+            className={`absolute size-2.5 rotate-45 bg-fluux-float border-fluux-border ${arrowStyles[actualPosition]}`}
           />
         </div>,
         document.body
