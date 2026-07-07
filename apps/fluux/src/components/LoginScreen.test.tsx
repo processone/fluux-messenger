@@ -510,10 +510,10 @@ describe('LoginScreen — Aurora branding', () => {
     // display-font heading
     const heading = screen.getByRole('heading', { level: 1 })
     expect(heading.className).toMatch(/font-display/)
-    // the brand mark is the inline app-icon svg — no <img>, no legacy --fluux-grad tile
+    // the brand mark is the inline app-icon svg — no flat logo <img>
+    // (the soft halo behind it does use --fluux-grad, so we don't assert its absence)
     expect(screen.queryByRole('img')).toBeNull()
     expect(document.querySelector('svg.app-icon-mark')).not.toBeNull()
-    expect(document.querySelector('[style*="--fluux-grad"]')).toBeNull()
   })
 })
 
