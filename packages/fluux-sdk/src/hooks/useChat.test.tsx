@@ -23,6 +23,35 @@ describe('useChat hook', () => {
     })
   })
 
+  describe('composed action surface (useChat = state + useChatActions)', () => {
+    // useChat now composes useChatActions instead of re-defining every action;
+    // this pins that its full action surface — including actions that had
+    // drifted onto useChatActions only — is present and callable.
+    const composedActions = [
+      'sendMessage', 'sendChatState', 'sendReaction', 'sendCorrection', 'retractMessage',
+      'setActiveConversation', 'addConversation', 'deleteConversation',
+      // read-state (markReadToNewest had drifted onto useChatActions only)
+      'markAsRead', 'markReadToNewest',
+      'archiveConversation', 'unarchiveConversation', 'isArchived',
+      'sendEasterEgg', 'clearAnimation', 'setDraft', 'getDraft', 'clearDraft',
+      'clearFirstNewMessageId', 'updateLastSeenMessageId', 'fetchHistory', 'fetchOlderHistory',
+    ] as const
+
+    it('exposes every composed action as a function', () => {
+      const { result } = renderHook(() => useChat(), { wrapper })
+      const hook = result.current as unknown as Record<string, unknown>
+      const missing = composedActions.filter((name) => typeof hook[name] !== 'function')
+      expect(missing).toEqual([])
+    })
+
+    it('still exposes chat state alongside the actions', () => {
+      const { result } = renderHook(() => useChat(), { wrapper })
+      expect(Array.isArray(result.current.conversations)).toBe(true)
+      expect(Array.isArray(result.current.archivedConversations)).toBe(true)
+      expect(result.current.activeConversationId).toBeNull()
+    })
+  })
+
   describe('conversations reactivity', () => {
     it('should update when a conversation is added to the store', () => {
       const { result } = renderHook(() => useChat(), { wrapper })
