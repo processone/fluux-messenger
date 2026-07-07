@@ -13,8 +13,6 @@ import { useState, useEffect, useRef, useCallback, memo } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   useSearch,
-  getMessages,
-  getRoomMessages,
   createMessageLookup,
   getBareJid,
   getLocalPart,
@@ -25,6 +23,7 @@ import {
   type BaseMessage,
   type ContactIdentity,
 } from '@fluux/sdk'
+import { getMessages, getRoomMessages } from '@fluux/sdk/cache'
 import { getSearchClient } from '@fluux/sdk/stores'
 import { useConnectionStore } from '@fluux/sdk/react'
 import { MessageBubble, MessageList, shouldShowAvatar, buildReplyContext } from './conversation'

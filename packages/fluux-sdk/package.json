@@ -55,6 +55,16 @@
         "types": "./dist/demo/index.d.cts",
         "default": "./dist/demo/index.cjs"
       }
+    },
+    "./cache": {
+      "import": {
+        "types": "./dist/cache/index.d.ts",
+        "default": "./dist/cache/index.js"
+      },
+      "require": {
+        "types": "./dist/cache/index.d.cts",
+        "default": "./dist/cache/index.cjs"
+      }
     }
   },
   "files": [
