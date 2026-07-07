@@ -1,149 +1,68 @@
-import { describe, it, expect, vi } from 'vitest'
-import { renderHook, act } from '@testing-library/react'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { renderHook } from '@testing-library/react'
 import { useSlashCommands } from './useSlashCommands'
+import { useToastStore } from '../stores/toastStore'
+import type { CommandContext } from '../commands/types'
+
+function ctx(overrides: Partial<CommandContext> = {}): CommandContext {
+  return {
+    kind: 'room',
+    entityJid: 'room@conf.example.com',
+    self: { role: 'moderator', affiliation: 'owner' },
+    sdk: {
+      joinRoom: vi.fn().mockResolvedValue(undefined),
+      joinResult: vi.fn().mockResolvedValue(undefined),
+      leaveRoom: vi.fn().mockResolvedValue(undefined),
+      setSubject: vi.fn().mockResolvedValue(undefined),
+      setRole: vi.fn().mockResolvedValue(undefined),
+      setAffiliation: vi.fn().mockResolvedValue(undefined),
+      invite: vi.fn().mockResolvedValue(undefined),
+    },
+    ui: { openInviteModal: vi.fn(), openRoomConfig: vi.fn(), openHelp: vi.fn() },
+    app: { sendEasterEgg: vi.fn() },
+    resolveNick: () => undefined,
+    t: (k: string) => k,
+    ...overrides,
+  }
+}
 
 describe('useSlashCommands', () => {
-  describe('handleCommand', () => {
-    it('should return true and call sendEasterEgg for /christmas command', async () => {
-      const sendEasterEgg = vi.fn().mockResolvedValue(undefined)
-      const { result } = renderHook(() =>
-        useSlashCommands({ sendEasterEgg })
-      )
+  beforeEach(() => useToastStore.setState({ toasts: [] }))
 
-      let handled: boolean
-      await act(async () => {
-        handled = await result.current.handleCommand('/christmas')
-      })
-
-      expect(handled!).toBe(true)
-      expect(sendEasterEgg).toHaveBeenCalledTimes(1)
-      expect(sendEasterEgg).toHaveBeenCalledWith('christmas')
-    })
-
-    it('should be case insensitive', async () => {
-      const sendEasterEgg = vi.fn().mockResolvedValue(undefined)
-      const { result } = renderHook(() =>
-        useSlashCommands({ sendEasterEgg })
-      )
-
-      await act(async () => {
-        await result.current.handleCommand('/CHRISTMAS')
-      })
-      expect(sendEasterEgg).toHaveBeenCalledTimes(1)
-
-      await act(async () => {
-        await result.current.handleCommand('/Christmas')
-      })
-      expect(sendEasterEgg).toHaveBeenCalledTimes(2)
-
-      await act(async () => {
-        await result.current.handleCommand('/ChRiStMaS')
-      })
-      expect(sendEasterEgg).toHaveBeenCalledTimes(3)
-    })
-
-    it('should handle leading/trailing whitespace', async () => {
-      const sendEasterEgg = vi.fn().mockResolvedValue(undefined)
-      const { result } = renderHook(() =>
-        useSlashCommands({ sendEasterEgg })
-      )
-
-      await act(async () => {
-        await result.current.handleCommand('  /christmas  ')
-      })
-
-      expect(sendEasterEgg).toHaveBeenCalledTimes(1)
-    })
-
-    it('should return false for unrecognized commands', async () => {
-      const sendEasterEgg = vi.fn().mockResolvedValue(undefined)
-      const { result } = renderHook(() =>
-        useSlashCommands({ sendEasterEgg })
-      )
-
-      let handled: boolean
-      await act(async () => {
-        handled = await result.current.handleCommand('/unknown')
-      })
-
-      expect(handled!).toBe(false)
-      expect(sendEasterEgg).not.toHaveBeenCalled()
-    })
-
-    it('should return false for regular messages', async () => {
-      const sendEasterEgg = vi.fn().mockResolvedValue(undefined)
-      const { result } = renderHook(() =>
-        useSlashCommands({ sendEasterEgg })
-      )
-
-      let handled: boolean
-      await act(async () => {
-        handled = await result.current.handleCommand('hello world')
-      })
-
-      expect(handled!).toBe(false)
-      expect(sendEasterEgg).not.toHaveBeenCalled()
-    })
-
-    it('should return false for messages containing command as substring', async () => {
-      const sendEasterEgg = vi.fn().mockResolvedValue(undefined)
-      const { result } = renderHook(() =>
-        useSlashCommands({ sendEasterEgg })
-      )
-
-      let handled: boolean
-      await act(async () => {
-        handled = await result.current.handleCommand('I love /christmas!')
-      })
-
-      expect(handled!).toBe(false)
-      expect(sendEasterEgg).not.toHaveBeenCalled()
-    })
-
-    it('should return false for command with extra text', async () => {
-      const sendEasterEgg = vi.fn().mockResolvedValue(undefined)
-      const { result } = renderHook(() =>
-        useSlashCommands({ sendEasterEgg })
-      )
-
-      let handled: boolean
-      await act(async () => {
-        handled = await result.current.handleCommand('/christmas everyone')
-      })
-
-      expect(handled!).toBe(false)
-      expect(sendEasterEgg).not.toHaveBeenCalled()
-    })
-
-    it('should return false for empty string', async () => {
-      const sendEasterEgg = vi.fn().mockResolvedValue(undefined)
-      const { result } = renderHook(() =>
-        useSlashCommands({ sendEasterEgg })
-      )
-
-      let handled: boolean
-      await act(async () => {
-        handled = await result.current.handleCommand('')
-      })
-
-      expect(handled!).toBe(false)
-      expect(sendEasterEgg).not.toHaveBeenCalled()
-    })
-
-    it('should return false for whitespace only', async () => {
-      const sendEasterEgg = vi.fn().mockResolvedValue(undefined)
-      const { result } = renderHook(() =>
-        useSlashCommands({ sendEasterEgg })
-      )
-
-      let handled: boolean
-      await act(async () => {
-        handled = await result.current.handleCommand('   ')
-      })
-
-      expect(handled!).toBe(false)
-      expect(sendEasterEgg).not.toHaveBeenCalled()
-    })
+  it('returns the original text for a plain message', async () => {
+    const { result } = renderHook(() => useSlashCommands(ctx()))
+    expect(await result.current.resolveInput('hello')).toBe('hello')
   })
 
+  it('returns the verbatim text for /me', async () => {
+    const { result } = renderHook(() => useSlashCommands(ctx()))
+    expect(await result.current.resolveInput('/me waves')).toBe('/me waves')
+  })
+
+  it('returns the stripped literal for /say', async () => {
+    const { result } = renderHook(() => useSlashCommands(ctx()))
+    expect(await result.current.resolveInput('/say /literal')).toBe('/literal')
+  })
+
+  it('consumes a command and toasts its error', async () => {
+    const c = ctx({ self: { role: 'participant', affiliation: 'none' } })
+    const { result } = renderHook(() => useSlashCommands(c))
+    expect(await result.current.resolveInput('/kick alice')).toBe('consumed')
+    const toasts = useToastStore.getState().toasts
+    expect(toasts[0]?.type).toBe('error')
+    expect(c.sdk.setRole).not.toHaveBeenCalled()
+  })
+
+  it('consumes a command and toasts a success message', async () => {
+    const c = ctx()
+    const { result } = renderHook(() => useSlashCommands(c))
+    expect(await result.current.resolveInput('/kick alice rude')).toBe('consumed')
+    expect(useToastStore.getState().toasts[0]?.type).toBe('success')
+  })
+
+  it('classifies input for the indicator', () => {
+    const { result } = renderHook(() => useSlashCommands(ctx()))
+    expect(result.current.classifyInput('/kick alice')).toBe('command')
+    expect(result.current.classifyInput('hello')).toBe('send')
+  })
 })
