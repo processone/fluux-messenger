@@ -180,6 +180,26 @@ describe('RoomHeader', () => {
       expect(screen.getByText('My Room')).toBeInTheDocument()
     })
 
+    it('carries the aurora horizon hairline', () => {
+      const { container } = render(
+        <RoomHeader
+          room={createRoom({ name: 'My Room' })}
+          showOccupants={false}
+          onToggleOccupants={mockOnToggleOccupants}
+          setRoomNotifyAll={mockSetRoomNotifyAll}
+          setRoomAvatar={mockSetRoomAvatar}
+          clearRoomAvatar={mockClearRoomAvatar}
+          submitRoomConfig={mockSubmitRoomConfig}
+          setSubject={mockSetSubject}
+          destroyRoom={mockDestroyRoom}
+        />
+      )
+      const header = container.querySelector('header')
+      expect(header).not.toBeNull()
+      expect(header!.className).toContain('aurora-horizon')
+      expect(header!.className).toContain('relative')
+    })
+
     it('renders room subject when available', () => {
       render(
         <RoomHeader
