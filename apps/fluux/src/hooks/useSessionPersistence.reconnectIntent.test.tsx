@@ -9,14 +9,18 @@ import { markLoggedOut, markConnectActive } from '@/utils/reconnectIntent'
 const mockConnect = vi.fn().mockResolvedValue(undefined)
 
 // Override the SDK mock from test-setup for this file only:
-//  - `useXMPPContext` returns our spy client (the real one needs a provider)
-//  - `connectionStore.getState()` exposes the setters the connect wrapper calls
+//  - `useConnectionActions` returns our spy `connect` (production now routes the
+//    auto-reconnect engine through the SDK's connect action, not a local wrapper)
+//  - `useXMPPContext` returns a stub client (the hook still reads it for avatar
+//    cache restore; the real one needs a provider)
+//  - `connectionStore.getState()` exposes the setters callers may touch
 //  - real `hasFastToken` / `getBareJid` / `deleteFastToken` are preserved so the
 //    FAST-token Path B reads our seeded token exactly like production
 vi.mock('@fluux/sdk', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@fluux/sdk')>()
   return {
     ...actual,
+    useConnectionActions: () => ({ connect: mockConnect }),
     useXMPPContext: () => ({ client: { connect: mockConnect } }),
     connectionStore: {
       getState: () => ({ setStatus: vi.fn(), setError: vi.fn() }),
