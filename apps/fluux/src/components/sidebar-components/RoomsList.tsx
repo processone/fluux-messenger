@@ -9,11 +9,13 @@ import {
   roomActivityTone,
   generateConsistentColorHexSync,
 } from '@fluux/sdk'
-import { useChatStore, useRoomStore } from '@fluux/sdk/react'
+import { useChatStore, useRoomStore, useIgnoreStore } from '@fluux/sdk/react'
 import { formatLocalizedPreview } from '@/utils/messagePreviewText'
 import { shouldReplaceOnSelect } from '@/utils/navigationHistory'
+import { visibleRoomTypingNicks } from '@/utils/roomTyping'
 import { EditBookmarkModal } from '../EditBookmarkModal'
 import { Tooltip } from '../Tooltip'
+import { TypingIndicator } from '../conversation/TypingIndicator'
 import { useSidebarZone } from './types'
 import { RoomInvitationsBanner } from './RoomInvitationsBanner'
 import { formatConversationTime } from '@/utils/dateFormat'
@@ -34,6 +36,10 @@ import {
   Plus,
 } from 'lucide-react'
 import { ListEmpty } from '../ui/ListEmpty'
+
+// Stable empty reference for the ignore selector — avoids a new array identity
+// per render (which would defeat the per-row memo / trip a render loop).
+const EMPTY_IGNORED_ARRAY: import('@fluux/sdk/stores').IgnoredUser[] = []
 
 type SidebarSection = 'quick' | 'joined' | 'bookmarked'
 
@@ -297,7 +303,7 @@ interface RoomItemProps {
   'data-selected'?: boolean
 }
 
-const RoomItem = memo(function RoomItem({
+export const RoomItem = memo(function RoomItem({
   roomJid,
   isActive,
   isSelected,
@@ -325,6 +331,7 @@ const RoomItem = memo(function RoomItem({
   // updates during a multi-room join / MAM sync.
   const room = useRoomStore((s) => s.getRoom(roomJid))
   const draft = useRoomStore((s) => s.drafts.get(roomJid))
+  const ignoredForRoom = useIgnoreStore((s) => s.ignoredUsers[roomJid] ?? EMPTY_IGNORED_ARRAY)
 
   if (!room) return null
 
@@ -332,6 +339,16 @@ const RoomItem = memo(function RoomItem({
 
   // Get last message for preview (uses pre-computed lastMessage from metadata for better performance)
   const lastMessage = room.lastMessage ?? null
+
+  // Sidebar typing is intentionally quiet: only surface it on a joined room the
+  // user is caught up on (zero unread) and is not currently viewing — the moment
+  // a settled conversation is about to get a new message. Busy rooms keep their
+  // unread badge and paint no typing (the two never fight for the same pixels).
+  const typingNicks =
+    room.joined && room.unreadCount === 0 && !isActive
+      ? visibleRoomTypingNicks(room, ignoredForRoom)
+      : []
+  const showTyping = typingNicks.length > 0
 
   const handleClick = () => {
     if (menu.isOpen || menu.longPressTriggered.current) return
@@ -454,30 +471,33 @@ const RoomItem = memo(function RoomItem({
               </span>
             )}
           </div>
-          <p dir="auto" className={`truncate text-xs opacity-75 ${draft ? 'italic' : ''}`}>
-            {draft ? (
-              <>{t('conversations.draft')}: {draft}</>
-            ) : room.isJoining ? (
-              <span className="italic">{t('rooms.joining')}</span>
-            ) : lastMessage ? (
-              <span className={lastMessage.isRetracted ? 'italic' : ''}>
-                {lastMessage.isOutgoing ? `${t('chat.me')}: ` : `${lastMessage.nick}: `}
-                {lastMessage.isRetracted ? t('chat.messageDeleted') : formatLocalizedPreview(lastMessage, t)}
-              </span>
-            ) : room.joined ? (
-              // No messages yet - show room subject if available, otherwise subtle placeholder
-              room.subject ? (
-                <span className="text-fluux-muted">{room.subject}</span>
+          {showTyping ? (
+            <TypingIndicator variant="compact" typingUsers={typingNicks} />
+          ) : (
+            <p dir="auto" className={`truncate text-xs opacity-75 ${draft ? 'italic' : ''}`}>
+              {draft ? (
+                <>{t('conversations.draft')}: {draft}</>
+              ) : room.isJoining ? (
+                <span className="italic">{t('rooms.joining')}</span>
+              ) : lastMessage ? (
+                <span className={lastMessage.isRetracted ? 'italic' : ''}>
+                  {lastMessage.isOutgoing ? `${t('chat.me')}: ` : `${lastMessage.nick}: `}
+                  {lastMessage.isRetracted ? t('chat.messageDeleted') : formatLocalizedPreview(lastMessage, t)}
+                </span>
+              ) : room.joined ? (
+                room.subject ? (
+                  <span className="text-fluux-muted">{room.subject}</span>
+                ) : (
+                  <span className="text-fluux-muted italic">{t('rooms.noMessages')}</span>
+                )
               ) : (
-                <span className="text-fluux-muted italic">{t('rooms.noMessages')}</span>
-              )
-            ) : (
-              <>
-                {room.nickname && t('rooms.asNickname', { nickname: room.nickname })}
-                {room.autojoin && ` • ${t('rooms.autoJoin')}`}
-              </>
-            )}
-          </p>
+                <>
+                  {room.nickname && t('rooms.asNickname', { nickname: room.nickname })}
+                  {room.autojoin && ` • ${t('rooms.autoJoin')}`}
+                </>
+              )}
+            </p>
+          )}
         </div>
         </div>
       </Tooltip>
