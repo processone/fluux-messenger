@@ -889,6 +889,8 @@
             "statusRunning": "Läuft auf 127.0.0.1:{{port}}",
             "copy": "Verbindungsdaten kopieren",
             "copied": "Kopiert",
+            "tokenNote": "Die Verbindungsdaten bleiben über Neustarts hinweg erhalten. Durch das Zurücksetzen des Tokens verlieren alle eingerichteten Clients den Zugriff.",
+            "resetToken": "Token zurücksetzen",
             "activityTitle": "Letzte Aktivität",
             "activityEmpty": "Noch keine Claude-Aktivität.",
             "activityClear": "Löschen",

@@ -890,6 +890,8 @@
             "statusRunning": "En execució a 127.0.0.1:{{port}}",
             "copy": "Copia les dades de connexió",
             "copied": "Copiat",
+            "tokenNote": "Les dades de connexió es conserven entre reinicis. En restablir el token es revoca l'accés de tots els clients configurats.",
+            "resetToken": "Restableix el token",
             "activityTitle": "Activitat recent",
             "activityEmpty": "Encara no hi ha activitat de Claude.",
             "activityClear": "Neteja",

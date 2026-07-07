@@ -888,6 +888,8 @@
             "statusRunning": "Pokrenuto na 127.0.0.1:{{port}}",
             "copy": "Kopiraj podatke o vezi",
             "copied": "Kopirano",
+            "tokenNote": "Podaci o povezivanju čuvaju se između ponovnih pokretanja. Poništavanjem tokena opoziva se pristup svim postavljenim klijentima.",
+            "resetToken": "Poništi token",
             "activityTitle": "Nedavna aktivnost",
             "activityEmpty": "Još nema aktivnosti Claudea.",
             "activityClear": "Očisti",

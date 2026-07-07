@@ -625,6 +625,8 @@
             "statusRunning": "Running on 127.0.0.1:{{port}}",
             "copy": "Copy connection details",
             "copied": "Copied",
+            "tokenNote": "Connection details persist across restarts. Resetting the token revokes access for all configured clients.",
+            "resetToken": "Reset token",
             "activityTitle": "Recent activity",
             "activityEmpty": "No Claude activity yet.",
             "activityClear": "Clear",

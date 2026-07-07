@@ -891,6 +891,8 @@
             "statusRunning": "Działa na 127.0.0.1:{{port}}",
             "copy": "Kopiuj dane połączenia",
             "copied": "Skopiowano",
+            "tokenNote": "Dane połączenia są zachowywane między uruchomieniami. Zresetowanie tokenu odbiera dostęp wszystkim skonfigurowanym klientom.",
+            "resetToken": "Zresetuj token",
             "activityTitle": "Ostatnia aktywność",
             "activityEmpty": "Brak aktywności Claude.",
             "activityClear": "Wyczyść",

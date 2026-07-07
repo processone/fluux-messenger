@@ -4,6 +4,7 @@ import { SettingsSection } from '@/components/ui/SettingsSection'
 import { useMcpBridgeStore } from '@/stores/mcpBridgeStore'
 import { copyToClipboard } from '@/utils/clipboard'
 import { useTimeFormat } from '@/hooks/useTimeFormat'
+import { resetMcpToken } from '@/hooks/useMcpBridge'
 
 export function McpSettings() {
   const { t } = useTranslation()
@@ -48,13 +49,23 @@ export function McpSettings() {
                 <p>{t('settings.mcp.statusRunning', { port: serverInfo.port })}</p>
                 <p className="font-mono text-xs mt-1 break-all">{`http://127.0.0.1:${serverInfo.port}/mcp`}</p>
                 <p className="font-mono text-xs break-all">{serverInfo.token}</p>
-                <button
-                  type="button"
-                  onClick={() => void handleCopy()}
-                  className="text-xs underline mt-1 tap-target transition-colors"
-                >
-                  {copied ? t('settings.mcp.copied') : t('settings.mcp.copy')}
-                </button>
+                <p className="text-xs mt-1">{t('settings.mcp.tokenNote')}</p>
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => void handleCopy()}
+                    className="text-xs underline mt-1 tap-target transition-colors"
+                  >
+                    {copied ? t('settings.mcp.copied') : t('settings.mcp.copy')}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void resetMcpToken()}
+                    className="text-xs underline mt-1 tap-target transition-colors"
+                  >
+                    {t('settings.mcp.resetToken')}
+                  </button>
+                </div>
               </>
             ) : (
               <p>{t('settings.mcp.statusStarting')}</p>

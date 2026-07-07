@@ -65,6 +65,24 @@ export function __resetServerOpQueueForTests(): void {
 }
 
 /**
+ * Regenerate the MCP bearer token (revoking previously configured clients)
+ * and restart the server with it. Called from the Settings panel; routed
+ * through the same op queue as start/stop so it cannot interleave with an
+ * in-flight lifecycle change. No-op on web builds.
+ */
+export async function resetMcpToken(): Promise<void> {
+  if (!isTauri()) return
+  const { setServerInfo, setPreferredPort } = useMcpBridgeStore.getState()
+  const info = await enqueueServerOp(() =>
+    invoke<{ port: number; token: string }>('mcp_reset_token', {
+      preferredPort: useMcpBridgeStore.getState().preferredPort,
+    })
+  )
+  setServerInfo({ port: info.port, token: info.token })
+  setPreferredPort(info.port)
+}
+
+/**
  * Bridges incoming MCP tool calls (from the Rust-hosted local MCP server) to
  * the SDK stores and the live XMPP client, and starts/stops the Rust MCP
  * server as the user toggles it in Settings. Desktop (Tauri) only — a no-op
@@ -90,13 +108,20 @@ export function useMcpBridge(client: XMPPClient): void {
     void (async () => {
       let info: { port: number; token: string }
       try {
-        info = await enqueueServerOp(() => invoke<{ port: number; token: string }>('mcp_start_server'))
+        info = await enqueueServerOp(() =>
+          invoke<{ port: number; token: string }>('mcp_start_server', {
+            // Read at call time via getState(), NOT as an effect dependency:
+            // storing the bound port below must not re-trigger this effect.
+            preferredPort: useMcpBridgeStore.getState().preferredPort,
+          })
+        )
       } catch {
         // Server failed to start (e.g. bind error) — nothing to listen for.
         return
       }
       if (cancelled) return
       setServerInfo({ port: info.port, token: info.token })
+      useMcpBridgeStore.getState().setPreferredPort(info.port)
 
       const stop = await listen<McpToolCallEvent>('mcp:tool-call', (tauriEvent) => {
         void (async () => {

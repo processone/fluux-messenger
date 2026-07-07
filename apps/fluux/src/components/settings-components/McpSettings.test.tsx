@@ -10,6 +10,13 @@ vi.mock('react-i18next', () => ({
   }),
 }))
 
+// The component imports resetMcpToken from the bridge hook module, which
+// statically imports @tauri-apps APIs — mock it to a spy.
+const resetMcpTokenMock = vi.fn()
+vi.mock('@/hooks/useMcpBridge', () => ({
+  resetMcpToken: (...args: unknown[]) => resetMcpTokenMock(...args),
+}))
+
 beforeEach(() => {
   useMcpBridgeStore.setState({ enabled: false, serverInfo: null, activityLog: [] })
 })
@@ -60,5 +67,14 @@ describe('McpSettings', () => {
     await waitFor(() => {
       expect(screen.getByRole('button', { name: 'settings.mcp.copied' })).toBeInTheDocument()
     })
+  })
+
+  it('offers a reset-token action while the server is running', () => {
+    useMcpBridgeStore.setState({ enabled: true, serverInfo: { port: 4123, token: 'secret-token' } })
+
+    render(<McpSettings />)
+    fireEvent.click(screen.getByRole('button', { name: 'settings.mcp.resetToken' }))
+
+    expect(resetMcpTokenMock).toHaveBeenCalledOnce()
   })
 })

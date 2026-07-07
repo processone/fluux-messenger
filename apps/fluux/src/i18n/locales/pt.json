@@ -890,6 +890,8 @@
             "statusRunning": "Em execução em 127.0.0.1:{{port}}",
             "copy": "Copiar dados de ligação",
             "copied": "Copiado",
+            "tokenNote": "Os dados de ligação mantêm-se entre reinícios. Redefinir o token revoga o acesso de todos os clientes configurados.",
+            "resetToken": "Redefinir o token",
             "activityTitle": "Atividade recente",
             "activityEmpty": "Ainda não há atividade do Claude.",
             "activityClear": "Limpar",

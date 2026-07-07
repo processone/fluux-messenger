@@ -889,6 +889,8 @@
             "statusRunning": "Darbojas adresē 127.0.0.1:{{port}}",
             "copy": "Kopēt savienojuma datus",
             "copied": "Nokopēts",
+            "tokenNote": "Savienojuma dati saglabājas starp restartiem. Marķiera atiestatīšana atsauc piekļuvi visiem konfigurētajiem klientiem.",
+            "resetToken": "Atiestatīt marķieri",
             "activityTitle": "Nesenā aktivitāte",
             "activityEmpty": "Claude aktivitātes vēl nav.",
             "activityClear": "Notīrīt",

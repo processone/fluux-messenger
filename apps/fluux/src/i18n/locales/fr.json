@@ -627,6 +627,8 @@
             "statusRunning": "En cours d'exécution sur 127.0.0.1:{{port}}",
             "copy": "Copier les informations de connexion",
             "copied": "Copié",
+            "tokenNote": "Les informations de connexion sont conservées après un redémarrage. La réinitialisation du jeton révoque l'accès de tous les clients configurés.",
+            "resetToken": "Réinitialiser le jeton",
             "activityTitle": "Activité récente",
             "activityEmpty": "Aucune activité de Claude pour l'instant.",
             "activityClear": "Effacer",

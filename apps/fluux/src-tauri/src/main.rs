@@ -624,15 +624,62 @@ async fn stop_xmpp_proxy() -> Result<(), String> {
         })?
 }
 
+/// Keychain slot for the MCP bearer token. Persisting it (instead of minting
+/// one per launch) keeps the user's MCP client config working across app
+/// restarts without ever writing a plaintext token file to disk.
+const MCP_TOKEN_KEYRING_USER: &str = "mcp-token";
+
+/// Load the persisted MCP token, creating one on first use. `regenerate`
+/// discards any existing token (the Settings "reset token" action, revoking
+/// access for previously configured clients).
+async fn mcp_load_or_create_token(regenerate: bool) -> Result<String, String> {
+    tokio::task::spawn_blocking(move || {
+        let entry = Entry::new(KEYRING_SERVICE, MCP_TOKEN_KEYRING_USER)
+            .map_err(|e| format!("Failed to create keyring entry for MCP token: {e}"))?;
+        if !regenerate {
+            match entry.get_password() {
+                Ok(token) if !token.is_empty() => return Ok(token),
+                _ => {}
+            }
+        }
+        let token = uuid::Uuid::new_v4().to_string();
+        entry.set_password(&token).map_err(|e| {
+            let desc = classify_keyring_error(&e, "save MCP token");
+            tracing::error!("Keychain: {}", desc);
+            desc
+        })?;
+        Ok(token)
+    })
+    .await
+    .map_err(|e| format!("Keychain task panicked: {e}"))?
+}
+
 /// Start the local MCP server (Model Context Protocol) for Claude
 /// Desktop/Code to read history and send messages through Fluux.
+/// `preferred_port` is the last port we served on (persisted by the webview);
+/// the server tries to rebind it so existing client configs keep working.
 #[tauri::command]
 async fn mcp_start_server(
     app: tauri::AppHandle,
     pending: tauri::State<'_, Arc<mcp::bridge::PendingRequests>>,
+    preferred_port: Option<u16>,
 ) -> Result<mcp::server::McpServerInfo, String> {
+    let token = mcp_load_or_create_token(false).await?;
     let executor = Arc::new(mcp::bridge::TauriBridgeExecutor::new(app, pending.inner().clone()));
-    mcp::server::start(executor).await
+    mcp::server::start(executor, preferred_port, token).await
+}
+
+/// Regenerate the MCP bearer token (revoking previously configured clients)
+/// and restart the server with it.
+#[tauri::command]
+async fn mcp_reset_token(
+    app: tauri::AppHandle,
+    pending: tauri::State<'_, Arc<mcp::bridge::PendingRequests>>,
+    preferred_port: Option<u16>,
+) -> Result<mcp::server::McpServerInfo, String> {
+    let token = mcp_load_or_create_token(true).await?;
+    let executor = Arc::new(mcp::bridge::TauriBridgeExecutor::new(app, pending.inner().clone()));
+    mcp::server::start(executor, preferred_port, token).await
 }
 
 /// Stop the local MCP server.
@@ -1425,6 +1472,7 @@ fn main() {
             stop_xmpp_proxy,
             mcp_start_server,
             mcp_stop_server,
+            mcp_reset_token,
             mcp::bridge::mcp_respond,
             log_to_terminal,
             open_notification_settings,

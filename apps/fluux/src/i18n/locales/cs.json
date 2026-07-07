@@ -891,6 +891,8 @@
             "statusRunning": "Běží na 127.0.0.1:{{port}}",
             "copy": "Kopírovat údaje o připojení",
             "copied": "Zkopírováno",
+            "tokenNote": "Údaje o připojení zůstávají zachovány i po restartu. Resetováním tokenu odeberete přístup všem nastaveným klientům.",
+            "resetToken": "Resetovat token",
             "activityTitle": "Nedávná aktivita",
             "activityEmpty": "Zatím žádná aktivita Claude.",
             "activityClear": "Vymazat",

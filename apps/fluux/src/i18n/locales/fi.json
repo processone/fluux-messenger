@@ -887,6 +887,8 @@
             "statusRunning": "Käynnissä osoitteessa 127.0.0.1:{{port}}",
             "copy": "Kopioi yhteystiedot",
             "copied": "Kopioitu",
+            "tokenNote": "Yhteystiedot säilyvät uudelleenkäynnistysten välillä. Tokenin nollaaminen poistaa pääsyn kaikilta määritetyiltä asiakasohjelmilta.",
+            "resetToken": "Nollaa token",
             "activityTitle": "Viimeaikainen toiminta",
             "activityEmpty": "Ei vielä Claude-toimintaa.",
             "activityClear": "Tyhjennä",

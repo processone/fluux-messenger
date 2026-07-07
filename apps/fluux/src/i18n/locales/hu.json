@@ -887,6 +887,8 @@
             "statusRunning": "Fut a 127.0.0.1:{{port}} címen",
             "copy": "Kapcsolati adatok másolása",
             "copied": "Másolva",
+            "tokenNote": "A kapcsolat adatai újraindítás után is megmaradnak. A token visszaállítása visszavonja az összes beállított kliens hozzáférését.",
+            "resetToken": "Token visszaállítása",
             "activityTitle": "Legutóbbi tevékenység",
             "activityEmpty": "Még nincs Claude-tevékenység.",
             "activityClear": "Törlés",

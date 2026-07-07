@@ -887,6 +887,8 @@
             "statusRunning": "运行于 127.0.0.1:{{port}}",
             "copy": "复制连接详情",
             "copied": "已复制",
+            "tokenNote": "连接信息在重启后保持不变。重置令牌将撤销所有已配置客户端的访问权限。",
+            "resetToken": "重置令牌",
             "activityTitle": "最近活动",
             "activityEmpty": "暂无 Claude 活动。",
             "activityClear": "清除",

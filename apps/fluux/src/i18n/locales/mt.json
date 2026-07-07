@@ -892,6 +892,8 @@
             "statusRunning": "Qed jaħdem fuq 127.0.0.1:{{port}}",
             "copy": "Ikkopja d-dettalji tal-konnessjoni",
             "copied": "Ikkopjat",
+            "tokenNote": "Id-dettalji tal-konnessjoni jibqgħu l-istess wara ristart. Meta tirrisettja t-token, il-klijenti kollha kkonfigurati jitilfu l-aċċess.",
+            "resetToken": "Irrisettja t-token",
             "activityTitle": "Attività riċenti",
             "activityEmpty": "Għad m'hemm l-ebda attività ta' Claude.",
             "activityClear": "Ħassar",
