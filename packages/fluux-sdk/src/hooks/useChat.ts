@@ -1,12 +1,9 @@
-import { useCallback, useMemo } from 'react'
+import { useMemo } from 'react'
 import { useShallow } from 'zustand/react/shallow'
-import { chatStore, connectionStore } from '../stores'
 import { useChatStore, useConnectionStore } from '../react/storeHooks'
-import { useXMPPContext } from '../provider'
-import type { Conversation, ChatStateNotification, FileAttachment, MAMQueryState, Message } from '../core'
+import type { MAMQueryState, Message } from '../core'
 import { NS_MAM } from '../core/namespaces'
-import { createFetchOlderHistory, pickOldestArchiveId } from './shared'
-import { selectCatchUpQuery, MAM_CATCHUP_FORWARD_MAX, MAM_ROOM_FORWARD_MAX_PAGES } from '../utils/mamCatchUpUtils'
+import { useChatActions } from './useChatActions'
 
 /**
  * Stable empty array references to prevent infinite re-renders.
@@ -85,7 +82,11 @@ const EMPTY_TYPING_ARRAY: string[] = []
  * @category Hooks
  */
 export function useChat() {
-  const { client } = useXMPPContext()
+  // Actions live in useChatActions (zero store subscriptions). useChat composes
+  // it and adds the conversation-list/active-conversation state subscriptions
+  // below — so the action definitions exist ONCE (they previously drifted
+  // between the two hooks).
+  const actions = useChatActions()
 
   // Use useShallow for derived arrays to properly detect changes
   // Note: We compute values directly from state snapshot (s) rather than calling
@@ -191,242 +192,6 @@ export function useChat() {
   // Note: Auto-fetch logic (load cache + MAM query) has been moved to store subscriptions
   // in sideEffects.ts. This eliminates the useEffect → action → state change pattern
   // that could cause render loops. The side effects now run outside React's render cycle.
-
-  const sendMessage = useCallback(
-    async (
-      to: string,
-      body: string,
-      type: 'chat' | 'groupchat' = 'chat',
-      replyTo?: { id: string; to?: string; fallback?: { author: string; body: string } },
-      attachment?: FileAttachment
-    ): Promise<string> => {
-      return await client.chat.sendMessage(to, body, type, replyTo, undefined, attachment)
-    },
-    [client]
-  )
-
-  // Hydrates the message cache before marking active (see chatStore.activateConversation)
-  const setActiveConversation = useCallback(async (id: string | null) => {
-    await chatStore.getState().activateConversation(id)
-  }, [])
-
-  const addConversation = useCallback((conv: Conversation) => {
-    chatStore.getState().addConversation(conv)
-  }, [])
-
-  const deleteConversation = useCallback((id: string) => {
-    chatStore.getState().deleteConversation(id)
-  }, [])
-
-  const markAsRead = useCallback((conversationId: string) => {
-    chatStore.getState().markAsRead(conversationId)
-  }, [])
-
-  const sendChatState = useCallback(
-    async (to: string, state: ChatStateNotification, type: 'chat' | 'groupchat' = 'chat') => {
-      await client.chat.sendChatState(to, state, type)
-    },
-    [client]
-  )
-
-  const sendReaction = useCallback(
-    async (to: string, messageId: string, emojis: string[], type: 'chat' | 'groupchat' = 'chat') => {
-      await client.chat.sendReaction(to, messageId, emojis, type)
-    },
-    [client]
-  )
-
-  const sendCorrection = useCallback(
-    async (conversationId: string, messageId: string, newBody: string, attachment?: FileAttachment) => {
-      await client.chat.sendCorrection(conversationId, messageId, newBody, 'chat', attachment)
-    },
-    [client]
-  )
-
-  const retractMessage = useCallback(
-    async (conversationId: string, messageId: string) => {
-      await client.chat.sendRetraction(conversationId, messageId, 'chat')
-    },
-    [client]
-  )
-
-  const sendEasterEgg = useCallback(
-    async (to: string, type: 'chat' | 'groupchat', animation: string) => {
-      await client.chat.sendEasterEgg(to, type, animation)
-    },
-    [client]
-  )
-
-  const clearAnimation = useCallback(() => {
-    chatStore.getState().clearAnimation()
-  }, [])
-
-  const archiveConversation = useCallback((id: string) => {
-    chatStore.getState().archiveConversation(id)
-  }, [])
-
-  const unarchiveConversation = useCallback((id: string) => {
-    chatStore.getState().unarchiveConversation(id)
-  }, [])
-
-  const isArchived = useCallback((id: string) => {
-    return chatStore.getState().isArchived(id)
-  }, [])
-
-  const setDraft = useCallback((conversationId: string, text: string) => {
-    chatStore.getState().setDraft(conversationId, text)
-  }, [])
-
-  const getDraft = useCallback((conversationId: string) => {
-    return chatStore.getState().getDraft(conversationId)
-  }, [])
-
-  const clearDraft = useCallback((conversationId: string) => {
-    chatStore.getState().clearDraft(conversationId)
-  }, [])
-
-  const clearFirstNewMessageId = useCallback((conversationId: string) => {
-    chatStore.getState().clearFirstNewMessageId(conversationId)
-  }, [])
-
-  const updateLastSeenMessageId = useCallback((conversationId: string, messageId: string) => {
-    chatStore.getState().updateLastSeenMessageId(conversationId, messageId)
-  }, [])
-
-  // XEP-0313: Fetch message history from server archive
-  // If we have cached messages, fetch NEW messages after the newest cached.
-  // If no cache, fetch latest messages.
-  // NOTE: hasQueried guard is intentionally removed to allow re-fetching when
-  // returning to a conversation (to catch messages from other devices).
-  const fetchHistory = useCallback(
-    async (conversationId?: string): Promise<void> => {
-      // Guard: Don't attempt MAM query if not connected
-      // This prevents infinite retry loops when socket is dead (e.g., after sleep)
-      const connectionStatus = connectionStore.getState().status
-      if (connectionStatus !== 'online') return
-
-      const targetId = conversationId ?? chatStore.getState().activeConversationId
-      if (!targetId) return
-
-      // Get the conversation to find the partner JID
-      const conversation = chatStore.getState().conversations.get(targetId)
-      if (!conversation || conversation.type !== 'chat') return
-
-      // Guard: only prevent concurrent queries
-      const mamState = chatStore.getState().getMAMQueryState(targetId)
-      if (mamState.isLoading) return
-
-      // Set loading IMMEDIATELY to prevent race conditions with concurrent calls
-      chatStore.getState().setMAMLoading(targetId, true)
-
-      try {
-        // First ensure messages are loaded from IndexedDB cache
-        let cachedMessages = chatStore.getState().messages.get(targetId)
-        if (!cachedMessages || cachedMessages.length === 0) {
-          await chatStore.getState().loadMessagesFromCache(targetId, { limit: 100 })
-          cachedMessages = chatStore.getState().messages.get(targetId)
-        }
-
-        const gapStart = chatStore.getState().conversationGaps.get(targetId)?.start
-        const lastTimestamp = chatStore.getState().getConversationLastTimestamp(targetId)
-        const q = selectCatchUpQuery(cachedMessages ?? [], { forwardGapTimestamp: gapStart, fallbackNewestTimestamp: lastTimestamp })
-
-        await client.chat.queryMAM({
-          with: conversation.id,
-          ...q,
-          ...(q.start ? { max: MAM_CATCHUP_FORWARD_MAX, maxAutoPages: MAM_ROOM_FORWARD_MAX_PAGES } : {}),
-        })
-      } catch (error) {
-        console.error('Failed to fetch history:', error)
-      } finally {
-        chatStore.getState().setMAMLoading(targetId, false)
-      }
-    },
-    [client]
-  )
-
-  // XEP-0313: Fetch older messages (pagination) - for lazy loading on scroll up
-  // First checks IndexedDB cache, then falls back to MAM if needed
-  const fetchOlderHistory = useMemo(
-    () =>
-      createFetchOlderHistory({
-        getActiveId: () => chatStore.getState().activeConversationId,
-        isValidTarget: (id) => {
-          const conversation = chatStore.getState().conversations.get(id)
-          return !!conversation && conversation.type === 'chat'
-        },
-        getMAMState: (id) => chatStore.getState().getMAMQueryState(id),
-        setMAMLoading: (id, loading) => chatStore.getState().setMAMLoading(id, loading),
-        loadFromCache: (id, limit) => chatStore.getState().loadOlderMessagesFromCache(id, limit),
-        getOldestMessageId: (id) => pickOldestArchiveId(chatStore.getState().messages.get(id) ?? []),
-        clearInvalidArchiveCursor: (id, cursor) => chatStore.getState().clearMessageStanzaId(id, cursor),
-        getOldestTimestamp: (id) => chatStore.getState().messages.get(id)?.[0]?.timestamp,
-        queryMAM: async (id, beforeId) => {
-          const conversation = chatStore.getState().conversations.get(id)
-          if (conversation) {
-            await client.chat.queryMAM({ with: conversation.id, before: beforeId })
-          }
-        },
-        queryMAMByEndTime: async (id, endIso) => {
-          const conversation = chatStore.getState().conversations.get(id)
-          if (conversation) {
-            await client.chat.queryMAM({ with: conversation.id, end: endIso, before: '' })
-          }
-        },
-        errorLogPrefix: 'Failed to fetch older chat history',
-      }),
-    [client]
-  )
-
-  // Memoize actions object to prevent re-renders when only state changes
-  const actions = useMemo(
-    () => ({
-      sendMessage,
-      setActiveConversation,
-      addConversation,
-      deleteConversation,
-      markAsRead,
-      archiveConversation,
-      unarchiveConversation,
-      isArchived,
-      sendChatState,
-      sendReaction,
-      sendCorrection,
-      retractMessage,
-      sendEasterEgg,
-      clearAnimation,
-      setDraft,
-      getDraft,
-      clearDraft,
-      clearFirstNewMessageId,
-      updateLastSeenMessageId,
-      fetchHistory,
-      fetchOlderHistory,
-    }),
-    [
-      sendMessage,
-      setActiveConversation,
-      addConversation,
-      deleteConversation,
-      markAsRead,
-      archiveConversation,
-      unarchiveConversation,
-      isArchived,
-      sendChatState,
-      sendReaction,
-      sendCorrection,
-      retractMessage,
-      sendEasterEgg,
-      clearAnimation,
-      setDraft,
-      getDraft,
-      clearDraft,
-      clearFirstNewMessageId,
-      updateLastSeenMessageId,
-      fetchHistory,
-      fetchOlderHistory,
-    ]
-  )
 
   // Memoize the entire return value to prevent render loops
   return useMemo(
