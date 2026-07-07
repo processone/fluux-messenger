@@ -755,8 +755,26 @@ fn fetch_url_metadata_blocking(url: String) -> Result<UrlMetadata, String> {
         format!("Failed to read response: {}", e)
     })?;
 
-    // Parse HTML and extract OG metadata
-    let document = Html::parse_document(&html);
+    let metadata = parse_og_metadata(&url, &html);
+
+    // Only return success if we got at least a title
+    if metadata.title.is_some() {
+        Ok(metadata)
+    } else {
+        tracing::debug!(url = %url, "Link preview: no title found in page metadata");
+        Err("Could not extract metadata from URL".to_string())
+    }
+}
+
+/// Extract Open Graph (and fallback) metadata from an HTML document.
+///
+/// Pure function over `(request_url, html)` — no I/O — so it is unit-testable.
+/// `og:*` tags win, with `<title>` and `<meta name="description">` as fallbacks;
+/// `og:url` overrides the canonical url when present. Never fails: an empty
+/// document yields a `UrlMetadata` with only `url` set (the caller enforces the
+/// "must have a title" business rule).
+fn parse_og_metadata(url: &str, html: &str) -> UrlMetadata {
+    let document = Html::parse_document(html);
 
     // Selectors for Open Graph meta tags
     let og_title = Selector::parse(r#"meta[property="og:title"]"#).ok();
@@ -770,7 +788,7 @@ fn fetch_url_metadata_blocking(url: String) -> Result<UrlMetadata, String> {
     let meta_desc = Selector::parse(r#"meta[name="description"]"#).ok();
 
     let mut metadata = UrlMetadata {
-        url: url.clone(),
+        url: url.to_string(),
         ..Default::default()
     };
 
@@ -839,13 +857,7 @@ fn fetch_url_metadata_blocking(url: String) -> Result<UrlMetadata, String> {
         }
     }
 
-    // Only return success if we got at least a title
-    if metadata.title.is_some() {
-        Ok(metadata)
-    } else {
-        tracing::debug!(url = %url, "Link preview: no title found in page metadata");
-        Err("Could not extract metadata from URL".to_string())
-    }
+    metadata
 }
 
 /// Check if window is visible on any monitor, reset to center if off-screen
@@ -2460,5 +2472,74 @@ mod tests {
         let cloned = payload.clone();
         assert!(!cloned.display_active);
         assert_eq!(cloned.slept_ms, 0);
+    }
+
+    // --- Link-preview OG metadata extraction (parse_og_metadata) ---
+
+    #[test]
+    fn test_parse_og_metadata_full_open_graph() {
+        let html = r#"
+            <html><head>
+              <meta property="og:title" content="The Rock">
+              <meta property="og:description" content="A 1996 action film">
+              <meta property="og:image" content="https://example.com/rock.jpg">
+              <meta property="og:site_name" content="IMDb">
+              <meta property="og:url" content="https://example.com/canonical">
+            </head></html>
+        "#;
+        let m = parse_og_metadata("https://example.com/requested", html);
+        assert_eq!(m.title.as_deref(), Some("The Rock"));
+        assert_eq!(m.description.as_deref(), Some("A 1996 action film"));
+        assert_eq!(m.image.as_deref(), Some("https://example.com/rock.jpg"));
+        assert_eq!(m.site_name.as_deref(), Some("IMDb"));
+        // og:url overrides the requested url as the canonical link.
+        assert_eq!(m.url, "https://example.com/canonical");
+    }
+
+    #[test]
+    fn test_parse_og_metadata_falls_back_to_title_and_meta_description() {
+        let html = r#"
+            <html><head>
+              <title>  Plain Title  </title>
+              <meta name="description" content="Plain description">
+            </head></html>
+        "#;
+        let m = parse_og_metadata("https://example.com/a", html);
+        // <title> is trimmed; used when og:title is absent.
+        assert_eq!(m.title.as_deref(), Some("Plain Title"));
+        assert_eq!(m.description.as_deref(), Some("Plain description"));
+        assert_eq!(m.image, None);
+        assert_eq!(m.site_name, None);
+        // No og:url → keep the requested url.
+        assert_eq!(m.url, "https://example.com/a");
+    }
+
+    #[test]
+    fn test_parse_og_metadata_prefers_og_title_over_title_tag() {
+        let html = r#"
+            <html><head>
+              <title>Fallback Title</title>
+              <meta property="og:title" content="OG Title">
+            </head></html>
+        "#;
+        let m = parse_og_metadata("https://example.com/a", html);
+        assert_eq!(m.title.as_deref(), Some("OG Title"));
+    }
+
+    #[test]
+    fn test_parse_og_metadata_empty_document_yields_only_url() {
+        let m = parse_og_metadata("https://example.com/a", "<html></html>");
+        assert_eq!(m.url, "https://example.com/a");
+        assert_eq!(m.title, None);
+        assert_eq!(m.description, None);
+        assert_eq!(m.image, None);
+        assert_eq!(m.site_name, None);
+    }
+
+    #[test]
+    fn test_parse_og_metadata_ignores_empty_title_tag() {
+        // A whitespace-only <title> must not become a spurious title.
+        let m = parse_og_metadata("https://example.com/a", "<html><head><title>   </title></head></html>");
+        assert_eq!(m.title, None);
     }
 }
