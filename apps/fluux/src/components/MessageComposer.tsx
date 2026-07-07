@@ -1,10 +1,11 @@
 import React, { useState, useRef, useEffect, useCallback, Suspense, lazy, type ReactNode, type RefObject, type Ref, useImperativeHandle } from 'react'
 import { useTranslation } from 'react-i18next'
 import { detectRenderLoop, notifyUserInput } from '@/utils/renderLoopDetector'
-import { Send, Smile, Paperclip, Reply, X, Pencil, Loader2, Image, FileText, Trash2, BarChart3, Plus, Lock, ShieldCheck, ShieldAlert } from 'lucide-react'
-import { useClickOutside, useSlashCommands } from '@/hooks'
+import { Send, Smile, Paperclip, Reply, X, Pencil, Loader2, Image, FileText, Trash2, BarChart3, Plus, Lock, ShieldCheck, ShieldAlert, Terminal } from 'lucide-react'
+import { useClickOutside } from '@/hooks'
 import { Tooltip } from './Tooltip'
 import { TextArea } from './ui/TextInput'
+import type { InputClass } from '../commands/types'
 
 // Lazy-load emoji picker — keeps ~150KB of emoji data out of the main bundle
 const emojiPickerImport = () => import('./EmojiPicker').then(m => ({ default: m.EmojiPicker }))
@@ -173,6 +174,10 @@ interface MessageComposerProps {
    * non-interactive reminders. Rooms never set this (group E2EE is disabled).
    */
   onEncryptionClick?: () => void
+  /** Resolve slash-command input. Returns the text to send, or 'consumed' when a command ran. */
+  resolveInput?: (text: string) => Promise<string | 'consumed'>
+  /** Classify current input for the send-button indicator. */
+  classifyInput?: (text: string) => InputClass
 }
 
 export function MessageComposer({
@@ -188,7 +193,6 @@ export function MessageComposer({
   onInputResize,
   onComposingChange,
   onSend,
-  onSendEasterEgg,
   onCreatePoll,
   onSendTypingState,
   typingNotificationsEnabled = true,
@@ -208,6 +212,8 @@ export function MessageComposer({
   encryptionState,
   sendBadge,
   onEncryptionClick,
+  resolveInput,
+  classifyInput,
   ref,
 }: MessageComposerProps & { ref?: Ref<MessageComposerHandle> }) {
   detectRenderLoop('MessageComposer')
@@ -240,6 +246,7 @@ export function MessageComposer({
   const [sending, setSending] = useState(false)
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
   const [editAttachmentRemoved, setEditAttachmentRemoved] = useState(false)
+  const [inputClass, setInputClass] = useState<InputClass>('send')
   const inputRef = useRef<HTMLTextAreaElement>(null)
 
   // Merged ref callback to assign to both internal and external refs
@@ -284,13 +291,6 @@ export function MessageComposer({
   useClickOutside(attachMenuRef, closeAttachMenu, showAttachMenu)
   const closeEmojiPicker = () => setShowEmojiPicker(false)
   useClickOutside(emojiPickerRef, closeEmojiPicker, showEmojiPicker)
-
-  // Slash command handler
-  const { handleCommand } = useSlashCommands({
-    sendEasterEgg: async (animation: string) => {
-      if (onSendEasterEgg) onSendEasterEgg(animation)
-    },
-  })
 
   // Cleanup timeouts on unmount
   useEffect(() => {
@@ -431,6 +431,7 @@ export function MessageComposer({
     // the hard loop-break threshold is unaffected.
     notifyUserInput()
     setText(e.target.value)
+    setInputClass(classifyInput ? classifyInput(e.target.value) : 'send')
 
     // Update toolbar visibility based on typing activity
     onComposingChange?.(true)
@@ -489,11 +490,17 @@ export function MessageComposer({
     if (!trimmed && !isEmptyEdit && !hasAttachmentOnly && !pendingAttachment) return
     if (sending) return
 
-    // Handle slash commands (but not when editing)
-    if (!editingMessage && trimmed && await handleCommand(trimmed)) {
-      setText('')
-      inputRef.current?.focus()
-      return
+    // Slash commands (never while editing). resolveInput returns the text to send,
+    // or 'consumed' when the input triggered a command.
+    let outgoingText = trimmed
+    if (!editingMessage && trimmed && resolveInput) {
+      const outcome = await resolveInput(trimmed)
+      if (outcome === 'consumed') {
+        setText('')
+        inputRef.current?.focus()
+        return
+      }
+      outgoingText = outcome
     }
 
     // Clear paused timeout
@@ -524,7 +531,7 @@ export function MessageComposer({
         }
       } else {
         // Normal message send
-        handled = await onSend(trimmed)
+        handled = await onSend(outgoingText)
         if (handled) {
           setText('')
           onCancelReply?.()
@@ -1007,10 +1014,27 @@ export function MessageComposer({
             type="submit"
             disabled={(!text.trim() && !pendingAttachment) || sending || disabled || sendDisabled}
             aria-label={t('chat.send', 'Send')}
-            className="group/send send-aurora relative z-10 p-2.5 rounded-xl tap-target flex items-center justify-center
-                       disabled:cursor-not-allowed transition-colors"
+            title={
+              inputClass === 'command'
+                ? t('commands.indicator.willRun')
+                : inputClass === 'unknown'
+                  ? t('commands.indicator.unknownHint')
+                  : undefined
+            }
+            className={`group/send send-aurora relative z-10 p-2.5 rounded-xl tap-target flex items-center justify-center
+                       disabled:cursor-not-allowed transition-colors ${
+                         inputClass === 'command'
+                           ? 'text-fluux-brand'
+                           : inputClass === 'unknown'
+                             ? 'text-fluux-muted'
+                             : ''
+                       }`}
           >
-            <Send className="rtl-mirror icon-optical-send size-5" />
+            {inputClass === 'command' ? (
+              <Terminal className="size-5" aria-hidden />
+            ) : (
+              <Send className="rtl-mirror icon-optical-send size-5" />
+            )}
             {sendBadge}
           </button>
         </div>
