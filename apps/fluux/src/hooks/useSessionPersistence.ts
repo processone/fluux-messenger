@@ -1,6 +1,6 @@
 import { useEffect, useRef, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
-import { connectionStore, useXMPPContext, getBareJid, getDomain, hasFastToken, deleteFastToken } from '@fluux/sdk'
+import { connectionStore, useXMPPContext, useConnectionActions, getBareJid, getDomain, hasFastToken, deleteFastToken } from '@fluux/sdk'
 import { useRosterStore, useConnectionStore, useRoomStore } from '@fluux/sdk/react'
 import type { Contact, Room, RoomOccupant, ServerInfo, HttpUploadService, RoomMessage, ResourcePresence, JoinedRoomInfo } from '@fluux/sdk'
 import { getResource } from '@/utils/xmppResource'
@@ -487,29 +487,10 @@ export function useSessionPersistence(claimConnection?: (jid: string) => Promise
   const isResumptionRef = useRef(false)
   const keychainRetryAttempted = useRef(false)
 
-  const connect = useCallback(async (
-    jid: string,
-    password: string | undefined,
-    server: string,
-    smState?: { id: string; inbound: number; outbound: number },
-    resource?: string,
-    lang?: string,
-    disableSmKeepalive?: boolean,
-    rememberSession?: boolean,
-    autoRetryOnTransientFailure?: boolean,
-    previouslyJoinedRooms?: JoinedRoomInfo[]
-  ) => {
-    connectionStore.getState().setStatus('connecting')
-    connectionStore.getState().setError(null)
-    try {
-      await client.connect({ jid, password, server, resource, smState, lang, disableSmKeepalive, rememberSession, autoRetryOnTransientFailure, previouslyJoinedRooms })
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Connection failed'
-      connectionStore.getState().setStatus('error')
-      connectionStore.getState().setError(message)
-      throw err
-    }
-  }, [client])
+  // Reuse the SDK's connect action: it performs the identical connecting/error
+  // status wrapping around client.connect() and takes a ConnectOptions object.
+  // useConnectionActions() does zero store subscriptions, so it adds no renders.
+  const { connect } = useConnectionActions()
 
   // Note: SM state is now managed by SDK's storage adapter.
   // The SDK automatically loads SM state on connect and persists it on enable/resume.
@@ -620,14 +601,14 @@ export function useSessionPersistence(claimConnection?: (jid: string) => Promise
             isResumptionRef.current = false
             return
           }
-          connect(session.jid, session.password, session.server, undefined, resource, i18n.language, disableSmKeepalive, rememberSession, autoRetry, joinedRoomInfos).catch((err) => {
+          connect({ jid: session.jid, password: session.password, server: session.server, resource, lang: i18n.language, disableSmKeepalive, rememberSession, autoRetryOnTransientFailure: autoRetry, previouslyJoinedRooms: joinedRoomInfos }).catch((err) => {
             console.log('[Auth] Reconnection failed:', err?.message || err)
             clearSession()
             isResumptionRef.current = false
           })
         }).catch(() => {
           // Claim check failed, try connecting anyway
-          connect(session.jid, session.password, session.server, undefined, resource, i18n.language, disableSmKeepalive, rememberSession, autoRetry, joinedRoomInfos).catch((err) => {
+          connect({ jid: session.jid, password: session.password, server: session.server, resource, lang: i18n.language, disableSmKeepalive, rememberSession, autoRetryOnTransientFailure: autoRetry, previouslyJoinedRooms: joinedRoomInfos }).catch((err) => {
             console.log('[Auth] Reconnection failed:', err?.message || err)
             clearSession()
             isResumptionRef.current = false
@@ -636,7 +617,7 @@ export function useSessionPersistence(claimConnection?: (jid: string) => Promise
         return
       }
 
-      connect(session.jid, session.password, session.server, undefined, resource, i18n.language, disableSmKeepalive, rememberSession, autoRetry, joinedRoomInfos).catch((err) => {
+      connect({ jid: session.jid, password: session.password, server: session.server, resource, lang: i18n.language, disableSmKeepalive, rememberSession, autoRetryOnTransientFailure: autoRetry, previouslyJoinedRooms: joinedRoomInfos }).catch((err) => {
         console.log('[Auth] Reconnection failed:', err?.message || err)
         // If auto-reconnect fails, clear session
         clearSession()
@@ -689,7 +670,7 @@ export function useSessionPersistence(claimConnection?: (jid: string) => Promise
         // flakiness as page-reload. Auth failures (bad/expired token) still
         // surface via the machine's AUTH_ERROR path and delete the token.
         try {
-          await connect(savedJid, fallbackPassword, effectiveServer, undefined, resource, i18n.language, false, true, true)
+          await connect({ jid: savedJid, password: fallbackPassword, server: effectiveServer, resource, lang: i18n.language, disableSmKeepalive: false, rememberSession: true, autoRetryOnTransientFailure: true })
           // Save session for subsequent in-tab reconnects. Store the
           // fallback password so reloads (Path A) don't have to re-hit
           // the keychain; empty string preserves prior behavior when no
@@ -760,7 +741,7 @@ export function useSessionPersistence(claimConnection?: (jid: string) => Promise
         if (!creds || getBareJid(creds.jid) !== getBareJid(savedJid)) return
         console.log('[Auth] Auth failure on Tauri: retrying with keychain credentials')
         const resource = getResource()
-        await connect(savedJid, creds.password, effectiveServer, undefined, resource, i18n.language, false, true, true)
+        await connect({ jid: savedJid, password: creds.password, server: effectiveServer, resource, lang: i18n.language, disableSmKeepalive: false, rememberSession: true, autoRetryOnTransientFailure: true })
         saveSession(savedJid, creds.password, effectiveServer)
       } catch (err) {
         console.log('[Auth] Keychain retry after auth failure failed:', err instanceof Error ? err.message : err)
