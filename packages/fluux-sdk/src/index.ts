@@ -499,9 +499,9 @@ export { isPreviewableMessage } from './stores/shared/lastMessageUtils'
 // Configuration constants
 export { WELL_KNOWN_MUC_SERVERS } from './core/config'
 export type { WellKnownMucServer } from './core/config'
-// Sliding-window bound. getResidentWindowSize() is the current cap; setResidentWindowSize() is a
-// DEV/DEMO/TEST seam to shrink it so the slide/load-newer paths are testable with a small backlog.
-export { getResidentWindowSize, setResidentWindowSize } from './stores/shared/residentWindow'
+// The resident-window bound (getResidentWindowSize/setResidentWindowSize) is a
+// DEV/DEMO/TEST-only seam; it lives on the `@fluux/sdk/demo` dev-tooling entry,
+// not the product API. SDK internals use it via a relative import.
 
 // =============================================================================
 // XMPP NAMESPACE CONSTANTS
@@ -624,9 +624,10 @@ export type { FallbackProcessingResult, FallbackProcessingOptions } from './util
 export { parseXMPPError, formatXMPPError } from './utils/xmppError'
 export type { XMPPStanzaError, XMPPErrorType } from './utils/xmppError'
 
-// Per-key latest-wins coalescing buffer (pure, no timers)
-export { createKeyedCoalescer } from './utils/keyedCoalescer'
-export type { KeyedCoalescer, CoalescedEntry } from './utils/keyedCoalescer'
+// The per-key latest-wins coalescing buffer (keyedCoalescer) is a generic,
+// non-XMPP primitive and is intentionally NOT part of the product API — the
+// app owns its own notification coalescer, and the SDK keeps an internal copy
+// for side effects (core/mdsSideEffects) via a relative import.
 
 // Transport error classification and humanization
 export { classifyConnectionError, extractTransportErrorClass, humanizeTransportError } from './core/modules/transportErrors'
