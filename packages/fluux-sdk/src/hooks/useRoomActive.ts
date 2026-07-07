@@ -2,8 +2,11 @@ import { useCallback, useMemo } from 'react'
 import { roomStore, connectionStore } from '../stores'
 import { useRoomStore } from '../react/storeHooks'
 import { useXMPPContext } from '../provider'
-import type { Room, RoomMessage, MentionReference, ChatStateNotification, FileAttachment, MAMQueryState, RoomAffiliation, RoomRole, PollData, PollSettings, RoomFeatures } from '../core/types'
+import type { Room, RoomMessage, MentionReference, ChatStateNotification, FileAttachment, MAMQueryState, RoomFeatures } from '../core/types'
 import { createFetchOlderHistory, pickOldestArchiveId } from './shared'
+import { usePolls } from './usePolls'
+import { useRoomModeration } from './useRoomModeration'
+import { useRoomManagement } from './useRoomManagement'
 import {
   findContinueCatchUpCursor,
   buildCatchUpStartTime,
@@ -44,6 +47,21 @@ const EMPTY_TYPING_ARRAY: string[] = []
  */
 export function useRoomActive() {
   const { client } = useXMPPContext()
+
+  // Slice actions sourced from the focused hooks (each subscribes to no store,
+  // so they add no re-render triggers). Only the actions this hook already
+  // exposed are destructured — the public surface is unchanged.
+  const { sendPoll, votePoll, closePoll } = usePolls()
+  const { moderateMessage, setAffiliation, setRole } = useRoomModeration()
+  const {
+    setRoomNotifyAll,
+    submitRoomConfig,
+    setSubject,
+    destroyRoom,
+    setRoomAvatar,
+    clearRoomAvatar,
+    restoreRoomAvatarFromCache,
+  } = useRoomManagement()
 
   // --- Active room state (focused selectors) ---
 
@@ -208,27 +226,6 @@ export function useRoomActive() {
     [client]
   )
 
-  const sendPoll = useCallback(
-    async (roomJid: string, title: string, options: string[], settings?: Partial<PollSettings>, description?: string, deadline?: string, customEmojis?: string[]) => {
-      return await client.poll.sendPoll(roomJid, title, options, settings, description, deadline, customEmojis)
-    },
-    [client]
-  )
-
-  const votePoll = useCallback(
-    async (roomJid: string, messageId: string, optionEmoji: string, currentMyReactions: string[], poll: PollData, isClosed?: boolean) => {
-      await client.poll.vote(roomJid, messageId, optionEmoji, currentMyReactions, poll, isClosed)
-    },
-    [client]
-  )
-
-  const closePoll = useCallback(
-    async (roomJid: string, messageId: string) => {
-      return await client.poll.closePoll(roomJid, messageId)
-    },
-    [client]
-  )
-
   const sendCorrection = useCallback(
     async (roomJid: string, messageId: string, newBody: string, attachment?: FileAttachment) => {
       await client.chat.sendCorrection(roomJid, messageId, newBody, 'groupchat', attachment)
@@ -239,20 +236,6 @@ export function useRoomActive() {
   const retractMessage = useCallback(
     async (roomJid: string, messageId: string) => {
       await client.chat.sendRetraction(roomJid, messageId, 'groupchat')
-    },
-    [client]
-  )
-
-  const moderateMessage = useCallback(
-    async (roomJid: string, stanzaId: string, reason?: string) => {
-      await client.muc.moderateMessage(roomJid, stanzaId, reason)
-    },
-    [client]
-  )
-
-  const setRoomNotifyAll = useCallback(
-    async (roomJid: string, notifyAll: boolean, persistent: boolean = false) => {
-      await client.muc.setRoomNotifyAll(roomJid, notifyAll, persistent)
     },
     [client]
   )
@@ -297,76 +280,6 @@ export function useRoomActive() {
   const clearDraft = useCallback((roomJid: string) => {
     roomStore.getState().clearDraft(roomJid)
   }, [])
-
-  /**
-   * Set room avatar (XEP-0054 vCard-temp for MUC rooms).
-   * Only room owners can change the room avatar.
-   */
-  const setRoomAvatar = useCallback(
-    async (roomJid: string, imageData: Uint8Array, mimeType: string) => {
-      // Convert Uint8Array to base64 data URL
-      const base64 = btoa(String.fromCharCode(...Array.from(imageData)))
-      const dataUrl = `data:${mimeType};base64,${base64}`
-      await client.profile.setRoomAvatar(roomJid, dataUrl, mimeType)
-    },
-    [client]
-  )
-
-  /**
-   * Clear room avatar (XEP-0054 vCard-temp for MUC rooms).
-   * Only room owners can clear the room avatar.
-   */
-  const clearRoomAvatar = useCallback(
-    async (roomJid: string) => {
-      await client.profile.clearRoomAvatar(roomJid)
-    },
-    [client]
-  )
-
-  /**
-   * Restore room avatar from cache using stored hash.
-   */
-  const restoreRoomAvatarFromCache = useCallback(
-    async (roomJid: string, avatarHash: string) => {
-      return client.profile.restoreRoomAvatarFromCache(roomJid, avatarHash)
-    },
-    [client]
-  )
-
-  const submitRoomConfig = useCallback(
-    async (roomJid: string, values: Record<string, string | string[]>) => {
-      await client.muc.submitRoomConfig(roomJid, values)
-    },
-    [client]
-  )
-
-  const setSubject = useCallback(
-    async (roomJid: string, subject: string) => {
-      await client.muc.setSubject(roomJid, subject)
-    },
-    [client]
-  )
-
-  const destroyRoom = useCallback(
-    async (roomJid: string, reason?: string, alternateRoomJid?: string) => {
-      await client.muc.destroyRoom(roomJid, reason, alternateRoomJid)
-    },
-    [client]
-  )
-
-  const setAffiliation = useCallback(
-    async (roomJid: string, userJid: string, affiliation: RoomAffiliation, reason?: string) => {
-      await client.muc.setAffiliation(roomJid, userJid, affiliation, reason)
-    },
-    [client]
-  )
-
-  const setRole = useCallback(
-    async (roomJid: string, nick: string, role: RoomRole, reason?: string) => {
-      await client.muc.setRole(roomJid, nick, role, reason)
-    },
-    [client]
-  )
 
   /**
    * Fetch older room history (pagination) - for lazy loading on scroll up.

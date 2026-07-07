@@ -10,6 +10,7 @@ import { usePolls } from './usePolls'
 import { useRoomModeration } from './useRoomModeration'
 import { useRoomManagement } from './useRoomManagement'
 import { useRoomActions } from './useRoomActions'
+import { useRoomActive } from './useRoomActive'
 import { createRoom } from './renderStability.helpers'
 
 function wrapper({ children }: { children: ReactNode }) {
@@ -59,6 +60,21 @@ describe('focused room hooks', () => {
     const missing = [...pollActions, ...moderationActions, ...managementActions].filter(
       (name) => typeof hook[name] !== 'function'
     )
+    expect(missing).toEqual([])
+  })
+
+  it('useRoomActive still exposes the slice actions it sources from the focused hooks', () => {
+    // useRoomActive now sources these definitions from the focused hooks; its
+    // public surface must be unchanged (only the actions it already exposed).
+    const { result } = renderHook(() => useRoomActive(), { wrapper })
+    const hook = asFns(result.current)
+    const composedSlice = [
+      'sendPoll', 'votePoll', 'closePoll',
+      'moderateMessage', 'setAffiliation', 'setRole',
+      'setRoomNotifyAll', 'submitRoomConfig', 'setSubject', 'destroyRoom',
+      'setRoomAvatar', 'clearRoomAvatar', 'restoreRoomAvatarFromCache',
+    ]
+    const missing = composedSlice.filter((name) => typeof hook[name] !== 'function')
     expect(missing).toEqual([])
   })
 })
