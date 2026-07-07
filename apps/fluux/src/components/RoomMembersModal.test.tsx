@@ -14,7 +14,7 @@ const mockContacts = [
 ]
 
 vi.mock('@fluux/sdk', () => ({
-  useRoomActions: () => ({
+  useRoomModeration: () => ({
     setAffiliation: mockSetAffiliation,
     queryAffiliationList: mockQueryAffiliationList,
   }),

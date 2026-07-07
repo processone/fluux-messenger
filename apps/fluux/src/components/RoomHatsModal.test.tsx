@@ -14,7 +14,7 @@ const mockAssignHat = vi.fn()
 const mockUnassignHat = vi.fn()
 
 vi.mock('@fluux/sdk', () => ({
-  useRoomActions: () => ({
+  useRoomModeration: () => ({
     listHats: mockListHats,
     createHat: mockCreateHat,
     destroyHat: mockDestroyHat,

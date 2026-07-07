@@ -165,8 +165,18 @@ vi.mock('@fluux/sdk', () => ({
     firstNewMessageId: undefined,
     joinRoom: mockJoinRoom,
     joinResult: mockJoinResult,
+  }),
+  // Focused room action hooks (RoomView sources its poll / moderation /
+  // management slices from these instead of the useRoomActive spread).
+  usePolls: () => ({ sendPoll: vi.fn(), votePoll: vi.fn(), closePoll: vi.fn() }),
+  useRoomModeration: () => ({ moderateMessage: vi.fn(), setAffiliation: vi.fn(), setRole: vi.fn() }),
+  useRoomManagement: () => ({
+    setRoomNotifyAll: mockSetRoomNotifyAll,
     setRoomAvatar: mockSetRoomAvatar,
     clearRoomAvatar: mockClearRoomAvatar,
+    submitRoomConfig: vi.fn(),
+    setSubject: vi.fn(),
+    destroyRoom: vi.fn(),
   }),
   // Focused room subscriptions used by the memoized RoomMessageInput composer.
   useRoomEntity: () => mockActiveRoom ? { name: mockActiveRoom.name, nickname: mockActiveRoom.nickname } : undefined,
