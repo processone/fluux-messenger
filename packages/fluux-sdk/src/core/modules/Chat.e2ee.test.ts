@@ -1819,7 +1819,13 @@ describe('Chat E2EE wiring', () => {
       await plainChat.sendLinkPreview('bob@example.com', 'orig-id', preview)
 
       const sent = captured[0]
-      expect(sent.getChild('apply-to', 'urn:xmpp:fasten:0')).toBeDefined()
+      const applyTo = sent.getChild('apply-to', 'urn:xmpp:fasten:0')
+      expect(applyTo).toBeDefined()
+      // Interop wire format: OGP <meta> are direct children of <apply-to>, with
+      // no invalid <external> wrapper (mod_ogp / Gajim / Movim convention).
+      expect(applyTo!.getChild('external', 'urn:xmpp:fasten:0')).toBeUndefined()
+      const metas = applyTo!.getChildren('meta', 'http://www.w3.org/1999/xhtml')
+      expect(metas.map((m) => m.attrs.property)).toContain('og:title')
       expect(sent.getChild('no-store', 'urn:xmpp:hints')).toBeDefined()
       expect(sent.getChild('plain', 'urn:fluux:e2ee-dummy:0')).toBeUndefined()
     })

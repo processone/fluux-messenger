@@ -1582,10 +1582,13 @@ export class Chat extends BaseModule {
     if (preview.image) metaElements.push(xml('meta', { xmlns: 'http://www.w3.org/1999/xhtml', property: 'og:image', content: preview.image }))
     if (preview.siteName) metaElements.push(xml('meta', { xmlns: 'http://www.w3.org/1999/xhtml', property: 'og:site_name', content: preview.siteName }))
 
+    // The OGP <meta> elements are direct children of <apply-to>, matching the
+    // de-facto convention (Prosody mod_ogp, Movim, Gajim). Do NOT wrap them in
+    // <external>: per XEP-0422 <external> is an empty pointer to a top-level
+    // stanza child, so wrapping payload in it makes the fastening invalid and
+    // interop clients silently drop the preview.
     const children: Element[] = [
-      xml('apply-to', { xmlns: NS_FASTEN, id: originalId },
-        xml('external', { xmlns: NS_FASTEN, name: 'ogp' }, ...metaElements)
-      ),
+      xml('apply-to', { xmlns: NS_FASTEN, id: originalId }, ...metaElements),
       xml('no-store', { xmlns: NS_HINTS }),
     ]
 
