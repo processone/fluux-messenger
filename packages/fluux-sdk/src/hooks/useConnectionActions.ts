@@ -1,7 +1,7 @@
 import { useCallback, useMemo } from 'react'
 import { connectionStore } from '../stores'
 import { useXMPPContext } from '../provider'
-import type { LinkPreview, VCardInfo } from '../core/types'
+import type { LinkPreview, VCardInfo, ConnectOptions } from '../core/types'
 
 /**
  * Action-only counterpart to `useConnection()`.
@@ -29,20 +29,11 @@ export function useConnectionActions() {
   const { client } = useXMPPContext()
 
   const connect = useCallback(
-    async (
-      jid: string,
-      password: string | undefined,
-      server: string,
-      smState?: { id: string; inbound: number; outbound: number },
-      resource?: string,
-      lang?: string,
-      disableSmKeepalive?: boolean,
-      rememberSession?: boolean
-    ) => {
+    async (options: ConnectOptions) => {
       connectionStore.getState().setStatus('connecting')
       connectionStore.getState().setError(null)
       try {
-        await client.connect({ jid, password, server, resource, smState, lang, disableSmKeepalive, rememberSession })
+        await client.connect(options)
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Connection failed'
         connectionStore.getState().setStatus('error')
