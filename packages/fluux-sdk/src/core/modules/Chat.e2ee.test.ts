@@ -1829,6 +1829,36 @@ describe('Chat E2EE wiring', () => {
       expect(sent.getChild('no-store', 'urn:xmpp:hints')).toBeDefined()
       expect(sent.getChild('plain', 'urn:fluux:e2ee-dummy:0')).toBeUndefined()
     })
+
+    it('renders a foreign (mod_ogp / Gajim) preview: meta direct under apply-to, no <external>', () => {
+      const rxBuilt = makeDeps({ jid: 'me@example.com', manager, captureStanza: () => {} })
+      const rxChat = new Chat(rxBuilt.deps, stubMAM())
+
+      // Shape emitted by Prosody mod_ogp: OGP <meta> as direct children of
+      // <apply-to>, from the room, applying to the message's id/origin-id.
+      const inbound = xml(
+        'message',
+        { from: 'room@muc.example.com/alice', to: 'me@example.com', type: 'groupchat', id: 'muc-msg-1' },
+        xml(
+          'apply-to',
+          { xmlns: 'urn:xmpp:fasten:0', id: 'muc-msg-1' },
+          xml('meta', { xmlns: 'http://www.w3.org/1999/xhtml', property: 'og:url', content: 'https://example.com/a' }),
+          xml('meta', { xmlns: 'http://www.w3.org/1999/xhtml', property: 'og:title', content: 'Foreign Title' }),
+          xml('meta', { xmlns: 'http://www.w3.org/1999/xhtml', property: 'og:image', content: 'https://example.com/i.jpg' }),
+        ),
+      )
+
+      rxChat.handle(inbound)
+
+      const evt = rxBuilt.sdkEmitted.find(
+        (e) => (e as { event: string }).event === 'room:message-updated',
+      ) as { payload: { roomJid: string; messageId: string; updates: { linkPreview?: { title?: string; image?: string } } } } | undefined
+      expect(evt).toBeDefined()
+      expect(evt!.payload.roomJid).toBe('room@muc.example.com')
+      expect(evt!.payload.messageId).toBe('muc-msg-1')
+      expect(evt!.payload.updates.linkPreview?.title).toBe('Foreign Title')
+      expect(evt!.payload.updates.linkPreview?.image).toBe('https://example.com/i.jpg')
+    })
   })
 
   describe('reply-quote leak protection (cleartext reply to an encrypted message)', () => {
