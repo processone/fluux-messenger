@@ -1230,7 +1230,8 @@
         "filteringRooms": "Фільтрація кімнат...",
         "filteringCommands": "Фільтрація команд...",
         "searchMessages": "Search messages for \"{{query}}\"",
-        "unread": "Непрочитані"
+        "unread": "Непрочитані",
+        "attention": "Потребує уваги"
     },
     "dataFormHints": {
         "muc#roomconfig_roomname": "Ім'я, що відображається у списку кімнат та в заголовку.",

@@ -1228,7 +1228,8 @@
         "filteringRooms": "Groepen filteren...",
         "filteringCommands": "Commando's filteren...",
         "searchMessages": "Search messages for \"{{query}}\"",
-        "unread": "Ongelezen"
+        "unread": "Ongelezen",
+        "attention": "Vereist aandacht"
     },
     "dataFormHints": {
         "muc#roomconfig_roomname": "De weergavenaam in de kamerlijst en de koptekst.",

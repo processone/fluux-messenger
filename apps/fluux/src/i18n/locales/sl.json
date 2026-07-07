@@ -1232,7 +1232,8 @@
         "filteringRooms": "Filtriranje sob...",
         "filteringCommands": "Filtriranje ukazov...",
         "searchMessages": "Search messages for \"{{query}}\"",
-        "unread": "Neprebrano"
+        "unread": "Neprebrano",
+        "attention": "Zahteva pozornost"
     },
     "dataFormHints": {
         "muc#roomconfig_roomname": "Prikazano ime na seznamu sob in v glavi.",

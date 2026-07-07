@@ -1228,7 +1228,8 @@
         "filteringRooms": "Suodatetaan huoneita...",
         "filteringCommands": "Suodatetaan komentoja...",
         "searchMessages": "Search messages for \"{{query}}\"",
-        "unread": "Lukematta"
+        "unread": "Lukematta",
+        "attention": "Vaatii huomiota"
     },
     "dataFormHints": {
         "muc#roomconfig_roomname": "Huoneluettelossa ja otsikossa näkyvä nimi.",

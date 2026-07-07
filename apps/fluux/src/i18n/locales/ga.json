@@ -1231,7 +1231,8 @@
         "filteringRooms": "Ag scagadh seomraí...",
         "filteringCommands": "Ag scagadh orduithe...",
         "searchMessages": "Search messages for \"{{query}}\"",
-        "unread": "Neamhléite"
+        "unread": "Neamhléite",
+        "attention": "Aird de dhíth"
     },
     "dataFormHints": {
         "muc#roomconfig_roomname": "An t-ainm taispeána a thaispeántar i liostaí seomraí agus sa cheanntásc.",

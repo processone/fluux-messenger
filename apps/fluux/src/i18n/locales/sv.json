@@ -1228,7 +1228,8 @@
         "filteringRooms": "Filtrerar rum...",
         "filteringCommands": "Filtrerar kommandon...",
         "searchMessages": "Search messages for \"{{query}}\"",
-        "unread": "Olästa"
+        "unread": "Olästa",
+        "attention": "Kräver uppmärksamhet"
     },
     "dataFormHints": {
         "muc#roomconfig_roomname": "Visningsnamnet som visas i rumslistor och rubriken.",

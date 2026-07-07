@@ -1228,7 +1228,8 @@
         "filteringRooms": "Szobák szűrése...",
         "filteringCommands": "Parancsok szűrése...",
         "searchMessages": "Search messages for \"{{query}}\"",
-        "unread": "Olvasatlan"
+        "unread": "Olvasatlan",
+        "attention": "Figyelmet igényel"
     },
     "dataFormHints": {
         "muc#roomconfig_roomname": "A szobalistákban és a fejlécben megjelenő megjelenítési név.",

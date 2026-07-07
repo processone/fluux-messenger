@@ -1229,7 +1229,8 @@
         "filteringRooms": "Φιλτράρισμα δωματίων...",
         "filteringCommands": "Φιλτράρισμα εντολών...",
         "searchMessages": "Search messages for \"{{query}}\"",
-        "unread": "Μη αναγνωσμένα"
+        "unread": "Μη αναγνωσμένα",
+        "attention": "Χρειάζεται προσοχή"
     },
     "dataFormHints": {
         "muc#roomconfig_roomname": "Το εμφανιζόμενο όνομα στη λίστα δωματίων και στην κεφαλίδα.",

@@ -1228,7 +1228,8 @@
         "filteringRooms": "Filtrerer rom...",
         "filteringCommands": "Filtrerer kommandoer...",
         "searchMessages": "Search messages for \"{{query}}\"",
-        "unread": "Uleste"
+        "unread": "Uleste",
+        "attention": "Krever oppmerksomhet"
     },
     "dataFormHints": {
         "muc#roomconfig_roomname": "Visningsnavnet som vises i romlister og overskriften.",

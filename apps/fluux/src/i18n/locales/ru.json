@@ -1230,7 +1230,8 @@
         "filteringRooms": "Фильтр конференций...",
         "filteringCommands": "Фильтр команд...",
         "searchMessages": "Search messages for \"{{query}}\"",
-        "unread": "Непрочитанные"
+        "unread": "Непрочитанные",
+        "attention": "Требует внимания"
     },
     "dataFormHints": {
         "muc#roomconfig_roomname": "Отображаемое имя в списке комнат и в заголовке.",

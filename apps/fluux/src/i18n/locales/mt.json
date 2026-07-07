@@ -1233,7 +1233,8 @@
         "filteringRooms": "Qed jiffiltra kmamar...",
         "filteringCommands": "Qed jiffiltra kmandi...",
         "searchMessages": "Search messages for \"{{query}}\"",
-        "unread": "Mhux moqrija"
+        "unread": "Mhux moqrija",
+        "attention": "Jeħtieġ attenzjoni"
     },
     "dataFormHints": {
         "muc#roomconfig_roomname": "L-isem tal-wiri muri fil-lista tal-kmamar u fl-header.",

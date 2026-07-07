@@ -1231,7 +1231,8 @@
         "filteringRooms": "Filtrujú sa miestnosti...",
         "filteringCommands": "Filtrujú sa príkazy...",
         "searchMessages": "Search messages for \"{{query}}\"",
-        "unread": "Neprečítané"
+        "unread": "Neprečítané",
+        "attention": "Vyžaduje pozornosť"
     },
     "dataFormHints": {
         "muc#roomconfig_roomname": "Zobrazovaný názov v zozname miestností a v hlavičke.",
