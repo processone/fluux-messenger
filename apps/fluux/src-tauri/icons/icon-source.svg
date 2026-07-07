@@ -49,10 +49,8 @@
   </g>
   <rect x="63.5" y="63.5" width="897" height="897" rx="222.5" fill="none" stroke="#FFFFFF" stroke-opacity="0.15" stroke-width="3"/>
 
-  <g filter="url(#depth)" fill="url(#bubble)">
-    <rect x="262" y="315" width="500" height="357" rx="132"/>
-    <path d="M405 665 L332 808 L548 665 Z"/>
-  </g>
+  <!-- Body + tail as one continuous path (no seam where they used to meet). -->
+  <path filter="url(#depth)" fill="url(#bubble)" d="M394 315 L630 315 Q762 315 762 447 L762 540 Q762 672 630 672 L548 672 L332 808 L405 672 L394 672 Q262 672 262 540 L262 447 Q262 315 394 315 Z"/>
   <g clip-path="url(#bubbleClip)">
     <rect x="262" y="315" width="500" height="493" fill="url(#transmit)"/>
     <rect x="262" y="315" width="500" height="245" fill="url(#bubbleHi)"/>

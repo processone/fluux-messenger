@@ -67,10 +67,13 @@ export function AppIconMark({ size = 72, className }: AppIconMarkProps) {
       </g>
       <rect x="63.5" y="63.5" width="897" height="897" rx="222.5" fill="none" stroke="#FFFFFF" strokeOpacity="0.15" strokeWidth="3" />
 
-      <g filter={`url(#${id('depth')})`} fill={`url(#${id('bubble')})`}>
-        <rect x="262" y="315" width="500" height="357" rx="132" />
-        <path d="M405 665 L332 808 L548 665 Z" />
-      </g>
+      {/* Body + tail as ONE continuous path (a rounded rect whose bottom edge
+          dips into the tail), so there's no seam where the two used to meet. */}
+      <path
+        filter={`url(#${id('depth')})`}
+        fill={`url(#${id('bubble')})`}
+        d="M394 315 L630 315 Q762 315 762 447 L762 540 Q762 672 630 672 L548 672 L332 808 L405 672 L394 672 Q262 672 262 540 L262 447 Q262 315 394 315 Z"
+      />
     </svg>
   )
 }
