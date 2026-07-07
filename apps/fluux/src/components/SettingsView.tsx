@@ -15,11 +15,9 @@ import {
   PrivacySettings,
   AdvancedSettings,
   McpSettings,
-  type SettingsCategory,
   SETTINGS_CATEGORIES,
-  DEFAULT_SETTINGS_CATEGORY,
+  resolveSettingsCategory,
 } from './settings-components'
-import { isUpdaterEnabled } from '@/utils/tauri'
 import { ArrowLeft } from 'lucide-react'
 
 interface SettingsViewProps {
@@ -36,8 +34,10 @@ export function SettingsView({ onBack }: SettingsViewProps) {
   const { dragRegionProps } = useWindowDrag()
   const { settingsCategory } = useRouteSync()
 
-  // Current category (default to profile if none specified)
-  const activeCategory = (settingsCategory as SettingsCategory) || DEFAULT_SETTINGS_CATEGORY
+  // Current category: default to profile if none specified, and fall back to
+  // profile when the URL names a category this platform doesn't offer (e.g. a
+  // deep link to the Tauri-only `mcp` or `storage` panels in the web build).
+  const activeCategory = resolveSettingsCategory(settingsCategory)
 
   // Get the active category's config for icon and label
   const activeCategoryConfig = SETTINGS_CATEGORIES.find(cat => cat.id === activeCategory)
@@ -60,8 +60,9 @@ export function SettingsView({ onBack }: SettingsViewProps) {
       case 'privacy':
         return <PrivacySettings />
       case 'updates':
-        // Updates only available on macOS/Windows, not Linux (users update via package manager)
-        return isUpdaterEnabled() ? <UpdatesSettings /> : <ProfileSettings />
+        // Platform availability is handled by resolveSettingsCategory above
+        // (updaterOnly config), so this case only renders where it applies.
+        return <UpdatesSettings />
       case 'blocked':
         return <BlockedUsersSettings />
       case 'storage':

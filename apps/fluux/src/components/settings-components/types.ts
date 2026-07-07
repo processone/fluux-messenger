@@ -66,6 +66,18 @@ export function getVisibleCategories(): SettingsCategoryConfig[] {
  */
 export const DEFAULT_SETTINGS_CATEGORY: SettingsCategory = 'profile'
 
+/**
+ * Resolve a (possibly absent or platform-unavailable) requested category to
+ * one that may actually render. The sidebar already hides platform-gated
+ * entries, but the category also arrives via the URL, so a deep link on the
+ * wrong platform (e.g. `mcp` or `storage` in the web build) must fall back to
+ * the default instead of rendering a panel for a feature that cannot work.
+ */
+export function resolveSettingsCategory(requested: string | null | undefined): SettingsCategory {
+  const category = (requested as SettingsCategory) || DEFAULT_SETTINGS_CATEGORY
+  return getVisibleCategories().some((cat) => cat.id === category) ? category : DEFAULT_SETTINGS_CATEGORY
+}
+
 export interface SettingsGroupSection {
   group: SettingsGroup
   /** i18n key for the group header, or null for a group rendered with no header */
