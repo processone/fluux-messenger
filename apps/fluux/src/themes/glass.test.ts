@@ -169,12 +169,33 @@ describe('liquid-glass tier', () => {
   })
 
   it('gates the liquid tier off on Linux and fully reverts under reduced transparency', () => {
-    // Linux keeps the base frost: the liquid override must be scoped away from data-platform="linux"
+    // The liquid override must be scoped away from data-platform="linux"
     expect(css).toMatch(/:root:not\(\[data-platform="linux"\]\)\s+\.fluux-glass/)
     // the reduced-transparency revert must also clear the liquid additions
     const reduced = css.match(/:root\[data-transparency="reduced"\]\s+\.fluux-glass\s*\{([\s\S]*?)\}/)?.[1] ?? ''
     expect(reduced).toContain('background-image: none')
     expect(reduced).toContain('backdrop-filter: none')
+  })
+
+  // WebKitGTK advertises backdrop-filter via @supports but often paints the blur
+  // as a no-op, so the base frost's translucency ghosts the background through
+  // ("too transparent"). Linux must revert .fluux-glass to the solid surface with
+  // the blur removed, INSIDE the @supports block (that is exactly when the base
+  // frost would otherwise apply). Specificity (0,3,0) beats the base rule.
+  it('reverts the glass panel to a solid, blur-free surface on Linux', () => {
+    const linux = css.match(/:root\[data-platform="linux"\]\s+\.fluux-glass\s*\{([\s\S]*?)\}/)?.[1] ?? ''
+    expect(linux, ':root[data-platform="linux"] .fluux-glass rule missing').not.toBe('')
+    expect(linux).toContain('background-color: var(--fluux-chat-bg)')
+    expect(linux).toContain('backdrop-filter: none')
+    expect(linux).toContain('-webkit-backdrop-filter: none')
+    // it must sit inside the @supports frost block (after the base .fluux-glass
+    // rule), so it only fires when the base translucency would otherwise apply.
+    const supportsIdx = css.indexOf('@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) and (background: color-mix(in srgb, red, blue))')
+    const linuxIdx = css.indexOf(':root[data-platform="linux"] .fluux-glass {')
+    const liquidIdx = css.indexOf(':root:not([data-platform="linux"]) .fluux-glass {')
+    expect(supportsIdx).toBeGreaterThan(-1)
+    expect(linuxIdx).toBeGreaterThan(supportsIdx)
+    expect(linuxIdx).toBeLessThan(liquidIdx)
   })
 
   // The liquid rule `:root:not([data-platform="linux"]) .fluux-glass` has
