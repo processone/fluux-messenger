@@ -14,6 +14,7 @@ import type { FileAttachment } from '@fluux/sdk'
 import { useConnectionStore } from '@fluux/sdk/react'
 import { encryptionSendErrorKey } from '@/e2ee/encryptionSendError'
 import type { ConversationEncryptionState } from '@/hooks/useConversationEncryptionState'
+import { trustVisual } from '@/e2ee/trustVisual'
 import { useToastStore } from '@/stores/toastStore'
 
 // Format file size for display
@@ -699,16 +700,18 @@ export function MessageComposer({
     onCancelEdit?.()
   }
 
-  // Aurora encryption reminder. Calm by default (teal lock/shield), escalates to
-  // amber only on a real key change ('blocked'). Everything else shows nothing.
+  // Aurora encryption reminder. Colors flow from trustVisual() — the single
+  // source of truth shared with the per-message bubble lock: calm gray for a
+  // routine encrypted-but-unverified peer, teal only once verified, amber on a
+  // real key change ('blocked'). Everything else shows nothing.
   const enc = encryptionState
-  const lockInfo: { Icon: typeof Lock; color: string; label: string } | null =
+  const lockInfo: { Icon: typeof Lock; colorClass: string; label: string } | null =
     enc?.kind === 'encrypted'
       ? enc.trust === 'verified'
-        ? { Icon: ShieldCheck, color: 'var(--fluux-text-encryption)', label: t('chat.encryption.verifiedTooltip') }
-        : { Icon: Lock, color: 'var(--fluux-text-encryption)', label: t('chat.encryption.openpgpTooltip') }
+        ? { Icon: ShieldCheck, colorClass: trustVisual('verified').colorClass, label: t('chat.encryption.verifiedTooltip') }
+        : { Icon: Lock, colorClass: trustVisual('trusted').colorClass, label: t('chat.encryption.openpgpTooltip') }
       : enc?.kind === 'blocked'
-        ? { Icon: ShieldAlert, color: 'var(--fluux-status-warning)', label: t('chat.encryption.blockedTooltip') }
+        ? { Icon: ShieldAlert, colorClass: trustVisual('keyChanged').colorClass, label: t('chat.encryption.blockedTooltip') }
         : null
   const keyChanged = enc?.kind === 'blocked'
 
@@ -953,7 +956,7 @@ export function MessageComposer({
           )}
         </div>
 
-        {/* Leading encryption lock — calm teal reminder, escalates to amber ShieldAlert on blocked */}
+        {/* Leading encryption lock — calm gray reminder, teal once verified, amber ShieldAlert on blocked */}
         {lockInfo && (
           onEncryptionClick ? (
             <button
@@ -963,11 +966,11 @@ export function MessageComposer({
               aria-label={lockInfo.label}
               className="p-1.5 flex-shrink-0 rounded-lg hover:bg-fluux-bg transition-colors [grid-area:lock] composer-drawer-item"
             >
-              <lockInfo.Icon className="size-4" style={{ color: lockInfo.color }} />
+              <lockInfo.Icon className={`size-4 ${lockInfo.colorClass}`} />
             </button>
           ) : (
             <span data-encryption-lock aria-label={lockInfo.label} className="p-1.5 flex-shrink-0 [grid-area:lock] composer-drawer-item">
-              <lockInfo.Icon className="size-4" style={{ color: lockInfo.color }} />
+              <lockInfo.Icon className={`size-4 ${lockInfo.colorClass}`} />
             </span>
           )
         )}

@@ -186,6 +186,13 @@ export function useRoomActive() {
     [client],
   )
 
+  const changeNick = useCallback(
+    async (roomJid: string, newNick: string): Promise<void> => {
+      await client.muc.changeNick(roomJid, newNick)
+    },
+    [client],
+  )
+
   // Pre-join room inspection + real-JID-exposure acknowledgement (issue #37)
   const getRoomInfo = useCallback(
     async (roomJid: string): Promise<RoomFeatures | null> => client.muc.queryRoomFeatures(roomJid),
@@ -386,6 +393,7 @@ export function useRoomActive() {
     () => ({
       joinRoom,
       joinResult,
+      changeNick,
       getRoomInfo,
       acknowledgeNonAnonymousRoom,
       isNonAnonymousRoomAcknowledged,
@@ -427,6 +435,7 @@ export function useRoomActive() {
     [
       joinRoom,
       joinResult,
+      changeNick,
       getRoomInfo,
       acknowledgeNonAnonymousRoom,
       isNonAnonymousRoomAcknowledged,

@@ -12,6 +12,7 @@ function ctx(overrides: Partial<CommandContext> = {}): CommandContext {
     sdk: {
       joinRoom: vi.fn().mockResolvedValue(undefined),
       joinResult: vi.fn().mockResolvedValue(undefined),
+      changeNick: vi.fn().mockResolvedValue(undefined),
       leaveRoom: vi.fn().mockResolvedValue(undefined),
       setSubject: vi.fn().mockResolvedValue(undefined),
       setRole: vi.fn().mockResolvedValue(undefined),

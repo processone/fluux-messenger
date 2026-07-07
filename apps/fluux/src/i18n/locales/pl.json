@@ -427,6 +427,7 @@
         "userInfo": "Informacje o użytkowniku",
         "manageOccupant": "Zarządzaj",
         "invitationsHeading": "Zaproszenia",
+        "nickChanged": "{{oldNick}} jest teraz znany jako {{newNick}}",
         "nickEdgeWhitespace": "Nazwa ma dodatkowe spacje na brzegach",
         "nickHiddenChars": "Nazwa zawiera ukryte znaki"
     },

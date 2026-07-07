@@ -1050,7 +1050,7 @@ export const MessageInput = memo(function MessageInput({
   onCancelReply: () => void
   editingMessage: Message | null
   onCancelEdit: () => void
-  sendMessage: (to: string, body: string, type?: 'chat' | 'groupchat', replyTo?: { id: string; to?: string; fallback?: { author: string; body: string; fromEncrypted?: boolean } }, attachment?: import('@fluux/sdk').FileAttachment) => Promise<string>
+  sendMessage: (to: string, body: string, options?: { replyTo?: { id: string; to?: string; fallback?: { author: string; body: string; fromEncrypted?: boolean } }; attachment?: import('@fluux/sdk').FileAttachment }) => Promise<string>
   sendCorrection: (conversationId: string, messageId: string, newBody: string, attachment?: import('@fluux/sdk').FileAttachment) => Promise<void>
   retractMessage: (conversationId: string, messageId: string) => Promise<void>
   sendChatState: (to: string, state: import('@fluux/sdk').ChatStateNotification, type?: 'chat' | 'groupchat') => Promise<void>
@@ -1096,6 +1096,7 @@ export const MessageInput = memo(function MessageInput({
       sdk: {
         joinRoom: notInRoom,
         joinResult: notInRoom,
+        changeNick: notInRoom,
         leaveRoom: notInRoom,
         setSubject: notInRoom,
         setRole: notInRoom,
@@ -1210,7 +1211,7 @@ export const MessageInput = memo(function MessageInput({
 
     // The body is the file URL if no text was entered, otherwise the user's text
     const body = text || attachment?.url || ''
-    const messageId = await sendMessage(conversationId, body, type, replyTo, attachment ?? undefined)
+    const messageId = await sendMessage(conversationId, body, { replyTo, attachment: attachment ?? undefined })
 
     // Notify parent of sent message ID for animation
     onMessageIdSent?.(messageId)

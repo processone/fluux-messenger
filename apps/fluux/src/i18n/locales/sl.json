@@ -427,6 +427,7 @@
         "userInfo": "Podatki o uporabniku",
         "manageOccupant": "Upravljaj",
         "invitationsHeading": "Vabila",
+        "nickChanged": "{{oldNick}} je zdaj znan kot {{newNick}}",
         "nickEdgeWhitespace": "Ime ima dodatne presledke na robovih",
         "nickHiddenChars": "Ime vsebuje skrite znake"
     },

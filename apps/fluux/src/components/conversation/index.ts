@@ -18,6 +18,9 @@ export { NewMessageMarker } from './NewMessageMarker'
 export { HistoryStartMarker } from './HistoryStartMarker'
 export { HistoryGapMarker } from './HistoryGapMarker'
 
+export { RoomSystemLine } from './RoomSystemLine'
+export type { RoomSystemLineProps } from './RoomSystemLine'
+
 export { MessageBubble, buildReplyContext } from './MessageBubble'
 export type { MessageBubbleProps } from './MessageBubble'
 

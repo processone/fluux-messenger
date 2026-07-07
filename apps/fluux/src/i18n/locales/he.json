@@ -425,6 +425,7 @@
         "selectHat": "בחר תג",
         "hatJidPlaceholder": "user@example.com",
         "invitationsHeading": "הזמנות",
+        "nickChanged": "{{oldNick}} ידוע כעת בשם {{newNick}}",
         "nickEdgeWhitespace": "השם מכיל רווחים נוספים בקצוות",
         "nickHiddenChars": "השם מכיל תווים נסתרים"
     },

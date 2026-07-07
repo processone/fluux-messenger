@@ -87,6 +87,7 @@ void i18n.use(initReactI18next).init({
           markAllRead: 'Mark all as read',
           whisperThread: 'Private with {{nick}}',
           whisperCounterpartGone: "{{nick}} is no longer in the room, so you can't reply",
+          nickChanged: '{{oldNick}} is now known as {{newNick}}',
         },
         messages: {
           showArchived: 'Show archived conversations',

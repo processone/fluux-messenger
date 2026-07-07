@@ -425,6 +425,7 @@
         "userInfo": "Käyttäjätiedot",
         "manageOccupant": "Hallitse",
         "invitationsHeading": "Kutsut",
+        "nickChanged": "{{oldNick}} tunnetaan nyt nimellä {{newNick}}",
         "nickEdgeWhitespace": "Nimessä on ylimääräisiä välilyöntejä reunoilla",
         "nickHiddenChars": "Nimi sisältää piilotettuja merkkejä"
     },

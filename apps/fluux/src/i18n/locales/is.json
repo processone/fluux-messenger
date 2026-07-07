@@ -425,6 +425,7 @@
         "userInfo": "Notandaupplýsingar",
         "manageOccupant": "Stjórna",
         "invitationsHeading": "Boð",
+        "nickChanged": "{{oldNick}} er nú þekktur sem {{newNick}}",
         "nickEdgeWhitespace": "Nafnið er með auka bil á endunum",
         "nickHiddenChars": "Nafnið inniheldur falda stafi"
     },

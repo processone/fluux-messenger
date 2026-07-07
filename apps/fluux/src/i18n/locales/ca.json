@@ -427,6 +427,7 @@
         "userInfo": "Info de l'usuari",
         "manageOccupant": "Gestionar",
         "invitationsHeading": "Invitacions",
+        "nickChanged": "{{oldNick}} ara es coneix com a {{newNick}}",
         "nickEdgeWhitespace": "El nom té espais addicionals als extrems",
         "nickHiddenChars": "El nom conté caràcters ocults"
     },

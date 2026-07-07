@@ -425,6 +425,7 @@
         "userInfo": "Інфармацыя пра карыстальніка",
         "manageOccupant": "Кіраванне",
         "invitationsHeading": "Запрашэнні",
+        "nickChanged": "{{oldNick}} цяпер вядомы як {{newNick}}",
         "nickEdgeWhitespace": "Імя змяшчае лішнія прабелы па краях",
         "nickHiddenChars": "Імя змяшчае схаваныя сімвалы"
     },

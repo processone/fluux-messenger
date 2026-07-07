@@ -425,6 +425,7 @@
         "userInfo": "Brugerinfo",
         "manageOccupant": "Administrer",
         "invitationsHeading": "Invitationer",
+        "nickChanged": "{{oldNick}} er nu kendt som {{newNick}}",
         "nickEdgeWhitespace": "Navnet har ekstra mellemrum i kanterne",
         "nickHiddenChars": "Navnet indeholder skjulte tegn"
     },

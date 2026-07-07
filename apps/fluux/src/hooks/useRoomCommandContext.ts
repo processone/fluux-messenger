@@ -17,7 +17,7 @@ interface RoomCommandContextArgs {
 export function useRoomCommandContext(args: RoomCommandContextArgs): CommandContext {
   const { roomJid, self, occupants, currentSubject, onOpenHelp, sendEasterEgg } = args
   const { t } = useTranslation()
-  const { joinRoom, joinResult, leaveRoom } = useRoomActions()
+  const { joinRoom, joinResult, changeNick, leaveRoom } = useRoomActions()
   const { setRole, setAffiliation } = useRoomModeration()
   const { setSubject, inviteToRoom } = useRoomManagement()
   const openInvite = useRoomUiStore((s) => s.openInvite)
@@ -32,6 +32,7 @@ export function useRoomCommandContext(args: RoomCommandContextArgs): CommandCont
       sdk: {
         joinRoom: (jid, nick) => joinRoom(jid, nick),
         joinResult: (jid) => joinResult(jid),
+        changeNick: (jid, newNick) => changeNick(jid, newNick),
         leaveRoom: (jid) => leaveRoom(jid),
         setSubject: (jid, subject) => setSubject(jid, subject),
         setRole: (jid, nick, role, reason) => setRole(jid, nick, role, reason),
@@ -45,7 +46,7 @@ export function useRoomCommandContext(args: RoomCommandContextArgs): CommandCont
     }),
     [
       roomJid, self, currentSubject, occupants, onOpenHelp, sendEasterEgg,
-      joinRoom, joinResult, leaveRoom, setSubject, setRole, setAffiliation, inviteToRoom,
+      joinRoom, joinResult, changeNick, leaveRoom, setSubject, setRole, setAffiliation, inviteToRoom,
       openInvite, openConfig, t,
     ],
   )

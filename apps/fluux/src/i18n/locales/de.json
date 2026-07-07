@@ -427,6 +427,7 @@
         "userInfo": "Benutzerinfo",
         "manageOccupant": "Verwalten",
         "invitationsHeading": "Einladungen",
+        "nickChanged": "{{oldNick}} heißt jetzt {{newNick}}",
         "nickEdgeWhitespace": "Der Name hat zusätzliche Leerzeichen am Rand",
         "nickHiddenChars": "Der Name enthält versteckte Zeichen"
     },

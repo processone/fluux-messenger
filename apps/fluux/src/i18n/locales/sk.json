@@ -426,6 +426,7 @@
         "userInfo": "Informácie o používateľovi",
         "manageOccupant": "Spravovať",
         "invitationsHeading": "Pozvánky",
+        "nickChanged": "{{oldNick}} je teraz známy ako {{newNick}}",
         "nickEdgeWhitespace": "Meno obsahuje medzery na okrajoch",
         "nickHiddenChars": "Meno obsahuje skryté znaky"
     },

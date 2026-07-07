@@ -425,6 +425,7 @@
         "userInfo": "Информация о пользователе",
         "manageOccupant": "Управление",
         "invitationsHeading": "Приглашения",
+        "nickChanged": "{{oldNick}} теперь известен как {{newNick}}",
         "nickEdgeWhitespace": "Имя содержит лишние пробелы по краям",
         "nickHiddenChars": "Имя содержит скрытые символы"
     },

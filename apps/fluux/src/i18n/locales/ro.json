@@ -427,6 +427,7 @@
         "userInfo": "Informații utilizator",
         "manageOccupant": "Gestionează",
         "invitationsHeading": "Invitații",
+        "nickChanged": "{{oldNick}} este acum cunoscut ca {{newNick}}",
         "nickEdgeWhitespace": "Numele are spații suplimentare la margini",
         "nickHiddenChars": "Numele conține caractere ascunse"
     },

@@ -18,6 +18,7 @@ export interface CommandSelf {
 export interface CommandSdk {
   joinRoom(jid: string, nick: string): Promise<void>
   joinResult(jid: string): Promise<void>
+  changeNick(jid: string, newNick: string): Promise<void>
   leaveRoom(jid: string): Promise<void>
   setSubject(jid: string, subject: string): Promise<void>
   setRole(jid: string, nick: string, role: RoomRole, reason?: string): Promise<void>
