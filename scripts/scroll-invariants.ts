@@ -1707,3 +1707,91 @@ test.describe('Sliding window (load-older past the cap)', () => {
     expect(recentered.count, `resident not bounded after recenter: ${JSON.stringify(recentered)}`).toBeLessThanOrEqual(100)
   })
 })
+
+// ── Jump-to-last-read pill: survives a jump-to-present and returns to the divider (#870) ──
+//
+// Reproduces the "dead pill": read a room to the bottom, leave, receive MANY new messages
+// while away, return (opens at the divider). Jump to present via the FAB. The per-visit
+// anchor must SURVIVE the jump so the pill shows "N new · Jump to last read", and clicking
+// it must return the divider to view. With the pre-fix clear branches this pill never
+// durably appears, so this test goes RED against the bug.
+test.describe('Jump-to-last-read pill', () => {
+  test('pill appears after FAB jump-to-present and returns to the divider', async ({ page }) => {
+    await loadDemo(page)
+    await navigateToStressRoom(page)
+
+    // Read the room the real way, then pin lastSeen to the true last message.
+    await scrollToBottom(page)
+    await page.waitForTimeout(400)
+    await page.evaluate((jid) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const rs = (window as any).__roomStore.getState()
+      const msgs = rs.roomRuntime.get(jid)?.messages ?? rs.rooms.get(jid)?.messages ?? []
+      const last = msgs[msgs.length - 1]
+      if (last) rs.updateLastSeenMessageId(jid, last.id)
+    }, STRESS_ROOM_JID)
+
+    // Leave the room (genuinely at the bottom, so no restore-position is saved).
+    await page.evaluate(() => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      void (window as any).__roomStore.getState().activateRoom(null)
+    })
+    await page.waitForTimeout(300)
+
+    // Many new messages arrive while away, so the divider sits well above the live edge
+    // (and its row is trimmed from the DOM once we jump — exercising the trim-survival path).
+    const baseTs = Date.now()
+    await page.evaluate(([jid, count, base]) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const c = (window as any).__demoClient
+      for (let i = 0; i < (count as number); i++) {
+        c.emitSDK('room:message', {
+          roomJid: jid,
+          message: {
+            type: 'groupchat', id: `pill-new-${base}-${i}`, from: `${jid}/AwayBot`, nick: 'AwayBot',
+            body: `away message ${i} — the divider must survive a jump to present`,
+            timestamp: new Date((base as number) + i), isOutgoing: false, roomJid: jid,
+          },
+          incrementUnread: true,
+        })
+      }
+    }, [STRESS_ROOM_JID, 30, baseTs])
+    await page.waitForTimeout(200)
+
+    // Re-enter: opens at the divider, so the pill is hidden (divider visible).
+    await navigateToStressRoom(page)
+    await page.waitForTimeout(1500) // let the marker re-assert loop settle
+    await expect(page.locator('[data-new-message-marker]'), 'divider row should exist on re-entry').toBeVisible()
+    await expect(page.locator('[data-jump-to-last-read]'), 'pill is hidden while the divider is visible').toHaveCount(0)
+
+    // Jump to present via the FAB (two-step: to marker, then to bottom). Click until at bottom.
+    const fab = page.locator('[data-fab="scroll-to-bottom"]')
+    for (let i = 0; i < 3; i++) {
+      if (await fab.isVisible().catch(() => false)) {
+        await fab.click()
+        await page.waitForTimeout(600)
+      }
+      const dist = await page.evaluate(() => {
+        const s = document.querySelector('[data-message-list]') as HTMLElement | null
+        return s ? Math.round(s.scrollHeight - s.scrollTop - s.clientHeight) : 99999
+      })
+      if (dist < 8) break
+    }
+
+    // The anchor survived the jump: the pill now shows and offers the return.
+    await expect(page.locator('[data-jump-to-last-read]'), 'pill must appear after a jump-to-present').toBeVisible({ timeout: 4000 })
+
+    // Click the pill: the divider returns to view.
+    await page.locator('[data-jump-to-last-read] button').click()
+    await page.waitForTimeout(1200)
+    const dividerVisible = await page.evaluate(() => {
+      const s = document.querySelector('[data-message-list]') as HTMLElement | null
+      const m = document.querySelector('[data-new-message-marker]') as HTMLElement | null
+      if (!s || !m) return false
+      const sr = s.getBoundingClientRect()
+      const mr = m.getBoundingClientRect()
+      return mr.bottom > sr.top && mr.top < sr.bottom
+    })
+    expect(dividerVisible, 'clicking the pill must return the divider to view').toBe(true)
+  })
+})

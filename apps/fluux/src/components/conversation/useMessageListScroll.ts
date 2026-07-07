@@ -1335,10 +1335,6 @@ export function useMessageListScroll({
       }
     }
 
-    if (firstNewMessageId) {
-      clearFirstNewMessageId?.()
-    }
-
     const virtFab = latestRef.current.virtualizer
     if (virtFab && virtFab.itemCount > 0) {
       reassertBottom('fab')
@@ -1347,7 +1343,7 @@ export function useMessageListScroll({
 
     rememberBottomIntent()
     scroller.scrollTo({ top: scroller.scrollHeight, behavior: 'smooth' })
-  }, [firstNewMessageId, clearFirstNewMessageId, reassertBottom, rememberBottomIntent])
+  }, [firstNewMessageId, reassertBottom, rememberBottomIntent])
 
   const scrollToTop = useCallback(() => {
     lastLoadTimeRef.current = Date.now() // prevent auto-load trigger
@@ -1799,25 +1795,14 @@ export function useMessageListScroll({
         userHasScrolledSinceMarkerRef.current = true
         debugLog('MARKER CLEAR armed (first scroll)', { firstNewMessageId, distFromBottom })
       } else if (distFromBottom < AT_BOTTOM_THRESHOLD) {
-        // User reached the bottom — all new messages are visible
+        // User genuinely read through to the bottom — the "skipped vs read-through" clear.
+        // NOTE: gated by `!programmaticScroll` above, so a FAB jump-to-present (which drives a
+        // reassert loop) does NOT clear the anchor — the jump-to-last-read pill (#870) needs the
+        // per-visit divider anchor to survive a skip. Scrolled-past / DOM-trimmed no longer clear:
+        // those are exactly the states where the pill must show (moved toward the present without
+        // reading). The anchor now clears only on read-through, Esc, mark-all-read, or deactivation.
         debugLog('MARKER CLEAR (reached bottom)', { firstNewMessageId, distFromBottom })
         clearFirstNewMessageId()
-      } else {
-        const escapedId = CSS.escape(firstNewMessageId)
-        const markerEl = el.querySelector(`[data-message-id="${escapedId}"]`) as HTMLElement | null
-        if (markerEl) {
-          const scrollerRect = el.getBoundingClientRect()
-          const markerRect = markerEl.getBoundingClientRect()
-          // Marker is "scrolled past" when its bottom edge is above the viewport
-          if (markerRect.bottom < scrollerRect.top) {
-            debugLog('MARKER CLEAR (scrolled past)', { firstNewMessageId })
-            clearFirstNewMessageId()
-          }
-        } else {
-          // Marker element not in DOM (trimmed) — clear it
-          debugLog('MARKER CLEAR (not in DOM/trimmed)', { firstNewMessageId, distFromBottom })
-          clearFirstNewMessageId()
-        }
       }
     }
 

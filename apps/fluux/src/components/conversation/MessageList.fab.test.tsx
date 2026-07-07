@@ -407,7 +407,11 @@ describe('MessageList FAB badge and scroll behavior', () => {
       )
     })
 
-    it('should clear the unread marker when the FAB intentionally goes to bottom', () => {
+    it('should NOT clear the unread marker when the FAB intentionally goes to bottom (#870)', () => {
+      // The FAB jump-to-present must scroll to the live bottom WITHOUT clearing
+      // firstNewMessageId — the per-visit divider anchor has to survive the jump so the
+      // jump-to-last-read pill can appear afterward. See useMessageListScroll's
+      // scrollToBottom callback and the "reached bottom" clear guarded by !programmaticScroll.
       const messages = createTestMessages(10)
       const clearFirstNewMessageId = vi.fn()
 
@@ -436,7 +440,7 @@ describe('MessageList FAB badge and scroll behavior', () => {
 
       act(() => { fireEvent.click(fab) })
 
-      expect(clearFirstNewMessageId).toHaveBeenCalled()
+      expect(clearFirstNewMessageId).not.toHaveBeenCalled()
       expect(scrollCtx.scrollToSpy).toHaveBeenCalledWith(
         expect.objectContaining({ top: 2000, behavior: 'smooth' })
       )
