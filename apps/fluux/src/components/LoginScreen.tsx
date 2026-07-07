@@ -439,7 +439,12 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
               style={{ background: 'var(--fluux-grad)' }}
               aria-hidden="true"
             />
-            <AppIconMark size={72} className="relative" />
+            {/* Soft neutral shadow so the icon stays defined on pale/white
+                backgrounds (the halo glows on dark but doesn't define an edge on light). */}
+            <AppIconMark
+              size={72}
+              className="relative [filter:drop-shadow(0_6px_16px_rgba(26,32,64,0.22))]"
+            />
           </div>
           <h1 className="text-3xl font-semibold font-display tracking-tight text-fluux-text">{t('login.title')}</h1>
           <p className="text-fluux-muted mt-2">{t('login.subtitle')}</p>
