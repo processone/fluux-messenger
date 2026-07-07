@@ -425,7 +425,8 @@
         "hatJidPlaceholder": "user@example.com",
         "userInfo": "Lietotāja informācija",
         "manageOccupant": "Pārvaldīt",
-        "invitationsHeading": "Ielūgumi"
+        "invitationsHeading": "Ielūgumi",
+        "nickChanged": "{{oldNick}} tagad zināms kā {{newNick}}"
     },
     "events": {
         "invitedBy": "Uzaicināja {{name}}",

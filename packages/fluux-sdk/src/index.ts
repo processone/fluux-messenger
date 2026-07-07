@@ -230,6 +230,7 @@ export type {
   // Room types (MUC)
   Room,
   RoomMessage,
+  RoomSystemEvent,
   RoomOccupant,
   RoomMember,
   RoomAffiliation,

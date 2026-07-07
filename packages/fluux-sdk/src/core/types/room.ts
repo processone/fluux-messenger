@@ -106,6 +106,22 @@ export interface RoomMember {
 }
 
 /**
+ * A client-synthesized, non-persisted timeline notice describing a room
+ * occurrence rather than user-authored content. Rendered as a centered system
+ * line (not a message bubble) and never written to the local cache or search
+ * index — it is live-session-scoped and reconstructed from the presence stream,
+ * so it does not survive a reload (MAM does not archive presence).
+ *
+ * @category MUC
+ */
+export type RoomSystemEvent = {
+  /** XEP-0045 §7.6 occupant nick change. */
+  kind: 'nick-changed'
+  oldNick: string
+  newNick: string
+}
+
+/**
  * A message in a MUC room.
  *
  * Extends {@link BaseMessage} with MUC-specific fields like
@@ -149,6 +165,13 @@ export interface RoomMessage extends Omit<BaseMessage, 'type'> {
    * can't be mis-addressed. Absent in rooms without occupant-id support.
    */
   whisperWithOccupantId?: string
+  /**
+   * When present, this is a synthetic system notice (e.g. an occupant nick
+   * change) rather than user-authored content. The app renders a localized,
+   * centered line from this structured payload; `body` is empty so the entry is
+   * never surfaced as a sidebar preview. Always paired with `noLocalStore`.
+   */
+  systemEvent?: RoomSystemEvent
 }
 
 /**

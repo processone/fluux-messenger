@@ -424,7 +424,8 @@
         "hatUnassignError": "فشل إزالة الشارة",
         "selectHat": "اختيار شارة",
         "hatJidPlaceholder": "user@example.com",
-        "invitationsHeading": "الدعوات"
+        "invitationsHeading": "الدعوات",
+        "nickChanged": "أصبح {{oldNick}} يُعرف الآن باسم {{newNick}}"
     },
     "events": {
         "invitedBy": "دعوة من {{name}}",

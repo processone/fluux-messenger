@@ -426,7 +426,8 @@
         "hatJidPlaceholder": "user@example.com",
         "userInfo": "Podatki o uporabniku",
         "manageOccupant": "Upravljaj",
-        "invitationsHeading": "Vabila"
+        "invitationsHeading": "Vabila",
+        "nickChanged": "{{oldNick}} je zdaj znan kot {{newNick}}"
     },
     "events": {
         "invitedBy": "Povabil {{name}}",

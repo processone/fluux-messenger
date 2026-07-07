@@ -425,7 +425,8 @@
         "hatJidPlaceholder": "user@example.com",
         "userInfo": "Informácie o používateľovi",
         "manageOccupant": "Spravovať",
-        "invitationsHeading": "Pozvánky"
+        "invitationsHeading": "Pozvánky",
+        "nickChanged": "{{oldNick}} je teraz známy ako {{newNick}}"
     },
     "events": {
         "invitedBy": "Pozval {{name}}",

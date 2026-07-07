@@ -424,7 +424,8 @@
         "hatJidPlaceholder": "user@example.com",
         "userInfo": "Информация за потребителя",
         "manageOccupant": "Управление",
-        "invitationsHeading": "Покани"
+        "invitationsHeading": "Покани",
+        "nickChanged": "{{oldNick}} вече е познат като {{newNick}}"
     },
     "events": {
         "invitedBy": "Поканен от {{name}}",

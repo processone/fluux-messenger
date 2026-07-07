@@ -235,6 +235,30 @@ export class MUC extends BaseModule {
       // also carries status 110 and must not flip the room to "not joined".
       if (statuses.includes('303')) {
         this.deps.emitSDK('room:occupant-left', { roomJid, nick })
+        const newNick = item?.attrs.nick
+        if (newNick && newNick !== nick) {
+          // Transient, session-scoped timeline notice ("<old> is now known as
+          // <new>"). Empty body → never a sidebar preview; noLocalStore → not
+          // persisted or indexed (presence isn't archived, so it can't be
+          // reconstructed on reload anyway).
+          this.deps.emitSDK('room:message', {
+            roomJid,
+            message: {
+              type: 'groupchat',
+              id: generateUUID(),
+              roomJid,
+              from: `${roomJid}/${nick}`,
+              nick,
+              body: '',
+              timestamp: new Date(),
+              isOutgoing: isSelf,
+              noLocalStore: true,
+              systemEvent: { kind: 'nick-changed', oldNick: nick, newNick },
+            },
+            incrementUnread: false,
+            incrementMentions: false,
+          })
+        }
         return
       }
       if (isSelf) {

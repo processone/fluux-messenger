@@ -5,7 +5,7 @@ import { useRoomActive, usePolls, useRoomModeration, useRoomManagement, useRoomE
 import { useConnectionStore, useIgnoreStore, useRoomStore } from '@fluux/sdk/react'
 import { ignoreStore, roomStore, type IgnoredUser } from '@fluux/sdk/stores'
 import { useMentionAutocomplete, useFileUpload, useLinkPreview, useTypeToFocus, useMessageCopy, useMode, useMessageSelection, useMessageHoverState, useDragAndDrop, useConversationDraft, useTimeFormat, useContextMenu, useWhisperCounterpartPresent, useRoomOccupantCountBelow, isSmallScreen } from '@/hooks'
-import { MessageBubble, MessageList, shouldShowAvatar, whisperThreadPosition, whisperCounterpartPresent, resolveWhisperTarget, decideWhisperSend, decideChatStateRoute, buildReplyContext, canClosePoll, PollBanner, type WhisperThreadPosition, type WhisperTarget } from './conversation'
+import { MessageBubble, MessageList, RoomSystemLine, shouldShowAvatar, whisperThreadPosition, whisperCounterpartPresent, resolveWhisperTarget, decideWhisperSend, decideChatStateRoute, buildReplyContext, canClosePoll, PollBanner, type WhisperThreadPosition, type WhisperTarget } from './conversation'
 import { FindOnPageBar } from './conversation/FindOnPageBar'
 import { useFindOnPage, type FindOnPageHandle } from '@/hooks/useFindOnPage'
 import { Avatar } from './Avatar'
@@ -1048,6 +1048,11 @@ export const RoomMessageList = memo(function RoomMessageList({
   })
 
   const renderMessage = (msg: RoomMessage, idx: number, groupMessages: RoomMessage[]) => {
+    // System notices (e.g. nick changes) render as a centered line, not a bubble.
+    if (msg.systemEvent) {
+      return <RoomSystemLine event={msg.systemEvent} />
+    }
+
     const sender = resolveRoomSender(msg, room, contactsByJid, selfOccupant)
 
     // Resolve the reply-preview avatar to PRIMITIVES (the wrapper builds the

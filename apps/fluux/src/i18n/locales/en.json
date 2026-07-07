@@ -424,7 +424,8 @@
         "hatUnassignError": "Failed to remove hat",
         "selectHat": "Select hat",
         "hatJidPlaceholder": "user@example.com",
-        "invitationsHeading": "Invitations"
+        "invitationsHeading": "Invitations",
+        "nickChanged": "{{oldNick}} is now known as {{newNick}}"
     },
     "events": {
         "invitedBy": "Invited by {{name}}",

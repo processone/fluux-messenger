@@ -2385,6 +2385,18 @@ describe('MUC Module', () => {
 
       // Old nick dropped; not mistaken for the occupant leaving-and-gone.
       expect(mockEmitSDK).toHaveBeenCalledWith('room:occupant-left', { roomJid: ROOM, nick: 'alice' })
+      // A transient, non-persisted system notice is added to the timeline.
+      expect(mockEmitSDK).toHaveBeenCalledWith('room:message', {
+        roomJid: ROOM,
+        message: expect.objectContaining({
+          type: 'groupchat',
+          body: '',
+          noLocalStore: true,
+          systemEvent: { kind: 'nick-changed', oldNick: 'alice', newNick: 'alice2' },
+        }),
+        incrementUnread: false,
+        incrementMentions: false,
+      })
       // The paired available presence for the new nick then re-adds the occupant.
       mockStores.room.getRoom.mockReturnValue(joinedRoom('mynick'))
       muc.handle(
@@ -2420,6 +2432,33 @@ describe('MUC Module', () => {
       expect(mockEmitSDK).toHaveBeenCalledWith('room:occupant-left', { roomJid: ROOM, nick: 'oldnick' })
       // …but the room is NOT flipped to "not joined".
       expect(mockEmitSDK).not.toHaveBeenCalledWith('room:joined', { roomJid: ROOM, joined: false })
+      // Self rename also drops a timeline notice, flagged outgoing.
+      expect(mockEmitSDK).toHaveBeenCalledWith('room:message', {
+        roomJid: ROOM,
+        message: expect.objectContaining({
+          isOutgoing: true,
+          systemEvent: { kind: 'nick-changed', oldNick: 'oldnick', newNick: 'newnick' },
+        }),
+        incrementUnread: false,
+        incrementMentions: false,
+      })
+    })
+
+    it('does not emit a system notice when the 303 carries no new nick', () => {
+      const presence = createMockElement('presence', { from: `${ROOM}/bob`, type: 'unavailable' }, [
+        {
+          name: 'x',
+          attrs: { xmlns: 'http://jabber.org/protocol/muc#user' },
+          children: [
+            { name: 'item', attrs: {} },
+            { name: 'status', attrs: { code: '303' } },
+          ],
+        },
+      ])
+      muc.handle(presence)
+
+      expect(mockEmitSDK).toHaveBeenCalledWith('room:occupant-left', { roomJid: ROOM, nick: 'bob' })
+      expect(mockEmitSDK).not.toHaveBeenCalledWith('room:message', expect.anything())
     })
 
     it('confirms the rename on the new self-presence without re-running join completion', async () => {

@@ -42,6 +42,7 @@ export type {
   RoomOccupant,
   RoomMember,
   RoomMessage,
+  RoomSystemEvent,
   RoomEntity,
   RoomMetadata,
   RoomRuntime,

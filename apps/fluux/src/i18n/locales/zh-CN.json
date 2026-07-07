@@ -424,7 +424,8 @@
         "hatJidPlaceholder": "user@example.com",
         "userInfo": "用户信息",
         "manageOccupant": "管理",
-        "invitationsHeading": "邀请"
+        "invitationsHeading": "邀请",
+        "nickChanged": "{{oldNick}} 现在称为 {{newNick}}"
     },
     "events": {
         "invitedBy": "邀请者 {{name}}",

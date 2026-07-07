@@ -424,7 +424,8 @@
         "hatJidPlaceholder": "user@example.com",
         "userInfo": "Felhasználó adatai",
         "manageOccupant": "Kezelés",
-        "invitationsHeading": "Meghívók"
+        "invitationsHeading": "Meghívók",
+        "nickChanged": "{{oldNick}} mostantól {{newNick}} néven ismert"
     },
     "events": {
         "invitedBy": "Meghívta: {{name}}",

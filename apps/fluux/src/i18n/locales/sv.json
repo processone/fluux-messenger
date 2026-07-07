@@ -424,7 +424,8 @@
         "hatJidPlaceholder": "user@example.com",
         "userInfo": "Användarinfo",
         "manageOccupant": "Hantera",
-        "invitationsHeading": "Inbjudningar"
+        "invitationsHeading": "Inbjudningar",
+        "nickChanged": "{{oldNick}} är nu känd som {{newNick}}"
     },
     "events": {
         "invitedBy": "Inbjuden av {{name}}",

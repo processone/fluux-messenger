@@ -426,7 +426,8 @@
         "hatJidPlaceholder": "user@example.com",
         "userInfo": "Info de l'usuari",
         "manageOccupant": "Gestionar",
-        "invitationsHeading": "Invitacions"
+        "invitationsHeading": "Invitacions",
+        "nickChanged": "{{oldNick}} ara es coneix com a {{newNick}}"
     },
     "events": {
         "invitedBy": "Convidat per {{name}}",
