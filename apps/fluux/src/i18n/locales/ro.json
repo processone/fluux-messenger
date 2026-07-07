@@ -426,7 +426,8 @@
         "hatJidPlaceholder": "user@example.com",
         "userInfo": "Informații utilizator",
         "manageOccupant": "Gestionează",
-        "invitationsHeading": "Invitații"
+        "invitationsHeading": "Invitații",
+        "nickChanged": "{{oldNick}} este acum cunoscut ca {{newNick}}"
     },
     "events": {
         "invitedBy": "Invitat de {{name}}",

@@ -11,6 +11,7 @@ function makeCtx(overrides: Partial<CommandContext> = {}): CommandContext {
     sdk: {
       joinRoom: vi.fn().mockResolvedValue(undefined),
       joinResult: vi.fn().mockResolvedValue(undefined),
+      changeNick: vi.fn().mockResolvedValue(undefined),
       leaveRoom: vi.fn().mockResolvedValue(undefined),
       setSubject: vi.fn().mockResolvedValue(undefined),
       setRole: vi.fn().mockResolvedValue(undefined),
@@ -112,11 +113,19 @@ describe('runCommand', () => {
     expect(ctx.sdk.setAffiliation).not.toHaveBeenCalled()
   })
 
-  it('/nick rejoins and reports a conflict', async () => {
+  it('/nick changes the nick and reports success', async () => {
     const ctx = makeCtx()
-    ;(ctx.sdk.joinResult as ReturnType<typeof vi.fn>).mockRejectedValueOnce({ condition: 'conflict' })
+    const res = await runCommand({ kind: 'command', name: 'nick', args: 'newname' }, ctx)
+    expect(ctx.sdk.changeNick).toHaveBeenCalledWith('room@conf.example.com', 'newname')
+    expect(ctx.sdk.joinRoom).not.toHaveBeenCalled()
+    expect(res).toEqual({ ok: true, toast: expect.stringContaining('commands.nick.changed') })
+  })
+
+  it('/nick reports a conflict when the nick is taken', async () => {
+    const ctx = makeCtx()
+    ;(ctx.sdk.changeNick as ReturnType<typeof vi.fn>).mockRejectedValueOnce({ condition: 'conflict' })
     const res = await runCommand({ kind: 'command', name: 'nick', args: 'taken' }, ctx)
-    expect(ctx.sdk.joinRoom).toHaveBeenCalledWith('room@conf.example.com', 'taken')
+    expect(ctx.sdk.changeNick).toHaveBeenCalledWith('room@conf.example.com', 'taken')
     expect(res).toEqual({ ok: false, error: expect.stringContaining('commands.error.nickInUse') })
   })
 

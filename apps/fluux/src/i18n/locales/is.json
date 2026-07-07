@@ -424,7 +424,8 @@
         "hatJidPlaceholder": "user@example.com",
         "userInfo": "Notandaupplýsingar",
         "manageOccupant": "Stjórna",
-        "invitationsHeading": "Boð"
+        "invitationsHeading": "Boð",
+        "nickChanged": "{{oldNick}} er nú þekktur sem {{newNick}}"
     },
     "events": {
         "invitedBy": "Boðið af {{name}}",

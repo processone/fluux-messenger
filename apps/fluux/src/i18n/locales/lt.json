@@ -424,7 +424,8 @@
         "hatJidPlaceholder": "user@example.com",
         "userInfo": "Naudotojo informacija",
         "manageOccupant": "Valdyti",
-        "invitationsHeading": "Kvietimai"
+        "invitationsHeading": "Kvietimai",
+        "nickChanged": "{{oldNick}} dabar žinomas kaip {{newNick}}"
     },
     "events": {
         "invitedBy": "Pakvietė {{name}}",

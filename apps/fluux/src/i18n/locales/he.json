@@ -424,7 +424,8 @@
         "hatUnassignError": "הסרת התג נכשלה",
         "selectHat": "בחר תג",
         "hatJidPlaceholder": "user@example.com",
-        "invitationsHeading": "הזמנות"
+        "invitationsHeading": "הזמנות",
+        "nickChanged": "{{oldNick}} ידוע כעת בשם {{newNick}}"
     },
     "events": {
         "invitedBy": "הוזמן על ידי {{name}}",

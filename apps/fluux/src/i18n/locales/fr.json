@@ -425,7 +425,8 @@
         "selectHat": "Sélectionner un badge",
         "hatJidPlaceholder": "user@example.com",
         "manageOccupant": "Gérer",
-        "invitationsHeading": "Invitations"
+        "invitationsHeading": "Invitations",
+        "nickChanged": "{{oldNick}} est désormais connu sous le nom de {{newNick}}"
     },
     "events": {
         "invitedBy": "Invité par {{name}}",

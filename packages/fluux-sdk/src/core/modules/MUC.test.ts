@@ -2315,4 +2315,190 @@ describe('MUC Module', () => {
       })
     })
   })
+
+  describe('changeNick (XEP-0045 §7.6)', () => {
+    const ROOM = 'room@conference.example.org'
+
+    const joinedRoom = (nickname: string) => ({
+      jid: ROOM,
+      name: 'room',
+      joined: true,
+      isJoining: false,
+      nickname,
+      isBookmarked: true,
+      occupants: new Map(),
+      messages: [],
+      unreadCount: 0,
+      mentionsCount: 0,
+      typingUsers: new Set<string>(),
+    })
+
+    /** A status-110 self-presence for `nick` (what the server echoes after a rename). */
+    const selfPresence = (nick: string) =>
+      createMockElement('presence', { from: `${ROOM}/${nick}` }, [
+        {
+          name: 'x',
+          attrs: { xmlns: 'http://jabber.org/protocol/muc#user' },
+          children: [
+            { name: 'item', attrs: { affiliation: 'member', role: 'participant' } },
+            { name: 'status', attrs: { code: '110' } },
+          ],
+        },
+      ])
+
+    it('sends a directed presence to the new nick (no history request)', async () => {
+      mockStores.room.getRoom.mockReturnValue(joinedRoom('oldnick'))
+      const p = muc.changeNick(ROOM, 'newnick')
+      muc.handle(selfPresence('newnick')) // server confirms → settles the promise
+      await p
+
+      const presence = mockSendStanza.mock.calls[0][0]
+      expect(presence.attrs.to).toBe(`${ROOM}/newnick`)
+      // Unlike joinRoom, a nick change carries no <x muc> / history child.
+      expect(presence.getChild('x')).toBeUndefined()
+    })
+
+    it('rejects when not currently in the room', async () => {
+      mockStores.room.getRoom.mockReturnValue(undefined)
+      await expect(muc.changeNick(ROOM, 'newnick')).rejects.toMatchObject({ condition: 'not-joined' })
+      expect(mockSendStanza).not.toHaveBeenCalled()
+    })
+
+    it('is a no-op when the new nick equals the current nick', async () => {
+      mockStores.room.getRoom.mockReturnValue(joinedRoom('samenick'))
+      await muc.changeNick(ROOM, 'samenick')
+      expect(mockSendStanza).not.toHaveBeenCalled()
+    })
+
+    it('renames another occupant on their status-303 unavailable (no room:joined change)', () => {
+      const presence = createMockElement('presence', { from: `${ROOM}/alice`, type: 'unavailable' }, [
+        {
+          name: 'x',
+          attrs: { xmlns: 'http://jabber.org/protocol/muc#user' },
+          children: [
+            { name: 'item', attrs: { nick: 'alice2' } },
+            { name: 'status', attrs: { code: '303' } },
+          ],
+        },
+      ])
+      muc.handle(presence)
+
+      // Old nick dropped; not mistaken for the occupant leaving-and-gone.
+      expect(mockEmitSDK).toHaveBeenCalledWith('room:occupant-left', { roomJid: ROOM, nick: 'alice' })
+      // A transient, non-persisted system notice is added to the timeline.
+      expect(mockEmitSDK).toHaveBeenCalledWith('room:message', {
+        roomJid: ROOM,
+        message: expect.objectContaining({
+          type: 'groupchat',
+          body: '',
+          noLocalStore: true,
+          systemEvent: { kind: 'nick-changed', oldNick: 'alice', newNick: 'alice2' },
+        }),
+        incrementUnread: false,
+        incrementMentions: false,
+      })
+      // The paired available presence for the new nick then re-adds the occupant.
+      mockStores.room.getRoom.mockReturnValue(joinedRoom('mynick'))
+      muc.handle(
+        createMockElement('presence', { from: `${ROOM}/alice2` }, [
+          {
+            name: 'x',
+            attrs: { xmlns: 'http://jabber.org/protocol/muc#user' },
+            children: [{ name: 'item', attrs: { affiliation: 'member', role: 'participant' } }],
+          },
+        ]),
+      )
+      expect(mockEmitSDK).toHaveBeenCalledWith(
+        'room:occupant-joined',
+        expect.objectContaining({ occupant: expect.objectContaining({ nick: 'alice2' }) }),
+      )
+    })
+
+    it('treats a self status-303 unavailable as a rename, not a room leave', () => {
+      const presence = createMockElement('presence', { from: `${ROOM}/oldnick`, type: 'unavailable' }, [
+        {
+          name: 'x',
+          attrs: { xmlns: 'http://jabber.org/protocol/muc#user' },
+          children: [
+            { name: 'item', attrs: { nick: 'newnick' } },
+            { name: 'status', attrs: { code: '303' } },
+            { name: 'status', attrs: { code: '110' } },
+          ],
+        },
+      ])
+      muc.handle(presence)
+
+      // Old-nick occupant removed…
+      expect(mockEmitSDK).toHaveBeenCalledWith('room:occupant-left', { roomJid: ROOM, nick: 'oldnick' })
+      // …but the room is NOT flipped to "not joined".
+      expect(mockEmitSDK).not.toHaveBeenCalledWith('room:joined', { roomJid: ROOM, joined: false })
+      // Self rename also drops a timeline notice, flagged outgoing.
+      expect(mockEmitSDK).toHaveBeenCalledWith('room:message', {
+        roomJid: ROOM,
+        message: expect.objectContaining({
+          isOutgoing: true,
+          systemEvent: { kind: 'nick-changed', oldNick: 'oldnick', newNick: 'newnick' },
+        }),
+        incrementUnread: false,
+        incrementMentions: false,
+      })
+    })
+
+    it('does not emit a system notice when the 303 carries no new nick', () => {
+      const presence = createMockElement('presence', { from: `${ROOM}/bob`, type: 'unavailable' }, [
+        {
+          name: 'x',
+          attrs: { xmlns: 'http://jabber.org/protocol/muc#user' },
+          children: [
+            { name: 'item', attrs: {} },
+            { name: 'status', attrs: { code: '303' } },
+          ],
+        },
+      ])
+      muc.handle(presence)
+
+      expect(mockEmitSDK).toHaveBeenCalledWith('room:occupant-left', { roomJid: ROOM, nick: 'bob' })
+      expect(mockEmitSDK).not.toHaveBeenCalledWith('room:message', expect.anything())
+    })
+
+    it('confirms the rename on the new self-presence without re-running join completion', async () => {
+      mockStores.room.getRoom.mockReturnValue(joinedRoom('oldnick'))
+      const p = muc.changeNick(ROOM, 'newnick')
+      muc.handle(selfPresence('newnick'))
+      await p
+
+      expect(mockEmitSDK).toHaveBeenCalledWith(
+        'room:self-occupant',
+        expect.objectContaining({ roomJid: ROOM, occupant: expect.objectContaining({ nick: 'newnick' }) }),
+      )
+      expect(mockEmitSDK).toHaveBeenCalledWith(
+        'room:occupant-joined',
+        expect.objectContaining({ occupant: expect.objectContaining({ nick: 'newnick' }) }),
+      )
+      // No full join completion: no room:joined toggle, no mucJoined side effects.
+      expect(mockEmitSDK).not.toHaveBeenCalledWith('room:joined', { roomJid: ROOM, joined: true })
+      expect(mockEmit).not.toHaveBeenCalledWith('mucJoined', expect.anything(), expect.anything())
+    })
+
+    it('rejects with conflict on an error presence and keeps the room joined', async () => {
+      mockStores.room.getRoom.mockReturnValue(joinedRoom('oldnick'))
+      const p = muc.changeNick(ROOM, 'taken')
+
+      const errorPresence = createMockElement('presence', { from: `${ROOM}/taken`, type: 'error' }, [
+        {
+          name: 'error',
+          attrs: { type: 'cancel' },
+          children: [{ name: 'conflict', attrs: { xmlns: 'urn:ietf:params:xml:ns:xmpp-stanzas' } }],
+        },
+      ])
+      muc.handle(errorPresence)
+
+      await expect(p).rejects.toMatchObject({ condition: 'conflict' })
+      // A failed rename must not mark the room as left — we're still in it under the old nick.
+      expect(mockEmitSDK).not.toHaveBeenCalledWith(
+        'room:updated',
+        expect.objectContaining({ updates: expect.objectContaining({ joined: false }) }),
+      )
+    })
+  })
 })

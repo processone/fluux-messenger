@@ -85,6 +85,7 @@ void i18n.use(initReactI18next).init({
           browseRooms: 'Browse Rooms',
           catchUpAll: 'Catch up all rooms',
           markAllRead: 'Mark all as read',
+          nickChanged: '{{oldNick}} is now known as {{newNick}}',
         },
         messages: {
           showArchived: 'Show archived conversations',

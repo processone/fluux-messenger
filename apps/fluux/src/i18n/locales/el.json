@@ -425,7 +425,8 @@
         "hatJidPlaceholder": "user@example.com",
         "userInfo": "Πληροφορίες χρήστη",
         "manageOccupant": "Διαχείριση",
-        "invitationsHeading": "Προσκλήσεις"
+        "invitationsHeading": "Προσκλήσεις",
+        "nickChanged": "{{oldNick}} είναι πλέον γνωστός ως {{newNick}}"
     },
     "events": {
         "invitedBy": "Πρόσκληση από {{name}}",

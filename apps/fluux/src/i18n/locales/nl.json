@@ -424,7 +424,8 @@
         "hatJidPlaceholder": "user@example.com",
         "userInfo": "Gebruikersinfo",
         "manageOccupant": "Beheren",
-        "invitationsHeading": "Uitnodigingen"
+        "invitationsHeading": "Uitnodigingen",
+        "nickChanged": "{{oldNick}} heet nu {{newNick}}"
     },
     "events": {
         "invitedBy": "Uitgenodigd door {{name}}",

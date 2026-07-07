@@ -424,7 +424,8 @@
         "hatJidPlaceholder": "user@example.com",
         "userInfo": "Інфармацыя пра карыстальніка",
         "manageOccupant": "Кіраванне",
-        "invitationsHeading": "Запрашэнні"
+        "invitationsHeading": "Запрашэнні",
+        "nickChanged": "{{oldNick}} цяпер вядомы як {{newNick}}"
     },
     "events": {
         "invitedBy": "Запрошаны {{name}}",

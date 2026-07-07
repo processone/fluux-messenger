@@ -64,8 +64,7 @@ const nick: SlashCommand = {
     const newNick = args.trim()
     if (!newNick) return { ok: false, error: ctx.t('commands.error.needNick') }
     try {
-      await ctx.sdk.joinRoom(ctx.entityJid, newNick)
-      await ctx.sdk.joinResult(ctx.entityJid)
+      await ctx.sdk.changeNick(ctx.entityJid, newNick)
       return { ok: true, toast: ctx.t('commands.nick.changed', { nick: newNick }) }
     } catch (e) {
       if (joinErrorCondition(e) === 'conflict') {

@@ -426,7 +426,8 @@
         "hatJidPlaceholder": "user@example.com",
         "userInfo": "Info tal-utent",
         "manageOccupant": "Immaniġġja",
-        "invitationsHeading": "Stedini"
+        "invitationsHeading": "Stedini",
+        "nickChanged": "{{oldNick}} issa magħruf bħala {{newNick}}"
     },
     "events": {
         "invitedBy": "Mistieden minn {{name}}",

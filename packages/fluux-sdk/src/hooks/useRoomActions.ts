@@ -63,6 +63,13 @@ export function useRoomActions() {
     [client]
   )
 
+  const changeNick = useCallback(
+    async (roomJid: string, newNick: string): Promise<void> => {
+      await client.muc.changeNick(roomJid, newNick)
+    },
+    [client]
+  )
+
   /**
    * Inspect a room via disco#info WITHOUT joining (no side effects). Use before
    * joining to decide whether to warn about real-JID exposure (issue #37). The
@@ -227,6 +234,7 @@ export function useRoomActions() {
       // Core: messaging / lifecycle / read-state / drafts / history
       joinRoom,
       joinResult,
+      changeNick,
       getRoomInfo,
       acknowledgeNonAnonymousRoom,
       isNonAnonymousRoomAcknowledged,
@@ -259,6 +267,7 @@ export function useRoomActions() {
     [
       joinRoom,
       joinResult,
+      changeNick,
       getRoomInfo,
       acknowledgeNonAnonymousRoom,
       isNonAnonymousRoomAcknowledged,
