@@ -28,11 +28,13 @@ export function useChatActions() {
     async (
       to: string,
       body: string,
-      type: 'chat' | 'groupchat' = 'chat',
-      replyTo?: { id: string; to?: string; fallback?: { author: string; body: string } },
-      attachment?: FileAttachment
+      options?: {
+        replyTo?: { id: string; to?: string; fallback?: { author: string; body: string } }
+        attachment?: FileAttachment
+      }
     ): Promise<string> => {
-      return await client.chat.sendMessage(to, body, type, replyTo, undefined, attachment)
+      // 1:1 chat hook: always a 'chat'-type message (rooms use useRoomActions).
+      return await client.chat.sendMessage(to, body, 'chat', options?.replyTo, undefined, options?.attachment)
     },
     [client]
   )
