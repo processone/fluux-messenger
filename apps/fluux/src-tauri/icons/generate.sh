@@ -25,8 +25,13 @@ done
 
 # squircle / transparent corners
 sq()  { rsvg-convert -w "$1" -h "$1" "$SQ" -o "$2"; }
-# full-bleed maskable
+# full-bleed maskable (iOS apple-touch: iOS applies its own rounded mask)
 mk()  { rsvg-convert -w "$1" -h "$1" "$MK" -o "$2"; }
+# rounded maskable for Android/PWA: the squircle flattened on the manifest
+# background_color (#1a1b1e). On the PWA splash the dark corners blend into the
+# dark splash background, so the launch logo reads as a rounded squircle rather
+# than a full-bleed square; OS home-screen masking still trims the dark bleed.
+mkr() { rsvg-convert -w "$1" -h "$1" "$SQ" -o "$TMP/_mkr.png"; magick "$TMP/_mkr.png" -background '#1a1b1e' -flatten "$2"; }
 # squircle flattened on white (iOS — no alpha allowed)
 sqw() { rsvg-convert -w "$1" -h "$1" "$SQ" -o "$TMP/_w.png"; magick "$TMP/_w.png" -background white -flatten "$2"; }
 # squircle masked to a circle (android round)
@@ -52,10 +57,10 @@ sq 192 "$PUBLIC/icon-192.png"
 sq 512 "$PUBLIC/logo.png"
 sq 32  "$PUBLIC/favicon.png"
 
-echo "== public PWA maskable + apple-touch (full bleed) =="
-mk 512 "$PUBLIC/icon-512-maskable.png"
-mk 192 "$PUBLIC/icon-192-maskable.png"
-mk 180 "$PUBLIC/apple-touch-icon.png"
+echo "== public PWA maskable (rounded on bg) + apple-touch (full bleed) =="
+mkr 512 "$PUBLIC/icon-512-maskable.png"
+mkr 192 "$PUBLIC/icon-192-maskable.png"
+mk  180 "$PUBLIC/apple-touch-icon.png"
 
 echo "== iOS (squircle on white, no alpha) =="
 declare -A IOS=(
