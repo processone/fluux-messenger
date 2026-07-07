@@ -5,16 +5,12 @@ import type {
   MentionReference,
   ChatStateNotification,
   FileAttachment,
-  RSMRequest,
-  AdminRoom,
-  RSMResponse,
-  RoomAffiliation,
-  RoomRole,
-  PollData,
-  PollSettings,
   RoomFeatures,
 } from '../core/types'
 import { createFetchOlderHistory, pickOldestArchiveId } from './shared'
+import { usePolls } from './usePolls'
+import { useRoomModeration } from './useRoomModeration'
+import { useRoomManagement } from './useRoomManagement'
 
 /**
  * Action-only counterpart to `useRoom()`.
@@ -28,6 +24,10 @@ import { createFetchOlderHistory, pickOldestArchiveId } from './shared'
  * causing it to re-render on every room store update. During background MAM
  * sync this can produce hundreds of re-renders per second. `useRoomActions()`
  * avoids this by reading actions directly via `roomStore.getState()`.
+ *
+ * The poll / moderation / management slices are the FOCUSED hooks
+ * (`usePolls`, `useRoomModeration`, `useRoomManagement`) composed here; prefer
+ * those directly in components that only work with one slice.
  *
  * @returns A stable object of room action callbacks
  *
@@ -43,6 +43,11 @@ import { createFetchOlderHistory, pickOldestArchiveId } from './shared'
  */
 export function useRoomActions() {
   const { client } = useXMPPContext()
+
+  // Focused action slices (each subscribes to nothing).
+  const polls = usePolls()
+  const moderation = useRoomModeration()
+  const management = useRoomManagement()
 
   const joinRoom = useCallback(
     async (roomJid: string, nickname: string, options?: { maxHistory?: number; password?: string; knownFeatures?: RoomFeatures | null }) => {
@@ -137,27 +142,6 @@ export function useRoomActions() {
     [client]
   )
 
-  const sendPoll = useCallback(
-    async (roomJid: string, title: string, options: string[], settings?: Partial<PollSettings>, description?: string, deadline?: string, customEmojis?: string[]) => {
-      return await client.poll.sendPoll(roomJid, title, options, settings, description, deadline, customEmojis)
-    },
-    [client]
-  )
-
-  const votePoll = useCallback(
-    async (roomJid: string, messageId: string, optionEmoji: string, currentMyReactions: string[], poll: PollData, isClosed?: boolean) => {
-      await client.poll.vote(roomJid, messageId, optionEmoji, currentMyReactions, poll, isClosed)
-    },
-    [client]
-  )
-
-  const closePoll = useCallback(
-    async (roomJid: string, messageId: string) => {
-      return await client.poll.closePoll(roomJid, messageId)
-    },
-    [client]
-  )
-
   const sendCorrection = useCallback(
     async (roomJid: string, messageId: string, newBody: string, attachment?: FileAttachment) => {
       await client.chat.sendCorrection(roomJid, messageId, newBody, 'groupchat', attachment)
@@ -168,37 +152,6 @@ export function useRoomActions() {
   const retractMessage = useCallback(
     async (roomJid: string, messageId: string) => {
       await client.chat.sendRetraction(roomJid, messageId, 'groupchat')
-    },
-    [client]
-  )
-
-  const moderateMessage = useCallback(
-    async (roomJid: string, stanzaId: string, reason?: string) => {
-      await client.muc.moderateMessage(roomJid, stanzaId, reason)
-    },
-    [client]
-  )
-
-  const setBookmark = useCallback(
-    async (
-      roomJid: string,
-      options: { name: string; nick: string; autojoin?: boolean; password?: string }
-    ) => {
-      await client.muc.setBookmark(roomJid, options)
-    },
-    [client]
-  )
-
-  const removeBookmark = useCallback(
-    async (roomJid: string) => {
-      await client.muc.removeBookmark(roomJid)
-    },
-    [client]
-  )
-
-  const setRoomNotifyAll = useCallback(
-    async (roomJid: string, notifyAll: boolean, persistent: boolean = false) => {
-      await client.muc.setRoomNotifyAll(roomJid, notifyAll, persistent)
     },
     [client]
   )
@@ -248,159 +201,6 @@ export function useRoomActions() {
     roomStore.getState().updateLastSeenMessageId(roomJid, messageId)
   }, [])
 
-  const setRoomAvatar = useCallback(
-    async (roomJid: string, imageData: Uint8Array, mimeType: string) => {
-      const base64 = btoa(String.fromCharCode(...Array.from(imageData)))
-      const dataUrl = `data:${mimeType};base64,${base64}`
-      await client.profile.setRoomAvatar(roomJid, dataUrl, mimeType)
-    },
-    [client]
-  )
-
-  const clearRoomAvatar = useCallback(
-    async (roomJid: string) => {
-      await client.profile.clearRoomAvatar(roomJid)
-    },
-    [client]
-  )
-
-  const restoreRoomAvatarFromCache = useCallback(
-    async (roomJid: string, avatarHash: string) => {
-      return client.profile.restoreRoomAvatarFromCache(roomJid, avatarHash)
-    },
-    [client]
-  )
-
-  const browsePublicRooms = useCallback(
-    async (mucServiceJid?: string, rsm?: RSMRequest): Promise<{ rooms: AdminRoom[]; pagination: RSMResponse }> => {
-      return client.admin.fetchRoomList(mucServiceJid, rsm)
-    },
-    [client]
-  )
-
-  const inviteToRoom = useCallback(
-    async (roomJid: string, inviteeJid: string, reason?: string) => {
-      await client.muc.sendMediatedInvitation(roomJid, inviteeJid, reason)
-    },
-    [client]
-  )
-
-  const inviteMultipleToRoom = useCallback(
-    async (roomJid: string, inviteeJids: string[], reason?: string) => {
-      await client.muc.sendMediatedInvitations(roomJid, inviteeJids, reason)
-    },
-    [client]
-  )
-
-  const submitRoomConfig = useCallback(
-    async (roomJid: string, values: Record<string, string | string[]>) => {
-      await client.muc.submitRoomConfig(roomJid, values)
-    },
-    [client]
-  )
-
-  const setSubject = useCallback(
-    async (roomJid: string, subject: string) => {
-      await client.muc.setSubject(roomJid, subject)
-    },
-    [client]
-  )
-
-  const createRoom = useCallback(
-    async (
-      roomJid: string,
-      nickname: string,
-      config: {
-        name: string
-        description?: string
-        isPublic?: boolean
-        membersOnly?: boolean
-        extraFields?: Record<string, string | string[]>
-      },
-      options?: { invitees?: string[] }
-    ) => {
-      await client.muc.createRoom(roomJid, nickname, config, options)
-    },
-    [client]
-  )
-
-  const destroyRoom = useCallback(
-    async (roomJid: string, reason?: string, alternateRoomJid?: string) => {
-      await client.muc.destroyRoom(roomJid, reason, alternateRoomJid)
-    },
-    [client]
-  )
-
-  const roomExists = useCallback(
-    async (roomJid: string): Promise<boolean> => {
-      return client.muc.roomExists(roomJid)
-    },
-    [client]
-  )
-
-  const setAffiliation = useCallback(
-    async (roomJid: string, userJid: string, affiliation: RoomAffiliation, reason?: string) => {
-      await client.muc.setAffiliation(roomJid, userJid, affiliation, reason)
-    },
-    [client]
-  )
-
-  const setRole = useCallback(
-    async (roomJid: string, nick: string, role: RoomRole, reason?: string) => {
-      await client.muc.setRole(roomJid, nick, role, reason)
-    },
-    [client]
-  )
-
-  const queryAffiliationList = useCallback(
-    async (roomJid: string, affiliation: RoomAffiliation) => {
-      return client.muc.queryAffiliationList(roomJid, affiliation)
-    },
-    [client]
-  )
-
-  const listHats = useCallback(
-    async (roomJid: string) => {
-      return client.muc.listHats(roomJid)
-    },
-    [client]
-  )
-
-  const createHat = useCallback(
-    async (roomJid: string, title: string, uri: string, hue?: number) => {
-      await client.muc.createHat(roomJid, title, uri, hue)
-    },
-    [client]
-  )
-
-  const destroyHat = useCallback(
-    async (roomJid: string, uri: string) => {
-      await client.muc.destroyHat(roomJid, uri)
-    },
-    [client]
-  )
-
-  const listHatAssignments = useCallback(
-    async (roomJid: string) => {
-      return client.muc.listHatAssignments(roomJid)
-    },
-    [client]
-  )
-
-  const assignHat = useCallback(
-    async (roomJid: string, userJid: string, hatUri: string) => {
-      await client.muc.assignHat(roomJid, userJid, hatUri)
-    },
-    [client]
-  )
-
-  const unassignHat = useCallback(
-    async (roomJid: string, userJid: string, hatUri: string) => {
-      await client.muc.unassignHat(roomJid, userJid, hatUri)
-    },
-    [client]
-  )
-
   const fetchOlderHistory = useMemo(
     () =>
       createFetchOlderHistory({
@@ -424,6 +224,7 @@ export function useRoomActions() {
 
   return useMemo(
     () => ({
+      // Core: messaging / lifecycle / read-state / drafts / history
       joinRoom,
       joinResult,
       getRoomInfo,
@@ -438,17 +239,10 @@ export function useRoomActions() {
       markAllRoomsRead,
       sendMessage,
       sendReaction,
-      sendPoll,
-      votePoll,
-      closePoll,
       sendCorrection,
       retractMessage,
-      moderateMessage,
       sendChatState,
       sendWhisperChatState,
-      setBookmark,
-      removeBookmark,
-      setRoomNotifyAll,
       sendEasterEgg,
       clearAnimation,
       setDraft,
@@ -456,27 +250,11 @@ export function useRoomActions() {
       clearDraft,
       clearFirstNewMessageId,
       updateLastSeenMessageId,
-      setRoomAvatar,
-      clearRoomAvatar,
-      restoreRoomAvatarFromCache,
-      browsePublicRooms,
-      inviteToRoom,
-      inviteMultipleToRoom,
-      submitRoomConfig,
-      setSubject,
-      createRoom,
-      destroyRoom,
-      roomExists,
-      setAffiliation,
-      setRole,
-      queryAffiliationList,
-      listHats,
-      createHat,
-      destroyHat,
-      listHatAssignments,
-      assignHat,
-      unassignHat,
       fetchOlderHistory,
+      // Focused slices (composed)
+      ...polls,
+      ...moderation,
+      ...management,
     }),
     [
       joinRoom,
@@ -493,17 +271,10 @@ export function useRoomActions() {
       markAllRoomsRead,
       sendMessage,
       sendReaction,
-      sendPoll,
-      votePoll,
-      closePoll,
       sendCorrection,
       retractMessage,
-      moderateMessage,
       sendChatState,
       sendWhisperChatState,
-      setBookmark,
-      removeBookmark,
-      setRoomNotifyAll,
       sendEasterEgg,
       clearAnimation,
       setDraft,
@@ -511,27 +282,10 @@ export function useRoomActions() {
       clearDraft,
       clearFirstNewMessageId,
       updateLastSeenMessageId,
-      setRoomAvatar,
-      clearRoomAvatar,
-      restoreRoomAvatarFromCache,
-      browsePublicRooms,
-      inviteToRoom,
-      inviteMultipleToRoom,
-      submitRoomConfig,
-      setSubject,
-      createRoom,
-      destroyRoom,
-      roomExists,
-      setAffiliation,
-      setRole,
-      queryAffiliationList,
-      listHats,
-      createHat,
-      destroyHat,
-      listHatAssignments,
-      assignHat,
-      unassignHat,
       fetchOlderHistory,
+      polls,
+      moderation,
+      management,
     ]
   )
 }

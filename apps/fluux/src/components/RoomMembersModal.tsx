@@ -13,7 +13,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { TextInput } from './ui/TextInput'
 import { useTranslation } from 'react-i18next'
 import type { Room, RoomAffiliation } from '@fluux/sdk'
-import { useRoomActions, getAvailableAffiliations } from '@fluux/sdk'
+import { useRoomModeration, getAvailableAffiliations } from '@fluux/sdk'
 import { ModalShell } from './ModalShell'
 import { ContactSelector } from './ContactSelector'
 import { buildRoomContactSuggestions } from '@/utils/roomSuggestions'
@@ -37,7 +37,7 @@ const TABS: AffiliationTab[] = ['owner', 'admin', 'member', 'outcast']
 
 export function RoomMembersModal({ room, onClose }: RoomMembersModalProps) {
   const { t } = useTranslation()
-  const { setAffiliation, queryAffiliationList } = useRoomActions()
+  const { setAffiliation, queryAffiliationList } = useRoomModeration()
   const addToast = useToastStore((s) => s.addToast)
 
   const selfOccupant = room.nickname ? room.occupants.get(room.nickname) : undefined

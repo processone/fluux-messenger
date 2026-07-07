@@ -11,7 +11,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { TextInput } from './ui/TextInput'
 import { useTranslation } from 'react-i18next'
 import type { Room, Hat } from '@fluux/sdk'
-import { useRoomActions, generateConsistentColorHexSync } from '@fluux/sdk'
+import { useRoomModeration, generateConsistentColorHexSync } from '@fluux/sdk'
 import { ModalShell } from './ModalShell'
 import { ConfirmDialog } from './ConfirmDialog'
 import { ContactSelector } from './ContactSelector'
@@ -59,7 +59,7 @@ function getHatColors(hat: { uri: string; hue?: number }) {
 
 export function RoomHatsModal({ room, onClose }: RoomHatsModalProps) {
   const { t } = useTranslation()
-  const { listHats, createHat, destroyHat, listHatAssignments, assignHat, unassignHat } = useRoomActions()
+  const { listHats, createHat, destroyHat, listHatAssignments, assignHat, unassignHat } = useRoomModeration()
   const addToast = useToastStore((s) => s.addToast)
 
   // --- Tab state ---
