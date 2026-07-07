@@ -714,6 +714,16 @@ em-emoji-picker {
 .message-group-start { padding-top: 16px; }
 [data-density="compact"] .message-group-start { padding-top: 8px; }
 
+/* Message group-end spacing. A smaller sibling of the group-start gap on the
+ * last row of a sender group, so an active/hovered message isn't visually
+ * cropped at the bottom. Intentionally asymmetric (~2.7:1 top:bottom): the top
+ * carries avatar + name + hover toolbar and earns more room; the bottom only
+ * marks the end of the text, so a minimal sliver reads as balanced. Like
+ * group-start, this single-class rule overrides Tailwind's py-0.5 and sits just
+ * outside the own-message tint panel. */
+.message-group-end { padding-bottom: 6px; }
+[data-density="compact"] .message-group-end { padding-bottom: 3px; }
+
 /* The "New messages" marker already provides the visual break before the first
  * unread message, so collapse the sender-group top padding on the row right after
  * it down to the normal inter-row gap (py-0.5). Without this the marker's label is
