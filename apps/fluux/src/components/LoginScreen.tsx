@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { TextInput } from './ui/TextInput'
 import { useTranslation } from 'react-i18next'
-import { AuroraMark } from './brand/AuroraMark'
+import { AppIconMark } from './brand/AppIconMark'
 import { detectRenderLoop } from '@/utils/renderLoopDetector'
 import { useConnectionStatus, useConnectionActions, deleteFastToken, classifyConnectionError, getBareJid, getDomain, validateBareJid } from '@fluux/sdk'
 import { Loader2, KeyRound, Eye, EyeOff, Wrench } from 'lucide-react'
@@ -430,10 +430,17 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
         <div className="relative w-full max-w-md">
         {/* Logo / Header */}
         <div className="text-center mb-8">
-          {/* Aurora brand mark: liquid-glass bubble backlit by the aurora (G2).
-              The svg's own glow bleeds beyond the layout box; -my compensates
-              so the heading keeps its previous optical distance. */}
-          <AuroraMark size={150} className="mx-auto -my-3" />
+          {/* Brand mark: the app icon itself (aurora tile + white bubble), so the
+              login mark matches the installed app icon on the dock/home screen.
+              A soft aurora halo sits behind it for a little lift. */}
+          <div className="relative w-[72px] mx-auto mb-4">
+            <div
+              className="absolute -inset-2.5 rounded-[26px] blur-2xl opacity-45 pointer-events-none"
+              style={{ background: 'var(--fluux-grad)' }}
+              aria-hidden="true"
+            />
+            <AppIconMark size={72} className="relative" />
+          </div>
           <h1 className="text-3xl font-semibold font-display tracking-tight text-fluux-text">{t('login.title')}</h1>
           <p className="text-fluux-muted mt-2">{t('login.subtitle')}</p>
         </div>
