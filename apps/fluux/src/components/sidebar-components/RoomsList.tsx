@@ -344,8 +344,10 @@ export const RoomItem = memo(function RoomItem({
   // user is caught up on (zero unread) and is not currently viewing — the moment
   // a settled conversation is about to get a new message. Busy rooms keep their
   // unread badge and paint no typing (the two never fight for the same pixels).
+  // A pending draft wins over typing: your own unsent text is the stronger
+  // personal signal, so we never hide it behind someone else's composing.
   const typingNicks =
-    room.joined && room.unreadCount === 0 && !isActive
+    room.joined && room.unreadCount === 0 && !isActive && !draft
       ? visibleRoomTypingNicks(room, ignoredForRoom)
       : []
   const showTyping = typingNicks.length > 0
