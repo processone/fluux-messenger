@@ -56,5 +56,7 @@ export interface SlashCommand {
   usageKey?: string
   contexts: CommandContextKind[]
   capability?: CommandCapability
+  /** Hidden from discovery surfaces (help panel + completion menu) but still executable when typed. */
+  hidden?: boolean
   run(ctx: CommandContext, args: string): Promise<CommandResult>
 }

@@ -70,6 +70,12 @@ describe('visibleCommands', () => {
     expect(names).not.toContain('config')
     expect(names).toContain('nick')
   })
+
+  it('hides commands flagged hidden (e.g. the /christmas easter egg) from discovery', () => {
+    const owner = { role: 'moderator' as const, affiliation: 'owner' as const }
+    expect(visibleCommands('room', owner).map((c) => c.name)).not.toContain('christmas')
+    expect(visibleCommands('chat').map((c) => c.name)).not.toContain('christmas')
+  })
 })
 
 describe('runCommand', () => {

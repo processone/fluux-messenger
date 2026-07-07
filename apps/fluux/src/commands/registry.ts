@@ -174,6 +174,8 @@ const christmas: SlashCommand = {
   name: 'christmas',
   descriptionKey: 'commands.christmas.desc',
   contexts: ['chat', 'room'],
+  // Easter egg: still runs when typed, but hidden from /help and the completion menu.
+  hidden: true,
   run: async (ctx) => {
     await ctx.app.sendEasterEgg('christmas')
     return { ok: true }
@@ -200,9 +202,9 @@ export function findCommand(name: string, kind: CommandContextKind): SlashComman
   return cmd
 }
 
-/** Registry-visible commands for a context, hiding capability-gated ones the user lacks. */
+/** Registry-visible commands for a context, hiding capability-gated ones the user lacks and hidden ones. */
 export function visibleCommands(kind: CommandContextKind, self?: CommandSelf): SlashCommand[] {
-  return COMMANDS.filter((c) => c.contexts.includes(kind) && hasCapability(c.capability, self))
+  return COMMANDS.filter((c) => !c.hidden && c.contexts.includes(kind) && hasCapability(c.capability, self))
 }
 
 /** How the send button should present the current input. Capability is enforced at run time. */
