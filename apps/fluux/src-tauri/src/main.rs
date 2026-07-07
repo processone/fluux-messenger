@@ -1723,6 +1723,15 @@ fn main() {
 
                 let main_window = app.get_webview_window("main").unwrap();
 
+                // Explicitly (re)assert the window title so macOS system surfaces
+                // that sample the live NSWindow title — notably Control Center's
+                // media / Now Playing control shown while playing a voice note or
+                // video — never fall back to wry's built-in "Tauri App" default.
+                // `hiddenTitle: true` (tauri.macos.conf.json) keeps this out of our
+                // custom AppBar titlebar, so it is invisible in-app while correcting
+                // the name shown in the system media controls.
+                let _ = main_window.set_title("Fluux Messenger");
+
                 // NOTE: the macOS traffic lights are positioned by the decorum
                 // plugin's own `on_window_ready` hook at its FIXED inset (dot
                 // centre ~20px from the window top), kept in place across resize
