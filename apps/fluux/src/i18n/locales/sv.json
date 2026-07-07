@@ -608,6 +608,7 @@
             "storage": "Lagring",
             "encryption": "Kryptering",
             "privacy": "Sekretess",
+            "mcp": "Claude-integration",
             "advanced": "Avancerat"
         },
         "groups": {
@@ -877,6 +878,24 @@
         "mediaAutoDownloadNever": "Aldrig",
         "mediaAutoDownloadNeverDescription": "Läs aldrig in media automatiskt. Tryck för att läsa in i valfri konversation.",
         "mediaAutoDownloadStrangerNote": "Media från personer som inte finns i dina kontakter kräver alltid ett tryck för att läsas in, oavsett vad du väljer här.",
+        "mcp": {
+            "title": "Claude-integration (MCP)",
+            "description": "Låt Claude läsa din konversationshistorik och skicka meddelanden genom Fluux via Model Context Protocol. Varje begäran godkänns fortfarande individuellt i din MCP-klient (t.ex. Claude Desktop) innan den körs.",
+            "enable": "Aktivera Claude-åtkomst",
+            "disable": "Inaktivera Claude-åtkomst",
+            "statusStarting": "Startar lokal server…",
+            "statusRunning": "Körs på 127.0.0.1:{{port}}",
+            "copy": "Kopiera anslutningsuppgifter",
+            "copied": "Kopierat",
+            "activityTitle": "Senaste aktivitet",
+            "activityEmpty": "Ingen Claude-aktivitet ännu.",
+            "activityClear": "Rensa",
+            "tool": {
+                "list_conversations": "Konversationer listade",
+                "get_history": "Historik läst",
+                "send_message": "Meddelande skickat"
+            }
+        },
         "advanced": {
             "title": "Avancerat",
             "warning": "Dessa inställningar är för avancerade användare. Att ändra dem kan bryta anslutningen eller försvaga säkerheten.",

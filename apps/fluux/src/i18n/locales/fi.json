@@ -608,6 +608,7 @@
             "storage": "Tallennustila",
             "encryption": "Salaus",
             "privacy": "Yksityisyys",
+            "mcp": "Claude-integraatio",
             "advanced": "Lisäasetukset"
         },
         "groups": {
@@ -877,6 +878,24 @@
         "mediaAutoDownloadNever": "Ei koskaan",
         "mediaAutoDownloadNeverDescription": "Älä koskaan lataa mediaa automaattisesti. Napauta ladataksesi missä tahansa keskustelussa.",
         "mediaAutoDownloadStrangerNote": "Henkilöiltä, jotka eivät ole yhteystiedoissasi, peräisin oleva media vaatii aina napautuksen lataamiseen, riippumatta tästä valinnasta.",
+        "mcp": {
+            "title": "Claude-integraatio (MCP)",
+            "description": "Anna Claudelle mahdollisuus lukea keskusteluhistoriaasi ja lähettää viestejä Fluuxin kautta Model Context Protocolin avulla. Jokainen pyyntö hyväksytään silti erikseen MCP-asiakasohjelmassasi (esim. Claude Desktop) ennen suorittamista.",
+            "enable": "Ota Claude-käyttöoikeus käyttöön",
+            "disable": "Poista Claude-käyttöoikeus käytöstä",
+            "statusStarting": "Käynnistetään paikallista palvelinta…",
+            "statusRunning": "Käynnissä osoitteessa 127.0.0.1:{{port}}",
+            "copy": "Kopioi yhteystiedot",
+            "copied": "Kopioitu",
+            "activityTitle": "Viimeaikainen toiminta",
+            "activityEmpty": "Ei vielä Claude-toimintaa.",
+            "activityClear": "Tyhjennä",
+            "tool": {
+                "list_conversations": "Keskustelut listattu",
+                "get_history": "Historia luettu",
+                "send_message": "Viesti lähetetty"
+            }
+        },
         "advanced": {
             "title": "Lisäasetukset",
             "warning": "Nämä asetukset on tarkoitettu kokeneille käyttäjille. Niiden muuttaminen voi katkaista yhteyden tai heikentää tietoturvaa.",

@@ -608,6 +608,7 @@
             "storage": "Geymsla",
             "encryption": "Dulkóðun",
             "privacy": "Friðhelgi",
+            "mcp": "Claude-samþætting",
             "advanced": "Ítarlegt"
         },
         "groups": {
@@ -877,6 +878,24 @@
         "mediaAutoDownloadNever": "Aldrei",
         "mediaAutoDownloadNeverDescription": "Aldrei hlaða miðla sjálfvirkt. Ýttu til að hlaða í hvaða samskiptum sem er.",
         "mediaAutoDownloadStrangerNote": "Miðlar frá einstaklingum sem eru ekki í tengiliðalista þínum þurfa alltaf ýtingu til að hlaðast, óháð því hvað þú velur hér.",
+        "mcp": {
+            "title": "Claude-samþætting (MCP)",
+            "description": "Leyfðu Claude að lesa samtalasögu þína og senda skilaboð í gegnum Fluux með Model Context Protocol. Hver beiðni er samt sem áður samþykkt sérstaklega í MCP-biðlaranum þínum (t.d. Claude Desktop) áður en hún er keyrð.",
+            "enable": "Virkja aðgang Claude",
+            "disable": "Slökkva á aðgangi Claude",
+            "statusStarting": "Ræsir staðbundinn netþjón…",
+            "statusRunning": "Keyrir á 127.0.0.1:{{port}}",
+            "copy": "Afrita tengiupplýsingar",
+            "copied": "Afritað",
+            "activityTitle": "Nýleg virkni",
+            "activityEmpty": "Engin virkni frá Claude enn sem komið er.",
+            "activityClear": "Hreinsa",
+            "tool": {
+                "list_conversations": "Samtöl birt",
+                "get_history": "Saga lesin",
+                "send_message": "Skilaboð send"
+            }
+        },
         "advanced": {
             "title": "Ítarlegt",
             "warning": "Þessir valkostir eru fyrir lengra komna notendur. Að breyta þeim getur rofið tenginguna eða veikt öryggi.",

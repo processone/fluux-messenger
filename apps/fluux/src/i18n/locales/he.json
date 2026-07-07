@@ -609,6 +609,7 @@
             "storage": "אחסון",
             "encryption": "הצפנה",
             "privacy": "פרטיות",
+            "mcp": "שילוב Claude",
             "advanced": "מתקדם"
         },
         "groups": {
@@ -878,6 +879,24 @@
         "mediaAutoDownloadNever": "לעולם לא",
         "mediaAutoDownloadNeverDescription": "לעולם אל תטען מדיה אוטומטית. הקש לטעינה בכל שיחה.",
         "mediaAutoDownloadStrangerNote": "מדיה מאנשים שאינם באנשי הקשר שלך תמיד מצריכה הקשה לטעינה, ללא קשר למה שתבחר כאן.",
+        "mcp": {
+            "title": "שילוב Claude (MCP)",
+            "description": "אפשרו ל-Claude לקרוא את היסטוריית השיחות שלכם ולשלוח הודעות דרך Fluux באמצעות Model Context Protocol. כל בקשה עדיין מאושרת בנפרד בלקוח ה-MCP שלכם (למשל Claude Desktop) לפני ביצועה.",
+            "enable": "הפעלת גישת Claude",
+            "disable": "השבתת גישת Claude",
+            "statusStarting": "מפעיל שרת מקומי…",
+            "statusRunning": "פועל בכתובת 127.0.0.1:{{port}}",
+            "copy": "העתקת פרטי החיבור",
+            "copied": "הועתק",
+            "activityTitle": "פעילות אחרונה",
+            "activityEmpty": "עדיין אין פעילות של Claude.",
+            "activityClear": "ניקוי",
+            "tool": {
+                "list_conversations": "שיחות הוצגו",
+                "get_history": "היסטוריה נקראה",
+                "send_message": "הודעה נשלחה"
+            }
+        },
         "advanced": {
             "title": "מתקדם",
             "warning": "אפשרויות אלה מיועדות למשתמשים מתקדמים. שינוין עלול לשבש את החיבור או להחליש את האבטחה.",

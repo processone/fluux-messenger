@@ -9,6 +9,7 @@ export { StorageSettings } from './StorageSettings'
 export { EncryptionSettings } from './EncryptionSettings'
 export { PrivacySettings } from './PrivacySettings'
 export { AdvancedSettings } from './AdvancedSettings'
+export { McpSettings } from './McpSettings'
 export { SettingsSidebar } from './SettingsSidebar'
 export {
   type SettingsCategory,

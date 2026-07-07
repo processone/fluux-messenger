@@ -201,6 +201,7 @@ mod openpgp;
 mod openpgp_backup;
 mod openpgp_storage;
 mod notifications;
+mod mcp;
 
 // Linux tray-functionality detection (pure combiner compiled everywhere; the
 // DBus probe inside is Linux-only).
@@ -621,6 +622,23 @@ async fn stop_xmpp_proxy() -> Result<(), String> {
                 STOP_XMPP_PROXY_COMMAND_TIMEOUT.as_secs()
             )
         })?
+}
+
+/// Start the local MCP server (Model Context Protocol) for Claude
+/// Desktop/Code to read history and send messages through Fluux.
+#[tauri::command]
+async fn mcp_start_server(
+    app: tauri::AppHandle,
+    pending: tauri::State<'_, Arc<mcp::bridge::PendingRequests>>,
+) -> Result<mcp::server::McpServerInfo, String> {
+    let executor = Arc::new(mcp::bridge::TauriBridgeExecutor::new(app, pending.inner().clone()));
+    mcp::server::start(executor).await
+}
+
+/// Stop the local MCP server.
+#[tauri::command]
+async fn mcp_stop_server() -> Result<(), String> {
+    mcp::server::stop().await
 }
 
 /// Open Graph metadata extracted from a URL
@@ -1405,6 +1423,9 @@ fn main() {
             fetch_url_metadata,
             start_xmpp_proxy,
             stop_xmpp_proxy,
+            mcp_start_server,
+            mcp_stop_server,
+            mcp::bridge::mcp_respond,
             log_to_terminal,
             open_notification_settings,
             openpgp::openpgp_ensure_key,
@@ -1547,6 +1568,7 @@ fn main() {
             // stack frame — we can't move it into a `'static` task.)
             let openpgp_state = Arc::new(openpgp::OpenpgpState::new(openpgp_data_dir));
             app.manage(Arc::clone(&openpgp_state));
+            app.manage(Arc::new(mcp::bridge::PendingRequests::new()));
 
             // Boot-time prewarm: if `last_user` is stashed in the keychain
             // AND we have an encrypted TSK on disk for that JID, start the

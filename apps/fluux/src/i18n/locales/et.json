@@ -610,6 +610,7 @@
             "storage": "Salvestusruum",
             "encryption": "Krüpteerimine",
             "privacy": "Privaatsus",
+            "mcp": "Claude'i integratsioon",
             "advanced": "Täpsem"
         },
         "groups": {
@@ -879,6 +880,24 @@
         "mediaAutoDownloadNever": "Mitte kunagi",
         "mediaAutoDownloadNeverDescription": "Ära kunagi laadi meediat automaatselt. Puudutage laadimiseks mis tahes vestluses.",
         "mediaAutoDownloadStrangerNote": "Inimestelt pärinev meedia, keda pole teie kontaktide hulgas, vajab laadimiseks alati puudutust, olenemata sellest, mida siin valite.",
+        "mcp": {
+            "title": "Claude'i integratsioon (MCP)",
+            "description": "Luba Claude'il lugeda sinu vestluste ajalugu ja saata sõnumeid Fluuxi kaudu, kasutades Model Context Protocol'i. Iga päring kinnitatakse siiski eraldi sinu MCP-kliendis (nt Claude Desktop) enne käivitamist.",
+            "enable": "Luba Claude'i juurdepääs",
+            "disable": "Keela Claude'i juurdepääs",
+            "statusStarting": "Kohaliku serveri käivitamine…",
+            "statusRunning": "Töötab aadressil 127.0.0.1:{{port}}",
+            "copy": "Kopeeri ühenduse andmed",
+            "copied": "Kopeeritud",
+            "activityTitle": "Hiljutine tegevus",
+            "activityEmpty": "Claude'i tegevust pole veel olnud.",
+            "activityClear": "Tühjenda",
+            "tool": {
+                "list_conversations": "Vestlused loetletud",
+                "get_history": "Ajalugu loetud",
+                "send_message": "Sõnum saadetud"
+            }
+        },
         "advanced": {
             "title": "Täpsem",
             "warning": "Need valikud on mõeldud kogenud kasutajatele. Nende muutmine võib ühenduse katkestada või turvalisust nõrgendada.",

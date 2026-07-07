@@ -28,6 +28,7 @@ import { useAutoUpdate } from './hooks'
 import { useIgnoreSync } from './hooks/useIgnoreSync'
 import { useExternalLinkHandler } from './hooks/useExternalLinkHandler'
 import { usePlatformState } from './hooks/usePlatformState'
+import { useMcpBridge } from './hooks/useMcpBridge'
 import { useAccountScopeRehydration } from './hooks/useAccountScopeRehydration'
 import { useNativeContextMenuSuppression } from './hooks/useNativeContextMenuSuppression'
 import { clearLocalData } from './utils/clearLocalData'
@@ -64,6 +65,7 @@ function App() {
 
   const { status, jid } = useConnectionStatus()
   const { client } = useXMPPContext()
+  useMcpBridge(client)
   const { t } = useTranslation()
   const addToast = useToastStore((s) => s.addToast)
   const tabCoordination = useTabCoordination(() => {

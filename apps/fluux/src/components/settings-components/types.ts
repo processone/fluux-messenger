@@ -1,5 +1,5 @@
 import type { LucideIcon } from 'lucide-react'
-import { User, Palette, Globe, Bell, Download, Ban, HardDrive, Lock, ShieldCheck, Wrench, Accessibility } from 'lucide-react'
+import { User, Palette, Globe, Bell, Download, Ban, HardDrive, Lock, ShieldCheck, Wrench, Accessibility, Bot } from 'lucide-react'
 import { isTauri, isUpdaterEnabled } from '@/utils/tauri'
 
 export type SettingsCategory =
@@ -13,6 +13,7 @@ export type SettingsCategory =
   | 'blocked'
   | 'storage'
   | 'encryption'
+  | 'mcp'
   | 'advanced'
 
 export type SettingsGroup = 'account' | 'general' | 'privacy' | 'system'
@@ -44,6 +45,7 @@ export const SETTINGS_CATEGORIES: SettingsCategoryConfig[] = [
 
   { id: 'storage', labelKey: 'settings.categories.storage', icon: HardDrive, tauriOnly: true, group: 'system' },
   { id: 'updates', labelKey: 'settings.categories.updates', icon: Download, updaterOnly: true, group: 'system' },
+  { id: 'mcp', labelKey: 'settings.categories.mcp', icon: Bot, tauriOnly: true, group: 'system' },
   { id: 'advanced', labelKey: 'settings.categories.advanced', icon: Wrench, group: 'system' },
 ]
 

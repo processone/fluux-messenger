@@ -610,6 +610,7 @@
             "storage": "Saugykla",
             "encryption": "Šifravimas",
             "privacy": "Privatumas",
+            "mcp": "Claude integracija",
             "advanced": "Išplėstiniai"
         },
         "groups": {
@@ -879,6 +880,24 @@
         "mediaAutoDownloadNever": "Niekada",
         "mediaAutoDownloadNeverDescription": "Niekada neįkelti medijos automatiškai. Palieskite, kad įkeltumėte bet kuriame pokalbyje.",
         "mediaAutoDownloadStrangerNote": "Žmonių, kurių nėra jūsų kontaktuose, medija visada reikalauja palietimo, kad įsikeltų, nepaisant čia pasirinktos parinkties.",
+        "mcp": {
+            "title": "Claude integracija (MCP)",
+            "description": "Leiskite Claude skaityti jūsų pokalbių istoriją ir siųsti pranešimus per Fluux naudojant Model Context Protocol. Kiekviena užklausa vis tiek patvirtinama atskirai jūsų MCP kliente (pvz., Claude Desktop) prieš ją vykdant.",
+            "enable": "Įjungti Claude prieigą",
+            "disable": "Išjungti Claude prieigą",
+            "statusStarting": "Paleidžiamas vietinis serveris…",
+            "statusRunning": "Veikia adresu 127.0.0.1:{{port}}",
+            "copy": "Kopijuoti prisijungimo duomenis",
+            "copied": "Nukopijuota",
+            "activityTitle": "Naujausia veikla",
+            "activityEmpty": "Claude veiklos dar nėra.",
+            "activityClear": "Išvalyti",
+            "tool": {
+                "list_conversations": "Pokalbiai pateikti",
+                "get_history": "Istorija perskaityta",
+                "send_message": "Pranešimas išsiųstas"
+            }
+        },
         "advanced": {
             "title": "Išplėstiniai",
             "warning": "Šios parinktys skirtos pažengusiems naudotojams. Jas pakeitus gali nutrūkti ryšys arba susilpnėti sauga.",

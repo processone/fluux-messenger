@@ -612,6 +612,7 @@
             "storage": "Shramba",
             "encryption": "Šifriranje",
             "privacy": "Zasebnost",
+            "mcp": "Integracija s Claude",
             "advanced": "Napredno"
         },
         "groups": {
@@ -881,6 +882,24 @@
         "mediaAutoDownloadNever": "Nikoli",
         "mediaAutoDownloadNeverDescription": "Nikoli ne naloži predstavnosti samodejno. Tapnite za nalaganje v katerem koli pogovoru.",
         "mediaAutoDownloadStrangerNote": "Predstavnost od oseb, ki niso v vaših stikih, vedno zahteva tap za nalaganje, ne glede na vašo izbiro tukaj.",
+        "mcp": {
+            "title": "Integracija s Claude (MCP)",
+            "description": "Dovolite Claudu, da bere zgodovino vaših pogovorov in pošilja sporočila prek Fluuxa z uporabo Model Context Protocol. Vsaka zahteva se še vedno posamezno potrdi v vašem odjemalcu MCP (npr. Claude Desktop), preden se izvede.",
+            "enable": "Omogoči dostop Claude",
+            "disable": "Onemogoči dostop Claude",
+            "statusStarting": "Zaganjanje lokalnega strežnika…",
+            "statusRunning": "Deluje na 127.0.0.1:{{port}}",
+            "copy": "Kopiraj podatke o povezavi",
+            "copied": "Kopirano",
+            "activityTitle": "Nedavna dejavnost",
+            "activityEmpty": "Claude še ni imel nobene dejavnosti.",
+            "activityClear": "Počisti",
+            "tool": {
+                "list_conversations": "Prikazani pogovori",
+                "get_history": "Prebrana zgodovina",
+                "send_message": "Sporočilo poslano"
+            }
+        },
         "advanced": {
             "title": "Napredno",
             "warning": "Te možnosti so namenjene naprednim uporabnikom. Njihova sprememba lahko prekine povezavo ali oslabi varnost.",

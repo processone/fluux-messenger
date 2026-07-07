@@ -608,6 +608,7 @@
             "storage": "Opslag",
             "encryption": "Versleuteling",
             "privacy": "Privacy",
+            "mcp": "Claude-integratie",
             "advanced": "Geavanceerd"
         },
         "groups": {
@@ -877,6 +878,24 @@
         "mediaAutoDownloadNever": "Nooit",
         "mediaAutoDownloadNeverDescription": "Laad nooit automatisch media. Tik om te laden in elk gesprek.",
         "mediaAutoDownloadStrangerNote": "Media van mensen die niet in uw contacten staan, vereist altijd een tik om te laden, ongeacht wat u hier kiest.",
+        "mcp": {
+            "title": "Claude-integratie (MCP)",
+            "description": "Sta Claude toe om je gespreksgeschiedenis te lezen en berichten te versturen via Fluux met behulp van het Model Context Protocol. Elk verzoek wordt nog steeds afzonderlijk goedgekeurd in je MCP-client (bijv. Claude Desktop) voordat het wordt uitgevoerd.",
+            "enable": "Claude-toegang inschakelen",
+            "disable": "Claude-toegang uitschakelen",
+            "statusStarting": "Lokale server wordt gestart…",
+            "statusRunning": "Actief op 127.0.0.1:{{port}}",
+            "copy": "Verbindingsgegevens kopiëren",
+            "copied": "Gekopieerd",
+            "activityTitle": "Recente activiteit",
+            "activityEmpty": "Nog geen Claude-activiteit.",
+            "activityClear": "Wissen",
+            "tool": {
+                "list_conversations": "Gesprekken weergegeven",
+                "get_history": "Geschiedenis gelezen",
+                "send_message": "Bericht verzonden"
+            }
+        },
         "advanced": {
             "title": "Geavanceerd",
             "warning": "Deze opties zijn voor gevorderde gebruikers. Ze wijzigen kan de verbinding verstoren of de beveiliging verzwakken.",

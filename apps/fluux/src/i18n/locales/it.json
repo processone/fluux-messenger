@@ -611,6 +611,7 @@
             "storage": "Archiviazione",
             "encryption": "Crittografia",
             "privacy": "Privacy",
+            "mcp": "Integrazione Claude",
             "advanced": "Avanzate"
         },
         "groups": {
@@ -880,6 +881,24 @@
         "mediaAutoDownloadNever": "Mai",
         "mediaAutoDownloadNeverDescription": "Non caricare mai i media automaticamente. Tocca per caricare in qualsiasi conversazione.",
         "mediaAutoDownloadStrangerNote": "I media di persone che non sono nei tuoi contatti richiedono sempre un tocco per caricarsi, indipendentemente da ciò che scegli qui.",
+        "mcp": {
+            "title": "Integrazione Claude (MCP)",
+            "description": "Consenti a Claude di leggere la cronologia delle tue conversazioni e di inviare messaggi tramite Fluux usando il Model Context Protocol. Ogni richiesta viene comunque approvata singolarmente nel tuo client MCP (ad es. Claude Desktop) prima di essere eseguita.",
+            "enable": "Abilita accesso Claude",
+            "disable": "Disabilita accesso Claude",
+            "statusStarting": "Avvio del server locale in corso…",
+            "statusRunning": "In esecuzione su 127.0.0.1:{{port}}",
+            "copy": "Copia dati di connessione",
+            "copied": "Copiato",
+            "activityTitle": "Attività recente",
+            "activityEmpty": "Nessuna attività di Claude finora.",
+            "activityClear": "Cancella",
+            "tool": {
+                "list_conversations": "Conversazioni elencate",
+                "get_history": "Cronologia letta",
+                "send_message": "Messaggio inviato"
+            }
+        },
         "advanced": {
             "title": "Avanzate",
             "warning": "Queste opzioni sono per utenti esperti. Modificarle può compromettere la connessione o indebolire la sicurezza.",

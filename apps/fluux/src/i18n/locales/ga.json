@@ -611,6 +611,7 @@
             "storage": "Stóráil",
             "encryption": "Criptiúchán",
             "privacy": "Príobháideacht",
+            "mcp": "Comhtháthú Claude",
             "advanced": "Ardleibhéal"
         },
         "groups": {
@@ -880,6 +881,24 @@
         "mediaAutoDownloadNever": "Riamh",
         "mediaAutoDownloadNeverDescription": "Ná luchtaigh meán go huathoibríoch choíche. Buail chun luchtú in aon chomhrá.",
         "mediaAutoDownloadStrangerNote": "Meán ó dhaoine nach bhfuil i do chonarthaí éilíonn buille i gcónaí chun luchtú, cibé rud a roghnaíonn tú anseo.",
+        "mcp": {
+            "title": "Comhtháthú Claude (MCP)",
+            "description": "Tabhair cead do Claude stair do chuid comhráite a léamh agus teachtaireachtaí a sheoladh trí Fluux leis an Model Context Protocol. Ceadaítear gach iarratas fós ceann ar cheann i do chliant MCP (m.sh. Claude Desktop) sula rithtear é.",
+            "enable": "Cumasaigh rochtain Claude",
+            "disable": "Díchumasaigh rochtain Claude",
+            "statusStarting": "Freastalaí áitiúil á thosú…",
+            "statusRunning": "Ag rith ar 127.0.0.1:{{port}}",
+            "copy": "Cóipeáil sonraí an naisc",
+            "copied": "Cóipeáilte",
+            "activityTitle": "Gníomhaíocht le déanaí",
+            "activityEmpty": "Níl aon ghníomhaíocht Claude ann fós.",
+            "activityClear": "Glan",
+            "tool": {
+                "list_conversations": "Liostaíodh na comhráite",
+                "get_history": "Léadh an stair",
+                "send_message": "Seoladh teachtaireacht"
+            }
+        },
         "advanced": {
             "title": "Ardleibhéal",
             "warning": "Tá na roghanna seo dírithe ar úsáideoirí ardleibhéil. Féadann a n-athrú an nasc a bhriseadh nó an tslándáil a lagú.",

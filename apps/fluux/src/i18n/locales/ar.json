@@ -612,6 +612,7 @@
             "storage": "التخزين",
             "encryption": "التشفير",
             "privacy": "الخصوصية",
+            "mcp": "تكامل Claude",
             "advanced": "متقدم"
         },
         "groups": {
@@ -881,6 +882,24 @@
         "mediaAutoDownloadNever": "أبدًا",
         "mediaAutoDownloadNeverDescription": "لا تحميل تلقائي للوسائط. اضغط للتحميل في أي محادثة.",
         "mediaAutoDownloadStrangerNote": "وسائط الأشخاص غير الموجودين في جهات اتصالك تتطلب دائمًا ضغطة للتحميل، بغض النظر عن هذا الإعداد.",
+        "mcp": {
+            "title": "تكامل Claude (MCP)",
+            "description": "امنح Claude إمكانية قراءة سجل محادثاتك وإرسال الرسائل عبر Fluux باستخدام بروتوكول سياق النموذج (MCP). لا تزال كل عملية تحتاج إلى موافقة فردية في عميل MCP الخاص بك (مثل Claude Desktop) قبل تنفيذها.",
+            "enable": "تفعيل وصول Claude",
+            "disable": "إيقاف وصول Claude",
+            "statusStarting": "جارٍ تشغيل الخادم المحلي…",
+            "statusRunning": "يعمل على 127.0.0.1:{{port}}",
+            "copy": "نسخ تفاصيل الاتصال",
+            "copied": "تم النسخ",
+            "activityTitle": "النشاط الأخير",
+            "activityEmpty": "لا يوجد نشاط لـ Claude بعد.",
+            "activityClear": "مسح",
+            "tool": {
+                "list_conversations": "عرض المحادثات",
+                "get_history": "قراءة السجل",
+                "send_message": "إرسال رسالة"
+            }
+        },
         "advanced": {
             "title": "متقدم",
             "warning": "هذه الخيارات مخصصة للمستخدمين المتقدمين. قد يؤدي تغييرها إلى قطع الاتصال أو إضعاف الأمان.",
