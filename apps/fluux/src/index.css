@@ -1390,37 +1390,6 @@ input[type="range"]::-moz-range-thumb {
 .scrim-in  { animation: scrim-in var(--fluux-duration-base) var(--fluux-ease-standard); }
 .scrim-out { animation: scrim-out var(--fluux-duration-fast) var(--fluux-ease-standard) forwards; }
 
-/* ── Aurora brand mark (login) ─────────────────────────────────────────────
-   Mode-specific layers are all rendered by AuroraMark.tsx and toggled here,
-   so the component stays mode-agnostic. Motion is compositor-only opacity on
-   the three backlight blobs + rim glow ("the aurora slowly shifting behind
-   the glass"); [data-motion="reduced"] stills it — the static mark is the
-   complete design, not a degraded one. */
-.aurora-mark .aurora-light-only { display: none; }
-.light .aurora-mark .aurora-light-only { display: initial; }
-.light .aurora-mark .aurora-dark-only { display: none; }
-
-@keyframes aurora-backlight-breathe { from { opacity: 1; } to { opacity: 0.7; } }
-@keyframes aurora-rim-breathe { from { opacity: 0.35; } to { opacity: 0.28; } }
-
-.aurora-mark .aurora-breathe-1,
-.aurora-mark .aurora-breathe-2,
-.aurora-mark .aurora-breathe-3 {
-  animation: aurora-backlight-breathe 12s ease-in-out infinite alternate;
-}
-.aurora-mark .aurora-breathe-2 { animation-delay: -4s; }
-.aurora-mark .aurora-breathe-3 { animation-delay: -8s; }
-.aurora-mark .aurora-mark-rim-glow {
-  opacity: 0.35;
-  animation: aurora-rim-breathe 12s ease-in-out infinite alternate;
-}
-[data-motion="reduced"] .aurora-mark .aurora-breathe-1,
-[data-motion="reduced"] .aurora-mark .aurora-breathe-2,
-[data-motion="reduced"] .aurora-mark .aurora-breathe-3,
-[data-motion="reduced"] .aurora-mark .aurora-mark-rim-glow {
-  animation: none;
-}
-
 /* Aurora horizon: a 1px identity hairline riding ON TOP of the header's
    standard divider (which stays underneath — the audit's seam-visibility
    guarantees are untouched). Fades at both ends; the tokens flip to the
