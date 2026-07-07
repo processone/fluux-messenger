@@ -425,7 +425,7 @@ export const MessageBubble = memo(function MessageBubble({
   const threadEnd = whisperThread === 'end' || whisperThread === 'solo'
   const outerRowClass = inThread
     ? `group flex gap-4 -mx-4 px-4 transition-colors ${threadStart ? 'pt-3' : ''} ${threadEnd ? 'pb-1.5' : ''}`
-    : `group flex gap-4 ${hoverClass} -mx-4 px-4 py-0.5 transition-colors ${showAvatar ? 'message-group-start' : ''}`
+    : `group flex gap-4 ${hoverClass} -mx-4 px-4 py-0.5 transition-colors ${showAvatar ? 'message-group-start' : ''}${isGroupEnd ? ' message-group-end' : ''}`
 
   // Action capabilities — shared by the hover toolbar (MessageToolbar) and the
   // touch action sheet (MessageActionSheet) so the two surfaces stay in lock-step.

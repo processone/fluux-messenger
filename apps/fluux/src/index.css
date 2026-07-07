@@ -580,6 +580,20 @@
       backdrop-filter: blur(var(--fluux-glass-blur)) saturate(1.4);
       -webkit-backdrop-filter: blur(var(--fluux-glass-blur)) saturate(1.4);
     }
+    /* Linux keeps the SOLID surface. WebKitGTK advertises backdrop-filter +
+       color-mix (so this @supports gate passes), but its compositor frequently
+       paints the backdrop blur as a no-op — the base frost's 15% translucency
+       then lands with nothing blurred behind it, so the background ghosts
+       through and the panel reads as "too transparent". Revert to the opaque
+       fallback surface; the dark scrim + border + shadow separate the modal
+       without relying on a blur we can't trust. Specificity (0,3,0) beats the
+       base .fluux-glass rule above; the reduced-transparency revert below is
+       also (0,3,0) and, being later, still wins the tie on Linux. */
+    :root[data-platform="linux"] .fluux-glass {
+      background-color: var(--fluux-chat-bg);
+      backdrop-filter: none;
+      -webkit-backdrop-filter: none;
+    }
     /* Liquid tier: deeper translucency + specular edges + diagonal sheen.
        Scoped away from Linux; reduced-transparency reverts below. */
     :root:not([data-platform="linux"]) .fluux-glass {
@@ -713,6 +727,16 @@ em-emoji-picker {
  * tightens in compact. Comfortable keeps the current 16px. */
 .message-group-start { padding-top: 16px; }
 [data-density="compact"] .message-group-start { padding-top: 8px; }
+
+/* Message group-end spacing. A smaller sibling of the group-start gap on the
+ * last row of a sender group, so an active/hovered message isn't visually
+ * cropped at the bottom. Intentionally asymmetric (~2.7:1 top:bottom): the top
+ * carries avatar + name + hover toolbar and earns more room; the bottom only
+ * marks the end of the text, so a minimal sliver reads as balanced. Like
+ * group-start, this single-class rule overrides Tailwind's py-0.5 and sits just
+ * outside the own-message tint panel. */
+.message-group-end { padding-bottom: 6px; }
+[data-density="compact"] .message-group-end { padding-bottom: 3px; }
 
 /* The "New messages" marker already provides the visual break before the first
  * unread message, so collapse the sender-group top padding on the row right after
@@ -1365,37 +1389,6 @@ input[type="range"]::-moz-range-thumb {
 .command-palette-in { animation: command-palette-in var(--fluux-duration-base) var(--fluux-ease-emphasized); }
 .scrim-in  { animation: scrim-in var(--fluux-duration-base) var(--fluux-ease-standard); }
 .scrim-out { animation: scrim-out var(--fluux-duration-fast) var(--fluux-ease-standard) forwards; }
-
-/* ── Aurora brand mark (login) ─────────────────────────────────────────────
-   Mode-specific layers are all rendered by AuroraMark.tsx and toggled here,
-   so the component stays mode-agnostic. Motion is compositor-only opacity on
-   the three backlight blobs + rim glow ("the aurora slowly shifting behind
-   the glass"); [data-motion="reduced"] stills it — the static mark is the
-   complete design, not a degraded one. */
-.aurora-mark .aurora-light-only { display: none; }
-.light .aurora-mark .aurora-light-only { display: initial; }
-.light .aurora-mark .aurora-dark-only { display: none; }
-
-@keyframes aurora-backlight-breathe { from { opacity: 1; } to { opacity: 0.7; } }
-@keyframes aurora-rim-breathe { from { opacity: 0.35; } to { opacity: 0.28; } }
-
-.aurora-mark .aurora-breathe-1,
-.aurora-mark .aurora-breathe-2,
-.aurora-mark .aurora-breathe-3 {
-  animation: aurora-backlight-breathe 12s ease-in-out infinite alternate;
-}
-.aurora-mark .aurora-breathe-2 { animation-delay: -4s; }
-.aurora-mark .aurora-breathe-3 { animation-delay: -8s; }
-.aurora-mark .aurora-mark-rim-glow {
-  opacity: 0.35;
-  animation: aurora-rim-breathe 12s ease-in-out infinite alternate;
-}
-[data-motion="reduced"] .aurora-mark .aurora-breathe-1,
-[data-motion="reduced"] .aurora-mark .aurora-breathe-2,
-[data-motion="reduced"] .aurora-mark .aurora-breathe-3,
-[data-motion="reduced"] .aurora-mark .aurora-mark-rim-glow {
-  animation: none;
-}
 
 /* Aurora horizon: a 1px identity hairline riding ON TOP of the header's
    standard divider (which stays underneath — the audit's seam-visibility
