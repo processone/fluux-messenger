@@ -698,9 +698,25 @@ pub struct UrlMetadata {
     pub site_name: Option<String>,
 }
 
-/// Fetch URL and extract Open Graph metadata for link previews
+/// Fetch URL and extract Open Graph metadata for link previews.
+///
+/// The actual work (a blocking HTTP request with a multi-second timeout plus a
+/// synchronous HTML parse) runs on the blocking thread pool via
+/// [`tauri::async_runtime::spawn_blocking`] so the main thread stays free. A
+/// synchronous command would run this on the main thread and freeze the UI for
+/// the duration of the fetch — most visibly on Linux/WebKitGTK, where the
+/// webview renders on that same thread.
 #[tauri::command]
-fn fetch_url_metadata(url: String) -> Result<UrlMetadata, String> {
+async fn fetch_url_metadata(url: String) -> Result<UrlMetadata, String> {
+    tauri::async_runtime::spawn_blocking(move || fetch_url_metadata_blocking(url))
+        .await
+        .unwrap_or_else(|join_err| Err(format!("Link preview task panicked: {join_err}")))
+}
+
+/// Blocking implementation of [`fetch_url_metadata`]. Runs off the main thread.
+/// Uses `reqwest::blocking` and `scraper` (whose parsed document is `!Send`, so
+/// it must live entirely within this synchronous function).
+fn fetch_url_metadata_blocking(url: String) -> Result<UrlMetadata, String> {
     // Validate URL
     if !url.starts_with("http://") && !url.starts_with("https://") {
         return Err("Invalid URL: must start with http:// or https://".to_string());
