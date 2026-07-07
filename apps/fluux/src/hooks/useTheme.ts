@@ -325,10 +325,13 @@ export function useTheme() {
     return () => mq.removeEventListener('change', apply)
   }, [motionPreference])
 
-  // Platform attribute for CSS gating: the liquid-glass tier is disabled on
-  // Linux (WebKitGTK compositing is the known weak point — heavy
-  // backdrop-filter caused the historical freeze class), which keeps the
-  // lighter base frost there.
+  // Platform attribute for CSS gating: glass frost is disabled on Linux.
+  // WebKitGTK is the known weak point — it advertises backdrop-filter via
+  // @supports but its compositor often paints the blur as a no-op, so any
+  // translucency lands without frost and modals read as "too transparent"
+  // (and heavy backdrop-filter caused the historical freeze class). Linux
+  // therefore keeps a solid modal surface; see the .fluux-glass rules in
+  // index.css.
   useEffect(() => {
     document.documentElement.dataset.platform = isLinux() ? 'linux' : 'default'
   }, [])
