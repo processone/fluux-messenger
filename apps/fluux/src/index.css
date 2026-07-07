@@ -1287,33 +1287,6 @@ input[type="range"]::-moz-range-thumb {
   will-change: transform, opacity;
 }
 
-/* Typing indicator animation - three dots bouncing */
-@keyframes typing-dot {
-  0%, 60%, 100% {
-    transform: translateY(0);
-    opacity: 0.5;
-  }
-  30% {
-    transform: translateY(-2px);
-    opacity: 1;
-  }
-}
-
-.animate-typing-dot-1 {
-  animation: typing-dot 1.2s ease-in-out infinite;
-  animation-delay: 0s;
-}
-
-.animate-typing-dot-2 {
-  animation: typing-dot 1.2s ease-in-out infinite;
-  animation-delay: 0.2s;
-}
-
-.animate-typing-dot-3 {
-  animation: typing-dot 1.2s ease-in-out infinite;
-  animation-delay: 0.4s;
-}
-
 /* Sidebar view enter animation - gentle fade in on view switch */
 @keyframes sidebar-view-enter {
   from { opacity: 0; }
