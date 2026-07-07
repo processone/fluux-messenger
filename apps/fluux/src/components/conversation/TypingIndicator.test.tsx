@@ -113,4 +113,34 @@ describe('TypingIndicator', () => {
       expect(screen.getByText('Alice Smith and unknown are typing...')).toBeInTheDocument()
     })
   })
+
+  describe('TypingIndicator variants', () => {
+    it('renders nothing when no one is typing', () => {
+      const { container } = render(<TypingIndicator typingUsers={[]} />)
+      expect(container.firstChild).toBeNull()
+    })
+
+    it('uses message-view padding by default', () => {
+      const { container } = render(<TypingIndicator typingUsers={['Alice']} />)
+      const root = container.firstChild as HTMLElement
+      expect(root.className).toContain('py-2')
+      expect(root.className).toContain('text-sm')
+    })
+
+    it('drops padding and shrinks text in the compact variant', () => {
+      const { container } = render(
+        <TypingIndicator typingUsers={['Alice']} variant="compact" />,
+      )
+      const root = container.firstChild as HTMLElement
+      expect(root.className).not.toContain('py-2')
+      expect(root.className).toContain('text-xs')
+    })
+
+    it('still renders three shimmer dots in the compact variant', () => {
+      const { container } = render(
+        <TypingIndicator typingUsers={['Alice']} variant="compact" />,
+      )
+      expect(container.querySelectorAll('.typing-dot').length).toBe(3)
+    })
+  })
 })

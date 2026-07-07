@@ -313,7 +313,7 @@ export const ConversationItem = memo(function ConversationItem({
               size={avatarSize}
               presence={contact?.presence ?? 'offline'}
               forceOffline={forceOffline}
-              overlay={isTyping ? <TypingIndicator /> : undefined}
+              overlay={isTyping && !isActive ? <TypingIndicator /> : undefined}
             />
           )}
           {conversation.unreadCount > 0 && (

@@ -16,6 +16,11 @@ export interface TypingIndicatorProps {
    * Additional CSS classes for the container
    */
   className?: string
+  /**
+   * Visual density. 'default' is the message-view sizing; 'compact' drops the
+   * padding and uses text-xs so it fits a sidebar preview line.
+   */
+  variant?: 'default' | 'compact'
 }
 
 /**
@@ -33,7 +38,7 @@ export interface TypingIndicatorProps {
  * // For rooms - use nicknames directly
  * <TypingIndicator typingUsers={['Alice', 'Bob']} />
  */
-export function TypingIndicator({ typingUsers, formatUser, className = '' }: TypingIndicatorProps) {
+export function TypingIndicator({ typingUsers, formatUser, className = '', variant = 'default' }: TypingIndicatorProps) {
   const { t } = useTranslation()
 
   if (typingUsers.length === 0) return null
@@ -63,15 +68,20 @@ export function TypingIndicator({ typingUsers, formatUser, className = '' }: Typ
     })
   }
 
+  const containerClass =
+    variant === 'compact'
+      ? `text-xs text-fluux-muted italic flex items-center gap-1.5 min-w-0 ${className}`
+      : `py-2 px-4 text-sm text-fluux-muted italic flex items-center gap-2 ${className}`
+
   return (
-    <div className={`py-2 px-4 text-sm text-fluux-muted italic flex items-center gap-2 ${className}`}>
+    <div className={containerClass}>
       {/* Dots bounce and shimmer through the aurora hues (delays + colors in CSS). */}
-      <span className="flex gap-0.5" aria-hidden="true">
+      <span className="flex gap-0.5 flex-shrink-0" aria-hidden="true">
         <span className="size-1.5 rounded-full typing-dot" />
         <span className="size-1.5 rounded-full typing-dot" />
         <span className="size-1.5 rounded-full typing-dot" />
       </span>
-      <span>{text}</span>
+      <span className={variant === 'compact' ? 'truncate' : ''}>{text}</span>
     </div>
   )
 }
