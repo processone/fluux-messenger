@@ -28,6 +28,12 @@ import { findLastEditableMessage, findLastEditableMessageId } from '@/utils/mess
 import { useExpandedMessagesStore } from '@/stores/expandedMessagesStore'
 import { ConfirmDialog } from './ConfirmDialog'
 import { ModalOverlay } from './ModalOverlay'
+import { useRoomCommandContext } from '@/hooks/useRoomCommandContext'
+import { useSlashCommands } from '@/hooks/useSlashCommands'
+import { useCommandMenu } from '@/hooks/useCommandMenu'
+import { CommandMenu } from './composer/CommandMenu'
+import { CommandHelpPanel } from './composer/CommandHelpPanel'
+import { visibleCommands } from '@/commands/registry'
 import { useRoomJoinWarning } from '@/hooks/useRoomJoinWarning'
 import { MediaAutoloadProvider } from '@/contexts'
 import { computeMediaAutoload } from '@/utils/mediaAutoload'
@@ -1757,6 +1763,26 @@ export const RoomMessageInput = memo(function RoomMessageInput({
     onClearWhisper?.()
   }
 
+  // Slash commands (XEP-0045 moderation/subject/invite shortcuts, plus app-level
+  // easter eggs). The context composes the room action hooks and the roomUiStore
+  // bridge so commands can open modals rendered in RoomHeader.
+  const [helpOpen, setHelpOpen] = useState(false)
+  const selfOccupant = occupants.get(roomNickname)
+  const commandSelf = {
+    role: selfOccupant?.role ?? 'none' as RoomRole,
+    affiliation: selfOccupant?.affiliation ?? 'none' as RoomAffiliation,
+  }
+  const commandContext = useRoomCommandContext({
+    roomJid,
+    self: commandSelf,
+    occupants,
+    currentSubject: entity?.subject,
+    onOpenHelp: () => setHelpOpen(true),
+    sendEasterEgg: (jid, _kind, animation) => { void sendEasterEgg(jid, animation) },
+  })
+  const { resolveInput, classifyInput } = useSlashCommands(commandContext)
+  const commandMenu = useCommandMenu(text, cursorPosition, 'room', commandSelf)
+
   // Type-to-focus: auto-focus composer when user starts typing anywhere
   useTypeToFocus(composerRef)
 
@@ -1992,6 +2018,26 @@ export const RoomMessageInput = memo(function RoomMessageInput({
     </div>
   ) : null
 
+  // Popovers rendered above the composer, in priority order: help panel, then
+  // command completion menu, then the mention dropdown.
+  const aboveInputNode = helpOpen ? (
+    <CommandHelpPanel commands={visibleCommands('room', commandSelf)} onClose={() => setHelpOpen(false)} />
+  ) : commandMenu.state.isActive ? (
+    <CommandMenu
+      matches={commandMenu.state.matches}
+      selectedIndex={commandMenu.state.selectedIndex}
+      onSelect={(idx) => {
+        const cmd = commandMenu.state.matches[idx]
+        if (cmd) {
+          setText(`/${cmd.name} `)
+          commandMenu.dismiss()
+        }
+      }}
+    />
+  ) : (
+    mentionDropdown
+  )
+
   // Custom input renderer with mention highlighting
   const renderMentionInput = ({ inputRef, mergedRef, value, onChange, onKeyDown: baseKeyDown, onSelect, onPaste, placeholder }: {
     inputRef: React.RefObject<HTMLTextAreaElement | null>
@@ -2049,6 +2095,37 @@ export const RoomMessageInput = memo(function RoomMessageInput({
             }, 0)
             return
           }
+        }
+      }
+
+      // Handle command-menu keyboard navigation. Takes precedence over the mention
+      // menu -- in practice they are mutually exclusive (command menu only triggers
+      // on a bare "/" at position 0, mentions trigger on "@" mid-text) but this makes
+      // the precedence explicit.
+      if (commandMenu.state.isActive) {
+        if (e.key === 'ArrowUp') {
+          e.preventDefault()
+          commandMenu.moveSelection('up')
+          return
+        }
+        if (e.key === 'ArrowDown') {
+          e.preventDefault()
+          commandMenu.moveSelection('down')
+          return
+        }
+        if (e.key === 'Enter' || e.key === 'Tab') {
+          e.preventDefault()
+          const cmd = commandMenu.state.matches[commandMenu.state.selectedIndex]
+          if (cmd) {
+            setText(`/${cmd.name} `)
+            commandMenu.dismiss()
+          }
+          return
+        }
+        if (e.key === 'Escape') {
+          e.preventDefault()
+          commandMenu.dismiss()
+          return
         }
       }
 
@@ -2186,7 +2263,9 @@ export const RoomMessageInput = memo(function RoomMessageInput({
         onSendTypingState={handleTypingState}
         typingNotificationsEnabled={shouldSendTypingNotifications}
         renderInput={renderMentionInput}
-        aboveInput={mentionDropdown}
+        aboveInput={aboveInputNode}
+        resolveInput={resolveInput}
+        classifyInput={classifyInput}
         value={text}
         onValueChange={setText}
         onSelectionChange={setCursorPosition}
