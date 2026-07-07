@@ -426,7 +426,9 @@
         "userInfo": "Πληροφορίες χρήστη",
         "manageOccupant": "Διαχείριση",
         "invitationsHeading": "Προσκλήσεις",
-        "nickChanged": "{{oldNick}} είναι πλέον γνωστός ως {{newNick}}"
+        "nickChanged": "{{oldNick}} είναι πλέον γνωστός ως {{newNick}}",
+        "nickEdgeWhitespace": "Το όνομα έχει επιπλέον κενά στα άκρα",
+        "nickHiddenChars": "Το όνομα περιέχει κρυφούς χαρακτήρες"
     },
     "events": {
         "invitedBy": "Πρόσκληση από {{name}}",

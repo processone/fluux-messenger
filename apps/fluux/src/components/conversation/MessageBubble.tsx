@@ -11,6 +11,7 @@ import { formatMessagePreview, formatXMPPError, getBareJid, type BaseMessage, ty
 import { useVerifiedPeerKeysStore } from '@/stores/verifiedPeerKeysStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { Avatar } from '../Avatar'
+import { NickText, NickSentence } from '../NickText'
 import { AvatarLightbox } from '../AvatarLightbox'
 import { MessageToolbar } from './MessageToolbar'
 import { MessageBody } from './MessageBody'
@@ -537,7 +538,7 @@ export const MessageBubble = memo(function MessageBubble({
         {threadStart && (counterpartGone ? (
           <div className="flex items-center gap-1.5 pb-1 text-xs font-medium text-fluux-private">
             <Ear className="size-3.5 shrink-0" />
-            <span className="truncate">{t('rooms.whisperThread', { nick: whisperWith })}</span>
+            <span className="truncate"><NickSentence i18nKey="rooms.whisperThread" nick={whisperWith} /></span>
           </div>
         ) : (
           // Clicking the header re-enters whisper mode (same flow as the
@@ -549,7 +550,7 @@ export const MessageBubble = memo(function MessageBubble({
             className="flex max-w-full cursor-pointer items-center gap-1.5 -ms-1 mb-0.5 rounded px-1 py-0.5 text-xs font-medium text-fluux-private transition-colors hover:bg-fluux-private-hover"
           >
             <Ear className="size-3.5 shrink-0" />
-            <span className="truncate">{t('rooms.whisperThread', { nick: whisperWith })}</span>
+            <span className="truncate"><NickSentence i18nKey="rooms.whisperThread" nick={whisperWith} /></span>
           </button>
         ))}
         {/* Floating hover toolbar - hidden when user is composing or message is retracted */}
@@ -590,7 +591,7 @@ export const MessageBubble = memo(function MessageBubble({
                 onTouchStart={(e) => { e.stopPropagation(); onNickTouchStart?.(e) }}
                 onTouchEnd={onNickTouchEnd}
               >
-                {senderName}
+                <NickText nick={senderName} />
               </span>
             </UserInfoPopover>
             {nickExtras}
@@ -635,7 +636,7 @@ export const MessageBubble = memo(function MessageBubble({
               <span
                 className="font-medium"
                 style={{ color: replyContext.senderColor }}
-              >{replyContext.senderName}</span>
+              ><NickText nick={replyContext.senderName} /></span>
               <div className="reply-quote-preview opacity-75 max-h-16 overflow-hidden">{renderQuotePreview(replyContext.body)}</div>
             </div>
           </button>
@@ -745,7 +746,7 @@ export const MessageBubble = memo(function MessageBubble({
         {threadEnd && counterpartGone && (
           <div className="flex items-center gap-1.5 pt-1.5 text-xs text-fluux-muted">
             <UserX className="size-3.5 shrink-0" />
-            <span className="truncate">{t('rooms.whisperCounterpartGone', { nick: whisperWith })}</span>
+            <span className="truncate"><NickSentence i18nKey="rooms.whisperCounterpartGone" nick={whisperWith} /></span>
           </div>
         )}
       </div>

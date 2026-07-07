@@ -426,7 +426,9 @@
         "hatJidPlaceholder": "user@example.com",
         "manageOccupant": "Gérer",
         "invitationsHeading": "Invitations",
-        "nickChanged": "{{oldNick}} est désormais connu sous le nom de {{newNick}}"
+        "nickChanged": "{{oldNick}} est désormais connu sous le nom de {{newNick}}",
+        "nickEdgeWhitespace": "Le nom comporte des espaces au début ou à la fin",
+        "nickHiddenChars": "Le nom contient des caractères invisibles"
     },
     "events": {
         "invitedBy": "Invité par {{name}}",

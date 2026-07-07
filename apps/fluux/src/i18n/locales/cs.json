@@ -427,7 +427,9 @@
         "userInfo": "Informace o uživateli",
         "manageOccupant": "Spravovat",
         "invitationsHeading": "Pozvánky",
-        "nickChanged": "{{oldNick}} je nyní znám jako {{newNick}}"
+        "nickChanged": "{{oldNick}} je nyní znám jako {{newNick}}",
+        "nickEdgeWhitespace": "Jméno obsahuje mezery na okrajích",
+        "nickHiddenChars": "Jméno obsahuje skryté znaky"
     },
     "events": {
         "invitedBy": "Pozval(a) {{name}}",

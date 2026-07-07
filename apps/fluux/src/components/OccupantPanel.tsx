@@ -18,10 +18,11 @@ import { useRoomActions } from '@fluux/sdk'
 import { useConnectionStore, useIgnoreStore } from '@fluux/sdk/react'
 import { ignoreStore, type IgnoredUser } from '@fluux/sdk/stores'
 import { Avatar } from './Avatar'
+import { NickText } from './NickText'
 import { Tooltip } from './Tooltip'
 import { MenuButton, MenuDivider } from './sidebar-components/SidebarListMenu'
 import { useContextMenu, useTheme } from '@/hooks'
-import { auroraSenderColor } from '@/utils/senderColor'
+import { auroraSenderColor, nickColorSeed } from '@/utils/senderColor'
 import { bestTextColor } from '@/utils/contrastColor'
 import { useToastStore } from '@/stores/toastStore'
 import { getTranslatedShowText } from '@/utils/presence'
@@ -129,7 +130,12 @@ const OccupantRow = memo(function OccupantRow({
   // Per-person hue: same deterministic color the message list uses for this nick,
   // keyed on primaryNick + isDark. Derived as a plain string — memo still bails for
   // unchanged rows; when isDark flips all rows correctly re-render.
-  const identityColor = isMe ? undefined : auroraSenderColor(group.primaryNick, isDark)
+  const identityColor = isMe
+    ? undefined
+    : auroraSenderColor(
+        nickColorSeed({ occupantId: primaryOccupant.occupantId, bareJid: group.bareJid, nick: group.primaryNick }),
+        isDark,
+      )
   const nameColor = isMe ? 'var(--fluux-text-self)' : identityColor!
 
   // Get occupant avatar from XEP-0398 or fall back to contact avatar
@@ -197,7 +203,7 @@ const OccupantRow = memo(function OccupantRow({
           <div className="flex items-center gap-1.5">
             {isMe ? (
               <span className="min-w-0 truncate text-sm font-semibold" style={{ color: nameColor }}>
-                {group.primaryNick}
+                <NickText nick={group.primaryNick} />
                 <span className="text-fluux-muted font-normal"> {t('rooms.you')}</span>
               </span>
             ) : (
@@ -210,7 +216,7 @@ const OccupantRow = memo(function OccupantRow({
                 className="min-w-0"
               >
                 <span className="block truncate text-sm" style={{ color: nameColor }}>
-                  {group.primaryNick}
+                  <NickText nick={group.primaryNick} />
                 </span>
               </UserInfoPopover>
             )}

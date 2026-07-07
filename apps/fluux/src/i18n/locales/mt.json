@@ -427,7 +427,9 @@
         "userInfo": "Info tal-utent",
         "manageOccupant": "Immaniġġja",
         "invitationsHeading": "Stedini",
-        "nickChanged": "{{oldNick}} issa magħruf bħala {{newNick}}"
+        "nickChanged": "{{oldNick}} issa magħruf bħala {{newNick}}",
+        "nickEdgeWhitespace": "L-isem għandu spazji żejda fit-truf",
+        "nickHiddenChars": "L-isem fih karattri moħbija"
     },
     "events": {
         "invitedBy": "Mistieden minn {{name}}",

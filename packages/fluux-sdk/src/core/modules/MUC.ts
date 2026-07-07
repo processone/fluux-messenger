@@ -1,6 +1,7 @@
 import { xml, Element } from '@xmpp/client'
 import { BaseModule } from './BaseModule'
 import { getBareJid, getLocalPart, getResource, getDomain } from '../jid'
+import { stripNickWhitespace } from '../nick'
 import { generateUUID } from '../../utils/uuid'
 import { generateQuickChatSlug } from '../wordlist'
 import { hasStableOccupantIdentity, isNonAnonymousRoom, isPrivateRoom } from '../roomCapabilities'
@@ -649,9 +650,19 @@ export class MUC extends BaseModule {
    */
   async joinRoom(
     roomJid: string,
-    nickname: string,
+    rawNickname: string,
     options?: { maxHistory?: number; password?: string; isQuickChat?: boolean; knownFeatures?: RoomFeatures | null }
   ): Promise<void> {
+    // Normalize our OWN nick before it goes on the wire. Every self-nick path —
+    // the join modal, programmatic joins, the `/nick` command, and reconnection
+    // rejoin — routes through here, so this single choke point strips edge
+    // whitespace and invisible/bidi characters that MUC services (e.g. ejabberd)
+    // would otherwise accept, keeping our users from becoming impersonators.
+    // Fall back to the raw value if stripping empties it, so an all-whitespace
+    // input still produces a presence the server rejects meaningfully rather
+    // than a silently-changed one (the `/nick` handler already blocks empty).
+    const nickname = stripNickWhitespace(rawNickname) || rawNickname
+
     const existingRoom = this.deps.stores?.room.getRoom(roomJid)
 
     // If already joined, don't send another presence (avoids leave/rejoin issues)
@@ -827,7 +838,10 @@ export class MUC extends BaseModule {
    * - Rejects immediately if the room isn't currently joined.
    */
   async changeNick(roomJid: string, newNick: string): Promise<void> {
-    const trimmed = newNick.trim()
+    // Same hardening as joinRoom: strip edge whitespace + invisible/bidi chars so
+    // `/nick` can't set an impersonating nick. An all-whitespace input strips to
+    // '' and is treated as a no-op below.
+    const trimmed = stripNickWhitespace(newNick)
     const room = this.deps.stores?.room.getRoom(roomJid)
     if (!room || !room.joined) {
       throw new RoomJoinError(roomJid, 'not-joined', 'cancel', 'Not in room')

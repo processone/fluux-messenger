@@ -426,7 +426,9 @@
         "userInfo": "Lietotāja informācija",
         "manageOccupant": "Pārvaldīt",
         "invitationsHeading": "Ielūgumi",
-        "nickChanged": "{{oldNick}} tagad zināms kā {{newNick}}"
+        "nickChanged": "{{oldNick}} tagad zināms kā {{newNick}}",
+        "nickEdgeWhitespace": "Vārdam ir papildu atstarpes malās",
+        "nickHiddenChars": "Vārds satur slēptas rakstzīmes"
     },
     "events": {
         "invitedBy": "Uzaicināja {{name}}",

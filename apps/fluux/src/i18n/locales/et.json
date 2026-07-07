@@ -427,7 +427,9 @@
         "userInfo": "Kasutaja teave",
         "manageOccupant": "Halda",
         "invitationsHeading": "Kutsed",
-        "nickChanged": "{{oldNick}} on nüüd tuntud kui {{newNick}}"
+        "nickChanged": "{{oldNick}} on nüüd tuntud kui {{newNick}}",
+        "nickEdgeWhitespace": "Nimel on servades lisatühikud",
+        "nickHiddenChars": "Nimi sisaldab peidetud märke"
     },
     "events": {
         "invitedBy": "Kutsuja {{name}}",

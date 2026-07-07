@@ -425,7 +425,9 @@
         "userInfo": "Brukerinfo",
         "manageOccupant": "Administrer",
         "invitationsHeading": "Invitasjoner",
-        "nickChanged": "{{oldNick}} er nå kjent som {{newNick}}"
+        "nickChanged": "{{oldNick}} er nå kjent som {{newNick}}",
+        "nickEdgeWhitespace": "Navnet har ekstra mellomrom i kantene",
+        "nickHiddenChars": "Navnet inneholder skjulte tegn"
     },
     "events": {
         "invitedBy": "Invitert av {{name}}",

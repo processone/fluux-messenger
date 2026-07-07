@@ -425,7 +425,9 @@
         "userInfo": "Användarinfo",
         "manageOccupant": "Hantera",
         "invitationsHeading": "Inbjudningar",
-        "nickChanged": "{{oldNick}} är nu känd som {{newNick}}"
+        "nickChanged": "{{oldNick}} är nu känd som {{newNick}}",
+        "nickEdgeWhitespace": "Namnet har extra mellanslag i kanterna",
+        "nickHiddenChars": "Namnet innehåller dolda tecken"
     },
     "events": {
         "invitedBy": "Inbjuden av {{name}}",

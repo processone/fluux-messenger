@@ -425,7 +425,9 @@
         "userInfo": "Felhasználó adatai",
         "manageOccupant": "Kezelés",
         "invitationsHeading": "Meghívók",
-        "nickChanged": "{{oldNick}} mostantól {{newNick}} néven ismert"
+        "nickChanged": "{{oldNick}} mostantól {{newNick}} néven ismert",
+        "nickEdgeWhitespace": "A név szélein extra szóközök vannak",
+        "nickHiddenChars": "A név rejtett karaktereket tartalmaz"
     },
     "events": {
         "invitedBy": "Meghívta: {{name}}",

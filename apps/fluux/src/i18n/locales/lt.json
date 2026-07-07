@@ -425,7 +425,9 @@
         "userInfo": "Naudotojo informacija",
         "manageOccupant": "Valdyti",
         "invitationsHeading": "Kvietimai",
-        "nickChanged": "{{oldNick}} dabar žinomas kaip {{newNick}}"
+        "nickChanged": "{{oldNick}} dabar žinomas kaip {{newNick}}",
+        "nickEdgeWhitespace": "Varde yra papildomų tarpų kraštuose",
+        "nickHiddenChars": "Varde yra paslėptų simbolių"
     },
     "events": {
         "invitedBy": "Pakvietė {{name}}",

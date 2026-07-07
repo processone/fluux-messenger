@@ -425,7 +425,9 @@
         "selectHat": "اختيار شارة",
         "hatJidPlaceholder": "user@example.com",
         "invitationsHeading": "الدعوات",
-        "nickChanged": "أصبح {{oldNick}} يُعرف الآن باسم {{newNick}}"
+        "nickChanged": "أصبح {{oldNick}} يُعرف الآن باسم {{newNick}}",
+        "nickEdgeWhitespace": "يحتوي الاسم على مسافات إضافية في الأطراف",
+        "nickHiddenChars": "يحتوي الاسم على أحرف مخفية"
     },
     "events": {
         "invitedBy": "دعوة من {{name}}",

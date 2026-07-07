@@ -425,7 +425,9 @@
         "userInfo": "Eolas úsáideora",
         "manageOccupant": "Bainistigh",
         "invitationsHeading": "Cuirí",
-        "nickChanged": "Tugtar {{newNick}} ar {{oldNick}} anois"
+        "nickChanged": "Tugtar {{newNick}} ar {{oldNick}} anois",
+        "nickEdgeWhitespace": "Tá spásanna breise ag imill an ainm",
+        "nickHiddenChars": "Tá carachtair fholaithe san ainm"
     },
     "events": {
         "invitedBy": "Cuireadh ag {{name}}",

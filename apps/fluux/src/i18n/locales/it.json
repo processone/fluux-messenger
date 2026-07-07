@@ -427,7 +427,9 @@
         "userInfo": "Info utente",
         "manageOccupant": "Gestisci",
         "invitationsHeading": "Inviti",
-        "nickChanged": "{{oldNick}} ora è conosciuto come {{newNick}}"
+        "nickChanged": "{{oldNick}} ora è conosciuto come {{newNick}}",
+        "nickEdgeWhitespace": "Il nome ha spazi aggiuntivi ai bordi",
+        "nickHiddenChars": "Il nome contiene caratteri nascosti"
     },
     "events": {
         "invitedBy": "Invitato da {{name}}",

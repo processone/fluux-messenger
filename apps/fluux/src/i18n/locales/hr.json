@@ -425,7 +425,9 @@
         "userInfo": "Podaci o korisniku",
         "manageOccupant": "Upravljaj",
         "invitationsHeading": "Pozivnice",
-        "nickChanged": "{{oldNick}} sada je poznat kao {{newNick}}"
+        "nickChanged": "{{oldNick}} sada je poznat kao {{newNick}}",
+        "nickEdgeWhitespace": "Ime sadrži dodatne razmake na rubovima",
+        "nickHiddenChars": "Ime sadrži skrivene znakove"
     },
     "events": {
         "invitedBy": "Pozvao {{name}}",

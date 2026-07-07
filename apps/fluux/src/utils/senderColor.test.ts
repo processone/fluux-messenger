@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { auroraSenderColor } from './senderColor'
+import { auroraSenderColor, nickColorSeed } from './senderColor'
 import { getLuminance, contrastRatio, hexToRgb } from './contrastColor'
 
 // Chat-row + hover-row luminances for AA assertions.
@@ -10,6 +10,26 @@ function lum(hex: string) {
   const c = hexToRgb(hex)!
   return getLuminance(c.r, c.g, c.b)
 }
+
+describe('nickColorSeed', () => {
+  it('prefers the occupant-id (device-stable, works in anonymous rooms)', () => {
+    expect(nickColorSeed({ occupantId: 'occ-1', bareJid: 'a@x', nick: 'admin' })).toBe('occ-1')
+  })
+
+  it('falls back to the real bare JID when there is no occupant-id', () => {
+    expect(nickColorSeed({ bareJid: 'a@x', nick: 'admin' })).toBe('a@x')
+  })
+
+  it('falls back to the nick when no stable identity is known', () => {
+    expect(nickColorSeed({ nick: 'admin' })).toBe('admin')
+  })
+
+  it('gives a spoofed nick a different seed than the person it mimics', () => {
+    const real = nickColorSeed({ occupantId: 'real-occ', nick: 'admin' })
+    const spoof = nickColorSeed({ occupantId: 'spoof-occ', nick: 'admin ' })
+    expect(real).not.toBe(spoof)
+  })
+})
 
 describe('auroraSenderColor', () => {
   it('is deterministic per identifier + mode', () => {

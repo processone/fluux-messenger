@@ -39,7 +39,7 @@ import { MediaAutoloadProvider } from '@/contexts'
 import { computeMediaAutoload } from '@/utils/mediaAutoload'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { getRoomJoinErrorMessage } from '@/utils/roomJoinError'
-import { auroraSenderColor } from '@/utils/senderColor'
+import { auroraSenderColor, nickColorSeed } from '@/utils/senderColor'
 import { ReactionMentions } from './conversation/ReactionMentions'
 import { reactionMentionStore } from '@/stores/reactionMentionStore'
 
@@ -1335,7 +1335,13 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
   // Get sender color: dedicated AA-safe self color for own messages, contact's pre-calculated color, or fallback to nick-based generation
   const senderColor = message.isOutgoing
     ? 'var(--fluux-text-self)'
-    : resolveSenderColor(resolvedSenderName, contact, isDarkMode ?? true)
+    // Seed on stable identity (occupant-id, then real JID), not the display name,
+    // so an impersonator's look-alike nick renders in a different color.
+    : resolveSenderColor(
+        nickColorSeed({ occupantId: message.occupantId, bareJid: senderBareJid, nick: message.nick }),
+        contact,
+        isDarkMode ?? true,
+      )
 
   // Get my current reactions to this message (room — uses nick)
   const myReactions = getMyReactions(message.reactions, myNick, undefined, true)
@@ -1389,7 +1395,11 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
       // Same contact-color preference as the main senderColor above, so the
       // quote never disagrees with the sender's main-message color.
       const replyContact = replyBareJid ? contactsByJid.get(replyBareJid) : undefined
-      return resolveSenderColor(nick, replyContact, dark ?? true)
+      return resolveSenderColor(
+        nickColorSeed({ occupantId: originalMsg?.occupantId, bareJid: replyBareJid, nick }),
+        replyContact,
+        dark ?? true,
+      )
     },
     // Reply-target avatar resolved to primitives in the list layer (resolveReplyAvatar)
     // and passed in — so this callback reads no `room` and the row memo stays bail-able.
@@ -1844,7 +1854,7 @@ export const RoomMessageInput = memo(function RoomMessageInput({
         from: replyingTo.from,
         senderName: replyingTo.nick,
         body: replyingTo.body,
-        senderColor: auroraSenderColor(replyingTo.nick, isDarkMode ?? true),
+        senderColor: auroraSenderColor(nickColorSeed({ occupantId: replyingTo.occupantId, nick: replyingTo.nick }), isDarkMode ?? true),
       }
     : null
 

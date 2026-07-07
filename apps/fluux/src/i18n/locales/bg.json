@@ -425,7 +425,9 @@
         "userInfo": "Информация за потребителя",
         "manageOccupant": "Управление",
         "invitationsHeading": "Покани",
-        "nickChanged": "{{oldNick}} вече е познат като {{newNick}}"
+        "nickChanged": "{{oldNick}} вече е познат като {{newNick}}",
+        "nickEdgeWhitespace": "Името съдържа излишни интервали в краищата",
+        "nickHiddenChars": "Името съдържа скрити знаци"
     },
     "events": {
         "invitedBy": "Поканен от {{name}}",

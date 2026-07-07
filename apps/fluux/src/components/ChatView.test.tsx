@@ -167,6 +167,7 @@ vi.mock('@fluux/sdk', () => ({
   }),
   // Used by auroraSenderColor (imported by ChatMessageBubble)
   generateConsistentColorHexSync: () => '#4a90d9',
+  splitNickForDisplay: (nick: string) => ({ leading: '', core: nick, trailing: '', hasHiddenChars: false }),
 }))
 
 // Mock React store hooks (from @fluux/sdk/react)

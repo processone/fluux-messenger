@@ -425,7 +425,9 @@
         "userInfo": "Gebruikersinfo",
         "manageOccupant": "Beheren",
         "invitationsHeading": "Uitnodigingen",
-        "nickChanged": "{{oldNick}} heet nu {{newNick}}"
+        "nickChanged": "{{oldNick}} heet nu {{newNick}}",
+        "nickEdgeWhitespace": "De naam heeft extra spaties aan de randen",
+        "nickHiddenChars": "De naam bevat verborgen tekens"
     },
     "events": {
         "invitedBy": "Uitgenodigd door {{name}}",

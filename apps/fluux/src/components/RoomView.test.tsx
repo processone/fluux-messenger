@@ -233,6 +233,7 @@ vi.mock('@fluux/sdk', () => ({
     return bareJids.size + noJidCount
   },
   generateConsistentColorHexSync: () => '#4a90d9',
+  splitNickForDisplay: (nick: string) => ({ leading: '', core: nick, trailing: '', hasHiddenChars: false }),
   getBestPresenceShow: () => 'online',
   getPresenceFromShow: () => 'online',
   createMessageLookup: (messages: RoomMessage[]) => {

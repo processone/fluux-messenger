@@ -797,6 +797,21 @@ describe('MUC Module', () => {
       })
     })
 
+    it('strips edge whitespace from our nick before sending join presence (impersonation hardening)', async () => {
+      await muc.joinRoom('room@conference.example.org', '  admin  ')
+
+      const presence = mockSendStanza.mock.calls[0][0]
+      expect(presence.attrs.to).toBe('room@conference.example.org/admin')
+    })
+
+    it('stores the stripped nick as the room self-nickname', async () => {
+      await muc.joinRoom('room@conference.example.org', 'admin​')
+
+      expect(mockEmitSDK).toHaveBeenCalledWith('room:added', {
+        room: expect.objectContaining({ nickname: 'admin' }),
+      })
+    })
+
     it('preserves a known supportsModeration value when a re-join disco fails (F3: no clobber to unknown)', async () => {
       // Existing, not-yet-joined room a prior disco resolved as moderation-unsupported.
       mockStores.room.getRoom.mockReturnValue({
@@ -2356,6 +2371,22 @@ describe('MUC Module', () => {
       expect(presence.attrs.to).toBe(`${ROOM}/newnick`)
       // Unlike joinRoom, a nick change carries no <x muc> / history child.
       expect(presence.getChild('x')).toBeUndefined()
+    })
+
+    it('strips edge whitespace and hidden chars from the new nick (impersonation hardening)', async () => {
+      mockStores.room.getRoom.mockReturnValue(joinedRoom('oldnick'))
+      const p = muc.changeNick(ROOM, '  new​nick  ')
+      muc.handle(selfPresence('newnick'))
+      await p
+
+      const presence = mockSendStanza.mock.calls[0][0]
+      expect(presence.attrs.to).toBe(`${ROOM}/newnick`)
+    })
+
+    it('is a no-op when the new nick is only whitespace', async () => {
+      mockStores.room.getRoom.mockReturnValue(joinedRoom('oldnick'))
+      await muc.changeNick(ROOM, '   ')
+      expect(mockSendStanza).not.toHaveBeenCalled()
     })
 
     it('rejects when not currently in the room', async () => {

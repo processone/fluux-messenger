@@ -183,20 +183,27 @@ describe('resolveSenderColor', () => {
 })
 
 describe('resolveNickColor', () => {
-  // Aurora: resolveNickColor delegates to resolveSenderColor which now always
-  // returns auroraSenderColor — consistent for all senders regardless of roster.
+  // Aurora: resolveNickColor delegates to resolveSenderColor. The color is seeded
+  // on the mentioned person's STABLE identity (occupant-id, then real JID), not the
+  // nick string, so an impersonating look-alike nick diverges in color.
   const contact = { jid: 'alice@x', colorLight: '#7b4500', colorDark: '#ffa54c' } as any
-  it('returns auroraSenderColor(nick) when the nick maps to a JID via the live occupant', () => {
+  it('seeds on the real JID when the nick maps to a JID via the live occupant', () => {
     const r = room({
       occupants: new Map([['alice', occ('alice', { jid: 'alice@x/res' })]]),
     })
-    expect(resolveNickColor('alice', r, new Map([['alice@x', contact]]), true)).toBe(auroraSenderColor('alice', true))
+    expect(resolveNickColor('alice', r, new Map([['alice@x', contact]]), true)).toBe(auroraSenderColor('alice@x', true))
   })
-  it('returns auroraSenderColor(nick) when the JID comes from nickToJidCache', () => {
+  it('seeds on the real JID when it comes from nickToJidCache', () => {
     const r = room({ occupants: new Map(), nickToJidCache: new Map([['alice', 'alice@x']]) })
-    expect(resolveNickColor('alice', r, new Map([['alice@x', contact]]), false)).toBe(auroraSenderColor('alice', false))
+    expect(resolveNickColor('alice', r, new Map([['alice@x', contact]]), false)).toBe(auroraSenderColor('alice@x', false))
   })
-  it('returns auroraSenderColor(nick) for an unknown nick (no JID / not a contact)', () => {
+  it('prefers the occupant-id over the JID when both are known', () => {
+    const r = room({
+      occupants: new Map([['alice', occ('alice', { jid: 'alice@x/res', occupantId: 'oid-alice' })]]),
+    })
+    expect(resolveNickColor('alice', r, new Map([['alice@x', contact]]), true)).toBe(auroraSenderColor('oid-alice', true))
+  })
+  it('falls back to the nick for an unknown occupant (no JID / no occupant-id)', () => {
     const r = room({ occupants: new Map(), nickToJidCache: new Map() })
     expect(resolveNickColor('ghost', r, new Map(), true)).toBe(auroraSenderColor('ghost', true))
   })
