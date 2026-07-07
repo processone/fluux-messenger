@@ -53,6 +53,41 @@ describe('useRoom hook', () => {
     roomStore.setState({ rooms: new Map(), activeRoomJid: null })
   })
 
+  describe('composed action surface (useRoom = state + useRoomActions)', () => {
+    // useRoom now composes useRoomActions instead of re-defining every action;
+    // this pins that its full action surface — including actions that had
+    // drifted onto useRoomActions only — is present and callable.
+    const representativeActions = [
+      // messaging / lifecycle
+      'joinRoom', 'leaveRoom', 'sendMessage', 'sendReaction', 'setActiveRoom',
+      // read-state (these had drifted onto useRoomActions only)
+      'markAsRead', 'markReadToNewest', 'markAllRoomsRead',
+      // polls
+      'sendPoll', 'votePoll', 'closePoll',
+      // moderation / admin
+      'moderateMessage', 'setAffiliation', 'setRole', 'queryAffiliationList',
+      // hats
+      'listHats', 'assignHat', 'unassignHat',
+      // management / config
+      'createRoom', 'destroyRoom', 'submitRoomConfig', 'setSubject',
+      'setBookmark', 'removeBookmark', 'browsePublicRooms', 'setRoomAvatar',
+    ] as const
+
+    it('exposes every composed action as a function', () => {
+      const { result } = renderHook(() => useRoom(), { wrapper })
+      const hook = result.current as unknown as Record<string, unknown>
+      const missing = representativeActions.filter((name) => typeof hook[name] !== 'function')
+      expect(missing).toEqual([])
+    })
+
+    it('still exposes room state alongside the actions', () => {
+      const { result } = renderHook(() => useRoom(), { wrapper })
+      expect(Array.isArray(result.current.joinedRooms)).toBe(true)
+      expect(Array.isArray(result.current.allRooms)).toBe(true)
+      expect(result.current.activeRoomJid).toBeNull()
+    })
+  })
+
   describe('joinedRooms reactivity', () => {
     it('should return only joined rooms', () => {
       const { result } = renderHook(() => useRoom(), { wrapper })
