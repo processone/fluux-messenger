@@ -36,12 +36,12 @@ import { logWarn } from '../logger'
  * Returns LinkPreview if valid OGP metadata is found, null otherwise.
  */
 export function parseOgpFastening(applyToEl: Element): LinkPreview | null {
-  // Look for external element containing OGP meta-tags
+  // OGP <meta> elements are direct children of <apply-to> (Prosody mod_ogp
+  // convention). Older Fluux builds wrapped them in <external name='ogp'>, which
+  // is invalid per XEP-0422 — still accept that shape so previews sent by those
+  // builds keep rendering.
   const externalEl = applyToEl.getChild('external', NS_FASTEN)
-  if (!externalEl) return null
-
-  // Get all meta-elements with OGP properties
-  const metaEls = externalEl.getChildren('meta', NS_XHTML)
+  const metaEls = (externalEl ?? applyToEl).getChildren('meta', NS_XHTML)
   if (metaEls.length === 0) return null
 
   let url: string | undefined

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { applyRetraction, applyCorrection, parseOobData, parseMessageContent, parseOriginId, parseStanzaId, createOriginIdElement, hasRenderableContent, parseReactionsSignal, parseRetractionSignal, parseCorrectionSignal, isMessageSignal } from './messagingUtils'
+import { applyRetraction, applyCorrection, parseOobData, parseMessageContent, parseOriginId, parseStanzaId, createOriginIdElement, hasRenderableContent, parseReactionsSignal, parseRetractionSignal, parseCorrectionSignal, isMessageSignal, parseOgpFastening } from './messagingUtils'
 import { createMockElement } from '../test-utils'
 
 describe('messagingUtils', () => {
@@ -974,6 +974,103 @@ describe('messagingUtils', () => {
       it('does not flag a plain body message', () => {
         const stanza = createMockElement('message', {}, [{ name: 'body', text: 'hello' }])
         expect(isMessageSignal(stanza)).toBe(false)
+      })
+    })
+  })
+
+  describe('parseOgpFastening', () => {
+    const NS_XHTML = 'http://www.w3.org/1999/xhtml'
+    const meta = (property: string, content: string) => ({
+      name: 'meta',
+      attrs: { xmlns: NS_XHTML, property, content },
+    })
+
+    it('parses OGP meta as direct children of apply-to (mod_ogp / interop shape)', () => {
+      const applyTo = createMockElement('apply-to', { xmlns: 'urn:xmpp:fasten:0', id: 'orig' }, [
+        meta('og:url', 'https://example.com/a'),
+        meta('og:title', 'Title'),
+        meta('og:description', 'Desc'),
+        meta('og:image', 'https://example.com/i.jpg'),
+        meta('og:site_name', 'Example'),
+      ])
+
+      expect(parseOgpFastening(applyTo)).toEqual({
+        url: 'https://example.com/a',
+        title: 'Title',
+        description: 'Desc',
+        image: 'https://example.com/i.jpg',
+        siteName: 'Example',
+      })
+    })
+
+    it('still parses the legacy <external name="ogp"> wrapper for backward compatibility', () => {
+      const applyTo = createMockElement('apply-to', { xmlns: 'urn:xmpp:fasten:0', id: 'orig' }, [
+        {
+          name: 'external',
+          attrs: { xmlns: 'urn:xmpp:fasten:0', name: 'ogp' },
+          children: [meta('og:url', 'https://example.com/a'), meta('og:title', 'Title')],
+        },
+      ])
+
+      expect(parseOgpFastening(applyTo)).toEqual({
+        url: 'https://example.com/a',
+        title: 'Title',
+      })
+    })
+
+    it('returns null when there are no meta elements', () => {
+      const applyTo = createMockElement('apply-to', { xmlns: 'urn:xmpp:fasten:0', id: 'orig' }, [])
+      expect(parseOgpFastening(applyTo)).toBeNull()
+    })
+
+    it('returns null when og:url is missing', () => {
+      const applyTo = createMockElement('apply-to', { xmlns: 'urn:xmpp:fasten:0', id: 'orig' }, [
+        meta('og:title', 'Title'),
+      ])
+      expect(parseOgpFastening(applyTo)).toBeNull()
+    })
+
+    it('parses a url-only preview (title/description/image/siteName optional)', () => {
+      const applyTo = createMockElement('apply-to', { xmlns: 'urn:xmpp:fasten:0', id: 'orig' }, [
+        meta('og:url', 'https://example.com/a'),
+      ])
+      expect(parseOgpFastening(applyTo)).toEqual({ url: 'https://example.com/a' })
+    })
+
+    it('skips meta elements missing a content attribute', () => {
+      const applyTo = createMockElement('apply-to', { xmlns: 'urn:xmpp:fasten:0', id: 'orig' }, [
+        meta('og:url', 'https://example.com/a'),
+        { name: 'meta', attrs: { xmlns: NS_XHTML, property: 'og:title' } }, // no content
+      ])
+      expect(parseOgpFastening(applyTo)).toEqual({ url: 'https://example.com/a' })
+    })
+
+    it('ignores og properties it does not map (only the known set is extracted)', () => {
+      const applyTo = createMockElement('apply-to', { xmlns: 'urn:xmpp:fasten:0', id: 'orig' }, [
+        meta('og:url', 'https://example.com/a'),
+        meta('og:locale', 'en_US'),
+        meta('og:type', 'article'),
+        meta('og:title', 'Title'),
+      ])
+      expect(parseOgpFastening(applyTo)).toEqual({
+        url: 'https://example.com/a',
+        title: 'Title',
+      })
+    })
+
+    it('prefers the legacy <external> wrapper when both shapes are present', () => {
+      const applyTo = createMockElement('apply-to', { xmlns: 'urn:xmpp:fasten:0', id: 'orig' }, [
+        {
+          name: 'external',
+          attrs: { xmlns: 'urn:xmpp:fasten:0', name: 'ogp' },
+          children: [meta('og:url', 'https://legacy.example.com'), meta('og:title', 'Legacy')],
+        },
+        meta('og:url', 'https://direct.example.com'),
+        meta('og:title', 'Direct'),
+      ])
+      expect(parseOgpFastening(applyTo)).toEqual({
+        url: 'https://legacy.example.com',
+        title: 'Legacy',
       })
     })
   })

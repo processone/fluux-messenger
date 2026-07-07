@@ -1819,9 +1819,172 @@ describe('Chat E2EE wiring', () => {
       await plainChat.sendLinkPreview('bob@example.com', 'orig-id', preview)
 
       const sent = captured[0]
-      expect(sent.getChild('apply-to', 'urn:xmpp:fasten:0')).toBeDefined()
+      const applyTo = sent.getChild('apply-to', 'urn:xmpp:fasten:0')
+      expect(applyTo).toBeDefined()
+      // Interop wire format: OGP <meta> are direct children of <apply-to>, with
+      // no invalid <external> wrapper (mod_ogp / Gajim / Movim convention).
+      expect(applyTo!.getChild('external', 'urn:xmpp:fasten:0')).toBeUndefined()
+      const metas = applyTo!.getChildren('meta', 'http://www.w3.org/1999/xhtml')
+      expect(metas.map((m) => m.attrs.property)).toContain('og:title')
       expect(sent.getChild('no-store', 'urn:xmpp:hints')).toBeDefined()
       expect(sent.getChild('plain', 'urn:fluux:e2ee-dummy:0')).toBeUndefined()
+    })
+
+    // Build a Chat with no E2EE plugin so the fastening goes out in cleartext and
+    // its wire format is directly inspectable.
+    const makePlainChat = () => {
+      const emptyManager = new E2EEManager({
+        storage: new InMemoryStorageBackend(),
+        xmpp: stubXmppPrimitives(async () => {}),
+        account: { jid: 'me@example.com' },
+      })
+      const localCaptured: Element[] = []
+      const { deps } = makeDeps({
+        jid: 'me@example.com',
+        manager: emptyManager,
+        captureStanza: (el) => localCaptured.push(el),
+      })
+      return { chat: new Chat(deps, stubMAM()), captured: localCaptured }
+    }
+
+    // Collapse the OGP <meta> children of <apply-to> into a { property: content } map.
+    const ogMapOf = (sent: Element): Record<string, string> => {
+      const applyTo = sent.getChild('apply-to', 'urn:xmpp:fasten:0')!
+      const map: Record<string, string> = {}
+      for (const m of applyTo.getChildren('meta', 'http://www.w3.org/1999/xhtml')) {
+        map[m.attrs.property] = m.attrs.content
+      }
+      return map
+    }
+
+    it('emits every OGP field as a direct <meta> child with the XHTML namespace', async () => {
+      const { chat: plainChat, captured: local } = makePlainChat()
+
+      await plainChat.sendLinkPreview('bob@example.com', 'orig-id', preview)
+
+      const applyTo = local[0].getChild('apply-to', 'urn:xmpp:fasten:0')!
+      expect(applyTo.attrs.id).toBe('orig-id')
+      // Every <meta> uses the XHTML namespace.
+      const metas = applyTo.getChildren('meta', 'http://www.w3.org/1999/xhtml')
+      expect(metas).toHaveLength(5)
+      for (const m of metas) expect(m.attrs.xmlns).toBe('http://www.w3.org/1999/xhtml')
+      expect(ogMapOf(local[0])).toEqual({
+        'og:url': 'https://secret.example.com/article',
+        'og:title': 'Confidential Title',
+        'og:description': 'A description the server must not see',
+        'og:image': 'https://secret.example.com/preview.jpg',
+        'og:site_name': 'Secret Site',
+      })
+    })
+
+    it('omits optional OGP fields that are absent from the preview (only og:url is mandatory)', async () => {
+      const { chat: plainChat, captured: local } = makePlainChat()
+
+      await plainChat.sendLinkPreview('bob@example.com', 'orig-id', { url: 'https://example.com/a' })
+
+      expect(ogMapOf(local[0])).toEqual({ 'og:url': 'https://example.com/a' })
+    })
+
+    it('sends a groupchat preview in cleartext with the interop wire format (no encryption)', async () => {
+      const { chat: plainChat, captured: local } = makePlainChat()
+
+      await plainChat.sendLinkPreview('room@muc.example.com', 'muc-orig', preview, 'groupchat')
+
+      const sent = local[0]
+      expect(sent.attrs.to).toBe('room@muc.example.com')
+      expect(sent.attrs.type).toBe('groupchat')
+      // groupchat is never encrypted (only 1:1 chat fastenings are).
+      expect(sent.getChild('plain', 'urn:fluux:e2ee-dummy:0')).toBeUndefined()
+      expect(sent.getChild('encryption', 'urn:xmpp:eme:0')).toBeUndefined()
+      const applyTo = sent.getChild('apply-to', 'urn:xmpp:fasten:0')
+      expect(applyTo).toBeDefined()
+      expect(applyTo!.getChild('external', 'urn:xmpp:fasten:0')).toBeUndefined()
+      expect(ogMapOf(sent)['og:title']).toBe('Confidential Title')
+      expect(sent.getChild('no-store', 'urn:xmpp:hints')).toBeDefined()
+    })
+
+    it('renders a foreign (mod_ogp / Gajim) preview: meta direct under apply-to, no <external>', () => {
+      const rxBuilt = makeDeps({ jid: 'me@example.com', manager, captureStanza: () => {} })
+      const rxChat = new Chat(rxBuilt.deps, stubMAM())
+
+      // Shape emitted by Prosody mod_ogp: OGP <meta> as direct children of
+      // <apply-to>, from the room, applying to the message's id/origin-id.
+      const inbound = xml(
+        'message',
+        { from: 'room@muc.example.com/alice', to: 'me@example.com', type: 'groupchat', id: 'muc-msg-1' },
+        xml(
+          'apply-to',
+          { xmlns: 'urn:xmpp:fasten:0', id: 'muc-msg-1' },
+          xml('meta', { xmlns: 'http://www.w3.org/1999/xhtml', property: 'og:url', content: 'https://example.com/a' }),
+          xml('meta', { xmlns: 'http://www.w3.org/1999/xhtml', property: 'og:title', content: 'Foreign Title' }),
+          xml('meta', { xmlns: 'http://www.w3.org/1999/xhtml', property: 'og:image', content: 'https://example.com/i.jpg' }),
+        ),
+      )
+
+      rxChat.handle(inbound)
+
+      const evt = rxBuilt.sdkEmitted.find(
+        (e) => (e as { event: string }).event === 'room:message-updated',
+      ) as { payload: { roomJid: string; messageId: string; updates: { linkPreview?: { title?: string; image?: string } } } } | undefined
+      expect(evt).toBeDefined()
+      expect(evt!.payload.roomJid).toBe('room@muc.example.com')
+      expect(evt!.payload.messageId).toBe('muc-msg-1')
+      expect(evt!.payload.updates.linkPreview?.title).toBe('Foreign Title')
+      expect(evt!.payload.updates.linkPreview?.image).toBe('https://example.com/i.jpg')
+    })
+
+    it('renders a foreign 1:1 preview (direct-meta apply-to on a chat stanza)', () => {
+      const rxBuilt = makeDeps({ jid: 'me@example.com', manager, captureStanza: () => {} })
+      const rxChat = new Chat(rxBuilt.deps, stubMAM())
+
+      const inbound = xml(
+        'message',
+        { from: 'bob@example.com/r', to: 'me@example.com', type: 'chat', id: 'chat-msg-1' },
+        xml(
+          'apply-to',
+          { xmlns: 'urn:xmpp:fasten:0', id: 'chat-msg-1' },
+          xml('meta', { xmlns: 'http://www.w3.org/1999/xhtml', property: 'og:url', content: 'https://example.com/a' }),
+          xml('meta', { xmlns: 'http://www.w3.org/1999/xhtml', property: 'og:title', content: 'Foreign 1:1' }),
+        ),
+      )
+
+      rxChat.handle(inbound)
+
+      const evt = rxBuilt.sdkEmitted.find(
+        (e) => (e as { event: string }).event === 'chat:message-updated',
+      ) as { payload: { conversationId: string; messageId: string; updates: { linkPreview?: { title?: string } } } } | undefined
+      expect(evt).toBeDefined()
+      expect(evt!.payload.conversationId).toBe('bob@example.com')
+      expect(evt!.payload.messageId).toBe('chat-msg-1')
+      expect(evt!.payload.updates.linkPreview?.title).toBe('Foreign 1:1')
+    })
+
+    it('still renders an inbound legacy <external>-wrapped preview (older Fluux builds)', () => {
+      const rxBuilt = makeDeps({ jid: 'me@example.com', manager, captureStanza: () => {} })
+      const rxChat = new Chat(rxBuilt.deps, stubMAM())
+
+      const inbound = xml(
+        'message',
+        { from: 'room@muc.example.com/alice', to: 'me@example.com', type: 'groupchat', id: 'muc-legacy-1' },
+        xml(
+          'apply-to',
+          { xmlns: 'urn:xmpp:fasten:0', id: 'muc-legacy-1' },
+          xml(
+            'external',
+            { xmlns: 'urn:xmpp:fasten:0', name: 'ogp' },
+            xml('meta', { xmlns: 'http://www.w3.org/1999/xhtml', property: 'og:url', content: 'https://example.com/a' }),
+            xml('meta', { xmlns: 'http://www.w3.org/1999/xhtml', property: 'og:title', content: 'Legacy Wrapped' }),
+          ),
+        ),
+      )
+
+      rxChat.handle(inbound)
+
+      const evt = rxBuilt.sdkEmitted.find(
+        (e) => (e as { event: string }).event === 'room:message-updated',
+      ) as { payload: { updates: { linkPreview?: { title?: string } } } } | undefined
+      expect(evt).toBeDefined()
+      expect(evt!.payload.updates.linkPreview?.title).toBe('Legacy Wrapped')
     })
   })
 
