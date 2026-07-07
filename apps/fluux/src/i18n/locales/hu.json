@@ -1305,5 +1305,73 @@
     "reactions": {
         "mention": "{{emoji}} {{name}} reagált erre: '{{preview}}'",
         "see": "Megtekintés"
+    },
+    "commands": {
+        "help": {
+            "title": "Elérhető parancsok",
+            "desc": "Elérhető parancsok megjelenítése",
+            "usage": "/help"
+        },
+        "me": {
+            "desc": "Cselekvésüzenet küldése",
+            "usage": "/me <action>"
+        },
+        "say": {
+            "desc": "Szöveg küldése szó szerint, még ha perjellel kezdődik is",
+            "usage": "/say <text>"
+        },
+        "nick": {
+            "desc": "Beceneved módosítása ebben a szobában",
+            "usage": "/nick <newnick>",
+            "changed": "Mostantól {{nick}} néven ismernek"
+        },
+        "part": {
+            "desc": "Kilépés ebből a szobából",
+            "usage": "/part"
+        },
+        "topic": {
+            "desc": "A szoba témájának megtekintése vagy beállítása",
+            "usage": "/topic [text]",
+            "set": "A téma frissítve",
+            "current": "Jelenlegi téma: {{subject}}",
+            "none": "Nincs beállítva téma"
+        },
+        "kick": {
+            "desc": "Valaki eltávolítása a szobából",
+            "usage": "/kick <nick> [reason]",
+            "done": "{{nick}} kirúgva"
+        },
+        "ban": {
+            "desc": "Valaki kitiltása a szobából",
+            "usage": "/ban <nick|jid> [reason]",
+            "done": "{{target}} kitiltva"
+        },
+        "invite": {
+            "desc": "Valaki meghívása a szobába",
+            "usage": "/invite [jid] [reason]",
+            "done": "Meghívó elküldve neki: {{target}}"
+        },
+        "config": {
+            "desc": "A szoba beállításainak megnyitása",
+            "usage": "/config"
+        },
+        "christmas": {
+            "desc": "Ünnepi meglepetés küldése"
+        },
+        "indicator": {
+            "willRun": "Ez egy parancsot fog futtatni",
+            "unknownHint": "Ismeretlen parancs. Használd a /say parancsot a szó szerinti elküldéshez."
+        },
+        "error": {
+            "unknown": "Ismeretlen parancs: /{{name}}",
+            "moderatorOnly": "Ezt csak moderátorok tehetik meg",
+            "adminOnly": "Ezt csak rendszergazdák tehetik meg",
+            "ownerOnly": "Ezt csak a szoba tulajdonosa teheti meg",
+            "needNick": "Kérjük, adj meg egy becenevet",
+            "needTarget": "Kérjük, adj meg egy becenevet vagy címet",
+            "userNotFound": "Nincs itt senki {{nick}} néven",
+            "nickInUse": "A(z) {{nick}} becenév már használatban van",
+            "nickFailed": "Nem sikerült megváltoztatni a becenevedet"
+        }
     }
 }

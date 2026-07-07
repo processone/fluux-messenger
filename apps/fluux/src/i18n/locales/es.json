@@ -1308,5 +1308,73 @@
     "reactions": {
         "mention": "{{emoji}} {{name}} reaccionó a '{{preview}}'",
         "see": "Ver"
+    },
+    "commands": {
+        "help": {
+            "title": "Comandos disponibles",
+            "desc": "Mostrar los comandos disponibles",
+            "usage": "/help"
+        },
+        "me": {
+            "desc": "Enviar un mensaje de acción",
+            "usage": "/me <action>"
+        },
+        "say": {
+            "desc": "Enviar texto literalmente, aunque empiece con una barra",
+            "usage": "/say <text>"
+        },
+        "nick": {
+            "desc": "Cambiar tu apodo en esta sala",
+            "usage": "/nick <newnick>",
+            "changed": "Ahora te conocen como {{nick}}"
+        },
+        "part": {
+            "desc": "Salir de esta sala",
+            "usage": "/part"
+        },
+        "topic": {
+            "desc": "Ver o definir el asunto de la sala",
+            "usage": "/topic [text]",
+            "set": "Asunto actualizado",
+            "current": "Asunto actual: {{subject}}",
+            "none": "No hay ningún asunto definido"
+        },
+        "kick": {
+            "desc": "Expulsar a alguien de la sala",
+            "usage": "/kick <nick> [reason]",
+            "done": "Se expulsó a {{nick}}"
+        },
+        "ban": {
+            "desc": "Vetar a alguien de la sala",
+            "usage": "/ban <nick|jid> [reason]",
+            "done": "Se vetó a {{target}}"
+        },
+        "invite": {
+            "desc": "Invitar a alguien a la sala",
+            "usage": "/invite [jid] [reason]",
+            "done": "Invitación enviada a {{target}}"
+        },
+        "config": {
+            "desc": "Abrir la configuración de la sala",
+            "usage": "/config"
+        },
+        "christmas": {
+            "desc": "Enviar una sorpresa festiva"
+        },
+        "indicator": {
+            "willRun": "Esto ejecutará un comando",
+            "unknownHint": "Comando desconocido. Usa /say para enviarlo literalmente."
+        },
+        "error": {
+            "unknown": "Comando desconocido: /{{name}}",
+            "moderatorOnly": "Solo los moderadores pueden hacer eso",
+            "adminOnly": "Solo los administradores pueden hacer eso",
+            "ownerOnly": "Solo el propietario de la sala puede hacer eso",
+            "needNick": "Indica un apodo",
+            "needTarget": "Indica un apodo o una dirección",
+            "userNotFound": "Aquí no hay nadie llamado {{nick}}",
+            "nickInUse": "El apodo {{nick}} ya está en uso",
+            "nickFailed": "No se pudo cambiar tu apodo"
+        }
     }
 }

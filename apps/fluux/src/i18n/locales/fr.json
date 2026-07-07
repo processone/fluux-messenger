@@ -1307,5 +1307,73 @@
     "reactions": {
         "mention": "{{emoji}} {{name}} a réagi à « {{preview}} »",
         "see": "Voir"
+    },
+    "commands": {
+        "help": {
+            "title": "Commandes disponibles",
+            "desc": "Afficher les commandes disponibles",
+            "usage": "/help"
+        },
+        "me": {
+            "desc": "Envoyer un message d’action",
+            "usage": "/me <action>"
+        },
+        "say": {
+            "desc": "Envoyer le texte tel quel, même s’il commence par une barre oblique",
+            "usage": "/say <text>"
+        },
+        "nick": {
+            "desc": "Changer votre pseudonyme dans ce salon",
+            "usage": "/nick <newnick>",
+            "changed": "Vous êtes désormais connu sous le nom {{nick}}"
+        },
+        "part": {
+            "desc": "Quitter ce salon",
+            "usage": "/part"
+        },
+        "topic": {
+            "desc": "Afficher ou définir le sujet du salon",
+            "usage": "/topic [text]",
+            "set": "Sujet mis à jour",
+            "current": "Sujet actuel : {{subject}}",
+            "none": "Aucun sujet n’est défini"
+        },
+        "kick": {
+            "desc": "Retirer quelqu’un du salon",
+            "usage": "/kick <nick> [reason]",
+            "done": "{{nick}} a été expulsé"
+        },
+        "ban": {
+            "desc": "Bannir quelqu’un du salon",
+            "usage": "/ban <nick|jid> [reason]",
+            "done": "{{target}} a été banni"
+        },
+        "invite": {
+            "desc": "Inviter quelqu’un dans le salon",
+            "usage": "/invite [jid] [reason]",
+            "done": "Invitation envoyée à {{target}}"
+        },
+        "config": {
+            "desc": "Ouvrir la configuration du salon",
+            "usage": "/config"
+        },
+        "christmas": {
+            "desc": "Envoyer une surprise festive"
+        },
+        "indicator": {
+            "willRun": "Cela exécutera une commande",
+            "unknownHint": "Commande inconnue. Utilisez /say pour l’envoyer telle quelle."
+        },
+        "error": {
+            "unknown": "Commande inconnue : /{{name}}",
+            "moderatorOnly": "Seuls les modérateurs peuvent faire cela",
+            "adminOnly": "Seuls les administrateurs peuvent faire cela",
+            "ownerOnly": "Seul le propriétaire du salon peut faire cela",
+            "needNick": "Veuillez indiquer un pseudonyme",
+            "needTarget": "Veuillez indiquer un pseudonyme ou une adresse",
+            "userNotFound": "Personne ne s’appelle {{nick}} ici",
+            "nickInUse": "Le pseudonyme {{nick}} est déjà utilisé",
+            "nickFailed": "Impossible de changer votre pseudonyme"
+        }
     }
 }

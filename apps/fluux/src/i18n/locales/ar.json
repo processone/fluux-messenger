@@ -1309,5 +1309,73 @@
     "reactions": {
         "mention": "{{emoji}} {{name}} تفاعل مع '{{preview}}'",
         "see": "عرض"
+    },
+    "commands": {
+        "help": {
+            "title": "الأوامر المتاحة",
+            "desc": "عرض الأوامر المتاحة",
+            "usage": "/help"
+        },
+        "me": {
+            "desc": "إرسال رسالة إجراء",
+            "usage": "/me <action>"
+        },
+        "say": {
+            "desc": "إرسال النص حرفيًا، حتى لو بدأ بشرطة مائلة",
+            "usage": "/say <text>"
+        },
+        "nick": {
+            "desc": "تغيير اسمك المستعار في هذه الغرفة",
+            "usage": "/nick <newnick>",
+            "changed": "أصبح اسمك الآن {{nick}}"
+        },
+        "part": {
+            "desc": "مغادرة هذه الغرفة",
+            "usage": "/part"
+        },
+        "topic": {
+            "desc": "عرض موضوع الغرفة أو تعيينه",
+            "usage": "/topic [text]",
+            "set": "تم تحديث الموضوع",
+            "current": "الموضوع الحالي: {{subject}}",
+            "none": "لم يتم تعيين أي موضوع"
+        },
+        "kick": {
+            "desc": "طرد شخص من الغرفة",
+            "usage": "/kick <nick> [reason]",
+            "done": "تم طرد {{nick}}"
+        },
+        "ban": {
+            "desc": "حظر شخص من الغرفة",
+            "usage": "/ban <nick|jid> [reason]",
+            "done": "تم حظر {{target}}"
+        },
+        "invite": {
+            "desc": "دعوة شخص إلى الغرفة",
+            "usage": "/invite [jid] [reason]",
+            "done": "تم إرسال دعوة إلى {{target}}"
+        },
+        "config": {
+            "desc": "فتح إعدادات الغرفة",
+            "usage": "/config"
+        },
+        "christmas": {
+            "desc": "إرسال مفاجأة احتفالية"
+        },
+        "indicator": {
+            "willRun": "سيؤدي هذا إلى تنفيذ أمر",
+            "unknownHint": "أمر غير معروف. استخدم /say لإرساله حرفيًا."
+        },
+        "error": {
+            "unknown": "أمر غير معروف: /{{name}}",
+            "moderatorOnly": "يمكن للمشرفين فقط القيام بذلك",
+            "adminOnly": "يمكن للمديرين فقط القيام بذلك",
+            "ownerOnly": "يمكن لمالك الغرفة فقط القيام بذلك",
+            "needNick": "يرجى تقديم اسم مستعار",
+            "needTarget": "يرجى تقديم اسم مستعار أو عنوان",
+            "userNotFound": "لا يوجد أحد باسم {{nick}} هنا",
+            "nickInUse": "الاسم المستعار {{nick}} مستخدم بالفعل",
+            "nickFailed": "تعذر تغيير اسمك المستعار"
+        }
     }
 }

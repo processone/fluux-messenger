@@ -1,49 +1,40 @@
+import { useCallback } from 'react'
+import { parseSlashInput } from '../commands/parseSlashInput'
+import { runCommand, classifyInput as classify } from '../commands/registry'
+import type { CommandContext, InputClass } from '../commands/types'
+import { useToastStore } from '../stores/toastStore'
 
 /**
- * Actions that slash commands can trigger.
- * Each view provides its own implementation of these actions.
- */
-export interface SlashCommandActions {
-  sendEasterEgg: (animation: string) => Promise<void>
-  // Future commands can add more actions here
-}
-
-/**
- * Hook that provides centralized slash command handling.
- * Command matching logic is shared, but actions are provided by each view.
+ * Registry-driven slash-command dispatcher.
  *
- * @example
- * // In ChatView
- * const { handleCommand } = useSlashCommands({
- *   sendEasterEgg: (anim) => sendEasterEgg(conversationId, 'chat', anim)
- * })
- *
- * // In handleSubmit
- * if (await handleCommand(text)) {
- *   setText('')
- *   return
- * }
+ * `resolveInput` returns the text that should actually be sent, or the sentinel
+ * `'consumed'` when the input was a command (feedback is delivered via toast).
+ * `classifyInput` drives the composer's send-button indicator.
  */
-export function useSlashCommands(actions: SlashCommandActions) {
-  /**
-   * Check if text is a slash command and execute it.
-   * @returns true if a command was handled, false otherwise
-   */
-  const handleCommand = async (text: string): Promise<boolean> => {
-    const command = text.trim().toLowerCase()
+export function useSlashCommands(context: CommandContext) {
+  const addToast = useToastStore((s) => s.addToast)
 
-    // Easter egg commands
-    if (command === '/christmas') {
-      await actions.sendEasterEgg('christmas')
-      return true
-    }
+  const resolveInput = useCallback(
+    async (text: string): Promise<string | 'consumed'> => {
+      const parsed = parseSlashInput(text)
+      if (parsed.kind === 'message') return text
+      if (parsed.kind === 'passthrough') return parsed.text
+      if (parsed.kind === 'literal') return parsed.text
+      const result = await runCommand(parsed, context)
+      if (result.ok) {
+        if (result.toast) addToast('success', result.toast)
+      } else {
+        addToast('error', result.error)
+      }
+      return 'consumed'
+    },
+    [context, addToast],
+  )
 
-    // Future commands can be added here:
-    // if (command === '/newyear') { ... }
-    // if (command === '/confetti') { ... }
+  const classifyInput = useCallback(
+    (text: string): InputClass => classify(text, context.kind),
+    [context.kind],
+  )
 
-    return false
-  }
-
-  return { handleCommand }
+  return { resolveInput, classifyInput }
 }

@@ -1307,5 +1307,73 @@
     "reactions": {
         "mention": "{{emoji}} {{name}} reaģēja uz '{{preview}}'",
         "see": "Skatīt"
+    },
+    "commands": {
+        "help": {
+            "title": "Pieejamās komandas",
+            "desc": "Rādīt pieejamās komandas",
+            "usage": "/help"
+        },
+        "me": {
+            "desc": "Sūtīt darbības ziņojumu",
+            "usage": "/me <action>"
+        },
+        "say": {
+            "desc": "Sūtīt tekstu burtiski, pat ja tas sākas ar slīpsvītru",
+            "usage": "/say <text>"
+        },
+        "nick": {
+            "desc": "Mainīt savu segvārdu šajā istabā",
+            "usage": "/nick <newnick>",
+            "changed": "Tagad jūs pazīst kā {{nick}}"
+        },
+        "part": {
+            "desc": "Pamest šo istabu",
+            "usage": "/part"
+        },
+        "topic": {
+            "desc": "Skatīt vai iestatīt istabas tematu",
+            "usage": "/topic [text]",
+            "set": "Temats atjaunināts",
+            "current": "Pašreizējais temats: {{subject}}",
+            "none": "Temats nav iestatīts"
+        },
+        "kick": {
+            "desc": "Izņemt kādu no istabas",
+            "usage": "/kick <nick> [reason]",
+            "done": "Izraidīts {{nick}}"
+        },
+        "ban": {
+            "desc": "Bloķēt kādu no istabas",
+            "usage": "/ban <nick|jid> [reason]",
+            "done": "Bloķēts {{target}}"
+        },
+        "invite": {
+            "desc": "Uzaicināt kādu uz istabu",
+            "usage": "/invite [jid] [reason]",
+            "done": "Uzaicinājums nosūtīts lietotājam {{target}}"
+        },
+        "config": {
+            "desc": "Atvērt istabas konfigurāciju",
+            "usage": "/config"
+        },
+        "christmas": {
+            "desc": "Sūtīt svētku pārsteigumu"
+        },
+        "indicator": {
+            "willRun": "Tas izpildīs komandu",
+            "unknownHint": "Nezināma komanda. Izmantojiet /say, lai to nosūtītu burtiski."
+        },
+        "error": {
+            "unknown": "Nezināma komanda: /{{name}}",
+            "moderatorOnly": "To var darīt tikai moderatori",
+            "adminOnly": "To var darīt tikai administratori",
+            "ownerOnly": "To var darīt tikai istabas īpašnieks",
+            "needNick": "Lūdzu, norādiet segvārdu",
+            "needTarget": "Lūdzu, norādiet segvārdu vai adresi",
+            "userNotFound": "Šeit nav neviena ar vārdu {{nick}}",
+            "nickInUse": "Segvārds {{nick}} jau tiek izmantots",
+            "nickFailed": "Neizdevās mainīt jūsu segvārdu"
+        }
     }
 }

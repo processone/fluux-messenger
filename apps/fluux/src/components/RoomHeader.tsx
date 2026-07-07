@@ -23,6 +23,7 @@ import { HeaderSubmenuButton } from './header/HeaderSubmenuButton'
 import { HeaderOverflowKebab, type OverflowEntry } from './header/HeaderOverflowKebab'
 import { buildNotifyGroup, buildManagementGroup, notifyModeOf } from './header/roomHeaderActions'
 import { inlineClass, kebabClass, KEBAB_TRIGGER_CLASS } from './header/headerOverflow'
+import { useRoomUiStore } from '../stores/roomUiStore'
 import {
   Hash,
   ArrowLeft,
@@ -66,12 +67,16 @@ export function RoomHeader({
 }: RoomHeaderProps) {
   const { t } = useTranslation()
   const [showAvatarModal, setShowAvatarModal] = useState(false)
-  const [showInviteModal, setShowInviteModal] = useState(false)
-  const [showConfigModal, setShowConfigModal] = useState(false)
   const [showMembersModal, setShowMembersModal] = useState(false)
   const [showHatsModal, setShowHatsModal] = useState(false)
   const [avatarError, setAvatarError] = useState<string | null>(null)
   const { dragRegionProps } = useWindowDrag()
+  const configModalOpen = useRoomUiStore((s) => s.configModalOpen)
+  const inviteModalOpen = useRoomUiStore((s) => s.inviteModalOpen)
+  const openConfig = useRoomUiStore((s) => s.openConfig)
+  const closeConfig = useRoomUiStore((s) => s.closeConfig)
+  const openInvite = useRoomUiStore((s) => s.openInvite)
+  const closeInvite = useRoomUiStore((s) => s.closeInvite)
 
   // Get self occupant to check affiliation
   const selfOccupant = room.nickname ? room.occupants.get(room.nickname) : undefined
@@ -87,7 +92,7 @@ export function RoomHeader({
   const notifyGroup = buildNotifyGroup({ room, t, setRoomNotifyAll })
   const managementGroup = buildManagementGroup({
     room, t, isOwner, canManageRoom,
-    onConfig: () => setShowConfigModal(true),
+    onConfig: openConfig,
     onAvatar: () => setShowAvatarModal(true),
     onClearAvatar: async () => {
       try { await clearRoomAvatar(room.jid) } catch { setAvatarError(t('rooms.avatarClearFailed')) }
@@ -150,7 +155,7 @@ export function RoomHeader({
       <div className={inlineClass('wide')}>
         <Tooltip content={t('rooms.inviteMember')} position="bottom">
           <button
-            onClick={() => setShowInviteModal(true)}
+            onClick={openInvite}
             className="p-1.5 rounded-lg hover:bg-fluux-hover text-fluux-muted hover:text-fluux-text transition-colors tap-target"
             aria-label={t('rooms.inviteMember')}
           >
@@ -196,7 +201,7 @@ export function RoomHeader({
             ...(onSearchInConversation
               ? [{ kind: 'action', key: 'search', label: t('chat.searchInConversation', 'Search in conversation'), icon: Search, onSelect: onSearchInConversation, kebabClassName: kebabClass('search') } as OverflowEntry]
               : []),
-            { kind: 'action', key: 'invite', label: t('rooms.inviteMember'), icon: UserPlus, onSelect: () => setShowInviteModal(true), kebabClassName: kebabClass('wide') },
+            { kind: 'action', key: 'invite', label: t('rooms.inviteMember'), icon: UserPlus, onSelect: openInvite, kebabClassName: kebabClass('wide') },
             { kind: 'submenu', key: 'notify', label: t('rooms.notificationSettings'), icon: NotifyIcon, group: notifyGroup, kebabClassName: kebabClass('wide') },
             ...(managementGroup
               ? [{ kind: 'submenu', key: 'manage', label: t('rooms.manageRoom'), icon: Settings, group: managementGroup, kebabClassName: kebabClass('wide') } as OverflowEntry]
@@ -251,17 +256,19 @@ export function RoomHeader({
       />
 
       {/* Invite to room modal */}
-      <InviteToRoomModal
-        isOpen={showInviteModal}
-        onClose={() => setShowInviteModal(false)}
-        room={room}
-      />
+      {inviteModalOpen && (
+        <InviteToRoomModal
+          isOpen={inviteModalOpen}
+          onClose={closeInvite}
+          room={room}
+        />
+      )}
 
       {/* Room configuration modal */}
-      {showConfigModal && (
+      {configModalOpen && (
         <RoomConfigModal
           room={room}
-          onClose={() => setShowConfigModal(false)}
+          onClose={closeConfig}
           submitRoomConfig={submitRoomConfig}
           setSubject={setSubject}
           destroyRoom={destroyRoom}

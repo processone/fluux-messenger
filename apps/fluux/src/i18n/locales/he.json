@@ -1306,5 +1306,73 @@
     "reactions": {
         "mention": "{{emoji}} {{name}} הגיב על '{{preview}}'",
         "see": "הצג"
+    },
+    "commands": {
+        "help": {
+            "title": "פקודות זמינות",
+            "desc": "הצגת הפקודות הזמינות",
+            "usage": "/help"
+        },
+        "me": {
+            "desc": "שליחת הודעת פעולה",
+            "usage": "/me <action>"
+        },
+        "say": {
+            "desc": "שליחת טקסט כפשוטו, גם אם הוא מתחיל בלוכסן",
+            "usage": "/say <text>"
+        },
+        "nick": {
+            "desc": "שינוי הכינוי שלך בחדר זה",
+            "usage": "/nick <newnick>",
+            "changed": "אתה מוכר כעת בשם {{nick}}"
+        },
+        "part": {
+            "desc": "יציאה מחדר זה",
+            "usage": "/part"
+        },
+        "topic": {
+            "desc": "הצגה או הגדרה של נושא החדר",
+            "usage": "/topic [text]",
+            "set": "הנושא עודכן",
+            "current": "הנושא הנוכחי: {{subject}}",
+            "none": "לא הוגדר נושא"
+        },
+        "kick": {
+            "desc": "הסרת מישהו מהחדר",
+            "usage": "/kick <nick> [reason]",
+            "done": "{{nick}} הורחק"
+        },
+        "ban": {
+            "desc": "חסימת מישהו מהחדר",
+            "usage": "/ban <nick|jid> [reason]",
+            "done": "{{target}} נחסם"
+        },
+        "invite": {
+            "desc": "הזמנת מישהו לחדר",
+            "usage": "/invite [jid] [reason]",
+            "done": "הזמנה נשלחה אל {{target}}"
+        },
+        "config": {
+            "desc": "פתיחת הגדרות החדר",
+            "usage": "/config"
+        },
+        "christmas": {
+            "desc": "שליחת הפתעה חגיגית"
+        },
+        "indicator": {
+            "willRun": "פעולה זו תריץ פקודה",
+            "unknownHint": "פקודה לא מוכרת. השתמש ב-/say כדי לשלוח אותה כפשוטה."
+        },
+        "error": {
+            "unknown": "פקודה לא מוכרת: /{{name}}",
+            "moderatorOnly": "רק מנחים יכולים לעשות זאת",
+            "adminOnly": "רק מנהלים יכולים לעשות זאת",
+            "ownerOnly": "רק בעל החדר יכול לעשות זאת",
+            "needNick": "נא לספק כינוי",
+            "needTarget": "נא לספק כינוי או כתובת",
+            "userNotFound": "אין כאן אף אחד בשם {{nick}}",
+            "nickInUse": "הכינוי {{nick}} כבר בשימוש",
+            "nickFailed": "לא ניתן היה לשנות את הכינוי שלך"
+        }
     }
 }

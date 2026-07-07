@@ -1308,5 +1308,73 @@
     "reactions": {
         "mention": "{{emoji}} d'imoibrigh {{name}} le '{{preview}}'",
         "see": "Amharc"
+    },
+    "commands": {
+        "help": {
+            "title": "Orduithe atá ar fáil",
+            "desc": "Taispeáin na horduithe atá ar fáil",
+            "usage": "/help"
+        },
+        "me": {
+            "desc": "Seol teachtaireacht gnímh",
+            "usage": "/me <action>"
+        },
+        "say": {
+            "desc": "Seol téacs go litriúil, fiú má thosaíonn sé le slais",
+            "usage": "/say <text>"
+        },
+        "nick": {
+            "desc": "Athraigh do leasainm sa seomra seo",
+            "usage": "/nick <newnick>",
+            "changed": "Tugtar {{nick}} ort anois"
+        },
+        "part": {
+            "desc": "Fág an seomra seo",
+            "usage": "/part"
+        },
+        "topic": {
+            "desc": "Féach nó socraigh ábhar an tseomra",
+            "usage": "/topic [text]",
+            "set": "Ábhar nuashonraithe",
+            "current": "Ábhar reatha: {{subject}}",
+            "none": "Níl aon ábhar socraithe"
+        },
+        "kick": {
+            "desc": "Bain duine as an seomra",
+            "usage": "/kick <nick> [reason]",
+            "done": "Ciceáladh {{nick}}"
+        },
+        "ban": {
+            "desc": "Coisc duine ón seomra",
+            "usage": "/ban <nick|jid> [reason]",
+            "done": "Coscaíodh {{target}}"
+        },
+        "invite": {
+            "desc": "Tabhair cuireadh do dhuine chuig an seomra",
+            "usage": "/invite [jid] [reason]",
+            "done": "Cuireadh seolta chuig {{target}}"
+        },
+        "config": {
+            "desc": "Oscail cumraíocht an tseomra",
+            "usage": "/config"
+        },
+        "christmas": {
+            "desc": "Seol iontas Nollag"
+        },
+        "indicator": {
+            "willRun": "Rithfidh sé seo ordú",
+            "unknownHint": "Ordú anaithnid. Úsáid /say chun é a sheoladh go litriúil."
+        },
+        "error": {
+            "unknown": "Ordú anaithnid: /{{name}}",
+            "moderatorOnly": "Ní féidir ach le modhnóirí é sin a dhéanamh",
+            "adminOnly": "Ní féidir ach le riarthóirí é sin a dhéanamh",
+            "ownerOnly": "Ní féidir ach le húinéir an tseomra é sin a dhéanamh",
+            "needNick": "Tabhair leasainm le do thoil",
+            "needTarget": "Tabhair leasainm nó seoladh le do thoil",
+            "userNotFound": "Níl aon duine darb ainm {{nick}} anseo",
+            "nickInUse": "Tá an leasainm {{nick}} in úsáid cheana féin",
+            "nickFailed": "Níorbh fhéidir do leasainm a athrú"
+        }
     }
 }

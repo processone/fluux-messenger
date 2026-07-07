@@ -20,6 +20,10 @@ import { useWebUnlockDialogStore } from '@/stores/webUnlockDialogStore'
 import { ChristmasAnimation } from './ChristmasAnimation'
 import { ChatHeader } from './ChatHeader'
 import { MessageComposer, type ReplyInfo, type EditInfo, type MessageComposerHandle, type PendingAttachment } from './MessageComposer'
+import { useSlashCommands } from '@/hooks/useSlashCommands'
+import { visibleCommands } from '@/commands/registry'
+import { CommandHelpPanel } from './composer/CommandHelpPanel'
+import type { CommandContext } from '@/commands/types'
 import { findLastEditableMessage, findLastEditableMessageId } from '@/utils/messageUtils'
 import { isEncryptedSource } from '@/utils/replyEncryption'
 import { useExpandedMessagesStore } from '@/stores/expandedMessagesStore'
@@ -1078,6 +1082,34 @@ export const MessageInput = memo(function MessageInput({
   const { t } = useTranslation()
   const openWebUnlockDialog = useWebUnlockDialogStore((s) => s.openWebUnlockDialog)
 
+  // Slash commands. A 1:1 chat supports /me, /say, /help, and /christmas; the
+  // room-only commands are context-gated out of this 'chat' context, so their
+  // sdk methods are never reached (they throw defensively if ever called).
+  const [helpOpen, setHelpOpen] = useState(false)
+  const chatCommandContext = useMemo<CommandContext>(() => {
+    const notInRoom = async () => {
+      throw new Error('command not available in a 1:1 chat')
+    }
+    return {
+      kind: 'chat',
+      entityJid: conversationId,
+      sdk: {
+        joinRoom: notInRoom,
+        joinResult: notInRoom,
+        leaveRoom: notInRoom,
+        setSubject: notInRoom,
+        setRole: notInRoom,
+        setAffiliation: notInRoom,
+        invite: notInRoom,
+      },
+      ui: { openInviteModal: () => {}, openRoomConfig: () => {}, openHelp: () => setHelpOpen(true) },
+      app: { sendEasterEgg: (animation) => sendEasterEgg(conversationId, type, animation) },
+      resolveNick: () => undefined,
+      t,
+    }
+  }, [conversationId, type, sendEasterEgg, t])
+  const { resolveInput, classifyInput } = useSlashCommands(chatCommandContext)
+
   // Draft persistence - saves on conversation change, restores on load
   const [text, setText] = useConversationDraft({
     conversationId,
@@ -1237,6 +1269,9 @@ export const MessageInput = memo(function MessageInput({
         disabled={!isConnected}
         value={text}
         onValueChange={setText}
+        resolveInput={resolveInput}
+        classifyInput={classifyInput}
+        aboveInput={helpOpen ? <CommandHelpPanel commands={visibleCommands('chat')} onClose={() => setHelpOpen(false)} /> : undefined}
         onEditLastMessage={onEditLastMessage}
         encryptionState={encryptionState}
         onEncryptionClick={onEncryptionClick}

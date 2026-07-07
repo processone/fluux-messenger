@@ -1308,5 +1308,73 @@
     "reactions": {
         "mention": "{{emoji}} {{name}} ha reagito a '{{preview}}'",
         "see": "Vedi"
+    },
+    "commands": {
+        "help": {
+            "title": "Comandi disponibili",
+            "desc": "Mostra i comandi disponibili",
+            "usage": "/help"
+        },
+        "me": {
+            "desc": "Invia un messaggio di azione",
+            "usage": "/me <action>"
+        },
+        "say": {
+            "desc": "Invia il testo alla lettera, anche se inizia con una barra",
+            "usage": "/say <text>"
+        },
+        "nick": {
+            "desc": "Cambia il tuo soprannome in questa stanza",
+            "usage": "/nick <newnick>",
+            "changed": "Ora sei conosciuto come {{nick}}"
+        },
+        "part": {
+            "desc": "Esci da questa stanza",
+            "usage": "/part"
+        },
+        "topic": {
+            "desc": "Visualizza o imposta l’argomento della stanza",
+            "usage": "/topic [text]",
+            "set": "Argomento aggiornato",
+            "current": "Argomento attuale: {{subject}}",
+            "none": "Nessun argomento impostato"
+        },
+        "kick": {
+            "desc": "Rimuovi qualcuno dalla stanza",
+            "usage": "/kick <nick> [reason]",
+            "done": "{{nick}} espulso"
+        },
+        "ban": {
+            "desc": "Bandisci qualcuno dalla stanza",
+            "usage": "/ban <nick|jid> [reason]",
+            "done": "{{target}} bandito"
+        },
+        "invite": {
+            "desc": "Invita qualcuno nella stanza",
+            "usage": "/invite [jid] [reason]",
+            "done": "Invito inviato a {{target}}"
+        },
+        "config": {
+            "desc": "Apri la configurazione della stanza",
+            "usage": "/config"
+        },
+        "christmas": {
+            "desc": "Invia una sorpresa festiva"
+        },
+        "indicator": {
+            "willRun": "Questo eseguirà un comando",
+            "unknownHint": "Comando sconosciuto. Usa /say per inviarlo alla lettera."
+        },
+        "error": {
+            "unknown": "Comando sconosciuto: /{{name}}",
+            "moderatorOnly": "Solo i moderatori possono farlo",
+            "adminOnly": "Solo gli amministratori possono farlo",
+            "ownerOnly": "Solo il proprietario della stanza può farlo",
+            "needNick": "Indica un soprannome",
+            "needTarget": "Indica un soprannome o un indirizzo",
+            "userNotFound": "Non c’è nessuno di nome {{nick}} qui",
+            "nickInUse": "Il soprannome {{nick}} è già in uso",
+            "nickFailed": "Impossibile cambiare il tuo soprannome"
+        }
     }
 }

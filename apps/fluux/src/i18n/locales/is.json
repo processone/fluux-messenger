@@ -1305,5 +1305,73 @@
     "reactions": {
         "mention": "{{emoji}} {{name}} brást við '{{preview}}'",
         "see": "Skoða"
+    },
+    "commands": {
+        "help": {
+            "title": "Tiltækar skipanir",
+            "desc": "Sýna tiltækar skipanir",
+            "usage": "/help"
+        },
+        "me": {
+            "desc": "Senda aðgerðaskilaboð",
+            "usage": "/me <action>"
+        },
+        "say": {
+            "desc": "Senda texta orðrétt, jafnvel þótt hann byrji á skástriki",
+            "usage": "/say <text>"
+        },
+        "nick": {
+            "desc": "Breyta gælunafni þínu í þessari stofu",
+            "usage": "/nick <newnick>",
+            "changed": "Þú ert nú þekktur sem {{nick}}"
+        },
+        "part": {
+            "desc": "Yfirgefa þessa stofu",
+            "usage": "/part"
+        },
+        "topic": {
+            "desc": "Skoða eða stilla umræðuefni stofunnar",
+            "usage": "/topic [text]",
+            "set": "Umræðuefni uppfært",
+            "current": "Núverandi umræðuefni: {{subject}}",
+            "none": "Ekkert umræðuefni er stillt"
+        },
+        "kick": {
+            "desc": "Fjarlægja einhvern úr stofunni",
+            "usage": "/kick <nick> [reason]",
+            "done": "Sparkaði {{nick}}"
+        },
+        "ban": {
+            "desc": "Banna einhvern úr stofunni",
+            "usage": "/ban <nick|jid> [reason]",
+            "done": "Bannaði {{target}}"
+        },
+        "invite": {
+            "desc": "Bjóða einhverjum í stofuna",
+            "usage": "/invite [jid] [reason]",
+            "done": "Boð sent til {{target}}"
+        },
+        "config": {
+            "desc": "Opna stillingar stofunnar",
+            "usage": "/config"
+        },
+        "christmas": {
+            "desc": "Senda hátíðlega óvæntingu"
+        },
+        "indicator": {
+            "willRun": "Þetta mun keyra skipun",
+            "unknownHint": "Óþekkt skipun. Notaðu /say til að senda hana orðrétt."
+        },
+        "error": {
+            "unknown": "Óþekkt skipun: /{{name}}",
+            "moderatorOnly": "Aðeins umsjónarmenn geta gert þetta",
+            "adminOnly": "Aðeins stjórnendur geta gert þetta",
+            "ownerOnly": "Aðeins eigandi stofunnar getur gert þetta",
+            "needNick": "Vinsamlegast gefðu upp gælunafn",
+            "needTarget": "Vinsamlegast gefðu upp gælunafn eða vistfang",
+            "userNotFound": "Enginn með nafnið {{nick}} er hér",
+            "nickInUse": "Gælunafnið {{nick}} er þegar í notkun",
+            "nickFailed": "Ekki tókst að breyta gælunafni þínu"
+        }
     }
 }

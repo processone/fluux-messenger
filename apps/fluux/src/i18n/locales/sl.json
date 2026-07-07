@@ -1309,5 +1309,73 @@
     "reactions": {
         "mention": "{{emoji}} {{name}} se je odzval(a) na '{{preview}}'",
         "see": "Prikaži"
+    },
+    "commands": {
+        "help": {
+            "title": "Razpoložljivi ukazi",
+            "desc": "Prikaži razpoložljive ukaze",
+            "usage": "/help"
+        },
+        "me": {
+            "desc": "Pošlji sporočilo o dejanju",
+            "usage": "/me <action>"
+        },
+        "say": {
+            "desc": "Pošlji besedilo dobesedno, tudi če se začne s poševnico",
+            "usage": "/say <text>"
+        },
+        "nick": {
+            "desc": "Spremeni svoj vzdevek v tej sobi",
+            "usage": "/nick <newnick>",
+            "changed": "Zdaj ste znani kot {{nick}}"
+        },
+        "part": {
+            "desc": "Zapusti to sobo",
+            "usage": "/part"
+        },
+        "topic": {
+            "desc": "Prikaži ali nastavi temo sobe",
+            "usage": "/topic [text]",
+            "set": "Tema posodobljena",
+            "current": "Trenutna tema: {{subject}}",
+            "none": "Tema ni nastavljena"
+        },
+        "kick": {
+            "desc": "Odstrani nekoga iz sobe",
+            "usage": "/kick <nick> [reason]",
+            "done": "Izgnan {{nick}}"
+        },
+        "ban": {
+            "desc": "Prepovej nekomu dostop do sobe",
+            "usage": "/ban <nick|jid> [reason]",
+            "done": "Prepovedan {{target}}"
+        },
+        "invite": {
+            "desc": "Povabi nekoga v sobo",
+            "usage": "/invite [jid] [reason]",
+            "done": "Vabilo poslano uporabniku {{target}}"
+        },
+        "config": {
+            "desc": "Odpri nastavitve sobe",
+            "usage": "/config"
+        },
+        "christmas": {
+            "desc": "Pošlji praznično presenečenje"
+        },
+        "indicator": {
+            "willRun": "To bo zagnalo ukaz",
+            "unknownHint": "Neznan ukaz. Uporabite /say za dobesedno pošiljanje."
+        },
+        "error": {
+            "unknown": "Neznan ukaz: /{{name}}",
+            "moderatorOnly": "To lahko storijo samo moderatorji",
+            "adminOnly": "To lahko storijo samo skrbniki",
+            "ownerOnly": "To lahko stori samo lastnik sobe",
+            "needNick": "Navedite vzdevek",
+            "needTarget": "Navedite vzdevek ali naslov",
+            "userNotFound": "Tukaj ni nikogar z imenom {{nick}}",
+            "nickInUse": "Vzdevek {{nick}} je že v uporabi",
+            "nickFailed": "Vašega vzdevka ni bilo mogoče spremeniti"
+        }
     }
 }

@@ -1307,5 +1307,73 @@
     "reactions": {
         "mention": "{{emoji}} {{name}} hat auf '{{preview}}' reagiert",
         "see": "Anzeigen"
+    },
+    "commands": {
+        "help": {
+            "title": "Verfügbare Befehle",
+            "desc": "Verfügbare Befehle anzeigen",
+            "usage": "/help"
+        },
+        "me": {
+            "desc": "Eine Aktionsnachricht senden",
+            "usage": "/me <action>"
+        },
+        "say": {
+            "desc": "Text wörtlich senden, auch wenn er mit einem Schrägstrich beginnt",
+            "usage": "/say <text>"
+        },
+        "nick": {
+            "desc": "Deinen Spitznamen in diesem Raum ändern",
+            "usage": "/nick <newnick>",
+            "changed": "Du heißt jetzt {{nick}}"
+        },
+        "part": {
+            "desc": "Diesen Raum verlassen",
+            "usage": "/part"
+        },
+        "topic": {
+            "desc": "Das Raumthema anzeigen oder festlegen",
+            "usage": "/topic [text]",
+            "set": "Thema aktualisiert",
+            "current": "Aktuelles Thema: {{subject}}",
+            "none": "Es ist kein Thema festgelegt"
+        },
+        "kick": {
+            "desc": "Jemanden aus dem Raum entfernen",
+            "usage": "/kick <nick> [reason]",
+            "done": "{{nick}} entfernt"
+        },
+        "ban": {
+            "desc": "Jemanden aus dem Raum verbannen",
+            "usage": "/ban <nick|jid> [reason]",
+            "done": "{{target}} verbannt"
+        },
+        "invite": {
+            "desc": "Jemanden in den Raum einladen",
+            "usage": "/invite [jid] [reason]",
+            "done": "Einladung an {{target}} gesendet"
+        },
+        "config": {
+            "desc": "Die Raumkonfiguration öffnen",
+            "usage": "/config"
+        },
+        "christmas": {
+            "desc": "Eine festliche Überraschung senden"
+        },
+        "indicator": {
+            "willRun": "Dadurch wird ein Befehl ausgeführt",
+            "unknownHint": "Unbekannter Befehl. Verwende /say, um ihn wörtlich zu senden."
+        },
+        "error": {
+            "unknown": "Unbekannter Befehl: /{{name}}",
+            "moderatorOnly": "Nur Moderatoren können das tun",
+            "adminOnly": "Nur Administratoren können das tun",
+            "ownerOnly": "Nur der Raumbesitzer kann das tun",
+            "needNick": "Bitte gib einen Spitznamen an",
+            "needTarget": "Bitte gib einen Spitznamen oder eine Adresse an",
+            "userNotFound": "Hier ist niemand mit dem Namen {{nick}}",
+            "nickInUse": "Der Spitzname {{nick}} wird bereits verwendet",
+            "nickFailed": "Dein Spitzname konnte nicht geändert werden"
+        }
     }
 }

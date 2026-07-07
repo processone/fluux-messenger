@@ -1307,5 +1307,73 @@
     "reactions": {
         "mention": "{{emoji}} {{name}} sureagavo į '{{preview}}'",
         "see": "Peržiūrėti"
+    },
+    "commands": {
+        "help": {
+            "title": "Galimos komandos",
+            "desc": "Rodyti galimas komandas",
+            "usage": "/help"
+        },
+        "me": {
+            "desc": "Siųsti veiksmo pranešimą",
+            "usage": "/me <action>"
+        },
+        "say": {
+            "desc": "Siųsti tekstą pažodžiui, net jei jis prasideda pasviruoju brūkšniu",
+            "usage": "/say <text>"
+        },
+        "nick": {
+            "desc": "Keisti savo slapyvardį šiame kambaryje",
+            "usage": "/nick <newnick>",
+            "changed": "Dabar esate žinomas kaip {{nick}}"
+        },
+        "part": {
+            "desc": "Palikti šį kambarį",
+            "usage": "/part"
+        },
+        "topic": {
+            "desc": "Peržiūrėti arba nustatyti kambario temą",
+            "usage": "/topic [text]",
+            "set": "Tema atnaujinta",
+            "current": "Dabartinė tema: {{subject}}",
+            "none": "Tema nenustatyta"
+        },
+        "kick": {
+            "desc": "Pašalinti ką nors iš kambario",
+            "usage": "/kick <nick> [reason]",
+            "done": "Pašalintas {{nick}}"
+        },
+        "ban": {
+            "desc": "Užblokuoti ką nors kambaryje",
+            "usage": "/ban <nick|jid> [reason]",
+            "done": "Užblokuotas {{target}}"
+        },
+        "invite": {
+            "desc": "Pakviesti ką nors į kambarį",
+            "usage": "/invite [jid] [reason]",
+            "done": "Kvietimas išsiųstas {{target}}"
+        },
+        "config": {
+            "desc": "Atverti kambario konfigūraciją",
+            "usage": "/config"
+        },
+        "christmas": {
+            "desc": "Siųsti šventinę staigmeną"
+        },
+        "indicator": {
+            "willRun": "Tai įvykdys komandą",
+            "unknownHint": "Nežinoma komanda. Naudokite /say, kad išsiųstumėte ją pažodžiui."
+        },
+        "error": {
+            "unknown": "Nežinoma komanda: /{{name}}",
+            "moderatorOnly": "Tai gali daryti tik moderatoriai",
+            "adminOnly": "Tai gali daryti tik administratoriai",
+            "ownerOnly": "Tai gali daryti tik kambario savininkas",
+            "needNick": "Nurodykite slapyvardį",
+            "needTarget": "Nurodykite slapyvardį arba adresą",
+            "userNotFound": "Čia nėra nieko, vardu {{nick}}",
+            "nickInUse": "Slapyvardis {{nick}} jau naudojamas",
+            "nickFailed": "Nepavyko pakeisti jūsų slapyvardžio"
+        }
     }
 }

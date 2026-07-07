@@ -1308,5 +1308,73 @@
     "reactions": {
         "mention": "{{emoji}} {{name}} reagiu a '{{preview}}'",
         "see": "Ver"
+    },
+    "commands": {
+        "help": {
+            "title": "Comandos disponíveis",
+            "desc": "Mostrar os comandos disponíveis",
+            "usage": "/help"
+        },
+        "me": {
+            "desc": "Enviar uma mensagem de ação",
+            "usage": "/me <action>"
+        },
+        "say": {
+            "desc": "Enviar texto literalmente, mesmo que comece com uma barra",
+            "usage": "/say <text>"
+        },
+        "nick": {
+            "desc": "Alterar a tua alcunha nesta sala",
+            "usage": "/nick <newnick>",
+            "changed": "És agora conhecido como {{nick}}"
+        },
+        "part": {
+            "desc": "Sair desta sala",
+            "usage": "/part"
+        },
+        "topic": {
+            "desc": "Ver ou definir o assunto da sala",
+            "usage": "/topic [text]",
+            "set": "Assunto atualizado",
+            "current": "Assunto atual: {{subject}}",
+            "none": "Não há nenhum assunto definido"
+        },
+        "kick": {
+            "desc": "Remover alguém da sala",
+            "usage": "/kick <nick> [reason]",
+            "done": "{{nick}} foi expulso"
+        },
+        "ban": {
+            "desc": "Banir alguém da sala",
+            "usage": "/ban <nick|jid> [reason]",
+            "done": "{{target}} foi banido"
+        },
+        "invite": {
+            "desc": "Convidar alguém para a sala",
+            "usage": "/invite [jid] [reason]",
+            "done": "Convite enviado para {{target}}"
+        },
+        "config": {
+            "desc": "Abrir a configuração da sala",
+            "usage": "/config"
+        },
+        "christmas": {
+            "desc": "Enviar uma surpresa festiva"
+        },
+        "indicator": {
+            "willRun": "Isto irá executar um comando",
+            "unknownHint": "Comando desconhecido. Usa /say para o enviar literalmente."
+        },
+        "error": {
+            "unknown": "Comando desconhecido: /{{name}}",
+            "moderatorOnly": "Só os moderadores podem fazer isso",
+            "adminOnly": "Só os administradores podem fazer isso",
+            "ownerOnly": "Só o proprietário da sala pode fazer isso",
+            "needNick": "Indica uma alcunha",
+            "needTarget": "Indica uma alcunha ou um endereço",
+            "userNotFound": "Não há ninguém com o nome {{nick}} aqui",
+            "nickInUse": "A alcunha {{nick}} já está em uso",
+            "nickFailed": "Não foi possível alterar a tua alcunha"
+        }
     }
 }

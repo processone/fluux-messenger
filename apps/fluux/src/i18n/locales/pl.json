@@ -1309,5 +1309,73 @@
     "reactions": {
         "mention": "{{emoji}} {{name}} zareagował(a) na '{{preview}}'",
         "see": "Pokaż"
+    },
+    "commands": {
+        "help": {
+            "title": "Dostępne polecenia",
+            "desc": "Pokaż dostępne polecenia",
+            "usage": "/help"
+        },
+        "me": {
+            "desc": "Wyślij wiadomość o czynności",
+            "usage": "/me <action>"
+        },
+        "say": {
+            "desc": "Wyślij tekst dosłownie, nawet jeśli zaczyna się od ukośnika",
+            "usage": "/say <text>"
+        },
+        "nick": {
+            "desc": "Zmień swój pseudonim w tym pokoju",
+            "usage": "/nick <newnick>",
+            "changed": "Jesteś teraz znany jako {{nick}}"
+        },
+        "part": {
+            "desc": "Opuść ten pokój",
+            "usage": "/part"
+        },
+        "topic": {
+            "desc": "Wyświetl lub ustaw temat pokoju",
+            "usage": "/topic [text]",
+            "set": "Temat zaktualizowany",
+            "current": "Bieżący temat: {{subject}}",
+            "none": "Nie ustawiono tematu"
+        },
+        "kick": {
+            "desc": "Usuń kogoś z pokoju",
+            "usage": "/kick <nick> [reason]",
+            "done": "Wyrzucono {{nick}}"
+        },
+        "ban": {
+            "desc": "Zablokuj komuś dostęp do pokoju",
+            "usage": "/ban <nick|jid> [reason]",
+            "done": "Zablokowano {{target}}"
+        },
+        "invite": {
+            "desc": "Zaproś kogoś do pokoju",
+            "usage": "/invite [jid] [reason]",
+            "done": "Zaproszenie wysłane do {{target}}"
+        },
+        "config": {
+            "desc": "Otwórz konfigurację pokoju",
+            "usage": "/config"
+        },
+        "christmas": {
+            "desc": "Wyślij świąteczną niespodziankę"
+        },
+        "indicator": {
+            "willRun": "To uruchomi polecenie",
+            "unknownHint": "Nieznane polecenie. Użyj /say, aby wysłać je dosłownie."
+        },
+        "error": {
+            "unknown": "Nieznane polecenie: /{{name}}",
+            "moderatorOnly": "Tylko moderatorzy mogą to zrobić",
+            "adminOnly": "Tylko administratorzy mogą to zrobić",
+            "ownerOnly": "Tylko właściciel pokoju może to zrobić",
+            "needNick": "Podaj pseudonim",
+            "needTarget": "Podaj pseudonim lub adres",
+            "userNotFound": "Nie ma tu nikogo o imieniu {{nick}}",
+            "nickInUse": "Pseudonim {{nick}} jest już używany",
+            "nickFailed": "Nie udało się zmienić twojego pseudonimu"
+        }
     }
 }

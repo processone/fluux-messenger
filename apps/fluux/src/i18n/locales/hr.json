@@ -1306,5 +1306,73 @@
     "reactions": {
         "mention": "{{emoji}} {{name}} reagirao je na '{{preview}}'",
         "see": "Prikaži"
+    },
+    "commands": {
+        "help": {
+            "title": "Dostupne naredbe",
+            "desc": "Prikaži dostupne naredbe",
+            "usage": "/help"
+        },
+        "me": {
+            "desc": "Pošalji poruku o radnji",
+            "usage": "/me <action>"
+        },
+        "say": {
+            "desc": "Pošalji tekst doslovno, čak i ako počinje kosom crtom",
+            "usage": "/say <text>"
+        },
+        "nick": {
+            "desc": "Promijeni svoj nadimak u ovoj sobi",
+            "usage": "/nick <newnick>",
+            "changed": "Sada ste poznati kao {{nick}}"
+        },
+        "part": {
+            "desc": "Napusti ovu sobu",
+            "usage": "/part"
+        },
+        "topic": {
+            "desc": "Pregledaj ili postavi temu sobe",
+            "usage": "/topic [text]",
+            "set": "Tema ažurirana",
+            "current": "Trenutna tema: {{subject}}",
+            "none": "Tema nije postavljena"
+        },
+        "kick": {
+            "desc": "Ukloni nekoga iz sobe",
+            "usage": "/kick <nick> [reason]",
+            "done": "Izbačen {{nick}}"
+        },
+        "ban": {
+            "desc": "Zabrani nekome pristup sobi",
+            "usage": "/ban <nick|jid> [reason]",
+            "done": "Zabranjen {{target}}"
+        },
+        "invite": {
+            "desc": "Pozovi nekoga u sobu",
+            "usage": "/invite [jid] [reason]",
+            "done": "Pozivnica poslana korisniku {{target}}"
+        },
+        "config": {
+            "desc": "Otvori konfiguraciju sobe",
+            "usage": "/config"
+        },
+        "christmas": {
+            "desc": "Pošalji blagdansko iznenađenje"
+        },
+        "indicator": {
+            "willRun": "Ovo će pokrenuti naredbu",
+            "unknownHint": "Nepoznata naredba. Upotrijebite /say za doslovno slanje."
+        },
+        "error": {
+            "unknown": "Nepoznata naredba: /{{name}}",
+            "moderatorOnly": "To mogu učiniti samo moderatori",
+            "adminOnly": "To mogu učiniti samo administratori",
+            "ownerOnly": "To može učiniti samo vlasnik sobe",
+            "needNick": "Molimo navedite nadimak",
+            "needTarget": "Molimo navedite nadimak ili adresu",
+            "userNotFound": "Ovdje nema nikoga pod imenom {{nick}}",
+            "nickInUse": "Nadimak {{nick}} već je u upotrebi",
+            "nickFailed": "Nije moguće promijeniti vaš nadimak"
+        }
     }
 }

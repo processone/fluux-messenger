@@ -1308,5 +1308,73 @@
     "reactions": {
         "mention": "{{emoji}} {{name}} ha reaccionat a '{{preview}}'",
         "see": "Mostra"
+    },
+    "commands": {
+        "help": {
+            "title": "Ordres disponibles",
+            "desc": "Mostra les ordres disponibles",
+            "usage": "/help"
+        },
+        "me": {
+            "desc": "Envia un missatge d'acció",
+            "usage": "/me <action>"
+        },
+        "say": {
+            "desc": "Envia el text literalment, encara que comenci amb una barra",
+            "usage": "/say <text>"
+        },
+        "nick": {
+            "desc": "Canvia el teu sobrenom en aquesta sala",
+            "usage": "/nick <newnick>",
+            "changed": "Ara se’t coneix com a {{nick}}"
+        },
+        "part": {
+            "desc": "Surt d’aquesta sala",
+            "usage": "/part"
+        },
+        "topic": {
+            "desc": "Mostra o defineix el tema de la sala",
+            "usage": "/topic [text]",
+            "set": "Tema actualitzat",
+            "current": "Tema actual: {{subject}}",
+            "none": "No hi ha cap tema definit"
+        },
+        "kick": {
+            "desc": "Expulsa algú de la sala",
+            "usage": "/kick <nick> [reason]",
+            "done": "S’ha expulsat {{nick}}"
+        },
+        "ban": {
+            "desc": "Bandeja algú de la sala",
+            "usage": "/ban <nick|jid> [reason]",
+            "done": "S’ha bandejat {{target}}"
+        },
+        "invite": {
+            "desc": "Convida algú a la sala",
+            "usage": "/invite [jid] [reason]",
+            "done": "Invitació enviada a {{target}}"
+        },
+        "config": {
+            "desc": "Obre la configuració de la sala",
+            "usage": "/config"
+        },
+        "christmas": {
+            "desc": "Envia una sorpresa festiva"
+        },
+        "indicator": {
+            "willRun": "Això executarà una ordre",
+            "unknownHint": "Ordre desconeguda. Utilitza /say per enviar-la literalment."
+        },
+        "error": {
+            "unknown": "Ordre desconeguda: /{{name}}",
+            "moderatorOnly": "Només els moderadors poden fer això",
+            "adminOnly": "Només els administradors poden fer això",
+            "ownerOnly": "Només el propietari de la sala pot fer això",
+            "needNick": "Indica un sobrenom",
+            "needTarget": "Indica un sobrenom o una adreça",
+            "userNotFound": "Aquí no hi ha ningú anomenat {{nick}}",
+            "nickInUse": "El sobrenom {{nick}} ja està en ús",
+            "nickFailed": "No s’ha pogut canviar el teu sobrenom"
+        }
     }
 }

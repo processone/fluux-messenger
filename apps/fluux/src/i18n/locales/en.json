@@ -1305,5 +1305,73 @@
     "reactions": {
         "mention": "{{emoji}} {{name}} reacted to '{{preview}}'",
         "see": "See"
+    },
+    "commands": {
+        "help": {
+            "title": "Available commands",
+            "desc": "List available commands",
+            "usage": "/help"
+        },
+        "me": {
+            "desc": "Send an action message",
+            "usage": "/me <action>"
+        },
+        "say": {
+            "desc": "Send text literally, even if it starts with a slash",
+            "usage": "/say <text>"
+        },
+        "nick": {
+            "desc": "Change your nickname in this room",
+            "usage": "/nick <newnick>",
+            "changed": "You are now known as {{nick}}"
+        },
+        "part": {
+            "desc": "Leave this room",
+            "usage": "/part"
+        },
+        "topic": {
+            "desc": "View or set the room subject",
+            "usage": "/topic [text]",
+            "set": "Subject updated",
+            "current": "Current subject: {{subject}}",
+            "none": "No subject is set"
+        },
+        "kick": {
+            "desc": "Remove someone from the room",
+            "usage": "/kick <nick> [reason]",
+            "done": "Kicked {{nick}}"
+        },
+        "ban": {
+            "desc": "Ban someone from the room",
+            "usage": "/ban <nick|jid> [reason]",
+            "done": "Banned {{target}}"
+        },
+        "invite": {
+            "desc": "Invite someone to the room",
+            "usage": "/invite [jid] [reason]",
+            "done": "Invitation sent to {{target}}"
+        },
+        "config": {
+            "desc": "Open the room configuration",
+            "usage": "/config"
+        },
+        "christmas": {
+            "desc": "Send a festive surprise"
+        },
+        "indicator": {
+            "willRun": "This will run a command",
+            "unknownHint": "Unknown command. Use /say to send it literally."
+        },
+        "error": {
+            "unknown": "Unknown command: /{{name}}",
+            "moderatorOnly": "Only moderators can do that",
+            "adminOnly": "Only admins can do that",
+            "ownerOnly": "Only the room owner can do that",
+            "needNick": "Please provide a nickname",
+            "needTarget": "Please provide a nickname or address",
+            "userNotFound": "No one named {{nick}} is here",
+            "nickInUse": "The nickname {{nick}} is already in use",
+            "nickFailed": "Could not change your nickname"
+        }
     }
 }

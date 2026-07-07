@@ -1309,5 +1309,73 @@
     "reactions": {
         "mention": "{{emoji}} {{name}} zareagoval na '{{preview}}'",
         "see": "Zobrazit"
+    },
+    "commands": {
+        "help": {
+            "title": "Dostupné příkazy",
+            "desc": "Zobrazit dostupné příkazy",
+            "usage": "/help"
+        },
+        "me": {
+            "desc": "Odeslat zprávu o akci",
+            "usage": "/me <action>"
+        },
+        "say": {
+            "desc": "Odeslat text doslovně, i když začíná lomítkem",
+            "usage": "/say <text>"
+        },
+        "nick": {
+            "desc": "Změnit vaši přezdívku v této místnosti",
+            "usage": "/nick <newnick>",
+            "changed": "Nyní jste známi jako {{nick}}"
+        },
+        "part": {
+            "desc": "Opustit tuto místnost",
+            "usage": "/part"
+        },
+        "topic": {
+            "desc": "Zobrazit nebo nastavit téma místnosti",
+            "usage": "/topic [text]",
+            "set": "Téma aktualizováno",
+            "current": "Aktuální téma: {{subject}}",
+            "none": "Není nastaveno žádné téma"
+        },
+        "kick": {
+            "desc": "Odebrat někoho z místnosti",
+            "usage": "/kick <nick> [reason]",
+            "done": "Vyhozen {{nick}}"
+        },
+        "ban": {
+            "desc": "Zablokovat někoho v místnosti",
+            "usage": "/ban <nick|jid> [reason]",
+            "done": "Zablokován {{target}}"
+        },
+        "invite": {
+            "desc": "Pozvat někoho do místnosti",
+            "usage": "/invite [jid] [reason]",
+            "done": "Pozvánka odeslána uživateli {{target}}"
+        },
+        "config": {
+            "desc": "Otevřít nastavení místnosti",
+            "usage": "/config"
+        },
+        "christmas": {
+            "desc": "Odeslat sváteční překvapení"
+        },
+        "indicator": {
+            "willRun": "Tímto se spustí příkaz",
+            "unknownHint": "Neznámý příkaz. Použijte /say k doslovnému odeslání."
+        },
+        "error": {
+            "unknown": "Neznámý příkaz: /{{name}}",
+            "moderatorOnly": "Toto mohou provádět pouze moderátoři",
+            "adminOnly": "Toto mohou provádět pouze administrátoři",
+            "ownerOnly": "Toto může provádět pouze vlastník místnosti",
+            "needNick": "Zadejte prosím přezdívku",
+            "needTarget": "Zadejte prosím přezdívku nebo adresu",
+            "userNotFound": "Nikdo se jménem {{nick}} tu není",
+            "nickInUse": "Přezdívka {{nick}} se již používá",
+            "nickFailed": "Nepodařilo se změnit vaši přezdívku"
+        }
     }
 }

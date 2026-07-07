@@ -1305,5 +1305,73 @@
     "reactions": {
         "mention": "{{emoji}} {{name}} reagerede på '{{preview}}'",
         "see": "Vis"
+    },
+    "commands": {
+        "help": {
+            "title": "Tilgængelige kommandoer",
+            "desc": "Vis tilgængelige kommandoer",
+            "usage": "/help"
+        },
+        "me": {
+            "desc": "Send en handlingsbesked",
+            "usage": "/me <action>"
+        },
+        "say": {
+            "desc": "Send tekst bogstaveligt, selv hvis den starter med en skråstreg",
+            "usage": "/say <text>"
+        },
+        "nick": {
+            "desc": "Skift dit kaldenavn i dette rum",
+            "usage": "/nick <newnick>",
+            "changed": "Du er nu kendt som {{nick}}"
+        },
+        "part": {
+            "desc": "Forlad dette rum",
+            "usage": "/part"
+        },
+        "topic": {
+            "desc": "Vis eller angiv rummets emne",
+            "usage": "/topic [text]",
+            "set": "Emne opdateret",
+            "current": "Aktuelt emne: {{subject}}",
+            "none": "Der er ikke angivet noget emne"
+        },
+        "kick": {
+            "desc": "Fjern nogen fra rummet",
+            "usage": "/kick <nick> [reason]",
+            "done": "Sparkede {{nick}} ud"
+        },
+        "ban": {
+            "desc": "Bandlys nogen fra rummet",
+            "usage": "/ban <nick|jid> [reason]",
+            "done": "Bandlyste {{target}}"
+        },
+        "invite": {
+            "desc": "Inviter nogen til rummet",
+            "usage": "/invite [jid] [reason]",
+            "done": "Invitation sendt til {{target}}"
+        },
+        "config": {
+            "desc": "Åbn rumkonfigurationen",
+            "usage": "/config"
+        },
+        "christmas": {
+            "desc": "Send en festlig overraskelse"
+        },
+        "indicator": {
+            "willRun": "Dette vil køre en kommando",
+            "unknownHint": "Ukendt kommando. Brug /say for at sende den bogstaveligt."
+        },
+        "error": {
+            "unknown": "Ukendt kommando: /{{name}}",
+            "moderatorOnly": "Kun moderatorer kan gøre det",
+            "adminOnly": "Kun administratorer kan gøre det",
+            "ownerOnly": "Kun rummets ejer kan gøre det",
+            "needNick": "Angiv venligst et kaldenavn",
+            "needTarget": "Angiv venligst et kaldenavn eller en adresse",
+            "userNotFound": "Der er ingen ved navn {{nick}} her",
+            "nickInUse": "Kaldenavnet {{nick}} er allerede i brug",
+            "nickFailed": "Dit kaldenavn kunne ikke ændres"
+        }
     }
 }

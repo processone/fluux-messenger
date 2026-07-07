@@ -1307,5 +1307,73 @@
     "reactions": {
         "mention": "{{emoji}} {{name}} reageeris sõnumile '{{preview}}'",
         "see": "Vaata"
+    },
+    "commands": {
+        "help": {
+            "title": "Saadaolevad käsud",
+            "desc": "Kuva saadaolevad käsud",
+            "usage": "/help"
+        },
+        "me": {
+            "desc": "Saada tegevussõnum",
+            "usage": "/me <action>"
+        },
+        "say": {
+            "desc": "Saada tekst sõna-sõnalt, isegi kui see algab kaldkriipsuga",
+            "usage": "/say <text>"
+        },
+        "nick": {
+            "desc": "Muuda oma hüüdnime selles toas",
+            "usage": "/nick <newnick>",
+            "changed": "Sind tuntakse nüüd kui {{nick}}"
+        },
+        "part": {
+            "desc": "Lahku sellest toast",
+            "usage": "/part"
+        },
+        "topic": {
+            "desc": "Vaata või määra toa teema",
+            "usage": "/topic [text]",
+            "set": "Teema uuendatud",
+            "current": "Praegune teema: {{subject}}",
+            "none": "Teemat pole määratud"
+        },
+        "kick": {
+            "desc": "Eemalda keegi toast",
+            "usage": "/kick <nick> [reason]",
+            "done": "{{nick}} visati välja"
+        },
+        "ban": {
+            "desc": "Keela kellelegi toale juurdepääs",
+            "usage": "/ban <nick|jid> [reason]",
+            "done": "{{target}} keelati"
+        },
+        "invite": {
+            "desc": "Kutsu keegi tuppa",
+            "usage": "/invite [jid] [reason]",
+            "done": "Kutse saadeti kasutajale {{target}}"
+        },
+        "config": {
+            "desc": "Ava toa seaded",
+            "usage": "/config"
+        },
+        "christmas": {
+            "desc": "Saada pidulik üllatus"
+        },
+        "indicator": {
+            "willRun": "See käivitab käsu",
+            "unknownHint": "Tundmatu käsk. Kasuta /say, et saata see sõna-sõnalt."
+        },
+        "error": {
+            "unknown": "Tundmatu käsk: /{{name}}",
+            "moderatorOnly": "Seda saavad teha ainult moderaatorid",
+            "adminOnly": "Seda saavad teha ainult administraatorid",
+            "ownerOnly": "Seda saab teha ainult toa omanik",
+            "needNick": "Palun sisesta hüüdnimi",
+            "needTarget": "Palun sisesta hüüdnimi või aadress",
+            "userNotFound": "Siin pole kedagi nimega {{nick}}",
+            "nickInUse": "Hüüdnimi {{nick}} on juba kasutusel",
+            "nickFailed": "Sinu hüüdnime ei õnnestunud muuta"
+        }
     }
 }

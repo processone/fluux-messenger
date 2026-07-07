@@ -1305,5 +1305,73 @@
     "reactions": {
         "mention": "{{emoji}} {{name}} 回应了 '{{preview}}'",
         "see": "查看"
+    },
+    "commands": {
+        "help": {
+            "title": "可用命令",
+            "desc": "列出可用命令",
+            "usage": "/help"
+        },
+        "me": {
+            "desc": "发送一条动作消息",
+            "usage": "/me <action>"
+        },
+        "say": {
+            "desc": "按原样发送文本，即使它以斜杠开头",
+            "usage": "/say <text>"
+        },
+        "nick": {
+            "desc": "更改你在此房间中的昵称",
+            "usage": "/nick <newnick>",
+            "changed": "你现在的昵称是 {{nick}}"
+        },
+        "part": {
+            "desc": "离开此房间",
+            "usage": "/part"
+        },
+        "topic": {
+            "desc": "查看或设置房间主题",
+            "usage": "/topic [text]",
+            "set": "主题已更新",
+            "current": "当前主题：{{subject}}",
+            "none": "未设置主题"
+        },
+        "kick": {
+            "desc": "将某人移出房间",
+            "usage": "/kick <nick> [reason]",
+            "done": "已踢出 {{nick}}"
+        },
+        "ban": {
+            "desc": "禁止某人进入房间",
+            "usage": "/ban <nick|jid> [reason]",
+            "done": "已封禁 {{target}}"
+        },
+        "invite": {
+            "desc": "邀请某人加入房间",
+            "usage": "/invite [jid] [reason]",
+            "done": "已向 {{target}} 发送邀请"
+        },
+        "config": {
+            "desc": "打开房间配置",
+            "usage": "/config"
+        },
+        "christmas": {
+            "desc": "发送一个节日惊喜"
+        },
+        "indicator": {
+            "willRun": "这将执行一条命令",
+            "unknownHint": "未知命令。使用 /say 按原样发送。"
+        },
+        "error": {
+            "unknown": "未知命令：/{{name}}",
+            "moderatorOnly": "只有主持人才能执行此操作",
+            "adminOnly": "只有管理员才能执行此操作",
+            "ownerOnly": "只有房间所有者才能执行此操作",
+            "needNick": "请提供一个昵称",
+            "needTarget": "请提供一个昵称或地址",
+            "userNotFound": "这里没有名为 {{nick}} 的人",
+            "nickInUse": "昵称 {{nick}} 已被占用",
+            "nickFailed": "无法更改你的昵称"
+        }
     }
 }
