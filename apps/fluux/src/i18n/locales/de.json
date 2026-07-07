@@ -1230,7 +1230,7 @@
         "filteringRooms": "Räume werden gefiltert...",
         "filteringCommands": "Befehle werden gefiltert...",
         "searchMessages": "Search messages for \"{{query}}\"",
-        "unread": "Ungelesen"
+        "attention": "Benötigt Aufmerksamkeit"
     },
     "dataFormHints": {
         "muc#roomconfig_roomname": "Der Anzeigename in der Raumliste und der Kopfzeile.",

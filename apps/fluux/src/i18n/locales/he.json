@@ -1229,7 +1229,7 @@
         "filteringRooms": "מסנן חדרים...",
         "filteringCommands": "מסנן פקודות...",
         "searchMessages": "חיפוש הודעות עבור \"{{query}}\"",
-        "unread": "לא נקראו"
+        "attention": "דורש תשומת לב"
     },
     "dataFormHints": {
         "muc#roomconfig_roomname": "שם התצוגה המוצג ברשימות החדרים ובכותרת.",

@@ -1232,7 +1232,7 @@
         "filteringRooms": "Filtrování místností...",
         "filteringCommands": "Filtrování příkazů...",
         "searchMessages": "Search messages for \"{{query}}\"",
-        "unread": "Nepřečtené"
+        "attention": "Vyžaduje pozornost"
     },
     "dataFormHints": {
         "muc#roomconfig_roomname": "Zobrazovaný název v seznamu místností a v záhlaví.",

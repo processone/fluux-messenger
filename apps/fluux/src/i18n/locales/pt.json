@@ -1231,7 +1231,7 @@
         "filteringRooms": "A filtrar salas...",
         "filteringCommands": "A filtrar comandos...",
         "searchMessages": "Search messages for \"{{query}}\"",
-        "unread": "Não lidas"
+        "attention": "Requer atenção"
     },
     "dataFormHints": {
         "muc#roomconfig_roomname": "O nome exibido na lista de salas e no cabeçalho.",

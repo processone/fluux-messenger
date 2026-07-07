@@ -1232,7 +1232,7 @@
         "filteringRooms": "تصفية الغرف...",
         "filteringCommands": "تصفية الأوامر...",
         "searchMessages": "البحث في الرسائل عن \"{{query}}\"",
-        "unread": "غير مقروءة"
+        "attention": "تحتاج إلى انتباه"
     },
     "dataFormHints": {
         "muc#roomconfig_roomname": "الاسم المعروض في قوائم الغرف والعنوان.",

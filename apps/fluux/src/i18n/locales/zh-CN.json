@@ -1228,7 +1228,7 @@
         "filteringRooms": "正在筛选房间…",
         "filteringCommands": "正在筛选命令…",
         "searchMessages": "搜索包含“{{query}}”的消息",
-        "unread": "未读"
+        "attention": "需要关注"
     },
     "dataFormHints": {
         "muc#roomconfig_roomname": "在房间列表和标题栏中显示的名称。",

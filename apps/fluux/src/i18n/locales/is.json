@@ -1228,7 +1228,7 @@
         "filteringRooms": "Sía herbergi...",
         "filteringCommands": "Sía skipanir...",
         "searchMessages": "Search messages for \"{{query}}\"",
-        "unread": "Ólesin"
+        "attention": "Þarfnast athygli"
     },
     "dataFormHints": {
         "muc#roomconfig_roomname": "Birtingarnafnið sem birtist í herbergjalista og haus.",

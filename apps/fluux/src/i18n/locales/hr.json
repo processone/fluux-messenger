@@ -1229,7 +1229,7 @@
         "filteringRooms": "Filtriranje soba...",
         "filteringCommands": "Filtriranje naredbi...",
         "searchMessages": "Search messages for \"{{query}}\"",
-        "unread": "Nepročitano"
+        "attention": "Zahtijeva pažnju"
     },
     "dataFormHints": {
         "muc#roomconfig_roomname": "Prikazano ime na popisu soba i u zaglavlju.",
