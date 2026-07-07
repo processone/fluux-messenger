@@ -91,12 +91,19 @@ export function UserInfoPopover({ contact, jid, occupantJid, role, affiliation, 
   useClickOutside(popoverRef, () => setIsOpen(false), isOpen)
   useFocusTrap(popoverRef, { active: isOpen })
 
-  // Close on scroll (message list or any parent)
+  // Close on scroll of a container that actually holds the trigger (e.g. the
+  // message list the anchor lives in). Capture phase catches scrolls on any
+  // ancestor, but we ignore unrelated scrolls elsewhere in the app so the
+  // popover isn't yanked away when, say, the sidebar list scrolls.
   useEffect(() => {
     if (!isOpen) return
 
-    const handleScroll = () => setIsOpen(false)
-    // Use capture to catch scroll events from any scrolling container
+    const handleScroll = (e: Event) => {
+      const target = e.target
+      if (target instanceof Node && target.contains(triggerRef.current)) {
+        setIsOpen(false)
+      }
+    }
     window.addEventListener('scroll', handleScroll, true)
     return () => window.removeEventListener('scroll', handleScroll, true)
   }, [isOpen])

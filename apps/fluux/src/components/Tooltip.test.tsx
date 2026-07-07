@@ -142,6 +142,64 @@ describe('Tooltip', () => {
     })
   })
 
+  describe('scroll dismissal', () => {
+    it('keeps the tooltip open when an unrelated element scrolls', async () => {
+      vi.useFakeTimers()
+      render(
+        <div>
+          <div data-testid="unrelated-scroller">Some scrollable content</div>
+          <Tooltip content="Test tooltip" delay={0}>
+            <button>Hover me</button>
+          </Tooltip>
+        </div>
+      )
+
+      const trigger = screen.getByText('Hover me').parentElement!
+      fireEvent.mouseEnter(trigger)
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0)
+      })
+
+      expect(screen.getByRole('tooltip')).toBeInTheDocument()
+
+      // An unrelated container (e.g. the message list auto-scrolling to bottom
+      // when the main view mounts) scrolls — this must NOT dismiss the tooltip.
+      const unrelated = screen.getByTestId('unrelated-scroller')
+      act(() => {
+        unrelated.dispatchEvent(new Event('scroll', { bubbles: false }))
+      })
+
+      expect(screen.getByRole('tooltip')).toBeInTheDocument()
+    })
+
+    it('hides the tooltip when a scroll moves the trigger', async () => {
+      vi.useFakeTimers()
+      render(
+        <Tooltip content="Test tooltip" delay={0}>
+          <button>Hover me</button>
+        </Tooltip>
+      )
+
+      const trigger = screen.getByText('Hover me').parentElement!
+      fireEvent.mouseEnter(trigger)
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0)
+      })
+
+      expect(screen.getByRole('tooltip')).toBeInTheDocument()
+
+      // A scroll whose target contains the trigger (e.g. page/ancestor scroll)
+      // can move the trigger, so the tooltip should hide.
+      act(() => {
+        document.dispatchEvent(new Event('scroll'))
+      })
+
+      expect(screen.queryByRole('tooltip')).not.toBeInTheDocument()
+    })
+  })
+
   describe('disabled state', () => {
     it('should not show tooltip when disabled', async () => {
       vi.useFakeTimers()
