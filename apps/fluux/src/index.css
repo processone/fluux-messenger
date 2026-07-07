@@ -1396,6 +1396,27 @@ input[type="range"]::-moz-range-thumb {
 .scrim-in  { animation: scrim-in var(--fluux-duration-base) var(--fluux-ease-standard); }
 .scrim-out { animation: scrim-out var(--fluux-duration-fast) var(--fluux-ease-standard) forwards; }
 
+/* ── Cross-theme aurora harmony ────────────────────────────────────────────
+   The aurora quartet (--fluux-aurora-1..4) drives the header hairline, the send
+   button, the typing dots and the modal scrim. Aurora (the default theme) keeps
+   its explicit teal→violet / muted-dawn signature from the :root / .light token
+   defaults above. Every OTHER theme derives the quartet from its own accent hue
+   instead of inheriting Aurora's teal→violet, so those accents harmonize with
+   each theme's palette. useTheme sets data-theme=<id> on <html>.
+
+   Lightness is floored well above mid so the dark ink icon on the send-button
+   solid fill (reduced-transparency / Linux fallback) clears WCAG AA on every
+   hue — guarded by auroraDerivation.test.ts. A theme may still override
+   --fluux-aurora-* directly for a hand-tuned quartet (see docs/THEMES.md).
+   Follow-up: hand-tune quartets for the busier builtin themes (e.g. gruvbox,
+   dracula) where a pure hue-fan around the accent is less characterful. */
+:root[data-theme]:not([data-theme='fluux']) {
+  --fluux-aurora-1: hsl(calc(var(--fluux-accent-h) - 50), var(--fluux-accent-s), clamp(66%, calc(var(--fluux-accent-l) + 14%), 80%));
+  --fluux-aurora-2: hsl(calc(var(--fluux-accent-h) - 18), var(--fluux-accent-s), clamp(66%, calc(var(--fluux-accent-l) + 14%), 80%));
+  --fluux-aurora-3: hsl(calc(var(--fluux-accent-h) + 16), var(--fluux-accent-s), clamp(66%, calc(var(--fluux-accent-l) + 14%), 80%));
+  --fluux-aurora-4: hsl(calc(var(--fluux-accent-h) + 50), var(--fluux-accent-s), clamp(66%, calc(var(--fluux-accent-l) + 14%), 80%));
+}
+
 /* Aurora horizon: a 1px identity hairline riding ON TOP of the header's
    standard divider (which stays underneath — the audit's seam-visibility
    guarantees are untouched). Fades at both ends; the tokens flip to the

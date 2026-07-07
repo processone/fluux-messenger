@@ -239,6 +239,10 @@ export function useTheme() {
 
     // 2. Apply theme variable overrides
     const theme = getActiveTheme()
+    // Expose the active theme id so CSS can scope per-theme rules — notably the
+    // aurora-quartet derivation, which harmonizes non-Aurora themes with their
+    // own accent while Aurora keeps its explicit teal→violet signature.
+    root.dataset.theme = theme?.id || 'fluux'
     const modeVars = theme?.variables?.[resolved]
     applyThemeVariables(modeVars, previousVarsRef)
 

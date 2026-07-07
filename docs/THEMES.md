@@ -125,10 +125,22 @@ From these, the app computes:
 - `--fluux-search-highlight-bg` — translucent accent for search match highlighting
 - `--fluux-search-highlight-text` — text color inside search highlights
 - `--fluux-focus-ring` — translucent accent for focus outlines
+- `--fluux-aurora-1..4` — the **aurora quartet** used by the header hairline, the send button, the typing-indicator dots and the modal scrim. For every theme except Aurora, these are derived as a gentle hue-fan around your accent (`accent-h` ± ~50°), so those aurora accents harmonize with your palette instead of showing Aurora's teal→violet.
 
 The `--fluux-text-on-accent` color is calculated automatically using WCAG relative luminance. Light accents (e.g. Yellow or Pink in dark mode) get black text; dark accents (e.g. Blue in light mode) get white text. This ensures buttons, active icon rail tabs, and other accent-colored elements remain readable with any accent color and mode combination. Theme authors do not need to set this variable — it adapts automatically.
 
 **Tip:** Lower the lightness by ~8-10% for light mode so the accent remains readable on light backgrounds.
+
+**Aurora accents.** The `--fluux-aurora-1..4` quartet is derived from your accent automatically — you don't need to set it. The built-in **Aurora** theme is the one exception: it keeps its explicit teal→violet (dark) / muted-dawn (light) signature. If the auto-derived hue-fan isn't right for your palette, you can override the four tokens with a hand-tuned quartet in `variables.dark` / `variables.light`:
+
+```json
+"--fluux-aurora-1": "#2FE0C0",
+"--fluux-aurora-2": "#4FB6E8",
+"--fluux-aurora-3": "#7C8CFF",
+"--fluux-aurora-4": "#A78BFA"
+```
+
+The derivation floors the quartet's lightness so the send button's dark ink icon stays readable on every hue; `auroraDerivation.test.ts` guards this. If you hand-tune the quartet, keep the stops light enough (roughly L ≥ 60%) that the ink icon clears WCAG 3:1 on the send-button fill.
 
 ### Typography
 
