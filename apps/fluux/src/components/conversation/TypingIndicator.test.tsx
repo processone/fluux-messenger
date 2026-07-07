@@ -55,18 +55,17 @@ describe('TypingIndicator', () => {
   })
 
   describe('animated dots', () => {
-    it('should render three animated dots', () => {
+    it('should render three aurora typing dots', () => {
       render(<TypingIndicator typingUsers={['Alice']} />)
-      const dots = document.querySelectorAll('.animate-bounce')
+      const dots = document.querySelectorAll('.typing-dot')
       expect(dots).toHaveLength(3)
+      // shape is retained; bounce + aurora-hue shimmer (and their stagger) live in CSS
+      dots.forEach((dot) => expect(dot).toHaveClass('rounded-full'))
     })
 
-    it('should have staggered animation delays', () => {
+    it('marks the dots decorative (the text conveys who is typing)', () => {
       render(<TypingIndicator typingUsers={['Alice']} />)
-      const dots = document.querySelectorAll('.animate-bounce')
-      expect(dots[0]).toHaveStyle({ animationDelay: '0ms' })
-      expect(dots[1]).toHaveStyle({ animationDelay: '150ms' })
-      expect(dots[2]).toHaveStyle({ animationDelay: '300ms' })
+      expect(document.querySelector('.typing-dot')?.closest('[aria-hidden="true"]')).not.toBeNull()
     })
   })
 

@@ -1413,6 +1413,32 @@ input[type="range"]::-moz-range-thumb {
   opacity: 0.65;
 }
 
+/* Typing indicator dots: they bounce and shimmer through the aurora hues — a
+   slow traveling wave of aurora light (staggered per dot). Reduced motion
+   stills both and leaves the dots a single aurora tone. */
+@keyframes typing-dot-bounce {
+  0%, 80%, 100% { transform: translateY(0); }
+  40% { transform: translateY(-3px); }
+}
+@keyframes typing-dot-aurora {
+  0%   { background-color: var(--fluux-aurora-1); }
+  25%  { background-color: var(--fluux-aurora-2); }
+  50%  { background-color: var(--fluux-aurora-3); }
+  75%  { background-color: var(--fluux-aurora-4); }
+  100% { background-color: var(--fluux-aurora-1); }
+}
+.typing-dot {
+  background-color: var(--fluux-aurora-3);
+  animation: typing-dot-bounce 1.2s ease-in-out infinite, typing-dot-aurora 2.4s linear infinite;
+}
+.typing-dot:nth-child(1) { animation-delay: 0ms, 0ms; }
+.typing-dot:nth-child(2) { animation-delay: 150ms, -0.8s; }
+.typing-dot:nth-child(3) { animation-delay: 300ms, -1.6s; }
+[data-motion="reduced"] .typing-dot {
+  animation: none;
+  background-color: var(--fluux-aurora-3);
+}
+
 /* Aurora send button: liquid glass over an aurora glow, only when a message is
    ready to send. Disabled = the previous muted icon. Reduced transparency (and
    thereby also the platforms where glass is off) falls back to the validated
