@@ -9,15 +9,15 @@ beforeAll(() => {
 })
 
 // Mock data
-const mockConversations: Array<{ id: string; name: string; unreadCount: number; type: 'chat'; lastMessage?: { body: string } }> = [
-  { id: 'alice@example.com', name: 'Alice Smith', unreadCount: 0, type: 'chat', lastMessage: { body: 'Can we discuss the deployment?' } },
-  { id: 'bob@example.com', name: 'Bob Jones', unreadCount: 2, type: 'chat', lastMessage: { body: 'The exponential backoff is working now' } },
+const mockConversations: Array<{ id: string; name: string; unreadCount: number; type: 'chat'; lastMessage?: { body: string; timestamp: Date } }> = [
+  { id: 'alice@example.com', name: 'Alice Smith', unreadCount: 0, type: 'chat', lastMessage: { body: 'Can we discuss the deployment?', timestamp: new Date('2026-07-07T09:00:00Z') } },
+  { id: 'bob@example.com', name: 'Bob Jones', unreadCount: 2, type: 'chat', lastMessage: { body: 'The exponential backoff is working now', timestamp: new Date('2026-07-07T10:00:00Z') } },
 ]
 
-const mockRooms: Array<{ jid: string; name: string; joined: boolean; unreadCount?: number; mentionsCount?: number; lastMessage?: { body: string } }> = [
-  { jid: 'dev@conference.example.com', name: 'Development', joined: true, unreadCount: 0, mentionsCount: 0, lastMessage: { body: 'PR merged successfully' } },
+const mockRooms: Array<{ jid: string; name: string; joined: boolean; unreadCount?: number; mentionsCount?: number; lastMessage?: { body: string; timestamp?: Date } }> = [
+  { jid: 'dev@conference.example.com', name: 'Development', joined: true, unreadCount: 0, mentionsCount: 0, lastMessage: { body: 'PR merged successfully', timestamp: new Date('2026-07-07T08:00:00Z') } },
   { jid: 'general@conference.example.com', name: 'General Chat', joined: true, unreadCount: 3, mentionsCount: 0 },
-  { jid: 'announce@conference.example.com', name: 'Announcements', joined: true, unreadCount: 1, mentionsCount: 1 },
+  { jid: 'announce@conference.example.com', name: 'Announcements', joined: true, unreadCount: 1, mentionsCount: 1, lastMessage: { body: 'Release is out', timestamp: new Date('2026-07-07T11:00:00Z') } },
 ]
 
 const mockBookmarkedRooms = [
@@ -106,6 +106,7 @@ vi.mock('react-i18next', () => ({
         'commandPalette.filteringCommands': 'Filtering commands...',
         'commandPalette.searchMessages': 'Search messages for "{{query}}"',
         'commandPalette.unread': 'Unread',
+        'commandPalette.attention': 'Needs attention',
         'sidebar.messages': 'Messages',
         'sidebar.rooms': 'Rooms',
         'sidebar.connections': 'Connections',
@@ -392,8 +393,9 @@ describe('CommandPalette', () => {
     it('should select first item by default', () => {
       render(<CommandPalette {...defaultProps} />)
 
-      // Bob (unreadCount 2) is in the Unread section, which comes first
-      const firstItem = screen.getByText('Bob Jones').closest('button')
+      // Announcements (mention, 11:00) leads the Needs attention group, ahead of
+      // Bob's DM (10:00) — interleaved by recency.
+      const firstItem = screen.getByText('Announcements').closest('button')
       expect(firstItem).toHaveAttribute('data-selected', 'true')
     })
 
@@ -403,8 +405,8 @@ describe('CommandPalette', () => {
 
       fireEvent.keyDown(container!, { key: 'ArrowDown' })
 
-      // Second item is Alice (in the Messages section, after the Unread section)
-      const secondItem = screen.getByText('Alice Smith').closest('button')
+      // Second item is Bob (still in the Needs attention group, after Announcements)
+      const secondItem = screen.getByText('Bob Jones').closest('button')
       expect(secondItem).toHaveAttribute('data-selected', 'true')
     })
 
@@ -412,15 +414,15 @@ describe('CommandPalette', () => {
       render(<CommandPalette {...defaultProps} />)
       const container = screen.getByPlaceholderText('Go to...').closest('div')?.parentElement
 
-      // Move down first
+      // Move down first (index 0 -> 1 -> 2, i.e. Announcements -> Bob -> Alice)
       fireEvent.keyDown(container!, { key: 'ArrowDown' })
       fireEvent.keyDown(container!, { key: 'ArrowDown' })
 
       // Then move up
       fireEvent.keyDown(container!, { key: 'ArrowUp' })
 
-      // Back to index 1 = Alice (Messages section)
-      const secondItem = screen.getByText('Alice Smith').closest('button')
+      // Back to index 1 = Bob (Needs attention group)
+      const secondItem = screen.getByText('Bob Jones').closest('button')
       expect(secondItem).toHaveAttribute('data-selected', 'true')
     })
 
@@ -447,8 +449,8 @@ describe('CommandPalette', () => {
         fireEvent.keyDown(container!, { key: 'ArrowUp' })
       }
 
-      // First item should still be selected (Bob, in the Unread section)
-      const firstItem = screen.getByText('Bob Jones').closest('button')
+      // First item should still be selected (Announcements, leading the Needs attention group)
+      const firstItem = screen.getByText('Announcements').closest('button')
       expect(firstItem).toHaveAttribute('data-selected', 'true')
     })
 
@@ -487,8 +489,9 @@ describe('CommandPalette', () => {
 
       fireEvent.keyDown(container!, { key: 'Enter' })
 
-      // First item is Bob (unread, in the Unread section), should set active conversation
-      expect(mockSetActiveConversation).toHaveBeenCalledWith('bob@example.com')
+      // First item is Announcements (mention room, leading the Needs attention group),
+      // should set active room
+      expect(mockSetActiveRoom).toHaveBeenCalledWith('announce@conference.example.com')
       expect(defaultProps.onClose).toHaveBeenCalled()
     })
 
@@ -671,8 +674,8 @@ describe('CommandPalette', () => {
       rerender(<CommandPalette {...defaultProps} isOpen={false} />)
       rerender(<CommandPalette {...defaultProps} isOpen={true} />)
 
-      // First item should be selected again (Bob, in the Unread section)
-      const firstItem = screen.getByText('Bob Jones').closest('button')
+      // First item should be selected again (Announcements, leading the Needs attention group)
+      const firstItem = screen.getByText('Announcements').closest('button')
       expect(firstItem).toHaveAttribute('data-selected', 'true')
     })
   })
@@ -702,7 +705,9 @@ describe('CommandPalette', () => {
       render(<CommandPalette {...defaultProps} />)
       const container = screen.getByPlaceholderText('Go to...').closest('div')?.parentElement
 
-      // Navigate to Alice Smith (second item — Bob is first in Unread section)
+      // Navigate to Alice Smith (third item — Announcements then Bob lead the
+      // Needs attention group, ahead of Alice in the Messages section)
+      fireEvent.keyDown(container!, { key: 'ArrowDown' })
       fireEvent.keyDown(container!, { key: 'ArrowDown' })
 
       // Verify Alice is selected
@@ -720,9 +725,9 @@ describe('CommandPalette', () => {
       const { rerender } = render(<CommandPalette {...defaultProps} />)
       const container = screen.getByPlaceholderText('Go to...').closest('div')?.parentElement
 
-      // First selection: Bob (first item, in Unread section)
+      // First selection: Announcements (first item, leading the Needs attention group)
       fireEvent.keyDown(container!, { key: 'Enter' })
-      expect(mockSetActiveConversation).toHaveBeenLastCalledWith('bob@example.com')
+      expect(mockSetActiveRoom).toHaveBeenLastCalledWith('announce@conference.example.com')
 
       vi.clearAllMocks()
 
@@ -732,11 +737,11 @@ describe('CommandPalette', () => {
 
       const container2 = screen.getByPlaceholderText('Go to...').closest('div')?.parentElement
 
-      // Navigate to Alice (index 1) and select
+      // Navigate to Bob (index 1) and select
       fireEvent.keyDown(container2!, { key: 'ArrowDown' })
       fireEvent.keyDown(container2!, { key: 'Enter' })
 
-      expect(mockSetActiveConversation).toHaveBeenLastCalledWith('alice@example.com')
+      expect(mockSetActiveConversation).toHaveBeenLastCalledWith('bob@example.com')
     })
 
     it('should select correct item after filtering and navigating', () => {
@@ -790,14 +795,14 @@ describe('CommandPalette', () => {
       fireEvent.keyDown(container!, { key: 'ArrowDown' })
       fireEvent.keyDown(container!, { key: 'ArrowUp' })
 
-      // Third item in the list should be a room (Announcements — tier 0, has mention)
-      // Order: Bob (Unread), Alice (Messages), Announcements (Rooms tier 0), General Chat (tier 1), Development (tier 2)...
-      const announceRoom = screen.getByText('Announcements').closest('button')
-      expect(announceRoom).toHaveAttribute('data-selected', 'true')
+      // Third item in the list should be Alice (read DM, in the Messages section)
+      // Order: Announcements + Bob (Needs attention), Alice (Messages), General Chat (Rooms tier 1), Development (tier 2)...
+      const aliceItem = screen.getByText('Alice Smith').closest('button')
+      expect(aliceItem).toHaveAttribute('data-selected', 'true')
 
       fireEvent.keyDown(container!, { key: 'Enter' })
 
-      expect(mockSetActiveRoom).toHaveBeenCalledWith('announce@conference.example.com')
+      expect(mockSetActiveConversation).toHaveBeenCalledWith('alice@example.com')
     })
 
     it('should work correctly with rapid consecutive selections', () => {
@@ -809,12 +814,12 @@ describe('CommandPalette', () => {
 
         const container = screen.getByPlaceholderText('Go to...').closest('div')?.parentElement
 
-        // Navigate down to the second item (Alice, Messages section) then select —
-        // exercises index-tracking under rapid reopen, not just Enter-on-first.
+        // Navigate down to the second item (Bob, still in the Needs attention group)
+        // then select — exercises index-tracking under rapid reopen, not just Enter-on-first.
         fireEvent.keyDown(container!, { key: 'ArrowDown' })
         fireEvent.keyDown(container!, { key: 'Enter' })
 
-        expect(mockSetActiveConversation).toHaveBeenCalledWith('alice@example.com')
+        expect(mockSetActiveConversation).toHaveBeenCalledWith('bob@example.com')
 
         // Close and reopen
         rerender(<CommandPalette {...defaultProps} isOpen={false} />)
@@ -1246,20 +1251,61 @@ describe('CommandPalette', () => {
   })
 
   describe('Unread section', () => {
-    it('shows unread DMs under an Unread header, read DMs under Messages, no duplication', () => {
+    it('shows unread DMs under a Needs attention header, read DMs under Messages, no duplication', () => {
       render(<CommandPalette {...defaultProps} />)
 
-      // The Unread section header is present
-      expect(screen.getByText('Unread')).toBeInTheDocument()
+      // The section header is now "Needs attention" (merges unread DMs + mention rooms)
+      expect(screen.getByText('Needs attention')).toBeInTheDocument()
 
       // Bob (unreadCount 2) appears exactly once, Alice (unreadCount 0) appears exactly once
       expect(screen.getAllByText('Bob Jones')).toHaveLength(1)
       expect(screen.getAllByText('Alice Smith')).toHaveLength(1)
 
-      // Bob's row is above Alice's row (Unread section precedes Messages section)
+      // Bob's row is above Alice's row (Needs attention section precedes Messages section)
       const bob = screen.getByText('Bob Jones')
       const alice = screen.getByText('Alice Smith')
       expect(bob.compareDocumentPosition(alice) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    })
+  })
+
+  describe('Needs attention group', () => {
+    // Groups render as `<div key={group.key}><div class="command-group-label">{label}</div>{...items}</div>`
+    // (see CommandPalette.tsx render section) — there is no role="group" wrapper. The label text node's
+    // own element IS the label div, so scoping to the group's subtree means walking up to its parentElement
+    // (the shared wrapper `<div>` for the label + all item rows), not `.closest('div')` (which would just
+    // resolve back to the label div itself, since a div matches `closest` on itself).
+    function getGroupContainer(labelText: string): HTMLElement {
+      const label = screen.getByText(labelText)
+      return label.parentElement as HTMLElement
+    }
+
+    it('promotes a room with a mention into the attention group', () => {
+      render(<CommandPalette {...defaultProps} />)
+      const attention = getGroupContainer('Needs attention')
+      // Announcements has mentionsCount 1 -> belongs to the attention group
+      expect(within(attention).getByText('Announcements')).toBeInTheDocument()
+    })
+
+    it('does not promote an unread room without a mention', () => {
+      render(<CommandPalette {...defaultProps} />)
+      const attention = getGroupContainer('Needs attention')
+      // General Chat has unreadCount 3 but mentionsCount 0 -> stays in the rooms group
+      expect(within(attention).queryByText('General Chat')).not.toBeInTheDocument()
+    })
+
+    it('does not duplicate a promoted room in the rooms group', () => {
+      render(<CommandPalette {...defaultProps} />)
+      // Announcements appears exactly once across the whole default view
+      expect(screen.getAllByText('Announcements')).toHaveLength(1)
+    })
+
+    it('orders the attention group by most-recent activity', () => {
+      render(<CommandPalette {...defaultProps} />)
+      const attention = getGroupContainer('Needs attention')
+      // Announcements (11:00) is newer than Bob Jones' DM (10:00) -> appears first within the group
+      const announce = within(attention).getByText('Announcements')
+      const bob = within(attention).getByText('Bob Jones')
+      expect(announce.compareDocumentPosition(bob) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     })
   })
 
@@ -1371,7 +1417,8 @@ describe('CommandPalette', () => {
       render(<CommandPalette {...trackingProps} />)
       const container = screen.getByPlaceholderText('Go to...').closest('div')?.parentElement
 
-      // Bob is first (Unread section), Alice is second (Messages section). Navigate to Alice.
+      // Announcements and Bob lead the Needs attention group; Alice is third (Messages section).
+      fireEvent.keyDown(container!, { key: 'ArrowDown' })
       fireEvent.keyDown(container!, { key: 'ArrowDown' })
       fireEvent.keyDown(container!, { key: 'Enter' })
 

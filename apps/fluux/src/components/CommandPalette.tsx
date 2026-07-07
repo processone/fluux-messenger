@@ -46,6 +46,8 @@ interface CommandItem {
   unreadCount?: number
   /** Mention count for room rows (ranks a mentioned room above merely-unread ones). */
   mentionsCount?: number
+  /** Last-message time (ms) for recency ordering in the attention group. */
+  sortTimestamp?: number
   action: () => void
   keywords?: string[]
   presence?: PresenceStatus
@@ -164,21 +166,36 @@ function roomTier(item: CommandItem): number {
 // Helper: Build groups for the empty-query default view (unread-first)
 // =============================================================================
 
+// Cap on the number of items promoted into the top "Needs attention" group.
+const ATTENTION_CAP = 6
+
+// Most-recent-first; items without a timestamp sort last.
+const byRecency = (a: CommandItem, b: CommandItem) => (b.sortTimestamp ?? 0) - (a.sortTimestamp ?? 0)
+
 function buildDefaultGroups(items: CommandItem[], t: (key: string) => string): ItemGroup[] {
   const groups: ItemGroup[] = []
 
   const conversations = items.filter((i) => i.type === 'conversation')
-  const unreadConvs = conversations.filter((i) => (i.unreadCount ?? 0) > 0).slice(0, 5)
-  const readConvs = conversations.filter((i) => (i.unreadCount ?? 0) === 0).slice(0, 5)
-  if (unreadConvs.length > 0) {
-    groups.push({ key: 'unread', type: 'conversation', label: t('commandPalette.unread'), items: unreadConvs })
+  const roomItems = items.filter((i) => i.type === 'room')
+
+  // Top group: unread DMs + rooms with a mention/whisper, interleaved by recency, capped.
+  const unreadConvs = conversations.filter((i) => (i.unreadCount ?? 0) > 0)
+  const mentionRooms = roomItems.filter((i) => (i.mentionsCount ?? 0) > 0)
+  const attention = [...unreadConvs, ...mentionRooms].sort(byRecency).slice(0, ATTENTION_CAP)
+  if (attention.length > 0) {
+    groups.push({ key: 'attention', type: 'conversation', label: t('commandPalette.attention'), items: attention })
   }
+  const promotedIds = new Set(attention.map((i) => i.id))
+
+  // Read DMs stay in their own group below.
+  const readConvs = conversations.filter((i) => (i.unreadCount ?? 0) === 0).slice(0, 5)
   if (readConvs.length > 0) {
     groups.push({ key: 'conversation', type: 'conversation', label: t('sidebar.messages'), items: readConvs })
   }
 
-  const rooms = items
-    .filter((i) => i.type === 'room')
+  // Rooms group: everything not already promoted, tier-sorted (mention overflow lands at tier 0).
+  const rooms = roomItems
+    .filter((i) => !promotedIds.has(i.id))
     .sort((a, b) => roomTier(a) - roomTier(b))
     .slice(0, 4)
   if (rooms.length > 0) {
@@ -315,6 +332,7 @@ function CommandPaletteContent({
         lastMessagePreview: preview,
         lastMessageBody: conv.lastMessage?.body,
         unreadCount: conv.unreadCount,
+        sortTimestamp: conv.lastMessage?.timestamp?.getTime(),
         avatarIdentifier: conv.id,
         avatarUrl: contact?.avatar,
         action: () => selectConversation(conv.id),
@@ -367,6 +385,7 @@ function CommandPaletteContent({
         lastMessageBody: room.lastMessage?.body,
         unreadCount: room.unreadCount,
         mentionsCount: room.mentionsCount,
+        sortTimestamp: room.lastMessage?.timestamp?.getTime(),
         avatarIdentifier: room.jid,
         avatarUrl: room.avatar,
         action: () => selectRoom(room.jid),
