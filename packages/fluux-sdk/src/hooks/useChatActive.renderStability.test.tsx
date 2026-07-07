@@ -206,4 +206,25 @@ describe('useChatActive render stability', () => {
     // useChatActive should NOT re-render during background MAM sync
     expect(result.current.renderCount).toBe(rendersAfterMount)
   })
+
+  // useChatActive now sources its shared action definitions from useChatActions;
+  // its public surface must be unchanged (the actions it already exposed, plus
+  // its active-specific ones).
+  it('exposes both the composed shared actions and its active-specific actions', () => {
+    const { result } = renderHook(() => useChatActive(), { wrapper })
+    const hook = result.current as unknown as Record<string, unknown>
+    const expected = [
+      // shared (sourced from useChatActions)
+      'sendMessage', 'setActiveConversation', 'addConversation', 'deleteConversation',
+      'markAsRead', 'archiveConversation', 'unarchiveConversation', 'isArchived',
+      'sendChatState', 'sendReaction', 'sendCorrection', 'retractMessage',
+      'sendEasterEgg', 'clearAnimation', 'setDraft', 'getDraft', 'clearDraft',
+      'clearFirstNewMessageId', 'updateLastSeenMessageId', 'fetchHistory', 'fetchOlderHistory',
+      // active-specific (defined in this hook)
+      'retryMessage', 'clearTargetMessageId', 'continueChatCatchUp',
+      'loadMessagesAround', 'loadNewer', 'recenterToLatest',
+    ]
+    const missing = expected.filter((name) => typeof hook[name] !== 'function')
+    expect(missing).toEqual([])
+  })
 })

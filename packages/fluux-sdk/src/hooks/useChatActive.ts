@@ -3,10 +3,10 @@ import { useShallow } from 'zustand/react/shallow'
 import { chatStore, connectionStore } from '../stores'
 import { useChatStore, useConnectionStore } from '../react/storeHooks'
 import { useXMPPContext } from '../provider'
-import type { Conversation, ChatStateNotification, FileAttachment, MAMQueryState, Message } from '../core'
+import type { Conversation, MAMQueryState, Message } from '../core'
 import { NS_MAM } from '../core/namespaces'
-import { createFetchOlderHistory, pickOldestArchiveId } from './shared'
-import { findContinueCatchUpCursor, buildCatchUpStartTime, selectCatchUpQuery, MAM_CACHE_LOAD_LIMIT, MAM_CATCHUP_FORWARD_MAX, MAM_ROOM_FORWARD_MAX_PAGES, MAM_ROOM_FORWARD_MAX_PAGES_MANUAL } from '../utils/mamCatchUpUtils'
+import { useChatActions } from './useChatActions'
+import { findContinueCatchUpCursor, buildCatchUpStartTime, MAM_CACHE_LOAD_LIMIT, MAM_CATCHUP_FORWARD_MAX, MAM_ROOM_FORWARD_MAX_PAGES_MANUAL } from '../utils/mamCatchUpUtils'
 
 /**
  * Stable empty array references to prevent infinite re-renders.
@@ -40,6 +40,35 @@ const EMPTY_TYPING_ARRAY: string[] = []
  */
 export function useChatActive() {
   const { client } = useXMPPContext()
+
+  // Shared actions sourced from useChatActions (which subscribes to no store,
+  // so it adds no re-render triggers). Only the actions this hook already
+  // exposed are destructured — the public surface is unchanged. The
+  // active-specific actions (retryMessage, scroll-window helpers, catch-up)
+  // stay defined below.
+  const {
+    sendMessage,
+    setActiveConversation,
+    addConversation,
+    deleteConversation,
+    markAsRead,
+    archiveConversation,
+    unarchiveConversation,
+    isArchived,
+    sendChatState,
+    sendReaction,
+    sendCorrection,
+    retractMessage,
+    sendEasterEgg,
+    clearAnimation,
+    setDraft,
+    getDraft,
+    clearDraft,
+    clearFirstNewMessageId,
+    updateLastSeenMessageId,
+    fetchHistory,
+    fetchOlderHistory,
+  } = useChatActions()
 
   // --- Active conversation state (focused selectors) ---
 
@@ -143,65 +172,7 @@ export function useChatActive() {
     }
   }, [activeConversationId, mamIsLoading, mamHasQueried, mamIsHistoryComplete, mamIsCaughtUpToLive, mamOldestFetchedId, mamForwardGapTimestamp])
 
-  // --- Actions (all stable callbacks) ---
-
-  const sendMessage = useCallback(
-    async (
-      to: string,
-      body: string,
-      type: 'chat' | 'groupchat' = 'chat',
-      replyTo?: { id: string; to?: string; fallback?: { author: string; body: string } },
-      attachment?: FileAttachment
-    ): Promise<string> => {
-      return await client.chat.sendMessage(to, body, type, replyTo, undefined, attachment)
-    },
-    [client]
-  )
-
-  // Hydrates the message cache before marking active (see chatStore.activateConversation)
-  const setActiveConversation = useCallback(async (id: string | null) => {
-    await chatStore.getState().activateConversation(id)
-  }, [])
-
-  const addConversation = useCallback((conv: Conversation) => {
-    chatStore.getState().addConversation(conv)
-  }, [])
-
-  const deleteConversation = useCallback((id: string) => {
-    chatStore.getState().deleteConversation(id)
-  }, [])
-
-  const markAsRead = useCallback((conversationId: string) => {
-    chatStore.getState().markAsRead(conversationId)
-  }, [])
-
-  const sendChatState = useCallback(
-    async (to: string, state: ChatStateNotification, type: 'chat' | 'groupchat' = 'chat') => {
-      await client.chat.sendChatState(to, state, type)
-    },
-    [client]
-  )
-
-  const sendReaction = useCallback(
-    async (to: string, messageId: string, emojis: string[], type: 'chat' | 'groupchat' = 'chat') => {
-      await client.chat.sendReaction(to, messageId, emojis, type)
-    },
-    [client]
-  )
-
-  const sendCorrection = useCallback(
-    async (conversationId: string, messageId: string, newBody: string, attachment?: FileAttachment) => {
-      await client.chat.sendCorrection(conversationId, messageId, newBody, 'chat', attachment)
-    },
-    [client]
-  )
-
-  const retractMessage = useCallback(
-    async (conversationId: string, messageId: string) => {
-      await client.chat.sendRetraction(conversationId, messageId, 'chat')
-    },
-    [client]
-  )
+  // --- Active-specific actions (not in useChatActions) ---
 
   const retryMessage = useCallback(
     async (conversationId: string, messageId: string) => {
@@ -216,124 +187,9 @@ export function useChatActive() {
     [client]
   )
 
-  const sendEasterEgg = useCallback(
-    async (to: string, type: 'chat' | 'groupchat', animation: string) => {
-      await client.chat.sendEasterEgg(to, type, animation)
-    },
-    [client]
-  )
-
-  const clearAnimation = useCallback(() => {
-    chatStore.getState().clearAnimation()
-  }, [])
-
   const clearTargetMessageId = useCallback(() => {
     chatStore.getState().setTargetMessageId(null)
   }, [])
-
-  const archiveConversation = useCallback((id: string) => {
-    chatStore.getState().archiveConversation(id)
-  }, [])
-
-  const unarchiveConversation = useCallback((id: string) => {
-    chatStore.getState().unarchiveConversation(id)
-  }, [])
-
-  const isArchived = useCallback((id: string) => {
-    return chatStore.getState().isArchived(id)
-  }, [])
-
-  const setDraft = useCallback((conversationId: string, text: string) => {
-    chatStore.getState().setDraft(conversationId, text)
-  }, [])
-
-  const getDraft = useCallback((conversationId: string) => {
-    return chatStore.getState().getDraft(conversationId)
-  }, [])
-
-  const clearDraft = useCallback((conversationId: string) => {
-    chatStore.getState().clearDraft(conversationId)
-  }, [])
-
-  const clearFirstNewMessageId = useCallback((conversationId: string) => {
-    chatStore.getState().clearFirstNewMessageId(conversationId)
-  }, [])
-
-  const updateLastSeenMessageId = useCallback((conversationId: string, messageId: string) => {
-    chatStore.getState().updateLastSeenMessageId(conversationId, messageId)
-  }, [])
-
-  const fetchHistory = useCallback(
-    async (conversationId?: string): Promise<void> => {
-      const connectionStatus = connectionStore.getState().status
-      if (connectionStatus !== 'online') return
-
-      const targetId = conversationId ?? chatStore.getState().activeConversationId
-      if (!targetId) return
-
-      const conversation = chatStore.getState().conversations.get(targetId)
-      if (!conversation || conversation.type !== 'chat') return
-
-      const mamState = chatStore.getState().getMAMQueryState(targetId)
-      if (mamState.isLoading) return
-
-      chatStore.getState().setMAMLoading(targetId, true)
-
-      try {
-        let cachedMessages = chatStore.getState().messages.get(targetId)
-        if (!cachedMessages || cachedMessages.length === 0) {
-          await chatStore.getState().loadMessagesFromCache(targetId, { limit: 100 })
-          cachedMessages = chatStore.getState().messages.get(targetId)
-        }
-
-        const gapStart = chatStore.getState().conversationGaps.get(targetId)?.start
-        const lastTimestamp = chatStore.getState().getConversationLastTimestamp(targetId)
-        const q = selectCatchUpQuery(cachedMessages ?? [], { forwardGapTimestamp: gapStart, fallbackNewestTimestamp: lastTimestamp })
-
-        await client.chat.queryMAM({
-          with: conversation.id,
-          ...q,
-          ...(q.start ? { max: MAM_CATCHUP_FORWARD_MAX, maxAutoPages: MAM_ROOM_FORWARD_MAX_PAGES } : {}),
-        })
-      } catch (error) {
-        console.error('Failed to fetch history:', error)
-      } finally {
-        chatStore.getState().setMAMLoading(targetId, false)
-      }
-    },
-    [client]
-  )
-
-  const fetchOlderHistory = useMemo(
-    () =>
-      createFetchOlderHistory({
-        getActiveId: () => chatStore.getState().activeConversationId,
-        isValidTarget: (id) => {
-          const conversation = chatStore.getState().conversations.get(id)
-          return !!conversation && conversation.type === 'chat'
-        },
-        getMAMState: (id) => chatStore.getState().getMAMQueryState(id),
-        setMAMLoading: (id, loading) => chatStore.getState().setMAMLoading(id, loading),
-        loadFromCache: (id, limit) => chatStore.getState().loadOlderMessagesFromCache(id, limit),
-        getOldestMessageId: (id) => pickOldestArchiveId(chatStore.getState().messages.get(id) ?? []),
-        clearInvalidArchiveCursor: (id, cursor) => chatStore.getState().clearMessageStanzaId(id, cursor),
-        getOldestTimestamp: (id) => chatStore.getState().messages.get(id)?.[0]?.timestamp,
-        queryMAM: async (id, beforeId) => {
-          const conversation = chatStore.getState().conversations.get(id)
-          if (conversation) {
-            await client.chat.queryMAM({ with: conversation.id, before: beforeId })
-          }
-        },
-        queryMAMByEndTime: async (id, endIso) => {
-          const conversation = chatStore.getState().conversations.get(id)
-          if (conversation) {
-            await client.chat.queryMAM({ with: conversation.id, end: endIso, before: '' })
-          }
-        },
-        errorLogPrefix: 'Failed to fetch older chat history',
-      }),
-    [client]
-  )
 
   // "Load missing messages": continue a forward catch-up from the recorded gap
   // boundary (parity with rooms' continueRoomCatchUp). Paginates oldest-first to
