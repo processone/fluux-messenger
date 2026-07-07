@@ -416,8 +416,8 @@ export const MessageBubble = memo(function MessageBubble({
   // Determine hover state: use controlled isHovered if provided, otherwise fall back to CSS hover
   const useControlledHover = isHovered !== undefined
   const hoverClass = useControlledHover
-    ? (isHovered ? 'bg-fluux-hover' : '')
-    : (hasKeyboardSelection ? '' : 'hover:bg-fluux-hover')
+    ? (isHovered ? 'bg-fluux-message-hover' : '')
+    : (hasKeyboardSelection ? '' : 'hover:bg-fluux-message-hover')
 
   // Whisper thread (XEP-0045 §7.5): a same-counterpart private run renders as one
   // bounded "private with X" container; the strip on the first row carries the label.

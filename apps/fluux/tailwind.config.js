@@ -20,6 +20,7 @@ export default {
           'chat': 'var(--fluux-chat-bg)',
           'surface': 'var(--fluux-bg-tertiary)',
           'hover': 'var(--fluux-bg-hover)',
+          'message-hover': 'var(--fluux-message-hover)',
           'active': 'var(--fluux-bg-active)',
           'float': 'var(--fluux-bg-float)',
           'float-hover': 'var(--fluux-bg-float-hover)',

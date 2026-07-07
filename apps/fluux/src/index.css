@@ -345,7 +345,13 @@
   --fluux-chat-header-border: var(--fluux-divider-color);
 
   /* Messages */
-  --fluux-message-hover: var(--fluux-bg-hover);
+  /* Message rows sit on the chat canvas (--fluux-chat-bg = base-30), one ramp
+     step below the generic --fluux-bg-hover (base-40), so the shared hover value
+     reads as almost nothing here. Lift message hover to base-50 for a clearly
+     perceptible — but still quiet — row highlight. Works in both modes: in light,
+     base-50 is darker than base-40, so it strengthens the highlight on the white
+     chat canvas too. */
+  --fluux-message-hover: var(--fluux-base-50);
   --fluux-message-selection: var(--fluux-selection-bg);
   --fluux-message-timestamp: var(--fluux-text-faint);
 
