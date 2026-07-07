@@ -202,10 +202,10 @@ function buildDefaultGroups(items: CommandItem[], t: (key: string) => string): I
     groups.push({ key: 'room', type: 'room', label: t('sidebar.rooms'), items: rooms })
   }
 
-  const contacts = items.filter((i) => i.type === 'contact').slice(0, 3)
-  if (contacts.length > 0) {
-    groups.push({ key: 'contact', type: 'contact', label: t('sidebar.contacts'), items: contacts })
-  }
+  // Contacts without an active conversation are intentionally omitted from the
+  // default view — it surfaces things you already have a thread with (or a
+  // view/action). Such contacts remain reachable by typing a name (or the
+  // `@` prefix), which routes through the search/filter path below.
 
   const views = items.filter((i) => i.type === 'view').slice(0, 3)
   if (views.length > 0) {

@@ -195,10 +195,18 @@ describe('CommandPalette', () => {
       expect(screen.getByText('General Chat')).toBeInTheDocument()
     })
 
-    it('should display contacts not in conversations', () => {
+    it('should NOT display contacts without a conversation in the default view', () => {
       render(<CommandPalette {...defaultProps} />)
+      // The empty-query view surfaces threads/views/actions only, not roster padding.
+      expect(screen.queryByText('Charlie Brown')).not.toBeInTheDocument()
+      expect(screen.queryByText('Diana Prince')).not.toBeInTheDocument()
+    })
+
+    it('should surface a contact without a conversation once the user types', () => {
+      render(<CommandPalette {...defaultProps} />)
+      const input = screen.getByPlaceholderText('Go to...')
+      fireEvent.change(input, { target: { value: 'charlie' } })
       expect(screen.getByText('Charlie Brown')).toBeInTheDocument()
-      expect(screen.getByText('Diana Prince')).toBeInTheDocument()
     })
 
     it('should display view options', () => {
@@ -220,7 +228,8 @@ describe('CommandPalette', () => {
       const labelTexts = Array.from(groupLabels).map(el => el.textContent)
       expect(labelTexts).toContain('Messages')
       expect(labelTexts).toContain('Rooms')
-      expect(labelTexts).toContain('Contacts')
+      // Contacts group is no longer part of the default view.
+      expect(labelTexts).not.toContain('Contacts')
     })
 
     it('should show last message preview for conversations', () => {
@@ -857,8 +866,8 @@ describe('CommandPalette', () => {
       expect(screen.getByText('Alice Smith')).toBeInTheDocument()
       expect(screen.getByText('Bob Jones')).toBeInTheDocument()
 
-      // Should show contacts (those without conversations)
-      expect(screen.getByText('Charlie Brown')).toBeInTheDocument()
+      // Should NOT show contacts without a conversation (roster padding removed)
+      expect(screen.queryByText('Charlie Brown')).not.toBeInTheDocument()
 
       // Should show rooms
       expect(screen.getByText('Development')).toBeInTheDocument()
