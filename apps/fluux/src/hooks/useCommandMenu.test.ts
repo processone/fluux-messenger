@@ -9,9 +9,13 @@ describe('matchCommandMenu', () => {
     expect(matchCommandMenu('/kick alice', 11, 'room').isActive).toBe(false)
   })
   it('activates on a bare partial command at position 0', () => {
-    const m = matchCommandMenu('/ki', 3, 'room')
+    const m = matchCommandMenu('/ki', 3, 'room', { role: 'moderator', affiliation: 'owner' })
     expect(m.isActive).toBe(true)
     expect(m.matches.map((c) => c.name)).toContain('kick')
+  })
+  it('hides capability-gated commands when self is unknown', () => {
+    const m = matchCommandMenu('/', 1, 'room')
+    expect(m.matches.map((c) => c.name)).not.toContain('kick')
   })
   it('lists all context commands for a lone slash', () => {
     const m = matchCommandMenu('/', 1, 'room')

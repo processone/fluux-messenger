@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { COMMANDS } from '../commands/registry'
-import { hasCapability } from '../commands/capabilities'
+import { visibleCommands } from '../commands/registry'
 import type { CommandContextKind, CommandSelf, SlashCommand } from '../commands/types'
 
 const PARTIAL = /^\/(\w*)$/
@@ -17,11 +16,8 @@ export function matchCommandMenu(
   const m = text.match(PARTIAL)
   if (!m) return { isActive: false, matches: [] }
   const partial = m[1].toLowerCase()
-  const matches = COMMANDS.filter(
-    (c) =>
-      c.contexts.includes(kind) &&
-      (self === undefined || hasCapability(c.capability, self)) &&
-      (c.name.startsWith(partial) || c.aliases?.some((a) => a.startsWith(partial))),
+  const matches = visibleCommands(kind, self).filter(
+    (c) => c.name.startsWith(partial) || c.aliases?.some((a) => a.startsWith(partial)),
   )
   return { isActive: matches.length > 0, matches }
 }
