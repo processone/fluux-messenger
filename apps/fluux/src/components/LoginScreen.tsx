@@ -333,7 +333,7 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
         // first fingerprint / encrypted send after `online`.
         void prewarmOpenpgpUnlock(jid)
         const resource = getResource()
-        await connect(jid, password, actualServer, undefined, resource, i18n.language, isTauri(), true)
+        await connect({ jid, password, server: actualServer, resource, lang: i18n.language, disableSmKeepalive: isTauri(), rememberSession: true })
         // Save session for auto-reconnect on page reload
         saveSession(jid, password, actualServer)
       } catch {
@@ -395,7 +395,7 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
       // KDF (~500 ms) overlaps with the TCP/TLS/XMPP handshake.
       void prewarmOpenpgpUnlock(jid)
       const resource = linkResourceRef.current || getResource()
-      await connect(jid, password, actualServer, undefined, resource, i18n.language, isTauri(), rememberMe)
+      await connect({ jid, password, server: actualServer, resource, lang: i18n.language, disableSmKeepalive: isTauri(), rememberSession: rememberMe })
       // Save session for auto-reconnect on page reload
       saveSession(jid, password, actualServer)
 

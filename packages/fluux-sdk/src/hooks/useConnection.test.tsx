@@ -224,53 +224,43 @@ describe('useConnection hook', () => {
     })
   })
 
-  describe('connect action', () => {
-    it('should call client.connect and set status to connecting', async () => {
+  describe('connect action (options object)', () => {
+    it('should forward the options object to client.connect and set status to connecting', async () => {
       const { result } = renderHook(() => useConnection(), { wrapper })
 
       mockClient.connect.mockResolvedValue(undefined)
 
-      await act(async () => {
-        await result.current.connect(
-          'user@example.com',
-          'password123',
-          'wss://example.com/ws'
-        )
-      })
-
-      expect(mockClient.connect).toHaveBeenCalledWith({
+      const options = {
         jid: 'user@example.com',
         password: 'password123',
         server: 'wss://example.com/ws',
-        resource: undefined,
-        smState: undefined,
+      }
+      await act(async () => {
+        await result.current.connect(options)
       })
+
+      expect(mockClient.connect).toHaveBeenCalledWith(options)
     })
 
-    it('should pass smState and resource to client.connect', async () => {
+    it('should pass smState and resource through to client.connect', async () => {
       const { result } = renderHook(() => useConnection(), { wrapper })
 
       mockClient.connect.mockResolvedValue(undefined)
 
-      const smState = { id: 'sm-session-1', inbound: 5, outbound: 0 }
-
-      await act(async () => {
-        await result.current.connect(
-          'user@example.com',
-          'password123',
-          'wss://example.com/ws',
-          smState,
-          'mobile'
-        )
-      })
-
-      expect(mockClient.connect).toHaveBeenCalledWith({
+      const options = {
         jid: 'user@example.com',
         password: 'password123',
         server: 'wss://example.com/ws',
+        smState: { id: 'sm-session-1', inbound: 5, outbound: 0 },
         resource: 'mobile',
-        smState,
+        disableSmKeepalive: true,
+        rememberSession: true,
+      }
+      await act(async () => {
+        await result.current.connect(options)
       })
+
+      expect(mockClient.connect).toHaveBeenCalledWith(options)
     })
 
     it('should set error status on connection failure', async () => {
@@ -280,11 +270,11 @@ describe('useConnection hook', () => {
 
       await act(async () => {
         await expect(
-          result.current.connect(
-            'user@example.com',
-            'wrongpassword',
-            'wss://example.com/ws'
-          )
+          result.current.connect({
+            jid: 'user@example.com',
+            password: 'wrongpassword',
+            server: 'wss://example.com/ws',
+          })
         ).rejects.toThrow('Authentication failed')
       })
 

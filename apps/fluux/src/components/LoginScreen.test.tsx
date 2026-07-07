@@ -268,16 +268,15 @@ describe('LoginScreen', () => {
             fireEvent.click(screen.getByRole('button', { name: 'login.connect' }))
 
             await waitFor(() => {
-                expect(mockConnect).toHaveBeenCalledWith(
-                    'alice@process-one.net',
-                    'secret',
-                    'wss://chat.process-one.net/xmpp',
-                    undefined,
-                    'test-resource',
-                    'en',
-                    false,
-                    false
-                )
+                expect(mockConnect).toHaveBeenCalledWith({
+                    jid: 'alice@process-one.net',
+                    password: 'secret',
+                    server: 'wss://chat.process-one.net/xmpp',
+                    resource: 'test-resource',
+                    lang: 'en',
+                    disableSmKeepalive: false,
+                    rememberSession: false,
+                })
             })
         })
 
@@ -296,16 +295,15 @@ describe('LoginScreen', () => {
             fireEvent.click(screen.getByRole('button', { name: 'login.connect' }))
 
             await waitFor(() => {
-                expect(mockConnect).toHaveBeenCalledWith(
-                    'alice@process-one.net',
-                    'secret',
-                    'chat.custom.net',
-                    undefined,
-                    'test-resource',
-                    'en',
-                    false,
-                    false
-                )
+                expect(mockConnect).toHaveBeenCalledWith({
+                    jid: 'alice@process-one.net',
+                    password: 'secret',
+                    server: 'chat.custom.net',
+                    resource: 'test-resource',
+                    lang: 'en',
+                    disableSmKeepalive: false,
+                    rememberSession: false,
+                })
             })
         })
     })
