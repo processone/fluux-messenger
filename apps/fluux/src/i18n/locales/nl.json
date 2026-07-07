@@ -1305,5 +1305,73 @@
     "reactions": {
         "mention": "{{emoji}} {{name}} reageerde op '{{preview}}'",
         "see": "Bekijken"
+    },
+    "commands": {
+        "help": {
+            "title": "Beschikbare opdrachten",
+            "desc": "Toon beschikbare opdrachten",
+            "usage": "/help"
+        },
+        "me": {
+            "desc": "Een actiebericht verzenden",
+            "usage": "/me <action>"
+        },
+        "say": {
+            "desc": "Tekst letterlijk verzenden, zelfs als deze met een schuine streep begint",
+            "usage": "/say <text>"
+        },
+        "nick": {
+            "desc": "Je bijnaam in deze ruimte wijzigen",
+            "usage": "/nick <newnick>",
+            "changed": "Je staat nu bekend als {{nick}}"
+        },
+        "part": {
+            "desc": "Deze ruimte verlaten",
+            "usage": "/part"
+        },
+        "topic": {
+            "desc": "Het onderwerp van de ruimte bekijken of instellen",
+            "usage": "/topic [text]",
+            "set": "Onderwerp bijgewerkt",
+            "current": "Huidig onderwerp: {{subject}}",
+            "none": "Er is geen onderwerp ingesteld"
+        },
+        "kick": {
+            "desc": "Iemand uit de ruimte verwijderen",
+            "usage": "/kick <nick> [reason]",
+            "done": "{{nick}} verwijderd"
+        },
+        "ban": {
+            "desc": "Iemand uit de ruimte verbannen",
+            "usage": "/ban <nick|jid> [reason]",
+            "done": "{{target}} verbannen"
+        },
+        "invite": {
+            "desc": "Iemand uitnodigen voor de ruimte",
+            "usage": "/invite [jid] [reason]",
+            "done": "Uitnodiging verzonden naar {{target}}"
+        },
+        "config": {
+            "desc": "De ruimte-instellingen openen",
+            "usage": "/config"
+        },
+        "christmas": {
+            "desc": "Een feestelijke verrassing verzenden"
+        },
+        "indicator": {
+            "willRun": "Hiermee wordt een opdracht uitgevoerd",
+            "unknownHint": "Onbekende opdracht. Gebruik /say om deze letterlijk te verzenden."
+        },
+        "error": {
+            "unknown": "Onbekende opdracht: /{{name}}",
+            "moderatorOnly": "Alleen moderators kunnen dat doen",
+            "adminOnly": "Alleen beheerders kunnen dat doen",
+            "ownerOnly": "Alleen de eigenaar van de ruimte kan dat doen",
+            "needNick": "Geef een bijnaam op",
+            "needTarget": "Geef een bijnaam of adres op",
+            "userNotFound": "Er is hier niemand met de naam {{nick}}",
+            "nickInUse": "De bijnaam {{nick}} is al in gebruik",
+            "nickFailed": "Je bijnaam kon niet worden gewijzigd"
+        }
     }
 }

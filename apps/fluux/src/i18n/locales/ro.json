@@ -1308,5 +1308,73 @@
     "reactions": {
         "mention": "{{emoji}} {{name}} a reacționat la '{{preview}}'",
         "see": "Vezi"
+    },
+    "commands": {
+        "help": {
+            "title": "Comenzi disponibile",
+            "desc": "Afișează comenzile disponibile",
+            "usage": "/help"
+        },
+        "me": {
+            "desc": "Trimite un mesaj de acțiune",
+            "usage": "/me <action>"
+        },
+        "say": {
+            "desc": "Trimite textul literal, chiar dacă începe cu o bară oblică",
+            "usage": "/say <text>"
+        },
+        "nick": {
+            "desc": "Schimbă-ți porecla în această cameră",
+            "usage": "/nick <newnick>",
+            "changed": "Acum ești cunoscut ca {{nick}}"
+        },
+        "part": {
+            "desc": "Părăsește această cameră",
+            "usage": "/part"
+        },
+        "topic": {
+            "desc": "Vizualizează sau setează subiectul camerei",
+            "usage": "/topic [text]",
+            "set": "Subiect actualizat",
+            "current": "Subiect curent: {{subject}}",
+            "none": "Nu este setat niciun subiect"
+        },
+        "kick": {
+            "desc": "Elimină pe cineva din cameră",
+            "usage": "/kick <nick> [reason]",
+            "done": "{{nick}} a fost dat afară"
+        },
+        "ban": {
+            "desc": "Interzice accesul cuiva în cameră",
+            "usage": "/ban <nick|jid> [reason]",
+            "done": "{{target}} a fost interzis"
+        },
+        "invite": {
+            "desc": "Invită pe cineva în cameră",
+            "usage": "/invite [jid] [reason]",
+            "done": "Invitație trimisă către {{target}}"
+        },
+        "config": {
+            "desc": "Deschide configurarea camerei",
+            "usage": "/config"
+        },
+        "christmas": {
+            "desc": "Trimite o surpriză festivă"
+        },
+        "indicator": {
+            "willRun": "Aceasta va executa o comandă",
+            "unknownHint": "Comandă necunoscută. Folosește /say pentru a o trimite literal."
+        },
+        "error": {
+            "unknown": "Comandă necunoscută: /{{name}}",
+            "moderatorOnly": "Doar moderatorii pot face asta",
+            "adminOnly": "Doar administratorii pot face asta",
+            "ownerOnly": "Doar proprietarul camerei poate face asta",
+            "needNick": "Te rugăm să indici o poreclă",
+            "needTarget": "Te rugăm să indici o poreclă sau o adresă",
+            "userNotFound": "Nu este nimeni cu numele {{nick}} aici",
+            "nickInUse": "Porecla {{nick}} este deja folosită",
+            "nickFailed": "Nu s-a putut schimba porecla ta"
+        }
     }
 }

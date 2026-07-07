@@ -1305,5 +1305,73 @@
     "reactions": {
         "mention": "{{emoji}} {{name}} reagoi viestiin '{{preview}}'",
         "see": "Näytä"
+    },
+    "commands": {
+        "help": {
+            "title": "Käytettävissä olevat komennot",
+            "desc": "Näytä käytettävissä olevat komennot",
+            "usage": "/help"
+        },
+        "me": {
+            "desc": "Lähetä toimintoviesti",
+            "usage": "/me <action>"
+        },
+        "say": {
+            "desc": "Lähetä teksti kirjaimellisesti, vaikka se alkaisi kauttaviivalla",
+            "usage": "/say <text>"
+        },
+        "nick": {
+            "desc": "Vaihda kutsumanimesi tässä huoneessa",
+            "usage": "/nick <newnick>",
+            "changed": "Sinut tunnetaan nyt nimellä {{nick}}"
+        },
+        "part": {
+            "desc": "Poistu tästä huoneesta",
+            "usage": "/part"
+        },
+        "topic": {
+            "desc": "Näytä tai aseta huoneen aihe",
+            "usage": "/topic [text]",
+            "set": "Aihe päivitetty",
+            "current": "Nykyinen aihe: {{subject}}",
+            "none": "Aihetta ei ole asetettu"
+        },
+        "kick": {
+            "desc": "Poista joku huoneesta",
+            "usage": "/kick <nick> [reason]",
+            "done": "Poistettu {{nick}}"
+        },
+        "ban": {
+            "desc": "Estä joku huoneesta",
+            "usage": "/ban <nick|jid> [reason]",
+            "done": "Estetty {{target}}"
+        },
+        "invite": {
+            "desc": "Kutsu joku huoneeseen",
+            "usage": "/invite [jid] [reason]",
+            "done": "Kutsu lähetetty käyttäjälle {{target}}"
+        },
+        "config": {
+            "desc": "Avaa huoneen asetukset",
+            "usage": "/config"
+        },
+        "christmas": {
+            "desc": "Lähetä juhlava yllätys"
+        },
+        "indicator": {
+            "willRun": "Tämä suorittaa komennon",
+            "unknownHint": "Tuntematon komento. Käytä /say lähettääksesi sen kirjaimellisesti."
+        },
+        "error": {
+            "unknown": "Tuntematon komento: /{{name}}",
+            "moderatorOnly": "Vain moderaattorit voivat tehdä sen",
+            "adminOnly": "Vain ylläpitäjät voivat tehdä sen",
+            "ownerOnly": "Vain huoneen omistaja voi tehdä sen",
+            "needNick": "Anna kutsumanimi",
+            "needTarget": "Anna kutsumanimi tai osoite",
+            "userNotFound": "Täällä ei ole ketään nimeltä {{nick}}",
+            "nickInUse": "Kutsumanimi {{nick}} on jo käytössä",
+            "nickFailed": "Kutsumanimeäsi ei voitu vaihtaa"
+        }
     }
 }

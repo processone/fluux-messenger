@@ -1305,5 +1305,73 @@
     "reactions": {
         "mention": "{{emoji}} {{name}} reagerade på '{{preview}}'",
         "see": "Visa"
+    },
+    "commands": {
+        "help": {
+            "title": "Tillgängliga kommandon",
+            "desc": "Visa tillgängliga kommandon",
+            "usage": "/help"
+        },
+        "me": {
+            "desc": "Skicka ett handlingsmeddelande",
+            "usage": "/me <action>"
+        },
+        "say": {
+            "desc": "Skicka text ordagrant, även om den börjar med ett snedstreck",
+            "usage": "/say <text>"
+        },
+        "nick": {
+            "desc": "Ändra ditt smeknamn i det här rummet",
+            "usage": "/nick <newnick>",
+            "changed": "Du är nu känd som {{nick}}"
+        },
+        "part": {
+            "desc": "Lämna det här rummet",
+            "usage": "/part"
+        },
+        "topic": {
+            "desc": "Visa eller ange rummets ämne",
+            "usage": "/topic [text]",
+            "set": "Ämnet uppdaterat",
+            "current": "Aktuellt ämne: {{subject}}",
+            "none": "Inget ämne är angivet"
+        },
+        "kick": {
+            "desc": "Ta bort någon från rummet",
+            "usage": "/kick <nick> [reason]",
+            "done": "Sparkade ut {{nick}}"
+        },
+        "ban": {
+            "desc": "Bannlys någon från rummet",
+            "usage": "/ban <nick|jid> [reason]",
+            "done": "Bannlyste {{target}}"
+        },
+        "invite": {
+            "desc": "Bjud in någon till rummet",
+            "usage": "/invite [jid] [reason]",
+            "done": "Inbjudan skickad till {{target}}"
+        },
+        "config": {
+            "desc": "Öppna rumskonfigurationen",
+            "usage": "/config"
+        },
+        "christmas": {
+            "desc": "Skicka en festlig överraskning"
+        },
+        "indicator": {
+            "willRun": "Detta kör ett kommando",
+            "unknownHint": "Okänt kommando. Använd /say för att skicka det ordagrant."
+        },
+        "error": {
+            "unknown": "Okänt kommando: /{{name}}",
+            "moderatorOnly": "Endast moderatorer kan göra det",
+            "adminOnly": "Endast administratörer kan göra det",
+            "ownerOnly": "Endast rummets ägare kan göra det",
+            "needNick": "Ange ett smeknamn",
+            "needTarget": "Ange ett smeknamn eller en adress",
+            "userNotFound": "Det finns ingen som heter {{nick}} här",
+            "nickInUse": "Smeknamnet {{nick}} används redan",
+            "nickFailed": "Det gick inte att ändra ditt smeknamn"
+        }
     }
 }

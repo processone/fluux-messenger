@@ -1310,5 +1310,73 @@
     "reactions": {
         "mention": "{{emoji}} {{name}} irreaġixxa għal '{{preview}}'",
         "see": "Ara"
+    },
+    "commands": {
+        "help": {
+            "title": "Kmandi disponibbli",
+            "desc": "Uri l-kmandi disponibbli",
+            "usage": "/help"
+        },
+        "me": {
+            "desc": "Ibgħat messaġġ ta’ azzjoni",
+            "usage": "/me <action>"
+        },
+        "say": {
+            "desc": "Ibgħat it-test litteralment, anke jekk jibda b’sing",
+            "usage": "/say <text>"
+        },
+        "nick": {
+            "desc": "Ibdel il-laqam tiegħek f’din il-kamra",
+            "usage": "/nick <newnick>",
+            "changed": "Issa int magħruf bħala {{nick}}"
+        },
+        "part": {
+            "desc": "Ħalli din il-kamra",
+            "usage": "/part"
+        },
+        "topic": {
+            "desc": "Ara jew issettja s-suġġett tal-kamra",
+            "usage": "/topic [text]",
+            "set": "Is-suġġett ġie aġġornat",
+            "current": "Suġġett attwali: {{subject}}",
+            "none": "L-ebda suġġett mhu ssettjat"
+        },
+        "kick": {
+            "desc": "Neħħi lil xi ħadd mill-kamra",
+            "usage": "/kick <nick> [reason]",
+            "done": "{{nick}} tkeċċa"
+        },
+        "ban": {
+            "desc": "Ipprojbixxi lil xi ħadd mill-kamra",
+            "usage": "/ban <nick|jid> [reason]",
+            "done": "{{target}} ġie pprojbit"
+        },
+        "invite": {
+            "desc": "Stieden lil xi ħadd fil-kamra",
+            "usage": "/invite [jid] [reason]",
+            "done": "Stedina mibgħuta lil {{target}}"
+        },
+        "config": {
+            "desc": "Iftaħ il-konfigurazzjoni tal-kamra",
+            "usage": "/config"
+        },
+        "christmas": {
+            "desc": "Ibgħat sorpriża festiva"
+        },
+        "indicator": {
+            "willRun": "Dan se jħaddem kmand",
+            "unknownHint": "Kmand mhux magħruf. Uża /say biex tibagħtu litteralment."
+        },
+        "error": {
+            "unknown": "Kmand mhux magħruf: /{{name}}",
+            "moderatorOnly": "Il-moderaturi biss jistgħu jagħmlu dan",
+            "adminOnly": "L-amministraturi biss jistgħu jagħmlu dan",
+            "ownerOnly": "Is-sid tal-kamra biss jista’ jagħmel dan",
+            "needNick": "Jekk jogħġbok agħti laqam",
+            "needTarget": "Jekk jogħġbok agħti laqam jew indirizz",
+            "userNotFound": "M’hawn ħadd bl-isem {{nick}} hawnhekk",
+            "nickInUse": "Il-laqam {{nick}} diġà qed jintuża",
+            "nickFailed": "Ma setax jinbidel il-laqam tiegħek"
+        }
     }
 }
