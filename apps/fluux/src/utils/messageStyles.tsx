@@ -31,7 +31,12 @@ const URL_REGEX = /(https?:\/\/[^\s<>]+[^\s<>.,;:!?)"'\]])/g
 // Used as fallback when XEP-0372 references aren't available
 // Uses Unicode property escapes (\p{L} for letters, \p{N} for numbers) to support
 // all valid XMPP nicks including accented, Cyrillic, Chinese, Japanese, etc.
-const MENTION_REGEX = /(?:^|(?<=\s))(@[\p{L}\p{N}_]+)/gu
+// The trailing lookahead rejects domain-like tokens such as "@nsa.gov" or
+// "@bob.dev": without it the word run stops at the dot and only "@nsa" would be
+// highlighted, splitting the domain into a fake mention plus a plain ".gov" tail.
+// The lookahead also fails on shorter (backtracked) matches — the next char after
+// a partial word is itself a word char — so the whole token stays plain text.
+const MENTION_REGEX = /(?:^|(?<=\s))(@[\p{L}\p{N}_]+)(?![\p{L}\p{N}_]|\.[\p{L}\p{N}])/gu
 
 // Escape sequences: \* \_ \~ \` \>
 const ESCAPE_PLACEHOLDER = '\u0000'

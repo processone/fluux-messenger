@@ -615,6 +615,27 @@ Steps to follow:
       expect(container.textContent).toContain('user@example.com')
     })
 
+    it('does not render @domain.tld references as mentions', () => {
+      // "@nsa.gov" is a domain reference, not a mention: the whole token must
+      // stay plain text — never split into a "@nsa" mention plus a ".gov" tail.
+      const container = renderRoomText('@nsa.gov publicly stated their goal')
+      expect(container.querySelector('[data-mention]')).toBeFalsy()
+      expect(container.textContent).toContain('@nsa.gov')
+    })
+
+    it('does not render @host.domain references mid-message as mentions', () => {
+      const container = renderRoomText('ping @bob.dev now')
+      expect(container.querySelector('[data-mention]')).toBeFalsy()
+      expect(container.textContent).toContain('@bob.dev')
+    })
+
+    it('still highlights a mention followed by a sentence period', () => {
+      const container = renderRoomText('Thanks @alice.')
+      const mention = container.querySelector('[data-mention]')
+      expect(mention).toBeTruthy()
+      expect(mention?.textContent).toBe('@alice')
+    })
+
     it('renders mentions with URLs correctly', () => {
       const container = renderRoomText('@alice check https://example.com')
       expect(container.querySelector('[data-mention]')).toBeTruthy()
