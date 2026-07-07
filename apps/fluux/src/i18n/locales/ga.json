@@ -890,6 +890,8 @@
             "statusRunning": "Ag rith ar 127.0.0.1:{{port}}",
             "copy": "Cóipeáil sonraí an naisc",
             "copied": "Cóipeáilte",
+            "tokenNote": "Coinnítear sonraí an naisc idir atosuithe. Má athshocraítear an ceadchomhartha, cailleann gach cliant cumraithe a rochtain.",
+            "resetToken": "Athshocraigh an ceadchomhartha",
             "activityTitle": "Gníomhaíocht le déanaí",
             "activityEmpty": "Níl aon ghníomhaíocht Claude ann fós.",
             "activityClear": "Glan",

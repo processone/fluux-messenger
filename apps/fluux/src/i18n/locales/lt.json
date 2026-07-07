@@ -889,6 +889,8 @@
             "statusRunning": "Veikia adresu 127.0.0.1:{{port}}",
             "copy": "Kopijuoti prisijungimo duomenis",
             "copied": "Nukopijuota",
+            "tokenNote": "Ryšio duomenys išsaugomi tarp paleidimų. Iš naujo nustačius žetoną, visų sukonfigūruotų klientų prieiga atšaukiama.",
+            "resetToken": "Iš naujo nustatyti žetoną",
             "activityTitle": "Naujausia veikla",
             "activityEmpty": "Claude veiklos dar nėra.",
             "activityClear": "Išvalyti",

@@ -891,6 +891,8 @@
             "statusRunning": "Deluje na 127.0.0.1:{{port}}",
             "copy": "Kopiraj podatke o povezavi",
             "copied": "Kopirano",
+            "tokenNote": "Podatki o povezavi se ohranijo med ponovnimi zagoni. S ponastavitvijo žetona prekličete dostop vsem nastavljenim odjemalcem.",
+            "resetToken": "Ponastavi žeton",
             "activityTitle": "Nedavna dejavnost",
             "activityEmpty": "Claude še ni imel nobene dejavnosti.",
             "activityClear": "Počisti",

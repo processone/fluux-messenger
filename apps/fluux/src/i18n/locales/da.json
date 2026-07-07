@@ -887,6 +887,8 @@
             "statusRunning": "Kører på 127.0.0.1:{{port}}",
             "copy": "Kopiér forbindelsesoplysninger",
             "copied": "Kopieret",
+            "tokenNote": "Forbindelsesoplysningerne bevares mellem genstarter. Nulstilling af tokenet fratager alle opsatte klienter adgangen.",
+            "resetToken": "Nulstil token",
             "activityTitle": "Seneste aktivitet",
             "activityEmpty": "Ingen Claude-aktivitet endnu.",
             "activityClear": "Ryd",

@@ -887,6 +887,8 @@
             "statusRunning": "Keyrir á 127.0.0.1:{{port}}",
             "copy": "Afrita tengiupplýsingar",
             "copied": "Afritað",
+            "tokenNote": "Tengiupplýsingarnar haldast milli enduræsinga. Endurstilling aðgangslykilsins afturkallar aðgang allra uppsettra biðlara.",
+            "resetToken": "Endurstilla aðgangslykil",
             "activityTitle": "Nýleg virkni",
             "activityEmpty": "Engin virkni frá Claude enn sem komið er.",
             "activityClear": "Hreinsa",

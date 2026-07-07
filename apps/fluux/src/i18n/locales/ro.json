@@ -890,6 +890,8 @@
             "statusRunning": "Rulează pe 127.0.0.1:{{port}}",
             "copy": "Copiază detaliile de conectare",
             "copied": "Copiat",
+            "tokenNote": "Datele de conectare se păstrează între reporniri. Resetarea tokenului revocă accesul tuturor clienților configurați.",
+            "resetToken": "Resetează tokenul",
             "activityTitle": "Activitate recentă",
             "activityEmpty": "Nicio activitate Claude până acum.",
             "activityClear": "Șterge",

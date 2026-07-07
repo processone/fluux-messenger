@@ -13,10 +13,12 @@ use tokio::task::JoinHandle;
 
 use super::protocol::{handle_request, JsonRpcRequest, JsonRpcResponse, ToolExecutor};
 
-/// Returned to the frontend when the server starts. Held in memory only and
-/// surfaced through the Settings panel's copy button — deliberately never
-/// written to disk, so there is no token-bearing file for another process
-/// (or a backup/sync tool) to pick up.
+/// Returned to the frontend when the server starts and surfaced through the
+/// Settings panel's copy button. The token persists in the OS keychain (so a
+/// configured MCP client keeps working across restarts) — deliberately never
+/// in a plaintext file, so there is nothing for another process or a
+/// backup/sync tool to pick up. The port is sticky on a best-effort basis:
+/// the webview passes back the last bound port and we try to reuse it.
 #[derive(Debug, Clone, Serialize)]
 pub struct McpServerInfo {
     pub port: u16,
@@ -79,23 +81,52 @@ pub struct McpServerHandle {
 }
 
 impl McpServerHandle {
-    pub fn stop(self) {
+    /// Abort the serve task and wait for it to actually terminate, so the
+    /// listening socket is released before this returns — a caller that stops
+    /// then immediately restarts (sticky-port rebind) must not race the drop.
+    pub async fn stop(self) {
         self.task.abort();
+        let _ = self.task.await;
     }
 }
 
-/// Bind a random loopback port and start serving MCP JSON-RPC requests.
+/// Bind a loopback listener, preferring `preferred_port` (so a user's MCP
+/// client config keeps working across restarts) and falling back to an
+/// OS-assigned port when it is unavailable. `SO_REUSEADDR` (non-Windows only:
+/// on Windows that flag would let another process hijack an active port)
+/// allows an immediate rebind of the same port after a disable/enable cycle.
+async fn bind_listener(preferred_port: Option<u16>) -> Result<TcpListener, String> {
+    async fn try_bind(port: u16) -> std::io::Result<TcpListener> {
+        let socket = tokio::net::TcpSocket::new_v4()?;
+        #[cfg(not(windows))]
+        socket.set_reuseaddr(true)?;
+        socket.bind(std::net::SocketAddr::from(([127, 0, 0, 1], port)))?;
+        socket.listen(1024)
+    }
+
+    if let Some(port) = preferred_port {
+        if let Ok(listener) = try_bind(port).await {
+            return Ok(listener);
+        }
+        // Preferred port taken by another process — fall back to a fresh one;
+        // the caller persists whatever port we actually bound.
+    }
+    try_bind(0).await.map_err(|e| format!("Failed to bind MCP server: {e}"))
+}
+
+/// Bind and start serving MCP JSON-RPC requests with the given bearer token.
 /// Does not touch the module-level singleton — see `start`/`stop` below for
 /// the idempotent, Tauri-command-facing wrapper.
-pub(crate) async fn bind_and_serve(executor: Arc<dyn ToolExecutor>) -> Result<McpServerHandle, String> {
-    let listener = TcpListener::bind("127.0.0.1:0")
-        .await
-        .map_err(|e| format!("Failed to bind MCP server: {e}"))?;
+pub(crate) async fn bind_and_serve(
+    executor: Arc<dyn ToolExecutor>,
+    preferred_port: Option<u16>,
+    token: String,
+) -> Result<McpServerHandle, String> {
+    let listener = bind_listener(preferred_port).await?;
     let port = listener
         .local_addr()
         .map_err(|e| format!("Failed to read MCP server port: {e}"))?
         .port();
-    let token = uuid::Uuid::new_v4().to_string();
 
     let state = Arc::new(McpAppState { token: token.clone(), executor });
     let router = build_router(state);
@@ -111,13 +142,18 @@ pub(crate) async fn bind_and_serve(executor: Arc<dyn ToolExecutor>) -> Result<Mc
 /// (see xmpp_proxy/mod.rs). Idempotent: starting again stops the old one first.
 static MCP_SERVER: tokio::sync::RwLock<Option<McpServerHandle>> = tokio::sync::RwLock::const_new(None);
 
-/// Start (or restart) the MCP server. Exposed to the `mcp_start_server` Tauri command.
-pub async fn start(executor: Arc<dyn ToolExecutor>) -> Result<McpServerInfo, String> {
+/// Start (or restart) the MCP server. Exposed to the `mcp_start_server` Tauri
+/// command, which owns token persistence (OS keychain) and hands us the token.
+pub async fn start(
+    executor: Arc<dyn ToolExecutor>,
+    preferred_port: Option<u16>,
+    token: String,
+) -> Result<McpServerInfo, String> {
     let mut guard = MCP_SERVER.write().await;
     if let Some(old) = guard.take() {
-        old.stop();
+        old.stop().await;
     }
-    let handle = bind_and_serve(executor).await?;
+    let handle = bind_and_serve(executor, preferred_port, token).await?;
     let info = handle.info.clone();
     *guard = Some(handle);
     Ok(info)
@@ -127,7 +163,7 @@ pub async fn start(executor: Arc<dyn ToolExecutor>) -> Result<McpServerInfo, Str
 pub async fn stop() -> Result<(), String> {
     let mut guard = MCP_SERVER.write().await;
     if let Some(handle) = guard.take() {
-        handle.stop();
+        handle.stop().await;
     }
     Ok(())
 }
@@ -230,9 +266,41 @@ mod tests {
 
     #[tokio::test]
     async fn bind_and_serve_returns_a_nonzero_loopback_port_and_token() {
-        let handle = bind_and_serve(Arc::new(EchoExecutor)).await.expect("server should start");
+        let handle = bind_and_serve(Arc::new(EchoExecutor), None, "tok".to_string())
+            .await
+            .expect("server should start");
         assert!(handle.info.port > 0);
-        assert!(!handle.info.token.is_empty());
-        handle.stop();
+        assert_eq!(handle.info.token, "tok");
+        handle.stop().await;
+    }
+
+    #[tokio::test]
+    async fn bind_and_serve_reuses_the_preferred_port_when_free() {
+        // Learn a free port, release it, then ask for it back.
+        let probe = bind_and_serve(Arc::new(EchoExecutor), None, "tok".to_string())
+            .await
+            .expect("probe server should start");
+        let port = probe.info.port;
+        probe.stop().await;
+
+        let handle = bind_and_serve(Arc::new(EchoExecutor), Some(port), "tok".to_string())
+            .await
+            .expect("server should rebind the preferred port");
+        assert_eq!(handle.info.port, port, "the preferred port should be honored when available");
+        handle.stop().await;
+    }
+
+    #[tokio::test]
+    async fn bind_and_serve_falls_back_when_the_preferred_port_is_taken() {
+        // Occupy a port with a plain listener, then prefer that same port.
+        let blocker = TcpListener::bind("127.0.0.1:0").await.expect("blocker should bind");
+        let taken = blocker.local_addr().expect("blocker addr").port();
+
+        let handle = bind_and_serve(Arc::new(EchoExecutor), Some(taken), "tok".to_string())
+            .await
+            .expect("server should fall back to a fresh port");
+        assert_ne!(handle.info.port, taken, "a taken preferred port must fall back, not fail");
+        assert!(handle.info.port > 0);
+        handle.stop().await;
     }
 }

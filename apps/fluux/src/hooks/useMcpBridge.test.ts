@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { renderHook, waitFor } from '@testing-library/react'
 import { chatStore } from '@fluux/sdk'
 import type { XMPPClient } from '@fluux/sdk/core'
-import { useMcpBridge, __resetServerOpQueueForTests } from './useMcpBridge'
+import { useMcpBridge, resetMcpToken, __resetServerOpQueueForTests } from './useMcpBridge'
 import { useMcpBridgeStore } from '@/stores/mcpBridgeStore'
 
 vi.mock('@/utils/tauri', () => ({ isTauri: () => true }))
@@ -33,7 +33,7 @@ describe('useMcpBridge', () => {
     unlistenMock.mockReset()
     invokeMock.mockResolvedValue({ port: 4123, token: 'secret' })
     listenMock.mockResolvedValue(unlistenMock)
-    useMcpBridgeStore.setState({ enabled: true, serverInfo: null, activityLog: [] })
+    useMcpBridgeStore.setState({ enabled: true, serverInfo: null, preferredPort: null, activityLog: [] })
     chatStore.getState().reset()
     __resetServerOpQueueForTests()
   })
@@ -44,10 +44,25 @@ describe('useMcpBridge', () => {
     renderHook(() => useMcpBridge(client))
 
     await waitFor(() => {
-      expect(invokeMock).toHaveBeenCalledWith('mcp_start_server')
+      expect(invokeMock).toHaveBeenCalledWith('mcp_start_server', { preferredPort: null })
       expect(listenMock).toHaveBeenCalledWith('mcp:tool-call', expect.any(Function))
     })
     expect(useMcpBridgeStore.getState().serverInfo).toEqual({ port: 4123, token: 'secret' })
+    // The bound port is remembered so the next start can try to rebind it.
+    expect(useMcpBridgeStore.getState().preferredPort).toBe(4123)
+  })
+
+  it('passes the remembered port as the preferred port on the next start', async () => {
+    useMcpBridgeStore.setState({ preferredPort: 9999 })
+    const client = { chat: { sendMessage: vi.fn() } } as unknown as XMPPClient
+
+    renderHook(() => useMcpBridge(client))
+
+    await waitFor(() => {
+      expect(invokeMock).toHaveBeenCalledWith('mcp_start_server', { preferredPort: 9999 })
+    })
+    // The server came back on a different port (9999 was taken): remember the new one.
+    expect(useMcpBridgeStore.getState().preferredPort).toBe(4123)
   })
 
   it('dispatches a list_conversations tool call and responds via mcp_respond', async () => {
@@ -109,7 +124,7 @@ describe('useMcpBridge', () => {
     })
 
     renderHook(() => useMcpBridge(client))
-    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith('mcp_start_server'))
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith('mcp_start_server', { preferredPort: null }))
 
     // Disable while the start is still in flight. Without the op queue, the
     // stop IPC call fires immediately and can reach Rust before the start,
@@ -185,5 +200,16 @@ describe('useMcpBridge', () => {
     await waitFor(() => {
       expect(unlistenMock).toHaveBeenCalled()
     })
+  })
+
+  it('resetMcpToken restarts the server and stores the new connection details', async () => {
+    useMcpBridgeStore.setState({ preferredPort: 4123 })
+    invokeMock.mockResolvedValue({ port: 4123, token: 'fresh-token' })
+
+    await resetMcpToken()
+
+    expect(invokeMock).toHaveBeenCalledWith('mcp_reset_token', { preferredPort: 4123 })
+    expect(useMcpBridgeStore.getState().serverInfo).toEqual({ port: 4123, token: 'fresh-token' })
+    expect(useMcpBridgeStore.getState().preferredPort).toBe(4123)
   })
 })

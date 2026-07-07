@@ -887,6 +887,8 @@
             "statusRunning": "Actief op 127.0.0.1:{{port}}",
             "copy": "Verbindingsgegevens kopiëren",
             "copied": "Gekopieerd",
+            "tokenNote": "De verbindingsgegevens blijven behouden na een herstart. Het opnieuw instellen van de token trekt de toegang van alle ingestelde clients in.",
+            "resetToken": "Token opnieuw instellen",
             "activityTitle": "Recente activiteit",
             "activityEmpty": "Nog geen Claude-activiteit.",
             "activityClear": "Wissen",

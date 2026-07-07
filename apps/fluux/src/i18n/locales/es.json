@@ -890,6 +890,8 @@
             "statusRunning": "En ejecución en 127.0.0.1:{{port}}",
             "copy": "Copiar datos de conexión",
             "copied": "Copiado",
+            "tokenNote": "Los datos de conexión se conservan entre reinicios. Al restablecer el token se revoca el acceso de todos los clientes configurados.",
+            "resetToken": "Restablecer el token",
             "activityTitle": "Actividad reciente",
             "activityEmpty": "Aún no hay actividad de Claude.",
             "activityClear": "Borrar",

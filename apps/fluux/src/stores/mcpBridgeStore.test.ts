@@ -4,7 +4,7 @@ import { useMcpBridgeStore } from './mcpBridgeStore'
 describe('useMcpBridgeStore', () => {
   beforeEach(() => {
     localStorage.clear()
-    useMcpBridgeStore.setState({ enabled: false, serverInfo: null, activityLog: [] })
+    useMcpBridgeStore.setState({ enabled: false, serverInfo: null, preferredPort: null, activityLog: [] })
   })
 
   it('persists enabled to localStorage', () => {
@@ -20,6 +20,16 @@ describe('useMcpBridgeStore', () => {
   it('stores the port and token reported by mcp_start_server', () => {
     useMcpBridgeStore.getState().setServerInfo({ port: 4123, token: 'secret-token' })
     expect(useMcpBridgeStore.getState().serverInfo).toEqual({ port: 4123, token: 'secret-token' })
+  })
+
+  it('persists the preferred port to localStorage and clears it on null', () => {
+    useMcpBridgeStore.getState().setPreferredPort(4123)
+    expect(localStorage.getItem('fluux-mcp-port')).toBe('4123')
+    expect(useMcpBridgeStore.getState().preferredPort).toBe(4123)
+
+    useMcpBridgeStore.getState().setPreferredPort(null)
+    expect(localStorage.getItem('fluux-mcp-port')).toBeNull()
+    expect(useMcpBridgeStore.getState().preferredPort).toBeNull()
   })
 
   it('keeps only the most recent 100 activity entries, newest first', () => {

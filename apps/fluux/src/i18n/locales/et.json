@@ -889,6 +889,8 @@
             "statusRunning": "Töötab aadressil 127.0.0.1:{{port}}",
             "copy": "Kopeeri ühenduse andmed",
             "copied": "Kopeeritud",
+            "tokenNote": "Ühenduse andmed säilivad taaskäivituste vahel. Tokeni lähtestamine tühistab kõigi seadistatud klientide juurdepääsu.",
+            "resetToken": "Lähtesta token",
             "activityTitle": "Hiljutine tegevus",
             "activityEmpty": "Claude'i tegevust pole veel olnud.",
             "activityClear": "Tühjenda",

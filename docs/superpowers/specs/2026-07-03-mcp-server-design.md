@@ -88,11 +88,16 @@ shortcut, so it inherits the SDK's existing E2EE invariant for free instead of r
 Distinct from the consent policy above — this is about who can even reach the local endpoint:
 
 - HTTP endpoint bound strictly to `127.0.0.1`, never LAN-exposed.
-- A bearer token, regenerated per app launch, surfaced only in memory via the Settings panel's
-  "Copy connection details" button — never written to disk, so there's no token-bearing file for
-  another local process (or a backup/sync tool) to pick up. The user copies the URL + token once
-  into their MCP client config. Without the token, no other local process can call in even if it
-  guesses the port.
+- A bearer token, persisted in the OS keychain (created on first use) so a configured MCP client
+  keeps working across app restarts — never written to a plaintext file, so there's no
+  token-bearing file for another local process (or a backup/sync tool) to pick up. The Settings
+  panel surfaces it via a "Copy connection details" button and offers a "Reset token" action that
+  regenerates it, revoking all previously configured clients. Without the token, no other local
+  process can call in even if it guesses the port.
+- The port is sticky on a best-effort basis: the webview persists the last bound port
+  (localStorage) and the server tries to rebind it on start, falling back to a fresh OS-assigned
+  port only when it's taken — so client configs survive restarts without a hardcoded port that
+  could conflict with other software.
 - No extra logic needed for a locked E2EE key: if the passphrase has not been entered, the
   relevant messages simply have no plaintext body yet in `messageCache`, so `get_history` returns
   exactly what the UI would show — nothing more, nothing less.

@@ -887,6 +887,8 @@
             "statusRunning": "Körs på 127.0.0.1:{{port}}",
             "copy": "Kopiera anslutningsuppgifter",
             "copied": "Kopierat",
+            "tokenNote": "Anslutningsuppgifterna behålls mellan omstarter. Om du återställer tokenet återkallas åtkomsten för alla konfigurerade klienter.",
+            "resetToken": "Återställ token",
             "activityTitle": "Senaste aktivitet",
             "activityEmpty": "Ingen Claude-aktivitet ännu.",
             "activityClear": "Rensa",
