@@ -44,6 +44,15 @@ The typing set to display is `room.typingUsers` minus:
   `activeTypingUsers` (`filteredTypingUsers`), so behavior is consistent between the
   room view and the sidebar.
 
+### 1:1 parity — suppress on the active chat
+
+`ConversationItem` currently renders the 1:1 typing overlay on the contact avatar
+**regardless** of whether that conversation is active. Apply the same
+suppress-on-active rule there: when a 1:1 conversation is the open one, hide its
+sidebar typing overlay, because `ChatView` already shows the typing state. This
+keeps the rule symmetric — the sidebar never echoes typing for the conversation you
+are already looking at, whether it is a room or a 1:1.
+
 ### Placement
 
 **Replace the preview line** (the second line of the row, normally the last-message
@@ -90,6 +99,8 @@ would be needed.
   - Ignored users excluded from the displayed set.
   - Active room → hidden.
   - `unreadCount === 0` + a non-ignored, non-self user typing → shown.
+  - 1:1 parity: active 1:1 conversation → overlay hidden; inactive 1:1 with the
+    contact typing → overlay shown (existing behavior, minus the active case).
 - Render test: compact typing indicator appears and disappears as the room's
   `typingUsers` changes under the gate.
 - Demo mode: seed a joined, caught-up room with an occupant composing to eyeball the
@@ -105,6 +116,7 @@ would be needed.
 ## Affected files
 
 - `apps/fluux/src/components/sidebar-components/RoomsList.tsx` — `RoomItem` gate + preview-line rendering.
+- `apps/fluux/src/components/sidebar-components/ConversationList.tsx` — `ConversationItem` suppress-on-active for the 1:1 typing overlay.
 - `apps/fluux/src/components/conversation/TypingIndicator.tsx` — compact variant.
 - Ignore-filter helper shared with `RoomView` (`useRoomActive` / wherever
   `filteredTypingUsers` is derived) — reused, factored out if currently inline.
