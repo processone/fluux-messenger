@@ -11,7 +11,7 @@
  *
  * Scroll behavior is handled by useMessageListScroll hook.
  */
-import { useMemo, useRef, useEffect, useCallback, type ReactNode } from 'react'
+import { useMemo, useRef, useEffect, useLayoutEffect, useCallback, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { BaseMessage } from '@fluux/sdk'
 import { useMessageCopyFormatter, useMessageRangeSelection } from '@/hooks'
@@ -378,6 +378,39 @@ export function MessageList<T extends BaseMessage>({
 
   const virtualizer = useTanstackMessageVirtualizer({ items: virtualItems, indexById, scrollRef: scrollContainerRef, estimateSize, initialMeasurements, onMeasured })
   const activeVirtualizer = virtualized ? virtualizer : undefined
+
+  // Settled-height snapshot on unmount (conversation switch). @tanstack measures each row via a
+  // ResizeObserver and onMeasured writes that height to the persistent cache. On WebKit the SETTLED
+  // measurement is delivered late — often after the row has been windowed out or the list unmounted —
+  // so the cache keeps the row's TRANSIENT (pre-settle) height. On the next entry the seed is that
+  // transient value, the visible rows reflow to their real height right after the first paint, and the
+  // bottom-pin re-asserts: a one-time content jump (visible on WebKit, smooth on Chromium). Reading
+  // each mounted row's live offsetHeight here — when it is fully settled in the DOM — overrides the
+  // transient with the settled value, so the NEXT seed matches the render and there is no reflow.
+  //
+  // useLayoutEffect (not useEffect) so the cleanup runs during the unmount commit while the rows are
+  // still attached (a passive cleanup runs after the DOM is removed → offsetHeight would read 0). Reads
+  // only, once per switch (~window+overscan rows). Keyed via data-index → virtualItems[i].key, so it
+  // covers every mounted row kind (messages, date separators, footer), matching the seed's key space.
+  useLayoutEffect(() => {
+    if (!virtualized) return
+    const scroller = scrollContainerRef.current
+    return () => {
+      if (!scroller) return
+      const { conversationId: cid, scalePct: scale, rowMetricsRef: metricsRef, virtualItems: items } = onMeasuredParamsRef.current
+      const widthBucketPx = Math.round(metricsRef.current.contentWidthPx / 20) * 20
+      const rows = scroller.querySelectorAll<HTMLElement>('[data-virtualizer-spacer] > [data-index]')
+      for (const el of rows) {
+        const idx = Number(el.dataset.index)
+        const key = Number.isNaN(idx) ? undefined : items[idx]?.key
+        const height = el.offsetHeight
+        if (key && height > 0) {
+          recordMeasuredHeight(cid, heightCacheKey(key, widthBucketPx, scale), height)
+          noteConversationWidthBucket(cid, widthBucketPx)
+        }
+      }
+    }
+  }, [virtualized])
 
   // Ref-backed so FloatingDateHeader subscribes once. Reads the live virtualizer
   // window + scrollTop each call; returns null to suppress (separator at top / no
