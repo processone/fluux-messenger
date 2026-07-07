@@ -65,20 +65,11 @@ export function TypingIndicator({ typingUsers, formatUser, className = '' }: Typ
 
   return (
     <div className={`py-2 px-4 text-sm text-fluux-muted italic flex items-center gap-2 ${className}`}>
-      {/* Animated bouncing dots */}
-      <span className="flex gap-0.5">
-        <span
-          className="size-1.5 rounded-full bg-fluux-muted animate-bounce"
-          style={{ animationDelay: '0ms' }}
-        />
-        <span
-          className="size-1.5 rounded-full bg-fluux-muted animate-bounce"
-          style={{ animationDelay: '150ms' }}
-        />
-        <span
-          className="size-1.5 rounded-full bg-fluux-muted animate-bounce"
-          style={{ animationDelay: '300ms' }}
-        />
+      {/* Dots bounce and shimmer through the aurora hues (delays + colors in CSS). */}
+      <span className="flex gap-0.5" aria-hidden="true">
+        <span className="size-1.5 rounded-full typing-dot" />
+        <span className="size-1.5 rounded-full typing-dot" />
+        <span className="size-1.5 rounded-full typing-dot" />
       </span>
       <span>{text}</span>
     </div>
