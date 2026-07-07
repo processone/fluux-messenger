@@ -1232,7 +1232,6 @@
         "filteringRooms": "Filtrowanie pokoi...",
         "filteringCommands": "Filtrowanie poleceń...",
         "searchMessages": "Search messages for \"{{query}}\"",
-        "unread": "Nieprzeczytane",
         "attention": "Wymaga uwagi"
     },
     "dataFormHints": {

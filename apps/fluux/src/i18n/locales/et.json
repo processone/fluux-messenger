@@ -1230,7 +1230,6 @@
         "filteringRooms": "Tubade filtreerimine...",
         "filteringCommands": "Käskude filtreerimine...",
         "searchMessages": "Search messages for \"{{query}}\"",
-        "unread": "Lugemata",
         "attention": "Vajab tähelepanu"
     },
     "dataFormHints": {

@@ -1230,7 +1230,6 @@
         "filteringRooms": "Filtruojami kambariai...",
         "filteringCommands": "Filtruojamos komandos...",
         "searchMessages": "Search messages for \"{{query}}\"",
-        "unread": "Neperskaityti",
         "attention": "Reikia dėmesio"
     },
     "dataFormHints": {

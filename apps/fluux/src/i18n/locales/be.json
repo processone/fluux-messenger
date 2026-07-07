@@ -1230,7 +1230,6 @@
         "filteringRooms": "Фільтрацыя пакояў...",
         "filteringCommands": "Фільтрацыя каманд...",
         "searchMessages": "Search messages for \"{{query}}\"",
-        "unread": "Непрачытаныя",
         "attention": "Патрабуе ўвагі"
     },
     "dataFormHints": {

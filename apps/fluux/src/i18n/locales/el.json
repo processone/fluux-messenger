@@ -1229,7 +1229,6 @@
         "filteringRooms": "Φιλτράρισμα δωματίων...",
         "filteringCommands": "Φιλτράρισμα εντολών...",
         "searchMessages": "Search messages for \"{{query}}\"",
-        "unread": "Μη αναγνωσμένα",
         "attention": "Χρειάζεται προσοχή"
     },
     "dataFormHints": {

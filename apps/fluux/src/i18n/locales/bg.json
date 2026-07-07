@@ -1228,7 +1228,6 @@
         "filteringRooms": "Филтриране на стаи...",
         "filteringCommands": "Филтриране на команди...",
         "searchMessages": "Search messages for \"{{query}}\"",
-        "unread": "Непрочетени",
         "attention": "Изисква внимание"
     },
     "dataFormHints": {

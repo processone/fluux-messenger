@@ -1228,7 +1228,6 @@
         "filteringRooms": "Szobák szűrése...",
         "filteringCommands": "Parancsok szűrése...",
         "searchMessages": "Search messages for \"{{query}}\"",
-        "unread": "Olvasatlan",
         "attention": "Figyelmet igényel"
     },
     "dataFormHints": {

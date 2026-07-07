@@ -1231,7 +1231,6 @@
         "filteringRooms": "Filtrujú sa miestnosti...",
         "filteringCommands": "Filtrujú sa príkazy...",
         "searchMessages": "Search messages for \"{{query}}\"",
-        "unread": "Neprečítané",
         "attention": "Vyžaduje pozornosť"
     },
     "dataFormHints": {

@@ -1228,7 +1228,6 @@
         "filteringRooms": "Filtering rooms...",
         "filteringCommands": "Filtering commands...",
         "searchMessages": "Search messages for \"{{query}}\"",
-        "unread": "Unread",
         "attention": "Needs attention"
     },
     "dataFormHints": {

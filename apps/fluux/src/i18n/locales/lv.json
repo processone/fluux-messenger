@@ -1230,7 +1230,6 @@
         "filteringRooms": "Filtrē istabas...",
         "filteringCommands": "Filtrē komandas...",
         "searchMessages": "Search messages for \"{{query}}\"",
-        "unread": "Nelasīti",
         "attention": "Nepieciešama uzmanība"
     },
     "dataFormHints": {

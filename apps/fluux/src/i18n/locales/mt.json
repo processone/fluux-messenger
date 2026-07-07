@@ -1233,7 +1233,6 @@
         "filteringRooms": "Qed jiffiltra kmamar...",
         "filteringCommands": "Qed jiffiltra kmandi...",
         "searchMessages": "Search messages for \"{{query}}\"",
-        "unread": "Mhux moqrija",
         "attention": "Jeħtieġ attenzjoni"
     },
     "dataFormHints": {

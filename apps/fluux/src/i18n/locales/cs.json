@@ -1232,7 +1232,6 @@
         "filteringRooms": "Filtrování místností...",
         "filteringCommands": "Filtrování příkazů...",
         "searchMessages": "Search messages for \"{{query}}\"",
-        "unread": "Nepřečtené",
         "attention": "Vyžaduje pozornost"
     },
     "dataFormHints": {

@@ -105,7 +105,6 @@ vi.mock('react-i18next', () => ({
         'commandPalette.filteringRooms': 'Filtering rooms...',
         'commandPalette.filteringCommands': 'Filtering commands...',
         'commandPalette.searchMessages': 'Search messages for "{{query}}"',
-        'commandPalette.unread': 'Unread',
         'commandPalette.attention': 'Needs attention',
         'sidebar.messages': 'Messages',
         'sidebar.rooms': 'Rooms',

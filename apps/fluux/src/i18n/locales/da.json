@@ -1228,7 +1228,6 @@
         "filteringRooms": "Filtrerer rum...",
         "filteringCommands": "Filtrerer kommandoer...",
         "searchMessages": "Search messages for \"{{query}}\"",
-        "unread": "Ulæste",
         "attention": "Kræver opmærksomhed"
     },
     "dataFormHints": {

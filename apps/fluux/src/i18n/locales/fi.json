@@ -1228,7 +1228,6 @@
         "filteringRooms": "Suodatetaan huoneita...",
         "filteringCommands": "Suodatetaan komentoja...",
         "searchMessages": "Search messages for \"{{query}}\"",
-        "unread": "Lukematta",
         "attention": "Vaatii huomiota"
     },
     "dataFormHints": {

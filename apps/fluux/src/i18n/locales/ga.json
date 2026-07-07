@@ -1231,7 +1231,6 @@
         "filteringRooms": "Ag scagadh seomraí...",
         "filteringCommands": "Ag scagadh orduithe...",
         "searchMessages": "Search messages for \"{{query}}\"",
-        "unread": "Neamhléite",
         "attention": "Teastaíonn aird"
     },
     "dataFormHints": {

@@ -1230,7 +1230,6 @@
         "filteringRooms": "Фильтр конференций...",
         "filteringCommands": "Фильтр команд...",
         "searchMessages": "Search messages for \"{{query}}\"",
-        "unread": "Непрочитанные",
         "attention": "Требует внимания"
     },
     "dataFormHints": {
