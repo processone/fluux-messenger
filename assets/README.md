@@ -14,8 +14,8 @@ Media used by the repository's README and docs.
 
 The app icon source lives with the Tauri icon pipeline, not here:
 
-- `apps/fluux/src-tauri/icons/icon-source.svg` - Vector source (Aurora design).
-- `apps/fluux/src-tauri/icons/icon-source-maskable.svg` - Maskable variant.
+- `apps/fluux/src-tauri/icons/icon-variants/plain/icon-source.svg` - Glass (plain) vector source.
+- `apps/fluux/src-tauri/icons/icon-variants/hollow/icon-source.svg` - Hollow-outline vector source. Maskable variants sit beside each. Run `./generate.sh all` in `src-tauri/icons` to re-derive; `scripts/select-icon-variant.mjs` copies a variant's `dist/` onto the live icons.
 
 Generated PNG/ICO/ICNS icons sit alongside those sources in
 `apps/fluux/src-tauri/icons/` (plus the PWA icons in `apps/fluux/public/`).
