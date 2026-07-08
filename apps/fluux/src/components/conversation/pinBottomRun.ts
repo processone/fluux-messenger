@@ -28,6 +28,14 @@ const PIN_SETTLED_FRAMES = 8
  *   repaint and skipping it removes the most expensive step on WebKitGTK.
  * - 'always' / 'off': on-device A/B escape hatches (localStorage
  *   `fluux:pin-repaint`) to validate the gating on the real Linux build.
+ *
+ * `suppressForBackgroundLoad` additionally skips the repaint while a MAM catch-up (or
+ * "load older") query is in flight for the conversation. A catch-up can page in dozens of
+ * merges over 1-2s, each moving scrollTop; forcing a repaint on every single one is the
+ * forced-layout/repaint storm PR #860 already had to cut down for the measurement-settle
+ * case. WebKit isn't painting those intermediate positions anyway without the forced
+ * toggle, so nothing visible is lost — the caller is responsible for forcing one final
+ * repaint once the load completes. 'always' still wins (on-device A/B must stay unconditional).
  */
 export type PinRepaintMode = 'on-write' | 'always' | 'off'
 
@@ -45,11 +53,12 @@ export function readPinRepaintMode(
 
 export function shouldForceRepaint(
   scrollTopMoved: boolean,
-  mode: PinRepaintMode
+  mode: PinRepaintMode,
+  suppressForBackgroundLoad = false
 ): boolean {
   if (mode === 'always') return true
   if (mode === 'off') return false
-  return scrollTopMoved
+  return scrollTopMoved && !suppressForBackgroundLoad
 }
 
 /** Forced-work categories a pin run accumulates for the probe line. */

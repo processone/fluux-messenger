@@ -81,6 +81,22 @@ describe('shouldForceRepaint — repaint gating policy', () => {
     expect(shouldForceRepaint(true, 'off')).toBe(false)
     expect(shouldForceRepaint(false, 'off')).toBe(false)
   })
+
+  it('on-write: suppresses the repaint when a background load (MAM catch-up) is in flight', () => {
+    expect(shouldForceRepaint(true, 'on-write', true)).toBe(false)
+  })
+
+  it('on-write: repaints as before when no background load is in flight', () => {
+    expect(shouldForceRepaint(true, 'on-write', false)).toBe(true)
+  })
+
+  it('always: the debug escape hatch still forces a repaint during a background load', () => {
+    expect(shouldForceRepaint(true, 'always', true)).toBe(true)
+  })
+
+  it('off: stays suppressed during a background load (already off)', () => {
+    expect(shouldForceRepaint(true, 'off', true)).toBe(false)
+  })
 })
 
 describe('readPinRepaintMode — localStorage override parsing', () => {

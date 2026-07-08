@@ -981,6 +981,71 @@ describe('MessageList — virtualized bottom-stick re-asserts as rows measure', 
     expect(scrollToOffsetCalls.length).toBeGreaterThan(0) // the prepend restore actually ran
     expect(scrollToIndexCalls).not.toContain('end')       // ...and did not jump to the bottom
   })
+
+  it('suppresses the forced repaint on re-pins while a MAM catch-up is loading', () => {
+    // Baseline: NOT loading -> the stale-paint fix forces a repaint (offsetHeight read) on a
+    // write that actually moved scrollTop, same as every other re-pin test in this file.
+    const { container, rerender } = render(
+      <MessageList messages={makeMessages(50)} conversationId="conv-mam-repaint" isLoadingOlder={false} {...props} />,
+    )
+    const scroller = container.querySelector('[data-message-list]') as HTMLElement
+    const { grow } = instrumentScroller(scroller, 2000)
+    let offsetHeightReads = 0
+    Object.defineProperty(scroller, 'offsetHeight', { get: () => { offsetHeightReads++; return 500 }, configurable: true })
+    rafQueue.length = 0
+
+    offsetHeightReads = 0
+    rerender(<MessageList messages={makeMessages(51)} conversationId="conv-mam-repaint" isLoadingOlder={false} {...props} />)
+    flush(1)
+    grow(3000)
+    flush(14)
+    expect(offsetHeightReads).toBeGreaterThan(0)
+
+    // A MAM page lands (message count grows again) while catch-up is in flight: the re-pin still
+    // writes scrollTop, but the expensive forced repaint must be skipped.
+    offsetHeightReads = 0
+    rerender(<MessageList messages={makeMessages(51)} conversationId="conv-mam-repaint" isLoadingOlder={true} {...props} />)
+    rerender(<MessageList messages={makeMessages(52)} conversationId="conv-mam-repaint" isLoadingOlder={true} {...props} />)
+    flush(1)
+    grow(4000)
+    flush(14)
+    expect(offsetHeightReads).toBe(0)
+  })
+
+  it('fires one clean settle pin when a MAM catch-up completes with no further message growth', () => {
+    // The catch-up's last page can land (messageCount already reflects it) with NOTHING further
+    // changing except isLoadingOlder flipping false — the "new message" effect sees no count/id
+    // change and stays silent, so the completion must be its own trigger.
+    const { container, rerender } = render(
+      <MessageList messages={makeMessages(50)} conversationId="conv-mam-done" isLoadingOlder={true} {...props} />,
+    )
+    const scroller = container.querySelector('[data-message-list]') as HTMLElement
+    instrumentScroller(scroller, 2000)
+    rafQueue.length = 0
+    scrollToIndexCalls.length = 0
+
+    rerender(<MessageList messages={makeMessages(50)} conversationId="conv-mam-done" isLoadingOlder={false} {...props} />)
+
+    expect(scrollToIndexCalls).toContain('end')
+  })
+
+  it('does NOT fire the settle pin on catch-up completion when the reader is scrolled away from the bottom', () => {
+    const { container, rerender } = render(
+      <MessageList messages={makeMessages(50)} conversationId="conv-mam-scrolled" isLoadingOlder={true} {...props} />,
+    )
+    const scroller = container.querySelector('[data-message-list]') as HTMLElement
+    instrumentScroller(scroller, 5000)
+    rafQueue.length = 0
+
+    // Reader scrolls up, away from the bottom -> isAtBottom flips false.
+    scroller.scrollTop = 1000
+    scroller.dispatchEvent(new Event('scroll', { bubbles: true }))
+    scrollToIndexCalls.length = 0
+
+    rerender(<MessageList messages={makeMessages(50)} conversationId="conv-mam-scrolled" isLoadingOlder={false} {...props} />)
+
+    expect(scrollToIndexCalls).not.toContain('end')
+  })
 })
 
 /**
