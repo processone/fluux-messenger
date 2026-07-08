@@ -78,9 +78,15 @@ Determined empirically by rendering candidates on the real gradient tile (see
 "Design exploration" below). All coordinates are in the **1024×1024 icon
 canvas** shared by `AppIconMark`, `icon-source.svg`, and the new hollow sources.
 
-- **Source path** (Lucide `MessageCircle`, v0.303.0):
+- **Source path** — the historical Lucide `MessageCircle` (v0.x era):
   `M7.9 20A9 9 0 1 0 4 16.1L2 22Z` in a 24-unit space, `fill="none"`,
-  `stroke-linecap="round"`, `stroke-linejoin="round"`.
+  `stroke-linecap="round"`, `stroke-linejoin="round"`. **Pinned as a literal —
+  do NOT `import { MessageCircle } from 'lucide-react'`.** The installed
+  lucide-react (1.16.0) ships a *redesigned* MessageCircle
+  (`M2.992 16.342…`, radius-10, different proportions); importing it would give
+  the wrong shape. We pin the original because (a) it is the exact glyph in the
+  approved screenshot / original login mark, and (b) a brand icon must not mutate
+  when the icon library is bumped.
 - **Measured visual bounding box** (at stroke 2): 21.02 × 21.02 units, visual
   center `(11.51, 12.49)` — note this is *not* the nominal 24-box center; the
   tail biases it, so we center on the measured box.
@@ -94,15 +100,20 @@ canvas** shared by `AppIconMark`, `icon-source.svg`, and the new hollow sources.
   small sizes, thicker (2.5) closes the hollow counter.
 - **Colour:** white `#FFFFFF`.
 - **Subtle glass cue — drop shadow only:**
-  `feDropShadow dx=0 dy=0.45 stdDeviation=0.6 flood-color="#160E3A" flood-opacity=0.22`,
-  applied to the glyph group in its local 24-unit space (⇒ ~11px offset / ~14px
-  blur on the 1024 canvas). Because the filter lives inside the scaled group it
-  shrinks with the icon — visible depth at large sizes, gracefully fading to
-  near-flat at 32–48px with no muddy halo. **No** fill gradient and **no**
-  specular highlight: both were tried and rejected (the gradient dims the lower
-  stroke into the background; the specular reads as a distracting double line).
-  The drop shadow also rhymes with the glass sibling's own shadow, so the two
-  variants feel like one family.
+  `feDropShadow dx=0 dy=10.8 stdDeviation=14.4 flood-color="#160E3A" flood-opacity=0.22`,
+  in **absolute 1024-canvas units**, applied to an *unscaled wrapper* `<g>` that
+  contains the scaled glyph `<g>` (i.e. filter on the outer group, `transform` on
+  the inner group). This ordering is deliberate: putting the filter on the scaled
+  group would express `stdDeviation` in sub-unit 24-space, which Cairo (rsvg /
+  the icon rasterizer) and Skia (the browser / login mark) interpret
+  inconsistently — the same class of Cairo-vs-Skia mismatch that caused the seam
+  bug (PR #926). Verified rendering identically in both engines at 512/48/32px.
+  The shadow gives visible depth at large sizes and fades to near-flat at 32–48px
+  with no muddy halo. **No** fill gradient and **no** specular highlight: both
+  were tried and rejected (the gradient dims the lower stroke into the
+  background; the specular reads as a distracting double line). The drop shadow
+  also rhymes with the glass sibling's own shadow, so the two variants feel like
+  one family.
 
 ### Single source of truth for the glyph
 
