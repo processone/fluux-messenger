@@ -250,7 +250,6 @@ export interface UseMessageListScrollOptions {
    *  ⇒ at the live edge — unchanged behavior. */
   windowAtLiveEdge?: boolean
   isHistoryComplete?: boolean
-  typingUsersCount: number
   lastMessageReactionsKey: string
   /** Whether the newest message is the local user's own (outgoing). When a NEW such message
    *  appears we scroll to the bottom regardless of position — you always want to see what you
@@ -313,7 +312,6 @@ export function useMessageListScroll({
   isLoadingNewer,
   windowAtLiveEdge,
   isHistoryComplete,
-  typingUsersCount,
   lastMessageReactionsKey,
   lastMessageIsOutgoing = false,
   lastMessageId,
@@ -2711,13 +2709,14 @@ export function useMessageListScroll({
   }, [firstNewMessageId])
 
   // ==========================================================================
-  // EFFECT: Typing indicator / reactions change
+  // EFFECT: Reactions change on the last message
   // ==========================================================================
 
-  // Content grew INSIDE the scroller (typing indicator toggled, reactions added to the last
-  // message): the scroller box is unchanged but scrollHeight grew, so a follower must re-pin.
-  // One effect keyed on both signals — the body is identical and both mean "footer/last-row
-  // height changed". useLayoutEffect runs BEFORE paint: with useEffect the browser paints a
+  // Reactions added to the last message grow its row INSIDE the scroller: the scroller box is
+  // unchanged but scrollHeight grew, so a follower must re-pin. (The typing indicator no longer
+  // participates — it floats OVER the list rather than living in the scroll content, so toggling
+  // it changes no height and must not re-pin; that inline height churn was what fought an upward
+  // scroll in issue #918.) useLayoutEffect runs BEFORE paint: with useEffect the browser paints a
   // frame with the gap visible and a scroll event can fire in between, flipping isAtBottomRef
   // false — which breaks auto-scroll for subsequent messages and strands a blank screen on
   // conversation switch (the stale "not at bottom" state gets persisted).
@@ -2725,11 +2724,11 @@ export function useMessageListScroll({
     if (!isAtBottomRef.current) return
     // Defer to an in-flight pin-bottom loop: it re-reads scrollHeight every frame and re-pins on
     // any change, so it picks this height change up by the next frame on its own. Restarting it
-    // here would add a synchronous forced layout (and possibly a full-scroller repaint) per typing
-    // toggle — in a busy room that is a keystroke-frequency event and the WebKitGTK freeze pattern.
+    // here would add a synchronous forced layout (and possibly a full-scroller repaint) per
+    // reaction — in a busy room that is a frequent event and the WebKitGTK freeze pattern.
     if (pinBottomActiveRef.current) return
-    reassertBottom('typing-reactions')
-  }, [typingUsersCount, lastMessageReactionsKey, isAtBottomRef, reassertBottom])
+    reassertBottom('reactions')
+  }, [lastMessageReactionsKey, isAtBottomRef, reassertBottom])
 
   // ==========================================================================
   // EFFECT: Container resize (composer grows/shrinks)
