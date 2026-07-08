@@ -6,7 +6,7 @@
  */
 import { useState, useMemo, useRef, useEffect, memo, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
-import { CornerUpRight, AlertCircle, RefreshCw, Lock, ShieldAlert, Ear, UserX } from 'lucide-react'
+import { CornerUpRight, AlertCircle, RefreshCw, Shield, ShieldCheck, ShieldX, ShieldAlert, Ear, UserX } from 'lucide-react'
 import { formatMessagePreview, formatXMPPError, getBareJid, type BaseMessage, type MentionReference, type Contact, type ContactIdentity, type RoomRole, type RoomAffiliation } from '@fluux/sdk'
 import { useVerifiedPeerKeysStore } from '@/stores/verifiedPeerKeysStore'
 import { useSettingsStore } from '@/stores/settingsStore'
@@ -640,9 +640,13 @@ export const MessageBubble = memo(function MessageBubble({
                   ).colorClass}`}
                   aria-label={`Encrypted with ${message.securityContext.protocolId}, trust ${displayTrust}`}
                 >
-                  {displayTrust === 'rejected'
+                  {displayTrust === 'verified'
+                    ? <ShieldCheck className="size-3" />
+                    : displayTrust === 'rejected'
+                    ? <ShieldX className="size-3" />
+                    : displayTrust === 'untrusted'
                     ? <ShieldAlert className="size-3" />
-                    : <Lock className="size-3" />}
+                    : <Shield className="size-3" />}
                 </span>
               </Tooltip>
             )}

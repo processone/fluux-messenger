@@ -12,7 +12,7 @@ import { Avatar } from './Avatar'
 import { useWindowDrag, useAnchoredMenu } from '@/hooks'
 import { getTranslatedStatusText } from '@/utils/statusText'
 import { Tooltip } from './Tooltip'
-import { Archive, ArchiveRestore, ArrowLeft, Clock, Hash, Lock, LockOpen, Loader2, Search, ShieldAlert, ShieldCheck, ShieldOff, ShieldX, User } from 'lucide-react'
+import { Archive, ArchiveRestore, ArrowLeft, Clock, Hash, Loader2, Lock, Search, Shield, ShieldAlert, ShieldCheck, ShieldOff, ShieldX, User } from 'lucide-react'
 import type { ConversationEncryptionState } from '@/hooks/useConversationEncryptionState'
 import { useWebUnlockDialogStore } from '@/stores/webUnlockDialogStore'
 import { HeaderOverflowKebab, type OverflowEntry } from './header/HeaderOverflowKebab'
@@ -334,7 +334,7 @@ function EncryptionIcon({
             aria-label={t('chat.encryption.plaintextForced')}
             aria-expanded={open}
           >
-            <LockOpen className="size-4" />
+            <ShieldOff className="size-4" />
           </button>
         </Tooltip>
         {open && (
@@ -348,7 +348,7 @@ function EncryptionIcon({
                 className="flex w-full items-center gap-2.5 px-3 py-2 text-sm text-fluux-text hover:bg-fluux-hover transition-colors"
                 onClick={() => { setOpen(false); onEnableClick() }}
               >
-                <Lock className="size-4 flex-shrink-0 text-fluux-muted" />
+                <Shield className="size-4 flex-shrink-0 text-fluux-muted" />
                 {t('chat.encryption.enableEncryption')}
               </button>
             )}
@@ -362,12 +362,12 @@ function EncryptionIcon({
   const verified = state.kind === 'encrypted' && state.trust === 'verified'
   const tofuNew = state.kind === 'encrypted' && state.trust === 'tofu-new'
   // `tofu-new` (freshly TOFU-pinned, unchanged, not yet OOB-verified) renders
-  // the same neutral gray Lock as `unverified` — homogeneous with the Settings
+  // the same neutral gray Shield as `unverified` — homogeneous with the Settings
   // → Encryption screen and the Security tab. `tofuNew` survives only to pick a
   // gentler tooltip below. The yellow ShieldAlert is now reserved exclusively
   // for the genuine `blocked` (key-changed) alert, so the two states no longer
   // share an alarming icon.
-  const Icon = verified ? ShieldCheck : Lock
+  const Icon = verified ? ShieldCheck : Shield
   const colorClass = verified
     ? trustVisual('verified').colorClass
     : `${trustVisual('trusted').colorClass} hover:text-fluux-text`
