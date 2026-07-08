@@ -249,10 +249,11 @@ describe('MessageList scroll behavior', () => {
   })
 
   describe('reactions scroll', () => {
-    // Skip: Auto-scroll on reactions requires tracking content changes, not just message count.
-    // The current implementation only auto-scrolls when messages.length changes.
-    // This is a known limitation - reactions don't trigger scroll to bottom.
-    it.skip('should scroll to bottom when last message receives reaction and user is at bottom', () => {
+    // A reaction is an ambient change: adding one to the last message must NOT re-pin the viewport,
+    // even while the user is following at the bottom. (The follower stays within AT_BOTTOM_THRESHOLD,
+    // so the next real message still sticks to the bottom.) This is the intended behavior — a reaction
+    // yanking the scroll is the same class of annoyance the typing-indicator fix removed (#918).
+    it('does NOT scroll to bottom when the last message receives a reaction', () => {
       const messages = createTestMessages(5)
       const scrollSpy = vi.fn()
 
@@ -298,8 +299,8 @@ describe('MessageList scroll behavior', () => {
           />
         )
 
-        // Should have scrolled to bottom
-        expect(scrollSpy).toHaveBeenCalledWith(1000)
+        // Reaction is ambient — the viewport is left where it was.
+        expect(scrollSpy).not.toHaveBeenCalled()
       }
     })
   })

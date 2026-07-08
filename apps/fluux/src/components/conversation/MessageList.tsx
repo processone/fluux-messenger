@@ -229,9 +229,6 @@ export function MessageList<T extends BaseMessage>({
   // Compute derived values for scroll hook
   const firstMessageId = deduplicatedMessages[0]?.id
   const lastMessage = messages[messages.length - 1]
-  const lastMessageReactionsKey = lastMessage
-    ? JSON.stringify(lastMessage.reactions || {})
-    : ''
 
   // --------------------------------------------------------------------------
   // SCROLL BEHAVIOR (delegated to hook)
@@ -480,7 +477,6 @@ export function MessageList<T extends BaseMessage>({
     isLoadingNewer,
     windowAtLiveEdge,
     isHistoryComplete,
-    lastMessageReactionsKey,
     lastMessageIsOutgoing: lastMessage?.isOutgoing ?? false,
     lastMessageId: lastMessage?.id,
     staticMode,
