@@ -372,6 +372,13 @@ export function useMessageListScroll({
   const virtualizerRef = useRef<MessageVirtualizer | undefined>(undefined)
   virtualizerRef.current = virtualizer
 
+  // Latest MAM-loading state (forward catch-up on entry, or backward "load older" pagination) for
+  // the active conversation, read imperatively inside pinVirtualizedBottom's stable useCallback —
+  // see the repaint-suppression note in writePin below. Updated synchronously in the render body
+  // (same pattern as virtualizerRef) so it is never stale when the pin loop reads it mid-run.
+  const isLoadingOlderRef = useRef(isLoadingOlder)
+  isLoadingOlderRef.current = isLoadingOlder
+
   // Track conversation
   const prevConversationRef = useRef<string | null>(null)
   const prevMessageCountRef = useRef(0)
@@ -841,7 +848,7 @@ export function useMessageListScroll({
       run.addMs('scroll', performance.now() - started)
       const moved = ss.scrollTop !== before
       if (moved) wroteAny = true
-      if (shouldForceRepaint(moved, repaintMode)) forceRepaint()
+      if (shouldForceRepaint(moved, repaintMode, isLoadingOlderRef.current)) forceRepaint()
       return moved
     }
 
@@ -875,12 +882,14 @@ export function useMessageListScroll({
       if (framesLeft-- <= 0) {
         // Loop ran its full budget without converging. Re-derive isAtBottom from geometry (accurate —
         // the position is correct even when WebKit withheld the paint) and force one final repaint —
-        // if anything was written — so the settled position is actually drawn.
+        // if anything was written — so the settled position is actually drawn. Still suppressed while
+        // a MAM catch-up is in flight: more content is coming, so this isn't the settled position yet —
+        // the catch-up-complete effect below forces the real final repaint once it finishes.
         if (s) {
           flushTailLayout()
           const dist = s.scrollHeight - s.scrollTop - s.clientHeight
           isAtBottomRef.current = dist < AT_BOTTOM_THRESHOLD
-          if (shouldForceRepaint(wroteAny, repaintMode)) forceRepaint()
+          if (shouldForceRepaint(wroteAny, repaintMode, isLoadingOlderRef.current)) forceRepaint()
           debugLog('PIN settled (frames exhausted)', { distFromBottom: dist })
         }
         finish()
@@ -2697,6 +2706,28 @@ export function useMessageListScroll({
     prevMessageCountRef.current = messageCount
     prevLastMessageIdRef.current = lastMessageId
   }, [conversationId, messageCount, lastMessageId, isAtBottomRef, staticMode, lastMessageIsOutgoing, reassertBottom])
+
+  // ==========================================================================
+  // EFFECT: Clean settle pin once a MAM catch-up completes
+  // ==========================================================================
+
+  // writePin above suppresses the forced repaint while isLoadingOlder is true (see pinBottomRun's
+  // shouldForceRepaint doc) — a catch-up pages in merges every ~50-300ms, each moving scrollTop, and
+  // WebKit isn't painting those intermediate positions anyway without the forced toggle. But once the
+  // LAST merge lands, something has to force the final repaint or the view is stuck showing a stale
+  // frame at the (geometrically correct) suppressed position. This fires exactly once on the
+  // isLoadingOlder true -> false transition, while the reader is following the bottom, mirroring the
+  // "new message" effect above but keyed on load completion rather than message-count growth (needed
+  // because the last MAM page can land with no further count change once the switch effect's own
+  // initial cache load already brought it in).
+  const prevIsLoadingOlderRef = useRef(isLoadingOlder)
+  useEffect(() => {
+    const wasLoading = prevIsLoadingOlderRef.current
+    prevIsLoadingOlderRef.current = isLoadingOlder
+    if (wasLoading && !isLoadingOlder && isAtBottomRef.current && !staticMode) {
+      reassertBottom('mam-catchup-complete')
+    }
+  }, [isLoadingOlder, isAtBottomRef, staticMode, reassertBottom])
 
   // ==========================================================================
   // EFFECT: Reset marker scroll tracking when firstNewMessageId changes
