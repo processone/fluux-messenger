@@ -12,7 +12,7 @@ import { KeyChangeBanner } from './KeyChangeBanner'
 import { useConnectionStore } from '@fluux/sdk/react'
 import { useFileUpload, useLinkPreview, useTypeToFocus, useMessageCopy, useMode, useMessageSelection, useMessageHoverState, useDragAndDrop, useConversationDraft, useTimeFormat } from '@/hooks'
 import { Upload, Loader2 } from 'lucide-react'
-import { MessageBubble, MessageList as MessageListComponent, shouldShowAvatar, buildReplyContext } from './conversation'
+import { MessageBubble, MessageList as MessageListComponent, shouldShowAvatar, ownGroupKey as computeOwnGroupKey, buildReplyContext } from './conversation'
 import { FindOnPageBar } from './conversation/FindOnPageBar'
 import { useFindOnPage, type FindOnPageHandle } from '@/hooks/useFindOnPage'
 import { useConversationEncryptionState, type ConversationEncryptionState } from '@/hooks/useConversationEncryptionState'
@@ -705,6 +705,7 @@ export const ChatMessageList = memo(function ChatMessageList({
       message={msg}
       showAvatar={shouldShowAvatar(groupMessages, idx)}
       isGroupEnd={idx === groupMessages.length - 1 || shouldShowAvatar(groupMessages, idx + 1)}
+      ownGroupKey={computeOwnGroupKey(groupMessages, idx)}
       avatar={msg.isOutgoing ? ownAvatar ?? undefined : contactsByJid.get(msg.from)?.avatar}
       ownAvatar={ownAvatar}
       ownNickname={ownNickname}
@@ -785,6 +786,8 @@ interface ChatMessageBubbleProps {
   message: Message
   showAvatar: boolean
   isGroupEnd: boolean
+  /** Own-message run key (see ownGroupKey); undefined for incoming/solo rows. */
+  ownGroupKey?: string
   avatar?: string
   ownAvatar?: string | null
   ownNickname?: string | null
@@ -829,6 +832,7 @@ const ChatMessageBubble = memo(function ChatMessageBubble({
   message,
   showAvatar,
   isGroupEnd,
+  ownGroupKey,
   avatar,
   ownAvatar,
   ownNickname,
@@ -948,6 +952,7 @@ const ChatMessageBubble = memo(function ChatMessageBubble({
         message={message}
         showAvatar={showAvatar}
         isGroupEnd={isGroupEnd}
+        ownGroupKey={ownGroupKey}
         isSelected={isSelected}
         hasKeyboardSelection={hasKeyboardSelection}
         showToolbarForSelection={showToolbarForSelection}
