@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback, Suspense, lazy, type ReactNode, type RefObject, type Ref, useImperativeHandle } from 'react'
 import { useTranslation } from 'react-i18next'
 import { detectRenderLoop, notifyUserInput } from '@/utils/renderLoopDetector'
-import { Send, Smile, Paperclip, Reply, X, Pencil, Loader2, Image, FileText, Trash2, BarChart3, Plus, Lock, ShieldCheck, ShieldAlert, Terminal } from 'lucide-react'
+import { Send, Smile, Paperclip, Reply, X, Pencil, Loader2, Image, FileText, Trash2, BarChart3, Plus, Lock, Shield, ShieldCheck, ShieldAlert, Terminal } from 'lucide-react'
 import { useClickOutside } from '@/hooks'
 import { Tooltip } from './Tooltip'
 import { TextArea } from './ui/TextInput'
@@ -701,15 +701,15 @@ export function MessageComposer({
   }
 
   // Aurora encryption reminder. Colors flow from trustVisual() — the single
-  // source of truth shared with the per-message bubble lock: calm gray for a
+  // source of truth shared with the per-message bubble shield: calm gray for a
   // routine encrypted-but-unverified peer, teal only once verified, amber on a
   // real key change ('blocked'). Everything else shows nothing.
   const enc = encryptionState
-  const lockInfo: { Icon: typeof Lock; colorClass: string; label: string } | null =
+  const lockInfo: { Icon: typeof Shield; colorClass: string; label: string } | null =
     enc?.kind === 'encrypted'
       ? enc.trust === 'verified'
         ? { Icon: ShieldCheck, colorClass: trustVisual('verified').colorClass, label: t('chat.encryption.verifiedTooltip') }
-        : { Icon: Lock, colorClass: trustVisual('trusted').colorClass, label: t('chat.encryption.openpgpTooltip') }
+        : { Icon: Shield, colorClass: trustVisual('trusted').colorClass, label: t('chat.encryption.openpgpTooltip') }
       : enc?.kind === 'blocked'
         ? { Icon: ShieldAlert, colorClass: trustVisual('keyChanged').colorClass, label: t('chat.encryption.blockedTooltip') }
         : null

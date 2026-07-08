@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next'
-import { Loader2, Lock, LockOpen, ShieldAlert, ShieldCheck, ShieldOff, ShieldX } from 'lucide-react'
+import { Loader2, Shield, ShieldAlert, ShieldCheck, ShieldOff, ShieldX } from 'lucide-react'
 import type { ConversationEncryptionState } from '@/hooks/useConversationEncryptionState'
 import { trustVisual } from '@/e2ee/trustVisual'
 
@@ -64,7 +64,7 @@ export function SecurityTab({
 
         {state.kind === 'unsupported' && (
           <ExplanationPanel
-            icon={<LockOpen className="size-5 text-fluux-muted flex-shrink-0" />}
+            icon={<ShieldOff className="size-5 text-fluux-muted flex-shrink-0" />}
             title={t('contacts.encryption.notAvailableTitle')}
             description={t('contacts.encryption.notAvailableDescription')}
             tone="neutral"
@@ -74,7 +74,7 @@ export function SecurityTab({
         {state.kind === 'plaintextForced' && (
           <>
             <ExplanationPanel
-              icon={<LockOpen className="size-5 text-fluux-muted flex-shrink-0" />}
+              icon={<ShieldOff className="size-5 text-fluux-muted flex-shrink-0" />}
               title={t('contacts.encryption.disabledByYouTitle')}
               description={t('contacts.encryption.disabledByYouDescription')}
               tone="neutral"
@@ -84,7 +84,7 @@ export function SecurityTab({
               onClick={onEnableEncryption}
               className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-fluux-bg hover:bg-fluux-hover text-fluux-text border border-fluux-border rounded-lg transition-colors text-sm min-h-[44px]"
             >
-              <Lock className="size-4" />
+              <Shield className="size-4" />
               {t('chat.encryption.enableEncryption')}
             </button>
           </>
@@ -92,7 +92,7 @@ export function SecurityTab({
 
         {state.kind === 'disabled' && (
           <ExplanationPanel
-            icon={<LockOpen className="size-5 text-fluux-muted flex-shrink-0" />}
+            icon={<ShieldOff className="size-5 text-fluux-muted flex-shrink-0" />}
             title={t('contacts.encryption.unavailableNowTitle')}
             description={t('contacts.encryption.unavailableNowDescription')}
             tone="neutral"
@@ -106,7 +106,7 @@ export function SecurityTab({
                 state.trust === 'verified' ? (
                   <ShieldCheck className={`size-5 ${trustVisual('verified').colorClass} flex-shrink-0`} />
                 ) : (
-                  <Lock className="size-5 text-fluux-muted flex-shrink-0" />
+                  <Shield className="size-5 text-fluux-muted flex-shrink-0" />
                 )
               }
               title={

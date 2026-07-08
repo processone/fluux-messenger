@@ -1500,18 +1500,18 @@ describe('MessageComposer', () => {
 
     // Colors flow from the shared trustVisual() source of truth: calm gray for a
     // routine encrypted-but-unverified peer, teal only once verified — matching the
-    // per-message bubble lock so the two are never inconsistent.
-    it('shows a calm gray lock when encrypted but unverified', () => {
+    // per-message bubble shield so the two are never inconsistent.
+    it('shows a calm gray shield when encrypted but unverified', () => {
       const { container } = render(<MessageComposer {...base} encryptionState={{ kind: 'encrypted', fingerprint: 'a', trust: 'unverified' }} />)
-      const icon = container.querySelector('[data-encryption-lock] .lucide-lock')!
+      const icon = container.querySelector('[data-encryption-lock] .lucide-shield')!
       expect(icon).not.toBeNull()
       expect(icon.classList.contains('text-fluux-muted')).toBe(true)
       expect(icon.classList.contains('text-fluux-encryption')).toBe(false)
     })
 
-    it('shows a calm gray lock when trust is tofu-new', () => {
+    it('shows a calm gray shield when trust is tofu-new', () => {
       const { container } = render(<MessageComposer {...base} encryptionState={{ kind: 'encrypted', fingerprint: 'a', trust: 'tofu-new' }} />)
-      const icon = container.querySelector('[data-encryption-lock] .lucide-lock')!
+      const icon = container.querySelector('[data-encryption-lock] .lucide-shield')!
       expect(icon).not.toBeNull()
       expect(icon.classList.contains('text-fluux-muted')).toBe(true)
     })
