@@ -250,6 +250,9 @@ export interface UseMessageListScrollOptions {
    *  ⇒ at the live edge — unchanged behavior. */
   windowAtLiveEdge?: boolean
   isHistoryComplete?: boolean
+  /** Signature of the last message's reactions. Changes when a reaction is added/removed on the last
+   *  row (growing/shrinking it); drives a gentle bottom nudge while the reader is sticked to bottom. */
+  lastMessageReactionsKey: string
   /** Whether the newest message is the local user's own (outgoing). When a NEW such message
    *  appears we scroll to the bottom regardless of position — you always want to see what you
    *  just sent — whereas an incoming message only auto-follows when already near the bottom. */
@@ -311,6 +314,7 @@ export function useMessageListScroll({
   isLoadingNewer,
   windowAtLiveEdge,
   isHistoryComplete,
+  lastMessageReactionsKey,
   lastMessageIsOutgoing = false,
   lastMessageId,
   staticMode = false,
@@ -2706,11 +2710,43 @@ export function useMessageListScroll({
     }
   }, [firstNewMessageId])
 
-  // NOTE: neither a typing-indicator toggle nor a reaction on the last message re-pins the viewport.
-  // Both are ambient changes that must not yank the reader's scroll position — the typing indicator
-  // floats OVER the list (issue #918) so it changes no scroll height, and a reaction growing the last
-  // row is deliberately left alone (a follower stays within AT_BOTTOM_THRESHOLD, so the next real
-  // message still sticks to the bottom). Only new messages and layout/container changes re-pin.
+  // ==========================================================================
+  // EFFECT: Reaction on the last message — gentle bottom nudge (only when sticked)
+  // ==========================================================================
+
+  // A reaction added to the last message grows its row a little. While the reader is sticked to the
+  // bottom we keep the reaction visible with a GENTLE, single smooth nudge — NOT the multi-frame
+  // pinVirtualizedBottom loop (that WebKitGTK-heavy re-assert is for new messages; a reaction is a
+  // tiny ambient growth and a jolt would be jarring). Two safeguards keep it from ever fighting a
+  // scroll: (1) it's gated on LIVE geometry, not the latchable isAtBottomRef — a reader scrolled up
+  // into history reads distFromBottom >= threshold and is never nudged (this is what made a typing
+  // toggle "fight" the scroll in #918: a stale-true latch); (2) it fires only on an actual reactions
+  // change WITHIN the same conversation, so a conversation switch / restore is never disturbed.
+  // (The typing indicator itself no longer participates at all — it floats OVER the list, #918.)
+  const prevReactionsKeyRef = useRef(lastMessageReactionsKey)
+  const reactionsConvRef = useRef(conversationId)
+  useLayoutEffect(() => {
+    const sameConversation = reactionsConvRef.current === conversationId
+    reactionsConvRef.current = conversationId
+    const prevKey = prevReactionsKeyRef.current
+    prevReactionsKeyRef.current = lastMessageReactionsKey
+    if (!sameConversation) return // conversation switch → rebaseline, never nudge
+    if (prevKey === lastMessageReactionsKey) return // no actual reactions change (unrelated re-render)
+
+    const scroller = scrollerRef.current
+    if (!scroller || staticMode) return
+    // Live-geometry gate: only nudge when genuinely at/near the bottom right now.
+    if (getDistanceFromBottom(scroller) >= AT_BOTTOM_THRESHOLD) return
+    // A running pin loop already keeps the bottom pinned — don't stack a second scroll on it.
+    if (pinBottomActiveRef.current) return
+
+    const virt = virtualizerRef.current
+    if (virt && virt.itemCount > 0) {
+      virt.scrollToIndex(virt.itemCount - 1, { align: 'end', behavior: 'smooth' })
+    } else {
+      scroller.scrollTo({ top: scroller.scrollHeight, behavior: 'smooth' })
+    }
+  }, [lastMessageReactionsKey, conversationId, staticMode])
 
   // ==========================================================================
   // EFFECT: Container resize (composer grows/shrinks)

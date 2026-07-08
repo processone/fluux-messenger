@@ -79,6 +79,7 @@ function HookHarness({
     firstNewMessageId,
     clearFirstNewMessageId,
     onLoadAround,
+    lastMessageReactionsKey: '',
     lastMessageId: ids.at(-1),
   })
 
