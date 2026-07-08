@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { groupMessagesByDate, shouldShowAvatar, whisperThreadPosition, whisperCounterpartPresent, scrollToMessage, isActionMessage, canClosePoll } from './messageGrouping'
+import { groupMessagesByDate, shouldShowAvatar, ownGroupKey, whisperThreadPosition, whisperCounterpartPresent, scrollToMessage, isActionMessage, canClosePoll } from './messageGrouping'
 import { setActiveMessageListController } from './activeMessageListController'
 
 // Mock CSS.escape since it's not available in JSDOM
@@ -328,6 +328,61 @@ describe('shouldShowAvatar', () => {
 
       expect(shouldShowAvatar(messages, 1)).toBe(false)
     })
+  })
+})
+
+describe('ownGroupKey', () => {
+  const own = (id: string, min: number) => ({
+    id,
+    from: 'me',
+    isOutgoing: true,
+    timestamp: new Date(`2024-01-15T10:0${min}:00`),
+  })
+  const incoming = (id: string, min: number) => ({
+    id,
+    from: 'alice',
+    isOutgoing: false,
+    timestamp: new Date(`2024-01-15T10:0${min}:00`),
+  })
+
+  it('returns undefined for incoming messages', () => {
+    const messages = [incoming('1', 0), incoming('2', 1)]
+    expect(ownGroupKey(messages, 0)).toBeUndefined()
+    expect(ownGroupKey(messages, 1)).toBeUndefined()
+  })
+
+  it('returns undefined for a solo own message (a group of one)', () => {
+    const messages = [incoming('1', 0), own('2', 1), incoming('3', 2)]
+    expect(ownGroupKey(messages, 1)).toBeUndefined()
+  })
+
+  it('returns the group-start id for every row of a multi-message own run', () => {
+    const messages = [incoming('a', 0), own('b', 1), own('c', 2), own('d', 3)]
+    // All three own rows resolve to the run's first id.
+    expect(ownGroupKey(messages, 1)).toBe('b')
+    expect(ownGroupKey(messages, 2)).toBe('b')
+    expect(ownGroupKey(messages, 3)).toBe('b')
+  })
+
+  it('starts a fresh key after a >5min gap splits the own run', () => {
+    const messages = [
+      { id: 'b', from: 'me', isOutgoing: true, timestamp: new Date('2024-01-15T10:00:00') },
+      { id: 'c', from: 'me', isOutgoing: true, timestamp: new Date('2024-01-15T10:01:00') },
+      // >5min later — shouldShowAvatar breaks the group here, so a new run begins.
+      { id: 'd', from: 'me', isOutgoing: true, timestamp: new Date('2024-01-15T10:10:00') },
+      { id: 'e', from: 'me', isOutgoing: true, timestamp: new Date('2024-01-15T10:11:00') },
+    ]
+    expect(ownGroupKey(messages, 0)).toBe('b')
+    expect(ownGroupKey(messages, 1)).toBe('b')
+    expect(ownGroupKey(messages, 2)).toBe('d')
+    expect(ownGroupKey(messages, 3)).toBe('d')
+  })
+
+  it('does not merge an own run across an incoming message', () => {
+    const messages = [own('a', 0), incoming('b', 1), own('c', 2)]
+    // Both own rows are solo (separated by the incoming), so neither groups.
+    expect(ownGroupKey(messages, 0)).toBeUndefined()
+    expect(ownGroupKey(messages, 2)).toBeUndefined()
   })
 })
 

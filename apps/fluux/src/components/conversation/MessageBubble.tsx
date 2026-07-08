@@ -20,6 +20,7 @@ import { EncryptedPlaceholder } from './EncryptedPlaceholder'
 import { UnsupportedEncryptionNotice } from './UnsupportedEncryptionNotice'
 import { MessageReactions } from './MessageReactions'
 import { scrollToMessage, isActionMessage, type WhisperThreadPosition } from './messageGrouping'
+import { useOwnGroupWidth } from './messageGroupWidth'
 import { resolveDisplayTrust } from './messageTrust'
 import { trustVisual } from '@/e2ee/trustVisual'
 import { MessageAttachments } from '../MessageAttachments'
@@ -159,6 +160,14 @@ export interface MessageBubbleProps {
 
   // Whether this message is the current find-on-page match
   isCurrentMatch?: boolean
+
+  /**
+   * Key of the consecutive own-message run this row belongs to (from
+   * {@link ownGroupKey}); undefined for incoming or solo own messages. When set,
+   * the row's tint box shares the run's widest width so the own-message tint
+   * reads as one clean rectangle instead of a ragged, per-row hug.
+   */
+  ownGroupKey?: string
 }
 
 /**
@@ -265,6 +274,10 @@ function arePropsEqual(prev: MessageBubbleProps, next: MessageBubbleProps): bool
   // Find-on-page current match
   if (prev.isCurrentMatch !== next.isCurrentMatch) return false
 
+  // Own-message run identity — changes when grouping shifts, so the row can
+  // (de)register from the shared-width coordinator.
+  if (prev.ownGroupKey !== next.ownGroupKey) return false
+
   // All data props are equal - skip re-render
   // (callback props like onReply, onEdit, etc. are intentionally ignored)
   return true
@@ -324,6 +337,7 @@ export const MessageBubble = memo(function MessageBubble({
   timeFormat,
   highlightTerms,
   isCurrentMatch,
+  ownGroupKey,
 }: MessageBubbleProps) {
   const { t } = useTranslation()
   const [showReactionPicker, setShowReactionPickerState] = useState(false)
@@ -446,6 +460,19 @@ export const MessageBubble = memo(function MessageBubble({
   const ownRowClass = ownTint
     ? `${!showAvatar ? ' message-own-cont-top' : ''}${!isGroupEnd ? ' message-own-cont-bottom' : ''}`
     : ''
+  // Own-message tint hugs its content instead of spanning the row: `w-fit` sizes
+  // the filled surface to the widest line (body or the name+time header) and
+  // `max-w-full` still wraps long messages at the available width. Incoming rows
+  // and whisper cards keep `flex-1` so their layout is unchanged.
+  const contentWidthClass = ownTint ? 'w-fit max-w-full' : 'flex-1'
+  // A run of consecutive own messages shares its widest line's width so the tint
+  // reads as one clean rectangle rather than a ragged per-row hug. `ownGroupKey`
+  // is already undefined unless this is a MULTI-row own run; gate on `ownTint`
+  // too so a whisper-thread own message (a `flex-1` card) never gets pinned. The
+  // signature captures every field that changes the row's natural width so the
+  // group re-fits on content edits but not on hover/selection churn.
+  const ownGroupWidthSignature = `${message.body ?? ''}|${showAvatar ? 1 : 0}|${timeFormat}|${message.isRetracted ? 1 : 0}|${message.isEdited ? 1 : 0}|${JSON.stringify(message.reactions ?? {})}|${replyContext?.messageId ?? ''}|${message.attachment ? 1 : 0}|${message.linkPreview ? 1 : 0}|${message.poll ? 1 : 0}|${message.encryptedPayload ? 1 : 0}|${message.unsupportedEncryption?.name ?? ''}`
+  const ownGroupRef = useOwnGroupWidth(ownTint ? ownGroupKey : undefined, message.id, ownGroupWidthSignature)
 
   const { canReply, canEdit, canDelete } = actions
   const canCopyBody = !!message.body && !message.isRetracted && !message.encryptedPayload && !message.unsupportedEncryption
@@ -528,7 +555,8 @@ export const MessageBubble = memo(function MessageBubble({
           the incoming rows — shattering the single "private with X" card. The
           name header already carries the own-vs-counterpart distinction. */}
       <div
-        className={`relative flex-1 min-w-0 touch:select-none touch:[-webkit-touch-callout:none] ${isSelected || showActionSheet ? 'bg-fluux-selection -my-0.5 py-0.5 -ms-2 ps-2 -me-4 pe-4 rounded-s' : ''}${inThread ? ` bg-fluux-private-soft border-x border-fluux-private-border px-2.5 py-1 ${threadStart ? 'border-t rounded-t-lg' : ''} ${threadEnd ? 'border-b rounded-b-lg' : ''}` : ''} ${ownTintClass}`}
+        ref={ownGroupRef}
+        className={`relative ${contentWidthClass} min-w-0 touch:select-none touch:[-webkit-touch-callout:none] ${isSelected || showActionSheet ? 'bg-fluux-selection -my-0.5 py-0.5 -ms-2 ps-2 -me-4 pe-4 rounded-s' : ''}${inThread ? ` bg-fluux-private-soft border-x border-fluux-private-border px-2.5 py-1 ${threadStart ? 'border-t rounded-t-lg' : ''} ${threadEnd ? 'border-b rounded-b-lg' : ''}` : ''} ${ownTintClass}`}
         data-msg-chrome={showAvatar ? 'header' : 'cont'}
         onTouchStart={handleContentTouchStart}
         onTouchEnd={cancelLongPress}

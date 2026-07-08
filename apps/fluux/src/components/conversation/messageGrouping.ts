@@ -45,6 +45,8 @@ interface GroupableMessage {
   id: string
   timestamp: Date
   from: string
+  /** True for messages the local user sent — drives own-message grouping. */
+  isOutgoing?: boolean
   /** Message body — used to detect /me action messages for grouping. */
   body?: string
   securityContext?: GroupingSecurityContext
@@ -183,6 +185,34 @@ export function shouldShowAvatar<T extends GroupableMessage>(messages: T[], inde
   // Show avatar if more than 5 minutes apart
   const timeDiff = current.timestamp.getTime() - previous.timestamp.getTime()
   return timeDiff > 5 * 60 * 1000
+}
+
+/**
+ * Stable key identifying the run of consecutive OWN messages a row belongs to,
+ * or `undefined` when the row is incoming OR is a solo own message (a group of
+ * one needs no shared-width coordination). The key is the group-start message's
+ * id, so every member of the same run resolves to the same value.
+ *
+ * A "run" is an avatar-group (same boundaries as {@link shouldShowAvatar}) whose
+ * rows are all outgoing — the exact span the own-message tint renders as one
+ * continuous surface. Used to make those rows share the widest line's width so
+ * the tint reads as a clean rectangle (see `useOwnGroupWidth`).
+ */
+export function ownGroupKey<T extends GroupableMessage>(messages: T[], index: number): string | undefined {
+  if (!messages[index]?.isOutgoing) return undefined
+
+  // Walk back to the group start (rows without an avatar continue the previous).
+  let start = index
+  while (start > 0 && !shouldShowAvatar(messages, start)) start--
+  // Walk forward to the group end (the next avatar row starts a new group).
+  let end = index
+  while (end < messages.length - 1 && !shouldShowAvatar(messages, end + 1)) end++
+
+  // The whole run must be outgoing (a sender change is an avatar break, so this
+  // holds by construction, but guard the boundaries defensively) and span > 1 row.
+  if (start === end) return undefined
+  if (!messages[start].isOutgoing || !messages[end].isOutgoing) return undefined
+  return messages[start].id
 }
 
 /** Position of a message within a whisper thread (see `whisperThreadPosition`). */

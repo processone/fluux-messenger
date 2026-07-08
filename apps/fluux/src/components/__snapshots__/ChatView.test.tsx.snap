@@ -289,7 +289,7 @@ exports[`ChatView > Snapshots > should match snapshot with messages 1`] = `
                     </div>
                   </div>
                   <div
-                    class="relative flex-1 min-w-0 touch:select-none touch:[-webkit-touch-callout:none]  message-own-tint message-own-tint-start message-own-tint-end"
+                    class="relative w-fit max-w-full min-w-0 touch:select-none touch:[-webkit-touch-callout:none]  message-own-tint message-own-tint-start message-own-tint-end"
                     data-msg-chrome="header"
                   >
                     <div

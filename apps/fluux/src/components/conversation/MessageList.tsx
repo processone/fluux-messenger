@@ -26,6 +26,7 @@ import { TypingIndicator } from './TypingIndicator'
 import { groupMessagesByDate, shouldShowAvatar } from './messageGrouping'
 import { useMessageListScroll } from './useMessageListScroll'
 import { MessageWidthProvider } from './messageWidthContext'
+import { OwnGroupWidthProvider } from './messageGroupWidth'
 import { isFeatureEnabled } from '@/utils/featureFlags'
 import { useSettingsStore } from '@/stores/settingsStore'
 import type { CopyMessageMeta } from '@/utils/buildCopyText'
@@ -666,6 +667,7 @@ export function MessageList<T extends BaseMessage>({
 
   return (
     <MessageWidthProvider containerRef={scrollContainerRef}>
+    <OwnGroupWidthProvider>
     <div className="relative flex-1 flex flex-col min-h-0">
       {/* Scrollable message container - always mounted to preserve scroll position */}
       <div
@@ -836,6 +838,7 @@ export function MessageList<T extends BaseMessage>({
       </div>
       <MessageSelectionBar count={selectionCount} onCopy={copySelected} onClear={clearSelection} />
     </div>
+    </OwnGroupWidthProvider>
     </MessageWidthProvider>
   )
 }
