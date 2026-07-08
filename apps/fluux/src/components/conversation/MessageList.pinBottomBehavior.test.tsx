@@ -149,23 +149,26 @@ describe('MessageList — pinVirtualizedBottom cost control', () => {
   // canonical send-stick test in MessageList.pinBottomRepaint.test.tsx.
 
   // Issue #918: the typing indicator floats OVER the list rather than living in the scroll content,
-  // so toggling it changes no scroll height and must NEVER re-pin the viewport — the inline height
-  // churn was what "fought" an upward scroll while another participant was typing.
-  it('does not re-pin the list when the typing indicator toggles at the bottom', () => {
+  // so toggling it changes no scroll height on its own — the inline height churn was what "fought"
+  // an upward scroll while another participant was typing. The footer's reserved clearance for the
+  // pill DOES grow while genuinely at the bottom (a gentle nudge, same mechanism as a reaction
+  // growing the last row) — see the next test for the invariant that still matters: a reader
+  // scrolled up must never be yanked back down.
+  it('gently nudges to reveal the footer clearance when typing starts at the bottom, not when it stops', () => {
     const { rerender, isAtBottomRef } = renderPinned()
     flush(30) // quiesce any residual pin activity
     expect(rafQueue.length).toBe(0)
     const baseline = scrollToEndCalls.count
 
-    // Typing starts → no pin.
+    // Typing starts while genuinely at the bottom → nudges once to reveal the grown footer.
     rerender(<MessageList messages={makeMessages(50)} conversationId="conv-pin-behavior" isAtBottomRef={isAtBottomRef} typingUsers={['alice']} {...props} />)
     flush(5)
-    expect(scrollToEndCalls.count).toBe(baseline)
+    expect(scrollToEndCalls.count).toBe(baseline + 1)
 
-    // Typing stops → still no pin.
+    // Typing stops → the footer shrinks; the browser clamps scrollTop on its own, no extra nudge.
     rerender(<MessageList messages={makeMessages(50)} conversationId="conv-pin-behavior" isAtBottomRef={isAtBottomRef} typingUsers={[]} {...props} />)
     flush(5)
-    expect(scrollToEndCalls.count).toBe(baseline)
+    expect(scrollToEndCalls.count).toBe(baseline + 1)
   })
 
   it('does not yank a scrolled-up viewport back to the bottom when typing toggles (issue #918)', () => {
