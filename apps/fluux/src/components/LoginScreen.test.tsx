@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { LoginScreen } from './LoginScreen'
 import { useLoginPrefillStore } from '@/stores/loginPrefillStore'
@@ -503,15 +503,13 @@ describe('LoginScreen — Aurora branding', () => {
     mockUseConnection.mockReturnValue({ status: 'offline', error: null, connect: mockConnect })
   })
 
-  it('renders the app-icon brand mark + display-font heading (no flat logo img)', () => {
+  it('renders a brand mark svg + display-font heading (no flat logo img)', () => {
     render(<LoginScreen />)
-    // display-font heading
     const heading = screen.getByRole('heading', { level: 1 })
     expect(heading.className).toMatch(/font-display/)
-    // the brand mark is the inline app-icon svg — no flat logo <img>
-    // (the soft halo behind it does use --fluux-grad, so we don't assert its absence)
     expect(screen.queryByRole('img')).toBeNull()
-    expect(document.querySelector('svg.app-icon-mark')).not.toBeNull()
+    // brand mark is an inline svg of whichever variant is active
+    expect(document.querySelector('svg.hollow-icon-mark, svg.app-icon-mark')).not.toBeNull()
   })
 })
 
@@ -538,5 +536,34 @@ describe('LoginScreen — advanced-mode kebab', () => {
       expect(screen.getByText('login.serverLabel')).toBeInTheDocument()
     })
     expect(useAdvancedModeStore.getState().advancedMode).toBe(true)
+  })
+})
+
+describe('LoginScreen — icon-style variant', () => {
+  beforeEach(() => {
+    useAdvancedModeStore.setState({ advancedMode: false })
+    mockUseConnection.mockReturnValue({ status: 'offline', error: null, connect: mockConnect })
+  })
+  afterEach(() => {
+    vi.unstubAllEnvs()
+  })
+
+  it('defaults to the hollow mark when the flag is unset', () => {
+    render(<LoginScreen />)
+    expect(document.querySelector('svg.hollow-icon-mark')).not.toBeNull()
+    expect(document.querySelector('svg.app-icon-mark')).toBeNull()
+  })
+
+  it('renders the plain glass mark when VITE_FLUUX_ICON_STYLE=plain', () => {
+    vi.stubEnv('VITE_FLUUX_ICON_STYLE', 'plain')
+    render(<LoginScreen />)
+    expect(document.querySelector('svg.app-icon-mark')).not.toBeNull()
+    expect(document.querySelector('svg.hollow-icon-mark')).toBeNull()
+  })
+
+  it('falls back to the hollow mark for an unknown flag value', () => {
+    vi.stubEnv('VITE_FLUUX_ICON_STYLE', 'sparkly')
+    render(<LoginScreen />)
+    expect(document.querySelector('svg.hollow-icon-mark')).not.toBeNull()
   })
 })
