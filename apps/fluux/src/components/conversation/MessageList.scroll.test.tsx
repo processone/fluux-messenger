@@ -140,7 +140,10 @@ describe('MessageList scroll behavior', () => {
   })
 
   describe('typing indicator scroll', () => {
-    it('should scroll to bottom when typing indicator appears and user is at bottom', () => {
+    // The typing indicator floats OVER the list (it is not part of the scroll content), so toggling
+    // it changes no scroll height and must never move the viewport — whether the user is at the
+    // bottom or scrolled up in history (issue #918: inline height churn fought an upward scroll).
+    it('should NOT scroll when typing indicator appears and user is at bottom (it floats)', () => {
       const messages = createTestMessages(5)
       const scrollSpy = vi.fn()
 
@@ -171,6 +174,7 @@ describe('MessageList scroll behavior', () => {
 
         // Simulate being at bottom (scrollTop = scrollHeight - clientHeight = 500)
         scrollTopValue = 500
+        scrollSpy.mockClear()
 
         // Re-render with typing users
         rerender(
@@ -183,8 +187,8 @@ describe('MessageList scroll behavior', () => {
           />
         )
 
-        // Should have scrolled to bottom
-        expect(scrollSpy).toHaveBeenCalledWith(1000)
+        // The floating indicator changes no scroll height → no scroll write.
+        expect(scrollSpy).not.toHaveBeenCalled()
       }
     })
 
@@ -245,58 +249,53 @@ describe('MessageList scroll behavior', () => {
   })
 
   describe('reactions scroll', () => {
-    // Skip: Auto-scroll on reactions requires tracking content changes, not just message count.
-    // The current implementation only auto-scrolls when messages.length changes.
-    // This is a known limitation - reactions don't trigger scroll to bottom.
-    it.skip('should scroll to bottom when last message receives reaction and user is at bottom', () => {
-      const messages = createTestMessages(5)
-      const scrollSpy = vi.fn()
+    // A reaction grows the last message's row. While the reader is sticked to the bottom we keep it
+    // visible with a GENTLE single smooth nudge (not the heavy multi-frame pin loop, and not the old
+    // hard yank). It is gated on LIVE geometry, so a reader scrolled up into history is never nudged.
+    const reactOnLast = (msgs: ReturnType<typeof createTestMessages>) => {
+      const copy = [...msgs]
+      copy[copy.length - 1] = { ...copy[copy.length - 1], reactions: { '👍': ['someone@example.com'] } }
+      return copy
+    }
+    const instrument = (container: HTMLDivElement, scrollTop: number) => {
+      Object.defineProperty(container, 'scrollHeight', { value: 1000, configurable: true })
+      Object.defineProperty(container, 'clientHeight', { value: 500, configurable: true })
+      Object.defineProperty(container, 'scrollTop', { value: scrollTop, writable: true, configurable: true })
+      const scrollToSpy = vi.fn()
+      container.scrollTo = scrollToSpy
+      return scrollToSpy
+    }
 
+    it('gently nudges the bottom (smooth) when the last message gets a reaction while sticked', () => {
+      const messages = createTestMessages(5)
       const { rerender } = render(
-        <MessageList
-          messages={messages}
-          conversationId="conv-1"
-          clearFirstNewMessageId={vi.fn()}
-          renderMessage={(msg) => <div key={msg.id}>{msg.body}</div>}
-        />
+        <MessageList messages={messages} conversationId="conv-1" clearFirstNewMessageId={vi.fn()} renderMessage={(msg) => <div key={msg.id}>{msg.body}</div>} />
+      )
+      const container = document.querySelector('.overflow-y-auto') as HTMLDivElement
+      // scrollTop 500 → distFromBottom 0 (< AT_BOTTOM_THRESHOLD): the reader is sticked to the bottom.
+      const scrollToSpy = instrument(container, 500)
+
+      rerender(
+        <MessageList messages={reactOnLast(messages)} conversationId="conv-1" clearFirstNewMessageId={vi.fn()} renderMessage={(msg) => <div key={msg.id}>{msg.body}</div>} />
       )
 
-      // Get the scroll container
+      expect(scrollToSpy).toHaveBeenCalledWith(expect.objectContaining({ top: 1000, behavior: 'smooth' }))
+    })
+
+    it('does NOT nudge when a reaction arrives while the reader is scrolled up', () => {
+      const messages = createTestMessages(5)
+      const { rerender } = render(
+        <MessageList messages={messages} conversationId="conv-1" clearFirstNewMessageId={vi.fn()} renderMessage={(msg) => <div key={msg.id}>{msg.body}</div>} />
+      )
       const container = document.querySelector('.overflow-y-auto') as HTMLDivElement
-      if (container) {
-        let scrollTopValue = 500
-        Object.defineProperty(container, 'scrollHeight', { value: 1000, configurable: true })
-        Object.defineProperty(container, 'clientHeight', { value: 500, configurable: true })
-        Object.defineProperty(container, 'scrollTop', {
-          get: () => scrollTopValue,
-          set: (v) => {
-            scrollTopValue = v
-            scrollSpy(v)
-          },
-          configurable: true,
-        })
+      // scrollTop 200 → distFromBottom 300 (>= AT_BOTTOM_THRESHOLD 150): scrolled up into history.
+      const scrollToSpy = instrument(container, 200)
 
-        scrollSpy.mockClear()
+      rerender(
+        <MessageList messages={reactOnLast(messages)} conversationId="conv-1" clearFirstNewMessageId={vi.fn()} renderMessage={(msg) => <div key={msg.id}>{msg.body}</div>} />
+      )
 
-        // Re-render with reaction on last message
-        const messagesWithReaction = [...messages]
-        messagesWithReaction[4] = {
-          ...messagesWithReaction[4],
-          reactions: { '👍': ['someone@example.com'] },
-        }
-
-        rerender(
-          <MessageList
-            messages={messagesWithReaction}
-            conversationId="conv-1"
-            clearFirstNewMessageId={vi.fn()}
-            renderMessage={(msg) => <div key={msg.id}>{msg.body}</div>}
-          />
-        )
-
-        // Should have scrolled to bottom
-        expect(scrollSpy).toHaveBeenCalledWith(1000)
-      }
+      expect(scrollToSpy).not.toHaveBeenCalled()
     })
   })
 

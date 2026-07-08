@@ -148,26 +148,49 @@ describe('MessageList — pinVirtualizedBottom cost control', () => {
   // The complementary case — a pin that DOES move scrollTop still forces the repaint — is the
   // canonical send-stick test in MessageList.pinBottomRepaint.test.tsx.
 
-  it('defers a typing toggle to the already-running pin loop instead of restarting it', () => {
+  // Issue #918: the typing indicator floats OVER the list rather than living in the scroll content,
+  // so toggling it changes no scroll height and must NEVER re-pin the viewport — the inline height
+  // churn was what "fought" an upward scroll while another participant was typing.
+  it('does not re-pin the list when the typing indicator toggles at the bottom', () => {
     const { rerender, isAtBottomRef } = renderPinned()
-
-    geo.scrollHeight = 2040
-    const messagesWithSent = [...makeMessages(50), sent]
-    rerender(<MessageList messages={messagesWithSent} conversationId="conv-pin-behavior" isAtBottomRef={isAtBottomRef} {...props} />)
-    flush(1) // loop started, far from settled
-
-    const callsWhileLoopActive = scrollToEndCalls.count
-    rerender(<MessageList messages={messagesWithSent} conversationId="conv-pin-behavior" isAtBottomRef={isAtBottomRef} typingUsers={['alice']} {...props} />)
-
-    // No synchronous restart from the typing layout effect — the active loop owns the pin.
-    expect(scrollToEndCalls.count).toBe(callsWhileLoopActive)
-
-    // Once the loop has settled, a later typing toggle pins again (deferral is
-    // scoped to an ACTIVE loop only).
-    flush(30)
+    flush(30) // quiesce any residual pin activity
     expect(rafQueue.length).toBe(0)
-    const callsAfterSettle = scrollToEndCalls.count
-    rerender(<MessageList messages={messagesWithSent} conversationId="conv-pin-behavior" isAtBottomRef={isAtBottomRef} typingUsers={[]} {...props} />)
-    expect(scrollToEndCalls.count).toBeGreaterThan(callsAfterSettle)
+    const baseline = scrollToEndCalls.count
+
+    // Typing starts → no pin.
+    rerender(<MessageList messages={makeMessages(50)} conversationId="conv-pin-behavior" isAtBottomRef={isAtBottomRef} typingUsers={['alice']} {...props} />)
+    flush(5)
+    expect(scrollToEndCalls.count).toBe(baseline)
+
+    // Typing stops → still no pin.
+    rerender(<MessageList messages={makeMessages(50)} conversationId="conv-pin-behavior" isAtBottomRef={isAtBottomRef} typingUsers={[]} {...props} />)
+    flush(5)
+    expect(scrollToEndCalls.count).toBe(baseline)
+  })
+
+  it('does not yank a scrolled-up viewport back to the bottom when typing toggles (issue #918)', () => {
+    const { rerender, isAtBottomRef } = renderPinned()
+    flush(30) // quiesce any residual pin activity
+    const scroller = document.querySelector('[data-message-list]') as HTMLElement
+
+    // Reproduce the reported state faithfully: the user has scrolled UP into history, but the
+    // follow flag is still latched `true`. That latch is the real bug — pinVirtualizedBottom's
+    // user-intent bail calls finish() WITHOUT re-deriving isAtBottomRef from geometry, so after a
+    // wheel-up mid-pin the flag stays true. With the old code (typing indicator inside the scroll
+    // content, typingUsersCount driving the re-pin effect) each XEP-0085 composing/paused toggle
+    // then re-pinned and hauled the viewport back to the bottom. The typing indicator now floats
+    // over the list, so a toggle changes no scroll height and must not scroll at all.
+    scroller.scrollTop = 400
+    isAtBottomRef.current = true
+    scrollToEndCalls.count = 0
+
+    for (const users of [['alice'], [], ['alice'], []]) {
+      rerender(<MessageList messages={makeMessages(50)} conversationId="conv-pin-behavior" isAtBottomRef={isAtBottomRef} typingUsers={users} {...props} />)
+      flush(5)
+    }
+
+    // Never re-pinned; the scrolled-up position is exactly where the user left it.
+    expect(scrollToEndCalls.count).toBe(0)
+    expect(scroller.scrollTop).toBe(400)
   })
 })

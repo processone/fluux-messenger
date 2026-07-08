@@ -229,6 +229,9 @@ export function MessageList<T extends BaseMessage>({
   // Compute derived values for scroll hook
   const firstMessageId = deduplicatedMessages[0]?.id
   const lastMessage = messages[messages.length - 1]
+  // Signature of the last message's reactions — changes when a reaction is added/removed on it, which
+  // grows/shrinks its row. Used only to give a gentle bottom nudge while the reader is sticked to the
+  // bottom (see the reactions effect in useMessageListScroll).
   const lastMessageReactionsKey = lastMessage
     ? JSON.stringify(lastMessage.reactions || {})
     : ''
@@ -480,7 +483,6 @@ export function MessageList<T extends BaseMessage>({
     isLoadingNewer,
     windowAtLiveEdge,
     isHistoryComplete,
-    typingUsersCount: typingUsers.length,
     lastMessageReactionsKey,
     lastMessageIsOutgoing: lastMessage?.isOutgoing ?? false,
     lastMessageId: lastMessage?.id,
@@ -635,14 +637,12 @@ export function MessageList<T extends BaseMessage>({
         )
       }
       case 'footer':
+        // Typing indicator is NOT rendered here — it floats over the list (see below) so it never
+        // changes the scroll height (which used to re-pin the viewport and fight an upward scroll).
         return (
           <div data-row-kind="footer">
             {extraContent}
-            <div className="pb-4">
-              {typingUsers.length > 0 && (
-                <TypingIndicator typingUsers={typingUsers} formatUser={formatTypingUser} />
-              )}
-            </div>
+            <div className="pb-4" />
           </div>
         )
     }
@@ -788,12 +788,9 @@ export function MessageList<T extends BaseMessage>({
           {/* Extra content after messages */}
           {extraContent}
 
-          {/* Typing indicator */}
-          <div className="pb-4">
-            {typingUsers.length > 0 && (
-              <TypingIndicator typingUsers={typingUsers} formatUser={formatTypingUser} />
-            )}
-          </div>
+          {/* Bottom breathing room. The typing indicator floats over the list (see below) rather
+              than living here, so toggling it never changes scroll height. */}
+          <div className="pb-4" />
         </div>
         ))}
       </div>
@@ -809,6 +806,19 @@ export function MessageList<T extends BaseMessage>({
         count={markerUnreadCount}
         onJump={scrollToMarker}
       />
+
+      {/* Floating typing indicator — anchored to the bottom of the message area rather than living
+          inside the scroll content, so it (a) stays visible whether the user is at the bottom or
+          scrolled up in history, and (b) never changes the scroll height (toggling it inline used to
+          re-pin the viewport and fight an upward scroll — issue #918). Bottom-start keeps it clear of
+          the bottom-end FAB; pointer-events-none so it never intercepts taps on the message beneath. */}
+      {typingUsers.length > 0 && (
+        <div className="absolute bottom-4 start-4 z-30 max-w-[calc(100%-5rem)] pointer-events-none animate-toast-in">
+          <div className="rounded-full bg-fluux-float border border-fluux-border shadow-lg px-3 py-1.5">
+            <TypingIndicator typingUsers={typingUsers} formatUser={formatTypingUser} variant="compact" />
+          </div>
+        </div>
+      )}
 
       {/* Scroll to bottom FAB with spring animation */}
       <div

@@ -250,7 +250,8 @@ export interface UseMessageListScrollOptions {
    *  ⇒ at the live edge — unchanged behavior. */
   windowAtLiveEdge?: boolean
   isHistoryComplete?: boolean
-  typingUsersCount: number
+  /** Signature of the last message's reactions. Changes when a reaction is added/removed on the last
+   *  row (growing/shrinking it); drives a gentle bottom nudge while the reader is sticked to bottom. */
   lastMessageReactionsKey: string
   /** Whether the newest message is the local user's own (outgoing). When a NEW such message
    *  appears we scroll to the bottom regardless of position — you always want to see what you
@@ -313,7 +314,6 @@ export function useMessageListScroll({
   isLoadingNewer,
   windowAtLiveEdge,
   isHistoryComplete,
-  typingUsersCount,
   lastMessageReactionsKey,
   lastMessageIsOutgoing = false,
   lastMessageId,
@@ -2711,25 +2711,42 @@ export function useMessageListScroll({
   }, [firstNewMessageId])
 
   // ==========================================================================
-  // EFFECT: Typing indicator / reactions change
+  // EFFECT: Reaction on the last message — gentle bottom nudge (only when sticked)
   // ==========================================================================
 
-  // Content grew INSIDE the scroller (typing indicator toggled, reactions added to the last
-  // message): the scroller box is unchanged but scrollHeight grew, so a follower must re-pin.
-  // One effect keyed on both signals — the body is identical and both mean "footer/last-row
-  // height changed". useLayoutEffect runs BEFORE paint: with useEffect the browser paints a
-  // frame with the gap visible and a scroll event can fire in between, flipping isAtBottomRef
-  // false — which breaks auto-scroll for subsequent messages and strands a blank screen on
-  // conversation switch (the stale "not at bottom" state gets persisted).
+  // A reaction added to the last message grows its row a little. While the reader is sticked to the
+  // bottom we keep the reaction visible with a GENTLE, single smooth nudge — NOT the multi-frame
+  // pinVirtualizedBottom loop (that WebKitGTK-heavy re-assert is for new messages; a reaction is a
+  // tiny ambient growth and a jolt would be jarring). Two safeguards keep it from ever fighting a
+  // scroll: (1) it's gated on LIVE geometry, not the latchable isAtBottomRef — a reader scrolled up
+  // into history reads distFromBottom >= threshold and is never nudged (this is what made a typing
+  // toggle "fight" the scroll in #918: a stale-true latch); (2) it fires only on an actual reactions
+  // change WITHIN the same conversation, so a conversation switch / restore is never disturbed.
+  // (The typing indicator itself no longer participates at all — it floats OVER the list, #918.)
+  const prevReactionsKeyRef = useRef(lastMessageReactionsKey)
+  const reactionsConvRef = useRef(conversationId)
   useLayoutEffect(() => {
-    if (!isAtBottomRef.current) return
-    // Defer to an in-flight pin-bottom loop: it re-reads scrollHeight every frame and re-pins on
-    // any change, so it picks this height change up by the next frame on its own. Restarting it
-    // here would add a synchronous forced layout (and possibly a full-scroller repaint) per typing
-    // toggle — in a busy room that is a keystroke-frequency event and the WebKitGTK freeze pattern.
+    const sameConversation = reactionsConvRef.current === conversationId
+    reactionsConvRef.current = conversationId
+    const prevKey = prevReactionsKeyRef.current
+    prevReactionsKeyRef.current = lastMessageReactionsKey
+    if (!sameConversation) return // conversation switch → rebaseline, never nudge
+    if (prevKey === lastMessageReactionsKey) return // no actual reactions change (unrelated re-render)
+
+    const scroller = scrollerRef.current
+    if (!scroller || staticMode) return
+    // Live-geometry gate: only nudge when genuinely at/near the bottom right now.
+    if (getDistanceFromBottom(scroller) >= AT_BOTTOM_THRESHOLD) return
+    // A running pin loop already keeps the bottom pinned — don't stack a second scroll on it.
     if (pinBottomActiveRef.current) return
-    reassertBottom('typing-reactions')
-  }, [typingUsersCount, lastMessageReactionsKey, isAtBottomRef, reassertBottom])
+
+    const virt = virtualizerRef.current
+    if (virt && virt.itemCount > 0) {
+      virt.scrollToIndex(virt.itemCount - 1, { align: 'end', behavior: 'smooth' })
+    } else {
+      scroller.scrollTo({ top: scroller.scrollHeight, behavior: 'smooth' })
+    }
+  }, [lastMessageReactionsKey, conversationId, staticMode])
 
   // ==========================================================================
   // EFFECT: Container resize (composer grows/shrinks)
