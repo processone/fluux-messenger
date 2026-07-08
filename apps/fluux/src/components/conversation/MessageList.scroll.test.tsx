@@ -140,10 +140,13 @@ describe('MessageList scroll behavior', () => {
   })
 
   describe('typing indicator scroll', () => {
-    // The typing indicator floats OVER the list (it is not part of the scroll content), so toggling
-    // it changes no scroll height and must never move the viewport — whether the user is at the
-    // bottom or scrolled up in history (issue #918: inline height churn fought an upward scroll).
-    it('should NOT scroll when typing indicator appears and user is at bottom (it floats)', () => {
+    // The typing indicator floats OVER the list (it is not part of the scroll content); toggling it
+    // never changes scroll height on its own. But the footer reserves extra bottom padding to clear
+    // the pill while it's shown, and that DOES grow the scroll content — so while genuinely sticked
+    // to the bottom, reassertBottom re-pins to reveal the new clearance (same shared helper new
+    // messages use — a one-shot smooth nudge lands short because a virtualized footer needs a
+    // remeasure pass first). A reader scrolled up must never be yanked back (issue #918).
+    it('re-pins to the bottom when typing starts while sticked', () => {
       const messages = createTestMessages(5)
       const scrollSpy = vi.fn()
 
@@ -187,8 +190,8 @@ describe('MessageList scroll behavior', () => {
           />
         )
 
-        // The floating indicator changes no scroll height → no scroll write.
-        expect(scrollSpy).not.toHaveBeenCalled()
+        // Sticked to the bottom → the grown footer clearance is revealed by a re-pin to bottom.
+        expect(scrollSpy).toHaveBeenCalledWith(1000)
       }
     })
 

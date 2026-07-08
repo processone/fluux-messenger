@@ -253,6 +253,12 @@ export interface UseMessageListScrollOptions {
   /** Signature of the last message's reactions. Changes when a reaction is added/removed on the last
    *  row (growing/shrinking it); drives a gentle bottom nudge while the reader is sticked to bottom. */
   lastMessageReactionsKey: string
+  /** Whether the floating typing-indicator pill is currently shown. The footer reserves extra bottom
+   *  padding to clear the pill only while this is true; the 0→true edge drives the same gentle
+   *  bottom nudge as a reaction growing the last row, gated on live geometry (see the reactions
+   *  effect) so it never fires for a reader scrolled up into history — the #918 "fight" was a stale
+   *  isAtBottomRef latch, not the padding change itself. */
+  hasTypingIndicator?: boolean
   /** Whether the newest message is the local user's own (outgoing). When a NEW such message
    *  appears we scroll to the bottom regardless of position — you always want to see what you
    *  just sent — whereas an incoming message only auto-follows when already near the bottom. */
@@ -315,6 +321,7 @@ export function useMessageListScroll({
   windowAtLiveEdge,
   isHistoryComplete,
   lastMessageReactionsKey,
+  hasTypingIndicator = false,
   lastMessageIsOutgoing = false,
   lastMessageId,
   staticMode = false,
@@ -2722,7 +2729,8 @@ export function useMessageListScroll({
   // into history reads distFromBottom >= threshold and is never nudged (this is what made a typing
   // toggle "fight" the scroll in #918: a stale-true latch); (2) it fires only on an actual reactions
   // change WITHIN the same conversation, so a conversation switch / restore is never disturbed.
-  // (The typing indicator itself no longer participates at all — it floats OVER the list, #918.)
+  // (The typing indicator pill itself still floats OVER the list, #918 — it never lives in scroll
+  // content. Only the footer's reserved clearance for it participates; see the next effect.)
   const prevReactionsKeyRef = useRef(lastMessageReactionsKey)
   const reactionsConvRef = useRef(conversationId)
   useLayoutEffect(() => {
@@ -2747,6 +2755,37 @@ export function useMessageListScroll({
       scroller.scrollTo({ top: scroller.scrollHeight, behavior: 'smooth' })
     }
   }, [lastMessageReactionsKey, conversationId, staticMode])
+
+  // ==========================================================================
+  // EFFECT: Typing indicator appears — reveal its footer clearance while sticked
+  // ==========================================================================
+
+  // The footer reserves extra bottom padding only while the typing pill is shown (see
+  // MessageList's footer render), so that clearance grows when typing starts. Unlike a reaction's
+  // few-pixel growth, the virtualized footer row needs a remeasure pass before the virtualizer's
+  // computed end offset accounts for the taller padding — a one-shot scrollToIndex lands short (the
+  // spacer hasn't caught up yet), leaving a residual gap under the pill. So this routes through the
+  // shared reassertBottom/pinVirtualizedBottom (the same multi-frame convergence new messages use)
+  // instead of the reactions effect's single smooth nudge. Same two safeguards though: live-geometry
+  // gate (not the latchable isAtBottomRef) and a same-conversation check. Only the false→true edge
+  // nudges; typing stopping SHRINKS the footer, which the browser clamps scrollTop for on its own.
+  const prevHasTypingRef = useRef(hasTypingIndicator)
+  const typingConvRef = useRef(conversationId)
+  useLayoutEffect(() => {
+    const sameConversation = typingConvRef.current === conversationId
+    typingConvRef.current = conversationId
+    const prevHasTyping = prevHasTypingRef.current
+    prevHasTypingRef.current = hasTypingIndicator
+    if (!sameConversation) return // conversation switch → rebaseline, never nudge
+    if (!hasTypingIndicator || prevHasTyping) return // only the off→on edge grows the footer
+
+    const scroller = scrollerRef.current
+    if (!scroller || staticMode) return
+    // Live-geometry gate: only re-pin when genuinely at/near the bottom right now.
+    if (getDistanceFromBottom(scroller) >= AT_BOTTOM_THRESHOLD) return
+
+    reassertBottom('typing')
+  }, [hasTypingIndicator, conversationId, staticMode, reassertBottom])
 
   // ==========================================================================
   // EFFECT: Container resize (composer grows/shrinks)
