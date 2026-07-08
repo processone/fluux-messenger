@@ -1212,6 +1212,18 @@ input[type="range"]::-moz-range-thumb {
 .message-own-tint-end {
   border-bottom-left-radius: var(--fluux-radius-m);
   border-bottom-right-radius: var(--fluux-radius-m);
+  /* Extend the group's outer bottom edge down through the row's group-end
+     padding so the emphasis meets the bottom of the hover-row highlight instead
+     of floating a few px above it. padding-bottom paints the wash lower; the
+     matching negative margin-bottom cancels it so the row height (and the
+     virtualizer's measurements) are untouched. Mirror .message-group-end's
+     values exactly, including the compact-density override below. */
+  padding-bottom: 6px;
+  margin-bottom: -6px;
+}
+[data-density="compact"] .message-own-tint-end {
+  padding-bottom: 3px;
+  margin-bottom: -3px;
 }
 
 /* Persistent highlight for search context view */
