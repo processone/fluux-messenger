@@ -38,7 +38,7 @@
       <feDropShadow dx="0" dy="16" stdDeviation="22" flood-color="#1A1145" flood-opacity="0.25"/>
     </filter>
     <clipPath id="tileClip"><rect x="61" y="61" width="902" height="902" rx="225"/></clipPath>
-    <clipPath id="bubbleClip"><rect x="262" y="315" width="500" height="357" rx="132"/><path d="M405 665 L332 808 L548 665 Z"/></clipPath>
+    <clipPath id="bubbleClip"><rect x="262" y="315" width="500" height="357" rx="132"/><path d="M405 672 L332 808 L548 672 Z"/></clipPath>
   </defs>
 
   <rect x="61" y="61" width="902" height="902" rx="225" fill="url(#aurora)"/>
