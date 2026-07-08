@@ -36,7 +36,7 @@
     <filter id="depth" x="-20%" y="-20%" width="140%" height="150%">
       <feDropShadow dx="0" dy="16" stdDeviation="22" flood-color="#1A1145" flood-opacity="0.25"/>
     </filter>
-    <clipPath id="bubbleClip"><rect x="262" y="315" width="500" height="357" rx="132"/><path d="M405 665 L332 808 L548 665 Z"/></clipPath>
+    <clipPath id="bubbleClip"><rect x="262" y="315" width="500" height="357" rx="132"/><path d="M405 672 L332 808 L548 672 Z"/></clipPath>
   </defs>
 
   <rect x="0" y="0" width="1024" height="1024" fill="url(#aurora)"/>
