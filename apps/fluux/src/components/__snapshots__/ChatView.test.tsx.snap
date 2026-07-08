@@ -127,8 +127,7 @@ exports[`ChatView > Snapshots > should match snapshot with messages 1`] = `
                     </div>
                   </div>
                   <div
-                    class="relative flex-1 min-w-0 touch:select-none touch:[-webkit-touch-callout:none]  "
-                    data-msg-chrome="header"
+                    class="relative flex-1 min-w-0"
                   >
                     <div
                       class="absolute -top-7 -end-2 p-4 z-20 select-none pointer-events-none transition-all duration-200 ease-out opacity-0 translate-x-2"
@@ -223,40 +222,45 @@ exports[`ChatView > Snapshots > should match snapshot with messages 1`] = `
                       </div>
                     </div>
                     <div
-                      class="flex items-baseline gap-2 pb-1 flex-wrap"
+                      class="relative w-full min-w-0 touch:select-none touch:[-webkit-touch-callout:none]  "
+                      data-msg-chrome="header"
                     >
                       <div
-                        class="cursor-pointer "
-                        role="button"
-                        tabindex="0"
+                        class="flex items-baseline gap-2 pb-1 flex-wrap"
                       >
-                        <span
-                          class="font-medium"
-                          style="color: rgb(161, 197, 235);"
+                        <div
+                          class="cursor-pointer "
+                          role="button"
+                          tabindex="0"
                         >
-                          Alice Smith
+                          <span
+                            class="font-medium"
+                            style="color: rgb(161, 197, 235);"
+                          >
+                            Alice Smith
+                          </span>
+                        </div>
+                        <span
+                          class="text-xs text-fluux-muted"
+                        >
+                          14:30
                         </span>
                       </div>
-                      <span
-                        class="text-xs text-fluux-muted"
-                      >
-                        14:30
-                      </span>
-                    </div>
-                    <div
-                      class=""
-                    >
                       <div
-                        class="text-fluux-text break-words whitespace-pre-wrap leading-[1.375]"
-                        data-msg-text="true"
-                        dir="auto"
+                        class=""
                       >
-                        Hello there!
-                      </div>
-                      <div
-                        data-testid="message-attachments"
-                      >
-                        Attachments
+                        <div
+                          class="text-fluux-text break-words whitespace-pre-wrap leading-[1.375]"
+                          data-msg-text="true"
+                          dir="auto"
+                        >
+                          Hello there!
+                        </div>
+                        <div
+                          data-testid="message-attachments"
+                        >
+                          Attachments
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -289,8 +293,7 @@ exports[`ChatView > Snapshots > should match snapshot with messages 1`] = `
                     </div>
                   </div>
                   <div
-                    class="relative w-fit max-w-full min-w-0 touch:select-none touch:[-webkit-touch-callout:none]  message-own-tint message-own-tint-start message-own-tint-end"
-                    data-msg-chrome="header"
+                    class="relative flex-1 min-w-0"
                   >
                     <div
                       class="absolute -top-7 -end-2 p-4 z-20 select-none pointer-events-none transition-all duration-200 ease-out opacity-0 translate-x-2"
@@ -384,40 +387,45 @@ exports[`ChatView > Snapshots > should match snapshot with messages 1`] = `
                       </div>
                     </div>
                     <div
-                      class="flex items-baseline gap-2 pb-1 flex-wrap"
+                      class="relative w-fit max-w-full min-w-0 touch:select-none touch:[-webkit-touch-callout:none]  message-own-tint message-own-tint-start message-own-tint-end"
+                      data-msg-chrome="header"
                     >
                       <div
-                        class="cursor-pointer "
-                        role="button"
-                        tabindex="0"
+                        class="flex items-baseline gap-2 pb-1 flex-wrap"
                       >
-                        <span
-                          class="font-medium"
-                          style="color: var(--fluux-text-self);"
+                        <div
+                          class="cursor-pointer "
+                          role="button"
+                          tabindex="0"
                         >
-                          Me
+                          <span
+                            class="font-medium"
+                            style="color: var(--fluux-text-self);"
+                          >
+                            Me
+                          </span>
+                        </div>
+                        <span
+                          class="text-xs text-fluux-muted"
+                        >
+                          14:30
                         </span>
                       </div>
-                      <span
-                        class="text-xs text-fluux-muted"
-                      >
-                        14:30
-                      </span>
-                    </div>
-                    <div
-                      class=""
-                    >
                       <div
-                        class="text-fluux-text break-words whitespace-pre-wrap leading-[1.375]"
-                        data-msg-text="true"
-                        dir="auto"
+                        class=""
                       >
-                        Hi! How are you?
-                      </div>
-                      <div
-                        data-testid="message-attachments"
-                      >
-                        Attachments
+                        <div
+                          class="text-fluux-text break-words whitespace-pre-wrap leading-[1.375]"
+                          data-msg-text="true"
+                          dir="auto"
+                        >
+                          Hi! How are you?
+                        </div>
+                        <div
+                          data-testid="message-attachments"
+                        >
+                          Attachments
+                        </div>
                       </div>
                     </div>
                   </div>
