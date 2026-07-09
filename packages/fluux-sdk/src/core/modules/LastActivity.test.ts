@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { LastActivity } from './LastActivity'
-import { createMockElement, createMockStores } from '../test-utils'
+import { createMockElement, createMockStores, createMockPresenceReader } from '../test-utils'
 import type { Element } from '@xmpp/client'
 import type { ModuleDependencies } from './BaseModule'
 
@@ -55,6 +55,7 @@ describe('LastActivity module', () => {
 
     lastActivity = new LastActivity({
       stores: mockStores,
+      presence: createMockPresenceReader(),
       sendStanza: vi.fn(),
       sendIQ,
       getCurrentJid: () => 'user@example.com',

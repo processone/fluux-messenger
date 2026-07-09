@@ -11,6 +11,7 @@ import type {
   StorageAdapter,
   ProxyAdapter,
   PrivacyOptions,
+  PresenceOptions,
 } from './types'
 import {
   presenceMachine,
@@ -109,7 +110,8 @@ import { DeferredDecryptEngine } from './e2ee/deferredDecrypt'
 import { SessionLifecycleEngine } from './sessionLifecycle'
 import { dataToElement } from './e2ee/stanzaAdapter'
 import { NS_MAM } from './namespaces'
-import { createDefaultStoreBindings, type DefaultStoreBindingsOptions } from './defaultStoreBindings'
+import { createDefaultStoreBindings } from './defaultStoreBindings'
+import { createPresenceReader, type PresenceReader } from './presenceReader'
 import { initSearchIndex, backfillFromMessageCache } from '../utils/searchIndex'
 import { getMessagesWithEncryptedPayload, updateMessage as cacheUpdateMessage, deleteMessage as cacheDeleteMessage } from '../utils/messageCache'
 
@@ -326,6 +328,15 @@ export class XMPPClient {
   public presenceActor!: PresenceActor
 
   /**
+   * Narrow read surface over the presence machine, injected into every module
+   * via `moduleDeps.presence`. Built once in the constructor from the presence
+   * getters (machine snapshot + any custom `presenceOptions`), so it survives
+   * re-init via {@link bindStores}.
+   * @internal
+   */
+  private presenceReader!: PresenceReader
+
+  /**
    * XState connection actor managing connection lifecycle state.
    *
    * The connection machine handles explicit state transitions for the XMPP
@@ -474,8 +485,11 @@ export class XMPPClient {
     // Note: presence persistence subscription is set up in setupBindings()
     // so it can be re-established after destroy() in React StrictMode.
 
-    // Create presence options that read from the machine (single source of truth)
-    const presenceOptions: DefaultStoreBindingsOptions = {
+    // Presence getters read from the machine (single source of truth), merged
+    // with any custom integration the consumer provided. Modules consume these
+    // through the injected PresenceReader (moduleDeps.presence), not the
+    // connection store binding — presence is machine state, not store state.
+    const presenceOptions: PresenceOptions = {
       getPresenceShow: () => {
         const state = this.presenceActor.getSnapshot()
         const stateValue = state.value as PresenceStateValue
@@ -498,27 +512,13 @@ export class XMPPClient {
         const state = this.presenceActor.getSnapshot()
         return (state.context as PresenceMachineContext).preAutoAwayStatusMessage
       },
-      setPresenceState: (show, message) => {
-        // Send event to machine - it manages state transitions
-        const showMap = { online: 'online', away: 'away', dnd: 'dnd', offline: 'online' } as const
-        this.presenceActor.send({
-          type: 'SET_PRESENCE',
-          show: showMap[show] || 'online',
-          status: message ?? undefined,
-        })
-      },
-      setAutoAway: () => {
-        // No-op: auto-away is managed by the machine via IDLE_DETECTED events
-      },
-      clearPreAutoAwayState: () => {
-        // No-op: pre-auto-away state is managed by the machine internally
-      },
       // Merge any custom options provided by the user
       ...config.presenceOptions,
     }
+    this.presenceReader = createPresenceReader(presenceOptions)
 
     // Initialize with default store bindings (using global Zustand stores)
-    this.initializeModules(createDefaultStoreBindings(presenceOptions))
+    this.initializeModules(createDefaultStoreBindings())
 
     // Set up all bindings (presence sync, store bindings, side effects).
     // Extracted to a method so XMPPProvider can call setupBindings/destroy
@@ -622,6 +622,7 @@ export class XMPPClient {
 
     const moduleDeps = {
       stores: this.stores,
+      presence: this.presenceReader,
       sendStanza: (stanza: Element) => this.sendStanza(stanza),
       sendIQ: (iq: Element, timeoutMs?: number) => this.sendIQ(iq, timeoutMs),
       getCurrentJid: () => this.currentJid,

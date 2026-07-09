@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { Blocking } from './Blocking'
-import { createMockElement, createMockStores } from '../test-utils'
+import { createMockElement, createMockStores, createMockPresenceReader } from '../test-utils'
 import { NS_BLOCKING } from '../namespaces'
 import type { Element } from '@xmpp/client'
 import type { ModuleDependencies } from './BaseModule'
@@ -22,6 +22,7 @@ describe('Blocking module', () => {
 
     blocking = new Blocking({
       stores: mockStores,
+      presence: createMockPresenceReader(),
       sendStanza,
       sendIQ,
       getCurrentJid: () => 'user@example.com',

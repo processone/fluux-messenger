@@ -3,7 +3,6 @@ export { XMPPClient } from './XMPPClient'
 
 // Default store bindings for headless usage
 export { createDefaultStoreBindings } from './defaultStoreBindings'
-export type { DefaultStoreBindingsOptions } from './defaultStoreBindings'
 
 // Re-export xml builder from @xmpp/client for raw stanza construction
 export { xml } from '@xmpp/client'

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { EntityTime, parseTzo, getBestResource } from './EntityTime'
-import { createMockElement, createMockStores } from '../test-utils'
+import { createMockElement, createMockStores, createMockPresenceReader } from '../test-utils'
 import type { Element } from '@xmpp/client'
 import type { ModuleDependencies } from './BaseModule'
 import type { ResourcePresence } from '../types'
@@ -114,6 +114,7 @@ describe('EntityTime module', () => {
 
     entityTime = new EntityTime({
       stores: mockStores,
+      presence: createMockPresenceReader(),
       sendStanza: vi.fn(),
       sendIQ,
       getCurrentJid: () => 'user@example.com',

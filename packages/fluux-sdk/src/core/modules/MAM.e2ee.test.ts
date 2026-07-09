@@ -12,6 +12,7 @@
  * sender's XEP-0373 hint body and no decrypt attempt.
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { createPresenceReader } from '../presenceReader'
 import { xml } from '@xmpp/client'
 import type { Element } from '@xmpp/client'
 import { MAM } from './MAM'
@@ -98,6 +99,7 @@ function makeHarness(options: {
 
   const deps: ModuleDependencies = {
     stores: null,
+    presence: createPresenceReader(),
     sendStanza: async () => {},
     sendIQ: () =>
       new Promise<Element>((resolve) => {
@@ -147,6 +149,7 @@ function makeHarnessNoManager(jid: string): TestHarness {
 
   const deps: ModuleDependencies = {
     stores: null,
+    presence: createPresenceReader(),
     sendStanza: async () => {},
     sendIQ: () =>
       new Promise<Element>((resolve) => {
@@ -926,6 +929,7 @@ describe('MAM forward catch-up — cross-page modification resolution (1:1)', ()
     }
     const deps: ModuleDependencies = {
       stores: null,
+      presence: createPresenceReader(),
       sendStanza: async () => {},
       sendIQ: () =>
         new Promise<Element>((resolve) => {
@@ -1065,6 +1069,7 @@ describe('MAM preview refresh E2EE (sidebar preview)', () => {
     let captured: { body: string; from: string; encryptedPayload?: string } | null = null
 
     const deps: ModuleDependencies = {
+      presence: createPresenceReader(),
       stores: {
         chat: {
           getAllConversations: () => [{ id: conversationId }],

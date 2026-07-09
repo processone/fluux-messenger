@@ -9,6 +9,7 @@ import { MUC } from './MUC'
 import {
   createMockElement,
   createMockStores,
+  createMockPresenceReader,
 } from '../test-utils'
 import type { ModuleDependencies } from './BaseModule'
 
@@ -29,6 +30,7 @@ describe('MUC Module', () => {
 
     const deps = {
       stores: mockStores,
+      presence: createMockPresenceReader(),
       sendIQ: mockSendIQ,
       sendStanza: mockSendStanza,
       emit: mockEmit,
