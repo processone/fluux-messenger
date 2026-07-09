@@ -572,6 +572,35 @@ describe('onMarkAsRead', () => {
     expect(result.lastReadAt!.getTime()).toBeGreaterThanOrEqual(before)
     expect(result.lastReadAt!.getTime()).toBeLessThanOrEqual(after)
   })
+
+  it('leaves lastSeenMessageId untouched when no advance id is given', () => {
+    const state = makeState({ unreadCount: 3, lastSeenMessageId: 'seen-1' })
+    const result = onMarkAsRead(state, new Date())
+    expect(result.lastSeenMessageId).toBe('seen-1')
+  })
+
+  it('advances lastSeenMessageId to the supplied id (read pointer catches up)', () => {
+    const state = makeState({ unreadCount: 3, lastSeenMessageId: 'seen-1' })
+    const result = onMarkAsRead(state, new Date(), 'newest-9')
+    expect(result.lastSeenMessageId).toBe('newest-9')
+    expect(result.unreadCount).toBe(0)
+  })
+
+  it('advances lastSeenMessageId even when the badge is already clear', () => {
+    // The IntersectionObserver may lag: unread already 0 but the pointer is behind.
+    const ts = new Date('2025-01-15T12:00:00Z')
+    const state = makeState({ unreadCount: 0, lastReadAt: ts, lastSeenMessageId: 'seen-1' })
+    const result = onMarkAsRead(state, ts, 'newest-9')
+    expect(result).not.toBe(state)
+    expect(result.lastSeenMessageId).toBe('newest-9')
+  })
+
+  it('returns same reference when the supplied id equals the current pointer', () => {
+    const ts = new Date('2025-01-15T12:00:00Z')
+    const state = makeState({ unreadCount: 0, mentionsCount: 0, lastReadAt: ts, lastSeenMessageId: 'seen-1' })
+    const result = onMarkAsRead(state, ts, 'seen-1')
+    expect(result).toBe(state)
+  })
 })
 
 // ---------------------------------------------------------------------------

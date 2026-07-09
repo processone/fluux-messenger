@@ -210,6 +210,53 @@ describe('chatStore.applyRemoteDisplayed', () => {
   })
 })
 
+describe('chatStore.markAsRead — read-pointer advance for XEP-0490 sync', () => {
+  beforeEach(() => chatStore.getState().reset())
+
+  // At the live edge the newest loaded message IS the true newest; clearing the
+  // badge means the user caught up to it, so the read pointer must advance for the
+  // MDS publisher (which watches lastSeenMessageId) to sync the marker.
+  it('advances lastSeenMessageId to the newest loaded message when at the live edge', () => {
+    const cid = 'juliet@capulet.example'
+    seedMessages(cid, [msg('m1', 's1'), msg('m2', 's2'), msg('m3', 's3')])
+    chatStore.setState((state) => {
+      const newMeta = new Map(state.conversationMeta)
+      newMeta.set(cid, { unreadCount: 2, lastSeenMessageId: 'm1' })
+      const newConvs = new Map(state.conversations)
+      newConvs.set(cid, { id: cid, name: cid, type: 'chat', unreadCount: 2, lastSeenMessageId: 'm1' })
+      return { conversationMeta: newMeta, conversations: newConvs }
+    })
+
+    chatStore.getState().markAsRead(cid)
+
+    expect(chatStore.getState().conversationMeta.get(cid)?.lastSeenMessageId).toBe('m3')
+    expect(chatStore.getState().conversations.get(cid)?.lastSeenMessageId).toBe('m3')
+    expect(chatStore.getState().conversationMeta.get(cid)?.unreadCount).toBe(0)
+  })
+
+  // Slid up into history: the badge still clears (the user acknowledged the
+  // conversation) but the pointer must stay put so MDS never publishes a read
+  // position past messages the user has not seen.
+  it('does NOT advance lastSeenMessageId when the window is slid up into history', () => {
+    const cid = 'juliet@capulet.example'
+    seedMessages(cid, [msg('m1', 's1'), msg('m2', 's2'), msg('m3', 's3')])
+    chatStore.setState((state) => {
+      const newMeta = new Map(state.conversationMeta)
+      newMeta.set(cid, { unreadCount: 2, lastSeenMessageId: 'm1' })
+      const newConvs = new Map(state.conversations)
+      newConvs.set(cid, { id: cid, name: cid, type: 'chat', unreadCount: 2, lastSeenMessageId: 'm1' })
+      const newEdge = new Map(state.windowAtLiveEdge)
+      newEdge.set(cid, false)
+      return { conversationMeta: newMeta, conversations: newConvs, windowAtLiveEdge: newEdge }
+    })
+
+    chatStore.getState().markAsRead(cid)
+
+    expect(chatStore.getState().conversationMeta.get(cid)?.lastSeenMessageId).toBe('m1')
+    expect(chatStore.getState().conversationMeta.get(cid)?.unreadCount).toBe(0)
+  })
+})
+
 describe('chatStore — new-message divider is session-only', () => {
   beforeEach(() => chatStore.getState().reset())
 

@@ -406,3 +406,56 @@ describe('roomStore — new-message divider is session-only', () => {
     expect(roomStore.getState().firstNewMessageMarkers.get(ROOM_B)).toBeUndefined()
   })
 })
+
+describe('roomStore.markAsRead — read-pointer advance for XEP-0490 sync', () => {
+  beforeEach(() => {
+    _resetStorageScopeForTesting()
+    roomStore.setState({
+      rooms: new Map(),
+      roomEntities: new Map(),
+      roomMeta: new Map(),
+      roomRuntime: new Map(),
+      activeRoomJid: null,
+      drafts: new Map(),
+      mamQueryStates: new Map(),
+      roomGaps: new Map(),
+      firstNewMessageMarkers: new Map(),
+    })
+    vi.clearAllMocks()
+  })
+
+  // At the live edge, clearing the badge means the user caught up to the newest
+  // message — advance the read pointer so the MDS publisher syncs the marker.
+  it('advances lastSeenMessageId to the newest loaded message when at the live edge', () => {
+    seedRoom(ROOM, [rmsg('m1', 's1', 1), rmsg('m2', 's2', 2), rmsg('m3', 's3', 3)], 'm1')
+    roomStore.setState((s) => {
+      const m = new Map(s.roomMeta)
+      m.set(ROOM, { ...m.get(ROOM)!, unreadCount: 2 })
+      return { roomMeta: m }
+    })
+
+    roomStore.getState().markAsRead(ROOM)
+
+    expect(roomStore.getState().roomMeta.get(ROOM)?.lastSeenMessageId).toBe('m3')
+    expect(roomStore.getState().rooms.get(ROOM)?.lastSeenMessageId).toBe('m3')
+    expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(0)
+  })
+
+  // Slid up into history: badge clears but the pointer stays put, so MDS never
+  // publishes a read position past messages the user has not seen.
+  it('does NOT advance lastSeenMessageId when the window is slid up into history', () => {
+    seedRoom(ROOM, [rmsg('m1', 's1', 1), rmsg('m2', 's2', 2), rmsg('m3', 's3', 3)], 'm1')
+    roomStore.setState((s) => {
+      const m = new Map(s.roomMeta)
+      m.set(ROOM, { ...m.get(ROOM)!, unreadCount: 2 })
+      const rt = new Map(s.roomRuntime)
+      rt.set(ROOM, { ...rt.get(ROOM)!, windowAtLiveEdge: false })
+      return { roomMeta: m, roomRuntime: rt }
+    })
+
+    roomStore.getState().markAsRead(ROOM)
+
+    expect(roomStore.getState().roomMeta.get(ROOM)?.lastSeenMessageId).toBe('m1')
+    expect(roomStore.getState().roomMeta.get(ROOM)?.unreadCount).toBe(0)
+  })
+})
