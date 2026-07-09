@@ -142,6 +142,10 @@ export function createDefaultStoreBindings(options: DefaultStoreBindingsOptions 
         const meta = chatStore.getState().conversationMeta.get(conversationId)
         return meta?.lastMessage
       },
+      getAllStoredMessages: () =>
+        Array.from(chatStore.getState().messages, ([id, messages]) => ({ id, messages })),
+      getConversationMessages: (conversationId: string) =>
+        chatStore.getState().messages.get(conversationId) ?? [],
     },
     roster: bindStoreMethods(rosterStore, rosterBindingMethodKeys),
     console: bindStoreMethods(consoleStore, consoleBindingMethodKeys),
@@ -151,6 +155,8 @@ export function createDefaultStoreBindings(options: DefaultStoreBindingsOptions 
       // Composite getter
       getRoomGapStart: (roomJid: string) => roomStore.getState().roomGaps.get(roomJid)?.start,
       getRoomPendingStanzaId: (roomJid: string) => roomStore.getState().roomMeta.get(roomJid)?.pendingRemoteDisplayedStanzaId,
+      getAllRoomMessages: () =>
+        Array.from(roomStore.getState().roomRuntime, ([jid, runtime]) => ({ jid, messages: runtime.messages })),
     },
     admin: {
       ...bindStoreMethods(adminStore, adminBindingMethodKeys),

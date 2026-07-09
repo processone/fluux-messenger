@@ -1,5 +1,4 @@
 import { xml, Client, Element } from '@xmpp/client'
-import * as ltx from 'ltx'
 import { createActor, type Subscription, type Snapshot } from 'xstate'
 import type { EventHook } from './EventHook'
 import type {
@@ -12,8 +11,6 @@ import type {
   StorageAdapter,
   ProxyAdapter,
   PrivacyOptions,
-  FileAttachment,
-  MessageSecurityContext,
 } from './types'
 import {
   presenceMachine,
@@ -42,7 +39,6 @@ import {
 } from '../stores'
 import { detectPlatform, getCachedPlatform } from './platform'
 import { isDeadSocketError } from './modules/connectionUtils'
-import { parseMessageContent, applyRetraction, parseReactionsSignal, parseRetractionSignal } from './modules/messagingUtils'
 import {
   FRESH_SESSION_IQ_TIMEOUT_MS,
   FRESH_SESSION_SETUP_TIMEOUT_MS,
@@ -114,11 +110,11 @@ import { LastActivity } from './modules/LastActivity'
 import { MAM } from './modules/MAM'
 import { Poll } from './modules/Poll'
 import { E2EEManager, InMemoryStorageBackend, type StorageBackend, type XMPPPrimitives } from './e2ee'
+import { DeferredDecryptEngine } from './e2ee/deferredDecrypt'
 import { dataToElement } from './e2ee/stanzaAdapter'
-import { decryptStanzaInPlace, COULD_NOT_DECRYPT_BODY, MESSAGE_REJECTED_BODY } from './e2ee/stanzaDecrypt'
 import { NS_CARBONS, NS_MAM, NS_P1_PUSH_WEBPUSH } from './namespaces'
 import { createDefaultStoreBindings, type DefaultStoreBindingsOptions } from './defaultStoreBindings'
-import { logDebug, logInfo, logWarn } from './logger'
+import { logInfo } from './logger'
 import { SDK_VERSION } from '../version'
 import { initSearchIndex, backfillFromMessageCache } from '../utils/searchIndex'
 import { getMessagesWithEncryptedPayload, updateMessage as cacheUpdateMessage, deleteMessage as cacheDeleteMessage } from '../utils/messageCache'
@@ -188,35 +184,6 @@ import { bumpAvatarResumeCount } from '../utils/avatarCache'
  *
  * @category Core
  */
-
-/**
- * A bodiless signal stanza recovered from a deferred decrypt. The whole
- * element rode inside the encrypted payload (so the server never saw it), and
- * it has no `<body>` — it targets ANOTHER message rather than carrying content.
- * The placeholder "message" it was provisionally stored under must be replaced
- * by applying the signal to its target.
- */
-type RetryModification =
-  | { type: 'reactions'; targetId: string; emojis: string[] }
-  | { type: 'retract'; targetId: string }
-
-/**
- * Result of a single deferred-decrypt attempt.
- * - `decrypted`: plaintext recovered — update body/security/attachment, clear `encryptedPayload`.
- * - `modification`: decrypt surfaced a bodiless signal (XEP-0444 reaction or XEP-0424 retraction) —
- *   apply it to its target and remove the placeholder; there is no message body to update.
- * - `unsupported`: protocol we have no plugin for — clear `encryptedPayload`, tag `unsupportedEncryption`, keep body.
- * - `rejected`: signature is invalid (final, never retryable) — a real message placeholder is
- *   replaced with a "[Message rejected]" body; a bodiless-signal placeholder (forged reaction/
- *   retraction) is removed entirely so it never surfaces as a ghost bubble.
- * - `pending`: still cannot decrypt (key locked / plugin not ready) — leave `encryptedPayload`.
- */
-type RetryOutcome =
-  | { kind: 'decrypted'; body: string; securityContext?: MessageSecurityContext; attachment?: FileAttachment }
-  | { kind: 'modification'; modification: RetryModification }
-  | { kind: 'unsupported'; info: { namespace: string; name: string } }
-  | { kind: 'rejected'; securityContext?: MessageSecurityContext }
-  | { kind: 'pending' }
 
 export class XMPPClient {
   protected currentJid: string | null = null
@@ -422,21 +389,13 @@ export class XMPPClient {
   private isSmResumedSession = false
 
   /**
-   * Guard flag for {@link retryPendingDecrypts}. Prevents concurrent
-   * retry loops when multiple triggers (plugin-registered, key-unlocked)
-   * fire close together.
+   * E2EE deferred-decrypt engine. Repairs messages stored with an
+   * `encryptedPayload` once the blocking condition clears (plugin registered,
+   * key unlocked, peer key arrived). Constructed in {@link initializeModules}
+   * with getters onto the live manager / stores / identity.
    * @internal
    */
-  private isRetryingDecrypts = false
-
-  /**
-   * Set when a retry is requested while {@link retryPendingDecrypts} is
-   * already running. The in-flight pass re-runs once on completion so a
-   * trigger that arrives mid-pass (e.g. key-unlocked landing while the
-   * plugin-registered pass is still in flight) is coalesced, never dropped.
-   * @internal
-   */
-  private retryDecryptsRequested = false
+  private deferredDecrypt!: DeferredDecryptEngine
 
   /**
    * Monotonically increasing session generation counter.
@@ -653,6 +612,19 @@ export class XMPPClient {
     }
 
     this.stores = stores
+
+    // Deferred-decrypt engine reads/writes through getters so it always sees
+    // the current manager, stores, and identity — never a captured snapshot.
+    this.deferredDecrypt = new DeferredDecryptEngine({
+      getManager: () => this.e2ee,
+      getStores: () => this.stores,
+      getOwnBareJid: () => (this.currentJid ? getBareJid(this.currentJid) : ''),
+      cache: {
+        getMessagesWithEncryptedPayload,
+        updateMessage: cacheUpdateMessage,
+        deleteMessage: cacheDeleteMessage,
+      },
+    })
 
     // E2EEManager is NOT constructed here — it's tied to a logged-in
     // identity. See `ensureE2EEManager` (called from handleConnectionSuccess)
@@ -1687,446 +1659,15 @@ export class XMPPClient {
   }
 
   /**
-   * Re-decrypt all stored messages that carry an {@link encryptedPayload}
-   * because decryption failed at receive time (no plugin registered, key
-   * locked, etc.).
-   *
-   * Iterates both chat and room stores, reconstructs the stanza from the
-   * serialized XML, and re-runs {@link decryptStanzaInPlace}. On success
-   * the message body + securityContext are updated in-place via
-   * `store.updateMessage()`, and the `encryptedPayload` is cleared.
-   *
-   * Protected by a flag to prevent concurrent retry loops when multiple
-   * triggers fire close together.
+   * Re-decrypt all stored messages that carry an `encryptedPayload` because
+   * decryption failed at receive time (no plugin registered, key locked, etc.).
+   * Delegates to the {@link DeferredDecryptEngine}; kept on the client because
+   * backgroundSync triggers it via `client.retryPendingDecrypts()`.
    *
    * @returns the number of messages successfully decrypted
    */
   async retryPendingDecrypts(): Promise<number> {
-    if (this.isRetryingDecrypts) {
-      // A pass is already running. Remember the request so the in-flight
-      // pass re-runs on completion rather than dropping this trigger.
-      this.retryDecryptsRequested = true
-      return 0
-    }
-    const manager = this.e2ee
-    if (!manager || !manager.hasPlugins()) return 0
-    if (!this.stores) return 0
-
-    this.isRetryingDecrypts = true
-    let decryptedCount = 0
-    // Chat messages handled by the in-memory pass below, so the durable-cache
-    // pass can skip them (keyed by conversationId + message id).
-    const handledChatKeys = new Set<string>()
-
-    try {
-      const chatBindings = this.stores.chat
-      const roomBindings = this.stores.room
-
-      // --- 1:1 chat messages ---
-      // Read state from the imported Zustand stores (getState), mutate
-      // through StoreBindings so the abstract API contract is honoured.
-      const chatMessages = chatStore.getState().messages
-      for (const [conversationId, messages] of chatMessages) {
-        for (const msg of messages) {
-          if (!msg.encryptedPayload) continue
-          handledChatKeys.add(`${conversationId} ${msg.id}`)
-          const outcome = await this.retryDecryptSingle(
-            manager, msg.encryptedPayload, msg.from, conversationId,
-          )
-          if (outcome.kind === 'decrypted') {
-            chatBindings.updateMessage(conversationId, msg.id, {
-              body: outcome.body,
-              ...(outcome.securityContext && { securityContext: outcome.securityContext }),
-              ...(outcome.attachment && { attachment: outcome.attachment }),
-              encryptedPayload: undefined,
-            })
-            decryptedCount++
-          } else if (outcome.kind === 'modification') {
-            this.applyDeferredChatModification(conversationId, msg, outcome.modification, chatBindings)
-            decryptedCount++
-          } else if (outcome.kind === 'rejected') {
-            this.resolveRejectedChatPlaceholder(conversationId, msg, outcome.securityContext, chatBindings)
-          } else if (outcome.kind === 'unsupported') {
-            chatBindings.updateMessage(conversationId, msg.id, {
-              encryptedPayload: undefined,
-              unsupportedEncryption: outcome.info,
-            })
-          }
-        }
-      }
-
-      // --- Room messages ---
-      const roomRuntimes = roomStore.getState().roomRuntime
-      for (const [roomJid, runtime] of roomRuntimes) {
-        for (const msg of runtime.messages) {
-          if (!msg.encryptedPayload) continue
-          const outcome = await this.retryDecryptSingle(
-            manager, msg.encryptedPayload, msg.from, roomJid, 'room',
-          )
-          if (outcome.kind === 'decrypted') {
-            roomBindings.updateMessage(roomJid, msg.id, {
-              body: outcome.body,
-              ...(outcome.securityContext && { securityContext: outcome.securityContext }),
-              ...(outcome.attachment && { attachment: outcome.attachment }),
-              encryptedPayload: undefined,
-            })
-            decryptedCount++
-          } else if (outcome.kind === 'rejected') {
-            // MUC carries no encrypted bodiless signals, so a rejected room
-            // message always has real content — warn the user and clear the stash.
-            roomBindings.updateMessage(roomJid, msg.id, {
-              body: MESSAGE_REJECTED_BODY,
-              ...(outcome.securityContext && { securityContext: outcome.securityContext }),
-              encryptedPayload: undefined,
-            })
-          } else if (outcome.kind === 'unsupported') {
-            roomBindings.updateMessage(roomJid, msg.id, {
-              encryptedPayload: undefined,
-              unsupportedEncryption: outcome.info,
-            })
-          }
-        }
-      }
-
-      // --- Durable cache (web fresh-session reload) ---
-      // Conversations the user has not opened are absent from the in-memory
-      // store, so the loops above miss their stashed messages — they would
-      // stay permanently "could not be decrypted" even after unlock. Repair
-      // them straight in IndexedDB. The sparse `encryptedPayload` index makes
-      // this O(pending), not a full-archive scan, and near-free when nothing
-      // is pending (the steady state).
-      for (const msg of await getMessagesWithEncryptedPayload()) {
-        const conversationId = msg.conversationId
-        if (!msg.encryptedPayload || !conversationId) continue
-        if (handledChatKeys.has(`${conversationId} ${msg.id}`)) continue
-        const outcome = await this.retryDecryptSingle(
-          manager, msg.encryptedPayload, msg.from, conversationId,
-        )
-        if (outcome.kind === 'decrypted') {
-          const updates = {
-            body: outcome.body,
-            ...(outcome.securityContext && { securityContext: outcome.securityContext }),
-            ...(outcome.attachment && { attachment: outcome.attachment }),
-            encryptedPayload: undefined,
-          }
-          await cacheUpdateMessage(msg.id, updates)
-          // The conversation's messages aren't loaded (durable path), so the
-          // in-memory sidebar preview would keep the "[OpenPGP-encrypted
-          // message]" fallback. Heal it when this message IS the preview.
-          chatBindings.refreshLastMessageContent?.(conversationId, msg.id, updates)
-          decryptedCount++
-        } else if (outcome.kind === 'modification') {
-          // Conversation isn't loaded in memory. Apply best-effort to the
-          // in-memory target (no-op if absent) and drop the durable placeholder
-          // so it can't resurrect as a "[could not decrypt]" bubble. The store
-          // binding's removeMessage only touches in-memory state, so delete
-          // from the durable cache explicitly. For never-opened conversations
-          // the signal is reconciled on the next MAM catch-up, when the
-          // now-unlocked key decrypts it inline.
-          this.applyDeferredChatModification(conversationId, msg, outcome.modification, chatBindings)
-          await cacheDeleteMessage(msg.id)
-          decryptedCount++
-        } else if (outcome.kind === 'rejected') {
-          if (msg.body === COULD_NOT_DECRYPT_BODY) {
-            // Bodiless-signal placeholder (forged reaction/retraction) — drop it.
-            await cacheDeleteMessage(msg.id)
-          } else {
-            const updates = {
-              body: MESSAGE_REJECTED_BODY,
-              ...(outcome.securityContext && { securityContext: outcome.securityContext }),
-              encryptedPayload: undefined,
-            }
-            await cacheUpdateMessage(msg.id, updates)
-            chatBindings.refreshLastMessageContent?.(conversationId, msg.id, updates)
-          }
-        } else if (outcome.kind === 'unsupported') {
-          const updates = {
-            encryptedPayload: undefined,
-            unsupportedEncryption: outcome.info,
-          }
-          await cacheUpdateMessage(msg.id, updates)
-          chatBindings.refreshLastMessageContent?.(conversationId, msg.id, updates)
-        }
-      }
-
-      if (decryptedCount > 0) {
-        logInfo(`E2EE deferred decrypt: successfully decrypted ${decryptedCount} message(s)`)
-      }
-    } finally {
-      this.isRetryingDecrypts = false
-    }
-
-    // A trigger that arrived mid-pass was coalesced — run once more so its
-    // newly-available state (e.g. a just-unlocked key) is applied.
-    if (this.retryDecryptsRequested) {
-      this.retryDecryptsRequested = false
-      decryptedCount += await this.retryPendingDecrypts()
-    }
-
-    return decryptedCount
-  }
-
-  /**
-   * Apply a bodiless signal (XEP-0444 reaction or XEP-0424 retraction)
-   * recovered from a deferred decrypt to its target message, then remove the
-   * "[could not decrypt]" placeholder it was provisionally stored under. The
-   * sender of the placeholder stanza is the actor — our own bare JID for a
-   * self-outgoing MAM replay, the peer's for an inbound one. A retraction is
-   * only honoured when that actor authored the target (mirrors the live path).
-   */
-  private applyDeferredChatModification(
-    conversationId: string,
-    placeholder: { id: string; from: string },
-    modification: RetryModification,
-    chatBindings: StoreBindings['chat'],
-  ): void {
-    const actorJid = getBareJid(placeholder.from)
-    // Diagnostic (race investigation): a deferred reaction/retraction can only
-    // attach to its target if that target is in the loaded set when this runs.
-    // retryPendingDecrypts is a one-shot pass (launch / key-unlock); nothing
-    // re-runs it when a target enters the store later via scroll/MAM. Record
-    // whether target + placeholder were present so a "resolved only after
-    // relaunch" report can be confirmed against the actual presence at apply
-    // time. Domains only — no message content.
-    const targetPresent = !!chatBindings.getMessage(conversationId, modification.targetId)
-    const placeholderPresent = !!chatBindings.getMessage(conversationId, placeholder.id)
-    logInfo(
-      `E2EE deferred modification: type=${modification.type} conv=${getDomain(conversationId)} ` +
-      `targetPresent=${targetPresent} placeholderPresent=${placeholderPresent}` +
-      (targetPresent ? '' : ' — target not loaded, signal cannot attach until a later pass'),
-    )
-    if (modification.type === 'reactions') {
-      chatBindings.updateReactions(conversationId, modification.targetId, actorJid, modification.emojis)
-    } else {
-      const target = chatBindings.getMessage(conversationId, modification.targetId)
-      const updates = applyRetraction(!!target && target.from === actorJid)
-      if (updates) chatBindings.updateMessage(conversationId, modification.targetId, updates)
-    }
-    chatBindings.removeMessage(conversationId, placeholder.id)
-  }
-
-  /**
-   * Resolve a chat placeholder whose deferred decrypt was finally rejected
-   * (invalid signature — final, never retried again). A bodiless-signal
-   * placeholder still carries the {@link COULD_NOT_DECRYPT_BODY} marker that
-   * stanzaDecrypt stamps onto reactions/retractions; it is removed entirely so
-   * a forged signal never surfaces as a ghost bubble. A real message
-   * placeholder (any other body) is replaced with a "[Message rejected]" body
-   * so the user is warned the message could not be trusted.
-   */
-  private resolveRejectedChatPlaceholder(
-    conversationId: string,
-    placeholder: { id: string; body: string },
-    securityContext: MessageSecurityContext | undefined,
-    chatBindings: StoreBindings['chat'],
-  ): void {
-    if (placeholder.body === COULD_NOT_DECRYPT_BODY) {
-      chatBindings.removeMessage(conversationId, placeholder.id)
-    } else {
-      chatBindings.updateMessage(conversationId, placeholder.id, {
-        body: MESSAGE_REJECTED_BODY,
-        ...(securityContext && { securityContext }),
-        encryptedPayload: undefined,
-      })
-    }
-  }
-
-  /**
-   * Attempt to decrypt a single stashed payload — either a full original
-   * `<message>` stanza (current format, keeps outer reply/fallback context)
-   * or a bare encrypted element (legacy persisted stashes).
-   * @returns `RetryOutcome` describing whether decryption succeeded, the
-   *   protocol is unsupported, or the message should remain pending.
-   * @internal
-   */
-  private async retryDecryptSingle(
-    manager: E2EEManager,
-    encryptedPayloadXml: string,
-    senderJid: string,
-    peer: string,
-    messageContext: 'chat' | 'room' = 'chat',
-  ): Promise<RetryOutcome> {
-    try {
-      const parsedPayload = ltx.parse(encryptedPayloadXml) as unknown as Element
-
-      // Current stashes hold the full original <message> stanza so outer
-      // cleartext context (XEP-0461 <reply>, XEP-0428 <fallback> ranges)
-      // survives until this retry. Stashes persisted before that format
-      // hold just the encrypted child and need a minimal wrapper.
-      const stanza =
-        parsedPayload.name === 'message'
-          ? parsedPayload
-          : (xml('message', { from: senderJid }, parsedPayload) as Element)
-      if (!stanza.attrs.from) stanza.attrs.from = senderJid
-
-      // Detect self-outgoing (sent carbon or MAM self-replay): when the
-      // sender's bare JID equals our own, the signcrypt envelope's <to/>
-      // addresses the conversation peer — not us — so the plugin's
-      // reflection check must be inverted via isSelfOutgoing.
-      const ownBareJid = this.currentJid ? getBareJid(this.currentJid) : ''
-      const isSelfOutgoing = ownBareJid !== '' && getBareJid(senderJid) === ownBareJid
-
-      const result = await decryptStanzaInPlace(
-        stanza, manager, peer, 'archive',
-        isSelfOutgoing ? { isSelfOutgoing: true } : undefined,
-      )
-
-      // Protocol we have no plugin for (e.g. OMEMO): nothing to retry. Drop the
-      // encryptedPayload and tag the message so the already-stored fallback body
-      // renders with an "unsupported method" hint.
-      if (result.unsupportedEncryption) {
-        return { kind: 'unsupported', info: result.unsupportedEncryption }
-      }
-
-      if (!result.attempted || result.encryptedPayloadXml) {
-        // Still can't decrypt
-        return { kind: 'pending' }
-      }
-
-      // A rejected signature is final — never retryable. decryptStanzaInPlace
-      // threw before unwrapping the payload, so no <reactions>/<retract>/<body>
-      // was surfaced; the caller decides whether to show a "[Message rejected]"
-      // bubble (real message placeholder) or drop it (bodiless-signal placeholder).
-      if (result.securityContext?.trust === 'rejected') {
-        return {
-          kind: 'rejected',
-          securityContext: {
-            protocolId: result.securityContext.protocolId,
-            trust: result.securityContext.trust,
-            ...(result.securityContext.notes && { notes: result.securityContext.notes }),
-          },
-        }
-      }
-
-      // Bodiless signal stanzas (XEP-0444 reactions, XEP-0424 retractions)
-      // carry no <body> — the whole element rode inside the encrypted payload
-      // and now sits at the stanza root after decryptStanzaInPlace unwrapped
-      // it. These were stored under a "[could not decrypt]" placeholder while
-      // the key was locked; returning 'pending' here (the historical body-only
-      // behaviour) silently dropped them. Surface them as a modification so the
-      // caller applies the signal to its target and removes the placeholder.
-      const reactions = parseReactionsSignal(stanza)
-      if (reactions?.targetId) {
-        return {
-          kind: 'modification',
-          modification: { type: 'reactions', targetId: reactions.targetId, emojis: reactions.emojis },
-        }
-      }
-      const retraction = parseRetractionSignal(stanza)
-      if (retraction?.targetId) {
-        return { kind: 'modification', modification: { type: 'retract', targetId: retraction.targetId } }
-      }
-
-      // Extract the decrypted body
-      const body = stanza.getChildText('body')
-      if (!body) return { kind: 'pending' }
-
-      // Re-run the shared content parse on the decrypted stanza: strips
-      // XEP-0428 fallback ranges (e.g. the XEP-0461 reply quote that the
-      // sender prefixed to the encrypted body) and extracts the attachment
-      // (aesgcm:// URI, XEP-0446 file metadata, XEP-0264 thumbnails).
-      // Legacy bare-element stashes carry no outer <fallback>, so their
-      // body passes through unchanged.
-      const parsed = parseMessageContent({ messageEl: stanza, body, messageContext })
-      const processedBody = parsed.processedBody
-      const attachment = parsed.attachment
-      if (attachment) {
-        logDebug(
-          `E2EE deferred decrypt: attachment from ${getDomain(senderJid)} — ` +
-          `url=${attachment.url.slice(0, 40)}… mediaType=${attachment.mediaType ?? 'none'} ` +
-          `encrypted=${!!attachment.encryption} name=${attachment.name ? '<redacted>' : 'none'}`,
-        )
-      }
-
-      // Map SecurityContext to MessageSecurityContext
-      let securityContext: MessageSecurityContext | undefined
-      if (result.securityContext) {
-        securityContext = {
-          protocolId: result.securityContext.protocolId,
-          trust: result.securityContext.trust,
-          ...(result.securityContext.notes && { notes: result.securityContext.notes }),
-          ...(result.securityContext.fingerprint && { fingerprint: result.securityContext.fingerprint }),
-        }
-      }
-
-      return {
-        kind: 'decrypted',
-        body: processedBody,
-        ...(securityContext && { securityContext }),
-        ...(attachment && { attachment }),
-      }
-    } catch (err) {
-      logWarn(`E2EE deferred decrypt failed for message from ${getDomain(senderJid)}: ${err instanceof Error ? err.message : String(err)}`)
-      return { kind: 'pending' }
-    }
-  }
-
-  /**
-   * Re-attempt deferred decrypts AND upgrade stale trust for a specific
-   * peer, triggered when that peer's PEP key material changes.
-   *
-   * Two categories of stored messages are handled:
-   *
-   * 1. Messages with `encryptedPayload` — the peer key was not available
-   *    when the message was first processed, so the signature could not be
-   *    verified. Re-decrypt now that the key may be cached.
-   *
-   * 2. Old messages without `encryptedPayload` but with
-   *    `securityContext.trust === 'untrusted'` and a "not cached" note —
-   *    these were persisted before the payload-stash fix landed. We cannot
-   *    re-verify their signatures (the ciphertext is gone), but the
-   *    decryption + signcrypt envelope validation succeeded, so upgrading
-   *    to `tofu` is a sound pragmatic trade-off.
-   */
-  private async retryPendingDecryptsForPeer(peer: string): Promise<void> {
-    const manager = this.e2ee
-    if (!manager || !manager.hasPlugins()) return
-    if (!this.stores) return
-
-    const chatBindings = this.stores.chat
-    const chatMessages = chatStore.getState().messages
-    const peerMessages = chatMessages.get(peer)
-    if (!peerMessages) return
-
-    let updated = 0
-    for (const msg of peerMessages) {
-      if (msg.encryptedPayload) {
-        const outcome = await this.retryDecryptSingle(
-          manager, msg.encryptedPayload, msg.from, peer,
-        )
-        if (outcome.kind === 'decrypted') {
-          chatBindings.updateMessage(peer, msg.id, {
-            body: outcome.body,
-            ...(outcome.securityContext && { securityContext: outcome.securityContext }),
-            ...(outcome.attachment && { attachment: outcome.attachment }),
-            encryptedPayload: undefined,
-          })
-          updated++
-        } else if (outcome.kind === 'unsupported') {
-          chatBindings.updateMessage(peer, msg.id, {
-            encryptedPayload: undefined,
-            unsupportedEncryption: outcome.info,
-          })
-          updated++
-        }
-        continue
-      }
-      if (
-        msg.securityContext?.trust === 'untrusted' &&
-        msg.securityContext.notes?.some((n) => n.includes('not cached'))
-      ) {
-        chatBindings.updateMessage(peer, msg.id, {
-          securityContext: {
-            protocolId: msg.securityContext.protocolId,
-            trust: 'tofu',
-          },
-        })
-        updated++
-      }
-    }
-    if (updated > 0) {
-      logInfo(`E2EE peer key change: updated ${updated} message(s) for ${getDomain(peer)}`)
-    }
+    return this.deferredDecrypt.retryPending()
   }
 
   /**
@@ -2185,7 +1726,7 @@ export class XMPPClient {
     // have their signature verified and trust upgraded to tofu/verified.
     // Also upgrade old persisted messages that lack encryptedPayload.
     this.e2ee.onPeerKeysChanged((peer) => {
-      void this.retryPendingDecryptsForPeer(peer)
+      void this.deferredDecrypt.retryForPeer(peer)
     })
     // When a plugin reports the local key just became usable (passphrase
     // entered, server backup restored, key file imported, identity replaced),

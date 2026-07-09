@@ -8,6 +8,7 @@
 import type { Element } from '@xmpp/client'
 import type { ConnectionStatus } from './connection'
 import type { Message } from './chat'
+import type { RoomMessage } from './room'
 import type { PresenceStatus, Contact } from './roster'
 import type { ServerInfo } from './discovery'
 import type { HttpUploadService } from './upload'
@@ -85,6 +86,14 @@ export interface StoreBindings {
     // Smart MAM: archived conversation preview refresh
     getArchivedConversations?: () => Array<{ id: string; messages: Message[] }>
     getLastMessage?: (conversationId: string) => Message | undefined
+    // Every stored conversation (archived INCLUDED) with its in-memory
+    // messages. Read seam for the deferred-decrypt engine, which must retry
+    // pending encrypted payloads regardless of archive state — unlike
+    // getAllConversations, which returns only the active set.
+    getAllStoredMessages: () => Array<{ id: string; messages: Message[] }>
+    // In-memory messages for a single conversation (archived included). Read
+    // seam for peer-scoped deferred-decrypt retry on a PEP key change.
+    getConversationMessages: (conversationId: string) => Message[]
   }
   roster: Pick<RosterState, (typeof rosterBindingMethodKeys)[number]>
   console: Pick<ConsoleState, (typeof consoleBindingMethodKeys)[number]>
@@ -96,6 +105,9 @@ export interface StoreBindings {
     // can't be matched locally — seeds a forward `after` catch-up on an
     // empty-cache new device.
     getRoomPendingStanzaId?: (roomJid: string) => string | undefined
+    // Every room with its in-memory runtime messages. Read seam for the
+    // deferred-decrypt engine (mirrors chat.getAllStoredMessages for MUC).
+    getAllRoomMessages: () => Array<{ jid: string; messages: RoomMessage[] }>
   }
   admin: Pick<AdminState, (typeof adminBindingMethodKeys)[number]> & {
     // State getters

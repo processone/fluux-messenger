@@ -780,7 +780,10 @@ describe('XMPPClient.retryPendingDecrypts()', () => {
         releaseGate = resolve
       })
       let passes = 0
-      ;(xmppClient as unknown as { retryDecryptSingle: () => Promise<unknown> }).retryDecryptSingle =
+      // The deferred-decrypt engine owns the per-payload decrypt now; gate it
+      // there so a second retry is requested while pass #1 is still parked.
+      ;(xmppClient as unknown as { deferredDecrypt: { decryptSingle: () => Promise<unknown> } })
+        .deferredDecrypt.decryptSingle =
         vi.fn(async () => {
           passes++
           if (passes === 1) await gate
