@@ -459,6 +459,105 @@ describe('XMPPClient Quick Chat', () => {
     })
   })
 
+  describe('createQuickChat allow-invites config', () => {
+    // Build a muc#owner config-form response advertising the given field vars.
+    const buildConfigFormResponse = (fieldVars: string[]) =>
+      createMockElement('iq', { type: 'result' }, [
+        {
+          name: 'query',
+          attrs: { xmlns: 'http://jabber.org/protocol/muc#owner' },
+          children: [
+            {
+              name: 'x',
+              attrs: { xmlns: 'jabber:x:data', type: 'form' },
+              children: fieldVars.map((v) => ({
+                name: 'field',
+                attrs: { var: v, type: 'boolean' },
+                children: [{ name: 'value', text: '0' }],
+              })),
+            },
+          ],
+        },
+      ])
+
+    // Override the muc#owner branch so config-form GET returns a form and
+    // config SET returns success; delegate everything else to the base mock.
+    const installConfigForm = (fieldVars: string[]) => {
+      const base = mockXmppClientInstance.iqCaller.request.getMockImplementation()!
+      mockXmppClientInstance.iqCaller.request.mockImplementation(async (iq: any) => {
+        const xmlns = iq.children?.[0]?.attrs?.xmlns
+        if (xmlns === 'http://jabber.org/protocol/muc#owner') {
+          if (iq.attrs?.type === 'get') return buildConfigFormResponse(fieldVars)
+          return createMockElement('iq', { type: 'result' }, [])
+        }
+        return base(iq)
+      })
+    }
+
+    const getConfigSubmit = () => {
+      const requestCalls = mockXmppClientInstance.iqCaller.request.mock.calls
+      return requestCalls.find((call: any[]) => {
+        const iq = call[0]
+        return iq?.attrs?.type === 'set' &&
+               iq?.children?.some((c: any) => c.attrs?.xmlns === 'http://jabber.org/protocol/muc#owner')
+      })
+    }
+
+    it('sets the Prosody allow-member-invites field when the server advertises it', async () => {
+      installConfigForm(['{http://prosody.im/protocol/muc}roomconfig_allowmemberinvites'])
+
+      await xmppClient.muc.createQuickChat('testuser')
+
+      const configCall = getConfigSubmit()
+      expect(configCall).toBeDefined()
+      const xmlStr = JSON.stringify(configCall![0])
+      // Prosody field must be submitted...
+      expect(xmlStr).toContain('{http://prosody.im/protocol/muc}roomconfig_allowmemberinvites')
+      // ...and the unsupported ejabberd field must NOT be submitted.
+      expect(xmlStr).not.toContain('muc#roomconfig_allowinvites')
+    })
+
+    it('detects the allow-member-invites field regardless of its namespace prefix', async () => {
+      // A server that namespaces the field with a different URI than Prosody's:
+      // matching is by local name, so it should still be found and submitted verbatim.
+      installConfigForm(['{urn:example:muc}roomconfig_allowmemberinvites'])
+
+      await xmppClient.muc.createQuickChat('testuser')
+
+      const configCall = getConfigSubmit()
+      expect(configCall).toBeDefined()
+      const xmlStr = JSON.stringify(configCall![0])
+      expect(xmlStr).toContain('{urn:example:muc}roomconfig_allowmemberinvites')
+    })
+
+    it('sets the ejabberd allowinvites field when the server advertises it', async () => {
+      installConfigForm(['muc#roomconfig_allowinvites'])
+
+      await xmppClient.muc.createQuickChat('testuser')
+
+      const configCall = getConfigSubmit()
+      expect(configCall).toBeDefined()
+      const xmlStr = JSON.stringify(configCall![0])
+      expect(xmlStr).toContain('muc#roomconfig_allowinvites')
+    })
+
+    it('omits allow-invites fields entirely when the server advertises neither', async () => {
+      // Prosody-style form without any allow-invites field at all.
+      installConfigForm(['muc#roomconfig_persistentroom', 'muc#roomconfig_publicroom'])
+
+      await xmppClient.muc.createQuickChat('testuser')
+
+      const configCall = getConfigSubmit()
+      // Config must still be submitted (otherwise the room stays locked)...
+      expect(configCall).toBeDefined()
+      const xmlStr = JSON.stringify(configCall![0])
+      expect(xmlStr).toContain('muc#roomconfig_persistentroom')
+      // ...but no allow-invites field should be included.
+      expect(xmlStr).not.toContain('allowinvites')
+      expect(xmlStr).not.toContain('allowmemberinvites')
+    })
+  })
+
   describe('sendMediatedInvitation', () => {
     beforeEach(() => {
       // Clear send mock to isolate invitation tests from setup stanzas
