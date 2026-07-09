@@ -84,15 +84,26 @@ const { mockGetDomainFromJid, mockGetWebsocketUrlForDomain } = vi.hoisted(() => 
     mockGetWebsocketUrlForDomain: vi.fn(),
 }))
 
+// Keychain + Tauri detection are overridable per-test so the desktop
+// (keychain-backed) paths can be exercised. Defaults keep the web behaviour
+// (not Tauri, no saved credentials) used by the bulk of the suite.
+const { mockIsTauri, mockHasSavedCredentials, mockGetCredentials, mockSaveCredentials, mockDeleteCredentials } = vi.hoisted(() => ({
+    mockIsTauri: vi.fn(() => false),
+    mockHasSavedCredentials: vi.fn(() => false),
+    mockGetCredentials: vi.fn(),
+    mockSaveCredentials: vi.fn(),
+    mockDeleteCredentials: vi.fn(),
+}))
+
 vi.mock('@/utils/keychain', () => ({
-    hasSavedCredentials: () => false,
-    getCredentials: vi.fn(),
-    saveCredentials: vi.fn(),
-    deleteCredentials: vi.fn(),
+    hasSavedCredentials: mockHasSavedCredentials,
+    getCredentials: mockGetCredentials,
+    saveCredentials: mockSaveCredentials,
+    deleteCredentials: mockDeleteCredentials,
 }))
 
 vi.mock('@/utils/tauri', () => ({
-    isTauri: () => false,
+    isTauri: mockIsTauri,
 }))
 
 vi.mock('@/config/wellKnownServers', () => ({
@@ -430,6 +441,51 @@ describe('LoginScreen', () => {
 
             // No xmpp-last-jid in localStorage
             expect(() => render(<LoginScreen />)).not.toThrow()
+        })
+    })
+
+    // A `not-authorized` auth error is NOT proof the saved password is wrong:
+    // the SDK maps both a genuine SASL credential rejection and a transient,
+    // server-side stream-level <stream:error>not-authorized to the same string
+    // (issue #907). Deleting the OS-keychain password on it would erase a valid
+    // credential over a hiccup, leaving the user to re-enter it every restart.
+    describe('keychain credential preservation on auth error (desktop)', () => {
+        beforeEach(() => {
+            mockIsTauri.mockReturnValue(true)
+            mockHasSavedCredentials.mockReturnValue(true)
+            mockGetCredentials.mockResolvedValue({
+                jid: 'user@example.com',
+                password: 'stored-secret',
+                server: null,
+            })
+            useLoginPrefillStore.getState().clearPrefill()
+        })
+
+        afterEach(() => {
+            mockIsTauri.mockReturnValue(false)
+            mockHasSavedCredentials.mockReturnValue(false)
+            mockGetCredentials.mockReset()
+        })
+
+        it('does NOT delete the stored keychain password on a not-authorized error', async () => {
+            mockUseConnection.mockReturnValue({
+                status: 'error',
+                error: 'not-authorized - invalid username or password',
+                connect: mockConnect,
+            })
+
+            const { container } = render(<LoginScreen />)
+
+            // Wait until the keychain credentials have been loaded into the form
+            // (loadedFromKeychain is now true and the auth-error effect has run).
+            await waitFor(() => {
+                const jidInput = container.querySelector('#jid') as HTMLInputElement
+                expect(jidInput?.value).toBe('user@example.com')
+            })
+            // Let any queued microtasks/effects settle.
+            await new Promise((resolve) => setTimeout(resolve, 0))
+
+            expect(mockDeleteCredentials).not.toHaveBeenCalled()
         })
     })
 })

@@ -268,14 +268,16 @@ export function LoginScreen({ claimConnection }: LoginScreenProps) {
   useEffect(() => {
     if (!error) return
 
-    // Delete keychain credentials on "not-authorized" error (invalid password)
-    if (loadedFromKeychain && isDesktopApp && error.includes('not-authorized')) {
-      console.log('[LoginScreen] Deleting keychain credentials after auth failure')
-      void deleteCredentials().catch((err) => {
-        console.error('[LoginScreen] Failed to delete keychain credentials:', err)
-      })
-      setLoadedFromKeychain(false)
-    }
+    // NOTE: We deliberately do NOT delete the saved keychain password on a
+    // `not-authorized` error. A `not-authorized` is not proof the stored
+    // password is wrong: the SDK maps both a genuine SASL credential rejection
+    // and a transient, server-side stream-level <stream:error>not-authorized to
+    // the same error string (they are indistinguishable here). Wiping the
+    // keychain on a hiccup left users re-entering their password on every
+    // restart (issue #907). The credential is instead kept and prefilled so the
+    // user can retry or correct it; it is only removed on explicit user action
+    // (logout, or unchecking "Remember me") or replaced on a successful login
+    // with modified credentials.
 
     // Clear FAST token on auth failure (web) — prevents stale token from
     // triggering auto-connect loops on next tab open
