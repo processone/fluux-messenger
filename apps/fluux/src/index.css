@@ -1027,6 +1027,14 @@ html, body {
   border-color: var(--fluux-brand);
   box-shadow: 0 0 0 3px hsla(var(--fluux-accent-h), var(--fluux-accent-s), var(--fluux-accent-l), 0.22);
 }
+/* Round the top of the first stacked row (edit / reply / attachment / key-change
+ * indicator, or the input row itself). Without this its square accent bar and
+ * bottom border poke past the card's rounded top corner. Inset by the 1px card
+ * border so the curve tracks the inner edge. */
+.composer-card > :first-child {
+  border-start-start-radius: calc(var(--fluux-radius-l) - 1px);
+  border-start-end-radius: calc(var(--fluux-radius-l) - 1px);
+}
 
 /* Composer action row. On narrow widths (phone, narrowed pane) the input + send
  * sit on a top row and the secondary controls (+ / lock / emoji) form a drawer

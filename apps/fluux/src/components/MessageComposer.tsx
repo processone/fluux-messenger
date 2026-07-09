@@ -782,8 +782,8 @@ export function MessageComposer({
       {replyingTo && !editingMessage && (() => {
         const replyColor = replyingTo.senderColor || 'var(--fluux-brand)'
         return (
-        <div className="px-3 py-2 flex items-start gap-2 border-s-2 border-b border-fluux-border"
-             style={{ borderInlineStartColor: replyColor }}>
+        <div className="relative px-3 py-2 flex items-start gap-2 border-b border-fluux-border">
+          <span aria-hidden="true" className="pointer-events-none absolute inset-y-1.5 start-1.5 w-0.5 rounded-full" style={{ background: replyColor }} />
           <Reply className="rtl-mirror size-4 flex-shrink-0 mt-0.5" style={{ color: replyColor }} />
           <div className="flex-1 min-w-0">
             <p className="text-xs font-medium" style={{ color: replyColor }}>
