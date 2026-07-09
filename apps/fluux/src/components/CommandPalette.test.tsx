@@ -194,6 +194,15 @@ describe('CommandPalette', () => {
       expect(screen.getByText('General Chat')).toBeInTheDocument()
     })
 
+    it('renders room rows with a rounded-square avatar, never a circle', () => {
+      render(<CommandPalette {...defaultProps} />)
+      // "Development" has unreadCount 0 and mentionsCount 0, so its row has no
+      // unread badge (badges are rounded-full) — the only shaped element is its avatar.
+      const row = screen.getByText('Development').closest('button')!
+      expect(row.querySelector('.rounded-xl')).not.toBeNull()
+      expect(row.querySelector('.rounded-full')).toBeNull()
+    })
+
     it('should NOT display contacts without a conversation in the default view', () => {
       render(<CommandPalette {...defaultProps} />)
       // The empty-query view surfaces threads/views/actions only, not roster padding.

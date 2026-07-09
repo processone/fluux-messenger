@@ -18,6 +18,7 @@ import { useChatStore, useConnectionStore, useRoomStore } from '@fluux/sdk/react
 import type { PresenceStatus } from '@fluux/sdk'
 import type { SidebarView } from './Sidebar'
 import { Avatar } from './Avatar'
+import { RoomAvatar } from './RoomAvatar'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { isAdvancedMode } from '@/stores/advancedModeStore'
 import { ModalOverlay } from './ModalOverlay'
@@ -659,20 +660,24 @@ function CommandPaletteContent({
                         }`}
                     >
                       {item.avatarIdentifier !== undefined ? (
-                        <Avatar
-                          size={avatarSize}
-                          identifier={item.avatarIdentifier}
-                          name={item.label}
-                          avatarUrl={item.avatarUrl}
-                          presence={item.presence}
-                          forceOffline={forceOffline}
-                          presenceBorderColor="border-fluux-chat"
-                          fallbackIcon={
-                            item.type === 'room'
-                              ? <Hash className={isCompact ? 'size-3.5' : 'size-4'} />
-                              : undefined
-                          }
-                        />
+                        item.type === 'room' ? (
+                          <RoomAvatar
+                            size={avatarSize}
+                            identifier={item.avatarIdentifier}
+                            name={item.label}
+                            avatarUrl={item.avatarUrl}
+                          />
+                        ) : (
+                          <Avatar
+                            size={avatarSize}
+                            identifier={item.avatarIdentifier}
+                            name={item.label}
+                            avatarUrl={item.avatarUrl}
+                            presence={item.presence}
+                            forceOffline={forceOffline}
+                            presenceBorderColor="border-fluux-chat"
+                          />
+                        )
                       ) : (
                         <span
                           className={`flex items-center justify-center flex-shrink-0 ${iconBoxClass} ${iconGlyphClass}

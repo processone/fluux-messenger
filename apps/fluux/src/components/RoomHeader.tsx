@@ -9,8 +9,8 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { Room } from '@fluux/sdk'
-import { generateConsistentColorHexSync, getUniqueOccupantCount } from '@fluux/sdk'
-import { Avatar } from './Avatar'
+import { getUniqueOccupantCount } from '@fluux/sdk'
+import { RoomAvatar } from './RoomAvatar'
 import { Tooltip } from './Tooltip'
 import { useWindowDrag } from '@/hooks'
 import { renderTextWithLinks } from '@/utils/messageStyles'
@@ -25,7 +25,6 @@ import { buildNotifyGroup, buildManagementGroup, notifyModeOf } from './header/r
 import { inlineClass, kebabClass, KEBAB_TRIGGER_CLASS } from './header/headerOverflow'
 import { useRoomUiStore } from '../stores/roomUiStore'
 import {
-  Hash,
   ArrowLeft,
   Users,
   X,
@@ -115,22 +114,12 @@ export function RoomHeader({
       )}
 
       {/* Room Avatar or Icon */}
-      {room.avatar ? (
-        <Avatar
-          identifier={room.jid}
-          name={room.name}
-          avatarUrl={room.avatar}
-          size="header"
-          shape="square"
-        />
-      ) : (
-        <div
-          className="size-9 rounded-xl flex items-center justify-center flex-shrink-0"
-          style={{ backgroundColor: generateConsistentColorHexSync(room.jid, { saturation: 60, lightness: 45 }) }}
-        >
-          <Hash className="size-5 text-white" />
-        </div>
-      )}
+      <RoomAvatar
+        identifier={room.jid}
+        name={room.name}
+        avatarUrl={room.avatar}
+        size="header"
+      />
 
       {/* Name and info */}
       <div className="flex-1 min-w-0">

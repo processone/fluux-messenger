@@ -255,8 +255,8 @@ describe('RoomHeader', () => {
       expect(avatar).toHaveAttribute('data-avatar-url', 'https://example.com/avatar.png')
     })
 
-    it('renders colored hash icon when no avatar', () => {
-      const { container } = render(
+    it('renders avatar with no avatarUrl when room has no avatar', () => {
+      render(
         <RoomHeader
           room={createRoom({ avatar: undefined })}
           showOccupants={false}
@@ -270,9 +270,11 @@ describe('RoomHeader', () => {
         />
       )
 
-      // Hash icon is rendered in a colored div (rounded-xl for rooms)
-      expect(container.querySelector('.rounded-xl')).toBeInTheDocument()
-      expect(screen.queryByTestId('avatar')).not.toBeInTheDocument()
+      // Fallback (hash icon vs. letter, square shape) is RoomAvatar/Avatar's own
+      // concern, covered by RoomAvatar.test.tsx and Avatar.test.tsx. Here we only
+      // verify RoomHeader forwards an empty avatarUrl when the room has none.
+      const avatar = screen.getByTestId('avatar')
+      expect(avatar).toHaveAttribute('data-avatar-url', '')
     })
   })
 

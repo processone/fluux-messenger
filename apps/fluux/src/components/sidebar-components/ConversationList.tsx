@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, memo } from 'react'
+import React, { useState, useRef, memo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import { useListKeyboardNav, useRouteSync } from '@/hooks'
@@ -6,7 +6,6 @@ import { detectRenderLoop, trackSelectorChange } from '@/utils/renderLoopDetecto
 import {
   chatStore,
   roomStore,
-  generateConsistentColorHexSync,
   isPreviewableMessage,
   type Conversation,
 } from '@fluux/sdk'
@@ -14,11 +13,12 @@ import { formatLocalizedPreview } from '@/utils/messagePreviewText'
 import { shouldReplaceOnSelect } from '@/utils/navigationHistory'
 import { useChatStore, useConnectionStore, useRosterStore, useRoomStore } from '@fluux/sdk/react'
 import { Avatar, TypingIndicator } from '../Avatar'
+import { RoomAvatar } from '../RoomAvatar'
 import { Tooltip } from '../Tooltip'
 import { useSidebarZone, ContactTooltipContent } from './types'
 import { formatConversationTime } from '@/utils/dateFormat'
 import { useSettingsStore } from '@/stores/settingsStore'
-import { Hash, Trash2, Archive, ArchiveRestore, MessageCircle } from 'lucide-react'
+import { Trash2, Archive, ArchiveRestore, MessageCircle } from 'lucide-react'
 import { ListEmpty } from '../ui/ListEmpty'
 import { ConfirmDialog } from '../ConfirmDialog'
 import { MessageRequestsBanner } from './MessageRequestsBanner'
@@ -239,16 +239,9 @@ export const ConversationItem = memo(function ConversationItem({
   const isTyping = typingCount > 0
   const draft = useChatStore((s) => s.drafts.get(conversationId))
 
-  // Room avatars render as a raw <img> (no Avatar fallback). A dead blob: URL
-  // (WebKit reclaim across sleep) would otherwise show a broken-image glyph;
-  // fall back to the Hash icon instead. Reset when the URL changes.
-  const [roomAvatarBroken, setRoomAvatarBroken] = useState(false)
-  useEffect(() => { setRoomAvatarBroken(false) }, [room?.avatar])
-
   if (!conversation) return null
   const isGroupChat = conversation.type === 'groupchat'
   const avatarSize = densityMode === 'compact' ? 'sm' : 'md'
-  const avatarBox = densityMode === 'compact' ? 'size-8' : 'size-10'
   const menuProps = getItemMenuProps(conversation)
   // While the long-press / context menu is open, highlight the targeted cell so
   // the user can clearly see which conversation the action will apply to.
@@ -290,21 +283,13 @@ export const ConversationItem = memo(function ConversationItem({
             keeps its full width and stops truncating short names. */}
         <div className="relative flex-shrink-0">
           {isGroupChat ? (
-            room?.avatar && !roomAvatarBroken ? (
-              <img
-                src={room.avatar}
-                alt={conversation.name}
-                className={`${avatarBox} rounded-xl object-cover`}
-                draggable={false}
-                onError={() => setRoomAvatarBroken(true)}
-                onLoad={(e) => { if (e.currentTarget.naturalWidth === 0) setRoomAvatarBroken(true) }}
-              />
-            ) : (
-              <Hash
-                className={`${avatarBox} p-1.5 rounded-xl text-white`}
-                style={{ backgroundColor: generateConsistentColorHexSync(conversation.id, { saturation: 60, lightness: 45 }) }}
-              />
-            )
+            <RoomAvatar
+              identifier={conversation.id}
+              name={conversation.name}
+              avatarUrl={room?.avatar}
+              size={avatarSize}
+              overlay={isTyping && !isActive ? <TypingIndicator /> : undefined}
+            />
           ) : (
             <Avatar
               identifier={conversation.id}
