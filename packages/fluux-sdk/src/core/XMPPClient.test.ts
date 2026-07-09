@@ -296,6 +296,32 @@ describe('XMPPClient', () => {
 
       expect(stopSpy).not.toHaveBeenCalled()
     })
+
+    it('re-establishes the state snapshot subscriber after destroy() + setupBindings()', async () => {
+      // Regression: React StrictMode runs setup -> cleanup(destroy) -> setup again.
+      // destroy() tears down the snapshot subscriber (and nulls the field);
+      // setupBindings() must recreate it, otherwise SM-resumable persistence is
+      // silently disabled for the rest of the client's lifetime.
+      const setRoster = vi.fn(async () => {})
+      const storageAdapter = {
+        getSessionState: vi.fn(async () => null),
+        setSessionState: vi.fn(async () => {}),
+        clearSessionState: vi.fn(async () => {}),
+        setRoster,
+      }
+      const client = new XMPPClient({ debug: false, storageAdapter })
+      // The snapshot only writes when getJid() resolves — feed it a currentJid.
+      ;(client as unknown as { currentJid: string }).currentJid = 'user@example.com/res'
+
+      // Simulate the StrictMode mount/cleanup/remount cycle.
+      client.destroy()
+      client.setupBindings()
+
+      // flushStateSnapshot is a no-op when the snapshot was not recreated.
+      await client.flushStateSnapshot()
+
+      expect(setRoster).toHaveBeenCalledWith('user@example.com', expect.any(Array))
+    })
   })
 
   describe('clearPersistedPresence', () => {

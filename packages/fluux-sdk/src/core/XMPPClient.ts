@@ -571,6 +571,31 @@ export class XMPPClient {
     // Set up store-based side effects (activeConversation -> load cache, MAM fetch)
     const unsubscribeSideEffects = setupStoreSideEffects(this)
     this.cleanupFunctions.push(unsubscribeSideEffects)
+
+    // (Re)start the snapshot subscriber. Kept here rather than in
+    // initializeModules() (which runs once) so it is re-established after
+    // destroy() tears it down — otherwise a React StrictMode remount would
+    // leave SM-resumable persistence disabled for the client's lifetime.
+    this.startStateSnapshot()
+  }
+
+  /**
+   * (Re)create the snapshot subscriber that persists SM-resumable state
+   * (rooms, roster, server info, own profile) as stores change. Hydration on
+   * connect() reads it back before the socket starts, so SM replays land on
+   * populated state.
+   *
+   * Idempotent: stops any existing subscriber first. No-op without a storage
+   * adapter. Paired with the teardown in {@link destroy}.
+   */
+  private startStateSnapshot(): void {
+    if (!this.storageAdapter) return
+    this.stateSnapshot?.stop()
+    this.stateSnapshot = new StateSnapshot({
+      storageAdapter: this.storageAdapter,
+      getJid: () => this.currentJid ? getBareJid(this.currentJid) : null,
+    })
+    this.stateSnapshot.start()
   }
 
   /**
@@ -789,18 +814,9 @@ export class XMPPClient {
       })
     }
 
-    // Start the snapshot subscriber so SM-resumable state (rooms, roster,
-    // server info, own profile) is persisted as it changes. Hydration on
-    // connect() will read it back before the socket starts, so SM replays
-    // land on populated state.
-    if (this.storageAdapter) {
-      this.stateSnapshot?.stop()
-      this.stateSnapshot = new StateSnapshot({
-        storageAdapter: this.storageAdapter,
-        getJid: () => this.currentJid ? getBareJid(this.currentJid) : null,
-      })
-      this.stateSnapshot.start()
-    }
+    // The snapshot subscriber is (re)created in setupBindings() — not here —
+    // so it survives the destroy()/setupBindings() pair React StrictMode runs
+    // on remount. See startStateSnapshot().
 
     this.modulesInitialized = true
   }
