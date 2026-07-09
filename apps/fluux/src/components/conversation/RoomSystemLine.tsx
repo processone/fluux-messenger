@@ -25,7 +25,7 @@ export function RoomSystemLine({ event }: RoomSystemLineProps) {
   }
 
   return (
-    <div className="flex justify-center py-1.5 px-4">
+    <div className="flex justify-center pt-3 pb-1.5 px-4">
       <span className="text-xs text-fluux-muted text-center">{text}</span>
     </div>
   )
