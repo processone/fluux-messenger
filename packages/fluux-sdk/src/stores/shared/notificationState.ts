@@ -334,17 +334,28 @@ export function onDeactivate(
  * Clears unreadCount and mentionsCount, updates lastReadAt.
  * Preserves firstNewMessageId — the marker has a separate lifecycle
  * (set on activate, cleared on deactivate or explicit clear).
+ *
+ * When `advanceSeenTo` is supplied, the read pointer (lastSeenMessageId) is
+ * advanced to it. Callers pass the newest message id ONLY when the user has
+ * genuinely caught up to it (the loaded window is at the live edge) — this is
+ * what lets the XEP-0490 publisher, which watches lastSeenMessageId, sync the
+ * read marker to other devices. Omitting it (the scrolled-into-history case)
+ * clears the local badge without publishing a read position past what the user
+ * actually saw. The advance is forward-only in practice because the caller only
+ * ever supplies the tail of a live-edge window (>= the current pointer).
  */
 export function onMarkAsRead(
   state: EntityNotificationState,
-  lastMessageTimestamp?: Date
+  lastMessageTimestamp?: Date,
+  advanceSeenTo?: string
 ): EntityNotificationState {
   const lastReadAt = lastMessageTimestamp ?? new Date()
   // Skip update if nothing to change (prevents unnecessary state updates)
   const existingTime = state.lastReadAt instanceof Date
     ? state.lastReadAt.getTime()
     : state.lastReadAt ? new Date(state.lastReadAt as unknown as string).getTime() : 0
-  if (state.unreadCount === 0 && state.mentionsCount === 0 && existingTime === lastReadAt.getTime()) {
+  const seenUnchanged = advanceSeenTo === undefined || advanceSeenTo === state.lastSeenMessageId
+  if (state.unreadCount === 0 && state.mentionsCount === 0 && existingTime === lastReadAt.getTime() && seenUnchanged) {
     return state
   }
   return {
@@ -352,6 +363,7 @@ export function onMarkAsRead(
     unreadCount: 0,
     mentionsCount: 0,
     lastReadAt,
+    lastSeenMessageId: advanceSeenTo ?? state.lastSeenMessageId,
   }
 }
 
