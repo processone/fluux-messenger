@@ -25,6 +25,7 @@ import type {
   RoomState,
   AdminState,
   BlockingState,
+  SDKStores,
 } from '../../stores'
 import {
   connectionBindingMethodKeys,
@@ -229,6 +230,13 @@ export interface PrivacyOptions {
 export interface XMPPClientConfig {
   /** Enable debug logging */
   debug?: boolean
+  /**
+   * Store bundle backing this client. Defaults to the process-wide singletons
+   * ({@link defaultStores}). Injecting a custom {@link SDKStores} bundle is the
+   * seam for future multi-account support — see `stores/sdkStores.ts` for what
+   * else that entails. Single-account apps should omit this.
+   */
+  stores?: SDKStores
   /**
    * Options for integrating an external presence state machine.
    * Only needed when using XState for presence management (e.g., in React apps).

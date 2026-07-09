@@ -26,17 +26,7 @@ import type { ConnectionActor, ConnectionStateValue } from './connectionMachine'
 import { ensureCryptoRandomUUID } from './polyfill'
 import { createStoreBindings } from '../bindings/storeBindings'
 import { setupStoreSideEffects } from './sideEffects'
-import {
-  connectionStore,
-  chatStore,
-  rosterStore,
-  consoleStore,
-  eventsStore,
-  roomStore,
-  adminStore,
-  blockingStore,
-  ignoreStore,
-} from '../stores'
+import { defaultStores, type SDKStores } from '../stores'
 import { detectPlatform } from './platform'
 import { isDeadSocketError } from './modules/connectionUtils'
 import { getBareJid, getDomain } from './jid'
@@ -188,6 +178,13 @@ export class XMPPClient {
   private proxyAdapter?: ProxyAdapter
   private privacyOptions?: PrivacyOptions
   private stateSnapshot?: StateSnapshot
+  /**
+   * The store bundle backing this client (default bindings, event→store
+   * wiring, account switching). Defaults to the process-wide singletons; an
+   * injected bundle is the store-injection seam (see `stores/sdkStores.ts`).
+   * @internal
+   */
+  private readonly sdkStores: SDKStores
 
   /**
    * Connection management module.
@@ -453,6 +450,10 @@ export class XMPPClient {
     // This is async but we fire-and-forget; the result is cached for later use
     void detectPlatform()
 
+    // Resolve the store bundle (injected or the process-wide singletons). Set
+    // before initializeModules / setupBindings, which both read it.
+    this.sdkStores = config.stores ?? defaultStores
+
     // Store storage adapter for session persistence
     this.storageAdapter = config.storageAdapter
     this.shouldAutoReconnect = config.shouldAutoReconnect
@@ -518,7 +519,7 @@ export class XMPPClient {
     this.presenceReader = createPresenceReader(presenceOptions)
 
     // Initialize with default store bindings (using global Zustand stores)
-    this.initializeModules(createDefaultStoreBindings())
+    this.initializeModules(createDefaultStoreBindings(this.sdkStores))
 
     // Set up all bindings (presence sync, store bindings, side effects).
     // Extracted to a method so XMPPProvider can call setupBindings/destroy
@@ -555,15 +556,15 @@ export class XMPPClient {
     // Set up SDK event -> Zustand store bindings
     // This wires SDK events (e.g., 'chat:message') to store updates (e.g., chatStore.addMessage)
     const unsubscribeStoreBindings = createStoreBindings(this, () => ({
-      connection: connectionStore.getState(),
-      chat: chatStore.getState(),
-      roster: rosterStore.getState(),
-      room: roomStore.getState(),
-      events: eventsStore.getState(),
-      admin: adminStore.getState(),
-      blocking: blockingStore.getState(),
-      console: consoleStore.getState(),
-      ignore: ignoreStore.getState(),
+      connection: this.sdkStores.connection.getState(),
+      chat: this.sdkStores.chat.getState(),
+      roster: this.sdkStores.roster.getState(),
+      room: this.sdkStores.room.getState(),
+      events: this.sdkStores.events.getState(),
+      admin: this.sdkStores.admin.getState(),
+      blocking: this.sdkStores.blocking.getState(),
+      console: this.sdkStores.console.getState(),
+      ignore: this.sdkStores.ignore.getState(),
     }))
     this.cleanupFunctions.push(unsubscribeStoreBindings)
 
@@ -995,9 +996,9 @@ export class XMPPClient {
     const previousScope = getStorageScopeJid()
     if (previousScope !== scopedJid) {
       setStorageScopeJid(scopedJid)
-      chatStore.getState().switchAccount(scopedJid)
-      roomStore.getState().switchAccount(scopedJid)
-      ignoreStore.getState().rehydrate()
+      this.sdkStores.chat.getState().switchAccount(scopedJid)
+      this.sdkStores.room.getState().switchAccount(scopedJid)
+      this.sdkStores.ignore.getState().rehydrate()
     }
 
     // Open the search index DB and backfill from message cache if needed (one-time migration)

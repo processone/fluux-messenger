@@ -73,6 +73,10 @@ export type { IgnoreState, IgnoredUser } from './ignoreStore'
 export { searchStore, setSearchClient, getSearchClient } from './searchStore'
 export type { SearchState, SearchResult, ContextMessage, SearchResultContext, SearchFilterType, InPrefixSuggestion } from './searchStore'
 
+// Injectable store bundle (store-injection seam; see sdkStores.ts)
+export { defaultStores } from './sdkStores'
+export type { SDKStores } from './sdkStores'
+
 // =============================================================================
 // UTILITIES
 // =============================================================================

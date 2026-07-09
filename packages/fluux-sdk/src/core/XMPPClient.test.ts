@@ -24,6 +24,8 @@ import {
 } from './test-utils'
 import { VERIFY_CONNECTION_TIMEOUT_MS } from './modules/connectionTimeouts'
 import { _resetStorageScopeForTesting } from '../utils/storageScope'
+import { defaultStores, type SDKStores } from '../stores'
+import { createDefaultStoreBindings } from './defaultStoreBindings'
 
 let mockXmppClientInstance: MockXmppClient
 
@@ -2187,6 +2189,53 @@ describe('XMPPClient', () => {
         'me',
         expect.objectContaining({ knownFeatures: expect.objectContaining({ isNonAnonymous: true }) }),
       )
+    })
+  })
+
+  describe('store injection', () => {
+    // Wrap a store so getState() returns the real state with a specific method
+    // replaced by a spy — lets the rest of the client run on real stores while
+    // we observe that a chosen call routes through THIS instance.
+    const withSpy = <S>(store: S, override: Record<string, unknown>): S => ({
+      ...store,
+      getState: () => ({ ...(store as { getState: () => object }).getState(), ...override }),
+    }) as S
+
+    it('createDefaultStoreBindings routes writes through the injected bundle', () => {
+      const addMessage = vi.fn()
+      const bundle: SDKStores = {
+        ...defaultStores,
+        chat: withSpy(defaultStores.chat, { addMessage }),
+      }
+
+      const bindings = createDefaultStoreBindings(bundle)
+      bindings.chat.addMessage({ id: 'm1' } as never)
+
+      expect(addMessage).toHaveBeenCalledWith({ id: 'm1' })
+    })
+
+    it('new XMPPClient({ stores }) routes connect account-switch through the injected bundle', () => {
+      const chatSwitch = vi.fn()
+      const roomSwitch = vi.fn()
+      const ignoreRehydrate = vi.fn()
+      const bundle: SDKStores = {
+        ...defaultStores,
+        chat: withSpy(defaultStores.chat, { switchAccount: chatSwitch }),
+        room: withSpy(defaultStores.room, { switchAccount: roomSwitch }),
+        ignore: withSpy(defaultStores.ignore, { rehydrate: ignoreRehydrate }),
+      }
+
+      const client = new XMPPClient({ debug: false, stores: bundle })
+      // switchAccount / rehydrate run synchronously at the top of connect(),
+      // before any await — so they fire before the socket work (which we let
+      // reject harmlessly against the mocked transport).
+      void client
+        .connect({ jid: 'account@example.com', password: 'p', server: 'example.com', skipDiscovery: true })
+        .catch(() => {})
+
+      expect(chatSwitch).toHaveBeenCalledWith('account@example.com')
+      expect(roomSwitch).toHaveBeenCalledWith('account@example.com')
+      expect(ignoreRehydrate).toHaveBeenCalled()
     })
   })
 })

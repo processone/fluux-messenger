@@ -9,16 +9,7 @@
  * @module Core
  */
 
-import {
-  connectionStore,
-  chatStore,
-  rosterStore,
-  consoleStore,
-  eventsStore,
-  roomStore,
-  adminStore,
-  blockingStore,
-} from '../stores'
+import { defaultStores, type SDKStores } from '../stores'
 import type { StoreBindings } from './types/client'
 import {
   connectionBindingMethodKeys,
@@ -57,6 +48,9 @@ function bindStoreMethods<S, K extends keyof S>(
  * dependency (see `presenceReader.ts`), since presence is machine state, not
  * connection-store state.
  *
+ * @param stores - The store bundle to bind. Defaults to the process-wide
+ *   {@link defaultStores} singletons; an injected bundle is the store-injection
+ *   seam (see `sdkStores.ts`).
  * @returns StoreBindings object for XMPPClient
  *
  * @example
@@ -65,7 +59,17 @@ function bindStoreMethods<S, K extends keyof S>(
  * // Uses createDefaultStoreBindings() internally
  * ```
  */
-export function createDefaultStoreBindings(): StoreBindings {
+export function createDefaultStoreBindings(stores: SDKStores = defaultStores): StoreBindings {
+  const {
+    connection: connectionStore,
+    chat: chatStore,
+    roster: rosterStore,
+    console: consoleStore,
+    events: eventsStore,
+    room: roomStore,
+    admin: adminStore,
+    blocking: blockingStore,
+  } = stores
   return {
     connection: {
       ...bindStoreMethods(connectionStore, connectionBindingMethodKeys),
