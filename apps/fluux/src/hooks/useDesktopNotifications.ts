@@ -19,6 +19,7 @@ import { formatLocalizedPreview } from '@/utils/messagePreviewText'
 import { notificationDebug } from '@/utils/notificationDebug'
 import { showWebNotification } from '@/utils/webNotification'
 import { routeNotificationTarget } from '@/utils/notificationRouting'
+import { dismissNotification } from '@/utils/dismissNotification'
 import { createNotificationCoalescer } from './notificationCoalescer'
 
 /** Duration of the post-reconnect window during which offline-delivery
@@ -306,9 +307,25 @@ export function useDesktopNotifications(): void {
     await showConversationNotification(conv, message)
   }
 
+  // Dismiss the native notification when an entity is read — including reads
+  // that the navigation/focus paths never see: a reply sent from another device
+  // (sent carbon) or a synced cross-device read marker (MDS). Also drop any
+  // still-buffered catch-up notification so the post-reconnect flush does not
+  // re-post a banner for a conversation the user has since read/opened.
+  const handleConversationRead = (conversationId: string) => {
+    coalescerRef.current.delete(conversationId)
+    void dismissNotification('conversation', conversationId)
+  }
+
+  const handleRoomRead = (roomJid: string) => {
+    void dismissNotification('room', roomJid)
+  }
+
   // Subscribe to notification events
   useNotificationEvents({
     onConversationMessage: handleConversationMessage,
     onRoomMessage: showRoomNotification,
+    onConversationRead: handleConversationRead,
+    onRoomRead: handleRoomRead,
   })
 }

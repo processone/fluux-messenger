@@ -730,4 +730,96 @@ describe('useNotificationEvents', () => {
       expect(onConversationMessage).toHaveBeenCalledTimes(1)
     })
   })
+
+  // Read-transition signal: fires when an entity's unreadCount drops from >0 to
+  // 0 for ANY reason — local read, a sent carbon from another device (mobile),
+  // or a synced MDS read marker. Consumers use it to dismiss a delivered native
+  // notification that the navigation/focus paths would otherwise miss.
+  describe('entity read → dismiss signal', () => {
+    it('fires onConversationRead when a conversation unreadCount drops from >0 to 0', () => {
+      const onConversationRead = vi.fn()
+      renderHook(() => useNotificationEvents({ onConversationRead }))
+
+      // Unread message present.
+      act(() => {
+        mockConversations.set('alice@example.com', {
+          id: 'alice@example.com',
+          name: 'Alice',
+          unreadCount: 1,
+          lastMessage: {
+            id: 'm1',
+            timestamp: new Date(),
+            isOutgoing: false,
+            from: 'alice@example.com',
+          },
+        })
+        triggerChatStoreUpdate()
+      })
+      expect(onConversationRead).not.toHaveBeenCalled()
+
+      // Read elsewhere (e.g. reply sent from mobile → sent carbon) clears unread.
+      act(() => {
+        mockConversations.set('alice@example.com', {
+          ...mockConversations.get('alice@example.com'),
+          unreadCount: 0,
+        })
+        triggerChatStoreUpdate()
+      })
+      expect(onConversationRead).toHaveBeenCalledWith('alice@example.com')
+      expect(onConversationRead).toHaveBeenCalledTimes(1)
+    })
+
+    it('does not fire onConversationRead when unreadCount was already 0', () => {
+      const onConversationRead = vi.fn()
+      renderHook(() => useNotificationEvents({ onConversationRead }))
+
+      act(() => {
+        mockConversations.set('bob@example.com', {
+          id: 'bob@example.com',
+          name: 'Bob',
+          unreadCount: 0,
+        })
+        triggerChatStoreUpdate()
+        // A later unrelated update, still read.
+        mockConversations.set('bob@example.com', {
+          id: 'bob@example.com',
+          name: 'Bob',
+          unreadCount: 0,
+        })
+        triggerChatStoreUpdate()
+      })
+
+      expect(onConversationRead).not.toHaveBeenCalled()
+    })
+
+    it('fires onRoomRead when a room unreadCount drops from >0 to 0', () => {
+      const onRoomRead = vi.fn()
+      renderHook(() => useNotificationEvents({ onRoomRead }))
+
+      act(() => {
+        mockRooms.set('room@conference.example.com', {
+          jid: 'room@conference.example.com',
+          name: 'Test Room',
+          joined: true,
+          unreadCount: 2,
+          mentionsCount: 1,
+          messages: [],
+        })
+        triggerRoomStoreUpdate()
+      })
+      expect(onRoomRead).not.toHaveBeenCalled()
+
+      // Read elsewhere clears unread.
+      act(() => {
+        mockRooms.set('room@conference.example.com', {
+          ...mockRooms.get('room@conference.example.com'),
+          unreadCount: 0,
+          mentionsCount: 0,
+        })
+        triggerRoomStoreUpdate()
+      })
+      expect(onRoomRead).toHaveBeenCalledWith('room@conference.example.com')
+      expect(onRoomRead).toHaveBeenCalledTimes(1)
+    })
+  })
 })

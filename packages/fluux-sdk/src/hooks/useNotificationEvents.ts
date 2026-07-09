@@ -24,11 +24,29 @@ export interface NotificationEventHandlers {
    * @param isMention - Whether this message mentions the current user
    */
   onRoomMessage?: (room: Room, message: RoomMessage, isMention: boolean) => void
+
+  /**
+   * Called when a conversation's unreadCount drops from >0 to 0 — i.e. it was
+   * read. This fires regardless of cause: a local read, a message sent from
+   * another device (sent carbon), or a synced cross-device read marker (MDS).
+   * Consumers use it to dismiss a delivered native notification that the
+   * navigation/focus paths would otherwise leave behind.
+   * @param conversationId - The conversation that became read
+   */
+  onConversationRead?: (conversationId: string) => void
+
+  /**
+   * Called when a room's unreadCount drops from >0 to 0 — see
+   * {@link NotificationEventHandlers.onConversationRead} for the rationale.
+   * @param roomJid - The room that became read
+   */
+  onRoomRead?: (roomJid: string) => void
 }
 
 interface PrevRoomState {
   mentionsCount: number
   messagesLength: number
+  unreadCount: number
 }
 
 /**
@@ -107,8 +125,9 @@ export function useNotificationEvents(handlers: NotificationEventHandlers): void
       const activeConversationId = state.activeConversationId
       const prevConversations = prevConversationsRef.current
       const onConversationMessage = handlersRef.current.onConversationMessage
+      const onConversationRead = handlersRef.current.onConversationRead
 
-      if (!onConversationMessage) {
+      if (!onConversationMessage && !onConversationRead) {
         prevConversationsRef.current = conversations
         return
       }
@@ -118,8 +137,20 @@ export function useNotificationEvents(handlers: NotificationEventHandlers): void
       for (const conv of conversations) {
         const prevConv = prevConversations.find(c => c.id === conv.id)
 
+        // Read transition: unreadCount dropped from >0 to 0 (local read, sent
+        // carbon from another device, or a synced MDS marker). Fire so the
+        // consumer can dismiss a lingering native notification.
+        if (
+          onConversationRead &&
+          prevConv &&
+          (prevConv.unreadCount ?? 0) > 0 &&
+          conv.unreadCount === 0
+        ) {
+          onConversationRead(conv.id)
+        }
+
         // Check if this conversation has a new message
-        if (conv.lastMessage) {
+        if (onConversationMessage && conv.lastMessage) {
           const isNewMessage = !prevConv?.lastMessage ||
             prevConv.lastMessage.id !== conv.lastMessage.id
           if (!isNewMessage) continue
@@ -160,12 +191,19 @@ export function useNotificationEvents(handlers: NotificationEventHandlers): void
       const activeRoomJid = state.activeRoomJid
       const prevRooms = prevRoomsRef.current
       const onRoomMessage = handlersRef.current.onRoomMessage
+      const onRoomRead = handlersRef.current.onRoomRead
 
-      if (!onRoomMessage) {
-        // Still update refs even if no handler
-        prevRoomsRef.current = new Map(
-          allRooms.map(r => [r.jid, { mentionsCount: r.mentionsCount, messagesLength: r.messages.length }])
+      const snapshotRooms = () =>
+        new Map(
+          allRooms.map(r => [
+            r.jid,
+            { mentionsCount: r.mentionsCount, messagesLength: r.messages.length, unreadCount: r.unreadCount ?? 0 },
+          ])
         )
+
+      if (!onRoomMessage && !onRoomRead) {
+        // Still update refs even if no handler
+        prevRoomsRef.current = snapshotRooms()
         return
       }
 
@@ -175,6 +213,16 @@ export function useNotificationEvents(handlers: NotificationEventHandlers): void
         if (!room.joined) continue
 
         const prev = prevRooms.get(room.jid)
+
+        // Read transition: unreadCount dropped from >0 to 0 (local read or a
+        // synced cross-device read marker). Fire so the consumer can dismiss a
+        // lingering native notification.
+        if (onRoomRead && prev && prev.unreadCount > 0 && (room.unreadCount ?? 0) === 0) {
+          onRoomRead(room.jid)
+        }
+
+        if (!onRoomMessage) continue
+
         const prevMessagesLength = prev?.messagesLength ?? 0
         const hasNewMessages = room.messages.length > prevMessagesLength
         const newMessageCount = room.messages.length - prevMessagesLength
@@ -217,9 +265,7 @@ export function useNotificationEvents(handlers: NotificationEventHandlers): void
       }
 
       // Update refs
-      prevRoomsRef.current = new Map(
-        allRooms.map(r => [r.jid, { mentionsCount: r.mentionsCount, messagesLength: r.messages.length }])
-      )
+      prevRoomsRef.current = snapshotRooms()
     })
 
     return unsubscribe
