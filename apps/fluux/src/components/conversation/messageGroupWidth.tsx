@@ -15,9 +15,13 @@ import { useRemeasureOnWidthChange } from './messageWidthContext'
  * independent sibling with no per-group DOM container to hang a CSS solution on.
  *
  * Efficiency contract (the whole reason this is a bespoke registry, not state):
- *  - Widths are applied IMPERATIVELY (`el.style.width`), NEVER through React
- *    state or props. Measurement therefore never triggers a re-render, so there
- *    is no measure → render → measure feedback loop.
+ *  - The group width is applied IMPERATIVELY as a `min-width` (never React state
+ *    or props), so measurement never triggers a re-render and there is no
+ *    measure → render → measure feedback loop. It is a MINIMUM, not a hard width:
+ *    shorter rows stretch up to it so the tint reads as one rectangle, but a row
+ *    whose content is wider than a stale/under-measured max grows to fit its line
+ *    (the box stays `w-fit`) instead of being forced to wrap. Upholds the rule
+ *    "never wrap a line that would otherwise fit on one row."
  *  - Every dirty group is flushed in ONE microtask with reads strictly before
  *    writes: the browser does a single layout pass and never thrashes. The flush
  *    runs before paint, so a group snaps to its rectangle in the same frame it
@@ -54,7 +58,10 @@ class OwnGroupWidthRegistry {
     // Return the leaving row to its natural CSS width so a regrouped row (or a
     // row scrolling back in) never keeps a stale pinned width.
     const el = g.mounted.get(memberId)
-    if (el) el.style.width = ''
+    if (el) {
+      el.style.width = ''
+      el.style.minWidth = ''
+    }
     g.mounted.delete(memberId)
     if (g.mounted.size === 0) {
       this.groups.delete(groupId)
@@ -95,8 +102,13 @@ class OwnGroupWidthRegistry {
     if (entries.length === 0) return
 
     // Phase 1 (write): free every member to its natural width so we can read it.
+    // Reset any prior `min-width` too, or a stale pin would inflate the reading
+    // and the group max could only ever ratchet upward.
     for (const g of entries) {
-      for (const el of g.mounted.values()) el.style.width = 'max-content'
+      for (const el of g.mounted.values()) {
+        el.style.width = 'max-content'
+        el.style.minWidth = '0'
+      }
     }
     // Phase 2 (read): a single forced layout for the whole batch, then the max
     // natural width per group. `max-content` is still clamped by the box's
@@ -110,12 +122,21 @@ class OwnGroupWidthRegistry {
       }
       return max
     })
-    // Phase 3 (write): pin every member to the group max. Skip a zero measure
-    // (e.g. a layout-less test environment) so the box keeps its CSS `w-fit`.
+    // Phase 3 (write): size every member to the group max via `min-width`, not a
+    // hard `width`, and release the measurement width back to the CSS `w-fit`.
+    // `min(${max}px, 100%)`: shorter rows stretch UP to the group max so the tint
+    // reads as one clean rectangle, but a row whose content is wider than a
+    // stale/under-measured max grows to fit its line instead of being forced to
+    // wrap; the `100%` term keeps a stale-too-wide max from overflowing the
+    // column (a min-width alone would win over `max-w-full`). Skip a zero measure
+    // (e.g. a layout-less test environment) so the box keeps its plain `w-fit`.
     for (let i = 0; i < entries.length; i++) {
       const max = maxes[i]
-      const width = max > 0 ? `${max}px` : ''
-      for (const el of entries[i].mounted.values()) el.style.width = width
+      const minWidth = max > 0 ? `min(${max}px, 100%)` : ''
+      for (const el of entries[i].mounted.values()) {
+        el.style.width = ''
+        el.style.minWidth = minWidth
+      }
     }
   }
 }
