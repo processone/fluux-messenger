@@ -1651,7 +1651,7 @@ const RoomMessageBubbleWrapper = memo(function RoomMessageBubbleWrapper({
 interface RoomMessageInputProps {
   roomJid: string
   textareaRef?: React.RefObject<HTMLTextAreaElement | null>
-  sendMessage: (roomJid: string, body: string, replyTo?: { id: string; to: string; fallback?: { author: string; body: string } }, references?: MentionReference[], attachment?: FileAttachment) => Promise<string>
+  sendMessage: (roomJid: string, body: string, options?: { replyTo?: { id: string; to: string; fallback?: { author: string; body: string } }; references?: MentionReference[]; attachment?: FileAttachment }) => Promise<string>
   sendCorrection: (roomJid: string, messageId: string, newBody: string, attachment?: FileAttachment) => Promise<void>
   retractMessage: (roomJid: string, messageId: string) => Promise<void>
   sendChatState: (roomJid: string, state: ChatStateNotification) => Promise<void>
@@ -1946,7 +1946,7 @@ export const RoomMessageInput = memo(function RoomMessageInput({
 
     // The body is the file URL if no text was entered, otherwise the user's text
     const body = sendText || attachment?.url || ''
-    const messageId = await sendMessage(roomJid, body, replyTo, references.length > 0 ? references : undefined, attachment ?? undefined)
+    const messageId = await sendMessage(roomJid, body, { replyTo, references: references.length > 0 ? references : undefined, attachment: attachment ?? undefined })
     setReferences([])
 
     // Notify parent of sent message ID for animation

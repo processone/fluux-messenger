@@ -210,11 +210,13 @@ export function useRoomActive() {
     async (
       roomJid: string,
       body: string,
-      replyTo?: { id: string; to: string; fallback?: { author: string; body: string } },
-      references?: MentionReference[],
-      attachment?: FileAttachment
+      options?: {
+        replyTo?: { id: string; to: string; fallback?: { author: string; body: string } }
+        references?: MentionReference[]
+        attachment?: FileAttachment
+      }
     ): Promise<string> => {
-      return await client.chat.sendMessage(roomJid, body, 'groupchat', replyTo, references, attachment)
+      return await client.chat.sendMessage(roomJid, body, 'groupchat', options?.replyTo, options?.references, options?.attachment)
     },
     [client]
   )

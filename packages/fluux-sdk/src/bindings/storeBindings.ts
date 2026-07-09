@@ -622,7 +622,11 @@ export function createStoreBindings(
     stores.console.addPacket(direction, xml)
   })
 
-  // Recalculate room lastMessage previews when users are un-ignored
+  // Recalculate room lastMessage previews when users are un-ignored.
+  // NOTE: this subscribes to the module-global ignore singleton, not the injected
+  // bundle. Harmless in single-account (the singleton IS client.stores.ignore), but a
+  // known direct-global consumer to thread through the bundle for multi-account — see
+  // docs/MULTI_ACCOUNT.md §3.1 for why getStores().ignore is NOT the fix.
   let prevIgnoredUsers = ignoreStoreInstance.getState().ignoredUsers
   const unsubIgnore = ignoreStoreInstance.subscribe((state) => {
     const curr = state.ignoredUsers

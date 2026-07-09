@@ -1016,29 +1016,32 @@ export const chatStore = createStore<ChatState>()(
           const lastMessage = messages[messages.length - 1]
           const lastMessageTimestamp = lastMessage?.timestamp
 
-          // Delegate to pure function
-          const updated = notifState.onMarkAsRead(notifInput, lastMessageTimestamp)
+          // When the loaded window is at the live edge, the newest loaded message
+          // IS the true newest and clearing the badge means the user caught up to
+          // it — advance the read pointer so the XEP-0490 publisher (which watches
+          // lastSeenMessageId) syncs the marker to other devices. Slid up into
+          // history we leave the pointer where the user actually read, so MDS never
+          // publishes a position past unseen messages.
+          const atLiveEdge = state.windowAtLiveEdge.get(conversationId) !== false
+          const advanceSeenTo = atLiveEdge ? lastMessage?.id : undefined
 
-          // If no change (same reference returned), skip state update
-          if (updated.unreadCount === notifInput.unreadCount && updated.lastReadAt === notifInput.lastReadAt) {
-            // Also check by value for deserialized timestamps
-            const existingTime = notifInput.lastReadAt instanceof Date
-              ? notifInput.lastReadAt.getTime()
-              : notifInput.lastReadAt ? new Date(notifInput.lastReadAt as unknown as string).getTime() : 0
-            const newTime = updated.lastReadAt instanceof Date ? updated.lastReadAt.getTime() : 0
-            if (existingTime === newTime) return {}
-          }
+          // Delegate to pure function
+          const updated = notifState.onMarkAsRead(notifInput, lastMessageTimestamp, advanceSeenTo)
+
+          // Pure function returns the same reference when nothing changed.
+          if (updated === notifInput) return {}
 
           const newMetaEntry = {
             ...(meta ?? { unreadCount: 0, lastReadAt: undefined, lastSeenMessageId: undefined }),
             unreadCount: updated.unreadCount,
             lastReadAt: updated.lastReadAt,
+            lastSeenMessageId: updated.lastSeenMessageId,
           }
           const newMeta = new Map(state.conversationMeta)
           newMeta.set(conversationId, newMetaEntry)
 
           const newConversations = new Map(state.conversations)
-          newConversations.set(conversationId, { ...conv, unreadCount: updated.unreadCount, lastReadAt: updated.lastReadAt })
+          newConversations.set(conversationId, { ...conv, unreadCount: updated.unreadCount, lastReadAt: updated.lastReadAt, lastSeenMessageId: updated.lastSeenMessageId })
 
           return { conversationMeta: newMeta, conversations: newConversations }
         })

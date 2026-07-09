@@ -1498,13 +1498,19 @@ export const roomStore = createStore<RoomState>()(
       const lastMessage = messages[messages.length - 1]
       const lastMessageTimestamp = lastMessage?.timestamp
 
-      const updated = notifState.onMarkAsRead(notifInput, lastMessageTimestamp)
+      // At the live edge the newest loaded message is the true newest and clearing
+      // the badge means the user caught up — advance the read pointer so the
+      // XEP-0490 publisher syncs the marker. Slid up into history we leave it put.
+      const atLiveEdge = runtime?.windowAtLiveEdge !== false
+      const advanceSeenTo = atLiveEdge ? lastMessage?.id : undefined
+
+      const updated = notifState.onMarkAsRead(notifInput, lastMessageTimestamp, advanceSeenTo)
 
       // Skip update if no change
       if (updated === notifInput) return {}
 
       const newRooms = new Map(state.rooms)
-      newRooms.set(roomJid, { ...existing, unreadCount: updated.unreadCount, mentionsCount: updated.mentionsCount, lastReadAt: updated.lastReadAt })
+      newRooms.set(roomJid, { ...existing, unreadCount: updated.unreadCount, mentionsCount: updated.mentionsCount, lastReadAt: updated.lastReadAt, lastSeenMessageId: updated.lastSeenMessageId })
 
       const newMeta = new Map(state.roomMeta)
       const newMetaEntry = {
@@ -1512,6 +1518,7 @@ export const roomStore = createStore<RoomState>()(
         unreadCount: updated.unreadCount,
         mentionsCount: updated.mentionsCount,
         lastReadAt: updated.lastReadAt,
+        lastSeenMessageId: updated.lastSeenMessageId,
       }
       newMeta.set(roomJid, newMetaEntry)
 
