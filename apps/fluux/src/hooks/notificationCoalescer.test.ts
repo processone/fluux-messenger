@@ -38,4 +38,15 @@ describe('createNotificationCoalescer', () => {
     expect(c.isOpen()).toBe(false)
     expect(c.flush()).toEqual([])
   })
+
+  it('delete removes a buffered entry so a later flush does not re-post it', () => {
+    const c = createNotificationCoalescer<string>()
+    c.open()
+    c.add('a', 'a1')
+    c.add('b', 'b1')
+    // Conversation 'a' was read (e.g. reply sent from mobile) before flush.
+    expect(c.delete('a')).toBe(true)
+    expect(c.delete('a')).toBe(false) // already gone
+    expect(c.flush()).toEqual([{ key: 'b', value: 'b1' }])
+  })
 })
