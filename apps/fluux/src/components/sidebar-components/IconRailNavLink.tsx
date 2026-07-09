@@ -62,7 +62,7 @@ export function IconRailNavLink({
       >
         <Icon className="size-5" />
         {showBadge ? (
-          <span className={`absolute top-0.5 end-0.5 size-2.5 ${dotFillClass} rounded-full ring-2 ${ringClass}`} />
+          <span className={`absolute top-1 end-1 size-2.5 ${dotFillClass} rounded-full ring-2 ${ringClass}`} />
         ) : null}
       </button>
     </Tooltip>
