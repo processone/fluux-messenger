@@ -1671,11 +1671,13 @@ export const roomStore = createStore<RoomState>()(
       // BEFORE setActiveRoom derives the new-message divider (parity with
       // chatStore.activateConversation). Forward-only against the loaded messages.
       // Fold a pending XEP-0490 synced read position into lastSeenMessageId BEFORE setActiveRoom
-      // derives the divider — but only on the FIRST open of this room this session (parity with
-      // chatStore.activateConversation). XEP-0490 markers broadcast live over PEP, so re-folding on
-      // every open would reposition the divider on each return.
-      const firstConsumeThisSession = mdsGate.consume(roomJid)
+      // derives the divider — but only once per distinct marker this session (parity with
+      // chatStore.activateConversation). The gate keys on the pending stanza-id so a marker synced
+      // from another device while this room was inactive (evicted → the live notify could only
+      // stash it) still folds on the next open, while an identical already-folded marker is skipped
+      // (re-folding would reposition the divider on every return).
       const pending = get().roomMeta.get(roomJid)?.pendingRemoteDisplayedStanzaId
+      const firstConsumeThisSession = pending !== undefined && mdsGate.consume(roomJid, pending)
       if (pending && firstConsumeThisSession) {
         const lastSeenBefore = get().roomMeta.get(roomJid)?.lastSeenMessageId
         get().applyRemoteDisplayed(roomJid, pending)

@@ -105,14 +105,28 @@ describe('resolveRemoteDisplayed', () => {
 })
 
 describe('createMdsSessionGate', () => {
-  it('consumes each id once per session and resets', () => {
+  it('consumes each (id, stanzaId) once per session and resets', () => {
     const gate = createMdsSessionGate()
 
-    expect(gate.consume('a@example.com')).toBe(true)
-    expect(gate.consume('a@example.com')).toBe(false)
-    expect(gate.consume('b@example.com')).toBe(true)
+    expect(gate.consume('a@example.com', 's1')).toBe(true)
+    // Same marker re-presented: already folded → skip.
+    expect(gate.consume('a@example.com', 's1')).toBe(false)
+    // Distinct id: independent.
+    expect(gate.consume('b@example.com', 's1')).toBe(true)
 
     gate.reset()
-    expect(gate.consume('a@example.com')).toBe(true)
+    expect(gate.consume('a@example.com', 's1')).toBe(true)
+  })
+
+  it('re-arms when a newer marker arrives for an already-consumed id', () => {
+    const gate = createMdsSessionGate()
+
+    // First marker folds.
+    expect(gate.consume('a@example.com', 's1')).toBe(true)
+    // A different (newer) marker — synced from another device while this entity
+    // was unloaded, so the live PEP notify could only stash it — must fold too.
+    expect(gate.consume('a@example.com', 's2')).toBe(true)
+    // …but re-presenting that same newer marker is now a no-op.
+    expect(gate.consume('a@example.com', 's2')).toBe(false)
   })
 })

@@ -743,12 +743,13 @@ export const chatStore = createStore<ChatState>()(
           // just-loaded messages) so the divider reflects reads synced from other
           // devices instead of the stale local position.
           // Fold a pending XEP-0490 synced read position into lastSeenMessageId BEFORE
-          // setActiveConversation derives the divider — but only on the FIRST open of this
-          // conversation this session. XEP-0490 markers broadcast live over PEP, so after the
-          // first consumption the live `read:displayed-synced` notifies keep us current; re-folding
-          // on every open would let a synced read position reposition the divider on each return.
-          const firstConsumeThisSession = mdsGate.consume(id)
+          // setActiveConversation derives the divider — but only once per distinct marker this
+          // session. The gate keys on the pending stanza-id so a marker synced from another device
+          // while this conversation was inactive (evicted → the live notify could only stash it)
+          // still folds on the next open, while an identical already-folded marker is skipped
+          // (re-folding would let a synced read position reposition the divider on each return).
           const pending = get().conversationMeta.get(id)?.pendingRemoteDisplayedStanzaId
+          const firstConsumeThisSession = pending !== undefined && mdsGate.consume(id, pending)
           if (pending && firstConsumeThisSession) {
             const lastSeenBefore = get().conversationMeta.get(id)?.lastSeenMessageId
             get().applyRemoteDisplayed(id, pending)

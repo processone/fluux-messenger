@@ -104,24 +104,36 @@ export function resolveRemoteDisplayed<T extends NotificationMessage & { stanzaI
 // ============================================================================
 
 /**
- * XEP-0490 markers broadcast live over PEP, so a pending marker is folded
- * into the divider only on the FIRST open of an entity per session — later
- * opens rely on the live notifies (re-folding would reposition the divider on
- * every return). Each store owns one gate instance; `reset()` on account
- * switch.
+ * XEP-0490 markers broadcast live over PEP, so the activation fold applies a
+ * pending marker only ONCE per distinct value per session — re-folding the same
+ * marker on every open would reposition the divider on each return, and the live
+ * `read:displayed-synced` notifies already keep LOADED entities current.
+ *
+ * The gate keys on (id, stanzaId), not just id: a live notify that arrives while
+ * an entity is INACTIVE has no resident message array to advance against (memory
+ * windowing evicts it), so it can only stash the position as
+ * `pendingRemoteDisplayedStanzaId`. The next activation fold is then the only way
+ * to apply it. Keying on id alone would suppress that fold (the entity was opened
+ * before), leaving reads synced from another device stuck as unread. Keying on
+ * the stanza-id instead re-arms for a genuinely newer marker while still skipping
+ * the identical one. Each store owns one gate instance; `reset()` on account switch.
  */
 export interface MdsSessionGate {
-  /** True on the first call for this id since the last reset. Records the id. */
-  consume(id: string): boolean
+  /**
+   * True when `stanzaId` has not yet been folded for `id` this session — the
+   * first marker, or any newer/different one. Re-presenting the same value
+   * returns false. Records id → stanzaId.
+   */
+  consume(id: string, stanzaId: string): boolean
   reset(): void
 }
 
 export function createMdsSessionGate(): MdsSessionGate {
-  const consumed = new Set<string>()
+  const consumed = new Map<string, string>()
   return {
-    consume(id: string): boolean {
-      const first = !consumed.has(id)
-      consumed.add(id)
+    consume(id: string, stanzaId: string): boolean {
+      const first = consumed.get(id) !== stanzaId
+      consumed.set(id, stanzaId)
       return first
     },
     reset(): void {
