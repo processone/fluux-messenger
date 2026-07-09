@@ -1602,17 +1602,47 @@ export class MUC extends BaseModule {
   }
 
   /**
+   * Matches the MUC config-form field that lets occupants invite others.
+   * The var is not standardized across servers, so we match by local name
+   * (after stripping any Clark-notation `{namespace}` prefix) rather than a
+   * fixed string:
+   *   - ejabberd / XEP-0045: `muc#roomconfig_allowinvites`
+   *   - Prosody: `{http://prosody.im/protocol/muc}roomconfig_allowmemberinvites`
+   */
+  private static readonly ALLOW_INVITE_FIELD_RE = /^(?:muc#)?roomconfig_allow(?:member)?invites$/
+
+  /**
    * Configure a room as a temporary quick chat (non-persistent, private).
+   *
+   * The freshly created room is locked until its initial configuration is
+   * submitted (XEP-0045 §10.1.3). Submitting a field the server doesn't
+   * advertise makes the whole form fail, which leaves the room locked and
+   * unusable. We therefore fetch the config form first and only enable the
+   * "allow invites" field the server actually offers, using the exact var
+   * name it advertised.
    */
   private async configureQuickChat(roomJid: string, roomName: string, description?: string): Promise<void> {
     const values: Record<string, string | string[]> = {
       'muc#roomconfig_persistentroom': '0',
       'muc#roomconfig_roomname': roomName,
       'muc#roomconfig_publicroom': '0',
-      'muc#roomconfig_allowinvites': '1',
     }
     if (description) {
       values['muc#roomconfig_roomdesc'] = description
+    }
+
+    // Enable occupant invites, but only if the server's config form advertises
+    // such a field. We match by local name and submit the exact var the server
+    // used. If the form can't be read, omit it so the config submit still
+    // succeeds and unlocks the room.
+    const options = await this.fetchRoomOptions(roomJid)
+    if (options) {
+      for (const varName of Object.keys(options)) {
+        const localName = varName.replace(/^\{[^}]*\}/, '')
+        if (MUC.ALLOW_INVITE_FIELD_RE.test(localName)) {
+          values[varName] = '1'
+        }
+      }
     }
 
     try {
