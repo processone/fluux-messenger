@@ -3,6 +3,7 @@
  * to exercise the same stanza path plugins will hit.
  */
 import { describe, it, expect } from 'vitest'
+import { createPresenceReader } from '../presenceReader'
 import { xml } from '@xmpp/client'
 import type { Element } from '@xmpp/client'
 import { Discovery } from './Discovery'
@@ -11,6 +12,7 @@ import type { ModuleDependencies } from './BaseModule'
 function makeDeps(sendIQ: (iq: Element) => Promise<Element>): ModuleDependencies {
   return {
     stores: null,
+    presence: createPresenceReader(),
     sendStanza: async () => {},
     sendIQ,
     getCurrentJid: () => 'me@example.com',

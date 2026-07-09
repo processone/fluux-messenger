@@ -5,6 +5,7 @@
  * - MAM module (history replay) must emit isLive: false
  */
 import { describe, it, expect, beforeEach } from 'vitest'
+import { createPresenceReader } from '../presenceReader'
 import { xml } from '@xmpp/client'
 import type { Element } from '@xmpp/client'
 import { Chat } from './Chat'
@@ -28,6 +29,7 @@ function makeDeps(jid: string): {
   const emitted: { event: string; payload: Record<string, unknown> }[] = []
   const deps: ModuleDependencies = {
     stores: null,
+    presence: createPresenceReader(),
     sendStanza: async () => {},
     sendIQ: async () => xml('iq', {}) as Element,
     getCurrentJid: () => jid,
@@ -84,6 +86,7 @@ function makeMAMHarness(jid: string): MAMHarness {
 
   const deps: ModuleDependencies = {
     stores: null,
+    presence: createPresenceReader(),
     sendStanza: async () => {},
     sendIQ: () =>
       new Promise<Element>((resolve) => {

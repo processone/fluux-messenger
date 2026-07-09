@@ -633,15 +633,6 @@ export const createMockStores = (): MockStoreBindings => ({
     getWebPushServices: vi.fn().mockReturnValue([]),
     getWebPushEnabled: vi.fn().mockReturnValue(true),
     getServerInfo: vi.fn().mockReturnValue(null),
-    // Presence bridge
-    getPresenceShow: vi.fn().mockReturnValue('online'),
-    getStatusMessage: vi.fn().mockReturnValue(null),
-    getIsAutoAway: vi.fn().mockReturnValue(false),
-    getPreAutoAwayState: vi.fn().mockReturnValue(null),
-    getPreAutoAwayStatusMessage: vi.fn().mockReturnValue(null),
-    setPresenceState: vi.fn(),
-    setAutoAway: vi.fn(),
-    clearPreAutoAwayState: vi.fn(),
   },
   chat: {
     ...mockMethods(chatBindingMethodKeys),
@@ -698,6 +689,19 @@ export const createMockStores = (): MockStoreBindings => ({
     isBlocked: vi.fn().mockReturnValue(false),
     getBlockedJids: vi.fn().mockReturnValue([]),
   },
+})
+
+/**
+ * Mock PresenceReader with headless defaults. Use as `moduleDeps.presence` in
+ * module tests, or pass to `new XMPPClient({ presenceOptions })` so tests that
+ * drive presence-dependent behaviour can `.mockReturnValue(...)` on a getter.
+ */
+export const createMockPresenceReader = () => ({
+  getPresenceShow: vi.fn().mockReturnValue('online' as const),
+  getStatusMessage: vi.fn().mockReturnValue(null),
+  getIsAutoAway: vi.fn().mockReturnValue(false),
+  getPreAutoAwayState: vi.fn().mockReturnValue(null),
+  getPreAutoAwayStatusMessage: vi.fn().mockReturnValue(null),
 })
 
 /**

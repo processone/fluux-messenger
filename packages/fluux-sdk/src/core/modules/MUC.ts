@@ -760,8 +760,8 @@ export class MUC extends BaseModule {
     ]
 
     // Include current presence show (away, dnd, xa) if not online
-    const currentPresence = this.deps.stores?.connection.getPresenceShow()
-    const currentStatus = this.deps.stores?.connection.getStatusMessage()
+    const currentPresence = this.deps.presence.getPresenceShow()
+    const currentStatus = this.deps.presence.getStatusMessage()
     if (currentPresence && currentPresence !== 'online' && currentPresence !== 'offline') {
       const showValue = currentPresence === 'away' ? 'away' : currentPresence === 'dnd' ? 'dnd' : undefined
       if (showValue) {
@@ -875,8 +875,8 @@ export class MUC extends BaseModule {
     })
 
     // Preserve current presence show/status on the directed presence.
-    const currentPresence = this.deps.stores?.connection.getPresenceShow()
-    const currentStatus = this.deps.stores?.connection.getStatusMessage()
+    const currentPresence = this.deps.presence.getPresenceShow()
+    const currentStatus = this.deps.presence.getStatusMessage()
     const children: Element[] = []
     if (currentPresence && currentPresence !== 'online' && currentPresence !== 'offline') {
       const showValue = currentPresence === 'away' ? 'away' : currentPresence === 'dnd' ? 'dnd' : undefined

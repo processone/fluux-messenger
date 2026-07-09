@@ -61,9 +61,7 @@ import {
  * @category Internal
  */
 export interface StoreBindings {
-  connection: Pick<ConnectionState, (typeof connectionBindingMethodKeys)[number]> &
-    // Presence bridge to the external state machine (defaults for headless)
-    Required<PresenceOptions> & {
+  connection: Pick<ConnectionState, (typeof connectionBindingMethodKeys)[number]> & {
       // State getters
       getStatus: () => ConnectionStatus
       getOwnNickname: () => string | null

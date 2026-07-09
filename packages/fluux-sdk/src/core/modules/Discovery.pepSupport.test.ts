@@ -6,6 +6,7 @@
  * (`fetchServerInfo`) does not advertise PEP — only the account entity does.
  */
 import { describe, it, expect } from 'vitest'
+import { createPresenceReader } from '../presenceReader'
 import { xml } from '@xmpp/client'
 import type { Element } from '@xmpp/client'
 import { Discovery, discoSupportsPep } from './Discovery'
@@ -17,6 +18,7 @@ function makeDeps(
 ): ModuleDependencies {
   return {
     stores: null,
+    presence: createPresenceReader(),
     sendStanza: async () => {},
     sendIQ,
     getCurrentJid: () => currentJid,

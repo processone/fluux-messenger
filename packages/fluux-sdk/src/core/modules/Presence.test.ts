@@ -9,6 +9,7 @@ import { XMPPClient } from '../XMPPClient'
 import {
   createMockXmppClient,
   createMockStores,
+  createMockPresenceReader,
   createMockElement,
   createMockRoom,
   type MockXmppClient,
@@ -39,6 +40,7 @@ import { client as xmppClientFactory } from '@xmpp/client'
 describe('XMPPClient Presence', () => {
   let xmppClient: XMPPClient
   let mockStores: MockStoreBindings
+  let mockPresence: ReturnType<typeof createMockPresenceReader>
   let emitSDKSpy: ReturnType<typeof vi.spyOn>
 
   beforeEach(() => {
@@ -47,7 +49,10 @@ describe('XMPPClient Presence', () => {
     vi.mocked(xmppClientFactory).mockReturnValue(mockXmppClientInstance as any)
 
     mockStores = createMockStores()
-    xmppClient = new XMPPClient({ debug: false })
+    mockPresence = createMockPresenceReader()
+    // Presence is injected as a dependency now (not a store binding); the
+    // client wraps these getters, so tests drive presence via mockPresence.
+    xmppClient = new XMPPClient({ debug: false, presenceOptions: mockPresence })
     xmppClient.bindStores(mockStores)
     emitSDKSpy = vi.spyOn(xmppClient, 'emitSDK')
   })
@@ -532,8 +537,8 @@ describe('XMPPClient Presence', () => {
 
     it('should preserve DND presence on reconnect', async () => {
       // Set up mock to return DND presence
-      mockStores.connection.getPresenceShow.mockReturnValue('dnd')
-      mockStores.connection.getIsAutoAway.mockReturnValue(false)
+      mockPresence.getPresenceShow.mockReturnValue('dnd')
+      mockPresence.getIsAutoAway.mockReturnValue(false)
 
       const connectPromise = xmppClient.connect({
         jid: 'user@example.com',
@@ -559,8 +564,8 @@ describe('XMPPClient Presence', () => {
       // Stale away: previous session had auto-away but isAutoAway is transient (false).
       // We can't distinguish from manual away, so we default to online to avoid
       // being stuck in 'away' on every reconnect.
-      mockStores.connection.getPresenceShow.mockReturnValue('away')
-      mockStores.connection.getIsAutoAway.mockReturnValue(false)
+      mockPresence.getPresenceShow.mockReturnValue('away')
+      mockPresence.getIsAutoAway.mockReturnValue(false)
 
       const connectPromise = xmppClient.connect({
         jid: 'user@example.com',
@@ -584,8 +589,8 @@ describe('XMPPClient Presence', () => {
 
     it('should clear auto-away to online on reconnect', async () => {
       // Set up mock to return auto-away
-      mockStores.connection.getPresenceShow.mockReturnValue('away')
-      mockStores.connection.getIsAutoAway.mockReturnValue(true)
+      mockPresence.getPresenceShow.mockReturnValue('away')
+      mockPresence.getIsAutoAway.mockReturnValue(true)
 
       const connectPromise = xmppClient.connect({
         jid: 'user@example.com',
@@ -613,10 +618,10 @@ describe('XMPPClient Presence', () => {
 
     it('should restore pre-auto-away DND presence when recovering from auto-away/sleep', async () => {
       // Set up mock: was in DND before sleep, now in auto-away
-      mockStores.connection.getPresenceShow.mockReturnValue('away')
-      mockStores.connection.getIsAutoAway.mockReturnValue(true)
-      mockStores.connection.getPreAutoAwayState.mockReturnValue('dnd')
-      mockStores.connection.getPreAutoAwayStatusMessage.mockReturnValue('Busy working')
+      mockPresence.getPresenceShow.mockReturnValue('away')
+      mockPresence.getIsAutoAway.mockReturnValue(true)
+      mockPresence.getPreAutoAwayState.mockReturnValue('dnd')
+      mockPresence.getPreAutoAwayStatusMessage.mockReturnValue('Busy working')
 
       const connectPromise = xmppClient.connect({
         jid: 'user@example.com',
@@ -648,10 +653,10 @@ describe('XMPPClient Presence', () => {
 
     it('should restore pre-auto-away presence when recovering from auto-away/sleep', async () => {
       // Set up mock: was manually away before idle timeout, now in auto-away
-      mockStores.connection.getPresenceShow.mockReturnValue('away')
-      mockStores.connection.getIsAutoAway.mockReturnValue(true)
-      mockStores.connection.getPreAutoAwayState.mockReturnValue('away')
-      mockStores.connection.getPreAutoAwayStatusMessage.mockReturnValue('In a meeting')
+      mockPresence.getPresenceShow.mockReturnValue('away')
+      mockPresence.getIsAutoAway.mockReturnValue(true)
+      mockPresence.getPreAutoAwayState.mockReturnValue('away')
+      mockPresence.getPreAutoAwayStatusMessage.mockReturnValue('In a meeting')
 
       const connectPromise = xmppClient.connect({
         jid: 'user@example.com',
@@ -679,11 +684,11 @@ describe('XMPPClient Presence', () => {
 
     it('should default to online when isAutoAway=false and no preAutoAwayState (stale away) on reconnect', async () => {
       // Set up mock: was online with no status before sleep
-      mockStores.connection.getPresenceShow.mockReturnValue('away')
-      mockStores.connection.getStatusMessage.mockReturnValue('Computer went to sleep...')
-      mockStores.connection.getIsAutoAway.mockReturnValue(true)
-      mockStores.connection.getPreAutoAwayState.mockReturnValue('online')
-      mockStores.connection.getPreAutoAwayStatusMessage.mockReturnValue(null)
+      mockPresence.getPresenceShow.mockReturnValue('away')
+      mockPresence.getStatusMessage.mockReturnValue('Computer went to sleep...')
+      mockPresence.getIsAutoAway.mockReturnValue(true)
+      mockPresence.getPreAutoAwayState.mockReturnValue('online')
+      mockPresence.getPreAutoAwayStatusMessage.mockReturnValue(null)
 
       const connectPromise = xmppClient.connect({
         jid: 'user@example.com',
@@ -711,8 +716,8 @@ describe('XMPPClient Presence', () => {
 
     it('should send online presence when status was online', async () => {
       // Set up mock to return online
-      mockStores.connection.getPresenceShow.mockReturnValue('online')
-      mockStores.connection.getIsAutoAway.mockReturnValue(false)
+      mockPresence.getPresenceShow.mockReturnValue('online')
+      mockPresence.getIsAutoAway.mockReturnValue(false)
 
       const connectPromise = xmppClient.connect({
         jid: 'user@example.com',
@@ -1636,8 +1641,8 @@ describe('XMPPClient Presence', () => {
       await connectClient()
 
       // Set user presence to DND
-      mockStores.connection.getPresenceShow.mockReturnValue('dnd')
-      mockStores.connection.getStatusMessage.mockReturnValue('Busy')
+      mockPresence.getPresenceShow.mockReturnValue('dnd')
+      mockPresence.getStatusMessage.mockReturnValue('Busy')
 
       // Join a room
       await xmppClient.muc.joinRoom('room@conference.example.com', 'testnick')
@@ -1668,8 +1673,8 @@ describe('XMPPClient Presence', () => {
       await connectClient()
 
       // Set user presence to away
-      mockStores.connection.getPresenceShow.mockReturnValue('away')
-      mockStores.connection.getStatusMessage.mockReturnValue(null)
+      mockPresence.getPresenceShow.mockReturnValue('away')
+      mockPresence.getStatusMessage.mockReturnValue(null)
 
       // Join a room
       await xmppClient.muc.joinRoom('room@conference.example.com', 'testnick')
@@ -1695,8 +1700,8 @@ describe('XMPPClient Presence', () => {
       await connectClient()
 
       // Set user presence to online (default)
-      mockStores.connection.getPresenceShow.mockReturnValue('online')
-      mockStores.connection.getStatusMessage.mockReturnValue(null)
+      mockPresence.getPresenceShow.mockReturnValue('online')
+      mockPresence.getStatusMessage.mockReturnValue(null)
 
       // Join a room
       await xmppClient.muc.joinRoom('room@conference.example.com', 'testnick')

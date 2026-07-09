@@ -9,6 +9,7 @@ import { XMPPClient } from '../XMPPClient'
 import {
   createMockXmppClient,
   createMockStores,
+  createMockPresenceReader,
   createMockElement,
   createIQHandlerTester,
   type MockXmppClient,
@@ -39,6 +40,7 @@ import { client as xmppClientFactory } from '@xmpp/client'
 describe('XMPPClient Roster', () => {
   let xmppClient: XMPPClient
   let mockStores: MockStoreBindings
+  let mockPresence: ReturnType<typeof createMockPresenceReader>
   let emitSDKSpy: ReturnType<typeof vi.spyOn>
 
   beforeEach(() => {
@@ -47,7 +49,10 @@ describe('XMPPClient Roster', () => {
     vi.mocked(xmppClientFactory).mockReturnValue(mockXmppClientInstance as any)
 
     mockStores = createMockStores()
-    xmppClient = new XMPPClient({ debug: false })
+    mockPresence = createMockPresenceReader()
+    // Presence is injected as a dependency now (not a store binding); the
+    // client wraps these getters, so tests drive presence via mockPresence.
+    xmppClient = new XMPPClient({ debug: false, presenceOptions: mockPresence })
     xmppClient.bindStores(mockStores)
     emitSDKSpy = vi.spyOn(xmppClient, 'emitSDK')
   })
@@ -454,11 +459,11 @@ describe('XMPPClient Roster', () => {
      * The fix: setPresence() should NOT call setPresenceState().
      * The presence machine is the source of truth.
      */
-    it('should NOT call setPresenceState when sending presence (prevents circular dependency)', async () => {
+    it('should NOT feed presence back into the machine when sending presence (prevents circular dependency)', async () => {
       await connectClient()
 
-      // Clear any calls from connection
-      mockStores.connection.setPresenceState.mockClear()
+      // Watch the presence machine — setPresence must not re-enter it.
+      const machineSend = vi.spyOn(xmppClient.presenceActor, 'send')
 
       // Call setPresence (as setupPresenceSync does when machine state changes)
       await xmppClient.roster.setPresence('away', 'Auto away')
@@ -468,18 +473,20 @@ describe('XMPPClient Roster', () => {
       const sentStanza = vi.mocked(mockXmppClientInstance.send).mock.calls[0][0]
       expect(sentStanza.name).toBe('presence')
 
-      // CRITICAL: setPresenceState should NOT have been called
-      // This would create a circular dependency that breaks auto-away restoration
-      expect(mockStores.connection.setPresenceState).not.toHaveBeenCalled()
+      // CRITICAL: setPresence must NOT push a SET_PRESENCE event back into the
+      // machine — that would create a circular dependency that breaks auto-away
+      // restoration. Presence is read-only from the module's perspective now.
+      expect(machineSend).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'SET_PRESENCE' }))
     })
 
-    it('should NOT call setPresenceState for any presence show value', async () => {
+    it('should NOT feed presence back into the machine for any presence show value', async () => {
       await connectClient()
 
       const showValues: Array<'away' | 'dnd' | 'xa' | 'online'> = ['away', 'dnd', 'xa', 'online']
 
       for (const show of showValues) {
-        mockStores.connection.setPresenceState.mockClear()
+        const machineSend = vi.spyOn(xmppClient.presenceActor, 'send')
+        machineSend.mockClear()
         vi.mocked(mockXmppClientInstance.send).mockClear()
 
         await xmppClient.roster.setPresence(show, 'Status message')
@@ -487,8 +494,8 @@ describe('XMPPClient Roster', () => {
         // Verify presence was sent
         expect(mockXmppClientInstance.send).toHaveBeenCalled()
 
-        // setPresenceState should NEVER be called from setPresence
-        expect(mockStores.connection.setPresenceState).not.toHaveBeenCalled()
+        // setPresence must never push SET_PRESENCE back into the machine.
+        expect(machineSend).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'SET_PRESENCE' }))
       }
     })
   })
@@ -502,10 +509,10 @@ describe('XMPPClient Roster', () => {
       await connectClient()
 
       // Simulate auto-away state: presenceShow='away', isAutoAway=true, preAutoAwayState='online'
-      mockStores.connection.getPresenceShow.mockReturnValue('away')
-      mockStores.connection.getIsAutoAway.mockReturnValue(true)
-      mockStores.connection.getPreAutoAwayState.mockReturnValue('online')
-      mockStores.connection.getPreAutoAwayStatusMessage.mockReturnValue(null)
+      mockPresence.getPresenceShow.mockReturnValue('away')
+      mockPresence.getIsAutoAway.mockReturnValue(true)
+      mockPresence.getPreAutoAwayState.mockReturnValue('online')
+      mockPresence.getPreAutoAwayStatusMessage.mockReturnValue(null)
 
       await xmppClient.roster.sendInitialPresence()
 
@@ -531,10 +538,10 @@ describe('XMPPClient Roster', () => {
 
       // Simulate corrupted state: presenceShow='away' (not updated), isAutoAway=false (cleared),
       // preAutoAwayState='online' (still exists because it's proof auto-away was active)
-      mockStores.connection.getPresenceShow.mockReturnValue('away')
-      mockStores.connection.getIsAutoAway.mockReturnValue(false)
-      mockStores.connection.getPreAutoAwayState.mockReturnValue('online')
-      mockStores.connection.getPreAutoAwayStatusMessage.mockReturnValue(null)
+      mockPresence.getPresenceShow.mockReturnValue('away')
+      mockPresence.getIsAutoAway.mockReturnValue(false)
+      mockPresence.getPreAutoAwayState.mockReturnValue('online')
+      mockPresence.getPreAutoAwayStatusMessage.mockReturnValue(null)
 
       await xmppClient.roster.sendInitialPresence()
 
@@ -555,10 +562,10 @@ describe('XMPPClient Roster', () => {
       // Simulate stale away: previous session had auto-away but isAutoAway is false
       // (because it's transient). We can't distinguish this from manual away, so
       // we default to online to avoid being stuck in 'away' on every reconnect.
-      mockStores.connection.getPresenceShow.mockReturnValue('away')
-      mockStores.connection.getIsAutoAway.mockReturnValue(false)
-      mockStores.connection.getPreAutoAwayState.mockReturnValue(null)
-      mockStores.connection.getStatusMessage.mockReturnValue('Out for lunch')
+      mockPresence.getPresenceShow.mockReturnValue('away')
+      mockPresence.getIsAutoAway.mockReturnValue(false)
+      mockPresence.getPreAutoAwayState.mockReturnValue(null)
+      mockPresence.getStatusMessage.mockReturnValue('Out for lunch')
 
       await xmppClient.roster.sendInitialPresence()
 
@@ -567,19 +574,16 @@ describe('XMPPClient Roster', () => {
       const sentStanza = vi.mocked(mockXmppClientInstance.send).mock.calls[0][0]
       const showElement = findChild(sentStanza, 'show') as { children: unknown[] } | undefined
       expect(showElement).toBeUndefined()
-
-      // Should NOT clear auto-away state (wasn't auto-away)
-      expect(mockStores.connection.setAutoAway).not.toHaveBeenCalled()
     })
 
     it('should preserve DND regardless of auto-away state', async () => {
       await connectClient()
 
       // DND should always be preserved, even if auto-away data exists
-      mockStores.connection.getPresenceShow.mockReturnValue('dnd')
-      mockStores.connection.getIsAutoAway.mockReturnValue(true) // Would normally trigger recovery
-      mockStores.connection.getPreAutoAwayState.mockReturnValue('online')
-      mockStores.connection.getStatusMessage.mockReturnValue('In a meeting')
+      mockPresence.getPresenceShow.mockReturnValue('dnd')
+      mockPresence.getIsAutoAway.mockReturnValue(true) // Would normally trigger recovery
+      mockPresence.getPreAutoAwayState.mockReturnValue('online')
+      mockPresence.getStatusMessage.mockReturnValue('In a meeting')
 
       await xmppClient.roster.sendInitialPresence()
 
@@ -596,10 +600,10 @@ describe('XMPPClient Roster', () => {
 
       // User was manually 'away', then went idle and got auto-xa.
       // Pre-auto-away state should be 'away' (what they had before auto-xa)
-      mockStores.connection.getPresenceShow.mockReturnValue('xa' as any)
-      mockStores.connection.getIsAutoAway.mockReturnValue(true)
-      mockStores.connection.getPreAutoAwayState.mockReturnValue('away')
-      mockStores.connection.getPreAutoAwayStatusMessage.mockReturnValue('Be right back')
+      mockPresence.getPresenceShow.mockReturnValue('xa' as any)
+      mockPresence.getIsAutoAway.mockReturnValue(true)
+      mockPresence.getPreAutoAwayState.mockReturnValue('away')
+      mockPresence.getPreAutoAwayStatusMessage.mockReturnValue('Be right back')
 
       await xmppClient.roster.sendInitialPresence()
 
@@ -620,10 +624,10 @@ describe('XMPPClient Roster', () => {
       await connectClient()
 
       // Normal online state
-      mockStores.connection.getPresenceShow.mockReturnValue('online')
-      mockStores.connection.getIsAutoAway.mockReturnValue(false)
-      mockStores.connection.getPreAutoAwayState.mockReturnValue(null)
-      mockStores.connection.getStatusMessage.mockReturnValue(null)
+      mockPresence.getPresenceShow.mockReturnValue('online')
+      mockPresence.getIsAutoAway.mockReturnValue(false)
+      mockPresence.getPreAutoAwayState.mockReturnValue(null)
+      mockPresence.getStatusMessage.mockReturnValue(null)
 
       await xmppClient.roster.sendInitialPresence()
 

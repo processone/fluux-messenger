@@ -19,7 +19,7 @@ import {
   adminStore,
   blockingStore,
 } from '../stores'
-import type { StoreBindings, PresenceOptions } from './types/client'
+import type { StoreBindings } from './types/client'
 import {
   connectionBindingMethodKeys,
   chatBindingMethodKeys,
@@ -50,49 +50,22 @@ function bindStoreMethods<S, K extends keyof S>(
 }
 
 /**
- * Options for creating default store bindings.
- */
-export type DefaultStoreBindingsOptions = PresenceOptions
-
-/**
  * Create default StoreBindings using the global Zustand stores.
  *
- * This is the standard way to create store bindings for XMPPClient.
- * The presence getters/setters are optional - if not provided, they
- * return defaults (useful for headless bots that don't need presence state machine).
+ * This is the standard way to create store bindings for XMPPClient. Presence
+ * is no longer part of the store bindings — it is a separate PresenceReader
+ * dependency (see `presenceReader.ts`), since presence is machine state, not
+ * connection-store state.
  *
- * @param options - Optional presence getters/setters from PresenceOptions
  * @returns StoreBindings object for XMPPClient
  *
- * @example Bot usage (no presence machine)
+ * @example
  * ```typescript
  * const client = new XMPPClient()
- * // Uses createDefaultStoreBindings() internally with default presence
- * ```
- *
- * @example React app with XState presence machine
- * ```typescript
- * const presenceActor = createActor(presenceMachine).start()
- * const client = new XMPPClient({
- *   presenceOptions: {
- *     getPresenceShow: () => getPresenceStatusFromState(presenceActor.getSnapshot().value),
- *     setPresenceState: (show, msg) => presenceActor.send({ type: 'SET_PRESENCE', show, status: msg }),
- *     // ...
- *   },
- * })
+ * // Uses createDefaultStoreBindings() internally
  * ```
  */
-export function createDefaultStoreBindings(options: DefaultStoreBindingsOptions = {}): StoreBindings {
-  // Extract presence options with defaults for headless usage
-  const getPresenceShow = options.getPresenceShow ?? (() => 'online' as const)
-  const getStatusMessage = options.getStatusMessage ?? (() => null)
-  const getIsAutoAway = options.getIsAutoAway ?? (() => false)
-  const getPreAutoAwayState = options.getPreAutoAwayState ?? (() => null)
-  const getPreAutoAwayStatusMessage = options.getPreAutoAwayStatusMessage ?? (() => null)
-  const setPresenceState = options.setPresenceState ?? (() => {})
-  const setAutoAway = options.setAutoAway ?? (() => {})
-  const clearPreAutoAwayState = options.clearPreAutoAwayState ?? (() => {})
-
+export function createDefaultStoreBindings(): StoreBindings {
   return {
     connection: {
       ...bindStoreMethods(connectionStore, connectionBindingMethodKeys),
@@ -104,15 +77,6 @@ export function createDefaultStoreBindings(options: DefaultStoreBindingsOptions 
       getWebPushServices: () => connectionStore.getState().webPushServices,
       getWebPushEnabled: () => connectionStore.getState().webPushEnabled,
       getServerInfo: () => connectionStore.getState().serverInfo,
-      // Presence from external machine (or defaults for headless)
-      getPresenceShow,
-      getStatusMessage,
-      getIsAutoAway,
-      getPreAutoAwayState,
-      getPreAutoAwayStatusMessage,
-      setPresenceState,
-      setAutoAway,
-      clearPreAutoAwayState,
     },
     chat: {
       ...bindStoreMethods(chatStore, chatBindingMethodKeys),

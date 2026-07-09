@@ -6,6 +6,7 @@
  * so we cover stanza construction, claim routing, and async decrypt-reprocess.
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { createPresenceReader } from '../presenceReader'
 import { xml } from '@xmpp/client'
 import type { Element } from '@xmpp/client'
 import { Chat } from './Chat'
@@ -140,6 +141,7 @@ function makeDeps(options: {
   const sdkEmitted: unknown[] = []
   const deps: ModuleDependencies = {
     stores: null,
+    presence: createPresenceReader(),
     sendStanza: async (stanza) => {
       options.captureStanza(stanza)
     },
@@ -1035,6 +1037,7 @@ describe('Chat E2EE wiring', () => {
       const sdkEmitted: unknown[] = []
       const deps: ModuleDependencies = {
         stores: null,
+        presence: createPresenceReader(),
         sendStanza: async () => {},
         sendIQ: async () => xml('iq', {}) as Element,
         getCurrentJid: () => jid,

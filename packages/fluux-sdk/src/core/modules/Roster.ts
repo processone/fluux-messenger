@@ -326,12 +326,12 @@ export class Roster extends BaseModule {
       this.capsHash = await calculateCapsHash()
     }
 
-    const currentPresence = this.deps.stores?.connection.getPresenceShow()
-    const isAutoAway = this.deps.stores?.connection.getIsAutoAway()
-    const currentStatusMessage = this.deps.stores?.connection.getStatusMessage()
+    const currentPresence = this.deps.presence.getPresenceShow()
+    const isAutoAway = this.deps.presence.getIsAutoAway()
+    const currentStatusMessage = this.deps.presence.getStatusMessage()
 
-    const preAutoAwayState = this.deps.stores?.connection.getPreAutoAwayState()
-    const preAutoAwayStatusMessage = this.deps.stores?.connection.getPreAutoAwayStatusMessage()
+    const preAutoAwayState = this.deps.presence.getPreAutoAwayState()
+    const preAutoAwayStatusMessage = this.deps.presence.getPreAutoAwayStatusMessage()
 
     let showToSend: 'away' | 'dnd' | 'xa' | undefined
     let statusToSend: string | null | undefined

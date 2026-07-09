@@ -1,6 +1,7 @@
 import type { Element } from '@xmpp/client'
 import type { StoreBindings, XMPPClientEvents, SDKEvents, StorageAdapter, ProxyAdapter, PrivacyOptions } from '../types'
 import type { E2EEManager } from '../e2ee'
+import type { PresenceReader } from '../presenceReader'
 
 /**
  * Dependencies injected into each module by XMPPClient.
@@ -12,6 +13,12 @@ import type { E2EEManager } from '../e2ee'
  */
 export interface ModuleDependencies {
   stores: StoreBindings | null
+  /**
+   * Read surface for presence-machine state. Presence is machine state, not
+   * connection-store state, so modules consult it here rather than through the
+   * connection store binding. Always provided (defaults to a headless reader).
+   */
+  presence: PresenceReader
   sendStanza: (stanza: Element) => Promise<void>
   sendIQ: (iq: Element, timeoutMs?: number) => Promise<Element>
   getCurrentJid: () => string | null

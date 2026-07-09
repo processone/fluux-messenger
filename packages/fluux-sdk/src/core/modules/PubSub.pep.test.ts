@@ -6,6 +6,7 @@
  * real plugins will exercise.
  */
 import { describe, it, expect, vi } from 'vitest'
+import { createPresenceReader } from '../presenceReader'
 import { xml } from '@xmpp/client'
 import type { Element } from '@xmpp/client'
 import { PubSub } from './PubSub'
@@ -15,6 +16,7 @@ import type { PEPItem } from '../e2ee'
 function makeDeps(sendIQ: (iq: Element) => Promise<Element>): ModuleDependencies {
   return {
     stores: null,
+    presence: createPresenceReader(),
     sendStanza: async () => {},
     sendIQ,
     getCurrentJid: () => 'me@example.com',
