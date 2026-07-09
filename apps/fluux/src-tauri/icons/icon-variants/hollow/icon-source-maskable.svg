@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="aurora" x1="0" y1="0" x2="1024" y2="1024" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#38E0C4"/>
+      <stop offset="0.52" stop-color="#7C8CFF"/>
+      <stop offset="1" stop-color="#A78BFA"/>
+    </linearGradient>
+    <radialGradient id="bloomTeal" cx="0.16" cy="0.9" r="0.6">
+      <stop offset="0" stop-color="#3FF0D6" stop-opacity="0.25"/>
+      <stop offset="1" stop-color="#3FF0D6" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="bloomViolet" cx="0.9" cy="0.1" r="0.6">
+      <stop offset="0" stop-color="#B79CFF" stop-opacity="0.22"/>
+      <stop offset="1" stop-color="#B79CFF" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="sheen" x1="512" y1="0" x2="512" y2="1024" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.22"/>
+      <stop offset="0.19" stop-color="#FFFFFF" stop-opacity="0.04"/>
+      <stop offset="0.34" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="glyphShadow" x="-30%" y="-30%" width="160%" height="180%">
+      <feDropShadow dx="0" dy="10.8" stdDeviation="14.4" flood-color="#160E3A" flood-opacity="0.22"/>
+    </filter>
+  </defs>
+
+  <rect x="0" y="0" width="1024" height="1024" fill="url(#aurora)"/>
+  <rect x="0" y="0" width="1024" height="1024" fill="url(#bloomTeal)"/>
+  <rect x="0" y="0" width="1024" height="1024" fill="url(#bloomViolet)"/>
+  <rect x="0" y="0" width="1024" height="1024" fill="url(#sheen)"/>
+
+  <g filter="url(#glyphShadow)">
+    <g transform="translate(235.41 211.86) scale(24.0304)">
+      <path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    </g>
+  </g>
+</svg>

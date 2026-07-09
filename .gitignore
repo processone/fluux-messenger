@@ -4,6 +4,9 @@ node_modules
 
 # Build outputs
 dist/
+# ...but track the committed per-variant icon dist trees (generate.sh output)
+!apps/fluux/src-tauri/icons/icon-variants/*/dist/
+!apps/fluux/src-tauri/icons/icon-variants/*/dist/**
 ts-docs/
 *.tsbuildinfo
 target/

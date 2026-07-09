@@ -3,7 +3,7 @@ import { useId } from 'react'
 /**
  * The Fluux app icon, inlined as a component for the login screen: the aurora
  * gradient squircle with the white speech bubble. Mirrors the shipped
- * `src-tauri/icons/icon-source.svg` (the "in-between" glass pass) so the login
+ * `src-tauri/icons/icon-variants/plain/icon-source.svg` (the "in-between" glass pass) so the login
  * mark and the installed app icon are the same object. Decorative
  * (`aria-hidden`); mode-agnostic (the tile gradient is fixed in both themes).
  */
