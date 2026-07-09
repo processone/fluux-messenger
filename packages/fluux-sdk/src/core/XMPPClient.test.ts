@@ -1973,7 +1973,7 @@ describe('XMPPClient', () => {
 
       // Call runFreshSessionSetup directly (private method)
       try {
-        await (xmppClient as any).runFreshSessionSetup(undefined, 1, 15000)
+        await (xmppClient as any).sessionLifecycle.runFreshSessionSetup(undefined, 1, 15000)
       } catch {
         // Expected: fetchRoster throws and propagates
       }
@@ -1997,7 +1997,7 @@ describe('XMPPClient', () => {
       vi.spyOn(xmppClient.profile, 'fetchOwnProfile').mockResolvedValue()
 
       try {
-        await (xmppClient as any).runFreshSessionSetup(undefined, 1, 15000)
+        await (xmppClient as any).sessionLifecycle.runFreshSessionSetup(undefined, 1, 15000)
       } catch {
         // Expected
       }
@@ -2026,7 +2026,7 @@ describe('XMPPClient', () => {
       vi.spyOn(xmppClient.muc, 'fetchBookmarks').mockRejectedValue(new Error('IQ timeout'))
 
       try {
-        await (xmppClient as any).runFreshSessionSetup(
+        await (xmppClient as any).sessionLifecycle.runFreshSessionSetup(
           [{ jid: 'r@conf.example.com', nickname: 'me' }],
           1,
           15000,
@@ -2044,7 +2044,7 @@ describe('XMPPClient', () => {
       // skip-guard is unnecessary — and leaving the flag alone avoids a
       // spurious store update that would cascade through subscribers.
       ;(xmppClient as any).currentJid = 'user@example.com'
-      ;(xmppClient as any).sessionGeneration = 1
+      ;(xmppClient as any).sessionLifecycle.sessionGeneration = 1
 
       const stores = (xmppClient as any).stores
       const markAllSpy = stores.room.markAllRoomsNotJoined as ReturnType<typeof vi.fn>
@@ -2061,7 +2061,7 @@ describe('XMPPClient', () => {
       if (convSync) vi.spyOn(convSync, 'fetchConversations').mockResolvedValue([])
 
       // No previouslyJoinedRooms, no autojoin bookmarks
-      await (xmppClient as any).runFreshSessionSetup(undefined, 1, 15000)
+      await (xmppClient as any).sessionLifecycle.runFreshSessionSetup(undefined, 1, 15000)
 
       expect(markAllSpy).not.toHaveBeenCalled()
     })
@@ -2069,7 +2069,7 @@ describe('XMPPClient', () => {
     it('should call markAllRoomsNotJoined exactly when rejoinActiveRooms runs', async () => {
       ;(xmppClient as any).currentJid = 'user@example.com'
       // Match the sessionGeneration so the guard doesn't abort mid-setup.
-      ;(xmppClient as any).sessionGeneration = 1
+      ;(xmppClient as any).sessionLifecycle.sessionGeneration = 1
 
       const stores = (xmppClient as any).stores
       const markAllSpy = stores.room.markAllRoomsNotJoined as ReturnType<typeof vi.fn>
@@ -2087,7 +2087,7 @@ describe('XMPPClient', () => {
       const convSync = (xmppClient as any).conversationSync
       if (convSync) vi.spyOn(convSync, 'fetchConversations').mockResolvedValue([])
 
-      await (xmppClient as any).runFreshSessionSetup(
+      await (xmppClient as any).sessionLifecycle.runFreshSessionSetup(
         [{ jid: 'r@conf.example.com', nickname: 'me' }],
         1,
         15000,
@@ -2127,7 +2127,7 @@ describe('XMPPClient', () => {
         vi.spyOn(convSync, 'fetchConversations').mockResolvedValue([])
       }
 
-      await (xmppClient as any).runFreshSessionSetup(undefined, 1, 15000)
+      await (xmppClient as any).sessionLifecycle.runFreshSessionSetup(undefined, 1, 15000)
 
       // Discovery calls should be initiated before fetchRoster starts
       // (they're fire-and-forget so they start synchronously before the first await)
@@ -2142,7 +2142,7 @@ describe('XMPPClient', () => {
     // the user's real JID unless they've acknowledged it.
     function setupAutojoinFreshSession() {
       ;(xmppClient as any).currentJid = 'user@example.com'
-      ;(xmppClient as any).sessionGeneration = 1
+      ;(xmppClient as any).sessionLifecycle.sessionGeneration = 1
       vi.spyOn(xmppClient.discovery, 'fetchServerInfo').mockResolvedValue()
       vi.spyOn(xmppClient.discovery, 'discoverHttpUploadService').mockResolvedValue()
       vi.spyOn(xmppClient.profile, 'fetchOwnProfile').mockResolvedValue()
@@ -2166,7 +2166,7 @@ describe('XMPPClient', () => {
       const stores = (xmppClient as any).stores
       ;(stores.room.isNonAnonymousRoomAcknowledged as ReturnType<typeof vi.fn>).mockReturnValue(false)
 
-      await (xmppClient as any).runFreshSessionSetup(undefined, 1, 15000)
+      await (xmppClient as any).sessionLifecycle.runFreshSessionSetup(undefined, 1, 15000)
       // The autojoin gate runs in a fire-and-forget async IIFE — flush its awaited
       // microtasks (fake timers are active, so advance them to drain the queue).
       await vi.advanceTimersByTimeAsync(1)
@@ -2179,7 +2179,7 @@ describe('XMPPClient', () => {
       const stores = (xmppClient as any).stores
       ;(stores.room.isNonAnonymousRoomAcknowledged as ReturnType<typeof vi.fn>).mockReturnValue(true)
 
-      await (xmppClient as any).runFreshSessionSetup(undefined, 1, 15000)
+      await (xmppClient as any).sessionLifecycle.runFreshSessionSetup(undefined, 1, 15000)
       await vi.advanceTimersByTimeAsync(1)
 
       expect(joinSpy).toHaveBeenCalledWith(
