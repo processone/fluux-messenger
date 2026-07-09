@@ -39,6 +39,7 @@ import type {
   AdminRoom,
   RoomFeatures,
 } from '../types'
+import type { StoredRoomMessage } from '../types/message-internal'
 import { parseXMPPError, formatXMPPError, hasErrorCondition } from '../../utils/xmppError'
 import { RoomJoinError } from '../errors'
 import { buildDataFormSubmit, parseDataForm } from '../../utils/dataForm'
@@ -242,20 +243,21 @@ export class MUC extends BaseModule {
           // <new>"). Empty body → never a sidebar preview; noLocalStore → not
           // persisted or indexed (presence isn't archived, so it can't be
           // reconstructed on reload anyway).
+          const nickChangeMessage: StoredRoomMessage = {
+            type: 'groupchat',
+            id: generateUUID(),
+            roomJid,
+            from: `${roomJid}/${nick}`,
+            nick,
+            body: '',
+            timestamp: new Date(),
+            isOutgoing: isSelf,
+            noLocalStore: true,
+            systemEvent: { kind: 'nick-changed', oldNick: nick, newNick },
+          }
           this.deps.emitSDK('room:message', {
             roomJid,
-            message: {
-              type: 'groupchat',
-              id: generateUUID(),
-              roomJid,
-              from: `${roomJid}/${nick}`,
-              nick,
-              body: '',
-              timestamp: new Date(),
-              isOutgoing: isSelf,
-              noLocalStore: true,
-              systemEvent: { kind: 'nick-changed', oldNick: nick, newNick },
-            },
+            message: nickChangeMessage,
             incrementUnread: false,
             incrementMentions: false,
           })

@@ -10,6 +10,7 @@
 
 import type { Element } from '@xmpp/client'
 import type { Message, Conversation } from './chat'
+import type { StoredMessage, StoredRoomMessage } from './message-internal'
 import type { Contact, PresenceShow, VCardInfo } from './roster'
 import type { Room, RoomOccupant, RoomMember, RoomMessage, RoomAffiliation, RoomRole } from './room'
 import type { ServerInfo } from './discovery'
@@ -144,7 +145,9 @@ export interface ChatEvents {
   'chat:message-updated': {
     conversationId: string
     messageId: string
-    updates: Partial<Message>
+    // Partial<StoredMessage>, not Partial<Message>: a correction update carries
+    // internal impl-state (correctionStanzaIds) alongside the public fields.
+    updates: Partial<StoredMessage>
   }
 
   /** XEP-0490: a device synced its last-displayed (read) position for a conversation (1:1 or room) */
@@ -310,7 +313,7 @@ export interface RoomEvents {
   'room:message-updated': {
     roomJid: string
     messageId: string
-    updates: Partial<RoomMessage>
+    updates: Partial<StoredRoomMessage>
   }
 
   /** Reactions updated on room message */

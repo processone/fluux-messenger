@@ -60,6 +60,7 @@ import type {
   RoomMAMResult,
   PollClosedData,
 } from '../types'
+import { getCorrectionStanzaIds } from '../types/message-internal'
 import { parseMessageContent, parseOgpFastening, applyRetraction, applyCorrection, createOriginIdElement, parseStanzaId, hasRenderableContent, parseReactionsSignal, parseRetractionSignal, parseCorrectionSignal } from './messagingUtils'
 import { checkForMention } from '../mentionDetection'
 import { parsePollElement, parsePollClosedElement } from '../poll'
@@ -1908,7 +1909,7 @@ export class Chat extends BaseModule {
       if (original && this.isSameMucAuthor(original, from, senderOccupantId)) {
         const correctionData = applyCorrection(stanza, body, original.originalBody ?? original.body)
         if (correctionStanzaId) {
-          correctionData.correctionStanzaIds = [...(original.correctionStanzaIds ?? []), correctionStanzaId]
+          correctionData.correctionStanzaIds = [...(getCorrectionStanzaIds(original) ?? []), correctionStanzaId]
         }
         this.deps.emitSDK('room:message-updated', { roomJid: conversationId, messageId: originalId, updates: correctionData })
         return true
@@ -1918,7 +1919,7 @@ export class Chat extends BaseModule {
       if (original && original.from === bareFrom) {
         const correctionData = applyCorrection(stanza, body, original.originalBody ?? original.body)
         if (correctionStanzaId) {
-          correctionData.correctionStanzaIds = [...(original.correctionStanzaIds ?? []), correctionStanzaId]
+          correctionData.correctionStanzaIds = [...(getCorrectionStanzaIds(original) ?? []), correctionStanzaId]
         }
         this.deps.emitSDK('chat:message-updated', { conversationId, messageId: originalId, updates: correctionData })
         return true

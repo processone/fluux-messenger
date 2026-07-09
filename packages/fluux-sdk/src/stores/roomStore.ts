@@ -12,6 +12,7 @@ import type {
   MAMQueryState,
   RSMResponse,
 } from '../core/types'
+import { isNoLocalStore, type StoredRoomMessage } from '../core/types/message-internal'
 import { setTypingTimeout, clearTypingTimeout } from './typingTimeout'
 import { findMessageById, findMessageIndexById } from '../utils/messageLookup'
 import { getBareJid } from '../core/jid'
@@ -1179,12 +1180,12 @@ export const roomStore = createStore<RoomState>()(
     const room = get().rooms.get(roomJid)
 
     // Quick Chat rooms are transient: keep their messages in memory only
-    const messageToAdd = room?.isQuickChat
+    const messageToAdd: StoredRoomMessage = room?.isQuickChat
       ? { ...message, noLocalStore: true }
       : message
 
     // Save to IndexedDB only if the message is locally persistable
-    if (!messageToAdd.noLocalStore) {
+    if (!isNoLocalStore(messageToAdd)) {
       void messageCache.saveRoomMessage(messageToAdd)
       searchIndex.indexMessage(messageToAdd).catch((e) => console.warn('[searchIndex] indexMessage failed:', e))
     }
@@ -2553,7 +2554,7 @@ export const roomStore = createStore<RoomState>()(
 
       // Persist to IndexedDB regardless of active state — this is the durable
       // history that rehydrates on open (search index too).
-      const persistableMessages = newFromMAM.filter(msg => !msg.noLocalStore)
+      const persistableMessages = newFromMAM.filter(msg => !isNoLocalStore(msg))
       if (persistableMessages.length > 0) {
         void messageCache.saveRoomMessages(persistableMessages)
         searchIndex.indexMessages(persistableMessages).catch((e) => console.warn('[searchIndex] indexMessages failed:', e))

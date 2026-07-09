@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { roomStore } from './roomStore'
 import type { Room, RoomMessage } from '../core/types'
+import { isNoLocalStore } from '../core/types/message-internal'
 import { getLocalPart } from '../core/jid'
 import { _resetStorageScopeForTesting, setStorageScopeJid } from '../utils/storageScope'
 import { setResidentWindowSize } from './shared/residentWindow'
@@ -1369,7 +1370,7 @@ describe('roomStore', () => {
       // But message should still be in memory with noLocalStore flag
       const room = roomStore.getState().rooms.get('quickchat@conference.example.com')
       expect(room?.messages.length).toBe(1)
-      expect(room?.messages[0].noLocalStore).toBe(true)
+      expect(isNoLocalStore(room!.messages[0])).toBe(true)
     })
 
     it('should still add noLocalStore message to in-memory store', () => {
