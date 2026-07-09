@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback, Suspense, lazy, type ReactNode, type RefObject, type Ref, useImperativeHandle } from 'react'
+import React, { useState, useRef, useEffect, useCallback, useMemo, Suspense, lazy, type ReactNode, type RefObject, type Ref, useImperativeHandle } from 'react'
 import { useTranslation } from 'react-i18next'
 import { detectRenderLoop, notifyUserInput } from '@/utils/renderLoopDetector'
 import { Send, Smile, Paperclip, Reply, X, Pencil, Loader2, Image, FileText, Trash2, BarChart3, Plus, Lock, Shield, ShieldCheck, ShieldAlert, Terminal } from 'lucide-react'
@@ -255,7 +255,16 @@ export function MessageComposer({
   const [sending, setSending] = useState(false)
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
   const [editAttachmentRemoved, setEditAttachmentRemoved] = useState(false)
-  const [inputClass, setInputClass] = useState<InputClass>('send')
+  // Which glyph the send button shows (send / command / unknown). Derived from
+  // the live text so it can never go stale — clearing the input after a command
+  // runs, an edit cancels, etc. reverts the icon automatically, whereas a
+  // separately-stored state only refreshed on keystrokes would stay stuck.
+  // Commands are inert in reply/whisper modes, so the indicator stays 'send'
+  // there, matching handleSubmit's gate (the button never implies a command).
+  const inputClass: InputClass = useMemo(
+    () => (commandsEnabled !== false && !replyingTo && classifyInput ? classifyInput(text) : 'send'),
+    [text, commandsEnabled, replyingTo, classifyInput]
+  )
   const inputRef = useRef<HTMLTextAreaElement>(null)
 
   // Merged ref callback to assign to both internal and external refs
@@ -440,9 +449,8 @@ export function MessageComposer({
     // the hard loop-break threshold is unaffected.
     notifyUserInput()
     setText(e.target.value)
-    // Suppress the command indicator when commands are inert (reply/whisper),
-    // matching handleSubmit's gate so the button never implies a command will run.
-    setInputClass(commandsEnabled !== false && !replyingTo && classifyInput ? classifyInput(e.target.value) : 'send')
+    // inputClass is derived from `text` (see declaration), so it updates here
+    // automatically — no manual sync needed.
 
     // Update toolbar visibility based on typing activity
     onComposingChange?.(true)

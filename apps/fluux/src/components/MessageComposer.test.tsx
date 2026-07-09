@@ -52,6 +52,25 @@ describe('MessageComposer', () => {
       expect(resolveInput).not.toHaveBeenCalled()
       expect(onSend).toHaveBeenCalledWith('/kick alice')
     })
+
+    it('reverts the send button from the command icon to the standard send icon after a command runs', async () => {
+      // Realistic classifier: only leading-slash input is a command (unlike the
+      // shared `() => 'command'` mock, which never returns to 'send').
+      const { textarea } = setup({
+        classifyInput: (value: string) => (value.trim().startsWith('/') ? 'command' : 'send'),
+      })
+      const submitButton = textarea.closest('form')?.querySelector('button[type="submit"]') as HTMLButtonElement
+
+      // Typing a command swaps in the Terminal icon and drops the standard Send icon.
+      fireEvent.change(textarea, { target: { value: '/kick alice' } })
+      expect(submitButton.querySelector('.icon-optical-send')).toBeNull()
+
+      // After the command is consumed, the input is cleared — the icon must return to Send.
+      await act(async () => {
+        fireEvent.submit(textarea.closest('form') as HTMLFormElement)
+      })
+      expect(submitButton.querySelector('.icon-optical-send')).not.toBeNull()
+    })
   })
 
   describe('typing notification throttling', () => {
