@@ -14,15 +14,9 @@ exports[`RoomView > Snapshots > should match snapshot for non-joined room 1`] = 
         class="@container relative aurora-horizon h-14 px-4 flex items-center border-b border-fluux-bg shadow-sm gap-3"
       >
         <div
-          class="size-9 rounded-xl flex items-center justify-center flex-shrink-0"
-          style="background-color: rgb(74, 144, 217);"
-        >
-          <span
-            data-testid="icon-hash"
-          >
-            Hash
-          </span>
-        </div>
+          data-name="Test Room"
+          data-testid="avatar"
+        />
         <div
           class="flex-1 min-w-0"
         >

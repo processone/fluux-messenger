@@ -602,7 +602,7 @@ vi.mock('./MessageAttachments', () => ({
 }))
 
 vi.mock('./Avatar', () => ({
-  Avatar: ({ name }: { name: string }) => <div data-testid="avatar">{name}</div>,
+  Avatar: ({ name }: { name: string }) => <div data-testid="avatar" data-name={name} />,
   getConsistentTextColor: () => '#000000',
 }))
 

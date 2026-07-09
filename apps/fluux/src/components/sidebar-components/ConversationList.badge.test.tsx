@@ -106,8 +106,9 @@ describe('ConversationItem unread badge placement', () => {
 
     const badge = screen.getByText('7')
     expect(badge.className).toContain('absolute')
-    // The group-chat icon (Hash svg) lives in the same wrapper
-    expect((badge.parentElement as HTMLElement).querySelector('svg')).toBeTruthy()
+    // Anchored inside the same wrapper as the avatar
+    const wrapper = badge.parentElement as HTMLElement
+    expect(within(wrapper).getByTestId('avatar')).toBeTruthy()
   })
 
   it('renders no badge when there are no unread messages', () => {
