@@ -10,6 +10,15 @@ const MCP_ENABLED_KEY = 'fluux-mcp-enabled'
 const MCP_PORT_KEY = 'fluux-mcp-port'
 const MAX_ACTIVITY_ENTRIES = 100
 
+/**
+ * Master kill-switch for the MCP bridge. The feature is not usable yet — it
+ * needs an HTTPS URL that our client cannot easily expose — so it is disabled:
+ * the settings screen is hidden (see settings-components/types.ts) and the
+ * server can never start, even if a previous build persisted `enabled: true`.
+ * Flip to `true` to bring the feature back.
+ */
+export const MCP_FEATURE_ENABLED = false
+
 export interface McpActivityEntry {
   /** Store-assigned unique id; a stable React key for the prepend-ordered log. */
   id: string
@@ -19,6 +28,7 @@ export interface McpActivityEntry {
 }
 
 function getInitialEnabled(): boolean {
+  if (!MCP_FEATURE_ENABLED) return false
   try {
     return localStorage.getItem(MCP_ENABLED_KEY) === 'true'
   } catch {

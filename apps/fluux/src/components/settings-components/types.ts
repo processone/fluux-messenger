@@ -1,6 +1,7 @@
 import type { LucideIcon } from 'lucide-react'
 import { User, Palette, Globe, Bell, Download, Ban, HardDrive, Lock, ShieldCheck, Wrench, Accessibility, Bot } from 'lucide-react'
 import { isTauri, isUpdaterEnabled } from '@/utils/tauri'
+import { MCP_FEATURE_ENABLED } from '@/stores/mcpBridgeStore'
 
 export type SettingsCategory =
   | 'profile'
@@ -27,6 +28,8 @@ export interface SettingsCategoryConfig {
   tauriOnly?: boolean
   /** Only show when in-app updater is enabled (macOS/Windows, not Linux) */
   updaterOnly?: boolean
+  /** Temporarily hidden regardless of platform (feature not ready to ship) */
+  disabled?: boolean
 }
 
 export { isTauri }
@@ -45,7 +48,9 @@ export const SETTINGS_CATEGORIES: SettingsCategoryConfig[] = [
 
   { id: 'storage', labelKey: 'settings.categories.storage', icon: HardDrive, tauriOnly: true, group: 'system' },
   { id: 'updates', labelKey: 'settings.categories.updates', icon: Download, updaterOnly: true, group: 'system' },
-  { id: 'mcp', labelKey: 'settings.categories.mcp', icon: Bot, tauriOnly: true, group: 'system' },
+  // MCP bridge is not usable yet: it needs an HTTPS URL that our client cannot
+  // easily expose, so the config screen is hidden (and unreachable) for now.
+  { id: 'mcp', labelKey: 'settings.categories.mcp', icon: Bot, tauriOnly: true, group: 'system', disabled: !MCP_FEATURE_ENABLED },
   { id: 'advanced', labelKey: 'settings.categories.advanced', icon: Wrench, group: 'system' },
 ]
 
@@ -55,6 +60,7 @@ export const SETTINGS_CATEGORIES: SettingsCategoryConfig[] = [
 export function getVisibleCategories(): SettingsCategoryConfig[] {
   const updaterEnabled = isUpdaterEnabled()
   return SETTINGS_CATEGORIES.filter(cat => {
+    if (cat.disabled) return false
     if (cat.tauriOnly && !isTauri()) return false
     if (cat.updaterOnly && !updaterEnabled) return false
     return true

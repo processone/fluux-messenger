@@ -76,8 +76,14 @@ describe('resolveSettingsCategory — platform gating', () => {
 
   it('keeps a Tauri-only category on the desktop build', () => {
     setTauriEnv(true)
-    expect(resolveSettingsCategory('mcp')).toBe('mcp')
     expect(resolveSettingsCategory('storage')).toBe('storage')
+  })
+
+  it('falls back to profile for the disabled MCP category even on desktop', () => {
+    // MCP is hidden via `disabled` until the feature ships, so a deep link
+    // must not render its panel even in the Tauri build.
+    setTauriEnv(true)
+    expect(resolveSettingsCategory('mcp')).toBe('profile')
   })
 
   it('defaults to profile when no category is requested', () => {
