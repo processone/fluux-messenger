@@ -80,6 +80,7 @@ import {
   recordUnclaimedEME,
 } from '../e2ee/stanzaDecrypt'
 import type { MessageSecurityContext } from '../types'
+import { getCorrectionStanzaIds, type MessageImplState } from '../types/message-internal'
 import { parseSearchQuery, tokenize } from '../../utils/searchIndex'
 
 /**
@@ -1606,7 +1607,7 @@ export class MAM extends BaseModule {
         target.encryptedPayload = correctionData.encryptedPayload
         // Track the correction's stanza-id so replies referencing it can resolve
         if (correction.correctionStanzaId) {
-          target.correctionStanzaIds = [...(target.correctionStanzaIds ?? []), correction.correctionStanzaId]
+          ;(target as MessageImplState).correctionStanzaIds = [...(getCorrectionStanzaIds(target) ?? []), correction.correctionStanzaId]
         }
       } else if (!target) {
         unresolved.corrections.push(correction)
@@ -1691,7 +1692,7 @@ export class MAM extends BaseModule {
       const cachedMessage = this.deps.stores?.chat.getMessage(conversationId, correction.targetId)
       const originalBody = cachedMessage?.originalBody ?? cachedMessage?.body ?? ''
       const correctionData = applyCorrection(correction.messageEl, correction.body, originalBody)
-      const existingIds = cachedMessage?.correctionStanzaIds ?? []
+      const existingIds = (cachedMessage ? getCorrectionStanzaIds(cachedMessage) : undefined) ?? []
       const correctionStanzaIds = correction.correctionStanzaId
         ? [...existingIds, correction.correctionStanzaId]
         : existingIds.length > 0 ? existingIds : undefined
@@ -1756,7 +1757,7 @@ export class MAM extends BaseModule {
       const originalBody = cachedMessage?.originalBody ?? cachedMessage?.body ?? ''
       const correctionData = applyCorrection(correction.messageEl, correction.body, originalBody)
       // Accumulate correction stanza-ids for reply lookup
-      const existingIds = cachedMessage?.correctionStanzaIds ?? []
+      const existingIds = (cachedMessage ? getCorrectionStanzaIds(cachedMessage) : undefined) ?? []
       const correctionStanzaIds = correction.correctionStanzaId
         ? [...existingIds, correction.correctionStanzaId]
         : existingIds.length > 0 ? existingIds : undefined

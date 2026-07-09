@@ -122,14 +122,6 @@ export interface BaseMessage {
   isEdited?: boolean
   /** XEP-0308: Original body before correction */
   originalBody?: string
-  /**
-   * XEP-0308 + XEP-0359: Stanza-IDs from correction stanzas.
-   * When a message is corrected, the MUC service archives the correction as a
-   * new stanza with its own stanza-id. Other clients may reference this
-   * correction stanza-id in replies (XEP-0461), so we track them to ensure
-   * reply lookups resolve correctly.
-   */
-  correctionStanzaIds?: string[]
   /** XEP-0424: Message has been retracted (deleted) */
   isRetracted?: boolean
   /** XEP-0424: When the message was retracted */
@@ -144,17 +136,6 @@ export interface BaseMessage {
   attachment?: FileAttachment
   /** XEP-0422 + OGP: Link preview metadata for URLs in message */
   linkPreview?: LinkPreview
-  /**
-   * Local persistence opt-out. When true, this message is kept in the in-memory
-   * store only — it is NOT written to the local IndexedDB cache or the search
-   * index. Automatically set for messages in Quick Chat (transient) rooms.
-   *
-   * Independent of server archival: the XEP-0334 `<no-store>` wire hint that
-   * asks the server not to archive is added at the send site, not derived from
-   * this field. A message can be kept off the server archive yet still persisted
-   * locally (e.g. MUC whispers), or vice versa.
-   */
-  noLocalStore?: boolean
   /**
    * Delivery error received from the server for this message.
    * Set when the server returns a `<message type="error">` stanza,

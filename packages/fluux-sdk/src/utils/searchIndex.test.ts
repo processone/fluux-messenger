@@ -1,7 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import 'fake-indexeddb/auto'
 import { IDBFactory } from 'fake-indexeddb'
-import type { Message, RoomMessage } from '../core/types'
+import type { RoomMessage } from '../core/types'
+import type { StoredMessage } from '../core/types/message-internal'
 import { setStorageScopeJid, _resetStorageScopeForTesting } from './storageScope'
 
 // Must import after fake-indexeddb/auto
@@ -26,7 +27,7 @@ import { _resetDBForTesting as _resetMessageCacheDB } from './messageCache'
 // Test helpers
 // =============================================================================
 
-function createChatMessage(conversationId: string, overrides: Partial<Message> = {}): Message {
+function createChatMessage(conversationId: string, overrides: Partial<StoredMessage> = {}): StoredMessage {
   return {
     type: 'chat',
     id: `msg-${Math.random().toString(36).slice(2)}`,

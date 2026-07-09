@@ -15,6 +15,7 @@
 
 import { openDB, type IDBPDatabase, type DBSchema } from 'idb'
 import type { Message, RoomMessage } from '../core/types'
+import { isNoLocalStore } from '../core/types/message-internal'
 import { getStorageScopeJid } from './storageScope'
 import * as messageCache from './messageCache'
 
@@ -276,7 +277,7 @@ export async function initSearchIndex(scopeJid: string): Promise<void> {
  */
 export async function indexMessage(message: Message | RoomMessage): Promise<void> {
   if (!isIndexedDBAvailable()) return
-  if (!message.body || message.isRetracted || message.noLocalStore) return
+  if (!message.body || message.isRetracted || isNoLocalStore(message)) return
 
   const indexId = getIndexId(message)
   const tokens = uniqueTokens(message.body)
@@ -340,7 +341,7 @@ const INDEX_BATCH_SIZE = 50
  */
 export async function indexMessages(messages: (Message | RoomMessage)[]): Promise<void> {
   if (!isIndexedDBAvailable()) return
-  const indexable = messages.filter((m) => m.body && !m.isRetracted && !m.noLocalStore)
+  const indexable = messages.filter((m) => m.body && !m.isRetracted && !isNoLocalStore(m))
   if (indexable.length === 0) return
 
   // Process in small batches to keep each IDB transaction short-lived

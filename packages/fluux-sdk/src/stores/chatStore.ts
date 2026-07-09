@@ -1,6 +1,7 @@
 import { createStore } from 'zustand/vanilla'
 import { persist, subscribeWithSelector } from 'zustand/middleware'
 import type { Message, Conversation, ConversationEntity, ConversationMetadata, MAMQueryState, RSMResponse } from '../core'
+import { isNoLocalStore } from '../core/types/message-internal'
 import { setTypingTimeout, clearTypingTimeout, clearAllTypingTimeouts } from './typingTimeout'
 import { findMessageById, findMessageIndexById } from '../utils/messageLookup'
 import { logInfo } from '../core/logger'
@@ -908,7 +909,7 @@ export const chatStore = createStore<ChatState>()(
           // This runs regardless of the live-edge gate: a gated message is still
           // durable in the cache (and the meta/preview/unread updates below still
           // run); it reloads on jump-to-latest.
-          if (!msg.noLocalStore) {
+          if (!isNoLocalStore(msg)) {
             void messageCache.saveMessage(msg)
             searchIndex.indexMessage(msg).catch((e) => console.warn('[searchIndex] indexMessage failed:', e))
           }
@@ -1650,7 +1651,7 @@ export const chatStore = createStore<ChatState>()(
           }
 
           // Persist to IndexedDB regardless of active state (durable history).
-          const persistableMessages = newMessages.filter(msg => !msg.noLocalStore)
+          const persistableMessages = newMessages.filter(msg => !isNoLocalStore(msg))
           if (persistableMessages.length > 0) {
             void messageCache.saveMessages(persistableMessages)
             searchIndex.indexMessages(persistableMessages).catch((e) => console.warn('[searchIndex] indexMessages failed:', e))
