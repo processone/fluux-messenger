@@ -232,9 +232,18 @@ export interface XMPPClientConfig {
   debug?: boolean
   /**
    * Store bundle backing this client. Defaults to the process-wide singletons
-   * ({@link defaultStores}). Injecting a custom {@link SDKStores} bundle is the
-   * seam for future multi-account support — see `stores/sdkStores.ts` for what
-   * else that entails. Single-account apps should omit this.
+   * ({@link defaultStores}).
+   *
+   * @internal Partial seam — NOT a supported multi-account switch yet, and not
+   * part of the public API. A custom {@link SDKStores} bundle is honored by
+   * `connect()` account-switch and the SDK event → store bindings, but the
+   * store-based side effects (MAM catch-up, read-marker / MDS sync, background
+   * sync), the SM-resumable state snapshot, and the Poll module still read and
+   * write the process-global singletons regardless of what is passed here.
+   * Two clients with different bundles therefore cross-contaminate on that
+   * state — do not use this to run multiple accounts. Full isolation also needs
+   * a `createStores()` factory and a per-instance storage scope; see the
+   * checklist in `stores/sdkStores.ts`. Single-account apps must omit this.
    */
   stores?: SDKStores
   /**
