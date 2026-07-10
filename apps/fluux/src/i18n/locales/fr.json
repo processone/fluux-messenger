@@ -491,6 +491,8 @@
         "moderateAndBan": "Bannir également cet utilisateur du salon",
         "imageUnavailable": "Image non disponible",
         "copyImageUrl": "Copier le lien de l'image",
+        "copyLink": "Copier le lien",
+        "copyLinkChoose": "Copier quel lien ?",
         "openInBrowser": "Ouvrir dans le navigateur",
         "saveImage": "Enregistrer l'image",
         "videoUnavailable": "Vidéo non disponible",

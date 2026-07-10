@@ -489,6 +489,8 @@
         "moderateAndBan": "A felhasználó kitiltása is a szobából",
         "imageUnavailable": "A kép már nem érhető el",
         "copyImageUrl": "Kép linkjének másolása",
+        "copyLink": "Link másolása",
+        "copyLinkChoose": "Melyik linket másoljuk?",
         "openInBrowser": "Megnyitás böngészőben",
         "saveImage": "Kép mentése",
         "videoUnavailable": "A videó már nem érhető el",

@@ -489,6 +489,8 @@
         "moderateAndBan": "Utesteng også denne brukeren fra rommet",
         "imageUnavailable": "Bildet er ikke lenger tilgjengelig",
         "copyImageUrl": "Kopier bildelenke",
+        "copyLink": "Kopier lenke",
+        "copyLinkChoose": "Hvilken lenke vil du kopiere?",
         "openInBrowser": "Åpne i nettleser",
         "saveImage": "Lagre bilde",
         "videoUnavailable": "Videoen er ikke lenger tilgjengelig",

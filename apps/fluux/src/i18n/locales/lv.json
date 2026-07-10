@@ -491,6 +491,8 @@
         "moderateAndBan": "Arī aizliegt šim lietotājam piekļuvi istabai",
         "imageUnavailable": "Attēls vairs nav pieejams",
         "copyImageUrl": "Kopēt attēla saiti",
+        "copyLink": "Kopēt saiti",
+        "copyLinkChoose": "Kuru saiti kopēt?",
         "openInBrowser": "Atvērt pārlūkā",
         "saveImage": "Saglabāt attēlu",
         "videoUnavailable": "Video vairs nav pieejams",

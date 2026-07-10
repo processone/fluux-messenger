@@ -492,6 +492,8 @@
         "moderateAndBan": "Baneja també aquest usuari de la sala",
         "imageUnavailable": "La imatge ja no està disponible",
         "copyImageUrl": "Copiar l'enllaç de la imatge",
+        "copyLink": "Copiar l'enllaç",
+        "copyLinkChoose": "Quin enllaç voleu copiar?",
         "openInBrowser": "Obrir al navegador",
         "saveImage": "Desar la imatge",
         "videoUnavailable": "El vídeo ja no està disponible",

@@ -489,6 +489,8 @@
         "moderateAndBan": "Banna einnig þennan notanda úr herberginu",
         "imageUnavailable": "Mynd ekki lengur tiltæk",
         "copyImageUrl": "Afrita myndatengil",
+        "copyLink": "Afrita tengil",
+        "copyLinkChoose": "Hvaða tengil á að afrita?",
         "openInBrowser": "Opna í vafra",
         "saveImage": "Vista mynd",
         "videoUnavailable": "Myndband ekki lengur tiltækt",

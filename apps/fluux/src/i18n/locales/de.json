@@ -491,6 +491,8 @@
         "moderateAndBan": "Benutzer auch aus dem Raum verbannen",
         "imageUnavailable": "Bild nicht mehr verfügbar",
         "copyImageUrl": "Bild-Link kopieren",
+        "copyLink": "Link kopieren",
+        "copyLinkChoose": "Welchen Link kopieren?",
         "openInBrowser": "Im Browser öffnen",
         "saveImage": "Bild speichern",
         "videoUnavailable": "Video nicht mehr verfügbar",

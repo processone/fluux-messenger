@@ -492,6 +492,8 @@
         "moderateAndBan": "También expulsar a este usuario de la sala",
         "imageUnavailable": "Imagen ya no disponible",
         "copyImageUrl": "Copiar enlace de imagen",
+        "copyLink": "Copiar enlace",
+        "copyLinkChoose": "¿Qué enlace copiar?",
         "openInBrowser": "Abrir en el navegador",
         "saveImage": "Guardar imagen",
         "videoUnavailable": "Video ya no disponible",

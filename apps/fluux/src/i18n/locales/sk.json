@@ -492,6 +492,8 @@
         "moderateAndBan": "Tiež zakázať tohto používateľa v miestnosti",
         "imageUnavailable": "Obrázok už nie je dostupný",
         "copyImageUrl": "Kopírovať odkaz obrázka",
+        "copyLink": "Kopírovať odkaz",
+        "copyLinkChoose": "Ktorý odkaz kopírovať?",
         "openInBrowser": "Otvoriť v prehliadači",
         "saveImage": "Uložiť obrázok",
         "videoUnavailable": "Video už nie je dostupné",

@@ -489,6 +489,8 @@
         "moderateAndBan": "Deze gebruiker ook verbannen uit de kamer",
         "imageUnavailable": "Afbeelding niet meer beschikbaar",
         "copyImageUrl": "Afbeeldingslink kopiëren",
+        "copyLink": "Link kopiëren",
+        "copyLinkChoose": "Welke link kopiëren?",
         "openInBrowser": "Openen in browser",
         "saveImage": "Afbeelding opslaan",
         "videoUnavailable": "Video niet meer beschikbaar",

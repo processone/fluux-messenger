@@ -492,6 +492,8 @@
         "moderateAndBan": "Coisc an t-úsáideoir seo ón seomra freisin",
         "imageUnavailable": "Níl an íomhá ar fáil a thuilleadh",
         "copyImageUrl": "Cóipeáil nasc íomhá",
+        "copyLink": "Cóipeáil nasc",
+        "copyLinkChoose": "Cén nasc a chóipeáil?",
         "openInBrowser": "Oscail sa bhrabhsálaí",
         "saveImage": "Sábháil íomhá",
         "videoUnavailable": "Níl an físeán ar fáil a thuilleadh",
