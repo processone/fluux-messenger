@@ -509,13 +509,16 @@ export function MessageList<T extends BaseMessage>({
     const controller: ActiveMessageListController = {
       hasMessage: (id) => activeVirtualizer ? activeVirtualizer.getIndexForMessageId(id) !== null : false,
       ensureMessageMounted: (id) => { void activeVirtualizer?.ensureMessageMounted(id) },
+      // Reuse the same cache-slice loader as the targetMessageId jump so scrollToMessage can reach a
+      // target that scrolled out of the loaded item set entirely (issue #955: reply-quote / poll).
+      loadAround: onLoadAround,
       scrollToBottom,
     }
     setActiveMessageListController(controller)
     return () => {
       if (getActiveMessageListController() === controller) setActiveMessageListController(null)
     }
-  }, [activeVirtualizer, scrollToBottom])
+  }, [activeVirtualizer, scrollToBottom, onLoadAround])
 
   // Dev-only: expose the full load-earlier trigger (saves anchor + calls onScrollToTop)
   // so tests can fire it without scrolling to 0, which would change findAnchorElement's

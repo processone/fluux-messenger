@@ -297,6 +297,13 @@ export function scrollToMessage(messageId: string): void {
   }
 
   let requestedMount = false
+  let requestedLoad = false
+
+  // A windowed-in row needs a few frames to mount + measure (covers a first-render race and an
+  // in-window re-window). A cache-slice fetch (loadAround) is asynchronous and much slower, so the
+  // retry budget widens to this once a load is requested — otherwise the loop would exhaust and warn
+  // before the slice lands.
+  const LOAD_AROUND_RETRY_FRAMES = 60
 
   function tryScroll(retriesLeft: number) {
     const element = findElement()
@@ -309,19 +316,34 @@ export function scrollToMessage(messageId: string): void {
       return
     }
     // Under virtualization the target row may be OUTSIDE the mounted window, so the DOM query above
-    // finds nothing (retrying alone never helps — the row is never rendered). Ask the active list to
-    // window it in once, then keep retrying across frames while it mounts and measures. No-op /
-    // absent for non-virtualized lists, where every row is already in the DOM.
-    if (!requestedMount) {
-      const controller = getActiveMessageListController()
-      if (controller?.hasMessage(messageId)) {
+    // finds nothing (retrying alone never helps — the row is never rendered). Two cases:
+    //   1. The row IS in the loaded item set (hasMessage) but its virtual row is unmounted — ask the
+    //      active list to window it in once, then keep retrying while it mounts and measures.
+    //   2. The row scrolled so far out that it isn't in the item set at all (issue #955: reply-quote
+    //      and poll jumps) — pull the cache slice around it via loadAround once, widen the retry
+    //      window to cover the async fetch, then case 1 windows it in once hasMessage flips true.
+    // Both are no-ops / absent for non-virtualized lists, where every row is already in the DOM.
+    //
+    // KNOWN EDGE: loadAround anchors on a LOCAL message id (getMessagesAround is keyed by it). A
+    // reply that references an OUT-OF-WINDOW target by its stanza-id / origin-id (XEP-0461/0308) has
+    // no local id to anchor the slice, so case 2 can't fetch it — the load falls through and the
+    // jump warns. In-window stanza/origin targets still resolve via findElement's 3-tier DOM query
+    // above. This covers reply-by-local-id and poll jumps (both carry local ids); a stanza→local map
+    // for out-of-window stanza/origin refs is future work.
+    const controller = getActiveMessageListController()
+    if (controller?.hasMessage(messageId)) {
+      if (!requestedMount) {
         controller.ensureMessageMounted(messageId)
         requestedMount = true
       }
+    } else if (!requestedLoad && controller?.loadAround) {
+      requestedLoad = true
+      void Promise.resolve(controller.loadAround(messageId))
+      retriesLeft = Math.max(retriesLeft, LOAD_AROUND_RETRY_FRAMES)
     }
     if (retriesLeft > 0) {
-      // Element may not be in the DOM yet (first render, or a row still being windowed in). Retry
-      // after the next frame.
+      // Element may not be in the DOM yet (first render, a row still being windowed in, or a cache
+      // slice still loading). Retry after the next frame.
       requestAnimationFrame(() => tryScroll(retriesLeft - 1))
     } else {
       // Debug: message not found in DOM, log to help diagnose issues
@@ -332,7 +354,5 @@ export function scrollToMessage(messageId: string): void {
     }
   }
 
-  // A windowed-in row needs a few frames to mount + measure, so allow more retries than the
-  // original 3 (which only had to cover a first-render race, not a virtualizer re-window).
   tryScroll(8)
 }
