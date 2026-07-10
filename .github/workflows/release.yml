@@ -454,7 +454,10 @@ jobs:
           flatpak-builder --user --force-clean --disable-updates --repo=repo build-dir com.processone.fluux.yaml
 
           # Create single-file bundle
-          flatpak build-bundle repo "fluux-messenger-${VERSION}-linux-${ARCH}.flatpak" com.processone.fluux
+          # --runtime-repo lets `flatpak install <bundle>.flatpak` auto-pull the GNOME
+          # runtime from Flathub (in the user's chosen scope) when it is missing, instead
+          # of failing with "missing org.gnome.Platform//49".
+          flatpak build-bundle --runtime-repo=https://flathub.org/repo/flathub.flatpakrepo repo "fluux-messenger-${VERSION}-linux-${ARCH}.flatpak" com.processone.fluux
 
           # Move to dist
           mv *.flatpak ../dist/
