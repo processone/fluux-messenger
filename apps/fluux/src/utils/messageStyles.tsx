@@ -30,8 +30,10 @@ const URL_REGEX = /(https?:\/\/[^\s<>]+[^\s<>.,;:!?)"'\]])/g
 
 /**
  * Return every http(s) URL found in `text`, in document order, de-duplicated.
- * Shares URL_REGEX with the message renderer so "what is a link" stays consistent
- * between the rendered text and the copy-link affordances.
+ * Shares URL_REGEX with the message renderer so URLs are detected the same way.
+ * Note: this scans the raw body, so a URL inside an inline-code span or code
+ * fence (which the renderer shows as non-clickable text) is still returned here
+ * and remains copyable from the action sheet — an intentional, harmless surplus.
  */
 export function extractLinks(text: string): string[] {
   if (!text) return []
