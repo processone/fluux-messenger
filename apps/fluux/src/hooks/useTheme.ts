@@ -344,6 +344,8 @@ export function useTheme() {
   // Apply transparency preference. Sets data-transparency="full"|"reduced" on <html>;
   // CSS frosts .fluux-glass by default and the [data-transparency="reduced"] rule
   // reverts to a solid surface. 'system' resolves from prefers-reduced-transparency.
+  // The active theme can also force 'reduced' (reduced-wins) via resolveTransparency,
+  // which is why getActiveTheme() is consulted here.
   useEffect(() => {
     const themeWantsReduced = getActiveTheme()?.transparency === 'reduced'
     const resolve = () =>

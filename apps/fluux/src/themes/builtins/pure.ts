@@ -49,8 +49,10 @@ export const pureTheme: ThemeDefinition = {
       '--fluux-accent-h': '174',
       '--fluux-accent-s': '70%',
       '--fluux-accent-l': '52%',
-      // Borders — hairlines carry the depth the flat surfaces don't.
-      '--fluux-border-color': 'rgba(255, 255, 255, 0.14)',
+      // Borders — hairlines carry the depth the flat surfaces don't; on pure
+      // black the chrome has no luminance to lean on, so the hairline is
+      // bumped slightly stronger (matches Aurora's dark default) to read clearly.
+      '--fluux-border-color': 'rgba(255, 255, 255, 0.16)',
       '--fluux-glass-border': 'rgba(255, 255, 255, 0.18)',
       // Pin the chrome surfaces to true black directly so the intent is explicit
       // and independent of ramp-derivation changes.
@@ -77,7 +79,9 @@ export const pureTheme: ThemeDefinition = {
       '--fluux-accent-h': '0',
       '--fluux-accent-s': '0%',
       '--fluux-accent-l': '10%',
-      // Strong dark structure.
+      // Strong dark structure. Alpha raised to 0.22 to clear the light-mode
+      // hairline-visibility contrast guard ("[pure/light] border-color reads
+      // as a hairline", which requires >=1.5:1; 0.16 measured only 1.45:1).
       '--fluux-border-color': 'rgba(0, 0, 0, 0.22)',
       '--fluux-glass-border': 'rgba(0, 0, 0, 0.18)',
       // The .light block sets --fluux-bg-secondary to a tinted value; pin it and
