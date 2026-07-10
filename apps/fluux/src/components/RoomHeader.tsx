@@ -19,6 +19,7 @@ import { InviteToRoomModal } from './InviteToRoomModal'
 import { RoomConfigModal } from './RoomConfigModal'
 import { RoomMembersModal } from './RoomMembersModal'
 import { RoomHatsModal } from './RoomHatsModal'
+import { RoomInfoModal } from './RoomInfoModal'
 import { HeaderSubmenuButton } from './header/HeaderSubmenuButton'
 import { HeaderOverflowKebab, type OverflowEntry } from './header/HeaderOverflowKebab'
 import { buildNotifyGroup, buildManagementGroup, notifyModeOf } from './header/roomHeaderActions'
@@ -68,6 +69,7 @@ export function RoomHeader({
   const [showAvatarModal, setShowAvatarModal] = useState(false)
   const [showMembersModal, setShowMembersModal] = useState(false)
   const [showHatsModal, setShowHatsModal] = useState(false)
+  const [showInfoModal, setShowInfoModal] = useState(false)
   const [avatarError, setAvatarError] = useState<string | null>(null)
   const { dragRegionProps } = useWindowDrag()
   const configModalOpen = useRoomUiStore((s) => s.configModalOpen)
@@ -121,13 +123,20 @@ export function RoomHeader({
         size="header"
       />
 
-      {/* Name and info */}
-      <div className="flex-1 min-w-0">
-        <h2 className="font-semibold text-fluux-text truncate leading-tight">{room.name}</h2>
-        <p className="text-xs text-fluux-muted truncate">
-          {room.subject ? renderTextWithLinks(room.subject) : room.jid}
-        </p>
-      </div>
+      {/* Name and info — opens Room Info modal; tooltip peeks the full topic */}
+      <Tooltip content={room.subject?.trim() || room.jid} position="bottom" className="flex-1 min-w-0">
+        <button
+          type="button"
+          onClick={() => setShowInfoModal(true)}
+          aria-label={`${t('rooms.showRoomInfo', 'Room info')}: ${room.name}`}
+          className="w-full min-w-0 text-start rounded-md px-1 -mx-1 py-0.5 hover:bg-fluux-hover transition-colors"
+        >
+          <span className="block font-semibold text-fluux-text truncate leading-tight">{room.name}</span>
+          <p className="text-xs text-fluux-muted truncate">
+            {room.subject?.trim() ? renderTextWithLinks(room.subject) : room.jid}
+          </p>
+        </button>
+      </Tooltip>
 
       {/* Trailing action cluster — grouped tightly on mobile (gap-1) so the
           kebab and members pill read as one unit; desktop keeps the header's md
@@ -280,6 +289,13 @@ export function RoomHeader({
         <RoomHatsModal
           room={room}
           onClose={() => setShowHatsModal(false)}
+        />
+      )}
+
+      {showInfoModal && (
+        <RoomInfoModal
+          room={room}
+          onClose={() => setShowInfoModal(false)}
         />
       )}
     </header>
