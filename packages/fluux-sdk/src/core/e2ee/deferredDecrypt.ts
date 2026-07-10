@@ -208,6 +208,9 @@ export class DeferredDecryptEngine {
         const conversationId = msg.conversationId
         if (!msg.encryptedPayload || !conversationId) continue
         if (handledChatKeys.has(`${conversationId} ${msg.id}`)) continue
+        // Record so the preview-heal pass below skips a message this pass
+        // already repaired (it heals the preview via refreshLastMessageContent).
+        handledChatKeys.add(`${conversationId} ${msg.id}`)
         const outcome = await this.decryptSingle(
           manager, msg.encryptedPayload, msg.from, conversationId,
         )
@@ -256,6 +259,52 @@ export class DeferredDecryptEngine {
           await this.deps.cache.updateMessage(msg.id, updates)
           stores.chat.refreshLastMessageContent?.(conversationId, msg.id, updates)
         }
+      }
+
+      // --- Orphaned sidebar previews ---
+      // A conversation's persisted preview (`conversationMeta.lastMessage`) can
+      // carry an `encryptedPayload` + "[OpenPGP-encrypted message]" fallback that
+      // NO message-store pass above reaches: the underlying message may have been
+      // evicted from IndexedDB, already decrypted there (so the durable scan skips
+      // it), or set preview-only by a MAM preview refresh that never stored a
+      // message row. The preview itself is then the sole carrier of the
+      // ciphertext, and would stay stuck on the fallback until the conversation is
+      // opened. Re-decrypt straight from the stash and heal the preview in place.
+      // Runs after the store passes so a preview already healed by them (its
+      // `encryptedPayload` cleared) is naturally excluded from the enumeration.
+      for (const { conversationId, lastMessage } of chatBindings.getEncryptedPreviews?.() ?? []) {
+        if (!lastMessage.encryptedPayload) continue
+        // Skip a preview whose message a store pass already repaired — that pass
+        // heals the preview in place (updateMessage / refreshLastMessageContent),
+        // so re-decrypting here would be redundant work.
+        if (handledChatKeys.has(`${conversationId} ${lastMessage.id}`)) continue
+        const outcome = await this.decryptSingle(
+          manager, lastMessage.encryptedPayload, lastMessage.from, conversationId,
+        )
+        if (outcome.kind === 'decrypted') {
+          chatBindings.refreshLastMessageContent?.(conversationId, lastMessage.id, {
+            body: outcome.body,
+            ...(outcome.securityContext && { securityContext: outcome.securityContext }),
+            ...(outcome.attachment && { attachment: outcome.attachment }),
+            encryptedPayload: undefined,
+          })
+          decryptedCount++
+        } else if (outcome.kind === 'unsupported') {
+          chatBindings.refreshLastMessageContent?.(conversationId, lastMessage.id, {
+            encryptedPayload: undefined,
+            unsupportedEncryption: outcome.info,
+          })
+        } else if (outcome.kind === 'rejected') {
+          // A preview is always a real previewable message (bodiless-signal
+          // placeholders are never previewable), so warn with the rejected body.
+          chatBindings.refreshLastMessageContent?.(conversationId, lastMessage.id, {
+            body: MESSAGE_REJECTED_BODY,
+            ...(outcome.securityContext && { securityContext: outcome.securityContext }),
+            encryptedPayload: undefined,
+          })
+        }
+        // 'modification' (reaction/retraction) can't be a preview, and 'pending'
+        // means the key is still locked — leave the stash for a later pass.
       }
 
       if (decryptedCount > 0) {

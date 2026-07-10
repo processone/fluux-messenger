@@ -133,6 +133,81 @@ describe('DeferredDecryptEngine', () => {
     expect(updates).toMatchObject({ body: 'hello', encryptedPayload: undefined })
   })
 
+  it('heals an orphaned encrypted sidebar preview from its own stashed payload', async () => {
+    // The stuck-preview class: the conversation is NOT loaded (empty
+    // getAllStoredMessages) and its message is not pending in the durable cache
+    // (already decrypted there, or evicted) — so neither the in-memory nor the
+    // durable pass reaches it. The only carrier of the ciphertext is the
+    // persisted preview itself, which still holds `encryptedPayload`. Without a
+    // preview-level heal the sidebar stays on "[OpenPGP-encrypted message]"
+    // until the conversation is opened.
+    vi.spyOn(manager, 'decryptArchive').mockResolvedValue({
+      plaintext: new TextEncoder().encode('hello'),
+      senderDevice: { jid: 'bob@example.com', deviceId: 'test' },
+      securityContext: { protocolId: 'dummy-plaintext', trust: 'verified' },
+    })
+
+    const preview: Message = {
+      type: 'chat',
+      id: 'msg-preview',
+      conversationId: 'bob@example.com',
+      from: 'bob@example.com',
+      body: '[OpenPGP-encrypted message]',
+      timestamp: new Date(),
+      isOutgoing: false,
+      encryptedPayload: DUMMY_PAYLOAD_XML,
+    }
+    // No loaded messages, nothing pending in the durable cache — the preview is
+    // the sole carrier of the ciphertext.
+    stores.chat.getAllStoredMessages.mockReturnValue([])
+    stores.chat.getEncryptedPreviews.mockReturnValue([
+      { conversationId: 'bob@example.com', lastMessage: preview },
+    ])
+
+    const count = await engine.retryPending()
+
+    expect(count).toBe(1)
+    expect(stores.chat.refreshLastMessageContent).toHaveBeenCalledTimes(1)
+    const [conversationId, messageId, updates] =
+      stores.chat.refreshLastMessageContent.mock.calls[0]
+    expect(conversationId).toBe('bob@example.com')
+    expect(messageId).toBe('msg-preview')
+    expect(updates).toMatchObject({ body: 'hello', encryptedPayload: undefined })
+  })
+
+  it('does not re-decrypt a preview already handled by the message-store pass', async () => {
+    // When the conversation IS loaded, the in-memory pass decrypts the message
+    // and heals its preview via updateMessage. The preview-level pass must not
+    // double-process it: once the store pass clears `encryptedPayload`,
+    // getEncryptedPreviews no longer returns it.
+    vi.spyOn(manager, 'decryptArchive').mockResolvedValue({
+      plaintext: new TextEncoder().encode('hello'),
+      senderDevice: { jid: 'bob@example.com', deviceId: 'test' },
+      securityContext: { protocolId: 'dummy-plaintext', trust: 'verified' },
+    })
+
+    const pending: Message = {
+      type: 'chat',
+      id: 'msg-loaded',
+      conversationId: 'bob@example.com',
+      from: 'bob@example.com',
+      body: '[OpenPGP-encrypted message]',
+      timestamp: new Date(),
+      isOutgoing: false,
+      encryptedPayload: DUMMY_PAYLOAD_XML,
+    }
+    stores.chat.getAllStoredMessages.mockReturnValue([
+      { id: 'bob@example.com', messages: [pending] },
+    ])
+    // The store pass cleared the stash, so the preview enumeration returns nothing.
+    stores.chat.getEncryptedPreviews.mockReturnValue([])
+
+    await engine.retryPending()
+
+    expect(stores.chat.updateMessage).toHaveBeenCalledTimes(1)
+    expect(stores.chat.refreshLastMessageContent).not.toHaveBeenCalled()
+  })
+
   it('is a no-op when no E2EE manager is available', async () => {
     engine = new DeferredDecryptEngine({
       getManager: () => null,
