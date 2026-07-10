@@ -6,7 +6,7 @@ describe('RoomAvatar', () => {
   test('renders a rounded square, not a circle', () => {
     const { container } = render(<RoomAvatar identifier="team@conference.example.com" name="Team" />)
     const root = container.firstChild as HTMLElement
-    expect(root.className).toContain('rounded-xl')
+    expect(root.className).toContain('rounded-[28%]')
     expect(root.className).not.toContain('rounded-full')
   })
 

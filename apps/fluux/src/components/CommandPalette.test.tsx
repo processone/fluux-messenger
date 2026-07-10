@@ -199,7 +199,8 @@ describe('CommandPalette', () => {
       // "Development" has unreadCount 0 and mentionsCount 0, so its row has no
       // unread badge (badges are rounded-full) — the only shaped element is its avatar.
       const row = screen.getByText('Development').closest('button')!
-      expect(row.querySelector('.rounded-xl')).not.toBeNull()
+      // Room avatars use a proportional rounded-square radius (rounded-[28%]), never a circle.
+      expect(row.querySelector('[class*="rounded-[28%]"]')).not.toBeNull()
       expect(row.querySelector('.rounded-full')).toBeNull()
     })
 
