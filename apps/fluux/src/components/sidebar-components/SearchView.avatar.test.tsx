@@ -67,10 +67,12 @@ vi.mock('@/hooks/useNavigateToTarget', () => ({
   useNavigateToTarget: () => ({ navigateToConversation: vi.fn(), navigateToRoom: vi.fn() }),
 }))
 
-// Expose the avatarUrl the row passes to <Avatar> so the contact case is observable.
+// Expose the avatarUrl and shape the row passes to <Avatar> so both the contact
+// (circle) and room (square, via RoomAvatar) cases are observable. RoomAvatar is
+// left un-mocked so it forwards shape="square" to this mocked Avatar.
 vi.mock('../Avatar', () => ({
-  Avatar: ({ name, avatarUrl }: { name: string; avatarUrl?: string }) => (
-    <div data-testid="avatar" data-avatar-url={avatarUrl ?? ''}>
+  Avatar: ({ name, avatarUrl, shape }: { name: string; avatarUrl?: string; shape?: string }) => (
+    <div data-testid="avatar" data-avatar-url={avatarUrl ?? ''} data-shape={shape ?? 'circle'}>
       {name}
     </div>
   ),
@@ -141,12 +143,15 @@ describe('SearchView avatar reactivity (frozen-derived-value regression guard)',
     mockRosterStore.setState({ contacts: new Map() })
   })
 
-  it('shows the room avatar when it loads AFTER the row first rendered', () => {
+  it('shows the room avatar (as a rounded-square) when it loads AFTER the row first rendered', () => {
     mockSearch = baseSearch([makeResult('1', 'team@conf.example.com', true)])
     const { container } = render(<SearchView />)
 
-    // Before the avatar resolves: letter-avatar fallback, no <img>.
-    expect(container.querySelector('img')).toBeNull()
+    const avatar = () => container.querySelector('[data-testid="avatar"]')
+    // Rooms render through RoomAvatar → square shape, regardless of image state.
+    expect(avatar()?.getAttribute('data-shape')).toBe('square')
+    // Before the avatar resolves: letter-avatar fallback, no image url.
+    expect(avatar()?.getAttribute('data-avatar-url')).toBe('')
 
     // Room avatar resolves (PEP / vCard fetch) after first render.
     act(() => {
@@ -155,9 +160,8 @@ describe('SearchView avatar reactivity (frozen-derived-value regression guard)',
       })
     })
 
-    const img = container.querySelector('img')
-    expect(img).not.toBeNull()
-    expect(img?.getAttribute('src')).toBe('https://example.com/room.png')
+    expect(avatar()?.getAttribute('data-avatar-url')).toBe('https://example.com/room.png')
+    expect(avatar()?.getAttribute('data-shape')).toBe('square')
   })
 
   it('shows the contact avatar when it loads AFTER the row first rendered', () => {
@@ -165,6 +169,8 @@ describe('SearchView avatar reactivity (frozen-derived-value regression guard)',
     const { container } = render(<SearchView />)
 
     const avatar = () => container.querySelector('[data-testid="avatar"]')
+    // Contacts render as circles.
+    expect(avatar()?.getAttribute('data-shape')).toBe('circle')
     // Before the vCard resolves: fallback letter avatar, no image url.
     expect(avatar()?.getAttribute('data-avatar-url')).toBe('')
 

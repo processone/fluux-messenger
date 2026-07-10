@@ -4,6 +4,7 @@ import { useSearch, chatStore, roomStore, getLocalPart } from '@fluux/sdk'
 import { useRoomStore, useRosterStore } from '@fluux/sdk/react'
 import type { SearchResult, SearchResultContext, SearchFilterType } from '@fluux/sdk'
 import { Avatar } from '../Avatar'
+import { RoomAvatar } from '../RoomAvatar'
 import { useNavigateToTarget } from '@/hooks/useNavigateToTarget'
 import { useListKeyboardNav } from '@/hooks'
 import { formatConversationTime } from '@/utils/dateFormat'
@@ -372,23 +373,15 @@ const SearchResultItem = memo(function SearchResultItem({ result, context, isAct
                        : 'text-fluux-muted hover:bg-fluux-hover hover:text-fluux-text'
                  }`}
     >
-      {/* Avatar / icon */}
+      {/* Avatar / icon — rooms are rounded-squares (with a Hash fallback), people are circles. */}
       <div className="flex-shrink-0 mt-0.5">
         {result.isRoom ? (
-          roomAvatar ? (
-            <img
-              src={roomAvatar}
-              alt={result.conversationName}
-              className="size-6 rounded-full object-cover"
-              draggable={false}
-            />
-          ) : (
-            <Avatar
-              identifier={result.conversationId}
-              name={result.conversationName}
-              size="xs"
-            />
-          )
+          <RoomAvatar
+            identifier={result.conversationId}
+            name={result.conversationName}
+            avatarUrl={roomAvatar}
+            size="xs"
+          />
         ) : (
           <Avatar
             identifier={result.conversationId}
