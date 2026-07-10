@@ -680,6 +680,8 @@
         "fontSizeDescription": "Szövegméret módosítása az alkalmazásban",
         "decreaseFontSize": "Betűméret csökkentése",
         "increaseFontSize": "Betűméret növelése",
+        "sound": "Értesítési hangok lejátszása",
+        "soundDescription": "Hang lejátszása, amikor új üzenet vagy névjegykérés érkezik",
         "language": "Nyelv",
         "languageAndRegion": "Nyelv és régió",
         "languageStreamNote": "A szerver nyelvi beállítása a következő bejelentkezésnél lép érvénybe",

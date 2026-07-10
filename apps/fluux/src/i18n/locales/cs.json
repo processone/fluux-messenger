@@ -684,6 +684,8 @@
         "fontSizeDescription": "Upravit velikost textu v aplikaci",
         "decreaseFontSize": "Zmenšit písmo",
         "increaseFontSize": "Zvětšit písmo",
+        "sound": "Přehrávat zvuky oznámení",
+        "soundDescription": "Přehrát zvuk při příchodu nové zprávy nebo žádosti o kontakt",
         "language": "Jazyk",
         "languageAndRegion": "Jazyk a region",
         "languageStreamNote": "Jazyková preference serveru se použije při příštím přihlášení",

@@ -8,7 +8,7 @@ vi.mock('react-i18next', () => ({
 }))
 
 beforeEach(() => {
-  useSettingsStore.setState({ motionPreference: 'system', transparencyMode: 'system', fontSize: 100 })
+  useSettingsStore.setState({ motionPreference: 'system', transparencyMode: 'system', fontSize: 100, soundEnabled: true })
 })
 
 describe('AccessibilitySettings', () => {
@@ -46,5 +46,20 @@ describe('AccessibilitySettings', () => {
     expect(slider).toBeInTheDocument()
     fireEvent.change(slider, { target: { value: '125' } })
     expect(useSettingsStore.getState().fontSize).toBe(125)
+  })
+
+  it('renders the sound toggle reflecting the store', () => {
+    useSettingsStore.setState({ soundEnabled: true })
+    render(<AccessibilitySettings />)
+    expect(screen.getByText('settings.sound')).toBeInTheDocument()
+    const toggle = screen.getByRole('switch', { name: 'settings.sound' })
+    expect(toggle).toHaveAttribute('aria-checked', 'true')
+  })
+
+  it('toggles soundEnabled off when clicked', () => {
+    useSettingsStore.setState({ soundEnabled: true })
+    render(<AccessibilitySettings />)
+    fireEvent.click(screen.getByRole('switch', { name: 'settings.sound' }))
+    expect(useSettingsStore.getState().soundEnabled).toBe(false)
   })
 })

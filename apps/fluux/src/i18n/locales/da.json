@@ -680,6 +680,8 @@
         "fontSizeDescription": "Juster tekststørrelsen i appen",
         "decreaseFontSize": "Formindsk skriftstørrelse",
         "increaseFontSize": "Forstør skriftstørrelse",
+        "sound": "Afspil notifikationslyde",
+        "soundDescription": "Afspil en lyd, når en ny besked eller kontaktanmodning ankommer",
         "language": "Sprog",
         "languageAndRegion": "Sprog og region",
         "languageStreamNote": "Serversprogpræference gælder ved næste login",

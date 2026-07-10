@@ -680,6 +680,8 @@
         "fontSizeDescription": "Pas de tekstgrootte in de app aan",
         "decreaseFontSize": "Lettergrootte verkleinen",
         "increaseFontSize": "Lettergrootte vergroten",
+        "sound": "Meldingsgeluiden afspelen",
+        "soundDescription": "Een geluid afspelen wanneer een nieuw bericht of contactverzoek binnenkomt",
         "language": "Taal",
         "languageAndRegion": "Taal & Regio",
         "languageStreamNote": "Servertaalvoorkeur geldt bij volgende aanmelding",

@@ -684,6 +684,8 @@
         "fontSizeDescription": "Dostosuj rozmiar tekstu w aplikacji",
         "decreaseFontSize": "Zmniejsz rozmiar czcionki",
         "increaseFontSize": "Zwiększ rozmiar czcionki",
+        "sound": "Odtwarzaj dźwięki powiadomień",
+        "soundDescription": "Odtwarzaj dźwięk, gdy nadejdzie nowa wiadomość lub prośba o kontakt",
         "language": "Język",
         "languageAndRegion": "Język i region",
         "languageStreamNote": "Preferencja języka serwera zostanie zastosowana przy następnym logowaniu",

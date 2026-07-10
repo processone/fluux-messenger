@@ -681,6 +681,8 @@
         "fontSizeDescription": "התאם את גודל הטקסט באפליקציה",
         "decreaseFontSize": "הקטן גודל גופן",
         "increaseFontSize": "הגדל גודל גופן",
+        "sound": "השמע צלילי התראה",
+        "soundDescription": "השמע צליל כאשר מגיעה הודעה חדשה או בקשת קשר",
         "language": "שפה",
         "languageAndRegion": "שפה ואזור",
         "languageStreamNote": "העדפת שפת השרת תיכנס לתוקף בהתחברות הבאה",

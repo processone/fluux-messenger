@@ -683,6 +683,8 @@
         "fontSizeDescription": "Ajusta la mida del text a l'aplicació",
         "decreaseFontSize": "Redueix la mida de la lletra",
         "increaseFontSize": "Augmenta la mida de la lletra",
+        "sound": "Reprodueix els sons de notificació",
+        "soundDescription": "Reprodueix un so quan arriba un missatge nou o una sol·licitud de contacte",
         "language": "Idioma",
         "languageAndRegion": "Idioma i regió",
         "languageStreamNote": "La preferència d'idioma del servidor s'aplicarà al proper inici de sessió",

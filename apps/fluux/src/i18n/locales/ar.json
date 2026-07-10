@@ -684,6 +684,8 @@
         "fontSizeDescription": "ضبط حجم النص عبر التطبيق",
         "decreaseFontSize": "تصغير حجم الخط",
         "increaseFontSize": "تكبير حجم الخط",
+        "sound": "تشغيل أصوات الإشعارات",
+        "soundDescription": "تشغيل صوت عند وصول رسالة جديدة أو طلب جهة اتصال",
         "language": "اللغة",
         "languageAndRegion": "اللغة والمنطقة",
         "languageStreamNote": "سيتم تطبيق تفضيل لغة الخادم عند تسجيل الدخول التالي",

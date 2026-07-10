@@ -683,6 +683,8 @@
         "fontSizeDescription": "Ajustar o tamanho do texto no aplicativo",
         "decreaseFontSize": "Diminuir tamanho da fonte",
         "increaseFontSize": "Aumentar tamanho da fonte",
+        "sound": "Reproduzir sons de notificação",
+        "soundDescription": "Reproduzir um som quando chega uma nova mensagem ou pedido de contacto",
         "language": "Idioma",
         "languageAndRegion": "Idioma e região",
         "languageStreamNote": "A preferência de idioma do servidor aplica-se no próximo login",

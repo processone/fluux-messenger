@@ -680,6 +680,8 @@
         "fontSizeDescription": "Juster tekststørrelsen i appen",
         "decreaseFontSize": "Reduser skriftstørrelse",
         "increaseFontSize": "Øk skriftstørrelse",
+        "sound": "Spill av varsellyder",
+        "soundDescription": "Spill av en lyd når en ny melding eller kontaktforespørsel kommer",
         "language": "Språk",
         "languageAndRegion": "Språk og region",
         "languageStreamNote": "Serverspråkpreferanse gjelder ved neste innlogging",

@@ -682,6 +682,8 @@
         "fontSizeDescription": "Koreguoti teksto dydį programėlėje",
         "decreaseFontSize": "Sumažinti šrifto dydį",
         "increaseFontSize": "Padidinti šrifto dydį",
+        "sound": "Groti pranešimų garsus",
+        "soundDescription": "Groti garsą, kai gaunama nauja žinutė ar kontakto užklausa",
         "language": "Kalba",
         "languageAndRegion": "Kalba ir regionas",
         "languageStreamNote": "Serverio kalbos nuostata įsigalios kitą kartą prisijungus",

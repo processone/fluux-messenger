@@ -860,6 +860,8 @@
         "fontSizeDescription": "Adjust the size of text across the app",
         "decreaseFontSize": "Decrease font size",
         "increaseFontSize": "Increase font size",
+        "sound": "Play notification sounds",
+        "soundDescription": "Play a sound when a new message or contact request arrives",
         "language": "Language",
         "languageAndRegion": "Language & Region",
         "languageStreamNote": "Server language preference applies on next login",

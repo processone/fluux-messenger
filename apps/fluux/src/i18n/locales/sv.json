@@ -680,6 +680,8 @@
         "fontSizeDescription": "Justera textstorleken i appen",
         "decreaseFontSize": "Minska textstorlek",
         "increaseFontSize": "Öka textstorlek",
+        "sound": "Spela upp aviseringsljud",
+        "soundDescription": "Spela upp ett ljud när ett nytt meddelande eller en kontaktförfrågan kommer",
         "language": "Språk",
         "languageAndRegion": "Språk & region",
         "languageStreamNote": "Serverspråkpreferens gäller vid nästa inloggning",

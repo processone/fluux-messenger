@@ -680,6 +680,8 @@
         "fontSizeDescription": "Säädä tekstin kokoa sovelluksessa",
         "decreaseFontSize": "Pienennä kirjasinkokoa",
         "increaseFontSize": "Suurenna kirjasinkokoa",
+        "sound": "Toista ilmoitusäänet",
+        "soundDescription": "Toista ääni, kun uusi viesti tai yhteystietopyyntö saapuu",
         "language": "Kieli",
         "languageAndRegion": "Kieli ja alue",
         "languageStreamNote": "Palvelimen kieliasetus otetaan käyttöön seuraavassa kirjautumisessa",

@@ -683,6 +683,8 @@
         "fontSizeDescription": "Ajustați dimensiunea textului în aplicație",
         "decreaseFontSize": "Micșorează dimensiunea fontului",
         "increaseFontSize": "Mărește dimensiunea fontului",
+        "sound": "Redă sunetele de notificare",
+        "soundDescription": "Redă un sunet când sosește un mesaj nou sau o cerere de contact",
         "language": "Limbă",
         "languageAndRegion": "Limbă și regiune",
         "languageStreamNote": "Preferința de limbă a serverului se aplică la următoarea conectare",

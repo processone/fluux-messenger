@@ -684,6 +684,8 @@
         "fontSizeDescription": "Prilagodite velikost besedila v aplikaciji",
         "decreaseFontSize": "Zmanjšaj velikost pisave",
         "increaseFontSize": "Povečaj velikost pisave",
+        "sound": "Predvajaj zvoke obvestil",
+        "soundDescription": "Predvajaj zvok, ko prispe novo sporočilo ali prošnja za stik",
         "language": "Jezik",
         "languageAndRegion": "Jezik in regija",
         "languageStreamNote": "Nastavitev jezika strežnika bo uporabljena ob naslednji prijavi",

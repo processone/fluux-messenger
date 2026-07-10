@@ -682,6 +682,8 @@
         "fontSizeDescription": "Pielāgojiet teksta lielumu lietotnē",
         "decreaseFontSize": "Samazināt fonta lielumu",
         "increaseFontSize": "Palielināt fonta lielumu",
+        "sound": "Atskaņot paziņojumu skaņas",
+        "soundDescription": "Atskaņot skaņu, kad pienāk jauns ziņojums vai kontaktpieprasījums",
         "language": "Valoda",
         "languageAndRegion": "Valoda un reģions",
         "languageStreamNote": "Servera valodas preference stājas spēkā nākamajā pieteikšanās reizē",

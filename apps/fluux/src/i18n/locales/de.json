@@ -682,6 +682,8 @@
         "fontSizeDescription": "Textgröße in der App anpassen",
         "decreaseFontSize": "Schriftgröße verkleinern",
         "increaseFontSize": "Schriftgröße vergrößern",
+        "sound": "Benachrichtigungstöne abspielen",
+        "soundDescription": "Einen Ton abspielen, wenn eine neue Nachricht oder Kontaktanfrage eintrifft",
         "language": "Sprache",
         "languageAndRegion": "Sprache & Region",
         "languageStreamNote": "Server-Sprachpräferenz gilt ab nächster Anmeldung",

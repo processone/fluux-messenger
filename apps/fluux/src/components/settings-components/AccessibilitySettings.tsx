@@ -2,6 +2,7 @@ import { useTranslation } from 'react-i18next'
 import { Monitor, Sparkles, CircleSlash } from 'lucide-react'
 import { useSettingsStore, type MotionPreference, type TransparencyMode } from '@/stores/settingsStore'
 import { SettingsSection } from '@/components/ui/SettingsSection'
+import { Toggle } from '@/components/ui/Toggle'
 
 const motionOptions: { value: MotionPreference; labelKey: string; icon: typeof Monitor; descriptionKey: string }[] = [
   { value: 'full', labelKey: 'settings.motionFull', icon: Sparkles, descriptionKey: 'settings.motionFullDescription' },
@@ -27,11 +28,62 @@ export function AccessibilitySettings() {
   const setTransparencyMode = useSettingsStore((s) => s.setTransparencyMode)
   const fontSize = useSettingsStore((s) => s.fontSize)
   const setFontSize = useSettingsStore((s) => s.setFontSize)
+  const soundEnabled = useSettingsStore((s) => s.soundEnabled)
+  const setSoundEnabled = useSettingsStore((s) => s.setSoundEnabled)
 
   return (
     <section className="w-full max-w-md">
       <SettingsSection title={t('settings.accessibility')}>
         <div className="space-y-6">
+        {/* Sound */}
+        <div className="space-y-3">
+          <div className="flex items-center justify-between gap-4">
+            <label className="text-sm font-medium text-fluux-text">{t('settings.sound')}</label>
+            <Toggle
+              checked={soundEnabled}
+              onChange={setSoundEnabled}
+              aria-label={t('settings.sound')}
+            />
+          </div>
+          <p className="text-xs text-fluux-muted">
+            {t('settings.soundDescription')}
+          </p>
+        </div>
+
+        {/* Character size */}
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <label className="text-sm font-medium text-fluux-text">{t('settings.fontSize')}</label>
+            <span className="text-sm text-fluux-muted">{fontSize}%</span>
+          </div>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => setFontSize(fontSize - FONT_SIZE_STEP)}
+              className="text-xs text-fluux-muted shrink-0 cursor-pointer hover:text-fluux-text transition-colors"
+              aria-label={t('settings.decreaseFontSize')}
+            >A</button>
+            <input
+              type="range"
+              min={FONT_SIZE_MIN}
+              max={FONT_SIZE_MAX}
+              step={FONT_SIZE_STEP}
+              value={fontSize}
+              onChange={(e) => setFontSize(Number(e.target.value))}
+              className="w-full accent-fluux-brand"
+            />
+            <button
+              type="button"
+              onClick={() => setFontSize(fontSize + FONT_SIZE_STEP)}
+              className="text-base font-medium text-fluux-muted shrink-0 cursor-pointer hover:text-fluux-text transition-colors"
+              aria-label={t('settings.increaseFontSize')}
+            >A</button>
+          </div>
+          <p className="text-xs text-fluux-muted">
+            {t('settings.fontSizeDescription')}
+          </p>
+        </div>
+
         {/* Animation */}
         <div className="space-y-3">
           <label className="text-sm font-medium text-fluux-text">{t('settings.motion')}</label>
@@ -93,40 +145,6 @@ export function AccessibilitySettings() {
           </div>
           <p className="text-xs text-fluux-muted mt-2">
             {t(transparencyOptions.find(o => o.value === transparencyMode)?.descriptionKey || '')}
-          </p>
-        </div>
-
-        {/* Character size */}
-        <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <label className="text-sm font-medium text-fluux-text">{t('settings.fontSize')}</label>
-            <span className="text-sm text-fluux-muted">{fontSize}%</span>
-          </div>
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={() => setFontSize(fontSize - FONT_SIZE_STEP)}
-              className="text-xs text-fluux-muted shrink-0 cursor-pointer hover:text-fluux-text transition-colors"
-              aria-label={t('settings.decreaseFontSize')}
-            >A</button>
-            <input
-              type="range"
-              min={FONT_SIZE_MIN}
-              max={FONT_SIZE_MAX}
-              step={FONT_SIZE_STEP}
-              value={fontSize}
-              onChange={(e) => setFontSize(Number(e.target.value))}
-              className="w-full accent-fluux-brand"
-            />
-            <button
-              type="button"
-              onClick={() => setFontSize(fontSize + FONT_SIZE_STEP)}
-              className="text-base font-medium text-fluux-muted shrink-0 cursor-pointer hover:text-fluux-text transition-colors"
-              aria-label={t('settings.increaseFontSize')}
-            >A</button>
-          </div>
-          <p className="text-xs text-fluux-muted">
-            {t('settings.fontSizeDescription')}
           </p>
         </div>
         </div>

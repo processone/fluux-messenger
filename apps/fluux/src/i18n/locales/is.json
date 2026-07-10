@@ -680,6 +680,8 @@
         "fontSizeDescription": "Stilla texastærð í appinu",
         "decreaseFontSize": "Minnka leturstærð",
         "increaseFontSize": "Stækka leturstærð",
+        "sound": "Spila tilkynningahljóð",
+        "soundDescription": "Spila hljóð þegar ný skilaboð eða tengiliðabeiðni berst",
         "language": "Tungumál",
         "languageAndRegion": "Tungumál og svæði",
         "languageStreamNote": "Tungumálaval þjóns tekur gildi við næstu innskráningu",

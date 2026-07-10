@@ -683,6 +683,8 @@
         "fontSizeDescription": "Athraigh méid an téacs san aip",
         "decreaseFontSize": "Laghdaigh méid an chló",
         "increaseFontSize": "Méadaigh méid an chló",
+        "sound": "Seinn fuaimeanna fógra",
+        "soundDescription": "Seinn fuaim nuair a thagann teachtaireacht nua nó iarratas teagmhála",
         "language": "Teanga",
         "languageAndRegion": "Teanga & Réigiún",
         "languageStreamNote": "Cuirtear rogha teanga an fhreastalaí i bhfeidhm ar an gcéad logáil isteach eile",

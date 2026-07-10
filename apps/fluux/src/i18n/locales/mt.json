@@ -685,6 +685,8 @@
         "fontSizeDescription": "Aġġusta d-daqs tat-test fl-app",
         "decreaseFontSize": "Naqqas id-daqs tal-font",
         "increaseFontSize": "Kabbar id-daqs tal-font",
+        "sound": "Daqqa ħsejjes ta' notifika",
+        "soundDescription": "Daqqa ħoss meta jasal messaġġ ġdid jew talba għal kuntatt",
         "language": "Lingwa",
         "languageAndRegion": "Lingwa u Reġjun",
         "languageStreamNote": "Il-preferenza tal-lingwa tas-server tieħu effett fil-login li jmiss",

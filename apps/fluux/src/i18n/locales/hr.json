@@ -681,6 +681,8 @@
         "fontSizeDescription": "Prilagodite veličinu teksta u aplikaciji",
         "decreaseFontSize": "Smanji veličinu fonta",
         "increaseFontSize": "Povećaj veličinu fonta",
+        "sound": "Reproduciraj zvukove obavijesti",
+        "soundDescription": "Reproduciraj zvuk kada stigne nova poruka ili zahtjev za kontakt",
         "language": "Jezik",
         "languageAndRegion": "Jezik i regija",
         "languageStreamNote": "Postavka jezika poslužitelja primjenjuje se pri sljedećoj prijavi",

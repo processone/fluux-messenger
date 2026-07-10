@@ -711,6 +711,8 @@
         "fontSizeDescription": "Ajuster la taille du texte dans l'application",
         "decreaseFontSize": "Réduire la taille de la police",
         "increaseFontSize": "Augmenter la taille de la police",
+        "sound": "Jouer les sons de notification",
+        "soundDescription": "Jouer un son à la réception d'un nouveau message ou d'une demande de contact",
         "language": "Langue",
         "languageAndRegion": "Langue et région",
         "languageStreamNote": "La préférence de langue serveur s'applique à la prochaine connexion",

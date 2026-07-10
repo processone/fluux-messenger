@@ -680,6 +680,8 @@
         "fontSizeDescription": "调整应用中的文本大小",
         "decreaseFontSize": "减小字体大小",
         "increaseFontSize": "增大字体大小",
+        "sound": "播放通知声音",
+        "soundDescription": "收到新消息或联系人请求时播放声音",
         "language": "语言",
         "languageAndRegion": "语言和区域",
         "languageStreamNote": "下次登录时应用服务器语言首选项",

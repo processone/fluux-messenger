@@ -682,6 +682,8 @@
         "fontSizeDescription": "Kohanda teksti suurust rakenduses",
         "decreaseFontSize": "Vähenda kirja suurust",
         "increaseFontSize": "Suurenda kirja suurust",
+        "sound": "Esita teavitushelid",
+        "soundDescription": "Esita heli, kui saabub uus sõnum või kontaktitaotlus",
         "language": "Keel",
         "languageAndRegion": "Keel ja piirkond",
         "languageStreamNote": "Serveri keele eelistus rakendub järgmisel sisselogimisel",
