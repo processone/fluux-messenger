@@ -67,4 +67,4 @@ The package requires these Arch packages:
 
 - `webkit2gtk-4.1` - WebView for rendering
 - `gtk3` - GTK3 toolkit
-- `libappindicator-gtk3` - System tray support
+- `libayatana-appindicator` - System tray support
