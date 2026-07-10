@@ -54,6 +54,14 @@ export interface ThemeDefinition {
     dark?: Record<string, string>
     light?: Record<string, string>
   }
+  /**
+   * Optional display-optimisation hint. When set to 'reduced', selecting this
+   * theme forces the app into reduced-transparency mode (glass surfaces render
+   * solid) regardless of the user's transparency setting — used by "Pure" so its
+   * true-black / flat-white surfaces are not broken by frosted panels. A theme
+   * can only tighten transparency, never loosen it. See resolveTransparency().
+   */
+  transparency?: 'reduced'
   /** Preview swatch colors for the theme picker UI (3-5 hex values) */
   swatches?: {
     dark?: string[]
