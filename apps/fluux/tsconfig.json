@@ -7,7 +7,9 @@
       "@fluux/sdk": ["../../packages/fluux-sdk/dist/index.d.ts"],
       "@fluux/sdk/react": ["../../packages/fluux-sdk/dist/react/index.d.ts"],
       "@fluux/sdk/core": ["../../packages/fluux-sdk/dist/core/index.d.ts"],
-      "@fluux/sdk/stores": ["../../packages/fluux-sdk/dist/stores/index.d.ts"]
+      "@fluux/sdk/stores": ["../../packages/fluux-sdk/dist/stores/index.d.ts"],
+      "@fluux/sdk/cache": ["../../packages/fluux-sdk/dist/cache/index.d.ts"],
+      "@fluux/sdk/demo": ["../../packages/fluux-sdk/dist/demo/index.d.ts"]
     }
   },
   "include": ["src"]
