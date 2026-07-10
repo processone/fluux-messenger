@@ -101,7 +101,7 @@ export function RoomHeader({
   })
 
   return (
-    <header className="@container relative aurora-horizon h-14 px-4 flex items-center border-b border-fluux-bg shadow-sm gap-3" {...dragRegionProps}>
+    <header className="@container relative aurora-horizon h-14 px-4 flex items-center border-b border-fluux-bg shadow-sm gap-2 md:gap-3" {...dragRegionProps}>
       {/* Back button - mobile only */}
       {onBack && (
         <button
@@ -129,92 +129,97 @@ export function RoomHeader({
         </p>
       </div>
 
-      {/* Notification settings — inline copy (wide tier) */}
-      <div className={inlineClass('wide')}>
-        <HeaderSubmenuButton
-          ariaLabel={t('rooms.notificationSettings')}
-          tooltip={t('rooms.notificationSettings')}
-          icon={NotifyIcon}
-          active={mode !== 'mentions'}
-          group={notifyGroup}
-        />
-      </div>
-
-      {/* Invite member — inline copy (wide tier) */}
-      <div className={inlineClass('wide')}>
-        <Tooltip content={t('rooms.inviteMember')} position="bottom">
-          <button
-            onClick={openInvite}
-            className="p-1.5 rounded-lg hover:bg-fluux-hover text-fluux-muted hover:text-fluux-text transition-colors tap-target"
-            aria-label={t('rooms.inviteMember')}
-          >
-            <UserPlus className="size-4" />
-          </button>
-        </Tooltip>
-      </div>
-
-      {/* Room management — inline copy (wide tier, owners/admins only) */}
-      {managementGroup && (
+      {/* Trailing action cluster — grouped tightly on mobile (gap-1) so the
+          kebab and members pill read as one unit; desktop keeps the header's md
+          gap so the wide-tier controls are spaced as before. */}
+      <div className="flex items-center gap-1 md:gap-3">
+        {/* Notification settings — inline copy (wide tier) */}
         <div className={inlineClass('wide')}>
           <HeaderSubmenuButton
-            ariaLabel={t('rooms.manageRoom')}
-            tooltip={t('rooms.manageRoom')}
-            icon={Settings}
-            group={managementGroup}
+            ariaLabel={t('rooms.notificationSettings')}
+            tooltip={t('rooms.notificationSettings')}
+            icon={NotifyIcon}
+            active={mode !== 'mentions'}
+            group={notifyGroup}
           />
         </div>
-      )}
 
-      {/* Search — inline copy (search tier) */}
-      {onSearchInConversation && (
-        <div className={inlineClass('search')}>
-          <Tooltip content={t('chat.searchInConversation', 'Search in conversation')} position="bottom">
+        {/* Invite member — inline copy (wide tier) */}
+        <div className={inlineClass('wide')}>
+          <Tooltip content={t('rooms.inviteMember')} position="bottom">
             <button
-              onClick={onSearchInConversation}
-              className="p-1.5 rounded hover:bg-fluux-hover text-fluux-muted hover:text-fluux-text transition-colors tap-target"
-              aria-label={t('chat.searchInConversation', 'Search in conversation')}
+              onClick={openInvite}
+              className="p-1.5 rounded-lg hover:bg-fluux-hover text-fluux-muted hover:text-fluux-text transition-colors tap-target"
+              aria-label={t('rooms.inviteMember')}
             >
-              <Search className="size-4" />
+              <UserPlus className="size-4" />
             </button>
           </Tooltip>
         </div>
-      )}
 
-      {/* Overflow kebab — holds the collapsed copies. Every room entry also has
-          an inline copy, so once the header is wide enough to show them all the
-          kebab is redundant: KEBAB_TRIGGER_CLASS hides it at the wide tier. */}
-      <div className={KEBAB_TRIGGER_CLASS}>
-        <HeaderOverflowKebab
-          ariaLabel={t('rooms.roomActions', 'Room actions')}
-          entries={[
-            ...(onSearchInConversation
-              ? [{ kind: 'action', key: 'search', label: t('chat.searchInConversation', 'Search in conversation'), icon: Search, onSelect: onSearchInConversation, kebabClassName: kebabClass('search') } as OverflowEntry]
-              : []),
-            { kind: 'action', key: 'invite', label: t('rooms.inviteMember'), icon: UserPlus, onSelect: openInvite, kebabClassName: kebabClass('wide') },
-            { kind: 'submenu', key: 'notify', label: t('rooms.notificationSettings'), icon: NotifyIcon, group: notifyGroup, kebabClassName: kebabClass('wide') },
-            ...(managementGroup
-              ? [{ kind: 'submenu', key: 'manage', label: t('rooms.manageRoom'), icon: Settings, group: managementGroup, kebabClassName: kebabClass('wide') } as OverflowEntry]
-              : []),
-          ]}
-        />
+        {/* Room management — inline copy (wide tier, owners/admins only) */}
+        {managementGroup && (
+          <div className={inlineClass('wide')}>
+            <HeaderSubmenuButton
+              ariaLabel={t('rooms.manageRoom')}
+              tooltip={t('rooms.manageRoom')}
+              icon={Settings}
+              group={managementGroup}
+            />
+          </div>
+        )}
+
+        {/* Search — inline copy (search tier) */}
+        {onSearchInConversation && (
+          <div className={inlineClass('search')}>
+            <Tooltip content={t('chat.searchInConversation', 'Search in conversation')} position="bottom">
+              <button
+                onClick={onSearchInConversation}
+                className="p-1.5 rounded hover:bg-fluux-hover text-fluux-muted hover:text-fluux-text transition-colors tap-target"
+                aria-label={t('chat.searchInConversation', 'Search in conversation')}
+              >
+                <Search className="size-4" />
+              </button>
+            </Tooltip>
+          </div>
+        )}
+
+        {/* Overflow kebab — holds the collapsed copies. Every room entry also has
+            an inline copy, so once the header is wide enough to show them all the
+            kebab is redundant: KEBAB_TRIGGER_CLASS hides it at the wide tier. */}
+        <div className={KEBAB_TRIGGER_CLASS}>
+          <HeaderOverflowKebab
+            ariaLabel={t('rooms.roomActions', 'Room actions')}
+            entries={[
+              ...(onSearchInConversation
+                ? [{ kind: 'action', key: 'search', label: t('chat.searchInConversation', 'Search in conversation'), icon: Search, onSelect: onSearchInConversation, kebabClassName: kebabClass('search') } as OverflowEntry]
+                : []),
+              { kind: 'action', key: 'invite', label: t('rooms.inviteMember'), icon: UserPlus, onSelect: openInvite, kebabClassName: kebabClass('wide') },
+              { kind: 'submenu', key: 'notify', label: t('rooms.notificationSettings'), icon: NotifyIcon, group: notifyGroup, kebabClassName: kebabClass('wide') },
+              ...(managementGroup
+                ? [{ kind: 'submenu', key: 'manage', label: t('rooms.manageRoom'), icon: Settings, group: managementGroup, kebabClassName: kebabClass('wide') } as OverflowEntry]
+                : []),
+            ]}
+          />
+        </div>
+
+        {/* Occupant toggle button */}
+        <Tooltip content={showOccupants ? t('rooms.hideMembers') : t('rooms.showMembers')} position="bottom">
+          <button
+            onClick={onToggleOccupants}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-colors tap-target
+                       ${showOccupants
+                         ? 'bg-fluux-brand/20 text-fluux-brand'
+                         : 'hover:bg-fluux-hover text-fluux-muted hover:text-fluux-text'
+                       }`}
+            aria-label={showOccupants ? t('rooms.hideMembers') : t('rooms.showMembers')}
+          >
+            <Users className="size-4" />
+            <span className="text-sm font-medium">{uniqueOccupantCount}</span>
+            <ChevronRight className={`size-4 transition-transform ${showOccupants ? 'rotate-180' : ''}`} />
+          </button>
+        </Tooltip>
       </div>
-
-      {/* Occupant toggle button */}
-      <Tooltip content={showOccupants ? t('rooms.hideMembers') : t('rooms.showMembers')} position="bottom">
-        <button
-          onClick={onToggleOccupants}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-colors tap-target
-                     ${showOccupants
-                       ? 'bg-fluux-brand/20 text-fluux-brand'
-                       : 'hover:bg-fluux-hover text-fluux-muted hover:text-fluux-text'
-                     }`}
-          aria-label={showOccupants ? t('rooms.hideMembers') : t('rooms.showMembers')}
-        >
-          <Users className="size-4" />
-          <span className="text-sm font-medium">{uniqueOccupantCount}</span>
-          <ChevronRight className={`size-4 transition-transform ${showOccupants ? 'rotate-180' : ''}`} />
-        </button>
-      </Tooltip>
 
       {/* Room avatar error message */}
       {avatarError && (

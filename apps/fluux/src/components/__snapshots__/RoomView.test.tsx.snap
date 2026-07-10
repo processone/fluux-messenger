@@ -11,7 +11,7 @@ exports[`RoomView > Snapshots > should match snapshot for non-joined room 1`] = 
       class="flex flex-col flex-1 min-w-0"
     >
       <header
-        class="@container relative aurora-horizon h-14 px-4 flex items-center border-b border-fluux-bg shadow-sm gap-3"
+        class="@container relative aurora-horizon h-14 px-4 flex items-center border-b border-fluux-bg shadow-sm gap-2 md:gap-3"
       >
         <div
           data-name="Test Room"
@@ -32,97 +32,101 @@ exports[`RoomView > Snapshots > should match snapshot for non-joined room 1`] = 
           </p>
         </div>
         <div
-          class="hidden @[600px]:flex"
+          class="flex items-center gap-1 md:gap-3"
         >
           <div
-            class="relative"
+            class="hidden @[600px]:flex"
+          >
+            <div
+              class="relative"
+            >
+              <div
+                class="inline-flex"
+              >
+                <button
+                  aria-expanded="false"
+                  aria-haspopup="menu"
+                  aria-label="rooms.notificationSettings"
+                  class="flex items-center gap-1 px-2 py-1.5 rounded-lg transition-colors tap-target hover:bg-fluux-hover text-fluux-muted hover:text-fluux-text"
+                >
+                  <span
+                    data-testid="icon-bell-off"
+                  >
+                    BellOff
+                  </span>
+                  <span
+                    data-testid="icon-chevron-down"
+                  >
+                    ChevronDown
+                  </span>
+                </button>
+              </div>
+            </div>
+          </div>
+          <div
+            class="hidden @[600px]:flex"
           >
             <div
               class="inline-flex"
             >
               <button
-                aria-expanded="false"
-                aria-haspopup="menu"
-                aria-label="rooms.notificationSettings"
-                class="flex items-center gap-1 px-2 py-1.5 rounded-lg transition-colors tap-target hover:bg-fluux-hover text-fluux-muted hover:text-fluux-text"
+                aria-label="rooms.inviteMember"
+                class="p-1.5 rounded-lg hover:bg-fluux-hover text-fluux-muted hover:text-fluux-text transition-colors tap-target"
               >
                 <span
-                  data-testid="icon-bell-off"
+                  data-testid="icon-user-plus"
                 >
-                  BellOff
-                </span>
-                <span
-                  data-testid="icon-chevron-down"
-                >
-                  ChevronDown
+                  UserPlus
                 </span>
               </button>
             </div>
           </div>
-        </div>
-        <div
-          class="hidden @[600px]:flex"
-        >
+          <div
+            class="flex @[600px]:hidden"
+          >
+            <div
+              class="relative"
+            >
+              <button
+                aria-expanded="false"
+                aria-haspopup="menu"
+                aria-label="rooms.roomActions"
+                class="p-1.5 rounded hover:bg-fluux-hover text-fluux-muted hover:text-fluux-text transition-colors tap-target"
+                type="button"
+              >
+                <span
+                  data-testid="icon-more-vertical"
+                >
+                  MoreVertical
+                </span>
+              </button>
+            </div>
+          </div>
           <div
             class="inline-flex"
           >
             <button
-              aria-label="rooms.inviteMember"
-              class="p-1.5 rounded-lg hover:bg-fluux-hover text-fluux-muted hover:text-fluux-text transition-colors tap-target"
+              aria-label="rooms.showMembers"
+              class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-colors tap-target
+                       hover:bg-fluux-hover text-fluux-muted hover:text-fluux-text"
             >
               <span
-                data-testid="icon-user-plus"
+                data-testid="icon-users"
               >
-                UserPlus
+                Users
+              </span>
+              <span
+                class="text-sm font-medium"
+              >
+                0
+              </span>
+              <span
+                data-testid="icon-chevron-right"
+              >
+                ChevronRight
               </span>
             </button>
           </div>
-        </div>
-        <div
-          class="flex @[600px]:hidden"
-        >
-          <div
-            class="relative"
-          >
-            <button
-              aria-expanded="false"
-              aria-haspopup="menu"
-              aria-label="rooms.roomActions"
-              class="p-1.5 rounded hover:bg-fluux-hover text-fluux-muted hover:text-fluux-text transition-colors tap-target"
-              type="button"
-            >
-              <span
-                data-testid="icon-more-vertical"
-              >
-                MoreVertical
-              </span>
-            </button>
-          </div>
-        </div>
-        <div
-          class="inline-flex"
-        >
-          <button
-            aria-label="rooms.showMembers"
-            class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-colors tap-target
-                     hover:bg-fluux-hover text-fluux-muted hover:text-fluux-text"
-          >
-            <span
-              data-testid="icon-users"
-            >
-              Users
-            </span>
-            <span
-              class="text-sm font-medium"
-            >
-              0
-            </span>
-            <span
-              data-testid="icon-chevron-right"
-            >
-              ChevronRight
-            </span>
-          </button>
         </div>
       </header>
       <div

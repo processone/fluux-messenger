@@ -60,13 +60,13 @@ internal gap, so they read as one unit and their glyphs sit close together:
   must be part of the cluster or grouping the kebab alone would leave it
   stranded exactly as the shield is today.
 
-`gap-1` (4px) — the "slight breathing room" option: grouped as a unit but the
-two icons stay individually legible. The 44px tap boxes still guarantee the
-touch-target separation underneath.
-
-The cluster gap is uniform (not media-gated): grouping trailing icons tightly is
-a correct pattern at every width, and on desktop it is a subtle improvement (the
-icons read as a group rather than three evenly-spread controls).
+Cluster gap is `gap-1 md:gap-3` — 4px on mobile ("slight breathing room":
+grouped as a unit but the icons stay individually legible; the 44px tap boxes
+still guarantee touch separation underneath), and 12px on desktop so the trailing
+controls keep their current `md:` header-gap spacing. This keeps desktop
+**visually identical** (important for RoomHeader, which shows five trailing
+controls at the wide tier) while delivering the grouping only where it is needed,
+on small screens.
 
 ### 2. Tighten the outer rhythm on mobile only
 
