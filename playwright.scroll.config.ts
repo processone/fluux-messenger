@@ -3,7 +3,10 @@ import { defineConfig, devices } from '@playwright/test'
 export default defineConfig({
   testDir: './scripts',
   testMatch: 'scroll-invariants.ts',
-  timeout: 60_000,
+  // Per-test budget. Generous because WebKit on a busy CI runner can take 45s+ just to boot the
+  // demo bundle + run the stress seeding before the test body starts; 60s left no margin and the
+  // slow-boot case failed the mount wait outright instead of proceeding.
+  timeout: 120_000,
   fullyParallel: false,
   // CI: retry twice to absorb timing noise on slower runners (the suite gates on async
   // measurement settling). Locally: no retries, so flakes surface immediately.
