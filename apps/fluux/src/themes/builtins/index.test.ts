@@ -21,4 +21,18 @@ describe('builtin themes', () => {
     expect(builtinThemes[0].id).toBe('fluux')
     expect(builtinThemes[1].id).toBe('indigo')
   })
+
+  it('registers the Pure theme optimized for OLED/e-ink', () => {
+    const pure = getBuiltinTheme('pure')
+    expect(pure).toBeDefined()
+    expect(pure?.name).toBe('Pure')
+    // Forces solid glass so true-black / flat-white is not broken by frost.
+    expect(pure?.transparency).toBe('reduced')
+    // OLED: the main content + sidebar chrome are true black.
+    expect(pure?.variables.dark?.['--fluux-chat-bg']).toBe('#000000')
+    expect(pure?.variables.dark?.['--fluux-sidebar-bg']).toBe('#000000')
+    // e-ink: the main content + sidebar chrome are flat white.
+    expect(pure?.variables.light?.['--fluux-chat-bg']).toBe('#ffffff')
+    expect(pure?.variables.light?.['--fluux-sidebar-bg']).toBe('#ffffff')
+  })
 })

@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react'
 import { useSettingsStore, type ThemeMode } from '@/stores/settingsStore'
 import { useThemeStore } from '@/stores/themeStore'
 import type { AccentPreset } from '@/themes/types'
+import { resolveTransparency } from '@/themes/transparency'
 import { isLinux } from '@/utils/tauri'
 
 const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
@@ -343,19 +344,23 @@ export function useTheme() {
   // Apply transparency preference. Sets data-transparency="full"|"reduced" on <html>;
   // CSS frosts .fluux-glass by default and the [data-transparency="reduced"] rule
   // reverts to a solid surface. 'system' resolves from prefers-reduced-transparency.
+  // The active theme can also force 'reduced' (reduced-wins) via resolveTransparency,
+  // which is why getActiveTheme() is consulted here.
   useEffect(() => {
-    const resolve = () => {
-      if (transparencyMode === 'reduced') return 'reduced'
-      if (transparencyMode === 'full') return 'full'
-      return window.matchMedia('(prefers-reduced-transparency: reduce)').matches ? 'reduced' : 'full'
-    }
+    const themeWantsReduced = getActiveTheme()?.transparency === 'reduced'
+    const resolve = () =>
+      resolveTransparency({
+        themeWantsReduced,
+        transparencyMode,
+        systemReducedMatches: window.matchMedia('(prefers-reduced-transparency: reduce)').matches,
+      })
     document.documentElement.setAttribute('data-transparency', resolve())
     if (transparencyMode !== 'system') return
     const mq = window.matchMedia('(prefers-reduced-transparency: reduce)')
     const on = () => document.documentElement.setAttribute('data-transparency', resolve())
     mq.addEventListener('change', on)
     return () => mq.removeEventListener('change', on)
-  }, [transparencyMode])
+  }, [transparencyMode, activeThemeId, getActiveTheme])
 
   // Sync CSS snippets
   useEffect(() => {
