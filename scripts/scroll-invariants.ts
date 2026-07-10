@@ -61,8 +61,10 @@ const AT_BOTTOM_OK_PX = 150   // distance-from-bottom still considered "stuck to
 /** Load demo, wait for demo to be fully ready (sidebar + stores populated). */
 async function loadDemo(page: Page): Promise<void> {
   await page.goto(DEMO_URL, { waitUntil: 'domcontentloaded' })
-  // Sidebar nav proves React mounted
-  await page.waitForSelector('[data-nav="messages"]', { timeout: 20_000 })
+  // Sidebar nav proves React mounted. WebKit on a loaded CI runner can take well over 20s to
+  // boot the demo bundle + run the stress seeding, so give the mount a generous ceiling — this
+  // gate is the #1 source of "flaky" retries when the runner is busy.
+  await page.waitForSelector('[data-nav="messages"]', { timeout: 45_000 })
   // Extra wait for the setTimeout(0) stress seeding to complete
   await page.waitForTimeout(1200)
 }
@@ -238,6 +240,58 @@ async function sampleScrollTop(page: Page, durationMs: number): Promise<number[]
   }), durationMs)
 }
 
+/**
+ * Wait until the prepend restore has settled, then return scrollTop and the anchor's virtualizer
+ * offset read from the SAME frame (so a rAF can't fire between two separate reads and skew the
+ * comparison). Polls the computed drift every rAF and resolves once it stops changing (within
+ * `tolerancePx` across `stableFrames` consecutive frames) or after `timeoutMs`.
+ *
+ * WebKit under CI load runs the 60-frame re-assert loop and lands late batch measurements well
+ * past the fixed settle sleeps, so a single-shot read races mid-restore and reports a full-batch
+ * drift (~2880px — the observed webkit flake). Waiting for the drift to stabilise removes that
+ * race WITHOUT loosening PREPEND_DRIFT_PX: a genuinely broken anchor never stabilises under
+ * tolerance, so it times out here and still fails the assertion.
+ */
+async function waitForPrependSettled(
+  page: Page,
+  anchorId: string,
+  anchorOffsetBefore: number,
+  { stableFrames = 8, tolerancePx = 2, timeoutMs = 2500 } = {},
+): Promise<{ actualScrollTop: number; anchorVirtOffsetAfter: number | null }> {
+  return page.evaluate(
+    ({ id, offsetBefore, stableFrames, tolerancePx, timeoutMs }) =>
+      new Promise<{ actualScrollTop: number; anchorVirtOffsetAfter: number | null }>((resolve) => {
+        const scroller = document.querySelector('[data-message-list]') as HTMLElement | null
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const getOffset = (window as any).__fluuxGetVirtOffset as ((id: string) => number | null) | undefined
+        const read = () => {
+          const actualScrollTop = scroller?.scrollTop ?? 0
+          const anchorVirtOffsetAfter = getOffset?.(id) ?? null
+          const drift = anchorVirtOffsetAfter === null
+            ? 0
+            : Math.abs(actualScrollTop - (anchorVirtOffsetAfter - offsetBefore))
+          return { actualScrollTop, anchorVirtOffsetAfter, drift }
+        }
+        const t0 = performance.now()
+        let last = read().drift
+        let stable = 0
+        const tick = () => {
+          const cur = read()
+          if (Math.abs(cur.drift - last) <= tolerancePx) stable++
+          else stable = 0
+          last = cur.drift
+          if (stable >= stableFrames || performance.now() - t0 >= timeoutMs) {
+            resolve({ actualScrollTop: cur.actualScrollTop, anchorVirtOffsetAfter: cur.anchorVirtOffsetAfter })
+          } else {
+            requestAnimationFrame(tick)
+          }
+        }
+        requestAnimationFrame(tick)
+      }),
+    { id: anchorId, offsetBefore: anchorOffsetBefore, stableFrames, tolerancePx, timeoutMs },
+  )
+}
+
 /** Scroll the container to an exact scrollTop (programmatic). */
 async function setScrollTop(page: Page, value: number): Promise<void> {
   await page.evaluate((v) => {
@@ -333,18 +387,16 @@ test.describe('Virtualization scroll invariants', () => {
     expect(maxJump, `max frame-to-frame scrollTop jump ${maxJump}px > ${LARGE_JUMP_PX}px (oscillation detected)`).toBeLessThanOrEqual(LARGE_JUMP_PX)
 
     // Assertion B: anchor position holds within PREPEND_DRIFT_PX.
-    // Read scrollTop and the virtualizer offset atomically (single evaluate) so that a
-    // rAF frame can't fire between two separate reads and skew the comparison.
-    // The 60-frame re-assert loop (≈1s) tracks measurement changes; PREPEND_DRIFT_PX=20
-    // covers the ~16px noise from one final ResizeObserver that can fire after the loop exits.
-    const { actualScrollTop, anchorVirtOffsetAfter } = await page.evaluate((id) => {
-      const scroller = document.querySelector('[data-message-list]') as HTMLElement | null
-      return {
-        actualScrollTop: scroller?.scrollTop ?? 0,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        anchorVirtOffsetAfter: (window as any).__fluuxGetVirtOffset?.(id) ?? null,
-      }
-    }, anchorId)
+    // Wait for the restore to settle before reading (WebKit under CI load runs the 60-frame
+    // re-assert loop and lands late batch measurements past the fixed sleeps above; a single-shot
+    // read there races mid-restore and reports a full-batch drift). The helper reads scrollTop and
+    // the virtualizer offset from the same settled frame; PREPEND_DRIFT_PX=20 still covers the
+    // ~16px noise from a final ResizeObserver that can fire after the loop exits.
+    const { actualScrollTop, anchorVirtOffsetAfter } = await waitForPrependSettled(
+      page,
+      anchorId,
+      anchorOffsetBefore,
+    )
 
     if (anchorVirtOffsetAfter !== null) {
       // Virtualizer path: expected scrollTop = anchorVirtOffset - anchorOffsetBefore
