@@ -22,10 +22,10 @@ export function RoomInfoModal({ room, onClose }: RoomInfoModalProps) {
   return (
     <ModalShell title={room.name} onClose={onClose} width="max-w-md" panelClassName="max-h-[80vh] flex flex-col">
       <div className="p-4 flex flex-col gap-4 flex-1 min-h-0 overflow-y-auto">
-        {/* Identity row */}
-        <div className="flex items-center gap-3 min-w-0">
+        {/* Identity — centered hero (the name is the modal title above) */}
+        <div className="flex flex-col items-center gap-2 text-center">
           <RoomAvatar identifier={room.jid} name={room.name} avatarUrl={room.avatar} size="xl" />
-          <p className="text-sm text-fluux-muted break-all select-text">{room.jid}</p>
+          <p className="text-sm text-fluux-muted break-all select-text max-w-full">{room.jid}</p>
         </div>
 
         {/* Topic — only when set */}
