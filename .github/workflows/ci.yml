@@ -8,6 +8,8 @@ jobs:
   test:
     name: Test
     runs-on: ubuntu-latest
+    # Backstop against a hung step (default GitHub timeout is 6h). A healthy run is ~7min.
+    timeout-minutes: 15
 
     steps:
       - name: Checkout
@@ -100,6 +102,10 @@ jobs:
   e2e-scroll:
     name: Scroll invariants (e2e)
     runs-on: ubuntu-latest
+    # Backstop against a hung dev server / browser install (default GitHub timeout is 6h).
+    # A healthy run is ~7min; the Playwright OS-dep apt install can be slow on an unlucky
+    # mirror, so this is set generously — it only fires on a genuine hang.
+    timeout-minutes: 30
 
     steps:
       - name: Checkout
@@ -121,8 +127,22 @@ jobs:
       - name: Build SDK
         run: npm run build:sdk
 
+      # Cache the browser binaries (~/.cache/ms-playwright) so a slow CDN can't add minutes to
+      # the download. The OS-level deps (apt) live on the ephemeral runner and are (re)installed
+      # separately each run via `install-deps`.
+      - name: Cache Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('package-lock.json') }}
+
       - name: Install Playwright browsers
-        run: npx playwright install --with-deps chromium webkit
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: npx playwright install chromium webkit
+
+      - name: Install Playwright OS dependencies
+        run: npx playwright install-deps chromium webkit
 
       # CI=true is set by GitHub Actions → the config enables retries(2), forbidOnly,
       # and the github + html reporters. Blocks the PR if any invariant regresses.
@@ -140,6 +160,8 @@ jobs:
   rust:
     name: Rust
     runs-on: ubuntu-latest
+    # Backstop against a hung build/test (default GitHub timeout is 6h). A cached run is ~5min.
+    timeout-minutes: 20
 
     steps:
       - name: Checkout
