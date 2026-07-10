@@ -20,16 +20,22 @@ exports[`RoomView > Snapshots > should match snapshot for non-joined room 1`] = 
         <div
           class="flex-1 min-w-0"
         >
-          <h2
-            class="font-semibold text-fluux-text truncate leading-tight"
+          <button
+            aria-label="rooms.showRoomInfo: Test Room"
+            class="w-full min-w-0 text-start rounded-md px-1 -mx-1 py-0.5 hover:bg-fluux-hover transition-colors"
+            type="button"
           >
-            Test Room
-          </h2>
-          <p
-            class="text-xs text-fluux-muted truncate"
-          >
-            room@conference.example.com
-          </p>
+            <span
+              class="block font-semibold text-fluux-text truncate leading-tight"
+            >
+              Test Room
+            </span>
+            <p
+              class="text-xs text-fluux-muted truncate"
+            >
+              room@conference.example.com
+            </p>
+          </button>
         </div>
         <div
           class="hidden @[600px]:flex"
