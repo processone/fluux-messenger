@@ -252,6 +252,17 @@ describe('Avatar', () => {
       expect(root.className).toContain('rounded-xl')
       expect(root.className).not.toContain('rounded-full')
     })
+
+    test('square xs avatar uses a smaller radius so it stays visually square (rounded-xl at 24px is a circle)', () => {
+      const { container } = render(
+        <Avatar identifier="team@conference.fluux.chat" name="Team" shape="square" size="xs" />
+      )
+      const root = container.firstChild as HTMLElement
+      // rounded-xl (12px) on a 24px box = a full circle; xs must use rounded-lg (8px).
+      expect(root.className).toContain('rounded-lg')
+      expect(root.className).not.toContain('rounded-xl')
+      expect(root.className).not.toContain('rounded-full')
+    })
   })
 })
 

@@ -17,6 +17,21 @@ const SIZES = {
 
 export type AvatarSize = keyof typeof SIZES
 
+/**
+ * Corner radius for square (room/group) avatars, per size. A fixed `rounded-xl`
+ * (12px) reads as a proper rounded-square at `sm` and up, but at `xs` (24px) a
+ * 12px radius equals half the side length — i.e. a full circle — so `xs` needs a
+ * smaller radius to stay visually square.
+ */
+const SQUARE_RADIUS: Record<AvatarSize, string> = {
+  xs: 'rounded-lg',
+  sm: 'rounded-xl',
+  header: 'rounded-xl',
+  md: 'rounded-xl',
+  lg: 'rounded-xl',
+  xl: 'rounded-xl',
+}
+
 export interface AvatarProps {
   /**
    * Unique identifier used for consistent color generation (JID, nickname, etc.)
@@ -314,7 +329,7 @@ export function Avatar({
   // Get size classes
   const sizeClasses = SIZES[size]
 
-  const radiusClass = shape === 'square' ? 'rounded-xl' : 'rounded-full'
+  const radiusClass = shape === 'square' ? SQUARE_RADIUS[size] : 'rounded-full'
 
   // Determine presence color
   // Uses CSS custom properties for smooth color transitions between states
