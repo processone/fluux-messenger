@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { usePresence } from '@fluux/sdk'
+import { useSettingsStore } from '@/stores/settingsStore'
 import { useNotificationEvents } from './useNotificationEvents'
 
 /**
@@ -65,12 +66,18 @@ function createNotificationSound(): () => void {
  */
 export function useSoundNotification(): void {
   const { presenceStatus } = usePresence()
+  const soundEnabled = useSettingsStore((s) => s.soundEnabled)
   const presenceStatusRef = useRef(presenceStatus)
+  const soundEnabledRef = useRef(soundEnabled)
   const playSoundRef = useRef<(() => void) | null>(null)
 
   useEffect(() => {
     presenceStatusRef.current = presenceStatus
   }, [presenceStatus])
+
+  useEffect(() => {
+    soundEnabledRef.current = soundEnabled
+  }, [soundEnabled])
 
   // Initialize sound player
   useEffect(() => {
@@ -84,7 +91,7 @@ export function useSoundNotification(): void {
   }, [])
 
   const playSound = () => {
-    if (presenceStatusRef.current === 'dnd') return
+    if (presenceStatusRef.current === 'dnd' || !soundEnabledRef.current) return
     playSoundRef.current?.()
   }
 

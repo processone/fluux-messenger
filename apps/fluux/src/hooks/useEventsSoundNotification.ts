@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { useEvents, usePresence } from '@fluux/sdk'
+import { useSettingsStore } from '@/stores/settingsStore'
 
 /**
  * Creates a notification sound for events using Web Audio API.
@@ -64,6 +65,7 @@ function createEventsNotificationSound(): () => void {
 export function useEventsSoundNotification(): void {
   const { subscriptionRequests } = useEvents()
   const { presenceStatus } = usePresence()
+  const soundEnabled = useSettingsStore((s) => s.soundEnabled)
   const prevCountRef = useRef(subscriptionRequests.length)
   const playSoundRef = useRef<(() => void) | null>(null)
 
@@ -83,11 +85,11 @@ export function useEventsSoundNotification(): void {
     const prevCount = prevCountRef.current
     const currentCount = subscriptionRequests.length
 
-    // Play sound when a new request is added (suppressed during DND)
-    if (currentCount > prevCount && playSoundRef.current && presenceStatus !== 'dnd') {
+    // Play sound when a new request is added (suppressed during DND or when sound is disabled)
+    if (currentCount > prevCount && playSoundRef.current && presenceStatus !== 'dnd' && soundEnabled) {
       playSoundRef.current()
     }
 
     prevCountRef.current = currentCount
-  }, [subscriptionRequests, presenceStatus])
+  }, [subscriptionRequests, presenceStatus, soundEnabled])
 }
