@@ -93,7 +93,7 @@ export function ChatHeader({
   const kebabWrapperClass = hasAlwaysShownEntry ? undefined : kebabClass('search')
 
   return (
-    <header className="@container relative aurora-horizon h-14 px-4 flex items-center border-b border-fluux-bg shadow-sm gap-3" {...dragRegionProps}>
+    <header className="@container relative aurora-horizon h-14 px-4 flex items-center border-b border-fluux-bg shadow-sm gap-2 md:gap-3" {...dragRegionProps}>
       {/* Back button - mobile only */}
       {onBack && (
         <button
@@ -130,7 +130,7 @@ export function ChatHeader({
               {fullContact ? getTranslatedStatusText(fullContact, t) : jid}
             </p>
             {contactTime && (
-              <Tooltip content={t('presence.localTime')} position="bottom" className="inline-flex items-center">
+              <Tooltip content={t('presence.localTime')} position="bottom" className="hidden @[400px]:inline-flex items-center">
                 <span className="text-xs text-fluux-muted flex-shrink-0 flex items-center gap-1">
                   · <Clock className="size-3" />{contactTime}
                 </span>
@@ -140,34 +140,38 @@ export function ChatHeader({
         )}
       </div>
 
-      {/* Encryption status icon — only for 1:1 chats with active E2EE */}
-      {encryptionState && encryptionState.kind !== 'disabled' && encryptionState.kind !== 'unsupported' && (
-        <EncryptionIcon
-          state={encryptionState}
-          peerName={name}
-          onVerifyClick={onEncryptionClick}
-          onDisableClick={onDisableEncryptionClick}
-          onEnableClick={onEnableEncryptionClick}
-        />
-      )}
+      {/* Trailing action cluster — grouped tightly on mobile (gap-1) so the
+          shield reads as part of the menu; desktop keeps the header's md gap. */}
+      <div className="flex items-center gap-1 md:gap-3">
+        {/* Encryption status icon — only for 1:1 chats with active E2EE */}
+        {encryptionState && encryptionState.kind !== 'disabled' && encryptionState.kind !== 'unsupported' && (
+          <EncryptionIcon
+            state={encryptionState}
+            peerName={name}
+            onVerifyClick={onEncryptionClick}
+            onDisableClick={onDisableEncryptionClick}
+            onEnableClick={onEnableEncryptionClick}
+          />
+        )}
 
-      {/* Search in conversation — inline copy (collapses on narrow widths) */}
-      {onSearchInConversation && (
-        <div className={inlineClass('search')}>
-          <button
-            onClick={onSearchInConversation}
-            className="p-1.5 rounded hover:bg-fluux-hover text-fluux-muted hover:text-fluux-text transition-colors tap-target"
-            aria-label={t('chat.searchInConversation', 'Search in conversation')}
-            title={t('chat.searchInConversation', 'Search in conversation')}
-          >
-            <Search className="size-4" />
-          </button>
+        {/* Search in conversation — inline copy (collapses on narrow widths) */}
+        {onSearchInConversation && (
+          <div className={inlineClass('search')}>
+            <button
+              onClick={onSearchInConversation}
+              className="p-1.5 rounded hover:bg-fluux-hover text-fluux-muted hover:text-fluux-text transition-colors tap-target"
+              aria-label={t('chat.searchInConversation', 'Search in conversation')}
+              title={t('chat.searchInConversation', 'Search in conversation')}
+            >
+              <Search className="size-4" />
+            </button>
+          </div>
+        )}
+
+        {/* Overflow (kebab) menu */}
+        <div className={kebabWrapperClass}>
+          <HeaderOverflowKebab ariaLabel={t('contacts.actionsMenu')} entries={overflowEntries} />
         </div>
-      )}
-
-      {/* Overflow (kebab) menu */}
-      <div className={kebabWrapperClass}>
-        <HeaderOverflowKebab ariaLabel={t('contacts.actionsMenu')} entries={overflowEntries} />
       </div>
     </header>
   )
