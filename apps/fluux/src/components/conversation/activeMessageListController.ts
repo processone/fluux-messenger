@@ -23,6 +23,12 @@ export interface ActiveMessageListController {
   /** Window the (possibly unmounted) row for `id` into the virtualizer's mounted set so a
    *  subsequent DOM query can find it. No-op when `id` isn't in the item set. */
   ensureMessageMounted(id: string): void
+  /** Pull the cache slice around `id` into the loaded item set, for a target that scrolled
+   *  so far out of the window it isn't even resolvable by the virtualizer index yet
+   *  (`hasMessage` is false). Reuses the same load-around path as the targetMessageId jump.
+   *  Resolves once the slice is merged. Absent on lists with no load-around wiring (older
+   *  callers, non-virtualized). `id` must be a LOCAL message id — see `scrollToMessage`. */
+  loadAround?(id: string): Promise<unknown> | void
   /** Scroll the active list to the newest message (same action as the ⌘/Ctrl+↓ shortcut
    *  and the scroll-to-bottom FAB). */
   scrollToBottom(): void

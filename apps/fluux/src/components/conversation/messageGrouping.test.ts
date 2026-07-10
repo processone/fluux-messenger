@@ -597,6 +597,47 @@ describe('scrollToMessage', () => {
     }
   })
 
+  it('requests a cache slice for an out-of-window target, then windows + scrolls once it loads', async () => {
+    // The target scrolled far out of the loaded window, so it is not even in the virtualizer's
+    // item set (hasMessage === false) — ensureMessageMounted alone can never recover it (this is
+    // issue #955: reply-quote and poll jumps silently no-op). scrollToMessage must pull the cache
+    // slice around the id via loadAround, wait past its default retry budget for the async fetch,
+    // then window + scroll as usual once the row enters the item set.
+    let loaded = false
+    let mounted = false
+    querySelectorSpy.mockImplementation(() => (mounted ? (mockElement as unknown as Element) : null))
+    // Resolve well past the default ~130ms retry window so the widened budget is exercised.
+    const loadAround = vi.fn(
+      () => new Promise<void>(resolve => setTimeout(() => { loaded = true; resolve() }, 300)),
+    )
+    const ensureMessageMounted = vi.fn(() => { mounted = true })
+    setActiveMessageListController({
+      hasMessage: () => loaded,
+      ensureMessageMounted,
+      loadAround,
+      scrollToBottom: vi.fn(),
+    })
+    try {
+      scrollToMessage('far-out-id')
+
+      // First pass: not in the item set → cache slice requested exactly once.
+      expect(loadAround).toHaveBeenCalledTimes(1)
+      expect(loadAround).toHaveBeenCalledWith('far-out-id')
+
+      // Slice loads (async) → id enters the item set → row windowed in → scrolled + highlighted.
+      await vi.advanceTimersByTimeAsync(500)
+      expect(ensureMessageMounted).toHaveBeenCalledWith('far-out-id')
+      expect(mockElement.scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth', block: 'center' })
+      expect(mockElement.classList.add).toHaveBeenCalledWith('message-highlight')
+      expect(consoleWarnSpy).not.toHaveBeenCalled()
+
+      // The slice is requested once, not per retry frame.
+      expect(loadAround).toHaveBeenCalledTimes(1)
+    } finally {
+      setActiveMessageListController(null)
+    }
+  })
+
   it('should handle special characters in message ID by escaping them', () => {
     querySelectorSpy.mockReturnValue(mockElement as unknown as Element)
 
