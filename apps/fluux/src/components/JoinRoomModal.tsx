@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { TextInput } from './ui/TextInput'
 import { useTranslation } from 'react-i18next'
-import { useConnection, useRoomActions, RoomJoinError, getLocalPart } from '@fluux/sdk'
+import { useConnection, useRoomActions, RoomJoinError, resolveDefaultMucNick } from '@fluux/sdk'
 import { useChatStore } from '@fluux/sdk/react'
 import { useModalInput } from '@/hooks'
 import { useRoomJoinWarning } from '@/hooks/useRoomJoinWarning'
@@ -30,16 +30,13 @@ export function JoinRoomModal({ onClose }: JoinRoomModalProps) {
   const passwordRef = useRef<HTMLInputElement>(null)
   const nicknameInitialized = useRef(false)
 
-  // Default nickname from PEP nickname or user JID (only once)
+  // Default nickname from profile username (PEP nick), else JID local part (only once)
   useEffect(() => {
-    if (!nicknameInitialized.current) {
-      if (ownNickname) {
-        setNickname(ownNickname)
-        nicknameInitialized.current = true
-      } else if (userJid) {
-        setNickname(getLocalPart(userJid))
-        nicknameInitialized.current = true
-      }
+    if (nicknameInitialized.current) return
+    const defaultNick = resolveDefaultMucNick(ownNickname, userJid)
+    if (defaultNick) {
+      setNickname(defaultNick)
+      nicknameInitialized.current = true
     }
   }, [ownNickname, userJid])
 

@@ -8,6 +8,7 @@ import {
   useRoom,
   WELL_KNOWN_MUC_SERVERS,
   getLocalPart,
+  resolveDefaultMucNick,
   generateConsistentColorHexSync,
 } from '@fluux/sdk'
 import { useChatStore } from '@fluux/sdk/react'
@@ -77,17 +78,13 @@ export function BrowseRoomsModal({ onClose }: BrowseRoomsModalProps) {
     }
   }, [mucServiceJid, selectedService])
 
-  // Default nickname from PEP nick (XEP-0172) or JID local part (only once)
+  // Default nickname from profile username (PEP nick), else JID local part (only once)
   useEffect(() => {
-    if (!nicknameInitialized.current) {
-      // Prefer PEP nickname if available, otherwise use JID local part
-      if (ownNickname) {
-        setNickname(ownNickname)
-        nicknameInitialized.current = true
-      } else if (userJid) {
-        setNickname(getLocalPart(userJid))
-        nicknameInitialized.current = true
-      }
+    if (nicknameInitialized.current) return
+    const defaultNick = resolveDefaultMucNick(ownNickname, userJid)
+    if (defaultNick) {
+      setNickname(defaultNick)
+      nicknameInitialized.current = true
     }
   }, [ownNickname, userJid])
 

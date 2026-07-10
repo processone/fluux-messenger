@@ -43,6 +43,8 @@ vi.mock('@fluux/sdk', () => ({
   }),
   WELL_KNOWN_MUC_SERVERS: ['conference.process-one.net', 'muc.xmpp.org'],
   getLocalPart: (jid: string) => jid.split('@')[0],
+  resolveDefaultMucNick: (nick: string | null | undefined, jid: string | null | undefined) =>
+    (nick?.trim() || (jid ? jid.split('@')[0] : '')),
   generateConsistentColorHexSync: () => '#5588aa',
   RoomJoinError,
 }))

@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import { TextInput } from './ui/TextInput'
 import { useTranslation } from 'react-i18next'
 import { Zap } from 'lucide-react'
-import { useConnection, useRoomActions, getLocalPart } from '@fluux/sdk'
+import { useConnection, useRoomActions, resolveDefaultMucNick } from '@fluux/sdk'
 import { useChatStore } from '@fluux/sdk/react'
 import { useModalInput } from '@/hooks'
 import { ModalShell } from './ModalShell'
@@ -26,10 +26,12 @@ export function CreateQuickChatModal({ onClose }: CreateQuickChatModalProps) {
   const inputRef = useModalInput<HTMLInputElement>()
   const nicknameInitialized = useRef(false)
 
-  // Default nickname from PEP nickname or JID (only once)
+  // Default nickname from profile username (PEP nick), else JID local part (only once)
   useEffect(() => {
-    if (!nicknameInitialized.current && (ownNickname || userJid)) {
-      setNickname(ownNickname || (userJid ? getLocalPart(userJid) : ''))
+    if (nicknameInitialized.current) return
+    const defaultNick = resolveDefaultMucNick(ownNickname, userJid)
+    if (defaultNick) {
+      setNickname(defaultNick)
       nicknameInitialized.current = true
     }
   }, [ownNickname, userJid])

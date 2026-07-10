@@ -15,6 +15,8 @@
  *   whisper addressing, which is keyed on the exact nick).
  */
 
+import { getLocalPart } from './jid'
+
 // Invisible / zero-width / bidi-control / soft-hyphen characters that have no
 // legitimate place in a nick. Single source of truth shared by strip + reveal.
 // (JS \s already covers NBSP, U+2000–200A, U+3000, U+FEFF, etc., so those are
@@ -35,6 +37,28 @@ const EDGE_WHITESPACE = /^\s+|\s+$/gu
  */
 export function stripNickWhitespace(nick: string): string {
   return nick.replace(INVISIBLE_STRIP, '').replace(EDGE_WHITESPACE, '')
+}
+
+/**
+ * Resolve the default MUC nickname for the local user.
+ *
+ * Single source of truth for "what nick do we join a room under when the user
+ * hasn't typed one." Prefers the profile username (XEP-0172 PEP nickname), then
+ * falls back to the bare-JID local part. The result is whitespace/invisible-char
+ * hardened via {@link stripNickWhitespace} so it is safe to put on the wire.
+ *
+ * @param ownNickname - The user's XEP-0172 nickname (from the connection store), or null.
+ * @param jid - The user's own JID (bare or full); used for the local-part fallback.
+ * @returns A non-empty nick when either input is usable, otherwise `''`.
+ */
+export function resolveDefaultMucNick(
+  ownNickname: string | null | undefined,
+  jid: string | null | undefined
+): string {
+  const fromNick = ownNickname ? stripNickWhitespace(ownNickname) : ''
+  if (fromNick) return fromNick
+  const fromJid = jid ? stripNickWhitespace(getLocalPart(jid)) : ''
+  return fromJid
 }
 
 export interface NickDisplay {
