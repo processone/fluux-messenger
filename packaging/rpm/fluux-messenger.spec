@@ -11,7 +11,7 @@ Source0:        fluux-messenger-%{version}.tar.gz
 Requires:       webkit2gtk4.1
 Requires:       gtk3
 Requires:       glib2
-Requires:       libappindicator-gtk3
+Requires:       libayatana-appindicator-gtk3
 
 # Disable automatic dependency generation (we use pre-built binary)
 AutoReqProv:    no

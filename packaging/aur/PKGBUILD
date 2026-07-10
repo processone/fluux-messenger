@@ -10,7 +10,7 @@ depends=(
     'webkit2gtk-4.1'
     'gtk3'
     'glib2'
-    'libappindicator-gtk3'
+    'libayatana-appindicator'
 )
 optdepends=(
     'xdg-utils: for opening URLs'
