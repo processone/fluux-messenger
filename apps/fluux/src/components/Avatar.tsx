@@ -17,6 +17,15 @@ const SIZES = {
 
 export type AvatarSize = keyof typeof SIZES
 
+/**
+ * Corner radius for square (room/group) avatars. A PERCENTAGE radius is relative
+ * to the element's own size, so a single value stays visually identical at every
+ * avatar size — unlike a fixed px radius, where the corner/size ratio drifts (12px
+ * is a full circle at 24px but barely rounded at 96px). 28% reads as a consistent
+ * rounded-square; 50% would be a circle.
+ */
+const SQUARE_RADIUS = 'rounded-[28%]'
+
 export interface AvatarProps {
   /**
    * Unique identifier used for consistent color generation (JID, nickname, etc.)
@@ -314,7 +323,7 @@ export function Avatar({
   // Get size classes
   const sizeClasses = SIZES[size]
 
-  const radiusClass = shape === 'square' ? 'rounded-xl' : 'rounded-full'
+  const radiusClass = shape === 'square' ? SQUARE_RADIUS : 'rounded-full'
 
   // Determine presence color
   // Uses CSS custom properties for smooth color transitions between states
