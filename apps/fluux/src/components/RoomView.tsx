@@ -603,7 +603,7 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
         </div>
 
         {/* Reaction mention pills — pinned above the composer */}
-        <ReactionMentions conversationId={activeRoom.jid} />
+        <ReactionMentions conversationId={activeRoom.jid} onSee={(id) => roomStore.getState().setTargetMessageId(id)} />
 
         {/* Input - show composer if joined, join prompt if not */}
         {activeRoom.joined ? (

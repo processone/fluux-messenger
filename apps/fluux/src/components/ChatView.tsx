@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { format } from 'date-fns'
 import { detectRenderLoop } from '@/utils/renderLoopDetector'
 import type { CopyMessageMeta } from '@/utils/buildCopyText'
-import { useChatActive, useContactIdentities, useReferencedMessage, getBareJid, getLocalPart, getMyReactions, useXMPPContext, type Message, type ContactIdentity } from '@fluux/sdk'
+import { useChatActive, useContactIdentities, useReferencedMessage, getBareJid, getLocalPart, getMyReactions, useXMPPContext, chatStore, type Message, type ContactIdentity } from '@fluux/sdk'
 import { useVerifiedPeerKeysStore } from '@/stores/verifiedPeerKeysStore'
 import { useToastStore } from '@/stores/toastStore'
 import { useConversationPlaintextOverrideStore } from '@/stores/conversationPlaintextOverrideStore'
@@ -522,7 +522,7 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
       </div>
 
       {/* Reaction mention pills — pinned above the composer */}
-      <ReactionMentions conversationId={activeConversation.id} />
+      <ReactionMentions conversationId={activeConversation.id} onSee={(id) => chatStore.getState().setTargetMessageId(id)} />
 
       {/* Input */}
       <MessageInput

@@ -52,13 +52,11 @@ vi.mock('@/stores/reactionMentionStore', () => ({
   useReactionMentionStore: { getState: () => ({ addMention: mockAddMention }) },
 }))
 
-const mockNavigateToMessages = vi.fn()
-const mockNavigateToRooms = vi.fn()
-vi.mock('@/hooks', () => ({
-  useRouteSync: () => ({ navigateToMessages: mockNavigateToMessages, navigateToRooms: mockNavigateToRooms }),
+const mockNavigateToConversation = vi.fn()
+const mockNavigateToRoom = vi.fn()
+vi.mock('./useNavigateToTarget', () => ({
+  useNavigateToTarget: () => ({ navigateToConversation: mockNavigateToConversation, navigateToRoom: mockNavigateToRoom }),
 }))
-
-vi.mock('@/components/conversation/messageGrouping', () => ({ scrollToMessage: vi.fn() }))
 
 /** Grab a subscribed handler by event name. */
 function handlerFor(event: string): (ev: Record<string, unknown>) => Promise<void> {
@@ -103,6 +101,12 @@ describe('useReactionNotifications — chat reaction resolution', () => {
     expect(mockAddToast).toHaveBeenCalledTimes(1)
     expect(mockAddToast).toHaveBeenCalledWith('info', expect.stringContaining('reactions.mention'), 6000, expect.any(Function))
     expect(mockAddMention).not.toHaveBeenCalled()
+
+    // Clicking the toast must jump by message reference (load-around-by-id), not a DOM query,
+    // so it works even when the reacted message has scrolled out of the loaded window (#923).
+    const onClick = mockAddToast.mock.calls[0][3] as () => void
+    onClick()
+    expect(mockNavigateToConversation).toHaveBeenCalledWith('peer@example.com', 'm1')
   })
 
   it('tries stanzaId lookup when the client-id cache read misses', async () => {
@@ -204,6 +208,11 @@ describe('useReactionNotifications — room reaction resolution', () => {
 
     expect(mockAddToast).toHaveBeenCalledTimes(1)
     expect(mockAddMention).not.toHaveBeenCalled()
+
+    // Room toast jumps by message reference too (#923).
+    const onClick = mockAddToast.mock.calls[0][3] as () => void
+    onClick()
+    expect(mockNavigateToRoom).toHaveBeenCalledWith(ROOM, 'r1')
   })
 
   it('falls back to the durable room cache when the reacted message is not resident', async () => {

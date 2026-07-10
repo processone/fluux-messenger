@@ -7,8 +7,7 @@ import { getMessage as getCachedMessage, getMessageByStanzaId as getCachedMessag
 import { getRoomMessage as getCachedRoomMessage, getRoomMessageByStanzaId as getCachedRoomMessageByStanzaId } from '@fluux/sdk/cache'
 import { useToastStore } from '@/stores/toastStore'
 import { useReactionMentionStore } from '@/stores/reactionMentionStore'
-import { useRouteSync } from '@/hooks'
-import { scrollToMessage } from '@/components/conversation/messageGrouping'
+import { useNavigateToTarget } from './useNavigateToTarget'
 import { decideReactionNotification, type ReactionDecision } from './reactionNotificationDecision'
 
 /**
@@ -22,7 +21,7 @@ import { decideReactionNotification, type ReactionDecision } from './reactionNot
 export function useReactionNotifications(): void {
   const { client } = useXMPP()
   const { t } = useTranslation()
-  const { navigateToMessages, navigateToRooms } = useRouteSync()
+  const { navigateToConversation, navigateToRoom } = useNavigateToTarget()
 
   useEffect(() => {
     if (!client?.subscribe) return
@@ -44,12 +43,16 @@ export function useReactionNotifications(): void {
 
       if (decision.kind === 'toast') {
         useToastStore.getState().addToast('info', label, 6000, () => {
+          // Navigate by message reference: navigateToConversation/navigateToRoom set the
+          // target's `targetMessageId` before activating, so the message list loads the
+          // history slice around it (getMessagesAround) and scrolls — even when the reacted
+          // message is far outside the loaded window. A DOM-query jump would silently no-op
+          // there (#923).
           if (m.isRoom) {
-            navigateToRooms(m.conversationId)
+            navigateToRoom(m.conversationId, m.messageId)
           } else {
-            navigateToMessages(m.conversationId)
+            navigateToConversation(m.conversationId, m.messageId)
           }
-          setTimeout(() => scrollToMessage(m.messageId), 100)
         })
       } else {
         // decision.kind === 'mention'
@@ -160,5 +163,5 @@ export function useReactionNotifications(): void {
       unsubChat()
       unsubRoom()
     }
-  }, [client, t, navigateToMessages, navigateToRooms])
+  }, [client, t, navigateToConversation, navigateToRoom])
 }
