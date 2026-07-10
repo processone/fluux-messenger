@@ -27,6 +27,27 @@ import { getConsistentTextColor } from '../components/Avatar'
 // URL regex pattern - excludes < and > to handle angle-bracketed URLs like <https://example.com>
 const URL_REGEX = /(https?:\/\/[^\s<>]+[^\s<>.,;:!?)"'\]])/g
 
+/**
+ * Return every http(s) URL found in `text`, in document order, de-duplicated.
+ * Shares URL_REGEX with the message renderer so "what is a link" stays consistent
+ * between the rendered text and the copy-link affordances.
+ */
+export function extractLinks(text: string): string[] {
+  if (!text) return []
+  URL_REGEX.lastIndex = 0
+  const seen = new Set<string>()
+  const out: string[] = []
+  let match: RegExpExecArray | null
+  while ((match = URL_REGEX.exec(text)) !== null) {
+    const url = match[0]
+    if (!seen.has(url)) {
+      seen.add(url)
+      out.push(url)
+    }
+  }
+  return out
+}
+
 // Mention regex pattern: @word (must be preceded by start or whitespace)
 // Used as fallback when XEP-0372 references aren't available
 // Uses Unicode property escapes (\p{L} for letters, \p{N} for numbers) to support
