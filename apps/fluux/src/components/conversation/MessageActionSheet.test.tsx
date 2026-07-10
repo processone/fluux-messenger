@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import { MessageActionSheet } from './MessageActionSheet'
 
@@ -14,11 +14,16 @@ vi.mock('react-i18next', () => ({
         'chat.deleteMessage': 'Delete message',
         'chat.moreReactions': 'More reactions',
         'chat.moreOptions': 'More options',
+        'chat.copyLink': 'Copy link',
+        'chat.copyLinkChoose': 'Copy which link?',
       }
       return map[key] ?? key
     },
   }),
 }))
+
+const copyMock = vi.fn()
+vi.mock('@/utils/clipboard', () => ({ copyToClipboard: (t: string) => copyMock(t) }))
 
 const baseProps = {
   open: true,
@@ -80,5 +85,41 @@ describe('MessageActionSheet', () => {
     fireEvent.click(screen.getByLabelText('React with ❤️'))
     expect(onReaction).toHaveBeenCalledWith('❤️')
     expect(onClose).toHaveBeenCalledTimes(1)
+  })
+})
+
+const linkBaseProps = {
+  open: true,
+  onClose: vi.fn(),
+  myReactions: [] as string[],
+  onReply: vi.fn(),
+  onEdit: vi.fn(),
+  onDelete: vi.fn(),
+  canReply: false,
+  canEdit: false,
+  canDelete: false,
+}
+
+describe('MessageActionSheet copy-link', () => {
+  beforeEach(() => copyMock.mockReset())
+
+  it('hides Copy link when the body has no links', () => {
+    render(<MessageActionSheet {...linkBaseProps} body="no links here" />)
+    expect(screen.queryByText('Copy link')).toBeNull()
+  })
+
+  it('copies the only link directly', () => {
+    render(<MessageActionSheet {...linkBaseProps} body="visit https://a.com today" />)
+    fireEvent.click(screen.getByText('Copy link'))
+    expect(copyMock).toHaveBeenCalledWith('https://a.com')
+  })
+
+  it('opens a chooser when there are several links', () => {
+    render(<MessageActionSheet {...linkBaseProps} body="https://a.com and https://b.com" />)
+    fireEvent.click(screen.getByText('Copy link'))
+    // chooser header appears; both URLs are listed
+    expect(screen.getByText('Copy which link?')).toBeInTheDocument()
+    fireEvent.click(screen.getByText('https://b.com'))
+    expect(copyMock).toHaveBeenCalledWith('https://b.com')
   })
 })
