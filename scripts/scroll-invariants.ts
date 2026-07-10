@@ -67,10 +67,11 @@ const AT_BOTTOM_OK_PX = 150   // distance-from-bottom still considered "stuck to
 /** Load demo, wait for demo to be fully ready (sidebar + stores populated). */
 async function loadDemo(page: Page): Promise<void> {
   await page.goto(DEMO_URL, { waitUntil: 'domcontentloaded' })
-  // Sidebar nav proves React mounted. WebKit on a loaded CI runner can take well over 20s to
-  // boot the demo bundle + run the stress seeding, so give the mount a generous ceiling — this
-  // gate is the #1 source of "flaky" retries when the runner is busy.
-  await page.waitForSelector('[data-nav="messages"]', { timeout: 45_000 })
+  // Sidebar nav proves React mounted. WebKit on a loaded CI runner has been observed taking >45s
+  // to boot the demo bundle + run the stress seeding — the #1 remaining source of "flaky" retries.
+  // Give it a large ceiling within the 120s per-test budget (leaving ~30s for the test body, which
+  // normally runs in <10s) so a slow boot proceeds instead of failing the mount and burning a retry.
+  await page.waitForSelector('[data-nav="messages"]', { timeout: 90_000 })
   // Extra wait for the setTimeout(0) stress seeding to complete
   await page.waitForTimeout(1200)
 }
