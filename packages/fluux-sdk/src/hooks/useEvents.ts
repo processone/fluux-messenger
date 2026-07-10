@@ -3,6 +3,7 @@ import { connectionStore, chatStore } from '../stores'
 import { useEventsStore } from '../react/storeHooks'
 import { useXMPPContext } from '../provider'
 import { getLocalPart } from '../core/jid'
+import { resolveDefaultMucNick } from '../core/nick'
 import type { Conversation } from '../core'
 
 /**
@@ -176,8 +177,9 @@ export function useEvents() {
     async (roomJid: string, password?: string) => {
       // Find the invitation to get the password and isQuickChat flag
       const invitation = mucInvitations.find((i) => i.roomJid === roomJid)
-      const currentJid = connectionStore.getState().jid
-      const defaultNick = getLocalPart(currentJid ?? 'user')
+      const { jid: currentJid, ownNickname } = connectionStore.getState()
+      // Prefer the profile username (XEP-0172 nick) over the bare-JID local part.
+      const defaultNick = resolveDefaultMucNick(ownNickname, currentJid) || 'user'
       const roomPassword = invitation?.password || password
 
       // Join the room with isQuickChat flag from invitation

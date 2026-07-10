@@ -207,6 +207,31 @@ describe('useEvents hook', () => {
       expect(result.current.mucInvitations).toHaveLength(0)
     })
 
+    it('should prefer the profile username (XEP-0172 nick) over the JID local part', async () => {
+      const { result } = renderHook(() => useEvents(), { wrapper })
+
+      mockClient.muc.joinRoom.mockResolvedValue(undefined)
+
+      act(() => {
+        connectionStore.getState().setJid('myuser@example.com/resource')
+        connectionStore.getState().setOwnNickname('Alice')
+        eventsStore.getState().addMucInvitation(
+          'room@conference.example.com',
+          'alice@example.com'
+        )
+      })
+
+      await act(async () => {
+        await result.current.acceptInvitation('room@conference.example.com')
+      })
+
+      expect(mockClient.muc.joinRoom).toHaveBeenCalledWith(
+        'room@conference.example.com',
+        'Alice',  // profile username, not the JID local part
+        { password: undefined, isQuickChat: false }
+      )
+    })
+
     it('should join room with password from invitation', async () => {
       const { result } = renderHook(() => useEvents(), { wrapper })
 

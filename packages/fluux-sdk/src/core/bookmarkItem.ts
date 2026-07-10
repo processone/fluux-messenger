@@ -6,8 +6,9 @@ import { NS_BOOKMARKS, NS_FLUUX } from './namespaces'
  * A parsed XEP-0402 `<conference>` bookmark item.
  *
  * `nick` is left raw (possibly `undefined`) so callers can apply their own
- * default — `fetchBookmarks` only auto-joins when a nick is present, while the
- * live-notification path substitutes `'user'`.
+ * default — `fetchBookmarks` resolves it via `resolveDefaultMucNick` (profile
+ * username, then bare-JID local part) so an autojoin bookmark that omits
+ * `<nick>` still rejoins under a sensible nick.
  */
 export interface ParsedBookmark {
   jid: string

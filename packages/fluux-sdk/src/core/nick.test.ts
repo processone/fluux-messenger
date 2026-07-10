@@ -1,5 +1,28 @@
 import { describe, it, expect } from 'vitest'
-import { stripNickWhitespace, splitNickForDisplay } from './nick'
+import { stripNickWhitespace, splitNickForDisplay, resolveDefaultMucNick } from './nick'
+
+describe('resolveDefaultMucNick', () => {
+  it('prefers the profile username (XEP-0172 nick)', () => {
+    expect(resolveDefaultMucNick('Alice', 'bob@example.com')).toBe('Alice')
+  })
+
+  it('falls back to the bare-JID local part when no profile nick', () => {
+    expect(resolveDefaultMucNick(null, 'bob@example.com/resource')).toBe('bob')
+  })
+
+  it('hardens the profile nick against edge/invisible characters', () => {
+    expect(resolveDefaultMucNick('  Alice  ', 'bob@example.com')).toBe('Alice')
+  })
+
+  it('falls back to the JID when the profile nick is all whitespace', () => {
+    expect(resolveDefaultMucNick('   ', 'bob@example.com')).toBe('bob')
+  })
+
+  it('returns empty string when neither input is usable', () => {
+    expect(resolveDefaultMucNick(null, null)).toBe('')
+    expect(resolveDefaultMucNick(undefined, undefined)).toBe('')
+  })
+})
 
 describe('stripNickWhitespace', () => {
   it('leaves a clean nick unchanged', () => {

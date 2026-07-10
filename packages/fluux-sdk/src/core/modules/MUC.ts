@@ -1,7 +1,7 @@
 import { xml, Element } from '@xmpp/client'
 import { BaseModule } from './BaseModule'
 import { getBareJid, getLocalPart, getResource, getDomain } from '../jid'
-import { stripNickWhitespace } from '../nick'
+import { stripNickWhitespace, resolveDefaultMucNick } from '../nick'
 import { generateUUID } from '../../utils/uuid'
 import { generateQuickChatSlug } from '../wordlist'
 import { hasStableOccupantIdentity, isNonAnonymousRoom, isPrivateRoom } from '../roomCapabilities'
@@ -1737,12 +1737,20 @@ export class MUC extends BaseModule {
       const items = response.getChild('pubsub', NS_PUBSUB)?.getChild('items')
       if (!items) return { roomsToAutojoin, allRoomJids }
 
+      // Fallback nick for bookmarks that carry no explicit <nick>: prefer the
+      // profile username (XEP-0172), then the bare-JID local part. Resolved once
+      // — it's the same for every bookmark in this fetch.
+      const ownNickname = this.deps.stores?.connection.getOwnNickname?.()
+      const ownJid = this.deps.stores?.connection.getJid?.()
+      const defaultNick = resolveDefaultMucNick(ownNickname, ownJid) || 'user'
+
       for (const item of items.getChildren('item')) {
         const parsed = parseBookmarkItem(item)
         if (!parsed) continue
         const { jid, name, autojoin, nick, password, notifyAll } = parsed
 
         allRoomJids.push(jid)
+        const resolvedNick = nick || defaultNick
 
         const existingRoom = this.deps.stores?.room.getRoom(jid)
         if (existingRoom) {
@@ -1751,13 +1759,13 @@ export class MUC extends BaseModule {
           // that races with fetchBookmarks during fresh session reconnect.
           this.deps.emitSDK('room:bookmark', {
             roomJid: jid,
-            bookmark: { name, nick: nick || 'user', autojoin, password, notifyAll },
+            bookmark: { name, nick: resolvedNick, autojoin, password, notifyAll },
           })
         } else {
           const room: Room = {
             jid,
             name,
-            nickname: nick || 'user',
+            nickname: resolvedNick,
             joined: false,
             isBookmarked: true,
             autojoin,
@@ -1774,8 +1782,10 @@ export class MUC extends BaseModule {
           this.deps.emitSDK('room:added', { room })
         }
 
-        if (autojoin && nick) {
-          roomsToAutojoin.push({ jid, nick, password })
+        // Autojoin with the resolved nick (explicit <nick>, else profile default)
+        // so an autojoin bookmark that omits <nick> still rejoins on reconnect.
+        if (autojoin && resolvedNick) {
+          roomsToAutojoin.push({ jid, nick: resolvedNick, password })
         }
       }
     } catch (err) {

@@ -465,7 +465,7 @@ export {
 export type { ParsedJid, JidValidation } from './core/jid'
 
 // MUC nickname hygiene / display (impersonation hardening)
-export { stripNickWhitespace, splitNickForDisplay } from './core/nick'
+export { stripNickWhitespace, splitNickForDisplay, resolveDefaultMucNick } from './core/nick'
 export type { NickDisplay } from './core/nick'
 
 // Service discovery utilities (XEP-0030 / XEP-0163)

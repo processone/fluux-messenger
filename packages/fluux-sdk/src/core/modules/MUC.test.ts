@@ -406,7 +406,7 @@ describe('MUC Module', () => {
         })
       })
 
-      it('does not add room to autojoin list when nick is missing', async () => {
+      it('autojoins a nickless bookmark under the resolved default nick', async () => {
         const response = createMockElement('iq', { type: 'result' }, [
           {
             name: 'pubsub',
@@ -440,9 +440,56 @@ describe('MUC Module', () => {
 
         const result = await muc.fetchBookmarks()
 
-        // Room should be in allRoomJids but NOT in roomsToAutojoin (can't join without nick)
+        // With no explicit <nick> and no profile nick / JID in the mock store,
+        // the resolved default falls back to 'user' — but the room still autojoins
+        // so an autojoin bookmark that omits <nick> rejoins on reconnect.
         expect(result.allRoomJids).toContain('nonick@conference.example.org')
-        expect(result.roomsToAutojoin).toHaveLength(0)
+        expect(result.roomsToAutojoin).toEqual([
+          { jid: 'nonick@conference.example.org', nick: 'user', password: undefined },
+        ])
+      })
+
+      it('resolves the default nick from the profile username (XEP-0172)', async () => {
+        mockStores.connection.getOwnNickname.mockReturnValue('Alice')
+        const response = createMockElement('iq', { type: 'result' }, [
+          {
+            name: 'pubsub',
+            attrs: { xmlns: 'http://jabber.org/protocol/pubsub' },
+            children: [
+              {
+                name: 'items',
+                attrs: { node: 'urn:xmpp:bookmarks:1' },
+                children: [
+                  {
+                    name: 'item',
+                    attrs: { id: 'nonick@conference.example.org' },
+                    children: [
+                      {
+                        name: 'conference',
+                        attrs: {
+                          xmlns: 'urn:xmpp:bookmarks:1',
+                          name: 'No Nick Room',
+                          autojoin: 'true',
+                        },
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        ])
+
+        mockSendIQ.mockResolvedValue(response)
+
+        const result = await muc.fetchBookmarks()
+
+        expect(mockEmitSDK).toHaveBeenCalledWith('room:added', {
+          room: expect.objectContaining({ nickname: 'Alice' }),
+        })
+        expect(result.roomsToAutojoin).toEqual([
+          { jid: 'nonick@conference.example.org', nick: 'Alice', password: undefined },
+        ])
       })
     })
 
