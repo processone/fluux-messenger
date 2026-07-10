@@ -11,6 +11,7 @@ import { rosePineTheme } from './rose-pine'
 import { kanagawaTheme } from './kanagawa'
 import { githubTheme } from './github'
 import { indigoTheme } from './indigo'
+import { pureTheme } from './pure'
 
 /**
  * Aurora — the default Fluux theme. Its variables live in index.css (:root /
@@ -65,6 +66,7 @@ export const builtinThemes: ThemeDefinition[] = [
   rosePineTheme,
   kanagawaTheme,
   githubTheme,
+  pureTheme,
 ]
 
 /** Look up a built-in theme by ID */
