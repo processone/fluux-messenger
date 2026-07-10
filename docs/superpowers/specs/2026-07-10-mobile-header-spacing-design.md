@@ -52,8 +52,13 @@ internal gap, so they read as one unit and their glyphs sit close together:
 
 - `ChatHeader`: wrap `EncryptionIcon` + inline-search `div` + kebab wrapper in
   `<div className="flex items-center gap-1">`.
-- `RoomHeader`: wrap the trailing inline action `div`s + kebab in the same
-  `flex items-center gap-1` container.
+- `RoomHeader`: wrap the trailing controls in the same `flex items-center gap-1`
+  container. This must include the notify / invite / management / search inline
+  `div`s, the kebab wrapper, **and** the occupant-toggle "members pill"
+  (RoomHeader.tsx:203) — the pill is a direct child, not wrapped in a tier
+  `div`, and on a phone it plus the kebab are the only inline controls, so it
+  must be part of the cluster or grouping the kebab alone would leave it
+  stranded exactly as the shield is today.
 
 `gap-1` (4px) — the "slight breathing room" option: grouped as a unit but the
 two icons stay individually legible. The 44px tap boxes still guarantee the
@@ -84,6 +89,10 @@ implementation.
 Above the threshold, behaviour is unchanged: a long custom status message still
 truncates first and the clock still shows. Only the narrowest widths drop the
 clock to keep the short presence label intact.
+
+This change is 1:1-only. Rooms have no presence/clock line — the room subtitle
+(topic/JID) simply truncates with nothing competing beside it — so there is no
+RoomHeader equivalent.
 
 ## Non-goals
 
