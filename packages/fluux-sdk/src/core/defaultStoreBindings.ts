@@ -11,6 +11,7 @@
 
 import { defaultStores, type SDKStores } from '../stores'
 import type { StoreBindings } from './types/client'
+import type { Message } from './types/chat'
 import {
   connectionBindingMethodKeys,
   chatBindingMethodKeys,
@@ -114,6 +115,15 @@ export function createDefaultStoreBindings(stores: SDKStores = defaultStores): S
         Array.from(chatStore.getState().messages, ([id, messages]) => ({ id, messages })),
       getConversationMessages: (conversationId: string) =>
         chatStore.getState().messages.get(conversationId) ?? [],
+      getEncryptedPreviews: () => {
+        const result: Array<{ conversationId: string; lastMessage: Message }> = []
+        for (const [conversationId, meta] of chatStore.getState().conversationMeta) {
+          if (meta.lastMessage?.encryptedPayload) {
+            result.push({ conversationId, lastMessage: meta.lastMessage })
+          }
+        }
+        return result
+      },
     },
     roster: bindStoreMethods(rosterStore, rosterBindingMethodKeys),
     console: bindStoreMethods(consoleStore, consoleBindingMethodKeys),

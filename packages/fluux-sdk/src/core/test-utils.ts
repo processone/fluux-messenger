@@ -18,7 +18,10 @@ import {
 
 // Type utility to convert all function properties to Vitest Mock functions
 type MockifyFunctions<T> = {
-  [K in keyof T]: T[K] extends (...args: infer A) => infer R
+  // NonNullable unwraps OPTIONAL function members (e.g. `getEncryptedPreviews?`)
+  // so they mockify to a non-optional Mock — createMockStores provides every
+  // one, matching runtime — instead of falling through as `fn | undefined`.
+  [K in keyof T]-?: NonNullable<T[K]> extends (...args: infer A) => infer R
     ? Mock<(...args: A) => R>
     : T[K]
 }
@@ -649,6 +652,7 @@ export const createMockStores = (): MockStoreBindings => ({
     getLastMessage: vi.fn().mockReturnValue(undefined),
     getAllStoredMessages: vi.fn().mockReturnValue([]),
     getConversationMessages: vi.fn().mockReturnValue([]),
+    getEncryptedPreviews: vi.fn().mockReturnValue([]),
   },
   roster: {
     ...mockMethods(rosterBindingMethodKeys),

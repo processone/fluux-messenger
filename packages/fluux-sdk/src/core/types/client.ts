@@ -93,6 +93,12 @@ export interface StoreBindings {
     // In-memory messages for a single conversation (archived included). Read
     // seam for peer-scoped deferred-decrypt retry on a PEP key change.
     getConversationMessages: (conversationId: string) => Message[]
+    // Every conversation whose sidebar preview still carries an
+    // `encryptedPayload` (archived INCLUDED). Read seam for the deferred-decrypt
+    // engine's preview-level heal: a preview can hold ciphertext that no message
+    // store reaches (its message evicted, already decrypted in IndexedDB, or set
+    // preview-only) — so it must be re-decrypted straight from its own stash.
+    getEncryptedPreviews?: () => Array<{ conversationId: string; lastMessage: Message }>
   }
   roster: Pick<RosterState, (typeof rosterBindingMethodKeys)[number]>
   console: Pick<ConsoleState, (typeof consoleBindingMethodKeys)[number]>
