@@ -23,6 +23,7 @@ import { Maximize2 } from 'lucide-react'
 import { ModalShell } from '../components/ModalShell'
 import { useHighlighter } from './codeHighlight'
 import { getConsistentTextColor } from '../components/Avatar'
+import { MessageLink } from '../components/conversation/MessageLink'
 
 // URL regex pattern - excludes < and > to handle angle-bracketed URLs like <https://example.com>
 const URL_REGEX = /(https?:\/\/[^\s<>]+[^\s<>.,;:!?)"'\]])/g
@@ -317,17 +318,7 @@ function renderSegment(segment: StyledSegment, index: number, isDarkMode?: boole
         </code>
       )
     case 'link':
-      return (
-        <a
-          key={index}
-          href={segment.content}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-fluux-link hover:underline"
-        >
-          {segment.content}
-        </a>
-      )
+      return <MessageLink key={index} href={segment.content} />
     case 'mention': {
       // Use per-user consistent color when identifier is available, otherwise fall back to brand.
       // Prefer the caller's resolver (which mirrors the sender-name color, including a roster
@@ -647,17 +638,7 @@ export function renderTextWithLinks(text: string): React.ReactNode {
 
     // Add the URL as a clickable link
     const url = match[0]
-    parts.push(
-      <a
-        key={match.index}
-        href={url}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="text-fluux-link hover:underline"
-      >
-        {url}
-      </a>
-    )
+    parts.push(<MessageLink key={match.index} href={url} />)
 
     lastIndex = match.index + url.length
   }
