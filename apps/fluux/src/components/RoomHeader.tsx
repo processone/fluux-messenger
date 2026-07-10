@@ -124,16 +124,16 @@ export function RoomHeader({
       />
 
       {/* Name and info — opens Room Info modal; tooltip peeks the full topic */}
-      <Tooltip content={room.subject || room.jid} position="bottom" className="flex-1 min-w-0">
+      <Tooltip content={room.subject?.trim() || room.jid} position="bottom" className="flex-1 min-w-0">
         <button
           type="button"
           onClick={() => setShowInfoModal(true)}
           aria-label={`${t('rooms.showRoomInfo', 'Room info')}: ${room.name}`}
           className="w-full min-w-0 text-start rounded-md px-1 -mx-1 py-0.5 hover:bg-fluux-hover transition-colors"
         >
-          <h2 className="font-semibold text-fluux-text truncate leading-tight">{room.name}</h2>
+          <span className="block font-semibold text-fluux-text truncate leading-tight">{room.name}</span>
           <p className="text-xs text-fluux-muted truncate">
-            {room.subject ? renderTextWithLinks(room.subject) : room.jid}
+            {room.subject?.trim() ? renderTextWithLinks(room.subject) : room.jid}
           </p>
         </button>
       </Tooltip>

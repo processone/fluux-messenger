@@ -20,8 +20,8 @@ interface RoomInfoModalProps {
  */
 export function RoomInfoModal({ room, onClose }: RoomInfoModalProps) {
   return (
-    <ModalShell title={room.name} onClose={onClose} width="max-w-md" panelClassName="max-h-[80vh]">
-      <div className="p-4 flex flex-col gap-4 overflow-y-auto">
+    <ModalShell title={room.name} onClose={onClose} width="max-w-md" panelClassName="max-h-[80vh] flex flex-col">
+      <div className="p-4 flex flex-col gap-4 flex-1 min-h-0 overflow-y-auto">
         {/* Identity row */}
         <div className="flex items-center gap-3 min-w-0">
           <RoomAvatar identifier={room.jid} name={room.name} avatarUrl={room.avatar} size="xl" />
@@ -29,7 +29,7 @@ export function RoomInfoModal({ room, onClose }: RoomInfoModalProps) {
         </div>
 
         {/* Topic — only when set */}
-        {room.subject && <RoomTopic subject={room.subject} />}
+        {room.subject?.trim() && <RoomTopic subject={room.subject} />}
       </div>
     </ModalShell>
   )
@@ -62,6 +62,7 @@ function RoomTopic({ subject }: { subject: string }) {
       </div>
       {overflowing && (
         <button
+          type="button"
           onClick={() => setExpanded(v => !v)}
           className="flex items-center gap-1 mt-1 text-sm text-fluux-muted hover:text-fluux-text transition-colors select-none self-start"
         >
