@@ -643,14 +643,14 @@ export function MessageList<T extends BaseMessage>({
       case 'footer':
         // Typing indicator is NOT rendered here — it floats over the list (see below). The footer's
         // padding grows to pb-12 (clears the pill's ~46px height) only while it's shown, and shrinks
-        // back to pb-4 otherwise, so idle conversations don't carry the pill's clearance as dead
+        // back to pb-2 otherwise, so idle conversations don't carry the pill's clearance as dead
         // space. The grow edge is paired with a live-geometry-gated nudge in useMessageListScroll
         // (only when already at the bottom) so this never re-pins a reader scrolled up into history —
         // the #918 bug was a stale isAtBottomRef latch, not a reactive footer height per se.
         return (
           <div data-row-kind="footer">
             {extraContent}
-            <div className={typingUsers.length > 0 ? 'pb-12' : 'pb-4'} />
+            <div className={typingUsers.length > 0 ? 'pb-12' : 'pb-2'} />
           </div>
         )
     }
@@ -798,9 +798,9 @@ export function MessageList<T extends BaseMessage>({
 
           {/* Bottom breathing room. The typing indicator floats over the list (see below) rather
               than living here. The padding grows to pb-12 (clears the pill) only while it's shown
-              and shrinks back to pb-4 otherwise — see the footer render case above for the safety
+              and shrinks back to pb-2 otherwise — see the footer render case above for the safety
               rationale (live-geometry-gated nudge, never re-pins a reader scrolled up). */}
-          <div className={typingUsers.length > 0 ? 'pb-12' : 'pb-4'} />
+          <div className={typingUsers.length > 0 ? 'pb-12' : 'pb-2'} />
         </div>
         ))}
       </div>
