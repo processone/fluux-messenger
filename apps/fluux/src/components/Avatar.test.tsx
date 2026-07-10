@@ -249,19 +249,20 @@ describe('Avatar', () => {
     test('Avatar shape="square" renders a rounded square', () => {
       const { container } = render(<Avatar identifier="team@conference.fluux.chat" name="Team" shape="square" />)
       const root = container.firstChild as HTMLElement
-      expect(root.className).toContain('rounded-xl')
+      expect(root.className).toContain('rounded-[28%]')
       expect(root.className).not.toContain('rounded-full')
     })
 
-    test('square xs avatar uses a smaller radius so it stays visually square (rounded-xl at 24px is a circle)', () => {
-      const { container } = render(
-        <Avatar identifier="team@conference.fluux.chat" name="Team" shape="square" size="xs" />
-      )
-      const root = container.firstChild as HTMLElement
-      // rounded-xl (12px) on a 24px box = a full circle; xs must use rounded-lg (8px).
-      expect(root.className).toContain('rounded-lg')
-      expect(root.className).not.toContain('rounded-xl')
-      expect(root.className).not.toContain('rounded-full')
+    test('square avatar uses a proportional radius so it stays square at every size (a fixed 12px is a circle at 24px)', () => {
+      // Percentage radius scales with the box, so xs (24px) is a rounded-square, not a circle.
+      for (const size of ['xs', 'sm', 'md', 'xl'] as const) {
+        const { container } = render(
+          <Avatar identifier="team@conference.fluux.chat" name="Team" shape="square" size={size} />
+        )
+        const root = container.firstChild as HTMLElement
+        expect(root.className).toContain('rounded-[28%]')
+        expect(root.className).not.toContain('rounded-full')
+      }
     })
   })
 })
