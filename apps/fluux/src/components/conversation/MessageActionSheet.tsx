@@ -10,10 +10,12 @@
  */
 import { useState, Suspense, lazy } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Reply, Pencil, Trash2, Copy, SmilePlus } from 'lucide-react'
+import { Reply, Pencil, Trash2, Copy, SmilePlus, Link2 } from 'lucide-react'
 import { BottomSheet } from '../ui/BottomSheet'
 import { MenuButton, MenuDivider } from '../sidebar-components/SidebarListMenu'
 import { TOOLBAR_REACTIONS } from './MessageToolbar'
+import { extractLinks } from '../../utils/messageStyles'
+import { copyToClipboard } from '@/utils/clipboard'
 
 // Lazy-load the emoji picker — only fetched when the user opens "more reactions".
 const EmojiPicker = lazy(() => import('../EmojiPicker').then((m) => ({ default: m.EmojiPicker })))
@@ -50,10 +52,12 @@ export function MessageActionSheet({
 }: MessageActionSheetProps) {
   const { t } = useTranslation()
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
+  const [showLinkPicker, setShowLinkPicker] = useState(false)
 
   // Always reset the inner picker on close so the sheet reopens on the actions view.
   const close = () => {
     setShowEmojiPicker(false)
+    setShowLinkPicker(false)
     onClose()
   }
 
@@ -74,9 +78,32 @@ export function MessageActionSheet({
 
   const canCopy = !!body
 
+  const links = extractLinks(body ?? '')
+  const copyLink = (url: string) => {
+    void copyToClipboard(url)
+    close()
+  }
+  const onCopyLinkClick = () => {
+    if (links.length === 1) copyLink(links[0])
+    else setShowLinkPicker(true)
+  }
+
   return (
     <BottomSheet open={open} onClose={close} ariaLabel={t('chat.moreOptions')}>
-      {showEmojiPicker ? (
+      {showLinkPicker ? (
+        <div className="pb-1">
+          <div className="px-3 py-2 text-sm text-fluux-muted">{t('chat.copyLinkChoose')}</div>
+          {links.map((url) => (
+            <MenuButton
+              key={url}
+              onClick={() => copyLink(url)}
+              icon={<Link2 className="size-5 shrink-0" />}
+              label={url}
+              className="py-3 [&_span]:min-w-0 [&_span]:truncate"
+            />
+          ))}
+        </div>
+      ) : showEmojiPicker ? (
         <div className="flex justify-center px-2 pb-2">
           <Suspense fallback={null}>
             <EmojiPicker onSelect={react} onClose={() => setShowEmojiPicker(false)} />
@@ -127,6 +154,14 @@ export function MessageActionSheet({
                 onClick={copyBody}
                 icon={<Copy className="size-5" />}
                 label={t('chat.copyMessage')}
+                className="py-3"
+              />
+            )}
+            {links.length > 0 && (
+              <MenuButton
+                onClick={onCopyLinkClick}
+                icon={<Link2 className="size-5" />}
+                label={t('chat.copyLink')}
                 className="py-3"
               />
             )}

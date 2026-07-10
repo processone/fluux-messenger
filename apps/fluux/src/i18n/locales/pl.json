@@ -493,6 +493,8 @@
         "moderateAndBan": "Również zbanuj tego użytkownika z pokoju",
         "imageUnavailable": "Obraz już niedostępny",
         "copyImageUrl": "Kopiuj link obrazu",
+        "copyLink": "Kopiuj link",
+        "copyLinkChoose": "Który link skopiować?",
         "openInBrowser": "Otwórz w przeglądarce",
         "saveImage": "Zapisz obraz",
         "videoUnavailable": "Film już niedostępny",

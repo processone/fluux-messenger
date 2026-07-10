@@ -492,6 +492,8 @@
         "moderateAndBan": "Bandisci anche questo utente dalla stanza",
         "imageUnavailable": "Immagine non più disponibile",
         "copyImageUrl": "Copia link immagine",
+        "copyLink": "Copia link",
+        "copyLinkChoose": "Quale link copiare?",
         "openInBrowser": "Apri nel browser",
         "saveImage": "Salva immagine",
         "videoUnavailable": "Video non più disponibile",

@@ -489,6 +489,8 @@
         "moderateAndBan": "Also ban this user from the room",
         "imageUnavailable": "Image no longer available",
         "copyImageUrl": "Copy image URL",
+        "copyLink": "Copy link",
+        "copyLinkChoose": "Copy which link?",
         "openInBrowser": "Open in browser",
         "saveImage": "Save image",
         "videoUnavailable": "Video no longer available",

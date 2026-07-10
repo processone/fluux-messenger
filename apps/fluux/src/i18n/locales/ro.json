@@ -492,6 +492,8 @@
         "moderateAndBan": "De asemenea, interzice acestui utilizator accesul în cameră",
         "imageUnavailable": "Imaginea nu mai este disponibilă",
         "copyImageUrl": "Copiază linkul imaginii",
+        "copyLink": "Copiază linkul",
+        "copyLinkChoose": "Care link se copiază?",
         "openInBrowser": "Deschide în browser",
         "saveImage": "Salvează imaginea",
         "videoUnavailable": "Videoclipul nu mai este disponibil",

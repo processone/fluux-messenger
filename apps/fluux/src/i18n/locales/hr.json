@@ -490,6 +490,8 @@
         "moderateAndBan": "Također zabrani ovog korisnika iz sobe",
         "imageUnavailable": "Slika više nije dostupna",
         "copyImageUrl": "Kopiraj poveznicu slike",
+        "copyLink": "Kopiraj poveznicu",
+        "copyLinkChoose": "Koju poveznicu kopirati?",
         "openInBrowser": "Otvori u pregledniku",
         "saveImage": "Spremi sliku",
         "videoUnavailable": "Video više nije dostupan",

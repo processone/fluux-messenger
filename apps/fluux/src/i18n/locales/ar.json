@@ -493,6 +493,8 @@
         "moderateAndBan": "حظر هذا المستخدم أيضًا من الغرفة",
         "imageUnavailable": "الصورة لم تعد متاحة",
         "copyImageUrl": "نسخ رابط الصورة",
+        "copyLink": "نسخ الرابط",
+        "copyLinkChoose": "نسخ أي رابط؟",
         "openInBrowser": "فتح في المتصفح",
         "saveImage": "حفظ الصورة",
         "videoUnavailable": "الفيديو لم يعد متاحًا",

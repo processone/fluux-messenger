@@ -491,6 +491,8 @@
         "moderateAndBan": "Taip pat uždrausti šiam naudotojui prieigą prie kambario",
         "imageUnavailable": "Paveikslėlis nebepasiekiamas",
         "copyImageUrl": "Kopijuoti vaizdo nuorodą",
+        "copyLink": "Kopijuoti nuorodą",
+        "copyLinkChoose": "Kurią nuorodą kopijuoti?",
         "openInBrowser": "Atidaryti naršyklėje",
         "saveImage": "Išsaugoti vaizdą",
         "videoUnavailable": "Vaizdo įrašas nebepasiekiamas",

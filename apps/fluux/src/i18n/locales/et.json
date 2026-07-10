@@ -491,6 +491,8 @@
         "moderateAndBan": "Keela ka see kasutaja ruumist",
         "imageUnavailable": "Pilt pole enam saadaval",
         "copyImageUrl": "Kopeeri pildi link",
+        "copyLink": "Kopeeri link",
+        "copyLinkChoose": "Millist linki kopeerida?",
         "openInBrowser": "Ava brauseris",
         "saveImage": "Salvesta pilt",
         "videoUnavailable": "Video pole enam saadaval",

@@ -489,6 +489,8 @@
         "moderateAndBan": "Estä myös tämä käyttäjä huoneesta",
         "imageUnavailable": "Kuva ei ole enää saatavilla",
         "copyImageUrl": "Kopioi kuvan linkki",
+        "copyLink": "Kopioi linkki",
+        "copyLinkChoose": "Mikä linkki kopioidaan?",
         "openInBrowser": "Avaa selaimessa",
         "saveImage": "Tallenna kuva",
         "videoUnavailable": "Video ei ole enää saatavilla",

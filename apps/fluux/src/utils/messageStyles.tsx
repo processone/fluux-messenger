@@ -23,9 +23,33 @@ import { Maximize2 } from 'lucide-react'
 import { ModalShell } from '../components/ModalShell'
 import { useHighlighter } from './codeHighlight'
 import { getConsistentTextColor } from '../components/Avatar'
+import { MessageLink } from '../components/conversation/MessageLink'
 
 // URL regex pattern - excludes < and > to handle angle-bracketed URLs like <https://example.com>
 const URL_REGEX = /(https?:\/\/[^\s<>]+[^\s<>.,;:!?)"'\]])/g
+
+/**
+ * Return every http(s) URL found in `text`, in document order, de-duplicated.
+ * Shares URL_REGEX with the message renderer so URLs are detected the same way.
+ * Note: this scans the raw body, so a URL inside an inline-code span or code
+ * fence (which the renderer shows as non-clickable text) is still returned here
+ * and remains copyable from the action sheet — an intentional, harmless surplus.
+ */
+export function extractLinks(text: string): string[] {
+  if (!text) return []
+  URL_REGEX.lastIndex = 0
+  const seen = new Set<string>()
+  const out: string[] = []
+  let match: RegExpExecArray | null
+  while ((match = URL_REGEX.exec(text)) !== null) {
+    const url = match[0]
+    if (!seen.has(url)) {
+      seen.add(url)
+      out.push(url)
+    }
+  }
+  return out
+}
 
 // Mention regex pattern: @word (must be preceded by start or whitespace)
 // Used as fallback when XEP-0372 references aren't available
@@ -296,17 +320,7 @@ function renderSegment(segment: StyledSegment, index: number, isDarkMode?: boole
         </code>
       )
     case 'link':
-      return (
-        <a
-          key={index}
-          href={segment.content}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-fluux-link hover:underline"
-        >
-          {segment.content}
-        </a>
-      )
+      return <MessageLink key={index} href={segment.content} />
     case 'mention': {
       // Use per-user consistent color when identifier is available, otherwise fall back to brand.
       // Prefer the caller's resolver (which mirrors the sender-name color, including a roster
@@ -626,17 +640,7 @@ export function renderTextWithLinks(text: string): React.ReactNode {
 
     // Add the URL as a clickable link
     const url = match[0]
-    parts.push(
-      <a
-        key={match.index}
-        href={url}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="text-fluux-link hover:underline"
-      >
-        {url}
-      </a>
-    )
+    parts.push(<MessageLink key={match.index} href={url} />)
 
     lastIndex = match.index + url.length
   }

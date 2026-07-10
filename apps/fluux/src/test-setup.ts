@@ -110,6 +110,10 @@ void i18n.use(initReactI18next).init({
           newMessagesCount: '{{count}} new message',
           newMessagesCount_other: '{{count}} new messages',
           youWereAway: 'You were away',
+          copyLink: 'Copy link',
+          copyLinkChoose: 'Copy which link?',
+          openInBrowser: 'Open in browser',
+          copyMessage: 'Copy text',
         },
         // Empty state primary actions (ChatLayout EmptyState tests)
         emptyState: {

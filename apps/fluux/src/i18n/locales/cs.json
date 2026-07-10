@@ -493,6 +493,8 @@
         "moderateAndBan": "Také zakázat tohoto uživatele v místnosti",
         "imageUnavailable": "Obrázek již není k dispozici",
         "copyImageUrl": "Kopírovat odkaz obrázku",
+        "copyLink": "Kopírovat odkaz",
+        "copyLinkChoose": "Který odkaz zkopírovat?",
         "openInBrowser": "Otevřít v prohlížeči",
         "saveImage": "Uložit obrázek",
         "videoUnavailable": "Video již není k dispozici",

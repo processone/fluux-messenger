@@ -2,7 +2,7 @@ import { useTranslation } from 'react-i18next'
 import { Link, ExternalLink, Download } from 'lucide-react'
 import { MenuButton } from './sidebar-components/SidebarListMenu'
 import { copyToClipboard } from '@/utils/clipboard'
-import { isTauri } from '@/utils/tauri'
+import { openInBrowser } from '@/utils/openInBrowser'
 import { downloadFile } from '@/utils/download'
 import type { ContextMenuState } from '@/hooks/useContextMenu'
 import { useFocusTrap } from '@/hooks/useFocusTrap'
@@ -12,15 +12,6 @@ interface ImageContextMenuProps {
   proxiedUrl: string | null
   filename?: string
   menu: ContextMenuState
-}
-
-async function openInBrowser(url: string): Promise<void> {
-  if (isTauri()) {
-    const { open } = await import('@tauri-apps/plugin-shell')
-    await open(url)
-  } else {
-    window.open(url, '_blank', 'noopener,noreferrer')
-  }
 }
 
 export function ImageContextMenu({ originalUrl, proxiedUrl, filename, menu }: ImageContextMenuProps) {

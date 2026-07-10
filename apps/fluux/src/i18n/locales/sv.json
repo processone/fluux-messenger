@@ -489,6 +489,8 @@
         "moderateAndBan": "Blockera även denna användare från rummet",
         "imageUnavailable": "Bilden är inte längre tillgänglig",
         "copyImageUrl": "Kopiera bildlänk",
+        "copyLink": "Kopiera länk",
+        "copyLinkChoose": "Vilken länk vill du kopiera?",
         "openInBrowser": "Öppna i webbläsare",
         "saveImage": "Spara bild",
         "videoUnavailable": "Videon är inte längre tillgänglig",

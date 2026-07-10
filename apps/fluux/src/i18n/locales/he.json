@@ -490,6 +490,8 @@
         "moderateAndBan": "גם חסום את המשתמש מהחדר",
         "imageUnavailable": "התמונה אינה זמינה יותר",
         "copyImageUrl": "העתקת קישור תמונה",
+        "copyLink": "העתקת קישור",
+        "copyLinkChoose": "איזה קישור להעתיק?",
         "openInBrowser": "פתיחה בדפדפן",
         "saveImage": "שמירת תמונה",
         "videoUnavailable": "הסרטון אינו זמין יותר",
