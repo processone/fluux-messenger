@@ -28,6 +28,8 @@ interface SettingsState {
   setTransparencyMode: (value: TransparencyMode) => void
   densityMode: DensityMode
   setDensityMode: (mode: DensityMode) => void
+  soundEnabled: boolean
+  setSoundEnabled: (enabled: boolean) => void
 }
 
 const THEME_KEY = 'fluux-theme'
@@ -37,6 +39,7 @@ const MEDIA_AUTO_DOWNLOAD_KEY = 'fluux-media-autodownload'
 const MOTION_KEY = 'fluux-motion'
 const TRANSPARENCY_KEY = 'fluux-transparency'
 const DENSITY_KEY = 'fluux-density'
+const SOUND_KEY = 'fluux-sound'
 
 /**
  * Get initial theme mode from localStorage, default to 'system'
@@ -142,6 +145,20 @@ function getInitialDensity(): DensityMode {
   return 'comfortable'
 }
 
+/**
+ * Get initial sound enabled preference from localStorage, default to true.
+ */
+function getInitialSoundEnabled(): boolean {
+  try {
+    const stored = localStorage.getItem(SOUND_KEY)
+    if (stored === 'false') return false
+    if (stored === 'true') return true
+  } catch {
+    // localStorage not available
+  }
+  return true
+}
+
 export const useSettingsStore = create<SettingsState>((set) => ({
   themeMode: getInitialMode(),
 
@@ -213,5 +230,12 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   setDensityMode: (mode) => {
     try { localStorage.setItem(DENSITY_KEY, mode) } catch { /* localStorage not available */ }
     set({ densityMode: mode })
+  },
+
+  soundEnabled: getInitialSoundEnabled(),
+
+  setSoundEnabled: (enabled) => {
+    try { localStorage.setItem(SOUND_KEY, String(enabled)) } catch { /* localStorage not available */ }
+    set({ soundEnabled: enabled })
   },
 }))
