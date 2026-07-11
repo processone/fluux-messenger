@@ -48,6 +48,14 @@ gen_variant() {
   sqr() { rsvg-convert -w "$1" -h "$1" "$SQ" -o "$TMP/_r.png"; \
           magick -size "${1}x${1}" xc:none -fill white -draw "circle $(( $1/2 )),$(( $1/2 )) $(( $1/2 )),0" "$TMP/_mask.png"; \
           magick "$TMP/_r.png" "$TMP/_mask.png" -alpha off -compose CopyOpacity -composite "$2"; }
+  # squircle inset to Apple's macOS icon grid: the 902/1024 source squircle is
+  # too full-bleed for the Dock (only ~6% margin). macOS convention is an
+  # 824x824 body in a 1024 canvas (~10% margin). Render the squircle smaller
+  # (824/902) then re-center it on a transparent SxS canvas so the final body
+  # lands exactly on the 824/1024 grid with system apps' standard margin.
+  sqm() { local inner=$(( ($1 * 824 + 451) / 902 )); \
+          rsvg-convert -w "$inner" -h "$inner" "$SQ" -o "$TMP/_m.png"; \
+          magick "$TMP/_m.png" -background none -gravity center -extent "${1}x${1}" "$2"; }
 
   echo "== [$VARIANT] src-tauri/icons (squircle) =="
   sq 512 "$OUT_I/icon.png"
@@ -98,13 +106,13 @@ gen_variant() {
   for s in 16 24 32 48 64 256; do sq "$s" "$TMP/ico_$s.png"; ICO_TMP+=("$TMP/ico_$s.png"); done
   magick "${ICO_TMP[@]}" "$OUT_I/icon.ico"
 
-  echo "== [$VARIANT] macOS ICNS (squircle, transparent) =="
+  echo "== [$VARIANT] macOS ICNS (squircle inset to Apple grid, transparent) =="
   ISET="$TMP/icon.iconset"; mkdir -p "$ISET"
-  sq 16   "$ISET/icon_16x16.png";      sq 32   "$ISET/icon_16x16@2x.png"
-  sq 32   "$ISET/icon_32x32.png";      sq 64   "$ISET/icon_32x32@2x.png"
-  sq 128  "$ISET/icon_128x128.png";    sq 256  "$ISET/icon_128x128@2x.png"
-  sq 256  "$ISET/icon_256x256.png";    sq 512  "$ISET/icon_256x256@2x.png"
-  sq 512  "$ISET/icon_512x512.png";    sq 1024 "$ISET/icon_512x512@2x.png"
+  sqm 16   "$ISET/icon_16x16.png";      sqm 32   "$ISET/icon_16x16@2x.png"
+  sqm 32   "$ISET/icon_32x32.png";      sqm 64   "$ISET/icon_32x32@2x.png"
+  sqm 128  "$ISET/icon_128x128.png";    sqm 256  "$ISET/icon_128x128@2x.png"
+  sqm 256  "$ISET/icon_256x256.png";    sqm 512  "$ISET/icon_256x256@2x.png"
+  sqm 512  "$ISET/icon_512x512.png";    sqm 1024 "$ISET/icon_512x512@2x.png"
   iconutil -c icns "$ISET" -o "$OUT_I/icon.icns"
 
   echo "[$VARIANT] DONE"
