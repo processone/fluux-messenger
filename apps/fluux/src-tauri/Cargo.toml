@@ -35,7 +35,7 @@ uuid = { version = "1", features = ["v4"] }
 
 # XMPP WebSocket-to-TCP proxy dependencies
 tokio = { version = "1", features = ["full"] }
-tokio-tungstenite = "0.29"
+tokio-tungstenite = "0.30"
 futures-util = "0.3"
 quick-xml = "0.41"
 tokio-rustls = "0.26"
