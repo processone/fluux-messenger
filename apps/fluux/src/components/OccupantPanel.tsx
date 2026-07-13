@@ -323,7 +323,10 @@ export function OccupantPanel({
     rowHandlersRef.current = {
       onContextMenu: (group, e) => {
         const { menu, setMenuTarget, roomNickname } = rowCtxRef.current
-        if (group.connections.some(conn => conn.nick === roomNickname)) return // no menu for self
+        if (group.connections.some(conn => conn.nick === roomNickname)) {
+          e.preventDefault() // no occupant menu for self, but still suppress the browser menu
+          return
+        }
         setMenuTarget(group)
         menu.handleContextMenu(e)
       },

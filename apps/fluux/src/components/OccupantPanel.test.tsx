@@ -15,6 +15,11 @@ vi.mock('react-i18next', () => ({
 }))
 
 // Mock hooks
+const contextMenuMock = vi.hoisted(() => ({
+  handleContextMenu: vi.fn((e: { preventDefault: () => void }) => e.preventDefault()),
+  handleTouchStart: vi.fn(),
+  handleTouchEnd: vi.fn(),
+}))
 vi.mock('@/hooks', () => ({
   useWindowDrag: () => ({
     dragRegionProps: { 'data-tauri-drag-region': true },
@@ -26,6 +31,7 @@ vi.mock('@/hooks', () => ({
     close: vi.fn(),
     menuRef: { current: null },
     triggerHandlers: {},
+    ...contextMenuMock,
   }),
   useTheme: () => ({
     isDark: true,
@@ -316,6 +322,46 @@ describe('OccupantPanel', () => {
       )
 
       expect(screen.getByText('rooms.you')).toBeInTheDocument()
+    })
+
+    it('suppresses the native context menu on own row without opening the occupant menu', () => {
+      contextMenuMock.handleContextMenu.mockClear()
+      const occupants = new Map<string, RoomOccupant>([
+        ['me@room', createOccupant({ nick: 'Me' })],
+      ])
+      const room = createRoom({ occupants, nickname: 'Me' })
+
+      render(
+        <OccupantPanel
+          room={room}
+          contactsByJid={new Map()}
+          onClose={() => {}}
+        />
+      )
+
+      // fireEvent returns false when preventDefault() was called
+      const notCancelled = fireEvent.contextMenu(screen.getByText('rooms.you'))
+      expect(notCancelled).toBe(false)
+      expect(contextMenuMock.handleContextMenu).not.toHaveBeenCalled()
+    })
+
+    it('opens the occupant context menu on another occupant row', () => {
+      contextMenuMock.handleContextMenu.mockClear()
+      const occupants = new Map<string, RoomOccupant>([
+        ['other@room', createOccupant({ nick: 'Other' })],
+      ])
+      const room = createRoom({ occupants, nickname: 'Me' })
+
+      render(
+        <OccupantPanel
+          room={room}
+          contactsByJid={new Map()}
+          onClose={() => {}}
+        />
+      )
+
+      fireEvent.contextMenu(screen.getByText('Other'))
+      expect(contextMenuMock.handleContextMenu).toHaveBeenCalledTimes(1)
     })
 
     it('shows bare JID when available', () => {
