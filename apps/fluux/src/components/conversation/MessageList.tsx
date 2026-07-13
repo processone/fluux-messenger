@@ -41,7 +41,7 @@ import {
   getActiveMessageListController,
   type ActiveMessageListController,
 } from './activeMessageListController'
-import { useRowMetrics } from './useRowMetrics'
+import { useRowMetrics, ROW_METRICS_FALLBACK } from './useRowMetrics'
 import { estimateRowHeight } from './rowHeightEstimator'
 import { isEstimateDebugEnabled, estimateDebugLog } from '@/utils/scrollDebug'
 import {
@@ -306,16 +306,15 @@ export function MessageList<T extends BaseMessage>({
       if (item === undefined) {
         return rowMetricsRef.current.chrome.continuation // safe fallback for any out-of-range probe
       }
-      const mountBucketPx = Math.round(rowMetricsRef.current.contentWidthPx / 20) * 20
-      const cached = getCachedHeight(conversationId, item.key, scalePct, mountBucketPx)
+      const cached = getCachedHeight(conversationId, item.key, scalePct)
       return cached ?? estimateRowHeight(item, rowMetricsRef.current)
     },
     [virtualItems, rowMetricsRef, conversationId, scalePct],
   )
 
   // Build the initialMeasurements seed from the persistent cache. Only when virtualized —
-  // flag-OFF path is unchanged. Filter to keys that match the width bucket + scale so stale
-  // entries from a different viewport/font-size are not applied.
+  // flag-OFF path is unchanged. Entries are keyed id@scale; width validity is a per-conversation
+  // tag (a changed real width wipes the map), so everything present is valid to seed.
   // Use a ref so it is evaluated once at mount without needing eslint-disable on empty deps.
   // MOUNT-SCOPED: this builds the seed exactly once per mount and relies on MessageList
   // remounting on every conversation switch (the cache is the whole point — it survives that
@@ -329,17 +328,11 @@ export function MessageList<T extends BaseMessage>({
     // FIRST mount after a reload seeds real heights (the in-memory cache alone dies with
     // the page, which made every conversation re-open on estimates → the reload blink).
     hydrateHeightCache()
-    // The mount-time content width is still the 560 fallback here (useRowMetrics samples the real
-    // width in a rAF after layout), so prefer the REAL bucket persisted by a prior write-back. The
-    // common case — re-entering at the same viewport — then hits; a genuine width change falls back
-    // to the mount-time bucket and just re-measures on mount as before.
-    const mountWidthBucketPx = Math.round(rowMetricsRef.current.contentWidthPx / 20) * 20
-    const widthBucketPx = getConversationWidthBucket(conversationId) ?? mountWidthBucketPx
     const stored = getCachedHeights(conversationId)
     if (stored.size > 0) {
-      const suffix = `@${widthBucketPx}@${scalePct}`
-      // Iterate the stored map; for each stored key that matches bucket+scale, extract messageId
-      // (strip `@bucket@scale` suffix) and include it if the messageId is a key in virtualItems.
+      const suffix = `@${scalePct}`
+      // For each stored key at the current scale, extract the item key (strip `@scale`) and
+      // include it if it is a key in virtualItems.
       const virtualKeys = new Set(virtualItems.map((item) => item.key))
       const result = new Map<string, number>()
       for (const [k, size] of stored) {
@@ -354,7 +347,7 @@ export function MessageList<T extends BaseMessage>({
     }
     estimateDebugLog('seed', {
       conversationId,
-      bucket: widthBucketPx,
+      bucket: getConversationWidthBucket(conversationId),
       scale: scalePct,
       seeded: initialMeasurementsRef.current?.size ?? 0,
       candidates: stored.size,
@@ -373,16 +366,21 @@ export function MessageList<T extends BaseMessage>({
       virtualized
         ? (key: string, size: number) => {
             const { conversationId: cid, scalePct: scale, rowMetricsRef: metricsRef, indexById: idMap, virtualItems: items } = onMeasuredParamsRef.current
-            // Real sampled bucket. Persist it alongside the entry so the next mount's seed (which
-            // runs before the real width is sampled) can filter by this same bucket and hit.
-            const widthBucketPx = Math.round(metricsRef.current.contentWidthPx / 20) * 20
-            recordMeasuredHeight(cid, heightCacheKey(key, widthBucketPx, scale), size)
-            noteConversationWidthBucket(cid, widthBucketPx)
+            const idx = idMap.get(key)
+            const item = idx != null ? items[idx] : undefined
+            // isFirstNew rows include the "new messages" divider, which comes and goes with
+            // read-state between opens — caching their height re-blinks the next open.
+            if (!(item?.kind === 'message' && item.isFirstNew)) {
+              recordMeasuredHeight(cid, heightCacheKey(key, scale), size)
+            }
+            // Note the width-validity tag only once the REAL width has been sampled — the
+            // mount-time fallback must never wipe (or masquerade as) a real bucket.
+            if (metricsRef.current !== ROW_METRICS_FALLBACK) {
+              noteConversationWidthBucket(cid, Math.round(metricsRef.current.contentWidthPx / 20) * 20)
+            }
             // Estimate-accuracy trace (estimate-debug only): predicted vs first-measured per row.
             // Gated up front so the predict (which may call pretext) is skipped when debug is off.
             if (isEstimateDebugEnabled()) {
-              const idx = idMap.get(key)
-              const item = idx != null ? items[idx] : undefined
               const predicted = item ? estimateRowHeight(item, metricsRef.current) : undefined
               estimateDebugLog('row', key, {
                 kind: item?.kind,
@@ -390,6 +388,12 @@ export function MessageList<T extends BaseMessage>({
                 measured: size,
                 delta: predicted != null ? Math.round(size - predicted) : undefined,
               })
+              // The re-entry blink signal: a row whose SEEDED height disagrees with what it
+              // measures on mount reflows after the first paint and re-asserts the bottom pin.
+              const seeded = initialMeasurementsRef.current?.get(key)
+              if (seeded !== undefined && seeded !== size) {
+                estimateDebugLog('seed-mismatch', key, { seeded, measured: size })
+              }
             }
           }
         : undefined,
@@ -422,13 +426,23 @@ export function MessageList<T extends BaseMessage>({
     const snapshotSettledRows = () => {
       if (!scroller) return
       const { conversationId: cid, scalePct: scale, rowMetricsRef: metricsRef, virtualItems: items } = onMeasuredParamsRef.current
-      const widthBucketPx = Math.round(metricsRef.current.contentWidthPx / 20) * 20
-      const settled = collectSettledRowHeights(scroller, items, widthBucketPx, scale)
+      // Note the width-validity tag BEFORE recording, so a genuine width change wipes the
+      // stale map first and the snapshot lands under the new tag. Only from a real sample —
+      // the mount-time fallback must never wipe a real bucket.
+      const sampled = metricsRef.current !== ROW_METRICS_FALLBACK
+      if (sampled) {
+        noteConversationWidthBucket(cid, Math.round(metricsRef.current.contentWidthPx / 20) * 20)
+      }
+      const settled = collectSettledRowHeights(scroller, items, scale)
       for (const [key, height] of settled) {
         recordMeasuredHeight(cid, key, height)
       }
-      if (settled.size > 0) noteConversationWidthBucket(cid, widthBucketPx)
-      persistHeightSnapshot(cid, settled, widthBucketPx)
+      // Persist under the conversation's validity tag; without one (sample never landed —
+      // pathological), skip persisting rather than stamping heights with a made-up width.
+      const bucket = getConversationWidthBucket(cid)
+      if (bucket !== undefined) {
+        persistHeightSnapshot(cid, settled, bucket)
+      }
     }
     window.addEventListener('pagehide', snapshotSettledRows)
     return () => {

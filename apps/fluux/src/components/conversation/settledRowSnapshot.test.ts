@@ -20,14 +20,14 @@ function scrollerWith(rows: Array<{ index: string; height: number }>): HTMLEleme
 const items = [{ key: 'm1' }, { key: 'm2' }, { key: 'date:2026-07-13' }]
 
 describe('collectSettledRowHeights', () => {
-  it('maps each mounted row to its height-cache key at the given bucket/scale', () => {
+  it('maps each mounted row to its height-cache key at the given scale', () => {
     const scroller = scrollerWith([
       { index: '0', height: 84 },
       { index: '2', height: 48 },
     ])
-    const result = collectSettledRowHeights(scroller, items, 880, 100)
-    expect(result.get('m1@880@100')).toBe(84)
-    expect(result.get('date:2026-07-13@880@100')).toBe(48)
+    const result = collectSettledRowHeights(scroller, items, 100)
+    expect(result.get('m1@100')).toBe(84)
+    expect(result.get('date:2026-07-13@100')).toBe(48)
     expect(result.size).toBe(2)
   })
 
@@ -38,13 +38,25 @@ describe('collectSettledRowHeights', () => {
       { index: 'x', height: 40 }, // malformed
       { index: '1', height: 116 },
     ])
-    const result = collectSettledRowHeights(scroller, items, 880, 100)
+    const result = collectSettledRowHeights(scroller, items, 100)
     expect(result.size).toBe(1)
-    expect(result.get('m2@880@100')).toBe(116)
+    expect(result.get('m2@100')).toBe(116)
+  })
+
+  it('skips first-new rows: their height includes the new-messages divider, which changes between opens', () => {
+    const withDivider = [{ key: 'm1' }, { key: 'm2', isFirstNew: true }, { key: 'm3' }]
+    const scroller = scrollerWith([
+      { index: '0', height: 84 },
+      { index: '1', height: 106 },
+      { index: '2', height: 62 },
+    ])
+    const result = collectSettledRowHeights(scroller, withDivider, 100)
+    expect(result.size).toBe(2)
+    expect(result.get('m2@100')).toBeUndefined()
   })
 
   it('returns an empty map when no spacer rows are mounted', () => {
     const scroller = document.createElement('div')
-    expect(collectSettledRowHeights(scroller, items, 880, 100).size).toBe(0)
+    expect(collectSettledRowHeights(scroller, items, 100).size).toBe(0)
   })
 })

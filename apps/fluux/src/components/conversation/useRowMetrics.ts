@@ -32,6 +32,45 @@ export const ROW_METRICS_FALLBACK: RowEstimatorContext = {
   chrome: FALLBACK_CHROME,
 }
 
+/**
+ * Pick the text element whose clientWidth is the conversation's real CONTENT width.
+ *
+ * Own bubbles are `w-fit` (hug width): their `[data-msg-text]` is only as wide as the text,
+ * so sampling whichever row happens to be first poisons the width (and therefore the height
+ * cache's width-bucket validity tag) with an essentially random value. Prefer the first text
+ * element OUTSIDE `[data-msg-own]`; if only own rows are mounted, the widest own text box is
+ * the best available lower bound.
+ */
+export function pickWidthSampleEl(root: HTMLElement): HTMLElement | null {
+  const all = root.querySelectorAll<HTMLElement>('[data-msg-text]')
+  let widestOwn: HTMLElement | null = null
+  for (const el of all) {
+    if (!el.closest('[data-msg-own]')) return el
+    if (!widestOwn || el.clientWidth > widestOwn.clientWidth) widestOwn = el
+  }
+  return widestOwn
+}
+
+/**
+ * Pick a row for chrome sampling (chrome = outer height − predicted text height): it must be
+ * a PLAIN-TEXT row. Quote/code/media rows make the prediction meaningless (observed: a
+ * continuation "chrome" of 369px vs the real ~6px), and own hug-width rows wrap at the bubble
+ * width rather than the content width. Returns the first clean row of the shape, or null.
+ */
+export function pickChromeSampleEl(
+  root: HTMLElement,
+  shape: 'header' | 'cont',
+): HTMLElement | null {
+  const rows = root.querySelectorAll<HTMLElement>(`[data-msg-chrome="${shape}"]`)
+  for (const row of rows) {
+    if (row.hasAttribute('data-msg-own')) continue
+    if (!row.querySelector('[data-msg-text]')) continue
+    if (row.querySelector('blockquote, pre, img, video, audio')) continue
+    return row
+  }
+  return null
+}
+
 function fontSpecFrom(el: HTMLElement): FontSpec {
   const cs = getComputedStyle(el)
   const fontSizePx = parseFloat(cs.fontSize) || 16
@@ -68,7 +107,7 @@ export function useRowMetrics(
   const sample = useCallback(() => {
     const root = scrollRef.current
     if (!root) return
-    const textEl = root.querySelector<HTMLElement>('[data-msg-text]')
+    const textEl = pickWidthSampleEl(root)
     if (!textEl) return // nothing mounted yet; keep current/fallback
 
     const fontSpec = fontSpecFrom(textEl)
@@ -89,7 +128,7 @@ export function useRowMetrics(
     const chrome: RowChrome = { ...ctxRef.current.chrome }
 
     const measureChromeFor = (shape: 'header' | 'cont'): number | null => {
-      const rowEl = root.querySelector<HTMLElement>(`[data-msg-chrome="${shape}"]`)
+      const rowEl = pickChromeSampleEl(root, shape)
       const t = rowEl?.querySelector<HTMLElement>('[data-msg-text]')
       if (!rowEl || !t) return null
       const outer = rowEl.getBoundingClientRect().height
