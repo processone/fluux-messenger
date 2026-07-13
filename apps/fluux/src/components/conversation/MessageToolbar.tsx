@@ -154,10 +154,14 @@ export const MessageToolbar = memo(function MessageToolbar({
       data-message-toolbar
       className={`absolute ${showAvatar ? '-top-16' : '-top-12'} -end-2 p-4 z-20 select-none pointer-events-none transition-all duration-200 ease-out ${visibilityClass}`}
     >
-      {/* Visible toolbar */}
+      {/* Visible toolbar. The p-0.5 inset keeps each control's square hover/active
+          fill (hover:bg-fluux-hover, reacted bg-fluux-brand/20) clear of the
+          rounded-md corners — without it, an end button's fill pokes past the
+          popover's rounded border. Clipping via overflow-hidden isn't an option
+          here because the reaction picker and more-menu dropdowns overflow the bar. */}
       <div
         ref={toolbarRef}
-        className={`flex items-center fluux-popover rounded-md ${interactivityClass}`}
+        className={`flex items-center p-0.5 fluux-popover rounded-md ${interactivityClass}`}
         onMouseEnter={onToolbarMouseEnter}
       >
       {/* Quick reaction emojis (hidden when reactions are disabled) */}

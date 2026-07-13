@@ -138,7 +138,7 @@ exports[`ChatView > Snapshots > should match snapshot with messages 1`] = `
                       data-message-toolbar="true"
                     >
                       <div
-                        class="flex items-center fluux-popover rounded-md "
+                        class="flex items-center p-0.5 fluux-popover rounded-md "
                       >
                         <button
                           aria-label="chat.reactWith"
@@ -304,7 +304,7 @@ exports[`ChatView > Snapshots > should match snapshot with messages 1`] = `
                       data-message-toolbar="true"
                     >
                       <div
-                        class="flex items-center fluux-popover rounded-md "
+                        class="flex items-center p-0.5 fluux-popover rounded-md "
                       >
                         <button
                           aria-label="chat.reactWith"
