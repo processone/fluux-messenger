@@ -24,6 +24,7 @@ import type { ReassertLoopHandle } from './reassertLoopMonitor'
 import { createPinRunTracker, readPinRepaintMode, shouldForceRepaint } from './pinBottomRun'
 import { createRenderCostProbe, type RenderCostProbe } from '@/utils/renderCostProbe'
 import { isProgrammaticScroll } from './scrollGate'
+import { shouldShowScrollToBottomFab } from './fabVisibility'
 import type { MessageVirtualizer } from './messageVirtualizer'
 import { notifyUserInput } from '@/utils/renderLoopDetector'
 
@@ -1746,8 +1747,11 @@ export function useMessageListScroll({
       mediaLoadSnapshotRef.current.userScrolled = true
     }
 
-    // FAB visibility (only React state in scroll handler)
-    const shouldShowFab = distFromBottom > FAB_THRESHOLD
+    // FAB visibility (only React state in scroll handler). Suppressed while the pin-bottom loop owns
+    // scrollTop: on WebKit a tall bottom row's post-paint growth fires 'scroll' events reporting a
+    // transiently large distFromBottom before the loop re-pins, which would otherwise flash the FAB
+    // on open-at-bottom (intermittent race). The loop settles AT the bottom, so the FAB stays hidden.
+    const shouldShowFab = shouldShowScrollToBottomFab(distFromBottom, FAB_THRESHOLD, pinBottomActiveRef.current)
     setShowScrollToBottom(prev => prev !== shouldShowFab ? shouldShowFab : prev)
 
     // Jump-to-last-read pill visibility: is the first-new-message divider currently scrolled
