@@ -128,14 +128,19 @@ jobs:
         run: npm run build:sdk
 
       # Cache the browser binaries (~/.cache/ms-playwright) so a slow CDN can't add minutes to
-      # the download. The OS-level deps (apt) live on the ephemeral runner and are (re)installed
-      # separately each run via `install-deps`.
+      # the download. Caches created in pull_request runs are scoped to that PR, so the shared
+      # copy is seeded from main by playwright-cache.yml; restore-keys lets a Playwright bump
+      # start from the previous cache and download only the changed browsers. The OS-level deps
+      # (apt) live on the ephemeral runner and are (re)installed separately each run via
+      # `install-deps`.
       - name: Cache Playwright browsers
         id: playwright-cache
         uses: actions/cache@v6
         with:
           path: ~/.cache/ms-playwright
           key: ${{ runner.os }}-playwright-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-playwright-
 
       - name: Install Playwright browsers
         if: steps.playwright-cache.outputs.cache-hit != 'true'
