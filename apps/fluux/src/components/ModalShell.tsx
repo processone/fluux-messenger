@@ -10,6 +10,10 @@ interface ModalShellProps {
   width?: string
   /** Extra classes on the panel div, e.g. 'max-h-[80vh]' */
   panelClassName?: string
+  /** Where focus lands on open. `'panel'` avoids ringing a content control in a
+   *  read-only modal; defaults to `'auto'` (first focusable child). See
+   *  {@link ModalOverlay}. */
+  initialFocus?: 'auto' | 'panel'
   children: React.ReactNode
 }
 
@@ -24,12 +28,13 @@ export function ModalShell({
   onClose,
   width = 'max-w-sm',
   panelClassName,
+  initialFocus,
   children,
 }: ModalShellProps) {
   const { t } = useTranslation()
 
   return (
-    <ModalOverlay onClose={onClose} width={width} panelClassName={panelClassName}>
+    <ModalOverlay onClose={onClose} width={width} panelClassName={panelClassName} initialFocus={initialFocus}>
       {({ close }) => (
         <>
           {/* Header */}
