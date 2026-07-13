@@ -822,4 +822,116 @@ describe('useNotificationEvents', () => {
       expect(onRoomRead).toHaveBeenCalledTimes(1)
     })
   })
+
+  // A room notification must fire at most once per message id. The room path
+  // detects "new activity" by message-array length growth, which a cache
+  // re-hydration (activateRoom → loadMessagesFromCache, prepending older
+  // history) also trips — even though the newest message is unchanged. Without
+  // an identity guard this resurrects a banner for a message already delivered,
+  // matching the observed "notification reappears when I open the room" bug.
+  // The 1:1 path is already immune (it dedupes by lastMessage.id).
+  describe('room notification idempotency', () => {
+    const roomJid = 'tech@conference.example.com'
+
+    const roomMsg = (id: string, body: string, timestamp: Date, nick = 'jerome') => ({
+      id,
+      roomJid,
+      from: `${roomJid}/${nick}`,
+      nick,
+      body,
+      timestamp,
+      isOutgoing: false,
+    })
+
+    it('does not notify twice for the same room message when the window is re-hydrated from cache', () => {
+      const onRoomMessage = vi.fn()
+      const now = new Date()
+      const twoMinutesAgo = new Date(now.getTime() - 2 * 60 * 1000)
+
+      renderHook(() => useNotificationEvents({ onRoomMessage }))
+
+      // Seed one prior message so the next arrival is an incremental notify
+      // (not an initial-history batch, which the >5 guard would skip).
+      act(() => {
+        mockRooms.set(roomJid, {
+          jid: roomJid,
+          name: 'Tech',
+          joined: true,
+          notifyAllPersistent: true,
+          mentionsCount: 0,
+          messages: [roomMsg('seed', 'earlier', twoMinutesAgo, 'old')],
+        })
+        triggerRoomStoreUpdate()
+      })
+      onRoomMessage.mockClear()
+
+      // A fresh message arrives → exactly one notification.
+      act(() => {
+        mockRooms.set(roomJid, {
+          ...mockRooms.get(roomJid),
+          messages: [
+            ...mockRooms.get(roomJid).messages,
+            roomMsg('fresh', 'Yes, but we should add Content-Disposition', now),
+          ],
+        })
+        triggerRoomStoreUpdate()
+      })
+      expect(onRoomMessage).toHaveBeenCalledTimes(1)
+
+      // Opening the room re-hydrates its resident window from cache, prepending
+      // older history. The array grows (length-based detection sees "new
+      // messages") but the newest message is the SAME one already delivered.
+      act(() => {
+        const older = Array.from({ length: 20 }, (_, i) =>
+          roomMsg(`hist-${i}`, `history ${i}`, new Date(now.getTime() - (300 + i) * 1000), 'old'),
+        )
+        mockRooms.set(roomJid, {
+          ...mockRooms.get(roomJid),
+          messages: [
+            ...older,
+            roomMsg('seed', 'earlier', twoMinutesAgo, 'old'),
+            roomMsg('fresh', 'Yes, but we should add Content-Disposition', now),
+          ],
+        })
+        triggerRoomStoreUpdate()
+      })
+
+      // Re-hydration is not a new message — still a single notification.
+      expect(onRoomMessage).toHaveBeenCalledTimes(1)
+    })
+
+    it('still notifies when a genuinely new message arrives after re-hydration', () => {
+      const onRoomMessage = vi.fn()
+      const now = new Date()
+
+      renderHook(() => useNotificationEvents({ onRoomMessage }))
+
+      act(() => {
+        mockRooms.set(roomJid, {
+          jid: roomJid,
+          name: 'Tech',
+          joined: true,
+          notifyAllPersistent: true,
+          mentionsCount: 0,
+          messages: [roomMsg('first', 'first', now)],
+        })
+        triggerRoomStoreUpdate()
+      })
+      expect(onRoomMessage).toHaveBeenCalledTimes(1)
+
+      // A second, distinct message must still notify (the guard is per id).
+      act(() => {
+        mockRooms.set(roomJid, {
+          ...mockRooms.get(roomJid),
+          messages: [
+            ...mockRooms.get(roomJid).messages,
+            roomMsg('second', 'second', now),
+          ],
+        })
+        triggerRoomStoreUpdate()
+      })
+      expect(onRoomMessage).toHaveBeenCalledTimes(2)
+      expect(onRoomMessage.mock.calls[1][1].id).toBe('second')
+    })
+  })
 })

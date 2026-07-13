@@ -117,6 +117,15 @@ export function useNotificationEvents(handlers: NotificationEventHandlers): void
   const prevConversationsRef = useRef<Conversation[]>([])
   const prevRoomsRef = useRef<Map<string, PrevRoomState>>(new Map())
 
+  // Highest message id we've already fired a room notification for, per room.
+  // Rooms detect new activity by message-array length growth, which a cache
+  // re-hydration (activateRoom → loadMessagesFromCache, prepending older
+  // history) also trips even though the newest message is unchanged. Keying the
+  // notify-once decision on the message id — not the count — stops a reload from
+  // resurrecting a banner already delivered. The 1:1 path is already immune
+  // because it dedupes by lastMessage.id.
+  const lastNotifiedRoomMessageIdRef = useRef<Map<string, string>>(new Map())
+
   // Watch for new messages in 1:1 conversations
   // Uses Zustand subscribe() to avoid re-rendering the parent component
   useEffect(() => {
@@ -255,7 +264,11 @@ export function useNotificationEvents(handlers: NotificationEventHandlers): void
           )
 
           if (result.shouldNotify) {
+            // Notify at most once per message id: a re-hydration that grows
+            // room.messages must not re-fire for a message already delivered.
+            if (lastNotifiedRoomMessageIdRef.current.get(room.jid) === msg.id) break
             onRoomMessage(room, msg, result.isMention)
+            lastNotifiedRoomMessageIdRef.current.set(room.jid, msg.id)
             break // Only notify for the latest relevant message
           }
 
