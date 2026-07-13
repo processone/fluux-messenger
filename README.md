@@ -74,11 +74,11 @@
 - **14 Built-in Themes** - Catppuccin, Nord, Dracula, Gruvbox, Tokyo Night, Rosé Pine, Solarized, and more — plus light/dark mode
 - **Custom Themes** - Import/export themes as JSON, pick a custom accent color, or write CSS overrides in the built-in editor
 - **Synced Across Devices** - Theme, accent, and font size preferences are stored server-side and follow you everywhere
-- **Internationalization** - 31 languages including complete EU coverage
+- **Internationalization** - 33 languages including complete EU coverage
 
 ### Privacy & Security
 - **Self-hostable** - Connect to any XMPP server, no vendor lock-in, no third-party dependency
-- **End-to-End Encryption** - OpenPGP (OX-IM, XEP-0373/0374) for 1:1 and group chats; messages are encrypted and signed; automatic key discovery, peer verification with cross-device sync, secret key backup, and encrypted MAM history decryption
+- **End-to-End Encryption** - OpenPGP (OX-IM, XEP-0373/0374) for 1:1 chats; messages are encrypted and signed; automatic key discovery, peer verification with cross-device sync, secret key backup, and encrypted MAM history decryption
 - **FAST Authentication** - Modern SASL2 with token-based reconnection for instant, password-less session resumption
 - **Contact Blocking** - Full block/unblock support with a dedicated management screen
 - **In-Band Password Change** - Change your account password without leaving the app
@@ -232,7 +232,7 @@ The web version downloads each encrypted attachment and decrypts it in the brows
 
 #### Does Fluux Messenger support end-to-end encryption?
 
-Yes — **OpenPGP (OX-IM, XEP-0373/0374)** is fully implemented. Messages in 1:1 and group chats are encrypted and signed using each participant's published OpenPGP key. Features include automatic key discovery, peer verification with cross-device sync, secret key backup, and MAM history decryption. **OMEMO** may follow: beyond the implementation work it raises licensing questions we want to address properly. We're also watching **MLS** as an option for large-scale group chats.
+Yes — **OpenPGP (OX-IM, XEP-0373/0374)** is implemented for one-to-one chats. Messages in 1:1 conversations are encrypted and signed using each participant's published OpenPGP key. Features include automatic key discovery, peer verification with cross-device sync, secret key backup, and MAM history decryption. Group-chat (MUC) encryption is not yet supported. **OMEMO** may follow: beyond the implementation work it raises licensing questions we want to address properly. We're also watching **MLS** as an option for large-scale group chats.
 
 #### When will voice and video calls be available?
 
