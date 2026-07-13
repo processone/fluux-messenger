@@ -1462,7 +1462,7 @@ describe('MessageList scroll behavior', () => {
         })
 
         // FAB should NOT be visible - wrapper div should have inert set
-        const fabWrapper = document.querySelector('.animate-\\[fab-spring-out_0\\.25s_ease-in_forwards\\]')
+        const fabWrapper = document.querySelector('[data-fab="scroll-to-bottom"]')?.closest('div.z-40')
         expect(fabWrapper?.hasAttribute('inert')).toBe(true)
       }
     })
@@ -1496,7 +1496,7 @@ describe('MessageList scroll behavior', () => {
           container.dispatchEvent(new Event('scroll'))
         })
 
-        let fabWrapper = document.querySelector('[class*="fab-spring"]')
+        let fabWrapper = document.querySelector('[data-fab="scroll-to-bottom"]')?.closest('div.z-40')
         expect(fabWrapper?.hasAttribute('inert')).toBe(true)
 
         // Scroll up far from bottom
@@ -1507,7 +1507,7 @@ describe('MessageList scroll behavior', () => {
         })
 
         // Now FAB should be visible
-        fabWrapper = document.querySelector('[class*="fab-spring"]')
+        fabWrapper = document.querySelector('[data-fab="scroll-to-bottom"]')?.closest('div.z-40')
         expect(fabWrapper?.hasAttribute('inert')).toBe(false)
       }
     })
@@ -1545,7 +1545,7 @@ describe('MessageList scroll behavior', () => {
           container.dispatchEvent(new Event('scroll'))
         })
 
-        const fabWrapper = document.querySelector('[class*="fab-spring"]')
+        const fabWrapper = document.querySelector('[data-fab="scroll-to-bottom"]')?.closest('div.z-40')
         expect(fabWrapper?.hasAttribute('inert')).toBe(false)
       }
     })
