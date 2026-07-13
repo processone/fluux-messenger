@@ -31,6 +31,7 @@ import { isFeatureEnabled } from '@/utils/featureFlags'
 import { useSettingsStore } from '@/stores/settingsStore'
 import type { CopyMessageMeta } from '@/utils/buildCopyText'
 import { buildMessageListItems, type RenderItem } from './messageListItems'
+import { fabAnimationClass } from './fabAnimationClass'
 import { FloatingDateHeader } from './FloatingDateHeader'
 import { JumpToLastReadPill } from './JumpToLastReadPill'
 import { getTopVisibleDate } from './getTopVisibleDate'
@@ -661,6 +662,11 @@ export function MessageList<T extends BaseMessage>({
   // whenever the window is slid up (newer content exists off-screen), not only past the FAB threshold.
   const windowSlidUp = windowAtLiveEdge === false
   const fabVisible = showScrollToBottom || windowSlidUp
+  // Track whether the FAB has ever been shown in this mount so the exit animation (whose first
+  // keyframe is fully-visible) never runs on a fresh open-at-bottom, which would flash the FAB.
+  // MessageList is remounted per conversation via `key`, so this ref resets on every open.
+  const hasFabBeenVisibleRef = useRef(false)
+  if (fabVisible) hasFabBeenVisibleRef.current = true
   const handleJumpToBottom = () => {
     if (windowSlidUp && onJumpToLatest) {
       // Recenter the resident window to the newest slice, then scroll to the bottom. If the
@@ -832,11 +838,7 @@ export function MessageList<T extends BaseMessage>({
 
       {/* Scroll to bottom FAB with spring animation */}
       <div
-        className={`absolute bottom-4 end-4 z-40 ${
-          fabVisible
-            ? 'animate-[fab-spring-in_0.4s_var(--fluux-ease-spring)_forwards]'
-            : 'animate-[fab-spring-out_0.25s_ease-in_forwards] pointer-events-none'
-        }`}
+        className={`absolute bottom-4 end-4 z-40 ${fabAnimationClass(fabVisible, hasFabBeenVisibleRef.current)}`}
         inert={!fabVisible}
       >
         <Tooltip content={t('chat.scrollToBottom') + ` (${isMac ? '⌘↓' : 'Ctrl+↓'})`} position="left">

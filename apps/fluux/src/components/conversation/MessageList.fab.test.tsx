@@ -293,6 +293,72 @@ describe('MessageList FAB badge and scroll behavior', () => {
     })
   })
 
+  describe('no flash on fresh open at bottom', () => {
+    it('does not play the spring-out exit animation on initial mount', () => {
+      // When a conversation opens already at the bottom, the FAB should be hidden with NO
+      // animation. The exit keyframe (fab-spring-out) starts at opacity:1 (fully visible), so
+      // running it on mount paints the FAB visible on frame 0 and springs it away — a flash.
+      const messages = createTestMessages(10)
+
+      render(
+        <MessageList
+          messages={messages}
+          conversationId="conv-1"
+          clearFirstNewMessageId={vi.fn()}
+          renderMessage={(msg) => <div key={msg.id}>{msg.body}</div>}
+        />
+      )
+
+      setupScrollContainer()
+
+      // Do NOT dispatch a scroll event — this is the fresh open-at-bottom state.
+      const fab = document.querySelector('button[aria-label="chat.scrollToBottom"]')
+      expect(fab).toBeTruthy()
+
+      const wrapper = fab!.closest('div.z-40') as HTMLElement
+      expect(wrapper).toBeTruthy()
+      // Must not run the exit animation on a FAB that was never shown.
+      expect(wrapper.className).not.toContain('fab-spring-out')
+      // Must be statically hidden and non-interactive instead.
+      expect(wrapper.className).toContain('opacity-0')
+      expect(wrapper.className).toContain('pointer-events-none')
+    })
+
+    it('plays the spring-out exit animation only after the FAB has been shown', () => {
+      const messages = createTestMessages(10)
+
+      render(
+        <MessageList
+          messages={messages}
+          conversationId="conv-1"
+          clearFirstNewMessageId={vi.fn()}
+          renderMessage={(msg) => <div key={msg.id}>{msg.body}</div>}
+        />
+      )
+
+      const scrollCtx = setupScrollContainer()
+      if (!scrollCtx) return
+
+      // Scroll up: FAB springs in.
+      simulateScrollUp(scrollCtx.container)
+      let fab = document.querySelector('button[aria-label="chat.scrollToBottom"]')
+      let wrapper = fab!.closest('div.z-40') as HTMLElement
+      expect(wrapper.className).toContain('fab-spring-in')
+
+      // Scroll back to bottom: now that it has been shown, the exit animation is allowed.
+      Object.defineProperty(scrollCtx.container, 'scrollTop', {
+        get: () => 1500, // scrollHeight 2000 - clientHeight 500 = bottom
+        set: () => {},
+        configurable: true,
+      })
+      act(() => { scrollCtx.container.dispatchEvent(new Event('scroll')) })
+
+      fab = document.querySelector('button[aria-label="chat.scrollToBottom"]')
+      wrapper = fab!.closest('div.z-40') as HTMLElement
+      expect(wrapper.className).toContain('fab-spring-out')
+    })
+  })
+
   describe('two-step scroll behavior', () => {
     it('should scroll to bottom directly when there is no firstNewMessageId', () => {
       const messages = createTestMessages(10)
