@@ -179,7 +179,7 @@ const OccupantRow = memo(function OccupantRow({
         onTouchStart={(e) => onTouchStart(group, e)}
         onTouchEnd={onTouchEnd}
         onTouchMove={onTouchMove}
-        className={`px-4 py-1.5 flex items-center gap-2 hover:bg-fluux-hover/50 cursor-default
+        className={`px-4 py-1.5 flex items-center gap-2 hover:bg-fluux-message-hover transition-colors cursor-default
                    ${isMe ? 'bg-fluux-brand/10' : ''}
                    ${ignored ? 'opacity-40' : ''}`}
       >
@@ -588,7 +588,7 @@ export function OccupantPanel({
             position="left"
             className="block"
           >
-            <div className="px-4 py-1.5 flex items-center gap-2 hover:bg-fluux-hover/50 cursor-default opacity-60">
+            <div className="px-4 py-1.5 flex items-center gap-2 hover:bg-fluux-message-hover transition-colors cursor-default opacity-60">
               <Avatar
                 identifier={displayName}
                 name={displayName}
@@ -644,7 +644,7 @@ export function OccupantPanel({
               onTouchStart={(e) => handleOccupantTouchStart(e, syntheticGroup)}
               onTouchEnd={menu.handleTouchEnd}
               onTouchMove={menu.handleTouchEnd}
-              className="px-4 py-1.5 flex items-center gap-2 hover:bg-fluux-hover/50 cursor-default opacity-40"
+              className="px-4 py-1.5 flex items-center gap-2 hover:bg-fluux-message-hover transition-colors cursor-default opacity-40"
             >
               <Avatar
                 identifier={displayName}
