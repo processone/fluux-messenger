@@ -382,9 +382,10 @@ describe('MessageToolbar', () => {
         <MessageToolbar {...defaultProps} showAvatar={true} />
       )
 
-      // Outer hover zone has extended positioning to provide larger hit area
+      // Group-start rows are taller (name+time header), so the bar is lifted
+      // further (-top-16) to straddle the row's top edge and clear the hover tint.
       const toolbar = container.firstChild as HTMLElement
-      expect(toolbar).toHaveClass('-top-7')
+      expect(toolbar).toHaveClass('-top-16')
     })
 
     it('should position normally when showAvatar is false', () => {
