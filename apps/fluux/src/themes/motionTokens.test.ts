@@ -40,7 +40,9 @@ describe('component animations reference motion tokens', () => {
   it('MessageList send + FAB animations use tokens', () => {
     const f = read('src/components/conversation/MessageList.tsx')
     expect(f).toMatch(/message-send var\(--fluux-duration-slow\) var\(--fluux-ease-standard\)/)
-    expect(f).toMatch(/fab-spring-in_0\.4s_var\(--fluux-ease-spring\)_forwards/)
+    // The FAB spring class lives in the extracted fabAnimationClass helper.
+    const fab = read('src/components/conversation/fabAnimationClass.ts')
+    expect(fab).toMatch(/fab-spring-in_0\.4s_var\(--fluux-ease-spring\)_forwards/)
   })
 
   it('Sidebar view-enter uses tokens', () => {
