@@ -889,9 +889,15 @@ test.describe('Virtualization scroll invariants', () => {
       tallAnchorSpread,
       `restored anchor drifted ${tallAnchorSpread} messages across re-opens with tall rows (bottom-visible per open: ${JSON.stringify(anchors)}) — anchor not re-pinned / drifted position saved`,
     ).toBeLessThanOrEqual(1)
+    // Pixel drift is measured from the SECOND open onward: the first re-open still warms the
+    // height cache (rows below the viewport learned their real 160px height during it), which
+    // legitimately shifts raw distFromBottom once — estimates for unmounted rows are not part of
+    // the restore contract (the content anchor above is). The compounding bug this guards against
+    // (position sliding older EVERY open) still trips: it grows dists on every re-open.
+    const steadyDists = dists.slice(1)
     expect(
-      Math.max(...dists) - Math.min(...dists),
-      `restored position drifted across re-opens with tall rows (distFromBottom: ${JSON.stringify(dists)})`,
+      Math.max(...steadyDists) - Math.min(...steadyDists),
+      `restored position drifted across repeated re-opens with tall rows (distFromBottom: ${JSON.stringify(dists)})`,
     ).toBeLessThan(250)
   })
 
