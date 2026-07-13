@@ -1142,4 +1142,108 @@ describe('useListKeyboardNav', () => {
       expect(result.current.selectedIndex).toBe(-1)
     })
   })
+
+  // Regression: issue #993 — the conversation/room sidebar must NOT scroll the
+  // active item back into view when the list merely reorders (activity sort during
+  // catch-up). Scrolling is only allowed when the active item's identity genuinely
+  // changes (click / shortcut / programmatic nav) or on keyboard navigation.
+  describe('auto-scroll on selection identity change (issue #993)', () => {
+    let scrollSpy: Mock
+    let originalScrollIntoView: typeof Element.prototype.scrollIntoView | undefined
+
+    beforeEach(() => {
+      scrollSpy = vi.fn()
+      originalScrollIntoView = Element.prototype.scrollIntoView
+      // jsdom does not implement scrollIntoView — install a spy.
+      Element.prototype.scrollIntoView = scrollSpy as unknown as typeof Element.prototype.scrollIntoView
+    })
+
+    afterEach(() => {
+      if (originalScrollIntoView) {
+        Element.prototype.scrollIntoView = originalScrollIntoView
+      } else {
+        // @ts-expect-error cleanup of test-only polyfill
+        delete Element.prototype.scrollIntoView
+      }
+    })
+
+    /**
+     * Builds a hook harness backed by a real (detached) DOM container whose child
+     * rows mirror the current `items`, so the hook's `querySelector` + scrollIntoView
+     * path exercises for real. Rows are rebuilt each render to reflect reordering.
+     */
+    function createScrollHarness() {
+      const container = document.createElement('div')
+      document.body.appendChild(container)
+      const listRef = { current: container } as React.RefObject<HTMLDivElement>
+      const syncRows = (items: TestItem[]) => {
+        container.textContent = ''
+        for (const it of items) {
+          const row = document.createElement('div')
+          row.setAttribute('data-item-id', it.id)
+          container.appendChild(row)
+        }
+      }
+      const useHarness = ({
+        items,
+        activeItemId,
+      }: {
+        items: TestItem[]
+        activeItemId: string | null | undefined
+      }) => {
+        // Keep the DOM in sync with the current items BEFORE effects run.
+        syncRows(items)
+        return useListKeyboardNav<TestItem>({
+          items,
+          onSelect: mockOnSelect,
+          listRef,
+          getItemId: (item) => item.id,
+          itemAttribute: 'data-item-id',
+          activeItemId,
+        })
+      }
+      return { useHarness, container }
+    }
+
+    it('does NOT scroll when the list reorders under a stable active item', () => {
+      const { useHarness } = createScrollHarness()
+      const { rerender } = renderHook(useHarness, {
+        initialProps: { items: mockItems, activeItemId: '3' as string | null | undefined },
+      })
+      // Ignore the initial activation scroll.
+      scrollSpy.mockClear()
+
+      // Reorder: same ids, brand-new array reference, active item unchanged.
+      const reordered: TestItem[] = [mockItems[2], mockItems[0], mockItems[1]]
+      rerender({ items: reordered, activeItemId: '3' })
+
+      expect(scrollSpy).not.toHaveBeenCalled()
+    })
+
+    it('scrolls the active item into view when activeItemId changes value', () => {
+      const { useHarness } = createScrollHarness()
+      const { rerender } = renderHook(useHarness, {
+        initialProps: { items: mockItems, activeItemId: '1' as string | null | undefined },
+      })
+      scrollSpy.mockClear()
+
+      rerender({ items: mockItems, activeItemId: '3' })
+
+      expect(scrollSpy).toHaveBeenCalledTimes(1)
+    })
+
+    it('scrolls the highlighted item into view on keyboard navigation', () => {
+      const { useHarness } = createScrollHarness()
+      renderHook(useHarness, {
+        initialProps: { items: mockItems, activeItemId: null as string | null | undefined },
+      })
+      scrollSpy.mockClear()
+
+      act(() => {
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown' }))
+      })
+
+      expect(scrollSpy).toHaveBeenCalled()
+    })
+  })
 })

@@ -149,6 +149,25 @@ export function useListKeyboardNav<T>({
   const itemIdToIndexRef = useRef(itemIdToIndex)
   itemIdToIndexRef.current = itemIdToIndex
 
+  // Imperatively scroll a row into view by id. This is called at the two moments a
+  // scroll is actually wanted — a keyboard move, or the active item's identity
+  // changing — NOT reactively off `items`. Scrolling off `items` (as a bare effect
+  // dependency) fires on every reorder and yanks the list away from where the user
+  // scrolled while the sidebar re-sorts during catch-up (issue #993).
+  const scrollItemIntoView = useCallback(
+    (itemId: string) => {
+      const selector = `[${itemAttribute}="${CSS.escape(itemId)}"]`
+      const element = listRef.current?.querySelector(selector)
+      element?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+    },
+    [listRef, itemAttribute],
+  )
+
+  // The active item id we last scrolled to, so the external-sync effect can scroll
+  // ONLY when the active item's identity genuinely changes — and stay put when the
+  // list merely reorders under a stable active item.
+  const lastScrolledActiveIdRef = useRef<string | null>(null)
+
   // When items change, try to preserve the selection by matching the previously selected item ID.
   // This prevents the selection from resetting to -1 when items are appended (e.g., pagination).
   useEffect(() => {
@@ -166,19 +185,30 @@ export function useListKeyboardNav<T>({
     selectedItemIdRef.current = null
   }, [itemsKey])
 
-  // Sync selectedIndex with externally-controlled active item.
-  // When the parent owns activation (clicks, global keyboard shortcuts, programmatic
-  // navigation), pass `activeItemId` so the list scrolls the active item into view
-  // via the existing auto-scroll effect.
+  // Sync selectedIndex with externally-controlled active item, and scroll it into
+  // view when the active item's identity changes. When the parent owns activation
+  // (clicks, global keyboard shortcuts, programmatic navigation), pass `activeItemId`.
   useEffect(() => {
-    if (activeItemId == null) return
-    const newIndex = itemIdToIndexRef.current.get(activeItemId)
-    if (newIndex !== undefined) {
-      selectionSourceRef.current = 'external'
-      setSelectedIndex(newIndex)
-      selectedItemIdRef.current = activeItemId
+    if (activeItemId == null) {
+      lastScrolledActiveIdRef.current = null
+      return
     }
-  }, [activeItemId, itemsKey])
+    const newIndex = itemIdToIndexRef.current.get(activeItemId)
+    // Active item not in the list yet (e.g. list still populating). Leave the
+    // "last scrolled" marker untouched so we scroll once it appears.
+    if (newIndex === undefined) return
+    selectionSourceRef.current = 'external'
+    setSelectedIndex(newIndex)
+    selectedItemIdRef.current = activeItemId
+    // Scroll into view only when the ACTIVE item's identity changes — never on a
+    // bare reorder (same active item, new position). This is the fix for #993:
+    // the effect still re-runs on `itemsKey` (to re-map the index), but the scroll
+    // is gated on the active id actually changing.
+    if (lastScrolledActiveIdRef.current !== activeItemId) {
+      lastScrolledActiveIdRef.current = activeItemId
+      scrollItemIntoView(activeItemId)
+    }
+  }, [activeItemId, itemsKey, scrollItemIntoView])
 
   // Keyboard event handler — stored in a ref so the effect listener is stable
   const handleKeyDownRef = useRef<(e: KeyboardEvent) => void>(() => {})
@@ -295,7 +325,10 @@ export function useListKeyboardNav<T>({
         // Update state and track selected item ID for preservation across list changes
         selectionSourceRef.current = 'keyboard'
         setSelectedIndex(newIndex)
-        selectedItemIdRef.current = newIndex >= 0 && newIndex < items.length ? getItemId(items[newIndex]) : null
+        const newSelectedId = newIndex >= 0 && newIndex < items.length ? getItemId(items[newIndex]) : null
+        selectedItemIdRef.current = newSelectedId
+        // Keyboard navigation deliberately moves the highlight — scroll it into view.
+        if (newSelectedId) scrollItemIntoView(newSelectedId)
 
         // If Alt+arrow and activateOnAltNav, call onSelect (only if actually navigated)
         if (e.altKey && activateOnAltNav && !bounced && newIndex !== selectedIndex && newIndex >= 0 && newIndex < items.length) {
@@ -321,17 +354,13 @@ export function useListKeyboardNav<T>({
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [enabled, handleKeyDown])
 
-  // Auto-scroll selected item into view (keyboard and external sources only —
-  // mouse hover must not trigger scrollIntoView or it fights touchpad momentum).
-  useEffect(() => {
-    if (selectionSourceRef.current === 'mouse') return
-    if (selectedIndex < 0 || !listRef.current || !items[selectedIndex]) return
-
-    const itemId = getItemId(items[selectedIndex])
-    const selector = `[${itemAttribute}="${CSS.escape(itemId)}"]`
-    const element = listRef.current.querySelector(selector)
-    element?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
-  }, [selectedIndex, items, listRef, getItemId, itemAttribute])
+  // NOTE: there is deliberately NO reactive "scroll selectedIndex into view" effect
+  // keyed on `items`. Such an effect re-fires on every reorder (new `items` array
+  // reference during activity re-sort) and yanks the list back to the active row
+  // while the user is manually scrolling during catch-up (issue #993). Scrolling is
+  // instead driven imperatively at the two moments it is genuinely wanted: keyboard
+  // navigation (see the keydown handler) and a real change of the active item's
+  // identity (see the activeItemId effect above). Mouse hover never scrolls.
 
   // Per-item hover handlers are cached (keyed by item id) so their identities stay
   // stable across renders AND reorders. Passing fresh onMouseEnter/onMouseMove would defeat
