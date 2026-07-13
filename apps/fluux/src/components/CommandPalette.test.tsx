@@ -1336,6 +1336,50 @@ describe('CommandPalette', () => {
     })
   })
 
+  describe('Notify-all rooms in attention (red pill)', () => {
+    function getGroupContainer(labelText: string): HTMLElement {
+      const label = screen.getByText(labelText)
+      return label.parentElement as HTMLElement
+    }
+
+    it('promotes a notify-all room with unread (no mention) into the attention group', () => {
+      mockRooms = [
+        ...defaultRooms,
+        { jid: 'ops@conference.example.com', name: 'Ops Alerts', joined: true, unreadCount: 4, mentionsCount: 0, notifyAllPersistent: true, lastMessage: { body: 'disk 90%', timestamp: new Date('2026-07-07T07:00:00Z') } },
+      ]
+      render(<CommandPalette {...defaultProps} />)
+      const attention = getGroupContainer('Needs attention')
+      expect(within(attention).getByText('Ops Alerts')).toBeInTheDocument()
+    })
+
+    it('gives a notify-all unread room a red (bg-fluux-brand) pill', () => {
+      mockRooms = [
+        ...defaultRooms,
+        { jid: 'ops@conference.example.com', name: 'Ops Alerts', joined: true, unreadCount: 4, mentionsCount: 0, notifyAllPersistent: true },
+      ]
+      render(<CommandPalette {...defaultProps} />)
+      const row = screen.getByText('Ops Alerts').closest('button')!
+      const badge = within(row).getByText('4')
+      expect(badge.className).toContain('bg-fluux-brand')
+    })
+
+    it('gives an ordinary unread room (not notify-all, no mention) a grey (bg-fluux-hover) pill', () => {
+      render(<CommandPalette {...defaultProps} />)
+      // General Chat: unread 3, mentionsCount 0, no notify-all -> neutral tone
+      const row = screen.getByText('General Chat').closest('button')!
+      const badge = within(row).getByText('3')
+      expect(badge.className).toContain('bg-fluux-hover')
+    })
+
+    it('gives an unread DM a red (bg-fluux-brand) pill', () => {
+      render(<CommandPalette {...defaultProps} />)
+      // Bob: unreadCount 2 -> attention tier -> red
+      const row = screen.getByText('Bob Jones').closest('button')!
+      const badge = within(row).getByText('2')
+      expect(badge.className).toContain('bg-fluux-brand')
+    })
+  })
+
   describe('Unread badge', () => {
     it('shows a count badge for unread DMs in the default view', () => {
       render(<CommandPalette {...defaultProps} />)

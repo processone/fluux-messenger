@@ -11,11 +11,11 @@ import {
   Users,
   Search,
 } from 'lucide-react'
-import { useChat, useRoom, useRoster, matchNameOrJid, getLocalPart, searchStore } from '@fluux/sdk'
+import { useChat, useRoom, useRoster, matchNameOrJid, getLocalPart, searchStore, roomActivityTone } from '@fluux/sdk'
 import { formatLocalizedPreview } from '@/utils/messagePreviewText'
 import { detectRenderLoop } from '@/utils/renderLoopDetector'
 import { useChatStore, useConnectionStore, useRoomStore } from '@fluux/sdk/react'
-import type { PresenceStatus } from '@fluux/sdk'
+import type { PresenceStatus, RoomActivityTone } from '@fluux/sdk'
 import type { SidebarView } from './Sidebar'
 import { Avatar } from './Avatar'
 import { RoomAvatar } from './RoomAvatar'
@@ -47,6 +47,8 @@ interface CommandItem {
   unreadCount?: number
   /** Mention count for room rows (ranks a mentioned room above merely-unread ones). */
   mentionsCount?: number
+  /** Activity tone for room rows, from roomActivityTone(): 'accent' = attention tier. */
+  activityTone?: RoomActivityTone
   /** Last-message time (ms) for recency ordering in the attention group. */
   sortTimestamp?: number
   action: () => void
@@ -158,9 +160,17 @@ function groupItemsByType(items: CommandItem[], t: (key: string) => string): Ite
 
 // Unread ranking tier for a room row: mentions outrank plain unread, which outrank read.
 function roomTier(item: CommandItem): number {
-  if ((item.mentionsCount ?? 0) > 0) return 0
+  if (item.activityTone === 'accent') return 0
   if ((item.unreadCount ?? 0) > 0) return 1
   return 2
+}
+
+// Attention tier: unread DMs, plus rooms whose activity tone is 'accent'
+// (a mention, or a notify-all room with unread). Drives both the "Needs
+// attention" group membership and the red pill.
+function isAttentionItem(item: CommandItem): boolean {
+  if (item.type === 'room') return item.activityTone === 'accent'
+  return (item.unreadCount ?? 0) > 0
 }
 
 // =============================================================================
@@ -180,9 +190,9 @@ function buildDefaultGroups(items: CommandItem[], t: (key: string) => string): I
   const roomItems = items.filter((i) => i.type === 'room')
 
   // Top group: unread DMs + rooms with a mention/whisper, interleaved by recency, capped.
-  const unreadConvs = conversations.filter((i) => (i.unreadCount ?? 0) > 0)
-  const mentionRooms = roomItems.filter((i) => (i.mentionsCount ?? 0) > 0)
-  const attention = [...unreadConvs, ...mentionRooms].sort(byRecency).slice(0, ATTENTION_CAP)
+  const attentionConvs = conversations.filter(isAttentionItem)
+  const attentionRooms = roomItems.filter(isAttentionItem)
+  const attention = [...attentionConvs, ...attentionRooms].sort(byRecency).slice(0, ATTENTION_CAP)
   if (attention.length > 0) {
     groups.push({ key: 'attention', type: 'conversation', label: t('commandPalette.attention'), items: attention })
   }
@@ -386,6 +396,7 @@ function CommandPaletteContent({
         lastMessageBody: room.lastMessage?.body,
         unreadCount: room.unreadCount,
         mentionsCount: room.mentionsCount,
+        activityTone: roomActivityTone(room),
         sortTimestamp: room.lastMessage?.timestamp?.getTime(),
         avatarIdentifier: room.jid,
         avatarUrl: room.avatar,
@@ -702,7 +713,7 @@ function CommandPaletteContent({
                       {isDefaultView && (item.unreadCount ?? 0) > 0 && (
                         <span
                           className={`ms-2 flex-shrink-0 inline-flex items-center justify-center min-w-5 h-5 px-1.5 rounded-full text-xs font-semibold ${
-                            (item.mentionsCount ?? 0) > 0
+                            isAttentionItem(item)
                               ? 'bg-fluux-brand text-white'
                               : 'bg-fluux-hover text-fluux-text'
                           }`}
