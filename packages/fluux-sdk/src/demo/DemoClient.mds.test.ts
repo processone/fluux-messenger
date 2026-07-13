@@ -78,13 +78,14 @@ describe('DemoClient.simulateRemoteDisplayed', () => {
 describe('DemoClient.populateDemo stanza-id defaulting', () => {
   function makeDemoData(): DemoData {
     const chatMessage: Message = {
+      type: 'chat',
       id: 'demo-msg-1',
+      conversationId: 'ava@fluux.chat',
       from: 'ava@fluux.chat',
-      to: 'you@fluux.chat',
       body: 'hi',
       timestamp: new Date(),
       isOutgoing: false,
-    } as Message
+    }
     const roomMessages: RoomMessage[] = [
       {
         type: 'groupchat', id: 'demo-room-1', from: `${ROOM_JID}/Emma`, nick: 'Emma',
