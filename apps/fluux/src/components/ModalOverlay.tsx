@@ -36,6 +36,13 @@ interface ModalOverlayProps {
   /** Focus target restored when the OS window refocuses; defaults to the panel.
    *  See useRestoreFocus for the rationale. */
   focusRef?: RefObject<HTMLElement | null>
+  /** Where focus lands when the modal opens (ignored when `focusRef` is set):
+   *  - `'auto'` (default): the first focusable child, so form modals focus their
+   *    input. Read-only modals whose first focusable is a content control (a
+   *    link, a Show more toggle) would draw an unsolicited focus ring here.
+   *  - `'panel'`: the panel container itself, so no control is ringed on open.
+   *    Tab still moves into the content. Use for display-only modals. */
+  initialFocus?: 'auto' | 'panel'
   /** Extra attributes for the panel element (role, aria-modal, …). onKeyDown is
    *  owned by `onPanelKeyDown` — pass that instead. */
   panelProps?: Omit<HTMLAttributes<HTMLDivElement>, 'className' | 'onKeyDown' | 'ref'>
@@ -82,6 +89,7 @@ export function ModalOverlay({
   panelClassName,
   panelInClass,
   focusRef,
+  initialFocus = 'auto',
   panelProps,
   onPanelKeyDown,
   closeOnEscape = true,
@@ -98,7 +106,11 @@ export function ModalOverlay({
   const close = useCallback(() => requestClose(onClose), [requestClose, onClose])
 
   // Trap Tab focus inside the panel and return focus to the opener on close.
-  useFocusTrap(panelRef, { initialFocusRef: focusRef })
+  // `focusRef` wins; otherwise `initialFocus='panel'` lands on the container so a
+  // display-only modal never rings a content control on open.
+  useFocusTrap(panelRef, {
+    initialFocusRef: focusRef ?? (initialFocus === 'panel' ? panelRef : undefined),
+  })
   // Keep keyboard focus inside the modal across OS window blur/refocus.
   useRestoreFocus(panelRef, focusRef)
 

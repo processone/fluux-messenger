@@ -20,7 +20,15 @@ interface RoomInfoModalProps {
  */
 export function RoomInfoModal({ room, onClose }: RoomInfoModalProps) {
   return (
-    <ModalShell title={room.name} onClose={onClose} width="max-w-md" panelClassName="max-h-[80vh] flex flex-col">
+    <ModalShell
+      title={room.name}
+      onClose={onClose}
+      width="max-w-md"
+      panelClassName="max-h-[80vh] flex flex-col"
+      // Read-only modal: the first focusable child is a topic link / Show more
+      // toggle, so land focus on the panel instead of ringing a content control.
+      initialFocus="panel"
+    >
       <div className="p-4 flex flex-col gap-4 flex-1 min-h-0 overflow-y-auto">
         {/* Identity — centered hero (the name is the modal title above) */}
         <div className="flex flex-col items-center gap-2 text-center">
