@@ -1,10 +1,17 @@
 import { useState, useEffect, useCallback } from 'react'
 import { isUpdaterEnabled } from '@/utils/tauri'
+import { createDownloadProgressTracker, type UpdaterDownloadEvent } from './downloadProgressTracker'
 
 const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
 
 // In-app updates are disabled on Linux - users update through their distro package manager
 const updaterEnabled = isUpdaterEnabled()
+
+// Cap download-progress re-renders to ~10/sec. The updater emits a Progress
+// event per network chunk (hundreds/sec on a fast link); updating React state on
+// every one re-rendered the whole tree past the render-loop detector threshold
+// and broke the UI mid-download (issue #994).
+const PROGRESS_UPDATE_INTERVAL_MS = 100
 
 export interface UpdateState {
   available: boolean
@@ -84,30 +91,18 @@ export function useAutoUpdate(options: UseAutoUpdateOptions = {}) {
     setState(prev => ({ ...prev, downloading: true, progress: 0, error: null }))
 
     try {
-      // Download with progress tracking
-      let contentLength = 0
+      // Throttle the per-chunk Progress events so a fast download can't
+      // re-render the app past the render-loop detector (issue #994).
+      const tracker = createDownloadProgressTracker(PROGRESS_UPDATE_INTERVAL_MS)
       await update.downloadAndInstall((event) => {
-        switch (event.event) {
-          case 'Started':
-            contentLength = (event.data as { contentLength?: number }).contentLength || 0
-            setState(prev => ({ ...prev, progress: 0 }))
-            break
-          case 'Progress':
-            if (contentLength > 0) {
-              const chunkLength = (event.data as { chunkLength: number }).chunkLength
-              setState(prev => {
-                const newProgress = Math.min(
-                  prev.progress + (chunkLength / contentLength) * 100,
-                  99
-                )
-                return { ...prev, progress: newProgress }
-              })
-            }
-            break
-          case 'Finished':
-            setState(prev => ({ ...prev, progress: 100, downloaded: true }))
-            break
-        }
+        const progress = tracker.handle(event as UpdaterDownloadEvent)
+        if (progress === null) return
+        const finished = event.event === 'Finished'
+        setState(prev => ({
+          ...prev,
+          progress,
+          ...(finished ? { downloaded: true } : {}),
+        }))
       })
 
       setState(prev => ({ ...prev, downloading: false, downloaded: true }))
