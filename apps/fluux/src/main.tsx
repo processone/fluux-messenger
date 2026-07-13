@@ -23,6 +23,16 @@ import { useLoginPrefillStore } from './stores/loginPrefillStore'
 // Check if running in Tauri
 const isTauri = '__TAURI_INTERNALS__' in window
 
+// Mark the desktop app on <html> (synchronously, before first paint) so CSS can
+// exclude it from the mobile safe-area insets. On macOS the overlay title bar
+// (titleBarStyle: "Overlay") makes WebKit report a non-zero
+// env(safe-area-inset-top); applied to #root that inset pushes the whole app —
+// including the AppBar that hosts the native traffic lights — down off the
+// window's top edge, so the fixed-position dots read as too high in the bar.
+// Desktop windows have no notch/home-indicator, so dropping the insets there is
+// purely correct; the web PWA keeps them.
+if (isTauri) document.documentElement.dataset.tauri = 'true'
+
 // Enable native TCP/TLS proxy in Tauri unless explicitly disabled
 const disableTcpProxy = localStorage.getItem('fluux:disable-tcp-proxy') === 'true'
 const proxyAdapter = isTauri && !disableTcpProxy ? tauriProxyAdapter : undefined
