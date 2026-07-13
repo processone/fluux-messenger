@@ -5,8 +5,11 @@ export default defineConfig({
   testMatch: 'scroll-invariants.ts',
   // Per-test budget. Generous because WebKit on a busy CI runner can take 45s+ just to boot the
   // demo bundle + run the stress seeding before the test body starts; 60s left no margin and the
-  // slow-boot case failed the mount wait outright instead of proceeding.
-  timeout: 120_000,
+  // slow-boot case failed the mount wait outright instead of proceeding. 120s was still occasionally
+  // exceeded during boot alone (run 29262345820: the test budget fired while loadDemo was still
+  // waiting for the nav to mount) — raised to 180s so a pathologically slow WebKitGTK boot proceeds
+  // into the (sub-10s) test body instead of burning a retry. Ceiling only; green runs finish in ~5-15s.
+  timeout: 180_000,
   fullyParallel: false,
   // CI: retry twice to absorb timing noise on slower runners (the suite gates on async
   // measurement settling). Locally: no retries, so flakes surface immediately.

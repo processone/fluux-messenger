@@ -68,10 +68,10 @@ const AT_BOTTOM_OK_PX = 150   // distance-from-bottom still considered "stuck to
 async function loadDemo(page: Page): Promise<void> {
   await page.goto(DEMO_URL, { waitUntil: 'domcontentloaded' })
   // Sidebar nav proves React mounted. WebKit on a loaded CI runner has been observed taking >45s
-  // to boot the demo bundle + run the stress seeding — the #1 remaining source of "flaky" retries.
-  // Give it a large ceiling within the 120s per-test budget (leaving ~30s for the test body, which
-  // normally runs in <10s) so a slow boot proceeds instead of failing the mount and burning a retry.
-  await page.waitForSelector('[data-nav="messages"]', { timeout: 90_000 })
+  // (occasionally >90s) to boot the demo bundle + run the stress seeding — the #1 remaining source
+  // of "flaky" retries. Give it a large ceiling within the 180s per-test budget (leaving ~60s for the
+  // test body, which normally runs in <10s) so a slow boot proceeds instead of failing the mount.
+  await page.waitForSelector('[data-nav="messages"]', { timeout: 120_000 })
   // Extra wait for the setTimeout(0) stress seeding to complete
   await page.waitForTimeout(1200)
 }
@@ -154,29 +154,6 @@ async function getDebugState(page: Page): Promise<Record<string, unknown>> {
 }
 
 /**
- * Find the top-most message row whose top edge is at or below the scroller's top edge.
- * Returns {id, offsetFromTop} or null.
- */
-async function findTopVisibleMessage(page: Page): Promise<{ id: string; offsetFromTop: number } | null> {
-  return page.evaluate(() => {
-    const scroller = document.querySelector('[data-message-list]') as HTMLElement | null
-    if (!scroller) return null
-    const scrollerRect = scroller.getBoundingClientRect()
-    const rows = Array.from(scroller.querySelectorAll('[data-message-id]')) as HTMLElement[]
-    for (const row of rows) {
-      const rect = row.getBoundingClientRect()
-      const offsetFromTop = rect.top - scrollerRect.top
-      if (offsetFromTop >= -rect.height / 2) {
-        return { id: row.dataset.messageId!, offsetFromTop }
-      }
-    }
-    return rows.length > 0
-      ? { id: rows[0].dataset.messageId!, offsetFromTop: rows[0].getBoundingClientRect().top - scrollerRect.top }
-      : null
-  })
-}
-
-/**
  * Find the BOTTOM-most message row whose top is above the viewport bottom — i.e. the row the
  * content anchor is captured from (mirrors findBottomAnchor in useMessageListScroll). Returns
  * {id, visible} or null.
@@ -252,21 +229,34 @@ async function sampleScrollTop(page: Page, durationMs: number): Promise<number[]
  * the scroller top — the actual on-screen position the user perceives.
  *
  * This measures the DOM directly rather than the virtualizer's `__fluuxGetVirtOffset` map. That map
- * is the source of the webkit flake: during the re-assert loop scrollTop and the offset move
+ * is the source of one webkit flake: during the re-assert loop scrollTop and the offset move
  * together, and a trailing measurement can leave the map reporting a STALE pre-prepend offset for a
  * sustained window while scrollTop already reflects the added batch — a ~2880px phantom drift that
  * isn't visible on screen. The row's own `getBoundingClientRect().top` can't go stale that way: it
- * is the layout truth. We poll it until it stops moving (within `tolerancePx` across `stableFrames`
- * consecutive frames) or `timeoutMs` elapses; a transient unmount (null) resets the counter. A
- * genuinely oscillating (broken) anchor never goes quiet, so it times out and still fails.
+ * is the layout truth.
+ *
+ * Settle detection uses a SLIDING-WINDOW RANGE, not consecutive-frame deltas. On a slow/contended
+ * WebKitGTK CI runner the production 60-frame re-assert loop runs over seconds and ResizeObserver
+ * delivers row measurements in coarse bursts: a single frame can jump 20-30px as one row resolves
+ * from its 64px estimate, then the re-assert re-pins it. The old "N consecutive frames within 1px"
+ * gate never accumulated through those bursts, timed out mid-motion, and returned a phantom drift
+ * (the observed `after=-692`). Range-over-last-N-frames ≤ tolerance instead treats the anchor as
+ * settled once the bursts die out and the window goes quiet — robust to the slow cadence while a
+ * genuinely oscillating (broken) anchor keeps a wide range and never settles (→ timeout).
+ *
+ * On timeout we return the MEDIAN of the recent samples rather than a single (possibly mid-burst)
+ * frame: for a converged-but-just-missed-the-gate anchor the median is the settled value; for a
+ * real oscillation/jump it is still far from the captured `before`, so the drift assertion stays RED.
+ * A transient unmount (null) resets the window. Timeout is generous (the re-assert loop can run for
+ * ~1s even at 60fps and far longer under load) and stays well inside the per-test budget.
  */
 async function waitForAnchorSettled(
   page: Page,
   anchorId: string,
-  { stableFrames = 10, tolerancePx = 1, timeoutMs = 8000 } = {},
+  { windowFrames = 8, tolerancePx = 2, timeoutMs = 15000 } = {},
 ): Promise<number | null> {
   return page.evaluate(
-    ({ id, stableFrames, tolerancePx, timeoutMs }) =>
+    ({ id, windowFrames, tolerancePx, timeoutMs }) =>
       new Promise<number | null>((resolve) => {
         const scroller = document.querySelector('[data-message-list]') as HTMLElement | null
         const readOffset = (): number | null => {
@@ -275,23 +265,100 @@ async function waitForAnchorSettled(
           if (!el) return null
           return el.getBoundingClientRect().top - scroller.getBoundingClientRect().top
         }
+        const median = (xs: number[]): number => {
+          const s = [...xs].sort((a, b) => a - b)
+          const m = Math.floor(s.length / 2)
+          return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2
+        }
         const t0 = performance.now()
-        let prev = readOffset()
-        let stable = 0
+        const win: number[] = []
         const tick = () => {
           const cur = readOffset()
-          if (cur !== null && prev !== null && Math.abs(cur - prev) <= tolerancePx) stable++
-          else stable = 0
-          prev = cur
-          if (stable >= stableFrames || performance.now() - t0 >= timeoutMs) {
-            resolve(cur)
+          if (cur === null) {
+            win.length = 0 // anchor unmounted (windowed out) — restart the window
+          } else {
+            win.push(cur)
+            if (win.length > windowFrames) win.shift()
+            if (win.length === windowFrames && Math.max(...win) - Math.min(...win) <= tolerancePx) {
+              resolve(cur) // window has been quiet for `windowFrames` frames — settled
+              return
+            }
+          }
+          if (performance.now() - t0 >= timeoutMs) {
+            resolve(win.length ? median(win) : cur)
           } else {
             requestAnimationFrame(tick)
           }
         }
         requestAnimationFrame(tick)
       }),
-    { id: anchorId, stableFrames, tolerancePx, timeoutMs },
+    { id: anchorId, windowFrames, tolerancePx, timeoutMs },
+  )
+}
+
+/**
+ * Wait until a programmatic scroll has SETTLED into a valid, on-screen top-visible anchor, then
+ * return it — the `before`-capture counterpart to waitForAnchorSettled.
+ *
+ * Directly setting `scrollTop` (setScrollTop) fires @tanstack's rAF scroll observer, which re-windows
+ * the rows and re-renders. On a slow/contended WebKitGTK CI runner that re-window can lag many frames
+ * behind a fixed `waitForTimeout`: the mounted DOM still holds the PRE-scroll window (e.g. the bottom
+ * rows after a scroll UP), so the top mounted row sits thousands of px below the new viewport top —
+ * a raw DOM-rect read then captured that stale row (the observed `before=2110`), and the whole
+ * before/after comparison became meaningless (GIGO).
+ *
+ * We reject that by requiring the captured anchor be BOTH stable AND genuinely on-screen: a settled
+ * top-visible row sits within one row of the viewport top (offset < clientHeight), whereas a lagged
+ * window leaves it a full viewport-plus below. Stability alone is insufficient — a stalled re-render
+ * holds the lagged row at a constant offset, which a delta-only check would wrongly accept — so the
+ * on-screen bound is the load-bearing gate. Returns null on timeout (the app never reached a settled
+ * 30% view), which fails the test with a clear precondition message rather than a phantom drift.
+ */
+async function waitForTopVisibleSettled(
+  page: Page,
+  { windowFrames = 8, tolerancePx = 2, timeoutMs = 8000 } = {},
+): Promise<{ id: string; offsetFromTop: number } | null> {
+  return page.evaluate(
+    ({ windowFrames, tolerancePx, timeoutMs }) =>
+      new Promise<{ id: string; offsetFromTop: number } | null>((resolve) => {
+        const scroller = document.querySelector('[data-message-list]') as HTMLElement | null
+        // First [data-message-id] whose top edge is at/below the scroller top (within half its own
+        // height) — the top-visible anchor.
+        const readTop = (): { id: string; offsetFromTop: number } | null => {
+          if (!scroller) return null
+          const scrollerRect = scroller.getBoundingClientRect()
+          const rows = Array.from(scroller.querySelectorAll('[data-message-id]')) as HTMLElement[]
+          for (const row of rows) {
+            const rect = row.getBoundingClientRect()
+            const offsetFromTop = rect.top - scrollerRect.top
+            if (offsetFromTop >= -rect.height / 2) return { id: row.dataset.messageId!, offsetFromTop }
+          }
+          return null
+        }
+        const t0 = performance.now()
+        let prevId: string | null = null
+        const win: number[] = []
+        const tick = () => {
+          const cur = readTop()
+          const onScreen = cur !== null && scroller !== null && cur.offsetFromTop < scroller.clientHeight
+          if (!onScreen) {
+            win.length = 0 // window hasn't caught up (lagged/blank) — keep waiting
+            prevId = null
+          } else {
+            if (cur!.id !== prevId) { win.length = 0; prevId = cur!.id } // anchor row changed — restart
+            win.push(cur!.offsetFromTop)
+            if (win.length > windowFrames) win.shift()
+            if (win.length === windowFrames && Math.max(...win) - Math.min(...win) <= tolerancePx) {
+              resolve(cur)
+              return
+            }
+          }
+          if (performance.now() - t0 >= timeoutMs) resolve(null)
+          else requestAnimationFrame(tick)
+        }
+        requestAnimationFrame(tick)
+      }),
+    { windowFrames, tolerancePx, timeoutMs },
   )
 }
 
@@ -354,7 +421,6 @@ test.describe('Virtualization scroll invariants', () => {
       return s ? s.scrollHeight : 0
     })
     await setScrollTop(page, Math.floor(scrollHeight * 0.3))
-    await page.waitForTimeout(300)
 
     // Record the top-visible message before load-older, capturing its DOM offset from the scroller
     // top. Assertion B compares the SAME row's offset after the restore — the position the user
@@ -363,8 +429,15 @@ test.describe('Virtualization scroll invariants', () => {
     // 30% when the prepend `useLayoutEffect` runs. This ensures:
     //   - findAnchorElement sees scrollTop=30% → picks the correct anchor (not firstMessageId)
     //   - items above the anchor are already measured (they were in the virtualizer window)
-    const before = await findTopVisibleMessage(page)
-    expect(before, 'must find a top-visible anchor message before prepend').not.toBeNull()
+    //
+    // Capture must wait for @tanstack's rAF scroll observer to RE-WINDOW after the programmatic
+    // setScrollTop, not just a fixed 300ms: on a slow WebKitGTK CI runner that re-window lags and
+    // a raw top-visible read would see the stale pre-scroll window (top row thousands of px below the
+    // viewport → the observed `before=2110`), poisoning the comparison. waitForTopVisibleSettled polls
+    // until the top-visible anchor is stable AND genuinely on-screen. Null = the app never reached a
+    // settled 30% view — fail with that precondition, not a phantom drift.
+    const before = await waitForTopVisibleSettled(page)
+    expect(before, 'scroll never settled into a valid on-screen 30% anchor before prepend').not.toBeNull()
     const anchorId = before!.id
     const anchorOffsetBefore = before!.offsetFromTop
 
