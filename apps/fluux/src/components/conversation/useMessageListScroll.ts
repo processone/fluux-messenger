@@ -250,12 +250,14 @@ export interface UseMessageListScrollOptions {
    *  ⇒ at the live edge — unchanged behavior. */
   windowAtLiveEdge?: boolean
   isHistoryComplete?: boolean
-  /** Signature of the last message's reactions. Changes when a reaction is added/removed on the last
-   *  row (growing/shrinking it); drives a gentle bottom nudge while the reader is sticked to bottom. */
-  lastMessageReactionsKey: string
+  /** Signature of the reactions across the resident window. Changes when a reaction is added/removed on
+   *  ANY row (growing/shrinking it); drives an instant bottom re-pin while the reader is sticked to the
+   *  bottom, so the growth is absorbed above (previous messages scroll up) instead of shoving the
+   *  newest message down. */
+  reactionsSignature: string
   /** Whether the floating typing-indicator pill is currently shown. The footer reserves extra bottom
-   *  padding to clear the pill only while this is true; the 0→true edge drives the same gentle
-   *  bottom nudge as a reaction growing the last row, gated on live geometry (see the reactions
+   *  padding to clear the pill only while this is true; the 0→true edge drives the same instant
+   *  bottom re-pin as a reaction growing a row, gated on live geometry (see the reactions
    *  effect) so it never fires for a reader scrolled up into history — the #918 "fight" was a stale
    *  isAtBottomRef latch, not the padding change itself. */
   hasTypingIndicator?: boolean
@@ -320,7 +322,7 @@ export function useMessageListScroll({
   isLoadingNewer,
   windowAtLiveEdge,
   isHistoryComplete,
-  lastMessageReactionsKey,
+  reactionsSignature,
   hasTypingIndicator = false,
   lastMessageIsOutgoing = false,
   lastMessageId,
@@ -2749,43 +2751,46 @@ export function useMessageListScroll({
   }, [firstNewMessageId])
 
   // ==========================================================================
-  // EFFECT: Reaction on the last message — gentle bottom nudge (only when sticked)
+  // EFFECT: Reaction added/removed — keep the bottom glued (only when sticked)
   // ==========================================================================
 
-  // A reaction added to the last message grows its row a little. While the reader is sticked to the
-  // bottom we keep the reaction visible with a GENTLE, single smooth nudge — NOT the multi-frame
-  // pinVirtualizedBottom loop (that WebKitGTK-heavy re-assert is for new messages; a reaction is a
-  // tiny ambient growth and a jolt would be jarring). Two safeguards keep it from ever fighting a
-  // scroll: (1) it's gated on LIVE geometry, not the latchable isAtBottomRef — a reader scrolled up
-  // into history reads distFromBottom >= threshold and is never nudged (this is what made a typing
-  // toggle "fight" the scroll in #918: a stale-true latch); (2) it fires only on an actual reactions
-  // change WITHIN the same conversation, so a conversation switch / restore is never disturbed.
-  // (The typing indicator pill itself still floats OVER the list, #918 — it never lives in scroll
-  // content. Only the footer's reserved clearance for it participates; see the next effect.)
-  const prevReactionsKeyRef = useRef(lastMessageReactionsKey)
+  // A reaction grows (or shrinks) its message row. While the reader is sticked to the bottom we keep
+  // the newest message glued to the bottom edge and let the growth be absorbed ABOVE (previous
+  // messages scroll up) — rather than letting the row growth shove the newest message down. This runs
+  // for a reaction on ANY resident row, not just the last one: a reaction in the middle of the
+  // viewport would otherwise push everything below it (including the newest message) down.
+  //
+  // We route through reassertBottom (the same multi-frame pinVirtualizedBottom convergence new
+  // messages and the typing footer use) rather than a one-shot scrollToIndex, because the row's
+  // ResizeObserver reports the grown height a frame or two AFTER the chip mounts — a single
+  // synchronous pin would land on the pre-growth height and still let the bottom dip. The loop polls
+  // scrollHeight per frame and re-pins instantly (no smooth easing, so nothing visibly animates),
+  // converging in a handful of frames. It's pure imperative scroll work — no React re-render.
+  //
+  // Two safeguards keep it from ever fighting a scroll: (1) it's gated on LIVE geometry, not the
+  // latchable isAtBottomRef — a reader scrolled up into history reads distFromBottom >= threshold and
+  // is never re-pinned (a stale-true latch is what made a typing toggle "fight" the scroll in #918);
+  // (2) it fires only on an actual reactions change WITHIN the same conversation, so a conversation
+  // switch / restore is never disturbed.
+  const prevReactionsKeyRef = useRef(reactionsSignature)
   const reactionsConvRef = useRef(conversationId)
   useLayoutEffect(() => {
     const sameConversation = reactionsConvRef.current === conversationId
     reactionsConvRef.current = conversationId
     const prevKey = prevReactionsKeyRef.current
-    prevReactionsKeyRef.current = lastMessageReactionsKey
-    if (!sameConversation) return // conversation switch → rebaseline, never nudge
-    if (prevKey === lastMessageReactionsKey) return // no actual reactions change (unrelated re-render)
+    prevReactionsKeyRef.current = reactionsSignature
+    if (!sameConversation) return // conversation switch → rebaseline, never re-pin
+    if (prevKey === reactionsSignature) return // no actual reactions change (unrelated re-render)
 
     const scroller = scrollerRef.current
     if (!scroller || staticMode) return
-    // Live-geometry gate: only nudge when genuinely at/near the bottom right now.
+    // Live-geometry gate: only re-pin when genuinely at/near the bottom right now.
     if (getDistanceFromBottom(scroller) >= AT_BOTTOM_THRESHOLD) return
-    // A running pin loop already keeps the bottom pinned — don't stack a second scroll on it.
+    // A running pin loop already keeps the bottom pinned — don't stack a second one.
     if (pinBottomActiveRef.current) return
 
-    const virt = virtualizerRef.current
-    if (virt && virt.itemCount > 0) {
-      virt.scrollToIndex(virt.itemCount - 1, { align: 'end', behavior: 'smooth' })
-    } else {
-      scroller.scrollTo({ top: scroller.scrollHeight, behavior: 'smooth' })
-    }
-  }, [lastMessageReactionsKey, conversationId, staticMode])
+    reassertBottom('reaction')
+  }, [reactionsSignature, conversationId, staticMode, reassertBottom])
 
   // ==========================================================================
   // EFFECT: Typing indicator appears — reveal its footer clearance while sticked
