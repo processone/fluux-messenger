@@ -237,12 +237,20 @@ export function MessageList<T extends BaseMessage>({
   // Compute derived values for scroll hook
   const firstMessageId = deduplicatedMessages[0]?.id
   const lastMessage = messages[messages.length - 1]
-  // Signature of the last message's reactions — changes when a reaction is added/removed on it, which
-  // grows/shrinks its row. Used only to give a gentle bottom nudge while the reader is sticked to the
-  // bottom (see the reactions effect in useMessageListScroll).
-  const lastMessageReactionsKey = lastMessage
-    ? JSON.stringify(lastMessage.reactions || {})
-    : ''
+  // Signature of every resident message's reactions — changes when a reaction is added/removed
+  // anywhere in the window, which grows/shrinks that row. Cheap: only messages that actually carry
+  // reactions contribute, so the common no-reaction rows cost a bare iteration. Drives an instant
+  // bottom re-pin while the reader is sticked to the bottom, so reaction growth is absorbed above
+  // (previous messages scroll up) instead of shoving the newest message down (see the reactions
+  // effect in useMessageListScroll).
+  const reactionsSignature = useMemo(() => {
+    let sig = ''
+    for (const m of deduplicatedMessages) {
+      const r = m.reactions
+      if (r && Object.keys(r).length > 0) sig += `${m.id}:${JSON.stringify(r)};`
+    }
+    return sig
+  }, [deduplicatedMessages])
 
   // --------------------------------------------------------------------------
   // SCROLL BEHAVIOR (delegated to hook)
@@ -521,7 +529,7 @@ export function MessageList<T extends BaseMessage>({
     isLoadingNewer,
     windowAtLiveEdge,
     isHistoryComplete,
-    lastMessageReactionsKey,
+    reactionsSignature,
     hasTypingIndicator: typingUsers.length > 0,
     lastMessageIsOutgoing: lastMessage?.isOutgoing ?? false,
     lastMessageId: lastMessage?.id,

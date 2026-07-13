@@ -1607,6 +1607,92 @@ test.describe('Send-stick diagnostic (1:1)', () => {
   })
 })
 
+// ── Reaction bottom-stick: a reaction growing a mid-viewport row must not shove the newest down ──
+//
+// Adding the first reaction to a message grows its row by the reaction chip. While the reader is
+// sticked to the bottom, that growth must be absorbed ABOVE (previous messages scroll up) so the
+// newest message stays glued to the bottom edge — NOT pushed down/out of view. This covers the
+// mid-viewport case specifically: a reaction on a message a few rows above the last pushes everything
+// below it (including the newest message) down, and the browser's overflow-anchor does NOT compensate
+// for growth below its chosen top anchor. RED before the fix (the old effect only re-pinned for a
+// reaction on the LAST row, so a mid-viewport reaction left the newest row dipped below the fold);
+// GREEN once any reaction re-asserts the bottom via the pin loop.
+test.describe('Reaction bottom-stick (room)', () => {
+  test('a reaction on a mid-viewport row keeps the newest message glued to the bottom', async ({ page }) => {
+    await loadDemo(page)
+    await navigateToStressRoom(page)
+    await scrollToBottom(page)
+    await page.waitForTimeout(300)
+
+    // Pick the newest message id and a target to react to: a row fully inside the viewport, NOT the
+    // last, and WITHOUT existing reactions (so adding one is a genuine 0→chip growth). A fully-visible
+    // mid-viewport row sits below the browser's top overflow-anchor, so its growth is not auto-
+    // compensated — it pushes the rows below it (the newest included) down. Also capture the newest
+    // row's pre-reaction distance so we assert it was glued to begin with.
+    const pick = await page.evaluate((jid) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const rs = (window as any).__roomStore.getState()
+      const msgs = rs.rooms.get(jid)?.messages ?? []
+      const lastId: string | null = msgs[msgs.length - 1]?.id ?? null
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const hasReactions = new Set(msgs.filter((m: any) => m.reactions && Object.keys(m.reactions).length > 0).map((m: any) => m.id))
+
+      const s = document.querySelector('[data-message-list]') as HTMLElement | null
+      if (!s) return { lastId, targetId: null as string | null, beforeDist: -1 }
+      const sRect = s.getBoundingClientRect()
+      const rows = (Array.from(s.querySelectorAll('.message-row[data-message-id]')) as HTMLElement[])
+        .filter((el) => {
+          if (el.offsetHeight <= 0) return false
+          const r = el.getBoundingClientRect()
+          const id = el.dataset.messageId!
+          return r.top >= sRect.top && r.bottom <= sRect.bottom && id !== lastId && !hasReactions.has(id)
+        })
+      // Choose one around the middle of the fully-visible, reaction-free rows.
+      const target = rows.length ? rows[Math.floor(rows.length / 2)] : null
+      return {
+        lastId,
+        targetId: target?.dataset.messageId ?? null,
+        beforeDist: Math.round(s.scrollHeight - s.scrollTop - s.clientHeight),
+      }
+    }, STRESS_ROOM_JID)
+
+    expect(pick.lastId, 'precondition: a newest message id exists').toBeTruthy()
+    expect(pick.targetId, 'precondition: a fully-visible, reaction-free, non-last row to react to').toBeTruthy()
+    expect(pick.beforeDist, 'precondition: the view is glued to the bottom before the reaction').toBeLessThan(AT_BOTTOM_OK_PX)
+
+    // Apply a reaction on the mid-viewport target through the real store path (grows its row).
+    await page.evaluate(([jid, targetId]) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ;(window as any).__roomStore.getState().updateReactions(jid, targetId, 'Reactor', ['👍'])
+    }, [STRESS_ROOM_JID, pick.targetId] as const)
+
+    // Confirm the chip actually mounted (the row genuinely grew), then let the pin loop converge.
+    await page.waitForFunction((targetId) => {
+      const s = document.querySelector('[data-message-list]') as HTMLElement | null
+      const el = s?.querySelector(`[data-message-id="${CSS.escape(targetId)}"]`) as HTMLElement | null
+      return !!el && el.textContent?.includes('👍')
+    }, pick.targetId as string, { timeout: 5_000 })
+    await page.waitForTimeout(800)
+
+    const after = await page.evaluate((lastId) => {
+      const s = document.querySelector('[data-message-list]') as HTMLElement | null
+      if (!s) return { lastVisible: false, distFromBottom: -1 }
+      const el = s.querySelector(`[data-message-id="${CSS.escape(lastId)}"]`) as HTMLElement | null
+      const sRect = s.getBoundingClientRect()
+      const r = el?.getBoundingClientRect()
+      return {
+        // The newest row's bottom must still sit at (not past) the viewport bottom — a mid-viewport
+        // reaction pushing it down would leave r.bottom well below sRect.bottom (by the chip height).
+        lastVisible: !!(r && r.bottom <= sRect.bottom + 8 && r.bottom > sRect.top),
+        distFromBottom: Math.round(s.scrollHeight - s.scrollTop - s.clientHeight),
+      }
+    }, pick.lastId as string)
+
+    expect(after.lastVisible, `newest message pushed below the fold by a mid-viewport reaction — distFromBottom=${after.distFromBottom}`).toBe(true)
+    expect(after.distFromBottom, 'the view must stay pinned to the bottom after a mid-viewport reaction').toBeLessThan(AT_BOTTOM_OK_PX)
+  })
+})
+
 // ── 11: Media decoding above a scrolled-up viewport must not drift the reading position ──────────
 //
 // The reported bug (real WebKitGTK trace): switch INTO a conversation, the saved scrolled-up anchor

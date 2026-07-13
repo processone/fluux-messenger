@@ -252,53 +252,65 @@ describe('MessageList scroll behavior', () => {
   })
 
   describe('reactions scroll', () => {
-    // A reaction grows the last message's row. While the reader is sticked to the bottom we keep it
-    // visible with a GENTLE single smooth nudge (not the heavy multi-frame pin loop, and not the old
-    // hard yank). It is gated on LIVE geometry, so a reader scrolled up into history is never nudged.
+    // A reaction grows a message's row. While the reader is sticked to the bottom we keep the newest
+    // message glued to the bottom edge via reassertBottom — the same shared helper new messages and the
+    // typing footer use. On the non-virtualized path that's an INSTANT scrollTop = scrollHeight write
+    // (no smooth animation, which is what used to visibly shove the newest message down). It is gated
+    // on LIVE geometry, so a reader scrolled up into history is never re-pinned.
     const reactOnLast = (msgs: ReturnType<typeof createTestMessages>) => {
       const copy = [...msgs]
       copy[copy.length - 1] = { ...copy[copy.length - 1], reactions: { '👍': ['someone@example.com'] } }
       return copy
     }
-    const instrument = (container: HTMLDivElement, scrollTop: number) => {
+    const instrument = (container: HTMLDivElement, initialScrollTop: number) => {
       Object.defineProperty(container, 'scrollHeight', { value: 1000, configurable: true })
       Object.defineProperty(container, 'clientHeight', { value: 500, configurable: true })
-      Object.defineProperty(container, 'scrollTop', { value: scrollTop, writable: true, configurable: true })
+      let scrollTopValue = initialScrollTop
+      const scrollTopWrites = vi.fn()
+      Object.defineProperty(container, 'scrollTop', {
+        get: () => scrollTopValue,
+        set: (v) => { scrollTopValue = v; scrollTopWrites(v) },
+        configurable: true,
+      })
       const scrollToSpy = vi.fn()
       container.scrollTo = scrollToSpy
-      return scrollToSpy
+      return { scrollToSpy, scrollTopWrites, getScrollTop: () => scrollTopValue }
     }
 
-    it('gently nudges the bottom (smooth) when the last message gets a reaction while sticked', () => {
+    it('instantly re-pins the bottom (no smooth animation) when a message gets a reaction while sticked', () => {
       const messages = createTestMessages(5)
       const { rerender } = render(
         <MessageList messages={messages} conversationId="conv-1" clearFirstNewMessageId={vi.fn()} renderMessage={(msg) => <div key={msg.id}>{msg.body}</div>} />
       )
       const container = document.querySelector('.overflow-y-auto') as HTMLDivElement
       // scrollTop 500 → distFromBottom 0 (< AT_BOTTOM_THRESHOLD): the reader is sticked to the bottom.
-      const scrollToSpy = instrument(container, 500)
+      const { scrollToSpy, getScrollTop } = instrument(container, 500)
 
       rerender(
         <MessageList messages={reactOnLast(messages)} conversationId="conv-1" clearFirstNewMessageId={vi.fn()} renderMessage={(msg) => <div key={msg.id}>{msg.body}</div>} />
       )
 
-      expect(scrollToSpy).toHaveBeenCalledWith(expect.objectContaining({ top: 1000, behavior: 'smooth' }))
+      // Instant pin: scrollTop is written straight to scrollHeight, NOT a smooth scrollTo nudge.
+      expect(getScrollTop()).toBe(1000)
+      expect(scrollToSpy).not.toHaveBeenCalledWith(expect.objectContaining({ behavior: 'smooth' }))
     })
 
-    it('does NOT nudge when a reaction arrives while the reader is scrolled up', () => {
+    it('does NOT re-pin when a reaction arrives while the reader is scrolled up', () => {
       const messages = createTestMessages(5)
       const { rerender } = render(
         <MessageList messages={messages} conversationId="conv-1" clearFirstNewMessageId={vi.fn()} renderMessage={(msg) => <div key={msg.id}>{msg.body}</div>} />
       )
       const container = document.querySelector('.overflow-y-auto') as HTMLDivElement
       // scrollTop 200 → distFromBottom 300 (>= AT_BOTTOM_THRESHOLD 150): scrolled up into history.
-      const scrollToSpy = instrument(container, 200)
+      const { scrollToSpy, scrollTopWrites, getScrollTop } = instrument(container, 200)
 
       rerender(
         <MessageList messages={reactOnLast(messages)} conversationId="conv-1" clearFirstNewMessageId={vi.fn()} renderMessage={(msg) => <div key={msg.id}>{msg.body}</div>} />
       )
 
+      expect(scrollTopWrites).not.toHaveBeenCalled()
       expect(scrollToSpy).not.toHaveBeenCalled()
+      expect(getScrollTop()).toBe(200)
     })
   })
 
