@@ -50,7 +50,11 @@ import {
   heightCacheKey,
   noteConversationWidthBucket,
   getConversationWidthBucket,
+  getCachedHeight,
+  persistHeightSnapshot,
+  hydrateHeightCache,
 } from './messageHeightCache'
+import { collectSettledRowHeights } from './settledRowSnapshot'
 import { Loader2, ChevronUp, ChevronDown, MessageCircle } from 'lucide-react'
 import { Tooltip } from '../Tooltip'
 import { MessageSelectionBar } from './MessageSelectionBar'
@@ -280,27 +284,34 @@ export function MessageList<T extends BaseMessage>({
   // falls back to ROW_METRICS_FALLBACK under jsdom / before any rows are mounted.
   const rowMetricsRef = useRowMetrics(scrollContainerRef)
 
-  // Per-index estimate: drives the virtualizer's initial size guess so prepend-restore lands
-  // accurately instead of snapping. Only used when virtualized (passed unconditionally since the
-  // adapter is always constructed; the non-virtualized path ignores it). Guard the index: @tanstack
-  // only probes valid indices in steady state, but a stale window during a count change could probe
-  // out of range, and estimateRowHeight reads item.kind immediately (the signature is not nullable).
-  const estimateSize = useCallback(
-    (index: number) => {
-      const item = virtualItems[index]
-      return item !== undefined
-        ? estimateRowHeight(item, rowMetricsRef.current)
-        : rowMetricsRef.current.chrome.continuation // safe fallback for any out-of-range probe
-    },
-    [virtualItems, rowMetricsRef],
-  )
-
   // --------------------------------------------------------------------------
   // PERSISTENT HEIGHT CACHE (virtualized path only)
   // --------------------------------------------------------------------------
   // Current font scale (a number; e.g. 100, 125). Subscribe so widthBucket changes
   // when the user adjusts font size — different scale = different heights.
   const scalePct = useSettingsStore((s) => s.fontSize)
+
+  // Per-index estimate: drives the virtualizer's initial size guess so prepend-restore lands
+  // accurately instead of snapping. Only used when virtualized (passed unconditionally since the
+  // adapter is always constructed; the non-virtualized path ignores it). Guard the index: @tanstack
+  // only probes valid indices in steady state, but a stale window during a count change could probe
+  // out of range, and estimateRowHeight reads item.kind immediately (the signature is not nullable).
+  // Cached-first: rows that appear AFTER mount (messages streaming in from MAM on a reload)
+  // are not covered by the mount-time initialMeasurements seed, so estimateSize consults the
+  // height cache (hydrated from the persisted snapshot) before predicting from text. A cache
+  // hit is the row's real settled height — no reflow, no bottom-pin re-assert when it mounts.
+  const estimateSize = useCallback(
+    (index: number) => {
+      const item = virtualItems[index]
+      if (item === undefined) {
+        return rowMetricsRef.current.chrome.continuation // safe fallback for any out-of-range probe
+      }
+      const mountBucketPx = Math.round(rowMetricsRef.current.contentWidthPx / 20) * 20
+      const cached = getCachedHeight(conversationId, item.key, scalePct, mountBucketPx)
+      return cached ?? estimateRowHeight(item, rowMetricsRef.current)
+    },
+    [virtualItems, rowMetricsRef, conversationId, scalePct],
+  )
 
   // Build the initialMeasurements seed from the persistent cache. Only when virtualized —
   // flag-OFF path is unchanged. Filter to keys that match the width bucket + scale so stale
@@ -314,6 +325,10 @@ export function MessageList<T extends BaseMessage>({
   const initialMeasurementsBuiltRef = useRef(false)
   if (!initialMeasurementsBuiltRef.current && virtualized) {
     initialMeasurementsBuiltRef.current = true
+    // One-shot per page load: fill the module cache from the persisted snapshot so the
+    // FIRST mount after a reload seeds real heights (the in-memory cache alone dies with
+    // the page, which made every conversation re-open on estimates → the reload blink).
+    hydrateHeightCache()
     // The mount-time content width is still the 560 fallback here (useRowMetrics samples the real
     // width in a rAF after layout), so prefer the REAL bucket persisted by a prior write-back. The
     // common case — re-entering at the same viewport — then hits; a genuine width change falls back
@@ -397,23 +412,28 @@ export function MessageList<T extends BaseMessage>({
   // still attached (a passive cleanup runs after the DOM is removed → offsetHeight would read 0). Reads
   // only, once per switch (~window+overscan rows). Keyed via data-index → virtualItems[i].key, so it
   // covers every mounted row kind (messages, date separators, footer), matching the seed's key space.
+  //
+  // The same snapshot also runs on pagehide: a reload never runs unmount cleanups, so without it
+  // the ACTIVE conversation — the one visibly blinking after the reload — would never persist.
+  // persistHeightSnapshot mirrors the settled window to localStorage for the next session's seed.
   useLayoutEffect(() => {
     if (!virtualized) return
     const scroller = scrollContainerRef.current
-    return () => {
+    const snapshotSettledRows = () => {
       if (!scroller) return
       const { conversationId: cid, scalePct: scale, rowMetricsRef: metricsRef, virtualItems: items } = onMeasuredParamsRef.current
       const widthBucketPx = Math.round(metricsRef.current.contentWidthPx / 20) * 20
-      const rows = scroller.querySelectorAll<HTMLElement>('[data-virtualizer-spacer] > [data-index]')
-      for (const el of rows) {
-        const idx = Number(el.dataset.index)
-        const key = Number.isNaN(idx) ? undefined : items[idx]?.key
-        const height = el.offsetHeight
-        if (key && height > 0) {
-          recordMeasuredHeight(cid, heightCacheKey(key, widthBucketPx, scale), height)
-          noteConversationWidthBucket(cid, widthBucketPx)
-        }
+      const settled = collectSettledRowHeights(scroller, items, widthBucketPx, scale)
+      for (const [key, height] of settled) {
+        recordMeasuredHeight(cid, key, height)
       }
+      if (settled.size > 0) noteConversationWidthBucket(cid, widthBucketPx)
+      persistHeightSnapshot(cid, settled, widthBucketPx)
+    }
+    window.addEventListener('pagehide', snapshotSettledRows)
+    return () => {
+      window.removeEventListener('pagehide', snapshotSettledRows)
+      snapshotSettledRows()
     }
   }, [virtualized])
 
