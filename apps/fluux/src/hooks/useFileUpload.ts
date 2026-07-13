@@ -21,6 +21,7 @@ import {
   getEffectiveMimeType,
   type ThumbnailResult,
 } from '@/utils/thumbnail'
+import { createUploadProgressReporter } from './uploadProgressReporter'
 
 /**
  * Check if running in Tauri dynamically.
@@ -143,19 +144,16 @@ export function useFileUpload() {
         }
       }
 
-      // Calculate total upload size for progress (main file + optional thumbnail)
+      // Combine main-file + optional-thumbnail progress into one size-weighted
+      // percent. The reporter only fires when the rounded percent changes, so a
+      // fast web upload can't re-render the conversation pane once per XHR
+      // progress event (same render-storm class as issue #994).
       const thumbnailSize = thumbnailResult?.blob.size || 0
-      const totalSize = file.size + thumbnailSize
-      let mainProgress = 0
-      let thumbProgress = 0
-
-      const updateProgress = () => {
-        // Weight progress by size
-        const mainWeight = file.size / totalSize
-        const thumbWeight = thumbnailSize / totalSize
-        const overall = Math.round(mainProgress * mainWeight + thumbProgress * thumbWeight)
-        setState(s => ({ ...s, progress: overall }))
-      }
+      const progressReporter = createUploadProgressReporter(
+        file.size,
+        thumbnailSize,
+        overall => setState(s => ({ ...s, progress: overall })),
+      )
 
       // 1. Prepare main file bytes — encrypted or plaintext depending on mode.
       // When encrypting we PUT the ciphertext (plaintext_len + 16-byte GCM
@@ -191,10 +189,7 @@ export function useFileUpload() {
         new File([mainUploadBlob], mainUploadFilename, { type: mainUploadMimeType }),
         mainUploadMimeType,
         slot.headers,
-        (progress) => {
-          mainProgress = progress
-          updateProgress()
-        },
+        (progress) => progressReporter.setMain(progress),
       )
 
       // 3. Upload thumbnail if generated. Encrypted attachments get an
@@ -230,10 +225,7 @@ export function useFileUpload() {
           new File([thumbBytes as BlobPart], thumbFilename, { type: thumbUploadMime }),
           thumbUploadMime,
           thumbSlot.headers,
-          (progress) => {
-            thumbProgress = progress
-            updateProgress()
-          },
+          (progress) => progressReporter.setThumbnail(progress),
         )
 
         // Store plain HTTPS URL locally; encryption params ride in a
