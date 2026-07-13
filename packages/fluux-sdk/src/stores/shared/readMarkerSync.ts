@@ -116,28 +116,71 @@ export function resolveRemoteDisplayed<T extends NotificationMessage & { stanzaI
  * to apply it. Keying on id alone would suppress that fold (the entity was opened
  * before), leaving reads synced from another device stuck as unread. Keying on
  * the stanza-id instead re-arms for a genuinely newer marker while still skipping
- * the identical one. Each store owns one gate instance; `reset()` on account switch.
+ * the identical one.
+ *
+ * Only RESOLVED folds are recorded (via `markFolded`, called by
+ * {@link foldPendingRemoteDisplayed} when the apply actually advanced or cleared
+ * the marker). A fold that stashed — the marker's message wasn't in the loaded
+ * slice — never took effect, so recording it would strand the marker: the next
+ * activation would skip the fold as "already consumed" while no merge may ever
+ * retry it. Each store owns one gate instance; `reset()` on account switch.
  */
 export interface MdsSessionGate {
   /**
-   * True when `stanzaId` has not yet been folded for `id` this session — the
-   * first marker, or any newer/different one. Re-presenting the same value
-   * returns false. Records id → stanzaId.
+   * True when `stanzaId` has not been folded-and-RESOLVED for `id` this
+   * session — the first marker, any newer/different one, or a marker whose
+   * earlier fold attempts all stashed.
    */
-  consume(id: string, stanzaId: string): boolean
+  shouldFold(id: string, stanzaId: string): boolean
+  /** Record a fold that actually resolved (advanced or cleared the marker). */
+  markFolded(id: string, stanzaId: string): void
   reset(): void
 }
 
 export function createMdsSessionGate(): MdsSessionGate {
-  const consumed = new Map<string, string>()
+  const folded = new Map<string, string>()
   return {
-    consume(id: string, stanzaId: string): boolean {
-      const first = consumed.get(id) !== stanzaId
-      consumed.set(id, stanzaId)
-      return first
+    shouldFold(id: string, stanzaId: string): boolean {
+      return folded.get(id) !== stanzaId
+    },
+    markFolded(id: string, stanzaId: string): void {
+      folded.set(id, stanzaId)
     },
     reset(): void {
-      consumed.clear()
+      folded.clear()
     },
   }
+}
+
+/** Outcome of one activation-fold attempt, for the caller's debug logging. */
+export interface ActivationFoldResult {
+  /** The pending stanza-id that was considered (undefined = nothing pending). */
+  pending?: string
+  /** True when the fold ran (a marker was pending and the gate allowed it). */
+  attempted: boolean
+  /** True when the fold resolved the marker (advanced or cleared) — the pending mark is gone. */
+  resolved: boolean
+}
+
+/**
+ * One activation-fold attempt: apply the pending XEP-0490 marker (if any and
+ * not already resolved this session) and record it on the gate ONLY when it
+ * actually resolved. Shared by chatStore.activateConversation and
+ * roomStore.activateRoom, which call it twice per activation:
+ * once against the freshly loaded latest slice, and again after a load-around
+ * of a deep stale pointer may have brought the marker's message into the slice.
+ */
+export function foldPendingRemoteDisplayed(
+  gate: MdsSessionGate,
+  id: string,
+  getPending: () => string | undefined,
+  apply: (stanzaId: string) => void
+): ActivationFoldResult {
+  const pending = getPending()
+  if (pending === undefined) return { attempted: false, resolved: false }
+  if (!gate.shouldFold(id, pending)) return { pending, attempted: false, resolved: false }
+  apply(pending)
+  const resolved = getPending() !== pending
+  if (resolved) gate.markFolded(id, pending)
+  return { pending, attempted: true, resolved }
 }

@@ -110,6 +110,29 @@ Each scene is tagged `variant: 'reel'` (appears in both videos) or `variant: 'fu
 - `populateDemo(data: DemoData)` seeds all Zustand stores synchronously via `emitSDK()` calls
 - `startAnimation(steps: DemoAnimationStep[])` schedules timed events (typing, messages, reactions) on `setTimeout`s
 - Sets MAM query state to "history complete" so no loading spinners appear
+- Serves the XEP-0490 MDS PEP node from an in-memory registry, so `client.mds.publishDisplayed/fetchAllDisplayed/retractDisplayed` round-trip in demo mode
+
+### Simulating cross-device read sync (XEP-0490 MDS)
+
+Seeded and stress-generated messages carry a deterministic XEP-0359 stanza-id
+(`sid-<messageId>`), and `DemoClient.simulateRemoteDisplayed(jid, stanzaId)`
+plays the "another of my devices read up to this message" notify: it upserts
+the marker on the simulated PEP node and emits `read:displayed-synced`.
+
+Example — reproduce the unread divider position after catching up elsewhere:
+
+```js
+// 1. Seed a deep room backlog (1000 messages, stanza-ids sid-stress-0-0 … sid-stress-0-999)
+__demoClient.runStressScenario({ kind: 'room-join', rooms: 1, occupants: 5, messagesPerRoom: 1000, mode: 'backfill', msgStepMs: 0 })
+
+// 2. Watch marker decisions in the console
+localStorage.setItem('fluux:scroll-debug', '1')
+
+// 3. With the room closed, simulate the other device having read to message 850
+__demoClient.simulateRemoteDisplayed('stress-0@conference.fluux.chat', 'sid-stress-0-850')
+
+// 4. Open the room — the "new messages" divider should sit just after message 850
+```
 
 The SDK also exports the `DemoData`, `DemoAnimationStep`, and related type interfaces, plus time-offset helpers (`minutesAgo`, `hoursAgo`, `daysAgo`) so any app can build its own demo data.
 

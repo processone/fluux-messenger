@@ -66,6 +66,9 @@ export function buildStressEvents(scenario: StressScenario, ctx: StressContext):
       const message: RoomMessage = {
         type: 'groupchat', id: `stress-${i}-${m}`, from: `${roomJid}/${nick}`, nick,
         body: `stress message ${m}`, timestamp: new Date(ts), isOutgoing: false, roomJid,
+        // XEP-0359 archive id: MDS (XEP-0490) markers match on stanzaId, so
+        // stress backlogs must carry one to exercise read-sync flows in demo.
+        stanzaId: `sid-stress-${i}-${m}`,
       }
       events.push({ delayMs: base + 20 + m * msgStepMs, type: 'room:message', payload: { roomJid, message } })
       globalMsg++
