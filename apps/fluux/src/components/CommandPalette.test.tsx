@@ -14,11 +14,12 @@ const mockConversations: Array<{ id: string; name: string; unreadCount: number; 
   { id: 'bob@example.com', name: 'Bob Jones', unreadCount: 2, type: 'chat', lastMessage: { body: 'The exponential backoff is working now', timestamp: new Date('2026-07-07T10:00:00Z') } },
 ]
 
-const mockRooms: Array<{ jid: string; name: string; joined: boolean; unreadCount?: number; mentionsCount?: number; lastMessage?: { body: string; timestamp?: Date } }> = [
+const defaultRooms: Array<{ jid: string; name: string; joined: boolean; unreadCount?: number; mentionsCount?: number; notifyAll?: boolean; notifyAllPersistent?: boolean; muted?: boolean; lastMessage?: { body: string; timestamp?: Date } }> = [
   { jid: 'dev@conference.example.com', name: 'Development', joined: true, unreadCount: 0, mentionsCount: 0, lastMessage: { body: 'PR merged successfully', timestamp: new Date('2026-07-07T08:00:00Z') } },
   { jid: 'general@conference.example.com', name: 'General Chat', joined: true, unreadCount: 3, mentionsCount: 0 },
   { jid: 'announce@conference.example.com', name: 'Announcements', joined: true, unreadCount: 1, mentionsCount: 1, lastMessage: { body: 'Release is out', timestamp: new Date('2026-07-07T11:00:00Z') } },
 ]
+let mockRooms = defaultRooms
 
 const mockBookmarkedRooms = [
   { jid: 'archived@conference.example.com', name: 'Archived Room', joined: false },
@@ -65,6 +66,14 @@ vi.mock('@fluux/sdk', () => ({
   searchStore: { getState: () => ({ search: mockSearchFn }) },
   // Entity rows now render <Avatar>, which derives its fallback color from this.
   generateConsistentColorHexSync: () => '#888888',
+  // Faithful copy of the SDK selector — keep in sync with roomSelectors.ts roomActivityTone().
+  roomActivityTone: (room: { joined?: boolean; muted?: boolean; unreadCount?: number; mentionsCount?: number; notifyAll?: boolean; notifyAllPersistent?: boolean }) => {
+    if (!room.joined || room.muted) return 'none'
+    const notifyAll = room.notifyAll || room.notifyAllPersistent
+    if ((room.mentionsCount ?? 0) > 0 || (notifyAll && (room.unreadCount ?? 0) > 0)) return 'accent'
+    if ((room.unreadCount ?? 0) > 0) return 'neutral'
+    return 'none'
+  },
 }))
 
 // Mock React store hooks (from @fluux/sdk/react)
@@ -148,6 +157,7 @@ describe('CommandPalette', () => {
     vi.clearAllMocks()
     mockIsArchived.mockReturnValue(false)
     mockArchivedConversations = []
+    mockRooms = defaultRooms
     mockActiveConversationId = null
     mockActiveRoomJid = null
     useAdvancedModeStore.setState({ advancedMode: false })
@@ -1324,6 +1334,50 @@ describe('CommandPalette', () => {
       const announce = within(attention).getByText('Announcements')
       const bob = within(attention).getByText('Bob Jones')
       expect(announce.compareDocumentPosition(bob) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    })
+  })
+
+  describe('Notify-all rooms in attention (red pill)', () => {
+    function getGroupContainer(labelText: string): HTMLElement {
+      const label = screen.getByText(labelText)
+      return label.parentElement as HTMLElement
+    }
+
+    it('promotes a notify-all room with unread (no mention) into the attention group', () => {
+      mockRooms = [
+        ...defaultRooms,
+        { jid: 'ops@conference.example.com', name: 'Ops Alerts', joined: true, unreadCount: 4, mentionsCount: 0, notifyAllPersistent: true, lastMessage: { body: 'disk 90%', timestamp: new Date('2026-07-07T07:00:00Z') } },
+      ]
+      render(<CommandPalette {...defaultProps} />)
+      const attention = getGroupContainer('Needs attention')
+      expect(within(attention).getByText('Ops Alerts')).toBeInTheDocument()
+    })
+
+    it('gives a notify-all unread room a red (bg-fluux-brand) pill', () => {
+      mockRooms = [
+        ...defaultRooms,
+        { jid: 'ops@conference.example.com', name: 'Ops Alerts', joined: true, unreadCount: 4, mentionsCount: 0, notifyAllPersistent: true },
+      ]
+      render(<CommandPalette {...defaultProps} />)
+      const row = screen.getByText('Ops Alerts').closest('button')!
+      const badge = within(row).getByText('4')
+      expect(badge.className).toContain('bg-fluux-brand')
+    })
+
+    it('gives an ordinary unread room (not notify-all, no mention) a grey (bg-fluux-hover) pill', () => {
+      render(<CommandPalette {...defaultProps} />)
+      // General Chat: unread 3, mentionsCount 0, no notify-all -> neutral tone
+      const row = screen.getByText('General Chat').closest('button')!
+      const badge = within(row).getByText('3')
+      expect(badge.className).toContain('bg-fluux-hover')
+    })
+
+    it('gives an unread DM a red (bg-fluux-brand) pill', () => {
+      render(<CommandPalette {...defaultProps} />)
+      // Bob: unreadCount 2 -> attention tier -> red
+      const row = screen.getByText('Bob Jones').closest('button')!
+      const badge = within(row).getByText('2')
+      expect(badge.className).toContain('bg-fluux-brand')
     })
   })
 
