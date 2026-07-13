@@ -18,7 +18,7 @@
  */
 import React from 'react'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render } from '@testing-library/react'
+import { render, act } from '@testing-library/react'
 import { MessageList } from './MessageList'
 import type { BaseMessage } from '@fluux/sdk'
 
@@ -169,6 +169,40 @@ describe('MessageList — pinVirtualizedBottom cost control', () => {
     rerender(<MessageList messages={makeMessages(50)} conversationId="conv-pin-behavior" isAtBottomRef={isAtBottomRef} typingUsers={[]} {...props} />)
     flush(5)
     expect(scrollToEndCalls.count).toBe(baseline + 1)
+  })
+
+  // The scroll-to-bottom FAB must stay hidden while the entry pin loop is settling at the bottom.
+  // On WebKit a tall bottom row's post-paint growth fires a 'scroll' event at the pre-repin scrollTop,
+  // so distFromBottom is transiently far past the 300px FAB threshold BEFORE the loop re-pins. Without
+  // the pinBottomActiveRef guard in handleScroll that transient flipped the FAB visible — the reported
+  // intermittent flash on opening a conversation at the bottom.
+  it('keeps the scroll-to-bottom FAB hidden when a growth-driven scroll fires during the entry pin (open-at-bottom flash race)', () => {
+    const isAtBottomRef = { current: true }
+    const view = render(
+      <MessageList messages={makeMessages(50)} conversationId="conv-fab-race" isAtBottomRef={isAtBottomRef} {...props} />,
+    )
+    const scroller = view.container.querySelector('[data-message-list]') as HTMLElement
+    instrumentScroller(scroller)
+
+    // Advance only a couple of frames: the entry pin-to-bottom loop is still running (pinBottomActive).
+    flush(2)
+    expect(rafQueue.length).toBeGreaterThan(0)
+
+    // Simulate WebKit's late row measurement: content grows after paint, and a 'scroll' event fires at
+    // the still-old scrollTop → distFromBottom ≈ 3200-1500-500 = 1200px, well past the FAB threshold.
+    geo.scrollHeight = 3200
+    act(() => { scroller.dispatchEvent(new Event('scroll')) })
+
+    const wrapperOf = () =>
+      (view.container.querySelector('[data-fab="scroll-to-bottom"]') as HTMLElement).closest('div.z-40') as HTMLElement
+
+    // The loop is settling AT the bottom, so the FAB must not appear.
+    expect(wrapperOf().className).not.toContain('fab-spring-in')
+    expect(wrapperOf().hasAttribute('inert')).toBe(true)
+
+    // Let the loop finish and re-pin to the new bottom — still hidden at the settled bottom.
+    flush(70)
+    expect(wrapperOf().hasAttribute('inert')).toBe(true)
   })
 
   it('does not yank a scrolled-up viewport back to the bottom when typing toggles (issue #918)', () => {
