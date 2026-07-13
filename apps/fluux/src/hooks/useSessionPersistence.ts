@@ -719,13 +719,22 @@ export function useSessionPersistence(claimConnection?: (jid: string) => Promise
 
   // Tauri: when auth fails during a FAST-token reconnect that had no password in
   // memory (e.g. keychain was locked at startup), try reading the keychain now
-  // that the user may have unlocked it. One retry per failure episode; the ref
-  // resets when the connection leaves the error state.
+  // that the user may have unlocked it. Exactly one retry per failure episode.
+  //
+  // The one-shot re-arms only on a *settled* connection state — 'online' after a
+  // success, or 'disconnected' after a clean teardown. It must NOT re-arm on the
+  // transient 'connecting'/'reconnecting'/'verifying' states, because the retry's
+  // own connect() flips status to 'connecting' before landing back on 'error'.
+  // Re-arming there let a genuinely wrong stored password loop forever —
+  // error -> connecting -> error, re-firing the retry each cycle (issue #995).
   useEffect(() => {
-    if (!isTauri() || !hasSavedCredentials() || status !== 'error') {
-      if (status !== 'error') keychainRetryAttempted.current = false
+    if (status !== 'error') {
+      if (status === 'online' || status === 'disconnected') {
+        keychainRetryAttempted.current = false
+      }
       return
     }
+    if (!isTauri() || !hasSavedCredentials()) return
     if (keychainRetryAttempted.current) return
 
     const savedJid = localStorage.getItem('xmpp-last-jid')
