@@ -93,7 +93,7 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
   // Active-room state + messaging/scroll actions. Poll / moderation /
   // management actions come from the focused hooks below (they subscribe to no
   // store, so they add no re-render triggers).
-  const { activeRoom, activeMessages, activeTypingUsers, sendMessage, sendWhisper, sendReaction, sendCorrection, retractMessage, sendChatState, sendWhisperChatState, activeAnimation, sendEasterEgg, clearAnimation, clearFirstNewMessageId, updateLastSeenMessageId, joinRoom, joinResult, fetchOlderHistory, loadMessagesAround, loadNewer, recenterToLatest, windowAtLiveEdge, continueRoomCatchUp, activeMAMState, targetMessageId, clearTargetMessageId, firstNewMessageId } = useRoomActive()
+  const { activeRoom, activeMessages, activeTypingUsers, sendMessage, sendWhisper, sendReaction, sendCorrection, retractMessage, sendChatState, sendWhisperChatState, activeAnimation, sendEasterEgg, clearAnimation, clearFirstNewMessageId, updateLastSeenMessageId, joinRoom, joinResult, fetchOlderHistory, loadMessagesAround, loadNewer, recenterToLatest, windowAtLiveEdge, continueRoomCatchUp, activeMAMState, targetMessageId, clearTargetMessageId, firstNewMessageId, firstNewMessageIsProvisional } = useRoomActive()
   const { sendPoll, votePoll, closePoll } = usePolls()
   const { moderateMessage, setAffiliation, setRole } = useRoomModeration()
   const { setRoomNotifyAll, setRoomAvatar, clearRoomAvatar, submitRoomConfig, setSubject, destroyRoom } = useRoomManagement()
@@ -574,6 +574,7 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
             hasKeyboardSelection={hasKeyboardSelection}
             showToolbarForSelection={showToolbarForSelection}
             firstNewMessageId={firstNewMessageId}
+            firstNewMessageIsProvisional={firstNewMessageIsProvisional}
             targetMessageId={targetMessageId}
             clearTargetMessageId={clearTargetMessageId}
             clearFirstNewMessageId={handleClearFirstNewMessageId}
@@ -858,6 +859,7 @@ export const RoomMessageList = memo(function RoomMessageList({
   hasKeyboardSelection,
   showToolbarForSelection,
   firstNewMessageId,
+  firstNewMessageIsProvisional,
   targetMessageId,
   clearTargetMessageId,
   clearFirstNewMessageId,
@@ -905,6 +907,7 @@ export const RoomMessageList = memo(function RoomMessageList({
   hasKeyboardSelection: boolean
   showToolbarForSelection: boolean
   firstNewMessageId?: string
+  firstNewMessageIsProvisional?: boolean
   targetMessageId?: string | null
   clearTargetMessageId?: () => void
   clearFirstNewMessageId: () => void
@@ -1143,6 +1146,7 @@ export const RoomMessageList = memo(function RoomMessageList({
       messages={messages}
       conversationId={room.jid}
       firstNewMessageId={firstNewMessageId}
+      firstNewMessageIsProvisional={firstNewMessageIsProvisional}
       targetMessageId={targetMessageId}
       onTargetMessageConsumed={clearTargetMessageId}
       clearFirstNewMessageId={clearFirstNewMessageId}

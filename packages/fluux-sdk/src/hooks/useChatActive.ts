@@ -1,6 +1,7 @@
 import { useCallback, useMemo } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { chatStore, connectionStore } from '../stores'
+import { chatSelectors } from '../stores/chatSelectors'
 import { useChatStore, useConnectionStore } from '../react/storeHooks'
 import { useXMPPContext } from '../provider'
 import type { Conversation, MAMQueryState, Message } from '../core'
@@ -88,6 +89,12 @@ export function useChatActive() {
   const activeFirstNewMessageId = useChatStore((s) => {
     if (!s.activeConversationId) return undefined
     return s.firstNewMessageMarkers.get(s.activeConversationId)
+  })
+  // Provisional divider: derived from the local pointer while a synced XEP-0490
+  // read position is still unresolved — rendered muted until confirmed.
+  const activeFirstNewMessageIsProvisional = useChatStore((s) => {
+    if (!s.activeConversationId) return false
+    return chatSelectors.firstNewMessageIsProvisionalFor(s.activeConversationId)(s)
   })
 
   // Reconstruct a stable activeConversation object from individual primitive fields.
@@ -310,6 +317,7 @@ export function useChatActive() {
       activeConversationId,
       activeConversation,
       firstNewMessageId: activeFirstNewMessageId,
+      firstNewMessageIsProvisional: activeFirstNewMessageIsProvisional,
       activeMessages,
       activeTypingUsers,
       activeAnimation,
@@ -320,7 +328,7 @@ export function useChatActive() {
       ...actions,
     }),
     [
-      activeConversationId, activeConversation, activeFirstNewMessageId, activeMessages,
+      activeConversationId, activeConversation, activeFirstNewMessageId, activeFirstNewMessageIsProvisional, activeMessages,
       activeTypingUsers, activeAnimation, targetMessageId, supportsMAM, activeMAMState,
       activeWindowAtLiveEdge, actions,
     ]

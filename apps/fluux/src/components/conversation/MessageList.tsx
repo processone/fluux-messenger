@@ -70,6 +70,8 @@ export interface MessageListProps<T extends BaseMessage> {
   conversationId: string
   /** ID of the first unread message (for new message marker) */
   firstNewMessageId?: string
+  /** Divider derived while a synced XEP-0490 read position is still unresolved — rendered muted */
+  firstNewMessageIsProvisional?: boolean
   /** ID of a specific message to scroll to (e.g., from activity log click) */
   targetMessageId?: string | null
   /** Called after scrolling to target message (to clear the store value) */
@@ -152,6 +154,7 @@ export function MessageList<T extends BaseMessage>({
   messages,
   conversationId,
   firstNewMessageId,
+  firstNewMessageIsProvisional = false,
   clearFirstNewMessageId,
   targetMessageId,
   onTargetMessageConsumed,
@@ -656,7 +659,7 @@ export function MessageList<T extends BaseMessage>({
             {msg.id === gapMarkerMessageId && onCatchUpHistory && (
               <HistoryGapMarker onLoadMore={onCatchUpHistory} isLoading={isCatchingUp ?? false} />
             )}
-            {item.isFirstNew && <NewMessageMarker />}
+            {item.isFirstNew && <NewMessageMarker provisional={firstNewMessageIsProvisional} />}
             {renderMessage(msg, item.indexInGroup, item.groupMessages, item.isFirstNew, handleMediaLoad)}
           </div>
         )
@@ -811,7 +814,7 @@ export function MessageList<T extends BaseMessage>({
                     style={msg.id === lastSentMessageId ? { animation: 'message-send var(--fluux-duration-slow) var(--fluux-ease-standard)' } : undefined}
                   >
                     {showGapMarker && <HistoryGapMarker onLoadMore={onCatchUpHistory} isLoading={isCatchingUp ?? false} />}
-                    {showNewMarker && <NewMessageMarker />}
+                    {showNewMarker && <NewMessageMarker provisional={firstNewMessageIsProvisional} />}
                     {renderMessage(msg, idx, group.messages, showNewMarker, handleMediaLoad)}
                   </div>
                 )

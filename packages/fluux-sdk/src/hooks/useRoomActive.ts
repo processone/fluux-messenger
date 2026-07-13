@@ -1,5 +1,6 @@
 import { useCallback, useMemo } from 'react'
 import { roomStore, connectionStore } from '../stores'
+import { roomSelectors } from '../stores/roomSelectors'
 import { useRoomStore } from '../react/storeHooks'
 import { useXMPPContext } from '../provider'
 import type { Room, RoomMessage, MentionReference, ChatStateNotification, FileAttachment, MAMQueryState, RoomFeatures } from '../core/types'
@@ -84,6 +85,13 @@ export function useRoomActive() {
   const activeFirstNewMessageId = useRoomStore((s) => {
     if (!s.activeRoomJid) return undefined
     return s.firstNewMessageMarkers.get(s.activeRoomJid)
+  })
+
+  // Provisional divider: derived from the local pointer while a synced XEP-0490
+  // read position is still unresolved — rendered muted until confirmed.
+  const activeFirstNewMessageIsProvisional = useRoomStore((s) => {
+    if (!s.activeRoomJid) return false
+    return roomSelectors.firstNewMessageIsProvisionalFor(s.activeRoomJid)(s)
   })
 
   const activeRoomRuntime = useRoomStore((s) => {
@@ -490,6 +498,7 @@ export function useRoomActive() {
       targetMessageId,
       activeMAMState,
       firstNewMessageId: activeFirstNewMessageId,
+      firstNewMessageIsProvisional: activeFirstNewMessageIsProvisional,
       windowAtLiveEdge: activeWindowAtLiveEdge,
 
       // Actions (spread memoized actions)
@@ -504,6 +513,7 @@ export function useRoomActive() {
       targetMessageId,
       activeMAMState,
       activeFirstNewMessageId,
+      activeFirstNewMessageIsProvisional,
       activeWindowAtLiveEdge,
       actions,
     ]
