@@ -39,6 +39,11 @@ export function ModalShell({
               <button
                 onClick={close}
                 aria-label={t('common.close')}
+                // Escape closes the modal, so the X is a pointer-only affordance:
+                // kept out of the tab order (and thus the focus trap's initial
+                // target) so opening a modal never lands focus here — which would
+                // otherwise draw the focus ring and pop this tooltip unprompted.
+                tabIndex={-1}
                 className="p-1 text-fluux-muted hover:text-fluux-text rounded hover:bg-fluux-hover tap-target"
               >
                 <X className="size-4" />
