@@ -856,8 +856,12 @@ html, body {
 /* Bottom inset is intentionally NOT applied to #root — instead, bottom-aligned */
 /* components (e.g. MessageComposer) add it to their own padding so their */
 /* background color fills the home-indicator zone seamlessly. */
+/* Web/PWA only: the desktop app (data-tauri on <html>, set in main.tsx) is
+   excluded because its macOS overlay title bar reports a non-zero
+   env(safe-area-inset-top) that would push the AppBar — and thus the native
+   traffic lights' alignment — down off the window's top edge. */
 @supports (padding-top: env(safe-area-inset-top)) {
-  #root {
+  :root:not([data-tauri]) #root {
     box-sizing: border-box;
     padding-top: env(safe-area-inset-top);
     padding-left: env(safe-area-inset-left);
