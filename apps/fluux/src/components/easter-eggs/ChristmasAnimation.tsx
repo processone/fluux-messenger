@@ -131,9 +131,12 @@ export function ChristmasAnimation({ onComplete, duration = 6000 }: ChristmasAni
         </div>
       </div>
 
-      {/* Click hint at bottom */}
+      {/* Click hint at bottom. Dark pill keeps the white text readable when
+          the app behind the half-opacity scrim is in light mode. */}
       <div className="absolute bottom-8 inset-x-0 text-center">
-        <span className="text-white/60 text-sm">Click anywhere to dismiss</span>
+        <span className="rounded-full bg-black/40 px-3 py-1 text-sm text-white/90">
+          Click anywhere to dismiss
+        </span>
       </div>
     </div>
   )

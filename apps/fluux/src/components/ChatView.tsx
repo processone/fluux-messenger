@@ -17,7 +17,7 @@ import { FindOnPageBar } from './conversation/FindOnPageBar'
 import { useFindOnPage, type FindOnPageHandle } from '@/hooks/useFindOnPage'
 import { useConversationEncryptionState, type ConversationEncryptionState } from '@/hooks/useConversationEncryptionState'
 import { useWebUnlockDialogStore } from '@/stores/webUnlockDialogStore'
-import { ChristmasAnimation } from './ChristmasAnimation'
+import { EasterEggAnimation } from './easter-eggs/EasterEggAnimation'
 import { ChatHeader } from './ChatHeader'
 import { MessageComposer, type ReplyInfo, type EditInfo, type MessageComposerHandle, type PendingAttachment } from './MessageComposer'
 import { useSlashCommands } from '@/hooks/useSlashCommands'
@@ -571,8 +571,8 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
       />
 
       {/* Easter egg animation */}
-      {activeAnimation?.conversationId === activeConversation.id && activeAnimation.animation === 'christmas' && (
-        <ChristmasAnimation onComplete={clearAnimation} />
+      {activeAnimation?.conversationId === activeConversation.id && (
+        <EasterEggAnimation animation={activeAnimation.animation} onComplete={clearAnimation} />
       )}
     </div>
   )

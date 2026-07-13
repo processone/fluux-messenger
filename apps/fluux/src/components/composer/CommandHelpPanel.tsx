@@ -29,7 +29,9 @@ export function CommandHelpPanel({ commands, onClose }: CommandHelpPanelProps) {
             <span className="text-sm font-medium text-fluux-text">
               {cmd.usageKey ? t(cmd.usageKey) : `/${cmd.name}`}
             </span>
-            <span className="block text-xs text-fluux-muted">{t(cmd.descriptionKey)}</span>
+            {cmd.descriptionKey ? (
+              <span className="block text-xs text-fluux-muted">{t(cmd.descriptionKey)}</span>
+            ) : null}
           </li>
         ))}
       </ul>

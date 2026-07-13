@@ -171,12 +171,23 @@ const config: SlashCommand = {
 
 const christmas: SlashCommand = {
   name: 'christmas',
-  descriptionKey: 'commands.christmas.desc',
   contexts: ['chat', 'room'],
   // Easter egg: still runs when typed, but hidden from /help and the completion menu.
   hidden: true,
   run: async (ctx) => {
     await ctx.app.sendEasterEgg('christmas')
+    return { ok: true }
+  },
+}
+
+const bastille: SlashCommand = {
+  name: 'bastille',
+  contexts: ['chat', 'room'],
+  // Easter egg: still runs when typed, but hidden from /help and the completion menu.
+  // Wire name is the generic 'fireworks' so future eggs can reuse the effect.
+  hidden: true,
+  run: async (ctx) => {
+    await ctx.app.sendEasterEgg('fireworks')
     return { ok: true }
   },
 }
@@ -193,6 +204,7 @@ export const COMMANDS: SlashCommand[] = [
   invite,
   config,
   christmas,
+  bastille,
 ]
 
 export function findCommand(name: string, kind: CommandContextKind): SlashCommand | undefined {

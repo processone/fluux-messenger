@@ -53,7 +53,8 @@ export type CommandResult = { ok: true; toast?: string } | { ok: false; error: s
 export interface SlashCommand {
   name: string
   aliases?: string[]
-  descriptionKey: string
+  /** i18n key shown in discovery surfaces. Omitted for hidden easter eggs, which never appear there. */
+  descriptionKey?: string
   usageKey?: string
   contexts: CommandContextKind[]
   capability?: CommandCapability

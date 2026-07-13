@@ -58,7 +58,7 @@ export function CommandMenu({ matches, selectedIndex, onSelect, onDismiss }: Com
               idx === selectedIndex ? 'text-fluux-text-on-accent/70' : 'text-fluux-muted'
             }`}
           >
-            {t(cmd.descriptionKey)}
+            {cmd.descriptionKey ? t(cmd.descriptionKey) : null}
           </span>
         </button>
       ))}

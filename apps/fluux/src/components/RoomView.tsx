@@ -14,7 +14,7 @@ import { selectRoomInitialLoading } from './conversation/roomLoadingState'
 import { format } from 'date-fns'
 import type { CopyMessageMeta } from '@/utils/buildCopyText'
 import { Shield, Crown, Upload, Loader2, LogIn, AlertCircle, Users, MessageCircle, EyeOff, User, Settings, Ear, X, Hash } from 'lucide-react'
-import { ChristmasAnimation } from './ChristmasAnimation'
+import { EasterEggAnimation } from './easter-eggs/EasterEggAnimation'
 import { TextInput, TextArea } from './ui/TextInput'
 import { MessageComposer, type ReplyInfo, type EditInfo, type MessageComposerHandle, type PendingAttachment, MESSAGE_INPUT_BASE_CLASSES, MESSAGE_INPUT_OVERLAY_CLASSES } from './MessageComposer'
 import { RoomHeader } from './RoomHeader'
@@ -686,9 +686,9 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
         </>
       )}
 
-      {/* Christmas easter egg animation */}
-      {activeAnimation?.roomJid === activeRoom.jid && activeAnimation.animation === 'christmas' && (
-        <ChristmasAnimation onComplete={clearAnimation} />
+      {/* Easter egg animation */}
+      {activeAnimation?.roomJid === activeRoom.jid && (
+        <EasterEggAnimation animation={activeAnimation.animation} onComplete={clearAnimation} />
       )}
 
       {/* Nick context menu (right-click / long-press on nick in messages) */}

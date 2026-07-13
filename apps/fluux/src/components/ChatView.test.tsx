@@ -386,8 +386,8 @@ const { MockMessageComposer } = vi.hoisted(() => {
 })
 
 // Mock sub-components
-vi.mock('./ChristmasAnimation', () => ({
-  ChristmasAnimation: () => null,
+vi.mock('./easter-eggs/EasterEggAnimation', () => ({
+  EasterEggAnimation: () => null,
 }))
 
 vi.mock('./MessageComposer', () => ({

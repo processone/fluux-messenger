@@ -76,6 +76,8 @@ describe('visibleCommands', () => {
     const owner = { role: 'moderator' as const, affiliation: 'owner' as const }
     expect(visibleCommands('room', owner).map((c) => c.name)).not.toContain('christmas')
     expect(visibleCommands('chat').map((c) => c.name)).not.toContain('christmas')
+    expect(visibleCommands('room', owner).map((c) => c.name)).not.toContain('bastille')
+    expect(visibleCommands('chat').map((c) => c.name)).not.toContain('bastille')
   })
 })
 
@@ -159,5 +161,17 @@ describe('runCommand', () => {
     const ctx = makeCtx()
     await runCommand({ kind: 'command', name: 'christmas', args: '' }, ctx)
     expect(ctx.app.sendEasterEgg).toHaveBeenCalledWith('christmas')
+  })
+
+  it('/bastille fires the fireworks easter egg', async () => {
+    const ctx = makeCtx()
+    await runCommand({ kind: 'command', name: 'bastille', args: '' }, ctx)
+    expect(ctx.app.sendEasterEgg).toHaveBeenCalledWith('fireworks')
+  })
+
+  it('/bastille also runs in chat context', async () => {
+    const ctx = makeCtx({ kind: 'chat', entityJid: 'alice@example.com', self: undefined })
+    await runCommand({ kind: 'command', name: 'bastille', args: '' }, ctx)
+    expect(ctx.app.sendEasterEgg).toHaveBeenCalledWith('fireworks')
   })
 })
