@@ -1,10 +1,18 @@
 /**
- * Module-level measured-height cache, keyed by messageId + widthBucket + scale.
+ * Module-level measured-height cache, keyed by messageId + scale, with the content-width
+ * bucket as a PER-CONVERSATION validity tag.
  *
  * @tanstack/react-virtual caches measured row heights by item key for the SESSION, but loses
  * them when MessageList unmounts (conversation switch). Re-entering a conversation then
  * re-snaps from estimates ("jumpy when you just opened it"). This module-level cache survives
  * remounts and seeds the virtualizer so resident rows start at their real measured height.
+ *
+ * WIDTH MODEL: heights are only valid for the content width they were measured at. Instead of
+ * embedding a width bucket in every key (which split a conversation's entries across buckets
+ * whenever the sampled width churned — corrections were then written under one bucket while
+ * the seed read another, making stale values IMMORTAL and re-blinking every re-open), the
+ * bucket is a single per-conversation tag: when it genuinely changes, that conversation's
+ * heights are wiped wholesale (they are all invalid at the new width anyway).
  *
  * Cache structure: conversationId -> Map<heightCacheKey -> px>
  * LRU eviction per conversation (max 8 conversations, max 6000 entries each).
@@ -17,24 +25,17 @@ const MAX_ENTRIES_PER_CONVERSATION = 6000
 const cache = new Map<string, Map<string, number>>()
 
 /**
- * Last REAL width bucket (px) each conversation's entries were written under. The seed is built at
- * synchronous mount when `rowMetricsRef.current.contentWidthPx` is still the 560 fallback (the live
- * width is only sampled in a rAF after layout), but the write-back stores entries under the real
- * sampled bucket. Persisting the real bucket here lets the seed filter by it, so same-width
- * re-entry hits the cache instead of missing every entry.
+ * The real width bucket (px) each conversation's entries are valid for. Written when a REAL
+ * (non-fallback) sample is available; a change wipes the conversation's heights (see above).
  */
 const widthBucketByConversation = new Map<string, number>()
 
 /**
  * Build the lookup key for a single row.
- * Format: `messageId@widthBucketPx@scalePct`
+ * Format: `messageId@scalePct` (the width bucket is a conversation-level tag, not part of the key).
  */
-export function heightCacheKey(
-  messageId: string,
-  widthBucketPx: number,
-  scalePct: number,
-): string {
-  return `${messageId}@${widthBucketPx}@${scalePct}`
+export function heightCacheKey(messageId: string, scalePct: number): string {
+  return `${messageId}@${scalePct}`
 }
 
 /**
@@ -79,24 +80,28 @@ export function recordMeasuredHeight(
 }
 
 /**
- * Record the REAL width bucket (px) a conversation's entries are written under. Called from the
- * write-back path alongside recordMeasuredHeight, using the same real bucket as the key.
+ * Record the REAL width bucket (px) a conversation's heights are valid for. A CHANGED bucket
+ * wipes that conversation's heights: they were measured at a different content width and
+ * would otherwise linger as stale seeds (the immortal-poison re-open blink). Call only with a
+ * bucket derived from a real sample, never from the mount-time fallback.
  */
 export function noteConversationWidthBucket(conversationId: string, widthBucketPx: number): void {
+  const prev = widthBucketByConversation.get(conversationId)
+  if (prev !== undefined && prev !== widthBucketPx) {
+    cache.get(conversationId)?.clear()
+  }
   widthBucketByConversation.set(conversationId, widthBucketPx)
 }
 
 /**
- * Read the last real width bucket persisted for a conversation, or undefined if none recorded yet.
- * The seed uses this (falling back to the mount-time bucket) to filter cached entries.
+ * Read the last real width bucket recorded for a conversation, or undefined if none yet.
  */
 export function getConversationWidthBucket(conversationId: string): number | undefined {
   return widthBucketByConversation.get(conversationId)
 }
 
 /**
- * Resolve one row's cached measured height by item key, using the conversation's real width
- * bucket (falling back to the caller's mount-time bucket). Lets estimateSize return the real
+ * Resolve one row's cached measured height by item key. Lets estimateSize return the real
  * height for rows that appear AFTER mount (e.g. messages streaming in from MAM on a reload),
  * which the mount-time initialMeasurements seed cannot cover.
  */
@@ -104,12 +109,10 @@ export function getCachedHeight(
   conversationId: string,
   itemKey: string,
   scalePct: number,
-  fallbackBucketPx: number,
 ): number | undefined {
-  const m = cache.get(conversationId)
-  if (!m) return undefined
-  const bucket = widthBucketByConversation.get(conversationId) ?? fallbackBucketPx
-  return m.get(heightCacheKey(itemKey, bucket, scalePct))
+  // Direct map access (no getCachedHeights) so a hot-path read miss neither creates a map
+  // nor perturbs the LRU order.
+  return cache.get(conversationId)?.get(heightCacheKey(itemKey, scalePct))
 }
 
 // --------------------------------------------------------------------------
@@ -125,6 +128,9 @@ export function getCachedHeight(
 
 /** localStorage key for the persisted snapshot payload. */
 export const HEIGHT_CACHE_STORAGE_KEY = 'fluux:msg-heights'
+
+/** Payload schema version. v2: bucket moved from the entry keys to the conversation tag. */
+const PAYLOAD_SCHEMA = 2
 
 const MAX_PERSISTED_CONVERSATIONS = 8
 /** A settled snapshot is one mounted window (~window+overscan rows); cap defensively. */
@@ -143,7 +149,7 @@ interface PersistedConversation {
 }
 
 interface PersistedPayload {
-  v: 1
+  v: typeof PAYLOAD_SCHEMA
   app: string
   conversations: Record<string, PersistedConversation>
 }
@@ -165,7 +171,11 @@ function readPayload(storage: StorageLike, version: string): PersistedPayload | 
   if (!raw) return undefined
   try {
     const parsed = JSON.parse(raw) as PersistedPayload
-    if (parsed?.v !== 1 || parsed.app !== version || typeof parsed.conversations !== 'object') {
+    if (
+      parsed?.v !== PAYLOAD_SCHEMA ||
+      parsed.app !== version ||
+      typeof parsed.conversations !== 'object'
+    ) {
       return undefined
     }
     return parsed
@@ -192,7 +202,7 @@ export function persistHeightSnapshot(
   const version = opts.version ?? defaultVersion()
   try {
     const payload: PersistedPayload = readPayload(storage, version) ?? {
-      v: 1,
+      v: PAYLOAD_SCHEMA,
       app: version,
       conversations: {},
     }
@@ -238,18 +248,20 @@ export function hydrateHeightCache(opts: { storage?: StorageLike; version?: stri
   try {
     const payload = readPayload(storage, version)
     if (!payload) {
-      // Absent is normal; corrupt or version-mismatched payloads are cleared so they
-      // don't linger across sessions.
+      // Absent is normal; corrupt, version-mismatched, or old-schema payloads are cleared so
+      // they don't linger across sessions.
       if (storage.getItem(HEIGHT_CACHE_STORAGE_KEY) !== null) {
         storage.removeItem(HEIGHT_CACHE_STORAGE_KEY)
       }
       return
     }
     for (const [conversationId, snap] of Object.entries(payload.conversations)) {
+      // Note the bucket FIRST: with an empty map the change-wipe is a no-op, and subsequent
+      // records land under the correct validity tag.
+      noteConversationWidthBucket(conversationId, snap.bucket)
       for (const [key, px] of Object.entries(snap.entries)) {
         recordMeasuredHeight(conversationId, key, px)
       }
-      noteConversationWidthBucket(conversationId, snap.bucket)
     }
   } catch {
     // storage unavailable — start unseeded, same as today
