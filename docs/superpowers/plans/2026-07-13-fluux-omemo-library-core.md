@@ -1,6 +1,8 @@
 # `@fluux/omemo` Library Core Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+>
+> **⚠ This is security-critical cryptographic code. Proceed carefully on every task.** The happy-path test in each step is a floor, not the goal: add edge-case and adversarial tests (malformed/truncated/tampered input must be rejected, never silently accepted or crash) before committing, and after each task dispatch a **separate reviewer agent whose only job is to hunt for defects** (auth-before-decrypt, timing/oracle leaks, malformed-input handling, key/nonce reuse, wire-constant drift). Its Critical/Important findings block progress. See the "Proceed carefully" bullet under Global Constraints for the full checklist.
 
 **Goal:** Build the standalone, XMPP-agnostic `@fluux/omemo` TypeScript package: a cleanroom OMEMO 2 (`urn:xmpp:omemo:2`) crypto core (X3DH + Double Ratchet + SCE payload) exposing typed data structures, with an injected store and injected RNG.
 
@@ -21,6 +23,7 @@
 - **OMEMO 2 wire format (the external contract — built from Task 10 onward, NOT deferred):** per-device `<key>` carries a protobuf `OMEMOAuthenticatedMessage {mac=1, message=2}` (established session) or `OMEMOKeyExchange {pk_id=1, spk_id=2, ik=3, ek=4, message=5}` (new session), where `message` is a byte-serialized `OMEMOMessage {n=1, pn=2, dh_pub=3, ciphertext=4}`. Ratchet MAC = `HMAC(authKey, AD || OMEMOMessage_bytes)[:16]` with `AD = Ed25519(IK_initiator) || Ed25519(IK_responder)` (fixed per session, initiator IK first, RFC 8032 32-byte form). The Double Ratchet transports **48 bytes = payloadKey(32) || payloadHmac(16)** per device; `<payload>` holds ONLY the AES-CBC ciphertext of the SCE envelope and is omitted for empty messages (which ratchet-encrypt 32 zero-bytes).
 - **Commands:** run from repo root. Test: `npm run test:run -w @fluux/omemo`. Typecheck: `npm run typecheck -w @fluux/omemo`. Lint: `npm run lint -w @fluux/omemo`. Single test file: `npx vitest run packages/omemo/src/<file>.test.ts`.
 - **Tests colocate** with source as `*.test.ts` (matches `@fluux/sdk` convention).
+- **Proceed carefully — this is security code.** For EVERY task: (1) do not settle for the happy-path test shown in the step; add edge-case tests before committing — empty/zero-length input, maximum-length input, wrong-length keys, tampered MAC/ciphertext (must reject), out-of-order and duplicate messages, truncated/garbage protobuf bytes (must not crash or silently accept), and boundary values for every varint/length field. (2) After the task's own tests pass, **dispatch a separate adversarial reviewer subagent whose sole job is to find defects** — timing/oracle leaks, missing authentication-before-decryption, silent acceptance of malformed input, key/nonce reuse, off-by-one in slicing, and any deviation from the wire constants above. Treat its findings as blocking (fix Critical/Important before moving on). A green happy-path test is NOT sufficient evidence of correctness for any task in this plan.
 
 ---
 
