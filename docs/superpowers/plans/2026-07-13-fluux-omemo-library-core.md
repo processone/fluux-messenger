@@ -17,7 +17,8 @@
 - **Cleanroom rule:** implement only from published specs (Signal X3DH & Double Ratchet docs, XEP-0384, XEP-0420) and interop wire bytes. NEVER read or port libsignal or any GPL/AGPL TS port.
 - **No wall-clock / no ambient randomness in library code:** all randomness comes through an injected `Rng` (`(n: number) => Uint8Array`); any timestamps are passed in by the caller. Tests must be deterministic.
 - **Namespace:** OMEMO 2 = `urn:xmpp:omemo:2`. (Legacy `axolotl` is OUT OF SCOPE — a later milestone.)
-- **Verified OMEMO 2 constants (do not drift):** payload HKDF info `"OMEMO Payload"` → 80 bytes split `32|32|16`, AES-256-CBC/PKCS#7, HMAC-SHA256 truncated to 16 bytes; ratchet root info `"OMEMO Root Chain"`, message-key info `"OMEMO Message Key Material"`, chain-key HMAC constants `0x01`/`0x02`; X3DH info `"OMEMO X3DH"`; IK published Ed25519, fingerprint shown as Curve25519 bytes; SCE `<envelope>` always includes random `<rpad>`.
+- **Verified OMEMO 2 constants (do not drift):** payload HKDF info `"OMEMO Payload"` → 80 bytes split `32|32|16`, AES-256-CBC/PKCS#7, HMAC-SHA256 truncated to 16 bytes; ratchet chain step `mk = HMAC(ck, 0x01)`, `ck' = HMAC(ck, 0x02)`; message keys `HKDF(mk, salt=32 zero bytes, "OMEMO Message Key Material", 80)` → `enc|auth|iv`; root info `"OMEMO Root Chain"`; X3DH info `"OMEMO X3DH"`; IK published Ed25519, fingerprint shown as Curve25519 bytes; SCE `<envelope>` always includes random `<rpad>`.
+- **OMEMO 2 wire format (the external contract — built from Task 10 onward, NOT deferred):** per-device `<key>` carries a protobuf `OMEMOAuthenticatedMessage {mac=1, message=2}` (established session) or `OMEMOKeyExchange {pk_id=1, spk_id=2, ik=3, ek=4, message=5}` (new session), where `message` is a byte-serialized `OMEMOMessage {n=1, pn=2, dh_pub=3, ciphertext=4}`. Ratchet MAC = `HMAC(authKey, AD || OMEMOMessage_bytes)[:16]` with `AD = Ed25519(IK_initiator) || Ed25519(IK_responder)` (fixed per session, initiator IK first, RFC 8032 32-byte form). The Double Ratchet transports **48 bytes = payloadKey(32) || payloadHmac(16)** per device; `<payload>` holds ONLY the AES-CBC ciphertext of the SCE envelope and is omitted for empty messages (which ratchet-encrypt 32 zero-bytes).
 - **Commands:** run from repo root. Test: `npm run test:run -w @fluux/omemo`. Typecheck: `npm run typecheck -w @fluux/omemo`. Lint: `npm run lint -w @fluux/omemo`. Single test file: `npx vitest run packages/omemo/src/<file>.test.ts`.
 - **Tests colocate** with source as `*.test.ts` (matches `@fluux/sdk` convention).
 
@@ -50,11 +51,12 @@ packages/omemo/
       prekeys.ts     prekeys.test.ts      # signed prekey + one-time prekeys
     x3dh/
       x3dh.ts        x3dh.test.ts         # initiator + responder agreement
-    ratchet/
-      ratchet.ts     ratchet.test.ts      # Double Ratchet state machine
     omemo2/
-      codec.ts       codec.test.ts        # Bundle / DeviceList / OmemoMessage codecs
+      wire.ts        wire.test.ts         # OMEMO 2 protobuf: OMEMOMessage/AuthenticatedMessage/KeyExchange
+      codec.ts       codec.test.ts        # Bundle / DeviceList / OmemoMessage typed structs + base64
       sce.ts         sce.test.ts          # XEP-0420 envelope build/parse
+    ratchet/
+      ratchet.ts     ratchet.test.ts      # Double Ratchet (AES-256-CBC msg cipher, MAC over AD)
     account/
       OmemoAccount.ts  OmemoAccount.test.ts  # orchestration
     interop/
@@ -1098,34 +1100,326 @@ git commit -m "feat(omemo): X3DH initiator/responder key agreement"
 
 ---
 
-### Task 10: Double Ratchet
+### Task 10: OMEMO 2 wire codec + bundle/device-list codecs
+
+**Files:**
+- Create: `packages/omemo/src/omemo2/wire.ts`
+- Test: `packages/omemo/src/omemo2/wire.test.ts`
+- Create: `packages/omemo/src/omemo2/codec.ts`
+- Test: `packages/omemo/src/omemo2/codec.test.ts`
+
+**Interfaces:**
+- Consumes: `concatBytes` (bytes.ts).
+- Produces (wire.ts — a minimal hand-rolled protobuf, NO external protobuf dependency):
+  - `encodeOmemoMessage(m: { n: number; pn: number; dhPub: Uint8Array; ciphertext?: Uint8Array }): Uint8Array`
+  - `decodeOmemoMessage(b: Uint8Array): { n: number; pn: number; dhPub: Uint8Array; ciphertext?: Uint8Array }`
+  - `encodeAuthMessage(m: { mac: Uint8Array; message: Uint8Array }): Uint8Array`
+  - `decodeAuthMessage(b: Uint8Array): { mac: Uint8Array; message: Uint8Array }`
+  - `encodeKeyExchange(m: { pkId: number; spkId: number; ik: Uint8Array; ek: Uint8Array; message: Uint8Array }): Uint8Array`
+  - `decodeKeyExchange(b: Uint8Array): { pkId: number; spkId: number; ik: Uint8Array; ek: Uint8Array; message: Uint8Array }`
+- Produces (codec.ts): `type Bundle`, `type DeviceList`, `type OmemoMessage`, `type OmemoKey`, `b64encode`, `b64decode`, `assertValidBundle`.
+
+> The three protobuf schemas are fixed by XEP-0384 §4.2:
+> `OMEMOMessage { uint32 n=1; uint32 pn=2; bytes dh_pub=3; bytes ciphertext=4 (optional) }`,
+> `OMEMOAuthenticatedMessage { bytes mac=1; bytes message=2 }`,
+> `OMEMOKeyExchange { uint32 pk_id=1; uint32 spk_id=2; bytes ik=3; bytes ek=4; bytes message=5 }`
+> (`message` field 5 carries the byte-serialized OMEMOAuthenticatedMessage). Only two wire
+> types are needed: varint (0) for the uint32 ids, length-delimited (2) for the byte fields.
+
+- [ ] **Step 1: Write the failing test** `packages/omemo/src/omemo2/wire.test.ts`
+
+```ts
+import { describe, it, expect } from 'vitest'
+import {
+  encodeOmemoMessage,
+  decodeOmemoMessage,
+  encodeAuthMessage,
+  decodeAuthMessage,
+  encodeKeyExchange,
+  decodeKeyExchange,
+} from './wire'
+
+describe('omemo2 wire protobuf', () => {
+  it('OMEMOMessage round-trips (with and without ciphertext)', () => {
+    const m = { n: 5, pn: 3, dhPub: new Uint8Array(32).fill(7), ciphertext: new Uint8Array([1, 2, 3]) }
+    expect(decodeOmemoMessage(encodeOmemoMessage(m))).toEqual(m)
+    const empty = { n: 0, pn: 0, dhPub: new Uint8Array(32).fill(1) }
+    expect(decodeOmemoMessage(encodeOmemoMessage(empty))).toEqual(empty)
+  })
+  it('OMEMOAuthenticatedMessage round-trips', () => {
+    const m = { mac: new Uint8Array(16).fill(9), message: new Uint8Array([4, 5, 6]) }
+    expect(decodeAuthMessage(encodeAuthMessage(m))).toEqual(m)
+  })
+  it('OMEMOKeyExchange round-trips', () => {
+    const m = {
+      pkId: 42,
+      spkId: 1,
+      ik: new Uint8Array(32).fill(2),
+      ek: new Uint8Array(32).fill(3),
+      message: new Uint8Array([7, 8, 9]),
+    }
+    expect(decodeKeyExchange(encodeKeyExchange(m))).toEqual(m)
+  })
+})
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `npx vitest run packages/omemo/src/omemo2/wire.test.ts`
+Expected: FAIL — cannot resolve `./wire`.
+
+- [ ] **Step 3: Create `packages/omemo/src/omemo2/wire.ts`**
+
+```ts
+import { concatBytes } from '../primitives/bytes'
+
+// --- minimal protobuf primitives (wire types 0 = varint, 2 = length-delimited) ---
+function encodeVarint(n: number): Uint8Array {
+  const out: number[] = []
+  let v = n >>> 0
+  while (v > 0x7f) {
+    out.push((v & 0x7f) | 0x80)
+    v >>>= 7
+  }
+  out.push(v)
+  return Uint8Array.from(out)
+}
+function tag(fieldNo: number, wireType: number): Uint8Array {
+  return encodeVarint((fieldNo << 3) | wireType)
+}
+function varintField(fieldNo: number, value: number): Uint8Array {
+  return concatBytes(tag(fieldNo, 0), encodeVarint(value))
+}
+function bytesField(fieldNo: number, value: Uint8Array): Uint8Array {
+  return concatBytes(tag(fieldNo, 2), encodeVarint(value.length), value)
+}
+
+interface Reader {
+  buf: Uint8Array
+  off: number
+}
+function readVarint(r: Reader): number {
+  let shift = 0
+  let result = 0
+  for (;;) {
+    const byte = r.buf[r.off++]
+    result |= (byte & 0x7f) << shift
+    if ((byte & 0x80) === 0) break
+    shift += 7
+  }
+  return result >>> 0
+}
+function readBytes(r: Reader): Uint8Array {
+  const len = readVarint(r)
+  const out = r.buf.slice(r.off, r.off + len)
+  r.off += len
+  return out
+}
+
+// --- OMEMOMessage { n=1, pn=2, dh_pub=3, ciphertext=4? } ---
+export function encodeOmemoMessage(m: {
+  n: number
+  pn: number
+  dhPub: Uint8Array
+  ciphertext?: Uint8Array
+}): Uint8Array {
+  const parts = [varintField(1, m.n), varintField(2, m.pn), bytesField(3, m.dhPub)]
+  if (m.ciphertext !== undefined) parts.push(bytesField(4, m.ciphertext))
+  return concatBytes(...parts)
+}
+export function decodeOmemoMessage(b: Uint8Array): {
+  n: number
+  pn: number
+  dhPub: Uint8Array
+  ciphertext?: Uint8Array
+} {
+  const r: Reader = { buf: b, off: 0 }
+  const out: { n: number; pn: number; dhPub: Uint8Array; ciphertext?: Uint8Array } = {
+    n: 0,
+    pn: 0,
+    dhPub: new Uint8Array(0),
+  }
+  while (r.off < b.length) {
+    const t = readVarint(r)
+    const field = t >> 3
+    if (field === 1) out.n = readVarint(r)
+    else if (field === 2) out.pn = readVarint(r)
+    else if (field === 3) out.dhPub = readBytes(r)
+    else if (field === 4) out.ciphertext = readBytes(r)
+    else readBytes(r)
+  }
+  return out
+}
+
+// --- OMEMOAuthenticatedMessage { mac=1, message=2 } ---
+export function encodeAuthMessage(m: { mac: Uint8Array; message: Uint8Array }): Uint8Array {
+  return concatBytes(bytesField(1, m.mac), bytesField(2, m.message))
+}
+export function decodeAuthMessage(b: Uint8Array): { mac: Uint8Array; message: Uint8Array } {
+  const r: Reader = { buf: b, off: 0 }
+  const out = { mac: new Uint8Array(0), message: new Uint8Array(0) }
+  while (r.off < b.length) {
+    const field = readVarint(r) >> 3
+    if (field === 1) out.mac = readBytes(r)
+    else if (field === 2) out.message = readBytes(r)
+    else readBytes(r)
+  }
+  return out
+}
+
+// --- OMEMOKeyExchange { pk_id=1, spk_id=2, ik=3, ek=4, message=5 } ---
+export function encodeKeyExchange(m: {
+  pkId: number
+  spkId: number
+  ik: Uint8Array
+  ek: Uint8Array
+  message: Uint8Array
+}): Uint8Array {
+  return concatBytes(
+    varintField(1, m.pkId),
+    varintField(2, m.spkId),
+    bytesField(3, m.ik),
+    bytesField(4, m.ek),
+    bytesField(5, m.message),
+  )
+}
+export function decodeKeyExchange(b: Uint8Array): {
+  pkId: number
+  spkId: number
+  ik: Uint8Array
+  ek: Uint8Array
+  message: Uint8Array
+} {
+  const r: Reader = { buf: b, off: 0 }
+  const out = { pkId: 0, spkId: 0, ik: new Uint8Array(0), ek: new Uint8Array(0), message: new Uint8Array(0) }
+  while (r.off < b.length) {
+    const field = readVarint(r) >> 3
+    if (field === 1) out.pkId = readVarint(r)
+    else if (field === 2) out.spkId = readVarint(r)
+    else if (field === 3) out.ik = readBytes(r)
+    else if (field === 4) out.ek = readBytes(r)
+    else if (field === 5) out.message = readBytes(r)
+    else readBytes(r)
+  }
+  return out
+}
+```
+
+- [ ] **Step 4: Run test to verify it passes**
+
+Run: `npx vitest run packages/omemo/src/omemo2/wire.test.ts`
+Expected: PASS (3 tests).
+
+- [ ] **Step 5: Write the failing test** `packages/omemo/src/omemo2/codec.test.ts`
+
+```ts
+import { describe, it, expect } from 'vitest'
+import { b64encode, b64decode, assertValidBundle, type Bundle } from './codec'
+
+describe('omemo2 codec', () => {
+  it('base64 round-trips', () => {
+    const u = new Uint8Array([0, 1, 2, 250, 255])
+    expect(b64decode(b64encode(u))).toEqual(u)
+  })
+  it('rejects a bundle with fewer than 25 prekeys', () => {
+    const bundle: Bundle = {
+      ik: new Uint8Array(32),
+      spkId: 1,
+      spk: new Uint8Array(32),
+      spkSig: new Uint8Array(64),
+      preKeys: [{ id: 1, key: new Uint8Array(32) }],
+    }
+    expect(() => assertValidBundle(bundle)).toThrow(/at least 25/)
+  })
+})
+```
+
+- [ ] **Step 6: Run — verify it fails, then create `packages/omemo/src/omemo2/codec.ts`**
+
+Run: `npx vitest run packages/omemo/src/omemo2/codec.test.ts` → FAIL (cannot resolve `./codec`).
+
+```ts
+export interface Bundle {
+  ik: Uint8Array // Ed25519 identity public key
+  spkId: number
+  spk: Uint8Array // X25519 signed prekey public
+  spkSig: Uint8Array // Ed25519 signature over spk
+  preKeys: { id: number; key: Uint8Array }[]
+}
+export type DeviceList = number[]
+export interface OmemoKey {
+  rid: number
+  kex: boolean // true => data is an OMEMOKeyExchange, false => an OMEMOAuthenticatedMessage
+  data: Uint8Array
+}
+export interface OmemoMessage {
+  sid: number
+  keys: OmemoKey[]
+  payload?: Uint8Array // AES-256-CBC ciphertext of the SCE envelope; omitted for empty messages
+}
+
+export function b64encode(u: Uint8Array): string {
+  let s = ''
+  for (let i = 0; i < u.length; i++) s += String.fromCharCode(u[i])
+  return btoa(s)
+}
+export function b64decode(s: string): Uint8Array {
+  const bin = atob(s)
+  const out = new Uint8Array(bin.length)
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i)
+  return out
+}
+
+export function assertValidBundle(b: Bundle): void {
+  if (b.ik.length !== 32) throw new Error('bundle ik must be 32 bytes')
+  if (b.spk.length !== 32) throw new Error('bundle spk must be 32 bytes')
+  if (b.spkSig.length !== 64) throw new Error('bundle spkSig must be 64 bytes')
+  if (b.preKeys.length < 25) throw new Error('bundle must contain at least 25 prekeys')
+}
+```
+
+- [ ] **Step 7: Run tests to verify they pass**
+
+Run: `npx vitest run packages/omemo/src/omemo2/wire.test.ts packages/omemo/src/omemo2/codec.test.ts`
+Expected: PASS (5 tests total).
+
+- [ ] **Step 8: Commit**
+
+```bash
+git add packages/omemo/src/omemo2/wire.ts packages/omemo/src/omemo2/wire.test.ts packages/omemo/src/omemo2/codec.ts packages/omemo/src/omemo2/codec.test.ts
+git commit -m "feat(omemo): OMEMO 2 wire protobuf + bundle/message codecs"
+```
+
+---
+
+### Task 11: Double Ratchet (OMEMO 2 message cipher)
 
 **Files:**
 - Create: `packages/omemo/src/ratchet/ratchet.ts`
 - Test: `packages/omemo/src/ratchet/ratchet.test.ts`
 
 **Interfaces:**
-- Consumes: `x25519`, `generateX25519` (curve.ts); `hkdf`, `hmacSha256` (hash.ts); `concatBytes` (bytes.ts); `Rng`.
+- Consumes: `x25519`, `generateX25519` (curve.ts); `hkdf`, `hmacSha256` (hash.ts); `concatBytes`, `bytesEqual` (bytes.ts); `encodeOmemoMessage`, `decodeOmemoMessage` (wire.ts); `cbc` from `@noble/ciphers/aes`.
 - Produces:
   - `initRatchetInitiator(sharedSecret, remoteSpkPub, rng): RatchetState`
   - `initRatchetResponder(sharedSecret, spkPriv, spkPub): RatchetState`
-  - `ratchetEncrypt(state, plaintext): { state, header, ciphertext }` where `header = { dhPub, pn, n }`
-  - `ratchetDecrypt(state, header, ciphertext): { state, plaintext }`
+  - `ratchetEncrypt(state, plaintext, ad): { state, authMessage: { mac: Uint8Array; message: Uint8Array } }`
+  - `ratchetDecrypt(state, authMessage, ad): { state, plaintext }`
   - `serializeRatchet(state): Uint8Array` / `deserializeRatchet(bytes): RatchetState`
+  - `type RatchetState`
 
-> This is the Signal Double Ratchet with OMEMO-2 KDF labels. `ratchetEncrypt` returns the per-message key material that the account layer feeds into `payloadEncrypt`; here we self-contain a simple message cipher (HMAC-authenticated) to test ratchet correctness independent of the payload AEAD.
+> Real OMEMO 2 message cipher (XEP-0384 §4.3): chain-key step `mk = HMAC(ck, 0x01)`,
+> `ck' = HMAC(ck, 0x02)`; message keys `HKDF(mk, salt=32 zero bytes, "OMEMO Message Key Material", 80)`
+> → `enc(32)|auth(32)|iv(16)`; `ciphertext = AES-256-CBC(enc, iv, plaintext)`; the ratchet emits an
+> OMEMOAuthenticatedMessage `{ mac, message }` where `message = OMEMOMessage.proto(n, pn, dh_pub, ciphertext)`
+> and `mac = HMAC(auth, ad || message)[:16]`. `ad` is the session associated data (see Task 13).
 
-- [ ] **Step 1: Write the failing test** — alternating + out-of-order delivery
+- [ ] **Step 1: Write the failing test** — alternating + out-of-order, with a fixed AD
 
 ```ts
 import { describe, it, expect } from 'vitest'
 import { generateX25519 } from '../primitives/curve'
-import {
-  initRatchetInitiator,
-  initRatchetResponder,
-  ratchetEncrypt,
-  ratchetDecrypt,
-} from './ratchet'
+import { initRatchetInitiator, initRatchetResponder, ratchetEncrypt, ratchetDecrypt } from './ratchet'
 
 function counterRng() {
   let c = 100
@@ -1133,8 +1427,9 @@ function counterRng() {
 }
 const enc = (s: string) => new TextEncoder().encode(s)
 const dec = (u: Uint8Array) => new TextDecoder().decode(u)
+const AD = new Uint8Array(64).fill(0xab) // stand-in for IK_a || IK_b
 
-describe('double ratchet', () => {
+describe('double ratchet (OMEMO 2 message cipher)', () => {
   it('exchanges messages both directions, including out of order', () => {
     const rng = counterRng()
     const ss = new Uint8Array(32).fill(1)
@@ -1142,31 +1437,39 @@ describe('double ratchet', () => {
     let alice = initRatchetInitiator(ss, bobSpk.pub, rng)
     let bob = initRatchetResponder(ss, bobSpk.priv, bobSpk.pub)
 
-    // Alice -> Bob
-    const a1 = ratchetEncrypt(alice, enc('hello'))
+    const a1 = ratchetEncrypt(alice, enc('hello'), AD)
     alice = a1.state
-    const b1 = ratchetDecrypt(bob, a1.header, a1.ciphertext)
+    const b1 = ratchetDecrypt(bob, a1.authMessage, AD)
     bob = b1.state
     expect(dec(b1.plaintext)).toBe('hello')
 
-    // Bob -> Alice (DH ratchet step)
-    const b2 = ratchetEncrypt(bob, enc('hi back'))
+    const b2 = ratchetEncrypt(bob, enc('hi back'), AD)
     bob = b2.state
-    const a2 = ratchetDecrypt(alice, b2.header, b2.ciphertext)
+    const a2 = ratchetDecrypt(alice, b2.authMessage, AD)
     alice = a2.state
     expect(dec(a2.plaintext)).toBe('hi back')
 
-    // Alice sends two, Bob receives them out of order
-    const m1 = ratchetEncrypt(alice, enc('one'))
+    const m1 = ratchetEncrypt(alice, enc('one'), AD)
     alice = m1.state
-    const m2 = ratchetEncrypt(alice, enc('two'))
+    const m2 = ratchetEncrypt(alice, enc('two'), AD)
     alice = m2.state
-    const r2 = ratchetDecrypt(bob, m2.header, m2.ciphertext) // second first
+    const r2 = ratchetDecrypt(bob, m2.authMessage, AD)
     bob = r2.state
-    const r1 = ratchetDecrypt(bob, m1.header, m1.ciphertext) // then first (skipped key)
+    const r1 = ratchetDecrypt(bob, m1.authMessage, AD)
     bob = r1.state
     expect(dec(r2.plaintext)).toBe('two')
     expect(dec(r1.plaintext)).toBe('one')
+  })
+
+  it('rejects a message whose MAC does not match the AD', () => {
+    const rng = counterRng()
+    const ss = new Uint8Array(32).fill(1)
+    const bobSpk = generateX25519(rng)
+    const alice = initRatchetInitiator(ss, bobSpk.pub, rng)
+    const bob = initRatchetResponder(ss, bobSpk.priv, bobSpk.pub)
+    const a1 = ratchetEncrypt(alice, enc('secret'), AD)
+    const wrongAd = new Uint8Array(64).fill(0xcd)
+    expect(() => ratchetDecrypt(bob, a1.authMessage, wrongAd)).toThrow()
   })
 })
 ```
@@ -1179,19 +1482,22 @@ Expected: FAIL — cannot resolve `./ratchet`.
 - [ ] **Step 3: Create `packages/omemo/src/ratchet/ratchet.ts`**
 
 ```ts
+import { cbc } from '@noble/ciphers/aes'
 import { x25519, generateX25519 } from '../primitives/curve'
 import { hkdf, hmacSha256 } from '../primitives/hash'
 import { concatBytes, bytesEqual } from '../primitives/bytes'
 import type { Rng } from '../primitives/bytes'
+import { encodeOmemoMessage, decodeOmemoMessage } from '../omemo2/wire'
 
 const ROOT_INFO = new TextEncoder().encode('OMEMO Root Chain')
 const MSG_INFO = new TextEncoder().encode('OMEMO Message Key Material')
+const ZERO32 = new Uint8Array(32)
 const MAX_SKIP = 1000
 
-export interface RatchetHeader {
+interface Header {
   dhPub: Uint8Array
-  pn: number // previous chain length
-  n: number // message number
+  pn: number
+  n: number
 }
 
 export interface RatchetState {
@@ -1213,30 +1519,32 @@ function kdfRoot(rootKey: Uint8Array, dhOut: Uint8Array): { rootKey: Uint8Array;
   return { rootKey: okm.slice(0, 32), chainKey: okm.slice(32, 64) }
 }
 function kdfChain(chainKey: Uint8Array): { chainKey: Uint8Array; messageKey: Uint8Array } {
-  const messageKey = hkdf(hmacSha256(chainKey, new Uint8Array([0x01])), new Uint8Array(32), MSG_INFO, 32)
+  const messageKey = hmacSha256(chainKey, new Uint8Array([0x01]))
   const nextChain = hmacSha256(chainKey, new Uint8Array([0x02]))
   return { chainKey: nextChain, messageKey }
+}
+function deriveMsgKeys(mk: Uint8Array): { enc: Uint8Array; auth: Uint8Array; iv: Uint8Array } {
+  const okm = hkdf(mk, ZERO32, MSG_INFO, 80)
+  return { enc: okm.slice(0, 32), auth: okm.slice(32, 64), iv: okm.slice(64, 80) }
 }
 function hexKey(dhPub: Uint8Array, n: number): string {
   return [...dhPub].map((b) => b.toString(16).padStart(2, '0')).join('') + ':' + n
 }
-function msgEncrypt(mk: Uint8Array, pt: Uint8Array): Uint8Array {
-  // Ratchet-level self-contained cipher (XOR-stream + HMAC) — sufficient to prove
-  // ratchet correctness. The account layer replaces this with payload AEAD.
-  const ks = hkdf(mk, new Uint8Array(32), new TextEncoder().encode('rk-msg'), pt.length + 32)
-  const ct = new Uint8Array(pt.length)
-  for (let i = 0; i < pt.length; i++) ct[i] = pt[i] ^ ks[i]
-  const tag = hmacSha256(ks.slice(pt.length), ct).slice(0, 16)
-  return concatBytes(tag, ct)
+
+function sealMessage(mk: Uint8Array, ad: Uint8Array, header: Header, plaintext: Uint8Array): { mac: Uint8Array; message: Uint8Array } {
+  const { enc, auth, iv } = deriveMsgKeys(mk)
+  const ciphertext = cbc(enc, iv).encrypt(plaintext)
+  const message = encodeOmemoMessage({ n: header.n, pn: header.pn, dhPub: header.dhPub, ciphertext })
+  const mac = hmacSha256(auth, concatBytes(ad, message)).slice(0, 16)
+  return { mac, message }
 }
-function msgDecrypt(mk: Uint8Array, blob: Uint8Array): Uint8Array {
-  const tag = blob.slice(0, 16)
-  const ct = blob.slice(16)
-  const ks = hkdf(mk, new Uint8Array(32), new TextEncoder().encode('rk-msg'), ct.length + 32)
-  if (!bytesEqual(hmacSha256(ks.slice(ct.length), ct).slice(0, 16), tag)) throw new Error('ratchet auth failed')
-  const pt = new Uint8Array(ct.length)
-  for (let i = 0; i < ct.length; i++) pt[i] = ct[i] ^ ks[i]
-  return pt
+function openMessage(mk: Uint8Array, ad: Uint8Array, authMessage: { mac: Uint8Array; message: Uint8Array }): Uint8Array {
+  const { enc, auth, iv } = deriveMsgKeys(mk)
+  if (!bytesEqual(hmacSha256(auth, concatBytes(ad, authMessage.message)).slice(0, 16), authMessage.mac)) {
+    throw new Error('ratchet message authentication failed')
+  }
+  const parsed = decodeOmemoMessage(authMessage.message)
+  return cbc(enc, iv).decrypt(parsed.ciphertext!)
 }
 
 export function initRatchetInitiator(sharedSecret: Uint8Array, remoteSpkPub: Uint8Array, rng: Rng): RatchetState {
@@ -1276,27 +1584,29 @@ export function initRatchetResponder(sharedSecret: Uint8Array, spkPriv: Uint8Arr
 export function ratchetEncrypt(
   state: RatchetState,
   plaintext: Uint8Array,
-): { state: RatchetState; header: RatchetHeader; ciphertext: Uint8Array } {
+  ad: Uint8Array,
+): { state: RatchetState; authMessage: { mac: Uint8Array; message: Uint8Array } } {
   const s = { ...state, skipped: new Map(state.skipped) }
   const step = kdfChain(s.sendChain!)
   s.sendChain = step.chainKey
-  const header: RatchetHeader = { dhPub: s.dhSelfPub, pn: s.pn, n: s.ns }
+  const header: Header = { dhPub: s.dhSelfPub, pn: s.pn, n: s.ns }
   s.ns += 1
-  return { state: s, header, ciphertext: msgEncrypt(step.messageKey, plaintext) }
+  return { state: s, authMessage: sealMessage(step.messageKey, ad, header, plaintext) }
 }
 
 export function ratchetDecrypt(
   state: RatchetState,
-  header: RatchetHeader,
-  ciphertext: Uint8Array,
+  authMessage: { mac: Uint8Array; message: Uint8Array },
+  ad: Uint8Array,
 ): { state: RatchetState; plaintext: Uint8Array } {
+  const header = decodeOmemoMessage(authMessage.message)
   let s: RatchetState = { ...state, skipped: new Map(state.skipped) }
 
   const skipId = hexKey(header.dhPub, header.n)
   const skippedKey = s.skipped.get(skipId)
   if (skippedKey) {
     s.skipped.delete(skipId)
-    return { state: s, plaintext: msgDecrypt(skippedKey, ciphertext) }
+    return { state: s, plaintext: openMessage(skippedKey, ad, authMessage) }
   }
 
   const isNewRemote = !s.dhRemote || !bytesEqual(s.dhRemote, header.dhPub)
@@ -1309,7 +1619,7 @@ export function ratchetDecrypt(
   const step = kdfChain(s.recvChain!)
   s.recvChain = step.chainKey
   s.nr += 1
-  return { state: s, plaintext: msgDecrypt(step.messageKey, ciphertext) }
+  return { state: s, plaintext: openMessage(step.messageKey, ad, authMessage) }
 }
 
 function skipMessageKeys(state: RatchetState, until: number): RatchetState {
@@ -1342,40 +1652,7 @@ function dhRatchet(state: RatchetState, remoteDhPub: Uint8Array): RatchetState {
   s.sendChain = send.chainKey
   return s
 }
-```
 
-> Responder-side first-send note: the responder's `rng` is a no-op stub because it must not perform its own DH generation until it has received the initiator's first message and done a `dhRatchet`. In the account layer the responder is always constructed from a received PreKey message, so its first outbound message happens after at least one inbound `dhRatchet` (which installs a real send chain). If a test needs the responder to send first, construct it via `initRatchetInitiator` instead.
-
-- [ ] **Step 4: Run test to verify it passes**
-
-Run: `npx vitest run packages/omemo/src/ratchet/ratchet.test.ts`
-Expected: PASS (1 test).
-
-- [ ] **Step 5: Add serialize/deserialize test**
-
-```ts
-// append to ratchet.test.ts
-import { serializeRatchet, deserializeRatchet } from './ratchet'
-
-it('serializes and restores ratchet state', () => {
-  const rng = counterRng()
-  const ss = new Uint8Array(32).fill(2)
-  const spk = generateX25519(rng)
-  const a = initRatchetInitiator(ss, spk.pub, rng)
-  const restored = deserializeRatchet(serializeRatchet(a))
-  const m = ratchetEncrypt(restored, new TextEncoder().encode('x'))
-  expect(m.ciphertext.length).toBeGreaterThan(16)
-})
-```
-
-- [ ] **Step 6: Run — verify it fails (functions missing), then implement**
-
-Run: `npx vitest run packages/omemo/src/ratchet/ratchet.test.ts`
-Expected: FAIL — `serializeRatchet is not a function`.
-
-Append to `ratchet.ts`:
-
-```ts
 interface SerializableState {
   dhSelfPriv: number[]; dhSelfPub: number[]; dhRemote: number[] | null
   rootKey: number[]; sendChain: number[] | null; recvChain: number[] | null
@@ -1396,7 +1673,7 @@ export function serializeRatchet(s: RatchetState): Uint8Array {
 export function deserializeRatchet(bytes: Uint8Array): RatchetState {
   const o: SerializableState = JSON.parse(new TextDecoder().decode(bytes))
   return {
-    rng: (n: number) => new Uint8Array(n), // real rng re-injected by the account layer before send
+    rng: (n: number) => new Uint8Array(n), // account layer re-injects the real rng before sending
     dhSelfPriv: Uint8Array.from(o.dhSelfPriv), dhSelfPub: Uint8Array.from(o.dhSelfPub),
     dhRemote: o.dhRemote ? Uint8Array.from(o.dhRemote) : null,
     rootKey: Uint8Array.from(o.rootKey),
@@ -1408,117 +1685,44 @@ export function deserializeRatchet(bytes: Uint8Array): RatchetState {
 }
 ```
 
-> The account layer re-injects the production `rng` onto a deserialized state before the first outbound message (`state.rng = rng`). This keeps serialization JSON-simple; a later hardening task can switch to a binary codec.
+> Responder-first-send note: the responder's `rng` is a no-op stub because it must not generate its
+> own ratchet DH key until it has received the initiator's first message and run `dhRatchet` (which
+> installs a real send chain). In the account layer the responder is always constructed from a
+> received KeyExchange, so its first outbound message happens after ≥1 inbound `dhRatchet`.
 
-- [ ] **Step 7: Run tests to verify they pass**
+- [ ] **Step 4: Run tests to verify they pass**
 
 Run: `npx vitest run packages/omemo/src/ratchet/ratchet.test.ts`
 Expected: PASS (2 tests).
 
-- [ ] **Step 8: Commit**
-
-```bash
-git add packages/omemo/src/ratchet
-git commit -m "feat(omemo): Double Ratchet with OMEMO KDF labels + serialization"
-```
-
----
-
-### Task 11: Codecs (Bundle / DeviceList / OmemoMessage)
-
-**Files:**
-- Create: `packages/omemo/src/omemo2/codec.ts`
-- Test: `packages/omemo/src/omemo2/codec.test.ts`
-
-**Interfaces:**
-- Produces the typed structures the SDK adapter maps to/from XML (no XML here — just typed objects with byte fields, plus base64 helpers the adapter can reuse):
-  - `type Bundle`, `type DeviceList = number[]`, `type OmemoMessage`, `type OmemoKey`
-  - `b64encode(u: Uint8Array): string`, `b64decode(s: string): Uint8Array`
-  - `assertValidBundle(b: Bundle): void` (min 25 prekeys)
-
-- [ ] **Step 1: Write the failing test**
+- [ ] **Step 5: Add serialize/deserialize test**
 
 ```ts
-import { describe, it, expect } from 'vitest'
-import { b64encode, b64decode, assertValidBundle, type Bundle } from './codec'
+// append to ratchet.test.ts
+import { serializeRatchet, deserializeRatchet } from './ratchet'
 
-describe('omemo2 codec', () => {
-  it('base64 round-trips', () => {
-    const u = new Uint8Array([0, 1, 2, 250, 255])
-    expect(b64decode(b64encode(u))).toEqual(u)
-  })
-  it('rejects a bundle with fewer than 25 prekeys', () => {
-    const bundle: Bundle = {
-      ik: new Uint8Array(32),
-      spkId: 1,
-      spk: new Uint8Array(32),
-      spkSig: new Uint8Array(64),
-      preKeys: [{ id: 1, key: new Uint8Array(32) }],
-    }
-    expect(() => assertValidBundle(bundle)).toThrow(/at least 25/)
-  })
+it('serializes and restores ratchet state', () => {
+  const rng = counterRng()
+  const ss = new Uint8Array(32).fill(2)
+  const spk = generateX25519(rng)
+  const a = initRatchetInitiator(ss, spk.pub, rng)
+  const restored = deserializeRatchet(serializeRatchet(a))
+  restored.rng = rng
+  const m = ratchetEncrypt(restored, new TextEncoder().encode('x'), AD)
+  expect(m.authMessage.mac.length).toBe(16)
 })
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [ ] **Step 6: Run tests to verify they pass**
 
-Run: `npx vitest run packages/omemo/src/omemo2/codec.test.ts`
-Expected: FAIL — cannot resolve `./codec`.
+Run: `npx vitest run packages/omemo/src/ratchet/ratchet.test.ts`
+Expected: PASS (3 tests).
 
-- [ ] **Step 3: Create `packages/omemo/src/omemo2/codec.ts`**
-
-```ts
-export interface Bundle {
-  ik: Uint8Array // Ed25519 identity public key
-  spkId: number
-  spk: Uint8Array // X25519 signed prekey public
-  spkSig: Uint8Array // Ed25519 signature over spk
-  preKeys: { id: number; key: Uint8Array }[]
-}
-export type DeviceList = number[]
-export interface OmemoKey {
-  rid: number
-  kex: boolean
-  data: Uint8Array
-}
-export interface OmemoMessage {
-  sid: number
-  keys: OmemoKey[]
-  payload?: Uint8Array
-}
-
-export function b64encode(u: Uint8Array): string {
-  let s = ''
-  for (let i = 0; i < u.length; i++) s += String.fromCharCode(u[i])
-  return btoa(s)
-}
-export function b64decode(s: string): Uint8Array {
-  const bin = atob(s)
-  const out = new Uint8Array(bin.length)
-  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i)
-  return out
-}
-
-export function assertValidBundle(b: Bundle): void {
-  if (b.ik.length !== 32) throw new Error('bundle ik must be 32 bytes')
-  if (b.spk.length !== 32) throw new Error('bundle spk must be 32 bytes')
-  if (b.spkSig.length !== 64) throw new Error('bundle spkSig must be 64 bytes')
-  if (b.preKeys.length < 25) throw new Error('bundle must contain at least 25 prekeys')
-}
-```
-
-> `btoa`/`atob` are available in Node ≥ 16 globals and all browsers. If a target lacks them, swap to `Buffer` in the adapter — but the library stays global-only.
-
-- [ ] **Step 4: Run test to verify it passes**
-
-Run: `npx vitest run packages/omemo/src/omemo2/codec.test.ts`
-Expected: PASS (2 tests).
-
-- [ ] **Step 5: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
-git add packages/omemo/src/omemo2/codec.ts packages/omemo/src/omemo2/codec.test.ts
-git commit -m "feat(omemo): bundle/device-list/message typed codecs + base64"
+git add packages/omemo/src/ratchet
+git commit -m "feat(omemo): Double Ratchet with OMEMO 2 message cipher + AD MAC"
 ```
 
 ---
@@ -1530,13 +1734,16 @@ git commit -m "feat(omemo): bundle/device-list/message typed codecs + base64"
 - Test: `packages/omemo/src/omemo2/sce.test.ts`
 
 **Interfaces:**
-- Consumes: `Rng`, `b64encode`/`b64decode` unused; produces a byte-serializable envelope. Since the library is XML-agnostic, SCE is modeled as a typed structure serialized to bytes with a minimal, deterministic encoding the adapter re-maps to XEP-0420 XML.
+- Consumes: `Rng`, `concatBytes`, `u32be` (bytes.ts).
 - Produces:
   - `type SceContent = { body?: string; from?: string; to?: string; timeIso?: string }`
   - `buildEnvelope(content: SceContent, rng: Rng): Uint8Array` (always includes random rpad)
   - `parseEnvelope(bytes: Uint8Array): SceContent`
 
-> Rationale: the crypto boundary encrypts the SCE envelope *bytes*. The exact XEP-0420 XML shape is the adapter's responsibility; the library only needs a stable, reversible byte serialization that carries the mandatory `rpad` (length-hiding) and optional `from`/`to`/`time`. We use a length-prefixed field encoding.
+> Rationale: the crypto boundary encrypts the SCE envelope *bytes*. The exact XEP-0420 XML shape is
+> the adapter's responsibility; the library needs a stable, reversible byte serialization that carries
+> the mandatory `rpad` (length-hiding) and optional `from`/`to`/`time`. We use a length-prefixed field
+> encoding.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1555,7 +1762,7 @@ describe('sce envelope', () => {
     expect(parsed.to).toBe('b@y')
     expect(parsed.timeIso).toBe('2026-07-13T00:00:00Z')
   })
-  it('two envelopes of the same content differ in length due to rpad', () => {
+  it('two envelopes of the same content still parse back to the body', () => {
     const a = buildEnvelope({ body: 'hi' }, (n) => new Uint8Array(n).fill(1))
     const b = buildEnvelope({ body: 'hi' }, (n) => new Uint8Array(Math.max(1, n)).fill(2))
     expect(parseEnvelope(a).body).toBe('hi')
@@ -1590,7 +1797,7 @@ function field(tag: Field, value: Uint8Array): Uint8Array {
   return concatBytes(u32be(t.length), t, u32be(value.length), value)
 }
 
-/** Builds the SCE envelope bytes with a mandatory random rpad (0..31 bytes). */
+/** Builds the SCE envelope bytes with a mandatory random rpad (1..32 bytes). */
 export function buildEnvelope(content: SceContent, rng: Rng): Uint8Array {
   const enc = new TextEncoder()
   const parts: Uint8Array[] = []
@@ -1653,12 +1860,24 @@ git commit -m "feat(omemo): SCE envelope build/parse with mandatory rpad"
 **Interfaces:**
 - Consumes: everything above.
 - Produces the public API from the spec:
-  - `class OmemoAccount` with `create`, `load`, `deviceId`, `identityFingerprint`, `publishableBundle`, `publishableDeviceId`, `processBundle`, `encrypt`, `decrypt`.
-  - `type Bundle`, `type OmemoMessage` re-exported.
+  - `class OmemoAccount` with `create`, `load`, `deviceId`, `identityFingerprint`, `publishableBundleAsync`, `publishableDeviceId`, `processBundle`, `encrypt`, `decrypt`.
+  - re-exports `type Bundle`, `type OmemoMessage`.
 
-> Account glue: `encrypt` builds the SCE envelope, derives a random 32-byte message key, `payloadEncrypt`s the envelope with it, then per target device wraps the message key via that device's ratchet (`ratchetEncrypt`) into an `OmemoKey`. `decrypt` reverses it: pick our `rid` key, ratchet-decrypt to recover the message key, `payloadDecrypt` the envelope, parse. New inbound sessions (`kex: true`) run `x3dhResponder` + `initRatchetResponder` first. `archive: true` clones the session, decrypts, and does NOT persist the advanced state.
+> **Session associated data (AD).** OMEMO 2 authenticates every ratchet message under
+> `AD = Ed25519(IK_initiator) || Ed25519(IK_responder)`, fixed for the life of the session regardless
+> of direction. The account persists both IKs in the session meta at session creation:
+> - as **initiator** (`processBundle`): `initiatorIk = ourEdPub`, `responderIk = bundle.ik`.
+> - as **responder** (first `decrypt` of a KeyExchange): `initiatorIk = keyExchange.ik`, `responderIk = ourEdPub`.
+>
+> **Wire mapping.** `encrypt` builds the SCE envelope, picks a random 32-byte payload key `k`,
+> `payloadEncrypt(k, envelope)` → `{ ciphertext, tag }`. `<payload>` carries `ciphertext`; the ratchet
+> transports the **48-byte `k || tag`** per device. A fresh (kex-pending) session wraps the ratchet's
+> OMEMOAuthenticatedMessage in an OMEMOKeyExchange (`pk_id`, `spk_id`, `ik = ourEdPub`, `ek = ephemeral`);
+> an established session sends the OMEMOAuthenticatedMessage bytes directly. `decrypt` reverses it,
+> recovering `k || tag`, verifying `tag` against the payload, and returning the body. `archive: true`
+> decrypts without persisting the advanced session and without consuming a one-time prekey.
 
-- [ ] **Step 1: Write the failing test** — two accounts round-trip end-to-end
+- [ ] **Step 1: Write the failing test** — initial PreKey message + a follow-up established message
 
 ```ts
 import { describe, it, expect } from 'vitest'
@@ -1673,22 +1892,22 @@ const enc = (s: string) => new TextEncoder().encode(s)
 const dec = (u: Uint8Array) => new TextDecoder().decode(u)
 
 describe('OmemoAccount', () => {
-  it('alice encrypts to bob and bob decrypts (initial PreKey message)', async () => {
-    const aStore = new MemoryStore()
-    const bStore = new MemoryStore()
-    const alice = await OmemoAccount.create(aStore, counterRng(1))
-    const bob = await OmemoAccount.create(bStore, counterRng(150))
+  it('round-trips an initial PreKey message then an established message', async () => {
+    const alice = await OmemoAccount.create(new MemoryStore(), counterRng(1))
+    const bob = await OmemoAccount.create(new MemoryStore(), counterRng(150))
 
-    // Alice fetches Bob's bundle (adapter would do PEP; here direct)
-    const bobBundle = bob.publishableBundle()
+    const bobBundle = await bob.publishableBundleAsync()
     await alice.processBundle('bob@x', bob.publishableDeviceId(), bobBundle)
 
-    const msg = await alice.encrypt('bob@x', [bob.publishableDeviceId()], enc('secret hi'))
-    expect(msg.sid).toBe(alice.publishableDeviceId())
-    expect(msg.keys[0].kex).toBe(true)
+    // 1) Initial message is a KeyExchange
+    const m1 = await alice.encrypt('bob@x', [bob.publishableDeviceId()], enc('secret hi'))
+    expect(m1.keys[0].kex).toBe(true)
+    expect(dec(await bob.decrypt('alice@x', m1.sid, m1))).toBe('secret hi')
 
-    const out = await bob.decrypt('alice@x', msg.sid, msg)
-    expect(dec(out)).toBe('secret hi')
+    // 2) Bob replies (establishes his send chain); Alice decrypts
+    const m2 = await bob.encrypt('alice@x', [alice.publishableDeviceId()], enc('got it'))
+    expect(m2.keys[0].kex).toBe(false)
+    expect(dec(await alice.decrypt('bob@x', m2.sid, m2))).toBe('got it')
   })
 
   it('fingerprint is 32 curve bytes and identity persists via load', async () => {
@@ -1715,7 +1934,6 @@ import type { Rng } from '../primitives/bytes'
 import type { OmemoStore } from '../store/types'
 import { createIdentity, fingerprint, randomDeviceId } from '../identity/identity'
 import { generateSignedPreKey, generatePreKeys } from '../prekeys/prekeys'
-import { ed25519PubToMontgomery } from '../primitives/curve'
 import { x3dhInitiator, x3dhResponder } from '../x3dh/x3dh'
 import {
   initRatchetInitiator,
@@ -1725,25 +1943,39 @@ import {
   serializeRatchet,
   deserializeRatchet,
   type RatchetState,
-  type RatchetHeader,
 } from '../ratchet/ratchet'
 import { payloadEncrypt, payloadDecrypt } from '../primitives/aead'
 import { buildEnvelope, parseEnvelope } from '../omemo2/sce'
-import { concatBytes, u32be } from '../primitives/bytes'
+import { concatBytes } from '../primitives/bytes'
+import {
+  encodeAuthMessage,
+  decodeAuthMessage,
+  encodeKeyExchange,
+  decodeKeyExchange,
+} from '../omemo2/wire'
 import { assertValidBundle, type Bundle, type OmemoMessage, type OmemoKey } from '../omemo2/codec'
 
 const SPK_ID = 1
 const PREKEY_START = 1
 const PREKEY_COUNT = 100
 
-/** A ratchet key wire-blob carries: [kex flag][header dhPub 32][pn u32][n u32][payload key blob]. */
-function packKeyBlob(header: RatchetHeader, keyCipher: Uint8Array): Uint8Array {
-  return concatBytes(header.dhPub, u32be(header.pn), u32be(header.n), keyCipher)
+interface SessionMeta {
+  ad: number[] // Ed25519(IK_initiator) || Ed25519(IK_responder)
+  kexPending: boolean
+  pkId?: number
+  spkId?: number
+  ek?: number[] // ephemeral pub, initiator side, while kexPending
 }
-function unpackKeyBlob(blob: Uint8Array): { header: RatchetHeader; keyCipher: Uint8Array } {
-  const dhPub = blob.slice(0, 32)
-  const rd = (o: number) => ((blob[o] << 24) | (blob[o + 1] << 16) | (blob[o + 2] << 8) | blob[o + 3]) >>> 0
-  return { header: { dhPub, pn: rd(32), n: rd(36) }, keyCipher: blob.slice(40) }
+/** Session record = [u32 metaLen][meta JSON][ratchet blob]. */
+function packSession(meta: SessionMeta, ratchet: Uint8Array): Uint8Array {
+  const m = new TextEncoder().encode(JSON.stringify(meta))
+  const len = new Uint8Array([(m.length >>> 24) & 0xff, (m.length >>> 16) & 0xff, (m.length >>> 8) & 0xff, m.length & 0xff])
+  return concatBytes(len, m, ratchet)
+}
+function unpackSession(blob: Uint8Array): { meta: SessionMeta; ratchet: Uint8Array } {
+  const len = ((blob[0] << 24) | (blob[1] << 16) | (blob[2] << 8) | blob[3]) >>> 0
+  const meta: SessionMeta = JSON.parse(new TextDecoder().decode(blob.slice(4, 4 + len)))
+  return { meta, ratchet: blob.slice(4 + len) }
 }
 
 export class OmemoAccount {
@@ -1781,11 +2013,6 @@ export class OmemoAccount {
     return fingerprint(this.id.edPub)
   }
 
-  publishableBundle(): Bundle {
-    // Synchronous view over already-created material; throws if not initialized.
-    throw new Error('use publishableBundleAsync()')
-  }
-
   async publishableBundleAsync(): Promise<Bundle> {
     const spk = await this.store.loadSignedPreKey(SPK_ID)
     if (!spk) throw new Error('signed prekey missing')
@@ -1810,118 +2037,118 @@ export class OmemoAccount {
       remoteOneTimePreKey: otk.key,
     })
     const ratchet = initRatchetInitiator(init.sharedSecret, bundle.spk, this.rng)
-    await this.store.saveSession(peer, rid, serializeRatchet(ratchet))
-    await this.store.saveTrust(peer, rid, { state: 'undecided', identityKey: bundle.ik })
-    // Stash the ephemeral + otk id so the first encrypt can flag kex; store on session meta:
-    await this.store.saveSession(peer, rid, this.tagKex(serializeRatchet(ratchet), init.ephemeralPub, otk.id, bundle.ik))
-  }
-
-  private tagKex(session: Uint8Array, eph: Uint8Array, otkId: number, remoteIk: Uint8Array): Uint8Array {
-    const meta = new TextEncoder().encode(JSON.stringify({ eph: [...eph], otkId, remoteIk: [...remoteIk], kexPending: true }))
-    return concatBytes(u32be(meta.length), meta, session)
-  }
-  private readMeta(blob: Uint8Array): { meta: { eph?: number[]; otkId?: number; remoteIk?: number[]; kexPending?: boolean } | null; session: Uint8Array } {
-    if (blob.length < 4) return { meta: null, session: blob }
-    const len = ((blob[0] << 24) | (blob[1] << 16) | (blob[2] << 8) | blob[3]) >>> 0
-    if (len > blob.length - 4) return { meta: null, session: blob }
-    try {
-      const meta = JSON.parse(new TextDecoder().decode(blob.slice(4, 4 + len)))
-      return { meta, session: blob.slice(4 + len) }
-    } catch {
-      return { meta: null, session: blob }
+    const meta: SessionMeta = {
+      ad: [...this.id.edPub, ...bundle.ik], // initiator=us, responder=them
+      kexPending: true,
+      pkId: otk.id,
+      spkId: bundle.spkId,
+      ek: [...init.ephemeralPub],
     }
+    await this.store.saveSession(peer, rid, packSession(meta, serializeRatchet(ratchet)))
+    await this.store.saveTrust(peer, rid, { state: 'undecided', identityKey: bundle.ik })
   }
 
   async encrypt(peer: string, deviceIds: number[], plaintext: Uint8Array): Promise<OmemoMessage> {
     const envelope = buildEnvelope({ body: new TextDecoder().decode(plaintext) }, this.rng)
-    const messageKey = this.rng(32)
-    const { ciphertext, tag } = payloadEncrypt(messageKey, envelope)
-    const payload = concatBytes(tag, ciphertext)
+    const k = this.rng(32)
+    const { ciphertext, tag } = payloadEncrypt(k, envelope)
+    const keyAndHmac = concatBytes(k, tag) // 48 bytes
 
     const keys: OmemoKey[] = []
     for (const rid of deviceIds) {
       const stored = await this.store.loadSession(peer, rid)
       if (!stored) throw new Error(`no session for ${peer}/${rid}; call processBundle first`)
-      const { meta, session } = this.readMeta(stored)
-      const state = deserializeRatchet(session)
+      const { meta, ratchet } = unpackSession(stored)
+      const state = deserializeRatchet(ratchet)
       state.rng = this.rng
-      const step = ratchetEncrypt(state, messageKey)
-      let blob = packKeyBlob(step.header, step.ciphertext)
-      const kex = !!meta?.kexPending
-      if (kex && meta) {
-        // prepend x3dh handshake material so the responder can derive the session
-        const hs = new TextEncoder().encode(JSON.stringify({ eph: meta.eph, otkId: meta.otkId, ik: [...this.id.edPub] }))
-        blob = concatBytes(u32be(hs.length), hs, blob)
+      const ad = Uint8Array.from(meta.ad)
+      const step = ratchetEncrypt(state, keyAndHmac, ad)
+      const authBytes = encodeAuthMessage(step.authMessage)
+
+      let data: Uint8Array
+      if (meta.kexPending) {
+        data = encodeKeyExchange({
+          pkId: meta.pkId!,
+          spkId: meta.spkId!,
+          ik: this.id.edPub,
+          ek: Uint8Array.from(meta.ek!),
+          message: authBytes,
+        })
+      } else {
+        data = authBytes
       }
-      keys.push({ rid, kex, data: blob })
-      // clear kexPending after first send
-      await this.store.saveSession(peer, rid, serializeRatchet(step.state))
+      keys.push({ rid, kex: meta.kexPending, data })
+      await this.store.saveSession(peer, rid, packSession(meta, serializeRatchet(step.state)))
     }
-    return { sid: this.id.deviceId, keys, payload }
+    return { sid: this.id.deviceId, keys, payload: ciphertext }
   }
 
-  async decrypt(
-    peer: string,
-    sid: number,
-    msg: OmemoMessage,
-    opts?: { archive?: boolean },
-  ): Promise<Uint8Array> {
+  async decrypt(peer: string, sid: number, msg: OmemoMessage, opts?: { archive?: boolean }): Promise<Uint8Array> {
     const mine = msg.keys.find((k) => k.rid === this.id.deviceId)
     if (!mine) throw new Error('message has no key for this device')
 
     let state: RatchetState
-    let blob = mine.data
+    let ad: Uint8Array
+    let meta: SessionMeta
+    let authMessage: { mac: Uint8Array; message: Uint8Array }
+
     if (mine.kex) {
-      const hsLen = ((blob[0] << 24) | (blob[1] << 16) | (blob[2] << 8) | blob[3]) >>> 0
-      const hs = JSON.parse(new TextDecoder().decode(blob.slice(4, 4 + hsLen)))
-      blob = blob.slice(4 + hsLen)
-      const spk = await this.store.loadSignedPreKey(SPK_ID)
-      if (!spk) throw new Error('signed prekey missing')
-      const otk = typeof hs.otkId === 'number' ? await this.store.loadPreKey(hs.otkId) : null
+      const kex = decodeKeyExchange(mine.data)
+      authMessage = decodeAuthMessage(kex.message)
+      const spk = await this.store.loadSignedPreKey(kex.spkId)
+      if (!spk) throw new Error('signed prekey missing for kex')
+      const otk = await this.store.loadPreKey(kex.pkId)
       const resp = x3dhResponder({
         identitySeed: this.id.edSeed,
         signedPreKeyPriv: spk.priv,
         oneTimePreKeyPriv: otk?.priv,
-        remoteIdentityEd: Uint8Array.from(hs.ik),
-        remoteEphemeral: Uint8Array.from(hs.eph),
+        remoteIdentityEd: kex.ik,
+        remoteEphemeral: kex.ek,
       })
       state = initRatchetResponder(resp.sharedSecret, spk.priv, spk.pub)
-      if (otk && !opts?.archive) await this.store.removePreKey(hs.otkId) // consume OTK once
-      await this.store.saveTrust(peer, sid, { state: 'undecided', identityKey: Uint8Array.from(hs.ik) })
+      ad = concatBytes(kex.ik, this.id.edPub) // initiator=them, responder=us
+      meta = { ad: [...ad], kexPending: false }
+      if (otk && !opts?.archive) await this.store.removePreKey(kex.pkId) // consume OTK once
+      await this.store.saveTrust(peer, sid, { state: 'undecided', identityKey: kex.ik })
     } else {
       const stored = await this.store.loadSession(peer, sid)
       if (!stored) throw new Error(`no session for ${peer}/${sid}`)
-      state = deserializeRatchet(this.readMeta(stored).session)
+      const unpacked = unpackSession(stored)
+      meta = unpacked.meta
+      state = deserializeRatchet(unpacked.ratchet)
+      ad = Uint8Array.from(meta.ad)
+      authMessage = decodeAuthMessage(mine.data)
     }
 
-    const { header, keyCipher } = unpackKeyBlob(blob)
-    const result = ratchetDecrypt(state, header, keyCipher)
-    const messageKey = result.plaintext
-    if (!opts?.archive) await this.store.saveSession(peer, sid, serializeRatchet(result.state))
+    const result = ratchetDecrypt(state, authMessage, ad)
+    const keyAndHmac = result.plaintext
+    const k = keyAndHmac.slice(0, 32)
+    const tag = keyAndHmac.slice(32, 48)
 
-    const tag = msg.payload!.slice(0, 16)
-    const ciphertext = msg.payload!.slice(16)
-    const envelopeBytes = payloadDecrypt(messageKey, ciphertext, tag)
-    const parsed = parseEnvelope(envelopeBytes)
-    return new TextEncoder().encode(parsed.body ?? '')
+    // Receiving any message clears our kex-pending flag (peer has our session now).
+    meta.kexPending = false
+    if (!opts?.archive) await this.store.saveSession(peer, sid, packSession(meta, serializeRatchet(result.state)))
+
+    if (!msg.payload) return new Uint8Array(0) // empty/key-transport message
+    const envelopeBytes = payloadDecrypt(k, msg.payload, tag)
+    return new TextEncoder().encode(parseEnvelope(envelopeBytes).body ?? '')
   }
 }
 
 export type { Bundle, OmemoMessage } from '../omemo2/codec'
 ```
 
-> **Implementer note on `publishableBundle()`:** the spec lists a synchronous `publishableBundle()`, but the store is async, so the real method is `publishableBundleAsync()`. Update the test in Step 1 to call `await bob.publishableBundleAsync()` (change the two `publishableBundle()` calls). Keep the sync stub throwing so the async name is the single source of truth. Record this deviation from the spec in the PR description.
+> **Spec deviation to note in the PR:** the spec listed a synchronous `publishableBundle()`; the store
+> is async, so the real method is `publishableBundleAsync()`. This is the only public-surface deviation.
 
-- [ ] **Step 4: Adjust the Step-1 test to use `publishableBundleAsync()`**
-
-Edit `OmemoAccount.test.ts`: replace `bob.publishableBundle()` with `await bob.publishableBundleAsync()`.
-
-- [ ] **Step 5: Run test to verify it passes**
+- [ ] **Step 4: Run test to verify it passes**
 
 Run: `npx vitest run packages/omemo/src/account/OmemoAccount.test.ts`
-Expected: PASS (2 tests). If the ratchet responder path fails to derive the same message key, debug against Task 9/10 in isolation first (the account layer must feed `bundle.spk` as the responder DH key on both sides).
+Expected: PASS (2 tests). If the established-message (m2) path fails, verify the responder's first
+`encrypt` runs after its `decrypt` installed a send chain via `dhRatchet`, and that both sides compute
+the identical `ad` byte order (initiator IK first).
 
-- [ ] **Step 6: Update `packages/omemo/src/index.ts`**
+- [ ] **Step 5: Update `packages/omemo/src/index.ts`**
 
 ```ts
 export type { Rng } from './primitives/bytes'
@@ -1941,14 +2168,14 @@ export { MemoryStore } from './store/MemoryStore'
 export { fingerprint } from './identity/identity'
 ```
 
-- [ ] **Step 7: Full package gate**
+- [ ] **Step 6: Full package gate**
 
 Run: `npm run test:run -w @fluux/omemo` → Expected: PASS (all tasks).
 Run: `npm run typecheck -w @fluux/omemo` → Expected: no errors.
 Run: `npm run lint -w @fluux/omemo` → Expected: no errors.
 Run: `npm run build -w @fluux/omemo` → Expected: dist emitted with `index.d.ts`.
 
-- [ ] **Step 8: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
 git add packages/omemo/src/account packages/omemo/src/index.ts
@@ -1966,25 +2193,32 @@ git commit -m "feat(omemo): OmemoAccount orchestration + public API"
 - Create: `packages/omemo/src/interop/README.md`
 
 **Interfaces:**
-- Consumes: `OmemoAccount`, codecs.
-- Produces: a CI-taggable test proving byte-level OMEMO 2 interop with a reference implementation. This is the authoritative check on the constants in Global Constraints.
+- Consumes: `OmemoAccount`, `b64encode`, `b64decode`.
+- Produces: a CI-taggable test proving byte-level OMEMO 2 interop with a reference implementation. Because
+  Tasks 10–13 already emit the real wire format, this task is a **validation** of the constants (KDF labels,
+  AD ordering, protobuf field numbers), not a rework.
 
-> This task validates that our cleanroom bytes match a reference. It runs only when `VITEST_INTEROP=1` (vitest config excludes `interop/**` otherwise). The reference peer is a small Python script using `python-omemo` (the Syndace reference stack, MIT-licensed) driven over a local prosody/ejabberd or via direct library calls exchanging bundle + message blobs through files (no live XMPP needed for the crypto round-trip).
+> Runs only when `VITEST_INTEROP=1` (vitest config excludes `interop/**` otherwise). The reference peer is a
+> small Python script using `python-omemo` (the Syndace reference stack, MIT). Bundle + message blobs are
+> exchanged as JSON files carrying base64 of the real protobuf `key` bytes and the `payload` ciphertext — no
+> live XMPP server is needed for the crypto round-trip.
 
 - [ ] **Step 1: Write `packages/omemo/src/interop/peer/omemo_peer.py`**
 
-A script that: (a) generates an OMEMO 2 identity + bundle via `python-omemo`, writes the bundle as JSON (base64 fields) to `bundle.json`; (b) reads an `OmemoMessage` JSON produced by our library, decrypts it, writes the plaintext to `plaintext.txt`; (c) given our bundle JSON, encrypts a known plaintext and writes an `OmemoMessage` JSON. Full script:
+A script that: (a) `gen-bundle` — generates an OMEMO 2 identity + bundle via `python-omemo`, writes it as JSON (base64 fields incl. `deviceId`, `ik`, `spkId`, `spk`, `spkSig`, `preKeys[]`) to `/shared/bundle.json`; (b) `decrypt <msg.json>` — reads an `OmemoMessage` JSON (our format: `sid`, `payload` b64, `keys[]` with `rid`,`kex`,`data` b64), decrypts, writes plaintext to `/shared/plaintext.txt`; (c) `encrypt <ourbundle.json> <text>` — encrypts to our bundle, writes an `OmemoMessage` JSON to `/shared/msg_from_peer.json`. Skeleton:
 
 ```python
 # packages/omemo/src/interop/peer/omemo_peer.py
 # Reference OMEMO 2 peer using python-omemo (MIT). Crypto round-trip over files.
-# Usage: python omemo_peer.py gen-bundle | decrypt <msg.json> | encrypt <ourbundle.json> <text>
+# Usage: python omemo_peer.py (gen-bundle | decrypt <msg.json> | encrypt <ourbundle.json> <text>)
 import sys, json, base64, asyncio
-# ... (implementer fills concrete python-omemo calls; see README for the exact
-#     python-omemo 1.x API: SessionManager, Bundle, encrypt_message/decrypt_message)
+# Implementer completes the concrete python-omemo 1.x calls (SessionManager / Bundle /
+# encrypt_message / decrypt_message) per the API pinned in README.md. The JSON field
+# layout above is the fixed contract with interop.test.ts.
 ```
 
-> The implementer completes the `python-omemo` calls against its 1.x API. The README documents pinning `python-omemo==1.*` and `libnacl`/`x3dh`/`doubleratchet` transitive deps. This is the one task where reading the *reference implementation's public API docs* (not libsignal) is expected.
+> This is the one task where reading the *reference implementation's public API docs* (python-omemo, MIT)
+> is expected and correct — it is not libsignal and not GPL/AGPL.
 
 - [ ] **Step 2: Write `packages/omemo/src/interop/docker-compose.yml`**
 
@@ -2007,35 +2241,33 @@ import { execFileSync } from 'node:child_process'
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs'
 import { OmemoAccount, MemoryStore, b64decode, b64encode } from '../index'
 
-const SHARED = new URL('./shared/', import.meta.url).pathname
+const HERE = new URL('.', import.meta.url).pathname
+const SHARED = HERE + 'shared/'
 const run = (...args: string[]) =>
-  execFileSync('docker', ['compose', 'exec', '-T', 'omemo-peer', 'python', '/peer/omemo_peer.py', ...args], {
-    cwd: new URL('.', import.meta.url).pathname,
-  })
+  execFileSync('docker', ['compose', 'exec', '-T', 'omemo-peer', 'python', '/peer/omemo_peer.py', ...args], { cwd: HERE })
 
 describe.runIf(process.env.VITEST_INTEROP)('OMEMO 2 interop with python-omemo', () => {
   beforeAll(() => mkdirSync(SHARED, { recursive: true }))
 
   it('our ciphertext decrypts on the reference peer', async () => {
-    const store = new MemoryStore()
-    const rng = (n: number) => crypto.getRandomValues(new Uint8Array(n))
-    const alice = await OmemoAccount.create(store, rng)
-
-    // peer publishes its bundle
+    const alice = await OmemoAccount.create(new MemoryStore(), (n) => crypto.getRandomValues(new Uint8Array(n)))
     run('gen-bundle')
-    const peerBundle = JSON.parse(readFileSync(SHARED + 'bundle.json', 'utf8'))
-    await alice.processBundle('peer@local', peerBundle.deviceId, {
-      ik: b64decode(peerBundle.ik),
-      spkId: peerBundle.spkId,
-      spk: b64decode(peerBundle.spk),
-      spkSig: b64decode(peerBundle.spkSig),
-      preKeys: peerBundle.preKeys.map((p: { id: number; key: string }) => ({ id: p.id, key: b64decode(p.key) })),
+    const pb = JSON.parse(readFileSync(SHARED + 'bundle.json', 'utf8'))
+    await alice.processBundle('peer@local', pb.deviceId, {
+      ik: b64decode(pb.ik),
+      spkId: pb.spkId,
+      spk: b64decode(pb.spk),
+      spkSig: b64decode(pb.spkSig),
+      preKeys: pb.preKeys.map((p: { id: number; key: string }) => ({ id: p.id, key: b64decode(p.key) })),
     })
-
-    const msg = await alice.encrypt('peer@local', [peerBundle.deviceId], new TextEncoder().encode('interop hello'))
+    const msg = await alice.encrypt('peer@local', [pb.deviceId], new TextEncoder().encode('interop hello'))
     writeFileSync(
       SHARED + 'msg.json',
-      JSON.stringify({ sid: msg.sid, payload: b64encode(msg.payload!), keys: msg.keys.map((k) => ({ ...k, data: b64encode(k.data) })) }),
+      JSON.stringify({
+        sid: msg.sid,
+        payload: msg.payload ? b64encode(msg.payload) : null,
+        keys: msg.keys.map((k) => ({ rid: k.rid, kex: k.kex, data: b64encode(k.data) })),
+      }),
     )
     run('decrypt', '/shared/msg.json')
     expect(readFileSync(SHARED + 'plaintext.txt', 'utf8').trim()).toBe('interop hello')
@@ -2043,16 +2275,18 @@ describe.runIf(process.env.VITEST_INTEROP)('OMEMO 2 interop with python-omemo', 
 })
 ```
 
-- [ ] **Step 4: Write `packages/omemo/src/interop/README.md`** documenting: `docker compose up -d`, then `VITEST_INTEROP=1 npx vitest run packages/omemo/src/interop/interop.test.ts`, dependency pins, and that a failure here means our constants (KDF labels, HKDF salt, byte layout) diverge from the reference — the constants in Global Constraints are the first suspects.
+- [ ] **Step 4: Write `packages/omemo/src/interop/README.md`** documenting: `docker compose up -d`, then
+  `VITEST_INTEROP=1 npx vitest run packages/omemo/src/interop/interop.test.ts`, the `python-omemo==1.*` pin,
+  and that a failure here localizes to a constant/layout mismatch (KDF label, AD ordering, protobuf field
+  number, HKDF salt) — the Global Constraints values are the first suspects.
 
-- [ ] **Step 5: Run the interop test locally (manual gate — not in default CI unit run)**
+- [ ] **Step 5: Run the interop test locally (manual gate — not in the default unit run)**
 
-Run:
 ```bash
 cd packages/omemo/src/interop && docker compose up -d
 VITEST_INTEROP=1 npx vitest run packages/omemo/src/interop/interop.test.ts
 ```
-Expected: PASS. If it fails, fix the divergent constant/layout in the corresponding task and re-run — this is the point where the two directions are reconciled.
+Expected: PASS. A failure means a wire constant diverges from the reference; fix it in the owning task and re-run.
 
 - [ ] **Step 6: Commit**
 
@@ -2066,21 +2300,29 @@ git commit -m "test(omemo): tagged interop harness vs python-omemo reference"
 ## Self-Review
 
 **Spec coverage:**
-- Package/boundaries/deps → Task 1 (constraints enforced by `package.json` deps + eslint). ✓
-- Layered modules → Tasks 2–13 map 1:1 to the spec's module list. ✓
-- Public API (`OmemoAccount`, `Bundle`, `OmemoMessage`, `Rng`) → Task 13. Deviation: `publishableBundle()` is async (`publishableBundleAsync`) because the store is async — flagged in Task 13 note for the PR. ✓
-- `OmemoStore` injected persistence → Task 6. ✓
-- Interop-critical constants → encoded in Task 2 (HKDF), Task 5 (payload), Task 9 (X3DH info), Task 10 (ratchet labels/consts); validated by Task 14. ✓
-- Testing/interop harness → Tasks with KAT vectors (2, 3) + interop (14). ✓
+- Package/boundaries/deps → Task 1 (enforced by `package.json` deps + eslint). ✓
+- Layered modules → Tasks 2–13 (wire+codec now Task 10, ratchet Task 11). ✓
+- Public API (`OmemoAccount`, `Bundle`, `OmemoMessage`, `Rng`) → Task 13. Deviation: `publishableBundleAsync()` (store is async) — flagged in Task 13. ✓
+- `OmemoStore` injected persistence → Task 6; session meta packed into `SessionRecord` bytes (Task 13). ✓
+- Real OMEMO 2 wire format (protobuf key structures + AES-256-CBC ratchet + AD-MAC) → Tasks 10, 11, 13; validated by Task 14. ✓
+- Interop-critical constants → Task 2 (HKDF), Task 5 (payload), Task 11 (ratchet labels/consts + `mk=HMAC(ck,0x01)`), Task 13 (`AD = IK_init||IK_resp`, 48-byte `k||hmac`, payload = ciphertext only). ✓
 - Cleanroom discipline → Global Constraints + Task 14 note (reference *API docs* only). ✓
-- Determinism (injected RNG) → every generation function takes `rng`; tests use counter RNG. ✓
-- Out-of-scope (legacy envelope, adapter, MUC/MAM) → not present. ✓
+- Determinism (injected RNG) → every generator takes `rng`; tests use counter RNG. ✓
+- Out-of-scope (legacy envelope, adapter, MUC/MAM) → absent. ✓
 
-**Placeholder scan:** The only intentionally-incomplete item is the Python reference peer's `python-omemo` calls (Task 14 Step 1), which depend on the reference library's runtime API and are explicitly the one place the implementer wires against external API docs; the harness contract around it is fully specified. No other TODO/TBD.
+**Placeholder scan:** The only intentionally-incomplete item is the Python reference peer's `python-omemo`
+calls (Task 14 Step 1), explicitly the one place the implementer wires against external API docs; its JSON
+contract with the TS test is fully specified. No other TODO/TBD.
 
-**Type consistency:** `RatchetState`/`RatchetHeader` names match across Tasks 10 and 13; `Bundle`/`OmemoMessage`/`OmemoKey` consistent across Tasks 11 and 13; `OmemoStore` record names consistent across Tasks 6, 7, 8, 13; `Rng` signature `(n:number)=>Uint8Array` consistent throughout.
+**Type consistency:** `RatchetState` and the `{ mac, message }` OMEMOAuthenticatedMessage shape are consistent
+across Tasks 11 and 13; `Bundle`/`OmemoMessage`/`OmemoKey` consistent across Tasks 10 and 13; wire
+encode/decode signatures consistent across Tasks 10, 11, 13; `OmemoStore` records consistent across Tasks 6, 7,
+8, 13; `Rng` signature `(n:number)=>Uint8Array` throughout.
 
 **Known implementation risks (call out during execution):**
-1. `@noble/curves` export names for `edwardsToMontgomeryPub/Priv` — verify against installed version (Task 3 note).
-2. The ratchet's self-contained `msgEncrypt` (Task 10) is a test-only cipher; the account layer (Task 13) uses `payloadEncrypt` for the actual SCE payload and the ratchet only wraps the 32-byte message key — confirm the message key wrapped through the ratchet round-trips before wiring the payload.
-3. Exact HKDF salt for the OMEMO payload (zero-filled vs empty) and the precise SCE XML mapping are pinned only at Task 14; treat interop failures as constant mismatches, not architecture problems.
+1. `@noble/curves` export names for `edwardsToMontgomeryPub/Priv` — verify against the installed version (Task 3 note).
+2. `@noble/ciphers` `cbc(key, iv)` applies PKCS#7 by default — confirm padding matches the reference at Task 14.
+3. AD byte order (`IK_initiator || IK_responder`, both Ed25519 RFC 8032 form) must be identical on both peers;
+   an AD mismatch surfaces as a MAC failure in Task 11's negative test and again at Task 14.
+4. The initiator keeps `kexPending` until it *receives* a message back (Task 13 clears it on `decrypt`); the
+   test exercises exactly that hand-off (m1 kex → m2 established).
