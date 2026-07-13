@@ -73,6 +73,33 @@ describe('double ratchet (OMEMO 2 message cipher)', () => {
     expect(m.authMessage.mac.length).toBe(16)
   })
 
+  // SECURITY REGRESSION: a deserialized ratchet whose real rng has NOT been re-injected
+  // must FAIL LOUD if an inbound message triggers a DH-ratchet step, instead of silently
+  // minting a predictable keypair from an all-zero scalar (forward-secrecy break).
+  it('throws (does not silently mint a degenerate key) when a DH ratchet fires before rng re-injection', () => {
+    const rng = counterRng()
+    const ss = new Uint8Array(32).fill(4)
+    const bobSpk = generateX25519(rng)
+    let alice = initRatchetInitiator(ss, bobSpk.pub, rng)
+    let bob = initRatchetResponder(ss, bobSpk.priv, bobSpk.pub)
+    bob.rng = rng
+
+    // Alice → Bob: establishes Bob's recv chain and makes Bob DH-ratchet (new dhSelfPub).
+    const a1 = ratchetEncrypt(alice, enc('hello'), AD)
+    alice = a1.state
+    bob = ratchetDecrypt(bob, a1.authMessage, AD).state
+
+    // Bob → Alice: msg2 carries Bob's NEW dhPub (differs from Alice's stored dhRemote),
+    // so decrypting it will trigger a DH ratchet on Alice → generateX25519(alice.rng).
+    const b1 = ratchetEncrypt(bob, enc('hi back'), AD)
+    bob = b1.state
+
+    // Persist Alice and restore WITHOUT re-injecting the real rng (the account-layer step
+    // that would normally run). The fail-loud stub must fire on the DH-ratchet path.
+    const restored = deserializeRatchet(serializeRatchet(alice))
+    expect(() => ratchetDecrypt(restored, b1.authMessage, AD)).toThrow(/rng not re-injected/)
+  })
+
   // (a) Duplicate delivery: a skipped key is consumed exactly once. Re-delivering the
   // SAME authMessage after its key was consumed must NOT silently yield a fresh valid
   // plaintext — it must throw (the chain has advanced past it and the skipped key is gone).

@@ -126,7 +126,8 @@ export function ratchetEncrypt(
   ad: Uint8Array,
 ): { state: RatchetState; authMessage: { mac: Uint8Array; message: Uint8Array } } {
   const s = { ...state, skipped: new Map(state.skipped) }
-  const step = kdfChain(s.sendChain!)
+  if (!s.sendChain) throw new Error('ratchet: no send chain established')
+  const step = kdfChain(s.sendChain)
   s.sendChain = step.chainKey
   const header: Header = { dhPub: s.dhSelfPub, pn: s.pn, n: s.ns }
   s.ns += 1
@@ -225,7 +226,11 @@ export function serializeRatchet(s: RatchetState): Uint8Array {
 export function deserializeRatchet(bytes: Uint8Array): RatchetState {
   const o: SerializableState = JSON.parse(new TextDecoder().decode(bytes))
   return {
-    rng: (n: number) => new Uint8Array(n), // account layer re-injects the real rng before sending
+    // Fail-loud stub: any DH-ratchet step before the account layer re-injects the real
+    // rng throws instead of silently minting a predictable (all-zero-scalar) keypair.
+    rng: () => {
+      throw new Error('ratchet: rng not re-injected after deserialize (set state.rng before encrypt/decrypt)')
+    },
     dhSelfPriv: Uint8Array.from(o.dhSelfPriv),
     dhSelfPub: Uint8Array.from(o.dhSelfPub),
     dhRemote: o.dhRemote ? Uint8Array.from(o.dhRemote) : null,
