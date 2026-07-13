@@ -17,6 +17,7 @@ import { buildEnvelope, parseEnvelope } from '../omemo2/sce'
 import { concatBytes } from '../primitives/bytes'
 import { encodeAuthMessage, decodeAuthMessage, encodeKeyExchange, decodeKeyExchange } from '../omemo2/wire'
 import { assertValidBundle, type Bundle, type OmemoMessage, type OmemoKey } from '../omemo2/codec'
+import { xeddsaVerify } from '../primitives/xeddsa'
 
 const SPK_ID = 1
 const PREKEY_START = 1
@@ -92,6 +93,12 @@ export class OmemoAccount {
 
   async processBundle(peer: string, rid: number, bundle: Bundle): Promise<void> {
     assertValidBundle(bundle)
+    // Cryptographic binding check: the signed prekey must carry a valid signature by the
+    // identity key. This authenticates the SPK before any X3DH / session establishment.
+    // (This is NOT a trust-policy decision — it verifies the bundle is internally consistent.)
+    if (!xeddsaVerify(bundle.ik, bundle.spk, bundle.spkSig)) {
+      throw new Error('OMEMO bundle signed-prekey signature verification failed')
+    }
     const otk = bundle.preKeys[0]
     const init = x3dhInitiator({
       identitySeed: this.id.edSeed,
@@ -109,7 +116,10 @@ export class OmemoAccount {
       ek: [...init.ephemeralPub],
     }
     await this.store.saveSession(peer, rid, packSession(meta, serializeRatchet(ratchet)))
-    await this.store.saveTrust(peer, rid, { state: 'undecided', identityKey: bundle.ik })
+    // Mirror the decrypt path: only record trust on first contact, never clobber an
+    // existing decision (e.g. a manual 'trusted' verification) if a bundle is re-processed.
+    const existingTrust = await this.store.loadTrust(peer, rid)
+    if (!existingTrust) await this.store.saveTrust(peer, rid, { state: 'undecided', identityKey: bundle.ik })
   }
 
   async encrypt(peer: string, deviceIds: number[], plaintext: Uint8Array): Promise<OmemoMessage> {

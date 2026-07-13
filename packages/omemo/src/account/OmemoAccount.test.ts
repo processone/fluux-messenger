@@ -192,4 +192,54 @@ describe('OmemoAccount', () => {
     // The manual 'trusted' decision must survive — never reset to 'undecided'.
     expect((await bobStore.loadTrust('alice@x', m1.sid))?.state).toBe('trusted')
   })
+
+  it('rejects a bundle with a tampered signed-prekey signature', async () => {
+    const alice = await OmemoAccount.create(new MemoryStore(), counterRng(1))
+    const bob = await OmemoAccount.create(new MemoryStore(), counterRng(150))
+    const bDev = bob.publishableDeviceId()
+
+    // A valid bundle still processes without throwing (regression).
+    await alice.processBundle('bob@x', bDev, await bob.publishableBundleAsync())
+
+    // Flip a byte in the SPK signature: the signature no longer verifies against ik/spk.
+    const tampered = await bob.publishableBundleAsync()
+    tampered.spkSig = Uint8Array.from(tampered.spkSig)
+    tampered.spkSig[0] ^= 0xff
+    await expect(alice.processBundle('carol@x', bDev, tampered)).rejects.toThrow(
+      /signed-prekey signature verification failed/,
+    )
+  })
+
+  it('rejects a bundle whose signed prekey was substituted (signature over old spk)', async () => {
+    const alice = await OmemoAccount.create(new MemoryStore(), counterRng(1))
+    const bob = await OmemoAccount.create(new MemoryStore(), counterRng(150))
+    const bDev = bob.publishableDeviceId()
+
+    // Replace the SPK with a different 32-byte key while keeping the original signature:
+    // the signature is over the OLD spk, so verification must fail.
+    const substituted = await bob.publishableBundleAsync()
+    const otherSpk = Uint8Array.from({ length: 32 }, (_, i) => (substituted.spk[i] ^ 0x5a) & 0xff)
+    substituted.spk = otherSpk
+    await expect(alice.processBundle('carol@x', bDev, substituted)).rejects.toThrow(
+      /signed-prekey signature verification failed/,
+    )
+  })
+
+  it('does not clobber an existing trust decision when a bundle is re-processed', async () => {
+    const aliceStore = new MemoryStore()
+    const alice = await OmemoAccount.create(aliceStore, counterRng(1))
+    const bob = await OmemoAccount.create(new MemoryStore(), counterRng(150))
+    const bDev = bob.publishableDeviceId()
+    const bobEdPub = (await bob.publishableBundleAsync()).ik
+
+    await alice.processBundle('bob@x', bDev, await bob.publishableBundleAsync())
+    expect((await aliceStore.loadTrust('bob@x', bDev))?.state).toBe('undecided')
+
+    // Alice manually verifies Bob's fingerprint.
+    await aliceStore.saveTrust('bob@x', bDev, { state: 'trusted', identityKey: bobEdPub })
+
+    // Re-processing a valid (re-fetched) bundle must not reset trust to 'undecided'.
+    await alice.processBundle('bob@x', bDev, await bob.publishableBundleAsync())
+    expect((await aliceStore.loadTrust('bob@x', bDev))?.state).toBe('trusted')
+  })
 })

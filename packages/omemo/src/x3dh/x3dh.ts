@@ -29,7 +29,7 @@ export function x3dhInitiator(p: X3DHInitiatorParams): { sharedSecret: Uint8Arra
   const dh2 = x25519.scalarMult(eph.priv, remoteIkMont) // EK_a * IK_b
   const dh3 = x25519.scalarMult(eph.priv, spkPub) // EK_a * SPK_b
   let concat = concatBytes(dh1, dh2, dh3)
-  if (p.remoteOneTimePreKey) {
+  if (p.remoteOneTimePreKey !== undefined) {
     const dh4 = x25519.scalarMult(eph.priv, p.remoteOneTimePreKey) // EK_a * OTK_b
     concat = concatBytes(concat, dh4)
   }
@@ -52,7 +52,7 @@ export function x3dhResponder(p: X3DHResponderParams): { sharedSecret: Uint8Arra
   const dh2 = x25519.scalarMult(ikPriv, p.remoteEphemeral) // IK_b * EK_a
   const dh3 = x25519.scalarMult(p.signedPreKeyPriv, p.remoteEphemeral) // SPK_b * EK_a
   let concat = concatBytes(dh1, dh2, dh3)
-  if (p.oneTimePreKeyPriv) {
+  if (p.oneTimePreKeyPriv !== undefined) {
     const dh4 = x25519.scalarMult(p.oneTimePreKeyPriv, p.remoteEphemeral) // OTK_b * EK_a
     concat = concatBytes(concat, dh4)
   }
