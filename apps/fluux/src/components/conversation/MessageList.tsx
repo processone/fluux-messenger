@@ -871,10 +871,13 @@ export function MessageList<T extends BaseMessage>({
       {/* Floating typing indicator — anchored to the bottom of the message area rather than living
           inside the scroll content, so it (a) stays visible whether the user is at the bottom or
           scrolled up in history, and (b) never changes the scroll height (toggling it inline used to
-          re-pin the viewport and fight an upward scroll — issue #918). Bottom-start keeps it clear of
-          the bottom-end FAB; pointer-events-none so it never intercepts taps on the message beneath. */}
+          re-pin the viewport and fight an upward scroll — issue #918). The spacer above grows to
+          pb-12 (48px) while typing; bottom-0.5 centres the ~30px pill vertically in that band so it
+          sits evenly (~16px each side) between the last message and the composer instead of hugging
+          the message. start-4 keeps it aligned under the messages and clear of the bottom-end FAB;
+          pointer-events-none so it never intercepts taps on the message beneath. */}
       {typingUsers.length > 0 && (
-        <div className="absolute bottom-4 start-4 z-30 max-w-[calc(100%-5rem)] pointer-events-none animate-toast-in">
+        <div className="absolute bottom-0.5 start-4 z-30 max-w-[calc(100%-5rem)] pointer-events-none animate-toast-in">
           <div className="rounded-full bg-fluux-float border border-fluux-border shadow-lg px-3 py-1.5">
             <TypingIndicator typingUsers={typingUsers} formatUser={formatTypingUser} variant="compact" />
           </div>
