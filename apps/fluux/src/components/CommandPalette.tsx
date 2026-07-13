@@ -158,7 +158,7 @@ function groupItemsByType(items: CommandItem[], t: (key: string) => string): Ite
   return groups
 }
 
-// Unread ranking tier for a room row: mentions outrank plain unread, which outrank read.
+// Unread ranking tier for a room row: the attention tier (a mention, or a notify-all room with unread) outranks plain unread, which outranks read.
 function roomTier(item: CommandItem): number {
   if (item.activityTone === 'accent') return 0
   if ((item.unreadCount ?? 0) > 0) return 1
@@ -189,7 +189,7 @@ function buildDefaultGroups(items: CommandItem[], t: (key: string) => string): I
   const conversations = items.filter((i) => i.type === 'conversation')
   const roomItems = items.filter((i) => i.type === 'room')
 
-  // Top group: unread DMs + rooms with a mention/whisper, interleaved by recency, capped.
+  // Top group: unread DMs + attention-tier rooms (a mention/whisper, or notify-all with unread), interleaved by recency, capped.
   const attentionConvs = conversations.filter(isAttentionItem)
   const attentionRooms = roomItems.filter(isAttentionItem)
   const attention = [...attentionConvs, ...attentionRooms].sort(byRecency).slice(0, ATTENTION_CAP)
@@ -204,7 +204,7 @@ function buildDefaultGroups(items: CommandItem[], t: (key: string) => string): I
     groups.push({ key: 'conversation', type: 'conversation', label: t('sidebar.messages'), items: readConvs })
   }
 
-  // Rooms group: everything not already promoted, tier-sorted (mention overflow lands at tier 0).
+  // Rooms group: everything not already promoted, tier-sorted (attention-tier overflow lands at tier 0).
   const rooms = roomItems
     .filter((i) => !promotedIds.has(i.id))
     .sort((a, b) => roomTier(a) - roomTier(b))

@@ -66,6 +66,7 @@ vi.mock('@fluux/sdk', () => ({
   searchStore: { getState: () => ({ search: mockSearchFn }) },
   // Entity rows now render <Avatar>, which derives its fallback color from this.
   generateConsistentColorHexSync: () => '#888888',
+  // Faithful copy of the SDK selector — keep in sync with roomSelectors.ts roomActivityTone().
   roomActivityTone: (room: { joined?: boolean; muted?: boolean; unreadCount?: number; mentionsCount?: number; notifyAll?: boolean; notifyAllPersistent?: boolean }) => {
     if (!room.joined || room.muted) return 'none'
     const notifyAll = room.notifyAll || room.notifyAllPersistent
