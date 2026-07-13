@@ -36,10 +36,12 @@ vi.mock('../utils/messageCache', async (importOriginal) => {
     saveRoomMessage: vi.fn().mockResolvedValue(undefined),
     saveRoomMessages: vi.fn().mockResolvedValue(undefined),
     getRoomMessages: vi.fn().mockResolvedValue([]),
+    getRoomMessagesAround: vi.fn().mockResolvedValue([]),
     updateRoomMessage: vi.fn().mockResolvedValue(undefined),
     deleteRoomMessages: vi.fn().mockResolvedValue(undefined),
   }
 })
+import * as messageCache from '../utils/messageCache'
 
 const ROOM = 'room@conference.example'
 
@@ -344,6 +346,75 @@ describe('roomStore.activateRoom — XEP-0490 divider sync', () => {
     })
     await roomStore.getState().activateRoom(REOPEN_ROOM)
     expect(roomStore.getState().roomMeta.get(REOPEN_ROOM)?.lastSeenMessageId).toBe('m4')
+  })
+
+  // Regression (gate burn on stash): the first activation fold may find the marker's
+  // message NOT loaded (stash-pending). A fold that never applied must not consume the
+  // session gate — otherwise the marker stays stuck as pending forever: re-entry skips
+  // the fold ("already consumed") and re-entry of a caught-up room runs no MAM merge,
+  // leaving no heal path for the whole session.
+  it('retries the fold on a later activation when the first fold could not resolve (marker message not yet loaded)', async () => {
+    const RETRY_ROOM = 'retry-stash@conference.example'
+    const early = [rmsg('m1', 's1', 1), rmsg('m2', 's2', 2)]
+    seedRoom(RETRY_ROOM, early, 'm1')
+    // A remote device read up to s9 — that message is not in any loaded slice yet.
+    roomStore.setState((s) => {
+      const m = new Map(s.roomMeta)
+      m.set(RETRY_ROOM, { ...m.get(RETRY_ROOM)!, pendingRemoteDisplayedStanzaId: 's9' })
+      return { roomMeta: m }
+    })
+
+    await roomStore.getState().activateRoom(RETRY_ROOM)
+    // Unresolvable → stash survives, pointer untouched.
+    expect(roomStore.getState().roomMeta.get(RETRY_ROOM)?.lastSeenMessageId).toBe('m1')
+    expect(roomStore.getState().roomMeta.get(RETRY_ROOM)?.pendingRemoteDisplayedStanzaId).toBe('s9')
+
+    await roomStore.getState().activateRoom(null)
+
+    // The archive healed since (e.g. catch-up landed): the marker's message is loadable now.
+    const healed = [...early, rmsg('m9', 's9', 9)]
+    roomStore.setState((s) => {
+      const rt = new Map(s.roomRuntime)
+      const existing = rt.get(RETRY_ROOM)
+      if (existing) rt.set(RETRY_ROOM, { ...existing, messages: healed })
+      return { roomRuntime: rt }
+    })
+
+    await roomStore.getState().activateRoom(RETRY_ROOM)
+    // The gate must allow the retry (the marker was never actually folded).
+    expect(roomStore.getState().roomMeta.get(RETRY_ROOM)?.lastSeenMessageId).toBe('m9')
+    expect(roomStore.getState().roomMeta.get(RETRY_ROOM)?.pendingRemoteDisplayedStanzaId).toBeUndefined()
+  })
+
+  // Regression (fold ran only before the load-around): with a deep backlog the pending
+  // marker's message is outside the latest-100 slice, so the first fold stashes. The
+  // subsequent load-around of the stale pointer brings that message in — the fold must
+  // be re-attempted against the around-slice, or the divider derives from the stale
+  // local pointer and shows messages already read on the other device as new.
+  it('re-attempts the fold against the slice loaded around a deep stale pointer', async () => {
+    const DEEP_ROOM = 'deep-pointer@conference.example'
+    const latest = [rmsg('m10', 's10', 10), rmsg('m11', 's11', 11), rmsg('m12', 's12', 12)]
+    // Resident window = latest slice; the read pointer (m2) is deeper than it.
+    seedRoom(DEEP_ROOM, latest, 'm2')
+    roomStore.setState((s) => {
+      const m = new Map(s.roomMeta)
+      m.set(DEEP_ROOM, { ...m.get(DEEP_ROOM)!, pendingRemoteDisplayedStanzaId: 's5' })
+      return { roomMeta: m }
+    })
+    // The IndexedDB slice around the stale pointer contains the marker's message (m5).
+    const aroundSlice = [
+      rmsg('m1', 's1', 1), rmsg('m2', 's2', 2), rmsg('m3', 's3', 3),
+      rmsg('m4', 's4', 4), rmsg('m5', 's5', 5), rmsg('m6', 's6', 6),
+    ]
+    vi.mocked(messageCache.getRoomMessagesAround).mockResolvedValueOnce(aroundSlice)
+
+    await roomStore.getState().activateRoom(DEEP_ROOM)
+
+    // The retried fold advances the pointer to the synced position…
+    expect(roomStore.getState().roomMeta.get(DEEP_ROOM)?.lastSeenMessageId).toBe('m5')
+    expect(roomStore.getState().roomMeta.get(DEEP_ROOM)?.pendingRemoteDisplayedStanzaId).toBeUndefined()
+    // …and the divider derives from it, not from the stale local pointer (m2 → 'm3').
+    expect(roomSelectors.firstNewMessageIdFor(DEEP_ROOM)(roomStore.getState())).toBe('m6')
   })
 })
 

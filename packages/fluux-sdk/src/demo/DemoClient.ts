@@ -53,6 +53,18 @@ const NS_COMMANDS = 'http://jabber.org/protocol/commands'
 const NS_DATA_FORMS = 'jabber:x:data'
 const NS_VERSION = 'jabber:iq:version'
 const NS_LAST = 'jabber:iq:last'
+const NS_MDS = 'urn:xmpp:mds:displayed:0'
+const NS_STANZA_ID = 'urn:xmpp:sid:0'
+
+/**
+ * Default an XEP-0359 stanza-id onto a seeded demo message. MDS (XEP-0490)
+ * marker resolution matches on `stanzaId`, so id-less demo messages could
+ * never be referenced by a simulated read position. Deterministic (`sid-<id>`)
+ * so demo scripts can point a marker at any seeded message.
+ */
+function withDefaultStanzaId<T extends { id: string; stanzaId?: string }>(message: T): T {
+  return message.stanzaId ? message : { ...message, stanzaId: `sid-${message.id}` }
+}
 
 /** Minimal Element-like object returned by mock IQ responses. */
 interface MockElement {
@@ -100,6 +112,10 @@ export class DemoClient extends XMPPClient {
   private seededRoomOccupants = new Map<string, RoomOccupant[]>()
   private seededContacts = new Map<string, Contact>()
   private seededRooms = new Map<string, Room>()
+  // Simulated XEP-0490 MDS PEP node: conversation bare JID → last-displayed
+  // marker. Backs the pubsub publish/items/retract IQs so client.mds.* and the
+  // fresh-session seed (fetchAllDisplayed) work in demo mode.
+  private mdsNodeItems = new Map<string, { stanzaId: string; by: string }>()
 
   /** Current animation state. */
   get animationState(): AnimationState {
@@ -116,6 +132,25 @@ export class DemoClient extends XMPPClient {
         this.knownRooms.set(room.jid, { name: room.name, occupantCount: room.occupantCount })
       }
     }
+  }
+
+  /**
+   * DEV/DEMO ONLY. Simulate another of our own devices publishing an MDS
+   * (XEP-0490) read position for a conversation or room: upserts the marker
+   * on the simulated PEP node (so a later `fetchAllDisplayed` seed sees it)
+   * and emits the live `read:displayed-synced` notify, exactly like PubSub
+   * does for a real +notify event.
+   *
+   * With seeded/stress messages carrying `sid-<messageId>` stanza-ids, this
+   * reproduces cross-device read-sync flows from the console, e.g.:
+   * `__demoClient.simulateRemoteDisplayed(roomJid, 'sid-stress-0-850')`
+   */
+  simulateRemoteDisplayed(conversationJid: string, stanzaId: string): void {
+    // XEP-0359 `by`: the archive that assigned the id — the room for MUC,
+    // our own bare JID for 1:1 (mirrors mdsSideEffects.stanzaIdBy).
+    const by = this.knownRooms.has(conversationJid) ? conversationJid : this.selfJid
+    this.mdsNodeItems.set(conversationJid, { stanzaId, by })
+    this.emitSDK('read:displayed-synced', { conversationId: conversationJid, stanzaId })
   }
 
   /**
@@ -237,6 +272,11 @@ export class DemoClient extends XMPPClient {
       (c: any) => c.name === 'pubsub' && c.attrs?.xmlns === NS_PUBSUB
     )
     if (pubsubChild) {
+      // XEP-0490 MDS node traffic is served from the in-memory node registry;
+      // other pubsub requests (avatars, nicknames) fall through to the
+      // generic empty-items response.
+      const mdsResponse = this.handleMdsPubSubIQ(pubsubChild)
+      if (mdsResponse) return mdsResponse
       return this.buildPubSubResponse(pubsubChild)
     }
 
@@ -335,7 +375,7 @@ export class DemoClient extends XMPPClient {
 
     for (const [, messages] of data.messages) {
       for (const message of messages) {
-        this.emitSDK('chat:message', { message })
+        this.emitSDK('chat:message', { message: withDefaultStanzaId(message) })
       }
     }
 
@@ -351,7 +391,7 @@ export class DemoClient extends XMPPClient {
       this.emitSDK('room:occupants-batch', { roomJid: room.jid, occupants })
 
       for (const message of messages) {
-        this.emitSDK('room:message', { roomJid: room.jid, message })
+        this.emitSDK('room:message', { roomJid: room.jid, message: withDefaultStanzaId(message) })
       }
 
       // Register seeded rooms in the internal registry
@@ -810,6 +850,57 @@ export class DemoClient extends XMPPClient {
     return this.mockElement('iq', { type: 'result' }, [
       this.mockElement('vCard', { xmlns: NS_VCARD_TEMP }, vcardChildren),
     ])
+  }
+
+  /**
+   * Serve XEP-0490 MDS node requests from the in-memory node registry:
+   * publish upserts an item (current-value semantics, one item per JID),
+   * retract deletes it, items returns the full node contents in the shape
+   * `parseMdsItems` expects. Returns undefined for non-MDS pubsub traffic.
+   *
+   * Works on both real ltx Elements (publish/retract are built with xml()
+   * by the Mds module) and mock elements, by navigating `children` directly.
+   */
+  private handleMdsPubSubIQ(pubsubChild: any): MockElement | undefined {
+    const childNamed = (parent: any, name: string) =>
+      parent?.children?.find?.((c: any) => c?.name === name)
+
+    const publish = childNamed(pubsubChild, 'publish')
+    if (publish?.attrs?.node === NS_MDS) {
+      const item = childNamed(publish, 'item')
+      const stanzaIdEl = childNamed(childNamed(item, 'displayed'), 'stanza-id')
+      const conversationJid = item?.attrs?.id
+      const stanzaId = stanzaIdEl?.attrs?.id
+      if (conversationJid && stanzaId) {
+        this.mdsNodeItems.set(conversationJid, { stanzaId, by: stanzaIdEl?.attrs?.by ?? '' })
+      }
+      return this.buildEmptyStub()
+    }
+
+    const retract = childNamed(pubsubChild, 'retract')
+    if (retract?.attrs?.node === NS_MDS) {
+      const itemId = childNamed(retract, 'item')?.attrs?.id
+      if (itemId) this.mdsNodeItems.delete(itemId)
+      return this.buildEmptyStub()
+    }
+
+    const items = childNamed(pubsubChild, 'items')
+    if (items?.attrs?.node === NS_MDS) {
+      const itemEls = [...this.mdsNodeItems].map(([jid, { stanzaId, by }]) =>
+        this.mockElement('item', { id: jid }, [
+          this.mockElement('displayed', { xmlns: NS_MDS }, [
+            this.mockElement('stanza-id', { xmlns: NS_STANZA_ID, id: stanzaId, ...(by ? { by } : {}) }),
+          ]),
+        ])
+      )
+      return this.mockElement('iq', { type: 'result' }, [
+        this.mockElement('pubsub', { xmlns: NS_PUBSUB }, [
+          this.mockElement('items', { node: NS_MDS }, itemEls),
+        ]),
+      ])
+    }
+
+    return undefined
   }
 
   /**

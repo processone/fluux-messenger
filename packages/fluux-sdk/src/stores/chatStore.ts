@@ -14,7 +14,7 @@ import * as draftState from './shared/draftState'
 import * as timeline from './shared/messageTimeline'
 import { isPreviewableMessage, findLastPreviewableMessage, shouldReplaceLastMessage } from './shared/lastMessageUtils'
 import { derivePreviewAfterMerge } from './shared/previewState'
-import { resolveRemoteDisplayed, createMdsSessionGate } from './shared/readMarkerSync'
+import { resolveRemoteDisplayed, createMdsSessionGate, foldPendingRemoteDisplayed } from './shared/readMarkerSync'
 import * as notifState from './shared/notificationState'
 import { markerDebugLog } from '../utils/markerDebug'
 import { connectionStore } from './connectionStore'
@@ -742,31 +742,35 @@ export const chatStore = createStore<ChatState>()(
           // session MDS seed runs before messages load, so the marker is stashed as
           // pendingRemoteDisplayedStanzaId; resolve it now (forward-only, against the
           // just-loaded messages) so the divider reflects reads synced from other
-          // devices instead of the stale local position.
-          // Fold a pending XEP-0490 synced read position into lastSeenMessageId BEFORE
-          // setActiveConversation derives the divider — but only once per distinct marker this
-          // session. The gate keys on the pending stanza-id so a marker synced from another device
-          // while this conversation was inactive (evicted → the live notify could only stash it)
-          // still folds on the next open, while an identical already-folded marker is skipped
-          // (re-folding would let a synced read position reposition the divider on each return).
-          const pending = get().conversationMeta.get(id)?.pendingRemoteDisplayedStanzaId
-          const firstConsumeThisSession = pending !== undefined && mdsGate.consume(id, pending)
-          if (pending && firstConsumeThisSession) {
+          // devices instead of the stale local position. Applied only once per
+          // distinct RESOLVED marker this session — a fold that stashed (message
+          // not loaded) stays retryable, a resolved one is never re-folded (that
+          // would reposition the divider on every return). Gate + retry policy
+          // live in shared/readMarkerSync.
+          const foldOnce = (stage: string) => {
             const lastSeenBefore = get().conversationMeta.get(id)?.lastSeenMessageId
-            get().applyRemoteDisplayed(id, pending)
-            markerDebugLog('activation fold (XEP-0490 pending → divider, first open this session)', {
-              conversationId: id,
-              pendingStanzaId: pending,
-              lastSeenBefore,
-              lastSeenAfter: get().conversationMeta.get(id)?.lastSeenMessageId,
-              advanced: lastSeenBefore !== get().conversationMeta.get(id)?.lastSeenMessageId,
-            })
-          } else if (pending) {
-            markerDebugLog('activation fold SKIPPED (already consumed this session — PEP keeps it live)', {
-              conversationId: id,
-              pendingStanzaId: pending,
-            })
+            const fold = foldPendingRemoteDisplayed(
+              mdsGate,
+              id,
+              () => get().conversationMeta.get(id)?.pendingRemoteDisplayedStanzaId,
+              (stanzaId) => get().applyRemoteDisplayed(id, stanzaId)
+            )
+            if (fold.attempted) {
+              markerDebugLog(`activation fold (XEP-0490 pending → divider, ${stage})`, {
+                conversationId: id,
+                pendingStanzaId: fold.pending,
+                lastSeenBefore,
+                lastSeenAfter: get().conversationMeta.get(id)?.lastSeenMessageId,
+                resolved: fold.resolved,
+              })
+            } else if (fold.pending) {
+              markerDebugLog('activation fold SKIPPED (marker already resolved this session — PEP keeps it live)', {
+                conversationId: id,
+                pendingStanzaId: fold.pending,
+              })
+            }
           }
+          foldOnce('latest slice')
 
           // Resume anchor: if the read pointer is deeper than the latest-100
           // slice, reload the window AROUND it (IndexedDB only) so the divider
@@ -781,6 +785,10 @@ export const chatStore = createStore<ChatState>()(
             if (!loaded.some((m) => m.id === pointer)) {
               await get().loadMessagesAroundFromCache(id, pointer)
               if (token !== activationToken) return
+              // The around-slice sits just past the stale pointer — exactly where
+              // a marker too deep for the latest-100 window lives. Retry a fold
+              // that stashed above so the divider derives from the synced position.
+              foldOnce('around slice')
             }
           }
         }

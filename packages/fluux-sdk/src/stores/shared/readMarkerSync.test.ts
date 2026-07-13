@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest'
-import { resolveRemoteDisplayed, createMdsSessionGate } from './readMarkerSync'
+import { describe, it, expect, vi } from 'vitest'
+import { resolveRemoteDisplayed, createMdsSessionGate, foldPendingRemoteDisplayed } from './readMarkerSync'
 import type { NotificationMessage } from './notificationState'
 
 /**
@@ -105,28 +105,71 @@ describe('resolveRemoteDisplayed', () => {
 })
 
 describe('createMdsSessionGate', () => {
-  it('consumes each (id, stanzaId) once per session and resets', () => {
+  it('blocks a marker only after it was marked folded, and resets', () => {
     const gate = createMdsSessionGate()
 
-    expect(gate.consume('a@example.com', 's1')).toBe(true)
-    // Same marker re-presented: already folded → skip.
-    expect(gate.consume('a@example.com', 's1')).toBe(false)
+    expect(gate.shouldFold('a@example.com', 's1')).toBe(true)
+    // Not yet marked folded (e.g. the fold stashed): still retryable.
+    expect(gate.shouldFold('a@example.com', 's1')).toBe(true)
+
+    gate.markFolded('a@example.com', 's1')
+    // Same marker re-presented after a RESOLVED fold: skip.
+    expect(gate.shouldFold('a@example.com', 's1')).toBe(false)
     // Distinct id: independent.
-    expect(gate.consume('b@example.com', 's1')).toBe(true)
+    expect(gate.shouldFold('b@example.com', 's1')).toBe(true)
 
     gate.reset()
-    expect(gate.consume('a@example.com', 's1')).toBe(true)
+    expect(gate.shouldFold('a@example.com', 's1')).toBe(true)
   })
 
-  it('re-arms when a newer marker arrives for an already-consumed id', () => {
+  it('re-arms when a newer marker arrives for an already-folded id', () => {
     const gate = createMdsSessionGate()
 
-    // First marker folds.
-    expect(gate.consume('a@example.com', 's1')).toBe(true)
+    gate.markFolded('a@example.com', 's1')
     // A different (newer) marker — synced from another device while this entity
     // was unloaded, so the live PEP notify could only stash it — must fold too.
-    expect(gate.consume('a@example.com', 's2')).toBe(true)
+    expect(gate.shouldFold('a@example.com', 's2')).toBe(true)
+    gate.markFolded('a@example.com', 's2')
     // …but re-presenting that same newer marker is now a no-op.
-    expect(gate.consume('a@example.com', 's2')).toBe(false)
+    expect(gate.shouldFold('a@example.com', 's2')).toBe(false)
+  })
+})
+
+describe('foldPendingRemoteDisplayed', () => {
+  it('does nothing when no marker is pending', () => {
+    const gate = createMdsSessionGate()
+    const apply = vi.fn()
+    const result = foldPendingRemoteDisplayed(gate, 'a@example.com', () => undefined, apply)
+    expect(result).toEqual({ attempted: false, resolved: false })
+    expect(apply).not.toHaveBeenCalled()
+  })
+
+  it('records a resolved fold on the gate so the same marker is not re-folded', () => {
+    const gate = createMdsSessionGate()
+    let pending: string | undefined = 's1'
+    const apply = vi.fn(() => { pending = undefined }) // apply resolved the marker
+    const first = foldPendingRemoteDisplayed(gate, 'a@example.com', () => pending, apply)
+    expect(first).toEqual({ pending: 's1', attempted: true, resolved: true })
+
+    // Same marker re-stashed later (e.g. our own publish echoed while unloaded):
+    pending = 's1'
+    const second = foldPendingRemoteDisplayed(gate, 'a@example.com', () => pending, apply)
+    expect(second).toEqual({ pending: 's1', attempted: false, resolved: false })
+    expect(apply).toHaveBeenCalledTimes(1)
+  })
+
+  it('leaves a stashed (unresolved) fold retryable — the gate is NOT consumed', () => {
+    const gate = createMdsSessionGate()
+    let pending: string | undefined = 's1'
+    const stashApply = vi.fn() // apply could not resolve: pending survives
+    const first = foldPendingRemoteDisplayed(gate, 'a@example.com', () => pending, stashApply)
+    expect(first).toEqual({ pending: 's1', attempted: true, resolved: false })
+
+    // Retry (next activation / after a load-around): must attempt again…
+    const resolveApply = vi.fn(() => { pending = undefined })
+    const second = foldPendingRemoteDisplayed(gate, 'a@example.com', () => pending, resolveApply)
+    expect(second).toEqual({ pending: 's1', attempted: true, resolved: true })
+    // …and only now is the marker recorded as folded.
+    expect(gate.shouldFold('a@example.com', 's1')).toBe(false)
   })
 })

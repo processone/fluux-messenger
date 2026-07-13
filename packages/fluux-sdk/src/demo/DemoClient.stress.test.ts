@@ -1,6 +1,24 @@
 // packages/fluux-sdk/src/demo/DemoClient.stress.test.ts
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { DemoClient } from './DemoClient'
+import { buildStressEvents } from './stress'
+import type { RoomMessage } from '../core/types/room'
+
+describe('buildStressEvents', () => {
+  it('gives every generated room message a unique stanzaId (MDS markers match on it)', () => {
+    const events = buildStressEvents(
+      { kind: 'room-join', rooms: 2, occupants: 2, messagesPerRoom: 5, msgStepMs: 0, roomStepMs: 0 },
+      { selfJid: 'you@fluux.chat', selfNick: 'you', conferenceService: 'conference.fluux.chat' }
+    )
+    const messages = events
+      .filter((e) => e.type === 'room:message')
+      .map((e) => (e.payload as { message: RoomMessage }).message)
+    expect(messages).toHaveLength(10)
+    const stanzaIds = messages.map((m) => m.stanzaId)
+    expect(stanzaIds.every((sid) => typeof sid === 'string' && sid.length > 0)).toBe(true)
+    expect(new Set(stanzaIds).size).toBe(10)
+  })
+})
 
 describe('DemoClient.runStressScenario', () => {
   beforeEach(() => vi.useFakeTimers())
