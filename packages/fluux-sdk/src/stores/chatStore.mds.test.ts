@@ -579,4 +579,123 @@ describe('chatStore.activateConversation — XEP-0490 divider sync', () => {
     // …and the divider derives from it, not from the stale local pointer (m2 → 'm3').
     expect(chatSelectors.firstNewMessageIdFor(cid)(chatStore.getState())).toBe('m6')
   })
+
+  // A divider derived while a pending marker is still UNRESOLVED is provisional —
+  // the synced read position may move or erase it once the marker's message loads.
+  // The UI renders it muted until it is confirmed (pending resolved).
+  it('flags the divider provisional while the pending marker is unresolved, confirmed once it resolves', async () => {
+    const cid = 'provisional@capulet.example'
+    const t = (n: number) => new Date(`2026-01-01T00:0${n}:00Z`)
+    const timed = (id: string, stanzaId: string, n: number): Message => ({ ...msg(id, stanzaId), timestamp: t(n) })
+    const messages = [timed('m1', 's1', 1), timed('m2', 's2', 2), timed('m3', 's3', 3), timed('m4', 's4', 4)]
+    seedMessages(cid, messages)
+    chatStore.setState((state) => {
+      const newMeta = new Map(state.conversationMeta)
+      newMeta.set(cid, { unreadCount: 0, lastSeenMessageId: 'm2', pendingRemoteDisplayedStanzaId: 's0' })
+      const newConvs = new Map(state.conversations)
+      newConvs.set(cid, { id: cid, name: cid, type: 'chat', unreadCount: 0, lastSeenMessageId: 'm2', pendingRemoteDisplayedStanzaId: 's0' })
+      return { conversationMeta: newMeta, conversations: newConvs }
+    })
+
+    await chatStore.getState().activateConversation(cid)
+
+    // Divider derived from the local pointer, but the synced position is unknown → provisional.
+    expect(chatSelectors.firstNewMessageIdFor(cid)(chatStore.getState())).toBe('m3')
+    expect(chatSelectors.firstNewMessageIsProvisionalFor(cid)(chatStore.getState())).toBe(true)
+
+    // The marker's message arrives (merge): it sits BEHIND the pointer → clear-pending.
+    // The divider is untouched but now confirmed.
+    chatStore.getState().applyRemoteDisplayed(cid, 's0', [timed('m0', 's0', 0), ...messages])
+    expect(chatSelectors.firstNewMessageIdFor(cid)(chatStore.getState())).toBe('m3')
+    expect(chatSelectors.firstNewMessageIsProvisionalFor(cid)(chatStore.getState())).toBe(false)
+  })
+
+  it('a divider derived with no pending marker is never provisional', async () => {
+    const cid = 'confirmed@capulet.example'
+    const t = (n: number) => new Date(`2026-01-01T00:0${n}:00Z`)
+    const timed = (id: string, stanzaId: string, n: number): Message => ({ ...msg(id, stanzaId), timestamp: t(n) })
+    seedMessages(cid, [timed('m1', 's1', 1), timed('m2', 's2', 2)])
+    chatStore.setState((state) => {
+      const newMeta = new Map(state.conversationMeta)
+      newMeta.set(cid, { unreadCount: 0, lastSeenMessageId: 'm1' })
+      const newConvs = new Map(state.conversations)
+      newConvs.set(cid, { id: cid, name: cid, type: 'chat', unreadCount: 0, lastSeenMessageId: 'm1' })
+      return { conversationMeta: newMeta, conversations: newConvs }
+    })
+
+    await chatStore.getState().activateConversation(cid)
+
+    expect(chatSelectors.firstNewMessageIdFor(cid)(chatStore.getState())).toBe('m2')
+    expect(chatSelectors.firstNewMessageIsProvisionalFor(cid)(chatStore.getState())).toBe(false)
+  })
+
+  it('a pending marker without a divider is not provisional (nothing to render)', () => {
+    const cid = 'pending-no-divider@capulet.example'
+    chatStore.setState((state) => {
+      const newMeta = new Map(state.conversationMeta)
+      newMeta.set(cid, { unreadCount: 0, lastSeenMessageId: 'm1', pendingRemoteDisplayedStanzaId: 's9' })
+      return { conversationMeta: newMeta }
+    })
+
+    expect(chatSelectors.firstNewMessageIsProvisionalFor(cid)(chatStore.getState())).toBe(false)
+  })
+
+  // The flash scenario, made explicit: a provisional divider must settle to its
+  // DEFINITIVE position (moved, confirmed) when the marker resolves AHEAD of it
+  // on the active conversation — and stop being provisional.
+  it('moves the divider and confirms it when the marker resolves ahead of it (active conversation)', async () => {
+    const cid = 'resolve-ahead@capulet.example'
+    const t = (n: number) => new Date(`2026-01-01T00:0${n}:00Z`)
+    const timed = (id: string, stanzaId: string, n: number): Message => ({ ...msg(id, stanzaId), timestamp: t(n) })
+    // m4 is NOT loaded at activation (deep gap) — the marker for s4 can only stash.
+    const loaded = [timed('m1', 's1', 1), timed('m2', 's2', 2), timed('m3', 's3', 3), timed('m5', 's5', 5)]
+    seedMessages(cid, loaded)
+    chatStore.setState((state) => {
+      const newMeta = new Map(state.conversationMeta)
+      newMeta.set(cid, { unreadCount: 0, lastSeenMessageId: 'm2', pendingRemoteDisplayedStanzaId: 's4' })
+      const newConvs = new Map(state.conversations)
+      newConvs.set(cid, { id: cid, name: cid, type: 'chat', unreadCount: 0, lastSeenMessageId: 'm2', pendingRemoteDisplayedStanzaId: 's4' })
+      return { conversationMeta: newMeta, conversations: newConvs }
+    })
+
+    await chatStore.getState().activateConversation(cid)
+    // Provisional divider from the stale local pointer (m2 → m3).
+    expect(chatSelectors.firstNewMessageIdFor(cid)(chatStore.getState())).toBe('m3')
+    expect(chatSelectors.firstNewMessageIsProvisionalFor(cid)(chatStore.getState())).toBe(true)
+
+    // The marker's message arrives (merge): the synced read is ahead → the divider
+    // settles after the synced position, definitive.
+    const full = [timed('m1', 's1', 1), timed('m2', 's2', 2), timed('m3', 's3', 3), timed('m4', 's4', 4), timed('m5', 's5', 5)]
+    chatStore.getState().applyRemoteDisplayed(cid, 's4', full)
+
+    expect(chatStore.getState().conversationMeta.get(cid)?.lastSeenMessageId).toBe('m4')
+    expect(chatSelectors.firstNewMessageIdFor(cid)(chatStore.getState())).toBe('m5')
+    expect(chatSelectors.firstNewMessageIsProvisionalFor(cid)(chatStore.getState())).toBe(false)
+  })
+
+  it('erases the provisional divider when the marker resolves at the newest message (all read elsewhere)', async () => {
+    const cid = 'resolve-erase@capulet.example'
+    const t = (n: number) => new Date(`2026-01-01T00:0${n}:00Z`)
+    const timed = (id: string, stanzaId: string, n: number): Message => ({ ...msg(id, stanzaId), timestamp: t(n) })
+    const loaded = [timed('m1', 's1', 1), timed('m2', 's2', 2), timed('m3', 's3', 3)]
+    seedMessages(cid, loaded)
+    chatStore.setState((state) => {
+      const newMeta = new Map(state.conversationMeta)
+      newMeta.set(cid, { unreadCount: 0, lastSeenMessageId: 'm1', pendingRemoteDisplayedStanzaId: 's9' })
+      const newConvs = new Map(state.conversations)
+      newConvs.set(cid, { id: cid, name: cid, type: 'chat', unreadCount: 0, lastSeenMessageId: 'm1', pendingRemoteDisplayedStanzaId: 's9' })
+      return { conversationMeta: newMeta, conversations: newConvs }
+    })
+
+    await chatStore.getState().activateConversation(cid)
+    expect(chatSelectors.firstNewMessageIdFor(cid)(chatStore.getState())).toBe('m2')
+    expect(chatSelectors.firstNewMessageIsProvisionalFor(cid)(chatStore.getState())).toBe(true)
+
+    // The other device read everything: the marker resolves at the newest message.
+    chatStore.getState().applyRemoteDisplayed(cid, 's9', [...loaded, timed('m9', 's9', 9)])
+
+    expect(chatSelectors.firstNewMessageIdFor(cid)(chatStore.getState())).toBeUndefined()
+    expect(chatSelectors.firstNewMessageIsProvisionalFor(cid)(chatStore.getState())).toBe(false)
+    expect(chatStore.getState().conversationMeta.get(cid)?.pendingRemoteDisplayedStanzaId).toBeUndefined()
+  })
 })

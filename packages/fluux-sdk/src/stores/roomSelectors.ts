@@ -360,6 +360,19 @@ export const roomSelectors = {
   },
 
   /**
+   * Is the room's new-message divider provisional? True while a synced
+   * XEP-0490 read position is still unresolved (pendingRemoteDisplayedStanzaId
+   * set): the divider was derived from the local read pointer and may move or
+   * vanish once the marker's message loads. Purely derived — resolving the
+   * marker (advance OR clear-pending) confirms the divider with no extra state.
+   */
+  firstNewMessageIsProvisionalFor: (roomJid: string) => (state: RoomState): boolean => {
+    if (!state.firstNewMessageMarkers.has(roomJid)) return false
+    const meta = state.roomMeta.get(roomJid) ?? state.rooms.get(roomJid)
+    return meta?.pendingRemoteDisplayedStanzaId !== undefined
+  },
+
+  /**
    * Get self occupant for a specific room.
    */
   selfOccupantFor: (roomJid: string) => (state: RoomState): RoomOccupant | undefined => {
