@@ -589,6 +589,9 @@ export const MessageBubble = memo(function MessageBubble({
         ref={ownGroupRef}
         className={`relative ${contentWidthClass} min-w-0 touch:select-none touch:[-webkit-touch-callout:none] ${isSelected || showActionSheet ? 'bg-fluux-selection -my-0.5 py-0.5 -ms-2 ps-2 -me-4 pe-4 rounded-s' : ''}${inThread ? ` bg-fluux-private-soft border-x border-fluux-private-border px-2.5 py-1 ${threadStart ? 'border-t rounded-t-lg' : ''} ${threadEnd ? 'border-b rounded-b-lg' : ''}` : ''} ${ownTintClass}`}
         data-msg-chrome={showAvatar ? 'header' : 'cont'}
+        // Marks hug-width (w-fit) own bubbles so useRowMetrics never samples their text box
+        // as the conversation's content width (it is only as wide as the text itself).
+        data-msg-own={ownTint ? '' : undefined}
         onTouchStart={handleContentTouchStart}
         onTouchEnd={cancelLongPress}
         onTouchMove={cancelLongPress}
