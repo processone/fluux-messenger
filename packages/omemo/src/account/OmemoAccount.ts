@@ -151,12 +151,34 @@ export class OmemoAccount {
     const mine = msg.keys.find((k) => k.rid === this.id.deviceId)
     if (!mine) throw new Error('message has no key for this device')
 
+    // Idempotency / duplicate handling: if a session already exists for (peer, sid),
+    // always decrypt against the ESTABLISHED ratchet — regardless of the kex flag. The
+    // initiator keeps sending kex:true until it hears back, so a kex-flagged message when
+    // we already have a session is either a normal next message on the initiator's chain
+    // or a duplicate of the initial one; both are handled correctly by the ratchet's
+    // replay/skip logic (which rejects true duplicates cleanly instead of rebuilding X3DH).
+    const stored = await this.store.loadSession(peer, sid)
+
     let state: RatchetState
     let ad: Uint8Array
     let meta: SessionMeta
     let authMessage: { mac: Uint8Array; message: Uint8Array }
+    // Set only on genuine first contact (no existing session + kex): drives the
+    // authenticated-first side effects (OTK consumption + trust) after ratchetDecrypt.
+    let firstContact: { ik: Uint8Array; pkId: number; hadOtk: boolean } | undefined
 
-    if (mine.kex) {
+    if (stored) {
+      const unpacked = unpackSession(stored)
+      meta = unpacked.meta
+      state = deserializeRatchet(unpacked.ratchet)
+      state.rng = this.rng // receiving a new remote DH triggers a dhRatchet -> needs real rng
+      ad = Uint8Array.from(meta.ad)
+      // A kex-flagged message over an established session still embeds the auth message.
+      const authBytes = mine.kex ? decodeKeyExchange(mine.data).message : mine.data
+      authMessage = decodeAuthMessage(authBytes)
+    } else if (mine.kex) {
+      // First contact. Authenticate BEFORE any persistent mutation: all reads below are
+      // safe pre-auth; no write happens until ratchetDecrypt (the HMAC check) succeeds.
       const kex = decodeKeyExchange(mine.data)
       authMessage = decodeAuthMessage(kex.message)
       const spk = await this.store.loadSignedPreKey(kex.spkId)
@@ -173,19 +195,12 @@ export class OmemoAccount {
       state.rng = this.rng // responder's FIRST ratchetDecrypt does a dhRatchet -> needs real rng
       ad = concatBytes(kex.ik, this.id.edPub) // initiator=them, responder=us
       meta = { ad: [...ad], kexPending: false }
-      if (otk && !opts?.archive) await this.store.removePreKey(kex.pkId) // consume OTK once
-      await this.store.saveTrust(peer, sid, { state: 'undecided', identityKey: kex.ik })
+      firstContact = { ik: kex.ik, pkId: kex.pkId, hadOtk: !!otk }
     } else {
-      const stored = await this.store.loadSession(peer, sid)
-      if (!stored) throw new Error(`no session for ${peer}/${sid}`)
-      const unpacked = unpackSession(stored)
-      meta = unpacked.meta
-      state = deserializeRatchet(unpacked.ratchet)
-      state.rng = this.rng // receiving a new remote DH triggers a dhRatchet -> needs real rng
-      ad = Uint8Array.from(meta.ad)
-      authMessage = decodeAuthMessage(mine.data)
+      throw new Error(`no session for ${peer}/${sid}`)
     }
 
+    // ratchetDecrypt performs the HMAC check. If it throws, NO writes have happened.
     const result = ratchetDecrypt(state, authMessage, ad)
     const keyAndHmac = result.plaintext
     const k = keyAndHmac.slice(0, 32)
@@ -193,7 +208,17 @@ export class OmemoAccount {
 
     // Receiving any message clears our kex-pending flag (peer now has our session).
     meta.kexPending = false
-    if (!opts?.archive) await this.store.saveSession(peer, sid, packSession(meta, serializeRatchet(result.state)))
+    if (!opts?.archive) {
+      // First-contact side effects run ONLY after successful authentication.
+      if (firstContact) {
+        if (firstContact.hadOtk) await this.store.removePreKey(firstContact.pkId) // consume OTK once
+        // Preserve any prior trust decision: only record trust on genuine first contact,
+        // never clobber an existing record (e.g. a manual 'trusted' verification).
+        const existingTrust = await this.store.loadTrust(peer, sid)
+        if (!existingTrust) await this.store.saveTrust(peer, sid, { state: 'undecided', identityKey: firstContact.ik })
+      }
+      await this.store.saveSession(peer, sid, packSession(meta, serializeRatchet(result.state)))
+    }
 
     if (!msg.payload) return new Uint8Array(0) // empty/key-transport message
     const envelopeBytes = payloadDecrypt(k, msg.payload, tag)
