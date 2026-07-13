@@ -1,0 +1,18 @@
+# Reference OMEMO 2 peer container for the tagged interop harness.
+#
+# `OMEMO` is the PyPI package name of python-omemo (the Syndace reference stack, MIT).
+# `twomemo[xml]` provides the `urn:xmpp:omemo:2` backend plus the ElementTree XEP-0384
+# (de)serializers (`twomemo.etree`) the peer script relies on. Pins are on the 1.x /
+# current majors that implement OMEMO 2; bump deliberately and re-run the harness.
+#
+# Bring it up before running the interop test:
+#   cd packages/omemo/src/interop && docker compose up -d
+services:
+  omemo-peer:
+    image: python:3.12-slim
+    working_dir: /peer
+    volumes:
+      - ./peer:/peer
+      - ./shared:/shared
+    command: >
+      sh -c "pip install --quiet 'OMEMO==1.*' 'twomemo[xml]' && sleep infinity"

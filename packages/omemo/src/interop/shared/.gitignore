@@ -1,0 +1,4 @@
+# Files written by the harness at runtime (bundle.json, msg.json, plaintext.b64,
+# peer_storage.json, ...). Keep the directory, ignore its contents.
+*
+!.gitignore
