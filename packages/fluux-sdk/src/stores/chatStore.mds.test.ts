@@ -7,10 +7,27 @@
  * 3. Pending high-water mark: stanza-id not in loaded messages → stored in
  *    pendingRemoteDisplayedStanzaId; lastSeenMessageId unchanged.
  */
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { chatStore } from './chatStore'
 import { chatSelectors } from './chatSelectors'
 import type { Message } from '../core/types/chat'
+
+// Mock messageCache: the deep-pointer activation tests need getMessagesAround to
+// return a controlled around-slice; everything else is a harmless stub.
+vi.mock('../utils/messageCache', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../utils/messageCache')>()
+  return {
+    ...actual,
+    isMessageCacheAvailable: vi.fn().mockReturnValue(true),
+    saveMessage: vi.fn().mockResolvedValue(undefined),
+    saveMessages: vi.fn().mockResolvedValue(undefined),
+    getMessages: vi.fn().mockResolvedValue([]),
+    getMessagesAround: vi.fn().mockResolvedValue([]),
+    updateMessage: vi.fn().mockResolvedValue(undefined),
+    deleteMessages: vi.fn().mockResolvedValue(undefined),
+  }
+})
+import * as messageCache from '../utils/messageCache'
 
 // Mock localStorage (required by chatStore's persist middleware)
 const localStorageMock = (() => {
@@ -494,5 +511,72 @@ describe('chatStore.activateConversation — XEP-0490 divider sync', () => {
     })
     await chatStore.getState().activateConversation(cid)
     expect(chatStore.getState().conversationMeta.get(cid)?.lastSeenMessageId).toBe('m4')
+  })
+
+  // Regression (gate burn on stash): a fold that could not resolve (marker's message not
+  // loaded) must not consume the session gate — otherwise the pending marker is stuck for
+  // the whole session (re-entry skips the fold as "already consumed").
+  it('retries the fold on a later activation when the first fold could not resolve (marker message not yet loaded)', async () => {
+    const cid = 'retry-stash@capulet.example'
+    const t = (n: number) => new Date(`2026-01-01T00:0${n}:00Z`)
+    const timed = (id: string, stanzaId: string, n: number): Message => ({ ...msg(id, stanzaId), timestamp: t(n) })
+    const early = [timed('m1', 's1', 1), timed('m2', 's2', 2)]
+    seedMessages(cid, early)
+    chatStore.setState((state) => {
+      const newMeta = new Map(state.conversationMeta)
+      newMeta.set(cid, { unreadCount: 0, lastSeenMessageId: 'm1', pendingRemoteDisplayedStanzaId: 's9' })
+      const newConvs = new Map(state.conversations)
+      newConvs.set(cid, { id: cid, name: cid, type: 'chat', unreadCount: 0, lastSeenMessageId: 'm1', pendingRemoteDisplayedStanzaId: 's9' })
+      return { conversationMeta: newMeta, conversations: newConvs }
+    })
+
+    await chatStore.getState().activateConversation(cid)
+    // Unresolvable → stash survives, pointer untouched.
+    expect(chatStore.getState().conversationMeta.get(cid)?.lastSeenMessageId).toBe('m1')
+    expect(chatStore.getState().conversationMeta.get(cid)?.pendingRemoteDisplayedStanzaId).toBe('s9')
+
+    await chatStore.getState().activateConversation(null)
+
+    // The archive healed since (catch-up landed): the marker's message is loadable now.
+    seedMessages(cid, [...early, timed('m9', 's9', 9)])
+
+    await chatStore.getState().activateConversation(cid)
+    // The gate must allow the retry (the marker was never actually folded).
+    expect(chatStore.getState().conversationMeta.get(cid)?.lastSeenMessageId).toBe('m9')
+    expect(chatStore.getState().conversationMeta.get(cid)?.pendingRemoteDisplayedStanzaId).toBeUndefined()
+  })
+
+  // Regression (fold ran only before the load-around): with a deep backlog the pending
+  // marker's message is outside the latest-100 slice, so the first fold stashes. The
+  // load-around of the stale pointer brings it in — the fold must re-attempt against
+  // the around-slice so the divider reflects the synced read position.
+  it('re-attempts the fold against the slice loaded around a deep stale pointer', async () => {
+    const cid = 'deep-pointer@capulet.example'
+    const t = (n: number) => new Date(`2026-01-01T00:${String(n).padStart(2, '0')}:00Z`)
+    const timed = (id: string, stanzaId: string, n: number): Message => ({ ...msg(id, stanzaId), timestamp: t(n) })
+    const latest = [timed('m10', 's10', 10), timed('m11', 's11', 11), timed('m12', 's12', 12)]
+    // Resident window = latest slice; the read pointer (m2) is deeper than it.
+    seedMessages(cid, latest)
+    chatStore.setState((state) => {
+      const newMeta = new Map(state.conversationMeta)
+      newMeta.set(cid, { unreadCount: 0, lastSeenMessageId: 'm2', pendingRemoteDisplayedStanzaId: 's5' })
+      const newConvs = new Map(state.conversations)
+      newConvs.set(cid, { id: cid, name: cid, type: 'chat', unreadCount: 0, lastSeenMessageId: 'm2', pendingRemoteDisplayedStanzaId: 's5' })
+      return { conversationMeta: newMeta, conversations: newConvs }
+    })
+    // The IndexedDB slice around the stale pointer contains the marker's message (m5).
+    const aroundSlice = [
+      timed('m1', 's1', 1), timed('m2', 's2', 2), timed('m3', 's3', 3),
+      timed('m4', 's4', 4), timed('m5', 's5', 5), timed('m6', 's6', 6),
+    ]
+    vi.mocked(messageCache.getMessagesAround).mockResolvedValueOnce(aroundSlice)
+
+    await chatStore.getState().activateConversation(cid)
+
+    // The retried fold advances the pointer to the synced position…
+    expect(chatStore.getState().conversationMeta.get(cid)?.lastSeenMessageId).toBe('m5')
+    expect(chatStore.getState().conversationMeta.get(cid)?.pendingRemoteDisplayedStanzaId).toBeUndefined()
+    // …and the divider derives from it, not from the stale local pointer (m2 → 'm3').
+    expect(chatSelectors.firstNewMessageIdFor(cid)(chatStore.getState())).toBe('m6')
   })
 })
