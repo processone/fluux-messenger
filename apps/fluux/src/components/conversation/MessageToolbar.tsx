@@ -175,7 +175,10 @@ export const MessageToolbar = memo(function MessageToolbar({
             }
             handleReaction(emoji)
           }}
-          className={`px-2 py-1.5 transition-colors text-base ${
+          // leading-none collapses the emoji's line box to its em square so the
+          // glyph sits centered in the hover/active fill; the default text-base
+          // line-height (1.5) adds leading that rides the emoji high in the pill.
+          className={`px-2 py-1.5 leading-none transition-colors text-base ${
             showReactionPicker || showMoreMenu ? '' : 'hover:bg-fluux-hover'
           } ${myReactions.includes(emoji) ? 'bg-fluux-brand/20' : ''}`}
           aria-label={t('chat.reactWith', { emoji })}
