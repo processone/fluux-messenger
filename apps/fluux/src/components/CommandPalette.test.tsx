@@ -14,11 +14,12 @@ const mockConversations: Array<{ id: string; name: string; unreadCount: number; 
   { id: 'bob@example.com', name: 'Bob Jones', unreadCount: 2, type: 'chat', lastMessage: { body: 'The exponential backoff is working now', timestamp: new Date('2026-07-07T10:00:00Z') } },
 ]
 
-const mockRooms: Array<{ jid: string; name: string; joined: boolean; unreadCount?: number; mentionsCount?: number; lastMessage?: { body: string; timestamp?: Date } }> = [
+const defaultRooms: Array<{ jid: string; name: string; joined: boolean; unreadCount?: number; mentionsCount?: number; notifyAll?: boolean; notifyAllPersistent?: boolean; muted?: boolean; lastMessage?: { body: string; timestamp?: Date } }> = [
   { jid: 'dev@conference.example.com', name: 'Development', joined: true, unreadCount: 0, mentionsCount: 0, lastMessage: { body: 'PR merged successfully', timestamp: new Date('2026-07-07T08:00:00Z') } },
   { jid: 'general@conference.example.com', name: 'General Chat', joined: true, unreadCount: 3, mentionsCount: 0 },
   { jid: 'announce@conference.example.com', name: 'Announcements', joined: true, unreadCount: 1, mentionsCount: 1, lastMessage: { body: 'Release is out', timestamp: new Date('2026-07-07T11:00:00Z') } },
 ]
+let mockRooms = defaultRooms
 
 const mockBookmarkedRooms = [
   { jid: 'archived@conference.example.com', name: 'Archived Room', joined: false },
@@ -65,6 +66,13 @@ vi.mock('@fluux/sdk', () => ({
   searchStore: { getState: () => ({ search: mockSearchFn }) },
   // Entity rows now render <Avatar>, which derives its fallback color from this.
   generateConsistentColorHexSync: () => '#888888',
+  roomActivityTone: (room: { joined?: boolean; muted?: boolean; unreadCount?: number; mentionsCount?: number; notifyAll?: boolean; notifyAllPersistent?: boolean }) => {
+    if (!room.joined || room.muted) return 'none'
+    const notifyAll = room.notifyAll || room.notifyAllPersistent
+    if ((room.mentionsCount ?? 0) > 0 || (notifyAll && (room.unreadCount ?? 0) > 0)) return 'accent'
+    if ((room.unreadCount ?? 0) > 0) return 'neutral'
+    return 'none'
+  },
 }))
 
 // Mock React store hooks (from @fluux/sdk/react)
@@ -148,6 +156,7 @@ describe('CommandPalette', () => {
     vi.clearAllMocks()
     mockIsArchived.mockReturnValue(false)
     mockArchivedConversations = []
+    mockRooms = defaultRooms
     mockActiveConversationId = null
     mockActiveRoomJid = null
     useAdvancedModeStore.setState({ advancedMode: false })
