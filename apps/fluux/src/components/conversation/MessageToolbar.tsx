@@ -143,10 +143,16 @@ export const MessageToolbar = memo(function MessageToolbar({
 
   return (
     // Outer wrapper provides an extended hover zone (padding) around the visible toolbar
-    // select-none prevents toolbar from being included in text selection
+    // select-none prevents toolbar from being included in text selection.
+    // The top offset lifts the bar to straddle the row's top edge so its rounded
+    // border sits over the calm chat surface rather than inside the message-hover
+    // tint (which otherwise bleeds around the bar's corners, most visibly in light
+    // theme where the popover surface and the tint differ). A group-start row is
+    // taller (name+time header), so it needs the larger -top-16 to land the bar at
+    // the same visual height a continuation row reaches with -top-12.
     <div
       data-message-toolbar
-      className={`absolute ${showAvatar ? '-top-7' : '-top-12'} -end-2 p-4 z-20 select-none pointer-events-none transition-all duration-200 ease-out ${visibilityClass}`}
+      className={`absolute ${showAvatar ? '-top-16' : '-top-12'} -end-2 p-4 z-20 select-none pointer-events-none transition-all duration-200 ease-out ${visibilityClass}`}
     >
       {/* Visible toolbar */}
       <div
