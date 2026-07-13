@@ -3,8 +3,10 @@ name: Seed Playwright cache
 # CI only runs on pull_request, and caches created in PR runs are scoped to that PR —
 # other PRs can't see them, so every PR's first e2e run re-downloads the browsers.
 # Caches created on the default branch ARE visible to all PRs, so this workflow keeps
-# a shared copy warm from main. It short-circuits in ~10s when the cache already
-# exists for the current package-lock.json.
+# two shared copies warm from main: the browser binaries (keyed on package-lock.json)
+# and the apt .deb files for the Playwright OS deps (keyed on the runner image version,
+# which rolls ~weekly — the azure apt mirror can be very slow at certain times of day).
+# Each job short-circuits in ~10s when its cache already exists for the current key.
 
 on:
   push:
@@ -50,3 +52,62 @@ jobs:
         with:
           path: ~/.cache/ms-playwright
           key: ${{ runner.os }}-playwright-${{ hashFiles('package-lock.json') }}
+
+  seed-apt:
+    name: Seed apt package cache
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Compute apt package cache key
+        id: apt-cache-key
+        run: echo "key=apt-debs-$ImageOS-$ImageVersion" >> "$GITHUB_OUTPUT"
+
+      - name: Check for existing cache
+        id: check
+        uses: actions/cache/restore@v6
+        with:
+          path: ~/.apt-debs
+          key: ${{ steps.apt-cache-key.outputs.key }}
+          lookup-only: true
+
+      - name: Checkout
+        if: steps.check.outputs.cache-hit != 'true'
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        if: steps.check.outputs.cache-hit != 'true'
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: 'npm'
+
+      - name: Install dependencies
+        if: steps.check.outputs.cache-hit != 'true'
+        run: npm ci
+
+      # apt-get keeps the downloaded .deb files in /var/cache/apt/archives; stage them
+      # in a runner-owned dir so the cache action can tar them without hitting the
+      # root-owned partial/ and lock files.
+      - name: Download Playwright OS dependencies
+        if: steps.check.outputs.cache-hit != 'true'
+        run: npx playwright install-deps chromium webkit
+
+      - name: Stage downloaded packages
+        if: steps.check.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p "$HOME/.apt-debs"
+          sudo cp /var/cache/apt/archives/*.deb "$HOME/.apt-debs/" 2>/dev/null || true
+          sudo chown -R "$USER" "$HOME/.apt-debs"
+          COUNT=$(ls "$HOME"/.apt-debs/*.deb 2>/dev/null | wc -l)
+          echo "Staged $COUNT .deb file(s)"
+          if [ "$COUNT" -eq 0 ]; then
+            echo "::warning::No .deb files found in /var/cache/apt/archives — apt cache seeding is a no-op"
+          fi
+
+      - name: Save cache
+        if: steps.check.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: ~/.apt-debs
+          key: ${{ steps.apt-cache-key.outputs.key }}

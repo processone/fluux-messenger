@@ -130,9 +130,7 @@ jobs:
       # Cache the browser binaries (~/.cache/ms-playwright) so a slow CDN can't add minutes to
       # the download. Caches created in pull_request runs are scoped to that PR, so the shared
       # copy is seeded from main by playwright-cache.yml; restore-keys lets a Playwright bump
-      # start from the previous cache and download only the changed browsers. The OS-level deps
-      # (apt) live on the ephemeral runner and are (re)installed separately each run via
-      # `install-deps`.
+      # start from the previous cache and download only the changed browsers.
       - name: Cache Playwright browsers
         id: playwright-cache
         uses: actions/cache@v6
@@ -145,6 +143,31 @@ jobs:
       - name: Install Playwright browsers
         if: steps.playwright-cache.outputs.cache-hit != 'true'
         run: npx playwright install chromium webkit
+
+      # The OS-level deps (apt) live on the ephemeral runner, so `install-deps` must run every
+      # time — but the azure apt mirror can be very slow at certain times of day, so the
+      # downloaded .deb files are cached and pre-seeded into apt's archive dir. apt validates
+      # cached debs by hash and re-downloads only what changed, so a stale cache degrades
+      # gracefully. Keyed on the runner image version (package versions roll with it, ~weekly);
+      # restore-only here — the shared cache is seeded from main by playwright-cache.yml.
+      - name: Compute apt package cache key
+        id: apt-cache-key
+        run: echo "key=apt-debs-$ImageOS-$ImageVersion" >> "$GITHUB_OUTPUT"
+
+      - name: Restore apt package cache
+        uses: actions/cache/restore@v6
+        with:
+          path: ~/.apt-debs
+          key: ${{ steps.apt-cache-key.outputs.key }}
+          restore-keys: |
+            apt-debs-
+
+      - name: Seed apt archives from cache
+        run: |
+          if [ -d "$HOME/.apt-debs" ]; then
+            sudo cp "$HOME"/.apt-debs/*.deb /var/cache/apt/archives/ 2>/dev/null || true
+            echo "Seeded $(ls "$HOME"/.apt-debs/*.deb 2>/dev/null | wc -l) cached .deb file(s)"
+          fi
 
       - name: Install Playwright OS dependencies
         run: npx playwright install-deps chromium webkit
