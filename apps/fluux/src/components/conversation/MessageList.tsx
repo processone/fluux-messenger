@@ -11,7 +11,7 @@
  *
  * Scroll behavior is handled by useMessageListScroll hook.
  */
-import { useMemo, useRef, useState, useEffect, useLayoutEffect, useCallback, type ReactNode } from 'react'
+import { useMemo, useRef, useEffect, useLayoutEffect, useCallback, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { BaseMessage } from '@fluux/sdk'
 import { useMessageCopyFormatter, useMessageRangeSelection } from '@/hooks'
@@ -79,6 +79,10 @@ export interface MessageListProps<T extends BaseMessage> {
   onTargetMessageConsumed?: () => void
   /** Callback to clear the first new message ID (used by viewport observer) */
   clearFirstNewMessageId?: () => void
+  /** Persisted read pointer for this conversation — the badge counts unread below it. */
+  lastSeenMessageId?: string
+  /** Recompute the divider from the read pointer (called when the reader scrolls back up). */
+  onResyncDivider?: (conversationId: string) => void
   /** Users currently typing */
   typingUsers?: string[]
   /** Format function for typing user display */
@@ -157,6 +161,8 @@ export function MessageList<T extends BaseMessage>({
   firstNewMessageId,
   firstNewMessageIsProvisional = false,
   clearFirstNewMessageId,
+  lastSeenMessageId,
+  onResyncDivider,
   targetMessageId,
   onTargetMessageConsumed,
   typingUsers = [],
@@ -709,32 +715,29 @@ export function MessageList<T extends BaseMessage>({
   // whenever the window is slid up (newer content exists off-screen), not only past the FAB threshold.
   const windowSlidUp = windowAtLiveEdge === false
   const fabVisible = showScrollToBottom || windowSlidUp
-  // Forward-only read watermark: the deepest (newest) message the reader has reached. The FAB badge
-  // counts the new messages still below THIS point — not below the current viewport — so it ticks
-  // DOWN as the reader scrolls toward the present and does NOT climb back up when they scroll back
-  // into history (those messages have already been seen). Tracked as a message id (not an index) so
-  // a load-older prepend can't shift it. The divider itself stays put; only the count reflects
-  // progress. The marker pill keeps the full markerUnreadCount ("jump back to N unread").
-  const [deepestReadMessageId, setDeepestReadMessageId] = useState<string | null>(null)
-  // A fresh unread divider (new marker, or a switch that remounts this list) resets the watermark so
-  // the badge shows the full new count again until the reader scrolls.
-  useEffect(() => {
-    setDeepestReadMessageId(null)
-  }, [firstNewMessageId])
-  // Advance the watermark only toward newer messages; a scroll back up must never retreat it.
-  useEffect(() => {
-    if (bottomVisibleMessageId === null) return
-    setDeepestReadMessageId((prev) => {
-      if (prev === bottomVisibleMessageId) return prev
-      const prevIdx = prev === null ? -1 : deduplicatedMessages.findIndex((m) => m.id === prev)
-      const nextIdx = deduplicatedMessages.findIndex((m) => m.id === bottomVisibleMessageId)
-      return nextIdx > prevIdx ? bottomVisibleMessageId : prev
-    })
-  }, [bottomVisibleMessageId, deduplicatedMessages])
+  // FAB badge: counts the new messages (from the divider) still below the persisted read pointer
+  // (lastSeenMessageId), which only advances forward (see chatStore/roomStore's
+  // updateLastSeenMessageId) — so the count ticks DOWN as the reader scrolls toward the present and
+  // never climbs back up when they scroll into history. The marker pill keeps the full
+  // markerUnreadCount ("jump back to N unread").
   const fabBadgeCount = useMemo(
-    () => countNewBelowViewport(deduplicatedMessages, firstNewMessageId, deepestReadMessageId),
-    [deduplicatedMessages, firstNewMessageId, deepestReadMessageId],
+    () => countNewBelowViewport(deduplicatedMessages, firstNewMessageId, lastSeenMessageId ?? null),
+    [deduplicatedMessages, firstNewMessageId, lastSeenMessageId],
   )
+  // When the reader scrolls back ABOVE the read pointer, snap the "New messages" divider to the
+  // first unread after the pointer ("here's how far I got"). Forward-only + idempotent in the store,
+  // so a slightly noisy trigger is harmless. Compares the bottom-most-visible row (from the scroll
+  // hook) against the pointer, both resolved in the resident message array.
+  useEffect(() => {
+    if (!firstNewMessageId || !lastSeenMessageId || !bottomVisibleMessageId || !onResyncDivider) return
+    const bIdx = deduplicatedMessages.findIndex((m) => m.id === bottomVisibleMessageId)
+    const pIdx = deduplicatedMessages.findIndex((m) => m.id === lastSeenMessageId)
+    const dIdx = deduplicatedMessages.findIndex((m) => m.id === firstNewMessageId)
+    // Scrolled above the pointer (bIdx < pIdx) and the divider still trails it (dIdx <= pIdx).
+    if (bIdx >= 0 && pIdx > bIdx && dIdx !== -1 && dIdx <= pIdx) {
+      onResyncDivider(conversationId)
+    }
+  }, [bottomVisibleMessageId, lastSeenMessageId, firstNewMessageId, deduplicatedMessages, conversationId, onResyncDivider])
   // Track whether the FAB has ever been shown in this mount so the exit animation (whose first
   // keyframe is fully-visible) never runs on a fresh open-at-bottom, which would flash the FAB.
   // MessageList is remounted per conversation via `key`, so this ref resets on every open.

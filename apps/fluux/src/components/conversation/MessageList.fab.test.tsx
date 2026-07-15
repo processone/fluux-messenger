@@ -338,74 +338,81 @@ describe('MessageList FAB badge and scroll behavior', () => {
       expect(badge?.textContent).toBe('5')
     })
 
-    it('decrements the badge as new messages scroll into view (messages-below-viewport)', () => {
-      const messages = createTestMessages(10) // msg-0 through msg-9
-      // Divider at msg-7 → new block is msg-7, msg-8, msg-9 (3 messages).
+    it('badge counts unread below the read pointer', () => {
+      const messages = createTestMessages(10) // msg-0 .. msg-9
+      const { rerender } = render(
+        <MessageList
+          messages={messages}
+          conversationId="conv-1"
+          clearFirstNewMessageId={vi.fn()}
+          firstNewMessageId="msg-3"
+          lastSeenMessageId="msg-2" // read up to msg-2 → unread = msg-3..msg-9 = 7
+          renderMessage={(msg) => <div key={msg.id}>{msg.body}</div>}
+        />
+      )
+      const scrollCtx = setupScrollContainer()
+      if (!scrollCtx) return
+      simulateScrollUp(scrollCtx.container) // just to show the FAB
+
+      const badge = () => scrollCtx.container.parentElement
+        ?.querySelector('button[aria-label="chat.scrollToBottom"]')?.querySelector('span')
+      expect(badge()?.textContent).toBe('7')
+
+      // Pointer advances to msg-6 (read further) → unread = msg-7..msg-9 = 3
+      rerender(
+        <MessageList
+          messages={messages}
+          conversationId="conv-1"
+          clearFirstNewMessageId={vi.fn()}
+          firstNewMessageId="msg-3"
+          lastSeenMessageId="msg-6"
+          renderMessage={(msg) => <div key={msg.id}>{msg.body}</div>}
+        />
+      )
+      expect(badge()?.textContent).toBe('3')
+    })
+  })
+
+  describe('divider resync on scroll-up', () => {
+    it('snaps the divider to the pointer when the reader scrolls back up', () => {
+      const onResyncDivider = vi.fn()
+      const messages = createTestMessages(10)
       render(
         <MessageList
           messages={messages}
           conversationId="conv-1"
           clearFirstNewMessageId={vi.fn()}
-          firstNewMessageId="msg-7"
+          firstNewMessageId="msg-3"   // divider at entry
+          lastSeenMessageId="msg-6"   // read pointer deeper than divider
+          onResyncDivider={onResyncDivider}
           renderMessage={(msg) => <div key={msg.id}>{msg.body}</div>}
         />
       )
-
       const scrollCtx = setupScrollContainer()
       if (!scrollCtx) return
-
-      // Scrolled to the top: bottom-most visible row is msg-4, above the divider → full count of 3.
+      // Scroll to the top so the bottom-most-visible row (msg-4) is above the pointer (msg-6).
       simulateScrollTo(scrollCtx.container, 0)
-      let badge = scrollCtx.container.parentElement
-        ?.querySelector('button[aria-label="chat.scrollToBottom"]')
-        ?.querySelector('span')
-      expect(badge?.textContent).toBe('3')
-
-      // Scroll down until the divider (msg-7) peeks in at the bottom edge (rows i at top i*100-250;
-      // top<500 ⇒ bottom-most visible is msg-7). msg-8 and msg-9 remain below the fold → 2.
-      simulateScrollTo(scrollCtx.container, 250)
-      badge = scrollCtx.container.parentElement
-        ?.querySelector('button[aria-label="chat.scrollToBottom"]')
-        ?.querySelector('span')
-      expect(badge?.textContent).toBe('2')
-
-      // Scroll one more row: msg-8 is now the bottom-most visible → only msg-9 remains below → 1.
-      simulateScrollTo(scrollCtx.container, 350)
-      badge = scrollCtx.container.parentElement
-        ?.querySelector('button[aria-label="chat.scrollToBottom"]')
-        ?.querySelector('span')
-      expect(badge?.textContent).toBe('1')
+      expect(onResyncDivider).toHaveBeenCalledWith('conv-1')
     })
 
-    it('does not climb back up when the reader scrolls back into history (forward-only)', () => {
-      const messages = createTestMessages(10) // msg-0 through msg-9
+    it('does not snap while the reader is at or below the pointer', () => {
+      const onResyncDivider = vi.fn()
+      const messages = createTestMessages(10)
       render(
         <MessageList
           messages={messages}
           conversationId="conv-1"
           clearFirstNewMessageId={vi.fn()}
-          firstNewMessageId="msg-7"
+          firstNewMessageId="msg-3"
+          lastSeenMessageId="msg-3"   // pointer == divider, reader hasn't gone past it
+          onResyncDivider={onResyncDivider}
           renderMessage={(msg) => <div key={msg.id}>{msg.body}</div>}
         />
       )
-
       const scrollCtx = setupScrollContainer()
       if (!scrollCtx) return
-
-      // Read down until msg-8 is the deepest-visible row → badge 1 (only msg-9 remains below).
-      simulateScrollTo(scrollCtx.container, 350)
-      let badge = scrollCtx.container.parentElement
-        ?.querySelector('button[aria-label="chat.scrollToBottom"]')
-        ?.querySelector('span')
-      expect(badge?.textContent).toBe('1')
-
-      // Scroll all the way back up: those messages have already been seen, so the badge must NOT
-      // climb back to 3 — the watermark holds at msg-8.
-      simulateScrollTo(scrollCtx.container, 0)
-      badge = scrollCtx.container.parentElement
-        ?.querySelector('button[aria-label="chat.scrollToBottom"]')
-        ?.querySelector('span')
-      expect(badge?.textContent).toBe('1')
+      simulateScrollTo(scrollCtx.container, 0) // bottom-visible msg-4 is BELOW the pointer msg-3
+      expect(onResyncDivider).not.toHaveBeenCalled()
     })
   })
 

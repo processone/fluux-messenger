@@ -87,6 +87,13 @@ export function useRoomActive() {
     return s.firstNewMessageMarkers.get(s.activeRoomJid)
   })
 
+  // Persisted read pointer (XEP-0490 sync marker) for the active room. Drives the FAB badge count
+  // and the divider resync-on-scroll-up trigger in MessageList.
+  const activeLastSeenMessageId = useRoomStore((s) => {
+    if (!s.activeRoomJid) return undefined
+    return s.roomMeta.get(s.activeRoomJid)?.lastSeenMessageId
+  })
+
   // Provisional divider: derived from the local pointer while a synced XEP-0490
   // read position is still unresolved — rendered muted until confirmed.
   const activeFirstNewMessageIsProvisional = useRoomStore((s) => {
@@ -178,6 +185,7 @@ export function useRoomActive() {
 
   const markAsRead = useRoomStore((s) => s.markAsRead)
   const clearFirstNewMessageId = useRoomStore((s) => s.clearFirstNewMessageId)
+  const resyncDividerToReadPointer = useRoomStore((s) => s.resyncDividerToReadPointer)
   const updateLastSeenMessageId = useRoomStore((s) => s.updateLastSeenMessageId)
 
   const joinRoom = useCallback(
@@ -430,6 +438,7 @@ export function useRoomActive() {
       getDraft,
       clearDraft,
       clearFirstNewMessageId,
+      resyncDividerToReadPointer,
       updateLastSeenMessageId,
       fetchOlderHistory,
       loadMessagesAround,
@@ -472,6 +481,7 @@ export function useRoomActive() {
       getDraft,
       clearDraft,
       clearFirstNewMessageId,
+      resyncDividerToReadPointer,
       updateLastSeenMessageId,
       fetchOlderHistory,
       loadMessagesAround,
@@ -499,6 +509,7 @@ export function useRoomActive() {
       activeMAMState,
       firstNewMessageId: activeFirstNewMessageId,
       firstNewMessageIsProvisional: activeFirstNewMessageIsProvisional,
+      lastSeenMessageId: activeLastSeenMessageId,
       windowAtLiveEdge: activeWindowAtLiveEdge,
 
       // Actions (spread memoized actions)
@@ -514,6 +525,7 @@ export function useRoomActive() {
       activeMAMState,
       activeFirstNewMessageId,
       activeFirstNewMessageIsProvisional,
+      activeLastSeenMessageId,
       activeWindowAtLiveEdge,
       actions,
     ]
