@@ -558,6 +558,9 @@
                     "untrusted": "nepārbaudīts",
                     "rejected": "NORAIDĪTS: nederīgs paraksts"
                 }
+            },
+            "omemoSwitchNotice": {
+                "body": "Šī saruna tagad izmanto OMEMO. Pārbaudiet jauno ierīci kontakta drošības informācijā."
             }
         },
         "verifyPeer": {

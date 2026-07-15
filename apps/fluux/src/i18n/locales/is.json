@@ -556,6 +556,9 @@
                     "untrusted": "óstaðfest",
                     "rejected": "HAFNAÐ: ógild undirskrift"
                 }
+            },
+            "omemoSwitchNotice": {
+                "body": "Þetta samtal notar nú OMEMO. Staðfestu nýja tækið í öryggisupplýsingum tengiliðarins."
             }
         },
         "verifyPeer": {

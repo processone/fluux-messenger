@@ -559,6 +559,9 @@
                     "untrusted": "non verificato",
                     "rejected": "RIFIUTATO: firma non valida"
                 }
+            },
+            "omemoSwitchNotice": {
+                "body": "Questa conversazione ora usa OMEMO. Verifica il nuovo dispositivo nei dettagli di sicurezza del contatto."
             }
         },
         "verifyPeer": {

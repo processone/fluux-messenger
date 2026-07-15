@@ -559,6 +559,9 @@
                     "untrusted": "gan fíorú",
                     "rejected": "DIÚLTAITHE: síniú neamhbhailí"
                 }
+            },
+            "omemoSwitchNotice": {
+                "body": "Úsáideann an comhrá seo OMEMO anois. Deimhnigh an gléas nua i sonraí slándála an teagmhálaí."
             }
         },
         "verifyPeer": {

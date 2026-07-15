@@ -558,6 +558,9 @@
                     "untrusted": "kontrollimata",
                     "rejected": "TAGASI LÜKATUD: kehtetu allkiri"
                 }
+            },
+            "omemoSwitchNotice": {
+                "body": "See vestlus kasutab nüüd OMEMO-t. Kontrolli uut seadet kontakti turvateabes."
             }
         },
         "verifyPeer": {

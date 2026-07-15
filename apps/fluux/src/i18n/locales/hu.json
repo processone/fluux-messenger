@@ -556,6 +556,9 @@
                     "untrusted": "nem hitelesítve",
                     "rejected": "ELUTASÍTVA: érvénytelen aláírás"
                 }
+            },
+            "omemoSwitchNotice": {
+                "body": "Ez a beszélgetés mostantól OMEMO-t használ. Ellenőrizze az új eszközt a partner biztonsági adatai között."
             }
         },
         "verifyPeer": {

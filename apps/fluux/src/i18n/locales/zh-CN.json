@@ -556,6 +556,9 @@
                     "untrusted": "未验证",
                     "rejected": "已拒绝：签名无效"
                 }
+            },
+            "omemoSwitchNotice": {
+                "body": "此对话现在使用 OMEMO。请在联系人的安全详情中验证新设备。"
             }
         },
         "verifyPeer": {

@@ -560,6 +560,9 @@
                     "untrusted": "niezweryfikowane",
                     "rejected": "ODRZUCONO: nieprawidłowy podpis"
                 }
+            },
+            "omemoSwitchNotice": {
+                "body": "Ta rozmowa korzysta teraz z OMEMO. Zweryfikuj nowe urządzenie w szczegółach zabezpieczeń kontaktu."
             }
         },
         "verifyPeer": {

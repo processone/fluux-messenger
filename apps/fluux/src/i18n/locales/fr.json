@@ -558,6 +558,9 @@
                     "untrusted": "non vérifié",
                     "rejected": "REJETÉ: signature invalide"
                 }
+            },
+            "omemoSwitchNotice": {
+                "body": "Cette conversation utilise désormais OMEMO. Vérifiez le nouvel appareil dans les détails de sécurité du contact."
             }
         },
         "verifyPeer": {

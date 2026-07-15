@@ -556,6 +556,9 @@
                     "untrusted": "overifierat",
                     "rejected": "AVVISAD: ogiltig signatur"
                 }
+            },
+            "omemoSwitchNotice": {
+                "body": "Den här konversationen använder nu OMEMO. Verifiera den nya enheten i kontaktens säkerhetsinformation."
             }
         },
         "verifyPeer": {

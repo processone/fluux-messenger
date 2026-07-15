@@ -556,6 +556,9 @@
                     "untrusted": "uverifisert",
                     "rejected": "AVVIST: ugyldig signatur"
                 }
+            },
+            "omemoSwitchNotice": {
+                "body": "Denne samtalen bruker nå OMEMO. Bekreft den nye enheten i kontaktens sikkerhetsdetaljer."
             }
         },
         "verifyPeer": {

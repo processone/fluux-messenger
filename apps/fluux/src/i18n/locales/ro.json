@@ -559,6 +559,9 @@
                     "untrusted": "neverificat",
                     "rejected": "RESPINS: semnătură nevalidă"
                 }
+            },
+            "omemoSwitchNotice": {
+                "body": "Această conversație folosește acum OMEMO. Verifică noul dispozitiv în detaliile de securitate ale contactului."
             }
         },
         "verifyPeer": {

@@ -559,6 +559,9 @@
                     "untrusted": "neoverené",
                     "rejected": "ZAMIETNUTÉ: neplatný podpis"
                 }
+            },
+            "omemoSwitchNotice": {
+                "body": "Táto konverzácia teraz používa OMEMO. Overte nové zariadenie v podrobnostiach zabezpečenia kontaktu."
             }
         },
         "verifyPeer": {

@@ -558,6 +558,9 @@
                     "untrusted": "nepatikrinta",
                     "rejected": "ATMESTA: neteisingas parašas"
                 }
+            },
+            "omemoSwitchNotice": {
+                "body": "Šis pokalbis dabar naudoja OMEMO. Patvirtinkite naują įrenginį kontakto saugumo informacijoje."
             }
         },
         "verifyPeer": {

@@ -560,6 +560,9 @@
                     "untrusted": "nepreverjeno",
                     "rejected": "ZAVRNJENO: neveljaven podpis"
                 }
+            },
+            "omemoSwitchNotice": {
+                "body": "Ta pogovor zdaj uporablja OMEMO. Preverite novo napravo v varnostnih podrobnostih stika."
             }
         },
         "verifyPeer": {

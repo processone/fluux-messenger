@@ -556,6 +556,9 @@
                     "untrusted": "unverified",
                     "rejected": "REJECTED: invalid signature"
                 }
+            },
+            "omemoSwitchNotice": {
+                "body": "This conversation now uses OMEMO. Verify the new device in the contact's security details."
             }
         },
         "verifyPeer": {

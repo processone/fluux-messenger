@@ -557,6 +557,9 @@
                     "untrusted": "nije provjereno",
                     "rejected": "ODBIJENO: nevažeći potpis"
                 }
+            },
+            "omemoSwitchNotice": {
+                "body": "Ovaj razgovor sada koristi OMEMO. Provjerite novi uređaj u sigurnosnim podacima kontakta."
             }
         },
         "verifyPeer": {

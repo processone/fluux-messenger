@@ -556,6 +556,9 @@
                     "untrusted": "niet geverifieerd",
                     "rejected": "GEWEIGERD: ongeldige handtekening"
                 }
+            },
+            "omemoSwitchNotice": {
+                "body": "Dit gesprek gebruikt nu OMEMO. Verifieer het nieuwe apparaat in de beveiligingsdetails van het contact."
             }
         },
         "verifyPeer": {

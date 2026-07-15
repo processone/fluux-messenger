@@ -561,6 +561,9 @@
                     "untrusted": "mhux verifikat",
                     "rejected": "MIĊĦUD: firma invalida"
                 }
+            },
+            "omemoSwitchNotice": {
+                "body": "Din il-konversazzjoni issa tuża OMEMO. Ivverifika l-apparat il-ġdid fid-dettalji tas-sigurtà tal-kuntatt."
             }
         },
         "verifyPeer": {

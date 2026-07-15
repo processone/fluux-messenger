@@ -57,6 +57,8 @@ export function EncryptionSettings() {
   const { client } = useXMPPContext()
   const openpgpEnabled = useEncryptionSettingsStore((s) => s.openpgpEnabled)
   const setOpenpgpEnabled = useEncryptionSettingsStore((s) => s.setOpenpgpEnabled)
+  const omemoEnabled = useEncryptionSettingsStore((s) => s.omemoEnabled)
+  const setOmemoEnabled = useEncryptionSettingsStore((s) => s.setOmemoEnabled)
   const registrationError = useEncryptionSettingsStore((s) => s.registrationError)
   const addToast = useToastStore((s) => s.addToast)
 
@@ -67,6 +69,7 @@ export function EncryptionSettings() {
   const [keychainBacked, setKeychainBacked] = useState<boolean | null>(null)
   const [isCopied, setIsCopied] = useState(false)
   const [isToggling, setIsToggling] = useState(false)
+  const [isOmemoToggling, setIsOmemoToggling] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
   const [generationFailed, setGenerationFailed] = useState(false)
@@ -434,6 +437,31 @@ export function EncryptionSettings() {
       setIsToggling(false)
     }
   }, [openpgpEnabled, online, client, jid, setOpenpgpEnabled, addToast, t, openWebUnlockDialog])
+
+  // OMEMO toggle — desktop-only, and far simpler than OpenPGP: no web path,
+  // no identity-choice dialog, no fingerprint probe. Flipping the flag
+  // registers/unregisters the OMEMO plugin (idempotent, per-id) on the live
+  // client. On any failure we roll the flag back and toast, mirroring the
+  // OpenPGP handler's try/catch/finally shape.
+  const handleOmemoToggle = useCallback(async () => {
+    const next = !omemoEnabled
+    setIsOmemoToggling(true)
+    try {
+      setOmemoEnabled(next)
+      if (!online) return
+      if (next) {
+        await registerE2EEPlugins(client)
+      } else {
+        await unregisterE2EEPlugins(client)
+      }
+    } catch (err) {
+      addToast('error', t('settings.encryption.toggleFailed'))
+      console.error('[Fluux] OMEMO toggle failed:', err)
+      setOmemoEnabled(!next)
+    } finally {
+      setIsOmemoToggling(false)
+    }
+  }, [omemoEnabled, online, client, setOmemoEnabled, addToast, t])
 
   // --- Identity choice dialog handlers (silent-fork prevention) ---
   // Each handler resolves the `pendingIdentityChoice` state with one of
@@ -902,6 +930,40 @@ export function EncryptionSettings() {
               aria-label={t('settings.encryption.openpgpLabel')}
             />
           </div>
+        </div>
+
+        {/* OMEMO toggle block — desktop-only. Mirrors the OpenPGP toggle
+            above; on web we render a one-line note in its place (same shape
+            as the rotate-not-supported-on-web note further down). */}
+        <div className="space-y-3">
+          {isTauri() ? (
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <Lock className="size-4 text-fluux-muted flex-shrink-0" />
+                  <label className="text-sm font-medium text-fluux-text">
+                    {t('settings.encryption.omemo.label')}
+                  </label>
+                  <span className="px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider rounded bg-fluux-yellow/15 text-fluux-yellow">
+                    {t('settings.encryption.experimental')}
+                  </span>
+                </div>
+                <p className="mt-1 text-xs text-fluux-muted leading-snug">
+                  {t('settings.encryption.omemo.description')}
+                </p>
+              </div>
+              <Toggle
+                checked={omemoEnabled}
+                onChange={handleOmemoToggle}
+                loading={isOmemoToggling}
+                aria-label={t('settings.encryption.omemo.label')}
+              />
+            </div>
+          ) : (
+            <p className="text-xs text-fluux-muted leading-snug">
+              {t('settings.encryption.omemo.desktopOnly')}
+            </p>
+          )}
         </div>
 
         {/* PEP-unsupported banner — the server can't host the published key,

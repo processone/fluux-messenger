@@ -559,6 +559,9 @@
                     "untrusted": "no verificat",
                     "rejected": "REBUTJAT: signatura no vàlida"
                 }
+            },
+            "omemoSwitchNotice": {
+                "body": "Aquesta conversa ara utilitza OMEMO. Verifiqueu el nou dispositiu als detalls de seguretat del contacte."
             }
         },
         "verifyPeer": {

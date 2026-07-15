@@ -556,6 +556,9 @@
                     "untrusted": "vahvistamaton",
                     "rejected": "HYLÄTTY: virheellinen allekirjoitus"
                 }
+            },
+            "omemoSwitchNotice": {
+                "body": "Tämä keskustelu käyttää nyt OMEMOa. Vahvista uusi laite yhteystiedon suojaustiedoissa."
             }
         },
         "verifyPeer": {

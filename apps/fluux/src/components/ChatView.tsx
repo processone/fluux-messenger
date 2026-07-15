@@ -9,6 +9,7 @@ import { useToastStore } from '@/stores/toastStore'
 import { useConversationPlaintextOverrideStore } from '@/stores/conversationPlaintextOverrideStore'
 import { VerifyPeerDialog } from './VerifyPeerDialog'
 import { KeyChangeBanner } from './KeyChangeBanner'
+import { OmemoSwitchNotice } from './OmemoSwitchNotice'
 import { useConnectionStore } from '@fluux/sdk/react'
 import { useFileUpload, useLinkPreview, useTypeToFocus, useMessageCopy, useMode, useMessageSelection, useMessageHoverState, useDragAndDrop, useConversationDraft, useTimeFormat } from '@/hooks'
 import { Upload, Loader2 } from 'lucide-react'
@@ -440,6 +441,12 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
           peerJid={activeConversation.id}
           peerName={activeConversation.name}
         />
+      )}
+
+      {/* OMEMO-switch notice — 1:1 only. Self-renders nothing unless the
+          conversation just switched from OpenPGP to OMEMO. */}
+      {activeConversation.type === 'chat' && (
+        <OmemoSwitchNotice peerJid={activeConversation.id} />
       )}
 
       {/* Verify-peer dialog — opened from the encryption icon in the header */}

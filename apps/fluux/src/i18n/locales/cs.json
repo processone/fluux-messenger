@@ -560,6 +560,9 @@
                     "untrusted": "neověřeno",
                     "rejected": "ODMÍTNUTO: neplatný podpis"
                 }
+            },
+            "omemoSwitchNotice": {
+                "body": "Tato konverzace nyní používá OMEMO. Ověřte nové zařízení v podrobnostech zabezpečení kontaktu."
             }
         },
         "verifyPeer": {
