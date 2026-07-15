@@ -998,14 +998,18 @@ export class Admin extends BaseModule {
     const setEl = query.getChild('set', NS_RSM)
     const pagination = parseRSMResponse(setEl)
 
-    // Parse room items
+    // Parse room items. Deduplicate by JID: some MUC services emit the same
+    // room more than once in a single disco#items response, and a boundary
+    // room can repeat across RSM pages (issue #1010).
     const rooms: AdminRoom[] = []
+    const seen = new Set<string>()
     const items = query.getChildren('item') || []
 
     for (const item of items) {
       const jid = item.attrs.jid
       const name = item.attrs.name || getLocalPart(jid)
-      if (jid) {
+      if (jid && !seen.has(jid)) {
+        seen.add(jid)
         rooms.push({ jid, name })
       }
     }
