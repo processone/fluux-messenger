@@ -248,8 +248,11 @@ interface ChatState {
   markReadToNewest: (conversationId: string) => void
   clearFirstNewMessageId: (conversationId: string) => void
   /** Recompute the session-only "New messages" divider from the current read pointer
-   *  (lastSeenMessageId) for this conversation. Forward-only and idempotent: sets the divider to
-   *  the first unread message after the pointer, or clears it when the pointer is at the newest.
+   *  (lastSeenMessageId) for this conversation. Forward-only and idempotent: repositions the
+   *  divider to the first unread message after the pointer when one exists. Never clears an
+   *  existing divider when the pointer is at the newest (nothing unread) — that state is kept
+   *  alive deliberately after a FAB jump-to-present so the jump-to-last-read pill can offer a
+   *  return; clearing is owned by the explicit read-through / mark-read paths.
    *  No-op when there is no existing divider. Touches nothing but firstNewMessageMarkers.
    *  Only meaningful for the ACTIVE conversation: that is where the resident `messages` array
    *  lives. On a deactivated conversation `setActiveConversation` deletes the messages entry, so
@@ -1136,10 +1139,13 @@ export const chatStore = createStore<ChatState>()(
             { treatDelayedAsNew: true }
           ).firstNewMessageId
 
-          if (divider === state.firstNewMessageMarkers.get(conversationId)) return state
+          // Only ever reposition the divider FORWARD to a real unread message. When there is no unread
+          // after the pointer (divider undefined — reader is at the newest), do NOT clear it here: the
+          // divider is deliberately kept alive after a FAB jump-to-present so the jump-to-last-read pill
+          // can offer a return, and the explicit read-through / mark-read paths own clearing.
+          if (!divider || divider === state.firstNewMessageMarkers.get(conversationId)) return state
           const newMarkers = new Map(state.firstNewMessageMarkers)
-          if (divider) newMarkers.set(conversationId, divider)
-          else newMarkers.delete(conversationId)
+          newMarkers.set(conversationId, divider)
           return { firstNewMessageMarkers: newMarkers }
         })
       },

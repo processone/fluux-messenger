@@ -55,10 +55,10 @@ describe('chatStore.resyncDividerToReadPointer', () => {
     expect(chatStore.getState().firstNewMessageMarkers.has(CID)).toBe(false)
   })
 
-  it('clears the divider when the pointer is at the newest message', () => {
+  it('does not clear the divider when the pointer is at the newest (leaves clearing to the read-through path)', () => {
     seed({ lastSeen: 'm3', marker: 'm1', messages: [msg('m0'), msg('m1'), msg('m2'), msg('m3')] })
     chatStore.getState().resyncDividerToReadPointer(CID)
-    expect(chatStore.getState().firstNewMessageMarkers.has(CID)).toBe(false)
+    expect(chatStore.getState().firstNewMessageMarkers.get(CID)).toBe('m1')
   })
 
   it('skips outgoing messages when choosing the first unread', () => {

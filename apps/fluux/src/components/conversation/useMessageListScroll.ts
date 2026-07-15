@@ -307,8 +307,10 @@ export interface UseMessageListScrollResult {
    *  jump-to-last-read pill. */
   markerAboveViewport: boolean
   /** Id of the bottom-most message whose top is within the viewport (the row peeking in at the
-   *  bottom edge), or null before the first scroll. Lets the FAB badge count only the new messages
-   *  still below the fold. */
+   *  bottom edge), or null before the first scroll (or during programmatic positioning — see the
+   *  handleScroll gate). Drives the divider-snap trigger in MessageList (snap the "New messages"
+   *  divider to the read pointer on genuine user scroll); the FAB badge count reads the pointer
+   *  directly instead. */
   bottomVisibleMessageId: string | null
   /** Scroll to (and re-assert toward) the first-new-message marker. Used by the jump-to-last-read
    *  pill's click handler; also the routine the conversation-switch entry effect uses. No-op when
@@ -1140,6 +1142,19 @@ export function useMessageListScroll({
       markerLoop.end()
       reassertLoopRef.current = null
     }
+    // Register the ref BEFORE scheduling the frame, then patch its `raf` id in place — rather than
+    // reassigning reassertLoopRef.current AFTER requestAnimationFrame returns. A mocked/synchronous
+    // rAF (test harnesses) invokes the callback inline, so an outer `ref.current = { raf:
+    // requestAnimationFrame(cb), ... }` evaluates the RHS (running the callback, possibly to
+    // completion — including a `finishMarker()` that nulls the ref) and THEN clobbers that null back
+    // to a stale non-null entry. Pre-registering means a same-tick finish's null assignment is never
+    // overwritten; the `raf` id patch only mutates the (by-then-detached) local object when that
+    // happens.
+    const registerMarkerLoop = (cb: () => void) => {
+      const entry: { raf: number; handle: typeof markerLoop } = { raf: 0, handle: markerLoop }
+      reassertLoopRef.current = entry
+      entry.raf = requestAnimationFrame(cb)
+    }
     let framesLeft = MARKER_REASSERT_FRAMES
     let stableFrames = 0
     let landedTarget = -1
@@ -1221,9 +1236,9 @@ export function useMessageListScroll({
       }
       const warning = markerLoop.frame(performance.now(), wrote)
       if (warning) console.warn(warning)
-      reassertLoopRef.current = { raf: requestAnimationFrame(stepToMarker), handle: markerLoop }
+      registerMarkerLoop(stepToMarker)
     }
-    reassertLoopRef.current = { raf: requestAnimationFrame(stepToMarker), handle: markerLoop }
+    registerMarkerLoop(stepToMarker)
   }, [isAtBottomRef, reassertBottom])
 
   const restoreSavedPosition = useCallback((source: 'entry' | 'retry'): RestoreSavedPositionResult => {
@@ -1852,12 +1867,16 @@ export function useMessageListScroll({
       setMarkerAboveViewport(prev => prev ? false : prev)
     }
 
-    // Surface the bottom-most-visible message (already captured in lastAnchorRef above) as state so
-    // the FAB badge can count only the new messages still BELOW the fold. Same throttled cadence and
-    // prev-dedup as the marker pill; a string identity change means the reader crossed a message
-    // boundary, which is exactly when the badge number should tick.
-    const bottomId = lastAnchorRef.current?.messageId ?? null
-    setBottomVisibleMessageId(prev => (prev !== bottomId ? bottomId : prev))
+    // Track the bottom-most-visible message ONLY on genuine (non-programmatic) user scroll — this
+    // drives the divider-snap trigger in MessageList (snap the "New messages" divider to the read
+    // pointer when the reader scrolls back up). Skipping programmatic scrolls (the entry
+    // scroll-to-marker re-assert, FAB jumps) prevents the divider from drifting during entry
+    // positioning. Conversation switch resets this to null, so the snap can't fire until the reader
+    // actually scrolls.
+    if (!programmaticScroll) {
+      const bottomId = lastAnchorRef.current?.messageId ?? null
+      setBottomVisibleMessageId(prev => (prev !== bottomId ? bottomId : prev))
+    }
 
     // `programmaticScroll` (computed above) also gates the marker-clear and position-save below: a
     // re-assert loop owns scrollTop while it runs, so its scroll events must not (a) clear the marker

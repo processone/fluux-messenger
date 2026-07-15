@@ -60,10 +60,10 @@ describe('roomStore.resyncDividerToReadPointer', () => {
     expect(roomStore.getState().firstNewMessageMarkers.has(JID)).toBe(false)
   })
 
-  it('clears the divider when the pointer is at the newest message', () => {
+  it('does not clear the divider when the pointer is at the newest (leaves clearing to the read-through path)', () => {
     seed({ lastSeen: 'm3', marker: 'm1', messages: [msg('m1'), msg('m2'), msg('m3')] })
     roomStore.getState().resyncDividerToReadPointer(JID)
-    expect(roomStore.getState().firstNewMessageMarkers.has(JID)).toBe(false)
+    expect(roomStore.getState().firstNewMessageMarkers.get(JID)).toBe('m1')
   })
 
   it('is idempotent once the divider already sits at first-unread-after-pointer', () => {
