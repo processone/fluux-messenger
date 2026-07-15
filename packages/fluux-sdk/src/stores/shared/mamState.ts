@@ -70,6 +70,22 @@ export function setMAMError(
 export type MAMQueryDirection = 'backward' | 'forward'
 
 /**
+ * Newest fetched message timestamp (epoch ms), for gap marker positioning by
+ * a forward catch-up. `undefined` for backward queries or an empty page —
+ * matches the `newestFetchedTimestamp` argument expected by
+ * `setMAMQueryCompleted` below. Shared by `chatStore`/`roomStore` to fold
+ * their identical inline computation.
+ */
+export function computeNewestFetchedTimestamp(
+  fetched: Array<{ timestamp?: Date }>,
+  direction: MAMQueryDirection
+): number | undefined {
+  return direction === 'forward' && fetched.length > 0
+    ? Math.max(...fetched.map(m => m.timestamp?.getTime() ?? 0))
+    : undefined
+}
+
+/**
  * Create a new MAM states map with query completed state.
  *
  * @param states - Current MAM states map

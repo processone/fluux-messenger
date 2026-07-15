@@ -196,6 +196,79 @@ describe('chatStore', () => {
       // Never the bare (unscoped) key.
       expect(localStorageMock._store['xmpp-chat-storage']).toBeUndefined()
     })
+
+    it('plants a seam when a fetch-latest page lands disjoint above held history (parity with rooms)', () => {
+      chatStore.getState().addConversation(createConversation(cid))
+      const held = { ...createMessage(cid, 'held'), id: 'held', timestamp: new Date('2026-07-06T00:00:00Z') }
+      chatStore.getState().addMessage(held)
+
+      const fetched = { ...createMessage(cid, 'fresh'), id: 'fresh', timestamp: new Date('2026-07-15T00:00:00Z') }
+      chatStore.getState().mergeMAMMessages(cid, [fetched], {}, true, 'backward', true)
+
+      expect(chatStore.getState().conversationGaps.get(cid)).toEqual({
+        start: new Date('2026-07-06T00:00:00Z').getTime(),
+        end: new Date('2026-07-15T00:00:00Z').getTime(),
+      })
+    })
+
+    it('does NOT plant a seam on dedupe overlap or plain backward pagination', () => {
+      chatStore.getState().addConversation(createConversation(cid))
+      const held = { ...createMessage(cid, 'shared'), id: 'shared', timestamp: new Date('2026-07-14T00:00:00Z') }
+      chatStore.getState().addMessage(held)
+
+      // Overlapping fetch-latest: dedupe hit → connected.
+      const fresh = { ...createMessage(cid, 'fresh'), id: 'fresh', timestamp: new Date('2026-07-15T00:00:00Z') }
+      chatStore.getState().mergeMAMMessages(cid, [{ ...held }, fresh], {}, true, 'backward', true)
+      expect(chatStore.getState().conversationGaps.has(cid)).toBe(false)
+
+      // Plain pagination (isFetchLatest omitted): never a formation candidate.
+      const older = { ...createMessage(cid, 'older'), id: 'older', timestamp: new Date('2026-07-01T00:00:00Z') }
+      chatStore.getState().mergeMAMMessages(cid, [older], {}, false, 'backward')
+      expect(chatStore.getState().conversationGaps.has(cid)).toBe(false)
+    })
+
+    it('backward closure: scroll-up pages shrink then clear a recorded gap', () => {
+      chatStore.getState().addConversation(createConversation(cid))
+      chatStore.setState({ conversationGaps: new Map([[cid, {
+        start: new Date('2026-07-06T00:00:00Z').getTime(),
+        end: new Date('2026-07-14T00:00:00Z').getTime(),
+      }]]) })
+
+      const mid = { ...createMessage(cid, 'mid'), id: 'mid', timestamp: new Date('2026-07-10T00:00:00Z') }
+      const upper = { ...createMessage(cid, 'upper'), id: 'upper', timestamp: new Date('2026-07-14T06:00:00Z') }
+      chatStore.getState().mergeMAMMessages(cid, [mid, upper], {}, false, 'backward')
+      expect(chatStore.getState().conversationGaps.get(cid)).toEqual({
+        start: new Date('2026-07-06T00:00:00Z').getTime(),
+        end: new Date('2026-07-10T00:00:00Z').getTime(),
+      })
+
+      const below = { ...createMessage(cid, 'below'), id: 'below', timestamp: new Date('2026-07-05T00:00:00Z') }
+      chatStore.getState().mergeMAMMessages(cid, [below, { ...mid }], {}, false, 'backward')
+      expect(chatStore.getState().conversationGaps.has(cid)).toBe(false)
+    })
+
+    it('backward closure: an older-region page below the gap leaves it untouched', () => {
+      chatStore.getState().addConversation(createConversation(cid))
+      const gap = {
+        start: new Date('2026-07-06T00:00:00Z').getTime(),
+        end: new Date('2026-07-14T00:00:00Z').getTime(),
+      }
+      chatStore.setState({ conversationGaps: new Map([[cid, gap]]) })
+
+      const ancient = { ...createMessage(cid, 'ancient'), id: 'ancient', timestamp: new Date('2026-07-01T00:00:00Z') }
+      chatStore.getState().mergeMAMMessages(cid, [ancient], {}, true, 'backward')
+      expect(chatStore.getState().conversationGaps.get(cid)).toEqual(gap)
+    })
+
+    it('preserveGapMarker leaves an existing conversation gap untouched on a forward complete=true merge', () => {
+      chatStore.getState().addConversation(createConversation(cid))
+      chatStore.setState({ conversationGaps: new Map([[cid, { start: 1000, end: 5000 }]]) })
+
+      // A bounded windowed context fetch completes within its window — must not clear an older gap.
+      chatStore.getState().mergeMAMMessages(cid, [], {}, true, 'forward', false, true)
+
+      expect(chatStore.getState().conversationGaps.get(cid)).toEqual({ start: 1000, end: 5000 })
+    })
   })
 
   describe('addConversation', () => {

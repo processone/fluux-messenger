@@ -401,7 +401,8 @@ describe('XMPPClient MAM', () => {
         messages: expect.any(Array),
         rsm: expect.any(Object),
         complete: true,
-        direction: 'backward'
+        direction: 'backward',
+        isFetchLatest: true
       })
     })
 
@@ -2511,7 +2512,8 @@ describe('XMPPClient MAM', () => {
         messages: expect.any(Array),
         rsm: expect.any(Object),
         complete: true, // complete from server
-        direction: 'forward' // direction - store will only set isCaughtUpToLive, not isHistoryComplete
+        direction: 'forward', // direction - store will only set isCaughtUpToLive, not isHistoryComplete
+        isFetchLatest: false // forward queries are never fetch-latest candidates
       })
     })
 
@@ -2547,7 +2549,8 @@ describe('XMPPClient MAM', () => {
         messages: expect.any(Array),
         rsm: expect.any(Object),
         complete: true, // complete from server
-        direction: 'backward' // direction - store will set isHistoryComplete
+        direction: 'backward', // direction - store will set isHistoryComplete
+        isFetchLatest: true // before:'' fetch-latest candidate
       })
     })
 
@@ -2911,7 +2914,8 @@ describe('XMPPClient MAM', () => {
         messages: expect.any(Array),
         rsm: expect.objectContaining({ first: 'first-id', last: 'last-id' }),
         complete: true,
-        direction: 'backward'
+        direction: 'backward',
+        isFetchLatest: true // no before, no start = fetch-latest
       })
     })
 
@@ -3030,7 +3034,8 @@ describe('XMPPClient MAM', () => {
         messages: expect.any(Array),
         rsm: expect.any(Object),
         complete: true, // complete from server
-        direction: 'forward' // direction - store will only set isCaughtUpToLive, not isHistoryComplete
+        direction: 'forward', // direction - store will only set isCaughtUpToLive, not isHistoryComplete
+        isFetchLatest: false // forward query, never a fetch-latest
       })
     })
 
@@ -3081,7 +3086,8 @@ describe('XMPPClient MAM', () => {
         messages: expect.any(Array),
         rsm: expect.any(Object),
         complete: true, // complete from server
-        direction: 'backward' // direction - store will set isHistoryComplete
+        direction: 'backward', // direction - store will set isHistoryComplete
+        isFetchLatest: false // real pagination cursor ('some-stanza-id'), not a fetch-latest
       })
     })
 
