@@ -174,7 +174,7 @@ export class MAM extends BaseModule {
    * @returns Query result with messages, completion status, and pagination info
    */
   async queryArchive(options: MAMQueryOptions): Promise<MAMResult> {
-    const { with: withJid, max = 50, before = '', start, end, after, maxAutoPages: maxAutoPagesOpt } = options
+    const { with: withJid, max = 50, before = '', start, end, after, preserveGapMarker, maxAutoPages: maxAutoPagesOpt } = options
     const conversationId = getBareJid(withJid)
     const mamStart = Date.now()
 
@@ -268,7 +268,7 @@ export class MAM extends BaseModule {
               // The archive no longer holds the after-anchor (expired/purged):
               // degrade to fetch-latest (spec §5 — degrade gracefully, never error).
               logInfo(`MAM after-cursor purged for ...@${getDomain(conversationId) || '*'} — degrading to fetch-latest`)
-              return this.queryArchive({ with: withJid, max, before: '' })
+              return this.queryArchive({ with: withJid, max, before: '', preserveGapMarker })
             }
             throw iqError
           }
@@ -342,6 +342,7 @@ export class MAM extends BaseModule {
         rsm: lastRsm,
         complete: isComplete,
         direction,
+        preserveGapMarker,
         isFetchLatest: direction === 'backward' && !before,
       })
 
@@ -779,11 +780,15 @@ export class MAM extends BaseModule {
     // Fetch messages before and after the target timestamp
     const oneHourBefore = new Date(new Date(targetTimestamp).getTime() - 3600000).toISOString()
 
+    // Bounded windowed forward query: its `complete` says nothing about
+    // contiguity outside the [oneHourBefore, ...] window, so it must not
+    // clear (or plant) a recorded gap — `preserveGapMarker` leaves it alone.
     if (isRoom) {
       const result = await this.queryRoomArchive({
         roomJid: conversationId,
         max: contextSize * 2,
         start: oneHourBefore,
+        preserveGapMarker: true,
       })
       return { messages: result.messages }
     } else {
@@ -792,6 +797,7 @@ export class MAM extends BaseModule {
         max: contextSize * 2,
         start: oneHourBefore,
         end: new Date(new Date(targetTimestamp).getTime() + 3600000).toISOString(),
+        preserveGapMarker: true,
       })
       return { messages: result.messages }
     }

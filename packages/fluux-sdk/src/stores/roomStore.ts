@@ -2556,6 +2556,9 @@ export const roomStore = createStore<RoomState>()(
         newMessagesCount: newFromMAM.length,
         patchedCount: patched.length,
         isFetchLatest,
+        // Fallback trusts the preview ts to be an archived message; a non-archived
+        // preview (noLocalStore/tombstone) above the true archive newest could plant
+        // a spurious — click-healable — seam.
         newestHeldBelowTs: messagePageExtent(existingMessages).newestTs ?? fallbackHeldTs,
         preserveGapMarker,
       })

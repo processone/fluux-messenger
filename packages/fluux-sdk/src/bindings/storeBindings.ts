@@ -266,9 +266,9 @@ export function createStoreBindings(
     stores.chat.setMAMError(conversationId, error)
   })
 
-  on('chat:mam-messages', ({ conversationId, messages, rsm, complete, direction, isFetchLatest }) => {
+  on('chat:mam-messages', ({ conversationId, messages, rsm, complete, direction, isFetchLatest, preserveGapMarker }) => {
     const stores = getStores()
-    stores.chat.mergeMAMMessages(conversationId, messages, rsm, complete, direction, isFetchLatest)
+    stores.chat.mergeMAMMessages(conversationId, messages, rsm, complete, direction, isFetchLatest, preserveGapMarker)
   })
 
   // ============================================================================

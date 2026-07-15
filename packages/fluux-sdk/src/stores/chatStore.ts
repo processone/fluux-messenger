@@ -297,7 +297,7 @@ interface ChatState {
    * @param complete - Whether server indicated query is complete
    * @param direction - Query direction: 'backward' for older history, 'forward' for catching up
    */
-  mergeMAMMessages: (conversationId: string, messages: Message[], rsm: RSMResponse, complete: boolean, direction: MAMQueryDirection, isFetchLatest?: boolean) => void
+  mergeMAMMessages: (conversationId: string, messages: Message[], rsm: RSMResponse, complete: boolean, direction: MAMQueryDirection, isFetchLatest?: boolean, preserveGapMarker?: boolean) => void
   getMAMQueryState: (conversationId: string) => MAMQueryState
   resetMAMStates: () => void
   /** Mark all conversations as needing a catch-up MAM query (called on reconnect) */
@@ -1596,7 +1596,7 @@ export const chatStore = createStore<ChatState>()(
         }))
       },
 
-      mergeMAMMessages: (conversationId, mamMessages, rsm, complete, direction, isFetchLatest = false) => {
+      mergeMAMMessages: (conversationId, mamMessages, rsm, complete, direction, isFetchLatest = false, preserveGapMarker = false) => {
         // Newest persisted timestamp (entity preview) — the seam-formation fallback
         // when the resident array is empty this run (fresh session, history on disk).
         const fallbackHeldTs = get().getConversationLastTimestamp(conversationId)
@@ -1634,12 +1634,14 @@ export const chatStore = createStore<ChatState>()(
             complete,
             direction,
             rsm.first, // Pagination cursor for fetching older messages
-            newestFetchedTimestamp
+            newestFetchedTimestamp,
+            preserveGapMarker
           )
 
           // Persisted gap sync (shared transition, both directions) — see
-          // syncGapAfterArchiveMerge. Chat has no bounded force-repair, so
-          // preserveGapMarker is always false.
+          // syncGapAfterArchiveMerge. Bounded windowed context fetches
+          // (fetchContext) pass preserveGapMarker so their windowed
+          // completion can't hide a real gap outside the window.
           const newGaps = syncGapAfterArchiveMerge({
             gaps: state.conversationGaps,
             id: conversationId,
@@ -1651,8 +1653,11 @@ export const chatStore = createStore<ChatState>()(
             newMessagesCount: newMessages.length,
             patchedCount: patched.length,
             isFetchLatest,
+            // Fallback trusts the preview ts to be an archived message; a non-archived
+            // preview (noLocalStore/tombstone) above the true archive newest could plant
+            // a spurious — click-healable — seam.
             newestHeldBelowTs: messagePageExtent(rawExisting).newestTs ?? fallbackHeldTs,
-            preserveGapMarker: false,
+            preserveGapMarker,
           })
 
           // If no new messages (all duplicates), only update MAM state to avoid

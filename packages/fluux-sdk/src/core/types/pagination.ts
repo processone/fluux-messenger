@@ -68,6 +68,13 @@ export interface MAMQueryOptions {
    * existing single-page behavior.
    */
   maxAutoPages?: number
+  /**
+   * When true, the resulting merge leaves the forward gap marker untouched.
+   * Used by bounded "force repair"/windowed context queries so a windowed
+   * completion can't hide a real gap older than the window (nor plant a
+   * spurious one inside it).
+   */
+  preserveGapMarker?: boolean
 }
 
 /**

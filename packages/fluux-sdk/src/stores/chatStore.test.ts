@@ -259,6 +259,16 @@ describe('chatStore', () => {
       chatStore.getState().mergeMAMMessages(cid, [ancient], {}, true, 'backward')
       expect(chatStore.getState().conversationGaps.get(cid)).toEqual(gap)
     })
+
+    it('preserveGapMarker leaves an existing conversation gap untouched on a forward complete=true merge', () => {
+      chatStore.getState().addConversation(createConversation(cid))
+      chatStore.setState({ conversationGaps: new Map([[cid, { start: 1000, end: 5000 }]]) })
+
+      // A bounded windowed context fetch completes within its window — must not clear an older gap.
+      chatStore.getState().mergeMAMMessages(cid, [], {}, true, 'forward', false, true)
+
+      expect(chatStore.getState().conversationGaps.get(cid)).toEqual({ start: 1000, end: 5000 })
+    })
   })
 
   describe('addConversation', () => {
