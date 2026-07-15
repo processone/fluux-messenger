@@ -157,9 +157,16 @@ describe('createStoreBindings', () => {
       )
     })
 
-    it('should handle chat:animation', () => {
+    it('should handle chat:animation when the conversation is active', () => {
+      mockStores.chat.activeConversationId = 'bob@example.com'
       mockClient.emit('chat:animation', { conversationId: 'bob@example.com', animation: 'shake', senderJid: 'bob@example.com' })
       expect(mockStores.chat.triggerAnimation).toHaveBeenCalledWith('bob@example.com', 'shake')
+    })
+
+    it('should not play chat:animation when the conversation is not active', () => {
+      mockStores.chat.activeConversationId = 'other@example.com'
+      mockClient.emit('chat:animation', { conversationId: 'bob@example.com', animation: 'shake', senderJid: 'bob@example.com' })
+      expect(mockStores.chat.triggerAnimation).not.toHaveBeenCalled()
     })
 
     it('should handle read:displayed-synced', () => {
@@ -416,9 +423,16 @@ describe('createStoreBindings', () => {
       expect(mockStores.room.removeBookmark).toHaveBeenCalledWith('room@conference.example.com')
     })
 
-    it('should handle room:animation', () => {
+    it('should handle room:animation when the room is active', () => {
+      mockStores.room.activeRoomJid = 'room@conference.example.com'
       mockClient.emit('room:animation', { roomJid: 'room@conference.example.com', animation: 'confetti', senderNick: 'alice' })
       expect(mockStores.room.triggerAnimation).toHaveBeenCalledWith('room@conference.example.com', 'confetti')
+    })
+
+    it('should not play room:animation when the room is not active', () => {
+      mockStores.room.activeRoomJid = 'other-room@conference.example.com'
+      mockClient.emit('room:animation', { roomJid: 'room@conference.example.com', animation: 'confetti', senderNick: 'alice' })
+      expect(mockStores.room.triggerAnimation).not.toHaveBeenCalled()
     })
 
     it('should handle room:members with avatar lookup', () => {

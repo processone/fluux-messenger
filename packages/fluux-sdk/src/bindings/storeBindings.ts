@@ -219,7 +219,11 @@ export function createStoreBindings(
 
   on('chat:animation', ({ conversationId, animation }) => {
     const stores = getStores()
-    stores.chat.triggerAnimation(conversationId, animation)
+    // Only auto-play in the active conversation; inactive eggs are surfaced by
+    // useEasterEggNotifications (toast + pending-egg store) and played on open.
+    if (stores.chat.activeConversationId === conversationId) {
+      stores.chat.triggerAnimation(conversationId, animation)
+    }
   })
 
   on('read:displayed-synced', ({ conversationId, stanzaId }) => {
@@ -408,7 +412,9 @@ export function createStoreBindings(
 
   on('room:animation', ({ roomJid, animation }) => {
     const stores = getStores()
-    stores.room.triggerAnimation(roomJid, animation)
+    if (stores.room.activeRoomJid === roomJid) {
+      stores.room.triggerAnimation(roomJid, animation)
+    }
   })
 
   on('room:mam-loading', ({ roomJid, isLoading }) => {
