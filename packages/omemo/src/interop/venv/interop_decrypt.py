@@ -8,8 +8,9 @@ the recipient holds the private keys needed to decrypt.
   Alice = @fluux/omemo TS library           (fetches Bob's bundle, encrypts)
 
 Flow: reference generates Bob's bundle -> our TS lib encrypts to it -> reference decrypts,
-recovering our exact SCE-envelope payload bytes with no MAC/auth error at any layer. This
-exercises X3DH (DH ordering, "OMEMO X3DH" KDF, AD = IK_A||IK_B), the Double Ratchet
+recovering our exact opaque content bytes with no MAC/auth error at any layer (`@fluux/omemo`
+is content-agnostic: `encrypt` transports the caller's bytes verbatim, no envelope wrapping).
+This exercises X3DH (DH ordering, "OMEMO X3DH" KDF, AD = IK_A||IK_B), the Double Ratchet
 ("OMEMO Root Chain" / "OMEMO Message Key Material", mk=HMAC(ck,0x01)), and the
 AES-256-CBC + HMAC-trunc16 "OMEMO Payload" cipher.
 
@@ -175,16 +176,17 @@ async def main() -> None:
     if plaintext is None:
         print("plaintext: None (empty OMEMO message)")
     else:
-        print(f"recovered {len(plaintext)}B (our SCE envelope); our ciphertext was "
+        print(f"recovered {len(plaintext)}B of opaque content; our ciphertext was "
               f"{ours['message']['payloadLen']}B")
         print(f"recovered (utf-8, best effort): "
               f"{plaintext.decode('utf-8', errors='replace')!r}")
         expected = ours["plaintext"].encode()
-        assert expected in plaintext, "recovered envelope does not contain our plaintext"
+        # `@fluux/omemo` is content-agnostic: the reference recovers our content bytes verbatim.
+        assert plaintext == expected, "recovered content does not equal our plaintext"
     print("====================================")
     print("\nCRYPTO SUCCESS: reference established the X3DH session from our KeyExchange, ran the "
           "double-ratchet decrypt, verified the payload HMAC, and AES-CBC-decrypted the payload to "
-          "our SCE envelope bytes with NO MAC/auth error. X3DH, ratchet, and payload cipher "
+          "our opaque content bytes with NO MAC/auth error. X3DH, ratchet, and payload cipher "
           "interoperate byte-for-byte.")
 
 

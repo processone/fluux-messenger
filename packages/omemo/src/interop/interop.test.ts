@@ -13,11 +13,10 @@ import { OmemoAccount, MemoryStore, b64decode, b64encode } from '../index'
 //
 // SCOPE (see README.md): this exercises the crypto-transport layers -- X3DH from our
 // bundle, the Double Ratchet, the OMEMO 2 protobuf wire format, the 48-byte payload-key
-// transport and the AES-256-CBC "OMEMO Payload" cipher. The reference *cannot* interpret
-// our SCE envelope (sce.ts emits a placeholder byte format, not XEP-0420 XML), so the peer
-// hands back the RAW recovered payload bytes and this test does the Fluux-format field-walk
-// to pull out the body. A body-level test against a strict XEP-0420 reference is a follow-up
-// for the SDK adapter layer, not this crypto core.
+// transport and the AES-256-CBC "OMEMO Payload" cipher. `@fluux/omemo` is now content-agnostic:
+// `encrypt` transports opaque `content` bytes verbatim, so the reference recovers exactly those
+// bytes. A body-level test against a strict XEP-0420 SCE reference is a follow-up for the SDK
+// adapter layer, not this crypto core.
 
 const HERE = new URL('.', import.meta.url).pathname
 const SHARED = HERE + 'shared/'
@@ -28,30 +27,6 @@ const run = (...args: string[]) =>
   })
 
 const rng = (n: number) => webcrypto.getRandomValues(new Uint8Array(n))
-
-// Minimal reader for sce.ts's placeholder envelope format: a stream of
-// [u32be tagLen][tag][u32be valLen][val] fields. Extracts the `body` field. This mirrors
-// parseEnvelope() (which is intentionally not part of the public API) so the harness can
-// interpret the bytes the reference recovered without leaking that format into the peer.
-function readEnvelopeBody(bytes: Uint8Array): string | undefined {
-  const dec = new TextDecoder()
-  let off = 0
-  const u32 = () => {
-    const v = ((bytes[off] << 24) | (bytes[off + 1] << 16) | (bytes[off + 2] << 8) | bytes[off + 3]) >>> 0
-    off += 4
-    return v
-  }
-  while (off < bytes.length) {
-    const tagLen = u32()
-    const tag = dec.decode(bytes.slice(off, off + tagLen))
-    off += tagLen
-    const valLen = u32()
-    const val = bytes.slice(off, off + valLen)
-    off += valLen
-    if (tag === 'body') return dec.decode(val)
-  }
-  return undefined
-}
 
 describe.runIf(process.env.VITEST_INTEROP)('OMEMO 2 interop with python-omemo', () => {
   beforeAll(() => mkdirSync(SHARED, { recursive: true }))
@@ -71,7 +46,8 @@ describe.runIf(process.env.VITEST_INTEROP)('OMEMO 2 interop with python-omemo', 
       spkSig: b64decode(pb.spkSig),
       preKeys: pb.preKeys.map((p: { id: number; key: string }) => ({ id: p.id, key: b64decode(p.key) })),
     })
-    const msg = await alice.encrypt('peer@local', [pb.deviceId], new TextEncoder().encode('interop hello'))
+    const content = new TextEncoder().encode('interop hello')
+    const msg = await alice.encrypt([{ jid: 'peer@local', deviceIds: [pb.deviceId] }], content)
 
     // 3. Ship the OmemoMessage as JSON (base64 of the real protobuf `key` bytes + payload).
     writeFileSync(
@@ -79,7 +55,7 @@ describe.runIf(process.env.VITEST_INTEROP)('OMEMO 2 interop with python-omemo', 
       JSON.stringify({
         sid: msg.sid,
         payload: msg.payload ? b64encode(msg.payload) : null,
-        keys: msg.keys.map((k) => ({ rid: k.rid, kex: k.kex, data: b64encode(k.data) })),
+        keys: msg.keys.map((k) => ({ jid: k.jid, rid: k.rid, kex: k.kex, data: b64encode(k.data) })),
       }),
     )
 
@@ -89,8 +65,7 @@ describe.runIf(process.env.VITEST_INTEROP)('OMEMO 2 interop with python-omemo', 
     run('decrypt', '/shared/msg.json')
     const recovered = b64decode(readFileSync(SHARED + 'plaintext.b64', 'utf8').trim())
 
-    // 5. Interpret the recovered SCE envelope bytes (Fluux placeholder format) and confirm
-    //    the transported body survived byte-for-byte.
-    expect(readEnvelopeBody(recovered)).toBe('interop hello')
+    // 5. `encrypt` is content-agnostic: the reference recovers our opaque content bytes verbatim.
+    expect(recovered).toEqual(content)
   })
 })

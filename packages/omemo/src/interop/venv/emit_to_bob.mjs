@@ -27,8 +27,11 @@ const bobBundle = {
 }
 await alice.processBundle('bob@localhost', bob.deviceId, bobBundle)
 
+// `@fluux/omemo` is content-agnostic: `encrypt` transports these opaque `content` bytes verbatim
+// (the SDK adapter owns real XEP-0420 SCE framing; this library-level harness uses a stand-in string).
 const plaintext = 'interop hello from @fluux/omemo'
-const msg = await alice.encrypt('bob@localhost', [bob.deviceId], new TextEncoder().encode(plaintext))
+const content = new TextEncoder().encode(plaintext)
+const msg = await alice.encrypt([{ jid: 'bob@localhost', deviceIds: [bob.deviceId] }], content)
 
 // Alice's own publishable bundle, so the reference can learn Alice's identity key.
 const aliceBundle = await alice.publishableBundleAsync()

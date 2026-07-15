@@ -11,22 +11,61 @@ const enc = (s: string) => new TextEncoder().encode(s)
 const dec = (u: Uint8Array) => new TextDecoder().decode(u)
 
 describe('OmemoAccount', () => {
-  it('round-trips an initial PreKey message then an established message', async () => {
+  it('encrypts opaque content to multiple recipients and each decrypts it', async () => {
+    const alice = await OmemoAccount.create(new MemoryStore(), counterRng(1))
+    const bob = await OmemoAccount.create(new MemoryStore(), counterRng(150))
+    const alice2 = await OmemoAccount.create(new MemoryStore(), counterRng(90))
+
+    await alice.processBundle('bob@x', bob.publishableDeviceId(), await bob.publishableBundleAsync())
+    await alice.processBundle('alice@x', alice2.publishableDeviceId(), await alice2.publishableBundleAsync())
+
+    const content = new TextEncoder().encode('<envelope>opaque sce bytes</envelope>')
+    const msg = await alice.encrypt(
+      [
+        { jid: 'bob@x', deviceIds: [bob.publishableDeviceId()] },
+        { jid: 'alice@x', deviceIds: [alice2.publishableDeviceId()] },
+      ],
+      content,
+    )
+    // keys carry their recipient jid
+    expect(new Set(msg.keys.map((k) => k.jid))).toEqual(new Set(['bob@x', 'alice@x']))
+    // both recipients recover the exact content bytes (no envelope wrapping by the library)
+    expect(await bob.decrypt('alice@x', msg.sid, msg)).toEqual(content)
+    expect(await alice2.decrypt('alice@x', msg.sid, msg)).toEqual(content)
+  })
+
+  it('round-trips a single recipient across a KeyExchange then an established message', async () => {
     const alice = await OmemoAccount.create(new MemoryStore(), counterRng(1))
     const bob = await OmemoAccount.create(new MemoryStore(), counterRng(150))
 
     const bobBundle = await bob.publishableBundleAsync()
     await alice.processBundle('bob@x', bob.publishableDeviceId(), bobBundle)
 
-    // 1) Initial message is a KeyExchange
-    const m1 = await alice.encrypt('bob@x', [bob.publishableDeviceId()], enc('secret hi'))
+    // 1) Initial message is a KeyExchange; decrypt returns the exact content bytes.
+    const m1 = await alice.encrypt([{ jid: 'bob@x', deviceIds: [bob.publishableDeviceId()] }], enc('secret hi'))
     expect(m1.keys[0].kex).toBe(true)
-    expect(dec(await bob.decrypt('alice@x', m1.sid, m1))).toBe('secret hi')
+    expect(await bob.decrypt('alice@x', m1.sid, m1)).toEqual(enc('secret hi'))
 
     // 2) Bob replies (establishes his send chain); Alice decrypts
-    const m2 = await bob.encrypt('alice@x', [alice.publishableDeviceId()], enc('got it'))
+    const m2 = await bob.encrypt([{ jid: 'alice@x', deviceIds: [alice.publishableDeviceId()] }], enc('got it'))
     expect(m2.keys[0].kex).toBe(false)
-    expect(dec(await alice.decrypt('bob@x', m2.sid, m2))).toBe('got it')
+    expect(await alice.decrypt('bob@x', m2.sid, m2)).toEqual(enc('got it'))
+  })
+
+  it('returns a zero-length Uint8Array for an empty (key-transport) message', async () => {
+    const alice = await OmemoAccount.create(new MemoryStore(), counterRng(1))
+    const bob = await OmemoAccount.create(new MemoryStore(), counterRng(150))
+    const bDev = bob.publishableDeviceId()
+
+    await alice.processBundle('bob@x', bDev, await bob.publishableBundleAsync())
+    // Encrypt empty content: the ratchet still transports the payload key, but there is no body.
+    const m1 = await alice.encrypt([{ jid: 'bob@x', deviceIds: [bDev] }], new Uint8Array(0))
+    // Drop the payload to model a pure key-transport (control) message.
+    delete m1.payload
+
+    const recovered = await bob.decrypt('alice@x', m1.sid, m1)
+    expect(recovered).toEqual(new Uint8Array(0))
+    expect(recovered.length).toBe(0)
   })
 
   it('fingerprint is 32 curve bytes and identity persists via load', async () => {
@@ -48,29 +87,29 @@ describe('OmemoAccount', () => {
     await alice.processBundle('bob@x', bDev, await bob.publishableBundleAsync())
 
     // m1: Alice -> Bob (KeyExchange)
-    const m1 = await alice.encrypt('bob@x', [bDev], enc('one'))
+    const m1 = await alice.encrypt([{ jid: 'bob@x', deviceIds: [bDev] }], enc('one'))
     expect(m1.keys[0].kex).toBe(true)
     expect(dec(await bob.decrypt('alice@x', m1.sid, m1))).toBe('one')
 
     // m2: Bob -> Alice (established, clears Alice's kex-pending on decrypt)
-    const m2 = await bob.encrypt('alice@x', [aDev], enc('two'))
+    const m2 = await bob.encrypt([{ jid: 'alice@x', deviceIds: [aDev] }], enc('two'))
     expect(m2.keys[0].kex).toBe(false)
     expect(dec(await alice.decrypt('bob@x', m2.sid, m2))).toBe('two')
 
     // m3: Alice -> Bob (now established -> not kex)
-    const m3 = await alice.encrypt('bob@x', [bDev], enc('three'))
+    const m3 = await alice.encrypt([{ jid: 'bob@x', deviceIds: [bDev] }], enc('three'))
     expect(m3.keys[0].kex).toBe(false)
     expect(dec(await bob.decrypt('alice@x', m3.sid, m3))).toBe('three')
 
     // m4: Bob -> Alice
-    const m4 = await bob.encrypt('alice@x', [aDev], enc('four'))
+    const m4 = await bob.encrypt([{ jid: 'alice@x', deviceIds: [aDev] }], enc('four'))
     expect(m4.keys[0].kex).toBe(false)
     expect(dec(await alice.decrypt('bob@x', m4.sid, m4))).toBe('four')
 
     // m5/m6: keep alternating to exercise repeated DH ratchets
-    const m5 = await alice.encrypt('bob@x', [bDev], enc('five'))
+    const m5 = await alice.encrypt([{ jid: 'bob@x', deviceIds: [bDev] }], enc('five'))
     expect(dec(await bob.decrypt('alice@x', m5.sid, m5))).toBe('five')
-    const m6 = await bob.encrypt('alice@x', [aDev], enc('six'))
+    const m6 = await bob.encrypt([{ jid: 'alice@x', deviceIds: [aDev] }], enc('six'))
     expect(dec(await alice.decrypt('bob@x', m6.sid, m6))).toBe('six')
   })
 
@@ -82,7 +121,7 @@ describe('OmemoAccount', () => {
     expect(carol.publishableDeviceId()).not.toBe(bob.publishableDeviceId())
 
     await alice.processBundle('bob@x', bob.publishableDeviceId(), await bob.publishableBundleAsync())
-    const m = await alice.encrypt('bob@x', [bob.publishableDeviceId()], enc('for bob only'))
+    const m = await alice.encrypt([{ jid: 'bob@x', deviceIds: [bob.publishableDeviceId()] }], enc('for bob only'))
 
     await expect(carol.decrypt('alice@x', m.sid, m)).rejects.toThrow(/no key for this device/)
   })
@@ -93,7 +132,7 @@ describe('OmemoAccount', () => {
     const bDev = bob.publishableDeviceId()
 
     await alice.processBundle('bob@x', bDev, await bob.publishableBundleAsync())
-    const m1 = await alice.encrypt('bob@x', [bDev], enc('archived hi'))
+    const m1 = await alice.encrypt([{ jid: 'bob@x', deviceIds: [bDev] }], enc('archived hi'))
 
     const before = (await bob.publishableBundleAsync()).preKeys.length
 
@@ -113,7 +152,7 @@ describe('OmemoAccount', () => {
     const bDev = bob.publishableDeviceId()
 
     await alice.processBundle('bob@x', bDev, await bob.publishableBundleAsync())
-    const m1 = await alice.encrypt('bob@x', [bDev], enc('do not tamper'))
+    const m1 = await alice.encrypt([{ jid: 'bob@x', deviceIds: [bDev] }], enc('do not tamper'))
     // Flip a byte in the AEAD ciphertext payload.
     m1.payload![0] ^= 0xff
 
@@ -133,7 +172,7 @@ describe('OmemoAccount', () => {
     await alice.processBundle('bob@x', bDev, bobBundle)
     const usedPkId = bobBundle.preKeys[0].id // the OTK Alice (and thus the forgery) references
 
-    const m1 = await alice.encrypt('bob@x', [bDev], enc('hi'))
+    const m1 = await alice.encrypt([{ jid: 'bob@x', deviceIds: [bDev] }], enc('hi'))
     // Keep the real pkId/spkId; corrupt only the embedded authenticated message.
     const kex = decodeKeyExchange(m1.keys[0].data)
     expect(kex.pkId).toBe(usedPkId)
@@ -154,7 +193,7 @@ describe('OmemoAccount', () => {
     const bDev = bob.publishableDeviceId()
     await alice.processBundle('bob@x', bDev, await bob.publishableBundleAsync())
 
-    const m1 = await alice.encrypt('bob@x', [bDev], enc('hi'))
+    const m1 = await alice.encrypt([{ jid: 'bob@x', deviceIds: [bDev] }], enc('hi'))
     expect(m1.keys[0].kex).toBe(true)
     expect(dec(await bob.decrypt('alice@x', m1.sid, m1))).toBe('hi')
 
@@ -164,7 +203,7 @@ describe('OmemoAccount', () => {
 
     // Alice still hasn't heard back, so her next message is still kex-flagged — and it must
     // decrypt against the established session (the OLD code rebuilt X3DH and would throw).
-    const m2 = await alice.encrypt('bob@x', [bDev], enc('still me'))
+    const m2 = await alice.encrypt([{ jid: 'bob@x', deviceIds: [bDev] }], enc('still me'))
     expect(m2.keys[0].kex).toBe(true)
     expect(dec(await bob.decrypt('alice@x', m2.sid, m2))).toBe('still me')
   })
@@ -177,7 +216,7 @@ describe('OmemoAccount', () => {
     await alice.processBundle('bob@x', bDev, await bob.publishableBundleAsync())
     const aliceEdPub = (await alice.publishableBundleAsync()).ik
 
-    const m1 = await alice.encrypt('bob@x', [bDev], enc('hi'))
+    const m1 = await alice.encrypt([{ jid: 'bob@x', deviceIds: [bDev] }], enc('hi'))
     expect(dec(await bob.decrypt('alice@x', m1.sid, m1))).toBe('hi')
     expect((await bobStore.loadTrust('alice@x', m1.sid))?.state).toBe('undecided')
 
@@ -185,7 +224,7 @@ describe('OmemoAccount', () => {
     await bobStore.saveTrust('alice@x', m1.sid, { state: 'trusted', identityKey: aliceEdPub })
 
     // Alice, not having heard back, sends another kex-flagged message.
-    const m2 = await alice.encrypt('bob@x', [bDev], enc('again'))
+    const m2 = await alice.encrypt([{ jid: 'bob@x', deviceIds: [bDev] }], enc('again'))
     expect(m2.keys[0].kex).toBe(true)
     expect(dec(await bob.decrypt('alice@x', m2.sid, m2))).toBe('again')
 

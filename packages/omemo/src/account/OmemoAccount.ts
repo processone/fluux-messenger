@@ -13,7 +13,6 @@ import {
   type RatchetState,
 } from '../ratchet/ratchet'
 import { payloadEncrypt, payloadDecrypt } from '../primitives/aead'
-import { buildEnvelope, parseEnvelope } from '../omemo2/sce'
 import { concatBytes } from '../primitives/bytes'
 import { encodeAuthMessage, decodeAuthMessage, encodeKeyExchange, decodeKeyExchange } from '../omemo2/wire'
 import { assertValidBundle, type Bundle, type OmemoMessage, type OmemoKey } from '../omemo2/codec'
@@ -122,42 +121,57 @@ export class OmemoAccount {
     if (!existingTrust) await this.store.saveTrust(peer, rid, { state: 'undecided', identityKey: bundle.ik })
   }
 
-  async encrypt(peer: string, deviceIds: number[], plaintext: Uint8Array): Promise<OmemoMessage> {
-    const envelope = buildEnvelope({ body: new TextDecoder().decode(plaintext) }, this.rng)
+  /**
+   * Content-agnostic, multi-recipient encrypt. `content` is opaque bytes (the SDK adapter owns
+   * any XEP-0420 SCE framing): we generate ONE payload key, `payloadEncrypt(content)` ONCE, and
+   * wrap the resulting 48-byte `k || tag` per device across every recipient JID (the peer's
+   * devices AND the sender's own other devices). Each returned key carries its recipient `jid`.
+   */
+  async encrypt(
+    recipients: Array<{ jid: string; deviceIds: number[] }>,
+    content: Uint8Array,
+  ): Promise<OmemoMessage> {
     const k = this.rng(32)
-    const { ciphertext, tag } = payloadEncrypt(k, envelope)
+    const { ciphertext, tag } = payloadEncrypt(k, content)
     const keyAndHmac = concatBytes(k, tag) // 48 bytes
 
     const keys: OmemoKey[] = []
-    for (const rid of deviceIds) {
-      const stored = await this.store.loadSession(peer, rid)
-      if (!stored) throw new Error(`no session for ${peer}/${rid}; call processBundle first`)
-      const { meta, ratchet } = unpackSession(stored)
-      const state = deserializeRatchet(ratchet)
-      state.rng = this.rng // re-inject real rng before any ratchet step (fail-loud stub otherwise)
-      const ad = Uint8Array.from(meta.ad)
-      const step = ratchetEncrypt(state, keyAndHmac, ad)
-      const authBytes = encodeAuthMessage(step.authMessage)
+    for (const { jid, deviceIds } of recipients) {
+      for (const rid of deviceIds) {
+        const stored = await this.store.loadSession(jid, rid)
+        if (!stored) throw new Error(`no session for ${jid}/${rid}; call processBundle first`)
+        const { meta, ratchet } = unpackSession(stored)
+        const state = deserializeRatchet(ratchet)
+        state.rng = this.rng // re-inject real rng before any ratchet step (fail-loud stub otherwise)
+        const ad = Uint8Array.from(meta.ad)
+        const step = ratchetEncrypt(state, keyAndHmac, ad)
+        const authBytes = encodeAuthMessage(step.authMessage)
 
-      let data: Uint8Array
-      if (meta.kexPending) {
-        data = encodeKeyExchange({
-          pkId: meta.pkId!,
-          spkId: meta.spkId!,
-          ik: this.id.edPub,
-          ek: Uint8Array.from(meta.ek!),
-          message: authBytes,
-        })
-      } else {
-        data = authBytes
+        let data: Uint8Array
+        if (meta.kexPending) {
+          data = encodeKeyExchange({
+            pkId: meta.pkId!,
+            spkId: meta.spkId!,
+            ik: this.id.edPub,
+            ek: Uint8Array.from(meta.ek!),
+            message: authBytes,
+          })
+        } else {
+          data = authBytes
+        }
+        keys.push({ jid, rid, kex: meta.kexPending, data })
+        await this.store.saveSession(jid, rid, packSession(meta, serializeRatchet(step.state)))
       }
-      keys.push({ rid, kex: meta.kexPending, data })
-      await this.store.saveSession(peer, rid, packSession(meta, serializeRatchet(step.state)))
     }
     return { sid: this.id.deviceId, keys, payload: ciphertext }
   }
 
-  async decrypt(peer: string, sid: number, msg: OmemoMessage, opts?: { archive?: boolean }): Promise<Uint8Array> {
+  /**
+   * Content-agnostic decrypt: authenticates the message and returns the RAW recovered content
+   * bytes (no SCE/envelope parsing — that is the adapter's job). `senderJid` is the session
+   * partner JID (the label under which the (senderJid, sid) session is stored).
+   */
+  async decrypt(senderJid: string, sid: number, msg: OmemoMessage, opts?: { archive?: boolean }): Promise<Uint8Array> {
     const mine = msg.keys.find((k) => k.rid === this.id.deviceId)
     if (!mine) throw new Error('message has no key for this device')
 
@@ -167,7 +181,7 @@ export class OmemoAccount {
     // we already have a session is either a normal next message on the initiator's chain
     // or a duplicate of the initial one; both are handled correctly by the ratchet's
     // replay/skip logic (which rejects true duplicates cleanly instead of rebuilding X3DH).
-    const stored = await this.store.loadSession(peer, sid)
+    const stored = await this.store.loadSession(senderJid, sid)
 
     let state: RatchetState
     let ad: Uint8Array
@@ -207,7 +221,7 @@ export class OmemoAccount {
       meta = { ad: [...ad], kexPending: false }
       firstContact = { ik: kex.ik, pkId: kex.pkId, hadOtk: !!otk }
     } else {
-      throw new Error(`no session for ${peer}/${sid}`)
+      throw new Error(`no session for ${senderJid}/${sid}`)
     }
 
     // ratchetDecrypt performs the HMAC check. If it throws, NO writes have happened.
@@ -224,15 +238,15 @@ export class OmemoAccount {
         if (firstContact.hadOtk) await this.store.removePreKey(firstContact.pkId) // consume OTK once
         // Preserve any prior trust decision: only record trust on genuine first contact,
         // never clobber an existing record (e.g. a manual 'trusted' verification).
-        const existingTrust = await this.store.loadTrust(peer, sid)
-        if (!existingTrust) await this.store.saveTrust(peer, sid, { state: 'undecided', identityKey: firstContact.ik })
+        const existingTrust = await this.store.loadTrust(senderJid, sid)
+        if (!existingTrust)
+          await this.store.saveTrust(senderJid, sid, { state: 'undecided', identityKey: firstContact.ik })
       }
-      await this.store.saveSession(peer, sid, packSession(meta, serializeRatchet(result.state)))
+      await this.store.saveSession(senderJid, sid, packSession(meta, serializeRatchet(result.state)))
     }
 
     if (!msg.payload) return new Uint8Array(0) // empty/key-transport message
-    const envelopeBytes = payloadDecrypt(k, msg.payload, tag)
-    return new TextEncoder().encode(parseEnvelope(envelopeBytes).body ?? '')
+    return payloadDecrypt(k, msg.payload, tag) // raw content bytes; SCE parsing is the adapter's job
   }
 }
 

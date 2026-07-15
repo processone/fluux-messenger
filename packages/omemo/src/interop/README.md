@@ -43,24 +43,22 @@ localises to a single constant/layout mismatch — first suspects: the HKDF labe
 associated-data ordering (`AD = IK_initiator || IK_responder`, both Ed25519 RFC 8032 form), a
 protobuf field number, or the ratchet KDF labels.
 
-### Envelope-format scope limitation (important)
+### Content-format scope limitation (important)
 
-This library's `sce.ts` produces a **placeholder length-prefixed byte envelope**, *not* real
-XEP-0420 `<envelope>` XML. Emitting real SCE XML is the future **SDK adapter's** job, not this
-crypto core's. Consequence: a full **body-level** round-trip against a *strict XEP-0420*
-reference is **not** achievable from this library alone — the reference would recover our custom
-envelope bytes, which are not parseable SCE XML.
+`@fluux/omemo` is **content-agnostic**: `encrypt` transports the caller's opaque `content` bytes
+verbatim — it does **not** wrap them in any envelope. Producing real XEP-0420 `<envelope>` SCE
+XML is the future **SDK adapter's** job, not this crypto core's. Consequence: a full
+**body-level** round-trip against a *strict XEP-0420* reference is **not** achievable from this
+library alone — this harness only proves the transport recovers our content bytes byte-for-byte.
 
 The harness handles this honestly:
 
 - `python-omemo`'s `Backend.decrypt_plaintext` returns the recovered payload plaintext as
   **opaque bytes** (it does not itself parse SCE), so the peer writes **those raw bytes**
   (base64) to `/shared/plaintext.b64`.
-- The TS test then does a small **Fluux-format field-walk** (mirroring `parseEnvelope`, which is
-  deliberately not part of the public API) to pull the `body` field out of the recovered bytes
-  and assert it equals `interop hello`.
+- The TS test then asserts the recovered bytes equal the `content` we encrypted (`interop hello`).
 
-So the reference proves it recovered our exact payload **bytes**; the envelope **XML semantics**
+So the reference proves it recovered our exact content **bytes**; the envelope **XML semantics**
 are explicitly out of scope. A body-level test against a strict XEP-0420 reference is a **known
 follow-up** for the adapter layer.
 
@@ -101,7 +99,7 @@ constant diverges from the reference — fix it in the owning task (see suspects
 - **`msg.json`** (us → peer): `{ sid, payload | null, keys: [{ rid, kex, data }] }`, `payload`
   and each `data` base64. `data` is the byte-serialized `OMEMOKeyExchange` (when `kex`) or
   `OMEMOAuthenticatedMessage`. Mirrors our `OmemoMessage`.
-- **`plaintext.b64`** (peer → us): base64 of the raw recovered payload bytes (our SCE envelope).
+- **`plaintext.b64`** (peer → us): base64 of the raw recovered payload bytes (our opaque content).
 - **`msg_from_peer.json`** (peer → us): same shape as `msg.json`, for the reverse direction.
 
 ## Peer script integration points

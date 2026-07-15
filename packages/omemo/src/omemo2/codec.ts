@@ -12,6 +12,7 @@ export interface Bundle {
 export type DeviceList = number[]
 
 export interface OmemoKey {
+  jid: string // recipient bare JID this key is addressed to (for the <keys jid> grouping)
   rid: number
   kex: boolean // true => data is a byte-serialized OMEMOKeyExchange, false => an OMEMOAuthenticatedMessage
   data: Uint8Array
@@ -20,7 +21,7 @@ export interface OmemoKey {
 export interface OmemoMessage {
   sid: number
   keys: OmemoKey[]
-  payload?: Uint8Array // AES-256-CBC ciphertext of the SCE envelope; omitted for key-transport (empty) messages
+  payload?: Uint8Array // AES-256-CBC ciphertext of the opaque content; omitted for key-transport (empty) messages
 }
 
 /** Minimum number of one-time prekeys a published bundle must carry, per XEP-0384 recommendation. */

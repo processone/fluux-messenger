@@ -19,10 +19,10 @@
 # X3DH session establishment from our bundle, the Double Ratchet, the OMEMOKeyExchange /
 # OMEMOAuthenticatedMessage / OMEMOMessage protobuf wire format, the 48-byte
 # `key || auth_tag` payload-key transport, and the AES-256-CBC ("OMEMO Payload") cipher.
-# It does NOT validate XEP-0420 <envelope> XML: @fluux/omemo's sce.ts emits a placeholder
-# length-prefixed byte format, not real SCE XML. `decrypt` therefore recovers and writes
-# the RAW payload plaintext bytes it obtained; interpreting those bytes as a message body
-# is the caller's job (the TS test does a Fluux-format field-walk). See README.md.
+# It does NOT validate XEP-0420 <envelope> XML: @fluux/omemo is content-agnostic and transports
+# the caller's opaque `content` bytes verbatim (no envelope wrapping). `decrypt` therefore
+# recovers and writes the RAW payload plaintext bytes it obtained; interpreting those bytes as a
+# message body is the caller's job (the TS test asserts they equal our content). See README.md.
 # ---------------------------------------------------------------------------------------
 
 import sys
@@ -258,7 +258,7 @@ async def decrypt(msg_path: str) -> None:
 
     plaintext, _device, _key_material = await manager.decrypt(message)
 
-    # plaintext is the RAW payload bytes recovered by the reference (our SCE envelope
+    # plaintext is the RAW payload bytes recovered by the reference (our opaque content
     # bytes), or None for an empty/key-transport message.
     with open(f"{SHARED}/plaintext.b64", "w", encoding="utf8") as fh:
         fh.write("" if plaintext is None else _b64(plaintext))
