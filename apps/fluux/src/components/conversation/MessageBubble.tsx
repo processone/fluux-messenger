@@ -473,7 +473,17 @@ export const MessageBubble = memo(function MessageBubble({
   // signature captures every field that changes the row's natural width so the
   // group re-fits on content edits but not on hover/selection churn.
   const ownGroupWidthSignature = `${message.body ?? ''}|${showAvatar ? 1 : 0}|${timeFormat}|${message.isRetracted ? 1 : 0}|${message.isEdited ? 1 : 0}|${JSON.stringify(message.reactions ?? {})}|${replyContext?.messageId ?? ''}|${message.attachment ? 1 : 0}|${message.linkPreview ? 1 : 0}|${message.poll ? 1 : 0}|${message.encryptedPayload ? 1 : 0}|${message.unsupportedEncryption?.name ?? ''}`
-  const ownGroupRef = useOwnGroupWidth(ownTint ? ownGroupKey : undefined, message.id, ownGroupWidthSignature)
+  const { ref: ownGroupRef, remeasure: remeasureOwnGroup } = useOwnGroupWidth(ownTint ? ownGroupKey : undefined, message.id, ownGroupWidthSignature)
+
+  // Media (image/video/link-preview) reaches its final layout width only once it
+  // loads — after the own-group's initial width measure. Re-fit the group then so
+  // the loaded row's width is shared with its text siblings (else it overflows
+  // the pre-load pin and the tint reads as a ragged edge). Also forwards the
+  // parent's scroll re-pin so the timeline stays glued to the bottom.
+  const handleMediaLoad = () => {
+    onMediaLoad?.()
+    remeasureOwnGroup()
+  }
 
   const { canReply, canEdit, canDelete } = actions
   const canCopyBody = !!message.body && !message.isRetracted && !message.encryptedPayload && !message.unsupportedEncryption
@@ -716,10 +726,10 @@ export const MessageBubble = memo(function MessageBubble({
           )}
 
           {/* File attachments (image, video, audio, text preview, document card) - hidden for retracted */}
-          {!message.isRetracted && <MessageAttachments attachment={message.attachment} onMediaLoad={onMediaLoad} isSelected={isSelected} isHovered={isHovered} isOwnMessage={message.isOutgoing} />}
+          {!message.isRetracted && <MessageAttachments attachment={message.attachment} onMediaLoad={handleMediaLoad} isSelected={isSelected} isHovered={isHovered} isOwnMessage={message.isOutgoing} />}
 
           {/* Link preview - hidden for retracted */}
-          {!message.isRetracted && message.linkPreview && <LinkPreviewCard preview={message.linkPreview} onLoad={onMediaLoad} isOwnMessage={message.isOutgoing} />}
+          {!message.isRetracted && message.linkPreview && <LinkPreviewCard preview={message.linkPreview} onLoad={handleMediaLoad} isOwnMessage={message.isOutgoing} />}
 
           {/* Poll display - hidden for retracted */}
           {!message.isRetracted && message.poll && (
