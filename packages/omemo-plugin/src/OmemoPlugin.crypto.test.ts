@@ -102,7 +102,39 @@ describe('OmemoPlugin encrypt/decrypt (SCE seam)', () => {
   it('encrypt with no peer devices throws rather than sending plaintext', async () => {
     const alice = await ready('alice@x')
     const handle = await alice.p.openConversation({ kind: 'direct', peer: 'nobody@x' })
-    await expect(alice.p.encrypt(handle, bodyPayload('leak?'))).rejects.toThrow(/no recipient devices/i)
+    await expect(alice.p.encrypt(handle, bodyPayload('leak?'))).rejects.toThrow(/no usable OMEMO devices/i)
+  })
+
+  it('encrypt throws when the peer has no devices even though the sender has other own devices', async () => {
+    // A peer with zero devices must NOT be masked by encrypt-to-self: give Alice a
+    // SECOND own device (so ownDevs is non-empty) and address a peer who published
+    // no device list. Without the peerDevs guard, encrypt would return an <encrypted>
+    // addressed only to Alice's own devices — undeliverable to bob, reported "secure".
+    const alice = await ready('alice@x')
+    await ready('alice@x', alice.c.net) // Alice's second own device -> ownDevs non-empty
+    const handle = await alice.p.openConversation({ kind: 'direct', peer: 'bob@x' })
+    await expect(alice.p.encrypt(handle, bodyPayload('to nobody but me?'))).rejects.toThrow(
+      /no usable OMEMO devices/i,
+    )
+  })
+
+  it('persists BTBV trust for a first-seen device decrypted from the archive', async () => {
+    // Archive-mode decrypt skips the account's own trust write, so the adapter must
+    // persist the resolved BTBV decision itself — otherwise getDeviceTrust reports
+    // `unknown` for a device the message surfaced as `tofu`.
+    const alice = await ready('alice@x')
+    const bob = await ready('bob@x', alice.c.net)
+    const aliceSid = (await alice.p.ensureIdentity()).devices![0]!.deviceId
+
+    const aHandle = await alice.p.openConversation({ kind: 'direct', peer: 'bob@x' })
+    const enc = await alice.p.encrypt(aHandle, bodyPayload('archived hi'))
+
+    const bHandle = await bob.p.openConversation({ kind: 'direct', peer: 'alice@x' })
+    const res = await bob.p.decryptArchive(bHandle, bob.p.tryClaimInbound(enc.stanzaElement)!, {})
+    expect(res.status ?? 'ok').toBe('ok')
+    expect(res.securityContext.trust).toBe('tofu')
+    // The surfaced trust was PERSISTED (not left as unknown) for the first-seen device.
+    expect(await bob.p.getDeviceTrust('alice@x', aliceSid)).toBe('tofu')
   })
 
   it('a 0-length key-transport decrypts as control-message with no plaintext', async () => {

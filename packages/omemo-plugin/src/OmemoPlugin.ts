@@ -203,6 +203,15 @@ export class OmemoPlugin implements E2EEPlugin {
     // sibling devices and MAM replay stay readable), never our own sending device.
     const myDev = acc.publishableDeviceId()
     const peerDevs = (await fetchDeviceList(this.ctx.xmpp, peer)).slice(0, DEVICE_CAP)
+    // The conversation PEER must have at least one OMEMO device. Otherwise the
+    // encrypt-to-self recipients below would keep `recipients` non-empty (self
+    // only) and we'd emit an <encrypted> addressed to NONE of the peer's devices —
+    // ciphertext the intended recipient can never read, reported to the host as a
+    // secure send. Fail LOUD (a peer with no published devices, or a transient PEP
+    // miss) so the host applies its plaintext policy rather than silently sending.
+    if (peerDevs.length === 0) {
+      throw new Error(`OMEMO: peer ${peer} has no usable OMEMO devices`)
+    }
     const ownDevs = (await fetchDeviceList(this.ctx.xmpp, this.ctx.account.jid))
       .filter((d) => d !== myDev)
       .slice(0, DEVICE_CAP)
@@ -289,12 +298,41 @@ export class OmemoPlugin implements E2EEPlugin {
     const existing = await store.loadTrust(senderJid, sid)
     const peerHasVerified = await this.peerHasVerifiedDevice(store, senderJid)
     const resolved = resolveInboundTrust(peerHasVerified, (existing?.state as BtbvState | undefined) ?? null)
-    // Persist only when it ADVANCES a blank/undecided record; resolveInboundTrust
-    // already preserves any explicit prior decision, so this never downgrades.
-    if (existing && existing.state !== resolved.store) {
-      await store.saveTrust(senderJid, sid, { ...existing, state: resolved.store })
+    if (existing) {
+      // Promote a blank/undecided record IN PLACE, keeping its bound identity key.
+      // resolveInboundTrust preserves any explicit prior decision, so this never
+      // downgrades an existing verified/untrusted verdict.
+      if (existing.state !== resolved.store) {
+        await store.saveTrust(senderJid, sid, { ...existing, state: resolved.store })
+      }
+    } else {
+      // First-seen device with NO record to promote. `OmemoAccount.decrypt` records
+      // the BTBV identity key + `undecided` state on non-archive first contact, but
+      // an ARCHIVE-mode decrypt skips that write — so without persisting here,
+      // getPeerTrust/getDeviceTrust would report `unknown` for a device the message
+      // just surfaced as `tofu`. Record the resolved decision now, bound to the
+      // sender's published identity key when we can fetch it (best-effort empty bytes
+      // otherwise — we never drop the decision over a transient bundle miss). There is
+      // no prior explicit decision to overwrite, so the no-downgrade rule holds.
+      const identityKey = await this.fetchIdentityKey(senderJid, sid)
+      await store.saveTrust(senderJid, sid, { state: resolved.store, identityKey })
     }
     return { protocolId: this.descriptor.id, trust: toSecurityTrust(resolved.surfaced) }
+  }
+
+  /**
+   * Best-effort fetch of a device's published Ed25519 identity key, to bind onto a
+   * first-seen `TrustRecord`. Returns empty bytes if the bundle is unavailable; the
+   * caller persists the trust *state* regardless so trust queries stay consistent.
+   */
+  private async fetchIdentityKey(jid: string, deviceId: number): Promise<Uint8Array> {
+    try {
+      const bundle = await fetchBundle(this.ctx.xmpp, jid, deviceId)
+      if (bundle) return bundle.ik
+    } catch {
+      /* bundle unavailable (retracted device, PEP miss) — persist state with empty IK */
+    }
+    return new Uint8Array(0)
   }
 
   /**
