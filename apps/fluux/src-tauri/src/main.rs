@@ -1522,6 +1522,10 @@ fn main() {
             openpgp::openpgp_backup_import_all,
             openpgp::openpgp_backup_import_selected,
             openpgp::openpgp_rotate_encryption_subkey,
+            e2ee_store::e2ee_store_get,
+            e2ee_store::e2ee_store_put,
+            e2ee_store::e2ee_store_delete,
+            e2ee_store::e2ee_store_list,
             #[cfg(target_os = "macos")]
             notifications::post_notification,
             #[cfg(target_os = "macos")]

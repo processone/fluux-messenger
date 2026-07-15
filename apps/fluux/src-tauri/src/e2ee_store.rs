@@ -15,10 +15,11 @@
 //! off the keychain and makes the seal deterministic across get/put within a
 //! session.
 //!
-//! The public surface (`Store` + get/put/delete/list) is consumed by the Tauri
-//! command layer added in M2b Task 2; until that lands it is exercised only by
-//! the tests below, so silence the binary's dead-code lint for this module.
-#![allow(dead_code)]
+//! The public surface (`Store` + get/put/delete/list) is wrapped by the Tauri
+//! commands below (`e2ee_store_get`/`put`/`delete`/`list`, M2b Task 2), which
+//! resolve the per-user app data dir, base64-encode bytes across the IPC
+//! boundary, validate the `account` param is a plausible bare JID, and
+//! serialize concurrent same-account writes.
 use aes_gcm::aead::rand_core::RngCore;
 use aes_gcm::aead::{Aead, KeyInit, OsRng};
 use aes_gcm::{Aes256Gcm, Key, Nonce};
@@ -26,7 +27,8 @@ use std::collections::{BTreeMap, HashMap};
 use std::io::Write as _;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex, OnceLock};
+use tauri::Manager;
 
 /// Keychain service name for per-account master keys. Distinct from the OpenPGP
 /// service so the two subsystems never collide on an account entry.
@@ -54,13 +56,19 @@ pub struct Store {
     /// (locked / access-denied / Secret-Service-down) rather than `NoEntry`,
     /// so the "do not mint a divergent key on a transient error" path can be
     /// exercised without a flaky real keychain. Always `false` in production.
+    /// Only *read* from the `#[cfg(test)]`-gated branch in `read_keychain`, so
+    /// a non-test build never touches it — narrowly silence that dead-code
+    /// warning rather than allowing it module-wide.
+    #[allow(dead_code)]
     simulate_keychain_error: bool,
     /// Test seam: inject a raw stored keychain payload (base64 string) so the
     /// real decode + length validation in `read_keychain` can be exercised
     /// against a malformed entry. The `keyring` mock isolates its store per
     /// `Entry`, so an entry seeded from outside the `Store` is invisible to it;
     /// this seam feeds the payload the `Store`'s own read would have seen.
-    /// Always `None` in production.
+    /// Always `None` in production. Same cfg(test)-only-read situation as
+    /// `simulate_keychain_error` above.
+    #[allow(dead_code)]
     test_keychain_payload: Option<String>,
 }
 
@@ -163,6 +171,13 @@ impl Store {
     /// True if any account's master key was resolved from the 0600 fallback
     /// file rather than the OS keychain. Values remain AES-256-GCM sealed
     /// either way; this only downgrades the key-protection boundary.
+    ///
+    /// Not yet wired to a Tauri command — M2b Task 2 only surfaces
+    /// get/put/delete/list. This is an observability seam for a later
+    /// command (or the tests below) to warn the user about the weaker
+    /// key-protection boundary; narrowly allow the dead-code warning rather
+    /// than blanket-allowing the module.
+    #[allow(dead_code)]
     pub fn fallback_used(&self) -> bool {
         self.fallback_used.load(Ordering::Relaxed)
     }
@@ -448,6 +463,119 @@ fn b64_decode(s: &str) -> Result<Vec<u8>, String> {
         .map_err(|e| e.to_string())
 }
 
+// --- Tauri command layer -----------------------------------------------
+//
+// This is the IPC trust boundary: `account` arrives as an arbitrary string
+// from the webview. Two hazards flagged in the Task-1 review apply here:
+//   (a) `sanitize_jid` can collapse distinct account strings onto the same
+//       on-disk file, so we reject anything that isn't a plausible bare JID
+//       before it ever reaches the store;
+//   (b) a read-modify-write (`read_map` + `write_map`) is not atomic, so two
+//       concurrent `put`/`delete` calls for the same account could race and
+//       lose an update. `account_lock` serializes mutating calls per
+//       sanitized-account (i.e. per on-disk file), process-wide.
+
+/// Reject anything that isn't a plausible bare JID: empty, missing `@`, or
+/// containing control characters (which could otherwise ride `sanitize_jid`
+/// into odd filenames or log output). This does not fully re-validate JID
+/// grammar — it is a cheap gate against obviously-wrong input reaching the
+/// store, not a JID parser.
+fn validate_account(account: &str) -> Result<(), String> {
+    if account.is_empty() || !account.contains('@') || account.chars().any(|c| c.is_control()) {
+        return Err("invalid account".to_string());
+    }
+    Ok(())
+}
+
+/// Process-wide per-account locks, keyed by the sanitized (on-disk) account
+/// name so two account strings that `sanitize_jid` would collapse onto the
+/// same file are also serialized against each other. `put`/`delete` hold the
+/// relevant lock for their full read-modify-write so concurrent writers to
+/// the same account can't interleave and lose an update.
+static ACCOUNT_LOCKS: OnceLock<Mutex<HashMap<String, Arc<Mutex<()>>>>> = OnceLock::new();
+
+fn account_lock(account: &str) -> Arc<Mutex<()>> {
+    let registry = ACCOUNT_LOCKS.get_or_init(|| Mutex::new(HashMap::new()));
+    let mut map = registry.lock().unwrap_or_else(|e| e.into_inner());
+    map.entry(sanitize_jid(account))
+        .or_insert_with(|| Arc::new(Mutex::new(())))
+        .clone()
+}
+
+/// Inner logic for `e2ee_store_get`, exercised directly by tests against a
+/// temp-dir `Store` (no `AppHandle` needed).
+fn handle_get(store: &Store, account: &str, key: &str) -> Result<Option<String>, String> {
+    validate_account(account)?;
+    Ok(store.get(account, key)?.map(|b| b64_encode(&b)))
+}
+
+/// Inner logic for `e2ee_store_put`. Decodes `value_b64` before acquiring the
+/// account lock (cheap, no I/O) and holds the lock across the store write.
+fn handle_put(store: &Store, account: &str, key: &str, value_b64: &str) -> Result<(), String> {
+    validate_account(account)?;
+    let value = b64_decode(value_b64)?;
+    let lock = account_lock(account);
+    let _guard = lock.lock().unwrap_or_else(|e| e.into_inner());
+    store.put(account, key, &value)
+}
+
+/// Inner logic for `e2ee_store_delete`.
+fn handle_delete(store: &Store, account: &str, key: &str) -> Result<(), String> {
+    validate_account(account)?;
+    let lock = account_lock(account);
+    let _guard = lock.lock().unwrap_or_else(|e| e.into_inner());
+    store.delete(account, key)
+}
+
+/// Inner logic for `e2ee_store_list`. Reads are not serialized against the
+/// account lock: `write_map` lands via an atomic rename, so a concurrent read
+/// only ever observes a fully-old or fully-new file, never a torn one.
+fn handle_list(store: &Store, account: &str, prefix: &str) -> Result<Vec<String>, String> {
+    validate_account(account)?;
+    store.list(account, prefix)
+}
+
+fn store_for(app: &tauri::AppHandle) -> Result<Store, String> {
+    let base = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("app_data_dir: {e}"))?;
+    Ok(Store::new(base))
+}
+
+#[tauri::command]
+pub fn e2ee_store_get(
+    app: tauri::AppHandle,
+    account: String,
+    key: String,
+) -> Result<Option<String>, String> {
+    handle_get(&store_for(&app)?, &account, &key)
+}
+
+#[tauri::command]
+pub fn e2ee_store_put(
+    app: tauri::AppHandle,
+    account: String,
+    key: String,
+    value_b64: String,
+) -> Result<(), String> {
+    handle_put(&store_for(&app)?, &account, &key, &value_b64)
+}
+
+#[tauri::command]
+pub fn e2ee_store_delete(app: tauri::AppHandle, account: String, key: String) -> Result<(), String> {
+    handle_delete(&store_for(&app)?, &account, &key)
+}
+
+#[tauri::command]
+pub fn e2ee_store_list(
+    app: tauri::AppHandle,
+    account: String,
+    prefix: String,
+) -> Result<Vec<String>, String> {
+    handle_list(&store_for(&app)?, &account, &prefix)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -617,6 +745,90 @@ mod tests {
         s.put("a@x", "k", b"first").unwrap();
         s.put("a@x", "k", b"second").unwrap();
         assert_eq!(s.get("a@x", "k").unwrap(), Some(b"second".to_vec()));
+    }
+
+    // --- Command-layer (handle_*) tests -------------------------------------
+
+    #[test]
+    fn handle_functions_round_trip_via_base64() {
+        install_mock_keychain();
+        let dir = tempdir().unwrap();
+        let store = Store::for_testing(dir.path().to_path_buf());
+        let value_b64 = b64_encode(b"hello e2ee");
+
+        handle_put(&store, "alice@example.com", "session/1", &value_b64).unwrap();
+        assert_eq!(
+            handle_get(&store, "alice@example.com", "session/1").unwrap(),
+            Some(value_b64)
+        );
+        assert_eq!(
+            handle_list(&store, "alice@example.com", "session/").unwrap(),
+            vec!["session/1".to_string()]
+        );
+
+        handle_delete(&store, "alice@example.com", "session/1").unwrap();
+        assert_eq!(
+            handle_get(&store, "alice@example.com", "session/1").unwrap(),
+            None
+        );
+    }
+
+    #[test]
+    fn handle_functions_reject_invalid_account() {
+        let dir = tempdir().unwrap();
+        let store = Store::for_testing_no_keychain(dir.path().to_path_buf());
+        let value_b64 = b64_encode(b"x");
+
+        assert!(handle_get(&store, "", "k").is_err(), "empty account");
+        assert!(
+            handle_get(&store, "no-at-sign", "k").is_err(),
+            "missing '@'"
+        );
+        assert!(
+            handle_put(&store, "bad\u{0000}acct@x", "k", &value_b64).is_err(),
+            "control character"
+        );
+        assert!(handle_delete(&store, "", "k").is_err());
+        assert!(handle_list(&store, "", "prefix").is_err());
+    }
+
+    #[test]
+    fn handle_put_rejects_invalid_base64() {
+        let dir = tempdir().unwrap();
+        let store = Store::for_testing_no_keychain(dir.path().to_path_buf());
+        assert!(handle_put(&store, "a@x", "k", "not valid base64!!").is_err());
+    }
+
+    #[test]
+    fn concurrent_puts_to_same_account_both_fully_persist() {
+        install_mock_keychain();
+        let dir = tempdir().unwrap();
+        let store = Arc::new(Store::for_testing(dir.path().to_path_buf()));
+        let barrier = Arc::new(std::sync::Barrier::new(2));
+        const N: usize = 50;
+
+        let (s1, b1) = (store.clone(), barrier.clone());
+        let t1 = std::thread::spawn(move || {
+            b1.wait();
+            for i in 0..N {
+                handle_put(&s1, "race@x", &format!("k1/{i}"), &b64_encode(&[1])).unwrap();
+            }
+        });
+        let (s2, b2) = (store.clone(), barrier.clone());
+        let t2 = std::thread::spawn(move || {
+            b2.wait();
+            for i in 0..N {
+                handle_put(&s2, "race@x", &format!("k2/{i}"), &b64_encode(&[2])).unwrap();
+            }
+        });
+        t1.join().unwrap();
+        t2.join().unwrap();
+
+        // Without per-account serialization this is a classic lost-update:
+        // both threads read-modify-write the same JSON map, so whichever
+        // write lands last silently drops keys written by the other thread.
+        assert_eq!(handle_list(&store, "race@x", "k1/").unwrap().len(), N);
+        assert_eq!(handle_list(&store, "race@x", "k2/").unwrap().len(), N);
     }
 
     #[test]
