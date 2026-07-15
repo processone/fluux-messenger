@@ -21,7 +21,7 @@
 //! 12-byte IV per call, 128-bit auth tag appended to the ciphertext.
 
 use aes_gcm::aead::{Aead, OsRng};
-use aes_gcm::{AeadCore, Aes256Gcm, Key, KeyInit};
+use aes_gcm::{AeadCore, Aes256Gcm, KeyInit};
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
 use serde::Serialize;
@@ -93,20 +93,32 @@ pub fn parse_upload_args(headers: &HeaderMap) -> Result<UploadArgs, String> {
     })
 }
 
+/// One AES-256-GCM encryption result. Key + IV are one-shot — never reuse.
+pub struct EncryptedUpload {
+    /// Ciphertext with the 128-bit auth tag appended (WebCrypto-compatible).
+    pub ciphertext: Vec<u8>,
+    pub key: [u8; 32],
+    pub iv: [u8; 12],
+}
+
 /// Encrypt file bytes with a fresh AES-256-GCM key and IV.
 ///
 /// Mirrors the WebCrypto path (`MediaEncryption.encryptFile`): the returned
 /// ciphertext has the 128-bit auth tag appended, and key/IV are one-shot —
 /// generated here, never accepted from a caller, so nonce reuse is
 /// impossible by construction.
-pub fn encrypt_for_upload(plaintext: &[u8]) -> Result<(Vec<u8>, [u8; 32], [u8; 12]), String> {
+pub fn encrypt_for_upload(plaintext: &[u8]) -> Result<EncryptedUpload, String> {
     let key = Aes256Gcm::generate_key(OsRng);
     let nonce = Aes256Gcm::generate_nonce(&mut OsRng);
     let cipher = Aes256Gcm::new(&key);
     let ciphertext = cipher
         .encrypt(&nonce, plaintext)
         .map_err(|_| "upload_file: AES-GCM encryption failed".to_string())?;
-    Ok((ciphertext, key.into(), nonce.into()))
+    Ok(EncryptedUpload {
+        ciphertext,
+        key: key.into(),
+        iv: nonce.into(),
+    })
 }
 
 /// `Read` adapter that counts bytes handed to reqwest and emits one progress
@@ -124,7 +136,7 @@ impl<R: Read> Read for ProgressReader<R> {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         let n = self.inner.read(buf)?;
         self.sent += n as u64;
-        let percent = if self.total == 0 { 100 } else { self.sent * 100 / self.total };
+        let percent = (self.sent * 100).checked_div(self.total).unwrap_or(100);
         if percent > self.last_percent {
             self.last_percent = percent;
             let _ = self.app.emit(
@@ -194,12 +206,12 @@ pub async fn upload_file(
 
     tauri::async_runtime::spawn_blocking(move || {
         let (payload, response) = if args.encrypt {
-            let (ciphertext, key, iv) = encrypt_for_upload(&bytes)?;
+            let encrypted = encrypt_for_upload(&bytes)?;
             (
-                ciphertext,
+                encrypted.ciphertext,
                 UploadResponse {
-                    key: Some(BASE64.encode(key)),
-                    iv: Some(BASE64.encode(iv)),
+                    key: Some(BASE64.encode(encrypted.key)),
+                    iv: Some(BASE64.encode(encrypted.iv)),
                 },
             )
         } else {
@@ -216,6 +228,7 @@ pub async fn upload_file(
 mod tests {
     use super::*;
     use aes_gcm::aead::Payload;
+    use aes_gcm::Key;
     use tauri::http::HeaderValue;
 
     fn headers(entries: &[(&str, &str)]) -> HeaderMap {
@@ -274,16 +287,16 @@ mod tests {
     #[test]
     fn encrypt_for_upload_appends_tag_and_roundtrips() {
         let plaintext = b"attachment bytes".to_vec();
-        let (ciphertext, key, iv) = encrypt_for_upload(&plaintext).unwrap();
+        let encrypted = encrypt_for_upload(&plaintext).unwrap();
 
         // WebCrypto-compatible shape: ciphertext || 16-byte GCM tag.
-        assert_eq!(ciphertext.len(), plaintext.len() + 16);
+        assert_eq!(encrypted.ciphertext.len(), plaintext.len() + 16);
 
-        let cipher = Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(&key));
+        let cipher = Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(&encrypted.key));
         let decrypted = cipher
             .decrypt(
-                (&iv).into(),
-                Payload { msg: &ciphertext, aad: &[] },
+                (&encrypted.iv).into(),
+                Payload { msg: encrypted.ciphertext.as_slice(), aad: &[] },
             )
             .unwrap();
         assert_eq!(decrypted, plaintext);
@@ -291,9 +304,9 @@ mod tests {
 
     #[test]
     fn encrypt_for_upload_generates_fresh_key_and_iv() {
-        let (_, key_a, iv_a) = encrypt_for_upload(b"x").unwrap();
-        let (_, key_b, iv_b) = encrypt_for_upload(b"x").unwrap();
-        assert_ne!(key_a, key_b);
-        assert_ne!(iv_a, iv_b);
+        let a = encrypt_for_upload(b"x").unwrap();
+        let b = encrypt_for_upload(b"x").unwrap();
+        assert_ne!(a.key, b.key);
+        assert_ne!(a.iv, b.iv);
     }
 }
