@@ -9,11 +9,17 @@
  * *above* the gap after the session-start fix) would never re-detect it, leaving
  * the gap silent again.
  *
- * Detection is driven ONLY by the reliable signal: a forward catch-up that ended
- * `complete=false` (the server said there is more, and we stopped at the page
- * cap). We never infer holes from timestamp discontinuities — a quiet period and
- * a real gap are indistinguishable by timestamp, and ejabberd archive ids are
- * non-sequential.
+ * Detection is driven ONLY by reliable structural signals — never by timestamp
+ * discontinuities (a quiet period and a real gap are indistinguishable by
+ * timestamp, and ejabberd archive ids are non-sequential):
+ * 1. a forward catch-up that ended `complete=false` (the server said there is
+ *    more, and we stopped at the page cap);
+ * 2. a `before:''` fetch-latest page that landed entirely above held history
+ *    with no dedupe overlap — the page provably does not connect to what we
+ *    hold, so the boundary between them is a seam (recorded at formation).
+ * Recorded gaps close progressively from both directions: forward catch-up
+ * resumes from the boundary; backward scroll-up pagination shrinks/clears the
+ * gap when its pages reach into or across it.
  *
  * @module Stores/Shared/MamGap
  */
@@ -171,4 +177,68 @@ export function closeGapWithBackwardPage(
   if (page.oldestTs <= gap.start) return undefined
   if (gap.end === undefined || page.oldestTs < gap.end) return { start: gap.start, end: page.oldestTs }
   return gap
+}
+
+/** Everything the gap transition needs from an archive merge, both directions. */
+export interface ArchiveMergeGapInput {
+  /** Current persisted gap map (`roomGaps` / `conversationGaps`). */
+  gaps: Map<string, GapInterval>
+  /** Room JID / conversation id. */
+  id: string
+  direction: 'backward' | 'forward'
+  /** Server's `<fin complete=…>` for this merge. */
+  complete: boolean
+  /** `forwardGapTimestamp` AFTER `setMAMQueryCompleted` for this merge (forward only). */
+  forwardGapTimestamp: number | undefined
+  /** Merged timeline (for `computeGapEnd` on the forward path). */
+  merged: Array<{ timestamp?: Date }>
+  /** The incoming page, as handed to the merge. */
+  fetched: Array<{ timestamp?: Date }>
+  /** How many of `fetched` survived dedupe. */
+  newMessagesCount: number
+  /** Archive-id backfills onto held messages. */
+  patchedCount: number
+  /** The query was a `before:''` fetch-latest. */
+  isFetchLatest: boolean
+  /** Newest message held BEFORE this merge (resident newest ?? persisted preview ts). */
+  newestHeldBelowTs: number | undefined
+  /** Bounded force-repair: leave the marker untouched (neither set nor cleared). */
+  preserveGapMarker: boolean
+}
+
+/**
+ * The single gap transition for BOTH stores and BOTH merge directions.
+ *
+ * Forward: mirror the (complete=false-driven) `forwardGapTimestamp` into the
+ * persisted map — unchanged behavior, extracted from the near-twin blocks in
+ * `mergeRoomMAMMessages` / `mergeMAMMessages`.
+ *
+ * Backward: an existing gap is reconciled against the page (closure takes
+ * priority — a fetch-latest while a gap is already recorded must not re-plant
+ * a shallower seam over a deeper one); otherwise a disjoint fetch-latest page
+ * plants a new seam at formation.
+ *
+ * Copy-on-write: returns the same map reference when nothing changes, so
+ * callers can skip persistence and re-renders.
+ */
+export function syncGapAfterArchiveMerge(input: ArchiveMergeGapInput): Map<string, GapInterval> {
+  const {
+    gaps, id, direction, complete, forwardGapTimestamp, merged, fetched,
+    newMessagesCount, patchedCount, isFetchLatest, newestHeldBelowTs, preserveGapMarker,
+  } = input
+
+  if (preserveGapMarker) return gaps
+
+  if (direction === 'forward') {
+    const gapEnd = forwardGapTimestamp !== undefined ? computeGapEnd(merged, forwardGapTimestamp) : undefined
+    return syncGap(gaps, id, forwardGapTimestamp, gapEnd)
+  }
+
+  const existing = gaps.get(id)
+  const next = existing
+    ? closeGapWithBackwardPage(existing, messagePageExtent(fetched), complete)
+    : isFetchLatest
+      ? detectFetchLatestSeam(fetched, newMessagesCount, patchedCount, newestHeldBelowTs)
+      : undefined
+  return syncGap(gaps, id, next?.start, next?.end)
 }

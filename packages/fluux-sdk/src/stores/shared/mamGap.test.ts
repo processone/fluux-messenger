@@ -7,7 +7,9 @@ import {
   messagePageExtent,
   detectFetchLatestSeam,
   closeGapWithBackwardPage,
+  syncGapAfterArchiveMerge,
   type GapInterval,
+  type ArchiveMergeGapInput,
 } from './mamGap'
 
 describe('computeGapEnd', () => {
@@ -174,5 +176,78 @@ describe('closeGapWithBackwardPage', () => {
     expect(closeGapWithBackwardPage(openGap, page, false)).toEqual({
       start: openGap.start, end: ts('2026-07-10T00:00:00Z'),
     })
+  })
+})
+
+describe('syncGapAfterArchiveMerge', () => {
+  const id = 'room@conference.example.com'
+  const base = (over: Partial<ArchiveMergeGapInput>): ArchiveMergeGapInput => ({
+    gaps: new Map(),
+    id,
+    direction: 'backward',
+    complete: false,
+    forwardGapTimestamp: undefined,
+    merged: [],
+    fetched: [],
+    newMessagesCount: 0,
+    patchedCount: 0,
+    isFetchLatest: false,
+    newestHeldBelowTs: undefined,
+    preserveGapMarker: false,
+    ...over,
+  })
+
+  it('forward: mirrors forwardGapTimestamp into the map with computeGapEnd (existing behavior)', () => {
+    const merged = [msg('2026-07-06T00:00:00Z'), msg('2026-07-15T00:00:00Z')]
+    const out = syncGapAfterArchiveMerge(base({
+      direction: 'forward', forwardGapTimestamp: ts('2026-07-06T00:00:00Z'), merged,
+    }))
+    expect(out.get(id)).toEqual({ start: ts('2026-07-06T00:00:00Z'), end: ts('2026-07-15T00:00:00Z') })
+  })
+
+  it('forward: clears the gap when forwardGapTimestamp is undefined (complete catch-up)', () => {
+    const gaps = new Map([[id, { start: 1000, end: 5000 }]])
+    const out = syncGapAfterArchiveMerge(base({ direction: 'forward', gaps, complete: true }))
+    expect(out.has(id)).toBe(false)
+  })
+
+  it('preserveGapMarker: returns the map untouched for BOTH directions', () => {
+    const gaps = new Map([[id, { start: 1000, end: 5000 }]])
+    expect(syncGapAfterArchiveMerge(base({ direction: 'forward', gaps, preserveGapMarker: true }))).toBe(gaps)
+    expect(syncGapAfterArchiveMerge(base({ gaps, preserveGapMarker: true, isFetchLatest: true }))).toBe(gaps)
+  })
+
+  it('backward formation: fetch-latest page disjoint above held history plants a seam', () => {
+    const fetched = [msg('2026-07-14T00:00:00Z'), msg('2026-07-15T00:00:00Z')]
+    const out = syncGapAfterArchiveMerge(base({
+      fetched, newMessagesCount: 2, isFetchLatest: true,
+      newestHeldBelowTs: ts('2026-07-06T00:00:00Z'),
+    }))
+    expect(out.get(id)).toEqual({ start: ts('2026-07-06T00:00:00Z'), end: ts('2026-07-14T00:00:00Z') })
+  })
+
+  it('backward formation: NOT planted for a plain pagination page (isFetchLatest=false)', () => {
+    const fetched = [msg('2026-07-14T00:00:00Z')]
+    const out = syncGapAfterArchiveMerge(base({
+      fetched, newMessagesCount: 1, newestHeldBelowTs: ts('2026-07-06T00:00:00Z'),
+    }))
+    expect(out.has(id)).toBe(false)
+  })
+
+  it('backward closure: an existing gap takes priority over formation and shrinks/clears', () => {
+    const gaps = new Map([[id, { start: ts('2026-07-01T00:00:00Z'), end: ts('2026-07-14T00:00:00Z') }]])
+    const fetched = [msg('2026-07-10T00:00:00Z'), msg('2026-07-14T06:00:00Z')]
+    const out = syncGapAfterArchiveMerge(base({
+      gaps, fetched, newMessagesCount: 2, isFetchLatest: true, // fetch-latest flag must NOT re-plant
+      newestHeldBelowTs: ts('2026-06-01T00:00:00Z'),
+    }))
+    expect(out.get(id)).toEqual({ start: ts('2026-07-01T00:00:00Z'), end: ts('2026-07-10T00:00:00Z') })
+  })
+
+  it('backward no-op: returns the SAME map reference when nothing changes', () => {
+    const gaps = new Map([[id, { start: ts('2026-07-06T00:00:00Z'), end: ts('2026-07-14T00:00:00Z') }]])
+    const fetched = [msg('2026-07-01T00:00:00Z')] // entirely below the gap
+    const out = syncGapAfterArchiveMerge(base({ gaps, fetched, newMessagesCount: 1 }))
+    expect(out).toBe(gaps)
   })
 })
