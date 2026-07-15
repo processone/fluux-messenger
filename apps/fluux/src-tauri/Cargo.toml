@@ -85,6 +85,8 @@ unicode-normalization = "0.1"
 # Test-only: not pulled into release builds.
 tokio = { version = "1", features = ["test-util"] }
 tower = { version = "0.5", features = ["util"] }
+# Temp dirs for the e2ee_store at-rest KV tests (per-account JSON + 0600 mk files).
+tempfile = "3"
 
 # Updater plugin for auto-updates (desktop only)
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]

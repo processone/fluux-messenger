@@ -202,6 +202,7 @@ mod xmpp_proxy;
 mod openpgp;
 mod openpgp_backup;
 mod openpgp_storage;
+mod e2ee_store;
 mod notifications;
 mod mcp;
 
