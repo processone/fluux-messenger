@@ -13,6 +13,16 @@ import type {
   XMLElementData,
 } from '@fluux/sdk'
 
+/** The `PEPPublishOptions` shape, derived from the host primitive (not re-exported by the SDK). */
+type PublishOptions = Parameters<PluginContext['xmpp']['publishPEP']>[2]
+
+/** A single captured `publishPEP` call, so tests can assert node/itemId/options. */
+export interface CapturedPublish {
+  node: string
+  itemId: string | undefined
+  options: PublishOptions
+}
+
 /**
  * Shared in-memory PEP network. Nodes and subscriptions are keyed by
  * `"${jid} ${node}"` so a subscription registered for a peer's node fires
@@ -57,9 +67,15 @@ function memPluginStorage(): PluginStorage {
 export function createMockPluginContext(
   jid: string,
   shared?: MockNetwork,
-): { ctx: PluginContext; net: MockNetwork; updates: SecurityContextUpdate[] } {
+): {
+  ctx: PluginContext
+  net: MockNetwork
+  updates: SecurityContextUpdate[]
+  publishes: CapturedPublish[]
+} {
   const net = shared ?? newMockNetwork()
   const updates: SecurityContextUpdate[] = []
+  const publishes: CapturedPublish[] = []
 
   const ctx: PluginContext = {
     storage: memPluginStorage(),
@@ -79,7 +95,11 @@ export function createMockPluginContext(
       async queryDisco() {
         return { features: [], identities: [] }
       },
-      async publishPEP(node, item) {
+      async publishPEP(node, item, options) {
+        // Capture the publish so tests can assert the interop-critical options
+        // (accessModel:'open', maxItems:1) and item id ('current') that let peers
+        // READ our device-list/bundle nodes.
+        publishes.push({ node, itemId: item.id, options })
         const key = pepKey(jid, node)
         net.nodes.set(key, [item])
         for (const cb of net.subs.get(key) ?? []) cb(item)
@@ -110,7 +130,7 @@ export function createMockPluginContext(
     },
   }
 
-  return { ctx, net, updates }
+  return { ctx, net, updates, publishes }
 }
 
 /**

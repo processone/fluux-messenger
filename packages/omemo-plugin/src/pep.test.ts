@@ -99,4 +99,19 @@ describe('OMEMO 2 PEP', () => {
   it('round-trips deviceListToXml/deviceListFromXml directly', () => {
     expect(deviceListFromXml(deviceListToXml([3, 1, 2]))).toEqual([3, 1, 2])
   })
+
+  it('publishes device-list and bundle nodes with the interop-critical open access model', async () => {
+    // Peers can only READ an `open` PEP node; a `maxItems:1`/id `current` singleton is
+    // how XEP-0384 keeps exactly one live device-list/bundle item. Assert the plugin
+    // publishes with those options so a regression to whitelist/default can't slip by.
+    const a = createMockPluginContext('a@x')
+    await publishDeviceList(a.ctx.xmpp, [5, 6])
+    await publishBundle(a.ctx.xmpp, 5, sampleBundle())
+
+    for (const pub of a.publishes) {
+      expect(pub.itemId).toBe('current')
+      expect(pub.options).toEqual({ accessModel: 'open', maxItems: 1 })
+    }
+    expect(a.publishes).toHaveLength(2)
+  })
 })

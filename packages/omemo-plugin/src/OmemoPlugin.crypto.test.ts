@@ -3,6 +3,9 @@ import { xml } from '@xmpp/client'
 import { serializePayloadEnvelope } from '@fluux/sdk'
 import { OmemoPlugin } from './OmemoPlugin'
 import { createMockPluginContext, type MockNetwork } from './testing/MockPluginContext'
+import { parseEncrypted } from './encryptedElement'
+import { dataToElement } from './stanzaData'
+import { publishDeviceList, fetchDeviceList } from './pep'
 
 /** Spin up a plugin bound to a fresh (or shared) mock PEP network, identity published. */
 async function ready(jid: string, net?: MockNetwork) {
@@ -114,6 +117,51 @@ describe('OmemoPlugin encrypt/decrypt (SCE seam)', () => {
     await ready('alice@x', alice.c.net) // Alice's second own device -> ownDevs non-empty
     const handle = await alice.p.openConversation({ kind: 'direct', peer: 'bob@x' })
     await expect(alice.p.encrypt(handle, bodyPayload('to nobody but me?'))).rejects.toThrow(
+      /no usable OMEMO devices/i,
+    )
+  })
+
+  it('encrypts to the reachable device and skips a peer device with no published bundle (partial fan-out)', async () => {
+    // Bob advertises TWO device ids but only ONE has a bundle. `ensureSessions`
+    // establishes a session for the reachable device and skips the other; `encrypt`
+    // must then address ONLY the reachable device and succeed. Under the OLD
+    // (unfiltered) behavior, `acc.encrypt` would throw `no session for bob@x/<phantom>`
+    // on the session-less device, bricking the entire send.
+    const alice = await ready('alice@x')
+    const bob = await ready('bob@x', alice.c.net)
+    const bobSid = Number((await bob.p.ensureIdentity()).devices![0]!.deviceId)
+
+    // Add a phantom device id to bob's device-list with NO bundle published for it.
+    const PHANTOM = 999999
+    const current = await fetchDeviceList(bob.c.ctx.xmpp, 'bob@x')
+    await publishDeviceList(bob.c.ctx.xmpp, [...new Set([...current, PHANTOM])])
+
+    const handle = await alice.p.openConversation({ kind: 'direct', peer: 'bob@x' })
+    const enc = await alice.p.encrypt(handle, bodyPayload('partial hi'))
+
+    // The <encrypted> addresses only the reachable device, never the phantom.
+    const msg = parseEncrypted(dataToElement(enc.stanzaElement))
+    const bobRids = msg.keys.filter((k) => k.jid === 'bob@x').map((k) => k.rid)
+    expect(bobRids).toContain(bobSid)
+    expect(bobRids).not.toContain(PHANTOM)
+
+    // And the reachable device really decrypts the body.
+    const bHandle = await bob.p.openConversation({ kind: 'direct', peer: 'alice@x' })
+    const res = await bob.p.decrypt(bHandle, bob.p.tryClaimInbound(enc.stanzaElement)!, {})
+    expect(res.status ?? 'ok').toBe('ok')
+    expect(new TextDecoder().decode(res.plaintext!)).toContain('partial hi')
+  })
+
+  it('encrypt throws when the peer has device ids but no bundles (all-unreachable, never silent plaintext)', async () => {
+    // A peer whose device-list has ids but NO published bundles yields zero reachable
+    // devices after ensureSessions. That must fail LOUD (so the host applies its
+    // plaintext policy), never silently emit encrypt-to-self-only ciphertext.
+    const alice = await ready('alice@x')
+    const bob = createMockPluginContext('bob@x', alice.c.net) // ids published below, but no ensureIdentity => no bundles
+    await publishDeviceList(bob.ctx.xmpp, [111, 222])
+
+    const handle = await alice.p.openConversation({ kind: 'direct', peer: 'bob@x' })
+    await expect(alice.p.encrypt(handle, bodyPayload('all unreachable'))).rejects.toThrow(
       /no usable OMEMO devices/i,
     )
   })

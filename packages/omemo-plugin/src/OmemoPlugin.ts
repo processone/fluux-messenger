@@ -184,6 +184,23 @@ export class OmemoPlugin implements E2EEPlugin {
     }
   }
 
+  /**
+   * Filter `deviceIds` to only those for which a session was successfully loaded/
+   * established. `ensureSessions` deliberately skips devices with a missing/invalid
+   * bundle, so after it runs some candidate ids may still have NO session. Passing
+   * such an id into `OmemoAccount.encrypt` would throw `no session for …` and brick
+   * the ENTIRE outbound message. Filtering here realises `ensureSessions`'s stated
+   * intent — "encrypt to the rest" — so one unreachable device never sinks the send.
+   */
+  private async reachableDevices(jid: string, deviceIds: number[]): Promise<number[]> {
+    const store = new PluginStorageOmemoStore(this.ctx.storage)
+    const reachable: number[] = []
+    for (const rid of deviceIds) {
+      if (await store.loadSession(jid, rid)) reachable.push(rid)
+    }
+    return reachable
+  }
+
   async encrypt(handle: ConversationHandle, plaintext: Uint8Array): Promise<EncryptedPayload> {
     const acc = await this.ensureAccount()
     const peer = this.peerOf(handle)
@@ -219,14 +236,25 @@ export class OmemoPlugin implements E2EEPlugin {
     await this.ensureSessions(acc, peer, peerDevs)
     await this.ensureSessions(acc, this.ctx.account.jid, ownDevs)
 
-    const recipients = [
-      { jid: peer, deviceIds: peerDevs },
-      { jid: this.ctx.account.jid, deviceIds: ownDevs },
-    ].filter((r) => r.deviceIds.length > 0)
-    // Fail LOUD rather than ever transmitting the body in the clear.
-    if (recipients.length === 0) {
-      throw new Error('OMEMO: no recipient devices to encrypt to; refusing to send plaintext')
+    // `ensureSessions` skips devices whose bundle is missing/invalid, so a device id
+    // in the peer's (or our own) list may still have no session. Narrow each group to
+    // the devices that actually have a session — `acc.encrypt` throws on the first
+    // session-less device, which would brick the WHOLE send over one stale/unreachable
+    // device. We encrypt to "the rest", matching ensureSessions's stated intent.
+    const reachablePeerDevs = await this.reachableDevices(peer, peerDevs)
+    const reachableOwnDevs = await this.reachableDevices(this.ctx.account.jid, ownDevs)
+
+    // Apply the peer guard to the FILTERED set: a peer whose every device is
+    // unreachable (all bundles retracted/invalid) must still fail LOUD, never fall
+    // back to encrypt-to-self only (undeliverable ciphertext reported as a secure send).
+    if (reachablePeerDevs.length === 0) {
+      throw new Error(`OMEMO: peer ${peer} has no usable OMEMO devices`)
     }
+
+    const recipients = [
+      { jid: peer, deviceIds: reachablePeerDevs },
+      { jid: this.ctx.account.jid, deviceIds: reachableOwnDevs },
+    ].filter((r) => r.deviceIds.length > 0)
 
     const msg = await acc.encrypt(recipients, sceBytes)
     return {
