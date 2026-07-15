@@ -17,7 +17,11 @@ function fakeClient() {
 }
 
 describe('registerE2EEPlugins with OMEMO', () => {
-  beforeEach(() => { localStorage.clear() })
+  beforeEach(() => {
+    localStorage.clear()
+    useEncryptionSettingsStore.getState().setOpenpgpEnabled(false)
+    useEncryptionSettingsStore.getState().setOmemoEnabled(false)
+  })
   it('registers OMEMO on Tauri when omemoEnabled, with a storage backend', async () => {
     useEncryptionSettingsStore.getState().setOmemoEnabled(true)
     useEncryptionSettingsStore.getState().setOpenpgpEnabled(false)

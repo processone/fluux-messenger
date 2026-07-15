@@ -1,5 +1,8 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { useProtocolSwitchStore } from './protocolSwitchStore'
+import { useProtocolSwitchStore, load } from './protocolSwitchStore'
+import { buildScopedStorageKey } from '@fluux/sdk'
+
+const KEY = buildScopedStorageKey('fluux-e2ee-protocol-switch')
 
 describe('protocolSwitchStore', () => {
   beforeEach(() => { localStorage.clear(); useProtocolSwitchStore.getState().reset() })
@@ -17,5 +20,30 @@ describe('protocolSwitchStore', () => {
     const s = () => useProtocolSwitchStore.getState()
     expect(s().recordSelected('carol@x', 'omemo:2').switchedFromOpenpgp).toBe(false)
     expect(s().pendingNotice('carol@x')).toBe(false)
+  })
+
+  describe('load() shape guard', () => {
+    it.each([
+      ['empty object', '{}'],
+      ['invalid json', 'not json'],
+      ['missing pending key', '{"last":{}}'],
+    ])('tolerates a malformed persisted value (%s) and falls back to empty state', (_label, raw) => {
+      localStorage.setItem(KEY, raw)
+      expect(() => load()).not.toThrow()
+      expect(load()).toEqual({ last: {}, pending: {} })
+    })
+
+    it('does not crash the store getters when localStorage holds a malformed value', () => {
+      localStorage.setItem(KEY, '{}')
+      // Re-run the same shape-guard the store applies at construction time.
+      const state = load()
+      expect(state.last).toEqual({})
+      expect(state.pending).toEqual({})
+      // Public API stays usable even though the persisted shape was wrong.
+      const s = () => useProtocolSwitchStore.getState()
+      expect(() => s().pendingNotice('anyone@x')).not.toThrow()
+      expect(s().pendingNotice('anyone@x')).toBe(false)
+      expect(() => s().recordSelected('anyone@x', 'omemo:2')).not.toThrow()
+    })
   })
 })

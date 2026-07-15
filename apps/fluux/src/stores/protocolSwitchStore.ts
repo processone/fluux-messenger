@@ -4,9 +4,20 @@ import { buildScopedStorageKey } from '@fluux/sdk'
 const KEY = 'fluux-e2ee-protocol-switch'
 type Persisted = { last: Record<string, string>; pending: Record<string, boolean> }
 
-function load(): Persisted {
-  try { return JSON.parse(localStorage.getItem(buildScopedStorageKey(KEY)) || '') || { last: {}, pending: {} } }
-  catch { return { last: {}, pending: {} } }
+export function load(): Persisted {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(buildScopedStorageKey(KEY)) || '')
+    if (
+      parsed && typeof parsed === 'object'
+      && parsed.last && typeof parsed.last === 'object'
+      && parsed.pending && typeof parsed.pending === 'object'
+    ) {
+      return parsed as Persisted
+    }
+    return { last: {}, pending: {} }
+  } catch {
+    return { last: {}, pending: {} }
+  }
 }
 function save(p: Persisted): void {
   try { localStorage.setItem(buildScopedStorageKey(KEY), JSON.stringify(p)) } catch { /* ignore */ }
