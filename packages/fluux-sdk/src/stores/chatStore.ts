@@ -247,6 +247,11 @@ interface ChatState {
    *  picks up the pointer advance via the conversationMeta watch. */
   markReadToNewest: (conversationId: string) => void
   clearFirstNewMessageId: (conversationId: string) => void
+  /** Recompute the session-only "New messages" divider from the current read pointer
+   *  (lastSeenMessageId) for this conversation. Forward-only and idempotent: sets the divider to
+   *  the first unread message after the pointer, or clears it when the pointer is at the newest.
+   *  No-op when there is no existing divider. Touches nothing but firstNewMessageMarkers. */
+  resyncDividerToReadPointer: (conversationId: string) => void
   updateLastSeenMessageId: (conversationId: string, messageId: string) => void
   /**
    * XEP-0490: apply a remote device's last-displayed marker. Advances
@@ -1101,6 +1106,36 @@ export const chatStore = createStore<ChatState>()(
           if (!state.firstNewMessageMarkers.has(conversationId)) return state
           const newMarkers = new Map(state.firstNewMessageMarkers)
           newMarkers.delete(conversationId)
+          return { firstNewMessageMarkers: newMarkers }
+        })
+      },
+
+      resyncDividerToReadPointer: (conversationId) => {
+        set((state) => {
+          // Only reposition an EXISTING divider — never resurrect one the reader has cleared.
+          if (!state.firstNewMessageMarkers.has(conversationId)) return state
+          const meta = state.conversationMeta.get(conversationId)
+          if (!meta) return state
+          const messages = state.messages.get(conversationId) || []
+
+          // Same recompute pattern as applyRemoteDisplayed's active-divider branch: derive the
+          // divider from the pointer via onActivate and keep only .firstNewMessageId.
+          const divider = notifState.onActivate(
+            {
+              unreadCount: 0,
+              mentionsCount: 0,
+              lastReadAt: meta.lastReadAt,
+              lastSeenMessageId: meta.lastSeenMessageId,
+              firstNewMessageId: undefined,
+            },
+            messages,
+            { treatDelayedAsNew: true }
+          ).firstNewMessageId
+
+          if (divider === state.firstNewMessageMarkers.get(conversationId)) return state
+          const newMarkers = new Map(state.firstNewMessageMarkers)
+          if (divider) newMarkers.set(conversationId, divider)
+          else newMarkers.delete(conversationId)
           return { firstNewMessageMarkers: newMarkers }
         })
       },

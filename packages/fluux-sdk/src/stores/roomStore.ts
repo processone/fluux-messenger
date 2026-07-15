@@ -548,6 +548,10 @@ export interface RoomState {
   activateRoom: (roomJid: string | null) => Promise<void>
   getActiveRoomJid: () => string | null
   clearFirstNewMessageId: (roomJid: string) => void
+  /** Recompute the session-only "New messages" divider from the current read pointer
+   *  (lastSeenMessageId) for this room. Forward-only, idempotent, no-op when no divider exists.
+   *  Touches nothing but firstNewMessageMarkers. */
+  resyncDividerToReadPointer: (roomJid: string) => void
   updateLastSeenMessageId: (roomJid: string, messageId: string) => void
   /**
    * XEP-0490: apply a remote device's last-displayed marker. Advances
@@ -1740,6 +1744,31 @@ export const roomStore = createStore<RoomState>()(
       if (!state.firstNewMessageMarkers.has(roomJid)) return state
       const newMarkers = new Map(state.firstNewMessageMarkers)
       newMarkers.delete(roomJid)
+      return { firstNewMessageMarkers: newMarkers }
+    })
+  },
+
+  resyncDividerToReadPointer: (roomJid) => {
+    set((state) => {
+      if (!state.firstNewMessageMarkers.has(roomJid)) return state
+      const meta = state.roomMeta.get(roomJid)
+      const existing = state.rooms.get(roomJid)
+      if (!meta && !existing) return state
+      const runtime = state.roomRuntime.get(roomJid)
+      const messages = runtime?.messages ?? existing?.messages ?? []
+      const lastSeenMessageId = meta?.lastSeenMessageId ?? existing?.lastSeenMessageId
+      const lastReadAt = meta?.lastReadAt ?? existing?.lastReadAt
+
+      const divider = notifState.onActivate(
+        { unreadCount: 0, mentionsCount: 0, lastReadAt, lastSeenMessageId, firstNewMessageId: undefined },
+        messages,
+        { treatDelayedAsNew: true }
+      ).firstNewMessageId
+
+      if (divider === state.firstNewMessageMarkers.get(roomJid)) return state
+      const newMarkers = new Map(state.firstNewMessageMarkers)
+      if (divider) newMarkers.set(roomJid, divider)
+      else newMarkers.delete(roomJid)
       return { firstNewMessageMarkers: newMarkers }
     })
   },
