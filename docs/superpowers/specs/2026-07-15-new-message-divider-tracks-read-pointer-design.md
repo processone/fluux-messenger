@@ -112,8 +112,13 @@ Mirror the `clearFirstNewMessageId` plumbing at every layer.
   ```
   (each store passes the same `treatDelayedAsNew` option it already uses at its existing
   `onActivate` / `resolveRemoteDisplayed` call sites — do not introduce a new convention.)
-- Set `firstNewMessageMarkers[conversationId] = divider` (or delete when `undefined`),
-  writing a new `Map`. Touch nothing else — no pointer write, no unread/lastReadAt, no MDS.
+- Set `firstNewMessageMarkers[conversationId] = divider` only when `divider` is a defined id
+  that differs from the current marker, writing a new `Map`. When `divider` is `undefined`
+  (pointer at/after the newest — nothing unread) this is a **no-op**: the divider is NOT
+  cleared here. Clearing is owned by the explicit read-through / mark-read paths, and the
+  divider is deliberately kept alive after a FAB jump-to-present so the jump-to-last-read pill
+  can offer a return — the snap must never clear it. Touch nothing else — no pointer write, no
+  unread/lastReadAt, no MDS.
 
 Notes:
 - Forward-only and idempotent by construction: the pointer only advances, so the derived
@@ -169,9 +174,13 @@ chains:
   nothing new was read.
 - **Divider already cleared (read to bottom):** UI guard (`if (!firstNewMessageId)`) means
   the snap never fires; the divider stays cleared.
-- **Pointer at the newest message:** `onActivate` returns `undefined` → action would clear
-  the divider; but the snap only fires when a divider exists and `B < P`, i.e. not at the
-  bottom, so the pointer is not at newest in that path.
+- **Pointer at the newest message:** `onActivate` returns `undefined` → the action is a
+  **no-op** (does not clear). This is essential: after a FAB jump-to-present the pointer sits
+  at the newest while the divider is intentionally kept alive for the pill; a scroll-up must
+  not clear it.
+- **Snap only on genuine user scroll:** the snap's bottom-visible tracking updates only on
+  non-programmatic scroll, so the entry scroll-to-marker re-assert and FAB jumps never drift
+  the divider — it moves only when the reader actually scrolls back up.
 - **Sliding-window trim:** indices are compared within the same resident `messages` array
   in the store action (`onActivate` uses `findIndex`), consistent with existing derivation;
   a not-found id yields the existing fallback behavior in `onActivate`.
@@ -199,7 +208,7 @@ chains:
 - **Pure function:** `countNewBelowViewport` tests already exist; the third argument is now
   the pointer. Add/adjust cases for divider == first-unread-after-pointer consistency.
 - **Store action:** unit tests (SDK, pure vitest) — advances the divider forward when the
-  pointer advanced; idempotent; no-op when no marker; clears when pointer is at newest;
+  pointer advanced; idempotent; no-op when no marker; no-op (does NOT clear) when pointer is at newest;
   writes nothing but `firstNewMessageMarkers`. Chat and room.
 - **MessageList (jsdom):** badge is now prop-driven by `lastSeenMessageId` (simpler than the
   geometry mock) — decrements as the pointer prop advances, holds when it does not. Snap
