@@ -4,11 +4,25 @@ A **tagged, opt-in** harness that validates `@fluux/omemo`'s OMEMO 2 wire output
 Syndace reference stack (`python-omemo`, MIT). It is **excluded from the default unit run**:
 the package `vitest.config.ts` only includes `interop/**` when `VITEST_INTEROP=1`.
 
-> **This harness was NOT executed in the authoring session.** No docker daemon was available
-> in that environment, so the interop test has never been run here. The files below are the
-> harness scaffolding + contract; the numbers they would print are unverified. Treat a first
-> real run as the actual gate. The default unit suite (99 tests, interop excluded), typecheck,
-> and lint *were* verified.
+> **Status: the crypto round-trip is VALIDATED.** On 2026-07-13 the reference stack
+> (`OMEMO`/`twomemo` **2.1.0**) decrypted a real `@fluux/omemo` message end-to-end — X3DH session
+> established from our `KeyExchange`, Double-Ratchet decrypt, payload HMAC verified, AES-256-CBC
+> decrypted to our exact SCE-envelope bytes — with **no MAC/auth/X3DH error at any layer**. This
+> was run **without Docker** via the validated `venv/` runner below (`python3` + PyPI only). The
+> older Docker path (`docker-compose.yml` + `peer/omemo_peer.py`) is kept as an alternative but
+> has not itself been executed; **prefer `venv/run.sh`.**
+>
+> ## Docker-free runner (validated) — `venv/`
+>
+> ```bash
+> packages/omemo/src/interop/venv/run.sh
+> ```
+>
+> Requires `python3` (>=3.11), `node`, and PyPI access — no Docker/colima. It builds the SDK if
+> needed, creates a venv and installs `OMEMO>=2,<3` + `twomemo[xml]`, has the reference generate
+> the recipient (Bob) bundle, has our lib (Alice) encrypt to it, and drives `bob.decrypt()`.
+> Exit 0 = crypto success. Scripts: `venv/interop_decrypt.py` (reference driver), `venv/emit_to_bob.mjs`
+> (our sender). The `venv/_run/` scratch dir (venv + exchanged JSON) is gitignored.
 
 ## What it validates (and what it does not)
 
@@ -52,9 +66,10 @@ follow-up** for the adapter layer.
 
 ## Dependency pin
 
-- **`OMEMO==1.*`** — PyPI package name of `python-omemo` (the 1.x line implements OMEMO 2).
-- **`twomemo[xml]`** — the `urn:xmpp:omemo:2` backend, with the `[xml]` extra for the
-  `twomemo.etree` XEP-0384 (de)serializers the peer bridges our JSON through.
+- **`OMEMO>=2,<3`** — PyPI package name of `python-omemo`; the crypto round-trip was validated
+  against **2.1.0** (the current 2.x major). `==1.*` is wrong and pulls an incompatible API.
+- **`twomemo[xml]`** — the `urn:xmpp:omemo:2` backend, with the `[xml]` extra (pulls `xmlschema`)
+  for the `twomemo.etree` XEP-0384 (de)serializers the driver bridges our JSON through.
 
 Both are MIT — reading their public API docs to write the peer is expected and allowed (this is
 not libsignal and not GPL/AGPL).

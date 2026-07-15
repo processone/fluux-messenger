@@ -2,8 +2,11 @@
 #
 # `OMEMO` is the PyPI package name of python-omemo (the Syndace reference stack, MIT).
 # `twomemo[xml]` provides the `urn:xmpp:omemo:2` backend plus the ElementTree XEP-0384
-# (de)serializers (`twomemo.etree`) the peer script relies on. Pins are on the 1.x /
-# current majors that implement OMEMO 2; bump deliberately and re-run the harness.
+# (de)serializers (`twomemo.etree`) the peer script relies on.
+#
+# NOTE: the CRYPTO round-trip was validated against OMEMO/twomemo **2.1.0** (the current 2.x
+# major), NOT 1.x — see ../venv/ for the validated, Docker-free runner. This compose file drives
+# the older `peer/omemo_peer.py` path and is kept as an alternative; prefer `../venv/run.sh`.
 #
 # Bring it up before running the interop test:
 #   cd packages/omemo/src/interop && docker compose up -d
@@ -15,4 +18,4 @@ services:
       - ./peer:/peer
       - ./shared:/shared
     command: >
-      sh -c "pip install --quiet 'OMEMO==1.*' 'twomemo[xml]' && sleep infinity"
+      sh -c "pip install --quiet 'OMEMO>=2,<3' 'twomemo[xml]' && sleep infinity"

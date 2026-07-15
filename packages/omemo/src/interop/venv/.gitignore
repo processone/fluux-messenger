@@ -1,0 +1,2 @@
+# Ephemeral run artifacts: the venv and the JSON exchanged between our lib and the reference.
+_run/

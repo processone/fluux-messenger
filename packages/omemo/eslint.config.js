@@ -17,5 +17,7 @@ export default tseslint.config(
       ],
     },
   },
-  { ignores: ['dist/**'] },
+  // The interop runner is standalone operational tooling (a Node script + Python + shell),
+  // not shipped library source — excluded from the TypeScript lint pass.
+  { ignores: ['dist/**', 'src/interop/venv/**'] },
 )
