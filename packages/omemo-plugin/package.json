@@ -1,0 +1,42 @@
+{
+  "name": "@fluux/omemo-plugin",
+  "version": "0.0.0",
+  "description": "OMEMO 2 E2EEPlugin adapter for the Fluux SDK, built on @fluux/omemo.",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "test": "vitest",
+    "test:run": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src",
+    "lint:fix": "eslint src --fix",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@fluux/omemo": "*",
+    "@fluux/sdk": "*",
+    "@xmpp/xml": "^0.14.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.17.0",
+    "eslint": "^9.17.0",
+    "tsup": "^8.3.5",
+    "typescript": "^5.7.2",
+    "typescript-eslint": "^8.18.1",
+    "vitest": "^2.1.8"
+  }
+}
