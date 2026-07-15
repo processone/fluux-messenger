@@ -34,6 +34,7 @@ import { useSettingsStore } from '@/stores/settingsStore'
 import { auroraSenderColor } from '@/utils/senderColor'
 import { ReactionMentions } from './conversation/ReactionMentions'
 import { reactionMentionStore } from '@/stores/reactionMentionStore'
+import { EasterEggMentions } from './conversation/EasterEggMentions'
 
 interface ChatViewProps {
   onBack?: () => void
@@ -524,6 +525,7 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
 
       {/* Reaction mention pills — pinned above the composer */}
       <ReactionMentions conversationId={activeConversation.id} onSee={(id) => chatStore.getState().setTargetMessageId(id)} />
+      <EasterEggMentions conversationId={activeConversation.id} onReplay={(animation) => chatStore.getState().triggerAnimation(activeConversation.id, animation)} />
 
       {/* Input */}
       <MessageInput
