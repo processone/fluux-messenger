@@ -1577,6 +1577,33 @@ input[type="range"]::-moz-range-thumb {
   display: none;
 }
 
+/* Send "launch" gesture: on a successful send the button briefly presses in
+   (scale) while the aurora glow blooms and fades, then `transition-colors`
+   settles the button into its disabled grey. Placed after the disabled/fallback
+   rules so it composes with them; adds only transform/opacity, never touching
+   the disabled background reset. Reduced-motion is neutralized globally (see the
+   prefers-reduced-motion block above). On Linux/reduced-transparency the glow is
+   display:none, so only the press-scale plays. */
+@keyframes send-press {
+  0% { transform: scale(1); }
+  38% { transform: scale(0.9); }
+  100% { transform: scale(1); }
+}
+@keyframes send-glow-pulse {
+  0% { opacity: 0.6; transform: scale(1); }
+  35% { opacity: 1; transform: scale(1.35); }
+  100% { opacity: 0; transform: scale(1.5); }
+}
+/* Invariant: send-press (the wrapper's onAnimationEnd trigger that unmounts the
+   glow) MUST outlast send-glow-pulse, so the glow has already reached opacity 0
+   before it unmounts — otherwise it pops out mid-pulse. Keep 280ms > 260ms. */
+.send-launching .send-aurora {
+  animation: send-press 280ms ease;
+}
+.send-launching .send-aurora-glow {
+  animation: send-glow-pulse 260ms ease-out forwards;
+}
+
 /* Aurora backlight in the modal scrim: gives the liquid glass something real
    to refract (this is what separates it from generic glassmorphism). Sits
    behind the opaque-ish panel, so panel text contrast is untouched. */

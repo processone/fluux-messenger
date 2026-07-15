@@ -1583,4 +1583,55 @@ describe('MessageComposer', () => {
       expect(name.getAttribute('style')).toContain('var(--fluux-brand)')
     })
   })
+
+  describe('send-button launch animation', () => {
+    const setupSend = () => {
+      const onSend = vi.fn().mockResolvedValue(true)
+      render(
+        <MessageComposer
+          placeholder="Type a message"
+          onSend={onSend}
+          classifyInput={() => 'send'}
+        />
+      )
+      const textarea = screen.getByPlaceholderText('Type a message') as HTMLTextAreaElement
+      const wrapper = textarea
+        .closest('form')!
+        .querySelector('button[type="submit"]')!
+        .parentElement as HTMLElement
+      return { onSend, textarea, wrapper }
+    }
+
+    it('adds send-launching to the wrapper after a successful send', async () => {
+      const { textarea, wrapper } = setupSend()
+      fireEvent.change(textarea, { target: { value: 'hello' } })
+      await act(async () => {
+        fireEvent.submit(textarea.closest('form') as HTMLFormElement)
+      })
+      expect(wrapper.classList.contains('send-launching')).toBe(true)
+    })
+
+    it('keeps the aurora glow mounted while launching', async () => {
+      const { textarea, wrapper } = setupSend()
+      fireEvent.change(textarea, { target: { value: 'hello' } })
+      await act(async () => {
+        fireEvent.submit(textarea.closest('form') as HTMLFormElement)
+      })
+      // Input is now cleared (button disabled) but the glow persists for the pulse.
+      expect(wrapper.querySelector('.send-aurora-glow')).not.toBeNull()
+    })
+
+    it('clears send-launching when the send-press animation ends', async () => {
+      const { textarea, wrapper } = setupSend()
+      fireEvent.change(textarea, { target: { value: 'hello' } })
+      await act(async () => {
+        fireEvent.submit(textarea.closest('form') as HTMLFormElement)
+      })
+      await act(async () => {
+        fireEvent.animationEnd(wrapper, { animationName: 'send-press' })
+      })
+      expect(wrapper.classList.contains('send-launching')).toBe(false)
+      expect(wrapper.querySelector('.send-aurora-glow')).toBeNull()
+    })
+  })
 })
