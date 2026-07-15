@@ -133,8 +133,50 @@ describe('MessageList FAB badge and scroll behavior', () => {
   }
 
   /**
-   * Simulate the user scrolling up by dispatching a scroll event.
-   * This updates the FAB visibility state inside the hook.
+   * jsdom reports 0 for offsetHeight and getBoundingClientRect, so the hook's findBottomAnchor
+   * (which picks the bottom-most visible .message-row to feed the FAB badge count) can't resolve a
+   * realistic row without explicit geometry. Lay the rows out at a fixed height and position them
+   * relative to scrollTop so the bottom-most-visible message is deterministic. rowHeight=100,
+   * clientHeight=500 (from setupScrollContainer) ⇒ five rows fit; at scrollTop=0 the bottom-most
+   * visible row is index 4.
+   */
+  function layoutRows(container: HTMLDivElement, scrollTop: number, rowHeight = 100) {
+    const rows = container.querySelectorAll('.message-row[data-message-id]')
+    rows.forEach((node, i) => {
+      const el = node as HTMLElement
+      Object.defineProperty(el, 'offsetHeight', { value: rowHeight, configurable: true })
+      Object.defineProperty(el, 'offsetTop', { value: i * rowHeight, configurable: true })
+      Object.defineProperty(el, 'getBoundingClientRect', {
+        value: () => {
+          const top = i * rowHeight - scrollTop
+          return { top, bottom: top + rowHeight, height: rowHeight, left: 0, right: 0, width: 0, x: 0, y: top, toJSON() {} } as DOMRect
+        },
+        configurable: true,
+      })
+    })
+  }
+
+  /**
+   * Scroll to an explicit position: lay out row geometry for that scrollTop, then dispatch the
+   * scroll event so the hook recomputes FAB visibility AND the bottom-most-visible message.
+   */
+  function simulateScrollTo(container: HTMLDivElement, scrollTop: number) {
+    Object.defineProperty(container, 'scrollTop', {
+      get: () => scrollTop,
+      set: () => {},
+      configurable: true,
+    })
+    layoutRows(container, scrollTop)
+    act(() => {
+      container.dispatchEvent(new Event('scroll'))
+    })
+  }
+
+  /**
+   * Simulate the user scrolling up by dispatching a scroll event, WITHOUT laying out row geometry.
+   * Used by the two-step-scroll and flash tests, which set their own marker offsetTop and only care
+   * about FAB visibility / scroll-target math — not the badge count. (Badge-count tests use
+   * simulateScrollTo, which adds row geometry so the bottom-most-visible message resolves.)
    */
   function simulateScrollUp(container: HTMLDivElement) {
     // Set scrollTop to a position far from bottom to trigger FAB
@@ -194,12 +236,13 @@ describe('MessageList FAB badge and scroll behavior', () => {
       const scrollCtx = setupScrollContainer()
       if (!scrollCtx) return
 
-      simulateScrollUp(scrollCtx.container)
+      // Scrolled to the top: bottom-most visible row (msg-4) is above the divider → full count of 3.
+      simulateScrollTo(scrollCtx.container, 0)
 
       const fab = scrollCtx.container.parentElement?.querySelector('button[aria-label="chat.scrollToBottom"]')
       expect(fab).toBeTruthy()
 
-      // Badge should show 3 (messages from marker to end)
+      // Badge should show 3 (new messages still below the fold: msg-7, msg-8, msg-9)
       const badge = fab?.querySelector('span')
       expect(badge).toBeTruthy()
       expect(badge?.textContent).toBe('3')
@@ -246,7 +289,8 @@ describe('MessageList FAB badge and scroll behavior', () => {
       const scrollCtx = setupScrollContainer()
       if (!scrollCtx) return
 
-      simulateScrollUp(scrollCtx.container)
+      // Scrolled to the top with the divider at msg-0: ~145 new messages remain below → capped 99+.
+      simulateScrollTo(scrollCtx.container, 0)
 
       const fab = scrollCtx.container.parentElement?.querySelector('button[aria-label="chat.scrollToBottom"]')
       const badge = fab?.querySelector('span')
@@ -269,7 +313,9 @@ describe('MessageList FAB badge and scroll behavior', () => {
       const scrollCtx = setupScrollContainer()
       if (!scrollCtx) return
 
-      simulateScrollUp(scrollCtx.container)
+      // Scrolled to the top: bottom-most visible row (msg-4) is above both markers used below, so the
+      // badge equals the full new-message count in each case.
+      simulateScrollTo(scrollCtx.container, 0)
 
       // Verify initial badge: msg-7 through msg-9 = 3
       let fab = scrollCtx.container.parentElement?.querySelector('button[aria-label="chat.scrollToBottom"]')
@@ -290,6 +336,76 @@ describe('MessageList FAB badge and scroll behavior', () => {
       fab = scrollCtx.container.parentElement?.querySelector('button[aria-label="chat.scrollToBottom"]')
       badge = fab?.querySelector('span')
       expect(badge?.textContent).toBe('5')
+    })
+
+    it('decrements the badge as new messages scroll into view (messages-below-viewport)', () => {
+      const messages = createTestMessages(10) // msg-0 through msg-9
+      // Divider at msg-7 → new block is msg-7, msg-8, msg-9 (3 messages).
+      render(
+        <MessageList
+          messages={messages}
+          conversationId="conv-1"
+          clearFirstNewMessageId={vi.fn()}
+          firstNewMessageId="msg-7"
+          renderMessage={(msg) => <div key={msg.id}>{msg.body}</div>}
+        />
+      )
+
+      const scrollCtx = setupScrollContainer()
+      if (!scrollCtx) return
+
+      // Scrolled to the top: bottom-most visible row is msg-4, above the divider → full count of 3.
+      simulateScrollTo(scrollCtx.container, 0)
+      let badge = scrollCtx.container.parentElement
+        ?.querySelector('button[aria-label="chat.scrollToBottom"]')
+        ?.querySelector('span')
+      expect(badge?.textContent).toBe('3')
+
+      // Scroll down until the divider (msg-7) peeks in at the bottom edge (rows i at top i*100-250;
+      // top<500 ⇒ bottom-most visible is msg-7). msg-8 and msg-9 remain below the fold → 2.
+      simulateScrollTo(scrollCtx.container, 250)
+      badge = scrollCtx.container.parentElement
+        ?.querySelector('button[aria-label="chat.scrollToBottom"]')
+        ?.querySelector('span')
+      expect(badge?.textContent).toBe('2')
+
+      // Scroll one more row: msg-8 is now the bottom-most visible → only msg-9 remains below → 1.
+      simulateScrollTo(scrollCtx.container, 350)
+      badge = scrollCtx.container.parentElement
+        ?.querySelector('button[aria-label="chat.scrollToBottom"]')
+        ?.querySelector('span')
+      expect(badge?.textContent).toBe('1')
+    })
+
+    it('does not climb back up when the reader scrolls back into history (forward-only)', () => {
+      const messages = createTestMessages(10) // msg-0 through msg-9
+      render(
+        <MessageList
+          messages={messages}
+          conversationId="conv-1"
+          clearFirstNewMessageId={vi.fn()}
+          firstNewMessageId="msg-7"
+          renderMessage={(msg) => <div key={msg.id}>{msg.body}</div>}
+        />
+      )
+
+      const scrollCtx = setupScrollContainer()
+      if (!scrollCtx) return
+
+      // Read down until msg-8 is the deepest-visible row → badge 1 (only msg-9 remains below).
+      simulateScrollTo(scrollCtx.container, 350)
+      let badge = scrollCtx.container.parentElement
+        ?.querySelector('button[aria-label="chat.scrollToBottom"]')
+        ?.querySelector('span')
+      expect(badge?.textContent).toBe('1')
+
+      // Scroll all the way back up: those messages have already been seen, so the badge must NOT
+      // climb back to 3 — the watermark holds at msg-8.
+      simulateScrollTo(scrollCtx.container, 0)
+      badge = scrollCtx.container.parentElement
+        ?.querySelector('button[aria-label="chat.scrollToBottom"]')
+        ?.querySelector('span')
+      expect(badge?.textContent).toBe('1')
     })
   })
 

@@ -11,7 +11,7 @@
  *
  * Scroll behavior is handled by useMessageListScroll hook.
  */
-import { useMemo, useRef, useEffect, useLayoutEffect, useCallback, type ReactNode } from 'react'
+import { useMemo, useRef, useState, useEffect, useLayoutEffect, useCallback, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { BaseMessage } from '@fluux/sdk'
 import { useMessageCopyFormatter, useMessageRangeSelection } from '@/hooks'
@@ -25,6 +25,7 @@ import { HistoryGapMarker } from './HistoryGapMarker'
 import { TypingIndicator } from './TypingIndicator'
 import { groupMessagesByDate, shouldShowAvatar } from './messageGrouping'
 import { useMessageListScroll } from './useMessageListScroll'
+import { countNewBelowViewport } from './unreadBadge'
 import { MessageWidthProvider } from './messageWidthContext'
 import { OwnGroupWidthProvider } from './messageGroupWidth'
 import { isFeatureEnabled } from '@/utils/featureFlags'
@@ -511,6 +512,7 @@ export function MessageList<T extends BaseMessage>({
     scrollToBottom,
     showScrollToBottom,
     markerAboveViewport,
+    bottomVisibleMessageId,
     scrollToMarker,
   } = useMessageListScroll({
     conversationId,
@@ -707,6 +709,32 @@ export function MessageList<T extends BaseMessage>({
   // whenever the window is slid up (newer content exists off-screen), not only past the FAB threshold.
   const windowSlidUp = windowAtLiveEdge === false
   const fabVisible = showScrollToBottom || windowSlidUp
+  // Forward-only read watermark: the deepest (newest) message the reader has reached. The FAB badge
+  // counts the new messages still below THIS point — not below the current viewport — so it ticks
+  // DOWN as the reader scrolls toward the present and does NOT climb back up when they scroll back
+  // into history (those messages have already been seen). Tracked as a message id (not an index) so
+  // a load-older prepend can't shift it. The divider itself stays put; only the count reflects
+  // progress. The marker pill keeps the full markerUnreadCount ("jump back to N unread").
+  const [deepestReadMessageId, setDeepestReadMessageId] = useState<string | null>(null)
+  // A fresh unread divider (new marker, or a switch that remounts this list) resets the watermark so
+  // the badge shows the full new count again until the reader scrolls.
+  useEffect(() => {
+    setDeepestReadMessageId(null)
+  }, [firstNewMessageId])
+  // Advance the watermark only toward newer messages; a scroll back up must never retreat it.
+  useEffect(() => {
+    if (bottomVisibleMessageId === null) return
+    setDeepestReadMessageId((prev) => {
+      if (prev === bottomVisibleMessageId) return prev
+      const prevIdx = prev === null ? -1 : deduplicatedMessages.findIndex((m) => m.id === prev)
+      const nextIdx = deduplicatedMessages.findIndex((m) => m.id === bottomVisibleMessageId)
+      return nextIdx > prevIdx ? bottomVisibleMessageId : prev
+    })
+  }, [bottomVisibleMessageId, deduplicatedMessages])
+  const fabBadgeCount = useMemo(
+    () => countNewBelowViewport(deduplicatedMessages, firstNewMessageId, deepestReadMessageId),
+    [deduplicatedMessages, firstNewMessageId, deepestReadMessageId],
+  )
   // Track whether the FAB has ever been shown in this mount so the exit animation (whose first
   // keyframe is fully-visible) never runs on a fresh open-at-bottom, which would flash the FAB.
   // MessageList is remounted per conversation via `key`, so this ref resets on every open.
@@ -897,9 +925,9 @@ export function MessageList<T extends BaseMessage>({
             aria-label={t('chat.scrollToBottom')}
             tabIndex={fabVisible ? 0 : -1}
           >
-            {markerUnreadCount > 0 && (
+            {fabBadgeCount > 0 && (
               <span className="absolute -top-1.5 -end-1.5 min-w-5 h-5 px-1 rounded-full bg-fluux-badge text-fluux-badge-text text-xs font-semibold flex items-center justify-center">
-                {markerUnreadCount > 99 ? '99+' : markerUnreadCount}
+                {fabBadgeCount > 99 ? '99+' : fabBadgeCount}
               </span>
             )}
             <ChevronDown className="size-5" />
