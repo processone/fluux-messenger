@@ -31,6 +31,8 @@ export interface E2EERegistrationFailure {
 interface EncryptionSettingsState {
   openpgpEnabled: boolean
   setOpenpgpEnabled: (enabled: boolean) => void
+  omemoEnabled: boolean
+  setOmemoEnabled: (enabled: boolean) => void
   /**
    * Incremented each time a plugin finishes registering. Used as a reactive
    * dependency in `useConversationEncryptionState` so the probe effect
@@ -76,6 +78,17 @@ function loadOpenpgpEnabled(): boolean {
   }
 }
 
+const OMEMO_STORAGE_KEY_BASE = 'fluux-e2ee-omemo-enabled'
+
+function loadOmemoEnabled(): boolean {
+  try {
+    const key = buildScopedStorageKey(OMEMO_STORAGE_KEY_BASE)
+    return localStorage.getItem(key) === '1'
+  } catch {
+    return false
+  }
+}
+
 export const useEncryptionSettingsStore = create<EncryptionSettingsState>((set) => ({
   openpgpEnabled: loadOpenpgpEnabled(),
   setOpenpgpEnabled: (enabled) => {
@@ -87,12 +100,22 @@ export const useEncryptionSettingsStore = create<EncryptionSettingsState>((set) 
     }
     set({ openpgpEnabled: enabled, registrationError: null })
   },
+  omemoEnabled: loadOmemoEnabled(),
+  setOmemoEnabled: (enabled) => {
+    try {
+      localStorage.setItem(buildScopedStorageKey(OMEMO_STORAGE_KEY_BASE), enabled ? '1' : '0')
+    } catch {
+      // localStorage unavailable — still update in-memory state so the
+      // rest of the session behaves consistently.
+    }
+    set({ omemoEnabled: enabled, registrationError: null })
+  },
   pluginRegisteredAt: 0,
   notifyPluginRegistered: () =>
     set((s) => ({ pluginRegisteredAt: s.pluginRegisteredAt + 1, registrationError: null })),
   registrationError: null,
   notifyPluginRegistrationFailed: (failure) => set({ registrationError: failure }),
-  rehydrate: () => set({ openpgpEnabled: loadOpenpgpEnabled() }),
+  rehydrate: () => set({ openpgpEnabled: loadOpenpgpEnabled(), omemoEnabled: loadOmemoEnabled() }),
 }))
 
 /**
@@ -102,6 +125,15 @@ export const useEncryptionSettingsStore = create<EncryptionSettingsState>((set) 
  */
 export function isOpenpgpEnabled(): boolean {
   return useEncryptionSettingsStore.getState().openpgpEnabled
+}
+
+/**
+ * Imperative read — for non-React code paths like `registerE2EEPlugins`
+ * that run on the `online` event and need the current preference without
+ * subscribing.
+ */
+export function isOmemoEnabled(): boolean {
+  return useEncryptionSettingsStore.getState().omemoEnabled
 }
 
 export function rehydrateEncryptionSettings(): void {
