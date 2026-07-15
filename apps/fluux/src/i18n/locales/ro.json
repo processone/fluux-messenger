@@ -1387,6 +1387,7 @@
     },
     "easterEgg": {
         "mention": "{{name}} ți-a trimis o animație",
-        "replay": "Redă din nou"
+        "replay": "Redă din nou",
+        "sentBy": "Trimis de {{name}}"
     }
 }

@@ -1384,6 +1384,7 @@
     },
     "easterEgg": {
         "mention": "{{name}} animációt küldött neked",
-        "replay": "Újrajátszás"
+        "replay": "Újrajátszás",
+        "sentBy": "Küldte: {{name}}"
     }
 }

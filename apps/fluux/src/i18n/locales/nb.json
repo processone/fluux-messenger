@@ -1384,6 +1384,7 @@
     },
     "easterEgg": {
         "mention": "{{name}} sendte deg en animasjon",
-        "replay": "Spill av på nytt"
+        "replay": "Spill av på nytt",
+        "sentBy": "Sendt av {{name}}"
     }
 }

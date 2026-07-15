@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 
 interface FireworksAnimationProps {
   onComplete: () => void
   duration?: number // Duration in ms before auto-dismiss starts
+  senderName?: string
 }
 
 // Soft, slightly desaturated tricolore palette — an understated evening
@@ -115,7 +117,8 @@ function burst(sparks: Spark[], rocket: Rocket): void {
   }
 }
 
-export function FireworksAnimation({ onComplete, duration = 6000 }: FireworksAnimationProps) {
+export function FireworksAnimation({ onComplete, duration = 6000, senderName }: FireworksAnimationProps) {
+  const { t } = useTranslation()
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [isVisible, setIsVisible] = useState(true)
   // Read inside the rAF loop to stop launching new shells during fade-out,
@@ -285,10 +288,19 @@ export function FireworksAnimation({ onComplete, duration = 6000 }: FireworksAni
 
       {/* Click hint at bottom. Dark pill keeps the white text readable when
           the app behind the half-opacity scrim is in light mode. */}
-      <div className="absolute bottom-8 inset-x-0 text-center">
-        <span className="rounded-full bg-black/40 px-3 py-1 text-sm text-white/90">
-          Click anywhere to dismiss
-        </span>
+      <div className="absolute bottom-8 inset-x-0 text-center space-y-2">
+        {senderName && (
+          <div>
+            <span className="rounded-full bg-black/40 px-3 py-1 text-sm text-white/90">
+              {t('easterEgg.sentBy', { name: senderName })}
+            </span>
+          </div>
+        )}
+        <div>
+          <span className="rounded-full bg-black/40 px-3 py-1 text-sm text-white/90">
+            Click anywhere to dismiss
+          </span>
+        </div>
       </div>
     </div>
   )

@@ -1389,6 +1389,7 @@
     },
     "easterEgg": {
         "mention": "{{name}} bagħtlek animazzjoni",
-        "replay": "Ilgħab mill-ġdid"
+        "replay": "Ilgħab mill-ġdid",
+        "sentBy": "Mibgħut minn {{name}}"
     }
 }

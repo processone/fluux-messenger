@@ -43,4 +43,14 @@ describe('FireworksAnimation', () => {
     expect(screen.getByText('Click anywhere to dismiss')).toBeInTheDocument()
     expect(document.querySelector('[aria-hidden="true"]')).not.toBeNull()
   })
+
+  it('shows a "Sent by" pill when senderName is provided', () => {
+    render(<FireworksAnimation onComplete={vi.fn()} senderName="Ava" />)
+    expect(screen.getByText('Sent by Ava')).toBeInTheDocument()
+  })
+
+  it('does not show a "Sent by" pill without senderName', () => {
+    render(<FireworksAnimation onComplete={vi.fn()} />)
+    expect(screen.queryByText(/Sent by/)).not.toBeInTheDocument()
+  })
 })

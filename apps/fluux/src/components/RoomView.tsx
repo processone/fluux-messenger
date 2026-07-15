@@ -398,7 +398,7 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
     if (!jid) return
     const egg = easterEggMentionStore.getState().mentions.get(jid)
     if (egg && !egg.played) {
-      roomStore.getState().triggerAnimation(jid, egg.animation)
+      roomStore.getState().triggerAnimation(jid, egg.animation, egg.senderName)
       easterEggMentionStore.getState().markPlayed(jid)
     }
   }, [activeRoom?.jid])
@@ -619,7 +619,7 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
 
         {/* Reaction mention pills — pinned above the composer */}
         <ReactionMentions conversationId={activeRoom.jid} onSee={(id) => roomStore.getState().setTargetMessageId(id)} />
-        <EasterEggMentions conversationId={activeRoom.jid} onReplay={(animation) => roomStore.getState().triggerAnimation(activeRoom.jid, animation)} />
+        <EasterEggMentions conversationId={activeRoom.jid} onReplay={(animation, senderName) => roomStore.getState().triggerAnimation(activeRoom.jid, animation, senderName)} />
 
         {/* Input - show composer if joined, join prompt if not */}
         {activeRoom.joined ? (
@@ -704,7 +704,7 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
 
       {/* Easter egg animation */}
       {activeAnimation?.roomJid === activeRoom.jid && (
-        <EasterEggAnimation animation={activeAnimation.animation} onComplete={clearAnimation} />
+        <EasterEggAnimation animation={activeAnimation.animation} onComplete={clearAnimation} senderName={activeAnimation.senderName} />
       )}
 
       {/* Nick context menu (right-click / long-press on nick in messages) */}

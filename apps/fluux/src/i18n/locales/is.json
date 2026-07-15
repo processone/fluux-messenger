@@ -1384,6 +1384,7 @@
     },
     "easterEgg": {
         "mention": "{{name}} sendi þér hreyfimynd",
-        "replay": "Endurspila"
+        "replay": "Endurspila",
+        "sentBy": "Sent af {{name}}"
     }
 }

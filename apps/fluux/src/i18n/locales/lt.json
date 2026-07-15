@@ -1386,6 +1386,7 @@
     },
     "easterEgg": {
         "mention": "{{name}} atsiuntė jums animaciją",
-        "replay": "Kartoti"
+        "replay": "Kartoti",
+        "sentBy": "Siuntėjas: {{name}}"
     }
 }

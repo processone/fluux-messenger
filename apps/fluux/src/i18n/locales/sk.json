@@ -1387,6 +1387,7 @@
     },
     "easterEgg": {
         "mention": "{{name}} vám poslal(a) animáciu",
-        "replay": "Prehrať znova"
+        "replay": "Prehrať znova",
+        "sentBy": "Odoslané od {{name}}"
     }
 }

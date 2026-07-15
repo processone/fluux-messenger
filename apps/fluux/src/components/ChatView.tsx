@@ -232,7 +232,7 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
     if (!id) return
     const egg = easterEggMentionStore.getState().mentions.get(id)
     if (egg && !egg.played) {
-      chatStore.getState().triggerAnimation(id, egg.animation)
+      chatStore.getState().triggerAnimation(id, egg.animation, egg.senderName)
       easterEggMentionStore.getState().markPlayed(id)
     }
   }, [activeConversation?.id])
@@ -538,7 +538,7 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
 
       {/* Reaction mention pills — pinned above the composer */}
       <ReactionMentions conversationId={activeConversation.id} onSee={(id) => chatStore.getState().setTargetMessageId(id)} />
-      <EasterEggMentions conversationId={activeConversation.id} onReplay={(animation) => chatStore.getState().triggerAnimation(activeConversation.id, animation)} />
+      <EasterEggMentions conversationId={activeConversation.id} onReplay={(animation, senderName) => chatStore.getState().triggerAnimation(activeConversation.id, animation, senderName)} />
 
       {/* Input */}
       <MessageInput
@@ -588,7 +588,7 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
 
       {/* Easter egg animation */}
       {activeAnimation?.conversationId === activeConversation.id && (
-        <EasterEggAnimation animation={activeAnimation.animation} onComplete={clearAnimation} />
+        <EasterEggAnimation animation={activeAnimation.animation} onComplete={clearAnimation} senderName={activeAnimation.senderName} />
       )}
     </div>
   )

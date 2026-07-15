@@ -5,7 +5,7 @@ import { MentionChip } from './MentionChip'
 interface EasterEggMentionsProps {
   conversationId: string
   /** Replay the stored animation in the active view (chat or room triggerAnimation). */
-  onReplay: (animation: string) => void
+  onReplay: (animation: string, senderName: string) => void
 }
 
 export function EasterEggMentions({ conversationId, onReplay }: EasterEggMentionsProps) {
@@ -20,7 +20,7 @@ export function EasterEggMentions({ conversationId, onReplay }: EasterEggMention
       <MentionChip
         label={t('easterEgg.mention', { name: egg.senderName })}
         actionLabel={t('easterEgg.replay')}
-        onAction={() => onReplay(egg.animation)}
+        onAction={() => onReplay(egg.animation, egg.senderName)}
         onDismiss={() => dismiss(conversationId)}
       />
     </div>

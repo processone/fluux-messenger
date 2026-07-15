@@ -7,7 +7,7 @@ import { FireworksAnimation } from './FireworksAnimation'
  * entry here plus a command in `commands/registry.ts` — the views stay
  * untouched.
  */
-const ANIMATIONS: Record<string, ComponentType<{ onComplete: () => void }>> = {
+const ANIMATIONS: Record<string, ComponentType<{ onComplete: () => void; senderName?: string }>> = {
   christmas: ChristmasAnimation,
   fireworks: FireworksAnimation,
 }
@@ -15,13 +15,14 @@ const ANIMATIONS: Record<string, ComponentType<{ onComplete: () => void }>> = {
 interface EasterEggAnimationProps {
   animation: string
   onComplete: () => void
+  senderName?: string
 }
 
 /** Full-screen easter-egg overlay dispatcher. Unknown names (e.g. eggs from newer clients) render nothing. */
-export function EasterEggAnimation({ animation, onComplete }: EasterEggAnimationProps) {
+export function EasterEggAnimation({ animation, onComplete, senderName }: EasterEggAnimationProps) {
   // `animation` is wire-controlled (any contact/occupant can send it): only accept the map's own
   // properties, so prototype-chain keys like '__proto__'/'constructor'/'toString' never resolve.
   const Overlay = Object.hasOwn(ANIMATIONS, animation) ? ANIMATIONS[animation] : undefined
   if (!Overlay) return null
-  return <Overlay onComplete={onComplete} />
+  return <Overlay onComplete={onComplete} senderName={senderName} />
 }

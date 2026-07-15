@@ -159,6 +159,7 @@ void i18n.use(initReactI18next).init({
         easterEgg: {
           mention: '{{name}} sent you an animation',
           replay: 'Replay',
+          sentBy: 'Sent by {{name}}',
         },
       },
     },

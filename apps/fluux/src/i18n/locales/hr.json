@@ -1385,6 +1385,7 @@
     },
     "easterEgg": {
         "mention": "{{name}} vam je poslao/la animaciju",
-        "replay": "Ponovi"
+        "replay": "Ponovi",
+        "sentBy": "Poslano od {{name}}"
     }
 }

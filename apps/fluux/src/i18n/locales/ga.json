@@ -1387,6 +1387,7 @@
     },
     "easterEgg": {
         "mention": "Sheol {{name}} beochan chugat",
-        "replay": "Athsheinm"
+        "replay": "Athsheinm",
+        "sentBy": "Seolta ag {{name}}"
     }
 }

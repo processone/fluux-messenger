@@ -1386,6 +1386,7 @@
     },
     "easterEgg": {
         "mention": "{{name}} saatis sulle animatsiooni",
-        "replay": "Mängi uuesti"
+        "replay": "Mängi uuesti",
+        "sentBy": "Saatja: {{name}}"
     }
 }

@@ -16,7 +16,7 @@ describe('EasterEggMentions', () => {
     const onReplay = vi.fn()
     render(<EasterEggMentions conversationId="a@x" onReplay={onReplay} />)
     fireEvent.click(screen.getByText('Replay'))
-    expect(onReplay).toHaveBeenCalledWith('fireworks')
+    expect(onReplay).toHaveBeenCalledWith('fireworks', 'ava')
     fireEvent.click(screen.getByLabelText('Dismiss'))
     expect(useEasterEggMentionStore.getState().mentions.has('a@x')).toBe(false)
   })
