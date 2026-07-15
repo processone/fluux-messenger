@@ -94,7 +94,7 @@ async function getCacheFilePath(url: string, mimeType?: string): Promise<string>
  *
  * 1. Check in-memory map (instant)
  * 2. Check filesystem (fast)
- * 3. Fetch via Tauri HTTP plugin → write to cache → return asset URL
+ * 3. Fetch via the native download_file command → write to cache → return asset URL
  *
  * @returns asset.localhost URL for use in <img>/<video>/<audio> tags
  * @throws on fetch/write failure (caller should fall back to direct URL)
@@ -143,23 +143,18 @@ async function doResolve(originalUrl: string): Promise<string> {
   const peeked = await peekMediaCache(originalUrl)
   if (peeked) return peeked
 
-  // 3. Fetch and cache
+  // 3. Fetch and cache. Native `download_file` command, NOT
+  // @tauri-apps/plugin-http — its chunked number-array marshaling blocks the
+  // WebView main thread ~20ms/MB on large media (see tauriDownload.ts).
   const { convertFileSrc } = await import('@tauri-apps/api/core')
-  const { fetch: tauriFetch } = await import('@tauri-apps/plugin-http')
+  const { downloadFileTauri } = await import('./tauriDownload')
 
-  const response = await tauriFetch(originalUrl, { method: 'GET' })
-  if (!response.ok) {
-    throw new Error(`Fetch failed: ${response.status} ${response.statusText}`)
-  }
+  const { bytes, contentType } = await downloadFileTauri({ url: originalUrl })
 
-  const blob = await response.blob()
-  const mimeType = blob.type || response.headers.get('content-type') || undefined
-
-  const finalPath = await getCacheFilePath(originalUrl, mimeType)
+  const finalPath = await getCacheFilePath(originalUrl, contentType ?? undefined)
 
   const { writeFile } = await import('@tauri-apps/plugin-fs')
-  const arrayBuffer = await new Response(blob).arrayBuffer()
-  await writeFile(finalPath, new Uint8Array(arrayBuffer))
+  await writeFile(finalPath, bytes)
 
   const assetUrl = convertFileSrc(finalPath)
   urlCache.set(originalUrl, assetUrl)
@@ -188,8 +183,9 @@ async function getDecryptedCacheFilePath(httpsUrl: string): Promise<string> {
 /**
  * Resolve an encrypted attachment URL for Tauri desktop.
  *
- * Downloads ciphertext from `httpsUrl`, AES-GCM decrypts it, and writes the
- * plaintext to `{appCacheDir}/media/{sha256}.dec`. Subsequent calls return
+ * Downloads and AES-GCM-decrypts `httpsUrl` in Rust (native `download_file`
+ * command), then writes the plaintext to `{appCacheDir}/media/{sha256}.dec`.
+ * Subsequent calls return
  * the cached `asset://localhost` URL without re-downloading or re-decrypting.
  *
  * Storing the decrypted content means no AES key needs to be persisted
@@ -249,17 +245,18 @@ async function doResolveEncrypted(
   const { convertFileSrc } = await import('@tauri-apps/api/core')
   const { writeFile } = await import('@tauri-apps/plugin-fs')
 
-  const { fetch: tauriFetch } = await import('@tauri-apps/plugin-http')
-  const response = await tauriFetch(httpsUrl, { method: 'GET' })
-  if (!response.ok) {
-    throw new Error(`Fetch failed: ${response.status} ${response.statusText}`)
-  }
-
-  const ciphertext = new Uint8Array(await response.arrayBuffer())
-  const plaintext = await decryptFile(ciphertext, encryption.key, encryption.iv)
+  // Native `download_file` command with the AES params passed through:
+  // Rust downloads AND decrypts (XEP-0454), so neither the ciphertext nor
+  // the plaintext takes plugin-http's number-array path through the WebView
+  // main thread (see tauriDownload.ts).
+  const { downloadFileTauri } = await import('./tauriDownload')
+  const { bytes: plaintext } = await downloadFileTauri({
+    url: httpsUrl,
+    decrypt: { key: encryption.key, iv: encryption.iv },
+  })
 
   const filePath = await getDecryptedCacheFilePath(httpsUrl)
-  await writeFile(filePath, new Uint8Array(plaintext))
+  await writeFile(filePath, plaintext)
 
   const assetUrl = convertFileSrc(filePath)
   urlCache.set(cacheKey, assetUrl)

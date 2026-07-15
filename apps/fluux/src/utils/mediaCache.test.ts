@@ -36,14 +36,14 @@ vi.mock('@tauri-apps/api/core', () => ({
   convertFileSrc: (path: string) => mockConvertFileSrc(path),
 }))
 
-// Mock Tauri HTTP plugin
-const mockTauriFetch = vi.fn()
-vi.mock('@tauri-apps/plugin-http', () => ({
-  fetch: (url: string, opts: unknown) => mockTauriFetch(url, opts),
+// Mock the native download transport (tauriDownload → Rust download_file)
+const mockDownloadFileTauri = vi.fn()
+vi.mock('./tauriDownload', () => ({
+  downloadFileTauri: (params: unknown) => mockDownloadFileTauri(params),
 }))
 
 import { resolveMediaUrl, resolveWebMediaUrl, resolveEncryptedMediaUrl, clearMediaCache, getMediaCacheSize, resetMediaUrlCache, peekMediaCache, peekEncryptedMediaCache, peekWebMediaCache, peekWebEncryptedMediaCache, resolveWebEncryptedMediaUrl } from './mediaCache'
-import { encryptFile } from '@fluux/sdk'
+import { encryptFile, decryptFile } from '@fluux/sdk'
 
 describe('mediaCache', () => {
   beforeEach(() => {
@@ -62,21 +62,15 @@ describe('mediaCache', () => {
   describe('resolveMediaUrl', () => {
     it('should fetch, cache, and return asset URL on cache miss', async () => {
       const imageData = new Uint8Array([0x89, 0x50, 0x4e, 0x47]) // PNG header
-      const mockBlob = new Blob([imageData], { type: 'image/png' })
 
-      mockTauriFetch.mockResolvedValue({
-        ok: true,
-        headers: new Headers({ 'content-type': 'image/png' }),
-        blob: () => Promise.resolve(mockBlob),
-      })
+      mockDownloadFileTauri.mockResolvedValue({ bytes: imageData, contentType: 'image/png' })
 
       const result = await resolveMediaUrl('https://upload.example.com/files/photo.png')
 
-      // Should have fetched the URL
-      expect(mockTauriFetch).toHaveBeenCalledWith(
-        'https://upload.example.com/files/photo.png',
-        { method: 'GET' },
-      )
+      // Should have fetched the URL through the native transport
+      expect(mockDownloadFileTauri).toHaveBeenCalledWith({
+        url: 'https://upload.example.com/files/photo.png',
+      })
 
       // Should have written the file
       expect(mockWriteFile).toHaveBeenCalledTimes(1)
@@ -87,18 +81,16 @@ describe('mediaCache', () => {
     })
 
     it('should return cached URL from memory on second call', async () => {
-      const mockBlob = new Blob([new Uint8Array([1, 2, 3])], { type: 'image/jpeg' })
-      mockTauriFetch.mockResolvedValue({
-        ok: true,
-        headers: new Headers({ 'content-type': 'image/jpeg' }),
-        blob: () => Promise.resolve(mockBlob),
+      mockDownloadFileTauri.mockResolvedValue({
+        bytes: new Uint8Array([1, 2, 3]),
+        contentType: 'image/jpeg',
       })
 
       const url1 = await resolveMediaUrl('https://upload.example.com/files/photo.jpg')
       const url2 = await resolveMediaUrl('https://upload.example.com/files/photo.jpg')
 
       // Should only fetch once
-      expect(mockTauriFetch).toHaveBeenCalledTimes(1)
+      expect(mockDownloadFileTauri).toHaveBeenCalledTimes(1)
       expect(url1).toBe(url2)
     })
 
@@ -114,30 +106,24 @@ describe('mediaCache', () => {
       expect(mockMkdir).toHaveBeenCalled()
 
       // Should NOT have fetched (file was found on disk)
-      expect(mockTauriFetch).not.toHaveBeenCalled()
+      expect(mockDownloadFileTauri).not.toHaveBeenCalled()
 
       // Should return an asset URL
       expect(result).toMatch(/^https:\/\/asset\.localhost\//)
     })
 
     it('should throw on fetch failure', async () => {
-      mockTauriFetch.mockResolvedValue({
-        ok: false,
-        status: 404,
-        statusText: 'Not Found',
-      })
+      mockDownloadFileTauri.mockRejectedValue(new Error('Download failed: 404'))
 
       await expect(
         resolveMediaUrl('https://upload.example.com/files/missing.png')
-      ).rejects.toThrow('Fetch failed: 404 Not Found')
+      ).rejects.toThrow('Download failed: 404')
     })
 
     it('should deduplicate concurrent requests for the same URL', async () => {
-      const mockBlob = new Blob([new Uint8Array([1])], { type: 'image/png' })
-      mockTauriFetch.mockResolvedValue({
-        ok: true,
-        headers: new Headers({ 'content-type': 'image/png' }),
-        blob: () => Promise.resolve(mockBlob),
+      mockDownloadFileTauri.mockResolvedValue({
+        bytes: new Uint8Array([1]),
+        contentType: 'image/png',
       })
 
       // Fire two concurrent requests
@@ -147,16 +133,14 @@ describe('mediaCache', () => {
       ])
 
       // Should only fetch once
-      expect(mockTauriFetch).toHaveBeenCalledTimes(1)
+      expect(mockDownloadFileTauri).toHaveBeenCalledTimes(1)
       expect(url1).toBe(url2)
     })
 
     it('should infer extension from URL when MIME type is unknown', async () => {
-      const mockBlob = new Blob([new Uint8Array([1])], { type: '' })
-      mockTauriFetch.mockResolvedValue({
-        ok: true,
-        headers: new Headers(),
-        blob: () => Promise.resolve(mockBlob),
+      mockDownloadFileTauri.mockResolvedValue({
+        bytes: new Uint8Array([1]),
+        contentType: null,
       })
 
       await resolveMediaUrl('https://upload.example.com/files/photo.webp')
@@ -170,15 +154,13 @@ describe('mediaCache', () => {
   describe('clearMediaCache', () => {
     it('should clear in-memory cache and remove filesystem directory', async () => {
       // Populate memory cache first
-      const mockBlob = new Blob([new Uint8Array([1])], { type: 'image/png' })
-      mockTauriFetch.mockResolvedValue({
-        ok: true,
-        headers: new Headers({ 'content-type': 'image/png' }),
-        blob: () => Promise.resolve(mockBlob),
+      mockDownloadFileTauri.mockResolvedValue({
+        bytes: new Uint8Array([1]),
+        contentType: 'image/png',
       })
 
       await resolveMediaUrl('https://upload.example.com/test.png')
-      expect(mockTauriFetch).toHaveBeenCalledTimes(1)
+      expect(mockDownloadFileTauri).toHaveBeenCalledTimes(1)
 
       await clearMediaCache()
 
@@ -189,7 +171,7 @@ describe('mediaCache', () => {
 
       // After clearing, next call should fetch again
       await resolveMediaUrl('https://upload.example.com/test.png')
-      expect(mockTauriFetch).toHaveBeenCalledTimes(2)
+      expect(mockDownloadFileTauri).toHaveBeenCalledTimes(2)
     })
   })
 
@@ -231,14 +213,14 @@ describe('peekMediaCache (Tauri, network-free)', () => {
     mockExists.mockResolvedValue(false)
     const result = await peekMediaCache('https://upload.example.com/a.png')
     expect(result).toBeNull()
-    expect(mockTauriFetch).not.toHaveBeenCalled()
+    expect(mockDownloadFileTauri).not.toHaveBeenCalled()
   })
 
   it('returns the asset URL on a filesystem hit without fetching', async () => {
     mockExists.mockResolvedValue(true)
     const result = await peekMediaCache('https://upload.example.com/a.png')
     expect(result).toMatch(/^https:\/\/asset\.localhost\//)
-    expect(mockTauriFetch).not.toHaveBeenCalled()
+    expect(mockDownloadFileTauri).not.toHaveBeenCalled()
   })
 })
 
@@ -255,13 +237,17 @@ describe('resolveEncryptedMediaUrl (Tauri filesystem, encrypted full path)', () 
     mockConvertFileSrc.mockImplementation((p: string) => `https://asset.localhost/${p}`)
   })
 
-  it('fetches ciphertext, decrypts, writes plaintext, and returns a .dec asset URL', async () => {
+  it('downloads+decrypts natively, writes plaintext, and returns a .dec asset URL', async () => {
     const plaintext = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 9, 8, 7])
     const enc = await encryptFile(plaintext)
-    mockTauriFetch.mockResolvedValue({
-      ok: true,
-      arrayBuffer: () => Promise.resolve(enc.ciphertext.slice().buffer),
-    })
+    // Faithful native-transport mock: decrypt with the key/iv the caller
+    // actually passed, exactly like the Rust command — wrong params throw.
+    mockDownloadFileTauri.mockImplementation(
+      async ({ decrypt }: { decrypt: { key: Uint8Array; iv: Uint8Array } }) => ({
+        bytes: new Uint8Array(await decryptFile(enc.ciphertext, decrypt.key, decrypt.iv)),
+        contentType: 'application/octet-stream',
+      }),
+    )
 
     const url = await resolveEncryptedMediaUrl('https://upload.example.com/enc.bin', {
       cipher: 'aes-256-gcm',
@@ -269,7 +255,10 @@ describe('resolveEncryptedMediaUrl (Tauri filesystem, encrypted full path)', () 
       iv: enc.iv,
     })
 
-    expect(mockTauriFetch).toHaveBeenCalledWith('https://upload.example.com/enc.bin', { method: 'GET' })
+    expect(mockDownloadFileTauri).toHaveBeenCalledWith({
+      url: 'https://upload.example.com/enc.bin',
+      decrypt: { key: enc.key, iv: enc.iv },
+    })
     // The DECRYPTED plaintext (not the ciphertext) is what gets written to the
     // `.dec` cache file, so no AES key needs to persist across sessions.
     expect(mockWriteFile).toHaveBeenCalledTimes(1)
@@ -280,13 +269,12 @@ describe('resolveEncryptedMediaUrl (Tauri filesystem, encrypted full path)', () 
   })
 
   it('serves the cached .dec file on a second call without re-fetching or re-decrypting', async () => {
-    const enc = await encryptFile(new Uint8Array([1, 1, 2, 3, 5, 8]))
-    mockTauriFetch.mockResolvedValue({
-      ok: true,
-      arrayBuffer: () => Promise.resolve(enc.ciphertext.slice().buffer),
+    mockDownloadFileTauri.mockResolvedValue({
+      bytes: new Uint8Array([1, 1, 2, 3, 5, 8]),
+      contentType: null,
     })
     const httpsUrl = 'https://upload.example.com/enc-again.bin'
-    const encryption = { cipher: 'aes-256-gcm' as const, key: enc.key, iv: enc.iv }
+    const encryption = { cipher: 'aes-256-gcm' as const, key: new Uint8Array(32), iv: new Uint8Array(12) }
 
     const first = await resolveEncryptedMediaUrl(httpsUrl, encryption)
     resetMediaUrlCache()               // drop in-memory index → consult filesystem
@@ -296,12 +284,12 @@ describe('resolveEncryptedMediaUrl (Tauri filesystem, encrypted full path)', () 
     expect(first).toMatch(/\.dec$/)
     expect(second).toMatch(/\.dec$/)
     // Second resolve is a pure cache hit: no download, no second decrypt+write.
-    expect(mockTauriFetch).toHaveBeenCalledTimes(1)
+    expect(mockDownloadFileTauri).toHaveBeenCalledTimes(1)
     expect(mockWriteFile).toHaveBeenCalledTimes(1)
   })
 
-  it('throws on a non-ok fetch without writing anything', async () => {
-    mockTauriFetch.mockResolvedValue({ ok: false, status: 404, statusText: 'Not Found' })
+  it('throws on a failed download without writing anything', async () => {
+    mockDownloadFileTauri.mockRejectedValue(new Error('Download failed: 404'))
 
     await expect(
       resolveEncryptedMediaUrl('https://upload.example.com/missing.bin', {
@@ -309,7 +297,7 @@ describe('resolveEncryptedMediaUrl (Tauri filesystem, encrypted full path)', () 
         key: new Uint8Array(32),
         iv: new Uint8Array(12),
       }),
-    ).rejects.toThrow('Fetch failed: 404 Not Found')
+    ).rejects.toThrow('Download failed: 404')
     expect(mockWriteFile).not.toHaveBeenCalled()
   })
 })
@@ -329,7 +317,7 @@ describe('peekEncryptedMediaCache (Tauri, network-free)', () => {
     mockExists.mockResolvedValue(true)
     const result = await peekEncryptedMediaCache('https://upload.example.com/enc.bin')
     expect(result).toMatch(/^https:\/\/asset\.localhost\/.*\.dec$/)
-    expect(mockTauriFetch).not.toHaveBeenCalled()
+    expect(mockDownloadFileTauri).not.toHaveBeenCalled()
   })
 
   it('returns null on a miss', async () => {
