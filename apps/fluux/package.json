@@ -23,6 +23,7 @@
   "dependencies": {
     "@chenglou/pretext": "^0.0.8",
     "@emoji-mart/data": "^1.2.1",
+    "@fluux/omemo-plugin": "*",
     "@fluux/sdk": "*",
     "@tanstack/react-virtual": "^3.13.23",
     "@tauri-apps/plugin-clipboard-manager": "^2.0.0",
