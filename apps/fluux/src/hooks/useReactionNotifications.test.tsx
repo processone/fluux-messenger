@@ -5,11 +5,11 @@ import { useReactionNotifications } from './useReactionNotifications'
 // --- SDK surface -----------------------------------------------------------
 const mockSubscribe = vi.fn()
 const chatState = {
-  messages: new Map<string, Array<{ id: string; isOutgoing?: boolean; body?: string }>>(),
+  messages: new Map<string, Array<{ id: string; stanzaId?: string; isOutgoing?: boolean; body?: string }>>(),
   activeConversationId: null as string | null,
 }
 const roomState = {
-  rooms: new Map<string, { nickname: string; messages: Array<{ id: string; nick?: string; body?: string }> }>(),
+  rooms: new Map<string, { nickname: string; messages: Array<{ id: string; stanzaId?: string; nick?: string; body?: string }> }>(),
   getMessage: vi.fn(),
   activeRoomJid: null as string | null,
 }
@@ -25,7 +25,9 @@ vi.mock('@fluux/sdk', async (importOriginal) => ({
   chatStore: { getState: () => chatState },
   roomStore: { getState: () => roomState },
   connectionStore: { getState: () => connectionState },
-  findMessageById: (msgs: Array<{ id: string }>, id: string) => msgs.find((m) => m.id === id),
+  // Mirror the real multi-tier resolution: client id first, then stanza-id.
+  findMessageById: (msgs: Array<{ id: string; stanzaId?: string }>, id: string) =>
+    msgs.find((m) => m.id === id) ?? msgs.find((m) => m.stanzaId === id),
 }))
 
 // Cache reads moved to the @fluux/sdk/cache escape-hatch subpath (Phase 2).
@@ -127,6 +129,57 @@ describe('useReactionNotifications — chat reaction resolution', () => {
     expect(mockAddToast).toHaveBeenCalledTimes(1)
   })
 
+  it('navigates with the canonical message id when the reaction references the stanza-id', async () => {
+    // The reactor's client references our message by its server stanza-id. The scroll
+    // target machinery (getIndexForMessageId / data-message-id) resolves only the client
+    // id, so navigation must use the resolved message's own id, not the raw reference.
+    chatState.activeConversationId = 'other@example.com'
+    mockGetCachedMessage.mockResolvedValue(null)
+    mockGetCachedMessageByStanzaId.mockResolvedValue({ id: 'm1', isOutgoing: true, body: 'via stanza id' })
+
+    renderHook(() => useReactionNotifications())
+    await chatHandler()({
+      conversationId: 'peer@example.com',
+      messageId: 'stanza-1',
+      reactorJid: 'peer@example.com',
+      emojis: ['🔥'],
+      isLive: true,
+    })
+
+    const onClick = mockAddToast.mock.calls[0][3] as () => void
+    onClick()
+    expect(mockNavigateToConversation).toHaveBeenCalledWith('peer@example.com', 'm1')
+  })
+
+  it('stores the canonical message id in the mention chip for a stanza-id reference', async () => {
+    const conv = 'peer@example.com'
+    chatState.activeConversationId = conv
+    chatState.messages.set(conv, [
+      { id: 'm1', stanzaId: 'stanza-m1', isOutgoing: true, body: 'older own message' },
+      { id: 'last', isOutgoing: false },
+    ])
+
+    renderHook(() => useReactionNotifications())
+    await chatHandler()({ conversationId: conv, messageId: 'stanza-m1', reactorJid: 'peer@example.com', emojis: ['🎉'], isLive: true })
+
+    expect(mockAddMention).toHaveBeenCalledWith(expect.objectContaining({ id: `${conv}:m1`, messageId: 'm1' }))
+  })
+
+  it('suppresses the notification when the reaction references the last message by stanza-id', async () => {
+    const conv = 'peer@example.com'
+    chatState.activeConversationId = conv
+    chatState.messages.set(conv, [
+      { id: 'm1', isOutgoing: false },
+      { id: 'last', stanzaId: 'stanza-last', isOutgoing: true, body: 'my latest' },
+    ])
+
+    renderHook(() => useReactionNotifications())
+    await chatHandler()({ conversationId: conv, messageId: 'stanza-last', reactorJid: 'peer@example.com', emojis: ['🎉'], isLive: true })
+
+    expect(mockAddToast).not.toHaveBeenCalled()
+    expect(mockAddMention).not.toHaveBeenCalled()
+  })
+
   it('does nothing when the message cannot be found in RAM or the cache', async () => {
     chatState.activeConversationId = 'other@example.com'
     renderHook(() => useReactionNotifications())
@@ -225,6 +278,33 @@ describe('useReactionNotifications — room reaction resolution', () => {
 
     expect(mockGetCachedRoomMessage).toHaveBeenCalledWith('r-old')
     expect(mockAddToast).toHaveBeenCalledTimes(1)
+  })
+
+  it('navigates with the canonical message id when the room reaction references the stanza-id', async () => {
+    // MUC reactions reference the server stanza-id (the canonical id other clients see);
+    // roomStore.getMessage resolves it multi-tier, but navigation must use message.id.
+    roomState.activeRoomJid = 'other@conference.example.com'
+    roomState.getMessage = vi.fn().mockReturnValue({ id: 'r1', stanzaId: 'stanza-r1', nick: 'Me', body: 'my room message' })
+
+    renderHook(() => useReactionNotifications())
+    await roomHandler()({ roomJid: ROOM, messageId: 'stanza-r1', reactorNick: 'Alice', emojis: ['🎉'], isLive: true })
+
+    const onClick = mockAddToast.mock.calls[0][3] as () => void
+    onClick()
+    expect(mockNavigateToRoom).toHaveBeenCalledWith(ROOM, 'r1')
+  })
+
+  it('suppresses the notification when the room reaction references the last message by stanza-id', async () => {
+    roomState.activeRoomJid = ROOM
+    const last = { id: 'r-last', stanzaId: 'stanza-r-last', nick: 'Me', body: 'my latest' }
+    roomState.rooms.set(ROOM, { nickname: 'Me', messages: [{ id: 'r1', nick: 'Alice' }, last] })
+    roomState.getMessage = vi.fn().mockReturnValue(last)
+
+    renderHook(() => useReactionNotifications())
+    await roomHandler()({ roomJid: ROOM, messageId: 'stanza-r-last', reactorNick: 'Alice', emojis: ['🎉'], isLive: true })
+
+    expect(mockAddToast).not.toHaveBeenCalled()
+    expect(mockAddMention).not.toHaveBeenCalled()
   })
 
   it('ignores a reaction to another occupant\'s message', async () => {
