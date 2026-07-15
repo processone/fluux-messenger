@@ -602,6 +602,9 @@ export const MessageBubble = memo(function MessageBubble({
         // Marks hug-width (w-fit) own bubbles so useRowMetrics never samples their text box
         // as the conversation's content width (it is only as wide as the text itself).
         data-msg-own={ownTint ? '' : undefined}
+        // Selected/action-sheet state: hooks the CSS that keeps quote and reply-card
+        // fills distinct from the selection tint (issue #1008).
+        data-msg-selected={isSelected || showActionSheet ? '' : undefined}
         onTouchStart={handleContentTouchStart}
         onTouchEnd={cancelLongPress}
         onTouchMove={cancelLongPress}
@@ -676,8 +679,14 @@ export const MessageBubble = memo(function MessageBubble({
         {!message.isRetracted && replyContext && (
           <button
             onClick={() => scrollToMessage(replyContext.messageId)}
-            className="flex items-start gap-1.5 py-1 pe-2 ps-2 mb-1.5 border-s-2 text-start min-w-0 bg-fluux-bg-secondary hover:bg-fluux-hover/50 rounded-e transition-colors cursor-pointer select-none"
-            style={{ borderColor: replyContext.senderColor }}
+            className="reply-quote-card flex items-start gap-1.5 py-1 pe-2 ps-2 mb-1.5 border-s-2 text-start min-w-0 bg-fluux-bg-secondary hover:bg-fluux-hover/50 rounded-e transition-colors cursor-pointer select-none"
+            // When the row is selected the selection tint melts into the card fill
+            // (light themes); a full frame in the sender's colour keeps the card
+            // distinct in every theme/mode without touching the fill. Issue #1008.
+            style={{
+              borderColor: replyContext.senderColor,
+              boxShadow: isSelected || showActionSheet ? `inset 0 0 0 1px ${replyContext.senderColor}` : undefined,
+            }}
           >
             <CornerUpRight
               className="rtl-mirror size-3.5 flex-shrink-0 mt-0.5"
