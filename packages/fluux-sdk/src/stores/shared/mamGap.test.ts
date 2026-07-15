@@ -4,6 +4,9 @@ import {
   syncGap,
   serializeGaps,
   deserializeGaps,
+  messagePageExtent,
+  detectFetchLatestSeam,
+  closeGapWithBackwardPage,
   type GapInterval,
 } from './mamGap'
 
@@ -75,5 +78,101 @@ describe('serializeGaps / deserializeGaps', () => {
 
   it('returns an empty map for malformed JSON', () => {
     expect(deserializeGaps('not json').size).toBe(0)
+  })
+})
+
+const msg = (iso: string) => ({ timestamp: new Date(iso) })
+const ts = (iso: string) => new Date(iso).getTime()
+
+describe('messagePageExtent', () => {
+  it('returns min/max timestamps, robust to unsorted input', () => {
+    const extent = messagePageExtent([msg('2026-07-10T00:00:00Z'), msg('2026-07-06T00:00:00Z'), msg('2026-07-08T00:00:00Z')])
+    expect(extent).toEqual({ oldestTs: ts('2026-07-06T00:00:00Z'), newestTs: ts('2026-07-10T00:00:00Z') })
+  })
+
+  it('skips messages without timestamps; empty input yields undefined bounds', () => {
+    expect(messagePageExtent([{}, msg('2026-07-06T00:00:00Z')])).toEqual({
+      oldestTs: ts('2026-07-06T00:00:00Z'), newestTs: ts('2026-07-06T00:00:00Z'),
+    })
+    expect(messagePageExtent([])).toEqual({ oldestTs: undefined, newestTs: undefined })
+  })
+})
+
+describe('detectFetchLatestSeam', () => {
+  const page = [msg('2026-07-14T00:00:00Z'), msg('2026-07-15T00:00:00Z')]
+  const heldBelowTs = ts('2026-07-06T00:00:00Z')
+
+  it('plants a seam when the page lands entirely above held history with no overlap', () => {
+    expect(detectFetchLatestSeam(page, 2, 0, heldBelowTs)).toEqual({
+      start: heldBelowTs,               // newest pre-existing message below
+      end: ts('2026-07-14T00:00:00Z'),  // oldest fetched message
+    })
+  })
+
+  it('no seam on dedupe overlap (some fetched messages already held)', () => {
+    expect(detectFetchLatestSeam(page, 1, 0, heldBelowTs)).toBeUndefined()
+  })
+
+  it('no seam on archive-id backfill (reflection patched onto held messages)', () => {
+    expect(detectFetchLatestSeam(page, 2, 1, heldBelowTs)).toBeUndefined()
+  })
+
+  it('no seam when nothing is held below', () => {
+    expect(detectFetchLatestSeam(page, 2, 0, undefined)).toBeUndefined()
+  })
+
+  it('no seam when the page interleaves with held history (ambiguous)', () => {
+    // Held newest (July 14T12:00) sits inside the page span — not entirely above.
+    expect(detectFetchLatestSeam(page, 2, 0, ts('2026-07-14T12:00:00Z'))).toBeUndefined()
+  })
+
+  it('no seam for an empty page or a page with no timestamps', () => {
+    expect(detectFetchLatestSeam([], 0, 0, heldBelowTs)).toBeUndefined()
+    expect(detectFetchLatestSeam([{}], 1, 0, heldBelowTs)).toBeUndefined()
+  })
+})
+
+describe('closeGapWithBackwardPage', () => {
+  const gap: GapInterval = { start: ts('2026-07-06T00:00:00Z'), end: ts('2026-07-14T00:00:00Z') }
+
+  it('clears the gap when the page crosses it (oldest fetched reaches held history below)', () => {
+    const page = { oldestTs: ts('2026-07-05T00:00:00Z'), newestTs: ts('2026-07-14T06:00:00Z') }
+    expect(closeGapWithBackwardPage(gap, page, false)).toBeUndefined()
+  })
+
+  it('shrinks the gap when the page reaches into it from above', () => {
+    const page = { oldestTs: ts('2026-07-10T00:00:00Z'), newestTs: ts('2026-07-14T06:00:00Z') }
+    expect(closeGapWithBackwardPage(gap, page, false)).toEqual({
+      start: gap.start, end: ts('2026-07-10T00:00:00Z'),
+    })
+  })
+
+  it('ignores a page entirely below the gap (older-region pagination says nothing)', () => {
+    const page = { oldestTs: ts('2026-07-01T00:00:00Z'), newestTs: ts('2026-07-05T00:00:00Z') }
+    expect(closeGapWithBackwardPage(gap, page, false)).toBe(gap)
+    // Even archive-start (complete=true) below the gap must NOT clear it.
+    expect(closeGapWithBackwardPage(gap, page, true)).toBe(gap)
+  })
+
+  it('clears the gap when a page from at/above it reaches archive start (complete)', () => {
+    const page = { oldestTs: ts('2026-07-08T00:00:00Z'), newestTs: ts('2026-07-14T06:00:00Z') }
+    expect(closeGapWithBackwardPage(gap, page, true)).toBeUndefined()
+  })
+
+  it('ignores an empty page (no positional info), even when complete', () => {
+    expect(closeGapWithBackwardPage(gap, { oldestTs: undefined, newestTs: undefined }, true)).toBe(gap)
+  })
+
+  it('ignores a page entirely above the gap end (recent-region pagination not yet at the seam)', () => {
+    const page = { oldestTs: ts('2026-07-14T12:00:00Z'), newestTs: ts('2026-07-15T00:00:00Z') }
+    expect(closeGapWithBackwardPage(gap, page, false)).toBe(gap)
+  })
+
+  it('shrinks an open-ended gap (end undefined) instead of ignoring it', () => {
+    const openGap: GapInterval = { start: ts('2026-07-06T00:00:00Z') }
+    const page = { oldestTs: ts('2026-07-10T00:00:00Z'), newestTs: ts('2026-07-15T00:00:00Z') }
+    expect(closeGapWithBackwardPage(openGap, page, false)).toEqual({
+      start: openGap.start, end: ts('2026-07-10T00:00:00Z'),
+    })
   })
 })
