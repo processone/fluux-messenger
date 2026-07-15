@@ -17,7 +17,8 @@
         "forward": "Uz priekšu",
         "block": "Bloķēt",
         "copied": "Nokopēts",
-        "comingSoon": "Drīzumā"
+        "comingSoon": "Drīzumā",
+        "dismiss": "Noraidīt"
     },
     "login": {
         "title": "Fluux Messenger",
@@ -1382,5 +1383,10 @@
             "nickInUse": "Segvārds {{nick}} jau tiek izmantots",
             "nickFailed": "Neizdevās mainīt jūsu segvārdu"
         }
+    },
+    "easterEgg": {
+        "mention": "{{name}} nosūtīja jums animāciju",
+        "replay": "Atkārtot",
+        "sentBy": "Sūtītājs: {{name}}"
     }
 }

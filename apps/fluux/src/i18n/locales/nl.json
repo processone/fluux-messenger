@@ -17,7 +17,8 @@
         "comingSoon": "Binnenkort",
         "back": "Terug",
         "forward": "Vooruit",
-        "copied": "Gekopieerd"
+        "copied": "Gekopieerd",
+        "dismiss": "Verwerpen"
     },
     "login": {
         "title": "Fluux Messenger",
@@ -1380,5 +1381,10 @@
             "nickInUse": "De bijnaam {{nick}} is al in gebruik",
             "nickFailed": "Je bijnaam kon niet worden gewijzigd"
         }
+    },
+    "easterEgg": {
+        "mention": "{{name}} heeft je een animatie gestuurd",
+        "replay": "Opnieuw afspelen",
+        "sentBy": "Verzonden door {{name}}"
     }
 }

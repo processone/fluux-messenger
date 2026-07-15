@@ -2158,6 +2158,123 @@ describe('roomStore', () => {
       expect(roomStore.getState().roomGaps.has(jid)).toBe(false)
     })
 
+    it('plants a seam when a fetch-latest page lands disjoint above held history', () => {
+      const held: RoomMessage = {
+        type: 'groupchat', id: 'held', roomJid: jid, from: `${jid}/a`, nick: 'a',
+        body: 'held', timestamp: new Date('2026-07-06T00:00:00Z'), isOutgoing: false,
+      }
+      roomStore.getState().addRoom(createRoom(jid, { joined: true, messages: [held], lastMessage: held }))
+
+      const fetched: RoomMessage = {
+        type: 'groupchat', id: 'fresh', roomJid: jid, from: `${jid}/b`, nick: 'b',
+        body: 'fresh', timestamp: new Date('2026-07-15T00:00:00Z'), isOutgoing: false,
+      }
+      // backward + isFetchLatest=true = a `before:''` fetch-latest page
+      roomStore.getState().mergeRoomMAMMessages(jid, [fetched], {}, true, 'backward', false, true)
+
+      expect(roomStore.getState().roomGaps.get(jid)).toEqual({
+        start: new Date('2026-07-06T00:00:00Z').getTime(),
+        end: new Date('2026-07-15T00:00:00Z').getTime(),
+      })
+    })
+
+    it('does NOT plant a seam when the fetch-latest page overlaps held history (dedupe)', () => {
+      const held: RoomMessage = {
+        type: 'groupchat', id: 'shared', roomJid: jid, from: `${jid}/a`, nick: 'a',
+        body: 'shared', timestamp: new Date('2026-07-14T00:00:00Z'), isOutgoing: false,
+      }
+      roomStore.getState().addRoom(createRoom(jid, { joined: true, messages: [held], lastMessage: held }))
+
+      const fresh: RoomMessage = {
+        type: 'groupchat', id: 'fresh', roomJid: jid, from: `${jid}/b`, nick: 'b',
+        body: 'fresh', timestamp: new Date('2026-07-15T00:00:00Z'), isOutgoing: false,
+      }
+      const dupe: RoomMessage = { ...held } // same id → dedupe hit → connection proof
+      roomStore.getState().mergeRoomMAMMessages(jid, [dupe, fresh], {}, true, 'backward', false, true)
+
+      expect(roomStore.getState().roomGaps.has(jid)).toBe(false)
+    })
+
+    it('does NOT plant a seam for a plain backward pagination page (isFetchLatest omitted)', () => {
+      const held: RoomMessage = {
+        type: 'groupchat', id: 'held', roomJid: jid, from: `${jid}/a`, nick: 'a',
+        body: 'held', timestamp: new Date('2026-07-06T00:00:00Z'), isOutgoing: false,
+      }
+      roomStore.getState().addRoom(createRoom(jid, { joined: true, messages: [held], lastMessage: held }))
+      const older: RoomMessage = {
+        type: 'groupchat', id: 'older', roomJid: jid, from: `${jid}/b`, nick: 'b',
+        body: 'older', timestamp: new Date('2026-07-01T00:00:00Z'), isOutgoing: false,
+      }
+      roomStore.getState().mergeRoomMAMMessages(jid, [older], {}, false, 'backward')
+
+      expect(roomStore.getState().roomGaps.has(jid)).toBe(false)
+    })
+
+    it('falls back to the persisted preview timestamp when the resident array is empty', () => {
+      const held: RoomMessage = {
+        type: 'groupchat', id: 'held', roomJid: jid, from: `${jid}/a`, nick: 'a',
+        body: 'held', timestamp: new Date('2026-07-06T00:00:00Z'), isOutgoing: false,
+      }
+      // Fresh-run shape: resident array EMPTY, preview (meta.lastMessage) persisted.
+      roomStore.getState().addRoom(createRoom(jid, { joined: true, lastMessage: held }))
+
+      const fetched: RoomMessage = {
+        type: 'groupchat', id: 'fresh', roomJid: jid, from: `${jid}/b`, nick: 'b',
+        body: 'fresh', timestamp: new Date('2026-07-15T00:00:00Z'), isOutgoing: false,
+      }
+      roomStore.getState().mergeRoomMAMMessages(jid, [fetched], {}, true, 'backward', false, true)
+
+      expect(roomStore.getState().roomGaps.get(jid)).toEqual({
+        start: new Date('2026-07-06T00:00:00Z').getTime(),
+        end: new Date('2026-07-15T00:00:00Z').getTime(),
+      })
+    })
+
+    it('backward closure: a scroll-up page reaching into the gap shrinks it; crossing clears it', () => {
+      roomStore.getState().addRoom(createRoom(jid))
+      roomStore.setState({ roomGaps: new Map([[jid, {
+        start: new Date('2026-07-06T00:00:00Z').getTime(),
+        end: new Date('2026-07-14T00:00:00Z').getTime(),
+      }]]) })
+
+      const mid: RoomMessage = {
+        type: 'groupchat', id: 'mid', roomJid: jid, from: `${jid}/a`, nick: 'a',
+        body: 'mid', timestamp: new Date('2026-07-10T00:00:00Z'), isOutgoing: false,
+      }
+      const upper: RoomMessage = {
+        type: 'groupchat', id: 'upper', roomJid: jid, from: `${jid}/b`, nick: 'b',
+        body: 'upper', timestamp: new Date('2026-07-14T06:00:00Z'), isOutgoing: false,
+      }
+      roomStore.getState().mergeRoomMAMMessages(jid, [mid, upper], {}, false, 'backward')
+      expect(roomStore.getState().roomGaps.get(jid)).toEqual({
+        start: new Date('2026-07-06T00:00:00Z').getTime(),
+        end: new Date('2026-07-10T00:00:00Z').getTime(),
+      })
+
+      const below: RoomMessage = {
+        type: 'groupchat', id: 'below', roomJid: jid, from: `${jid}/a`, nick: 'a',
+        body: 'below', timestamp: new Date('2026-07-05T00:00:00Z'), isOutgoing: false,
+      }
+      roomStore.getState().mergeRoomMAMMessages(jid, [below, mid], {}, false, 'backward')
+      expect(roomStore.getState().roomGaps.has(jid)).toBe(false)
+    })
+
+    it('backward closure: an older-region page below the gap leaves it untouched', () => {
+      roomStore.getState().addRoom(createRoom(jid))
+      const gap = {
+        start: new Date('2026-07-06T00:00:00Z').getTime(),
+        end: new Date('2026-07-14T00:00:00Z').getTime(),
+      }
+      roomStore.setState({ roomGaps: new Map([[jid, gap]]) })
+
+      const ancient: RoomMessage = {
+        type: 'groupchat', id: 'ancient', roomJid: jid, from: `${jid}/a`, nick: 'a',
+        body: 'ancient', timestamp: new Date('2026-07-01T00:00:00Z'), isOutgoing: false,
+      }
+      roomStore.getState().mergeRoomMAMMessages(jid, [ancient], {}, true, 'backward')
+      expect(roomStore.getState().roomGaps.get(jid)).toEqual(gap)
+    })
+
     it('leaves the persisted gap untouched when preserveGapMarker is set (bounded repair)', () => {
       roomStore.getState().addRoom(createRoom(jid))
       roomStore.setState({ roomGaps: new Map([[jid, { start: 1000, end: 5000 }]]) })

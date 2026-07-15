@@ -25,6 +25,7 @@ import { HistoryGapMarker } from './HistoryGapMarker'
 import { TypingIndicator } from './TypingIndicator'
 import { groupMessagesByDate, shouldShowAvatar } from './messageGrouping'
 import { useMessageListScroll } from './useMessageListScroll'
+import { countNewBelowViewport } from './unreadBadge'
 import { MessageWidthProvider } from './messageWidthContext'
 import { OwnGroupWidthProvider } from './messageGroupWidth'
 import { isFeatureEnabled } from '@/utils/featureFlags'
@@ -78,6 +79,10 @@ export interface MessageListProps<T extends BaseMessage> {
   onTargetMessageConsumed?: () => void
   /** Callback to clear the first new message ID (used by viewport observer) */
   clearFirstNewMessageId?: () => void
+  /** Persisted read pointer for this conversation — the badge counts unread below it. */
+  lastSeenMessageId?: string
+  /** Recompute the divider from the read pointer (called when the reader scrolls back up). */
+  onResyncDivider?: (conversationId: string) => void
   /** Users currently typing */
   typingUsers?: string[]
   /** Format function for typing user display */
@@ -156,6 +161,8 @@ export function MessageList<T extends BaseMessage>({
   firstNewMessageId,
   firstNewMessageIsProvisional = false,
   clearFirstNewMessageId,
+  lastSeenMessageId,
+  onResyncDivider,
   targetMessageId,
   onTargetMessageConsumed,
   typingUsers = [],
@@ -511,6 +518,7 @@ export function MessageList<T extends BaseMessage>({
     scrollToBottom,
     showScrollToBottom,
     markerAboveViewport,
+    bottomVisibleMessageId,
     scrollToMarker,
   } = useMessageListScroll({
     conversationId,
@@ -707,6 +715,29 @@ export function MessageList<T extends BaseMessage>({
   // whenever the window is slid up (newer content exists off-screen), not only past the FAB threshold.
   const windowSlidUp = windowAtLiveEdge === false
   const fabVisible = showScrollToBottom || windowSlidUp
+  // FAB badge: counts the new messages (from the divider) still below the persisted read pointer
+  // (lastSeenMessageId), which only advances forward (see chatStore/roomStore's
+  // updateLastSeenMessageId) — so the count ticks DOWN as the reader scrolls toward the present and
+  // never climbs back up when they scroll into history. The marker pill keeps the full
+  // markerUnreadCount ("jump back to N unread").
+  const fabBadgeCount = useMemo(
+    () => countNewBelowViewport(deduplicatedMessages, firstNewMessageId, lastSeenMessageId ?? null),
+    [deduplicatedMessages, firstNewMessageId, lastSeenMessageId],
+  )
+  // When the reader scrolls back ABOVE the read pointer, snap the "New messages" divider to the
+  // first unread after the pointer ("here's how far I got"). Forward-only + idempotent in the store,
+  // so a slightly noisy trigger is harmless. Compares the bottom-most-visible row (from the scroll
+  // hook) against the pointer, both resolved in the resident message array.
+  useEffect(() => {
+    if (!firstNewMessageId || !lastSeenMessageId || !bottomVisibleMessageId || !onResyncDivider) return
+    const bIdx = deduplicatedMessages.findIndex((m) => m.id === bottomVisibleMessageId)
+    const pIdx = deduplicatedMessages.findIndex((m) => m.id === lastSeenMessageId)
+    const dIdx = deduplicatedMessages.findIndex((m) => m.id === firstNewMessageId)
+    // Scrolled above the pointer (bIdx < pIdx) and the divider still trails it (dIdx <= pIdx).
+    if (bIdx >= 0 && pIdx > bIdx && dIdx !== -1 && dIdx <= pIdx) {
+      onResyncDivider(conversationId)
+    }
+  }, [bottomVisibleMessageId, lastSeenMessageId, firstNewMessageId, deduplicatedMessages, conversationId, onResyncDivider])
   // Track whether the FAB has ever been shown in this mount so the exit animation (whose first
   // keyframe is fully-visible) never runs on a fresh open-at-bottom, which would flash the FAB.
   // MessageList is remounted per conversation via `key`, so this ref resets on every open.
@@ -871,10 +902,13 @@ export function MessageList<T extends BaseMessage>({
       {/* Floating typing indicator — anchored to the bottom of the message area rather than living
           inside the scroll content, so it (a) stays visible whether the user is at the bottom or
           scrolled up in history, and (b) never changes the scroll height (toggling it inline used to
-          re-pin the viewport and fight an upward scroll — issue #918). Bottom-start keeps it clear of
-          the bottom-end FAB; pointer-events-none so it never intercepts taps on the message beneath. */}
+          re-pin the viewport and fight an upward scroll — issue #918). The spacer above grows to
+          pb-12 (48px) while typing; bottom-0.5 centres the ~30px pill vertically in that band so it
+          sits evenly (~16px each side) between the last message and the composer instead of hugging
+          the message. start-4 keeps it aligned under the messages and clear of the bottom-end FAB;
+          pointer-events-none so it never intercepts taps on the message beneath. */}
       {typingUsers.length > 0 && (
-        <div className="absolute bottom-4 start-4 z-30 max-w-[calc(100%-5rem)] pointer-events-none animate-toast-in">
+        <div className="absolute bottom-0.5 start-4 z-30 max-w-[calc(100%-5rem)] pointer-events-none animate-toast-in">
           <div className="rounded-full bg-fluux-float border border-fluux-border shadow-lg px-3 py-1.5">
             <TypingIndicator typingUsers={typingUsers} formatUser={formatTypingUser} variant="compact" />
           </div>
@@ -894,9 +928,9 @@ export function MessageList<T extends BaseMessage>({
             aria-label={t('chat.scrollToBottom')}
             tabIndex={fabVisible ? 0 : -1}
           >
-            {markerUnreadCount > 0 && (
+            {fabBadgeCount > 0 && (
               <span className="absolute -top-1.5 -end-1.5 min-w-5 h-5 px-1 rounded-full bg-fluux-badge text-fluux-badge-text text-xs font-semibold flex items-center justify-center">
-                {markerUnreadCount > 99 ? '99+' : markerUnreadCount}
+                {fabBadgeCount > 99 ? '99+' : fabBadgeCount}
               </span>
             )}
             <ChevronDown className="size-5" />

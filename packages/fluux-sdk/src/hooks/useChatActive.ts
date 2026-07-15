@@ -66,6 +66,7 @@ export function useChatActive() {
     getDraft,
     clearDraft,
     clearFirstNewMessageId,
+    resyncDividerToReadPointer,
     updateLastSeenMessageId,
     fetchHistory,
     fetchOlderHistory,
@@ -89,6 +90,12 @@ export function useChatActive() {
   const activeFirstNewMessageId = useChatStore((s) => {
     if (!s.activeConversationId) return undefined
     return s.firstNewMessageMarkers.get(s.activeConversationId)
+  })
+  // Persisted read pointer (XEP-0490 sync marker) for the active conversation. Drives the FAB badge
+  // count and the divider resync-on-scroll-up trigger in MessageList.
+  const activeLastSeenMessageId = useChatStore((s) => {
+    if (!s.activeConversationId) return undefined
+    return s.conversationMeta.get(s.activeConversationId)?.lastSeenMessageId
   })
   // Provisional divider: derived from the local pointer while a synced XEP-0490
   // read position is still unresolved — rendered muted until confirmed.
@@ -294,6 +301,7 @@ export function useChatActive() {
       getDraft,
       clearDraft,
       clearFirstNewMessageId,
+      resyncDividerToReadPointer,
       updateLastSeenMessageId,
       fetchHistory,
       fetchOlderHistory,
@@ -307,7 +315,7 @@ export function useChatActive() {
       markAsRead, archiveConversation, unarchiveConversation, isArchived,
       sendChatState, sendReaction, sendCorrection, retractMessage, retryMessage,
       sendEasterEgg, clearAnimation, clearTargetMessageId, setDraft, getDraft, clearDraft,
-      clearFirstNewMessageId, updateLastSeenMessageId, fetchHistory, fetchOlderHistory,
+      clearFirstNewMessageId, resyncDividerToReadPointer, updateLastSeenMessageId, fetchHistory, fetchOlderHistory,
       loadMessagesAround, loadNewer, recenterToLatest, continueChatCatchUp,
     ]
   )
@@ -318,6 +326,7 @@ export function useChatActive() {
       activeConversation,
       firstNewMessageId: activeFirstNewMessageId,
       firstNewMessageIsProvisional: activeFirstNewMessageIsProvisional,
+      lastSeenMessageId: activeLastSeenMessageId,
       activeMessages,
       activeTypingUsers,
       activeAnimation,
@@ -328,7 +337,8 @@ export function useChatActive() {
       ...actions,
     }),
     [
-      activeConversationId, activeConversation, activeFirstNewMessageId, activeFirstNewMessageIsProvisional, activeMessages,
+      activeConversationId, activeConversation, activeFirstNewMessageId, activeFirstNewMessageIsProvisional,
+      activeLastSeenMessageId, activeMessages,
       activeTypingUsers, activeAnimation, targetMessageId, supportsMAM, activeMAMState,
       activeWindowAtLiveEdge, actions,
     ]

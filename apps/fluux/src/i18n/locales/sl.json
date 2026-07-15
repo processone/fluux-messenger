@@ -17,7 +17,8 @@
         "forward": "Naprej",
         "block": "Blokiraj",
         "copied": "Kopirano",
-        "comingSoon": "Kmalu na voljo"
+        "comingSoon": "Kmalu na voljo",
+        "dismiss": "Opusti"
     },
     "login": {
         "title": "Fluux Messenger",
@@ -1384,5 +1385,10 @@
             "nickInUse": "Vzdevek {{nick}} je že v uporabi",
             "nickFailed": "Vašega vzdevka ni bilo mogoče spremeniti"
         }
+    },
+    "easterEgg": {
+        "mention": "{{name}} vam je poslal(a) animacijo",
+        "replay": "Ponovno predvajaj",
+        "sentBy": "Poslano od {{name}}"
     }
 }

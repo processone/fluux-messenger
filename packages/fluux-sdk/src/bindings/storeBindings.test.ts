@@ -157,9 +157,25 @@ describe('createStoreBindings', () => {
       )
     })
 
-    it('should handle chat:animation', () => {
-      mockClient.emit('chat:animation', { conversationId: 'bob@example.com', animation: 'shake' })
-      expect(mockStores.chat.triggerAnimation).toHaveBeenCalledWith('bob@example.com', 'shake')
+    it('should handle chat:animation when the conversation is active, naming the sender', () => {
+      mockStores.chat.activeConversationId = 'bob@example.com'
+      mockStores.connection.jid = 'me@example.com/res'
+      mockClient.emit('chat:animation', { conversationId: 'bob@example.com', animation: 'shake', senderJid: 'bob@example.com' })
+      expect(mockStores.chat.triggerAnimation).toHaveBeenCalledWith('bob@example.com', 'shake', 'bob')
+    })
+
+    it('should not name the sender for our own chat:animation', () => {
+      mockStores.chat.activeConversationId = 'bob@example.com'
+      mockStores.connection.jid = 'me@example.com/res'
+      // A sent-carbon of our own egg arrives with our own bare JID as sender.
+      mockClient.emit('chat:animation', { conversationId: 'bob@example.com', animation: 'shake', senderJid: 'me@example.com' })
+      expect(mockStores.chat.triggerAnimation).toHaveBeenCalledWith('bob@example.com', 'shake', undefined)
+    })
+
+    it('should not play chat:animation when the conversation is not active', () => {
+      mockStores.chat.activeConversationId = 'other@example.com'
+      mockClient.emit('chat:animation', { conversationId: 'bob@example.com', animation: 'shake', senderJid: 'bob@example.com' })
+      expect(mockStores.chat.triggerAnimation).not.toHaveBeenCalled()
     })
 
     it('should handle read:displayed-synced', () => {
@@ -416,9 +432,25 @@ describe('createStoreBindings', () => {
       expect(mockStores.room.removeBookmark).toHaveBeenCalledWith('room@conference.example.com')
     })
 
-    it('should handle room:animation', () => {
-      mockClient.emit('room:animation', { roomJid: 'room@conference.example.com', animation: 'confetti' })
-      expect(mockStores.room.triggerAnimation).toHaveBeenCalledWith('room@conference.example.com', 'confetti')
+    it('should handle room:animation when the room is active, naming the sender', () => {
+      mockStores.room.activeRoomJid = 'room@conference.example.com'
+      mockStores.room.rooms.set('room@conference.example.com', { nickname: 'me' } as never)
+      mockClient.emit('room:animation', { roomJid: 'room@conference.example.com', animation: 'confetti', senderNick: 'alice' })
+      expect(mockStores.room.triggerAnimation).toHaveBeenCalledWith('room@conference.example.com', 'confetti', 'alice')
+    })
+
+    it('should not name the sender for our own room:animation', () => {
+      mockStores.room.activeRoomJid = 'room@conference.example.com'
+      mockStores.room.rooms.set('room@conference.example.com', { nickname: 'me' } as never)
+      // The MUC reflects our own egg back with our own nick.
+      mockClient.emit('room:animation', { roomJid: 'room@conference.example.com', animation: 'confetti', senderNick: 'me' })
+      expect(mockStores.room.triggerAnimation).toHaveBeenCalledWith('room@conference.example.com', 'confetti', undefined)
+    })
+
+    it('should not play room:animation when the room is not active', () => {
+      mockStores.room.activeRoomJid = 'other-room@conference.example.com'
+      mockClient.emit('room:animation', { roomJid: 'room@conference.example.com', animation: 'confetti', senderNick: 'alice' })
+      expect(mockStores.room.triggerAnimation).not.toHaveBeenCalled()
     })
 
     it('should handle room:members with avatar lookup', () => {

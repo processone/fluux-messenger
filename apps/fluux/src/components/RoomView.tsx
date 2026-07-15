@@ -42,6 +42,8 @@ import { getRoomJoinErrorMessage } from '@/utils/roomJoinError'
 import { auroraSenderColor, nickColorSeed } from '@/utils/senderColor'
 import { ReactionMentions } from './conversation/ReactionMentions'
 import { reactionMentionStore } from '@/stores/reactionMentionStore'
+import { EasterEggMentions } from './conversation/EasterEggMentions'
+import { easterEggMentionStore } from '@/stores/easterEggMentionStore'
 
 // Generate hat colors from URI using XEP-0392 consistent color
 function getHatColors(hat: { uri: string; hue?: number }) {
@@ -93,7 +95,7 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
   // Active-room state + messaging/scroll actions. Poll / moderation /
   // management actions come from the focused hooks below (they subscribe to no
   // store, so they add no re-render triggers).
-  const { activeRoom, activeMessages, activeTypingUsers, sendMessage, sendWhisper, sendReaction, sendCorrection, retractMessage, sendChatState, sendWhisperChatState, activeAnimation, sendEasterEgg, clearAnimation, clearFirstNewMessageId, updateLastSeenMessageId, joinRoom, joinResult, fetchOlderHistory, loadMessagesAround, loadNewer, recenterToLatest, windowAtLiveEdge, continueRoomCatchUp, activeMAMState, targetMessageId, clearTargetMessageId, firstNewMessageId, firstNewMessageIsProvisional } = useRoomActive()
+  const { activeRoom, activeMessages, activeTypingUsers, sendMessage, sendWhisper, sendReaction, sendCorrection, retractMessage, sendChatState, sendWhisperChatState, activeAnimation, sendEasterEgg, clearAnimation, clearFirstNewMessageId, resyncDividerToReadPointer, updateLastSeenMessageId, joinRoom, joinResult, fetchOlderHistory, loadMessagesAround, loadNewer, recenterToLatest, windowAtLiveEdge, continueRoomCatchUp, activeMAMState, targetMessageId, clearTargetMessageId, firstNewMessageId, firstNewMessageIsProvisional, lastSeenMessageId } = useRoomActive()
   const { sendPoll, votePoll, closePoll } = usePolls()
   const { moderateMessage, setAffiliation, setRole } = useRoomModeration()
   const { setRoomNotifyAll, setRoomAvatar, clearRoomAvatar, submitRoomConfig, setSubject, destroyRoom } = useRoomManagement()
@@ -389,6 +391,18 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
     }
   }, [activeRoom?.jid])
 
+  // Auto-play a pending easter egg once when its room opens. The chip stays
+  // (via EasterEggMentions) as a Replay control until dismissed.
+  useEffect(() => {
+    const jid = activeRoom?.jid
+    if (!jid) return
+    const egg = easterEggMentionStore.getState().mentions.get(jid)
+    if (egg && !egg.played) {
+      roomStore.getState().triggerAnimation(jid, egg.animation, egg.senderName)
+      easterEggMentionStore.getState().markPlayed(jid)
+    }
+  }, [activeRoom?.jid])
+
   // Clear reply/edit/whisper/pending attachment state when room changes
   // Note: scroll position is managed by MessageList component
   useEffect(() => {
@@ -440,6 +454,11 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
       clearFirstNewMessageId(roomJid)
     }
   }, [roomJid, clearFirstNewMessageId])
+
+  const handleResyncDivider = useCallback(
+    (roomJid: string) => resyncDividerToReadPointer(roomJid),
+    [resyncDividerToReadPointer],
+  )
 
   // Viewport observer callback: update lastSeenMessageId as user scrolls
   const handleMessageSeen = useCallback((messageId: string) => {
@@ -575,9 +594,11 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
             showToolbarForSelection={showToolbarForSelection}
             firstNewMessageId={firstNewMessageId}
             firstNewMessageIsProvisional={firstNewMessageIsProvisional}
+            lastSeenMessageId={lastSeenMessageId}
             targetMessageId={targetMessageId}
             clearTargetMessageId={clearTargetMessageId}
             clearFirstNewMessageId={handleClearFirstNewMessageId}
+            onResyncDivider={handleResyncDivider}
             onMessageSeen={handleMessageSeen}
             isJoined={activeRoom.joined}
             isDarkMode={resolvedMode === 'dark'}
@@ -605,6 +626,7 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
 
         {/* Reaction mention pills — pinned above the composer */}
         <ReactionMentions conversationId={activeRoom.jid} onSee={(id) => roomStore.getState().setTargetMessageId(id)} />
+        <EasterEggMentions conversationId={activeRoom.jid} onReplay={(animation, senderName) => roomStore.getState().triggerAnimation(activeRoom.jid, animation, senderName)} />
 
         {/* Input - show composer if joined, join prompt if not */}
         {activeRoom.joined ? (
@@ -689,7 +711,7 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
 
       {/* Easter egg animation */}
       {activeAnimation?.roomJid === activeRoom.jid && (
-        <EasterEggAnimation animation={activeAnimation.animation} onComplete={clearAnimation} />
+        <EasterEggAnimation animation={activeAnimation.animation} onComplete={clearAnimation} senderName={activeAnimation.senderName} />
       )}
 
       {/* Nick context menu (right-click / long-press on nick in messages) */}
@@ -860,9 +882,11 @@ export const RoomMessageList = memo(function RoomMessageList({
   showToolbarForSelection,
   firstNewMessageId,
   firstNewMessageIsProvisional,
+  lastSeenMessageId,
   targetMessageId,
   clearTargetMessageId,
   clearFirstNewMessageId,
+  onResyncDivider,
   onMessageSeen,
   isJoined,
   isDarkMode,
@@ -908,9 +932,11 @@ export const RoomMessageList = memo(function RoomMessageList({
   showToolbarForSelection: boolean
   firstNewMessageId?: string
   firstNewMessageIsProvisional?: boolean
+  lastSeenMessageId?: string
   targetMessageId?: string | null
   clearTargetMessageId?: () => void
   clearFirstNewMessageId: () => void
+  onResyncDivider?: (roomJid: string) => void
   onMessageSeen?: (messageId: string) => void
   isJoined?: boolean
   isDarkMode?: boolean
@@ -1147,9 +1173,11 @@ export const RoomMessageList = memo(function RoomMessageList({
       conversationId={room.jid}
       firstNewMessageId={firstNewMessageId}
       firstNewMessageIsProvisional={firstNewMessageIsProvisional}
+      lastSeenMessageId={lastSeenMessageId}
       targetMessageId={targetMessageId}
       onTargetMessageConsumed={clearTargetMessageId}
       clearFirstNewMessageId={clearFirstNewMessageId}
+      onResyncDivider={onResyncDivider}
       onMessageSeen={onMessageSeen}
       scrollerRef={scrollerRef}
       isAtBottomRef={isAtBottomRef}

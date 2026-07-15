@@ -17,7 +17,8 @@
         "forward": "Áfram",
         "block": "Loka á",
         "copied": "Afritað",
-        "comingSoon": "Væntanlegt"
+        "comingSoon": "Væntanlegt",
+        "dismiss": "Vísa frá"
     },
     "login": {
         "title": "Fluux Messenger",
@@ -1380,5 +1381,10 @@
             "nickInUse": "Gælunafnið {{nick}} er þegar í notkun",
             "nickFailed": "Ekki tókst að breyta gælunafni þínu"
         }
+    },
+    "easterEgg": {
+        "mention": "{{name}} sendi þér hreyfimynd",
+        "replay": "Endurspila",
+        "sentBy": "Sent af {{name}}"
     }
 }

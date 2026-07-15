@@ -17,7 +17,8 @@
         "forward": "Вперёд",
         "block": "Заблокировать",
         "copied": "Скопировано",
-        "comingSoon": "Скоро"
+        "comingSoon": "Скоро",
+        "dismiss": "Скрыть"
     },
     "login": {
         "title": "Fluux Messenger",
@@ -1382,5 +1383,10 @@
             "nickInUse": "Псевдоним {{nick}} уже используется",
             "nickFailed": "Не удалось изменить ваш псевдоним"
         }
+    },
+    "easterEgg": {
+        "mention": "{{name}} отправил(а) вам анимацию",
+        "replay": "Повторить",
+        "sentBy": "Отправлено от {{name}}"
     }
 }

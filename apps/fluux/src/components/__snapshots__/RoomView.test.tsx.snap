@@ -17,26 +17,22 @@ exports[`RoomView > Snapshots > should match snapshot for non-joined room 1`] = 
           data-name="Test Room"
           data-testid="avatar"
         />
-        <div
-          class="flex-1 min-w-0"
+        <button
+          aria-label="rooms.showRoomInfo: Test Room"
+          class="flex-1 min-w-0 text-start rounded-md px-1 -mx-1 py-0.5 hover:bg-fluux-hover transition-colors"
+          type="button"
         >
-          <button
-            aria-label="rooms.showRoomInfo: Test Room"
-            class="w-full min-w-0 text-start rounded-md px-1 -mx-1 py-0.5 hover:bg-fluux-hover transition-colors"
-            type="button"
+          <span
+            class="block font-semibold text-fluux-text truncate leading-tight"
           >
-            <span
-              class="block font-semibold text-fluux-text truncate leading-tight"
-            >
-              Test Room
-            </span>
-            <p
-              class="text-xs text-fluux-muted truncate"
-            >
-              room@conference.example.com
-            </p>
-          </button>
-        </div>
+            Test Room
+          </span>
+          <p
+            class="text-xs text-fluux-muted truncate"
+          >
+            room@conference.example.com
+          </p>
+        </button>
         <div
           class="flex items-center gap-1 md:gap-3"
         >

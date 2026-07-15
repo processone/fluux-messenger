@@ -22,7 +22,7 @@ import * as searchIndex from '../utils/searchIndex'
 import type { GetMessagesOptions } from '../utils/messageCache'
 import * as mamState from './shared/mamState'
 import type { MAMQueryDirection } from './shared/mamState'
-import { computeGapEnd, syncGap, serializeGaps, deserializeGaps, type GapInterval } from './shared/mamGap'
+import { syncGapAfterArchiveMerge, messagePageExtent, serializeGaps, deserializeGaps, type GapInterval } from './shared/mamGap'
 import * as draftState from './shared/draftState'
 import * as timeline from './shared/messageTimeline'
 import { shouldUpdateLastMessage, shouldReplaceLastMessage, isPreviewableMessage, findLastNonIgnoredMessage } from './shared/lastMessageUtils'
@@ -466,7 +466,7 @@ export interface RoomState {
   // flashing the "nothing selected" empty state on tab switch.
   activationPending: boolean
   // Easter egg animation state (ephemeral)
-  activeAnimation: { roomJid: string; animation: string } | null
+  activeAnimation: { roomJid: string; animation: string; senderName?: string } | null
   // Message drafts per room (persisted to localStorage separately)
   drafts: Map<string, string>
   // Poll state per room (persisted to localStorage separately)
@@ -548,6 +548,18 @@ export interface RoomState {
   activateRoom: (roomJid: string | null) => Promise<void>
   getActiveRoomJid: () => string | null
   clearFirstNewMessageId: (roomJid: string) => void
+  /** Recompute the session-only "New messages" divider from the current read pointer
+   *  (lastSeenMessageId) for this room. Forward-only and idempotent: repositions the divider to the
+   *  first unread message after the pointer when one exists. Never clears an existing divider when
+   *  the pointer is at the newest (nothing unread) — that state is kept alive deliberately after a
+   *  FAB jump-to-present so the jump-to-last-read pill can offer a return; clearing is owned by the
+   *  explicit read-through / mark-read paths. No-op when no divider exists.
+   *  Touches nothing but firstNewMessageMarkers.
+   *  Only meaningful for the ACTIVE room: that is where the resident `messages` array lives. On a
+   *  deactivated room `setActiveRoom` empties the roomRuntime/rooms messages, so the recompute sees
+   *  an empty array and would SILENTLY clear the divider — callers must only invoke this for the
+   *  active room. */
+  resyncDividerToReadPointer: (roomJid: string) => void
   updateLastSeenMessageId: (roomJid: string, messageId: string) => void
   /**
    * XEP-0490: apply a remote device's last-displayed marker. Advances
@@ -571,7 +583,7 @@ export interface RoomState {
   setNotifyAll: (roomJid: string, notifyAll: boolean, persistent?: boolean) => void
 
   // Easter egg animations
-  triggerAnimation: (roomJid: string, animation: string) => void
+  triggerAnimation: (roomJid: string, animation: string, senderName?: string) => void
   clearAnimation: () => void
 
   // Draft management
@@ -639,7 +651,7 @@ export interface RoomState {
    * @param complete - Whether server indicated query is complete
    * @param direction - Query direction: 'backward' for older history, 'forward' for catching up
    */
-  mergeRoomMAMMessages: (roomJid: string, messages: RoomMessage[], rsm: RSMResponse, complete: boolean, direction: MAMQueryDirection, preserveGapMarker?: boolean) => void
+  mergeRoomMAMMessages: (roomJid: string, messages: RoomMessage[], rsm: RSMResponse, complete: boolean, direction: MAMQueryDirection, preserveGapMarker?: boolean, isFetchLatest?: boolean) => void
   getRoomMAMQueryState: (roomJid: string) => MAMQueryState
   resetRoomMAMStates: () => void
   /** Mark all rooms as needing a catch-up MAM query (called on reconnect) */
@@ -1744,6 +1756,34 @@ export const roomStore = createStore<RoomState>()(
     })
   },
 
+  resyncDividerToReadPointer: (roomJid) => {
+    set((state) => {
+      if (!state.firstNewMessageMarkers.has(roomJid)) return state
+      const meta = state.roomMeta.get(roomJid)
+      const existing = state.rooms.get(roomJid)
+      if (!meta && !existing) return state
+      const runtime = state.roomRuntime.get(roomJid)
+      const messages = runtime?.messages ?? existing?.messages ?? []
+      const lastSeenMessageId = meta?.lastSeenMessageId ?? existing?.lastSeenMessageId
+      const lastReadAt = meta?.lastReadAt ?? existing?.lastReadAt
+
+      const divider = notifState.onActivate(
+        { unreadCount: 0, mentionsCount: 0, lastReadAt, lastSeenMessageId, firstNewMessageId: undefined },
+        messages,
+        { treatDelayedAsNew: true }
+      ).firstNewMessageId
+
+      // Only ever reposition the divider FORWARD to a real unread message. When there is no unread
+      // after the pointer (divider undefined — reader is at the newest), do NOT clear it here: the
+      // divider is deliberately kept alive after a FAB jump-to-present so the jump-to-last-read pill
+      // can offer a return, and the explicit read-through / mark-read paths own clearing.
+      if (!divider || divider === state.firstNewMessageMarkers.get(roomJid)) return state
+      const newMarkers = new Map(state.firstNewMessageMarkers)
+      newMarkers.set(roomJid, divider)
+      return { firstNewMessageMarkers: newMarkers }
+    })
+  },
+
   updateLastSeenMessageId: (roomJid, messageId) => {
     set((state) => {
       const existing = state.rooms.get(roomJid)
@@ -2084,8 +2124,8 @@ export const roomStore = createStore<RoomState>()(
   },
 
   // Easter egg animations
-  triggerAnimation: (roomJid, animation) => {
-    set({ activeAnimation: { roomJid, animation } })
+  triggerAnimation: (roomJid, animation, senderName) => {
+    set({ activeAnimation: { roomJid, animation, senderName } })
   },
 
   clearAnimation: () => {
@@ -2492,7 +2532,10 @@ export const roomStore = createStore<RoomState>()(
     }))
   },
 
-  mergeRoomMAMMessages: (roomJid, mamMessages, rsm, complete, direction, preserveGapMarker = false) => {
+  mergeRoomMAMMessages: (roomJid, mamMessages, rsm, complete, direction, preserveGapMarker = false, isFetchLatest = false) => {
+    // Newest persisted timestamp (entity preview) — the seam-formation fallback
+    // when the resident array is empty this run (fresh session, history on disk).
+    const fallbackHeldTs = get().getRoomLastTimestamp(roomJid)
     // Captured from inside set() so the post-set MDS marker resolution can read the
     // merged array even for a non-active room (whose array isn't resident).
     let mergedForMarker: RoomMessage[] = []
@@ -2522,9 +2565,7 @@ export const roomStore = createStore<RoomState>()(
 
       // Compute the newest fetched timestamp for gap marker positioning.
       // When a forward catch-up ends incomplete, this marks where the gap starts.
-      const newestFetchedTimestamp = direction === 'forward' && mamMessages.length > 0
-        ? Math.max(...mamMessages.map(m => m.timestamp?.getTime() ?? 0))
-        : undefined
+      const newestFetchedTimestamp = mamState.computeNewestFetchedTimestamp(mamMessages, direction)
 
       // Update MAM query state using the two-marker approach
       // This must always be updated to track query completion and cursors
@@ -2538,16 +2579,30 @@ export const roomStore = createStore<RoomState>()(
         preserveGapMarker
       )
 
-      // Mirror the (reliable, complete=false-driven) forward gap into the PERSISTED
-      // roomGaps map so the marker survives a reload. `end` = oldest message held
-      // above the gap. preserveGapMarker (bounded force repair) leaves it untouched.
-      let newGaps = state.roomGaps
-      if (direction === 'forward' && !preserveGapMarker) {
-        const gapStart = newStates.get(roomJid)?.forwardGapTimestamp
-        const gapEnd = gapStart !== undefined ? computeGapEnd(merged, gapStart) : undefined
-        newGaps = syncGap(state.roomGaps, roomJid, gapStart, gapEnd)
-        if (newGaps !== state.roomGaps) saveGapsToStorage(newGaps)
-      }
+      // Persisted gap sync (shared transition, both directions):
+      // - forward: mirror the complete=false-driven forwardGapTimestamp (marker
+      //   survives a reload);
+      // - backward: close/shrink a recorded gap when a scroll-up page reaches
+      //   into or across it, or plant a seam when a `before:''` fetch-latest
+      //   page lands disjoint above held history (formation).
+      const newGaps = syncGapAfterArchiveMerge({
+        gaps: state.roomGaps,
+        id: roomJid,
+        direction,
+        complete,
+        forwardGapTimestamp: newStates.get(roomJid)?.forwardGapTimestamp,
+        merged,
+        fetched: mamMessages,
+        newMessagesCount: newFromMAM.length,
+        patchedCount: patched.length,
+        isFetchLatest,
+        // Fallback trusts the preview ts to be an archived message; a non-archived
+        // preview (noLocalStore/tombstone) above the true archive newest could plant
+        // a spurious — click-healable — seam.
+        newestHeldBelowTs: messagePageExtent(existingMessages).newestTs ?? fallbackHeldTs,
+        preserveGapMarker,
+      })
+      if (newGaps !== state.roomGaps) saveGapsToStorage(newGaps)
 
       // If no new messages (all duplicates), only update MAM state - skip room messages
       // This prevents unnecessary re-renders when merging duplicates.

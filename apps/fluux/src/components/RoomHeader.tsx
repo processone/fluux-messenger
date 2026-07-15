@@ -123,20 +123,18 @@ export function RoomHeader({
         size="header"
       />
 
-      {/* Name and info — opens Room Info modal; tooltip peeks the full topic */}
-      <Tooltip content={room.subject?.trim() || room.jid} position="bottom" className="flex-1 min-w-0">
-        <button
-          type="button"
-          onClick={() => setShowInfoModal(true)}
-          aria-label={`${t('rooms.showRoomInfo', 'Room info')}: ${room.name}`}
-          className="w-full min-w-0 text-start rounded-md px-1 -mx-1 py-0.5 hover:bg-fluux-hover transition-colors"
-        >
-          <span className="block font-semibold text-fluux-text truncate leading-tight">{room.name}</span>
-          <p className="text-xs text-fluux-muted truncate">
-            {room.subject?.trim() ? renderTextWithLinks(room.subject) : room.jid}
-          </p>
-        </button>
-      </Tooltip>
+      {/* Name and info — opens Room Info modal with the full topic and details */}
+      <button
+        type="button"
+        onClick={() => setShowInfoModal(true)}
+        aria-label={`${t('rooms.showRoomInfo', 'Room info')}: ${room.name}`}
+        className="flex-1 min-w-0 text-start rounded-md px-1 -mx-1 py-0.5 hover:bg-fluux-hover transition-colors"
+      >
+        <span className="block font-semibold text-fluux-text truncate leading-tight">{room.name}</span>
+        <p className="text-xs text-fluux-muted truncate">
+          {room.subject?.trim() ? renderTextWithLinks(room.subject) : room.jid}
+        </p>
+      </button>
 
       {/* Trailing action cluster — grouped tightly on mobile (gap-1) so the
           kebab and members pill read as one unit; desktop keeps the header's md

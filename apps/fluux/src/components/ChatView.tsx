@@ -34,6 +34,8 @@ import { useSettingsStore } from '@/stores/settingsStore'
 import { auroraSenderColor } from '@/utils/senderColor'
 import { ReactionMentions } from './conversation/ReactionMentions'
 import { reactionMentionStore } from '@/stores/reactionMentionStore'
+import { EasterEggMentions } from './conversation/EasterEggMentions'
+import { easterEggMentionStore } from '@/stores/easterEggMentionStore'
 
 interface ChatViewProps {
   onBack?: () => void
@@ -53,7 +55,7 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
   const { t } = useTranslation()
   // Use useChatActive instead of useChat to avoid subscribing to the conversation list.
   // This prevents re-renders during background MAM sync of other conversations.
-  const { activeConversation, firstNewMessageId, firstNewMessageIsProvisional, activeMessages, activeTypingUsers, sendMessage, sendReaction, sendCorrection, retractMessage, retryMessage, sendChatState, isArchived, archiveConversation, unarchiveConversation, setDraft, getDraft, clearDraft, activeAnimation, sendEasterEgg, clearAnimation, clearFirstNewMessageId, updateLastSeenMessageId, activeMAMState, fetchOlderHistory, loadMessagesAround, loadNewer, recenterToLatest, windowAtLiveEdge, continueChatCatchUp, targetMessageId, clearTargetMessageId } = useChatActive()
+  const { activeConversation, firstNewMessageId, firstNewMessageIsProvisional, lastSeenMessageId, activeMessages, activeTypingUsers, sendMessage, sendReaction, sendCorrection, retractMessage, retryMessage, sendChatState, isArchived, archiveConversation, unarchiveConversation, setDraft, getDraft, clearDraft, activeAnimation, sendEasterEgg, clearAnimation, clearFirstNewMessageId, resyncDividerToReadPointer, updateLastSeenMessageId, activeMAMState, fetchOlderHistory, loadMessagesAround, loadNewer, recenterToLatest, windowAtLiveEdge, continueChatCatchUp, targetMessageId, clearTargetMessageId } = useChatActive()
   // Use useContactIdentities instead of useRoster() to avoid re-renders on
   // presence changes. ChatView only needs contact names and avatars for display.
   const contactsByJid = useContactIdentities()
@@ -223,6 +225,18 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
     }
   }, [activeConversation?.id])
 
+  // Auto-play a pending easter egg once when its conversation opens. The chip
+  // stays (via EasterEggMentions) as a Replay control until dismissed.
+  useEffect(() => {
+    const id = activeConversation?.id
+    if (!id) return
+    const egg = easterEggMentionStore.getState().mentions.get(id)
+    if (egg && !egg.played) {
+      chatStore.getState().triggerAnimation(id, egg.animation, egg.senderName)
+      easterEggMentionStore.getState().markPlayed(id)
+    }
+  }, [activeConversation?.id])
+
   useEffect(() => {
     setReplyingTo(null)
     setEditingMessage(null)
@@ -280,6 +294,11 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
       clearFirstNewMessageId(conversationId)
     }
   }
+
+  const handleResyncDivider = useCallback(
+    (conversationId: string) => resyncDividerToReadPointer(conversationId),
+    [resyncDividerToReadPointer],
+  )
 
   // Viewport observer callback: update lastSeenMessageId as user scrolls
   const handleMessageSeen = (messageId: string) => {
@@ -498,9 +517,11 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
             showToolbarForSelection={showToolbarForSelection}
             firstNewMessageId={firstNewMessageId}
             firstNewMessageIsProvisional={firstNewMessageIsProvisional}
+            lastSeenMessageId={lastSeenMessageId}
             targetMessageId={targetMessageId}
             clearTargetMessageId={clearTargetMessageId}
             clearFirstNewMessageId={handleClearFirstNewMessageId}
+            onResyncDivider={handleResyncDivider}
             onMessageSeen={handleMessageSeen}
             isDarkMode={resolvedMode === 'dark'}
           onScrollToTop={fetchOlderHistory}
@@ -524,6 +545,7 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
 
       {/* Reaction mention pills — pinned above the composer */}
       <ReactionMentions conversationId={activeConversation.id} onSee={(id) => chatStore.getState().setTargetMessageId(id)} />
+      <EasterEggMentions conversationId={activeConversation.id} onReplay={(animation, senderName) => chatStore.getState().triggerAnimation(activeConversation.id, animation, senderName)} />
 
       {/* Input */}
       <MessageInput
@@ -573,7 +595,7 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
 
       {/* Easter egg animation */}
       {activeAnimation?.conversationId === activeConversation.id && (
-        <EasterEggAnimation animation={activeAnimation.animation} onComplete={clearAnimation} />
+        <EasterEggAnimation animation={activeAnimation.animation} onComplete={clearAnimation} senderName={activeAnimation.senderName} />
       )}
     </div>
   )
@@ -604,9 +626,11 @@ export const ChatMessageList = memo(function ChatMessageList({
   showToolbarForSelection,
   firstNewMessageId,
   firstNewMessageIsProvisional,
+  lastSeenMessageId,
   targetMessageId,
   clearTargetMessageId,
   clearFirstNewMessageId,
+  onResyncDivider,
   onMessageSeen,
   isDarkMode,
   onScrollToTop,
@@ -648,9 +672,11 @@ export const ChatMessageList = memo(function ChatMessageList({
   showToolbarForSelection: boolean
   firstNewMessageId?: string
   firstNewMessageIsProvisional?: boolean
+  lastSeenMessageId?: string
   targetMessageId?: string | null
   clearTargetMessageId?: () => void
   clearFirstNewMessageId: () => void
+  onResyncDivider?: (conversationId: string) => void
   onMessageSeen?: (messageId: string) => void
   isDarkMode?: boolean
   onScrollToTop?: () => void
@@ -752,9 +778,11 @@ export const ChatMessageList = memo(function ChatMessageList({
       conversationId={conversationId}
       firstNewMessageId={firstNewMessageId}
       firstNewMessageIsProvisional={firstNewMessageIsProvisional}
+      lastSeenMessageId={lastSeenMessageId}
       targetMessageId={targetMessageId}
       onTargetMessageConsumed={clearTargetMessageId}
       clearFirstNewMessageId={clearFirstNewMessageId}
+      onResyncDivider={onResyncDivider}
       onMessageSeen={onMessageSeen}
       scrollerRef={scrollerRef}
       isAtBottomRef={isAtBottomRef}

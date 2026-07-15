@@ -17,7 +17,8 @@
         "forward": "Fremover",
         "block": "Blokker",
         "copied": "Kopiert",
-        "comingSoon": "Kommer snart"
+        "comingSoon": "Kommer snart",
+        "dismiss": "Avvis"
     },
     "login": {
         "title": "Fluux Messenger",
@@ -1380,5 +1381,10 @@
             "nickInUse": "Kallenavnet {{nick}} er allerede i bruk",
             "nickFailed": "Kunne ikke endre kallenavnet ditt"
         }
+    },
+    "easterEgg": {
+        "mention": "{{name}} sendte deg en animasjon",
+        "replay": "Spill av på nytt",
+        "sentBy": "Sendt av {{name}}"
     }
 }

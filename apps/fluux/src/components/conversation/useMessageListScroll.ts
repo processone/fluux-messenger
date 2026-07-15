@@ -22,6 +22,7 @@ import { createSlowCorrectionMonitor } from './slowCorrectionMonitor'
 import { createReassertLoopMonitor } from './reassertLoopMonitor'
 import type { ReassertLoopHandle } from './reassertLoopMonitor'
 import { createPinRunTracker, readPinRepaintMode, shouldForceRepaint } from './pinBottomRun'
+import { createPinRepaintBurst, pinBurstProbeLine, type PinRepaintBurst } from './pinRepaintBurst'
 import { createRenderCostProbe, type RenderCostProbe } from '@/utils/renderCostProbe'
 import { isProgrammaticScroll } from './scrollGate'
 import { shouldShowScrollToBottomFab } from './fabVisibility'
@@ -128,6 +129,17 @@ const BOTTOM_PIN_TOLERANCE = 4
 // is worth one rate-limited [PinLoopProbe] line in fluux.log — it attributes the layoutPaint cost
 // RenderCostProbe can only measure in aggregate. ~3 frame budgets; healthy runs stay far below.
 const PIN_PROBE_THRESHOLD_MS = 50
+// Pin triggers that represent NEW CONTENT landing at the bottom (as opposed to a user/layout event
+// like a conversation switch, FAB tap, or viewport resize). Only these feed the repaint-burst
+// coalescer: a rapid run of them — live chatter, a reaction storm, images decoding, or a reconnect
+// flushing queued messages — is exactly the burst whose per-arrival forced repaints freeze WebKitGTK.
+const CONTENT_ARRIVAL_TRIGGERS: ReadonlySet<string> = new Set([
+  'new-message',
+  'content-growth',
+  'media-load',
+  'reaction',
+  'mam-catchup-complete',
+])
 
 // ============================================================================
 // KINETIC SCROLL
@@ -294,6 +306,12 @@ export interface UseMessageListScrollResult {
   /** Whether the first-new-message divider is currently scrolled above the viewport. Drives the
    *  jump-to-last-read pill. */
   markerAboveViewport: boolean
+  /** Id of the bottom-most message whose top is within the viewport (the row peeking in at the
+   *  bottom edge), or null before the first scroll (or during programmatic positioning — see the
+   *  handleScroll gate). Drives the divider-snap trigger in MessageList (snap the "New messages"
+   *  divider to the read pointer on genuine user scroll); the FAB badge count reads the pointer
+   *  directly instead. */
+  bottomVisibleMessageId: string | null
   /** Scroll to (and re-assert toward) the first-new-message marker. Used by the jump-to-last-read
    *  pill's click handler; also the routine the conversation-switch entry effect uses. No-op when
    *  there is no current marker. */
@@ -360,6 +378,12 @@ export function useMessageListScroll({
   const pinBottomActiveRef = useRef(false)
   // Rate-limits the [PinLoopProbe] fluux.log line to one per cooldown (like RenderCostProbe).
   const pinRunProbeRef = useRef<RenderCostProbe | null>(null)
+  // Coalesces forced repaints across a BURST of content-arrival pins (each superseding the last).
+  // On WebKitGTK the overflow-toggle repaint is ~50–150ms; without this, a burst of new messages /
+  // reactions / images fires one per arrival and freezes the main thread. Suppresses the
+  // intermediate repaints (scroll position still written, layout stays correct) and forces exactly
+  // one trailing repaint once arrival quiesces — see pinRepaintBurst.ts.
+  const pinRepaintBurstRef = useRef<PinRepaintBurst | null>(null)
   // Supersede any in-flight re-assert loop. Held in a ref (read as `.current()`) so callers in
   // useCallback / useLayoutEffect don't need it as a dependency — react-hooks treats refs as stable.
   const supersedeReassertLoopRef = useRef(() => {
@@ -488,6 +512,11 @@ export function useMessageListScroll({
   // it hasn't scrolled into view yet). Drives the jump-to-last-read pill. Recomputed in the same
   // scroll-handler cadence as showScrollToBottom — no separate listener.
   const [markerAboveViewport, setMarkerAboveViewport] = useState(false)
+  // Id of the bottom-most message whose top is within the viewport (the row peeking in at the bottom
+  // edge). Drives the scroll-to-bottom FAB badge so it counts DOWN as new messages scroll into view.
+  // Reuses the anchor already computed every scroll (lastAnchorRef); updated at the same throttled
+  // cadence via the prev-dedup setter, so it only re-renders when the bottom-most row changes.
+  const [bottomVisibleMessageId, setBottomVisibleMessageId] = useState<string | null>(null)
 
   // ==========================================================================
   // HELPERS
@@ -526,6 +555,8 @@ export function useMessageListScroll({
     isAtBottomRef.current = true
     setShowScrollToBottom(false)
     setMarkerAboveViewport(false)
+    // At the bottom the newest message is visible → 0 new below the fold (anchor is the last row).
+    setBottomVisibleMessageId(lastAnchorRef.current?.messageId ?? null)
     scrollStateManager.clearSavedScrollState(conversationId)
   }, [conversationId, isAtBottomRef])
 
@@ -796,6 +827,14 @@ export function useMessageListScroll({
     // window — and a send can land mid-prepend — so re-entry is routine.
     supersedeReassertLoopRef.current()
 
+    // Repaint-burst coalescing. A content-arrival trigger (new message / reaction / media / catch-up)
+    // landing in quick succession with others is a BURST: its per-arrival forced repaint is the
+    // WebKitGTK freeze. note() it BEFORE the loop so writePin below can suppress the intermediate
+    // repaints (position still written, layout stays correct) and let convergence force one trailing
+    // repaint. User/layout triggers (switch, fab, resize) are not content and never suppress.
+    const burst = (pinRepaintBurstRef.current ??= createPinRepaintBurst())
+    if (CONTENT_ARRIVAL_TRIGGERS.has(trigger)) burst.note(performance.now())
+
     // Per-run forced-work accounting + convergence tracking. On WebKitGTK the forced layouts and
     // repaints below are the dominant main-thread cost in busy rooms (RenderCostProbe layoutPaint
     // 189–359ms with react as low as 2ms) — the tracker attributes them in fluux.log.
@@ -843,6 +882,21 @@ export function useMessageListScroll({
       run.addMs('repaint', performance.now() - started)
     }
 
+    // Forced repaint, coalesced across a content-arrival BURST. When the pin would normally repaint
+    // but a burst is in flight (this arrival plus others within PIN_BURST_WINDOW_MS), skip it and
+    // record the debt: the position is already written so the layout is correct — only the paint is
+    // deferred to the single trailing repaint that convergence forces once arrival quiesces. This
+    // collapses a burst's N WebKitGTK repaints (~50–150ms each) to ~1. The 'always'/'off' A/B
+    // overrides stay unconditional (they must, to measure the un-coalesced cost on-device).
+    const repaintCoalesced = (moved: boolean) => {
+      if (!shouldForceRepaint(moved, repaintMode, isLoadingOlderRef.current)) return
+      if (repaintMode === 'on-write' && burst.suppress(performance.now())) {
+        burst.markSuppressed()
+        return
+      }
+      forceRepaint()
+    }
+
     // Pin write + gated repaint. The stale-paint bug is specific to a PROGRAMMATIC SCROLL, so when
     // scrollToIndex lands on the scrollTop the scroller already had (a no-op re-assert — typing
     // toggles, resize re-pins) there is nothing stale to draw and the expensive repaint is skipped.
@@ -858,8 +912,17 @@ export function useMessageListScroll({
       run.addMs('scroll', performance.now() - started)
       const moved = ss.scrollTop !== before
       if (moved) wroteAny = true
-      if (shouldForceRepaint(moved, repaintMode, isLoadingOlderRef.current)) forceRepaint()
+      repaintCoalesced(moved)
       return moved
+    }
+
+    // Flush a repaint debt owed by burst coalescing: force the single trailing repaint that draws the
+    // final settled position, and emit the [PinBurstProbe] line attributing how many repaints were
+    // coalesced (each ~50–150ms of WebKitGTK freeze avoided). No-op when nothing was suppressed.
+    const flushOwedRepaint = () => {
+      if (!burst.owed()) return
+      forceRepaint()
+      console.warn(pinBurstProbeLine(trigger, burst.settle()))
     }
 
     // Immediate pin (pre-paint when called from a layout effect).
@@ -899,7 +962,11 @@ export function useMessageListScroll({
           flushTailLayout()
           const dist = s.scrollHeight - s.scrollTop - s.clientHeight
           isAtBottomRef.current = dist < AT_BOTTOM_THRESHOLD
-          if (shouldForceRepaint(wroteAny, repaintMode, isLoadingOlderRef.current)) forceRepaint()
+          // One final repaint draws the settled position. A burst debt takes precedence (it forces the
+          // repaint AND logs the coalesced count) and subsumes the normal on-write repaint, so at most
+          // one overflow toggle fires here.
+          if (burst.owed()) flushOwedRepaint()
+          else if (shouldForceRepaint(wroteAny, repaintMode, isLoadingOlderRef.current)) forceRepaint()
           debugLog('PIN settled (frames exhausted)', { distFromBottom: dist })
         }
         finish()
@@ -917,6 +984,9 @@ export function useMessageListScroll({
         debugLog('PIN bail (user scroll intent)', {
           distFromBottom: s.scrollHeight - s.scrollTop - s.clientHeight,
         })
+        // User took over: the bottom-pin debt is void (their scroll itself repaints), so drop it
+        // rather than force a trailing repaint that would fight the position they scrolled to.
+        burst.reset()
         finish()
         return
       }
@@ -941,6 +1011,10 @@ export function useMessageListScroll({
       // layout per frame (the WebKitGTK freeze pattern). Late media loads re-pin via their own site.
       if (run.frame(wrote) === 'settled') {
         isAtBottomRef.current = dist < AT_BOTTOM_THRESHOLD
+        // Arrival has quiesced (8 stable frames): flush any repaint the burst coalescer deferred, so
+        // the final bottom position is drawn exactly once. Non-burst runs already painted per-frame,
+        // so owed() is false and this is a no-op.
+        flushOwedRepaint()
         debugLog('PIN settled (converged)', {
           distFromBottom: dist,
           framesUsed: BOTTOM_REASSERT_FRAMES - framesLeft,
@@ -1068,6 +1142,19 @@ export function useMessageListScroll({
       markerLoop.end()
       reassertLoopRef.current = null
     }
+    // Register the ref BEFORE scheduling the frame, then patch its `raf` id in place — rather than
+    // reassigning reassertLoopRef.current AFTER requestAnimationFrame returns. A mocked/synchronous
+    // rAF (test harnesses) invokes the callback inline, so an outer `ref.current = { raf:
+    // requestAnimationFrame(cb), ... }` evaluates the RHS (running the callback, possibly to
+    // completion — including a `finishMarker()` that nulls the ref) and THEN clobbers that null back
+    // to a stale non-null entry. Pre-registering means a same-tick finish's null assignment is never
+    // overwritten; the `raf` id patch only mutates the (by-then-detached) local object when that
+    // happens.
+    const registerMarkerLoop = (cb: () => void) => {
+      const entry: { raf: number; handle: typeof markerLoop } = { raf: 0, handle: markerLoop }
+      reassertLoopRef.current = entry
+      entry.raf = requestAnimationFrame(cb)
+    }
     let framesLeft = MARKER_REASSERT_FRAMES
     let stableFrames = 0
     let landedTarget = -1
@@ -1149,9 +1236,9 @@ export function useMessageListScroll({
       }
       const warning = markerLoop.frame(performance.now(), wrote)
       if (warning) console.warn(warning)
-      reassertLoopRef.current = { raf: requestAnimationFrame(stepToMarker), handle: markerLoop }
+      registerMarkerLoop(stepToMarker)
     }
-    reassertLoopRef.current = { raf: requestAnimationFrame(stepToMarker), handle: markerLoop }
+    registerMarkerLoop(stepToMarker)
   }, [isAtBottomRef, reassertBottom])
 
   const restoreSavedPosition = useCallback((source: 'entry' | 'retry'): RestoreSavedPositionResult => {
@@ -1780,6 +1867,17 @@ export function useMessageListScroll({
       setMarkerAboveViewport(prev => prev ? false : prev)
     }
 
+    // Track the bottom-most-visible message ONLY on genuine (non-programmatic) user scroll — this
+    // drives the divider-snap trigger in MessageList (snap the "New messages" divider to the read
+    // pointer when the reader scrolls back up). Skipping programmatic scrolls (the entry
+    // scroll-to-marker re-assert, FAB jumps) prevents the divider from drifting during entry
+    // positioning. Conversation switch resets this to null, so the snap can't fire until the reader
+    // actually scrolls.
+    if (!programmaticScroll) {
+      const bottomId = lastAnchorRef.current?.messageId ?? null
+      setBottomVisibleMessageId(prev => (prev !== bottomId ? bottomId : prev))
+    }
+
     // `programmaticScroll` (computed above) also gates the marker-clear and position-save below: a
     // re-assert loop owns scrollTop while it runs, so its scroll events must not (a) clear the marker
     // (the marker-positioning loop scrolls TO the marker, momentarily landing at/near the bottom for
@@ -1934,6 +2032,9 @@ export function useMessageListScroll({
     prevScrollHeightRef.current = null
     setShowScrollToBottom(false)
     setMarkerAboveViewport(false)
+    // No scroll observed in the new conversation yet → badge falls back to the full new count until
+    // the first scroll re-derives the bottom-most-visible row.
+    setBottomVisibleMessageId(null)
 
     // Clear any pending media load batch
     if (mediaLoadDebounceRef.current) {
@@ -1941,6 +2042,8 @@ export function useMessageListScroll({
       mediaLoadDebounceRef.current = null
     }
     mediaLoadSnapshotRef.current = null
+    // Drop any repaint-burst debt from the room we're leaving so it can't flush into the new one.
+    pinRepaintBurstRef.current?.reset()
 
     // In static mode (read-only previews), skip all scroll positioning.
     // The parent component handles its own scroll-to-target.
@@ -2965,6 +3068,7 @@ export function useMessageListScroll({
     scrollToTop,
     showScrollToBottom,
     markerAboveViewport,
+    bottomVisibleMessageId,
     scrollToMarker,
   }
 }

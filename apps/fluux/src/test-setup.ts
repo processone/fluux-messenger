@@ -155,6 +155,12 @@ void i18n.use(initReactI18next).init({
           mention: "{{emoji}} {{name}} reacted to '{{preview}}'",
           see: 'See',
         },
+        // Easter egg replay mention keys (EasterEggMentions component tests)
+        easterEgg: {
+          mention: '{{name}} sent you an animation',
+          replay: 'Replay',
+          sentBy: 'Sent by {{name}}',
+        },
       },
     },
   },

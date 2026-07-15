@@ -473,7 +473,17 @@ export const MessageBubble = memo(function MessageBubble({
   // signature captures every field that changes the row's natural width so the
   // group re-fits on content edits but not on hover/selection churn.
   const ownGroupWidthSignature = `${message.body ?? ''}|${showAvatar ? 1 : 0}|${timeFormat}|${message.isRetracted ? 1 : 0}|${message.isEdited ? 1 : 0}|${JSON.stringify(message.reactions ?? {})}|${replyContext?.messageId ?? ''}|${message.attachment ? 1 : 0}|${message.linkPreview ? 1 : 0}|${message.poll ? 1 : 0}|${message.encryptedPayload ? 1 : 0}|${message.unsupportedEncryption?.name ?? ''}`
-  const ownGroupRef = useOwnGroupWidth(ownTint ? ownGroupKey : undefined, message.id, ownGroupWidthSignature)
+  const { ref: ownGroupRef, remeasure: remeasureOwnGroup } = useOwnGroupWidth(ownTint ? ownGroupKey : undefined, message.id, ownGroupWidthSignature)
+
+  // Media (image/video/link-preview) reaches its final layout width only once it
+  // loads — after the own-group's initial width measure. Re-fit the group then so
+  // the loaded row's width is shared with its text siblings (else it overflows
+  // the pre-load pin and the tint reads as a ragged edge). Also forwards the
+  // parent's scroll re-pin so the timeline stays glued to the bottom.
+  const handleMediaLoad = () => {
+    onMediaLoad?.()
+    remeasureOwnGroup()
+  }
 
   const { canReply, canEdit, canDelete } = actions
   const canCopyBody = !!message.body && !message.isRetracted && !message.encryptedPayload && !message.unsupportedEncryption
@@ -592,6 +602,9 @@ export const MessageBubble = memo(function MessageBubble({
         // Marks hug-width (w-fit) own bubbles so useRowMetrics never samples their text box
         // as the conversation's content width (it is only as wide as the text itself).
         data-msg-own={ownTint ? '' : undefined}
+        // Selected/action-sheet state: hooks the CSS that keeps quote and reply-card
+        // fills distinct from the selection tint (issue #1008).
+        data-msg-selected={isSelected || showActionSheet ? '' : undefined}
         onTouchStart={handleContentTouchStart}
         onTouchEnd={cancelLongPress}
         onTouchMove={cancelLongPress}
@@ -666,8 +679,14 @@ export const MessageBubble = memo(function MessageBubble({
         {!message.isRetracted && replyContext && (
           <button
             onClick={() => scrollToMessage(replyContext.messageId)}
-            className="flex items-start gap-1.5 py-1 pe-2 ps-2 mb-1.5 border-s-2 text-start min-w-0 bg-fluux-bg-secondary hover:bg-fluux-hover/50 rounded-e transition-colors cursor-pointer select-none"
-            style={{ borderColor: replyContext.senderColor }}
+            className="reply-quote-card flex items-start gap-1.5 py-1 pe-2 ps-2 mb-1.5 border-s-2 text-start min-w-0 bg-fluux-bg-secondary hover:bg-fluux-hover/50 rounded-e transition-colors cursor-pointer select-none"
+            // When the row is selected the selection tint melts into the card fill
+            // (light themes); a full frame in the sender's colour keeps the card
+            // distinct in every theme/mode without touching the fill. Issue #1008.
+            style={{
+              borderColor: replyContext.senderColor,
+              boxShadow: isSelected || showActionSheet ? `inset 0 0 0 1px ${replyContext.senderColor}` : undefined,
+            }}
           >
             <CornerUpRight
               className="rtl-mirror size-3.5 flex-shrink-0 mt-0.5"
@@ -716,10 +735,10 @@ export const MessageBubble = memo(function MessageBubble({
           )}
 
           {/* File attachments (image, video, audio, text preview, document card) - hidden for retracted */}
-          {!message.isRetracted && <MessageAttachments attachment={message.attachment} onMediaLoad={onMediaLoad} isSelected={isSelected} isHovered={isHovered} isOwnMessage={message.isOutgoing} />}
+          {!message.isRetracted && <MessageAttachments attachment={message.attachment} onMediaLoad={handleMediaLoad} isSelected={isSelected} isHovered={isHovered} isOwnMessage={message.isOutgoing} />}
 
           {/* Link preview - hidden for retracted */}
-          {!message.isRetracted && message.linkPreview && <LinkPreviewCard preview={message.linkPreview} onLoad={onMediaLoad} isOwnMessage={message.isOutgoing} />}
+          {!message.isRetracted && message.linkPreview && <LinkPreviewCard preview={message.linkPreview} onLoad={handleMediaLoad} isOwnMessage={message.isOutgoing} />}
 
           {/* Poll display - hidden for retracted */}
           {!message.isRetracted && message.poll && (

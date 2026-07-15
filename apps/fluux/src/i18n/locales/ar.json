@@ -17,7 +17,8 @@
         "forward": "إلى الأمام",
         "block": "حظر",
         "copied": "تم النسخ",
-        "comingSoon": "قريبًا"
+        "comingSoon": "قريبًا",
+        "dismiss": "تجاهل"
     },
     "login": {
         "title": "Fluux Messenger",
@@ -1384,5 +1385,10 @@
             "nickInUse": "الاسم المستعار {{nick}} مستخدم بالفعل",
             "nickFailed": "تعذر تغيير اسمك المستعار"
         }
+    },
+    "easterEgg": {
+        "mention": "أرسل لك {{name}} رسمًا متحركًا",
+        "replay": "إعادة التشغيل",
+        "sentBy": "أُرسل من {{name}}"
     }
 }

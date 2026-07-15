@@ -17,7 +17,8 @@
         "forward": "Vpřed",
         "block": "Zablokovat",
         "copied": "Zkopírováno",
-        "comingSoon": "Již brzy"
+        "comingSoon": "Již brzy",
+        "dismiss": "Zavřít"
     },
     "login": {
         "title": "Fluux Messenger",
@@ -1384,5 +1385,10 @@
             "nickInUse": "Přezdívka {{nick}} se již používá",
             "nickFailed": "Nepodařilo se změnit vaši přezdívku"
         }
+    },
+    "easterEgg": {
+        "mention": "{{name}} vám poslal(a) animaci",
+        "replay": "Přehrát znovu",
+        "sentBy": "Odesláno od {{name}}"
     }
 }

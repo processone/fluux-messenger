@@ -17,7 +17,8 @@
         "forward": "Pirmyn",
         "block": "Blokuoti",
         "copied": "Nukopijuota",
-        "comingSoon": "Greitai"
+        "comingSoon": "Greitai",
+        "dismiss": "Atmesti"
     },
     "login": {
         "title": "Fluux Messenger",
@@ -1382,5 +1383,10 @@
             "nickInUse": "Slapyvardis {{nick}} jau naudojamas",
             "nickFailed": "Nepavyko pakeisti jūsų slapyvardžio"
         }
+    },
+    "easterEgg": {
+        "mention": "{{name}} atsiuntė jums animaciją",
+        "replay": "Kartoti",
+        "sentBy": "Siuntėjas: {{name}}"
     }
 }

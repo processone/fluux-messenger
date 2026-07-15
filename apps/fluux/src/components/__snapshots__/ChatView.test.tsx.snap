@@ -569,7 +569,7 @@ exports[`ChatView > Snapshots > should match snapshot with typing indicator 1`] 
           </div>
         </div>
         <div
-          class="absolute bottom-4 start-4 z-30 max-w-[calc(100%-5rem)] pointer-events-none animate-toast-in"
+          class="absolute bottom-0.5 start-4 z-30 max-w-[calc(100%-5rem)] pointer-events-none animate-toast-in"
         >
           <div
             class="rounded-full bg-fluux-float border border-fluux-border shadow-lg px-3 py-1.5"

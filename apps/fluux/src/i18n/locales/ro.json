@@ -17,7 +17,8 @@
         "forward": "Înainte",
         "block": "Blochează",
         "copied": "Copiat",
-        "comingSoon": "În curând"
+        "comingSoon": "În curând",
+        "dismiss": "Respinge"
     },
     "login": {
         "title": "Fluux Messenger",
@@ -1383,5 +1384,10 @@
             "nickInUse": "Porecla {{nick}} este deja folosită",
             "nickFailed": "Nu s-a putut schimba porecla ta"
         }
+    },
+    "easterEgg": {
+        "mention": "{{name}} ți-a trimis o animație",
+        "replay": "Redă din nou",
+        "sentBy": "Trimis de {{name}}"
     }
 }

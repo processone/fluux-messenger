@@ -9,7 +9,7 @@ import * as messageCache from '../utils/messageCache'
 import * as searchIndex from '../utils/searchIndex'
 import * as mamState from './shared/mamState'
 import type { MAMQueryDirection } from './shared/mamState'
-import { computeGapEnd, syncGap, type GapInterval } from './shared/mamGap'
+import { syncGapAfterArchiveMerge, messagePageExtent, type GapInterval } from './shared/mamGap'
 import * as draftState from './shared/draftState'
 import * as timeline from './shared/messageTimeline'
 import { isPreviewableMessage, findLastPreviewableMessage, shouldReplaceLastMessage } from './shared/lastMessageUtils'
@@ -185,7 +185,7 @@ interface ChatState {
   // Typing indicators: conversationId -> Set of JIDs currently typing (ephemeral, not persisted)
   typingStates: Map<string, Set<string>>
   // Easter egg animation state (ephemeral, not persisted)
-  activeAnimation: { conversationId: string; animation: string } | null
+  activeAnimation: { conversationId: string; animation: string; senderName?: string } | null
   // Message drafts per conversation (persisted to localStorage)
   drafts: Map<string, string>
   // XEP-0313: MAM query state per conversation (ephemeral, not persisted)
@@ -247,6 +247,18 @@ interface ChatState {
    *  picks up the pointer advance via the conversationMeta watch. */
   markReadToNewest: (conversationId: string) => void
   clearFirstNewMessageId: (conversationId: string) => void
+  /** Recompute the session-only "New messages" divider from the current read pointer
+   *  (lastSeenMessageId) for this conversation. Forward-only and idempotent: repositions the
+   *  divider to the first unread message after the pointer when one exists. Never clears an
+   *  existing divider when the pointer is at the newest (nothing unread) — that state is kept
+   *  alive deliberately after a FAB jump-to-present so the jump-to-last-read pill can offer a
+   *  return; clearing is owned by the explicit read-through / mark-read paths.
+   *  No-op when there is no existing divider. Touches nothing but firstNewMessageMarkers.
+   *  Only meaningful for the ACTIVE conversation: that is where the resident `messages` array
+   *  lives. On a deactivated conversation `setActiveConversation` deletes the messages entry, so
+   *  the recompute sees an empty array and would SILENTLY clear the divider — callers must only
+   *  invoke this for the active conversation. */
+  resyncDividerToReadPointer: (conversationId: string) => void
   updateLastSeenMessageId: (conversationId: string, messageId: string) => void
   /**
    * XEP-0490: apply a remote device's last-displayed marker. Advances
@@ -280,7 +292,7 @@ interface ChatState {
    * forward-fills its offline gap instead of a `before:''` fetch-latest.
    */
   getConversationLastTimestamp: (conversationId: string) => number | undefined
-  triggerAnimation: (conversationId: string, animation: string) => void
+  triggerAnimation: (conversationId: string, animation: string, senderName?: string) => void
   clearAnimation: () => void
   // Draft management
   setDraft: (conversationId: string, text: string) => void
@@ -297,7 +309,7 @@ interface ChatState {
    * @param complete - Whether server indicated query is complete
    * @param direction - Query direction: 'backward' for older history, 'forward' for catching up
    */
-  mergeMAMMessages: (conversationId: string, messages: Message[], rsm: RSMResponse, complete: boolean, direction: MAMQueryDirection) => void
+  mergeMAMMessages: (conversationId: string, messages: Message[], rsm: RSMResponse, complete: boolean, direction: MAMQueryDirection, isFetchLatest?: boolean, preserveGapMarker?: boolean) => void
   getMAMQueryState: (conversationId: string) => MAMQueryState
   resetMAMStates: () => void
   /** Mark all conversations as needing a catch-up MAM query (called on reconnect) */
@@ -1105,6 +1117,39 @@ export const chatStore = createStore<ChatState>()(
         })
       },
 
+      resyncDividerToReadPointer: (conversationId) => {
+        set((state) => {
+          // Only reposition an EXISTING divider — never resurrect one the reader has cleared.
+          if (!state.firstNewMessageMarkers.has(conversationId)) return state
+          const meta = state.conversationMeta.get(conversationId)
+          if (!meta) return state
+          const messages = state.messages.get(conversationId) || []
+
+          // Same recompute pattern as applyRemoteDisplayed's active-divider branch: derive the
+          // divider from the pointer via onActivate and keep only .firstNewMessageId.
+          const divider = notifState.onActivate(
+            {
+              unreadCount: 0,
+              mentionsCount: 0,
+              lastReadAt: meta.lastReadAt,
+              lastSeenMessageId: meta.lastSeenMessageId,
+              firstNewMessageId: undefined,
+            },
+            messages,
+            { treatDelayedAsNew: true }
+          ).firstNewMessageId
+
+          // Only ever reposition the divider FORWARD to a real unread message. When there is no unread
+          // after the pointer (divider undefined — reader is at the newest), do NOT clear it here: the
+          // divider is deliberately kept alive after a FAB jump-to-present so the jump-to-last-read pill
+          // can offer a return, and the explicit read-through / mark-read paths own clearing.
+          if (!divider || divider === state.firstNewMessageMarkers.get(conversationId)) return state
+          const newMarkers = new Map(state.firstNewMessageMarkers)
+          newMarkers.set(conversationId, divider)
+          return { firstNewMessageMarkers: newMarkers }
+        })
+      },
+
       updateLastSeenMessageId: (conversationId, messageId) => {
         set((state) => {
           const meta = state.conversationMeta.get(conversationId)
@@ -1555,8 +1600,8 @@ export const chatStore = createStore<ChatState>()(
         })
       },
 
-      triggerAnimation: (conversationId, animation) => {
-        set({ activeAnimation: { conversationId, animation } })
+      triggerAnimation: (conversationId, animation, senderName) => {
+        set({ activeAnimation: { conversationId, animation, senderName } })
       },
 
       clearAnimation: () => {
@@ -1596,7 +1641,10 @@ export const chatStore = createStore<ChatState>()(
         }))
       },
 
-      mergeMAMMessages: (conversationId, mamMessages, rsm, complete, direction) => {
+      mergeMAMMessages: (conversationId, mamMessages, rsm, complete, direction, isFetchLatest = false, preserveGapMarker = false) => {
+        // Newest persisted timestamp (entity preview) — the seam-formation fallback
+        // when the resident array is empty this run (fresh session, history on disk).
+        const fallbackHeldTs = get().getConversationLastTimestamp(conversationId)
         // Captured from inside set() so the post-set MDS marker resolution can read the
         // merged array even for a non-active conversation (whose array isn't in RAM).
         let mergedForMarker: Message[] = []
@@ -1621,9 +1669,7 @@ export const chatStore = createStore<ChatState>()(
 
           // Newest fetched message timestamp marks the gap edge for an incomplete
           // forward catch-up (parity with rooms).
-          const newestFetchedTimestamp = direction === 'forward' && mamMessages.length > 0
-            ? Math.max(...mamMessages.map(m => m.timestamp?.getTime() ?? 0))
-            : undefined
+          const newestFetchedTimestamp = mamState.computeNewestFetchedTimestamp(mamMessages, direction)
 
           // Update MAM query state with pagination cursor using the two-marker approach
           // This must always be updated to track query completion and cursors
@@ -1633,19 +1679,31 @@ export const chatStore = createStore<ChatState>()(
             complete,
             direction,
             rsm.first, // Pagination cursor for fetching older messages
-            newestFetchedTimestamp
+            newestFetchedTimestamp,
+            preserveGapMarker
           )
 
-          // Mirror the forward gap into the PERSISTED conversationGaps (account-scoped
-          // via the chat storage blob) so the marker survives a reload. Forward
-          // complete=false sets it, complete=true clears it; backward leaves it.
-          // `end` = oldest message held above the gap.
-          let newGaps = state.conversationGaps
-          if (direction === 'forward') {
-            const gapStart = newStates.get(conversationId)?.forwardGapTimestamp
-            const gapEnd = gapStart !== undefined ? computeGapEnd(trimmed, gapStart) : undefined
-            newGaps = syncGap(state.conversationGaps, conversationId, gapStart, gapEnd)
-          }
+          // Persisted gap sync (shared transition, both directions) — see
+          // syncGapAfterArchiveMerge. Bounded windowed context fetches
+          // (fetchContext) pass preserveGapMarker so their windowed
+          // completion can't hide a real gap outside the window.
+          const newGaps = syncGapAfterArchiveMerge({
+            gaps: state.conversationGaps,
+            id: conversationId,
+            direction,
+            complete,
+            forwardGapTimestamp: newStates.get(conversationId)?.forwardGapTimestamp,
+            merged: trimmed,
+            fetched: mamMessages,
+            newMessagesCount: newMessages.length,
+            patchedCount: patched.length,
+            isFetchLatest,
+            // Fallback trusts the preview ts to be an archived message; a non-archived
+            // preview (noLocalStore/tombstone) above the true archive newest could plant
+            // a spurious — click-healable — seam.
+            newestHeldBelowTs: messagePageExtent(rawExisting).newestTs ?? fallbackHeldTs,
+            preserveGapMarker,
+          })
 
           // If no new messages (all duplicates), only update MAM state to avoid
           // unnecessary re-renders. Exception: a stanzaId backfill onto existing

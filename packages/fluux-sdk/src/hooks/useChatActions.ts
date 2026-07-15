@@ -127,6 +127,10 @@ export function useChatActions() {
     chatStore.getState().clearFirstNewMessageId(conversationId)
   }, [])
 
+  const resyncDividerToReadPointer = useCallback((conversationId: string) => {
+    chatStore.getState().resyncDividerToReadPointer(conversationId)
+  }, [])
+
   const updateLastSeenMessageId = useCallback((conversationId: string, messageId: string) => {
     chatStore.getState().updateLastSeenMessageId(conversationId, messageId)
   }, [])
@@ -224,6 +228,7 @@ export function useChatActions() {
       getDraft,
       clearDraft,
       clearFirstNewMessageId,
+      resyncDividerToReadPointer,
       updateLastSeenMessageId,
       fetchHistory,
       fetchOlderHistory,
@@ -248,6 +253,7 @@ export function useChatActions() {
       getDraft,
       clearDraft,
       clearFirstNewMessageId,
+      resyncDividerToReadPointer,
       updateLastSeenMessageId,
       fetchHistory,
       fetchOlderHistory,

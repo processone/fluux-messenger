@@ -829,6 +829,47 @@ describe('XMPPClient Message', () => {
     })
   })
 
+  describe('easter eggs (animation triggers)', () => {
+    it('emits chat:animation with the sender bare JID on receipt', async () => {
+      await connectClient()
+
+      const stanza = createMockElement('message', {
+        from: 'ava@fluux.chat/phone',
+        to: 'me@fluux.chat',
+        type: 'chat',
+      }, [
+        { name: 'easter-egg', attrs: { xmlns: 'urn:fluux:easter-egg:0', animation: 'fireworks' } },
+      ])
+
+      mockXmppClientInstance._emit('stanza', stanza)
+
+      expect(emitSDKSpy).toHaveBeenCalledWith('chat:animation', {
+        conversationId: 'ava@fluux.chat',
+        animation: 'fireworks',
+        senderJid: 'ava@fluux.chat',
+      })
+    })
+
+    it('emits room:animation with the sender nick on receipt', async () => {
+      await connectClient()
+
+      const stanza = createMockElement('message', {
+        from: 'room@conf.fluux.chat/ava',
+        type: 'groupchat',
+      }, [
+        { name: 'easter-egg', attrs: { xmlns: 'urn:fluux:easter-egg:0', animation: 'fireworks' } },
+      ])
+
+      mockXmppClientInstance._emit('stanza', stanza)
+
+      expect(emitSDKSpy).toHaveBeenCalledWith('room:animation', {
+        roomJid: 'room@conf.fluux.chat',
+        animation: 'fireworks',
+        senderNick: 'ava',
+      })
+    })
+  })
+
   describe('message styling (XEP-0393)', () => {
     it('should set noStyling flag when no-styling element is present', async () => {
       await connectClient()

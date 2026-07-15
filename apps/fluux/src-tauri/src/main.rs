@@ -196,6 +196,8 @@ use tauri_plugin_deep_link::DeepLinkExt;
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 use tauri_plugin_opener::OpenerExt;
 
+mod download;
+mod upload;
 mod xmpp_proxy;
 mod openpgp;
 mod openpgp_backup;
@@ -1496,6 +1498,8 @@ fn main() {
             delete_credentials,
             exit_app,
             fetch_url_metadata,
+            upload::upload_file,
+            download::download_file,
             start_xmpp_proxy,
             stop_xmpp_proxy,
             mcp_start_server,

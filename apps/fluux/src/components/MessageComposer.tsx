@@ -284,6 +284,10 @@ export function MessageComposer({
     const hasAttachment = editingMessage.attachment && !editAttachmentRemoved
     return !hasText && !hasAttachment
   })()
+  // Brief "press + glow pulse" gesture fired on a successful send; cleared when
+  // the CSS `send-press` animation ends. Keeps the aurora glow mounted for the
+  // pulse even though the input (and thus the enabled state) has already cleared.
+  const [launching, setLaunching] = useState(false)
   const [showAttachMenu, setShowAttachMenu] = useState(false)
   const attachMenuRef = useRef<HTMLDivElement>(null)
   const emojiPickerRef = useRef<HTMLDivElement>(null)
@@ -546,6 +550,7 @@ export function MessageComposer({
         handled = await onSendCorrection(editingMessage.id, trimmed, attachmentToKeep)
         if (handled) {
           setText('')
+          setLaunching(true)
           onCancelEdit?.()
           inputRef.current?.focus()
         }
@@ -554,6 +559,7 @@ export function MessageComposer({
         handled = await onSend(outgoingText)
         if (handled) {
           setText('')
+          setLaunching(true)
           onCancelReply?.()
           inputRef.current?.focus()
         }
@@ -1028,8 +1034,13 @@ export function MessageComposer({
         {/* Send button — liquid glass lit by the aurora when a message is ready
             to send (identity tied to the brand action); muted while empty.
             Encryption state is shown by the leading lock (not here). */}
-        <div className="relative m-1 flex [grid-area:send]">
-          {!((!text.trim() && !pendingAttachment) || sending || disabled || sendDisabled) && (
+        <div
+          className={`relative m-1 flex [grid-area:send]${launching ? ' send-launching' : ''}`}
+          onAnimationEnd={(e) => {
+            if (e.animationName === 'send-press') setLaunching(false)
+          }}
+        >
+          {(!((!text.trim() && !pendingAttachment) || sending || disabled || sendDisabled) || launching) && (
             <span className="send-aurora-glow" aria-hidden="true" />
           )}
           <button

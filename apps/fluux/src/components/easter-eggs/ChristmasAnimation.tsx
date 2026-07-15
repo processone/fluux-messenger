@@ -1,8 +1,10 @@
 import React, { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 
 interface ChristmasAnimationProps {
   onComplete: () => void
   duration?: number // Duration in ms before auto-dismiss
+  senderName?: string
 }
 
 // Snowflake and decoration types
@@ -58,7 +60,8 @@ function generateParticles(count: number): Particle[] {
   return particles
 }
 
-export function ChristmasAnimation({ onComplete, duration = 6000 }: ChristmasAnimationProps) {
+export function ChristmasAnimation({ onComplete, duration = 6000, senderName }: ChristmasAnimationProps) {
+  const { t } = useTranslation()
   const [particles] = useState(() => generateParticles(50))
   const [isVisible, setIsVisible] = useState(true)
 
@@ -133,10 +136,19 @@ export function ChristmasAnimation({ onComplete, duration = 6000 }: ChristmasAni
 
       {/* Click hint at bottom. Dark pill keeps the white text readable when
           the app behind the half-opacity scrim is in light mode. */}
-      <div className="absolute bottom-8 inset-x-0 text-center">
-        <span className="rounded-full bg-black/40 px-3 py-1 text-sm text-white/90">
-          Click anywhere to dismiss
-        </span>
+      <div className="absolute bottom-8 inset-x-0 text-center space-y-2">
+        {senderName && (
+          <div>
+            <span className="rounded-full bg-black/40 px-3 py-1 text-sm text-white/90">
+              {t('easterEgg.sentBy', { name: senderName })}
+            </span>
+          </div>
+        )}
+        <div>
+          <span className="rounded-full bg-black/40 px-3 py-1 text-sm text-white/90">
+            Click anywhere to dismiss
+          </span>
+        </div>
       </div>
     </div>
   )

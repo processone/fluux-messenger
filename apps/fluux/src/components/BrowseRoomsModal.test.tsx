@@ -611,6 +611,43 @@ describe('BrowseRoomsModal', () => {
   })
 
   describe('pagination', () => {
+    // Mirror of PAGE_SIZE in BrowseRoomsModal — a "full" page signals more pages.
+    const PAGE_SIZE = 50
+
+    // Install an IntersectionObserver whose callback we can fire on demand to
+    // trigger load-more. Returns a trigger fn and a restore fn.
+    const installCapturingObserver = () => {
+      let observerCallback: IntersectionObserverCallback | null = null
+      const originalIO = globalThis.IntersectionObserver
+      class CapturingIO {
+        observe = vi.fn()
+        unobserve = vi.fn()
+        disconnect = vi.fn()
+        constructor(cb: IntersectionObserverCallback) {
+          observerCallback = cb
+        }
+      }
+      globalThis.IntersectionObserver = CapturingIO as unknown as typeof IntersectionObserver
+      return {
+        trigger: () =>
+          act(async () => {
+            observerCallback?.(
+              [{ isIntersecting: true } as IntersectionObserverEntry],
+              {} as IntersectionObserver
+            )
+          }),
+        restore: () => {
+          globalThis.IntersectionObserver = originalIO
+        },
+      }
+    }
+
+    const makeFullPage = (prefix: string) =>
+      Array.from({ length: PAGE_SIZE }, (_, i) => ({
+        jid: `${prefix}${i}@conference.example.com`,
+        name: `${prefix} Room ${i}`,
+      }))
+
     it('should pass RSM max parameter on initial fetch', async () => {
       render(<BrowseRoomsModal onClose={mockOnClose} />)
 
@@ -619,10 +656,12 @@ describe('BrowseRoomsModal', () => {
       })
     })
 
-    it('should show total count in footer when server provides it', async () => {
+    it('should show total count in footer while more pages remain', async () => {
+      // Full page + cursor → more pages available, so the "/ N" progress hint
+      // is meaningful.
       mockBrowsePublicRooms.mockResolvedValue({
-        rooms: sampleRooms,
-        pagination: { first: 'first-id', last: 'last-id', count: 150 },
+        rooms: makeFullPage('p1'),
+        pagination: { first: 'p10', last: 'p1last', count: 150 },
       })
 
       render(<BrowseRoomsModal onClose={mockOnClose} />)
@@ -630,6 +669,39 @@ describe('BrowseRoomsModal', () => {
       await waitFor(() => {
         expect(screen.getByText(/\/ 150/)).toBeInTheDocument()
       })
+    })
+
+    it('should drop the total-count hint once the last page is reached (issue #1010)', async () => {
+      const observer = installCapturingObserver()
+      try {
+        // Page 1: full page, more available. count is inflated (150).
+        mockBrowsePublicRooms.mockResolvedValueOnce({
+          rooms: makeFullPage('p1'),
+          pagination: { first: 'p10', last: 'p1last', count: 150 },
+        })
+        // Page 2: short page → authoritative end, but count still says 150.
+        mockBrowsePublicRooms.mockResolvedValueOnce({
+          rooms: [{ jid: 'tail@conference.example.com', name: 'Tail Room' }],
+          pagination: { first: 'tail', last: 'tail', count: 150 },
+        })
+
+        render(<BrowseRoomsModal onClose={mockOnClose} />)
+
+        await waitFor(() => {
+          expect(screen.getByText(/\/ 150/)).toBeInTheDocument()
+        })
+
+        await observer.trigger()
+
+        await waitFor(() => {
+          expect(screen.getByText('Tail Room')).toBeInTheDocument()
+        })
+
+        // We've loaded everything listable; the inflated "/ 150" must be gone.
+        expect(screen.queryByText(/\/ 150/)).not.toBeInTheDocument()
+      } finally {
+        observer.restore()
+      }
     })
 
     it('should not show total count when rooms are fully loaded', async () => {
@@ -646,6 +718,84 @@ describe('BrowseRoomsModal', () => {
 
       // Should NOT show "/ 3" since all rooms are loaded
       expect(screen.queryByText(/\/ 3/)).not.toBeInTheDocument()
+    })
+
+    it('should not duplicate a room repeated across pages (issue #1010)', async () => {
+      const observer = installCapturingObserver()
+      try {
+        // Page 1: a full page whose last room is B (a page boundary).
+        const page1 = makeFullPage('p1')
+        const roomB = { jid: 'b@conference.example.com', name: 'Room B' }
+        page1[PAGE_SIZE - 1] = roomB
+        mockBrowsePublicRooms.mockResolvedValueOnce({
+          rooms: page1,
+          pagination: { first: 'p10', last: 'b', count: 100 },
+        })
+        // Page 2: repeats boundary room B, then adds C.
+        mockBrowsePublicRooms.mockResolvedValueOnce({
+          rooms: [roomB, { jid: 'c@conference.example.com', name: 'Room C' }],
+          pagination: { first: 'b', last: 'c', count: 100 },
+        })
+
+        render(<BrowseRoomsModal onClose={mockOnClose} />)
+
+        await waitFor(() => {
+          expect(screen.getByText('Room B')).toBeInTheDocument()
+        })
+
+        await observer.trigger()
+
+        await waitFor(() => {
+          expect(screen.getByText('Room C')).toBeInTheDocument()
+        })
+
+        // Room B must appear exactly once despite being returned on both pages.
+        expect(screen.getAllByText('Room B')).toHaveLength(1)
+      } finally {
+        observer.restore()
+      }
+    })
+
+    it('should stop paging on a short page even when count stays high (issue #1010)', async () => {
+      const observer = installCapturingObserver()
+      try {
+        // Page 1: a full page — more pages available. count is inflated (e.g.
+        // ejabberd reports total online rooms, including empty ones it filters
+        // out of the listing), so it must NOT drive the stop decision.
+        mockBrowsePublicRooms.mockResolvedValueOnce({
+          rooms: makeFullPage('p1'),
+          pagination: { first: 'p10', last: 'p1last', count: 150 },
+        })
+        // Page 2: a SHORT page — the server's ordered walk reached the end,
+        // even though count (150) still exceeds the rooms loaded so far (60).
+        mockBrowsePublicRooms.mockResolvedValueOnce({
+          rooms: Array.from({ length: 10 }, (_, i) => ({
+            jid: `p2${i}@conference.example.com`,
+            name: `p2 Room ${i}`,
+          })),
+          pagination: { first: 'p20', last: 'p2last', count: 150 },
+        })
+
+        render(<BrowseRoomsModal onClose={mockOnClose} />)
+
+        await waitFor(() => {
+          expect(screen.getByText('p1 Room 0')).toBeInTheDocument()
+        })
+
+        // First load-more fetches the short page 2.
+        await observer.trigger()
+        await waitFor(() => {
+          expect(screen.getByText('p2 Room 0')).toBeInTheDocument()
+        })
+        expect(mockBrowsePublicRooms).toHaveBeenCalledTimes(2)
+
+        // Firing again must NOT fetch a third page: the short page 2 is the
+        // authoritative end signal, regardless of the still-high count.
+        await observer.trigger()
+        expect(mockBrowsePublicRooms).toHaveBeenCalledTimes(2)
+      } finally {
+        observer.restore()
+      }
     })
 
     it('should reset pagination when switching MUC service', async () => {

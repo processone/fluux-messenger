@@ -17,7 +17,8 @@
         "forward": "前进",
         "block": "屏蔽",
         "copied": "已复制",
-        "comingSoon": "即将推出"
+        "comingSoon": "即将推出",
+        "dismiss": "关闭"
     },
     "login": {
         "title": "Fluux Messenger",
@@ -1380,5 +1381,10 @@
             "nickInUse": "昵称 {{nick}} 已被占用",
             "nickFailed": "无法更改你的昵称"
         }
+    },
+    "easterEgg": {
+        "mention": "{{name}} 给你发送了一个动画",
+        "replay": "重播",
+        "sentBy": "由 {{name}} 发送"
     }
 }
