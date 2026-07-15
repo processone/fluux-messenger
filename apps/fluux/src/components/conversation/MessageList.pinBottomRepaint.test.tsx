@@ -132,4 +132,51 @@ describe('MessageList — pin forces a repaint after a programmatic scroll (WebK
     expect(repaint.overflowSets).toContain('hidden')
     expect(repaint.overflowSets[repaint.overflowSets.length - 1]).toBe('')
   })
+
+  // Regression for the WebKitGTK "half-freeze": a BURST of new bottom rows (live chatter, a reconnect
+  // flushing queued messages, a reaction/media storm) used to fire one forced overflow-toggle repaint
+  // PER arrival. On WebKitGTK each is a ~50–150ms full scroller re-layout+repaint, so a burst
+  // saturated the main thread. The burst coalescer suppresses the intermediate repaints (position is
+  // still written) and forces ONE trailing repaint on settle — a burst of N collapses to ~1–2 toggles.
+  it('coalesces a burst of new messages into far fewer forced repaints', () => {
+    const isAtBottomRef = { current: true }
+    const base = makeMessages(50)
+    const { container, rerender } = render(
+      <MessageList messages={base} conversationId="conv-burst" isAtBottomRef={isAtBottomRef} {...props} />,
+    )
+    const scroller = container.querySelector('[data-message-list]') as HTMLElement
+    instrumentScroller(scroller)
+    flush(70) // settle the entry pin
+    repaint.overflowSets = []
+    scrollToEndCalls.count = 0
+
+    // BURST — 8 incoming messages land in rapid succession, each growing the content and firing the
+    // new-message pin, with only a couple of frames between them (the loop cannot fully settle).
+    const burst: BaseMessage[] = []
+    for (let i = 0; i < 8; i++) {
+      burst.push({
+        id: `burst-${i}`, from: `user${i}@example.com`, body: `burst ${i}`,
+        timestamp: new Date(2024, 0, 1, 13, i), isOutgoing: false, type: 'chat',
+      })
+      geo.scrollHeight = 2000 + (i + 1) * 40
+      rerender(
+        <MessageList messages={[...base, ...burst]} conversationId="conv-burst" isAtBottomRef={isAtBottomRef} {...props} />,
+      )
+      flush(2)
+    }
+    // Arrival stops — let the loop converge and flush the single trailing repaint.
+    flush(20)
+
+    // Position was still written for every arrival (layout stays correct — nothing is stranded).
+    expect(scrollToEndCalls.count).toBeGreaterThanOrEqual(8)
+
+    // But the expensive forced repaints were coalesced: far fewer overflow 'hidden' toggles than the
+    // 8 arrivals. Pre-fix this was ~8+ (one per arrival); post-fix it is the first arrival's immediate
+    // paint plus the trailing settle paint.
+    const hiddenToggles = repaint.overflowSets.filter((v) => v === 'hidden').length
+    expect(hiddenToggles).toBeLessThan(8)
+    expect(hiddenToggles).toBeGreaterThan(0) // the final position IS painted (not left stale)
+    // Whatever the last toggle, overflow is restored so scrolling still works.
+    expect(repaint.overflowSets[repaint.overflowSets.length - 1]).toBe('')
+  })
 })
