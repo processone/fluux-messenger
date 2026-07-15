@@ -6,6 +6,7 @@ import {
   type FileAttachment,
   type FileEncryption,
   type ThumbnailInfo,
+  type UploadSlot,
 } from '@fluux/sdk'
 import { useConnectionStore } from '@fluux/sdk/react'
 import {
@@ -21,16 +22,12 @@ import {
   getEffectiveMimeType,
   type ThumbnailResult,
 } from '@/utils/thumbnail'
+import { isTauri } from '@/utils/tauri'
+import { uploadFileTauri } from '@/utils/tauriUpload'
 import { createUploadProgressReporter } from './uploadProgressReporter'
 
-/**
- * Check if running in Tauri dynamically.
- * IMPORTANT: Must be checked at call time, not module load time,
- * because __TAURI_INTERNALS__ may not be available when the module first loads.
- */
-function isTauri(): boolean {
-  return typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
-}
+/** WebCrypto/aes-gcm append a 128-bit auth tag, so ciphertext = plaintext + 16. */
+const GCM_TAG_BYTES = 16
 
 interface UploadState {
   isUploading: boolean
@@ -39,6 +36,78 @@ interface UploadState {
 }
 
 export type { FileAttachment, ThumbnailInfo }
+
+type RequestSlot = (filename: string, size: number, contentType: string) => Promise<UploadSlot>
+
+interface SlotUploadOutcome {
+  /** Plain HTTPS URL of the uploaded (cipher)text. */
+  getUrl: string
+  /** AES-GCM params when the blob was encrypted before upload. */
+  encryption?: FileEncryption
+}
+
+/**
+ * Upload one blob through an XEP-0363 slot, optionally AES-256-GCM-encrypted
+ * (XEP-0454). Shared by the main file and its thumbnail.
+ *
+ * Encrypted uploads never leak the original filename/mimetype to the upload
+ * server — the real ones ride inside the encrypted `<file-metadata/>` — and
+ * the slot is requested with the CIPHERTEXT size (plaintext + GCM tag) so
+ * the server's size limit applies to what actually goes on the wire.
+ *
+ * Transport is platform-split:
+ * - Desktop: the Rust `upload_file` command receives the plaintext bytes as
+ *   Tauri's raw IPC body and does encryption + PUT natively. Do NOT use
+ *   `@tauri-apps/plugin-http` here — its JS shim turns the body into a
+ *   number array and JSON-serializes it, which blocks the main thread ~1s
+ *   for a 40MB file (the `[MainThreadStall]` class).
+ * - Web: WebCrypto encryption + XHR PUT; the browser streams the body off
+ *   the main thread.
+ */
+async function uploadBlobViaSlot(
+  blob: Blob,
+  filename: string,
+  mimeType: string,
+  encrypt: boolean,
+  requestSlot: RequestSlot,
+  onProgress: (percent: number) => void,
+): Promise<SlotUploadOutcome> {
+  const uploadFilename = encrypt ? `${crypto.randomUUID()}.bin` : filename
+  const uploadMimeType = encrypt ? 'application/octet-stream' : mimeType
+  const uploadSize = encrypt ? blob.size + GCM_TAG_BYTES : blob.size
+
+  const slot = await requestSlot(uploadFilename, uploadSize, uploadMimeType)
+
+  if (isTauri()) {
+    const encryption = await uploadFileTauri({
+      bytes: await blob.arrayBuffer(),
+      putUrl: slot.putUrl,
+      contentType: uploadMimeType,
+      headers: slot.headers,
+      encrypt,
+      onProgress,
+    })
+    return { getUrl: slot.getUrl, encryption }
+  }
+
+  let uploadBlob = blob
+  let encryption: FileEncryption | undefined
+  if (encrypt) {
+    // Each call generates a fresh key + IV; reuse would be catastrophic
+    // for GCM.
+    const enc = await encryptFile(new Uint8Array(await blob.arrayBuffer()))
+    encryption = { cipher: 'aes-256-gcm', key: enc.key, iv: enc.iv }
+    uploadBlob = new Blob([enc.ciphertext as BlobPart], { type: uploadMimeType })
+  }
+  await uploadWithXHR(
+    slot.putUrl,
+    new File([uploadBlob], uploadFilename, { type: uploadMimeType }),
+    uploadMimeType,
+    slot.headers,
+    onProgress,
+  )
+  return { getUrl: slot.getUrl, encryption }
+}
 
 /**
  * Hook for uploading files via XEP-0363 HTTP File Upload.
@@ -76,12 +145,11 @@ export function useFileUpload() {
    * - Audio: extracts duration
    *
    * When `encrypt` is true the file bytes (and thumbnail bytes, if any)
-   * are AES-256-GCM-encrypted client-side before HTTP Upload. The returned
+   * are AES-256-GCM-encrypted before HTTP Upload. The returned
    * `FileAttachment.url` is the HTTPS URL of the ciphertext, and
    * `encryption` carries the per-file key/IV — the SDK's Chat module then
    * embeds an `aesgcm://` URI inside the E2EE `<payload/>` so the XMPP
-   * server never sees the key. Each call generates fresh key + IV; reuse
-   * would be catastrophic for GCM.
+   * server never sees the key.
    *
    * Returns FileAttachment with URL, thumbnail info, duration, and
    * optional encryption metadata, or null on failure.
@@ -146,8 +214,8 @@ export function useFileUpload() {
 
       // Combine main-file + optional-thumbnail progress into one size-weighted
       // percent. The reporter only fires when the rounded percent changes, so a
-      // fast web upload can't re-render the conversation pane once per XHR
-      // progress event (same render-storm class as issue #994).
+      // fast upload can't re-render the conversation pane once per progress
+      // event (same render-storm class as issue #994).
       const thumbnailSize = thumbnailResult?.blob.size || 0
       const progressReporter = createUploadProgressReporter(
         file.size,
@@ -155,76 +223,28 @@ export function useFileUpload() {
         overall => setState(s => ({ ...s, progress: overall })),
       )
 
-      // 1. Prepare main file bytes — encrypted or plaintext depending on mode.
-      // When encrypting we PUT the ciphertext (plaintext_len + 16-byte GCM
-      // tag) and store the key/IV in `encryption` for the downstream stanza
-      // assembly. The XEP-0363 slot is requested with the CIPHERTEXT size
-      // so the server's size limit applies to what actually goes on the wire.
       const effectiveMimeType = getEffectiveMimeType(file)
-      let mainEncryption: FileEncryption | undefined
-      let mainUploadBlob: Blob = file
-      let mainUploadMimeType = effectiveMimeType
-      let mainUploadFilename = file.name
-      let mainUploadSize = file.size
-      if (shouldEncrypt) {
-        const plaintextBytes = new Uint8Array(await file.arrayBuffer())
-        const enc = await encryptFile(plaintextBytes)
-        mainEncryption = { cipher: 'aes-256-gcm', key: enc.key, iv: enc.iv }
-        mainUploadBlob = new Blob([enc.ciphertext as BlobPart], { type: 'application/octet-stream' })
-        // Don't leak the original filename / mimetype via HTTP Upload — the
-        // real name/mimetype ride inside the encrypted `<file-metadata/>`.
-        mainUploadMimeType = 'application/octet-stream'
-        mainUploadFilename = `${crypto.randomUUID()}.bin`
-        mainUploadSize = enc.ciphertext.byteLength
-      }
-      const slot = await requestUploadSlot(
-        mainUploadFilename,
-        mainUploadSize,
-        mainUploadMimeType,
-      )
-
-      // 2. Upload main file (ciphertext or plaintext) via HTTP PUT with progress.
-      await uploadWithProgress(
-        slot.putUrl,
-        new File([mainUploadBlob], mainUploadFilename, { type: mainUploadMimeType }),
-        mainUploadMimeType,
-        slot.headers,
+      const main = await uploadBlobViaSlot(
+        file,
+        file.name,
+        effectiveMimeType,
+        shouldEncrypt,
+        requestUploadSlot,
         (progress) => progressReporter.setMain(progress),
       )
 
-      // 3. Upload thumbnail if generated. Encrypted attachments get an
+      // Upload thumbnail if generated. Encrypted attachments get an
       // encrypted thumbnail too — a plaintext thumbnail would leak a
       // preview of the very file we just protected.
       let thumbnailInfo: ThumbnailInfo | undefined
       if (thumbnailResult) {
-        let thumbBytes: Uint8Array
-        let thumbUploadMime: string
-        let thumbFilename: string
-        let thumbEncryption: FileEncryption | undefined
-        if (shouldEncrypt) {
-          const thumbPlain = new Uint8Array(await thumbnailResult.blob.arrayBuffer())
-          const enc = await encryptFile(thumbPlain)
-          thumbBytes = enc.ciphertext
-          thumbEncryption = { cipher: 'aes-256-gcm', key: enc.key, iv: enc.iv }
-          thumbUploadMime = 'application/octet-stream'
-          thumbFilename = `${crypto.randomUUID()}.bin`
-        } else {
-          thumbBytes = new Uint8Array(await thumbnailResult.blob.arrayBuffer())
-          thumbUploadMime = thumbnailResult.mediaType
-          thumbFilename = `thumb_${file.name.replace(/\.[^.]+$/, '')}.jpg`
-        }
-
-        const thumbSlot = await requestUploadSlot(
+        const thumbFilename = `thumb_${file.name.replace(/\.[^.]+$/, '')}.jpg`
+        const thumb = await uploadBlobViaSlot(
+          thumbnailResult.blob,
           thumbFilename,
-          thumbBytes.byteLength,
-          thumbUploadMime,
-        )
-
-        await uploadWithProgress(
-          thumbSlot.putUrl,
-          new File([thumbBytes as BlobPart], thumbFilename, { type: thumbUploadMime }),
-          thumbUploadMime,
-          thumbSlot.headers,
+          thumbnailResult.mediaType,
+          shouldEncrypt,
+          requestUploadSlot,
           (progress) => progressReporter.setThumbnail(progress),
         )
 
@@ -232,11 +252,11 @@ export function useFileUpload() {
         // separate field. Chat.ts converts to `aesgcm://` only when
         // building the outgoing stanza's OOB thumbnail attribute.
         thumbnailInfo = {
-          uri: thumbSlot.getUrl,
+          uri: thumb.getUrl,
           mediaType: thumbnailResult.mediaType,
           width: thumbnailResult.width,
           height: thumbnailResult.height,
-          ...(thumbEncryption && { encryption: thumbEncryption }),
+          ...(thumb.encryption && { encryption: thumb.encryption }),
         }
       }
 
@@ -249,7 +269,7 @@ export function useFileUpload() {
       // local form separate means UI code can fetch the URL directly and
       // renderers reason about encryption as an explicit field.
       return {
-        url: slot.getUrl,
+        url: main.getUrl,
         name: file.name,
         size: file.size,
         mediaType: effectiveMimeType,
@@ -257,7 +277,7 @@ export function useFileUpload() {
         height,
         thumbnail: thumbnailInfo,
         duration,
-        ...(mainEncryption && { encryption: mainEncryption }),
+        ...(main.encryption && { encryption: main.encryption }),
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : t('upload.failed')
@@ -273,47 +293,6 @@ export function useFileUpload() {
     isSupported: !!httpUploadService,
     maxFileSize: httpUploadService?.maxFileSize,
   }
-}
-
-/**
- * Upload file using Tauri's HTTP plugin (bypasses CORS).
- * Progress tracking is not available with Tauri's fetch.
- */
-async function uploadWithTauri(
-  url: string,
-  file: File,
-  contentType: string,
-  headers?: Record<string, string>,
-  onProgress?: (progress: number) => void
-): Promise<void> {
-  // Dynamic import to avoid bundling Tauri code in web builds
-  const { fetch } = await import('@tauri-apps/plugin-http')
-
-  // Read file as Uint8Array for Tauri fetch
-  // Note: Tauri's fetch expects Uint8Array, not ArrayBuffer
-  const arrayBuffer = await file.arrayBuffer()
-  const body = new Uint8Array(arrayBuffer)
-
-  // Build headers
-  const requestHeaders: Record<string, string> = {
-    'Content-Type': contentType,
-    ...headers,
-  }
-
-  // Tauri fetch doesn't support progress, simulate it
-  onProgress?.(50)
-
-  const response = await fetch(url, {
-    method: 'PUT',
-    headers: requestHeaders,
-    body,
-  })
-
-  if (!response.ok) {
-    throw new Error(`Upload failed: ${response.status}`)
-  }
-
-  onProgress?.(100)
 }
 
 /**
@@ -365,24 +344,6 @@ async function uploadWithXHR(
 
     xhr.send(file)
   })
-}
-
-/**
- * Upload file with progress tracking.
- * Uses Tauri HTTP plugin in desktop app (bypasses CORS),
- * falls back to XMLHttpRequest for web.
- */
-async function uploadWithProgress(
-  url: string,
-  file: File,
-  contentType: string,
-  headers?: Record<string, string>,
-  onProgress?: (progress: number) => void
-): Promise<void> {
-  if (isTauri()) {
-    return uploadWithTauri(url, file, contentType, headers, onProgress)
-  }
-  return uploadWithXHR(url, file, contentType, headers, onProgress)
 }
 
 /**

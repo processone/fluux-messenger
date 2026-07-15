@@ -66,6 +66,12 @@ sequoia-openpgp = { version = "2.0", default-features = false, features = [
 anyhow = "1"
 base64 = "0.22"
 
+# XEP-0454 media encryption for the native upload path (upload.rs). The
+# WebView cannot ship large bodies over IPC without a main-thread stall, so
+# file encryption + HTTP PUT both run in Rust; aes-gcm matches the
+# WebCrypto AES-256-GCM shape used by the web build (tag appended).
+aes-gcm = "0.10"
+
 # Unicode NFKD normalization for the backup passphrase. BIP-39 wordlists
 # for non-English languages contain precomposed diacritics that user
 # keyboards and copy-paste sources may decompose differently; applying
