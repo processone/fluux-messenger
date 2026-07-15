@@ -546,7 +546,8 @@
             "tooltip": {
                 "header": "Salattu",
                 "protocol": {
-                    "openpgp": "OpenPGP"
+                    "openpgp": "OpenPGP",
+                    "omemo:2": "OMEMO"
                 },
                 "trust": {
                     "verified": "vahvistettu",
@@ -875,7 +876,12 @@
             "unlockPassphraseMismatch": "Salasanat eivät täsmää",
             "unlockPassphraseTooShort": "Salasanassa on oltava vähintään 8 merkkiä",
             "lockedBannerBody": "Salausavaimesi on lukittu. Syötä salasana ottaaksesi salauksen käyttöön tässä istunnossa.",
-            "rotateNotSupportedWeb": "Avaimen kierto ei ole käytettävissä verkossa. Käytä työpöytäsovellusta."
+            "rotateNotSupportedWeb": "Avaimen kierto ei ole käytettävissä verkossa. Käytä työpöytäsovellusta.",
+            "omemo": {
+                "label": "OMEMO",
+                "description": "Salaa yksityisviestit OMEMO 2:lla, yhteensopiva muiden OMEMO-asiakkaiden kanssa. Vain työpöydällä.",
+                "desktopOnly": "Käytettävissä vain työpöytäsovelluksessa."
+            }
         },
         "mediaAutoDownload": "Median automaattinen lataus",
         "mediaAutoDownloadDescription": "Valitse, milloin kuvat, videot ja tiedostot ladataan automaattisesti.",

@@ -546,7 +546,8 @@
             "tooltip": {
                 "header": "Encrypted",
                 "protocol": {
-                    "openpgp": "OpenPGP"
+                    "openpgp": "OpenPGP",
+                    "omemo:2": "OMEMO"
                 },
                 "trust": {
                     "verified": "verified",
@@ -800,7 +801,12 @@
             "unlockPassphraseMismatch": "Passphrases don’t match",
             "unlockPassphraseTooShort": "Passphrase must be at least 8 characters",
             "lockedBannerBody": "Your encryption key is locked. Enter your passphrase to enable encryption for this session.",
-            "rotateNotSupportedWeb": "Key rotation is not available on the web. Use the desktop app."
+            "rotateNotSupportedWeb": "Key rotation is not available on the web. Use the desktop app.",
+            "omemo": {
+                "label": "OMEMO",
+                "description": "Encrypt 1:1 messages with OMEMO 2, compatible with other OMEMO clients. Desktop only.",
+                "desktopOnly": "Available on the desktop app only."
+            }
         },
         "blocked": {
             "title": "Blocked Users",

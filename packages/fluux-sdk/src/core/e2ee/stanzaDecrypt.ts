@@ -488,6 +488,12 @@ const KNOWN_ENCRYPTION_NAMESPACES = new Set(Object.keys(EME_PROTOCOL_NAMES))
 
 const EME_NAMESPACE_PLUGIN_IDS: Record<string, string> = {
   'urn:xmpp:openpgp:0': 'openpgp',
+  'urn:xmpp:omemo:2': 'omemo:2',
+}
+
+/** Plugin id that handles an EME namespace, if any (for supported-vs-unsupported classification). */
+export function emePluginIdFor(namespace: string): string | undefined {
+  return EME_NAMESPACE_PLUGIN_IDS[namespace]
 }
 
 /**
@@ -535,7 +541,7 @@ function unclaimedPluginState(state: UnclaimedEMEPluginState): {
   return {
     hasPlugins: state.hasPlugins(),
     hasPluginForNamespace: (namespace) => {
-      const pluginId = EME_NAMESPACE_PLUGIN_IDS[namespace]
+      const pluginId = emePluginIdFor(namespace)
       return pluginId ? !!state.getPlugin(pluginId) : false
     },
   }

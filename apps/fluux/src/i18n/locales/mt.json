@@ -551,7 +551,8 @@
             "tooltip": {
                 "header": "Encrypted",
                 "protocol": {
-                    "openpgp": "OpenPGP"
+                    "openpgp": "OpenPGP",
+                    "omemo:2": "OMEMO"
                 },
                 "trust": {
                     "verified": "verifikat",
@@ -880,7 +881,12 @@
             "unlockPassphraseMismatch": "Il-passphrase ma jaqblux",
             "unlockPassphraseTooShort": "Il-passphrase għandu jkollu mill-inqas 8 karattri",
             "lockedBannerBody": "Iċ-ċavetta tal-kriptaġġ tiegħek hija msakkar. Daħħal il-passphrase biex tattiva l-kriptaġġ għal din is-sessjoni.",
-            "rotateNotSupportedWeb": "Ir-rotazzjoni taċ-ċavetta mhix disponibbli fuq il-web. Uża l-applikazzjoni tal-desktop."
+            "rotateNotSupportedWeb": "Ir-rotazzjoni taċ-ċavetta mhix disponibbli fuq il-web. Uża l-applikazzjoni tal-desktop.",
+            "omemo": {
+                "label": "OMEMO",
+                "description": "Ikkripta l-messaġġi 1:1 b'OMEMO 2, kompatibbli ma' klijenti OMEMO oħra. Desktop biss.",
+                "desktopOnly": "Disponibbli biss fl-applikazzjoni desktop."
+            }
         },
         "mediaAutoDownload": "Tniżżil awtomatiku tal-midja",
         "mediaAutoDownloadDescription": "Agħżel meta l-immagini, il-vidjows u l-fajls jitgħabbew awtomatikament.",

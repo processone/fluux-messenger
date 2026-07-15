@@ -548,7 +548,8 @@
             "tooltip": {
                 "header": "Šifrēts",
                 "protocol": {
-                    "openpgp": "OpenPGP"
+                    "openpgp": "OpenPGP",
+                    "omemo:2": "OMEMO"
                 },
                 "trust": {
                     "verified": "pārbaudīts",
@@ -877,7 +878,12 @@
             "unlockPassphraseMismatch": "Paroles nesakrīt",
             "unlockPassphraseTooShort": "Parole jābūt vismaz 8 rakstzīmēm",
             "lockedBannerBody": "Jūsu šifrēšanas atslēga ir bloķēta. Ievadiet paroli, lai aktivizētu šifrēšanu šai sesijai.",
-            "rotateNotSupportedWeb": "Atslēgas rotācija nav pieejama tīmeklī. Izmantojiet darbvirsmas lietotni."
+            "rotateNotSupportedWeb": "Atslēgas rotācija nav pieejama tīmeklī. Izmantojiet darbvirsmas lietotni.",
+            "omemo": {
+                "label": "OMEMO",
+                "description": "Šifrējiet privātās ziņas ar OMEMO 2, saderīgu ar citiem OMEMO klientiem. Tikai galddatoram.",
+                "desktopOnly": "Pieejams tikai galddatora lietotnē."
+            }
         },
         "mediaAutoDownload": "Automātiska multivides lejupielāde",
         "mediaAutoDownloadDescription": "Izvēlieties, kad attēli, videoklipi un faili tiek ielādēti automātiski.",

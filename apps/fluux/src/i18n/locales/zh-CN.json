@@ -546,7 +546,8 @@
             "tooltip": {
                 "header": "已加密",
                 "protocol": {
-                    "openpgp": "OpenPGP"
+                    "openpgp": "OpenPGP",
+                    "omemo:2": "OMEMO"
                 },
                 "trust": {
                     "verified": "已验证",
@@ -875,7 +876,12 @@
             "unlockPassphraseMismatch": "密码短语不匹配",
             "unlockPassphraseTooShort": "密码短语必须至少包含 8 个字符",
             "lockedBannerBody": "您的加密密钥已被锁定。请输入您的密码短语以启用此会话的加密。",
-            "rotateNotSupportedWeb": "网页端不支持密钥轮换。请使用桌面应用。"
+            "rotateNotSupportedWeb": "网页端不支持密钥轮换。请使用桌面应用。",
+            "omemo": {
+                "label": "OMEMO",
+                "description": "使用与其他 OMEMO 客户端兼容的 OMEMO 2 加密单聊消息。仅限桌面版。",
+                "desktopOnly": "仅在桌面应用中可用。"
+            }
         },
         "mediaAutoDownload": "自动下载媒体",
         "mediaAutoDownloadDescription": "选择图片、视频和文件何时自动加载。",

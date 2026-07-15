@@ -548,7 +548,8 @@
             "tooltip": {
                 "header": "Krüptitud",
                 "protocol": {
-                    "openpgp": "OpenPGP"
+                    "openpgp": "OpenPGP",
+                    "omemo:2": "OMEMO"
                 },
                 "trust": {
                     "verified": "kontrollitud",
@@ -877,7 +878,12 @@
             "unlockPassphraseMismatch": "Paroolid ei ühti",
             "unlockPassphraseTooShort": "Parool peab olema vähemalt 8 märki pikk",
             "lockedBannerBody": "Sinu krüpteerimisvõti on lukustatud. Sisesta parool krüpteerimise aktiveerimiseks selle seansi jaoks.",
-            "rotateNotSupportedWeb": "Võtme rotatsioon ei ole veebis saadaval. Kasuta lauaarvutirakendust."
+            "rotateNotSupportedWeb": "Võtme rotatsioon ei ole veebis saadaval. Kasuta lauaarvutirakendust.",
+            "omemo": {
+                "label": "OMEMO",
+                "description": "Krüpti isiklikud sõnumid OMEMO 2-ga, ühilduv teiste OMEMO klientidega. Ainult lauaarvutis.",
+                "desktopOnly": "Saadaval ainult lauaarvuti rakenduses."
+            }
         },
         "mediaAutoDownload": "Meedia automaatne allalaadimine",
         "mediaAutoDownloadDescription": "Valige, millal pildid, videod ja failid automaatselt laaditakse.",

@@ -546,7 +546,8 @@
             "tooltip": {
                 "header": "Kryptert",
                 "protocol": {
-                    "openpgp": "OpenPGP"
+                    "openpgp": "OpenPGP",
+                    "omemo:2": "OMEMO"
                 },
                 "trust": {
                     "verified": "verifisert",
@@ -875,7 +876,12 @@
             "unlockPassphraseMismatch": "Passfrasene stemmer ikke overens",
             "unlockPassphraseTooShort": "Passfrasen må være minst 8 tegn",
             "lockedBannerBody": "Krypteringsnøkkelen din er låst. Oppgi passfrasen din for å aktivere kryptering for denne økt.",
-            "rotateNotSupportedWeb": "Nøkkelrotering er ikke tilgjengelig på nettet. Bruk skrivebordsappen."
+            "rotateNotSupportedWeb": "Nøkkelrotering er ikke tilgjengelig på nettet. Bruk skrivebordsappen.",
+            "omemo": {
+                "label": "OMEMO",
+                "description": "Krypter 1:1-meldinger med OMEMO 2, kompatibel med andre OMEMO-klienter. Kun for datamaskin.",
+                "desktopOnly": "Kun tilgjengelig i skrivebordsappen."
+            }
         },
         "mediaAutoDownload": "Automatisk nedlasting av medier",
         "mediaAutoDownloadDescription": "Velg når bilder, videoer og filer lastes inn automatisk.",

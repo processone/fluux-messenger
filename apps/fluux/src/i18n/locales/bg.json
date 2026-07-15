@@ -546,7 +546,8 @@
             "tooltip": {
                 "header": "Шифровано",
                 "protocol": {
-                    "openpgp": "OpenPGP"
+                    "openpgp": "OpenPGP",
+                    "omemo:2": "OMEMO"
                 },
                 "trust": {
                     "verified": "проверено",
@@ -875,7 +876,12 @@
             "unlockPassphraseMismatch": "Паролите не съвпадат",
             "unlockPassphraseTooShort": "Паролата трябва да е поне 8 символа",
             "lockedBannerBody": "Ключът ти е заключен. Въведи паролата, за да активираш шифроването за тази сесия.",
-            "rotateNotSupportedWeb": "Ротацията на ключ не е достъпна в уеб. Използвай настолното приложение."
+            "rotateNotSupportedWeb": "Ротацията на ключ не е достъпна в уеб. Използвай настолното приложение.",
+            "omemo": {
+                "label": "OMEMO",
+                "description": "Шифроване на лични съобщения с OMEMO 2, съвместимо с други OMEMO клиенти. Само за настолни компютри.",
+                "desktopOnly": "Налично само в настолното приложение."
+            }
         },
         "mediaAutoDownload": "Автоматично изтегляне на медия",
         "mediaAutoDownloadDescription": "Изберете кога изображенията, видеоклиповете и файловете се зареждат автоматично.",

@@ -550,7 +550,8 @@
             "tooltip": {
                 "header": "Zaszyfrowane",
                 "protocol": {
-                    "openpgp": "OpenPGP"
+                    "openpgp": "OpenPGP",
+                    "omemo:2": "OMEMO"
                 },
                 "trust": {
                     "verified": "zweryfikowane",
@@ -879,7 +880,12 @@
             "unlockPassphraseMismatch": "Hasła nie pasują do siebie",
             "unlockPassphraseTooShort": "Hasło musi mieć co najmniej 8 znaków",
             "lockedBannerBody": "Klucz szyfrowania jest zablokowany. Wprowadź hasło, aby aktywować szyfrowanie na tę sesję.",
-            "rotateNotSupportedWeb": "Rotacja klucza nie jest dostępna w przeglądarce. Użyj aplikacji desktopowej."
+            "rotateNotSupportedWeb": "Rotacja klucza nie jest dostępna w przeglądarce. Użyj aplikacji desktopowej.",
+            "omemo": {
+                "label": "OMEMO",
+                "description": "Szyfruj prywatne wiadomości za pomocą OMEMO 2, kompatybilnego z innymi klientami OMEMO. Tylko na komputer.",
+                "desktopOnly": "Dostępne tylko w aplikacji na komputer."
+            }
         },
         "mediaAutoDownload": "Automatyczne pobieranie multimediów",
         "mediaAutoDownloadDescription": "Wybierz, kiedy obrazy, filmy i pliki ładują się automatycznie.",

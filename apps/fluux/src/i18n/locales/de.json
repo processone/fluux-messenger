@@ -548,7 +548,8 @@
             "tooltip": {
                 "header": "Verschlüsselt",
                 "protocol": {
-                    "openpgp": "OpenPGP"
+                    "openpgp": "OpenPGP",
+                    "omemo:2": "OMEMO"
                 },
                 "trust": {
                     "verified": "verifiziert",
@@ -877,7 +878,12 @@
             "unlockPassphraseMismatch": "Passphrasen stimmen nicht überein",
             "unlockPassphraseTooShort": "Die Passphrase muss mindestens 8 Zeichen lang sein",
             "lockedBannerBody": "Dein Verschlüsselungsschlüssel ist gesperrt. Gib deine Passphrase ein, um die Verschlüsselung für diese Sitzung zu aktivieren.",
-            "rotateNotSupportedWeb": "Schlüsselrotation ist im Web nicht verfügbar. Verwende die Desktop-App."
+            "rotateNotSupportedWeb": "Schlüsselrotation ist im Web nicht verfügbar. Verwende die Desktop-App.",
+            "omemo": {
+                "label": "OMEMO",
+                "description": "Verschlüsselt 1:1-Nachrichten mit OMEMO 2, kompatibel mit anderen OMEMO-Clients. Nur für den Desktop.",
+                "desktopOnly": "Nur in der Desktop-App verfügbar."
+            }
         },
         "mediaAutoDownload": "Medien automatisch herunterladen",
         "mediaAutoDownloadDescription": "Legen Sie fest, wann Bilder, Videos und Dateien automatisch geladen werden.",

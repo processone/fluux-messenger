@@ -547,7 +547,8 @@
             "tooltip": {
                 "header": "מוצפן",
                 "protocol": {
-                    "openpgp": "OpenPGP"
+                    "openpgp": "OpenPGP",
+                    "omemo:2": "OMEMO"
                 },
                 "trust": {
                     "verified": "מאומת",
@@ -876,7 +877,12 @@
             "unlockPassphraseMismatch": "ביטויי הסיסמה אינם תואמים",
             "unlockPassphraseTooShort": "ביטוי הסיסמה חייב להכיל לפחות 8 תווים",
             "lockedBannerBody": "מפתח ההצפנה שלך נעול. הזן את ביטוי הסיסמה כדי לאפשר הצפנה לסשן זה.",
-            "rotateNotSupportedWeb": "סיבוב מפתחות אינו זמין באינטרנט. השתמש ביישום שולחן העבודה."
+            "rotateNotSupportedWeb": "סיבוב מפתחות אינו זמין באינטרנט. השתמש ביישום שולחן העבודה.",
+            "omemo": {
+                "label": "OMEMO",
+                "description": "הצפינו הודעות אישיות עם OMEMO 2, תואם ללקוחות OMEMO אחרים. למחשב בלבד.",
+                "desktopOnly": "זמין רק באפליקציית שולחן העבודה."
+            }
         },
         "mediaAutoDownload": "הורדה אוטומטית של מדיה",
         "mediaAutoDownloadDescription": "בחר מתי תמונות, סרטונים וקבצים נטענים אוטומטית.",

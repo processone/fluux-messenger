@@ -549,7 +549,8 @@
             "tooltip": {
                 "header": "Criptat",
                 "protocol": {
-                    "openpgp": "OpenPGP"
+                    "openpgp": "OpenPGP",
+                    "omemo:2": "OMEMO"
                 },
                 "trust": {
                     "verified": "verificat",
@@ -878,7 +879,12 @@
             "unlockPassphraseMismatch": "Parolele nu se potrivesc",
             "unlockPassphraseTooShort": "Parola trebuie să aibă cel puțin 8 caractere",
             "lockedBannerBody": "Cheia de criptare este blocată. Introdu parola pentru a activa criptarea pentru această sesiune.",
-            "rotateNotSupportedWeb": "Rotația cheii nu este disponibilă pe web. Folosește aplicația desktop."
+            "rotateNotSupportedWeb": "Rotația cheii nu este disponibilă pe web. Folosește aplicația desktop.",
+            "omemo": {
+                "label": "OMEMO",
+                "description": "Criptați mesajele individuale cu OMEMO 2, compatibil cu alți clienți OMEMO. Doar pentru desktop.",
+                "desktopOnly": "Disponibil doar în aplicația desktop."
+            }
         },
         "mediaAutoDownload": "Descărcare automată a conținutului media",
         "mediaAutoDownloadDescription": "Alegeți când imaginile, videoclipurile și fișierele se încarcă automat.",

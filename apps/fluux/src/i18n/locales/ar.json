@@ -550,7 +550,8 @@
             "tooltip": {
                 "header": "مُشفَّر",
                 "protocol": {
-                    "openpgp": "OpenPGP"
+                    "openpgp": "OpenPGP",
+                    "omemo:2": "OMEMO"
                 },
                 "trust": {
                     "verified": "تم التحقق",
@@ -879,7 +880,12 @@
             "unlockPassphraseMismatch": "عبارتا المرور غير متطابقتين",
             "unlockPassphraseTooShort": "يجب أن تتكون عبارة المرور من 8 أحرف على الأقل",
             "lockedBannerBody": "مفتاح التشفير مقفل. أدخل عبارة المرور لتفعيل التشفير لهذه الجلسة.",
-            "rotateNotSupportedWeb": "دوران المفتاح غير متاح على الويب. استخدم تطبيق سطح المكتب."
+            "rotateNotSupportedWeb": "دوران المفتاح غير متاح على الويب. استخدم تطبيق سطح المكتب.",
+            "omemo": {
+                "label": "OMEMO",
+                "description": "تشفير الرسائل الفردية باستخدام OMEMO 2، المتوافق مع عملاء OMEMO الآخرين. لسطح المكتب فقط.",
+                "desktopOnly": "متوفر فقط في تطبيق سطح المكتب."
+            }
         },
         "mediaAutoDownload": "تنزيل الوسائط تلقائيًا",
         "mediaAutoDownloadDescription": "اختر متى يتم تحميل الصور ومقاطع الفيديو والملفات تلقائيًا.",

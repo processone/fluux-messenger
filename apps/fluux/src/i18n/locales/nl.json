@@ -546,7 +546,8 @@
             "tooltip": {
                 "header": "Versleuteld",
                 "protocol": {
-                    "openpgp": "OpenPGP"
+                    "openpgp": "OpenPGP",
+                    "omemo:2": "OMEMO"
                 },
                 "trust": {
                     "verified": "geverifieerd",
@@ -875,7 +876,12 @@
             "unlockPassphraseMismatch": "Wachtwoordzinnen komen niet overeen",
             "unlockPassphraseTooShort": "De wachtwoordzin moet minimaal 8 tekens bevatten",
             "lockedBannerBody": "Je versleutelingssleutel is vergrendeld. Voer je wachtwoordzin in om versleuteling voor deze sessie te activeren.",
-            "rotateNotSupportedWeb": "Sleutelrotatie is niet beschikbaar op het web. Gebruik de desktopapp."
+            "rotateNotSupportedWeb": "Sleutelrotatie is niet beschikbaar op het web. Gebruik de desktopapp.",
+            "omemo": {
+                "label": "OMEMO",
+                "description": "Versleutel 1-op-1-berichten met OMEMO 2, compatibel met andere OMEMO-clients. Alleen voor desktop.",
+                "desktopOnly": "Alleen beschikbaar in de desktop-app."
+            }
         },
         "mediaAutoDownload": "Media automatisch downloaden",
         "mediaAutoDownloadDescription": "Kies wanneer afbeeldingen, video's en bestanden automatisch worden geladen.",

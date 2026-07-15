@@ -549,7 +549,8 @@
             "tooltip": {
                 "header": "Xifrat",
                 "protocol": {
-                    "openpgp": "OpenPGP"
+                    "openpgp": "OpenPGP",
+                    "omemo:2": "OMEMO"
                 },
                 "trust": {
                     "verified": "verificat",
@@ -878,7 +879,12 @@
             "unlockPassphraseMismatch": "Les contrasenyes no coincideixen",
             "unlockPassphraseTooShort": "La contrasenya ha de tenir almenys 8 caràcters",
             "lockedBannerBody": "La teva clau de xifratge està bloquejada. Introdueix la contrasenya per activar el xifratge per a aquesta sessió.",
-            "rotateNotSupportedWeb": "La rotació de claus no està disponible al web. Utilitza l'aplicació d'escriptori."
+            "rotateNotSupportedWeb": "La rotació de claus no està disponible al web. Utilitza l'aplicació d'escriptori.",
+            "omemo": {
+                "label": "OMEMO",
+                "description": "Xifra els missatges 1 a 1 amb OMEMO 2, compatible amb altres clients OMEMO. Només d'escriptori.",
+                "desktopOnly": "Disponible només a l'aplicació d'escriptori."
+            }
         },
         "mediaAutoDownload": "Descàrrega automàtica de multimèdia",
         "mediaAutoDownloadDescription": "Trieu quan es carreguen automàticament les imatges, els vídeos i els fitxers.",

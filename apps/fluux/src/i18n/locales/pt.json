@@ -549,7 +549,8 @@
             "tooltip": {
                 "header": "Cifrado",
                 "protocol": {
-                    "openpgp": "OpenPGP"
+                    "openpgp": "OpenPGP",
+                    "omemo:2": "OMEMO"
                 },
                 "trust": {
                     "verified": "verificado",
@@ -878,7 +879,12 @@
             "unlockPassphraseMismatch": "As frases-passe não coincidem",
             "unlockPassphraseTooShort": "A frase-passe deve ter pelo menos 8 caracteres",
             "lockedBannerBody": "A sua chave de criptografia está bloqueada. Insira a frase-passe para ativar a criptografia para esta sessão.",
-            "rotateNotSupportedWeb": "A rotação de chaves não está disponível na web. Use a aplicação de secretária."
+            "rotateNotSupportedWeb": "A rotação de chaves não está disponível na web. Use a aplicação de secretária.",
+            "omemo": {
+                "label": "OMEMO",
+                "description": "Cifra as mensagens individuais com OMEMO 2, compatível com outros clientes OMEMO. Apenas no computador.",
+                "desktopOnly": "Disponível apenas na aplicação de computador."
+            }
         },
         "mediaAutoDownload": "Transferência automática de ficheiros multimédia",
         "mediaAutoDownloadDescription": "Escolha quando as imagens, vídeos e ficheiros são carregados automaticamente.",

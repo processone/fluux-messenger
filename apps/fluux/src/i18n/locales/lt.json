@@ -548,7 +548,8 @@
             "tooltip": {
                 "header": "Šifruota",
                 "protocol": {
-                    "openpgp": "OpenPGP"
+                    "openpgp": "OpenPGP",
+                    "omemo:2": "OMEMO"
                 },
                 "trust": {
                     "verified": "patvirtinta",
@@ -877,7 +878,12 @@
             "unlockPassphraseMismatch": "Slaptažodžiai nesutampa",
             "unlockPassphraseTooShort": "Slaptažodį turi sudaryti ne mažiau kaip 8 simboliai",
             "lockedBannerBody": "Šifravimo raktas užrakintas. Įveskite slaptažodį, kad įjungtumėte šifravimą šiai sesijai.",
-            "rotateNotSupportedWeb": "Rakto rotacija internete negalima. Naudokite darbalaukio programą."
+            "rotateNotSupportedWeb": "Rakto rotacija internete negalima. Naudokite darbalaukio programą.",
+            "omemo": {
+                "label": "OMEMO",
+                "description": "Šifruokite asmenines žinutes naudodami OMEMO 2, suderinamą su kitais OMEMO klientais. Tik darbalaukiui.",
+                "desktopOnly": "Prieinama tik darbalaukio programoje."
+            }
         },
         "mediaAutoDownload": "Automatinis medijos atsisiuntimas",
         "mediaAutoDownloadDescription": "Pasirinkite, kada nuotraukos, vaizdo įrašai ir failai įkeliami automatiškai.",

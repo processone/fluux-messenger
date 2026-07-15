@@ -857,6 +857,7 @@ function formatSecurityTooltip(
 ): string {
   const header = t('chat.encryption.tooltip.header')
   const protocol = t(`chat.encryption.tooltip.protocol.${ctx.protocolId}`, {
+    nsSeparator: false,
     defaultValue: ctx.protocolId,
   })
   const trust = t(`chat.encryption.tooltip.trust.${ctx.trust}`)

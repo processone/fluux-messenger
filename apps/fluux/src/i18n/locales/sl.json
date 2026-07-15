@@ -550,7 +550,8 @@
             "tooltip": {
                 "header": "Šifrirano",
                 "protocol": {
-                    "openpgp": "OpenPGP"
+                    "openpgp": "OpenPGP",
+                    "omemo:2": "OMEMO"
                 },
                 "trust": {
                     "verified": "preverjeno",
@@ -879,7 +880,12 @@
             "unlockPassphraseMismatch": "Gesli se ne ujemata",
             "unlockPassphraseTooShort": "Geslo mora imeti vsaj 8 znakov",
             "lockedBannerBody": "Šifrirni ključ je zaklenjen. Vnesite geslo za aktivacijo šifriranja za to sejo.",
-            "rotateNotSupportedWeb": "Rotacija ključev v spletu ni na voljo. Uporabite namizno aplikacijo."
+            "rotateNotSupportedWeb": "Rotacija ključev v spletu ni na voljo. Uporabite namizno aplikacijo.",
+            "omemo": {
+                "label": "OMEMO",
+                "description": "Šifrirajte zasebna sporočila z OMEMO 2, združljivim z drugimi odjemalci OMEMO. Samo za namizje.",
+                "desktopOnly": "Na voljo samo v namizni aplikaciji."
+            }
         },
         "mediaAutoDownload": "Samodejni prenos predstavnosti",
         "mediaAutoDownloadDescription": "Izberite, kdaj se slike, videi in datoteke naložijo samodejno.",

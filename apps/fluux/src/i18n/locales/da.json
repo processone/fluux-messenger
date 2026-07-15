@@ -546,7 +546,8 @@
             "tooltip": {
                 "header": "Krypteret",
                 "protocol": {
-                    "openpgp": "OpenPGP"
+                    "openpgp": "OpenPGP",
+                    "omemo:2": "OMEMO"
                 },
                 "trust": {
                     "verified": "verificeret",
@@ -875,7 +876,12 @@
             "unlockPassphraseMismatch": "Adgangskoderne stemmer ikke overens",
             "unlockPassphraseTooShort": "Adgangskoden skal være mindst 8 tegn",
             "lockedBannerBody": "Din krypteringsnøgle er låst. Indtast din adgangskode for at aktivere kryptering for denne session.",
-            "rotateNotSupportedWeb": "Nøglerotation er ikke tilgængelig på webbet. Brug desktopappen."
+            "rotateNotSupportedWeb": "Nøglerotation er ikke tilgængelig på webbet. Brug desktopappen.",
+            "omemo": {
+                "label": "OMEMO",
+                "description": "Krypter 1:1-beskeder med OMEMO 2, kompatibel med andre OMEMO-klienter. Kun til computer.",
+                "desktopOnly": "Kun tilgængelig i skrivebordsappen."
+            }
         },
         "mediaAutoDownload": "Automatisk download af medier",
         "mediaAutoDownloadDescription": "Vælg hvornår billeder, videoer og filer indlæses automatisk.",

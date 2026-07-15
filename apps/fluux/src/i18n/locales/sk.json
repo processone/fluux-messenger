@@ -549,7 +549,8 @@
             "tooltip": {
                 "header": "Šifrované",
                 "protocol": {
-                    "openpgp": "OpenPGP"
+                    "openpgp": "OpenPGP",
+                    "omemo:2": "OMEMO"
                 },
                 "trust": {
                     "verified": "overené",
@@ -878,7 +879,12 @@
             "unlockPassphraseMismatch": "Heslá sa nezhodujú",
             "unlockPassphraseTooShort": "Heslo musí mať aspoň 8 znakov",
             "lockedBannerBody": "Šifrovací kľúč je uzamknutý. Zadaj heslo na aktiváciu šifrovania pre toto sedenie.",
-            "rotateNotSupportedWeb": "Rotácia kľúča nie je na webe k dispozícii. Použi desktopovú aplikáciu."
+            "rotateNotSupportedWeb": "Rotácia kľúča nie je na webe k dispozícii. Použi desktopovú aplikáciu.",
+            "omemo": {
+                "label": "OMEMO",
+                "description": "Šifrujte súkromné správy pomocou OMEMO 2, kompatibilného s inými klientmi OMEMO. Len pre počítač.",
+                "desktopOnly": "Dostupné iba v desktopovej aplikácii."
+            }
         },
         "mediaAutoDownload": "Automatické sťahovanie médií",
         "mediaAutoDownloadDescription": "Vyberte, kedy sa obrázky, videá a súbory načítavajú automaticky.",

@@ -548,7 +548,8 @@
             "tooltip": {
                 "header": "Chiffré",
                 "protocol": {
-                    "openpgp": "OpenPGP"
+                    "openpgp": "OpenPGP",
+                    "omemo:2": "OMEMO"
                 },
                 "trust": {
                     "verified": "vérifié",
@@ -906,7 +907,12 @@
             "unlockPassphraseMismatch": "Les phrases de passe ne correspondent pas",
             "unlockPassphraseTooShort": "La phrase de passe doit comporter au moins 8 caractères",
             "lockedBannerBody": "Votre clé de chiffrement est verrouillée. Saisissez votre phrase de passe pour activer le chiffrement pour cette session.",
-            "rotateNotSupportedWeb": "La rotation de clé n'est pas disponible sur le web. Utilisez l'application de bureau."
+            "rotateNotSupportedWeb": "La rotation de clé n'est pas disponible sur le web. Utilisez l'application de bureau.",
+            "omemo": {
+                "label": "OMEMO",
+                "description": "Chiffrez les messages en tête-à-tête avec OMEMO 2, compatible avec les autres clients OMEMO. Uniquement sur ordinateur.",
+                "desktopOnly": "Disponible uniquement dans l'application de bureau."
+            }
         },
         "mediaAutoDownload": "Téléchargement automatique des médias",
         "mediaAutoDownloadDescription": "Choisissez quand les images, vidéos et fichiers se chargent automatiquement.",

@@ -549,7 +549,8 @@
             "tooltip": {
                 "header": "Cifrato",
                 "protocol": {
-                    "openpgp": "OpenPGP"
+                    "openpgp": "OpenPGP",
+                    "omemo:2": "OMEMO"
                 },
                 "trust": {
                     "verified": "verificato",
@@ -878,7 +879,12 @@
             "unlockPassphraseMismatch": "Le passphrase non corrispondono",
             "unlockPassphraseTooShort": "La passphrase deve avere almeno 8 caratteri",
             "lockedBannerBody": "La tua chiave di crittografia è bloccata. Inserisci la tua passphrase per attivare la crittografia per questa sessione.",
-            "rotateNotSupportedWeb": "La rotazione delle chiavi non è disponibile sul web. Usa l'app desktop."
+            "rotateNotSupportedWeb": "La rotazione delle chiavi non è disponibile sul web. Usa l'app desktop.",
+            "omemo": {
+                "label": "OMEMO",
+                "description": "Cifra i messaggi 1 a 1 con OMEMO 2, compatibile con altri client OMEMO. Solo desktop.",
+                "desktopOnly": "Disponibile solo nell'app desktop."
+            }
         },
         "mediaAutoDownload": "Download automatico dei media",
         "mediaAutoDownloadDescription": "Scegli quando immagini, video e file vengono caricati automaticamente.",

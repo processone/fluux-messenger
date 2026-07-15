@@ -549,7 +549,8 @@
             "tooltip": {
                 "header": "Criptithe",
                 "protocol": {
-                    "openpgp": "OpenPGP"
+                    "openpgp": "OpenPGP",
+                    "omemo:2": "OMEMO"
                 },
                 "trust": {
                     "verified": "fíoraithe",
@@ -878,7 +879,12 @@
             "unlockPassphraseMismatch": "Ní hionann na pasfhrásaí",
             "unlockPassphraseTooShort": "Caithfidh an pasfhrása a bheith ar a laghad 8 gcarachtar",
             "lockedBannerBody": "Tá d'eochair criptiúcháin glasáilte. Cuir isteach do phasfhrása chun criptiú a chumasú don seisiún seo.",
-            "rotateNotSupportedWeb": "Níl rothlú eochrach ar fáil ar an ngréasán. Úsáid an aip deisce."
+            "rotateNotSupportedWeb": "Níl rothlú eochrach ar fáil ar an ngréasán. Úsáid an aip deisce.",
+            "omemo": {
+                "label": "OMEMO",
+                "description": "Criptigh teachtaireachtaí 1:1 le OMEMO 2, comhoiriúnach le cliaint OMEMO eile. Ríomhaire deisce amháin.",
+                "desktopOnly": "Ar fáil san aip deisce amháin."
+            }
         },
         "mediaAutoDownload": "Íoslódáil uathoibríoch meán",
         "mediaAutoDownloadDescription": "Roghnaigh cathain a luchtaítear íomhánna, físeáin agus comhaid go huathoibríoch.",

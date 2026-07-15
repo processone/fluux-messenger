@@ -546,7 +546,8 @@
             "tooltip": {
                 "header": "Dulkóðað",
                 "protocol": {
-                    "openpgp": "OpenPGP"
+                    "openpgp": "OpenPGP",
+                    "omemo:2": "OMEMO"
                 },
                 "trust": {
                     "verified": "staðfest",
@@ -875,7 +876,12 @@
             "unlockPassphraseMismatch": "Aðgangsorðin stemma ekki",
             "unlockPassphraseTooShort": "Aðgangsorðið verður að vera að minnsta kosti 8 stafir",
             "lockedBannerBody": "Dulkóðunarlykillinn þinn er læstur. Sláðu inn aðgangsorð til að virkja dulkóðun fyrir þessa lotu.",
-            "rotateNotSupportedWeb": "Lyklaskipti eru ekki tiltæk á vefnum. Notaðu skjáborðsforritið."
+            "rotateNotSupportedWeb": "Lyklaskipti eru ekki tiltæk á vefnum. Notaðu skjáborðsforritið.",
+            "omemo": {
+                "label": "OMEMO",
+                "description": "Dulkóðaðu einkaskilaboð með OMEMO 2, samhæft við aðra OMEMO biðlara. Aðeins fyrir tölvu.",
+                "desktopOnly": "Aðeins í boði í tölvuforritinu."
+            }
         },
         "mediaAutoDownload": "Sjálfvirk niðurhal miðla",
         "mediaAutoDownloadDescription": "Veldu hvenær myndir, myndbönd og skrár hlaðast inn sjálfvirkt.",
