@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useConnectionStatus, useXMPPContext } from '@fluux/sdk'
+import { useConnectionStatus, useXMPPContext, type TrustState } from '@fluux/sdk'
 import { useEncryptionSettingsStore } from '@/stores/encryptionSettingsStore'
+import { useProtocolSwitchStore } from '../stores/protocolSwitchStore'
 import { useVerifiedPeerKeysStore } from '@/stores/verifiedPeerKeysStore'
 import { useKeyChangeAlertsStore } from '@/stores/keyChangeAlertsStore'
 import { useConversationPlaintextOverrideStore } from '@/stores/conversationPlaintextOverrideStore'
@@ -68,6 +69,21 @@ export type ConversationEncryptionState =
        * surface the unverified state in the UI.
        */
       trust: 'verified' | 'unverified' | 'tofu-new'
+      /**
+       * Which E2EE protocol was selected for this conversation. Absent
+       * means OpenPGP (the historical default) so existing consumers and
+       * assertions that don't know about this field keep working
+       * unchanged. Only the OMEMO branch sets it to `'omemo:2'`.
+       */
+      protocolId?: 'openpgp' | 'omemo:2'
+      /**
+       * Aggregate OMEMO trust for the peer, only populated when
+       * `protocolId === 'omemo:2'`. `trust` is the OpenPGP-shaped
+       * verified/unverified/tofu-new projection the chip already renders;
+       * `omemoTrust` preserves the richer OMEMO trust vocabulary for
+       * OMEMO-specific UI.
+       */
+      omemoTrust?: 'verified' | 'tofu' | 'untrusted' | 'unknown'
     }
   | { kind: 'blocked'; pinnedFingerprint: string; advertisedFingerprint: string }
   | { kind: 'unsupported' }
@@ -83,6 +99,31 @@ export type ConversationEncryptionState =
 interface OpenpgpPluginShape {
   getPeerFingerprint?: (peer: string) => string | null
   probePeer?: (peer: string) => Promise<{ supported: boolean; fingerprint?: string }>
+}
+
+/**
+ * Minimal structural type for the OMEMO plugin surface this hook reads
+ * off the `selectStrategy` result. Mirrors `OpenpgpPluginShape` in spirit:
+ * we only depend on the two members we touch so the SDK remains the source
+ * of truth for the full plugin contract.
+ */
+interface SelectedPluginShape {
+  descriptor: { id: string }
+  getPeerTrust: (peer: string) => Promise<TrustState>
+}
+
+/**
+ * Project the OMEMO `TrustState` onto the OpenPGP-shaped `trust` union the
+ * chip already understands, so both protocols drive the same palette:
+ *
+ *   - `verified`  → `verified`   (green)
+ *   - `tofu`      → `tofu-new`   (first-contact amber)
+ *   - everything else (`untrusted`, `unknown`, `introduced`) → `unverified`
+ */
+function mapOmemoTrust(t: TrustState): 'verified' | 'unverified' | 'tofu-new' {
+  if (t === 'verified') return 'verified'
+  if (t === 'tofu') return 'tofu-new'
+  return 'unverified'
 }
 
 /**
@@ -107,6 +148,7 @@ export function useConversationEncryptionState(
   const { status } = useConnectionStatus()
   const { client } = useXMPPContext()
   const openpgpEnabled = useEncryptionSettingsStore((s) => s.openpgpEnabled)
+  const omemoEnabled = useEncryptionSettingsStore((s) => s.omemoEnabled)
   // Changes when a plugin finishes registering. Makes the probe effect re-run
   // after async plugin init so we never stay stuck at `disabled`.
   const pluginRegisteredAt = useEncryptionSettingsStore((s) => s.pluginRegisteredAt)
@@ -176,9 +218,20 @@ export function useConversationEncryptionState(
     | { kind: 'unsupported' }
   const [base, setBase] = useState<BaseEncryptionState>({ kind: 'disabled' })
 
+  // OMEMO selection result. `null` means "OMEMO is not the selected
+  // protocol for this peer" — the hook then falls through to the OpenPGP
+  // base/memo below, so the entire OpenPGP path is untouched. Only when a
+  // non-null value is set (an `omemo:2` strategy was selected) does the
+  // return short-circuit to it.
+  const [omemoResult, setOmemoResult] = useState<ConversationEncryptionState | null>(null)
+
   useEffect(() => {
-    // Short-circuit all the "not applicable" cases first.
-    if (!openpgpEnabled || !online || conversationType !== 'chat' || !peerJid) {
+    // Short-circuit all the "not applicable" cases first. Note we bail
+    // only when BOTH protocols are off: with just OMEMO enabled the
+    // OpenPGP base must still resolve to `disabled` here (so the OMEMO
+    // effect's result wins via the short-circuit in the return), while
+    // still leaving room for OpenPGP to drive the state when it's on.
+    if ((!openpgpEnabled && !omemoEnabled) || !online || conversationType !== 'chat' || !peerJid) {
       setBase({ kind: 'disabled' })
       return
     }
@@ -252,7 +305,65 @@ export function useConversationEncryptionState(
     return () => {
       cancelled = true
     }
-  }, [peerJid, conversationType, openpgpEnabled, online, e2eeManager, isForcedPlaintext, verifiedFingerprint, pinnedFp, pluginRegisteredAt])
+  }, [peerJid, conversationType, openpgpEnabled, omemoEnabled, online, e2eeManager, isForcedPlaintext, verifiedFingerprint, pinnedFp, pluginRegisteredAt])
+
+  // ---------------------------------------------------------------------------
+  // OMEMO selection (isolated from the OpenPGP effect above).
+  //
+  // Asks the E2EEManager which protocol wins for this peer. When OMEMO is
+  // the selected strategy, we surface the peer's aggregate OMEMO trust as
+  // an `encrypted` state; otherwise we set `omemoResult` to null and let
+  // the OpenPGP base/memo drive the output unchanged.
+  // ---------------------------------------------------------------------------
+  useEffect(() => {
+    if (!omemoEnabled || !online || conversationType !== 'chat' || !peerJid || !e2eeManager) {
+      setOmemoResult(null)
+      return
+    }
+    // The existing OpenPGP test mock has no `selectStrategy`; treat its
+    // absence as "OMEMO not available" so this effect is a strict no-op
+    // there and every current test keeps its behavior.
+    if (typeof e2eeManager.selectStrategy !== 'function') {
+      setOmemoResult(null)
+      return
+    }
+
+    let cancelled = false
+    void (async () => {
+      try {
+        const selected = (await e2eeManager.selectStrategy({
+          kind: 'direct',
+          peer: peerJid,
+        })) as SelectedPluginShape | null
+        if (cancelled) return
+        const id = selected?.descriptor.id ?? 'none'
+        // Feed the openpgp→omemo:2 switch notice regardless of outcome.
+        useProtocolSwitchStore.getState().recordSelected(peerJid, id)
+        if (id === 'omemo:2' && selected) {
+          const t = await selected.getPeerTrust(peerJid)
+          if (cancelled) return
+          setOmemoResult({
+            kind: 'encrypted',
+            protocolId: 'omemo:2',
+            fingerprint: '',
+            trust: mapOmemoTrust(t),
+            omemoTrust: t === 'introduced' ? 'unknown' : t,
+          })
+        } else {
+          // OpenPGP / none / null selected — defer to the OpenPGP path.
+          setOmemoResult(null)
+        }
+      } catch {
+        // Selection failed (network, plugin glitch). Don't invent an
+        // OMEMO state; let the OpenPGP path report its own status.
+        if (!cancelled) setOmemoResult(null)
+      }
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [peerJid, conversationType, omemoEnabled, online, e2eeManager])
 
   // Merge the verification trust + pin-mismatch alert into the
   // encrypted state. Precedence:
@@ -262,7 +373,7 @@ export function useConversationEncryptionState(
   //      `blocked` state regardless of the underlying cached cert.
   //   2. Otherwise, fall through to the standard verified/unverified
   //      derivation against the cached cert's fingerprint.
-  return useMemo<ConversationEncryptionState>(() => {
+  const memoResult = useMemo<ConversationEncryptionState>(() => {
     // Per-conversation override takes precedence over everything else.
     // The effect already sets base to 'disabled' to skip the probe, but
     // the memo is the single authoritative output — check here so a toggle
@@ -299,4 +410,9 @@ export function useConversationEncryptionState(
       : (peerJid && isTofuNew(peerJid) ? 'tofu-new' : 'unverified')
     return { kind: 'encrypted', fingerprint: base.fingerprint, trust }
   }, [base, peerJid, isForcedPlaintext, verifiedFingerprint, alertCurrentFp, alertPreviousFp, certRejections, webKeyLocked])
+
+  // When OMEMO is the selected protocol for this peer, its result wins.
+  // Otherwise `omemoResult` is null and the OpenPGP-driven memo is used
+  // exactly as before — the OpenPGP path is byte-for-byte unchanged.
+  return omemoResult ?? memoResult
 }
