@@ -41,6 +41,7 @@ import { useEventsSoundNotification } from '@/hooks/useEventsSoundNotification'
 import { useEventsDesktopNotifications } from '@/hooks/useEventsDesktopNotifications'
 import { useSDKErrorToasts } from '@/hooks/useSDKErrorToasts'
 import { useReactionNotifications } from '@/hooks/useReactionNotifications'
+import { useEasterEggNotifications } from '@/hooks/useEasterEggNotifications'
 import { useFocusZones, useViewNavigation, isMobileWeb, isSmallScreen, useWindowVisibility, useRouteSync, type FocusZoneRefs } from '@/hooks'
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
 import { useDeepLink } from '@/hooks/useDeepLink'
@@ -97,6 +98,9 @@ function GlobalEffects() {
 
   // Notify received reactions via toast (inactive conversation) or in-flow mention (active, off-screen)
   useReactionNotifications()
+
+  // Notify received easter eggs via toast (inactive conversation); active playback handled by the store binding
+  useEasterEggNotifications()
 
   // Handle XMPP URI deep links (xmpp:user@example.com?message)
   useDeepLink()
