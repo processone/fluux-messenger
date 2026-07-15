@@ -1624,9 +1624,7 @@ export const chatStore = createStore<ChatState>()(
 
           // Newest fetched message timestamp marks the gap edge for an incomplete
           // forward catch-up (parity with rooms).
-          const newestFetchedTimestamp = direction === 'forward' && mamMessages.length > 0
-            ? Math.max(...mamMessages.map(m => m.timestamp?.getTime() ?? 0))
-            : undefined
+          const newestFetchedTimestamp = mamState.computeNewestFetchedTimestamp(mamMessages, direction)
 
           // Update MAM query state with pagination cursor using the two-marker approach
           // This must always be updated to track query completion and cursors

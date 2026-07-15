@@ -2525,9 +2525,7 @@ export const roomStore = createStore<RoomState>()(
 
       // Compute the newest fetched timestamp for gap marker positioning.
       // When a forward catch-up ends incomplete, this marks where the gap starts.
-      const newestFetchedTimestamp = direction === 'forward' && mamMessages.length > 0
-        ? Math.max(...mamMessages.map(m => m.timestamp?.getTime() ?? 0))
-        : undefined
+      const newestFetchedTimestamp = mamState.computeNewestFetchedTimestamp(mamMessages, direction)
 
       // Update MAM query state using the two-marker approach
       // This must always be updated to track query completion and cursors
