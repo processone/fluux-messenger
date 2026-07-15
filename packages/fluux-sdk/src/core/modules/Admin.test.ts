@@ -1042,6 +1042,39 @@ describe('XMPPClient Admin', () => {
       expect(result.rooms).toHaveLength(1)
     })
 
+    it('should deduplicate rooms that share the same JID (issue #1010)', async () => {
+      await connectClient()
+
+      // A MUC service may emit the same room more than once in a single
+      // disco#items response (or repeat a boundary item across RSM pages).
+      const mockQuery = createAdminMockElement('query', {
+        xmlns: 'http://jabber.org/protocol/disco#items',
+      }, [
+        { name: 'item', attrs: { jid: 'room1@conference.example.com', name: 'Room 1' }, getChildren: () => [] },
+        { name: 'item', attrs: { jid: 'room1@conference.example.com', name: 'Room 1' }, getChildren: () => [] },
+        { name: 'item', attrs: { jid: 'room2@conference.example.com', name: 'Room 2' }, getChildren: () => [] },
+      ])
+
+      const mockResponse = {
+        getChild: (name: string, xmlns?: string) => {
+          if (name === 'query' && xmlns === 'http://jabber.org/protocol/disco#items') {
+            return mockQuery
+          }
+          return undefined
+        },
+      }
+
+      mockXmppClientInstance.iqCaller.request.mockResolvedValue(mockResponse)
+
+      const result = await xmppClient.admin.fetchRoomList('custom.muc.server.com')
+
+      expect(result.rooms).toHaveLength(2)
+      expect(result.rooms.map((r) => r.jid)).toEqual([
+        'room1@conference.example.com',
+        'room2@conference.example.com',
+      ])
+    })
+
     it('should throw error when not connected', async () => {
       await expect(xmppClient.admin.fetchRoomList('muc.example.com')).rejects.toThrow('Not connected')
     })

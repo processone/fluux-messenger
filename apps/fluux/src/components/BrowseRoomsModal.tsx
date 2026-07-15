@@ -19,6 +19,21 @@ import { getRoomJoinErrorMessage } from '@/utils/roomJoinError'
 
 const PAGE_SIZE = 50
 
+/**
+ * Whether more pages are available. The authoritative signal is the server's
+ * own boundary: a page shorter than the requested max means the RSM walk
+ * reached the end. We deliberately do NOT compare against the RSM `count` —
+ * ejabberd reports it as the total online-room count, which drifts as rooms
+ * churn and can exceed the number of listable rooms once empty rooms are
+ * filtered out at scale, so it would stop us early or loop us forever (#1010).
+ */
+function hasMorePages(result: {
+  rooms: unknown[]
+  pagination: { last?: string }
+}): boolean {
+  return result.rooms.length >= PAGE_SIZE && !!result.pagination.last
+}
+
 interface BrowseRoomsModalProps {
   onClose: () => void
 }
@@ -111,12 +126,7 @@ export function BrowseRoomsModal({ onClose }: BrowseRoomsModalProps) {
         setRooms(result.rooms)
         setPaginationCursor(result.pagination.last)
         setTotalCount(result.pagination.count)
-        // Determine if there are more pages
-        if (result.pagination.count !== undefined) {
-          setHasMore(result.rooms.length < result.pagination.count)
-        } else {
-          setHasMore(result.rooms.length >= PAGE_SIZE && !!result.pagination.last)
-        }
+        setHasMore(hasMorePages(result))
       } catch (err) {
         setError(err instanceof Error ? err.message : t('rooms.failedToLoadRooms'))
         setRooms([])
@@ -143,20 +153,21 @@ export function BrowseRoomsModal({ onClose }: BrowseRoomsModalProps) {
       .then((result) => {
         if (result.rooms.length === 0) {
           setHasMore(false)
-        } else {
-          setRooms((prev) => {
-            const updated = [...prev, ...result.rooms]
-            // Compute hasMore from the actual new total (avoids stale closure)
-            if (result.pagination.count !== undefined) {
-              setHasMore(updated.length < result.pagination.count)
-              setTotalCount(result.pagination.count)
-            } else {
-              setHasMore(result.rooms.length >= PAGE_SIZE && !!result.pagination.last)
-            }
-            return updated
-          })
-          setPaginationCursor(result.pagination.last)
+          return
         }
+        setRooms((prev) => {
+          // Deduplicate by JID: a boundary room can repeat across RSM pages
+          // (issue #1010). Append only rooms we haven't already listed.
+          const seen = new Set(prev.map((r) => r.jid))
+          const fresh = result.rooms.filter((r) => !seen.has(r.jid))
+          return [...prev, ...fresh]
+        })
+        if (result.pagination.count !== undefined) {
+          setTotalCount(result.pagination.count)
+        }
+        // Stop signal comes from the server boundary (short page), not `count`.
+        setHasMore(hasMorePages(result))
+        setPaginationCursor(result.pagination.last)
       })
       .catch((err: unknown) => {
         setError(err instanceof Error ? err.message : t('rooms.failedToLoadRooms'))
@@ -479,7 +490,11 @@ export function BrowseRoomsModal({ onClose }: BrowseRoomsModalProps) {
         <div className="px-4 py-3 border-t border-fluux-hover flex-shrink-0">
           <p className="text-xs text-fluux-muted">
             {t('rooms.browseRoomsHint', { count: rooms.length })}
-            {totalCount !== undefined && totalCount > rooms.length && ` / ${totalCount}`}
+            {/* Only a progress hint while more pages remain. Once the server's
+                boundary is reached (hasMore false), the count is dropped: the
+                RSM `count` can exceed the listable rooms (empty rooms filtered
+                out at scale), so keeping "/ N" would look like a stalled load. */}
+            {hasMore && totalCount !== undefined && totalCount > rooms.length && ` / ${totalCount}`}
           </p>
         </div>
     </ModalShell>
