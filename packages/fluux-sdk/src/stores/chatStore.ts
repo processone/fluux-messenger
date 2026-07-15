@@ -185,7 +185,7 @@ interface ChatState {
   // Typing indicators: conversationId -> Set of JIDs currently typing (ephemeral, not persisted)
   typingStates: Map<string, Set<string>>
   // Easter egg animation state (ephemeral, not persisted)
-  activeAnimation: { conversationId: string; animation: string } | null
+  activeAnimation: { conversationId: string; animation: string; senderName?: string } | null
   // Message drafts per conversation (persisted to localStorage)
   drafts: Map<string, string>
   // XEP-0313: MAM query state per conversation (ephemeral, not persisted)
@@ -280,7 +280,7 @@ interface ChatState {
    * forward-fills its offline gap instead of a `before:''` fetch-latest.
    */
   getConversationLastTimestamp: (conversationId: string) => number | undefined
-  triggerAnimation: (conversationId: string, animation: string) => void
+  triggerAnimation: (conversationId: string, animation: string, senderName?: string) => void
   clearAnimation: () => void
   // Draft management
   setDraft: (conversationId: string, text: string) => void
@@ -1555,8 +1555,8 @@ export const chatStore = createStore<ChatState>()(
         })
       },
 
-      triggerAnimation: (conversationId, animation) => {
-        set({ activeAnimation: { conversationId, animation } })
+      triggerAnimation: (conversationId, animation, senderName) => {
+        set({ activeAnimation: { conversationId, animation, senderName } })
       },
 
       clearAnimation: () => {

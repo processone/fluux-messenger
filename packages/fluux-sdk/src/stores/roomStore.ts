@@ -466,7 +466,7 @@ export interface RoomState {
   // flashing the "nothing selected" empty state on tab switch.
   activationPending: boolean
   // Easter egg animation state (ephemeral)
-  activeAnimation: { roomJid: string; animation: string } | null
+  activeAnimation: { roomJid: string; animation: string; senderName?: string } | null
   // Message drafts per room (persisted to localStorage separately)
   drafts: Map<string, string>
   // Poll state per room (persisted to localStorage separately)
@@ -571,7 +571,7 @@ export interface RoomState {
   setNotifyAll: (roomJid: string, notifyAll: boolean, persistent?: boolean) => void
 
   // Easter egg animations
-  triggerAnimation: (roomJid: string, animation: string) => void
+  triggerAnimation: (roomJid: string, animation: string, senderName?: string) => void
   clearAnimation: () => void
 
   // Draft management
@@ -2084,8 +2084,8 @@ export const roomStore = createStore<RoomState>()(
   },
 
   // Easter egg animations
-  triggerAnimation: (roomJid, animation) => {
-    set({ activeAnimation: { roomJid, animation } })
+  triggerAnimation: (roomJid, animation, senderName) => {
+    set({ activeAnimation: { roomJid, animation, senderName } })
   },
 
   clearAnimation: () => {

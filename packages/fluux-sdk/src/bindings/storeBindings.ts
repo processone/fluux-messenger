@@ -31,6 +31,7 @@ import type {
 import { isMessageFromIgnoredUser, isReplyToIgnoredUser, ignoreStore as ignoreStoreInstance } from '../stores'
 import { findLastNonIgnoredMessage } from '../stores/shared/lastMessageUtils'
 import { isMarkerDebugEnabled, markerDebugLog } from '../utils/markerDebug'
+import { getBareJid, getLocalPart } from '../core/jid'
 
 /**
  * Store references for binding SDK events.
@@ -217,12 +218,14 @@ export function createStoreBindings(
     stores.chat.updateMessage(conversationId, messageId, { deliveryError: error })
   })
 
-  on('chat:animation', ({ conversationId, animation }) => {
+  on('chat:animation', ({ conversationId, animation, senderJid }) => {
     const stores = getStores()
     // Only auto-play in the active conversation; inactive eggs are surfaced by
     // useEasterEggNotifications (toast + pending-egg store) and played on open.
     if (stores.chat.activeConversationId === conversationId) {
-      stores.chat.triggerAnimation(conversationId, animation)
+      // Name the sender on the overlay, but not for our own outgoing egg.
+      const isOwn = getBareJid(senderJid) === getBareJid(stores.connection.jid ?? '')
+      stores.chat.triggerAnimation(conversationId, animation, isOwn ? undefined : getLocalPart(senderJid))
     }
   })
 
@@ -410,10 +413,14 @@ export function createStoreBindings(
     stores.room.removeBookmark(roomJid)
   })
 
-  on('room:animation', ({ roomJid, animation }) => {
+  on('room:animation', ({ roomJid, animation, senderNick }) => {
     const stores = getStores()
     if (stores.room.activeRoomJid === roomJid) {
-      stores.room.triggerAnimation(roomJid, animation)
+      // Name the sender on the overlay, but not for our own outgoing egg
+      // (own sends carry an empty nick; a reflection carries our own nick).
+      const ownNick = stores.room.rooms.get(roomJid)?.nickname
+      const isOwn = !senderNick || senderNick === ownNick
+      stores.room.triggerAnimation(roomJid, animation, isOwn ? undefined : senderNick)
     }
   })
 
