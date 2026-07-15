@@ -37,7 +37,7 @@ interface GroupEntry {
   mounted: Map<string, HTMLElement>
 }
 
-class OwnGroupWidthRegistry {
+export class OwnGroupWidthRegistry {
   private groups = new Map<string, GroupEntry>()
   private dirty = new Set<string>()
   private scheduled = false
@@ -156,19 +156,25 @@ export function OwnGroupWidthProvider({ children }: { children: ReactNode }) {
 }
 
 /**
- * Attach the returned callback ref to a grouped own-message's tint box so it
- * shares the group's width. Pass `groupId === undefined` for solo/incoming rows
- * (the box then keeps its CSS `w-fit`); safe with no provider (tests no-op too).
+ * Attach the returned `ref` to a grouped own-message's tint box so it shares the
+ * group's width. Pass `groupId === undefined` for solo/incoming rows (the box
+ * then keeps its CSS `w-fit`); safe with no provider (tests no-op too).
  *
  * `widthSignature` is any value derived from the row's width-affecting content
  * (body, reactions, reply, attachment…). When it changes, the group re-measures;
  * hover/selection churn leaves it untouched, so those re-renders cost nothing.
+ *
+ * The returned `remeasure` re-fits the group on demand — used when a member's
+ * media (image/video/link-preview) finishes loading and only THEN reaches its
+ * final layout width. The initial measure at mount happens before the media
+ * settles, so without this the group stays pinned to the pre-load (too-narrow)
+ * width and the loaded row overflows it. No-op when the row is solo/incoming.
  */
 export function useOwnGroupWidth(
   groupId: string | undefined,
   memberId: string,
   widthSignature: unknown,
-): (node: HTMLDivElement | null) => void {
+): { ref: (node: HTMLDivElement | null) => void; remeasure: () => void } {
   const registry = useContext(OwnGroupWidthContext)
   const nodeRef = useRef<HTMLDivElement | null>(null)
   const active = registry != null && groupId != null
@@ -184,7 +190,13 @@ export function useOwnGroupWidth(
     // re-fits. The transient unregister settles before the microtask flush.
   }, [registry, active, groupId, memberId, widthSignature])
 
-  return useCallback((node: HTMLDivElement | null) => {
+  const ref = useCallback((node: HTMLDivElement | null) => {
     nodeRef.current = node
   }, [])
+
+  const remeasure = useCallback(() => {
+    if (active) registry.markDirty(groupId)
+  }, [registry, active, groupId])
+
+  return { ref, remeasure }
 }
