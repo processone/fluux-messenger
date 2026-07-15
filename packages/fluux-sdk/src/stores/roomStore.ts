@@ -548,6 +548,18 @@ export interface RoomState {
   activateRoom: (roomJid: string | null) => Promise<void>
   getActiveRoomJid: () => string | null
   clearFirstNewMessageId: (roomJid: string) => void
+  /** Recompute the session-only "New messages" divider from the current read pointer
+   *  (lastSeenMessageId) for this room. Forward-only and idempotent: repositions the divider to the
+   *  first unread message after the pointer when one exists. Never clears an existing divider when
+   *  the pointer is at the newest (nothing unread) — that state is kept alive deliberately after a
+   *  FAB jump-to-present so the jump-to-last-read pill can offer a return; clearing is owned by the
+   *  explicit read-through / mark-read paths. No-op when no divider exists.
+   *  Touches nothing but firstNewMessageMarkers.
+   *  Only meaningful for the ACTIVE room: that is where the resident `messages` array lives. On a
+   *  deactivated room `setActiveRoom` empties the roomRuntime/rooms messages, so the recompute sees
+   *  an empty array and would SILENTLY clear the divider — callers must only invoke this for the
+   *  active room. */
+  resyncDividerToReadPointer: (roomJid: string) => void
   updateLastSeenMessageId: (roomJid: string, messageId: string) => void
   /**
    * XEP-0490: apply a remote device's last-displayed marker. Advances
@@ -1740,6 +1752,34 @@ export const roomStore = createStore<RoomState>()(
       if (!state.firstNewMessageMarkers.has(roomJid)) return state
       const newMarkers = new Map(state.firstNewMessageMarkers)
       newMarkers.delete(roomJid)
+      return { firstNewMessageMarkers: newMarkers }
+    })
+  },
+
+  resyncDividerToReadPointer: (roomJid) => {
+    set((state) => {
+      if (!state.firstNewMessageMarkers.has(roomJid)) return state
+      const meta = state.roomMeta.get(roomJid)
+      const existing = state.rooms.get(roomJid)
+      if (!meta && !existing) return state
+      const runtime = state.roomRuntime.get(roomJid)
+      const messages = runtime?.messages ?? existing?.messages ?? []
+      const lastSeenMessageId = meta?.lastSeenMessageId ?? existing?.lastSeenMessageId
+      const lastReadAt = meta?.lastReadAt ?? existing?.lastReadAt
+
+      const divider = notifState.onActivate(
+        { unreadCount: 0, mentionsCount: 0, lastReadAt, lastSeenMessageId, firstNewMessageId: undefined },
+        messages,
+        { treatDelayedAsNew: true }
+      ).firstNewMessageId
+
+      // Only ever reposition the divider FORWARD to a real unread message. When there is no unread
+      // after the pointer (divider undefined — reader is at the newest), do NOT clear it here: the
+      // divider is deliberately kept alive after a FAB jump-to-present so the jump-to-last-read pill
+      // can offer a return, and the explicit read-through / mark-read paths own clearing.
+      if (!divider || divider === state.firstNewMessageMarkers.get(roomJid)) return state
+      const newMarkers = new Map(state.firstNewMessageMarkers)
+      newMarkers.set(roomJid, divider)
       return { firstNewMessageMarkers: newMarkers }
     })
   },

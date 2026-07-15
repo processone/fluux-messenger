@@ -2000,4 +2000,85 @@ test.describe('Jump-to-last-read pill', () => {
     })
     expect(dividerVisible, 'clicking the pill must return the divider to view').toBe(true)
   })
+
+  // The "New messages" divider follows reading progress: once the reader has read past part of a
+  // new-message block and scrolls back up, the divider snaps FORWARD to the read pointer (first
+  // unread after lastSeenMessageId) — and it must NEVER be cleared by that snap (the read-through /
+  // pill paths own clearing). Setup is store-driven (divider behind an advanced pointer) so the test
+  // is deterministic and does not depend on the stress room's live-message cache-reload behavior; the
+  // observer→pointer and entry-positioning paths are covered by the marker-reentry / pill invariants.
+  // What this exercises for real: the MessageList scroll-up snap effect → resyncDividerToReadPointer.
+  test('divider snaps forward to the read pointer on genuine scroll-up (never cleared)', async ({ page }) => {
+    await loadDemo(page)
+    await navigateToStressRoom(page)
+    await page.waitForTimeout(400)
+
+    // Plant a divider BEHIND an advanced read pointer, and place the pointer JUST BEFORE a verified
+    // incoming (non-outgoing) message so the recompute has a deterministic forward target. This is
+    // the state after the reader has read down past the divider (pointer advanced by the viewport
+    // observer) while the sticky divider has not yet caught up.
+    const setup = await page.evaluate((jid) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const store = (window as any).__roomStore
+      const s = store.getState()
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const msgs = (s.roomRuntime.get(jid)?.messages ?? s.rooms.get(jid)?.messages ?? []) as { id: string; isOutgoing?: boolean }[]
+      // First unread after the pointer must exist and be incoming — find the last incoming message
+      // and put the pointer immediately before it, so resyncDividerToReadPointer lands on it.
+      let targetIdx = -1
+      for (let i = msgs.length - 1; i >= 2; i--) { if (!msgs[i].isOutgoing) { targetIdx = i; break } }
+      if (targetIdx < 2) return { ok: false, len: msgs.length }
+      const pIdx = targetIdx - 1
+      const dIdx = Math.max(0, Math.floor(pIdx * 0.3))
+      const dividerId = msgs[dIdx].id
+      const pointerId = msgs[pIdx].id
+      const expectedTargetId = msgs[targetIdx].id
+      const roomMeta = new Map(s.roomMeta)
+      const meta = roomMeta.get(jid)
+      if (meta) roomMeta.set(jid, { ...meta, lastSeenMessageId: pointerId })
+      const rooms = new Map(s.rooms)
+      const room = rooms.get(jid)
+      if (room) rooms.set(jid, { ...room, lastSeenMessageId: pointerId })
+      const markers = new Map(s.firstNewMessageMarkers)
+      markers.set(jid, dividerId)
+      store.setState({ roomMeta, rooms, firstNewMessageMarkers: markers })
+      return { ok: true, dividerId, pointerId, expectedTargetId, dIdx, pIdx, targetIdx, len: msgs.length }
+    }, STRESS_ROOM_JID)
+    expect(setup.ok, `stress room needs a resident incoming message (len=${setup.len})`).toBe(true)
+    await page.waitForTimeout(200)
+
+    // Genuine (non-programmatic) user scroll-up to near the top: the viewport bottom is now well
+    // above the advanced pointer, so the snap fires and repositions the divider to the read spot.
+    // (The reactive plant above may already snap it in the demo; this scroll guarantees the trigger
+    // path runs. Either way we assert the observable END state: the divider tracks the pointer.)
+    await page.evaluate(() => {
+      const s = document.querySelector('[data-message-list]') as HTMLElement | null
+      if (s) s.scrollTop = 400
+    })
+    await page.waitForTimeout(800)
+
+    const after = await page.evaluate(([jid, dividerId]) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const rs = (window as any).__roomStore.getState()
+      const msgs = rs.roomRuntime.get(jid)?.messages ?? rs.rooms.get(jid)?.messages ?? []
+      const markerId = rs.firstNewMessageMarkers.get(jid) ?? null
+      const s = document.querySelector('[data-message-list]') as HTMLElement | null
+      return {
+        markerId,
+        markerIdx: msgs.findIndex((m: { id: string }) => m.id === markerId),
+        dividerIdx: msgs.findIndex((m: { id: string }) => m.id === dividerId),
+        scrollTop: s ? Math.round(s.scrollTop) : null,
+      }
+    }, [STRESS_ROOM_JID, setup.dividerId] as const)
+
+    console.log('── DIVIDER SNAP ──', JSON.stringify({ setup, after }))
+
+    // The snap moved the divider FORWARD to the first unread after the pointer, and did NOT clear it.
+    expect(after.markerId, 'the scroll-up snap must not clear the divider').not.toBeNull()
+    expect(
+      after.markerId,
+      `divider must snap forward from ${setup.dividerId} to ${setup.expectedTargetId} (stayed at ${after.markerId})`,
+    ).toBe(setup.expectedTargetId)
+    expect(after.markerIdx, 'the divider must snap FORWARD toward the read pointer').toBeGreaterThan(after.dividerIdx)
+  })
 })

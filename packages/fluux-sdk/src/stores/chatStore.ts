@@ -247,6 +247,18 @@ interface ChatState {
    *  picks up the pointer advance via the conversationMeta watch. */
   markReadToNewest: (conversationId: string) => void
   clearFirstNewMessageId: (conversationId: string) => void
+  /** Recompute the session-only "New messages" divider from the current read pointer
+   *  (lastSeenMessageId) for this conversation. Forward-only and idempotent: repositions the
+   *  divider to the first unread message after the pointer when one exists. Never clears an
+   *  existing divider when the pointer is at the newest (nothing unread) — that state is kept
+   *  alive deliberately after a FAB jump-to-present so the jump-to-last-read pill can offer a
+   *  return; clearing is owned by the explicit read-through / mark-read paths.
+   *  No-op when there is no existing divider. Touches nothing but firstNewMessageMarkers.
+   *  Only meaningful for the ACTIVE conversation: that is where the resident `messages` array
+   *  lives. On a deactivated conversation `setActiveConversation` deletes the messages entry, so
+   *  the recompute sees an empty array and would SILENTLY clear the divider — callers must only
+   *  invoke this for the active conversation. */
+  resyncDividerToReadPointer: (conversationId: string) => void
   updateLastSeenMessageId: (conversationId: string, messageId: string) => void
   /**
    * XEP-0490: apply a remote device's last-displayed marker. Advances
@@ -1101,6 +1113,39 @@ export const chatStore = createStore<ChatState>()(
           if (!state.firstNewMessageMarkers.has(conversationId)) return state
           const newMarkers = new Map(state.firstNewMessageMarkers)
           newMarkers.delete(conversationId)
+          return { firstNewMessageMarkers: newMarkers }
+        })
+      },
+
+      resyncDividerToReadPointer: (conversationId) => {
+        set((state) => {
+          // Only reposition an EXISTING divider — never resurrect one the reader has cleared.
+          if (!state.firstNewMessageMarkers.has(conversationId)) return state
+          const meta = state.conversationMeta.get(conversationId)
+          if (!meta) return state
+          const messages = state.messages.get(conversationId) || []
+
+          // Same recompute pattern as applyRemoteDisplayed's active-divider branch: derive the
+          // divider from the pointer via onActivate and keep only .firstNewMessageId.
+          const divider = notifState.onActivate(
+            {
+              unreadCount: 0,
+              mentionsCount: 0,
+              lastReadAt: meta.lastReadAt,
+              lastSeenMessageId: meta.lastSeenMessageId,
+              firstNewMessageId: undefined,
+            },
+            messages,
+            { treatDelayedAsNew: true }
+          ).firstNewMessageId
+
+          // Only ever reposition the divider FORWARD to a real unread message. When there is no unread
+          // after the pointer (divider undefined — reader is at the newest), do NOT clear it here: the
+          // divider is deliberately kept alive after a FAB jump-to-present so the jump-to-last-read pill
+          // can offer a return, and the explicit read-through / mark-read paths own clearing.
+          if (!divider || divider === state.firstNewMessageMarkers.get(conversationId)) return state
+          const newMarkers = new Map(state.firstNewMessageMarkers)
+          newMarkers.set(conversationId, divider)
           return { firstNewMessageMarkers: newMarkers }
         })
       },

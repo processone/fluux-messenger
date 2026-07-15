@@ -95,7 +95,7 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
   // Active-room state + messaging/scroll actions. Poll / moderation /
   // management actions come from the focused hooks below (they subscribe to no
   // store, so they add no re-render triggers).
-  const { activeRoom, activeMessages, activeTypingUsers, sendMessage, sendWhisper, sendReaction, sendCorrection, retractMessage, sendChatState, sendWhisperChatState, activeAnimation, sendEasterEgg, clearAnimation, clearFirstNewMessageId, updateLastSeenMessageId, joinRoom, joinResult, fetchOlderHistory, loadMessagesAround, loadNewer, recenterToLatest, windowAtLiveEdge, continueRoomCatchUp, activeMAMState, targetMessageId, clearTargetMessageId, firstNewMessageId, firstNewMessageIsProvisional } = useRoomActive()
+  const { activeRoom, activeMessages, activeTypingUsers, sendMessage, sendWhisper, sendReaction, sendCorrection, retractMessage, sendChatState, sendWhisperChatState, activeAnimation, sendEasterEgg, clearAnimation, clearFirstNewMessageId, resyncDividerToReadPointer, updateLastSeenMessageId, joinRoom, joinResult, fetchOlderHistory, loadMessagesAround, loadNewer, recenterToLatest, windowAtLiveEdge, continueRoomCatchUp, activeMAMState, targetMessageId, clearTargetMessageId, firstNewMessageId, firstNewMessageIsProvisional, lastSeenMessageId } = useRoomActive()
   const { sendPoll, votePoll, closePoll } = usePolls()
   const { moderateMessage, setAffiliation, setRole } = useRoomModeration()
   const { setRoomNotifyAll, setRoomAvatar, clearRoomAvatar, submitRoomConfig, setSubject, destroyRoom } = useRoomManagement()
@@ -455,6 +455,11 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
     }
   }, [roomJid, clearFirstNewMessageId])
 
+  const handleResyncDivider = useCallback(
+    (roomJid: string) => resyncDividerToReadPointer(roomJid),
+    [resyncDividerToReadPointer],
+  )
+
   // Viewport observer callback: update lastSeenMessageId as user scrolls
   const handleMessageSeen = useCallback((messageId: string) => {
     if (roomJid) {
@@ -589,9 +594,11 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
             showToolbarForSelection={showToolbarForSelection}
             firstNewMessageId={firstNewMessageId}
             firstNewMessageIsProvisional={firstNewMessageIsProvisional}
+            lastSeenMessageId={lastSeenMessageId}
             targetMessageId={targetMessageId}
             clearTargetMessageId={clearTargetMessageId}
             clearFirstNewMessageId={handleClearFirstNewMessageId}
+            onResyncDivider={handleResyncDivider}
             onMessageSeen={handleMessageSeen}
             isJoined={activeRoom.joined}
             isDarkMode={resolvedMode === 'dark'}
@@ -875,9 +882,11 @@ export const RoomMessageList = memo(function RoomMessageList({
   showToolbarForSelection,
   firstNewMessageId,
   firstNewMessageIsProvisional,
+  lastSeenMessageId,
   targetMessageId,
   clearTargetMessageId,
   clearFirstNewMessageId,
+  onResyncDivider,
   onMessageSeen,
   isJoined,
   isDarkMode,
@@ -923,9 +932,11 @@ export const RoomMessageList = memo(function RoomMessageList({
   showToolbarForSelection: boolean
   firstNewMessageId?: string
   firstNewMessageIsProvisional?: boolean
+  lastSeenMessageId?: string
   targetMessageId?: string | null
   clearTargetMessageId?: () => void
   clearFirstNewMessageId: () => void
+  onResyncDivider?: (roomJid: string) => void
   onMessageSeen?: (messageId: string) => void
   isJoined?: boolean
   isDarkMode?: boolean
@@ -1162,9 +1173,11 @@ export const RoomMessageList = memo(function RoomMessageList({
       conversationId={room.jid}
       firstNewMessageId={firstNewMessageId}
       firstNewMessageIsProvisional={firstNewMessageIsProvisional}
+      lastSeenMessageId={lastSeenMessageId}
       targetMessageId={targetMessageId}
       onTargetMessageConsumed={clearTargetMessageId}
       clearFirstNewMessageId={clearFirstNewMessageId}
+      onResyncDivider={onResyncDivider}
       onMessageSeen={onMessageSeen}
       scrollerRef={scrollerRef}
       isAtBottomRef={isAtBottomRef}
