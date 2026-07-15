@@ -35,6 +35,7 @@ import { auroraSenderColor } from '@/utils/senderColor'
 import { ReactionMentions } from './conversation/ReactionMentions'
 import { reactionMentionStore } from '@/stores/reactionMentionStore'
 import { EasterEggMentions } from './conversation/EasterEggMentions'
+import { easterEggMentionStore } from '@/stores/easterEggMentionStore'
 
 interface ChatViewProps {
   onBack?: () => void
@@ -222,6 +223,15 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
         reactionMentionStore.getState().clearConversation(activeConversation.id)
       }
     }
+  }, [activeConversation?.id])
+
+  // Auto-play a pending easter egg once when its conversation opens. The chip
+  // stays (via EasterEggMentions) as a Replay control until dismissed.
+  useEffect(() => {
+    const id = activeConversation?.id
+    if (!id) return
+    const egg = easterEggMentionStore.getState().mentions.get(id)
+    if (egg) chatStore.getState().triggerAnimation(id, egg.animation)
   }, [activeConversation?.id])
 
   useEffect(() => {

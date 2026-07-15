@@ -43,6 +43,7 @@ import { auroraSenderColor, nickColorSeed } from '@/utils/senderColor'
 import { ReactionMentions } from './conversation/ReactionMentions'
 import { reactionMentionStore } from '@/stores/reactionMentionStore'
 import { EasterEggMentions } from './conversation/EasterEggMentions'
+import { easterEggMentionStore } from '@/stores/easterEggMentionStore'
 
 // Generate hat colors from URI using XEP-0392 consistent color
 function getHatColors(hat: { uri: string; hue?: number }) {
@@ -388,6 +389,15 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
         reactionMentionStore.getState().clearConversation(activeRoom.jid)
       }
     }
+  }, [activeRoom?.jid])
+
+  // Auto-play a pending easter egg once when its room opens. The chip stays
+  // (via EasterEggMentions) as a Replay control until dismissed.
+  useEffect(() => {
+    const jid = activeRoom?.jid
+    if (!jid) return
+    const egg = easterEggMentionStore.getState().mentions.get(jid)
+    if (egg) roomStore.getState().triggerAnimation(jid, egg.animation)
   }, [activeRoom?.jid])
 
   // Clear reply/edit/whisper/pending attachment state when room changes
