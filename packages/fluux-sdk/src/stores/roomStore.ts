@@ -550,7 +550,11 @@ export interface RoomState {
   clearFirstNewMessageId: (roomJid: string) => void
   /** Recompute the session-only "New messages" divider from the current read pointer
    *  (lastSeenMessageId) for this room. Forward-only, idempotent, no-op when no divider exists.
-   *  Touches nothing but firstNewMessageMarkers. */
+   *  Touches nothing but firstNewMessageMarkers.
+   *  Only meaningful for the ACTIVE room: that is where the resident `messages` array lives. On a
+   *  deactivated room `setActiveRoom` empties the roomRuntime/rooms messages, so the recompute sees
+   *  an empty array and would SILENTLY clear the divider — callers must only invoke this for the
+   *  active room. */
   resyncDividerToReadPointer: (roomJid: string) => void
   updateLastSeenMessageId: (roomJid: string, messageId: string) => void
   /**

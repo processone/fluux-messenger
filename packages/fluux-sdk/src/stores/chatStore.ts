@@ -250,7 +250,11 @@ interface ChatState {
   /** Recompute the session-only "New messages" divider from the current read pointer
    *  (lastSeenMessageId) for this conversation. Forward-only and idempotent: sets the divider to
    *  the first unread message after the pointer, or clears it when the pointer is at the newest.
-   *  No-op when there is no existing divider. Touches nothing but firstNewMessageMarkers. */
+   *  No-op when there is no existing divider. Touches nothing but firstNewMessageMarkers.
+   *  Only meaningful for the ACTIVE conversation: that is where the resident `messages` array
+   *  lives. On a deactivated conversation `setActiveConversation` deletes the messages entry, so
+   *  the recompute sees an empty array and would SILENTLY clear the divider — callers must only
+   *  invoke this for the active conversation. */
   resyncDividerToReadPointer: (conversationId: string) => void
   updateLastSeenMessageId: (conversationId: string, messageId: string) => void
   /**

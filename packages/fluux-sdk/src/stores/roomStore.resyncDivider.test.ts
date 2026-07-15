@@ -65,4 +65,28 @@ describe('roomStore.resyncDividerToReadPointer', () => {
     roomStore.getState().resyncDividerToReadPointer(JID)
     expect(roomStore.getState().firstNewMessageMarkers.has(JID)).toBe(false)
   })
+
+  it('is idempotent once the divider already sits at first-unread-after-pointer', () => {
+    seed({ lastSeen: 'm2', marker: 'm3', messages: [msg('m0'), msg('m1'), msg('m2'), msg('m3'), msg('m4')] })
+    const before = roomStore.getState().firstNewMessageMarkers
+    roomStore.getState().resyncDividerToReadPointer(JID)
+    // same value, and the map reference is unchanged (no-op set returns state)
+    expect(roomStore.getState().firstNewMessageMarkers).toBe(before)
+    expect(roomStore.getState().firstNewMessageMarkers.get(JID)).toBe('m3')
+  })
+
+  it('skips outgoing messages when choosing the first unread', () => {
+    // m3 is our own message; first incoming unread after pointer m2 is m4
+    seed({ lastSeen: 'm2', marker: 'm1', messages: [msg('m1'), msg('m2'), msg('m3', { outgoing: true }), msg('m4')] })
+    roomStore.getState().resyncDividerToReadPointer(JID)
+    expect(roomStore.getState().firstNewMessageMarkers.get(JID)).toBe('m4')
+  })
+
+  it('does not touch lastSeenMessageId or unreadCount', () => {
+    seed({ lastSeen: 'm2', marker: 'm1', messages: [msg('m1'), msg('m2'), msg('m3')] })
+    roomStore.getState().resyncDividerToReadPointer(JID)
+    const meta = roomStore.getState().roomMeta.get(JID)!
+    expect(meta.lastSeenMessageId).toBe('m2')
+    expect(meta.unreadCount).toBe(0)
+  })
 })
