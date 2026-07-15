@@ -1,34 +1,34 @@
-// @xmpp/xml's DefinitelyTyped types model `xml` as a default export only
-// (the runtime module also exposes it as a named export, but we import per
-// the types so `tsc` can verify usage).
-import xml from '@xmpp/xml'
-import type { Element } from '@xmpp/xml'
-// ltx ships the parser that @xmpp/xml is built on; @xmpp/xml does not
-// re-export `parse`, so we depend on ltx directly (pinned to the version
-// already resolved by @xmpp/xml so both dedupe to a single copy).
+// Use the ONE @xmpp lineage the project shares: `xml` + the `Element` type come
+// from @xmpp/client (the same package @fluux/sdk uses), and `parse` from ltx —
+// both at the SDK's exact versions. Types come from the local ambient shim
+// (src/xmpp.d.ts), mirroring the SDK; @xmpp/client / ltx ship no declarations.
+import { xml } from '@xmpp/client'
+import type { Element } from '@xmpp/client'
 import { parse as ltxParse } from 'ltx'
 import type { XMLElementData } from '@fluux/sdk'
 
 /**
- * Converts a live `@xmpp/xml` `Element` into the plain, structural
+ * Converts a live `@xmpp/client` `Element` into the plain, structural
  * `XMLElementData` shape used at the E2EE plugin trait boundary.
  */
 export function elementToData(el: Element): XMLElementData {
   return {
     name: el.name,
-    attrs: { ...el.attrs },
-    children: el.children.map((c) => (typeof c === 'string' ? c : elementToData(c as Element))),
+    attrs: { ...(el.attrs ?? {}) } as Record<string, string>,
+    children: (el.children ?? []).map((child) =>
+      typeof child === 'string' ? child : elementToData(child as Element),
+    ),
   }
 }
 
 /**
- * Builds a live `@xmpp/xml` `Element` from the plain `XMLElementData` shape.
- * Uses `xml()` (ltx under the hood) so attribute/text escaping is always
- * handled by the library, never by hand-rolled string concatenation.
+ * Builds a live `Element` from the plain `XMLElementData` shape. Uses `xml()`
+ * (ltx under the hood) so attribute/text escaping is always handled by the
+ * library, never by hand-rolled string concatenation.
  */
 export function dataToElement(d: XMLElementData): Element {
-  const children = d.children.map((c) => (typeof c === 'string' ? c : dataToElement(c)))
-  return xml(d.name, d.attrs, ...children)
+  const children = d.children.map((child) => (typeof child === 'string' ? child : dataToElement(child)))
+  return xml(d.name, d.attrs, ...children) as Element
 }
 
 /**
@@ -37,10 +37,10 @@ export function dataToElement(d: XMLElementData): Element {
  * string into an `Element` in this package — never hand-roll XML parsing.
  */
 export function parseXml(s: string): Element {
-  return ltxParse(s) as unknown as Element
+  return ltxParse(s)
 }
 
-/** Serializes a live `Element` back to an XML string. */
+/** Serializes a live `Element` back to an XML string (ltx handles escaping). */
 export function serializeElement(el: Element): string {
   return el.toString()
 }

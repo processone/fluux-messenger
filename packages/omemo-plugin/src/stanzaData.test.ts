@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import xml from '@xmpp/xml'
+import { xml } from '@xmpp/client'
 import { elementToData, dataToElement, parseXml, serializeElement } from './stanzaData'
 
 describe('stanzaData', () => {
