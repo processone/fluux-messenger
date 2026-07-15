@@ -396,6 +396,8 @@ export interface RoomEvents {
     direction: MAMQueryDirection
     /** When true, leave the gap marker untouched (bounded force-repair queries). */
     preserveGapMarker?: boolean
+    /** The query was a `before:''` fetch-latest (seam formation candidate). */
+    isFetchLatest?: boolean
   }
 
   /** Room member affiliations discovered (XEP-0045 admin query) */

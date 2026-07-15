@@ -495,6 +495,7 @@ export class MAM extends BaseModule {
             complete,
             direction,
             preserveGapMarker,
+            isFetchLatest: !isForward && !before,
           })
 
           allMessages.push(...collectedMessages)
