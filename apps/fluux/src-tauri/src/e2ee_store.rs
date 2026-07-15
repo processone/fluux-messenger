@@ -50,6 +50,33 @@ pub struct Store {
     fallback_used: AtomicBool,
     /// In-memory per-account master-key cache (account JID -> 32-byte key).
     master_keys: Mutex<HashMap<String, [u8; KEY_LEN]>>,
+    /// Test seam: force the keychain read to report a transient failure
+    /// (locked / access-denied / Secret-Service-down) rather than `NoEntry`,
+    /// so the "do not mint a divergent key on a transient error" path can be
+    /// exercised without a flaky real keychain. Always `false` in production.
+    simulate_keychain_error: bool,
+    /// Test seam: inject a raw stored keychain payload (base64 string) so the
+    /// real decode + length validation in `read_keychain` can be exercised
+    /// against a malformed entry. The `keyring` mock isolates its store per
+    /// `Entry`, so an entry seeded from outside the `Store` is invisible to it;
+    /// this seam feeds the payload the `Store`'s own read would have seen.
+    /// Always `None` in production.
+    test_keychain_payload: Option<String>,
+}
+
+/// Outcome of a keychain master-key read, keeping the three cases distinct so
+/// the caller never conflates a *transient* failure with a genuinely *absent*
+/// entry (minting a fresh key on the former silently orphans real secrets).
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+enum KeychainRead {
+    /// A valid 32-byte key was present.
+    Found([u8; KEY_LEN]),
+    /// `NoEntry` — the keychain works but holds nothing yet (genuine first use).
+    Absent,
+    /// The keychain errored (locked, access-denied, service unavailable). This
+    /// is NOT "absent": we must not mint a fresh key that would diverge from
+    /// the real (temporarily inaccessible) one.
+    Unavailable,
 }
 
 /// Map a JID to a filesystem-safe basename. Collisions between distinct JIDs
@@ -76,6 +103,8 @@ impl Store {
             use_keychain: true,
             fallback_used: AtomicBool::new(false),
             master_keys: Mutex::new(HashMap::new()),
+            simulate_keychain_error: false,
+            test_keychain_payload: None,
         }
     }
 
@@ -96,6 +125,38 @@ impl Store {
             use_keychain: false,
             fallback_used: AtomicBool::new(false),
             master_keys: Mutex::new(HashMap::new()),
+            simulate_keychain_error: false,
+            test_keychain_payload: None,
+        }
+    }
+
+    /// Test-only constructor exercising the keychain path but with the read
+    /// forced to report a transient failure (not `NoEntry`). Used to assert
+    /// that a locked/unavailable keychain never mints a divergent master key.
+    #[cfg(test)]
+    pub fn for_testing_keychain_error(base_dir: PathBuf) -> Self {
+        Self {
+            base_dir,
+            use_keychain: true,
+            fallback_used: AtomicBool::new(false),
+            master_keys: Mutex::new(HashMap::new()),
+            simulate_keychain_error: true,
+            test_keychain_payload: None,
+        }
+    }
+
+    /// Test-only constructor that makes the keychain read return `payload` as
+    /// the stored entry, so the real decode + 32-byte length validation runs
+    /// against a (typically malformed) value.
+    #[cfg(test)]
+    pub fn for_testing_keychain_payload(base_dir: PathBuf, payload: String) -> Self {
+        Self {
+            base_dir,
+            use_keychain: true,
+            fallback_used: AtomicBool::new(false),
+            master_keys: Mutex::new(HashMap::new()),
+            simulate_keychain_error: false,
+            test_keychain_payload: Some(payload),
         }
     }
 
@@ -143,55 +204,102 @@ impl Store {
         Ok(key)
     }
 
+    /// Read the per-account master key from the OS keychain, keeping the three
+    /// outcomes distinct (see [`KeychainRead`]). A malformed entry (present but
+    /// not a valid 32-byte key) is a hard `Err`: we refuse to silently overwrite
+    /// whatever key material occupies that slot.
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    fn read_keychain(&self, account: &str) -> Result<KeychainRead, String> {
+        #[cfg(test)]
+        if self.simulate_keychain_error {
+            return Ok(KeychainRead::Unavailable);
+        }
+        #[cfg(test)]
+        if let Some(payload) = self.test_keychain_payload.clone() {
+            // Exercise the real decode + length validation against the injected
+            // (typically malformed) entry.
+            return parse_keychain_key(account, &payload).map(KeychainRead::Found);
+        }
+        let entry = match keyring::Entry::new(KEYCHAIN_SERVICE, account) {
+            Ok(e) => e,
+            // Could not even open the entry — treat as a transient failure, not
+            // "absent", so we never mint a divergent key on top of it.
+            Err(_) => return Ok(KeychainRead::Unavailable),
+        };
+        match entry.get_password() {
+            // Stored as base64 of the raw 32-byte key. A decode failure or a
+            // wrong length means the slot is occupied by something we don't
+            // understand — surface it rather than clobbering it.
+            Ok(encoded) => parse_keychain_key(account, &encoded).map(KeychainRead::Found),
+            Err(keyring::Error::NoEntry) => Ok(KeychainRead::Absent),
+            // Locked / access-denied / service-down: transient, NOT absent.
+            Err(_) => Ok(KeychainRead::Unavailable),
+        }
+    }
+
+    /// Persist a freshly-minted master key to the keychain.
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    fn write_keychain(&self, account: &str, k: &[u8; KEY_LEN]) -> Result<(), String> {
+        let entry =
+            keyring::Entry::new(KEYCHAIN_SERVICE, account).map_err(|e| format!("keychain open: {e}"))?;
+        entry
+            .set_password(&b64_encode(k))
+            .map_err(|e| format!("keychain set: {e}"))
+    }
+
+    /// Read the existing 0600 fallback master-key file, if present and valid.
+    /// Returns `None` when the file is absent or not exactly `KEY_LEN` bytes.
+    fn read_fallback_mk(&self, account: &str) -> Option<[u8; KEY_LEN]> {
+        let bytes = std::fs::read(self.mk_path(account)).ok()?;
+        if bytes.len() != KEY_LEN {
+            return None;
+        }
+        let mut k = [0u8; KEY_LEN];
+        k.copy_from_slice(&bytes);
+        Some(k)
+    }
+
     fn load_or_create_master_key(&self, account: &str) -> Result<[u8; KEY_LEN], String> {
         // 1) Keychain path (desktop only; mobile has no `keyring` dep).
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
         if self.use_keychain {
-            if let Ok(entry) = keyring::Entry::new(KEYCHAIN_SERVICE, account) {
-                match entry.get_password() {
-                    Ok(encoded) => {
-                        // Stored as base64 of the raw 32-byte key.
-                        if let Ok(bytes) = b64_decode(encoded.trim()) {
-                            if bytes.len() == KEY_LEN {
-                                let mut k = [0u8; KEY_LEN];
-                                k.copy_from_slice(&bytes);
-                                return Ok(k);
-                            }
-                        }
-                        // Present but malformed — mint a fresh key and overwrite.
-                        let k = random_key();
-                        entry
-                            .set_password(&b64_encode(&k))
-                            .map_err(|e| format!("keychain set: {e}"))?;
+            match self.read_keychain(account)? {
+                // Valid key present — use it.
+                KeychainRead::Found(k) => return Ok(k),
+                // Genuine first use: keychain works but is empty. Mint + persist.
+                KeychainRead::Absent => {
+                    let k = random_key();
+                    self.write_keychain(account, &k)?;
+                    return Ok(k);
+                }
+                // Transient failure (locked / access-denied / service-down). Do
+                // NOT mint a fresh keychain key: it would diverge from the real
+                // (temporarily inaccessible) one and permanently orphan anything
+                // sealed under it. Only fall back to the 0600 file if it ALREADY
+                // exists; otherwise surface the failure so the caller can retry
+                // next session (a returned Err is recoverable; a minted divergent
+                // key is not).
+                KeychainRead::Unavailable => {
+                    if let Some(k) = self.read_fallback_mk(account) {
+                        self.fallback_used.store(true, Ordering::Relaxed);
                         return Ok(k);
                     }
-                    Err(keyring::Error::NoEntry) => {
-                        let k = random_key();
-                        entry
-                            .set_password(&b64_encode(&k))
-                            .map_err(|e| format!("keychain set: {e}"))?;
-                        return Ok(k);
-                    }
-                    // Keychain present but erroring (locked/access denied) —
-                    // fall through to the 0600 file fallback rather than fail.
-                    Err(_) => {}
+                    return Err(format!(
+                        "keychain unavailable for account '{account}' and no fallback key present"
+                    ));
                 }
             }
         }
 
-        // 2) 0600 master-key file fallback.
+        // 2) 0600 master-key file fallback (keychain disabled for this Store —
+        //    mobile, or the no-keychain test constructor).
         self.fallback_used.store(true, Ordering::Relaxed);
         self.dir().map_err(|e| e.to_string())?;
-        let p = self.mk_path(account);
-        if let Ok(bytes) = std::fs::read(&p) {
-            if bytes.len() == KEY_LEN {
-                let mut k = [0u8; KEY_LEN];
-                k.copy_from_slice(&bytes);
-                return Ok(k);
-            }
+        if let Some(k) = self.read_fallback_mk(account) {
+            return Ok(k);
         }
         let k = random_key();
-        write_0600(&p, &k).map_err(|e| format!("write fallback mk: {e}"))?;
+        write_0600(&self.mk_path(account), &k).map_err(|e| format!("write fallback mk: {e}"))?;
         Ok(k)
     }
 
@@ -274,16 +382,45 @@ impl Store {
     }
 }
 
+/// Decode + validate a keychain master-key payload (base64 of the raw 32-byte
+/// key). A decode failure or wrong length is a hard `Err`: the slot holds
+/// something we don't understand and must not silently overwrite.
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+fn parse_keychain_key(account: &str, encoded: &str) -> Result<[u8; KEY_LEN], String> {
+    let bytes = b64_decode(encoded.trim()).map_err(|e| {
+        format!("keychain entry for '{account}' is malformed (invalid base64: {e})")
+    })?;
+    if bytes.len() != KEY_LEN {
+        return Err(format!(
+            "keychain entry for '{account}' is malformed (expected {KEY_LEN} bytes, got {})",
+            bytes.len()
+        ));
+    }
+    let mut k = [0u8; KEY_LEN];
+    k.copy_from_slice(&bytes);
+    Ok(k)
+}
+
 fn random_key() -> [u8; KEY_LEN] {
     let mut k = [0u8; KEY_LEN];
     OsRng.fill_bytes(&mut k);
     k
 }
 
+/// Write `bytes` to `path` with 0600 permissions, atomically: the data lands in
+/// a sibling `<path>.tmp` (created 0600 up front, before any bytes are written)
+/// and is then `rename`d into place. A crash mid-write leaves the temp file but
+/// never a truncated/partial `path`, so an interrupted write can't corrupt the
+/// whole per-account JSON (which would block get/list for ALL keys) or the
+/// fallback master key. `rename` is atomic on the same filesystem.
 fn write_0600(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
     }
+    let mut tmp = path.as_os_str().to_os_string();
+    tmp.push(".tmp");
+    let tmp = PathBuf::from(tmp);
+
     let mut opts = std::fs::OpenOptions::new();
     opts.write(true).create(true).truncate(true);
     #[cfg(unix)]
@@ -291,8 +428,11 @@ fn write_0600(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
         use std::os::unix::fs::OpenOptionsExt;
         opts.mode(0o600);
     }
-    let mut f = opts.open(path)?;
+    let mut f = opts.open(&tmp)?;
     f.write_all(bytes)?;
+    f.sync_all()?;
+    drop(f);
+    std::fs::rename(&tmp, path)?;
     Ok(())
 }
 
@@ -380,6 +520,64 @@ mod tests {
         // 0600 fallback key file was created, and the flag is surfaced.
         assert!(s.file_path("a@x").with_extension("mk").exists());
         assert!(s.fallback_used());
+    }
+
+    #[test]
+    fn transient_keychain_error_without_fallback_is_err_and_mints_nothing() {
+        install_mock_keychain();
+        let dir = tempdir().unwrap();
+        let s = Store::for_testing_keychain_error(dir.path().to_path_buf());
+        // No .mk file exists: a transient keychain failure must surface as Err,
+        // never mint a fresh (divergent) key. Any operation that needs the key
+        // fails. (`get` on an ABSENT key legitimately returns Ok(None) without
+        // ever touching the key — so we assert on the key-requiring paths.)
+        assert!(s.master_key("a@x").is_err());
+        assert!(s.put("a@x", "k", &[1, 2, 3]).is_err());
+        // Crucially, no fallback key file was created and no keychain key minted.
+        assert!(
+            !s.mk_path("a@x").exists(),
+            "transient error must not create a .mk fallback"
+        );
+        assert!(!s.fallback_used());
+    }
+
+    #[test]
+    fn transient_keychain_error_with_existing_fallback_uses_it() {
+        install_mock_keychain();
+        let dir = tempdir().unwrap();
+        // Pre-seed a valid 0600 fallback key for the account, as if a prior
+        // keychain-less session had written it.
+        let seeded = random_key();
+        let s = Store::for_testing_keychain_error(dir.path().to_path_buf());
+        write_0600(&s.mk_path("a@x"), &seeded).unwrap();
+
+        // With the keychain transiently unavailable, values must seal/unseal via
+        // the existing fallback key and the fallback flag must be surfaced.
+        s.put("a@x", "k", &[9, 8, 7]).unwrap();
+        assert_eq!(s.get("a@x", "k").unwrap(), Some(vec![9, 8, 7]));
+        assert!(s.fallback_used());
+        // The fallback file is unchanged (not re-minted).
+        assert_eq!(std::fs::read(s.mk_path("a@x")).unwrap(), seeded.to_vec());
+    }
+
+    #[test]
+    fn malformed_keychain_entry_is_err_and_not_overwritten() {
+        install_mock_keychain();
+        let dir = tempdir().unwrap();
+        let acct = "malformed-entry@x";
+        // Seed the keychain slot with a non-32-byte payload via the read seam
+        // (the keyring mock isolates its store per Entry, so a value written
+        // from outside the Store would be invisible to the Store's own read).
+        let bad = b64_encode(b"not-a-32-byte-key");
+        let s = Store::for_testing_keychain_payload(dir.path().to_path_buf(), bad.clone());
+
+        // A malformed entry must surface as Err, never be silently overwritten.
+        // Because read validation returns Err, `load_or_create_master_key` never
+        // reaches the keychain write — the existing entry is left intact — and
+        // no fallback .mk is minted either.
+        assert!(s.master_key(acct).is_err());
+        assert!(s.put(acct, "k", &[1]).is_err());
+        assert!(!s.mk_path(acct).exists());
     }
 
     // --- Adversarial at-rest crypto tests -----------------------------------
