@@ -275,6 +275,12 @@
 
   /* Selection */
   --fluux-selection-bg: hsla(var(--fluux-accent-h), var(--fluux-accent-s), var(--fluux-accent-l), 0.25);
+  /* Extra fill laid over a quote/reply card when its message row is selected, to
+     keep the card distinct from the selection tint (issue #1008). Dark mode
+     needs none — the card's opaque --fluux-bg-secondary already contrasts with
+     the lighter selection tint; the .light override supplies the accent nudge
+     where the two would otherwise collide. */
+  --fluux-quote-selected-overlay: transparent;
 
   /* Search highlight */
   --fluux-search-highlight-bg: hsla(var(--fluux-accent-h), var(--fluux-accent-s), var(--fluux-accent-l), 0.35);
@@ -509,6 +515,10 @@
   --fluux-bg-float-hover: var(--fluux-base-20);
   --fluux-selection-bg: hsla(var(--fluux-accent-h), var(--fluux-accent-s), var(--fluux-accent-l), 0.15);
   --fluux-search-highlight-bg: hsla(var(--fluux-accent-h), var(--fluux-accent-s), var(--fluux-accent-l), 0.25);
+  /* Light themes are where the selection tint collides with the card fill; a
+     gentle accent nudge (kept low so the card's muted preview text stays legible
+     — the selected frame carries the actual separation guarantee). Issue #1008. */
+  --fluux-quote-selected-overlay: hsla(var(--fluux-accent-h), var(--fluux-accent-s), var(--fluux-accent-l), 0.14);
   --fluux-scrollbar-thumb: #c4c9ce;
   --fluux-scrollbar-thumb-hover: #a8adb3;
   /* Sidebar sits on a grayer surface than the white content area, so its thumb is
@@ -958,6 +968,29 @@ html, body {
   margin-bottom: 0.125rem;
   border-left: 2px solid var(--fluux-brand);
   opacity: 0.85;
+}
+
+/* Selection-aware quote/reply framing (issue #1008). When a message row is
+   selected it gets a translucent accent selection tint; in light themes that
+   lands almost exactly on the quote/reply card's own --fluux-bg-secondary,
+   erasing the card. Two cues restore the separation, both scoped to the
+   selected row via [data-msg-selected]:
+     1. A gentle accent fill nudge in light mode (transparent in dark, where no
+        collision exists) — the "differentiated fill" look.
+     2. An accent frame (inset ring) that stays high-contrast against both the
+        fill and the selection tint in every theme and both modes — the frame is
+        what guarantees the card is always readable as a distinct block.
+   The reply card carries its frame inline in the sender's colour (see
+   MessageBubble); the blockquote uses the brand accent it already borders with. */
+[data-msg-selected] .blockquote-decorated,
+[data-msg-selected] .reply-quote-card {
+  background-image: linear-gradient(
+    var(--fluux-quote-selected-overlay),
+    var(--fluux-quote-selected-overlay)
+  );
+}
+[data-msg-selected] .blockquote-decorated {
+  box-shadow: inset 0 0 0 1px var(--fluux-brand);
 }
 
 /* Remove default focus outline */
