@@ -328,6 +328,14 @@ export function useConversationEncryptionState(
       return
     }
 
+    // Reset synchronously before kicking off the async selection so a peer
+    // switch (or any effect re-run) can't briefly surface the PREVIOUS
+    // peer's OMEMO result while the new peer's selectStrategy is in
+    // flight. Without this, the memo below would read a stale
+    // `omemoResult` (wrong trust/protocol) for the new peer until the
+    // promise resolves.
+    setOmemoResult(null)
+
     let cancelled = false
     void (async () => {
       try {

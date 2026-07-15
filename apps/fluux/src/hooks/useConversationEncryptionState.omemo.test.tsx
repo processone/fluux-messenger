@@ -15,7 +15,6 @@ vi.mock('@fluux/sdk', async (importOriginal) => {
   const actual = (await importOriginal()) as Record<string, unknown>
   return {
     ...actual,
-    useConnection: vi.fn(),
     useConnectionStatus: vi.fn(),
     useXMPPContext: vi.fn(),
   }
@@ -27,11 +26,10 @@ vi.mock('@/hooks/useWebKeyLocked', () => ({
   useWebKeyLocked: vi.fn(() => false),
 }))
 
-import { useConnection, useConnectionStatus, useXMPPContext } from '@fluux/sdk'
+import { useConnectionStatus, useXMPPContext } from '@fluux/sdk'
 import { useEncryptionSettingsStore } from '@/stores/encryptionSettingsStore'
 import { useWebKeyLocked } from '@/hooks/useWebKeyLocked'
 
-const mockedUseConnection = useConnection as unknown as ReturnType<typeof vi.fn>
 const mockedUseConnectionStatus = useConnectionStatus as unknown as ReturnType<typeof vi.fn>
 const mockedUseXMPPContext = useXMPPContext as unknown as ReturnType<typeof vi.fn>
 const mockedUseEncryptionSettingsStore =
@@ -55,16 +53,20 @@ function wireMocks(opts: {
   openpgpEnabled?: boolean
   omemoEnabled?: boolean
   omemoPlugin?: OmemoPlugin | null
+  /** Override the plugin resolved by selectStrategy (defaults to omemoPlugin). */
+  selectStrategyPlugin?: OmemoPlugin | null
+  /** Optional custom selectStrategy impl, e.g. to delay resolution. */
+  selectStrategyImpl?: (req: { kind: 'direct'; peer: string }) => Promise<OmemoPlugin | null>
 }) {
   const conn = { status: opts.online === false ? 'offline' : 'online' }
-  mockedUseConnection.mockReturnValue(conn)
   mockedUseConnectionStatus.mockReturnValue(conn)
   const omemoPlugin = opts.omemoPlugin
+  const resolvedPlugin = 'selectStrategyPlugin' in opts ? opts.selectStrategyPlugin : omemoPlugin
   mockedUseXMPPContext.mockReturnValue({
     client: {
       e2ee: {
         getPlugin: (id: string) => (id === 'omemo:2' ? omemoPlugin : null),
-        selectStrategy: vi.fn(async () => omemoPlugin ?? null),
+        selectStrategy: opts.selectStrategyImpl ?? vi.fn(async () => resolvedPlugin ?? null),
       },
     },
   })
@@ -115,6 +117,58 @@ describe('useConversationEncryptionState — OMEMO selection', () => {
       trust: 'verified',
       omemoTrust: 'verified',
     })
+  })
+
+  it('clears the previous peer\'s OMEMO result synchronously on peer switch (no stale-trust flash)', async () => {
+    // Regression test: the OMEMO selection effect must reset `omemoResult`
+    // to null BEFORE kicking off the async `selectStrategy` call, so that
+    // switching from a peer that resolved to omemo:2/verified to a new
+    // peer never briefly surfaces the OLD peer's encrypted/trust state
+    // while the new peer's selection is still in flight.
+    const pluginA = makeOmemoPlugin('verified')
+    let resolveB: (value: OmemoPlugin | null) => void = () => {}
+    const bResult = new Promise<OmemoPlugin | null>((resolve) => {
+      resolveB = resolve
+    })
+
+    wireMocks({
+      omemoPlugin: pluginA,
+      selectStrategyImpl: vi.fn(async (req: { peer: string }) => {
+        if (req.peer === 'alice@example.com') return pluginA
+        return bResult
+      }),
+    })
+
+    const { result, rerender } = renderHook(
+      ({ peer }: { peer: string }) => useConversationEncryptionState(peer, 'chat'),
+      { initialProps: { peer: 'alice@example.com' } },
+    )
+
+    await waitFor(() => expect(result.current.kind).toBe('encrypted'))
+    expect(result.current).toEqual({
+      kind: 'encrypted',
+      protocolId: 'omemo:2',
+      fingerprint: '',
+      trust: 'verified',
+      omemoTrust: 'verified',
+    })
+
+    // Switch to a different peer whose selectStrategy is still pending
+    // (bResult hasn't resolved yet).
+    rerender({ peer: 'bob@example.com' })
+
+    // Immediately after the peer switch — before bob's selectStrategy
+    // resolves — the hook must NOT still report alice's omemo:2/verified
+    // result. The synchronous reset in the effect should have already
+    // cleared it, falling through to the OpenPGP/checking/disabled path.
+    expect(result.current).not.toEqual(
+      expect.objectContaining({ protocolId: 'omemo:2', omemoTrust: 'verified' }),
+    )
+    expect(result.current.kind).not.toBe('encrypted')
+
+    // Resolve bob's selection as "no OMEMO" so the effect settles cleanly.
+    resolveB(null)
+    await waitFor(() => expect(result.current.kind).not.toBe('encrypted'))
   })
 
   it('does not report an OMEMO encrypted state when selectStrategy returns null', async () => {
