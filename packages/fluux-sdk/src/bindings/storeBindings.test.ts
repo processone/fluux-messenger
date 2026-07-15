@@ -158,7 +158,7 @@ describe('createStoreBindings', () => {
     })
 
     it('should handle chat:animation', () => {
-      mockClient.emit('chat:animation', { conversationId: 'bob@example.com', animation: 'shake' })
+      mockClient.emit('chat:animation', { conversationId: 'bob@example.com', animation: 'shake', senderJid: 'bob@example.com' })
       expect(mockStores.chat.triggerAnimation).toHaveBeenCalledWith('bob@example.com', 'shake')
     })
 
@@ -417,7 +417,7 @@ describe('createStoreBindings', () => {
     })
 
     it('should handle room:animation', () => {
-      mockClient.emit('room:animation', { roomJid: 'room@conference.example.com', animation: 'confetti' })
+      mockClient.emit('room:animation', { roomJid: 'room@conference.example.com', animation: 'confetti', senderNick: 'alice' })
       expect(mockStores.room.triggerAnimation).toHaveBeenCalledWith('room@conference.example.com', 'confetti')
     })
 

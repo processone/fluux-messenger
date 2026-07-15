@@ -178,6 +178,7 @@ export interface ChatEvents {
   'chat:animation': {
     conversationId: string
     animation: string
+    senderJid: string
   }
 
   /** MAM loading state changed */
@@ -362,6 +363,7 @@ export interface RoomEvents {
   'room:animation': {
     roomJid: string
     animation: string
+    senderNick: string
   }
 
   /** Room MAM loading state */

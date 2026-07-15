@@ -382,9 +382,9 @@ export class Chat extends BaseModule {
       if (animation) {
         // SDK event only - binding calls store.triggerAnimation
         if (type === 'groupchat') {
-          this.deps.emitSDK('room:animation', { roomJid: bareFrom, animation })
+          this.deps.emitSDK('room:animation', { roomJid: bareFrom, animation, senderNick: getResource(from ?? '') ?? '' })
         } else {
-          this.deps.emitSDK('chat:animation', { conversationId: bareFrom, animation })
+          this.deps.emitSDK('chat:animation', { conversationId: bareFrom, animation, senderJid: bareFrom })
         }
       }
       return { handled: true }
@@ -1535,9 +1535,9 @@ export class Chat extends BaseModule {
 
     // SDK event only - binding calls store.triggerAnimation
     if (type === 'groupchat') {
-      this.deps.emitSDK('room:animation', { roomJid: to, animation })
+      this.deps.emitSDK('room:animation', { roomJid: to, animation, senderNick: '' })
     } else {
-      this.deps.emitSDK('chat:animation', { conversationId: to, animation })
+      this.deps.emitSDK('chat:animation', { conversationId: to, animation, senderJid: getBareJid(this.deps.getCurrentJid() ?? '') })
     }
   }
 
