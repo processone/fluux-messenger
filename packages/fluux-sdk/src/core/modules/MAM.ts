@@ -342,6 +342,7 @@ export class MAM extends BaseModule {
         rsm: lastRsm,
         complete: isComplete,
         direction,
+        isFetchLatest: direction === 'backward' && !before,
       })
 
       // Modifications whose target is not in this batch belong to a message

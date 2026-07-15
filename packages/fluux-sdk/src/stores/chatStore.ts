@@ -9,7 +9,7 @@ import * as messageCache from '../utils/messageCache'
 import * as searchIndex from '../utils/searchIndex'
 import * as mamState from './shared/mamState'
 import type { MAMQueryDirection } from './shared/mamState'
-import { computeGapEnd, syncGap, type GapInterval } from './shared/mamGap'
+import { syncGapAfterArchiveMerge, messagePageExtent, type GapInterval } from './shared/mamGap'
 import * as draftState from './shared/draftState'
 import * as timeline from './shared/messageTimeline'
 import { isPreviewableMessage, findLastPreviewableMessage, shouldReplaceLastMessage } from './shared/lastMessageUtils'
@@ -297,7 +297,7 @@ interface ChatState {
    * @param complete - Whether server indicated query is complete
    * @param direction - Query direction: 'backward' for older history, 'forward' for catching up
    */
-  mergeMAMMessages: (conversationId: string, messages: Message[], rsm: RSMResponse, complete: boolean, direction: MAMQueryDirection) => void
+  mergeMAMMessages: (conversationId: string, messages: Message[], rsm: RSMResponse, complete: boolean, direction: MAMQueryDirection, isFetchLatest?: boolean) => void
   getMAMQueryState: (conversationId: string) => MAMQueryState
   resetMAMStates: () => void
   /** Mark all conversations as needing a catch-up MAM query (called on reconnect) */
@@ -1596,7 +1596,10 @@ export const chatStore = createStore<ChatState>()(
         }))
       },
 
-      mergeMAMMessages: (conversationId, mamMessages, rsm, complete, direction) => {
+      mergeMAMMessages: (conversationId, mamMessages, rsm, complete, direction, isFetchLatest = false) => {
+        // Newest persisted timestamp (entity preview) — the seam-formation fallback
+        // when the resident array is empty this run (fresh session, history on disk).
+        const fallbackHeldTs = get().getConversationLastTimestamp(conversationId)
         // Captured from inside set() so the post-set MDS marker resolution can read the
         // merged array even for a non-active conversation (whose array isn't in RAM).
         let mergedForMarker: Message[] = []
@@ -1636,16 +1639,23 @@ export const chatStore = createStore<ChatState>()(
             newestFetchedTimestamp
           )
 
-          // Mirror the forward gap into the PERSISTED conversationGaps (account-scoped
-          // via the chat storage blob) so the marker survives a reload. Forward
-          // complete=false sets it, complete=true clears it; backward leaves it.
-          // `end` = oldest message held above the gap.
-          let newGaps = state.conversationGaps
-          if (direction === 'forward') {
-            const gapStart = newStates.get(conversationId)?.forwardGapTimestamp
-            const gapEnd = gapStart !== undefined ? computeGapEnd(trimmed, gapStart) : undefined
-            newGaps = syncGap(state.conversationGaps, conversationId, gapStart, gapEnd)
-          }
+          // Persisted gap sync (shared transition, both directions) — see
+          // syncGapAfterArchiveMerge. Chat has no bounded force-repair, so
+          // preserveGapMarker is always false.
+          const newGaps = syncGapAfterArchiveMerge({
+            gaps: state.conversationGaps,
+            id: conversationId,
+            direction,
+            complete,
+            forwardGapTimestamp: newStates.get(conversationId)?.forwardGapTimestamp,
+            merged: trimmed,
+            fetched: mamMessages,
+            newMessagesCount: newMessages.length,
+            patchedCount: patched.length,
+            isFetchLatest,
+            newestHeldBelowTs: messagePageExtent(rawExisting).newestTs ?? fallbackHeldTs,
+            preserveGapMarker: false,
+          })
 
           // If no new messages (all duplicates), only update MAM state to avoid
           // unnecessary re-renders. Exception: a stanzaId backfill onto existing

@@ -199,6 +199,8 @@ export interface ChatEvents {
     rsm: RSMResponse
     complete: boolean
     direction: MAMQueryDirection
+    /** The query was a `before:''` fetch-latest (seam formation candidate). */
+    isFetchLatest?: boolean
   }
 
   /**
