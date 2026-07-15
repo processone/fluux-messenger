@@ -1561,6 +1561,9 @@ input[type="range"]::-moz-range-thumb {
   35% { opacity: 1; transform: scale(1.35); }
   100% { opacity: 0; transform: scale(1.5); }
 }
+/* Invariant: send-press (the wrapper's onAnimationEnd trigger that unmounts the
+   glow) MUST outlast send-glow-pulse, so the glow has already reached opacity 0
+   before it unmounts — otherwise it pops out mid-pulse. Keep 280ms > 260ms. */
 .send-launching .send-aurora {
   animation: send-press 280ms ease;
 }
