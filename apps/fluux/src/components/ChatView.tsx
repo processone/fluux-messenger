@@ -231,7 +231,10 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
     const id = activeConversation?.id
     if (!id) return
     const egg = easterEggMentionStore.getState().mentions.get(id)
-    if (egg) chatStore.getState().triggerAnimation(id, egg.animation)
+    if (egg && !egg.played) {
+      chatStore.getState().triggerAnimation(id, egg.animation)
+      easterEggMentionStore.getState().markPlayed(id)
+    }
   }, [activeConversation?.id])
 
   useEffect(() => {

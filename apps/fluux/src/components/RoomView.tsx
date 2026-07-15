@@ -397,7 +397,10 @@ export function RoomView({ onBack, mainContentRef, composerRef, showOccupants = 
     const jid = activeRoom?.jid
     if (!jid) return
     const egg = easterEggMentionStore.getState().mentions.get(jid)
-    if (egg) roomStore.getState().triggerAnimation(jid, egg.animation)
+    if (egg && !egg.played) {
+      roomStore.getState().triggerAnimation(jid, egg.animation)
+      easterEggMentionStore.getState().markPlayed(jid)
+    }
   }, [activeRoom?.jid])
 
   // Clear reply/edit/whisper/pending attachment state when room changes
