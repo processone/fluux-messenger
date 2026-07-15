@@ -17,7 +17,8 @@
         "forward": "Ar aghaidh",
         "block": "Blocáil",
         "copied": "Cóipeáilte",
-        "comingSoon": "Ag teacht go luath"
+        "comingSoon": "Ag teacht go luath",
+        "dismiss": "Diúltaigh"
     },
     "login": {
         "title": "Fluux Messenger",
@@ -1383,5 +1384,9 @@
             "nickInUse": "Tá an leasainm {{nick}} in úsáid cheana féin",
             "nickFailed": "Níorbh fhéidir do leasainm a athrú"
         }
+    },
+    "easterEgg": {
+        "mention": "Sheol {{name}} beochan chugat",
+        "replay": "Athsheinm"
     }
 }

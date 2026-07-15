@@ -17,7 +17,8 @@
         "forward": "Endavant",
         "block": "Bloca",
         "copied": "Copiat",
-        "comingSoon": "Properament"
+        "comingSoon": "Properament",
+        "dismiss": "Descarta"
     },
     "login": {
         "title": "Fluux Messenger",
@@ -1383,5 +1384,9 @@
             "nickInUse": "El sobrenom {{nick}} ja està en ús",
             "nickFailed": "No s’ha pogut canviar el teu sobrenom"
         }
+    },
+    "easterEgg": {
+        "mention": "{{name}} t'ha enviat una animació",
+        "replay": "Reprodueix de nou"
     }
 }

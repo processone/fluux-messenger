@@ -17,7 +17,8 @@
         "comingSoon": "Wkrótce",
         "back": "Wstecz",
         "forward": "Dalej",
-        "copied": "Skopiowano"
+        "copied": "Skopiowano",
+        "dismiss": "Odrzuć"
     },
     "login": {
         "title": "Fluux Messenger",
@@ -1384,5 +1385,9 @@
             "nickInUse": "Pseudonim {{nick}} jest już używany",
             "nickFailed": "Nie udało się zmienić twojego pseudonimu"
         }
+    },
+    "easterEgg": {
+        "mention": "{{name}} wysłał(a) Ci animację",
+        "replay": "Odtwórz ponownie"
     }
 }

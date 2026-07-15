@@ -17,7 +17,8 @@
         "forward": "Eteenpäin",
         "block": "Estä",
         "copied": "Kopioitu",
-        "comingSoon": "Tulossa pian"
+        "comingSoon": "Tulossa pian",
+        "dismiss": "Hylkää"
     },
     "login": {
         "title": "Fluux Messenger",
@@ -1380,5 +1381,9 @@
             "nickInUse": "Kutsumanimi {{nick}} on jo käytössä",
             "nickFailed": "Kutsumanimeäsi ei voitu vaihtaa"
         }
+    },
+    "easterEgg": {
+        "mention": "{{name}} lähetti sinulle animaation",
+        "replay": "Toista uudelleen"
     }
 }

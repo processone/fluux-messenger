@@ -17,7 +17,8 @@
         "forward": "Forward",
         "block": "Block",
         "copied": "Copied",
-        "comingSoon": "Coming soon"
+        "comingSoon": "Coming soon",
+        "dismiss": "Dismiss"
     },
     "login": {
         "title": "Fluux Messenger",
@@ -1380,5 +1381,9 @@
             "nickInUse": "The nickname {{nick}} is already in use",
             "nickFailed": "Could not change your nickname"
         }
+    },
+    "easterEgg": {
+        "mention": "{{name}} sent you an animation",
+        "replay": "Replay"
     }
 }

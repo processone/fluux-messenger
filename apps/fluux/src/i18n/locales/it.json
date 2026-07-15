@@ -17,7 +17,8 @@
         "comingSoon": "Prossimamente",
         "back": "Indietro",
         "forward": "Avanti",
-        "copied": "Copiato"
+        "copied": "Copiato",
+        "dismiss": "Scarta"
     },
     "login": {
         "title": "Fluux Messenger",
@@ -1383,5 +1384,9 @@
             "nickInUse": "Il soprannome {{nick}} è già in uso",
             "nickFailed": "Impossibile cambiare il tuo soprannome"
         }
+    },
+    "easterEgg": {
+        "mention": "{{name}} ti ha inviato un'animazione",
+        "replay": "Riproduci di nuovo"
     }
 }

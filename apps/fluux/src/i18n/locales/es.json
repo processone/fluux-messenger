@@ -17,7 +17,8 @@
         "comingSoon": "Próximamente",
         "back": "Atrás",
         "forward": "Adelante",
-        "copied": "Copiado"
+        "copied": "Copiado",
+        "dismiss": "Descartar"
     },
     "login": {
         "title": "Fluux Messenger",
@@ -1383,5 +1384,9 @@
             "nickInUse": "El apodo {{nick}} ya está en uso",
             "nickFailed": "No se pudo cambiar tu apodo"
         }
+    },
+    "easterEgg": {
+        "mention": "{{name}} te envió una animación",
+        "replay": "Reproducir de nuevo"
     }
 }

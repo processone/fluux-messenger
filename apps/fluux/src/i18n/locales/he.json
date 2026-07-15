@@ -17,7 +17,8 @@
         "forward": "קדימה",
         "block": "חסום",
         "copied": "הועתק",
-        "comingSoon": "בקרוב"
+        "comingSoon": "בקרוב",
+        "dismiss": "בטל"
     },
     "login": {
         "title": "Fluux Messenger",
@@ -1381,5 +1382,9 @@
             "nickInUse": "הכינוי {{nick}} כבר בשימוש",
             "nickFailed": "לא ניתן היה לשנות את הכינוי שלך"
         }
+    },
+    "easterEgg": {
+        "mention": "{{name}} שלח/ה לך אנימציה",
+        "replay": "הפעל שוב"
     }
 }

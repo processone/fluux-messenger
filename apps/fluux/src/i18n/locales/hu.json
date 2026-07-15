@@ -17,7 +17,8 @@
         "forward": "Előre",
         "block": "Letiltás",
         "copied": "Másolva",
-        "comingSoon": "Hamarosan"
+        "comingSoon": "Hamarosan",
+        "dismiss": "Elutasítás"
     },
     "login": {
         "title": "Fluux Messenger",
@@ -1380,5 +1381,9 @@
             "nickInUse": "A(z) {{nick}} becenév már használatban van",
             "nickFailed": "Nem sikerült megváltoztatni a becenevedet"
         }
+    },
+    "easterEgg": {
+        "mention": "{{name}} animációt küldött neked",
+        "replay": "Újrajátszás"
     }
 }

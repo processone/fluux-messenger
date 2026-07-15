@@ -17,7 +17,8 @@
         "forward": "Edasi",
         "block": "Blokeeri",
         "copied": "Kopeeritud",
-        "comingSoon": "Tulemas"
+        "comingSoon": "Tulemas",
+        "dismiss": "Loobu"
     },
     "login": {
         "title": "Fluux Messenger",
@@ -1382,5 +1383,9 @@
             "nickInUse": "Hüüdnimi {{nick}} on juba kasutusel",
             "nickFailed": "Sinu hüüdnime ei õnnestunud muuta"
         }
+    },
+    "easterEgg": {
+        "mention": "{{name}} saatis sulle animatsiooni",
+        "replay": "Mängi uuesti"
     }
 }
