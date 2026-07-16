@@ -2727,4 +2727,145 @@ describe('legacy backup passphrase migration (#1021)', () => {
       code: 'wrong-passphrase',
     })
   })
+
+  it('unlock() on a fresh device recovers from a legacy backup and heals it', async () => {
+    // The end-to-end scenario from #1021: no local key, an old backup on
+    // the server, the user types the code exactly as displayed. The
+    // unlock recovery path routes through restoreSecretKey, so the
+    // fallback opens the backup AND the heal re-publishes it verbatim.
+    const shared: SharedPep = new Map()
+    const original = await publishLegacyBackup(shared)
+
+    const device = new WebOpenPGPPlugin()
+    await device.init(makeCtxWithWritablePep('alice@example.com', shared).ctx)
+
+    const result = await device.unlock(CODE)
+
+    expect(result).toEqual({ recovered: true })
+    expect(device.getOwnFingerprint()).toBe(original.fingerprint)
+
+    const healed = await device.fetchSecretKeyBackup()
+    const openpgp = await import('openpgp')
+    const message = await openpgp.readMessage({ armoredMessage: healed! })
+    await expect(
+      openpgp.decrypt({ message, passwords: [CODE], format: 'binary' }),
+    ).resolves.toBeDefined()
+  })
+
+  it('restore still succeeds when the heal re-publish fails', async () => {
+    // The heal is best-effort: losing the re-publish must never lose the
+    // restore. The server copy simply keeps the legacy encoding.
+    const shared: SharedPep = new Map()
+    const original = await publishLegacyBackup(shared)
+
+    const device = new WebOpenPGPPlugin()
+    const { ctx } = makeCtxWithWritablePep('alice@example.com', shared)
+    const origPublish = ctx.xmpp.publishPEP
+    ctx.xmpp.publishPEP = async (node, item, opts) => {
+      if (node.includes('secret-key')) throw new Error('item-not-found')
+      return origPublish(node, item, opts)
+    }
+    await device.init(ctx)
+
+    const result = await device.restoreSecretKey(CODE)
+
+    expect(result).toEqual({ fingerprint: original.fingerprint })
+    expect(device.getOwnFingerprint()).toBe(original.fingerprint)
+  })
+
+  it('imports a legacy-encoded export FILE without publishing anything to the server', async () => {
+    // Files exported by ≤0.17.1 are encrypted with the normalized form
+    // too. The same fallback opens them — but there is no server copy to
+    // heal, so no secret-key publish may happen.
+    const openpgp = await import('openpgp')
+    const { legacyNormalizeBackupPassphrase } = await import('./backupPassphrase')
+    const { privateKey: tsk } = await openpgp.generateKey({
+      type: 'ecc',
+      curve: 'curve25519Legacy',
+      userIDs: [{ name: 'xmpp:alice@example.com' }],
+      format: 'object',
+    })
+    const legacyFile = (await openpgp.encrypt({
+      message: await openpgp.createMessage({ binary: tsk.write() as Uint8Array }),
+      passwords: [legacyNormalizeBackupPassphrase(CODE)],
+    })) as string
+
+    const device = new WebOpenPGPPlugin()
+    const shared: SharedPep = new Map()
+    const { ctx } = makeCtxWithWritablePep('alice@example.com', shared)
+    const secretKeyPublishes: string[] = []
+    const origPublish = ctx.xmpp.publishPEP
+    ctx.xmpp.publishPEP = async (node, item, opts) => {
+      if (node.includes('secret-key')) secretKeyPublishes.push(node)
+      return origPublish(node, item, opts)
+    }
+    await device.init(ctx)
+
+    const result = await device.importKeyFromFile(legacyFile, CODE)
+
+    expect(result).toEqual({ fingerprint: expect.any(String) })
+    expect((result as { fingerprint: string }).fingerprint.toUpperCase()).toBe(
+      tsk.getFingerprint().toUpperCase(),
+    )
+    expect(secretKeyPublishes).toEqual([])
+  })
+
+  it('multi-key legacy backup: the picker context carries the passphrase form that opens it', async () => {
+    // Two TSKs bundled under the LEGACY encoding (a ≤0.17.1 backup made
+    // from a Gajim-style multi-key import). Restore must surface the
+    // picker with a backupContext whose passphrase actually decrypts the
+    // blob, so installSelectedKey completes without re-prompting.
+    const openpgp = await import('openpgp')
+    const { legacyNormalizeBackupPassphrase } = await import('./backupPassphrase')
+    const genKey = () =>
+      openpgp.generateKey({
+        type: 'ecc',
+        curve: 'curve25519Legacy' as const,
+        userIDs: [{ name: 'xmpp:alice@example.com' }],
+        format: 'object',
+      })
+    const [{ privateKey: keyA }, { privateKey: keyB }] = await Promise.all([genKey(), genKey()])
+    const binaryA = keyA.write() as Uint8Array
+    const binaryB = keyB.write() as Uint8Array
+    const combined = new Uint8Array(binaryA.length + binaryB.length)
+    combined.set(binaryA)
+    combined.set(binaryB, binaryA.length)
+    const legacyBlob = (await openpgp.encrypt({
+      message: await openpgp.createMessage({ binary: combined }),
+      passwords: [legacyNormalizeBackupPassphrase(CODE)],
+    })) as string
+
+    const shared: SharedPep = new Map()
+    const device = new WebOpenPGPPlugin()
+    const { ctx } = makeCtxWithWritablePep('alice@example.com', shared)
+    await device.init(ctx)
+    // Serve the multi-key blob as the server backup.
+    shared.set(`alice@example.com\0urn:xmpp:openpgp:0:secret-key`, [
+      {
+        id: 'current',
+        payload: {
+          name: 'secretkey',
+          attrs: { xmlns: 'urn:xmpp:openpgp:0' },
+          children: [dearmorBase64ForXep0373(legacyBlob)],
+        },
+      },
+    ])
+
+    const result = await device.restoreSecretKey(CODE)
+
+    if (!('needsPicker' in result)) throw new Error('expected the multi-key picker')
+    expect(result.candidates).toHaveLength(2)
+    // The context must carry the form that actually decrypts the blob:
+    // the NATIVE install path re-decrypts from it (web installs from a
+    // cache, so only this direct assertion catches a regression here).
+    expect(result.backupContext.passphrase).toBe(legacyNormalizeBackupPassphrase(CODE))
+
+    const chosen = result.candidates[0].fingerprint
+    const installed = await device.installSelectedKey(
+      result.backupContext.message,
+      result.backupContext.passphrase,
+      chosen,
+    )
+    expect(installed.fingerprint).toBe(chosen)
+  })
 })
