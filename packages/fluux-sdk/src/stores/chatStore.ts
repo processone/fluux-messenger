@@ -1659,7 +1659,8 @@ export const chatStore = createStore<ChatState>()(
             rawExisting,
             mamMessages,
             direction,
-            chatTimelineConfig()
+            chatTimelineConfig(),
+            isFetchLatest
           )
           // Persist backfilled archive ids so pagination cursors survive a reload.
           for (const p of patched) {
@@ -1680,7 +1681,8 @@ export const chatStore = createStore<ChatState>()(
             direction,
             rsm.first, // Pagination cursor for fetching older messages
             newestFetchedTimestamp,
-            preserveGapMarker
+            preserveGapMarker,
+            isFetchLatest
           )
 
           // Persisted gap sync (shared transition, both directions) — see
@@ -1798,6 +1800,10 @@ export const chatStore = createStore<ChatState>()(
           if (newestEvicted) {
             newWindowAtLiveEdge = new Map(state.windowAtLiveEdge)
             newWindowAtLiveEdge.set(conversationId, false)
+          } else if (isFetchLatest && newMessages.length > 0) {
+            // Fetch-latest lands the window AT the live edge by construction.
+            newWindowAtLiveEdge = new Map(state.windowAtLiveEdge)
+            newWindowAtLiveEdge.set(conversationId, true)
           }
 
           if (previewUpdate) {

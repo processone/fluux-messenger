@@ -300,6 +300,18 @@ describe('mamState utilities', () => {
     })
   })
 
+  describe('setMAMQueryCompleted fetch-latest', () => {
+    it('marks caught-up-to-live on a fetch-latest merge (window is at the live edge by definition)', () => {
+      const states = setMAMQueryCompleted(new Map(), 'a@b.c', false, 'backward', undefined, undefined, false, true)
+      expect(states.get('a@b.c')?.isCaughtUpToLive).toBe(true)
+    })
+
+    it('plain backward completion still does not mark caught-up-to-live', () => {
+      const states = setMAMQueryCompleted(new Map(), 'a@b.c', true, 'backward')
+      expect(states.get('a@b.c')?.isCaughtUpToLive).toBe(false)
+    })
+  })
+
   describe('markAllNeedsCatchUp', () => {
     it('marks all existing states as needing catch-up', () => {
       const states = new Map<string, MAMQueryState>()

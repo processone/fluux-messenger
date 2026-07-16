@@ -2555,7 +2555,8 @@ export const roomStore = createStore<RoomState>()(
         existingMessages,
         mamMessages,
         direction,
-        roomTimelineConfig()
+        roomTimelineConfig(),
+        isFetchLatest
       )
       // Persist backfilled archive ids so pagination cursors survive a reload.
       for (const p of patched) {
@@ -2576,7 +2577,8 @@ export const roomStore = createStore<RoomState>()(
         direction,
         rsm.first, // Pagination cursor for fetching older messages
         newestFetchedTimestamp,
-        preserveGapMarker
+        preserveGapMarker,
+        isFetchLatest
       )
 
       // Persisted gap sync (shared transition, both directions):
@@ -2696,14 +2698,19 @@ export const roomStore = createStore<RoomState>()(
       // A backward (scroll-up) merge uses keep-oldest and can evict the newest tail
       // (newestEvicted from the timeline machine), sliding the window off the live
       // edge (same gate as loadOlderMessagesFromCache). Forward catch-up keeps the
-      // newest, so it never slides.
+      // newest, so it never slides. Fetch-latest lands the window AT the live edge
+      // by construction.
       const newRuntime = new Map(state.roomRuntime)
       const existingRuntime = newRuntime.get(roomJid)
       if (existingRuntime) {
         newRuntime.set(roomJid, {
           ...existingRuntime,
           messages: merged,
-          ...(newestEvicted ? { windowAtLiveEdge: false } : {}),
+          ...(newestEvicted
+            ? { windowAtLiveEdge: false }
+            : isFetchLatest && newFromMAM.length > 0
+              ? { windowAtLiveEdge: true }
+              : {}),
         })
       }
 

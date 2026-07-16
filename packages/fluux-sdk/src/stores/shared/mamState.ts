@@ -94,6 +94,9 @@ export function computeNewestFetchedTimestamp(
  * @param direction - Query direction: 'backward' for older history, 'forward' for catching up
  * @param oldestFetchedId - ID of oldest fetched message for pagination
  * @param newestFetchedTimestamp - Epoch ms of the newest fetched message (for gap marker positioning)
+ * @param preserveGapMarker - Leave forwardGapTimestamp untouched (bounded windowed queries)
+ * @param isFetchLatest - A `before:''` fetch-latest merge: the window is the live edge by
+ *   definition (SM/carbons own everything newer), regardless of `complete`.
  */
 export function setMAMQueryCompleted(
   states: Map<string, MAMQueryState>,
@@ -102,7 +105,8 @@ export function setMAMQueryCompleted(
   direction: MAMQueryDirection,
   oldestFetchedId?: string,
   newestFetchedTimestamp?: number,
-  preserveGapMarker = false
+  preserveGapMarker = false,
+  isFetchLatest = false
 ): Map<string, MAMQueryState> {
   const newStates = new Map(states)
   const current = newStates.get(id) || DEFAULT_MAM_STATE
@@ -112,9 +116,15 @@ export function setMAMQueryCompleted(
     ? complete
     : current.isHistoryComplete
 
+  // Forward: complete === reached live. Fetch-latest: the window IS the live
+  // edge by definition (SM/carbons own everything newer), regardless of
+  // `complete` (which only says whether OLDER history is exhausted) — without
+  // this, an entity synced via fetch-latest is re-seeded on every SM resume.
   const isCaughtUpToLive = direction === 'forward'
     ? complete
-    : current.isCaughtUpToLive
+    : isFetchLatest
+      ? true
+      : current.isCaughtUpToLive
 
   // Track gap position for incomplete forward catch-ups.
   // Set when forward catch-up ends without complete=true, cleared when caught up.

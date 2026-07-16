@@ -121,6 +121,47 @@ describe('messageTimeline', () => {
     })
   })
 
+  describe('mergeArchive fetch-latest mode', () => {
+    it('merges a latest page ABOVE resident history with full sort + keep-newest', () => {
+      const existing = [
+        msg('old-1', '2026-06-01T10:00:00Z'),
+        msg('old-2', '2026-06-01T11:00:00Z'),
+      ]
+      const incoming = [
+        msg('new-1', '2026-07-16T09:00:00Z'),
+        msg('new-2', '2026-07-16T10:00:00Z'),
+      ]
+
+      const result = mergeArchive(existing, incoming, 'backward', { ...cfg, windowSize: 4 }, true)
+
+      expect(result.merged.map((m) => m.id)).toEqual(['old-1', 'old-2', 'new-1', 'new-2'])
+      expect(result.newestEvicted).toBe(false)
+    })
+
+    it('keeps the NEWEST window when the merge exceeds the cap (window jumps to live)', () => {
+      const existing = Array.from({ length: 4 }, (_, i) =>
+        msg(`old-${i}`, new Date(2026, 5, 1, 10, i).toISOString())
+      )
+      const incoming = Array.from({ length: 3 }, (_, i) =>
+        msg(`new-${i}`, new Date(2026, 6, 16, 10, i).toISOString())
+      )
+
+      const result = mergeArchive(existing, incoming, 'backward', { ...cfg, windowSize: 4 }, true)
+
+      expect(result.merged.map((m) => m.id)).toEqual(['old-3', 'new-0', 'new-1', 'new-2'])
+      expect(result.newestEvicted).toBe(false)
+    })
+
+    it('plain backward merges are unchanged when isFetchLatest is false', () => {
+      const existing = [msg('new-1', '2026-07-16T10:00:00Z')]
+      const incoming = [msg('old-1', '2026-06-01T10:00:00Z')]
+
+      const result = mergeArchive(existing, incoming, 'backward', cfg)
+
+      expect(result.merged.map((m) => m.id)).toEqual(['old-1', 'new-1'])
+    })
+  })
+
   describe('loadOlderSlice', () => {
     it('dedupes, sorts, and keeps the oldest on overflow, reporting the slide', () => {
       const current = [msg('m4', '2024-01-15T10:04:00Z'), msg('m5', '2024-01-15T10:05:00Z')]
