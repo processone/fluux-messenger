@@ -13,6 +13,7 @@ import type {
   E2EEProtocolDescriptor,
   PluginContext,
   IdentityInfo,
+  PeerIdentity,
   PeerSupport,
   BareJID,
   TrustState,
@@ -27,11 +28,12 @@ import type {
   SecurityContext,
   XMLElementData,
 } from '@fluux/sdk'
-import { OmemoAccount } from '@fluux/omemo'
+import { OmemoAccount, fingerprint } from '@fluux/omemo'
 import type { OmemoMessage } from '@fluux/omemo'
 import { PluginStorageOmemoStore } from './store'
 import { publishDeviceList, fetchDeviceList, fetchBundle, publishBundle } from './pep'
 import { resolveInboundTrust, toTrustState, type BtbvState } from './trust'
+import { isVerified } from './verifiedDevices'
 import { buildEnvelope, parseEnvelope } from './sce'
 import { buildEncrypted, parseEncrypted } from './encryptedElement'
 import { elementToData, dataToElement, parseXml } from './stanzaData'
@@ -134,6 +136,44 @@ export class OmemoPlugin implements E2EEPlugin {
 
   async startVerification(_peer: BareJID, _method: VerificationMethod): Promise<VerificationFlow> {
     throw new Error('fingerprint-compare verification UI is a later sub-project')
+  }
+
+  /**
+   * Resolve one peer device to a {@link PeerIdentity}. Identity key comes from
+   * the persisted `TrustRecord.identityKey` (bound on first session) when
+   * present, else a best-effort bundle fetch. No key → `fingerprint:''`,
+   * `trust:'unknown'`. Trust precedence: a fingerprint-bound verified marker
+   * wins (`'verified'`), else the library BTBV state (`toTrustState`).
+   */
+  private async resolvePeerIdentity(peer: string, deviceId: number): Promise<PeerIdentity> {
+    const store = new PluginStorageOmemoStore(this.ctx.storage)
+    const existing = await store.loadTrust(peer, deviceId)
+    let ik: Uint8Array | null =
+      existing?.identityKey && existing.identityKey.length > 0 ? existing.identityKey : null
+    if (!ik) {
+      try {
+        ik = (await fetchBundle(this.ctx.xmpp, peer, deviceId))?.ik ?? null
+      } catch {
+        ik = null
+      }
+    }
+    const fpHex = ik ? hex(fingerprint(ik)) : ''
+    let trust: TrustState
+    if (fpHex && (await isVerified(this.ctx.storage, peer, deviceId, fpHex))) {
+      trust = 'verified'
+    } else if (!fpHex) {
+      trust = 'unknown'
+    } else {
+      trust = toTrustState((existing?.state as BtbvState | undefined) ?? 'undecided')
+    }
+    return { id: String(deviceId), fingerprint: fpHex, trust }
+  }
+
+  async listPeerIdentities(peer: BareJID): Promise<PeerIdentity[]> {
+    const ids = await fetchDeviceList(this.ctx.xmpp, peer)
+    const out: PeerIdentity[] = []
+    for (const id of ids) out.push(await this.resolvePeerIdentity(peer, id))
+    return out
   }
 
   async getPeerTrust(peer: BareJID): Promise<TrustState> {
