@@ -192,7 +192,14 @@
             "glanceEncrypted": "Titkosított, nem ellenőrzött",
             "glanceNotEncrypted": "Nem titkosított",
             "glanceDisabled": "Titkosítás kikapcsolva",
-            "glanceLocked": "Titkosított, zárolt"
+            "glanceLocked": "Titkosított, zárolt",
+            "trust": {
+                "verified": "Ellenőrzött",
+                "introduced": "Bemutatott",
+                "tofu": "Nem ellenőrzött",
+                "untrusted": "Nem megbízható",
+                "unknown": "Ismeretlen"
+            }
         },
         "actionsMenu": "További műveletek",
         "requestsHeading": "Kérések"

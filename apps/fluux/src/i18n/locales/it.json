@@ -194,7 +194,14 @@
             "glanceEncrypted": "Cifrato, non verificato",
             "glanceNotEncrypted": "Non cifrato",
             "glanceDisabled": "Cifratura disattivata",
-            "glanceLocked": "Cifrato, bloccato"
+            "glanceLocked": "Cifrato, bloccato",
+            "trust": {
+                "verified": "Verificato",
+                "introduced": "Introdotto",
+                "tofu": "Non verificato",
+                "untrusted": "Non attendibile",
+                "unknown": "Sconosciuto"
+            }
         },
         "actionsMenu": "Altre azioni",
         "requestsHeading": "Richieste"

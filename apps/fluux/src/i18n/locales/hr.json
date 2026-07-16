@@ -192,7 +192,14 @@
             "glanceEncrypted": "Šifrirano, nije potvrđeno",
             "glanceNotEncrypted": "Nije šifrirano",
             "glanceDisabled": "Šifriranje isključeno",
-            "glanceLocked": "Šifrirano, zaključano"
+            "glanceLocked": "Šifrirano, zaključano",
+            "trust": {
+                "verified": "Potvrđeno",
+                "introduced": "Predstavljeno",
+                "tofu": "Nije potvrđeno",
+                "untrusted": "Nepouzdano",
+                "unknown": "Nepoznato"
+            }
         },
         "actionsMenu": "Više radnji",
         "requestsHeading": "Zahtjevi"

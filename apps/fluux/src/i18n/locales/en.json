@@ -193,7 +193,14 @@
             "glanceEncrypted": "Encrypted, not verified",
             "glanceNotEncrypted": "Not encrypted",
             "glanceDisabled": "Encryption off",
-            "glanceLocked": "Encrypted, locked"
+            "glanceLocked": "Encrypted, locked",
+            "trust": {
+                "verified": "Verified",
+                "introduced": "Introduced",
+                "tofu": "Not verified",
+                "untrusted": "Untrusted",
+                "unknown": "Unknown"
+            }
         },
         "actionsMenu": "More actions"
     },

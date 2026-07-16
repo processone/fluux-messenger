@@ -193,7 +193,14 @@
             "glanceEncrypted": "Κρυπτογραφημένο, μη επαληθευμένο",
             "glanceNotEncrypted": "Μη κρυπτογραφημένο",
             "glanceDisabled": "Κρυπτογράφηση απενεργοποιημένη",
-            "glanceLocked": "Κρυπτογραφημένο, κλειδωμένο"
+            "glanceLocked": "Κρυπτογραφημένο, κλειδωμένο",
+            "trust": {
+                "verified": "Επαληθευμένο",
+                "introduced": "Εισήχθη",
+                "tofu": "Μη επαληθευμένο",
+                "untrusted": "Μη αξιόπιστο",
+                "unknown": "Άγνωστο"
+            }
         },
         "actionsMenu": "Περισσότερες ενέργειες",
         "requestsHeading": "Αιτήματα"

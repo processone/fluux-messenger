@@ -192,7 +192,14 @@
             "glanceEncrypted": "Dulkóðað, ekki staðfest",
             "glanceNotEncrypted": "Ekki dulkóðað",
             "glanceDisabled": "Dulkóðun slökkt",
-            "glanceLocked": "Dulkóðað, læst"
+            "glanceLocked": "Dulkóðað, læst",
+            "trust": {
+                "verified": "Staðfest",
+                "introduced": "Kynnt",
+                "tofu": "Ekki staðfest",
+                "untrusted": "Ekki treyst",
+                "unknown": "Óþekkt"
+            }
         },
         "actionsMenu": "Fleiri aðgerðir",
         "requestsHeading": "Beiðnir"

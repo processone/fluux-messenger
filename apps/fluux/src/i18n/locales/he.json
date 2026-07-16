@@ -192,7 +192,14 @@
             "glanceEncrypted": "מוצפן, לא מאומת",
             "glanceNotEncrypted": "לא מוצפן",
             "glanceDisabled": "הצפנה כבויה",
-            "glanceLocked": "מוצפן, נעול"
+            "glanceLocked": "מוצפן, נעול",
+            "trust": {
+                "verified": "מאומת",
+                "introduced": "הוצג",
+                "tofu": "לא מאומת",
+                "untrusted": "לא מהימן",
+                "unknown": "לא ידוע"
+            }
         },
         "actionsMenu": "פעולות נוספות",
         "requestsHeading": "בקשות"

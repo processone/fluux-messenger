@@ -192,7 +192,14 @@
             "glanceEncrypted": "Salattu, ei vahvistettu",
             "glanceNotEncrypted": "Ei salattu",
             "glanceDisabled": "Salaus pois käytöstä",
-            "glanceLocked": "Salattu, lukittu"
+            "glanceLocked": "Salattu, lukittu",
+            "trust": {
+                "verified": "Vahvistettu",
+                "introduced": "Esitelty",
+                "tofu": "Ei vahvistettu",
+                "untrusted": "Ei luotettu",
+                "unknown": "Tuntematon"
+            }
         },
         "actionsMenu": "Lisätoiminnot",
         "requestsHeading": "Pyynnöt"

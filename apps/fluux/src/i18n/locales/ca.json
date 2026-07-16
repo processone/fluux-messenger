@@ -194,7 +194,14 @@
             "glanceEncrypted": "Xifrat, no verificat",
             "glanceNotEncrypted": "No xifrat",
             "glanceDisabled": "Xifratge desactivat",
-            "glanceLocked": "Xifrat, bloquejat"
+            "glanceLocked": "Xifrat, bloquejat",
+            "trust": {
+                "verified": "Verificat",
+                "introduced": "Introduït",
+                "tofu": "No verificat",
+                "untrusted": "No fiable",
+                "unknown": "Desconegut"
+            }
         },
         "actionsMenu": "Més accions",
         "requestsHeading": "Sol·licituds"

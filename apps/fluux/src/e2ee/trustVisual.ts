@@ -1,3 +1,5 @@
+import type { TrustState } from '@fluux/sdk'
+
 /**
  * The single source of truth for the COLOR of an E2EE trust indicator.
  *
@@ -42,4 +44,30 @@ export function trustVisual(state: TrustVisualState): TrustVisual {
     case 'checking':
       return { colorClass: 'text-fluux-muted', tone: 'calm' }
   }
+}
+
+/**
+ * The single source of truth for the COLOR + TONE of a consumer-facing
+ * {@link TrustState} (peer/device/aggregate trust). Distinct from
+ * {@link trustVisual}, which keys on the message-lock / cert PRESENTATION
+ * states (`decryptFailed`, `keyChanged`, `rejected`, …) — those are not trust
+ * levels. "Calm by default": only `untrusted` (a new/changed/failed key) is a
+ * danger signal; `verified` is the teal brand; everything else is neutral.
+ */
+export function trustStateVisual(t: TrustState): TrustVisual {
+  switch (t) {
+    case 'verified':
+      return { colorClass: 'text-fluux-encryption', tone: 'verified' }
+    case 'untrusted':
+      return { colorClass: 'text-fluux-error', tone: 'danger' }
+    case 'tofu':
+    case 'introduced':
+    case 'unknown':
+      return { colorClass: 'text-fluux-muted', tone: 'calm' }
+  }
+}
+
+/** i18n key for a {@link TrustState}'s human label. Caller wraps in `t(...)`. */
+export function trustLabel(t: TrustState): string {
+  return `contacts.encryption.trust.${t}`
 }

@@ -192,7 +192,14 @@
             "glanceEncrypted": "مشفّر، غير موثّق",
             "glanceNotEncrypted": "غير مشفّر",
             "glanceDisabled": "التشفير معطّل",
-            "glanceLocked": "مشفّر، مقفل"
+            "glanceLocked": "مشفّر، مقفل",
+            "trust": {
+                "verified": "موثّق",
+                "introduced": "معرّف",
+                "tofu": "غير موثّق",
+                "untrusted": "غير موثوق به",
+                "unknown": "غير معروف"
+            }
         },
         "actionsMenu": "إجراءات أخرى",
         "requestsHeading": "طلبات"

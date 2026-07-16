@@ -193,7 +193,14 @@
             "glanceEncrypted": "Šifrēts, nepārbaudīts",
             "glanceNotEncrypted": "Nešifrēts",
             "glanceDisabled": "Šifrēšana izslēgta",
-            "glanceLocked": "Šifrēts, bloķēts"
+            "glanceLocked": "Šifrēts, bloķēts",
+            "trust": {
+                "verified": "Pārbaudīts",
+                "introduced": "Iepazīstināts",
+                "tofu": "Nepārbaudīts",
+                "untrusted": "Neuzticams",
+                "unknown": "Nezināms"
+            }
         },
         "actionsMenu": "Vairāk darbību",
         "requestsHeading": "Pieprasījumi"

@@ -194,7 +194,14 @@
             "glanceEncrypted": "Krüptitud, kontrollimata",
             "glanceNotEncrypted": "Krüptimata",
             "glanceDisabled": "Krüptimine väljas",
-            "glanceLocked": "Krüptitud, lukustatud"
+            "glanceLocked": "Krüptitud, lukustatud",
+            "trust": {
+                "verified": "Kontrollitud",
+                "introduced": "Tutvustatud",
+                "tofu": "Kontrollimata",
+                "untrusted": "Ebausaldusväärne",
+                "unknown": "Teadmata"
+            }
         },
         "actionsMenu": "Rohkem toiminguid",
         "requestsHeading": "Taotlused"

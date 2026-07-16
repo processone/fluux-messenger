@@ -194,7 +194,14 @@
             "glanceEncrypted": "Kriptat, mhux ivverifikat",
             "glanceNotEncrypted": "Mhux kriptat",
             "glanceDisabled": "Kriptaġġ mitfi",
-            "glanceLocked": "Kriptat, imsakkar"
+            "glanceLocked": "Kriptat, imsakkar",
+            "trust": {
+                "verified": "Ivverifikat",
+                "introduced": "Introdott",
+                "tofu": "Mhux ivverifikat",
+                "untrusted": "Mhux affidabbli",
+                "unknown": "Mhux magħruf"
+            }
         },
         "actionsMenu": "Aktar azzjonijiet",
         "requestsHeading": "Talbiet"

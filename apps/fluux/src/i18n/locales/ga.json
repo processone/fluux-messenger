@@ -192,7 +192,14 @@
             "glanceEncrypted": "Criptithe, gan fíorú",
             "glanceNotEncrypted": "Gan criptiú",
             "glanceDisabled": "Criptiú as",
-            "glanceLocked": "Criptithe, faoi ghlas"
+            "glanceLocked": "Criptithe, faoi ghlas",
+            "trust": {
+                "verified": "Fíoraithe",
+                "introduced": "Tugtha isteach",
+                "tofu": "Gan fíorú",
+                "untrusted": "Neamhiontaofa",
+                "unknown": "Anaithnid"
+            }
         },
         "actionsMenu": "Tuilleadh gníomhartha",
         "requestsHeading": "Iarratais"

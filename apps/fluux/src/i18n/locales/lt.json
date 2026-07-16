@@ -192,7 +192,14 @@
             "glanceEncrypted": "Užšifruota, nepatvirtinta",
             "glanceNotEncrypted": "Neužšifruota",
             "glanceDisabled": "Šifravimas išjungtas",
-            "glanceLocked": "Užšifruota, užrakinta"
+            "glanceLocked": "Užšifruota, užrakinta",
+            "trust": {
+                "verified": "Patvirtinta",
+                "introduced": "Pristatyta",
+                "tofu": "Nepatvirtinta",
+                "untrusted": "Nepatikima",
+                "unknown": "Nežinoma"
+            }
         },
         "actionsMenu": "Daugiau veiksmų",
         "requestsHeading": "Prašymai"

@@ -194,7 +194,14 @@
             "glanceEncrypted": "Criptat, neverificat",
             "glanceNotEncrypted": "Necriptat",
             "glanceDisabled": "Criptare dezactivată",
-            "glanceLocked": "Criptat, blocat"
+            "glanceLocked": "Criptat, blocat",
+            "trust": {
+                "verified": "Verificat",
+                "introduced": "Introdus",
+                "tofu": "Neverificat",
+                "untrusted": "Nu este de încredere",
+                "unknown": "Necunoscut"
+            }
         },
         "actionsMenu": "Mai multe acțiuni",
         "requestsHeading": "Solicitări"

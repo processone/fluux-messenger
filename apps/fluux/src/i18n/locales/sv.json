@@ -192,7 +192,14 @@
             "glanceEncrypted": "Krypterat, ej verifierat",
             "glanceNotEncrypted": "Inte krypterat",
             "glanceDisabled": "Kryptering av",
-            "glanceLocked": "Krypterat, låst"
+            "glanceLocked": "Krypterat, låst",
+            "trust": {
+                "verified": "Verifierat",
+                "introduced": "Introducerad",
+                "tofu": "Ej verifierat",
+                "untrusted": "Opålitlig",
+                "unknown": "Okänd"
+            }
         },
         "actionsMenu": "Fler åtgärder",
         "requestsHeading": "Förfrågningar"

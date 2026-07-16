@@ -194,7 +194,14 @@
             "glanceEncrypted": "Šifrováno, neověřeno",
             "glanceNotEncrypted": "Nešifrováno",
             "glanceDisabled": "Šifrování vypnuto",
-            "glanceLocked": "Šifrováno, uzamčeno"
+            "glanceLocked": "Šifrováno, uzamčeno",
+            "trust": {
+                "verified": "Ověřeno",
+                "introduced": "Představeno",
+                "tofu": "Neověřeno",
+                "untrusted": "Nedůvěryhodné",
+                "unknown": "Neznámé"
+            }
         },
         "actionsMenu": "Další akce",
         "requestsHeading": "Žádosti"

@@ -192,7 +192,14 @@
             "glanceEncrypted": "已加密，未验证",
             "glanceNotEncrypted": "未加密",
             "glanceDisabled": "加密已关闭",
-            "glanceLocked": "已加密，已锁定"
+            "glanceLocked": "已加密，已锁定",
+            "trust": {
+                "verified": "已验证",
+                "introduced": "已引入",
+                "tofu": "未验证",
+                "untrusted": "不可信",
+                "unknown": "未知"
+            }
         },
         "actionsMenu": "更多操作",
         "requestsHeading": "请求"

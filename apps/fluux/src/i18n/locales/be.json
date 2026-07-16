@@ -192,7 +192,14 @@
             "glanceEncrypted": "Зашыфравана, не праверана",
             "glanceNotEncrypted": "Не зашыфравана",
             "glanceDisabled": "Шыфраванне адключана",
-            "glanceLocked": "Зашыфравана, заблакавана"
+            "glanceLocked": "Зашыфравана, заблакавана",
+            "trust": {
+                "verified": "Праверана",
+                "introduced": "Прадстаўлена",
+                "tofu": "Не праверана",
+                "untrusted": "Ненадзейна",
+                "unknown": "Невядома"
+            }
         },
         "actionsMenu": "Іншыя дзеянні",
         "requestsHeading": "Запыты"

@@ -192,7 +192,14 @@
             "glanceEncrypted": "Зашифровано, не перевірено",
             "glanceNotEncrypted": "Не зашифровано",
             "glanceDisabled": "Шифрування вимкнено",
-            "glanceLocked": "Зашифровано, заблоковано"
+            "glanceLocked": "Зашифровано, заблоковано",
+            "trust": {
+                "verified": "Перевірено",
+                "introduced": "Представлено",
+                "tofu": "Не перевірено",
+                "untrusted": "Ненадійно",
+                "unknown": "Невідомо"
+            }
         },
         "actionsMenu": "Інші дії",
         "requestsHeading": "Запити"

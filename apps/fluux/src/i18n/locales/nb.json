@@ -192,7 +192,14 @@
             "glanceEncrypted": "Kryptert, ikke bekreftet",
             "glanceNotEncrypted": "Ikke kryptert",
             "glanceDisabled": "Kryptering av",
-            "glanceLocked": "Kryptert, låst"
+            "glanceLocked": "Kryptert, låst",
+            "trust": {
+                "verified": "Bekreftet",
+                "introduced": "Introdusert",
+                "tofu": "Ikke bekreftet",
+                "untrusted": "Ikke pålitelig",
+                "unknown": "Ukjent"
+            }
         },
         "actionsMenu": "Flere handlinger",
         "requestsHeading": "Forespørsler"

@@ -192,7 +192,14 @@
             "glanceEncrypted": "Криптирано, непотвърдено",
             "glanceNotEncrypted": "Некриптирано",
             "glanceDisabled": "Криптирането е изключено",
-            "glanceLocked": "Криптирано, заключено"
+            "glanceLocked": "Криптирано, заключено",
+            "trust": {
+                "verified": "Потвърдено",
+                "introduced": "Представено",
+                "tofu": "Непотвърдено",
+                "untrusted": "Ненадеждно",
+                "unknown": "Неизвестно"
+            }
         },
         "actionsMenu": "Още действия",
         "requestsHeading": "Заявки"
