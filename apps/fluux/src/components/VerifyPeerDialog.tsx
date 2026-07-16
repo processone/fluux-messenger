@@ -47,9 +47,10 @@ interface VerifyPeerDialogProps {
  *   (Gajim, Dino, Conversations, …). Hidden behind a toggle to keep the
  *   default UX uncluttered, but always available.
  *
- * Either path records the same `peerFingerprint` in
- * `verifiedPeerKeysStore`, so a key rotation silently demotes trust
- * until the user re-verifies.
+ * Either path reports the compared `peerFingerprint` via `onConfirm`; the
+ * caller decides how to persist it (OpenPGP verified-key store, or an OMEMO
+ * per-device `setIdentityTrust`). A key rotation changes the fingerprint, so a
+ * stored verification silently lapses until the user re-verifies.
  */
 export function VerifyPeerDialog({
   peerName,

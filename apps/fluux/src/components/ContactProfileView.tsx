@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ArrowLeft } from 'lucide-react'
-import { type Contact, type VCardInfo, useBlocking, useXMPPContext } from '@fluux/sdk'
+import { type Contact, type PeerIdentity, type VCardInfo, useBlocking, useXMPPContext } from '@fluux/sdk'
 import { useBlockingStore, useConnectionStore, useLastActivity } from '@fluux/sdk/react'
 import { APP_OFFLINE_PRESENCE_COLOR, PRESENCE_COLORS } from '@/constants/ui'
 import { getTranslatedStatusText } from '@/utils/statusText'
@@ -71,6 +71,42 @@ export function ContactProfileView({
     | undefined
   const ownFingerprint = plugin?.getOwnFingerprint?.() ?? null
 
+  const omemoPlugin = client.e2ee?.getPlugin('omemo:2') as
+    | {
+        listPeerIdentities: (peer: string) => Promise<PeerIdentity[]>
+        getOwnFingerprint: () => Promise<string | null>
+        setIdentityTrust: (peer: string, id: string, decision: 'verified' | 'untrusted') => Promise<void>
+      }
+    | null
+    | undefined
+  const isOmemoConversation = encryptionState.kind === 'encrypted' && encryptionState.protocolId === 'omemo:2'
+
+  const [verifyDevice, setVerifyDevice] = useState<PeerIdentity | null>(null)
+  const [omemoOwnFp, setOmemoOwnFp] = useState<string | null>(null)
+  const [omemoReloadKey, setOmemoReloadKey] = useState(0)
+
+  // Memoized so SecurityTab's fetch effect (which depends on the whole
+  // `omemo` object) doesn't refetch + flash its loading spinner on every
+  // unrelated parent re-render — only when the plugin, target peer, or an
+  // explicit reload actually changes.
+  const omemoProp = useMemo(() => {
+    if (!isOmemoConversation || !omemoPlugin?.listPeerIdentities) return null
+    return {
+      listPeerIdentities: omemoPlugin.listPeerIdentities,
+      onVerifyDevice: (identity: PeerIdentity) => {
+        void omemoPlugin.getOwnFingerprint().then((fp) => {
+          setOmemoOwnFp(fp)
+          setVerifyDevice(identity)
+        })
+      },
+      onRevokeDevice: async (identity: PeerIdentity) => {
+        await omemoPlugin.setIdentityTrust(contact.jid, identity.id, 'untrusted')
+        setOmemoReloadKey((n) => n + 1)
+      },
+      reloadKey: omemoReloadKey,
+    }
+  }, [isOmemoConversation, omemoPlugin, contact.jid, omemoReloadKey])
+
   // Lazily query last activity for offline roster contacts
   useLastActivity(
     isInRoster && !forceOffline && contact.presence === 'offline' ? contact.jid : null
@@ -89,6 +125,8 @@ export function ContactProfileView({
     setShowVerifyDialog(false)
     setPepNickname(null)
     setVcard(null)
+    setVerifyDevice(null)
+    setOmemoOwnFp(null)
   }, [contact.jid, contact.name])
 
   // PEP nickname fetch
@@ -262,6 +300,8 @@ export function ContactProfileView({
         {securityOpen && (
           <ContactSecurityDetail
             state={encryptionState}
+            peerJid={contact.jid}
+            omemo={omemoProp}
             onVerify={() => setShowVerifyDialog(true)}
             onRequestRevoke={() => setPendingConfirm('revokeVerify')}
             onDisableEncryption={handleDisableEncryption}
@@ -294,6 +334,24 @@ export function ContactProfileView({
             setShowVerifyDialog(false)
           }}
           onCancel={() => setShowVerifyDialog(false)}
+        />
+      )}
+
+      {verifyDevice && omemoPlugin && ownJid && (
+        <VerifyPeerDialog
+          peerName={contact.name}
+          peerJid={contact.jid}
+          peerFingerprint={verifyDevice.fingerprint}
+          ownJid={ownJid}
+          ownFingerprint={omemoOwnFp}
+          alreadyVerified={verifyDevice.trust === 'verified'}
+          onConfirm={() => {
+            void omemoPlugin.setIdentityTrust(contact.jid, verifyDevice.id, 'verified').then(() => {
+              setVerifyDevice(null)
+              setOmemoReloadKey((n) => n + 1)
+            })
+          }}
+          onCancel={() => setVerifyDevice(null)}
         />
       )}
     </>
