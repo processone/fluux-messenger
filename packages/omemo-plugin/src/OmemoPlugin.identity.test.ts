@@ -78,4 +78,17 @@ describe('OmemoPlugin identity/probe', () => {
     const bundle = await fetchBundle(alice.ctx.xmpp, 'bob@x', bobDevices[0])
     expect(bundle).not.toBeNull()
   })
+
+  it('getOwnFingerprint returns the hex identity fingerprint without publishing', async () => {
+    const a = createMockPluginContext('a@x')
+    const p = new OmemoPlugin()
+    await p.init(a.ctx)
+    const fp = await p.getOwnFingerprint()
+    expect(fp).toMatch(/^[0-9a-f]+$/)
+    // Read-only: it must NOT have published a device-list/bundle (unlike ensureIdentity).
+    expect(a.publishes).toHaveLength(0)
+    // Stable across calls and equal to ensureIdentity's fingerprint.
+    const id = await p.ensureIdentity()
+    expect(await p.getOwnFingerprint()).toBe(id.fingerprint)
+  })
 })

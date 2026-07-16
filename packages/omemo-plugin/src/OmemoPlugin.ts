@@ -101,6 +101,22 @@ export class OmemoPlugin implements E2EEPlugin {
     }
   }
 
+  /**
+   * Read-only OMEMO identity fingerprint (hex), for the verify dialog's
+   * own-fingerprint display. Loads/creates the local account but NEVER
+   * publishes — unlike {@link ensureIdentity}, which has PEP side effects and
+   * must not run on the dialog hot path. Returns `null` only if the account
+   * cannot be loaded.
+   */
+  async getOwnFingerprint(): Promise<string | null> {
+    try {
+      const acc = await this.ensureAccount()
+      return hex(acc.identityFingerprint())
+    } catch {
+      return null
+    }
+  }
+
   async probePeer(peer: BareJID): Promise<PeerSupport> {
     const ids = await fetchDeviceList(this.ctx.xmpp, peer)
     return { supported: ids.length > 0, ttl: 300, variant: NS_OMEMO }
