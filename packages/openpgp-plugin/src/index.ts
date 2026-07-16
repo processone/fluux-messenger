@@ -37,3 +37,11 @@ export {
   SecretKeyBackupProbeError,
 } from './secretKeyProbe'
 export type { RemoteIdentityState } from './secretKeyProbe'
+
+// XEP-0373 base plugin: descriptor, error classifier, shared value/output types,
+// and the abstract base class subclasses extend.
+export { OpenPGPPluginBase, OPENPGP_DESCRIPTOR, classifyBoundaryError } from './OpenPGPPluginBase'
+export type { KeyBundle, RestoreResult, DecryptOutput, CertValidation } from './OpenPGPPluginBase'
+
+// App-layer recovery signals raised by the web unlock auto-recovery path.
+export { KeyPickerRequiredError, NoRecoveryAvailableError } from './recoveryErrors'
