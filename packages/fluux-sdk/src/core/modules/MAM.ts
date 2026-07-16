@@ -283,7 +283,10 @@ export class MAM extends BaseModule {
               // The archive no longer holds the after-anchor (expired/purged):
               // degrade to fetch-latest (spec §5 — degrade gracefully, never error).
               logInfo(`MAM after-cursor purged for ...@${getDomain(conversationId) || '*'} — degrading to fetch-latest`)
-              return this.queryArchive({ with: withJid, max, before: '', preserveGapMarker })
+              const degraded = await this.queryArchive({ with: withJid, max, before: '', preserveGapMarker })
+              // Mark the result so callers (the catch-up orchestrator) can tell
+              // this is ALREADY a fetch-latest page and skip issuing another one.
+              return { ...degraded, degradedToFetchLatest: true }
             }
             throw iqError
           }
@@ -475,7 +478,10 @@ export class MAM extends BaseModule {
               // The archive no longer holds the after-anchor (expired/purged):
               // degrade to fetch-latest (spec §5 — degrade gracefully, never error).
               logInfo(`Room MAM after-cursor purged for ${roomJid} — degrading to fetch-latest`)
-              return this.queryRoomArchive({ roomJid, max, before: '', preserveGapMarker })
+              const degraded = await this.queryRoomArchive({ roomJid, max, before: '', preserveGapMarker })
+              // Mark the result so callers (the catch-up orchestrator) can tell
+              // this is ALREADY a fetch-latest page and skip issuing another one.
+              return { ...degraded, degradedToFetchLatest: true }
             }
             throw iqError
           }
@@ -1257,7 +1263,7 @@ export class MAM extends BaseModule {
         after?: string
         start?: string
         maxAutoPages?: number
-      }) => Promise<{ complete: boolean; rsm: { first?: string } }>
+      }) => Promise<{ complete: boolean; rsm: { first?: string }; degradedToFetchLatest?: boolean }>
     },
   ): Promise<void> {
     const { sessionStartTime, stitchReadPointer = false } = options
@@ -1277,11 +1283,25 @@ export class MAM extends BaseModule {
       ...(isForward ? { maxAutoPages: MAM_CATCHUP_FORWARD_BAIL_PAGES } : {}),
     })
     let windowBottom: string | undefined
-    if (isForward && !initial.complete) {
+    // Whether the query that established `windowBottom` reported complete:
+    // true — i.e. it exhausted the archive rather than merely landing on an
+    // intermediate page. Used below to skip a pointless Phase B walk.
+    let windowBottomComplete = false
+    if (initial.degradedToFetchLatest) {
+      // Phase A's forward query hit a purged after-anchor (item-not-found)
+      // and queryArchive/queryRoomArchive already retried it internally as a
+      // before:'' fetch-latest — `initial` IS that fetch-latest page. Treat
+      // it as the fetch-latest phase directly instead of issuing a second,
+      // fully-deduped `before: ''` bail query.
+      windowBottom = initial.rsm.first
+      windowBottomComplete = initial.complete
+    } else if (isForward && !initial.complete) {
       const latest = await io.query({ max: MAM_CATCHUP_BACKWARD_MAX, before: '' })
       windowBottom = latest.rsm.first
+      windowBottomComplete = latest.complete
     } else if (!isForward) {
       windowBottom = initial.rsm.first
+      windowBottomComplete = initial.complete
     }
     // (forward && complete → contiguous to live over the cache; a pending
     // pointer, if any, lives in the cache and the activation machinery
@@ -1289,6 +1309,15 @@ export class MAM extends BaseModule {
 
     // Phase B — grow the window down to the read pointer.
     if (!stitchReadPointer) return
+    // The fetch-latest that established `windowBottom` already exhausted the
+    // archive (complete: true) — nothing older exists, so a still-pending
+    // pointer was purged rather than merely deep. Walking backward from
+    // windowBottom would just issue one wasted page (the server would report
+    // complete: true again). Skip the walk. This does NOT apply to the
+    // cache-bottom-probe seed below — a pointer below the cache bottom is a
+    // different situation, unrelated to whether a fetch-latest here exhausted
+    // the archive.
+    if (windowBottomComplete) return
     // Cross-session convergence: Phase A can end forward-complete with no
     // fetch-latest (windowBottom unset) while the pointer is still pending —
     // e.g. the session after a capped Phase B walk, whose coverage edge is

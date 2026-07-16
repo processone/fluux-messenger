@@ -2765,6 +2765,11 @@ export const roomStore = createStore<RoomState>()(
       // edge (same gate as loadOlderMessagesFromCache). Forward catch-up keeps the
       // newest, so it never slides. Fetch-latest lands the window AT the live edge
       // by construction.
+      // Accepted edge case: a fresh-session bail fetch-latest while the user
+      // is deep-scrolled in THIS active room can evict resident messages via
+      // keep-newest and jump the window to live — same class as
+      // jump-to-latest. The content-anchor scroll restore then degrades to an
+      // estimate rather than an exact reposition.
       const newRuntime = new Map(state.roomRuntime)
       const existingRuntime = newRuntime.get(roomJid)
       if (existingRuntime) {

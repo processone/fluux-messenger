@@ -1863,6 +1863,11 @@ export const chatStore = createStore<ChatState>()(
             newWindowAtLiveEdge.set(conversationId, false)
           } else if (isFetchLatest && newMessages.length > 0) {
             // Fetch-latest lands the window AT the live edge by construction.
+            // Accepted edge case: a fresh-session bail fetch-latest while the
+            // user is deep-scrolled in THIS active conversation can evict
+            // resident messages via keep-newest and jump the window to live —
+            // same class as jump-to-latest. The content-anchor scroll restore
+            // then degrades to an estimate rather than an exact reposition.
             newWindowAtLiveEdge = new Map(state.windowAtLiveEdge)
             newWindowAtLiveEdge.set(conversationId, true)
           }

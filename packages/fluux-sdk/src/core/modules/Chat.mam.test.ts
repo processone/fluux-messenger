@@ -2734,6 +2734,10 @@ describe('XMPPClient MAM', () => {
       const retryBeforeEl = retrySetEl?.children?.find((c: any) => c.name === 'before')
       expect(retryBeforeEl).toBeDefined()
       expect(retrySetEl?.children?.find((c: any) => c.name === 'after')).toBeUndefined()
+
+      // The degraded result must carry the flag so the catch-up orchestrator
+      // can recognize it's already a fetch-latest page and skip a second one.
+      expect(result.degradedToFetchLatest).toBe(true)
     })
 
     it('does not retry item-not-found when it occurs on a later page (not after-anchored first page)', async () => {
@@ -3282,6 +3286,10 @@ describe('XMPPClient MAM', () => {
       const retryBeforeEl = retrySetEl?.children?.find((c: any) => c.name === 'before')
       expect(retryBeforeEl).toBeDefined()
       expect(retrySetEl?.children?.find((c: any) => c.name === 'after')).toBeUndefined()
+
+      // The degraded result must carry the flag so the catch-up orchestrator
+      // can recognize it's already a fetch-latest page and skip a second one.
+      expect(result.degradedToFetchLatest).toBe(true)
     })
   })
 

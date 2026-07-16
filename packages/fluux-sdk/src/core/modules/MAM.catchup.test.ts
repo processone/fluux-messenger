@@ -826,6 +826,56 @@ describe('MAM Background Catch-Up', () => {
       // First page (after-anchored) failed, degrade retry (fetch-latest) succeeded.
       expect(callCount).toBe(2)
     })
+
+    it('skips the redundant fetch-latest when Phase A itself degraded to one (purged after-anchor)', async () => {
+      await connectClient()
+      setupChat('mds-ptr') // pending pointer set — exercises Phase B seeding too
+
+      const calls: any[] = []
+      vi.spyOn(xmppClient.mam, 'queryArchive').mockImplementation(async (opts: any) => {
+        calls.push(opts)
+        if (opts.after) {
+          // Phase A's forward query already degraded internally (purged
+          // after-anchor) and returned a fetch-latest page — NOT a second
+          // `before: ''` bail query should follow.
+          return { messages: [], complete: false, degradedToFetchLatest: true, rsm: { first: 'w-bottom' } }
+        }
+        // The pointer's own message is in the backward page seeded from 'w-bottom'.
+        vi.mocked(mockStores.chat.getConversationPendingStanzaId!).mockReturnValue(undefined)
+        return { messages: [], complete: false, rsm: { first: 'older' } }
+      })
+
+      const cached = [{ timestamp: new Date('2026-05-14T09:00:00.000Z'), stanzaId: 'cov-42' }]
+      await xmppClient.mam.catchUpConversationHistory('alice@example.com', cached, {
+        sessionStartTime: new Date('2026-06-14T12:00:00Z').getTime(),
+        stitchReadPointer: true,
+      })
+
+      // No second `before: ''` bail query — the degraded initial IS the fetch-latest.
+      expect(calls.some((c) => c.before === '')).toBe(false)
+      // Phase B seeds its first backward page from the degraded result's rsm.first.
+      expect(calls[1]).toMatchObject({ before: 'w-bottom' })
+      expect(calls).toHaveLength(2)
+    })
+
+    it('skips the Phase B walk when the fetch-latest establishing windowBottom already exhausted the archive', async () => {
+      await connectClient()
+      setupChat('mds-ptr') // pending pointer never clears in this test
+
+      const calls: any[] = []
+      vi.spyOn(xmppClient.mam, 'queryArchive').mockImplementation(async (opts: any) => {
+        calls.push(opts)
+        // Empty cache: Phase A's own query IS the fetch-latest (before: '').
+        return { messages: [], complete: true, rsm: { first: 'w-bottom' } }
+      })
+
+      await xmppClient.mam.catchUpConversationHistory('alice@example.com', [], { stitchReadPointer: true })
+
+      // The fetch-latest exhausted the archive — nothing older exists, so a
+      // still-pending pointer was purged, not merely deep. No backward page.
+      expect(calls).toHaveLength(1)
+      expect(calls[0]).toMatchObject({ before: '' })
+    })
   })
 
   describe('catchUpRoomHistory (latest-first orchestrator, room twin)', () => {

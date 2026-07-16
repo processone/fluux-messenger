@@ -89,6 +89,12 @@ export interface MAMResult {
   complete: boolean
   /** Pagination info for next query */
   rsm: RSMResponse
+  /**
+   * Set when a purged `after`-anchored cursor (item-not-found) degraded this
+   * query to a `before:''` fetch-latest — the result IS that fetch-latest
+   * page, not the originally requested forward page.
+   */
+  degradedToFetchLatest?: boolean
 }
 
 /**
@@ -133,6 +139,12 @@ export interface RoomMAMResult {
   complete: boolean
   /** Pagination info for next query */
   rsm: RSMResponse
+  /**
+   * Set when a purged `after`-anchored cursor (item-not-found) degraded this
+   * query to a `before:''` fetch-latest — the result IS that fetch-latest
+   * page, not the originally requested forward page.
+   */
+  degradedToFetchLatest?: boolean
 }
 
 /**
