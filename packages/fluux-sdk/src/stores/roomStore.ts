@@ -599,8 +599,10 @@ export interface RoomState {
   dismissPoll: (roomJid: string, messageId: string) => void
   getDismissedPollIds: (roomJid: string) => Set<string>
 
-  // IndexedDB cache loading
-  loadMessagesFromCache: (roomJid: string, options?: GetMessagesOptions & { peek?: boolean }) => Promise<RoomMessage[]>
+  // IndexedDB cache loading. `oldest` flips the latest-N default to the
+  // OLDEST-N ascending slice (true cache bottom) — pointer-walk seeding; use
+  // with `peek` (an oldest slice must never become the resident window).
+  loadMessagesFromCache: (roomJid: string, options?: GetMessagesOptions & { peek?: boolean; oldest?: boolean }) => Promise<RoomMessage[]>
   /**
    * Hydrate the resident array with the contiguous cache slice that CONTAINS a specific message
    * (the anchor), rather than the latest-N slice. Room counterpart of
@@ -2280,14 +2282,17 @@ export const roomStore = createStore<RoomState>()(
         limit: options.limit ?? 100,
         before: options.before,
         after: options.after,
-        // When loading without 'before', get the latest messages (most recent)
-        latest: !options.before,
+        // When loading without 'before', get the latest messages (most recent).
+        // `oldest` opts out: ascending oldest-N (the true cache bottom).
+        latest: !options.before && !options.oldest,
       }
       const cachedMessages = await messageCache.getRoomMessages(roomJid, queryOptions)
       // `peek`: a pure read that returns the messages WITHOUT pulling them into the
       // store. Used to compute a catch-up cursor for a non-active room without
       // breaking the invariant that only the active room is resident in RAM.
-      if (!options.peek && cachedMessages.length > 0) {
+      // `oldest` is always a pure read too: the cache bottom must never become
+      // the resident window (that would tear the UI off the live edge).
+      if (!options.peek && !options.oldest && cachedMessages.length > 0) {
         // A latest-N load (no `before` cursor) makes the newest window resident — this
         // is the activation / recenter path, so the window is back at the live edge.
         // A `before`-anchored load (deep scroll-back restore) is NOT the live edge.

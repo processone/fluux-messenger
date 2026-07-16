@@ -43,6 +43,7 @@ import {
   MAM_ROOM_FORWARD_MAX_PAGES_MANUAL,
   MAM_CATCHUP_FORWARD_BAIL_PAGES,
   MAM_POINTER_STITCH_MAX_PAGES,
+  MAM_POINTER_SEED_PROBE_LIMIT,
   oldestMessageWithStanzaId,
 } from '../../utils/mamCatchUpUtils'
 import {
@@ -1066,14 +1067,21 @@ export class MAM extends BaseModule {
     // Cross-session convergence: Phase A can end forward-complete with no
     // fetch-latest (windowBottom unset) while the pointer is still pending —
     // e.g. the session after a capped Phase B walk, whose coverage edge is
-    // already near live. Seed the backward cursor from the oldest cached
-    // message that carries an archive id (the cache peek handed in). The
-    // first backward page may re-fetch a page of already-cached history
-    // (deduped by the merge) before descending into the undownloaded region —
-    // bounded by the cap below and converging across sessions as the cache
-    // deepens.
+    // already near live. Seed the backward cursor from the TRUE cache bottom:
+    // an oldest-N pure read (ascending), first message WITH an archive id.
+    // Each pass then descends genuinely below all prior coverage — never
+    // re-fetching already-cached pages — so a deep pointer converges across
+    // sessions and a purged one terminates at the archive-start `complete`.
+    // (The `messages` peek param is the NEWEST-100 slice and would pin the
+    // seed ~100 below live forever; it remains only the cacheless fallback.)
     if (!windowBottom && this.deps.stores?.chat.getConversationPendingStanzaId?.(conversationId)) {
-      windowBottom = oldestMessageWithStanzaId(messages)?.stanzaId
+      const bottom = await this.deps.stores.chat.loadMessagesFromCache(conversationId, {
+        limit: MAM_POINTER_SEED_PROBE_LIMIT,
+        peek: true,
+        oldest: true,
+      }) as Array<{ timestamp?: Date; stanzaId?: string }>
+      windowBottom = bottom.find((m) => m.stanzaId)?.stanzaId
+        ?? oldestMessageWithStanzaId(messages)?.stanzaId
     }
     for (let page = 0; page < MAM_POINTER_STITCH_MAX_PAGES; page++) {
       // Re-check activity EVERY iteration, not just at dispatch: a walk is up
@@ -1266,11 +1274,19 @@ export class MAM extends BaseModule {
     }
 
     if (!stitchReadPointer) return
-    // Cross-session convergence: seed the backward cursor from the oldest
-    // cached archive id when Phase A ended forward-complete with the pointer
-    // still pending (see the chat twin above for the full rationale).
+    // Cross-session convergence: seed the backward cursor from the TRUE cache
+    // bottom (oldest-N pure read, first message WITH an archive id) when
+    // Phase A ended forward-complete with the pointer still pending — each
+    // pass descends genuinely below prior coverage; the newest-100 peek param
+    // is only the cacheless fallback (see the chat twin above).
     if (!windowBottom && this.deps.stores?.room.getRoomPendingStanzaId?.(roomJid)) {
-      windowBottom = oldestMessageWithStanzaId(messages)?.stanzaId
+      const bottom = await this.deps.stores.room.loadMessagesFromCache(roomJid, {
+        limit: MAM_POINTER_SEED_PROBE_LIMIT,
+        peek: true,
+        oldest: true,
+      }) as Array<{ timestamp?: Date; stanzaId?: string }>
+      windowBottom = bottom.find((m) => m.stanzaId)?.stanzaId
+        ?? oldestMessageWithStanzaId(messages)?.stanzaId
     }
     for (let page = 0; page < MAM_POINTER_STITCH_MAX_PAGES; page++) {
       // Re-check activity EVERY iteration (chat-twin rationale): backward

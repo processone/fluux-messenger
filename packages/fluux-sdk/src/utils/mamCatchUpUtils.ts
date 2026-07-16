@@ -53,6 +53,12 @@ export const MAM_CATCHUP_FORWARD_BAIL_PAGES = 3
  *  the seam marker keeps the remaining hole honest meanwhile. */
 export const MAM_POINTER_STITCH_MAX_PAGES = 10
 
+/** Oldest-N probe size for seeding the pointer-stitch walk from the TRUE cache
+ *  bottom when Phase A ended forward-complete (no fetch-latest → no window
+ *  bottom). Small: only the first message WITH a stanza-id is needed; the
+ *  margin absorbs leading id-less rows (own-sent never archived). */
+export const MAM_POINTER_SEED_PROBE_LIMIT = 25
+
 /** Newest-N cache window for the EXACT badge recount after a XEP-0490 pointer
  *  resolves on a non-resident entity. The per-page recount inside the merge
  *  only sees the final page; the exact recount re-reads from IndexedDB a slice
@@ -131,9 +137,11 @@ export function findCatchUpCursorMessage(
  * never archived) is simply skipped: any archived message is a valid cursor
  * to resume the backward pointer-stitch walk from.
  *
- * Used when Phase A of the catch-up ends forward-complete (no fetch-latest,
- * so no window bottom) while the XEP-0490 pointer is still pending: the walk
- * resumes below the cached region instead of stalling forever.
+ * Fallback seed for the pointer-stitch walk when Phase A ended
+ * forward-complete (no fetch-latest, so no window bottom) while the XEP-0490
+ * pointer is still pending AND the true-cache-bottom probe returned nothing
+ * (cache unavailable): the walk then resumes from the deepest id in the slice
+ * at hand (typically the newest-100 peek) instead of stalling forever.
  */
 export function oldestMessageWithStanzaId<T extends { timestamp?: Date; stanzaId?: string }>(
   messages: T[],

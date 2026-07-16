@@ -650,9 +650,18 @@ describe('MAM Background Catch-Up', () => {
       expect(calls[1]).toMatchObject({ before: '' })
     })
 
-    it('forward-complete Phase A + still-pending pointer: seeds the backward walk from the oldest cached stanza-id', async () => {
+    it('forward-complete Phase A + still-pending pointer: seeds the backward walk from the TRUE cache bottom', async () => {
       await connectClient()
       setupChat('mds-ptr')
+
+      // The `messages` peek param is the NEWEST-100 slice; the true cache
+      // bottom sits far below it. The seed must probe the oldest cached
+      // messages (skipping id-less own-sent rows) — NOT reuse the peek.
+      vi.mocked(mockStores.chat.loadMessagesFromCache).mockResolvedValue([
+        { timestamp: new Date('2026-01-01T00:00:00Z') }, // own-sent, never archived
+        { timestamp: new Date('2026-01-02T00:00:00Z'), stanzaId: 'bottom-1' },
+        { timestamp: new Date('2026-01-03T00:00:00Z'), stanzaId: 'bottom-2' },
+      ] as any)
 
       const calls: any[] = []
       vi.spyOn(xmppClient.mam, 'queryArchive').mockImplementation(async (opts: any) => {
@@ -660,8 +669,8 @@ describe('MAM Background Catch-Up', () => {
         // Phase A forward from the coverage edge completes in one page —
         // no fetch-latest, so windowBottom would stay unset.
         if (opts.after === 'new-9') return { messages: [], complete: true, rsm: {} }
-        if (opts.before === 'old-1') {
-          // First backward page (over the cached region, deduped) resolved the pointer.
+        if (opts.before === 'bottom-1') {
+          // First backward page below prior coverage resolved the pointer.
           vi.mocked(mockStores.chat.getConversationPendingStanzaId!).mockReturnValue(undefined)
           return { messages: [], complete: false, rsm: { first: 'older-0' } }
         }
@@ -677,8 +686,42 @@ describe('MAM Background Catch-Up', () => {
         stitchReadPointer: true,
       })
 
-      // Phase B resumes from the oldest cached archive id instead of returning
-      // immediately (cross-session convergence toward a deep pointer).
+      // Phase B resumes from the deepest cached archive id — genuinely below
+      // prior coverage — not the peek slice's oldest (~100 below live).
+      expect(mockStores.chat.loadMessagesFromCache).toHaveBeenCalledWith(
+        'alice@example.com',
+        expect.objectContaining({ peek: true, oldest: true })
+      )
+      expect(calls[0]).toMatchObject({ after: 'new-9' })
+      expect(calls[1]).toMatchObject({ before: 'bottom-1' })
+      expect(calls).toHaveLength(2)
+    })
+
+    it('falls back to the peek slice for the seed when the cache bottom probe returns nothing', async () => {
+      await connectClient()
+      setupChat('mds-ptr')
+      // Default loadMessagesFromCache mock resolves [] (cache unavailable).
+
+      const calls: any[] = []
+      vi.spyOn(xmppClient.mam, 'queryArchive').mockImplementation(async (opts: any) => {
+        calls.push(opts)
+        if (opts.after === 'new-9') return { messages: [], complete: true, rsm: {} }
+        if (opts.before === 'old-1') {
+          vi.mocked(mockStores.chat.getConversationPendingStanzaId!).mockReturnValue(undefined)
+          return { messages: [], complete: false, rsm: { first: 'older-0' } }
+        }
+        return { messages: [], complete: false, rsm: { first: 'x' } }
+      })
+
+      const cached = [
+        { timestamp: new Date('2026-06-14T09:00:00Z'), stanzaId: 'old-1' },
+        { timestamp: new Date('2026-06-14T10:00:00Z'), stanzaId: 'new-9' },
+      ]
+      await xmppClient.mam.catchUpConversationHistory('alice@example.com', cached, {
+        sessionStartTime: new Date('2026-06-14T12:00:00Z').getTime(),
+        stitchReadPointer: true,
+      })
+
       expect(calls[0]).toMatchObject({ after: 'new-9' })
       expect(calls[1]).toMatchObject({ before: 'old-1' })
       expect(calls).toHaveLength(2)
@@ -783,9 +826,52 @@ describe('MAM Background Catch-Up', () => {
       expect(calls[1]).toMatchObject({ before: '' })
     })
 
-    it('forward-complete Phase A + still-pending pointer: seeds the backward walk from the oldest cached stanza-id', async () => {
+    it('forward-complete Phase A + still-pending pointer: seeds the backward walk from the TRUE cache bottom', async () => {
       await connectClient()
       setupRoom('mds-ptr')
+
+      // The `messages` peek param is the NEWEST-100 slice; the true cache
+      // bottom sits far below it. The seed must probe the oldest cached
+      // messages (skipping id-less own-sent rows) — NOT reuse the peek.
+      vi.mocked(mockStores.room.loadMessagesFromCache).mockResolvedValue([
+        { timestamp: new Date('2026-01-01T00:00:00Z') }, // own-sent, never archived
+        { timestamp: new Date('2026-01-02T00:00:00Z'), stanzaId: 'bottom-1' },
+        { timestamp: new Date('2026-01-03T00:00:00Z'), stanzaId: 'bottom-2' },
+      ] as any)
+
+      const calls: any[] = []
+      vi.spyOn(xmppClient.mam, 'queryRoomArchive').mockImplementation(async (opts: any) => {
+        calls.push(opts)
+        if (opts.after === 'new-9') return { messages: [], complete: true, rsm: {} }
+        if (opts.before === 'bottom-1') {
+          vi.mocked(mockStores.room.getRoomPendingStanzaId!).mockReturnValue(undefined)
+          return { messages: [], complete: false, rsm: { first: 'older-0' } }
+        }
+        return { messages: [], complete: false, rsm: { first: 'x' } }
+      })
+
+      const cached = [
+        { timestamp: new Date('2026-06-14T09:00:00Z'), stanzaId: 'old-1' },
+        { timestamp: new Date('2026-06-14T10:00:00Z'), stanzaId: 'new-9' },
+      ]
+      await xmppClient.mam.catchUpRoomHistory(roomJid, cached, {
+        sessionStartTime: new Date('2026-06-14T12:00:00Z').getTime(),
+        stitchReadPointer: true,
+      })
+
+      expect(mockStores.room.loadMessagesFromCache).toHaveBeenCalledWith(
+        roomJid,
+        expect.objectContaining({ peek: true, oldest: true })
+      )
+      expect(calls[0]).toMatchObject({ after: 'new-9' })
+      expect(calls[1]).toMatchObject({ before: 'bottom-1' })
+      expect(calls).toHaveLength(2)
+    })
+
+    it('falls back to the peek slice for the seed when the cache bottom probe returns nothing', async () => {
+      await connectClient()
+      setupRoom('mds-ptr')
+      // Default loadMessagesFromCache mock resolves [] (cache unavailable).
 
       const calls: any[] = []
       vi.spyOn(xmppClient.mam, 'queryRoomArchive').mockImplementation(async (opts: any) => {

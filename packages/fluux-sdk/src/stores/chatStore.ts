@@ -339,8 +339,10 @@ interface ChatState {
    * @param updates - Partial content to merge into the preview message
    */
   refreshLastMessageContent: (conversationId: string, messageId: string, updates: Partial<Message>) => void
-  // IndexedDB message loading
-  loadMessagesFromCache: (conversationId: string, options?: { limit?: number; before?: Date; peek?: boolean }) => Promise<Message[]>
+  // IndexedDB message loading. `oldest` flips the latest-N default to the
+  // OLDEST-N ascending slice (true cache bottom) — pointer-walk seeding; use
+  // with `peek` (an oldest slice must never become the resident window).
+  loadMessagesFromCache: (conversationId: string, options?: { limit?: number; before?: Date; peek?: boolean; oldest?: boolean }) => Promise<Message[]>
   /**
    * Hydrate the resident array with the contiguous cache slice that CONTAINS a specific message
    * (the anchor), rather than the latest-N slice. Used by scroll-position restore on return to a
@@ -1961,20 +1963,23 @@ export const chatStore = createStore<ChatState>()(
       // Load messages from IndexedDB cache for a conversation
       // For initial load (no 'before'), loads the LATEST 100 messages to show most recent first
       loadMessagesFromCache: async (conversationId, options = {}) => {
-        const { limit = 100, before, peek } = options
+        const { limit = 100, before, peek, oldest } = options
         try {
           const cachedMessages = await messageCache.getMessages(conversationId, {
             limit,
             before,
             // When loading without 'before', get the latest messages (most recent)
-            // This prevents showing old messages and jumping to recent ones
-            latest: !before,
+            // This prevents showing old messages and jumping to recent ones.
+            // `oldest` opts out: ascending oldest-N (the true cache bottom).
+            latest: !before && !oldest,
           })
 
           // `peek`: pure read that returns the messages WITHOUT writing the store —
           // used to compute a catch-up cursor for a non-active conversation without
           // pulling its history into RAM (only the active conversation is resident).
-          if (!peek && cachedMessages.length > 0) {
+          // `oldest` is always a pure read too: the cache bottom must never
+          // become the resident window (that would tear the UI off the live edge).
+          if (!peek && !oldest && cachedMessages.length > 0) {
             // A latest-N load (no `before` cursor) makes the newest window resident —
             // this is the activation / recenter path, so the window is back at the live
             // edge. Clear any explicit `false` (absent = at the edge). A `before`-anchored
