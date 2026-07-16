@@ -1,0 +1,33 @@
+import { describe, it, expect } from 'vitest'
+import * as pkg from './index'
+
+describe('@fluux/openpgp-plugin public surface', () => {
+  it('exports the plugin classes and helpers', () => {
+    expect(typeof pkg.SequoiaPgpPlugin).toBe('function')
+    expect(typeof pkg.WebOpenPGPPlugin).toBe('function')
+    expect(typeof pkg.classifyBoundaryError).toBe('function')
+    expect(pkg.OPENPGP_DESCRIPTOR.id).toBe('openpgp')
+    expect(typeof pkg.fingerprintsEqual).toBe('function')
+    expect(typeof pkg.toXep0373Fingerprint).toBe('function')
+    expect(typeof pkg.pubkeyMetadataFingerprintAttrs).toBe('function')
+    expect(typeof pkg.probeRemoteIdentityState).toBe('function')
+    expect(typeof pkg.probeRemotePublishedFingerprints).toBe('function')
+    expect(typeof pkg.SecretKeyBackupProbeError).toBe('function')
+    expect(typeof pkg.parseArmorPassphraseFormat).toBe('function')
+    expect(typeof pkg.generateBackupPassphrase).toBe('function')
+    expect(typeof pkg.generateBackupCode).toBe('function')
+    expect(typeof pkg.USE_V6_KEYS).toBe('boolean')
+    expect(typeof pkg.KeyPickerRequiredError).toBe('function')
+    expect(typeof pkg.NoRecoveryAvailableError).toBe('function')
+    expect(typeof pkg.isKeyLocked).toBe('function')
+    expect(typeof pkg.subscribeKeyLockState).toBe('function')
+    expect(typeof pkg.setSessionPassphrase).toBe('function')
+    expect(typeof pkg.sweepExpiredPassphrases).toBe('function')
+    expect(typeof pkg.clearCachedPassphrase).toBe('function')
+    expect(typeof pkg.clearAllCachedPassphrases).toBe('function')
+    expect(typeof pkg.cachePassphrase).toBe('function')
+    expect(typeof pkg.loadCachedPassphrase).toBe('function')
+    expect(typeof pkg.getRememberPassphrasePreference).toBe('function')
+    expect(typeof pkg.setRememberPassphrasePreference).toBe('function')
+  })
+})
