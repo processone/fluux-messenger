@@ -309,6 +309,22 @@ export interface SecurityContextUpdate {
  */
 export type TrustState = 'verified' | 'introduced' | 'tofu' | 'untrusted' | 'unknown'
 
+/**
+ * One trustable identity of a peer, protocol-agnostic. OMEMO maps each of a
+ * peer's DEVICES to a `PeerIdentity` (`id` = device id string); a future
+ * OpenPGP plugin maps its single key to a length-1 list. The host renders a
+ * uniform per-identity list from `listPeerIdentities`, feature-detecting the
+ * optional trait methods below.
+ */
+export interface PeerIdentity {
+  /** Stable identity id within the protocol (OMEMO: the device id, as a string). */
+  id: string
+  /** Hex fingerprint/safety-number for out-of-band comparison; `''` if no key is known yet. */
+  fingerprint: string
+  /** Resolved trust for this identity. */
+  trust: TrustState
+}
+
 /** A verification flow a plugin supports. */
 export interface VerificationMethod {
   id: string
@@ -580,6 +596,22 @@ export interface E2EEPlugin {
   startVerification(peer: BareJID, method: VerificationMethod): Promise<VerificationFlow>
   getPeerTrust(peer: BareJID): Promise<TrustState>
   getDeviceTrust(peer: BareJID, deviceId: string): Promise<TrustState>
+
+  /**
+   * Optional: enumerate a peer's trustable identities (OMEMO: one per device)
+   * for the per-identity verification UI. Returns `[]` if the peer has none.
+   * The host feature-detects (`if (plugin.listPeerIdentities) …`); a plugin
+   * that omits it keeps the aggregate-only trust surface.
+   */
+  listPeerIdentities?(peer: BareJID): Promise<PeerIdentity[]>
+
+  /**
+   * Optional: record an explicit trust decision for one identity. `id` is the
+   * `PeerIdentity.id` (OMEMO: the device id string). `'verified'` pins the
+   * current fingerprint out-of-band; `'untrusted'` revokes/marks it. Both
+   * operations are idempotent.
+   */
+  setIdentityTrust?(peer: BareJID, id: string, decision: 'verified' | 'untrusted'): Promise<void>
 
   /**
    * If an incoming stanza's encrypted element belongs to this plugin, return

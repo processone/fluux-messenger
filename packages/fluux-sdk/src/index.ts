@@ -402,6 +402,7 @@ export type {
   InboundSource,
   Logger as E2EELogger,
   PEPItem,
+  PeerIdentity,
   PeerSupport,
   PinnedStrategy,
   PluginConfiguration,
