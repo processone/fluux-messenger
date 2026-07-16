@@ -33,7 +33,7 @@ import type { OmemoMessage } from '@fluux/omemo'
 import { PluginStorageOmemoStore } from './store'
 import { publishDeviceList, fetchDeviceList, fetchBundle, publishBundle } from './pep'
 import { resolveInboundTrust, toTrustState, type BtbvState } from './trust'
-import { isVerified } from './verifiedDevices'
+import { isVerified, setVerified, clearVerified } from './verifiedDevices'
 import { buildEnvelope, parseEnvelope } from './sce'
 import { buildEncrypted, parseEncrypted } from './encryptedElement'
 import { elementToData, dataToElement, parseXml } from './stanzaData'
@@ -174,6 +174,46 @@ export class OmemoPlugin implements E2EEPlugin {
     const out: PeerIdentity[] = []
     for (const id of ids) out.push(await this.resolvePeerIdentity(peer, id))
     return out
+  }
+
+  /**
+   * Write side of per-device trust: mark a device out-of-band `'verified'` or
+   * `'untrusted'`. `'verified'` pins the marker to the device's CURRENT
+   * identity key (fingerprint-bound, per `verifiedDevices.ts`) so a later key
+   * change silently reverts it; it also clears any prior library `untrusted`
+   * verdict so the two stores agree. `'untrusted'` persists the library
+   * verdict and drops any verified marker (never leaves the two stores
+   * disagreeing about the same device).
+   */
+  async setIdentityTrust(peer: BareJID, id: string, decision: 'verified' | 'untrusted'): Promise<void> {
+    const deviceId = Number(id)
+    const store = new PluginStorageOmemoStore(this.ctx.storage)
+    const existing = await store.loadTrust(peer, deviceId)
+    // Resolve the device's current identity key (persisted first, else bundle).
+    let ik: Uint8Array | null =
+      existing?.identityKey && existing.identityKey.length > 0 ? existing.identityKey : null
+    if (!ik) {
+      try {
+        ik = (await fetchBundle(this.ctx.xmpp, peer, deviceId))?.ik ?? null
+      } catch {
+        ik = null
+      }
+    }
+    if (decision === 'verified') {
+      // A verify has nothing to pin without a key; ignore the no-key case
+      // (the UI disables verify when fingerprint is '').
+      if (!ik) return
+      await setVerified(this.ctx.storage, peer, deviceId, hex(fingerprint(ik)))
+      // Clear any prior library `untrusted` verdict so the two stores agree.
+      if (existing && existing.state === 'untrusted') {
+        await store.saveTrust(peer, deviceId, { ...existing, state: 'undecided' })
+      }
+    } else {
+      // untrusted: persist the library verdict (bound to the key when we have
+      // it) and drop any verified marker.
+      await store.saveTrust(peer, deviceId, { state: 'untrusted', identityKey: ik ?? new Uint8Array(0) })
+      await clearVerified(this.ctx.storage, peer, deviceId)
+    }
   }
 
   async getPeerTrust(peer: BareJID): Promise<TrustState> {

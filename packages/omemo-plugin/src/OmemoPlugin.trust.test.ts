@@ -132,3 +132,47 @@ describe('OmemoPlugin.listPeerIdentities', () => {
     })
   })
 })
+
+describe('OmemoPlugin.setIdentityTrust', () => {
+  it("'verified' pins the current fingerprint and flips listed trust to verified", async () => {
+    const { pa, bobDeviceId } = await twoParty()
+    await pa.setIdentityTrust('bob@x', String(bobDeviceId), 'verified')
+    const list = await pa.listPeerIdentities('bob@x')
+    expect(list[0].trust).toBe('verified')
+    // Note: getPeerTrust/getDeviceTrust are NOT verified-aware yet (Task 10
+    // wires isVerified into those read paths); listPeerIdentities (Task 8) is
+    // the verified-aware read path today, so it is the round-trip proof here.
+  })
+
+  it("'verified' then a fingerprint change invalidates the marker (back to unverified)", async () => {
+    const { alice, pa, bobDeviceId } = await twoParty()
+    await pa.setIdentityTrust('bob@x', String(bobDeviceId), 'verified')
+    // Simulate a key change: overwrite the stored TrustRecord's identityKey.
+    const store = new PluginStorageOmemoStore(alice.ctx.storage)
+    const rec = await store.loadTrust('bob@x', bobDeviceId)
+    await store.saveTrust('bob@x', bobDeviceId, {
+      state: rec?.state ?? 'trusted',
+      identityKey: new Uint8Array(32).fill(0xaa), // different key → different fp
+    })
+    const list = await pa.listPeerIdentities('bob@x')
+    expect(list[0].trust).not.toBe('verified')
+  })
+
+  it("'untrusted' writes library untrusted state and removes any verified marker", async () => {
+    const { alice, pa, bobDeviceId } = await twoParty()
+    await pa.setIdentityTrust('bob@x', String(bobDeviceId), 'verified')
+    await pa.setIdentityTrust('bob@x', String(bobDeviceId), 'untrusted')
+    const store = new PluginStorageOmemoStore(alice.ctx.storage)
+    expect((await store.loadTrust('bob@x', bobDeviceId))!.state).toBe('untrusted')
+    const list = await pa.listPeerIdentities('bob@x')
+    expect(list[0].trust).toBe('untrusted')
+  })
+
+  it('is idempotent for repeated verified calls', async () => {
+    const { pa, bobDeviceId } = await twoParty()
+    await pa.setIdentityTrust('bob@x', String(bobDeviceId), 'verified')
+    await pa.setIdentityTrust('bob@x', String(bobDeviceId), 'verified')
+    const list = await pa.listPeerIdentities('bob@x')
+    expect(list[0].trust).toBe('verified')
+  })
+})
