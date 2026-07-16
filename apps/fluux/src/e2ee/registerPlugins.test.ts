@@ -14,11 +14,15 @@ import { useEncryptionSettingsStore } from '@/stores/encryptionSettingsStore'
 // SequoiaPgpPlugin constructor is stubbed below.
 vi.mock('../utils/tauri', () => ({ isTauri: () => true }))
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }))
-vi.mock('./SequoiaPgpPlugin', () => ({
-  SequoiaPgpPlugin: vi.fn(function SequoiaPgpPluginMock() {
-    return {}
-  }),
-}))
+vi.mock('@fluux/openpgp-plugin', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@fluux/openpgp-plugin')>()
+  return {
+    ...actual,
+    SequoiaPgpPlugin: vi.fn(function SequoiaPgpPluginMock() {
+      return {}
+    }),
+  }
+})
 
 function makeClient(register: () => Promise<void>): XMPPClient {
   return {

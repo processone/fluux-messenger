@@ -15,8 +15,111 @@ import type { XMPPClient } from '@fluux/sdk/core'
 import { isTauri } from '../utils/tauri'
 import { isOpenpgpEnabled, isOmemoEnabled, useEncryptionSettingsStore } from '../stores/encryptionSettingsStore'
 import { useConversationPlaintextOverrideStore } from '../stores/conversationPlaintextOverrideStore'
-import { classifyBoundaryError } from './OpenPGPPluginBase'
-import { SequoiaPgpPlugin } from './SequoiaPgpPlugin'
+import { classifyBoundaryError, SequoiaPgpPlugin } from '@fluux/openpgp-plugin'
+import type { OpenPGPHostStores, OpenPGPFileIO } from '@fluux/openpgp-plugin'
+import {
+  isPeerVerified,
+  setPeerVerified,
+  clearPeerVerified,
+  useVerifiedPeerKeysStore,
+} from '../stores/verifiedPeerKeysStore'
+import { recordCertRejections, clearCertRejections } from '../stores/certRejectionStore'
+import {
+  recordKeyChangeAlert,
+  clearKeyChangeAlert,
+  getKeyChangeAlert,
+  useKeyChangeAlertsStore,
+} from '../stores/keyChangeAlertsStore'
+import { recordOwnKeyConflict, clearOwnKeyConflict, getOwnKeyConflict } from '../stores/ownKeyConflictStore'
+import {
+  getPinnedPrimaryFp,
+  setPinnedPrimaryFp,
+  usePinnedPrimaryFingerprintsStore,
+} from '../stores/pinnedPrimaryFingerprintsStore'
+import { setTrustStateStatus, getTrustStateStatus } from '../stores/trustStateStatusStore'
+
+/**
+ * Adapter over the six app trust stores, injected into the OpenPGP plugins.
+ * Delegates to the stores' imperative helpers; the store data + localStorage
+ * keys are untouched, so this is behavior-preserving. The subscribe methods
+ * guard on the exact store slice the base watched.
+ */
+const openpgpHostStores: OpenPGPHostStores = {
+  verifiedPeers: {
+    isVerified: isPeerVerified,
+    setVerified: setPeerVerified,
+    clearVerified: clearPeerVerified,
+    getAll: () => useVerifiedPeerKeysStore.getState().verifiedFingerprintByJid,
+    subscribe: (listener) =>
+      useVerifiedPeerKeysStore.subscribe((state, prev) => {
+        if (state.verifiedFingerprintByJid !== prev.verifiedFingerprintByJid) {
+          listener(state.verifiedFingerprintByJid)
+        }
+      }),
+  },
+  certRejections: {
+    record: recordCertRejections,
+    clear: clearCertRejections,
+  },
+  keyChangeAlerts: {
+    record: recordKeyChangeAlert,
+    clear: clearKeyChangeAlert,
+    get: getKeyChangeAlert,
+    getAll: () => useKeyChangeAlertsStore.getState().alertsByJid,
+    subscribe: (listener) =>
+      useKeyChangeAlertsStore.subscribe((state, prev) => {
+        if (state.alertsByJid !== prev.alertsByJid) listener()
+      }),
+  },
+  ownKeyConflict: {
+    record: recordOwnKeyConflict,
+    clear: clearOwnKeyConflict,
+    get: getOwnKeyConflict,
+  },
+  pinnedPrimaryFingerprints: {
+    get: getPinnedPrimaryFp,
+    set: setPinnedPrimaryFp,
+    getAll: () => usePinnedPrimaryFingerprintsStore.getState().pinnedFingerprintByJid,
+    subscribe: (listener) =>
+      usePinnedPrimaryFingerprintsStore.subscribe((state, prev) => {
+        if (state.pinnedFingerprintByJid !== prev.pinnedFingerprintByJid) listener()
+      }),
+  },
+  trustStateStatus: {
+    set: setTrustStateStatus,
+    get: getTrustStateStatus,
+  },
+}
+
+/**
+ * Tauri-backed file dialogs for the desktop plugin. The bodies are the exact
+ * dynamic-import sequences that used to live in `SequoiaPgpPlugin`.
+ */
+const openpgpFileIO: OpenPGPFileIO = {
+  async saveFile(defaultName, armored) {
+    const { save } = await import('@tauri-apps/plugin-dialog')
+    const filePath = await save({
+      defaultPath: defaultName,
+      filters: [{ name: 'OpenPGP Armor', extensions: ['asc', 'pgp', 'gpg'] }],
+    })
+    if (!filePath) return false
+    const { writeTextFile } = await import('@tauri-apps/plugin-fs')
+    await writeTextFile(filePath, armored)
+    return true
+  },
+  async pickFile() {
+    const { open } = await import('@tauri-apps/plugin-dialog')
+    const result = await open({
+      multiple: false,
+      filters: [{ name: 'OpenPGP Armor', extensions: ['asc', 'pgp', 'gpg'] }],
+    })
+    if (!result) return null
+    const filePath = typeof result === 'string' ? result : result[0]
+    if (!filePath) return null
+    const { readTextFile } = await import('@tauri-apps/plugin-fs')
+    return readTextFile(filePath)
+  },
+}
 
 export async function registerE2EEPlugins(client: XMPPClient): Promise<void> {
   const manager = client.e2ee
@@ -31,7 +134,7 @@ export async function registerE2EEPlugins(client: XMPPClient): Promise<void> {
         // Desktop: Rust crypto via Tauri IPC. Key is managed by the OS keychain;
         // no user passphrase needed for day-to-day use.
         const { invoke } = await import('@tauri-apps/api/core')
-        await manager.register(new SequoiaPgpPlugin({ invoke }))
+        await manager.register(new SequoiaPgpPlugin({ invoke, hostStores: openpgpHostStores, fileIO: openpgpFileIO }))
       } else {
         // Web: openpgp.js crypto. Private key is stored encrypted in IndexedDB;
         // the user must enter a passphrase each session to unlock it.
@@ -39,8 +142,8 @@ export async function registerE2EEPlugins(client: XMPPClient): Promise<void> {
         const backend = new IndexedDBStorageBackend(manager.getAccountJid())
         await backend.open()
         client.setE2EEStorageBackend(backend)
-        const { WebOpenPGPPlugin } = await import('./WebOpenPGPPlugin')
-        await manager.register(new WebOpenPGPPlugin())
+        const { WebOpenPGPPlugin } = await import('@fluux/openpgp-plugin')
+        await manager.register(new WebOpenPGPPlugin({ hostStores: openpgpHostStores }))
       }
     }
 
