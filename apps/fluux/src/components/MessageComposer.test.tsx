@@ -1521,15 +1521,15 @@ describe('MessageComposer', () => {
     // routine encrypted-but-unverified peer, teal only once verified — matching the
     // per-message bubble shield so the two are never inconsistent.
     it('shows a calm gray shield when encrypted but unverified', () => {
-      const { container } = render(<MessageComposer {...base} encryptionState={{ kind: 'encrypted', fingerprint: 'a', trust: 'unverified' }} />)
+      const { container } = render(<MessageComposer {...base} encryptionState={{ kind: 'encrypted', fingerprint: 'a', trust: 'tofu' }} />)
       const icon = container.querySelector('[data-encryption-lock] .lucide-shield')!
       expect(icon).not.toBeNull()
       expect(icon.classList.contains('text-fluux-muted')).toBe(true)
       expect(icon.classList.contains('text-fluux-encryption')).toBe(false)
     })
 
-    it('shows a calm gray shield when trust is tofu-new', () => {
-      const { container } = render(<MessageComposer {...base} encryptionState={{ kind: 'encrypted', fingerprint: 'a', trust: 'tofu-new' }} />)
+    it('shows a calm gray shield for a first-contact (tofu, firstSeen) peer', () => {
+      const { container } = render(<MessageComposer {...base} encryptionState={{ kind: 'encrypted', fingerprint: 'a', trust: 'tofu', firstSeen: true }} />)
       const icon = container.querySelector('[data-encryption-lock] .lucide-shield')!
       expect(icon).not.toBeNull()
       expect(icon.classList.contains('text-fluux-muted')).toBe(true)
@@ -1549,7 +1549,7 @@ describe('MessageComposer', () => {
 
     it('calls onEncryptionClick when the lock is activated', () => {
       const onEncryptionClick = vi.fn()
-      const { container } = render(<MessageComposer {...base} onEncryptionClick={onEncryptionClick} encryptionState={{ kind: 'encrypted', fingerprint: 'a', trust: 'unverified' }} />)
+      const { container } = render(<MessageComposer {...base} onEncryptionClick={onEncryptionClick} encryptionState={{ kind: 'encrypted', fingerprint: 'a', trust: 'tofu' }} />)
       fireEvent.click(container.querySelector('[data-encryption-lock]')!)
       expect(onEncryptionClick).toHaveBeenCalledTimes(1)
     })

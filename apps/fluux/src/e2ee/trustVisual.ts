@@ -16,7 +16,7 @@ export type TrustTone = 'verified' | 'calm' | 'warning' | 'danger'
 
 export type TrustVisualState =
   | 'verified'      // out-of-band-confirmed peer key
-  | 'trusted'       // tofu / tofu-new / introduced / encrypted-unverified
+  | 'trusted'       // tofu / introduced / encrypted-but-unverified
   | 'decryptFailed' // per-message untrusted: could not decrypt this message
   | 'rejected'      // forged or absent signature
   | 'keyChanged'    // peer key rotated, encryption blocked pending acceptance

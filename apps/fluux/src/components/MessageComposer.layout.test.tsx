@@ -27,7 +27,7 @@ describe('MessageComposer responsive layout', () => {
       <MessageComposer
         placeholder="Type a message"
         onSend={onSend}
-        encryptionState={{ kind: 'encrypted', fingerprint: 'ABCD1234', trust: 'unverified' }}
+        encryptionState={{ kind: 'encrypted', fingerprint: 'ABCD1234', trust: 'tofu' }}
       />
     )
 
@@ -55,7 +55,7 @@ describe('MessageComposer responsive layout', () => {
       <MessageComposer
         placeholder="Type a message"
         onSend={onSend}
-        encryptionState={{ kind: 'encrypted', fingerprint: 'ABCD1234', trust: 'unverified' }}
+        encryptionState={{ kind: 'encrypted', fingerprint: 'ABCD1234', trust: 'tofu' }}
       />
     )
 
