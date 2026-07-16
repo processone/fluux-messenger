@@ -311,6 +311,14 @@ interface ChatState {
    * @param direction - Query direction: 'backward' for older history, 'forward' for catching up
    */
   mergeMAMMessages: (conversationId: string, messages: Message[], rsm: RSMResponse, complete: boolean, direction: MAMQueryDirection, isFetchLatest?: boolean, preserveGapMarker?: boolean) => void
+  /**
+   * Strip a purged archive id from the persisted gap anchor (`startId`),
+   * keeping the `start` timestamp so the next catch-up resume uses the
+   * timestamp fallback and progresses. Called via the `chat:mam-anchor-purged`
+   * binding when an `after:`-anchored query hit item-not-found. Only strips a
+   * MATCHING id — a gap whose anchor already advanced is left untouched.
+   */
+  clearConversationGapAnchor: (conversationId: string, purgedStartId: string) => void
   getMAMQueryState: (conversationId: string) => MAMQueryState
   resetMAMStates: () => void
   /**
@@ -1768,6 +1776,25 @@ export const chatStore = createStore<ChatState>()(
             preserveGapMarker,
           })
 
+          // Crash-window safety (backward CLEARANCE only): the gap map is
+          // persisted synchronously (localStorage) while saveMessages to
+          // IndexedDB is fire-and-forget. Deleting the gap now and crashing
+          // before the write lands leaves cache [old][HOLE][new] with no
+          // marker — a permanent silent hole. So when a backward merge would
+          // DELETE an existing gap AND carries persistable new messages,
+          // defer ONLY the deletion until the durable write resolves (below).
+          // Forward paths are self-healing (coverage anchors on cache newest)
+          // and are left untouched; a clearing merge with nothing to persist
+          // has no crash window and deletes immediately.
+          const clearedGap = state.conversationGaps.get(conversationId)
+          const persistableMessages = newMessages.filter(msg => !isNoLocalStore(msg))
+          const deferGapClear =
+            direction === 'backward' &&
+            clearedGap !== undefined &&
+            !newGaps.has(conversationId) &&
+            persistableMessages.length > 0
+          const gapsAfterMerge = deferGapClear ? state.conversationGaps : newGaps
+
           // If no new messages (all duplicates), only update MAM state to avoid
           // unnecessary re-renders. Exception: a stanzaId backfill onto existing
           // RAM messages must persist — but only for the ACTIVE conversation
@@ -1775,17 +1802,33 @@ export const chatStore = createStore<ChatState>()(
           const isActive = state.activeConversationId === conversationId
           if (newMessages.length === 0) {
             if (patched.length === 0 || !isActive) {
-              return { mamQueryStates: newStates, conversationGaps: newGaps }
+              return { mamQueryStates: newStates, conversationGaps: gapsAfterMerge }
             }
             const backfilledMap = new Map(state.messages)
             backfilledMap.set(conversationId, trimmed)
-            return { messages: backfilledMap, mamQueryStates: newStates, conversationGaps: newGaps }
+            return { messages: backfilledMap, mamQueryStates: newStates, conversationGaps: gapsAfterMerge }
           }
 
           // Persist to IndexedDB regardless of active state (durable history).
-          const persistableMessages = newMessages.filter(msg => !isNoLocalStore(msg))
           if (persistableMessages.length > 0) {
-            void messageCache.saveMessages(persistableMessages)
+            const savePromise = messageCache.saveMessages(persistableMessages)
+            if (deferGapClear) {
+              // The page is durably cached — now the gap deletion is safe.
+              void savePromise.then(() => {
+                set((s) => {
+                  // State may have moved on (gap advanced or re-planted by a
+                  // later merge): only delete the exact interval this merge
+                  // cleared. Reference equality suffices — every gap
+                  // transition (syncGap) creates a new object.
+                  if (s.conversationGaps.get(conversationId) !== clearedGap) return s
+                  const cleared = new Map(s.conversationGaps)
+                  cleared.delete(conversationId)
+                  return { conversationGaps: cleared }
+                })
+              })
+            } else {
+              void savePromise
+            }
             searchIndex.indexMessages(persistableMessages).catch((e) => console.warn('[searchIndex] indexMessages failed:', e))
           }
 
@@ -1845,9 +1888,9 @@ export const chatStore = createStore<ChatState>()(
                   lastSeenMessageId: hydrated.lastSeenMessageId,
                 } : {}),
               })
-              return { mamQueryStates: newStates, conversationMeta: newMeta, conversations: newConversations, conversationGaps: newGaps }
+              return { mamQueryStates: newStates, conversationMeta: newMeta, conversations: newConversations, conversationGaps: gapsAfterMerge }
             }
-            return { mamQueryStates: newStates, conversationGaps: newGaps }
+            return { mamQueryStates: newStates, conversationGaps: gapsAfterMerge }
           }
 
           // ACTIVE conversation: populate the resident messages map.
@@ -1877,10 +1920,10 @@ export const chatStore = createStore<ChatState>()(
             newMeta.set(conversationId, { ...meta!, lastMessage })
             const newConversations = new Map(state.conversations)
             newConversations.set(conversationId, { ...conv!, lastMessage })
-            return { messages: newMessagesMap, mamQueryStates: newStates, conversationMeta: newMeta, conversations: newConversations, conversationGaps: newGaps, windowAtLiveEdge: newWindowAtLiveEdge }
+            return { messages: newMessagesMap, mamQueryStates: newStates, conversationMeta: newMeta, conversations: newConversations, conversationGaps: gapsAfterMerge, windowAtLiveEdge: newWindowAtLiveEdge }
           }
 
-          return { messages: newMessagesMap, mamQueryStates: newStates, conversationGaps: newGaps, windowAtLiveEdge: newWindowAtLiveEdge }
+          return { messages: newMessagesMap, mamQueryStates: newStates, conversationGaps: gapsAfterMerge, windowAtLiveEdge: newWindowAtLiveEdge }
         })
 
         // XEP-0490: a remote displayed marker may have arrived before its message.
@@ -1891,6 +1934,17 @@ export const chatStore = createStore<ChatState>()(
         if (pending) {
           get().applyRemoteDisplayed(conversationId, pending, mergedForMarker)
         }
+      },
+
+      clearConversationGapAnchor: (conversationId, purgedStartId) => {
+        set((state) => {
+          const gap = state.conversationGaps.get(conversationId)
+          if (!gap || gap.startId !== purgedStartId) return state
+          const newGaps = new Map(state.conversationGaps)
+          const { startId: _purged, ...withoutAnchor } = gap
+          newGaps.set(conversationId, withoutAnchor)
+          return { conversationGaps: newGaps }
+        })
       },
 
       getMAMQueryState: (conversationId) => {

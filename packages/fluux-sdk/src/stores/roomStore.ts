@@ -655,6 +655,14 @@ export interface RoomState {
    * @param direction - Query direction: 'backward' for older history, 'forward' for catching up
    */
   mergeRoomMAMMessages: (roomJid: string, messages: RoomMessage[], rsm: RSMResponse, complete: boolean, direction: MAMQueryDirection, preserveGapMarker?: boolean, isFetchLatest?: boolean) => void
+  /**
+   * Strip a purged archive id from the persisted gap anchor (`startId`),
+   * keeping the `start` timestamp so the next catch-up resume uses the
+   * timestamp fallback and progresses. Called via the `room:mam-anchor-purged`
+   * binding when an `after:`-anchored query hit item-not-found. Only strips a
+   * MATCHING id — a gap whose anchor already advanced is left untouched.
+   */
+  clearRoomGapAnchor: (roomJid: string, purgedStartId: string) => void
   getRoomMAMQueryState: (roomJid: string) => MAMQueryState
   resetRoomMAMStates: () => void
   /** Update only the lastMessage preview without affecting message history */
@@ -2669,7 +2677,25 @@ export const roomStore = createStore<RoomState>()(
         lastFetchedArchiveId: rsm.last,
         preserveGapMarker,
       })
-      if (newGaps !== state.roomGaps) saveGapsToStorage(newGaps)
+      // Crash-window safety (backward CLEARANCE only): the gap map is
+      // persisted synchronously (localStorage) while saveRoomMessages to
+      // IndexedDB is fire-and-forget. Deleting the gap now and crashing
+      // before the write lands leaves cache [old][HOLE][new] with no marker —
+      // a permanent silent hole. So when a backward merge would DELETE an
+      // existing gap AND carries persistable new messages, defer ONLY the
+      // deletion until the durable write resolves (below). Forward paths are
+      // self-healing (coverage anchors on cache newest) and are left
+      // untouched; a clearing merge with nothing to persist has no crash
+      // window and deletes immediately.
+      const clearedGap = state.roomGaps.get(roomJid)
+      const persistableMessages = newFromMAM.filter(msg => !isNoLocalStore(msg))
+      const deferGapClear =
+        direction === 'backward' &&
+        clearedGap !== undefined &&
+        !newGaps.has(roomJid) &&
+        persistableMessages.length > 0
+      const gapsAfterMerge = deferGapClear ? state.roomGaps : newGaps
+      if (gapsAfterMerge !== state.roomGaps) saveGapsToStorage(gapsAfterMerge)
 
       // If no new messages (all duplicates), only update MAM state - skip room messages
       // This prevents unnecessary re-renders when merging duplicates.
@@ -2677,7 +2703,7 @@ export const roomStore = createStore<RoomState>()(
       // but only for the ACTIVE room (non-active rooms keep no resident array).
       if (newFromMAM.length === 0) {
         if (patched.length === 0 || state.activeRoomJid !== roomJid) {
-          return { mamQueryStates: newStates, roomGaps: newGaps }
+          return { mamQueryStates: newStates, roomGaps: gapsAfterMerge }
         }
         const backfilledRooms = new Map(state.rooms)
         backfilledRooms.set(roomJid, { ...room, messages: merged })
@@ -2686,14 +2712,31 @@ export const roomStore = createStore<RoomState>()(
         if (runtimeEntry) {
           backfilledRuntime.set(roomJid, { ...runtimeEntry, messages: merged })
         }
-        return { rooms: backfilledRooms, roomRuntime: backfilledRuntime, mamQueryStates: newStates, roomGaps: newGaps }
+        return { rooms: backfilledRooms, roomRuntime: backfilledRuntime, mamQueryStates: newStates, roomGaps: gapsAfterMerge }
       }
 
       // Persist to IndexedDB regardless of active state — this is the durable
       // history that rehydrates on open (search index too).
-      const persistableMessages = newFromMAM.filter(msg => !isNoLocalStore(msg))
       if (persistableMessages.length > 0) {
-        void messageCache.saveRoomMessages(persistableMessages)
+        const savePromise = messageCache.saveRoomMessages(persistableMessages)
+        if (deferGapClear) {
+          // The page is durably cached — now the gap deletion is safe.
+          void savePromise.then(() => {
+            set((s) => {
+              // State may have moved on (gap advanced or re-planted by a
+              // later merge): only delete the exact interval this merge
+              // cleared. Reference equality suffices — every gap transition
+              // (syncGap) creates a new object.
+              if (s.roomGaps.get(roomJid) !== clearedGap) return s
+              const cleared = new Map(s.roomGaps)
+              cleared.delete(roomJid)
+              saveGapsToStorage(cleared)
+              return { roomGaps: cleared }
+            })
+          })
+        } else {
+          void savePromise
+        }
         searchIndex.indexMessages(persistableMessages).catch((e) => console.warn('[searchIndex] indexMessages failed:', e))
       }
 
@@ -2753,7 +2796,7 @@ export const roomStore = createStore<RoomState>()(
         }
 
         // roomRuntime deliberately untouched.
-        return { rooms: newRooms, roomMeta: newMeta, mamQueryStates: newStates, roomGaps: newGaps }
+        return { rooms: newRooms, roomMeta: newMeta, mamQueryStates: newStates, roomGaps: gapsAfterMerge }
       }
 
       // ACTIVE room: populate the resident array (foreground catch-up / scroll-up).
@@ -2784,7 +2827,7 @@ export const roomStore = createStore<RoomState>()(
         })
       }
 
-      return { rooms: newRooms, roomRuntime: newRuntime, roomMeta: newMeta, mamQueryStates: newStates, roomGaps: newGaps }
+      return { rooms: newRooms, roomRuntime: newRuntime, roomMeta: newMeta, mamQueryStates: newStates, roomGaps: gapsAfterMerge }
     })
 
     // XEP-0490: a remote room marker may have arrived before its message.
@@ -2793,6 +2836,18 @@ export const roomStore = createStore<RoomState>()(
     if (pending) {
       get().applyRemoteDisplayed(roomJid, pending, mergedForMarker)
     }
+  },
+
+  clearRoomGapAnchor: (roomJid, purgedStartId) => {
+    set((state) => {
+      const gap = state.roomGaps.get(roomJid)
+      if (!gap || gap.startId !== purgedStartId) return state
+      const newGaps = new Map(state.roomGaps)
+      const { startId: _purged, ...withoutAnchor } = gap
+      newGaps.set(roomJid, withoutAnchor)
+      saveGapsToStorage(newGaps)
+      return { roomGaps: newGaps }
+    })
   },
 
   getRoomMAMQueryState: (roomJid) => {
