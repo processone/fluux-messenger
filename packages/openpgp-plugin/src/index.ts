@@ -29,3 +29,11 @@ export type {
   OwnKeyConflict,
   TrustStateStatus,
 } from './hostStores'
+
+// PEP secret-key / identity probes.
+export {
+  probeRemoteIdentityState,
+  probeRemotePublishedFingerprints,
+  SecretKeyBackupProbeError,
+} from './secretKeyProbe'
+export type { RemoteIdentityState } from './secretKeyProbe'

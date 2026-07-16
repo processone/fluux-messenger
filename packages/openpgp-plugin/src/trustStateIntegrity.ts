@@ -14,11 +14,7 @@
  */
 
 import { buildScopedStorageKey } from '@fluux/sdk'
-import { usePinnedPrimaryFingerprintsStore } from '@/stores/pinnedPrimaryFingerprintsStore'
-import { useVerifiedPeerKeysStore } from '@/stores/verifiedPeerKeysStore'
-import { useKeyChangeAlertsStore } from '@/stores/keyChangeAlertsStore'
-import { setTrustStateStatus, getTrustStateStatus } from '@/stores/trustStateStatusStore'
-import type { TrustStateStatus } from '@/stores/trustStateStatusStore'
+import type { OpenPGPHostStores, TrustStateStatus } from './hostStores'
 import { loadAppliedVerificationsVersion } from './verificationSync'
 import type { EncryptFn, DecryptFn } from './verificationSync'
 
@@ -40,10 +36,10 @@ function sortedStringify(obj: unknown): string {
   return JSON.stringify(obj, Object.keys(obj as Record<string, unknown>).sort())
 }
 
-export function buildCanonicalSnapshot(): TrustStateSnapshot {
-  const pins = { ...usePinnedPrimaryFingerprintsStore.getState().pinnedFingerprintByJid }
-  const verified = { ...useVerifiedPeerKeysStore.getState().verifiedFingerprintByJid }
-  const alerts = { ...useKeyChangeAlertsStore.getState().alertsByJid }
+export function buildCanonicalSnapshot(hostStores: OpenPGPHostStores): TrustStateSnapshot {
+  const pins = { ...hostStores.pinnedPrimaryFingerprints.getAll() }
+  const verified = { ...hostStores.verifiedPeers.getAll() }
+  const alerts = { ...hostStores.keyChangeAlerts.getAll() }
   const syncVersion = loadAppliedVerificationsVersion()
   return { v: 1, sealedAt: new Date().toISOString(), pins, verified, alerts, syncVersion }
 }
@@ -57,10 +53,10 @@ function payloadsMatch(a: TrustStateSnapshot, b: TrustStateSnapshot): { match: b
   return { match: details.length === 0, details }
 }
 
-function storesAreEmpty(): boolean {
-  const pins = usePinnedPrimaryFingerprintsStore.getState().pinnedFingerprintByJid
-  const verified = useVerifiedPeerKeysStore.getState().verifiedFingerprintByJid
-  const alerts = useKeyChangeAlertsStore.getState().alertsByJid
+function storesAreEmpty(hostStores: OpenPGPHostStores): boolean {
+  const pins = hostStores.pinnedPrimaryFingerprints.getAll()
+  const verified = hostStores.verifiedPeers.getAll()
+  const alerts = hostStores.keyChangeAlerts.getAll()
   return (
     Object.keys(pins).length === 0 &&
     Object.keys(verified).length === 0 &&
@@ -95,8 +91,9 @@ function markInitialized(): void {
 export async function sealTrustState(
   encryptFn: EncryptFn,
   ownPublicArmored: string,
+  hostStores: OpenPGPHostStores,
 ): Promise<void> {
-  const snapshot = buildCanonicalSnapshot()
+  const snapshot = buildCanonicalSnapshot(hostStores)
   const json = JSON.stringify(snapshot)
   const armored = await encryptFn(json, ownPublicArmored)
   try {
@@ -115,12 +112,13 @@ export async function verifyTrustStateSeal(
   decryptFn: DecryptFn,
   ownPublicArmored: string,
   ownFingerprint: string,
+  hostStores: OpenPGPHostStores,
   isKeyUnavailable: (err: unknown) => boolean = () => false,
 ): Promise<{ status: TrustStateStatus; details?: string[] }> {
   const sealArmored = localStorage.getItem(getSealKey())
 
   if (!sealArmored) {
-    if (storesAreEmpty()) return { status: 'uninitialized' }
+    if (storesAreEmpty(hostStores)) return { status: 'uninitialized' }
     if (!isInitialized()) return { status: 'pending-seal' }
     return { status: 'compromised', details: ['Trust state seal was removed but stores contain data'] }
   }
@@ -133,7 +131,7 @@ export async function verifyTrustStateSeal(
     // unrecoverable) is NOT a tamper signal — there is simply no
     // verdict yet. Only a decrypt failure with a usable key is suspicious.
     if (isKeyUnavailable(err)) return { status: 'awaiting-key' }
-    if (storesAreEmpty()) return { status: 'pending-seal' }
+    if (storesAreEmpty(hostStores)) return { status: 'pending-seal' }
     return { status: 'compromised', details: ['Trust state seal could not be decrypted'] }
   }
 
@@ -142,7 +140,7 @@ export async function verifyTrustStateSeal(
     !decrypted.signerFingerprint ||
     !fingerprintsEqual(decrypted.signerFingerprint, ownFingerprint)
   ) {
-    if (storesAreEmpty()) return { status: 'pending-seal' }
+    if (storesAreEmpty(hostStores)) return { status: 'pending-seal' }
     return { status: 'compromised', details: ['Trust state seal has invalid or foreign signature'] }
   }
 
@@ -156,7 +154,7 @@ export async function verifyTrustStateSeal(
 
   lastKnownPayload = payload
 
-  const current = buildCanonicalSnapshot()
+  const current = buildCanonicalSnapshot(hostStores)
   const { match, details } = payloadsMatch(payload, current)
   if (!match) {
     return { status: 'compromised', details }
@@ -165,8 +163,8 @@ export async function verifyTrustStateSeal(
   return { status: 'sealed' }
 }
 
-export function isTofuBlockedByCompromise(peer: string): boolean {
-  if (getTrustStateStatus() !== 'compromised') return false
+export function isTofuBlockedByCompromise(peer: string, hostStores: OpenPGPHostStores): boolean {
+  if (hostStores.trustStateStatus.get() !== 'compromised') return false
   if (!lastKnownPayload) return true
   return peer in lastKnownPayload.pins
 }
@@ -174,8 +172,9 @@ export function isTofuBlockedByCompromise(peer: string): boolean {
 export async function clearCompromisedAndReseal(
   encryptFn: EncryptFn,
   ownPublicArmored: string,
+  hostStores: OpenPGPHostStores,
 ): Promise<void> {
-  await sealTrustState(encryptFn, ownPublicArmored)
+  await sealTrustState(encryptFn, ownPublicArmored, hostStores)
   lastKnownPayload = null
-  setTrustStateStatus('sealed')
+  hostStores.trustStateStatus.set('sealed')
 }
