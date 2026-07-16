@@ -1,0 +1,43 @@
+{
+  "name": "@fluux/openpgp-plugin",
+  "version": "0.0.0",
+  "description": "OpenPGP (XEP-0373) E2EEPlugin adapter for the Fluux SDK.",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "test": "vitest",
+    "test:run": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src",
+    "lint:fix": "eslint src --fix",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@fluux/sdk": "*",
+    "openpgp": "^6.3.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.0",
+    "eslint": "^10.0.0",
+    "fake-indexeddb": "^6.2.5",
+    "happy-dom": "^20.0.11",
+    "tsup": "^8.0.0",
+    "typescript": "^5.3.3",
+    "typescript-eslint": "^8.53.0",
+    "vitest": "^4.1.0"
+  }
+}
