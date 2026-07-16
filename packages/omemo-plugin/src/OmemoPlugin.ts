@@ -321,11 +321,27 @@ export class OmemoPlugin implements E2EEPlugin {
     if (peerDevs.length === 0) {
       throw new Error(`OMEMO: peer ${peer} has no usable OMEMO devices`)
     }
+
+    // BTBV encrypt exclusion: drop peer devices whose resolved trust is
+    // `untrusted`. Own devices are unaffected (own-device trust is M2c-3).
+    // Before any verification exists all devices are tofu/unknown, so nothing
+    // is dropped (M2b blind-trust behavior preserved). If this empties the
+    // peer set (every device untrusted), the existing zero-usable-devices
+    // guard below fails LOUD rather than silently sending to self only.
+    const trustedPeerDevs: number[] = []
+    for (const rid of peerDevs) {
+      const { trust } = await this.resolvePeerIdentity(peer, rid)
+      if (trust !== 'untrusted') trustedPeerDevs.push(rid)
+    }
+    if (trustedPeerDevs.length === 0) {
+      throw new Error(`OMEMO: peer ${peer} has no usable OMEMO devices`)
+    }
+
     const ownDevs = (await fetchDeviceList(this.ctx.xmpp, this.ctx.account.jid))
       .filter((d) => d !== myDev)
       .slice(0, DEVICE_CAP)
 
-    await this.ensureSessions(acc, peer, peerDevs)
+    await this.ensureSessions(acc, peer, trustedPeerDevs)
     await this.ensureSessions(acc, this.ctx.account.jid, ownDevs)
 
     // `ensureSessions` skips devices whose bundle is missing/invalid, so a device id
@@ -333,7 +349,7 @@ export class OmemoPlugin implements E2EEPlugin {
     // the devices that actually have a session — `acc.encrypt` throws on the first
     // session-less device, which would brick the WHOLE send over one stale/unreachable
     // device. We encrypt to "the rest", matching ensureSessions's stated intent.
-    const reachablePeerDevs = await this.reachableDevices(peer, peerDevs)
+    const reachablePeerDevs = await this.reachableDevices(peer, trustedPeerDevs)
     const reachableOwnDevs = await this.reachableDevices(this.ctx.account.jid, ownDevs)
 
     // Apply the peer guard to the FILTERED set: a peer whose every device is

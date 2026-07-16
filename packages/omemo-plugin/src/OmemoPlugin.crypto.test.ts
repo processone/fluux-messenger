@@ -217,3 +217,45 @@ describe('OmemoPlugin encrypt/decrypt (SCE seam)', () => {
     expect(await bob.p.getPeerTrust('alice@x')).toBe('tofu')
   })
 })
+
+describe('OmemoPlugin.encrypt — untrusted exclusion', () => {
+  it('excludes an untrusted peer device from recipients while a still-trusted second device is included', async () => {
+    const alice = await ready('alice@x')
+    const bob = await ready('bob@x', alice.c.net)
+    const bobDeviceId = Number((await bob.p.ensureIdentity()).devices![0]!.deviceId)
+    // Bob's second device (same bare JID, shared PEP network) so exactly one
+    // device can be untrusted while a send still works.
+    const bob2 = await ready('bob@x', alice.c.net)
+    const secondDeviceId = Number((await bob2.p.ensureIdentity()).devices![0]!.deviceId)
+
+    await alice.p.setIdentityTrust('bob@x', String(bobDeviceId), 'untrusted')
+
+    const handle = await alice.p.openConversation({ kind: 'direct', peer: 'bob@x' })
+    const enc = await alice.p.encrypt(handle, bodyPayload('hi'))
+    const msg = parseEncrypted(dataToElement(enc.stanzaElement))
+    const recipientDeviceIds = msg.keys.filter((k) => k.jid === 'bob@x').map((k) => k.rid)
+    expect(recipientDeviceIds).not.toContain(bobDeviceId)
+    expect(recipientDeviceIds).toContain(secondDeviceId)
+  })
+
+  it('throws the loud no-usable-devices error when EVERY peer device is untrusted', async () => {
+    const alice = await ready('alice@x')
+    const bob = await ready('bob@x', alice.c.net)
+    const bobDeviceId = Number((await bob.p.ensureIdentity()).devices![0]!.deviceId)
+    await alice.p.setIdentityTrust('bob@x', String(bobDeviceId), 'untrusted')
+
+    const handle = await alice.p.openConversation({ kind: 'direct', peer: 'bob@x' })
+    await expect(alice.p.encrypt(handle, bodyPayload('leak?'))).rejects.toThrow(/no usable OMEMO devices/i)
+  })
+
+  it('pre-verification blind trust: nothing excluded (current behavior preserved)', async () => {
+    const alice = await ready('alice@x')
+    const bob = await ready('bob@x', alice.c.net)
+    const bobDeviceId = Number((await bob.p.ensureIdentity()).devices![0]!.deviceId)
+
+    const handle = await alice.p.openConversation({ kind: 'direct', peer: 'bob@x' })
+    const enc = await alice.p.encrypt(handle, bodyPayload('hello'))
+    const msg = parseEncrypted(dataToElement(enc.stanzaElement))
+    expect(msg.keys.map((k) => k.rid)).toContain(bobDeviceId)
+  })
+})
