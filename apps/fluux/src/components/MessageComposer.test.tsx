@@ -1547,6 +1547,19 @@ describe('MessageComposer', () => {
       expect(container.querySelector('[data-encryption-escalation]')).not.toBeNull()
     })
 
+    // needsDeviceVerification: every OMEMO device for this peer is untrusted, so
+    // nothing is encryptable — a strictly worse case than a routine untrusted
+    // aggregate. Must render the same danger cue (red ShieldAlert) as `blocked`,
+    // never the calm gray shield.
+    it('shows a red shield-alert lock when the peer needs device verification', () => {
+      const { container } = render(<MessageComposer {...base} encryptionState={{ kind: 'needsDeviceVerification', peerJid: 'bob@example.com' }} />)
+      const icon = container.querySelector('[data-encryption-lock] .lucide-shield-alert')!
+      expect(icon).not.toBeNull()
+      expect(icon.classList.contains('text-fluux-error')).toBe(true)
+      expect(container.querySelector('[data-encryption-lock] .lucide-shield')).toBeNull()
+      expect(container.querySelector('[data-encryption-lock] .lucide-shield-check')).toBeNull()
+    })
+
     it('calls onEncryptionClick when the lock is activated', () => {
       const onEncryptionClick = vi.fn()
       const { container } = render(<MessageComposer {...base} onEncryptionClick={onEncryptionClick} encryptionState={{ kind: 'encrypted', fingerprint: 'a', trust: 'tofu' }} />)

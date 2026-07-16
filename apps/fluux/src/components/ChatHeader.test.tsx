@@ -377,6 +377,57 @@ describe('ChatHeader', () => {
     })
   })
 
+  describe('Encryption menu — needsDeviceVerification danger cue (Task 15/16)', () => {
+    function renderNeedsVerification(onEncryptionClick?: () => void) {
+      return render(
+        <ChatHeader
+          name="Alice Smith"
+          type="chat"
+          jid="alice@example.com"
+          encryptionState={{ kind: 'needsDeviceVerification', peerJid: 'alice@example.com' }}
+          onEncryptionClick={onEncryptionClick}
+        />
+      )
+    }
+
+    it('renders ShieldAlert + danger color (text-fluux-error), not the calm gray Shield or teal ShieldCheck', () => {
+      const { container } = renderNeedsVerification()
+      const shieldAlert = container.querySelector('.lucide-shield-alert')
+      expect(shieldAlert).not.toBeNull()
+      const status = shieldAlert!.closest('[role="status"]')!
+      expect(status.getAttribute('class')).toContain('text-fluux-error')
+      // Distinct from a calm `tofu` state (see the OMEMO danger-cue suite above):
+      // no plain Shield, no ShieldCheck.
+      expect(container.querySelector('.lucide-shield')).toBeNull()
+      expect(container.querySelector('.lucide-shield-check')).toBeNull()
+    })
+
+    it('hover tooltip reuses the composer\'s needsVerificationTooltip copy, never the OpenPGP tooltip', async () => {
+      vi.useFakeTimers()
+      try {
+        const { container } = renderNeedsVerification()
+        const trigger = container.querySelector('[role="status"]') as HTMLElement
+        fireEvent.mouseEnter(trigger)
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(700)
+        })
+        expect(document.body.textContent).toContain('chat.encryption.needsVerificationTooltip')
+        expect(document.body.textContent).not.toContain('chat.encryption.openpgpTooltip')
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+
+    it('is clickable and calls onEncryptionClick when a handler is wired (header lock is actionable)', () => {
+      const onEncryptionClick = vi.fn()
+      const { container } = renderNeedsVerification(onEncryptionClick)
+      const shieldAlert = container.querySelector('button .lucide-shield-alert')
+      expect(shieldAlert).not.toBeNull()
+      fireEvent.click(shieldAlert!.closest('button')!)
+      expect(onEncryptionClick).toHaveBeenCalledTimes(1)
+    })
+  })
+
   describe('Title Bar', () => {
     it('applies drag region props for Tauri', () => {
       const { container } = render(

@@ -35,7 +35,7 @@ export function getGlance(
     case 'blocked':
       return { icon: ShieldAlert, label: t('chat.encryption.blocked'), tone: 'warning' }
     case 'needsDeviceVerification':
-      return { icon: ShieldAlert, label: t('contacts.encryption.needsVerification.glance'), tone: 'warning' }
+      return { icon: ShieldAlert, label: t('contacts.encryption.needsVerification.glance'), tone: 'danger' }
     case 'checking':
       return { icon: Loader2, label: t('chat.encryption.checking'), tone: 'neutral' }
     default:

@@ -278,6 +278,36 @@ function EncryptionIcon({
     )
   }
 
+  // needsDeviceVerification — every OMEMO device for this peer is untrusted,
+  // so nothing is encryptable. This is the worst case (strictly worse than a
+  // routine `encrypted`/`untrusted` aggregate) and must render the same
+  // danger cue as `blocked`: a red ShieldAlert, never the neutral gray Shield
+  // the generic `encrypted` path below would otherwise fall through to.
+  if (state.kind === 'needsDeviceVerification') {
+    const tooltip = t('chat.encryption.needsVerificationTooltip')
+    if (onVerifyClick) {
+      return (
+        <Tooltip content={tooltip} position="bottom">
+          <button
+            type="button"
+            className={`${btnClass} ${trustStateVisual('untrusted').colorClass} cursor-pointer`}
+            aria-label={tooltip}
+            onClick={onVerifyClick}
+          >
+            <ShieldAlert className="size-4" />
+          </button>
+        </Tooltip>
+      )
+    }
+    return (
+      <Tooltip content={tooltip} position="bottom">
+        <div className={`${btnClass} ${trustStateVisual('untrusted').colorClass}`} role="status">
+          <ShieldAlert className="size-4" />
+        </div>
+      </Tooltip>
+    )
+  }
+
   if (state.kind === 'keyLocked') {
     return <KeyLockedIcon fingerprint={state.fingerprint} />
   }

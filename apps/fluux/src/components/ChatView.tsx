@@ -411,7 +411,16 @@ export function ChatView({ onBack, onSwitchToMessages, onSearchInConversation, o
         onBack={onBack}
         onSearchInConversation={handleSearchInConversation}
         encryptionState={encryptionState}
-        onEncryptionClick={encryptionState.kind === 'encrypted' || encryptionState.kind === 'blocked' ? handleOpenVerify : undefined}
+        onEncryptionClick={
+          encryptionState.kind === 'encrypted' || encryptionState.kind === 'blocked'
+            ? handleOpenVerify
+            // needsDeviceVerification has no single aggregate fingerprint to hand
+            // VerifyPeerDialog (every device is untrusted) — route to the contact
+            // profile's Security tab instead, where per-device verification lives.
+            : encryptionState.kind === 'needsDeviceVerification' && onShowProfile
+              ? () => onShowProfile(activeConversation.id)
+              : undefined
+        }
         onDisableEncryptionClick={encryptionState.kind === 'encrypted' ? handleDisableEncryption : undefined}
         onEnableEncryptionClick={encryptionState.kind === 'plaintextForced' ? handleEnableEncryption : undefined}
         onShowProfile={
