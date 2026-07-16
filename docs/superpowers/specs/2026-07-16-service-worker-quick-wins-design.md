@@ -95,9 +95,17 @@ handler:
 - Carry `count` in `notification.data`. First message: `count = 1`, body =
   payload body (or the generic text for encrypted payloads). Subsequent:
   `count = previous + 1`, body = localized **"N new messages"**.
-- `renotify: true` so each coalesced update still alerts.
+- `renotify: true` **on Android only** (detected via `navigator.userAgent` in
+  the SW). On a phone each incoming message should still buzz — that is what
+  users expect from a native messenger, and Android Chrome supports
+  `renotify`. Everywhere else the default (`false`) applies: on desktop the
+  persistent notification is already visible, silent count updates match the
+  calm attention-vs-ambient philosophy of the rail badge, and Safari/Firefox
+  ignore the flag anyway — so leaving it off keeps behavior consistent across
+  the remaining platforms.
 - The coalescing decision lives in a pure function
-  `buildPushNotification(existingData, payload)` so it is unit-testable.
+  `buildPushNotification(existingData, payload, { isAndroid })` so it is
+  unit-testable.
 
 ### Localization
 
@@ -125,7 +133,7 @@ too. `webTag` moves to a shared location importable by both `sw.ts` and
 
 - `buildPushNotification` — vitest unit tests (pattern:
   `serviceWorkerUpdate.test.ts`): first message, increment, encrypted body,
-  tag scheme, renotify flag.
+  tag scheme, renotify set on Android and absent elsewhere.
 - `useAppBadge` — hook test with mocked `navigator.setAppBadge` /
   `clearAppBadge`: count changes, zero → clear, missing API → no-op.
 - `swMessages` — locale selection and plural fallback.
