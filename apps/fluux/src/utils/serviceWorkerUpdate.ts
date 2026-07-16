@@ -9,10 +9,15 @@
  * Previously we reloaded the page automatically as soon as the new worker took
  * control. On an installed PWA that fires on nearly every foreground-after-deploy
  * (see the focus update check below), so the app reloaded out from under the user
- * mid-session. Now, when a waiting worker is detected we flag
+ * mid-session. Now, when an update installs mid-session we flag
  * `appUpdateStore.webUpdateReady` so the sidebar surfaces an "update available"
  * button; clicking it runs `applyWaitingUpdate`, which tells the waiting worker to
  * `skipWaiting()` and reloads once it takes control.
+ *
+ * Safety net: a worker still parked in `waiting` when the page boots (the icon
+ * was never tapped last session — or never shown: the login screen has no rail)
+ * is applied immediately, so an installed PWA can't trail the deployed build
+ * indefinitely (see `dispatchUpdateReady`).
  *
  * The browser only checks for an updated `sw.js` on `register()`, on navigations
  * within scope, and on its own ~24h timer — none of which fire for a backgrounded,
@@ -28,8 +33,16 @@ import { useAppUpdateStore } from '@/stores/appUpdateStore'
 export const FOCUS_UPDATE_MIN_INTERVAL_MS = 60_000
 
 /**
+ * How an update became ready to activate:
+ *  - `waiting-at-registration`: a worker was already parked in `waiting` when the
+ *    page registered — i.e. it was found in a previous session and never applied.
+ *  - `update-found`: a fresh `updatefound` finished installing mid-session.
+ */
+export type UpdateReadySource = 'waiting-at-registration' | 'update-found'
+
+/**
  * Watch a registration for an update that is ready to activate, and invoke
- * `onReady` when one is.
+ * `onReady` (with how it got there) when one is.
  *
  * "Ready" means a worker is `waiting` — either already (from a check on a prior
  * page load) or after a fresh `updatefound` reaches the `installed` state while a
@@ -39,10 +52,10 @@ export const FOCUS_UPDATE_MIN_INTERVAL_MS = 60_000
 export function installUpdateReadyDetection(
   registration: ServiceWorkerRegistration,
   hasController: () => boolean,
-  onReady: () => void,
+  onReady: (source: UpdateReadySource) => void,
 ): void {
   if (registration.waiting) {
-    onReady()
+    onReady('waiting-at-registration')
     return
   }
   registration.addEventListener('updatefound', () => {
@@ -50,10 +63,30 @@ export function installUpdateReadyDetection(
     if (!installing) return
     installing.addEventListener('statechange', () => {
       if (installing.state === 'installed' && hasController()) {
-        onReady()
+        onReady('update-found')
       }
     })
   })
+}
+
+/**
+ * Policy for a ready update: safety net at boot, opt-in mid-session.
+ *
+ * A worker still `waiting` at registration means the previous session parked an
+ * update the user never applied (icon unnoticed, or no rail at all on the login
+ * screen). We are at page load — a reload is invisible — so `applyUpdate` right
+ * away rather than letting the app trail the deployed build indefinitely (an
+ * installed PWA the OS rarely kills may otherwise stay old for days).
+ * An update found mid-session keeps today's behavior: `offerUpdate` surfaces the
+ * rail icon and the user applies it when they wish.
+ */
+export function dispatchUpdateReady(
+  source: UpdateReadySource,
+  applyUpdate: () => void,
+  offerUpdate: (apply: () => void) => void,
+): void {
+  if (source === 'waiting-at-registration') applyUpdate()
+  else offerUpdate(applyUpdate)
 }
 
 /**
@@ -121,14 +154,17 @@ export function registerServiceWorker(): void {
     navigator.serviceWorker
       .register('./sw.js')
       .then((registration) => {
-        // A waiting worker means a new build is ready. Surface the button and
-        // register the apply action (skipWaiting + one reload) for it.
+        // A waiting worker means a new build is ready. Parked at boot → apply
+        // silently (safety net); found mid-session → surface the rail button
+        // with the apply action (skipWaiting + one reload).
         installUpdateReadyDetection(
           registration,
           () => navigator.serviceWorker.controller !== null,
-          () => {
-            useAppUpdateStore.getState().setWebUpdateReady(true, () =>
-              applyWaitingUpdate(registration, navigator.serviceWorker, () => window.location.reload()),
+          (source) => {
+            dispatchUpdateReady(
+              source,
+              () => applyWaitingUpdate(registration, navigator.serviceWorker, () => window.location.reload()),
+              (apply) => useAppUpdateStore.getState().setWebUpdateReady(true, apply),
             )
           },
         )

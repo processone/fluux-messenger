@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import {
   installUpdateReadyDetection,
+  dispatchUpdateReady,
   applyWaitingUpdate,
   createFocusUpdateChecker,
 } from './serviceWorkerUpdate'
@@ -56,7 +57,7 @@ function createFakeContainer() {
 }
 
 describe('installUpdateReadyDetection', () => {
-  it('reports ready immediately when a worker is already waiting', () => {
+  it('reports a worker already waiting at registration as waiting-at-registration', () => {
     const onReady = vi.fn()
     const reg = createFakeRegistration()
     reg.waiting = createFakeWorker('installed')
@@ -64,9 +65,10 @@ describe('installUpdateReadyDetection', () => {
     installUpdateReadyDetection(reg as unknown as ServiceWorkerRegistration, () => true, onReady)
 
     expect(onReady).toHaveBeenCalledTimes(1)
+    expect(onReady).toHaveBeenCalledWith('waiting-at-registration')
   })
 
-  it('reports ready when an installing worker finishes while a controller exists (an update)', () => {
+  it('reports an installing worker finishing mid-session (controller exists) as update-found', () => {
     const onReady = vi.fn()
     const reg = createFakeRegistration()
     installUpdateReadyDetection(reg as unknown as ServiceWorkerRegistration, () => true, onReady)
@@ -76,6 +78,7 @@ describe('installUpdateReadyDetection', () => {
     reg.installing.setState('installed')
 
     expect(onReady).toHaveBeenCalledTimes(1)
+    expect(onReady).toHaveBeenCalledWith('update-found')
   })
 
   it('does not report ready on a first install (installed with no controller)', () => {
@@ -100,6 +103,29 @@ describe('installUpdateReadyDetection', () => {
     reg.installing.setState('redundant')
 
     expect(onReady).not.toHaveBeenCalled()
+  })
+})
+
+describe('dispatchUpdateReady', () => {
+  it('applies immediately (safety net) when the update was already waiting at registration', () => {
+    const apply = vi.fn()
+    const offer = vi.fn()
+
+    dispatchUpdateReady('waiting-at-registration', apply, offer)
+
+    expect(apply).toHaveBeenCalledTimes(1)
+    expect(offer).not.toHaveBeenCalled()
+  })
+
+  it('offers the update (rail icon) when it arrived mid-session', () => {
+    const apply = vi.fn()
+    const offer = vi.fn()
+
+    dispatchUpdateReady('update-found', apply, offer)
+
+    expect(offer).toHaveBeenCalledTimes(1)
+    expect(offer).toHaveBeenCalledWith(apply)
+    expect(apply).not.toHaveBeenCalled()
   })
 })
 
