@@ -1036,71 +1036,19 @@ export class MAM extends BaseModule {
     messages: Array<{ timestamp?: Date; stanzaId?: string }>,
     options: { sessionStartTime?: number; stitchReadPointer?: boolean } = {},
   ): Promise<void> {
-    const { sessionStartTime, stitchReadPointer = false } = options
-    const gapStart = this.deps.stores?.chat.getConversationGapStart?.(conversationId)
-    const gapStartId = this.deps.stores?.chat.getConversationGapStartId?.(conversationId)
-    const q = selectCatchUpQuery(messages, { sessionStartTime, forwardGapTimestamp: gapStart, forwardGapStartId: gapStartId })
-    const isForward = !!(q.start || q.after)
-
-    // Phase A — align to live, anchored on the COVERAGE pointer (id-exact
-    // when available; `after` here is the local downloaded edge, never the
-    // XEP-0490 read pointer).
-    const initial = await this.queryArchive({
-      with: conversationId,
-      ...q,
-      max: isForward ? MAM_CATCHUP_FORWARD_MAX : MAM_CATCHUP_BACKWARD_MAX,
-      ...(isForward ? { maxAutoPages: MAM_CATCHUP_FORWARD_BAIL_PAGES } : {}),
+    await this.runCatchUpHistory(messages, options, {
+      getGapStart: () => this.deps.stores?.chat.getConversationGapStart?.(conversationId),
+      getGapStartId: () => this.deps.stores?.chat.getConversationGapStartId?.(conversationId),
+      getPendingStanzaId: () => this.deps.stores?.chat.getConversationPendingStanzaId?.(conversationId),
+      isActive: () => this.deps.stores?.chat.getActiveConversationId?.() === conversationId,
+      probeCacheBottom: async () =>
+        ((await this.deps.stores?.chat.loadMessagesFromCache(conversationId, {
+          limit: MAM_POINTER_SEED_PROBE_LIMIT,
+          peek: true,
+          oldest: true,
+        })) ?? []) as Array<{ timestamp?: Date; stanzaId?: string }>,
+      query: (opts) => this.queryArchive({ with: conversationId, ...opts }),
     })
-    let windowBottom: string | undefined
-    if (isForward && !initial.complete) {
-      const latest = await this.queryArchive({ with: conversationId, max: MAM_CATCHUP_BACKWARD_MAX, before: '' })
-      windowBottom = latest.rsm.first
-    } else if (!isForward) {
-      windowBottom = initial.rsm.first
-    }
-    // (forward && complete → contiguous to live over the cache; a pending
-    // pointer, if any, lives in the cache and the activation machinery
-    // resolves it — no backward growth needed.)
-
-    // Phase B — grow the window down to the read pointer.
-    if (!stitchReadPointer) return
-    // Cross-session convergence: Phase A can end forward-complete with no
-    // fetch-latest (windowBottom unset) while the pointer is still pending —
-    // e.g. the session after a capped Phase B walk, whose coverage edge is
-    // already near live. Seed the backward cursor from the TRUE cache bottom:
-    // an oldest-N pure read (ascending), first message WITH an archive id.
-    // Each pass then descends genuinely below all prior coverage — never
-    // re-fetching already-cached pages — so a deep pointer converges across
-    // sessions and a purged one terminates at the archive-start `complete`.
-    // (The `messages` peek param is the NEWEST-100 slice and would pin the
-    // seed ~100 below live forever; it remains only the cacheless fallback.)
-    if (!windowBottom && this.deps.stores?.chat.getConversationPendingStanzaId?.(conversationId)) {
-      const bottom = await this.deps.stores.chat.loadMessagesFromCache(conversationId, {
-        limit: MAM_POINTER_SEED_PROBE_LIMIT,
-        peek: true,
-        oldest: true,
-      }) as Array<{ timestamp?: Date; stanzaId?: string }>
-      windowBottom = bottom.find((m) => m.stanzaId)?.stanzaId
-        ?? oldestMessageWithStanzaId(messages)?.stanzaId
-    }
-    for (let page = 0; page < MAM_POINTER_STITCH_MAX_PAGES; page++) {
-      // Re-check activity EVERY iteration, not just at dispatch: a walk is up
-      // to MAM_POINTER_STITCH_MAX_PAGES RTTs, and once the conversation is
-      // opened its resident window is capped — further backward pages would
-      // keep-oldest-evict the live edge under the user. The activation
-      // machinery owns the active deep-pointer UX (see the Phase B doc above).
-      if (this.deps.stores?.chat.getActiveConversationId?.() === conversationId) return
-      if (!this.deps.stores?.chat.getConversationPendingStanzaId?.(conversationId)) return
-      if (!windowBottom) return
-      const res = await this.queryArchive({
-        with: conversationId,
-        before: windowBottom,
-        max: MAM_CATCHUP_FORWARD_MAX,
-      })
-      if (res.complete) return // archive start reached — a still-pending pointer is purged
-      if (!res.rsm.first || res.rsm.first === windowBottom) return
-      windowBottom = res.rsm.first
-    }
   }
 
   /**
@@ -1253,54 +1201,104 @@ export class MAM extends BaseModule {
     messages: Array<{ timestamp?: Date; stanzaId?: string }>,
     options: { sessionStartTime?: number; stitchReadPointer?: boolean } = {},
   ): Promise<void> {
+    await this.runCatchUpHistory(messages, options, {
+      getGapStart: () => this.deps.stores?.room.getRoomGapStart?.(roomJid),
+      getGapStartId: () => this.deps.stores?.room.getRoomGapStartId?.(roomJid),
+      getPendingStanzaId: () => this.deps.stores?.room.getRoomPendingStanzaId?.(roomJid),
+      isActive: () => this.deps.stores?.room.getActiveRoomJid() === roomJid,
+      probeCacheBottom: async () =>
+        ((await this.deps.stores?.room.loadMessagesFromCache(roomJid, {
+          limit: MAM_POINTER_SEED_PROBE_LIMIT,
+          peek: true,
+          oldest: true,
+        })) ?? []) as Array<{ timestamp?: Date; stanzaId?: string }>,
+      query: (opts) => this.queryRoomArchive({ roomJid, ...opts }),
+    })
+  }
+
+  /**
+   * Shared Phase A/B catch-up core behind {@link catchUpConversationHistory}
+   * and {@link catchUpRoomHistory} — the full behavioral contract is documented
+   * on the chat adapter. The `io` seam carries the only per-entity differences:
+   * store getters (gap seam, XEP-0490 pending pointer, active-entity check),
+   * the true-cache-bottom probe, and the archive query transport.
+   */
+  private async runCatchUpHistory(
+    messages: Array<{ timestamp?: Date; stanzaId?: string }>,
+    options: { sessionStartTime?: number; stitchReadPointer?: boolean },
+    io: {
+      getGapStart: () => number | undefined
+      getGapStartId: () => string | undefined
+      getPendingStanzaId: () => string | undefined
+      isActive: () => boolean
+      probeCacheBottom: () => Promise<Array<{ timestamp?: Date; stanzaId?: string }>>
+      query: (opts: {
+        max: number
+        before?: string
+        after?: string
+        start?: string
+        maxAutoPages?: number
+      }) => Promise<{ complete: boolean; rsm: { first?: string } }>
+    },
+  ): Promise<void> {
     const { sessionStartTime, stitchReadPointer = false } = options
-    const gapStart = this.deps.stores?.room.getRoomGapStart?.(roomJid)
-    const gapStartId = this.deps.stores?.room.getRoomGapStartId?.(roomJid)
-    const q = selectCatchUpQuery(messages, { sessionStartTime, forwardGapTimestamp: gapStart, forwardGapStartId: gapStartId })
+    const q = selectCatchUpQuery(messages, {
+      sessionStartTime,
+      forwardGapTimestamp: io.getGapStart(),
+      forwardGapStartId: io.getGapStartId(),
+    })
     const isForward = !!(q.start || q.after)
 
-    const initial = await this.queryRoomArchive({
-      roomJid,
+    // Phase A — align to live, anchored on the COVERAGE pointer (id-exact
+    // when available; `after` here is the local downloaded edge, never the
+    // XEP-0490 read pointer).
+    const initial = await io.query({
       ...q,
       max: isForward ? MAM_CATCHUP_FORWARD_MAX : MAM_CATCHUP_BACKWARD_MAX,
       ...(isForward ? { maxAutoPages: MAM_CATCHUP_FORWARD_BAIL_PAGES } : {}),
     })
     let windowBottom: string | undefined
     if (isForward && !initial.complete) {
-      const latest = await this.queryRoomArchive({ roomJid, max: MAM_CATCHUP_BACKWARD_MAX, before: '' })
+      const latest = await io.query({ max: MAM_CATCHUP_BACKWARD_MAX, before: '' })
       windowBottom = latest.rsm.first
     } else if (!isForward) {
       windowBottom = initial.rsm.first
     }
+    // (forward && complete → contiguous to live over the cache; a pending
+    // pointer, if any, lives in the cache and the activation machinery
+    // resolves it — no backward growth needed.)
 
+    // Phase B — grow the window down to the read pointer.
     if (!stitchReadPointer) return
-    // Cross-session convergence: seed the backward cursor from the TRUE cache
-    // bottom (oldest-N pure read, first message WITH an archive id) when
-    // Phase A ended forward-complete with the pointer still pending — each
-    // pass descends genuinely below prior coverage; the newest-100 peek param
-    // is only the cacheless fallback (see the chat twin above).
-    if (!windowBottom && this.deps.stores?.room.getRoomPendingStanzaId?.(roomJid)) {
-      const bottom = await this.deps.stores.room.loadMessagesFromCache(roomJid, {
-        limit: MAM_POINTER_SEED_PROBE_LIMIT,
-        peek: true,
-        oldest: true,
-      }) as Array<{ timestamp?: Date; stanzaId?: string }>
+    // Cross-session convergence: Phase A can end forward-complete with no
+    // fetch-latest (windowBottom unset) while the pointer is still pending —
+    // e.g. the session after a capped Phase B walk, whose coverage edge is
+    // already near live. Seed the backward cursor from the TRUE cache bottom:
+    // an oldest-N pure read (ascending), first message WITH an archive id.
+    // Each pass then descends genuinely below all prior coverage — never
+    // re-fetching already-cached pages — so a deep pointer converges across
+    // sessions and a purged one terminates at the archive-start `complete`.
+    // (The `messages` peek param is the NEWEST-100 slice and would pin the
+    // seed ~100 below live forever; it remains only the cacheless fallback.)
+    if (!windowBottom && io.getPendingStanzaId()) {
+      const bottom = await io.probeCacheBottom()
       windowBottom = bottom.find((m) => m.stanzaId)?.stanzaId
         ?? oldestMessageWithStanzaId(messages)?.stanzaId
     }
     for (let page = 0; page < MAM_POINTER_STITCH_MAX_PAGES; page++) {
-      // Re-check activity EVERY iteration (chat-twin rationale): backward
-      // pages into the now-active room's capped resident window would
-      // keep-oldest-evict its live edge.
-      if (this.deps.stores?.room.getActiveRoomJid() === roomJid) return
-      if (!this.deps.stores?.room.getRoomPendingStanzaId?.(roomJid)) return
+      // Re-check activity EVERY iteration, not just at dispatch: a walk is up
+      // to MAM_POINTER_STITCH_MAX_PAGES RTTs, and once the entity is opened
+      // its resident window is capped — further backward pages would
+      // keep-oldest-evict the live edge under the user. The activation
+      // machinery owns the active deep-pointer UX (see the Phase B doc above).
+      if (io.isActive()) return
+      if (!io.getPendingStanzaId()) return
       if (!windowBottom) return
-      const res = await this.queryRoomArchive({
-        roomJid,
+      const res = await io.query({
         before: windowBottom,
         max: MAM_CATCHUP_FORWARD_MAX,
       })
-      if (res.complete) return
+      if (res.complete) return // archive start reached — a still-pending pointer is purged
       if (!res.rsm.first || res.rsm.first === windowBottom) return
       windowBottom = res.rsm.first
     }

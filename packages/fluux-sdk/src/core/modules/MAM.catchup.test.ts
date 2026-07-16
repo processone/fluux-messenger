@@ -917,6 +917,96 @@ describe('MAM Background Catch-Up', () => {
 
       expect(calls.map((c) => c.before)).toEqual(['', 'w-bottom'])
     })
+
+    it('stops growing at the archive start (purged pointer) instead of looping', async () => {
+      await connectClient()
+      setupRoom('mds-ptr')
+
+      const calls: any[] = []
+      vi.spyOn(xmppClient.mam, 'queryRoomArchive').mockImplementation(async (opts: any) => {
+        calls.push(opts)
+        if (opts.before === '') return { messages: [], complete: false, rsm: { first: 'w-bottom' } }
+        return { messages: [], complete: true, rsm: { first: 'page-1-first' } } // archive start
+      })
+
+      await xmppClient.mam.catchUpRoomHistory(roomJid, [], { stitchReadPointer: true })
+
+      expect(calls).toHaveLength(2)
+    })
+
+    it('respects the per-pass page cap for a very deep pointer', async () => {
+      await connectClient()
+      setupRoom('mds-ptr')
+
+      let n = 0
+      const querySpy = vi.spyOn(xmppClient.mam, 'queryRoomArchive').mockImplementation(async () => {
+        n++
+        return { messages: [], complete: false, rsm: { first: `page-${n}-first` } }
+      })
+
+      await xmppClient.mam.catchUpRoomHistory(roomJid, [], { stitchReadPointer: true })
+
+      // 1 fetch-latest + MAM_POINTER_STITCH_MAX_PAGES backward pages
+      expect(querySpy).toHaveBeenCalledTimes(1 + 10)
+    })
+
+    it('does NOT grow toward the pointer when stitchReadPointer is off (active entity)', async () => {
+      await connectClient()
+      setupRoom('mds-ptr')
+
+      const querySpy = vi.spyOn(xmppClient.mam, 'queryRoomArchive')
+        .mockResolvedValue({ messages: [], complete: false, rsm: { first: 'w-bottom' } })
+
+      await xmppClient.mam.catchUpRoomHistory(roomJid, [])
+
+      expect(querySpy).toHaveBeenCalledTimes(1)
+    })
+
+    it('non-empty cache: id-exact forward from the coverage edge with the bail cap; done when complete', async () => {
+      await connectClient()
+      setupRoom(undefined)
+
+      const querySpy = vi.spyOn(xmppClient.mam, 'queryRoomArchive')
+        .mockResolvedValue({ messages: [], complete: true, rsm: {} })
+
+      const cached = [{ timestamp: new Date('2026-05-14T09:00:00.000Z'), stanzaId: 'cov-42' }]
+      await xmppClient.mam.catchUpRoomHistory(roomJid, cached, { sessionStartTime: new Date('2026-06-14T12:00:00Z').getTime() })
+
+      expect(querySpy).toHaveBeenCalledTimes(1)
+      expect(querySpy).toHaveBeenCalledWith(expect.objectContaining({
+        after: 'cov-42', // COVERAGE id, not the read pointer
+        maxAutoPages: 3, // MAM_CATCHUP_FORWARD_BAIL_PAGES
+      }))
+    })
+
+    it('non-empty cache without stanza-ids: timestamp fallback anchor', async () => {
+      await connectClient()
+      setupRoom(undefined)
+
+      const querySpy = vi.spyOn(xmppClient.mam, 'queryRoomArchive')
+        .mockResolvedValue({ messages: [], complete: true, rsm: {} })
+
+      const cached = [{ timestamp: new Date('2026-05-14T09:00:00.000Z') }]
+      await xmppClient.mam.catchUpRoomHistory(roomJid, cached, { sessionStartTime: new Date('2026-06-14T12:00:00Z').getTime() })
+
+      expect(querySpy).toHaveBeenCalledWith(expect.objectContaining({
+        start: '2026-05-14T09:00:00.001Z',
+        maxAutoPages: 3,
+      }))
+    })
+
+    it('resumes a recorded gap id-exact (after: seam startId)', async () => {
+      await connectClient()
+      setupRoom(undefined)
+      vi.mocked(mockStores.room.getRoomGapStart!).mockReturnValue(new Date('2026-05-14T09:00:00Z').getTime())
+      vi.mocked(mockStores.room.getRoomGapStartId!).mockReturnValue('gap-edge-7')
+
+      const querySpy = vi.spyOn(xmppClient.mam, 'queryRoomArchive').mockResolvedValue({ messages: [], complete: true, rsm: {} })
+
+      await xmppClient.mam.catchUpRoomHistory(roomJid, [{ timestamp: new Date('2026-06-01T12:00:00Z'), stanzaId: 'newer' }])
+
+      expect(querySpy).toHaveBeenCalledWith(expect.objectContaining({ after: 'gap-edge-7' }))
+    })
   })
 
   describe('catchUpAllRooms', () => {
