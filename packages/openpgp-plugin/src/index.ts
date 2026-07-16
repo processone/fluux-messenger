@@ -49,3 +49,7 @@ export { KeyPickerRequiredError, NoRecoveryAvailableError } from './recoveryErro
 // Desktop plugin (Rust Sequoia via Tauri IPC).
 export { SequoiaPgpPlugin } from './SequoiaPgpPlugin'
 export type { InvokeFn, SequoiaPgpPluginOptions } from './SequoiaPgpPlugin'
+
+// Web plugin (openpgp.js + IndexedDB).
+export { WebOpenPGPPlugin } from './WebOpenPGPPlugin'
+export type { WebOpenPGPPluginOptions } from './WebOpenPGPPlugin'

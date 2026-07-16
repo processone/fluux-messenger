@@ -33,6 +33,7 @@ import {
 } from '@fluux/sdk'
 import { WebOpenPGPPlugin } from './WebOpenPGPPlugin'
 import { clearSessionPassphrase } from './webPassphraseStore'
+import { createMockHostStores } from './testing/mockHostStores'
 
 const FIXTURES_DIR = resolve(__dirname, 'fixtures')
 const readFixture = (name: string) => readFileSync(resolve(FIXTURES_DIR, name), 'utf-8')
@@ -145,14 +146,6 @@ function makeCtx(accountJid: string) {
 
 beforeEach(async () => {
   localStorage.clear()
-  const verifiedStore = await import('@/stores/verifiedPeerKeysStore')
-  const alertsStore = await import('@/stores/keyChangeAlertsStore')
-  const pinStore = await import('@/stores/pinnedPrimaryFingerprintsStore')
-  const ownConflictStore = await import('@/stores/ownKeyConflictStore')
-  verifiedStore.useVerifiedPeerKeysStore.setState({ verifiedFingerprintByJid: {} })
-  alertsStore.useKeyChangeAlertsStore.setState({ alertsByJid: {} })
-  pinStore.usePinnedPrimaryFingerprintsStore.setState({ pinnedFingerprintByJid: {} })
-  ownConflictStore.useOwnKeyConflictStore.setState({ conflict: null })
   clearSessionPassphrase()
 })
 
@@ -160,7 +153,7 @@ describe('migration backup import (other tools → Fluux)', () => {
   for (const [name, makeVector] of Object.entries(VECTOR_SPECS)) {
     it(`imports a ${name} backup and recovers a usable secret key`, async () => {
       const { backup, passphrase, fingerprint } = await makeVector()
-      const plugin = new TestablePlugin()
+      const plugin = new TestablePlugin({ hostStores: createMockHostStores() })
       const ctx = makeCtx('migrant@example.com')
       await plugin.init(ctx) // locked — fine for import
 
@@ -193,7 +186,7 @@ describe('migration backup import (other tools → Fluux)', () => {
 
     it(`rejects a ${name} backup with the wrong passphrase`, async () => {
       const { backup } = await makeVector()
-      const plugin = new TestablePlugin()
+      const plugin = new TestablePlugin({ hostStores: createMockHostStores() })
       const ctx = makeCtx('migrant@example.com')
       await plugin.init(ctx)
 

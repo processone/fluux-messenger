@@ -31,6 +31,7 @@ import {
   type KeyBundle,
   type RestoreResult,
 } from './OpenPGPPluginBase'
+import type { OpenPGPHostStores } from './hostStores'
 import { accountUserId } from './openpgpUserId'
 import { keyExportFilename } from './keyExportNaming'
 import { KeyPickerRequiredError, NoRecoveryAvailableError } from './recoveryErrors'
@@ -120,7 +121,16 @@ function triggerBrowserDownload(content: string, filename: string): void {
   }
 }
 
+export interface WebOpenPGPPluginOptions {
+  /** App-injected adapter over the six trust stores. */
+  hostStores: OpenPGPHostStores
+}
+
 export class WebOpenPGPPlugin extends OpenPGPPluginBase {
+  constructor(options: WebOpenPGPPluginOptions) {
+    super({ hostStores: options.hostStores })
+  }
+
   /** In-memory decrypted private key. Cleared on shutdown / page reload. */
   private ownPrivateKey: PrivateKey | null = null
 

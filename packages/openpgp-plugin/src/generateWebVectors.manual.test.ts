@@ -26,6 +26,7 @@ import {
 } from '@fluux/sdk'
 import { WebOpenPGPPlugin } from './WebOpenPGPPlugin'
 import { clearSessionPassphrase, setSessionPassphrase } from './webPassphraseStore'
+import { createMockHostStores } from './testing/mockHostStores'
 
 const FIXTURES_DIR = resolve(__dirname, 'fixtures')
 const BACKUP_PASSPHRASE = 'TWNK-KD5Y-MT3T-E1GS-DRDB-KVTW'
@@ -72,14 +73,6 @@ function makeCtx(accountJid: string) {
 
 beforeEach(async () => {
   localStorage.clear()
-  const verifiedStore = await import('@/stores/verifiedPeerKeysStore')
-  const alertsStore = await import('@/stores/keyChangeAlertsStore')
-  const pinStore = await import('@/stores/pinnedPrimaryFingerprintsStore')
-  const ownConflictStore = await import('@/stores/ownKeyConflictStore')
-  verifiedStore.useVerifiedPeerKeysStore.setState({ verifiedFingerprintByJid: {} })
-  alertsStore.useKeyChangeAlertsStore.setState({ alertsByJid: {} })
-  pinStore.usePinnedPrimaryFingerprintsStore.setState({ pinnedFingerprintByJid: {} })
-  ownConflictStore.useOwnKeyConflictStore.setState({ conflict: null })
   clearSessionPassphrase()
 })
 
@@ -90,7 +83,7 @@ afterEach(() => {
 describe('generate web golden vectors for Sequoia consumption', () => {
   it('writes fixture files', async () => {
     // Alice
-    const alice = new TestablePlugin()
+    const alice = new TestablePlugin({ hostStores: createMockHostStores() })
     const { ctx: aliceCtx } = makeCtx('alice@example.com')
     setSessionPassphrase('alice-pp')
     await alice.init(aliceCtx)
@@ -98,7 +91,7 @@ describe('generate web golden vectors for Sequoia consumption', () => {
 
     // Bob
     clearSessionPassphrase()
-    const bob = new TestablePlugin()
+    const bob = new TestablePlugin({ hostStores: createMockHostStores() })
     const { ctx: bobCtx } = makeCtx('bob@example.com')
     setSessionPassphrase('bob-pp')
     await bob.init(bobCtx)
