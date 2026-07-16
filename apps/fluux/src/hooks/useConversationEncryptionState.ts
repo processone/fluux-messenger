@@ -58,32 +58,24 @@ export type ConversationEncryptionState =
       kind: 'encrypted'
       fingerprint: string
       /**
-       * `verified` — the user has confirmed this exact fingerprint via
-       * the verify-peer dialog. A subsequent key rotation drops back
-       * to `unverified` automatically (the store keys on
-       * fingerprint, not just JID).
-       *
-       * `unverified` — peer key is cached and we can encrypt to it,
-       * but the user hasn't confirmed it. This is the BTBV ground
-       * state: trust the cached key for cryptographic purposes,
-       * surface the unverified state in the UI.
+       * Consumer-facing trust for the conversation, on the shared SDK
+       * `TrustState`. OMEMO passes its per-peer aggregate through unchanged
+       * (so `untrusted` stays `untrusted`); OpenPGP maps an explicitly
+       * verified key to `verified` and everything else to `tofu`.
        */
-      trust: 'verified' | 'unverified' | 'tofu-new'
+      trust: TrustState
       /**
-       * Which E2EE protocol was selected for this conversation. Absent
-       * means OpenPGP (the historical default) so existing consumers and
-       * assertions that don't know about this field keep working
-       * unchanged. Only the OMEMO branch sets it to `'omemo:2'`.
+       * Which E2EE protocol drives this conversation. Absent means OpenPGP
+       * (the historical default) so existing consumers keep working; only
+       * the OMEMO branch sets it to `'omemo:2'`.
        */
       protocolId?: 'openpgp' | 'omemo:2'
       /**
-       * Aggregate OMEMO trust for the peer, only populated when
-       * `protocolId === 'omemo:2'`. `trust` is the OpenPGP-shaped
-       * verified/unverified/tofu-new projection the chip already renders;
-       * `omemoTrust` preserves the richer OMEMO trust vocabulary for
-       * OMEMO-specific UI.
+       * First-contact nudge for OpenPGP ("new contact — verify fingerprint").
+       * "New" is not a trust LEVEL, so it is a separate flag rather than a
+       * `trust` value. OMEMO leaves it unset.
        */
-      omemoTrust?: 'verified' | 'tofu' | 'untrusted' | 'unknown'
+      firstSeen?: boolean
     }
   | { kind: 'blocked'; pinnedFingerprint: string; advertisedFingerprint: string }
   | { kind: 'unsupported' }
@@ -110,20 +102,6 @@ interface OpenpgpPluginShape {
 interface SelectedPluginShape {
   descriptor: { id: string }
   getPeerTrust: (peer: string) => Promise<TrustState>
-}
-
-/**
- * Project the OMEMO `TrustState` onto the OpenPGP-shaped `trust` union the
- * chip already understands, so both protocols drive the same palette:
- *
- *   - `verified`  → `verified`   (green)
- *   - `tofu`      → `tofu-new`   (first-contact amber)
- *   - everything else (`untrusted`, `unknown`, `introduced`) → `unverified`
- */
-function mapOmemoTrust(t: TrustState): 'verified' | 'unverified' | 'tofu-new' {
-  if (t === 'verified') return 'verified'
-  if (t === 'tofu') return 'tofu-new'
-  return 'unverified'
 }
 
 /**
@@ -354,8 +332,7 @@ export function useConversationEncryptionState(
             kind: 'encrypted',
             protocolId: 'omemo:2',
             fingerprint: '',
-            trust: mapOmemoTrust(t),
-            omemoTrust: t === 'introduced' ? 'unknown' : t,
+            trust: t,
           })
         } else {
           // OpenPGP / none / null selected — defer to the OpenPGP path.
@@ -413,10 +390,18 @@ export function useConversationEncryptionState(
     // Normalized compare: the verified fingerprint may have been synced from
     // another OpenPGP backend (Sequoia UPPERCASE ↔ openpgp.js lowercase), so
     // raw `===` would spuriously read as unverified. See fingerprintCompare.ts.
-    const trust = verifiedFingerprint && fingerprintsEqual(verifiedFingerprint, base.fingerprint)
-      ? 'verified'
-      : (peerJid && isTofuNew(peerJid) ? 'tofu-new' : 'unverified')
-    return { kind: 'encrypted', fingerprint: base.fingerprint, trust }
+    // OpenPGP → TrustState: an explicitly-verified key is `verified`; anything
+    // else (cached-but-unverified, or a first-contact TOFU pin) is `tofu`. The
+    // "new contact" nudge is a separate `firstSeen` flag, not a trust level.
+    const isVerified =
+      !!verifiedFingerprint && fingerprintsEqual(verifiedFingerprint, base.fingerprint)
+    const firstSeen = !isVerified && !!peerJid && isTofuNew(peerJid)
+    return {
+      kind: 'encrypted',
+      fingerprint: base.fingerprint,
+      trust: isVerified ? 'verified' : 'tofu',
+      ...(firstSeen ? { firstSeen: true } : {}),
+    }
   }, [base, peerJid, isForcedPlaintext, verifiedFingerprint, alertCurrentFp, alertPreviousFp, certRejections, webKeyLocked])
 
   // When OMEMO is the selected protocol for this peer, its result wins.

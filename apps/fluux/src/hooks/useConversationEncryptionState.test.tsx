@@ -139,7 +139,7 @@ describe('useConversationEncryptionState', () => {
     const { result } = renderHook(() =>
       useConversationEncryptionState('bob@example.com', 'chat'),
     )
-    expect(result.current).toEqual({ kind: 'encrypted', fingerprint: 'ABCD1234', trust: 'unverified' })
+    expect(result.current).toEqual({ kind: 'encrypted', fingerprint: 'ABCD1234', trust: 'tofu' })
     // Fast path: no probe triggered.
     expect(plugin.probePeer).not.toHaveBeenCalled()
   })
@@ -162,7 +162,7 @@ describe('useConversationEncryptionState', () => {
     // Synchronously in 'checking' state while probe is in flight.
     expect(result.current.kind).toBe('checking')
     await waitFor(() => {
-      expect(result.current).toEqual({ kind: 'encrypted', fingerprint: fp, trust: 'unverified' })
+      expect(result.current).toEqual({ kind: 'encrypted', fingerprint: fp, trust: 'tofu' })
     })
     expect(plugin.probePeer).toHaveBeenCalledWith('bob@example.com')
   })
@@ -183,7 +183,7 @@ describe('useConversationEncryptionState', () => {
       expect(result.current).toEqual({
         kind: 'encrypted',
         fingerprint: 'D94E599C93F7EB648D2880D8829C29E7F50FD65F',
-        trust: 'unverified',
+        trust: 'tofu',
       })
     })
   })
@@ -243,7 +243,7 @@ describe('useConversationEncryptionState', () => {
 
     // Switch to bob — immediate cache hit.
     rerender('bob@example.com')
-    expect(result.current).toEqual({ kind: 'encrypted', fingerprint: 'BOBFP', trust: 'unverified' })
+    expect(result.current).toEqual({ kind: 'encrypted', fingerprint: 'BOBFP', trust: 'tofu' })
 
     // Now let the stale alice probe resolve. The hook's cancellation
     // flag must prevent this from overwriting the bob state.
@@ -251,7 +251,7 @@ describe('useConversationEncryptionState', () => {
       resolveAliceProbe({ supported: true })
       await new Promise((r) => setTimeout(r, 0))
     })
-    expect(result.current).toEqual({ kind: 'encrypted', fingerprint: 'BOBFP', trust: 'unverified' })
+    expect(result.current).toEqual({ kind: 'encrypted', fingerprint: 'BOBFP', trust: 'tofu' })
   })
 
   describe('verification trust derivation', () => {
@@ -329,7 +329,7 @@ describe('useConversationEncryptionState', () => {
       expect(result.current).toEqual({
         kind: 'encrypted',
         fingerprint: 'NEW_FP_VALUE',
-        trust: 'unverified',
+        trust: 'tofu',
       })
     })
 
@@ -342,7 +342,7 @@ describe('useConversationEncryptionState', () => {
         useConversationEncryptionState('bob@example.com', 'chat'),
       )
       // Pre-verify state.
-      expect(result.current).toMatchObject({ trust: 'unverified' })
+      expect(result.current).toMatchObject({ trust: 'tofu' })
       // User confirms the fingerprint via the dialog — the hook's
       // verifiedFingerprint subscription should pick the change up
       // without needing a remount.
@@ -515,7 +515,7 @@ describe('useConversationEncryptionState', () => {
 
       // Hook transitions back through 'checking' then 'encrypted'.
       await waitFor(() => {
-        expect(result.current).toEqual({ kind: 'encrypted', fingerprint: fp, trust: 'unverified' })
+        expect(result.current).toEqual({ kind: 'encrypted', fingerprint: fp, trust: 'tofu' })
       })
     })
 
@@ -539,7 +539,7 @@ describe('useConversationEncryptionState', () => {
       expect(aliceResult.current).toEqual({
         kind: 'encrypted',
         fingerprint: 'ALICE_FP',
-        trust: 'unverified',
+        trust: 'tofu',
       })
     })
   })
@@ -661,7 +661,7 @@ describe('useConversationEncryptionState', () => {
         expect(result.current).toEqual({
           kind: 'encrypted',
           fingerprint: fp,
-          trust: 'unverified',
+          trust: 'tofu',
         })
       })
     })

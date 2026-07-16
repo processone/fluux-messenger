@@ -89,7 +89,7 @@ describe('useConversationEncryptionState — OMEMO selection', () => {
     vi.restoreAllMocks()
   })
 
-  it("reports 'encrypted' with omemoTrust when OMEMO is the selected strategy (tofu)", async () => {
+  it("reports 'encrypted' with TrustState passed through when OMEMO is selected (tofu)", async () => {
     wireMocks({ omemoPlugin: makeOmemoPlugin('tofu') })
     const { result } = renderHook(() =>
       useConversationEncryptionState('bob@example.com', 'chat'),
@@ -99,12 +99,11 @@ describe('useConversationEncryptionState — OMEMO selection', () => {
       kind: 'encrypted',
       protocolId: 'omemo:2',
       fingerprint: '',
-      trust: 'tofu-new',
-      omemoTrust: 'tofu',
+      trust: 'tofu',
     })
   })
 
-  it("maps OMEMO 'verified' trust to trust='verified'", async () => {
+  it("passes OMEMO 'verified' trust through unchanged", async () => {
     wireMocks({ omemoPlugin: makeOmemoPlugin('verified') })
     const { result } = renderHook(() =>
       useConversationEncryptionState('bob@example.com', 'chat'),
@@ -115,7 +114,6 @@ describe('useConversationEncryptionState — OMEMO selection', () => {
       protocolId: 'omemo:2',
       fingerprint: '',
       trust: 'verified',
-      omemoTrust: 'verified',
     })
   })
 
@@ -150,7 +148,6 @@ describe('useConversationEncryptionState — OMEMO selection', () => {
       protocolId: 'omemo:2',
       fingerprint: '',
       trust: 'verified',
-      omemoTrust: 'verified',
     })
 
     // Switch to a different peer whose selectStrategy is still pending
@@ -162,7 +159,7 @@ describe('useConversationEncryptionState — OMEMO selection', () => {
     // result. The synchronous reset in the effect should have already
     // cleared it, falling through to the OpenPGP/checking/disabled path.
     expect(result.current).not.toEqual(
-      expect.objectContaining({ protocolId: 'omemo:2', omemoTrust: 'verified' }),
+      expect.objectContaining({ protocolId: 'omemo:2', trust: 'verified' }),
     )
     expect(result.current.kind).not.toBe('encrypted')
 
