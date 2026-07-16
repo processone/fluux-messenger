@@ -68,6 +68,11 @@ void i18n.use(initReactI18next).init({
             tofu: 'Encrypted (not verified)',
             fingerprintLabel: 'OpenPGP fingerprint',
             verifyButton: 'Verify fingerprint',
+            // Shared TrustState label (trustLabel()) — asserted by
+            // MessageComposer/SecurityGlanceCard OMEMO-untrusted danger tests.
+            trust: {
+              untrusted: 'Untrusted',
+            },
             // OMEMO device-row label must interpolate the id so per-device rows
             // are distinguishable (deviceLabel is asserted in SecurityTab.omemo.test).
             // The other omemo.* keys are intentionally left out so the test can

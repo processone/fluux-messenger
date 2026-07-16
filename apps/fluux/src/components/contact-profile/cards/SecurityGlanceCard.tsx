@@ -3,6 +3,7 @@ import {
   ChevronRight, Loader2, Lock, LockOpen, ShieldAlert, ShieldCheck, ShieldX,
 } from 'lucide-react'
 import type { ConversationEncryptionState } from '@/hooks/useConversationEncryptionState'
+import { trustLabel } from '@/e2ee/trustVisual'
 
 interface SecurityGlanceCardProps {
   state: ConversationEncryptionState
@@ -21,9 +22,17 @@ export function getGlance(
 ): Glance | null {
   switch (state.kind) {
     case 'encrypted':
+      // OMEMO aggregate trust: a single untrusted device dominates the
+      // conversation-level trust even though the peer is still
+      // encryptable (see getPeerTrust). That is a genuine danger signal —
+      // it must not collapse into the same neutral "Encrypted, not
+      // verified" glance as a routine tofu/introduced peer, matching
+      // ChatHeader's and SecurityTab's per-device danger treatment.
       return state.trust === 'verified'
         ? { icon: ShieldCheck, label: t('contacts.encryption.glanceVerified'), tone: 'success' }
-        : { icon: Lock, label: t('contacts.encryption.glanceEncrypted'), tone: 'neutral' }
+        : state.trust === 'untrusted'
+          ? { icon: ShieldAlert, label: t(trustLabel(state.trust)), tone: 'danger' }
+          : { icon: Lock, label: t('contacts.encryption.glanceEncrypted'), tone: 'neutral' }
     case 'keyLocked':
       return { icon: Lock, label: t('contacts.encryption.glanceLocked'), tone: 'neutral' }
     case 'plaintextForced':

@@ -38,4 +38,39 @@ describe('SecurityGlanceCard', () => {
     expect(icon).not.toBeNull()
     expect(icon!.getAttribute('class')).toContain('text-fluux-error')
   })
+
+  // F-1: OMEMO conversation-level aggregate trust can be `untrusted` (a
+  // single untrusted device dominates getPeerTrust) while the conversation
+  // stays encryptable — an `encrypted` state, not `needsDeviceVerification`.
+  // The glance must not collapse this into the same neutral "Encrypted, not
+  // verified" row as a routine tofu peer.
+  it('getGlance: encrypted + untrusted aggregate → danger tone', () => {
+    const g = getGlance({ kind: 'encrypted', fingerprint: 'AB', protocolId: 'omemo:2', trust: 'untrusted' }, (k) => k)
+    expect(g).not.toBeNull()
+    expect(g!.tone).toBe('danger')
+  })
+
+  it('renders the danger shield-alert icon for an OMEMO encrypted-but-untrusted aggregate', () => {
+    render(
+      <SecurityGlanceCard
+        state={{ kind: 'encrypted', fingerprint: 'AB', protocolId: 'omemo:2', trust: 'untrusted' }}
+        onOpen={() => {}}
+      />
+    )
+    const icon = document.querySelector('.lucide-shield-alert')
+    expect(icon).not.toBeNull()
+    expect(icon!.getAttribute('class')).toContain('text-fluux-error')
+    expect(screen.getByText('Untrusted')).toBeInTheDocument()
+  })
+
+  it('keeps the neutral glance for an OMEMO encrypted-and-tofu aggregate', () => {
+    render(
+      <SecurityGlanceCard
+        state={{ kind: 'encrypted', fingerprint: 'AB', protocolId: 'omemo:2', trust: 'tofu' }}
+        onOpen={() => {}}
+      />
+    )
+    expect(screen.getByText('Encrypted, not verified')).toBeInTheDocument()
+    expect(document.querySelector('.lucide-shield-alert')).toBeNull()
+  })
 })

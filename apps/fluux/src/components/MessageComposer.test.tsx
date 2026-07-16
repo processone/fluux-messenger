@@ -1566,6 +1566,53 @@ describe('MessageComposer', () => {
       fireEvent.click(container.querySelector('[data-encryption-lock]')!)
       expect(onEncryptionClick).toHaveBeenCalledTimes(1)
     })
+
+    // F-1: OMEMO conversation-level aggregate trust can be `untrusted` (one
+    // untrusted device dominates getPeerTrust) while the conversation is
+    // still encryptable — this is `encrypted`, not `needsDeviceVerification`.
+    // The composer must render the same danger cue as ChatHeader/SecurityTab
+    // (red ShieldAlert via trustStateVisual('untrusted')), never the calm
+    // gray shield or the OpenPGP tooltip copy.
+    it('shows a red shield-alert lock for an OMEMO encrypted-but-untrusted aggregate', () => {
+      const { container } = render(
+        <MessageComposer
+          {...base}
+          encryptionState={{ kind: 'encrypted', fingerprint: 'a', protocolId: 'omemo:2', trust: 'untrusted' }}
+        />
+      )
+      const lock = container.querySelector('[data-encryption-lock]')!
+      const icon = lock.querySelector('.lucide-shield-alert')!
+      expect(icon).not.toBeNull()
+      expect(icon.classList.contains('text-fluux-error')).toBe(true)
+      expect(lock.querySelector('.lucide-shield')).toBeNull()
+      expect(lock.querySelector('.lucide-shield-check')).toBeNull()
+      expect(lock.getAttribute('aria-label')).toBe('Untrusted')
+    })
+
+    it('does not show the OpenPGP tooltip copy for an OMEMO untrusted aggregate', () => {
+      const { container } = render(
+        <MessageComposer
+          {...base}
+          encryptionState={{ kind: 'encrypted', fingerprint: 'a', protocolId: 'omemo:2', trust: 'untrusted' }}
+        />
+      )
+      const lock = container.querySelector('[data-encryption-lock]')!
+      expect(lock.getAttribute('aria-label')).not.toContain('OpenPGP')
+    })
+
+    it('stays calm gray for an OMEMO encrypted-and-tofu aggregate', () => {
+      const { container } = render(
+        <MessageComposer
+          {...base}
+          encryptionState={{ kind: 'encrypted', fingerprint: 'a', protocolId: 'omemo:2', trust: 'tofu' }}
+        />
+      )
+      const lock = container.querySelector('[data-encryption-lock]')!
+      const icon = lock.querySelector('.lucide-shield')!
+      expect(icon).not.toBeNull()
+      expect(icon.classList.contains('text-fluux-muted')).toBe(true)
+      expect(lock.querySelector('.lucide-shield-alert')).toBeNull()
+    })
   })
 
   describe('Aurora reply-chip color', () => {

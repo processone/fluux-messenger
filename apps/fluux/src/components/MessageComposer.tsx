@@ -14,7 +14,7 @@ import type { FileAttachment } from '@fluux/sdk'
 import { useConnectionStore } from '@fluux/sdk/react'
 import { encryptionSendErrorKey } from '@/e2ee/encryptionSendError'
 import type { ConversationEncryptionState } from '@/hooks/useConversationEncryptionState'
-import { trustVisual } from '@/e2ee/trustVisual'
+import { trustVisual, trustStateVisual, trustLabel } from '@/e2ee/trustVisual'
 import { useToastStore } from '@/stores/toastStore'
 
 // Format file size for display
@@ -723,7 +723,15 @@ export function MessageComposer({
     enc?.kind === 'encrypted'
       ? enc.trust === 'verified'
         ? { Icon: ShieldCheck, colorClass: trustVisual('verified').colorClass, label: t('chat.encryption.verifiedTooltip') }
-        : { Icon: Shield, colorClass: trustVisual('trusted').colorClass, label: t('chat.encryption.openpgpTooltip') }
+        // OMEMO aggregate trust: one untrusted device dominates the
+        // conversation-level trust even though the peer is still
+        // encryptable (see getPeerTrust). That is a genuine danger signal
+        // and must not collapse into the neutral gray Shield / OpenPGP
+        // tooltip below — mirrors ChatHeader's `trustStateVisual('untrusted')`
+        // treatment.
+        : enc.trust === 'untrusted'
+          ? { Icon: ShieldAlert, colorClass: trustStateVisual('untrusted').colorClass, label: t(trustLabel(enc.trust)) }
+          : { Icon: Shield, colorClass: trustVisual('trusted').colorClass, label: t('chat.encryption.openpgpTooltip') }
       : enc?.kind === 'needsDeviceVerification'
         ? { Icon: ShieldAlert, colorClass: 'text-fluux-error', label: t('chat.encryption.needsVerificationTooltip') }
         : enc?.kind === 'blocked'
