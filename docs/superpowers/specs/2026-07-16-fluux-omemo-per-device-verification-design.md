@@ -20,6 +20,8 @@ Today "verified" is **unrepresentable**:
 
 M2c-1 fills those gaps and adds the contact-profile UI to verify/revoke a peer's devices. It also fixes **G-1** (from M2b's final review): `ChatHeader` and `SecurityTab` label OMEMO chats as "OpenPGP" and render an empty fingerprint.
 
+Separately, the app has drifted into **four overlapping trust vocabularies** (see Component 0). Since M2c-1 is where trust becomes multi-protocol and per-device, it also **unifies all consumer-facing trust onto the shared SDK `TrustState`** — a cross-cutting change that touches the shipped OpenPGP trust UI, done here so we don't build the new per-device surfaces on a divergent foundation. This makes the slice larger than a pure feature add; the implementation plan sequences the trust-vocabulary migration (Component 0) first, with regression coverage locking OpenPGP's rendering, before the per-device work builds on it.
+
 **Scope note (sequencing):** M2c-1 is deliberately built with a trait seam shaped to fit *both* protocols. The `@fluux/openpgp-plugin` extraction is the **next** slice after M2c-1; at that point OpenPGP's verified-trust migrates behind its plugin and the temporary trust-store asymmetry (below) is retired. M2c-1 does not perform that extraction.
 
 ## Locked-in decisions (from the brainstorming session)
@@ -29,6 +31,17 @@ M2c-1 fills those gaps and adds the contact-profile UI to verify/revoke a peer's
 3. **Verified marker is plugin-owned; the crypto core stays untouched.** The `verified` state lives entirely in `@fluux/omemo-plugin` (over `PluginStorage`), keyed by `(peer, deviceId, fingerprint)`. `@fluux/omemo`'s `TrustRecord` schema is unchanged. Rationale: "verified" is a trust-*policy* concern belonging to the adapter layer, not the security-reviewed cleanroom crypto.
 4. **Trait seam shaped for both protocols.** The two new methods are modeled as an *identity* list (OMEMO: devices; OpenPGP later: a single-element list = the key), so the UI renders one uniform per-identity list. Added as **optional** `E2EEPlugin` trait methods; the app feature-detects.
 5. **Own-device management, QR verification, and the protocol picker are out of scope** (later slices M2c-2 / M2c-3).
+6. **Unify all consumer-facing trust onto the shared `TrustState`.** The SDK plugin API already standardizes trust as `TrustState = verified | introduced | tofu | untrusted | unknown` (`getPeerTrust`/`getDeviceTrust`/`VerificationFlow.result`). M2c-1 migrates the app's divergent conversation-level union (`encrypted.trust: 'verified'|'unverified'|'tofu-new'`) and every consumer onto `TrustState`, with **one** shared `TrustState → visual/label` mapping. No new fifth vocabulary; no more `untrusted → unverified` information loss.
+
+## Component 0 — Unified trust vocabulary (`TrustState` everywhere)
+
+**Foundational; lands before the per-device work depends on it.** Today four overlapping trust vocabularies coexist: (1) SDK `TrustState` — the shared plugin-API contract; (2) SDK per-message `SecurityContext.trust` (`…| rejected`, no `unknown`); (3) the app hook's conversation-level `encrypted.trust` (`verified | unverified | tofu-new`); (4) the presentation enum `TrustVisualState` in `apps/fluux/src/e2ee/trustVisual.ts`. Consumers read a mix, and the hook's `mapOmemoTrust` collapses `untrusted → unverified` (information loss flagged in M2b review).
+
+Changes:
+- **Conversation-level trust becomes `TrustState`.** `useConversationEncryptionState`'s `encrypted` variant carries `trust: TrustState` (drop the 3-value union, the separate `omemoTrust` field, and `mapOmemoTrust`). The OpenPGP branch maps its state to `TrustState`: an explicitly-verified key → `verified`; encrypted-but-not-verified (today's `unverified`/`tofu-new`) → `tofu`. The **"new contact" nudge**, if the UI still wants it, becomes a separate boolean (e.g. `firstSeen`) — "new" is not a trust *level* and must not be encoded as one. OMEMO passes the plugin's `TrustState` through unchanged (no collapse), so `untrusted` stays `untrusted`.
+- **One shared trust mapping.** Refactor `trustVisual` so the *trust* dimension is keyed on `TrustState` (add `tofu` → calm, `untrusted` → danger, `unknown` → calm/muted, `introduced` → calm; `verified` stays). The genuinely non-trust presentation states (`decryptFailed`, `keyChanged`, `keyLocked`, `plaintext`, `checking`, `rejected`) remain a distinct presentation concern layered alongside — they are message-lock / cert states, not trust levels. Add a parallel `trustLabel(TrustState)` i18n helper. Both are the single source used by OMEMO device rows, the OMEMO/OpenPGP aggregate, and the message lock.
+- **Per-message `SecurityContext.trust` (#2)** stays SDK-set but its values are reconciled to `TrustState` semantics; `rejected` (OpenPGP cert-validation outcome) is treated as an orthogonal presentation state in `trustVisual`, not a trust level — no destabilizing rewrite of message-lock rendering, just shared labels/visuals.
+- **Update all consumers** (~8: `ChatHeader`, `SecurityTab`, `SecurityGlanceCard`, `MessageComposer`, `ContactProfileView`, `ContactSecurityDetail`, `ContactProfileGrid`, message lock) to read `TrustState` via the shared mapping. The OpenPGP path must render **equivalently** to today (regression-tested), just sourced from `TrustState`.
 
 ## Component 1 — Verified-trust store (plugin-owned)
 
@@ -75,7 +88,7 @@ setIdentityTrust?(peer: BareJID, id: string, decision: 'verified' | 'untrusted')
 
 `apps/fluux/src/components/contact-profile/tabs/SecurityTab.tsx`'s `encrypted` branch is currently single-fingerprint and protocol-blind. Make it `protocolId`-aware:
 
-- **OMEMO (`state.protocolId === 'omemo:2'`):** render a **per-identity list** from `listPeerIdentities(peerJid)`. Each row: a short device id, the formatted safety-number/fingerprint, a trust badge (**Verified** / **Trusted** / **Untrusted** / **Unknown**), and an action:
+- **OMEMO (`state.protocolId === 'omemo:2'`):** render a **per-identity list** from `listPeerIdentities(peerJid)`. Each row: a short device id, the formatted safety-number/fingerprint, a trust badge rendered via the **shared `TrustState` mapping** from Component 0 (`verified` / `tofu` / `untrusted` / `unknown`, each with its shared label + color/tone), and an action:
   - **Verify** (device not yet verified) → opens `VerifyPeerDialog` driven with that device's fingerprint; on confirm → `setIdentityTrust(peer, deviceId, 'verified')`, then refresh the list.
   - **Revoke** (verified or trusted device) → `setIdentityTrust(peer, deviceId, 'untrusted')`, then refresh.
   - An aggregate summary line at the top (reuse the existing trust wording; "N devices, M verified").
@@ -110,9 +123,10 @@ When Component 3 determines a peer has zero encryptable (non-untrusted) devices,
 
 ## Testing & verification
 
+- **Trust-vocabulary migration (Component 0)**: `trustVisual`/`trustLabel` map every `TrustState` value; the OpenPGP path renders **equivalently to before** (regression tests pinning today's badge/color/label output for each OpenPGP state, now sourced from `TrustState`); OMEMO `untrusted` no longer displays as `unverified`; the hook's `encrypted.trust` is `TrustState` and the `firstSeen` nudge (if kept) is a separate flag.
 - **Plugin unit tests** (`@fluux/omemo-plugin`): `listPeerIdentities` assembles `{id, fingerprint, trust}` from a mocked device-list + bundles; `setIdentityTrust('verified')` round-trips through `PluginStorage` and is fingerprint-bound; a fingerprint change invalidates a prior verified marker; `peerHasVerifiedDevice` flips a newly-seen device to `untrusted`; encrypt excludes untrusted devices; the all-untrusted → zero-recipient path surfaces (does not silently succeed). `getPeerTrust` now surfaces `verified`.
 - **SDK**: the optional trait methods typecheck; `PeerIdentity` exported.
-- **App unit tests**: `SecurityTab` OMEMO branch renders per-identity rows + verify/revoke wiring against a mocked plugin; `ChatHeader` shows "OMEMO" (not "OpenPGP") and no empty fingerprint for an OMEMO `state`; the "verify a device to send" state renders; OpenPGP `SecurityTab`/`ChatHeader` paths unchanged.
+- **App unit tests**: `SecurityTab` OMEMO branch renders per-identity rows + verify/revoke wiring against a mocked plugin; `ChatHeader` shows "OMEMO" (not "OpenPGP") and no empty fingerprint for an OMEMO `state`; the "verify a device to send" state renders; OpenPGP `SecurityTab`/`ChatHeader` paths unchanged (via the regression tests above).
 - **Manual E2E gate** (with M2b's Task 10, not automatable here): in `tauri:dev`, with a live OMEMO peer that has ≥2 devices, verify one device (fingerprint matches the other client), confirm the badge flips to Verified and the aggregate reflects it; add a new device on the peer and confirm it appears as Untrusted and is excluded from encryption until verified; revoke and confirm exclusion.
 
 ## Out of scope (YAGNI)
