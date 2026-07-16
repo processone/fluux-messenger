@@ -22,7 +22,7 @@ import * as searchIndex from '../utils/searchIndex'
 import type { GetMessagesOptions } from '../utils/messageCache'
 import * as mamState from './shared/mamState'
 import type { MAMQueryDirection } from './shared/mamState'
-import { syncGapAfterArchiveMerge, messagePageExtent, serializeGaps, deserializeGaps, type GapInterval } from './shared/mamGap'
+import { syncGapAfterArchiveMerge, messagePageExtent, newestMessageStanzaId, serializeGaps, deserializeGaps, type GapInterval } from './shared/mamGap'
 import * as draftState from './shared/draftState'
 import * as timeline from './shared/messageTimeline'
 import { shouldUpdateLastMessage, shouldReplaceLastMessage, isPreviewableMessage, findLastNonIgnoredMessage } from './shared/lastMessageUtils'
@@ -2669,7 +2669,7 @@ export const roomStore = createStore<RoomState>()(
         // preview (noLocalStore/tombstone) above the true archive newest could plant
         // a spurious — click-healable — seam.
         newestHeldBelowTs: messagePageExtent(existingMessages).newestTs ?? fallbackHeldTs,
-        newestHeldBelowId: [...existingMessages].sort((a, b) => (a.timestamp?.getTime() ?? 0) - (b.timestamp?.getTime() ?? 0)).at(-1)?.stanzaId,
+        newestHeldBelowId: newestMessageStanzaId(existingMessages),
         lastFetchedArchiveId: rsm.last,
         preserveGapMarker,
       })

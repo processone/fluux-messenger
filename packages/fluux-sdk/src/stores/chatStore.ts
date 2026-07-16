@@ -9,7 +9,7 @@ import * as messageCache from '../utils/messageCache'
 import * as searchIndex from '../utils/searchIndex'
 import * as mamState from './shared/mamState'
 import type { MAMQueryDirection } from './shared/mamState'
-import { syncGapAfterArchiveMerge, messagePageExtent, type GapInterval } from './shared/mamGap'
+import { syncGapAfterArchiveMerge, messagePageExtent, newestMessageStanzaId, type GapInterval } from './shared/mamGap'
 import * as draftState from './shared/draftState'
 import * as timeline from './shared/messageTimeline'
 import { isPreviewableMessage, findLastPreviewableMessage, shouldReplaceLastMessage } from './shared/lastMessageUtils'
@@ -1767,7 +1767,7 @@ export const chatStore = createStore<ChatState>()(
             // preview (noLocalStore/tombstone) above the true archive newest could plant
             // a spurious — click-healable — seam.
             newestHeldBelowTs: messagePageExtent(rawExisting).newestTs ?? fallbackHeldTs,
-            newestHeldBelowId: [...rawExisting].sort((a, b) => (a.timestamp?.getTime() ?? 0) - (b.timestamp?.getTime() ?? 0)).at(-1)?.stanzaId,
+            newestHeldBelowId: newestMessageStanzaId(rawExisting),
             lastFetchedArchiveId: rsm.last,
             preserveGapMarker,
           })

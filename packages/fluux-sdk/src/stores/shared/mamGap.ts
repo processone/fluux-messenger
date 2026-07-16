@@ -148,6 +148,24 @@ export function oldestMessageStanzaId(
   return oldest?.id
 }
 
+/** stanzaId of the newest-timestamp message in a page that HAS a stanzaId
+ *  (undefined when none do). Skips id-less newer messages — e.g. an own-sent
+ *  pre-echo that hasn't been reflected with an archive id yet — so the
+ *  id-exact resume cursor falls back to the newest message that carries one,
+ *  rather than silently degrading to undefined. */
+export function newestMessageStanzaId(
+  messages: Array<{ timestamp?: Date; stanzaId?: string }>,
+): string | undefined {
+  let best: { ts: number; id: string } | undefined
+  for (const m of messages) {
+    if (!m.stanzaId) continue
+    const ts = m.timestamp?.getTime()
+    if (ts === undefined) continue
+    if (!best || ts > best.ts) best = { ts, id: m.stanzaId }
+  }
+  return best?.id
+}
+
 /**
  * Detect a disjoint fetch-latest page: a backward `before:''` page that landed
  * entirely above held history without any connection proof.
@@ -289,8 +307,15 @@ export function syncGapAfterArchiveMerge(input: ArchiveMergeGapInput): Map<strin
   if (preserveGapMarker) return gaps
 
   if (direction === 'forward') {
+    const existing = gaps.get(id)
     const gapEnd = forwardGapTimestamp !== undefined ? computeGapEnd(merged, forwardGapTimestamp) : undefined
-    return syncGap(gaps, id, forwardGapTimestamp, gapEnd, lastFetchedArchiveId)
+    // startId: prefer this merge's rsm.last; an incomplete forward merge
+    // without one (no new page fetched) carries the existing cursor forward.
+    const startId = lastFetchedArchiveId ?? existing?.startId
+    // endId: only survives when the end edge hasn't moved — once `end`
+    // shifts, the id for the new edge is unknown until a later merge stamps it.
+    const endId = existing && existing.end === gapEnd ? existing.endId : undefined
+    return syncGap(gaps, id, forwardGapTimestamp, gapEnd, startId, endId)
   }
 
   const existing = gaps.get(id)

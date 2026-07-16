@@ -8,6 +8,7 @@ import {
   detectFetchLatestSeam,
   closeGapWithBackwardPage,
   syncGapAfterArchiveMerge,
+  newestMessageStanzaId,
   type GapInterval,
   type ArchiveMergeGapInput,
 } from './mamGap'
@@ -205,6 +206,57 @@ describe('syncGapAfterArchiveMerge', () => {
     expect(out.get(id)).toEqual({ start: ts('2026-07-06T00:00:00Z'), end: ts('2026-07-15T00:00:00Z') })
   })
 
+  it('forward resync: preserves endId when the end timestamp is unchanged', () => {
+    const start = ts('2026-07-01T00:00:00Z')
+    const end = ts('2026-07-14T00:00:00Z')
+    const gaps = new Map([[id, { start, end, startId: 's1', endId: 'e1' }]])
+    // Merged still has an above-gap message at exactly `end` — computeGapEnd
+    // resolves to the same value, so the recorded endId survives.
+    const merged = [msg('2026-07-10T00:00:00Z'), msg('2026-07-14T00:00:00Z')]
+    const out = syncGapAfterArchiveMerge(base({
+      direction: 'forward', gaps, forwardGapTimestamp: ts('2026-07-10T00:00:00Z'),
+      merged, lastFetchedArchiveId: 's2',
+    }))
+    expect(out.get(id)).toEqual({ start: ts('2026-07-10T00:00:00Z'), end, startId: 's2', endId: 'e1' })
+  })
+
+  it('forward resync: preserves startId when the merge has no lastFetchedArchiveId (rsm.last)', () => {
+    const start = ts('2026-07-01T00:00:00Z')
+    const end = ts('2026-07-14T00:00:00Z')
+    const gaps = new Map([[id, { start, end, startId: 's1', endId: 'e1' }]])
+    const merged = [msg('2026-07-14T00:00:00Z')]
+    const out = syncGapAfterArchiveMerge(base({
+      direction: 'forward', gaps, forwardGapTimestamp: start, merged,
+      // No lastFetchedArchiveId — an incomplete forward merge without rsm.last.
+    }))
+    expect(out.get(id)).toEqual({ start, end, startId: 's1', endId: 'e1' })
+  })
+
+  it('forward resync: drops endId when the end timestamp moves (id for the new edge is unknown)', () => {
+    const start = ts('2026-07-01T00:00:00Z')
+    const end = ts('2026-07-14T00:00:00Z')
+    const gaps = new Map([[id, { start, end, startId: 's1', endId: 'e1' }]])
+    // A newer message now sits above the old end — the gap's end edge moved.
+    const merged = [msg('2026-07-10T00:00:00Z'), msg('2026-07-20T00:00:00Z')]
+    const out = syncGapAfterArchiveMerge(base({
+      direction: 'forward', gaps, forwardGapTimestamp: ts('2026-07-10T00:00:00Z'),
+      merged, lastFetchedArchiveId: 's2',
+    }))
+    expect(out.get(id)).toEqual({
+      start: ts('2026-07-10T00:00:00Z'), end: ts('2026-07-20T00:00:00Z'), startId: 's2',
+    })
+    expect(out.get(id)?.endId).toBeUndefined()
+  })
+
+  it('forward resync: a brand-new gap (no existing entry) still stamps only startId, never a phantom endId', () => {
+    const merged = [msg('2026-07-06T00:00:00Z'), msg('2026-07-15T00:00:00Z')]
+    const out = syncGapAfterArchiveMerge(base({
+      direction: 'forward', forwardGapTimestamp: ts('2026-07-06T00:00:00Z'), merged,
+      lastFetchedArchiveId: 's1',
+    }))
+    expect(out.get(id)).toEqual({ start: ts('2026-07-06T00:00:00Z'), end: ts('2026-07-15T00:00:00Z'), startId: 's1' })
+  })
+
   it('forward: clears the gap when forwardGapTimestamp is undefined (complete catch-up)', () => {
     const gaps = new Map([[id, { start: 1000, end: 5000 }]])
     const out = syncGapAfterArchiveMerge(base({ direction: 'forward', gaps, complete: true }))
@@ -249,6 +301,39 @@ describe('syncGapAfterArchiveMerge', () => {
     const fetched = [msg('2026-07-01T00:00:00Z')] // entirely below the gap
     const out = syncGapAfterArchiveMerge(base({ gaps, fetched, newMessagesCount: 1 }))
     expect(out).toBe(gaps)
+  })
+})
+
+describe('newestMessageStanzaId', () => {
+  it('returns the stanzaId of the newest-timestamped message when it carries one', () => {
+    const messages = [
+      { timestamp: new Date('2026-07-10T00:00:00Z'), stanzaId: 'old' },
+      { timestamp: new Date('2026-07-15T00:00:00Z'), stanzaId: 'newest' },
+      { timestamp: new Date('2026-07-12T00:00:00Z'), stanzaId: 'mid' },
+    ]
+    expect(newestMessageStanzaId(messages)).toBe('newest')
+  })
+
+  it('falls back to the next-newest message that HAS a stanzaId when the newest lacks one', () => {
+    // The newest-timestamped message (own-sent pre-echo) has no stanzaId yet —
+    // must not silently drop the id-exact resume cursor.
+    const messages = [
+      { timestamp: new Date('2026-07-10T00:00:00Z'), stanzaId: 'archived' },
+      { timestamp: new Date('2026-07-15T00:00:00Z') }, // newest, id-less
+    ]
+    expect(newestMessageStanzaId(messages)).toBe('archived')
+  })
+
+  it('returns undefined when no message carries a stanzaId', () => {
+    const messages = [
+      { timestamp: new Date('2026-07-10T00:00:00Z') },
+      { timestamp: new Date('2026-07-15T00:00:00Z') },
+    ]
+    expect(newestMessageStanzaId(messages)).toBeUndefined()
+  })
+
+  it('returns undefined for an empty array', () => {
+    expect(newestMessageStanzaId([])).toBeUndefined()
   })
 })
 
