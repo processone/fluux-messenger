@@ -14,6 +14,44 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: '0.17.2',
+    date: '2026-07-16',
+    sections: [
+      {
+        type: 'added',
+        items: [
+          'The send button responds with a press and glow-pulse animation when a message goes out',
+        ],
+      },
+      {
+        type: 'changed',
+        items: [
+          'The new-messages divider and the unread badge on the scroll-to-bottom button now follow your read position, staying consistent with the sidebar and read-marker sync',
+          'Desktop: file uploads and media downloads are handled by native code, making transfers of large files much faster and more reliable',
+          'Updated dependencies (Rust crates)',
+        ],
+      },
+      {
+        type: 'fixed',
+        items: [
+          'Conversation history no longer shows silent gaps: interruptions while syncing the archive are detected and healed from both directions',
+          'Clicking a reaction notification now always jumps to the reacted message',
+          'The sidebar keeps its scroll position when conversations reorder during catch-up',
+          'Authentication: a wrong saved password no longer triggers an endless keychain retry loop',
+          'Desktop: downloading an update no longer risks freezing the app while showing progress',
+          'Linux: fixed a performance issue when many new messages arrived at once',
+          'Group chats: the public room directory no longer lists duplicate rooms and no longer pulls in results beyond your server\'s directory',
+          'Group chats: a room notification banner no longer reappears when the room is reopened',
+          'Group chats: removed a redundant tooltip on the room header title',
+          'The quoted-message and reply cards stay visually distinct when a message is selected',
+          'Your own message group re-fits its width once an image inside it finishes loading',
+          'The typing indicator is vertically centered between the last message and the composer',
+          'macOS: the traffic-light window buttons stay centered in the app bar',
+        ],
+      },
+    ],
+  },
+  {
     version: '0.17.1',
     date: '2026-07-13',
     sections: [
