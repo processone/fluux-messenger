@@ -33,7 +33,7 @@ import type { OmemoMessage } from '@fluux/omemo'
 import { PluginStorageOmemoStore } from './store'
 import { publishDeviceList, fetchDeviceList, fetchBundle, publishBundle } from './pep'
 import { resolveInboundTrust, toTrustState, type BtbvState } from './trust'
-import { isVerified, setVerified, clearVerified } from './verifiedDevices'
+import { isVerified, setVerified, clearVerified, hasAnyVerified } from './verifiedDevices'
 import { buildEnvelope, parseEnvelope } from './sce'
 import { buildEncrypted, parseEncrypted } from './encryptedElement'
 import { elementToData, dataToElement, parseXml } from './stanzaData'
@@ -217,7 +217,6 @@ export class OmemoPlugin implements E2EEPlugin {
   }
 
   async getPeerTrust(peer: BareJID): Promise<TrustState> {
-    const store = new PluginStorageOmemoStore(this.ctx.storage)
     const ids = await fetchDeviceList(this.ctx.xmpp, peer)
     // Surface the STRONGEST concern with priority: a single untrusted device
     // dominates (attention needed), then any explicitly verified device, then
@@ -227,11 +226,10 @@ export class OmemoPlugin implements E2EEPlugin {
     let sawVerified = false
     let sawTofu = false
     for (const id of ids) {
-      const t = await store.loadTrust(peer, id)
-      const s = toTrustState((t?.state as BtbvState) ?? 'undecided')
-      if (s === 'untrusted') sawUntrusted = true
-      else if (s === 'verified') sawVerified = true
-      else if (s === 'tofu') sawTofu = true
+      const { trust } = await this.resolvePeerIdentity(peer, id)
+      if (trust === 'untrusted') sawUntrusted = true
+      else if (trust === 'verified') sawVerified = true
+      else if (trust === 'tofu') sawTofu = true
     }
     if (sawUntrusted) return 'untrusted'
     if (sawVerified) return 'verified'
@@ -240,9 +238,7 @@ export class OmemoPlugin implements E2EEPlugin {
   }
 
   async getDeviceTrust(peer: BareJID, deviceId: string): Promise<TrustState> {
-    const store = new PluginStorageOmemoStore(this.ctx.storage)
-    const t = await store.loadTrust(peer, Number(deviceId))
-    return toTrustState((t?.state as BtbvState) ?? 'undecided')
+    return (await this.resolvePeerIdentity(peer, Number(deviceId))).trust
   }
 
   // --- Task 11: encrypt / claim / decrypt (the SCE seam). ---
@@ -460,15 +456,15 @@ export class OmemoPlugin implements E2EEPlugin {
   }
 
   /**
-   * BTBV gate: has the peer any EXPLICITLY out-of-band-verified device? Explicit
-   * verification is tracked by a separate marker introduced with the verification
-   * flow (see `trust.ts`); until that lands no device counts as verified, so new
-   * devices are blind-trusted. Blind-trusted (`'trusted'`) devices deliberately do
-   * NOT count here — otherwise the second device a peer adds would be forced to
-   * `untrusted`, defeating blind-trust-before-verification.
+   * BTBV gate: does the peer have any EXPLICITLY verified device (fingerprint-
+   * bound marker present)? When true, `resolveInboundTrust` forces newly-seen
+   * unverified devices to `untrusted` rather than blind-trusting them.
+   * Blind-trusted (`'trusted'`) devices deliberately do NOT count here —
+   * otherwise the second device a peer adds would be forced to `untrusted`,
+   * defeating blind-trust-before-verification.
    */
-  private async peerHasVerifiedDevice(_store: PluginStorageOmemoStore, _peer: string): Promise<boolean> {
-    return false
+  private async peerHasVerifiedDevice(_store: PluginStorageOmemoStore, peer: string): Promise<boolean> {
+    return hasAnyVerified(this.ctx.storage, peer)
   }
 
   private async decryptWith(

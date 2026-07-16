@@ -195,3 +195,59 @@ describe('OmemoPlugin.setIdentityTrust', () => {
     expect(list[0].trust).toBe('verified')
   })
 })
+
+describe('OmemoPlugin BTBV wiring', () => {
+  it('getDeviceTrust surfaces verified after setIdentityTrust', async () => {
+    const { pa, bobDeviceId } = await twoParty()
+    await pa.setIdentityTrust('bob@x', String(bobDeviceId), 'verified')
+    expect(await pa.getDeviceTrust('bob@x', String(bobDeviceId))).toBe('verified')
+  })
+
+  it('once a peer has a verified device, a newly-seen device resolves to untrusted (BTBV)', async () => {
+    const { alice, pa, pb, bobDeviceId } = await twoParty()
+    // Verify bob's first device.
+    await pa.setIdentityTrust('bob@x', String(bobDeviceId), 'verified')
+    // Bob adds a SECOND device on the shared net.
+    const bob2 = createMockPluginContext('bob@x', alice.net)
+    const pb2 = new OmemoPlugin()
+    await pb2.init(bob2.ctx)
+    // Re-create identity for a distinct device id by seeding a fresh account:
+    const secondId = await pb2.ensureIdentity()
+    const secondDeviceId = Number(secondId.devices![0].deviceId)
+    // The second device, never verified, with a peer that HAS a verified device,
+    // must resolve untrusted via resolveInboundTrust (peerHasVerifiedDevice=true).
+    const store = new (await import('./store')).PluginStorageOmemoStore(alice.ctx.storage)
+    const { resolveInboundTrust } = await import('./trust')
+    const peerHasVerified = await (pa as unknown as {
+      peerHasVerifiedDevice(s: unknown, p: string): Promise<boolean>
+    }).peerHasVerifiedDevice(store, 'bob@x')
+    expect(peerHasVerified).toBe(true)
+    expect(resolveInboundTrust(peerHasVerified, null).store).toBe('untrusted')
+    expect(secondDeviceId).not.toBe(bobDeviceId)
+    // pb kept alive only for the shared-net stand-up in twoParty(); silence unused-var lint.
+    void pb
+  })
+
+  it('getPeerTrust returns verified for a peer with a verified and no untrusted device', async () => {
+    const { pa, bobDeviceId } = await twoParty()
+    await pa.setIdentityTrust('bob@x', String(bobDeviceId), 'verified')
+    expect(await pa.getPeerTrust('bob@x')).toBe('verified')
+  })
+
+  it('a fingerprint change on a verified device flips getDeviceTrust back off verified', async () => {
+    const { alice, pa, bobDeviceId } = await twoParty()
+    await pa.setIdentityTrust('bob@x', String(bobDeviceId), 'verified')
+    expect(await pa.getDeviceTrust('bob@x', String(bobDeviceId))).toBe('verified')
+
+    // Simulate a key change: overwrite the stored TrustRecord's identityKey so
+    // the verified marker (bound to the OLD fingerprint) no longer matches.
+    const store = new PluginStorageOmemoStore(alice.ctx.storage)
+    const rec = await store.loadTrust('bob@x', bobDeviceId)
+    await store.saveTrust('bob@x', bobDeviceId, {
+      state: rec?.state ?? 'trusted',
+      identityKey: new Uint8Array(32).fill(0xaa), // different key → different fp
+    })
+
+    expect(await pa.getDeviceTrust('bob@x', String(bobDeviceId))).not.toBe('verified')
+  })
+})
