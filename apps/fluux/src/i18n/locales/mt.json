@@ -212,6 +212,11 @@
                 "loading": "Qed jitgħabbew l-apparati...",
                 "loadError": "Ma setgħux jitgħabbew l-apparati",
                 "retry": "Erġa' pprova"
+            },
+            "needsVerification": {
+                "title": "Ivverifika apparat biex tibgħat",
+                "description": "L-apparati kollha ta' dan il-kuntatt mhumiex fdati. Ivverifika mill-inqas apparat wieħed biex tibgħat messaġġi kriptati.",
+                "glance": "Ivverifika apparat biex tibgħat"
             }
         },
         "actionsMenu": "Aktar azzjonijiet",
@@ -582,7 +587,8 @@
             },
             "omemoSwitchNotice": {
                 "body": "Din il-konversazzjoni issa tuża OMEMO. Ivverifika l-apparat il-ġdid fid-dettalji tas-sigurtà tal-kuntatt."
-            }
+            },
+            "needsVerificationTooltip": "Ivverifika apparat biex tibgħat messaġġi kriptati"
         },
         "verifyPeer": {
             "chipAriaLabel": "Ikkriptat lil {{name}}. Ikklikkja biex tivverifika l-marka tas-saba'",

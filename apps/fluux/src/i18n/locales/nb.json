@@ -210,6 +210,11 @@
                 "loading": "Laster enheter...",
                 "loadError": "Kunne ikke laste enheter",
                 "retry": "Prøv igjen"
+            },
+            "needsVerification": {
+                "title": "Bekreft en enhet for å sende",
+                "description": "Alle enheter til denne kontakten er ikke tiltrodd. Bekreft minst én enhet for å sende krypterte meldinger.",
+                "glance": "Bekreft en enhet for å sende"
             }
         },
         "actionsMenu": "Flere handlinger",
@@ -577,7 +582,8 @@
             },
             "omemoSwitchNotice": {
                 "body": "Denne samtalen bruker nå OMEMO. Bekreft den nye enheten i kontaktens sikkerhetsdetaljer."
-            }
+            },
+            "needsVerificationTooltip": "Bekreft en enhet for å sende krypterte meldinger"
         },
         "verifyPeer": {
             "chipAriaLabel": "Kryptert til {{name}}. Klikk for å verifisere fingeravtrykket",

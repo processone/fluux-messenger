@@ -212,6 +212,11 @@
                 "loading": "Cargando dispositivos...",
                 "loadError": "No se pudieron cargar los dispositivos",
                 "retry": "Reintentar"
+            },
+            "needsVerification": {
+                "title": "Verifica un dispositivo para enviar",
+                "description": "Todos los dispositivos de este contacto no son de confianza. Verifica al menos un dispositivo para enviar mensajes cifrados.",
+                "glance": "Verifica un dispositivo para enviar"
             }
         },
         "actionsMenu": "Más acciones",
@@ -580,7 +585,8 @@
             },
             "omemoSwitchNotice": {
                 "body": "Esta conversación ahora usa OMEMO. Verifica el nuevo dispositivo en los detalles de seguridad del contacto."
-            }
+            },
+            "needsVerificationTooltip": "Verifica un dispositivo para enviar mensajes cifrados"
         },
         "verifyPeer": {
             "chipAriaLabel": "Cifrado para {{name}}. Haz clic para verificar la huella",

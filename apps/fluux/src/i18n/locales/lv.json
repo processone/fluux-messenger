@@ -211,6 +211,11 @@
                 "loading": "Notiek ierīču ielāde...",
                 "loadError": "Neizdevās ielādēt ierīces",
                 "retry": "Mēģināt vēlreiz"
+            },
+            "needsVerification": {
+                "title": "Apstipriniet ierīci, lai sūtītu",
+                "description": "Visas šī kontakta ierīces ir neuzticamas. Apstipriniet vismaz vienu ierīci, lai sūtītu šifrētus ziņojumus.",
+                "glance": "Apstipriniet ierīci, lai sūtītu"
             }
         },
         "actionsMenu": "Vairāk darbību",
@@ -579,7 +584,8 @@
             },
             "omemoSwitchNotice": {
                 "body": "Šī saruna tagad izmanto OMEMO. Pārbaudiet jauno ierīci kontakta drošības informācijā."
-            }
+            },
+            "needsVerificationTooltip": "Apstipriniet ierīci, lai sūtītu šifrētus ziņojumus"
         },
         "verifyPeer": {
             "chipAriaLabel": "Šifrēts {{name}}. Noklikšķiniet, lai pārbaudītu pirkstu nospiedumu",

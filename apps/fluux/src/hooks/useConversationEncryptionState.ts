@@ -77,6 +77,7 @@ export type ConversationEncryptionState =
        */
       firstSeen?: boolean
     }
+  | { kind: 'needsDeviceVerification'; peerJid: string }
   | { kind: 'blocked'; pinnedFingerprint: string; advertisedFingerprint: string }
   | { kind: 'unsupported' }
   | { kind: 'rejected'; reasons: CertRejection[] }
@@ -102,6 +103,7 @@ interface OpenpgpPluginShape {
 interface SelectedPluginShape {
   descriptor: { id: string }
   getPeerTrust: (peer: string) => Promise<TrustState>
+  listPeerIdentities?: (peer: string) => Promise<Array<{ id: string; fingerprint: string; trust: TrustState }>>
 }
 
 /**
@@ -328,6 +330,21 @@ export function useConversationEncryptionState(
         if (id === 'omemo:2' && selected) {
           const t = await selected.getPeerTrust(peerJid)
           if (cancelled) return
+          // Zero-encryptable detection: if the peer HAS devices but every one
+          // is untrusted, encryption cannot proceed — surface the actionable
+          // "verify a device to send" state instead of a silent failure.
+          if (selected.listPeerIdentities) {
+            try {
+              const identities = await selected.listPeerIdentities(peerJid)
+              if (cancelled) return
+              if (identities.length > 0 && identities.every((d) => d.trust === 'untrusted')) {
+                setOmemoResult({ kind: 'needsDeviceVerification', peerJid })
+                return
+              }
+            } catch {
+              /* identity fetch failed — fall through to the encrypted state */
+            }
+          }
           setOmemoResult({
             kind: 'encrypted',
             protocolId: 'omemo:2',

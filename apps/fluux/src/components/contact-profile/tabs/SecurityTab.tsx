@@ -51,6 +51,15 @@ export function SecurityTab({
           />
         )}
 
+        {state.kind === 'needsDeviceVerification' && (
+          <ExplanationPanel
+            icon={<ShieldAlert className={`size-5 ${trustStateVisual('untrusted').colorClass} flex-shrink-0`} />}
+            title={t('contacts.encryption.needsVerification.title')}
+            description={t('contacts.encryption.needsVerification.description')}
+            tone="danger"
+          />
+        )}
+
         {state.kind === 'rejected' && (
           <>
             <ExplanationPanel

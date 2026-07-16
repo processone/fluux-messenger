@@ -210,6 +210,11 @@
                 "loading": "正在加载设备...",
                 "loadError": "无法加载设备",
                 "retry": "重试"
+            },
+            "needsVerification": {
+                "title": "验证设备以发送",
+                "description": "此联系人的所有设备均不受信任。请至少验证一个设备才能发送加密消息。",
+                "glance": "验证设备以发送"
             }
         },
         "actionsMenu": "更多操作",
@@ -577,7 +582,8 @@
             },
             "omemoSwitchNotice": {
                 "body": "此对话现在使用 OMEMO。请在联系人的安全详情中验证新设备。"
-            }
+            },
+            "needsVerificationTooltip": "验证设备以发送加密消息"
         },
         "verifyPeer": {
             "chipAriaLabel": "已加密至 {{name}}。点击即可验证指纹",

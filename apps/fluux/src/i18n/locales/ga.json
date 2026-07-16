@@ -210,6 +210,11 @@
                 "loading": "Gléasanna á lódáil...",
                 "loadError": "Níorbh fhéidir na gléasanna a lódáil",
                 "retry": "Bain triail eile as"
+            },
+            "needsVerification": {
+                "title": "Deimhnigh gléas chun seoladh",
+                "description": "Níl aon iontaoibh ag baint le gléasanna uile an teagmhálaí seo. Deimhnigh gléas amháin ar a laghad chun teachtaireachtaí criptithe a sheoladh.",
+                "glance": "Deimhnigh gléas chun seoladh"
             }
         },
         "actionsMenu": "Tuilleadh gníomhartha",
@@ -580,7 +585,8 @@
             },
             "omemoSwitchNotice": {
                 "body": "Úsáideann an comhrá seo OMEMO anois. Deimhnigh an gléas nua i sonraí slándála an teagmhálaí."
-            }
+            },
+            "needsVerificationTooltip": "Deimhnigh gléas chun teachtaireachtaí criptithe a sheoladh"
         },
         "verifyPeer": {
             "chipAriaLabel": "Criptithe go {{name}}. Cliceáil chun méarlorg a fhíorú",

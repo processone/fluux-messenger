@@ -210,6 +210,11 @@
                 "loading": "Indlæser enheder...",
                 "loadError": "Kunne ikke indlæse enheder",
                 "retry": "Prøv igen"
+            },
+            "needsVerification": {
+                "title": "Bekræft en enhed for at sende",
+                "description": "Alle enheder for denne kontakt er ubetroede. Bekræft mindst én enhed for at sende krypterede beskeder.",
+                "glance": "Bekræft en enhed for at sende"
             }
         },
         "actionsMenu": "Flere handlinger",
@@ -577,7 +582,8 @@
             },
             "omemoSwitchNotice": {
                 "body": "Denne samtale bruger nu OMEMO. Bekræft den nye enhed i kontaktens sikkerhedsoplysninger."
-            }
+            },
+            "needsVerificationTooltip": "Bekræft en enhed for at sende krypterede beskeder"
         },
         "verifyPeer": {
             "chipAriaLabel": "Krypteret til {{name}}. Klik for at verificere fingeraftrykket",

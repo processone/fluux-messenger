@@ -212,6 +212,11 @@
                 "loading": "Caricamento dei dispositivi...",
                 "loadError": "Impossibile caricare i dispositivi",
                 "retry": "Riprova"
+            },
+            "needsVerification": {
+                "title": "Verifica un dispositivo per inviare",
+                "description": "Tutti i dispositivi di questo contatto non sono attendibili. Verifica almeno un dispositivo per inviare messaggi crittografati.",
+                "glance": "Verifica un dispositivo per inviare"
             }
         },
         "actionsMenu": "Altre azioni",
@@ -580,7 +585,8 @@
             },
             "omemoSwitchNotice": {
                 "body": "Questa conversazione ora usa OMEMO. Verifica il nuovo dispositivo nei dettagli di sicurezza del contatto."
-            }
+            },
+            "needsVerificationTooltip": "Verifica un dispositivo per inviare messaggi crittografati"
         },
         "verifyPeer": {
             "chipAriaLabel": "Cifrato per {{name}}. Fai clic per verificare l'impronta",

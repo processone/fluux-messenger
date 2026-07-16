@@ -211,6 +211,11 @@
                 "loading": "Načítavajú sa zariadenia...",
                 "loadError": "Zariadenia sa nepodarilo načítať",
                 "retry": "Skúsiť znova"
+            },
+            "needsVerification": {
+                "title": "Overte zariadenie na odoslanie",
+                "description": "Všetky zariadenia tohto kontaktu sú nedôveryhodné. Overte aspoň jedno zariadenie na odosielanie šifrovaných správ.",
+                "glance": "Overte zariadenie na odoslanie"
             }
         },
         "actionsMenu": "Ďalšie akcie",
@@ -580,7 +585,8 @@
             },
             "omemoSwitchNotice": {
                 "body": "Táto konverzácia teraz používa OMEMO. Overte nové zariadenie v podrobnostiach zabezpečenia kontaktu."
-            }
+            },
+            "needsVerificationTooltip": "Overte zariadenie na odosielanie šifrovaných správ"
         },
         "verifyPeer": {
             "chipAriaLabel": "Šifrované pre {{name}}. Kliknutím overíte odtlačok",

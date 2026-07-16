@@ -212,6 +212,11 @@
                 "loading": "Seadmete laadimine...",
                 "loadError": "Seadmeid ei õnnestunud laadida",
                 "retry": "Proovi uuesti"
+            },
+            "needsVerification": {
+                "title": "Saatmiseks kinnita seade",
+                "description": "Selle kontakti kõik seadmed on usaldamatud. Kinnita vähemalt üks seade, et saata krüptitud sõnumeid.",
+                "glance": "Saatmiseks kinnita seade"
             }
         },
         "actionsMenu": "Rohkem toiminguid",
@@ -579,7 +584,8 @@
             },
             "omemoSwitchNotice": {
                 "body": "See vestlus kasutab nüüd OMEMO-t. Kontrolli uut seadet kontakti turvateabes."
-            }
+            },
+            "needsVerificationTooltip": "Krüptitud sõnumite saatmiseks kinnita seade"
         },
         "verifyPeer": {
             "chipAriaLabel": "Krüpteeritud {{name}}-le. Klõpsa sõrmejälje kinnitamiseks",

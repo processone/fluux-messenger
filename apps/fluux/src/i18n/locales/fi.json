@@ -210,6 +210,11 @@
                 "loading": "Ladataan laitteita...",
                 "loadError": "Laitteiden lataaminen epäonnistui",
                 "retry": "Yritä uudelleen"
+            },
+            "needsVerification": {
+                "title": "Vahvista laite lähettääksesi",
+                "description": "Kaikki tämän yhteystiedon laitteet ovat epäluotettavia. Vahvista vähintään yksi laite lähettääksesi salattuja viestejä.",
+                "glance": "Vahvista laite lähettääksesi"
             }
         },
         "actionsMenu": "Lisätoiminnot",
@@ -577,7 +582,8 @@
             },
             "omemoSwitchNotice": {
                 "body": "Tämä keskustelu käyttää nyt OMEMOa. Vahvista uusi laite yhteystiedon suojaustiedoissa."
-            }
+            },
+            "needsVerificationTooltip": "Vahvista laite lähettääksesi salattuja viestejä"
         },
         "verifyPeer": {
             "chipAriaLabel": "Salattu vastaanottajalle {{name}}. Napsauta vahvistaaksesi sormenjäljen",

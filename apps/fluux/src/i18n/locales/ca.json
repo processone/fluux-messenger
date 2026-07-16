@@ -212,6 +212,11 @@
                 "loading": "S'estan carregant els dispositius...",
                 "loadError": "No s'han pogut carregar els dispositius",
                 "retry": "Torna-ho a provar"
+            },
+            "needsVerification": {
+                "title": "Verifica un dispositiu per enviar",
+                "description": "Tots els dispositius d'aquest contacte no són de confiança. Verifica almenys un dispositiu per enviar missatges xifrats.",
+                "glance": "Verifica un dispositiu per enviar"
             }
         },
         "actionsMenu": "Més accions",
@@ -580,7 +585,8 @@
             },
             "omemoSwitchNotice": {
                 "body": "Aquesta conversa ara utilitza OMEMO. Verifiqueu el nou dispositiu als detalls de seguretat del contacte."
-            }
+            },
+            "needsVerificationTooltip": "Verifica un dispositiu per enviar missatges xifrats"
         },
         "verifyPeer": {
             "chipAriaLabel": "Xifrat per a {{name}}. Fes clic per verificar l'empremta",

@@ -211,6 +211,11 @@
                 "loading": "Loading devices...",
                 "loadError": "Could not load devices",
                 "retry": "Retry"
+            },
+            "needsVerification": {
+                "title": "Verify a device to send",
+                "description": "Every device for this contact is untrusted. Verify at least one device to send encrypted messages.",
+                "glance": "Verify a device to send"
             }
         },
         "actionsMenu": "More actions"
@@ -577,7 +582,8 @@
             },
             "omemoSwitchNotice": {
                 "body": "This conversation now uses OMEMO. Verify the new device in the contact's security details."
-            }
+            },
+            "needsVerificationTooltip": "Verify a device to send encrypted messages"
         },
         "verifyPeer": {
             "chipAriaLabel": "Encrypted to {{name}}. Click to verify fingerprint",

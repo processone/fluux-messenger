@@ -724,9 +724,11 @@ export function MessageComposer({
       ? enc.trust === 'verified'
         ? { Icon: ShieldCheck, colorClass: trustVisual('verified').colorClass, label: t('chat.encryption.verifiedTooltip') }
         : { Icon: Shield, colorClass: trustVisual('trusted').colorClass, label: t('chat.encryption.openpgpTooltip') }
-      : enc?.kind === 'blocked'
-        ? { Icon: ShieldAlert, colorClass: trustVisual('keyChanged').colorClass, label: t('chat.encryption.blockedTooltip') }
-        : null
+      : enc?.kind === 'needsDeviceVerification'
+        ? { Icon: ShieldAlert, colorClass: 'text-fluux-error', label: t('chat.encryption.needsVerificationTooltip') }
+        : enc?.kind === 'blocked'
+          ? { Icon: ShieldAlert, colorClass: trustVisual('keyChanged').colorClass, label: t('chat.encryption.blockedTooltip') }
+          : null
   const keyChanged = enc?.kind === 'blocked'
 
   return (

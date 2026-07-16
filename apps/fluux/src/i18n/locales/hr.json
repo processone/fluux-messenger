@@ -210,6 +210,11 @@
                 "loading": "Učitavanje uređaja...",
                 "loadError": "Uređaje nije moguće učitati",
                 "retry": "Pokušaj ponovno"
+            },
+            "needsVerification": {
+                "title": "Provjerite uređaj za slanje",
+                "description": "Svi uređaji ovog kontakta nisu pouzdani. Provjerite barem jedan uređaj za slanje šifriranih poruka.",
+                "glance": "Provjerite uređaj za slanje"
             }
         },
         "actionsMenu": "Više radnji",
@@ -578,7 +583,8 @@
             },
             "omemoSwitchNotice": {
                 "body": "Ovaj razgovor sada koristi OMEMO. Provjerite novi uređaj u sigurnosnim podacima kontakta."
-            }
+            },
+            "needsVerificationTooltip": "Provjerite uređaj za slanje šifriranih poruka"
         },
         "verifyPeer": {
             "chipAriaLabel": "Šifrirano za {{name}}. Kliknite za provjeru otiska",

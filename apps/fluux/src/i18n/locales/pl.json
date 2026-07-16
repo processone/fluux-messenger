@@ -212,6 +212,11 @@
                 "loading": "Ładowanie urządzeń...",
                 "loadError": "Nie udało się załadować urządzeń",
                 "retry": "Spróbuj ponownie"
+            },
+            "needsVerification": {
+                "title": "Zweryfikuj urządzenie, aby wysyłać",
+                "description": "Wszystkie urządzenia tego kontaktu są niezaufane. Zweryfikuj co najmniej jedno urządzenie, aby wysyłać zaszyfrowane wiadomości.",
+                "glance": "Zweryfikuj urządzenie, aby wysyłać"
             }
         },
         "actionsMenu": "Więcej akcji",
@@ -581,7 +586,8 @@
             },
             "omemoSwitchNotice": {
                 "body": "Ta rozmowa korzysta teraz z OMEMO. Zweryfikuj nowe urządzenie w szczegółach zabezpieczeń kontaktu."
-            }
+            },
+            "needsVerificationTooltip": "Zweryfikuj urządzenie, aby wysyłać zaszyfrowane wiadomości"
         },
         "verifyPeer": {
             "chipAriaLabel": "Szyfrowane do {{name}}. Kliknij, aby zweryfikować odcisk klucza",

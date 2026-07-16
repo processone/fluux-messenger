@@ -186,4 +186,31 @@ describe('useConversationEncryptionState — OMEMO selection', () => {
       expect.objectContaining({ kind: 'encrypted', protocolId: 'omemo:2' }),
     )
   })
+
+  it("reports 'needsDeviceVerification' when OMEMO peer has devices but all are untrusted", async () => {
+    const plugin = makeOmemoPlugin('untrusted')
+    ;(plugin as unknown as { listPeerIdentities: ReturnType<typeof vi.fn> }).listPeerIdentities = vi
+      .fn()
+      .mockResolvedValue([
+        { id: '1', fingerprint: 'aa', trust: 'untrusted' },
+        { id: '2', fingerprint: 'bb', trust: 'untrusted' },
+      ])
+    wireMocks({ omemoPlugin: plugin })
+    const { result } = renderHook(() => useConversationEncryptionState('bob@example.com', 'chat'))
+    await waitFor(() => expect(result.current.kind).toBe('needsDeviceVerification'))
+    expect(result.current).toEqual({ kind: 'needsDeviceVerification', peerJid: 'bob@example.com' })
+  })
+
+  it('stays encrypted when at least one device is trusted', async () => {
+    const plugin = makeOmemoPlugin('tofu')
+    ;(plugin as unknown as { listPeerIdentities: ReturnType<typeof vi.fn> }).listPeerIdentities = vi
+      .fn()
+      .mockResolvedValue([
+        { id: '1', fingerprint: 'aa', trust: 'untrusted' },
+        { id: '2', fingerprint: 'bb', trust: 'tofu' },
+      ])
+    wireMocks({ omemoPlugin: plugin })
+    const { result } = renderHook(() => useConversationEncryptionState('bob@example.com', 'chat'))
+    await waitFor(() => expect(result.current.kind).toBe('encrypted'))
+  })
 })

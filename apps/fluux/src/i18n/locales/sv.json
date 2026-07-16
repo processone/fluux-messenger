@@ -210,6 +210,11 @@
                 "loading": "Läser in enheter...",
                 "loadError": "Det gick inte att läsa in enheterna",
                 "retry": "Försök igen"
+            },
+            "needsVerification": {
+                "title": "Verifiera en enhet för att skicka",
+                "description": "Alla enheter för den här kontakten är opålitliga. Verifiera minst en enhet för att skicka krypterade meddelanden.",
+                "glance": "Verifiera en enhet för att skicka"
             }
         },
         "actionsMenu": "Fler åtgärder",
@@ -577,7 +582,8 @@
             },
             "omemoSwitchNotice": {
                 "body": "Den här konversationen använder nu OMEMO. Verifiera den nya enheten i kontaktens säkerhetsinformation."
-            }
+            },
+            "needsVerificationTooltip": "Verifiera en enhet för att skicka krypterade meddelanden"
         },
         "verifyPeer": {
             "chipAriaLabel": "Krypterat till {{name}}. Klicka för att verifiera fingeravtrycket",

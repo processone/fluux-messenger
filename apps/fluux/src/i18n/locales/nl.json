@@ -210,6 +210,11 @@
                 "loading": "Apparaten laden...",
                 "loadError": "Kan apparaten niet laden",
                 "retry": "Opnieuw proberen"
+            },
+            "needsVerification": {
+                "title": "Verifieer een apparaat om te verzenden",
+                "description": "Alle apparaten van dit contact zijn niet vertrouwd. Verifieer minstens één apparaat om versleutelde berichten te verzenden.",
+                "glance": "Verifieer een apparaat om te verzenden"
             }
         },
         "actionsMenu": "Meer acties",
@@ -577,7 +582,8 @@
             },
             "omemoSwitchNotice": {
                 "body": "Dit gesprek gebruikt nu OMEMO. Verifieer het nieuwe apparaat in de beveiligingsdetails van het contact."
-            }
+            },
+            "needsVerificationTooltip": "Verifieer een apparaat om versleutelde berichten te verzenden"
         },
         "verifyPeer": {
             "chipAriaLabel": "Versleuteld naar {{name}}. Klik om vingerafdruk te verifiëren",

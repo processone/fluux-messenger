@@ -212,6 +212,11 @@
                 "loading": "Načítání zařízení...",
                 "loadError": "Zařízení se nepodařilo načíst",
                 "retry": "Zkusit znovu"
+            },
+            "needsVerification": {
+                "title": "Ověřte zařízení pro odeslání",
+                "description": "Všechna zařízení tohoto kontaktu jsou nedůvěryhodná. Ověřte alespoň jedno zařízení pro odesílání šifrovaných zpráv.",
+                "glance": "Ověřte zařízení pro odeslání"
             }
         },
         "actionsMenu": "Další akce",
@@ -581,7 +586,8 @@
             },
             "omemoSwitchNotice": {
                 "body": "Tato konverzace nyní používá OMEMO. Ověřte nové zařízení v podrobnostech zabezpečení kontaktu."
-            }
+            },
+            "needsVerificationTooltip": "Ověřte zařízení pro odesílání šifrovaných zpráv"
         },
         "verifyPeer": {
             "chipAriaLabel": "Šifrováno pro {{name}}. Kliknutím ověříte otisk",

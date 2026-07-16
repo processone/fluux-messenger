@@ -210,6 +210,11 @@
                 "loading": "Hleð tækjum...",
                 "loadError": "Ekki tókst að hlaða tækjum",
                 "retry": "Reyna aftur"
+            },
+            "needsVerification": {
+                "title": "Staðfestu tæki til að senda",
+                "description": "Öll tæki þessa tengiliðar eru óáreiðanleg. Staðfestu að minnsta kosti eitt tæki til að senda dulkóðuð skilaboð.",
+                "glance": "Staðfestu tæki til að senda"
             }
         },
         "actionsMenu": "Fleiri aðgerðir",
@@ -577,7 +582,8 @@
             },
             "omemoSwitchNotice": {
                 "body": "Þetta samtal notar nú OMEMO. Staðfestu nýja tækið í öryggisupplýsingum tengiliðarins."
-            }
+            },
+            "needsVerificationTooltip": "Staðfestu tæki til að senda dulkóðuð skilaboð"
         },
         "verifyPeer": {
             "chipAriaLabel": "Dulritað til {{name}}. Smelltu til að staðfesta fingrafarið",

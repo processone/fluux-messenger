@@ -210,6 +210,11 @@
                 "loading": "Eszközök betöltése...",
                 "loadError": "Az eszközöket nem sikerült betölteni",
                 "retry": "Újra"
+            },
+            "needsVerification": {
+                "title": "Eszköz hitelesítése a küldéshez",
+                "description": "Ennek a névjegynek minden eszköze megbízhatatlan. Hitelesíts legalább egy eszközt titkosított üzenetek küldéséhez.",
+                "glance": "Eszköz hitelesítése a küldéshez"
             }
         },
         "actionsMenu": "További műveletek",
@@ -577,7 +582,8 @@
             },
             "omemoSwitchNotice": {
                 "body": "Ez a beszélgetés mostantól OMEMO-t használ. Ellenőrizze az új eszközt a partner biztonsági adatai között."
-            }
+            },
+            "needsVerificationTooltip": "Hitelesíts egy eszközt titkosított üzenetek küldéséhez"
         },
         "verifyPeer": {
             "chipAriaLabel": "Titkosítva {{name}} számára. Kattintson a ujjlenyomat ellenőrzéséhez",

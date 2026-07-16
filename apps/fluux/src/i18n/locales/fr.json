@@ -211,6 +211,11 @@
                 "loading": "Chargement des appareils...",
                 "loadError": "Impossible de charger les appareils",
                 "retry": "Réessayer"
+            },
+            "needsVerification": {
+                "title": "Vérifiez un appareil pour envoyer",
+                "description": "Tous les appareils de ce contact ne sont pas fiables. Vérifiez au moins un appareil pour envoyer des messages chiffrés.",
+                "glance": "Vérifiez un appareil pour envoyer"
             }
         },
         "actionsMenu": "Plus d'actions",
@@ -579,7 +584,8 @@
             },
             "omemoSwitchNotice": {
                 "body": "Cette conversation utilise désormais OMEMO. Vérifiez le nouvel appareil dans les détails de sécurité du contact."
-            }
+            },
+            "needsVerificationTooltip": "Vérifiez un appareil pour envoyer des messages chiffrés"
         },
         "verifyPeer": {
             "chipAriaLabel": "Chiffré à destination de {{name}}. Cliquez pour vérifier l'empreinte",

@@ -212,6 +212,11 @@
                 "loading": "Geräte werden geladen...",
                 "loadError": "Geräte konnten nicht geladen werden",
                 "retry": "Erneut versuchen"
+            },
+            "needsVerification": {
+                "title": "Gerät verifizieren, um zu senden",
+                "description": "Alle Geräte dieses Kontakts sind nicht vertrauenswürdig. Verifiziere mindestens ein Gerät, um verschlüsselte Nachrichten zu senden.",
+                "glance": "Gerät verifizieren, um zu senden"
             }
         },
         "actionsMenu": "Weitere Aktionen",
@@ -579,7 +584,8 @@
             },
             "omemoSwitchNotice": {
                 "body": "Diese Unterhaltung verwendet jetzt OMEMO. Überprüfe das neue Gerät in den Sicherheitsdetails des Kontakts."
-            }
+            },
+            "needsVerificationTooltip": "Gerät verifizieren, um verschlüsselte Nachrichten zu senden"
         },
         "verifyPeer": {
             "chipAriaLabel": "Verschlüsselt an {{name}}. Klicken, um Fingerabdruck zu verifizieren",

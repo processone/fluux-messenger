@@ -210,6 +210,11 @@
                 "loading": "Įkeliami įrenginiai...",
                 "loadError": "Nepavyko įkelti įrenginių",
                 "retry": "Bandyti dar kartą"
+            },
+            "needsVerification": {
+                "title": "Patvirtinkite įrenginį, kad galėtumėte siųsti",
+                "description": "Visi šio kontakto įrenginiai yra nepatikimi. Patvirtinkite bent vieną įrenginį, kad galėtumėte siųsti šifruotus pranešimus.",
+                "glance": "Patvirtinkite įrenginį, kad galėtumėte siųsti"
             }
         },
         "actionsMenu": "Daugiau veiksmų",
@@ -579,7 +584,8 @@
             },
             "omemoSwitchNotice": {
                 "body": "Šis pokalbis dabar naudoja OMEMO. Patvirtinkite naują įrenginį kontakto saugumo informacijoje."
-            }
+            },
+            "needsVerificationTooltip": "Patvirtinkite įrenginį, kad galėtumėte siųsti šifruotus pranešimus"
         },
         "verifyPeer": {
             "chipAriaLabel": "Užšifruota {{name}}. Spustelėkite norėdami patvirtinti pirštų atspaudą",

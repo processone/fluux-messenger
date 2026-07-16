@@ -212,6 +212,11 @@
                 "loading": "Se încarcă dispozitivele...",
                 "loadError": "Dispozitivele nu au putut fi încărcate",
                 "retry": "Reîncearcă"
+            },
+            "needsVerification": {
+                "title": "Verifică un dispozitiv pentru a trimite",
+                "description": "Toate dispozitivele acestui contact nu sunt de încredere. Verifică cel puțin un dispozitiv pentru a trimite mesaje criptate.",
+                "glance": "Verifică un dispozitiv pentru a trimite"
             }
         },
         "actionsMenu": "Mai multe acțiuni",
@@ -580,7 +585,8 @@
             },
             "omemoSwitchNotice": {
                 "body": "Această conversație folosește acum OMEMO. Verifică noul dispozitiv în detaliile de securitate ale contactului."
-            }
+            },
+            "needsVerificationTooltip": "Verifică un dispozitiv pentru a trimite mesaje criptate"
         },
         "verifyPeer": {
             "chipAriaLabel": "Criptat către {{name}}. Faceți clic pentru a verifica amprenta",
