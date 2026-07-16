@@ -1,7 +1,9 @@
+import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Loader2, Shield, ShieldAlert, ShieldCheck, ShieldOff, ShieldX } from 'lucide-react'
+import type { PeerIdentity } from '@fluux/sdk'
 import type { ConversationEncryptionState } from '@/hooks/useConversationEncryptionState'
-import { trustVisual } from '@/e2ee/trustVisual'
+import { trustVisual, trustStateVisual, trustLabel } from '@/e2ee/trustVisual'
 
 interface SecurityTabProps {
   state: ConversationEncryptionState
@@ -9,6 +11,14 @@ interface SecurityTabProps {
   onRequestRevoke: () => void
   onDisableEncryption: () => void
   onEnableEncryption: () => void
+  /** Present for OMEMO conversations; drives the per-identity device list. */
+  peerJid?: string
+  omemo?: {
+    listPeerIdentities: (peer: string) => Promise<PeerIdentity[]>
+    onVerifyDevice: (identity: PeerIdentity) => void
+    onRevokeDevice: (identity: PeerIdentity) => Promise<void>
+    reloadKey?: number
+  } | null
 }
 
 export function SecurityTab({
@@ -17,6 +27,8 @@ export function SecurityTab({
   onRequestRevoke,
   onDisableEncryption,
   onEnableEncryption,
+  peerJid,
+  omemo,
 }: SecurityTabProps) {
   const { t } = useTranslation()
 
@@ -99,7 +111,11 @@ export function SecurityTab({
           />
         )}
 
-        {state.kind === 'encrypted' && (
+        {state.kind === 'encrypted' && state.protocolId === 'omemo:2' && omemo && peerJid && (
+          <OmemoDeviceList peerJid={peerJid} omemo={omemo} />
+        )}
+
+        {state.kind === 'encrypted' && !(state.protocolId === 'omemo:2' && omemo && peerJid) && (
           <>
             <ExplanationPanel
               icon={
@@ -196,6 +212,125 @@ function ExplanationPanel({ icon, title, description, tone }: ExplanationPanelPr
           <p className="text-xs text-fluux-muted mt-1 leading-relaxed">{description}</p>
         )}
       </div>
+    </div>
+  )
+}
+
+function OmemoDeviceList({
+  peerJid,
+  omemo,
+}: {
+  peerJid: string
+  omemo: NonNullable<SecurityTabProps['omemo']>
+}) {
+  const { t } = useTranslation()
+  const [identities, setIdentities] = useState<PeerIdentity[] | null>(null)
+  const [error, setError] = useState(false)
+  const [reload, setReload] = useState(0)
+
+  useEffect(() => {
+    let cancelled = false
+    setIdentities(null)
+    setError(false)
+    void omemo
+      .listPeerIdentities(peerJid)
+      .then((list) => {
+        if (!cancelled) setIdentities(list)
+      })
+      .catch(() => {
+        if (!cancelled) setError(true)
+      })
+    return () => {
+      cancelled = true
+    }
+    // reload (local) + omemo.reloadKey (parent) both force a refetch.
+  }, [peerJid, omemo, reload, omemo.reloadKey])
+
+  if (error) {
+    return (
+      <div className="space-y-2">
+        <ExplanationPanel
+          icon={<ShieldX className={`size-5 ${trustVisual('rejected').colorClass} flex-shrink-0`} />}
+          title={t('contacts.encryption.omemo.loadError')}
+          tone="danger"
+        />
+        <button
+          type="button"
+          onClick={() => setReload((n) => n + 1)}
+          className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-fluux-bg hover:bg-fluux-hover text-fluux-text border border-fluux-border rounded-lg transition-colors text-sm min-h-[44px]"
+        >
+          {t('contacts.encryption.omemo.retry')}
+        </button>
+      </div>
+    )
+  }
+
+  if (identities === null) {
+    return (
+      <ExplanationPanel
+        icon={<Loader2 className="size-5 text-fluux-muted animate-spin flex-shrink-0" />}
+        title={t('contacts.encryption.omemo.loading')}
+        tone="neutral"
+      />
+    )
+  }
+
+  const verifiedCount = identities.filter((i) => i.trust === 'verified').length
+
+  return (
+    <div className="space-y-2">
+      <div className="text-xs text-fluux-muted px-1">
+        {t('contacts.encryption.omemo.summary', { count: identities.length, verified: verifiedCount })}
+      </div>
+      {identities.map((id) => {
+        const visual = trustStateVisual(id.trust)
+        const hasKey = id.fingerprint !== ''
+        return (
+          <div key={id.id} className="rounded-lg bg-fluux-bg/40 px-3 py-2 space-y-1.5">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs font-medium text-fluux-text">
+                {t('contacts.encryption.omemo.deviceLabel', { id: id.id })}
+              </span>
+              <span className={`inline-flex items-center gap-1 text-xs ${visual.colorClass}`}>
+                {id.trust === 'verified' ? <ShieldCheck className="size-3.5" /> : <Shield className="size-3.5" />}
+                {t(trustLabel(id.trust))}
+              </span>
+            </div>
+            <code className="block text-[11px] font-mono text-fluux-muted break-all leading-relaxed">
+              {hasKey ? formatFingerprint(id.fingerprint) : t('contacts.encryption.omemo.noKeyYet')}
+            </code>
+            <div className="flex gap-2">
+              {id.trust === 'verified' ? (
+                <button
+                  type="button"
+                  data-testid={`omemo-revoke-${id.id}`}
+                  onClick={() => void omemo.onRevokeDevice(id).then(() => setReload((n) => n + 1))}
+                  className="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 bg-fluux-red/10 hover:bg-fluux-red/20 text-fluux-error border border-fluux-red rounded-lg transition-colors text-xs min-h-[36px]"
+                >
+                  <ShieldOff className="size-3.5" />
+                  {t('contacts.encryption.omemo.revoke')}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  data-testid={`omemo-verify-${id.id}`}
+                  disabled={!hasKey}
+                  onClick={() => omemo.onVerifyDevice(id)}
+                  className="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 bg-fluux-bg hover:bg-fluux-hover text-fluux-text border border-fluux-border rounded-lg transition-colors text-xs min-h-[36px] disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  <ShieldCheck className="size-3.5" />
+                  {t('contacts.encryption.omemo.verify')}
+                </button>
+              )}
+              {id.trust === 'untrusted' && (
+                <span className={`flex items-center gap-1 text-xs ${trustStateVisual('untrusted').colorClass}`}>
+                  <ShieldAlert className="size-3.5" />
+                </span>
+              )}
+            </div>
+          </div>
+        )
+      })}
     </div>
   )
 }

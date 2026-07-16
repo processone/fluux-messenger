@@ -201,6 +201,17 @@
                 "tofu": "Neverificat",
                 "untrusted": "Nu este de încredere",
                 "unknown": "Necunoscut"
+            },
+            "omemo": {
+                "title": "Dispozitive",
+                "summary": "{{count}} dispozitive, {{verified}} verificate",
+                "deviceLabel": "Dispozitiv {{id}}",
+                "noKeyYet": "Nicio cheie publicată încă",
+                "verify": "Verifică",
+                "revoke": "Revocă",
+                "loading": "Se încarcă dispozitivele...",
+                "loadError": "Dispozitivele nu au putut fi încărcate",
+                "retry": "Reîncearcă"
             }
         },
         "actionsMenu": "Mai multe acțiuni",

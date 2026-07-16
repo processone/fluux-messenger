@@ -199,6 +199,17 @@
                 "tofu": "Ei vahvistettu",
                 "untrusted": "Ei luotettu",
                 "unknown": "Tuntematon"
+            },
+            "omemo": {
+                "title": "Laitteet",
+                "summary": "{{count}} laitetta, {{verified}} vahvistettu",
+                "deviceLabel": "Laite {{id}}",
+                "noKeyYet": "Avainta ei ole vielä julkaistu",
+                "verify": "Vahvista",
+                "revoke": "Peru",
+                "loading": "Ladataan laitteita...",
+                "loadError": "Laitteiden lataaminen epäonnistui",
+                "retry": "Yritä uudelleen"
             }
         },
         "actionsMenu": "Lisätoiminnot",

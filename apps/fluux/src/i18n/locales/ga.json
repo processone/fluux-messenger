@@ -199,6 +199,17 @@
                 "tofu": "Gan fíorú",
                 "untrusted": "Neamhiontaofa",
                 "unknown": "Anaithnid"
+            },
+            "omemo": {
+                "title": "Gléasanna",
+                "summary": "{{count}} ghléas, {{verified}} fíoraithe",
+                "deviceLabel": "Gléas {{id}}",
+                "noKeyYet": "Níl aon eochair foilsithe fós",
+                "verify": "Fíoraigh",
+                "revoke": "Cúlghair",
+                "loading": "Gléasanna á lódáil...",
+                "loadError": "Níorbh fhéidir na gléasanna a lódáil",
+                "retry": "Bain triail eile as"
             }
         },
         "actionsMenu": "Tuilleadh gníomhartha",

@@ -199,6 +199,17 @@
                 "tofu": "Niet geverifieerd",
                 "untrusted": "Niet vertrouwd",
                 "unknown": "Onbekend"
+            },
+            "omemo": {
+                "title": "Apparaten",
+                "summary": "{{count}} apparaten, {{verified}} geverifieerd",
+                "deviceLabel": "Apparaat {{id}}",
+                "noKeyYet": "Nog geen sleutel gepubliceerd",
+                "verify": "Verifiëren",
+                "revoke": "Intrekken",
+                "loading": "Apparaten laden...",
+                "loadError": "Kan apparaten niet laden",
+                "retry": "Opnieuw proberen"
             }
         },
         "actionsMenu": "Meer acties",

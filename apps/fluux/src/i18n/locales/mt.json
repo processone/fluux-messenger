@@ -201,6 +201,17 @@
                 "tofu": "Mhux ivverifikat",
                 "untrusted": "Mhux affidabbli",
                 "unknown": "Mhux magħruf"
+            },
+            "omemo": {
+                "title": "Apparati",
+                "summary": "{{count}} apparati, {{verified}} verifikati",
+                "deviceLabel": "Apparat {{id}}",
+                "noKeyYet": "Għadha ma ġiet ippubblikata l-ebda ċavetta",
+                "verify": "Ivverifika",
+                "revoke": "Irrevoka",
+                "loading": "Qed jitgħabbew l-apparati...",
+                "loadError": "Ma setgħux jitgħabbew l-apparati",
+                "retry": "Erġa' pprova"
             }
         },
         "actionsMenu": "Aktar azzjonijiet",

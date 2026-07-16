@@ -201,6 +201,17 @@
                 "tofu": "Neověřeno",
                 "untrusted": "Nedůvěryhodné",
                 "unknown": "Neznámé"
+            },
+            "omemo": {
+                "title": "Zařízení",
+                "summary": "{{count}} zařízení, {{verified}} ověřených",
+                "deviceLabel": "Zařízení {{id}}",
+                "noKeyYet": "Zatím nebyl zveřejněn žádný klíč",
+                "verify": "Ověřit",
+                "revoke": "Odvolat",
+                "loading": "Načítání zařízení...",
+                "loadError": "Zařízení se nepodařilo načíst",
+                "retry": "Zkusit znovu"
             }
         },
         "actionsMenu": "Další akce",

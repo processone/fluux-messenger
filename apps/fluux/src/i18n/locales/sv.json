@@ -199,6 +199,17 @@
                 "tofu": "Ej verifierat",
                 "untrusted": "Opålitlig",
                 "unknown": "Okänd"
+            },
+            "omemo": {
+                "title": "Enheter",
+                "summary": "{{count}} enheter, {{verified}} verifierade",
+                "deviceLabel": "Enhet {{id}}",
+                "noKeyYet": "Ingen nyckel har publicerats ännu",
+                "verify": "Verifiera",
+                "revoke": "Återkalla",
+                "loading": "Läser in enheter...",
+                "loadError": "Det gick inte att läsa in enheterna",
+                "retry": "Försök igen"
             }
         },
         "actionsMenu": "Fler åtgärder",

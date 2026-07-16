@@ -199,6 +199,17 @@
                 "tofu": "Ikke bekræftet",
                 "untrusted": "Ikke pålidelig",
                 "unknown": "Ukendt"
+            },
+            "omemo": {
+                "title": "Enheder",
+                "summary": "{{count}} enheder, {{verified}} verificeret",
+                "deviceLabel": "Enhed {{id}}",
+                "noKeyYet": "Der er endnu ikke offentliggjort nogen nøgle",
+                "verify": "Verificér",
+                "revoke": "Tilbagekald",
+                "loading": "Indlæser enheder...",
+                "loadError": "Kunne ikke indlæse enheder",
+                "retry": "Prøv igen"
             }
         },
         "actionsMenu": "Flere handlinger",

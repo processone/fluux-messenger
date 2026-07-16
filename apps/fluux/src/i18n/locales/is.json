@@ -199,6 +199,17 @@
                 "tofu": "Ekki staðfest",
                 "untrusted": "Ekki treyst",
                 "unknown": "Óþekkt"
+            },
+            "omemo": {
+                "title": "Tæki",
+                "summary": "{{count}} tæki, {{verified}} staðfest",
+                "deviceLabel": "Tæki {{id}}",
+                "noKeyYet": "Enginn lykill hefur enn verið birtur",
+                "verify": "Staðfesta",
+                "revoke": "Afturkalla",
+                "loading": "Hleð tækjum...",
+                "loadError": "Ekki tókst að hlaða tækjum",
+                "retry": "Reyna aftur"
             }
         },
         "actionsMenu": "Fleiri aðgerðir",

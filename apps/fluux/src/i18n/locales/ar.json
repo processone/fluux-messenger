@@ -199,6 +199,17 @@
                 "tofu": "غير موثّق",
                 "untrusted": "غير موثوق به",
                 "unknown": "غير معروف"
+            },
+            "omemo": {
+                "title": "الأجهزة",
+                "summary": "{{count}} أجهزة، {{verified}} موثّقة",
+                "deviceLabel": "الجهاز {{id}}",
+                "noKeyYet": "لم يُنشر أي مفتاح بعد",
+                "verify": "توثيق",
+                "revoke": "إبطال",
+                "loading": "جارٍ تحميل الأجهزة...",
+                "loadError": "تعذّر تحميل الأجهزة",
+                "retry": "إعادة المحاولة"
             }
         },
         "actionsMenu": "إجراءات أخرى",

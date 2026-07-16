@@ -200,6 +200,17 @@
                 "tofu": "Non vérifié",
                 "untrusted": "Non fiable",
                 "unknown": "Inconnu"
+            },
+            "omemo": {
+                "title": "Appareils",
+                "summary": "{{count}} appareils, {{verified}} vérifiés",
+                "deviceLabel": "Appareil {{id}}",
+                "noKeyYet": "Aucune clé publiée pour le moment",
+                "verify": "Vérifier",
+                "revoke": "Révoquer",
+                "loading": "Chargement des appareils...",
+                "loadError": "Impossible de charger les appareils",
+                "retry": "Réessayer"
             }
         },
         "actionsMenu": "Plus d'actions",

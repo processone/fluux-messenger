@@ -201,6 +201,17 @@
                 "tofu": "Kontrollimata",
                 "untrusted": "Ebausaldusväärne",
                 "unknown": "Teadmata"
+            },
+            "omemo": {
+                "title": "Seadmed",
+                "summary": "{{count}} seadet, {{verified}} kinnitatud",
+                "deviceLabel": "Seade {{id}}",
+                "noKeyYet": "Ühtki võtit pole veel avaldatud",
+                "verify": "Kinnita",
+                "revoke": "Tühista",
+                "loading": "Seadmete laadimine...",
+                "loadError": "Seadmeid ei õnnestunud laadida",
+                "retry": "Proovi uuesti"
             }
         },
         "actionsMenu": "Rohkem toiminguid",

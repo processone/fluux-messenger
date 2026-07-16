@@ -201,6 +201,17 @@
                 "tofu": "No verificat",
                 "untrusted": "No fiable",
                 "unknown": "Desconegut"
+            },
+            "omemo": {
+                "title": "Dispositius",
+                "summary": "{{count}} dispositius, {{verified}} verificats",
+                "deviceLabel": "Dispositiu {{id}}",
+                "noKeyYet": "Encara no s'ha publicat cap clau",
+                "verify": "Verifica",
+                "revoke": "Revoca",
+                "loading": "S'estan carregant els dispositius...",
+                "loadError": "No s'han pogut carregar els dispositius",
+                "retry": "Torna-ho a provar"
             }
         },
         "actionsMenu": "Més accions",

@@ -201,6 +201,17 @@
                 "tofu": "Niezweryfikowane",
                 "untrusted": "Niezaufane",
                 "unknown": "Nieznane"
+            },
+            "omemo": {
+                "title": "Urządzenia",
+                "summary": "{{count}} urządzeń, {{verified}} zweryfikowanych",
+                "deviceLabel": "Urządzenie {{id}}",
+                "noKeyYet": "Nie opublikowano jeszcze żadnego klucza",
+                "verify": "Zweryfikuj",
+                "revoke": "Unieważnij",
+                "loading": "Ładowanie urządzeń...",
+                "loadError": "Nie udało się załadować urządzeń",
+                "retry": "Spróbuj ponownie"
             }
         },
         "actionsMenu": "Więcej akcji",

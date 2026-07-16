@@ -1,3 +1,4 @@
+import type React from 'react'
 import { useTranslation } from 'react-i18next'
 import { ArrowLeft } from 'lucide-react'
 import type { ConversationEncryptionState } from '@/hooks/useConversationEncryptionState'
@@ -11,6 +12,8 @@ interface ContactSecurityDetailProps {
   onDisableEncryption: () => void
   onEnableEncryption: () => void
   onClose: () => void
+  peerJid?: string
+  omemo?: React.ComponentProps<typeof SecurityTab>['omemo']
 }
 
 export function ContactSecurityDetail({
@@ -20,6 +23,8 @@ export function ContactSecurityDetail({
   onDisableEncryption,
   onEnableEncryption,
   onClose,
+  peerJid,
+  omemo,
 }: ContactSecurityDetailProps) {
   const { t } = useTranslation()
 
@@ -46,6 +51,8 @@ export function ContactSecurityDetail({
           onRequestRevoke={onRequestRevoke}
           onDisableEncryption={onDisableEncryption}
           onEnableEncryption={onEnableEncryption}
+          peerJid={peerJid}
+          omemo={omemo}
         />
       </div>
     </ModalOverlay>

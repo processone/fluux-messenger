@@ -201,6 +201,17 @@
                 "tofu": "Ni preverjeno",
                 "untrusted": "Ni zaupanja vredno",
                 "unknown": "Neznano"
+            },
+            "omemo": {
+                "title": "Naprave",
+                "summary": "{{count}} naprav, {{verified}} preverjenih",
+                "deviceLabel": "Naprava {{id}}",
+                "noKeyYet": "Ključ še ni bil objavljen",
+                "verify": "Preveri",
+                "revoke": "Prekliči",
+                "loading": "Nalaganje naprav...",
+                "loadError": "Naprav ni bilo mogoče naložiti",
+                "retry": "Poskusi znova"
             }
         },
         "actionsMenu": "Več dejanj",

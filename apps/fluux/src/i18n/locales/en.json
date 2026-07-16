@@ -200,6 +200,17 @@
                 "tofu": "Not verified",
                 "untrusted": "Untrusted",
                 "unknown": "Unknown"
+            },
+            "omemo": {
+                "title": "Devices",
+                "summary": "{{count}} devices, {{verified}} verified",
+                "deviceLabel": "Device {{id}}",
+                "noKeyYet": "No key published yet",
+                "verify": "Verify",
+                "revoke": "Revoke",
+                "loading": "Loading devices...",
+                "loadError": "Could not load devices",
+                "retry": "Retry"
             }
         },
         "actionsMenu": "More actions"

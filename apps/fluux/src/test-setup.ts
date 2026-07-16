@@ -68,6 +68,13 @@ void i18n.use(initReactI18next).init({
             tofu: 'Encrypted (not verified)',
             fingerprintLabel: 'OpenPGP fingerprint',
             verifyButton: 'Verify fingerprint',
+            // OMEMO device-row label must interpolate the id so per-device rows
+            // are distinguishable (deviceLabel is asserted in SecurityTab.omemo.test).
+            // The other omemo.* keys are intentionally left out so the test can
+            // assert on their literal key strings (loadError/retry).
+            omemo: {
+              deviceLabel: 'Device {{id}}',
+            },
           },
         },
         conversations: {

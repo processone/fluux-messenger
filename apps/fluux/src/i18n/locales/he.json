@@ -199,6 +199,17 @@
                 "tofu": "לא מאומת",
                 "untrusted": "לא מהימן",
                 "unknown": "לא ידוע"
+            },
+            "omemo": {
+                "title": "מכשירים",
+                "summary": "{{count}} מכשירים, {{verified}} מאומתים",
+                "deviceLabel": "מכשיר {{id}}",
+                "noKeyYet": "עדיין לא פורסם מפתח",
+                "verify": "אימות",
+                "revoke": "ביטול",
+                "loading": "טוען מכשירים...",
+                "loadError": "לא ניתן לטעון את המכשירים",
+                "retry": "נסה שוב"
             }
         },
         "actionsMenu": "פעולות נוספות",

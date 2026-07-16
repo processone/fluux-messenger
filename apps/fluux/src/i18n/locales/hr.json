@@ -199,6 +199,17 @@
                 "tofu": "Nije potvrđeno",
                 "untrusted": "Nepouzdano",
                 "unknown": "Nepoznato"
+            },
+            "omemo": {
+                "title": "Uređaji",
+                "summary": "{{count}} uređaja, {{verified}} provjereno",
+                "deviceLabel": "Uređaj {{id}}",
+                "noKeyYet": "Ključ još nije objavljen",
+                "verify": "Provjeri",
+                "revoke": "Opozovi",
+                "loading": "Učitavanje uređaja...",
+                "loadError": "Uređaje nije moguće učitati",
+                "retry": "Pokušaj ponovno"
             }
         },
         "actionsMenu": "Više radnji",

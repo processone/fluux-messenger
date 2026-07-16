@@ -199,6 +199,17 @@
                 "tofu": "Ikke bekreftet",
                 "untrusted": "Ikke pålitelig",
                 "unknown": "Ukjent"
+            },
+            "omemo": {
+                "title": "Enheter",
+                "summary": "{{count}} enheter, {{verified}} verifisert",
+                "deviceLabel": "Enhet {{id}}",
+                "noKeyYet": "Ingen nøkkel er publisert ennå",
+                "verify": "Verifiser",
+                "revoke": "Tilbakekall",
+                "loading": "Laster enheter...",
+                "loadError": "Kunne ikke laste enheter",
+                "retry": "Prøv igjen"
             }
         },
         "actionsMenu": "Flere handlinger",

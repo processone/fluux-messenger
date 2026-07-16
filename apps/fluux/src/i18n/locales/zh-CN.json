@@ -199,6 +199,17 @@
                 "tofu": "未验证",
                 "untrusted": "不可信",
                 "unknown": "未知"
+            },
+            "omemo": {
+                "title": "设备",
+                "summary": "{{count}} 台设备，{{verified}} 台已验证",
+                "deviceLabel": "设备 {{id}}",
+                "noKeyYet": "尚未发布密钥",
+                "verify": "验证",
+                "revoke": "撤销",
+                "loading": "正在加载设备...",
+                "loadError": "无法加载设备",
+                "retry": "重试"
             }
         },
         "actionsMenu": "更多操作",

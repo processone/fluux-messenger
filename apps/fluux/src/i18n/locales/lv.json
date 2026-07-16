@@ -200,6 +200,17 @@
                 "tofu": "Nepārbaudīts",
                 "untrusted": "Neuzticams",
                 "unknown": "Nezināms"
+            },
+            "omemo": {
+                "title": "Ierīces",
+                "summary": "{{count}} ierīces, {{verified}} pārbaudītas",
+                "deviceLabel": "Ierīce {{id}}",
+                "noKeyYet": "Neviena atslēga vēl nav publicēta",
+                "verify": "Pārbaudīt",
+                "revoke": "Atsaukt",
+                "loading": "Notiek ierīču ielāde...",
+                "loadError": "Neizdevās ielādēt ierīces",
+                "retry": "Mēģināt vēlreiz"
             }
         },
         "actionsMenu": "Vairāk darbību",

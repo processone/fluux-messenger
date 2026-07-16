@@ -200,6 +200,17 @@
                 "tofu": "Neoverené",
                 "untrusted": "Nedôveryhodné",
                 "unknown": "Neznáme"
+            },
+            "omemo": {
+                "title": "Zariadenia",
+                "summary": "{{count}} zariadení, {{verified}} overených",
+                "deviceLabel": "Zariadenie {{id}}",
+                "noKeyYet": "Zatiaľ nebol zverejnený žiadny kľúč",
+                "verify": "Overiť",
+                "revoke": "Odvolať",
+                "loading": "Načítavajú sa zariadenia...",
+                "loadError": "Zariadenia sa nepodarilo načítať",
+                "retry": "Skúsiť znova"
             }
         },
         "actionsMenu": "Ďalšie akcie",

@@ -199,6 +199,17 @@
                 "tofu": "Nem ellenőrzött",
                 "untrusted": "Nem megbízható",
                 "unknown": "Ismeretlen"
+            },
+            "omemo": {
+                "title": "Eszközök",
+                "summary": "{{count}} eszköz, {{verified}} ellenőrzött",
+                "deviceLabel": "Eszköz {{id}}",
+                "noKeyYet": "Még nincs közzétett kulcs",
+                "verify": "Ellenőrzés",
+                "revoke": "Visszavonás",
+                "loading": "Eszközök betöltése...",
+                "loadError": "Az eszközöket nem sikerült betölteni",
+                "retry": "Újra"
             }
         },
         "actionsMenu": "További műveletek",

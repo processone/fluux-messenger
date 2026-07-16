@@ -199,6 +199,17 @@
                 "tofu": "Nepatvirtinta",
                 "untrusted": "Nepatikima",
                 "unknown": "Nežinoma"
+            },
+            "omemo": {
+                "title": "Įrenginiai",
+                "summary": "{{count}} įrenginių, {{verified}} patvirtinta",
+                "deviceLabel": "Įrenginys {{id}}",
+                "noKeyYet": "Raktas dar nepaskelbtas",
+                "verify": "Patvirtinti",
+                "revoke": "Atšaukti",
+                "loading": "Įkeliami įrenginiai...",
+                "loadError": "Nepavyko įkelti įrenginių",
+                "retry": "Bandyti dar kartą"
             }
         },
         "actionsMenu": "Daugiau veiksmų",

@@ -201,6 +201,17 @@
                 "tofu": "No verificado",
                 "untrusted": "No confiable",
                 "unknown": "Desconocido"
+            },
+            "omemo": {
+                "title": "Dispositivos",
+                "summary": "{{count}} dispositivos, {{verified}} verificados",
+                "deviceLabel": "Dispositivo {{id}}",
+                "noKeyYet": "Aún no se ha publicado ninguna clave",
+                "verify": "Verificar",
+                "revoke": "Revocar",
+                "loading": "Cargando dispositivos...",
+                "loadError": "No se pudieron cargar los dispositivos",
+                "retry": "Reintentar"
             }
         },
         "actionsMenu": "Más acciones",
