@@ -364,12 +364,13 @@ function EncryptionIcon({
 
   // encrypted — shield/lock icon + popover with verify + disable options.
   const verified = state.kind === 'encrypted' && state.trust === 'verified'
-  const tofuNew = state.kind === 'encrypted' && state.trust === 'tofu-new'
-  // `tofu-new` (freshly TOFU-pinned, unchanged, not yet OOB-verified) renders
-  // the same neutral gray Shield as `unverified` — homogeneous with the Settings
-  // → Encryption screen and the Security tab. `tofuNew` survives only to pick a
-  // gentler tooltip below. The yellow ShieldAlert is now reserved exclusively
-  // for the genuine `blocked` (key-changed) alert, so the two states no longer
+  const tofuNew = state.kind === 'encrypted' && state.firstSeen === true
+  // A freshly TOFU-pinned, first-contact peer (`firstSeen`, not yet
+  // OOB-verified) renders the same neutral gray Shield as any other
+  // non-verified `tofu` state — homogeneous with the Settings → Encryption
+  // screen and the Security tab. `tofuNew` survives only to pick a gentler
+  // tooltip below. The yellow ShieldAlert is now reserved exclusively for
+  // the genuine `blocked` (key-changed) alert, so the two states no longer
   // share an alarming icon.
   const Icon = verified ? ShieldCheck : Shield
   const colorClass = verified

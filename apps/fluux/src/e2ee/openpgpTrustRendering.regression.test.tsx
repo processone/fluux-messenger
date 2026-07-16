@@ -71,13 +71,18 @@ vi.mock('@/utils/statusText', () => ({
   getTranslatedStatusText: (contact: Contact) => contact.statusMessage ?? 'Online',
 }))
 
-function renderHeader(trust: 'verified' | 'unverified' | 'tofu-new') {
+function renderHeader(trust: 'verified' | 'tofu', firstSeen?: boolean) {
   return render(
     <ChatHeader
       name="Alice Smith"
       type="chat"
       jid="alice@example.com"
-      encryptionState={{ kind: 'encrypted', fingerprint: 'AAAA1111BBBB2222CCCC3333DDDD4444EEEE5555', trust }}
+      encryptionState={{
+        kind: 'encrypted',
+        fingerprint: 'AAAA1111BBBB2222CCCC3333DDDD4444EEEE5555',
+        trust,
+        ...(firstSeen ? { firstSeen: true } : {}),
+      }}
       onEncryptionClick={noop}
       onDisableEncryptionClick={noop}
     />,
@@ -100,20 +105,21 @@ describe('OpenPGP trust rendering (characterization — must not change under Co
     expect(container.textContent).not.toContain('Verify fingerprint')
   })
 
-  it('SecurityTab: unverified → gray Shield + Verify button', () => {
-    const { container } = renderTab({ kind: 'encrypted', fingerprint: 'ABCD1234', trust: 'unverified' })
-    // The heading icon is a plain Shield (not ShieldCheck), gray.
+  it('SecurityTab: tofu (not verified) → gray Shield + Verify button', () => {
+    const { container } = renderTab({ kind: 'encrypted', fingerprint: 'ABCD1234', trust: 'tofu' })
     const plainShield = container.querySelector('.lucide-shield')
     expect(plainShield).not.toBeNull()
     expect(plainShield!.getAttribute('class')).toContain('text-fluux-muted')
+    // `verifyButton` IS in the test i18n subset — assert the real translated string.
     expect(container.textContent).toContain('Verify fingerprint')
     expect(container.textContent).not.toContain('contacts.encryption.removeVerification')
   })
 
-  it('SecurityTab: tofu-new → gray Shield, neither Verify nor Remove button (current quirk)', () => {
-    const { container } = renderTab({ kind: 'encrypted', fingerprint: 'ABCD1234', trust: 'tofu-new' })
+  it('SecurityTab: tofu (firstSeen) → gray Shield + Verify button, no Remove button', () => {
+    const { container } = renderTab({ kind: 'encrypted', fingerprint: 'ABCD1234', trust: 'tofu', firstSeen: true })
     expect(container.querySelector('.lucide-shield')).not.toBeNull()
-    expect(container.textContent).not.toContain('Verify fingerprint')
+    // `verifyButton` IS in the test i18n subset — assert the real translated string.
+    expect(container.textContent).toContain('Verify fingerprint')
     expect(container.textContent).not.toContain('contacts.encryption.removeVerification')
   })
 
@@ -122,13 +128,13 @@ describe('OpenPGP trust rendering (characterization — must not change under Co
     expect(g).toEqual({ icon: ShieldCheck, label: 'contacts.encryption.glanceVerified', tone: 'success' })
   })
 
-  it('getGlance: unverified → Lock/glanceEncrypted/neutral', () => {
-    const g = getGlance({ kind: 'encrypted', fingerprint: 'FP', trust: 'unverified' }, identity)
+  it('getGlance: tofu → Lock/glanceEncrypted/neutral', () => {
+    const g = getGlance({ kind: 'encrypted', fingerprint: 'FP', trust: 'tofu' }, identity)
     expect(g).toEqual({ icon: Lock, label: 'contacts.encryption.glanceEncrypted', tone: 'neutral' })
   })
 
-  it('getGlance: tofu-new → Lock/glanceEncrypted/neutral (not verified)', () => {
-    const g = getGlance({ kind: 'encrypted', fingerprint: 'FP', trust: 'tofu-new' }, identity)
+  it('getGlance: tofu (firstSeen) → Lock/glanceEncrypted/neutral (not verified)', () => {
+    const g = getGlance({ kind: 'encrypted', fingerprint: 'FP', trust: 'tofu', firstSeen: true }, identity)
     expect(g).toEqual({ icon: Lock, label: 'contacts.encryption.glanceEncrypted', tone: 'neutral' })
   })
 
@@ -148,8 +154,8 @@ describe('OpenPGP trust rendering (characterization — must not change under Co
     expect(button.getAttribute('aria-label')).toBe('chat.encryption.encryptedTo')
   })
 
-  it('ChatHeader: unverified → gray Shield (not ShieldCheck) on the trigger button', () => {
-    const { container } = renderHeader('unverified')
+  it('ChatHeader: tofu (not verified) → gray Shield (not ShieldCheck) on the trigger button', () => {
+    const { container } = renderHeader('tofu')
     const shield = container.querySelector('button .lucide-shield')
     expect(shield).not.toBeNull()
     expect(container.querySelector('button .lucide-shield-check')).toBeNull()
@@ -160,8 +166,8 @@ describe('OpenPGP trust rendering (characterization — must not change under Co
     expect(button.getAttribute('aria-label')).toBe('chat.verifyPeer.chipAriaLabel')
   })
 
-  it('ChatHeader: tofu-new → same gray Shield + same aria-label as unverified (current quirk, no distinct chip)', () => {
-    const { container } = renderHeader('tofu-new')
+  it('ChatHeader: tofu (firstSeen) → same gray Shield + same aria-label as tofu (current quirk, no distinct chip)', () => {
+    const { container } = renderHeader('tofu', true)
     const shield = container.querySelector('button .lucide-shield')
     expect(shield).not.toBeNull()
     expect(container.querySelector('button .lucide-shield-check')).toBeNull()
@@ -170,10 +176,10 @@ describe('OpenPGP trust rendering (characterization — must not change under Co
     expect(button.getAttribute('aria-label')).toBe('chat.verifyPeer.chipAriaLabel')
   })
 
-  it('ChatHeader: unverified vs tofu-new hover tooltips differ (calm tofu-new copy has a real default string; unverified falls back to raw key)', async () => {
+  it('ChatHeader: tofu vs tofu (firstSeen) hover tooltips differ (calm firstSeen copy has a real default string; plain tofu falls back to raw key)', async () => {
     vi.useFakeTimers()
     try {
-      const unverified = renderHeader('unverified')
+      const unverified = renderHeader('tofu')
       const unverifiedButton = unverified.container.querySelector('button')!
       fireEvent.mouseEnter(unverifiedButton)
       await act(async () => {
@@ -184,7 +190,7 @@ describe('OpenPGP trust rendering (characterization — must not change under Co
       expect(document.body.textContent).toContain('chat.encryption.openpgpTooltip')
       unverified.unmount()
 
-      const tofuNew = renderHeader('tofu-new')
+      const tofuNew = renderHeader('tofu', true)
       const tofuButton = tofuNew.container.querySelector('button')!
       fireEvent.mouseEnter(tofuButton)
       await act(async () => {

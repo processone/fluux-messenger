@@ -128,7 +128,7 @@ export function SecurityTab({
               </div>
             </div>
 
-            {state.trust === 'unverified' && (
+            {state.trust !== 'verified' && (
               <button
                 type="button"
                 onClick={onVerify}

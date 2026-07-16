@@ -228,7 +228,7 @@ describe('ChatHeader', () => {
   })
 
   describe('Encryption menu', () => {
-    const encrypted = (trust: 'verified' | 'unverified' | 'tofu-new') =>
+    const encrypted = (trust: 'verified' | 'tofu') =>
       ({ kind: 'encrypted', fingerprint: 'AAAA1111BBBB2222CCCC3333DDDD4444EEEE5555', trust }) as const
 
     it('labels the verify item "Verify ... key" when the key is not yet verified', () => {
@@ -239,7 +239,7 @@ describe('ChatHeader', () => {
           type="chat"
           contact={contact}
           jid={contact.jid}
-          encryptionState={encrypted('unverified')}
+          encryptionState={encrypted('tofu')}
           onEncryptionClick={vi.fn()}
           onDisableEncryptionClick={vi.fn()}
         />

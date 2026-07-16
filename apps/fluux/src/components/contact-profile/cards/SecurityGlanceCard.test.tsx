@@ -11,8 +11,8 @@ describe('SecurityGlanceCard', () => {
     expect(onOpen).toHaveBeenCalledOnce()
   })
 
-  it('shows unverified label for an unverified encrypted state', () => {
-    render(<SecurityGlanceCard state={{ kind: 'encrypted', fingerprint: 'AB', trust: 'unverified' }} onOpen={() => {}} />)
+  it('shows unverified label for a tofu (not verified) encrypted state', () => {
+    render(<SecurityGlanceCard state={{ kind: 'encrypted', fingerprint: 'AB', trust: 'tofu' }} onOpen={() => {}} />)
     expect(screen.getByText('Encrypted, not verified')).toBeInTheDocument()
   })
 
