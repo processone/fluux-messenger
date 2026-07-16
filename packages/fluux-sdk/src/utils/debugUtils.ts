@@ -24,6 +24,7 @@
 import type { XMPPClient } from '../core/XMPPClient'
 import { roomStore } from '../stores/roomStore'
 import { connectionStore } from '../stores/connectionStore'
+import { MAM_ROOM_FORWARD_MAX_PAGES } from './mamCatchUpUtils'
 
 /**
  * Debug utilities interface exposed on window.__FLUUX_DEBUG__
@@ -91,6 +92,9 @@ function createDebugUtils(client: XMPPClient): FluuxDebugUtils {
             roomJid,
             start: startISO,
             max: 500, // Reasonable limit per room
+            // Explicit — this is the background auto-pagination default anyway,
+            // but debug tooling shouldn't silently ride an implicit default.
+            maxAutoPages: MAM_ROOM_FORWARD_MAX_PAGES,
           })
           processed++
           console.log(`[FLUUX_DEBUG] ✓ ${roomJid} done`)

@@ -313,10 +313,6 @@ interface ChatState {
   mergeMAMMessages: (conversationId: string, messages: Message[], rsm: RSMResponse, complete: boolean, direction: MAMQueryDirection, isFetchLatest?: boolean, preserveGapMarker?: boolean) => void
   getMAMQueryState: (conversationId: string) => MAMQueryState
   resetMAMStates: () => void
-  /** Mark all conversations as needing a catch-up MAM query (called on reconnect) */
-  markAllNeedsCatchUp: () => void
-  /** Clear the needsCatchUp flag for a specific conversation */
-  clearNeedsCatchUp: (conversationId: string) => void
   /**
    * Update only the lastMessage preview for a conversation without affecting the messages array.
    * Used for background preview refresh to sync sidebar with server state after being offline.
@@ -1898,18 +1894,6 @@ export const chatStore = createStore<ChatState>()(
 
       resetMAMStates: () => {
         set({ mamQueryStates: new Map() })
-      },
-
-      markAllNeedsCatchUp: () => {
-        set((state) => ({
-          mamQueryStates: mamState.markAllNeedsCatchUp(state.mamQueryStates),
-        }))
-      },
-
-      clearNeedsCatchUp: (conversationId) => {
-        set((state) => ({
-          mamQueryStates: mamState.clearNeedsCatchUp(state.mamQueryStates, conversationId),
-        }))
       },
 
       updateLastMessagePreview: (conversationId, lastMessage) => {

@@ -657,10 +657,6 @@ export interface RoomState {
   mergeRoomMAMMessages: (roomJid: string, messages: RoomMessage[], rsm: RSMResponse, complete: boolean, direction: MAMQueryDirection, preserveGapMarker?: boolean, isFetchLatest?: boolean) => void
   getRoomMAMQueryState: (roomJid: string) => MAMQueryState
   resetRoomMAMStates: () => void
-  /** Mark all rooms as needing a catch-up MAM query (called on reconnect) */
-  markAllRoomsNeedsCatchUp: () => void
-  /** Clear the needsCatchUp flag for a specific room */
-  clearRoomNeedsCatchUp: (roomJid: string) => void
   /** Update only the lastMessage preview without affecting message history */
   updateLastMessagePreview: (roomJid: string, lastMessage: RoomMessage) => void
   setTargetMessageId: (id: string | null) => void
@@ -2800,18 +2796,6 @@ export const roomStore = createStore<RoomState>()(
 
   resetRoomMAMStates: () => {
     set({ mamQueryStates: new Map() })
-  },
-
-  markAllRoomsNeedsCatchUp: () => {
-    set((state) => ({
-      mamQueryStates: mamState.markAllNeedsCatchUp(state.mamQueryStates),
-    }))
-  },
-
-  clearRoomNeedsCatchUp: (roomJid) => {
-    set((state) => ({
-      mamQueryStates: mamState.clearNeedsCatchUp(state.mamQueryStates, roomJid),
-    }))
   },
 
   /**

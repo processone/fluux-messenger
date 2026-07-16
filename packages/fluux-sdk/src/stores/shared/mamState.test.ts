@@ -5,8 +5,6 @@ import {
   setMAMLoading,
   setMAMError,
   setMAMQueryCompleted,
-  markAllNeedsCatchUp,
-  clearNeedsCatchUp,
 } from './mamState'
 import type { MAMQueryState } from '../../core/types'
 
@@ -164,7 +162,6 @@ describe('mamState utilities', () => {
         isHistoryComplete: true,
         isCaughtUpToLive: false,
         oldestFetchedId: 'msg-oldest',
-        needsCatchUp: false,
         forwardGapTimestamp: undefined,
       })
     })
@@ -180,7 +177,6 @@ describe('mamState utilities', () => {
         isHistoryComplete: false,
         isCaughtUpToLive: true,
         oldestFetchedId: undefined, // Not updated for forward queries
-        needsCatchUp: false,
         forwardGapTimestamp: undefined, // Cleared when caught up
       })
     })
@@ -312,63 +308,4 @@ describe('mamState utilities', () => {
     })
   })
 
-  describe('markAllNeedsCatchUp', () => {
-    it('marks all existing states as needing catch-up', () => {
-      const states = new Map<string, MAMQueryState>()
-      states.set('conv-1', { ...DEFAULT_MAM_STATE, hasQueried: true })
-      states.set('conv-2', { ...DEFAULT_MAM_STATE, hasQueried: true })
-
-      const result = markAllNeedsCatchUp(states)
-
-      expect(result.get('conv-1')?.needsCatchUp).toBe(true)
-      expect(result.get('conv-2')?.needsCatchUp).toBe(true)
-    })
-
-    it('returns empty map when given empty map', () => {
-      const states = new Map<string, MAMQueryState>()
-      const result = markAllNeedsCatchUp(states)
-      expect(result.size).toBe(0)
-    })
-
-    it('does not mutate the original map', () => {
-      const states = new Map<string, MAMQueryState>()
-      states.set('conv-1', { ...DEFAULT_MAM_STATE })
-
-      const result = markAllNeedsCatchUp(states)
-
-      expect(result).not.toBe(states)
-      expect(states.get('conv-1')?.needsCatchUp).toBeUndefined()
-    })
-  })
-
-  describe('clearNeedsCatchUp', () => {
-    it('clears needsCatchUp flag for specific conversation', () => {
-      const states = new Map<string, MAMQueryState>()
-      states.set('conv-1', { ...DEFAULT_MAM_STATE, needsCatchUp: true })
-      states.set('conv-2', { ...DEFAULT_MAM_STATE, needsCatchUp: true })
-
-      const result = clearNeedsCatchUp(states, 'conv-1')
-
-      expect(result.get('conv-1')?.needsCatchUp).toBe(false)
-      expect(result.get('conv-2')?.needsCatchUp).toBe(true) // Unchanged
-    })
-
-    it('returns original map when conversation not found', () => {
-      const states = new Map<string, MAMQueryState>()
-      states.set('conv-1', { ...DEFAULT_MAM_STATE })
-
-      const result = clearNeedsCatchUp(states, 'unknown')
-
-      expect(result).toBe(states) // Same reference
-    })
-
-    it('returns original map when needsCatchUp is already false', () => {
-      const states = new Map<string, MAMQueryState>()
-      states.set('conv-1', { ...DEFAULT_MAM_STATE, needsCatchUp: false })
-
-      const result = clearNeedsCatchUp(states, 'conv-1')
-
-      expect(result).toBe(states) // Same reference
-    })
-  })
 })

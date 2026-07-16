@@ -222,12 +222,6 @@ export interface MAMQueryState {
   /** ID of oldest fetched message (rsm.first) - use as 'before' cursor for pagination */
   oldestFetchedId?: string
   /**
-   * True if conversation needs a catch-up MAM query (e.g., after reconnect).
-   * Set to true on reconnect for all conversations, cleared after catch-up query completes.
-   * Used by side effects to determine if a MAM query should run when conversation opens.
-   */
-  needsCatchUp?: boolean
-  /**
    * Epoch ms of the newest message from an incomplete forward catch-up.
    * Used to position the gap marker in the message list. Set when a forward
    * catch-up query ends with complete=false, cleared when caught up to live.

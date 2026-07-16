@@ -151,40 +151,8 @@ export function setMAMQueryCompleted(
     oldestFetchedId: direction === 'backward' && oldestFetchedId
       ? oldestFetchedId
       : current.oldestFetchedId,
-    // Clear needsCatchUp after successful query
-    needsCatchUp: false,
     forwardGapTimestamp,
   })
-  return newStates
-}
-
-/**
- * Mark all conversations/rooms as needing a catch-up MAM query.
- * Called on reconnect to ensure open conversations fetch new messages.
- */
-export function markAllNeedsCatchUp(
-  states: Map<string, MAMQueryState>
-): Map<string, MAMQueryState> {
-  const newStates = new Map(states)
-  for (const [id, state] of newStates) {
-    newStates.set(id, { ...state, needsCatchUp: true })
-  }
-  return newStates
-}
-
-/**
- * Clear the needsCatchUp flag for a specific conversation/room.
- * Called after catch-up query completes or when manually cleared.
- */
-export function clearNeedsCatchUp(
-  states: Map<string, MAMQueryState>,
-  id: string
-): Map<string, MAMQueryState> {
-  const current = states.get(id)
-  if (!current || !current.needsCatchUp) return states
-
-  const newStates = new Map(states)
-  newStates.set(id, { ...current, needsCatchUp: false })
   return newStates
 }
 

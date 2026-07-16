@@ -12,7 +12,8 @@
 // Constants
 // ============================================================================
 
-/** Max messages per forward catch-up query (used in side effects and background sync). */
+/** Max messages per forward catch-up query (used by the MAM catch-up orchestrator
+ *  and the "Load missing messages" continue-catch-up hook). */
 export const MAM_CATCHUP_FORWARD_MAX = 100
 
 /** Max messages for backward queries when no cached messages exist. */
@@ -27,10 +28,12 @@ export const MAM_CACHE_LOAD_LIMIT = 100
 /** Delay (ms) before room catch-up starts, to let rooms finish joining. */
 export const MAM_ROOM_CATCHUP_DELAY_MS = 10_000
 
-/** Max auto-pagination pages for forward room MAM catch-up.
- *  Room traffic is typically higher than 1:1, so we allow many more pages
- *  (50 × 100 = 5 000 stanzas) to close the gap after long offline periods.
- *  The loop still breaks early on `complete=true`. */
+/** The `queryRoomArchive` forward default (used when a caller doesn't pass its
+ *  own `maxAutoPages`): 50 × 100 = 5 000 stanzas, high enough to close a room
+ *  gap after long offline periods since room traffic typically outpaces 1:1.
+ *  The loop still breaks early on `complete=true`. Callers that want a
+ *  different bound (e.g. a one-page bounded context fetch) pass `maxAutoPages`
+ *  explicitly rather than relying on this default. */
 export const MAM_ROOM_FORWARD_MAX_PAGES = 50
 
 /** Max auto-pagination pages for a USER-INITIATED forward catch-up (manual "Catch up

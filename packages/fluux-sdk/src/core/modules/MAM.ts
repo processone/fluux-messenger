@@ -7,21 +7,32 @@
  *
  * ## Loading Strategy
  *
- * MAM queries follow a hybrid lazy + background approach:
+ * MAM queries follow a latest-first catch-up model, orchestrated per entity
+ * (1:1 conversation or room) by {@link MAM.runCatchUpHistory} / the
+ * `catchUpConversationHistory` / `catchUpRoomHistory` adapters:
  *
- * 1. **On connect (fast)**: Preview refresh fetches the latest message for each
- *    conversation to update sidebar previews (max=5, concurrency=3).
- * 2. **On connect (slow)**: Background catch-up populates full message history
- *    for all conversations and rooms (max=100, concurrency=2).
- * 3. **On connect (discovery)**: Query MAM for roster contacts that don't have an
- *    existing conversation, discovering messages received while offline.
- * 4. **On conversation open**: Side effects trigger a MAM query with `start` filter
- *    to fetch any remaining messages newer than the most recent cached message.
- * 5. **On scroll up**: `fetchOlderHistory()` queries MAM with `before` cursor for
- *    older messages (pagination).
+ * - **Phase A — align to live**: forward, id-exact from the held coverage
+ *   edge (the newest downloaded message's archive id), capped at
+ *   `MAM_CATCHUP_FORWARD_BAIL_PAGES`. A long gap (incomplete within the cap,
+ *   or an empty cache) bails to a `before:''` fetch-latest so the window
+ *   jumps straight to the live edge in one round-trip.
+ * - **Phase B — grow to the read pointer** (background entities only, not
+ *   the active one): while the XEP-0490 read pointer is unresolved, page
+ *   backward from the window bottom until the pointer's own message is
+ *   found, the archive start is reached, or a page-count cap is hit.
+ * - **Seams**: a gap between held history and the live edge is recorded with
+ *   its coverage archive ids (`startId`/`endId`) and healed from both
+ *   directions — forward catch-up resumes from the id-exact edge, backward
+ *   pagination shrinks/clears it as pages reach into or across it (see
+ *   `mamGap.ts`).
  *
- * This approach balances fast connection time with having messages ready when
- * the user opens any conversation.
+ * On connect, preview refresh (fast, max=5) updates sidebar previews first;
+ * background catch-up (max=100, concurrency=2) then runs the orchestrator
+ * above for every conversation and room; discovery queries MAM for roster
+ * contacts with no existing conversation. On conversation/room open, side
+ * effects re-run the same orchestrator to fetch anything newer than the
+ * cached edge. `fetchOlderHistory()` handles explicit scroll-up pagination
+ * with a `before` cursor, independent of the catch-up orchestrator.
  *
  * @module MAM
  * @category Modules
@@ -793,6 +804,12 @@ export class MAM extends BaseModule {
         max: contextSize * 2,
         start: oneHourBefore,
         preserveGapMarker: true,
+        // Bounded context fetch — one round-trip only, mirroring the 1:1
+        // branch below: queryArchive doesn't opt into forward auto-pagination
+        // here (no maxAutoPages passed), so it stops after its first page of
+        // results too. Without this, queryRoomArchive's forward branch would
+        // silently inherit its MAM_ROOM_FORWARD_MAX_PAGES (50-page) default.
+        maxAutoPages: 1,
       })
       return { messages: result.messages }
     } else {
@@ -837,11 +854,13 @@ export class MAM extends BaseModule {
         : undefined
 
       if (isRoom) {
+        // RoomMAMQueryOptions has no `end` filter (unlike the 1:1 branch below) —
+        // rooms rely on RSM pagination + the oldestInPage/targetTime check below
+        // to stop at the target instead. `endFilter` is intentionally unused here.
         const result = await this.queryRoomArchive({
           roomJid: conversationId,
           max: 100,
           before: page === 0 ? '' : undefined,
-          ...(endFilter ? {} : {}), // For rooms, we rely on RSM pagination
         })
         // Check if we've reached the target
         const oldestInPage = result.messages.length > 0

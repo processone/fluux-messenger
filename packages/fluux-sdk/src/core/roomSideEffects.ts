@@ -50,7 +50,9 @@ export function setupRoomSideEffects(
 
   /**
    * Triggers MAM fetch for the active room if needed (catchup).
-   * Uses `start` filter to get messages AFTER the newest cached message.
+   * Delegates the actual query direction/cursor selection to the shared
+   * latest-first orchestrator (`client.mam.catchUpRoomHistory`) after
+   * loading the IndexedDB cache.
    */
   async function fetchMAMForRoom(roomJid: string): Promise<void> {
     const room = roomStore.getState().rooms.get(roomJid)
