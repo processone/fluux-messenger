@@ -17,6 +17,7 @@ import { derivePreviewAfterMerge } from './shared/previewState'
 import { resolveRemoteDisplayed, createMdsSessionGate, foldPendingRemoteDisplayed } from './shared/readMarkerSync'
 import * as notifState from './shared/notificationState'
 import { markerDebugLog } from '../utils/markerDebug'
+import { MAM_POINTER_RECOUNT_CACHE_LIMIT } from '../utils/mamCatchUpUtils'
 import { connectionStore } from './connectionStore'
 import { buildScopedStorageKey } from '../utils/storageScope'
 // Sliding-window bound (messages kept resident per conversation; rest live in IndexedDB + MAM).
@@ -1188,6 +1189,9 @@ export const chatStore = createStore<ChatState>()(
       },
 
       applyRemoteDisplayed: (conversationId, stanzaId, messagesOverride) => {
+        // Set when the resolution advanced the pointer on a NON-active
+        // conversation — triggers the exact cache recount below.
+        let advancedNonActive = false
         set((state) => {
           const meta = state.conversationMeta.get(conversationId)
           const conv = state.conversations.get(conversationId)
@@ -1235,6 +1239,7 @@ export const chatStore = createStore<ChatState>()(
           // (parity with the hydration path in mergeMAMMessages).
           let recomputed: notifState.EntityNotificationState | undefined
           if (resolution.kind === 'advanced') {
+            advancedNonActive = true
             recomputed = notifState.recomputeCountsFromPointer(
               {
                 unreadCount: meta.unreadCount,
@@ -1273,6 +1278,62 @@ export const chatStore = createStore<ChatState>()(
           }
           return { conversationMeta: newMeta, firstNewMessageMarkers: newMarkers }
         })
+
+        // EXACT badge recount for a non-resident conversation: the sync
+        // recount above ran over only the messages slice it was handed — for
+        // a non-resident conversation that is just the final merged page
+        // (mergedForMarker), excluding the fetch-latest page and earlier
+        // backward pages of the same pointer-stitch walk (badge undercount:
+        // 60 unread → ~10). Re-count asynchronously over the newest cached
+        // window, sized to everything one catch-up pass can download. Runs
+        // from where the resolution lands so it also covers a live-notify
+        // marker resolving against a partial resident slice.
+        if (advancedNonActive) {
+          void (async () => {
+            try {
+              const cached = await messageCache.getMessages(conversationId, {
+                limit: MAM_POINTER_RECOUNT_CACHE_LIMIT,
+                latest: true,
+              })
+              if (cached.length === 0) return
+              set((state) => {
+                // Re-read state: the conversation may have become active while
+                // the cache read was in flight — activation recomputes counts
+                // itself, and a stale recount must not clobber it.
+                if (state.activeConversationId === conversationId) return state
+                const meta = state.conversationMeta.get(conversationId)
+                if (!meta) return state
+                const pointerState: notifState.EntityNotificationState = {
+                  unreadCount: meta.unreadCount,
+                  mentionsCount: 0,
+                  lastReadAt: meta.lastReadAt,
+                  lastSeenMessageId: meta.lastSeenMessageId,
+                  firstNewMessageId: state.firstNewMessageMarkers.get(conversationId),
+                }
+                const exact = notifState.recomputeCountsFromPointer(pointerState, cached)
+                if (exact === pointerState) return state
+                const newMeta = new Map(state.conversationMeta)
+                newMeta.set(conversationId, {
+                  ...meta,
+                  unreadCount: exact.unreadCount,
+                  lastSeenMessageId: exact.lastSeenMessageId,
+                })
+                const conv = state.conversations.get(conversationId)
+                if (!conv) return { conversationMeta: newMeta }
+                const newConversations = new Map(state.conversations)
+                newConversations.set(conversationId, {
+                  ...conv,
+                  unreadCount: exact.unreadCount,
+                  lastSeenMessageId: exact.lastSeenMessageId,
+                })
+                return { conversationMeta: newMeta, conversations: newConversations }
+              })
+            } catch {
+              // Cache read failed — keep the page-scoped count (an undercount,
+              // corrected on the next merge/activation).
+            }
+          })()
+        }
       },
 
       hasConversation: (id) => {

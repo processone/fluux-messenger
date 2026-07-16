@@ -650,6 +650,63 @@ describe('MAM Background Catch-Up', () => {
       expect(calls[1]).toMatchObject({ before: '' })
     })
 
+    it('forward-complete Phase A + still-pending pointer: seeds the backward walk from the oldest cached stanza-id', async () => {
+      await connectClient()
+      setupChat('mds-ptr')
+
+      const calls: any[] = []
+      vi.spyOn(xmppClient.mam, 'queryArchive').mockImplementation(async (opts: any) => {
+        calls.push(opts)
+        // Phase A forward from the coverage edge completes in one page —
+        // no fetch-latest, so windowBottom would stay unset.
+        if (opts.after === 'new-9') return { messages: [], complete: true, rsm: {} }
+        if (opts.before === 'old-1') {
+          // First backward page (over the cached region, deduped) resolved the pointer.
+          vi.mocked(mockStores.chat.getConversationPendingStanzaId!).mockReturnValue(undefined)
+          return { messages: [], complete: false, rsm: { first: 'older-0' } }
+        }
+        return { messages: [], complete: false, rsm: { first: 'x' } }
+      })
+
+      const cached = [
+        { timestamp: new Date('2026-06-14T09:00:00Z'), stanzaId: 'old-1' },
+        { timestamp: new Date('2026-06-14T10:00:00Z'), stanzaId: 'new-9' },
+      ]
+      await xmppClient.mam.catchUpConversationHistory('alice@example.com', cached, {
+        sessionStartTime: new Date('2026-06-14T12:00:00Z').getTime(),
+        stitchReadPointer: true,
+      })
+
+      // Phase B resumes from the oldest cached archive id instead of returning
+      // immediately (cross-session convergence toward a deep pointer).
+      expect(calls[0]).toMatchObject({ after: 'new-9' })
+      expect(calls[1]).toMatchObject({ before: 'old-1' })
+      expect(calls).toHaveLength(2)
+    })
+
+    it('bails out of the Phase B walk when the conversation becomes active mid-walk', async () => {
+      await connectClient()
+      setupChat('mds-ptr')
+
+      const calls: any[] = []
+      vi.spyOn(xmppClient.mam, 'queryArchive').mockImplementation(async (opts: any) => {
+        calls.push(opts)
+        if (opts.before === 'w-bottom') {
+          // The user opened the conversation while this backward page was in flight.
+          vi.mocked(mockStores.chat.getActiveConversationId!).mockReturnValue('alice@example.com')
+          return { messages: [], complete: false, rsm: { first: 'page-1-first' } }
+        }
+        return { messages: [], complete: false, rsm: { first: 'w-bottom' } }
+      })
+
+      await xmppClient.mam.catchUpConversationHistory('alice@example.com', [], { stitchReadPointer: true })
+
+      // Fetch-latest + ONE backward page — the walk stops as soon as the
+      // entity is active (backward pages would keep-oldest-evict the ACTIVE
+      // resident window's live edge).
+      expect(calls.map((c) => c.before)).toEqual(['', 'w-bottom'])
+    })
+
     it('resumes a recorded gap id-exact (after: seam startId)', async () => {
       await connectClient()
       setupChat(undefined)
@@ -724,6 +781,55 @@ describe('MAM Background Catch-Up', () => {
       expect(calls).toHaveLength(2)
       expect(calls[0]).toMatchObject({ start: '2026-05-14T09:00:00.001Z', maxAutoPages: 3 })
       expect(calls[1]).toMatchObject({ before: '' })
+    })
+
+    it('forward-complete Phase A + still-pending pointer: seeds the backward walk from the oldest cached stanza-id', async () => {
+      await connectClient()
+      setupRoom('mds-ptr')
+
+      const calls: any[] = []
+      vi.spyOn(xmppClient.mam, 'queryRoomArchive').mockImplementation(async (opts: any) => {
+        calls.push(opts)
+        if (opts.after === 'new-9') return { messages: [], complete: true, rsm: {} }
+        if (opts.before === 'old-1') {
+          vi.mocked(mockStores.room.getRoomPendingStanzaId!).mockReturnValue(undefined)
+          return { messages: [], complete: false, rsm: { first: 'older-0' } }
+        }
+        return { messages: [], complete: false, rsm: { first: 'x' } }
+      })
+
+      const cached = [
+        { timestamp: new Date('2026-06-14T09:00:00Z'), stanzaId: 'old-1' },
+        { timestamp: new Date('2026-06-14T10:00:00Z'), stanzaId: 'new-9' },
+      ]
+      await xmppClient.mam.catchUpRoomHistory(roomJid, cached, {
+        sessionStartTime: new Date('2026-06-14T12:00:00Z').getTime(),
+        stitchReadPointer: true,
+      })
+
+      expect(calls[0]).toMatchObject({ after: 'new-9' })
+      expect(calls[1]).toMatchObject({ before: 'old-1' })
+      expect(calls).toHaveLength(2)
+    })
+
+    it('bails out of the Phase B walk when the room becomes active mid-walk', async () => {
+      await connectClient()
+      setupRoom('mds-ptr')
+
+      const calls: any[] = []
+      vi.spyOn(xmppClient.mam, 'queryRoomArchive').mockImplementation(async (opts: any) => {
+        calls.push(opts)
+        if (opts.before === 'w-bottom') {
+          // The user opened the room while this backward page was in flight.
+          vi.mocked(mockStores.room.getActiveRoomJid).mockReturnValue(roomJid)
+          return { messages: [], complete: false, rsm: { first: 'page-1-first' } }
+        }
+        return { messages: [], complete: false, rsm: { first: 'w-bottom' } }
+      })
+
+      await xmppClient.mam.catchUpRoomHistory(roomJid, [], { stitchReadPointer: true })
+
+      expect(calls.map((c) => c.before)).toEqual(['', 'w-bottom'])
     })
   })
 

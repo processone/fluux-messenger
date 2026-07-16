@@ -53,6 +53,15 @@ export const MAM_CATCHUP_FORWARD_BAIL_PAGES = 3
  *  the seam marker keeps the remaining hole honest meanwhile. */
 export const MAM_POINTER_STITCH_MAX_PAGES = 10
 
+/** Newest-N cache window for the EXACT badge recount after a XEP-0490 pointer
+ *  resolves on a non-resident entity. The per-page recount inside the merge
+ *  only sees the final page; the exact recount re-reads from IndexedDB a slice
+ *  sized to everything one catch-up pass can have downloaded above the pointer:
+ *  a fetch-latest page + a full pointer-stitch walk, plus one fetch-latest page
+ *  of slack for live messages that landed during the walk. */
+export const MAM_POINTER_RECOUNT_CACHE_LIMIT =
+  MAM_CATCHUP_BACKWARD_MAX + MAM_POINTER_STITCH_MAX_PAGES * MAM_CATCHUP_FORWARD_MAX + MAM_CATCHUP_BACKWARD_MAX
+
 // ============================================================================
 // Functions
 // ============================================================================
@@ -110,6 +119,33 @@ export function findCatchUpCursorMessage(
     }
   }
   return cursor
+}
+
+/**
+ * Find the oldest-timestamped message that CARRIES an archive stanza-id —
+ * the deepest usable RSM `before:` cursor in a cached slice.
+ *
+ * Distinct from `mamGap.oldestMessageStanzaId`, which returns the id of the
+ * oldest message (undefined when that message has none — seam correctness
+ * needs the true edge). Here a message without a stanza-id (e.g. own-sent
+ * never archived) is simply skipped: any archived message is a valid cursor
+ * to resume the backward pointer-stitch walk from.
+ *
+ * Used when Phase A of the catch-up ends forward-complete (no fetch-latest,
+ * so no window bottom) while the XEP-0490 pointer is still pending: the walk
+ * resumes below the cached region instead of stalling forever.
+ */
+export function oldestMessageWithStanzaId<T extends { timestamp?: Date; stanzaId?: string }>(
+  messages: T[],
+): T | undefined {
+  let oldest: T | undefined
+  for (const message of messages) {
+    if (!message.stanzaId) continue
+    const ts = message.timestamp?.getTime()
+    if (ts === undefined) continue
+    if (!oldest || ts < oldest.timestamp!.getTime()) oldest = message
+  }
+  return oldest
 }
 
 /** Result of {@link selectCatchUpQuery}: an id-exact forward `after` cursor

@@ -7,6 +7,9 @@ import {
   selectRoomsNeedingResumeSeed,
   buildCatchUpStartTime,
   isConnectionError,
+  oldestMessageWithStanzaId,
+  MAM_POINTER_RECOUNT_CACHE_LIMIT,
+  MAM_POINTER_STITCH_MAX_PAGES,
   MAM_ROOM_FORWARD_MAX_PAGES_MANUAL,
   MAM_CATCHUP_FORWARD_MAX,
   MAM_CATCHUP_BACKWARD_MAX,
@@ -359,5 +362,40 @@ describe('MAM constants', () => {
     expect(MAM_CACHE_LOAD_LIMIT).toBe(100)
     expect(MAM_ROOM_CATCHUP_DELAY_MS).toBe(10_000)
     expect(MAM_ROOM_FORWARD_MAX_PAGES).toBe(50)
+  })
+
+  it('sizes the exact-recount window to everything one catch-up pass can download', () => {
+    expect(MAM_POINTER_RECOUNT_CACHE_LIMIT).toBe(
+      MAM_CATCHUP_BACKWARD_MAX + MAM_POINTER_STITCH_MAX_PAGES * MAM_CATCHUP_FORWARD_MAX + MAM_CATCHUP_BACKWARD_MAX
+    )
+  })
+})
+
+// ============================================================================
+// oldestMessageWithStanzaId
+// ============================================================================
+
+describe('oldestMessageWithStanzaId', () => {
+  it('returns the oldest-timestamped message that carries a stanzaId', () => {
+    const messages = [
+      { timestamp: new Date('2026-06-14T10:00:00Z'), stanzaId: 'newer' },
+      { timestamp: new Date('2026-06-14T08:00:00Z'), stanzaId: 'oldest-with-id' },
+      { timestamp: new Date('2026-06-14T09:00:00Z'), stanzaId: 'mid' },
+    ]
+    expect(oldestMessageWithStanzaId(messages)?.stanzaId).toBe('oldest-with-id')
+  })
+
+  it('skips older messages WITHOUT a stanzaId (unlike mamGap.oldestMessageStanzaId)', () => {
+    const messages = [
+      { timestamp: new Date('2026-06-14T08:00:00Z') }, // own-sent, never archived
+      { timestamp: new Date('2026-06-14T09:00:00Z'), stanzaId: 'first-archived' },
+    ]
+    expect(oldestMessageWithStanzaId(messages)?.stanzaId).toBe('first-archived')
+  })
+
+  it('ignores messages without a timestamp and returns undefined when nothing qualifies', () => {
+    expect(oldestMessageWithStanzaId([])).toBeUndefined()
+    expect(oldestMessageWithStanzaId([{ stanzaId: 'no-ts' }])).toBeUndefined()
+    expect(oldestMessageWithStanzaId([{ timestamp: new Date(), stanzaId: undefined }])).toBeUndefined()
   })
 })

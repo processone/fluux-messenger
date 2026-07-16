@@ -32,6 +32,7 @@ import { ignoreStore, isMessageFromIgnoredUser } from './ignoreStore'
 import { roomActivityTone } from './roomSelectors'
 import * as notifState from './shared/notificationState'
 import { markerDebugLog } from '../utils/markerDebug'
+import { MAM_POINTER_RECOUNT_CACHE_LIMIT } from '../utils/mamCatchUpUtils'
 import { connectionStore } from './connectionStore'
 import { buildScopedStorageKey } from '../utils/storageScope'
 // Sliding-window bound (messages kept resident per room; rest live in IndexedDB + MAM). Read via
@@ -1817,6 +1818,9 @@ export const roomStore = createStore<RoomState>()(
   },
 
   applyRemoteDisplayed: (roomJid, stanzaId, messagesOverride) => {
+    // Set when the resolution advanced the pointer on a NON-active room —
+    // triggers the exact cache recount below.
+    let advancedNonActive = false
     set((state) => {
       const meta = state.roomMeta.get(roomJid)
       const existing = state.rooms.get(roomJid)
@@ -1865,6 +1869,7 @@ export const roomStore = createStore<RoomState>()(
       // ever looks past it).
       let recomputed: notifState.EntityNotificationState | undefined
       if (resolution.kind === 'advanced') {
+        advancedNonActive = true
         recomputed = notifState.recomputeCountsFromPointer(
           {
             unreadCount: meta.unreadCount,
@@ -1907,6 +1912,63 @@ export const roomStore = createStore<RoomState>()(
       }
       return { roomMeta: newMeta, firstNewMessageMarkers: newMarkers }
     })
+
+    // EXACT badge recount for a non-resident room: the sync recount above ran
+    // over only the messages slice it was handed — for a non-resident room
+    // that is just the final merged page (mergedForMarker), excluding the
+    // fetch-latest page and earlier backward pages of the same pointer-stitch
+    // walk (badge undercount: 60 unread → ~10). Re-count asynchronously over
+    // the newest cached window, sized to everything one catch-up pass can
+    // download. Runs from where the resolution lands so it also covers a
+    // live-notify marker resolving against a partial resident slice.
+    if (advancedNonActive) {
+      void (async () => {
+        try {
+          const cached = await messageCache.getRoomMessages(roomJid, {
+            limit: MAM_POINTER_RECOUNT_CACHE_LIMIT,
+            latest: true,
+          })
+          if (cached.length === 0) return
+          set((state) => {
+            // Re-read state: the room may have become active while the cache
+            // read was in flight — activation recomputes counts itself, and a
+            // stale recount must not clobber it.
+            if (state.activeRoomJid === roomJid) return state
+            const meta = state.roomMeta.get(roomJid)
+            if (!meta) return state
+            const pointerState: notifState.EntityNotificationState = {
+              unreadCount: meta.unreadCount,
+              mentionsCount: meta.mentionsCount,
+              lastReadAt: meta.lastReadAt,
+              lastSeenMessageId: meta.lastSeenMessageId,
+              firstNewMessageId: state.firstNewMessageMarkers.get(roomJid),
+            }
+            const exact = notifState.recomputeCountsFromPointer(pointerState, cached, { countMentions: true })
+            if (exact === pointerState) return state
+            const newMeta = new Map(state.roomMeta)
+            newMeta.set(roomJid, {
+              ...meta,
+              unreadCount: exact.unreadCount,
+              mentionsCount: exact.mentionsCount,
+              lastSeenMessageId: exact.lastSeenMessageId,
+            })
+            const room = state.rooms.get(roomJid)
+            if (!room) return { roomMeta: newMeta }
+            const newRooms = new Map(state.rooms)
+            newRooms.set(roomJid, {
+              ...room,
+              unreadCount: exact.unreadCount,
+              mentionsCount: exact.mentionsCount,
+              lastSeenMessageId: exact.lastSeenMessageId,
+            })
+            return { roomMeta: newMeta, rooms: newRooms }
+          })
+        } catch {
+          // Cache read failed — keep the page-scoped count (an undercount,
+          // corrected on the next merge/activation).
+        }
+      })()
+    }
   },
 
   setTyping: (roomJid, nick, isTyping) => {

@@ -85,6 +85,10 @@ export interface StoreBindings {
     // can't be matched locally — seeds a forward `after` catch-up on an
     // empty-cache new device.
     getConversationPendingStanzaId?: (conversationId: string) => string | undefined
+    // Currently ACTIVE conversation id (null when none). Re-checked at every
+    // Phase B iteration of the pointer-stitch walk: backward pages into the
+    // active resident window would keep-oldest-evict its live edge.
+    getActiveConversationId?: () => string | null
     // Smart MAM: archived conversation preview refresh
     getArchivedConversations?: () => Array<{ id: string; messages: Message[] }>
     getLastMessage?: (conversationId: string) => Message | undefined

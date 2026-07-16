@@ -649,6 +649,7 @@ export const createMockStores = (): MockStoreBindings => ({
     getConversationGapStart: vi.fn().mockReturnValue(undefined),
     getConversationGapStartId: vi.fn().mockReturnValue(undefined),
     getConversationPendingStanzaId: vi.fn().mockReturnValue(undefined),
+    getActiveConversationId: vi.fn().mockReturnValue(null),
     getArchivedConversations: vi.fn().mockReturnValue([]),
     getLastMessage: vi.fn().mockReturnValue(undefined),
     getAllStoredMessages: vi.fn().mockReturnValue([]),

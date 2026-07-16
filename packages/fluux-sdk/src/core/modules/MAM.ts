@@ -43,6 +43,7 @@ import {
   MAM_ROOM_FORWARD_MAX_PAGES_MANUAL,
   MAM_CATCHUP_FORWARD_BAIL_PAGES,
   MAM_POINTER_STITCH_MAX_PAGES,
+  oldestMessageWithStanzaId,
 } from '../../utils/mamCatchUpUtils'
 import {
   NS_MAM,
@@ -1062,7 +1063,25 @@ export class MAM extends BaseModule {
 
     // Phase B — grow the window down to the read pointer.
     if (!stitchReadPointer) return
+    // Cross-session convergence: Phase A can end forward-complete with no
+    // fetch-latest (windowBottom unset) while the pointer is still pending —
+    // e.g. the session after a capped Phase B walk, whose coverage edge is
+    // already near live. Seed the backward cursor from the oldest cached
+    // message that carries an archive id (the cache peek handed in). The
+    // first backward page may re-fetch a page of already-cached history
+    // (deduped by the merge) before descending into the undownloaded region —
+    // bounded by the cap below and converging across sessions as the cache
+    // deepens.
+    if (!windowBottom && this.deps.stores?.chat.getConversationPendingStanzaId?.(conversationId)) {
+      windowBottom = oldestMessageWithStanzaId(messages)?.stanzaId
+    }
     for (let page = 0; page < MAM_POINTER_STITCH_MAX_PAGES; page++) {
+      // Re-check activity EVERY iteration, not just at dispatch: a walk is up
+      // to MAM_POINTER_STITCH_MAX_PAGES RTTs, and once the conversation is
+      // opened its resident window is capped — further backward pages would
+      // keep-oldest-evict the live edge under the user. The activation
+      // machinery owns the active deep-pointer UX (see the Phase B doc above).
+      if (this.deps.stores?.chat.getActiveConversationId?.() === conversationId) return
       if (!this.deps.stores?.chat.getConversationPendingStanzaId?.(conversationId)) return
       if (!windowBottom) return
       const res = await this.queryArchive({
@@ -1247,7 +1266,17 @@ export class MAM extends BaseModule {
     }
 
     if (!stitchReadPointer) return
+    // Cross-session convergence: seed the backward cursor from the oldest
+    // cached archive id when Phase A ended forward-complete with the pointer
+    // still pending (see the chat twin above for the full rationale).
+    if (!windowBottom && this.deps.stores?.room.getRoomPendingStanzaId?.(roomJid)) {
+      windowBottom = oldestMessageWithStanzaId(messages)?.stanzaId
+    }
     for (let page = 0; page < MAM_POINTER_STITCH_MAX_PAGES; page++) {
+      // Re-check activity EVERY iteration (chat-twin rationale): backward
+      // pages into the now-active room's capped resident window would
+      // keep-oldest-evict its live edge.
+      if (this.deps.stores?.room.getActiveRoomJid() === roomJid) return
       if (!this.deps.stores?.room.getRoomPendingStanzaId?.(roomJid)) return
       if (!windowBottom) return
       const res = await this.queryRoomArchive({
