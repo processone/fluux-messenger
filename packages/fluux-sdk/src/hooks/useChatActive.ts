@@ -1,13 +1,13 @@
 import { useCallback, useMemo } from 'react'
 import { useShallow } from 'zustand/react/shallow'
-import { chatStore, connectionStore } from '../stores'
+import { chatStore } from '../stores'
 import { chatSelectors } from '../stores/chatSelectors'
 import { useChatStore, useConnectionStore } from '../react/storeHooks'
 import { useXMPPContext } from '../provider'
 import type { Conversation, MAMQueryState, Message } from '../core'
 import { NS_MAM } from '../core/namespaces'
 import { useChatActions } from './useChatActions'
-import { findContinueCatchUpCursor, buildCatchUpStartTime, MAM_CACHE_LOAD_LIMIT, MAM_CATCHUP_FORWARD_MAX, MAM_ROOM_FORWARD_MAX_PAGES_MANUAL } from '../utils/mamCatchUpUtils'
+import { createContinueCatchUp } from './shared'
 
 /**
  * Stable empty array references to prevent infinite re-renders.
@@ -207,50 +207,22 @@ export function useChatActive() {
 
   // "Load missing messages": continue a forward catch-up from the recorded gap
   // boundary (parity with rooms' continueRoomCatchUp). Paginates oldest-first to
-  // completion via the manual cap.
-  const continueChatCatchUp = useCallback(async () => {
-    const conversationId = chatStore.getState().activeConversationId
-    if (!conversationId) return
-    if (connectionStore.getState().status !== 'online') return
-
-    const mamState = chatStore.getState().getMAMQueryState(conversationId)
-    if (mamState.isLoading) return
-
-    chatStore.getState().setMAMLoading(conversationId, true)
-
-    try {
-      await chatStore.getState().loadMessagesFromCache(conversationId, { limit: MAM_CACHE_LOAD_LIMIT })
-      const messages = chatStore.getState().messages.get(conversationId) || []
-      const gap = chatStore.getState().conversationGaps.get(conversationId)
-      const cursor = findContinueCatchUpCursor(messages, gap?.start)
-      if (gap?.startId) {
-        // Id-exact resume: the recorded seam carries the last-downloaded
-        // archive id, immune to same-millisecond timestamp collisions.
-        await client.chat.queryMAM({
-          with: conversationId,
-          after: gap.startId,
-          max: MAM_CATCHUP_FORWARD_MAX,
-          maxAutoPages: MAM_ROOM_FORWARD_MAX_PAGES_MANUAL,
-        })
-      } else if (cursor?.timestamp) {
-        await client.chat.queryMAM({
-          with: conversationId,
-          start: buildCatchUpStartTime(cursor.timestamp),
-          max: MAM_CATCHUP_FORWARD_MAX,
-          maxAutoPages: MAM_ROOM_FORWARD_MAX_PAGES_MANUAL,
-        })
-      }
-    } catch {
-      // Swallow — the gap marker stays so the user can retry.
-    } finally {
-      // Always clear the loading flag, even when no cursor was found and no
-      // query ran (otherwise the "load missing messages" button spins forever).
-      // On the success path queryMAM's own finally already emitted
-      // isLoading:false; this idempotent backstop covers the no-query and error
-      // paths.
-      chatStore.getState().setMAMLoading(conversationId, false)
-    }
-  }, [client])
+  // completion via the manual cap. Cursor policy in createContinueCatchUp.
+  const continueChatCatchUp = useMemo(
+    () =>
+      createContinueCatchUp({
+        getActiveId: () => chatStore.getState().activeConversationId,
+        getMAMState: (id) => chatStore.getState().getMAMQueryState(id),
+        setMAMLoading: (id, loading) => chatStore.getState().setMAMLoading(id, loading),
+        loadFromCache: (id, limit) => chatStore.getState().loadMessagesFromCache(id, { limit }),
+        getMessages: (id) => chatStore.getState().messages.get(id) || [],
+        getGap: (id) => chatStore.getState().conversationGaps.get(id),
+        queryMAM: async (id, options) => {
+          await client.chat.queryMAM({ with: id, ...options })
+        },
+      }),
+    [client]
+  )
 
   // Hydrate the resident array with the cache slice CONTAINING a specific message, used by scroll
   // restore / search navigation when the target/anchor isn't in the latest-N slice. Bound to the

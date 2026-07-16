@@ -2,7 +2,6 @@ import { describe, it, expect } from 'vitest'
 import {
   findNewestMessage,
   findCatchUpCursorMessage,
-  findContinueCatchUpCursor,
   selectCatchUpQuery,
   selectRoomsNeedingResumeSeed,
   buildCatchUpStartTime,
@@ -125,38 +124,6 @@ describe('findCatchUpCursorMessage', () => {
     // Deliberately unsorted.
     const messages = [{ timestamp: live }, { timestamp: older }, {}, { timestamp: newerPre }]
     expect(findCatchUpCursorMessage(messages, sessionStart)?.timestamp).toBe(newerPre)
-  })
-})
-
-// ============================================================================
-// findContinueCatchUpCursor
-// ============================================================================
-
-describe('findContinueCatchUpCursor', () => {
-  it('returns the gap-boundary timestamp when a gap marker exists, ignoring newer messages', () => {
-    // "Load missing messages": the cursor must be the gap boundary so the forward
-    // query fills the HOLE — not the global newest, which sits AFTER the hole.
-    const gapBoundary = new Date('2026-05-14T09:00:00Z')
-    const recentAfterHole = new Date('2026-06-14T12:00:00Z')
-    const messages = [{ timestamp: gapBoundary }, { timestamp: recentAfterHole }]
-    const result = findContinueCatchUpCursor(messages, gapBoundary.getTime())
-    expect(result?.timestamp.getTime()).toBe(gapBoundary.getTime())
-  })
-
-  it('returns the gap boundary even when the message cache is empty', () => {
-    const gapBoundary = new Date('2026-05-14T09:00:00Z')
-    expect(findContinueCatchUpCursor([], gapBoundary.getTime())?.timestamp.getTime()).toBe(gapBoundary.getTime())
-  })
-
-  it('falls back to the newest message when there is no gap marker', () => {
-    const older = new Date('2026-01-01T00:00:00Z')
-    const newest = new Date('2026-02-01T00:00:00Z')
-    const result = findContinueCatchUpCursor([{ timestamp: older }, { timestamp: newest }], undefined)
-    expect(result?.timestamp).toBe(newest)
-  })
-
-  it('returns undefined with no gap marker and no messages', () => {
-    expect(findContinueCatchUpCursor([], undefined)).toBeUndefined()
   })
 })
 

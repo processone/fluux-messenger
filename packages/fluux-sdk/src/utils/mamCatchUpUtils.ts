@@ -270,28 +270,6 @@ export function selectRoomsNeedingResumeSeed<
 }
 
 /**
- * Pick the cursor for a user-initiated "continue catch-up" (the "Load missing
- * messages" button).
- *
- * When a forward gap marker exists (`forwardGapTimestamp`), the cursor must be
- * the gap boundary so the forward query fills the HOLE — the global newest
- * message sits *after* the hole, so resuming from it would skip the gap entirely
- * (the original "Load missing" bug). Falls back to the newest message when there
- * is no recorded gap.
- *
- * @param messages - Candidate messages (any order)
- * @param forwardGapTimestamp - Epoch ms of the recorded forward gap, or undefined
- * @returns The message-like cursor to start the forward query from, or undefined
- */
-export function findContinueCatchUpCursor(
-  messages: Array<{ timestamp?: Date }>,
-  forwardGapTimestamp: number | undefined
-): { timestamp: Date } | undefined {
-  if (forwardGapTimestamp !== undefined) return { timestamp: new Date(forwardGapTimestamp) }
-  return findNewestMessage(messages)
-}
-
-/**
  * Build a MAM `start` filter value from the newest cached message.
  *
  * Adds 1 ms to avoid re-fetching the cursor message itself. This

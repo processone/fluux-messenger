@@ -1,20 +1,13 @@
 import { useCallback, useMemo } from 'react'
-import { roomStore, connectionStore } from '../stores'
+import { roomStore } from '../stores'
 import { roomSelectors } from '../stores/roomSelectors'
 import { useRoomStore } from '../react/storeHooks'
 import { useXMPPContext } from '../provider'
 import type { Room, RoomMessage, MentionReference, ChatStateNotification, FileAttachment, MAMQueryState, RoomFeatures } from '../core/types'
-import { createFetchOlderHistory, pickOldestArchiveId } from './shared'
+import { createFetchOlderHistory, createContinueCatchUp, pickOldestArchiveId } from './shared'
 import { usePolls } from './usePolls'
 import { useRoomModeration } from './useRoomModeration'
 import { useRoomManagement } from './useRoomManagement'
-import {
-  findContinueCatchUpCursor,
-  buildCatchUpStartTime,
-  MAM_CATCHUP_FORWARD_MAX,
-  MAM_CACHE_LOAD_LIMIT,
-  MAM_ROOM_FORWARD_MAX_PAGES_MANUAL,
-} from '../utils/mamCatchUpUtils'
 
 /**
  * Stable empty array references to prevent infinite re-renders.
@@ -331,60 +324,25 @@ export function useRoomActive() {
   )
 
   /**
-   * Continue forward MAM catch-up for the active room.
-   * Used when a previous catch-up was incomplete (gap marker visible).
-   * Reads the newest cached message and queries forward from there.
+   * Continue forward MAM catch-up for the active room ("Load missing
+   * messages"). Used when a previous catch-up was incomplete (gap marker
+   * visible). Cursor policy in createContinueCatchUp.
    */
-  const continueRoomCatchUp = useCallback(async () => {
-    const roomJid = roomStore.getState().activeRoomJid
-    if (!roomJid) return
-
-    const connectionStatus = connectionStore.getState().status
-    if (connectionStatus !== 'online') return
-
-    const mamState = roomStore.getState().getRoomMAMQueryState(roomJid)
-    if (mamState.isLoading) return
-
-    roomStore.getState().setRoomMAMLoading(roomJid, true)
-
-    try {
-      await roomStore.getState().loadMessagesFromCache(roomJid, { limit: MAM_CACHE_LOAD_LIMIT })
-      const room = roomStore.getState().rooms.get(roomJid)
-      const messages = room?.messages || []
-      // Continue from the recorded (persisted) gap boundary so the forward query
-      // fills the HOLE. The global newest message sits AFTER the hole, so resuming
-      // from it would skip the gap. Paginate with the manual cap to fill it fully.
-      const gap = roomStore.getState().roomGaps.get(roomJid)
-      const cursor = findContinueCatchUpCursor(messages, gap?.start)
-
-      if (gap?.startId) {
-        // Id-exact resume: the recorded seam carries the last-downloaded
-        // archive id, immune to same-millisecond timestamp collisions.
-        await client.chat.queryRoomMAM({
-          roomJid,
-          after: gap.startId,
-          max: MAM_CATCHUP_FORWARD_MAX,
-          maxAutoPages: MAM_ROOM_FORWARD_MAX_PAGES_MANUAL,
-        })
-      } else if (cursor?.timestamp) {
-        await client.chat.queryRoomMAM({
-          roomJid,
-          start: buildCatchUpStartTime(cursor.timestamp),
-          max: MAM_CATCHUP_FORWARD_MAX,
-          maxAutoPages: MAM_ROOM_FORWARD_MAX_PAGES_MANUAL,
-        })
-      }
-    } catch {
-      // Swallow — the gap marker stays so the user can retry.
-    } finally {
-      // Always clear the loading flag, even when no cursor was found and no
-      // query ran (otherwise the "load missing messages" button spins forever).
-      // On the success path queryRoomMAM's own finally already emitted
-      // isLoading:false; this idempotent backstop covers the no-query and error
-      // paths.
-      roomStore.getState().setRoomMAMLoading(roomJid, false)
-    }
-  }, [client])
+  const continueRoomCatchUp = useMemo(
+    () =>
+      createContinueCatchUp({
+        getActiveId: () => roomStore.getState().activeRoomJid,
+        getMAMState: (id) => roomStore.getState().getRoomMAMQueryState(id),
+        setMAMLoading: (id, loading) => roomStore.getState().setRoomMAMLoading(id, loading),
+        loadFromCache: (id, limit) => roomStore.getState().loadMessagesFromCache(id, { limit }),
+        getMessages: (id) => roomStore.getState().rooms.get(id)?.messages || [],
+        getGap: (id) => roomStore.getState().roomGaps.get(id),
+        queryMAM: async (id, options) => {
+          await client.chat.queryRoomMAM({ roomJid: id, ...options })
+        },
+      }),
+    [client]
+  )
 
   // Hydrate the resident array with the cache slice CONTAINING a specific message, used by scroll
   // restore / search navigation when the target/anchor isn't in the latest-N slice. Bound to the
