@@ -43,6 +43,13 @@ export const MAM_ROOM_FORWARD_MAX_PAGES = 50
  *  `complete=true`; this is only a runaway backstop. */
 export const MAM_ROOM_FORWARD_MAX_PAGES_MANUAL = 500
 
+/** Max BACKWARD pages to walk past signal-only pages (reactions/receipts —
+ *  zero displayable messages) before giving up. Shared by the 1:1 and room
+ *  backward paths so both retry the same distance: a conversation/room whose
+ *  newest page is all signals must not render empty (or be marked
+ *  caught-up-to-live) while older real messages exist. */
+export const MAM_BACKWARD_SIGNAL_RETRY_PAGES = 5
+
 /** Max auto-pages for the INITIAL forward catch-up phase before bailing to a
  *  fetch-latest (3 × 100 = 300 messages fetched exactly). Beyond this the
  *  orchestrator jumps the window to the live edge and leaves the hole as a
@@ -275,12 +282,17 @@ export function selectRoomsNeedingResumeSeed<
 /**
  * Build a MAM `start` filter value from the newest cached message.
  *
- * Adds 1 ms to avoid re-fetching the cursor message itself. This
- * pattern is used in every catch-up site (chat side effects, room side
- * effects, MAM background catch-up).
+ * Queries from the EXACT anchor timestamp (XEP-0313 `start` is inclusive):
+ * the anchor message is re-fetched and deduplicated by the merge's XEP-0359
+ * identity keys (stanzaId / originId / from+id — an id-less resident echo is
+ * patched via archive-id backfill). The former +1 ms offset skipped the
+ * anchor but could also silently skip any OTHER message sharing the anchor's
+ * millisecond. This timestamp path is only the fallback anchor — id-exact
+ * `after:` is preferred whenever the edge carries a stanza-id
+ * (see {@link selectCatchUpQuery}).
  */
 export function buildCatchUpStartTime(newestTimestamp: Date): string {
-  return new Date(newestTimestamp.getTime() + 1).toISOString()
+  return newestTimestamp.toISOString()
 }
 
 /**

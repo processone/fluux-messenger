@@ -308,6 +308,15 @@ export function syncGapAfterArchiveMerge(input: ArchiveMergeGapInput): Map<strin
 
   if (direction === 'forward') {
     const existing = gaps.get(id)
+    // A signal-only (empty) incomplete forward page proves nothing about the
+    // hole — it must never erase a recorded gap. The session-scoped marker
+    // (forwardGapTimestamp) normally carries the gap through this mirror, but
+    // on a fresh session mamQueryStates are empty while the gap map is
+    // persisted: preserve the recorded interval verbatim and only advance the
+    // id-exact coverage cursor (rsm.last IS set for signal-only pages).
+    if (existing && !complete && fetched.length === 0 && forwardGapTimestamp === undefined) {
+      return syncGap(gaps, id, existing.start, existing.end, lastFetchedArchiveId ?? existing.startId, existing.endId)
+    }
     const gapEnd = forwardGapTimestamp !== undefined ? computeGapEnd(merged, forwardGapTimestamp) : undefined
     // startId: prefer this merge's rsm.last; an incomplete forward merge
     // without one (no new page fetched) carries the existing cursor forward.

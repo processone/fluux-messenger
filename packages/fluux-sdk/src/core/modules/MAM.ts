@@ -52,6 +52,7 @@ import {
   MAM_CACHE_LOAD_LIMIT,
   MAM_ROOM_FORWARD_MAX_PAGES,
   MAM_ROOM_FORWARD_MAX_PAGES_MANUAL,
+  MAM_BACKWARD_SIGNAL_RETRY_PAGES,
   MAM_CATCHUP_FORWARD_BAIL_PAGES,
   MAM_POINTER_STITCH_MAX_PAGES,
   MAM_POINTER_SEED_PROBE_LIMIT,
@@ -222,11 +223,7 @@ export class MAM extends BaseModule {
     let currentAfter: string | undefined = after
     let isComplete = false
     let lastRsm: RSMResponse = {}
-    const maxAutoPages = isForwardPaginate ? maxAutoPagesOpt : 5 // cap to avoid infinite loops
-    // True only for the very first page of an `after`-anchored query — used to
-    // detect a purged/expired archive id (item-not-found) and degrade once to
-    // a fetch-latest instead of failing the whole catch-up.
-    const isAfterAnchored = !!after
+    const maxAutoPages = isForwardPaginate ? maxAutoPagesOpt : MAM_BACKWARD_SIGNAL_RETRY_PAGES // cap to avoid infinite loops
 
     this.deps.emitSDK('chat:mam-loading', { conversationId, isLoading: true })
 
@@ -279,10 +276,16 @@ export class MAM extends BaseModule {
           try {
             response = await this.deps.sendIQ(iq)
           } catch (iqError) {
-            if (page === 0 && isAfterAnchored && isItemNotFoundError(iqError)) {
+            if (page === 0 && after && isItemNotFoundError(iqError)) {
               // The archive no longer holds the after-anchor (expired/purged):
               // degrade to fetch-latest (spec §5 — degrade gracefully, never error).
               logInfo(`MAM after-cursor purged for ...@${getDomain(conversationId) || '*'} — degrading to fetch-latest`)
+              // Strip the purged id from the persisted gap anchor (the degrade
+              // site is the only place that KNOWS the id is gone): otherwise
+              // every session — and every "Load missing messages" click —
+              // re-anchors on it and re-degrades forever. Keeping the gap's
+              // start timestamp lets the next resume fall back to it and progress.
+              this.deps.emitSDK('chat:mam-anchor-purged', { conversationId, after })
               const degraded = await this.queryArchive({ with: withJid, max, before: '', preserveGapMarker })
               // Mark the result so callers (the catch-up orchestrator) can tell
               // this is ALREADY a fetch-latest page and skip issuing another one.
@@ -412,18 +415,22 @@ export class MAM extends BaseModule {
     const roomDirection = isForward ? 'forward' : 'backward'
 
     // For forward catch-up queries, auto-paginate to retrieve all missed messages.
-    // Backward queries (scroll-up) remain single-page — the caller controls pagination.
     // User-initiated repair passes a higher cap (maxAutoPagesOpt) so it fills large
     // gaps to completion instead of stopping at the background limit.
-    const maxAutoPages = isForward ? (maxAutoPagesOpt ?? MAM_ROOM_FORWARD_MAX_PAGES) : 1
+    // Backward queries retry past signal-only pages (zero displayable messages)
+    // under the same cap as the 1:1 path — the caller still controls real
+    // pagination (the loop stops as soon as a page yields displayable messages).
+    const maxAutoPages = isForward ? (maxAutoPagesOpt ?? MAM_ROOM_FORWARD_MAX_PAGES) : MAM_BACKWARD_SIGNAL_RETRY_PAGES
     const allMessages: RoomMessage[] = []
     let isComplete = false
     let lastRsm: RSMResponse = {}
     let currentAfter = after
-    // True only for the very first page of an `after`-anchored query — used to
-    // detect a purged/expired archive id (item-not-found) and degrade once to
-    // a fetch-latest instead of failing the whole catch-up.
-    const isAfterAnchored = !!after
+    let currentBefore = before
+    // BACKWARD retry pages accumulate modifications across pages and resolve
+    // them ONCE after the loop (mirrors queryArchive's 1:1 batch model): a
+    // signal on the first, signal-only page targets a message only fetched by
+    // a later retry page — per-page resolution would drop it.
+    const backwardModifications: MAMModifications = { retractions: [], corrections: [], fastenings: [], reactions: [] }
 
     const room = this.deps.stores?.room.getRoom(roomJid)
     const myNickname = room?.nickname || ''
@@ -445,10 +452,14 @@ export class MAM extends BaseModule {
         }
 
         // Send IQ to room JID (not user's archive)
-        const iq = this.buildMAMQuery(queryId, formFields, max, before, roomJid, currentAfter)
+        const iq = this.buildMAMQuery(queryId, formFields, max, currentBefore, roomJid, currentAfter)
 
         const collectedMessages: RoomMessage[] = []
-        const modifications: MAMModifications = { retractions: [], corrections: [], fastenings: [], reactions: [] }
+        // Forward pages resolve modifications per page (earlier pages are
+        // already merged in the store); backward retry pages accumulate.
+        const modifications: MAMModifications = isForward
+          ? { retractions: [], corrections: [], fastenings: [], reactions: [] }
+          : backwardModifications
         const rawEntries: RawArchiveEntry[] = []
 
         // Collector only buffers; decrypt + parse happen in the async drain below.
@@ -474,10 +485,13 @@ export class MAM extends BaseModule {
           try {
             response = await this.deps.sendIQ(iq)
           } catch (iqError) {
-            if (page === 0 && isAfterAnchored && isItemNotFoundError(iqError)) {
+            if (page === 0 && after && isItemNotFoundError(iqError)) {
               // The archive no longer holds the after-anchor (expired/purged):
               // degrade to fetch-latest (spec §5 — degrade gracefully, never error).
               logInfo(`Room MAM after-cursor purged for ${roomJid} — degrading to fetch-latest`)
+              // Strip the purged id from the persisted gap anchor — see the
+              // 1:1 twin in queryArchive for the full rationale.
+              this.deps.emitSDK('room:mam-anchor-purged', { roomJid, after })
               const degraded = await this.queryRoomArchive({ roomJid, max, before: '', preserveGapMarker })
               // Mark the result so callers (the catch-up orchestrator) can tell
               // this is ALREADY a fetch-latest page and skip issuing another one.
@@ -498,28 +512,29 @@ export class MAM extends BaseModule {
             if (msg) collectedMessages.push(msg)
           }
 
-          // Apply modifications to collected messages (full JID comparison for rooms)
-          // normalizeReactor extracts nick from full MUC JID for consistent reactor identifiers
-          const unresolved = this.applyModifications(
-            collectedMessages, modifications,
-            (msg, from) => msg.from === from,
-            (from) => getResource(from) || from
-          )
+          if (isForward) {
+            // Apply modifications to collected messages (full JID comparison for rooms)
+            // normalizeReactor extracts nick from full MUC JID for consistent reactor identifiers
+            const unresolved = this.applyModifications(
+              collectedMessages, modifications,
+              (msg, from) => msg.from === from,
+              (from) => getResource(from) || from
+            )
 
-          // Emit modifications targeting messages already in the store (from prior queries/cache)
-          this.emitUnresolvedRoomModifications(roomJid, unresolved)
+            // Emit modifications targeting messages already in the store (from prior queries/cache)
+            this.emitUnresolvedRoomModifications(roomJid, unresolved)
 
-          // Emit each page's messages immediately so the store can update incrementally
-          const direction = isForward ? 'forward' : 'backward'
-          this.deps.emitSDK('room:mam-messages', {
-            roomJid,
-            messages: collectedMessages,
-            rsm,
-            complete,
-            direction,
-            preserveGapMarker,
-            isFetchLatest: !isForward && !before,
-          })
+            // Emit each page's messages immediately so the store can update incrementally
+            this.deps.emitSDK('room:mam-messages', {
+              roomJid,
+              messages: collectedMessages,
+              rsm,
+              complete,
+              direction: 'forward',
+              preserveGapMarker,
+              isFetchLatest: false,
+            })
+          }
 
           allMessages.push(...collectedMessages)
           isComplete = complete
@@ -530,16 +545,61 @@ export class MAM extends BaseModule {
             break
           }
 
-          // For forward pagination: use `last` as the next `after` cursor
-          if (isForward && rsm.last) {
-            currentAfter = rsm.last
+          if (isForward) {
+            // Forward pagination: use `last` as the next `after` cursor
+            if (rsm.last) {
+              currentAfter = rsm.last
+            } else {
+              break
+            }
           } else {
-            // No pagination cursor or single-page mode — stop
-            break
+            // BACKWARD: retry past signal-only pages (parity with the 1:1
+            // loop in queryArchive) — a room whose newest page is all
+            // reactions/receipts must not render empty (and be marked
+            // caught-up-to-live) while older real messages exist. Advance the
+            // cursor to this page's oldest and fetch the next older page.
+            if (allMessages.length > 0) {
+              break
+            }
+            if (rsm.first) {
+              currentBefore = rsm.first
+              this.deps.emitSDK('console:event', {
+                message: `Page ${page + 1} had no displayable messages, fetching older...`,
+                category: 'sm',
+              })
+            } else {
+              // No pagination cursor available, stop
+              break
+            }
           }
         } finally {
           unregister()
         }
+      }
+
+      // BACKWARD: ONE emit with the accumulated set (the retry pages walk
+      // contiguously down, so the union extent is the true coverage bottom)
+      // and the ORIGINAL fetch-latest flag — the page that finally carries
+      // messages must be seam-checked as part of the fetch-latest.
+      // Modifications resolve against the full accumulated set first;
+      // leftovers target store-resident messages and are emitted after the
+      // batch merge (same ordering as the 1:1 path).
+      if (!isForward) {
+        const unresolved = this.applyModifications(
+          allMessages, backwardModifications,
+          (msg, from) => msg.from === from,
+          (from) => getResource(from) || from
+        )
+        this.deps.emitSDK('room:mam-messages', {
+          roomJid,
+          messages: allMessages,
+          rsm: lastRsm,
+          complete: isComplete,
+          direction: 'backward',
+          preserveGapMarker,
+          isFetchLatest: !before,
+        })
+        this.emitUnresolvedRoomModifications(roomJid, unresolved)
       }
 
       logInfo(`Room MAM result: ${roomJid} → ${allMessages.length} msg(s), complete=${isComplete}, ${Date.now() - roomMamStart}ms`)

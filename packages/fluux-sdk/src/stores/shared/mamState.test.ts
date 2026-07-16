@@ -294,6 +294,19 @@ describe('mamState utilities', () => {
       expect(result.get('room-1')?.forwardGapTimestamp).toBeUndefined()
       expect(result.get('room-1')?.isCaughtUpToLive).toBe(false)
     })
+
+    it('preserves the existing forwardGapTimestamp on an incomplete forward page with no fetched timestamp (signal-only page)', () => {
+      // A signal-only page (reactions/receipts only — zero displayable
+      // messages) yields no newestFetchedTimestamp. It proves nothing about
+      // the hole, so it must not erase the recorded marker.
+      const states = new Map<string, MAMQueryState>([
+        ['room-1', { ...DEFAULT_MAM_STATE, forwardGapTimestamp: 1000 }],
+      ])
+      const result = setMAMQueryCompleted(states, 'room-1', false, 'forward', undefined, undefined)
+
+      expect(result.get('room-1')?.forwardGapTimestamp).toBe(1000)
+      expect(result.get('room-1')?.isCaughtUpToLive).toBe(false)
+    })
   })
 
   describe('setMAMQueryCompleted fetch-latest', () => {

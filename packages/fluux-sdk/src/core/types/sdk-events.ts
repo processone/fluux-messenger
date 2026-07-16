@@ -207,6 +207,19 @@ export interface ChatEvents {
   }
 
   /**
+   * The id-exact catch-up anchor (`after:` cursor) was purged from the
+   * archive (item-not-found) and the query degraded to a fetch-latest.
+   * Bindings strip the matching `startId` from the persisted GapInterval so
+   * the next resume — including "Load missing messages" — uses the timestamp
+   * fallback and progresses, instead of re-degrading on the purged id forever.
+   */
+  'chat:mam-anchor-purged': {
+    conversationId: string
+    /** The purged archive id the query was anchored on. */
+    after: string
+  }
+
+  /**
    * Plugin-driven upgrade of a previously-delivered message's security
    * context. Emitted after an E2EE plugin re-evaluates a buffered
    * message — typically when the sender's public key arrived moments
@@ -404,6 +417,18 @@ export interface RoomEvents {
     preserveGapMarker?: boolean
     /** The query was a `before:''` fetch-latest (seam formation candidate). */
     isFetchLatest?: boolean
+  }
+
+  /**
+   * Room twin of `chat:mam-anchor-purged`: the id-exact catch-up anchor was
+   * purged from the room archive (item-not-found) and the query degraded to
+   * a fetch-latest. Bindings strip the matching `startId` from the persisted
+   * GapInterval so the timestamp fallback can progress.
+   */
+  'room:mam-anchor-purged': {
+    roomJid: string
+    /** The purged archive id the query was anchored on. */
+    after: string
   }
 
   /** Room member affiliations discovered (XEP-0045 admin query) */

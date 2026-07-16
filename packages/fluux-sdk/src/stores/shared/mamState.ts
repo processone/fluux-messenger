@@ -135,10 +135,18 @@ export function setMAMQueryCompleted(
   // completion says nothing about whether older history is contiguous. Letting
   // such a query clear the marker would hide a real gap older than the window;
   // letting it set one would plant a spurious marker inside the window.
+  //
+  // Incomplete forward with NO fetched timestamp (a signal-only page:
+  // reactions/receipts only, zero displayable messages) PRESERVES the current
+  // marker — such a page proves nothing about the hole, and clearing the
+  // marker here would let the persisted-gap mirror (syncGapAfterArchiveMerge)
+  // delete the recorded GapInterval: a permanent silent hole. Coverage still
+  // advances id-exactly via the gap's startId (rsm.last IS set for
+  // signal-only pages; see mamGap.ts).
   const forwardGapTimestamp = preserveGapMarker
     ? current.forwardGapTimestamp
     : direction === 'forward'
-      ? (complete ? undefined : newestFetchedTimestamp)
+      ? (complete ? undefined : (newestFetchedTimestamp ?? current.forwardGapTimestamp))
       : current.forwardGapTimestamp
 
   newStates.set(id, {
