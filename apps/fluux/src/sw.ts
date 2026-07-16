@@ -21,6 +21,11 @@ import {
   resolveNotificationTarget,
   notificationNavigateMessage,
 } from './utils/notificationNavigation'
+import {
+  buildPushNotification,
+  pushNotificationTag,
+  type PushPayloadData,
+} from './utils/pushNotificationCoalesce'
 
 declare const self: ServiceWorkerGlobalScope
 
@@ -35,31 +40,45 @@ self.addEventListener('push', (event) => {
   console.log('[SW Push] Received push event, data:', event.data?.text())
   if (!event.data) return
 
-  let title = 'Fluux Messenger'
-  let options: NotificationOptions = {
-    body: 'New message',
-    icon: './icon-192.png',
-    badge: './icon-192.png',
-  }
-
+  let payload: PushPayloadData
   try {
-    const data = event.data.json()
-    title = data.title || data.from || title
-    options = {
-      ...options,
-      body: data.body || options.body,
-      tag: data.from || 'default',
-      data: { from: data.from, type: data.type },
-    }
+    payload = event.data.json() as PushPayloadData
   } catch {
     // Plain text payload
-    const text = event.data.text()
-    if (text) {
-      options.body = text
-    }
+    payload = { body: event.data.text() || undefined }
   }
 
-  event.waitUntil(self.registration.showNotification(title, options))
+  event.waitUntil(
+    (async () => {
+      // Coalesce with the still-displayed notification for this sender, if any.
+      const tag = pushNotificationTag(payload)
+      const existing = await self.registration.getNotifications({ tag })
+      const existingCount =
+        (existing[0]?.data as { count?: number } | undefined)?.count ??
+        (existing.length > 0 ? 1 : 0)
+
+      const built = buildPushNotification(payload, {
+        existingCount,
+        isAndroid: /android/i.test(self.navigator.userAgent),
+        locale: self.navigator.language,
+      })
+      await self.registration.showNotification(built.title, built.options as NotificationOptions)
+
+      // Badge: the app owns the exact count while it runs (useNotificationBadge);
+      // with no window open the SW can only honestly say "something is waiting" —
+      // an argumentless setAppBadge() shows a dot. Best-effort.
+      const windowClients = await self.clients.matchAll({ type: 'window' })
+      if (windowClients.length === 0) {
+        try {
+          await (
+            self.navigator as WorkerNavigator & { setAppBadge?: () => Promise<void> }
+          ).setAppBadge?.()
+        } catch {
+          // Badging unsupported on this platform.
+        }
+      }
+    })(),
+  )
 })
 
 // ============================================================================
