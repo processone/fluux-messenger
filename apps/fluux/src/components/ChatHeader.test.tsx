@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, act } from '@testing-library/react'
 import { ChatHeader } from './ChatHeader'
 import type { Contact } from '@fluux/sdk'
 
@@ -292,6 +292,43 @@ describe('ChatHeader', () => {
       fireEvent.click(screen.getByText('chat.verifyPeer.menuViewVerified'))
 
       expect(onEncryptionClick).toHaveBeenCalledTimes(1)
+    })
+  })
+
+  describe('Encryption menu — OMEMO protocol label (Task 13 / G-1)', () => {
+    it('OMEMO encrypted state: tooltip reads OMEMO (not OpenPGP) and shows no empty fingerprint block', async () => {
+      vi.useFakeTimers()
+      try {
+        const contact = setupContact()
+        const { container } = render(
+          <ChatHeader
+            name="Alice Smith"
+            type="chat"
+            contact={contact}
+            jid={contact.jid}
+            encryptionState={{ kind: 'encrypted', protocolId: 'omemo:2', fingerprint: '', trust: 'tofu' }}
+          />
+        )
+
+        // No actions wired up, so this hits the non-interactive `role="status"` chip.
+        const trigger = container.querySelector('[role="status"]') as HTMLElement
+        expect(trigger).not.toBeNull()
+        fireEvent.mouseEnter(trigger)
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(700)
+        })
+
+        // `t()` is mocked to identity, so the OMEMO protocol key surfaces
+        // verbatim — the point is that it is NOT the OpenPGP tooltip key.
+        expect(document.body.textContent).toContain('chat.encryption.tooltip.protocol.omemo:2')
+        expect(document.body.textContent).not.toContain('chat.encryption.openpgpTooltip')
+        // OMEMO has no single fingerprint (trust is per-device — see the
+        // contact profile's Security tab), so the empty `.font-mono` block
+        // that would otherwise render `formatFingerprint('')` must be absent.
+        expect(document.querySelector('.font-mono')).toBeNull()
+      } finally {
+        vi.useRealTimers()
+      }
     })
   })
 

@@ -17,7 +17,7 @@ import type { ConversationEncryptionState } from '@/hooks/useConversationEncrypt
 import { useWebUnlockDialogStore } from '@/stores/webUnlockDialogStore'
 import { HeaderOverflowKebab, type OverflowEntry } from './header/HeaderOverflowKebab'
 import { inlineClass, kebabClass } from './header/headerOverflow'
-import { trustVisual } from '@/e2ee/trustVisual'
+import { trustVisual, trustLabel } from '@/e2ee/trustVisual'
 
 export interface ChatHeaderProps {
   name: string
@@ -372,6 +372,19 @@ function EncryptionIcon({
   // tooltip below. The yellow ShieldAlert is now reserved exclusively for
   // the genuine `blocked` (key-changed) alert, so the two states no longer
   // share an alarming icon.
+  //
+  // OMEMO has no single peer fingerprint (trust is per-device — see the
+  // contact profile's Security tab), so its tooltip skips the OpenPGP
+  // copy entirely and reads "OMEMO · <aggregate trust>" instead. The
+  // `nsSeparator: false` override mirrors MessageBubble.tsx's
+  // `formatSecurityTooltip` — i18next's default `:` namespace separator
+  // would otherwise split the `omemo:2` key at the colon and silently
+  // fail to resolve.
+  const isOmemo = state.kind === 'encrypted' && state.protocolId === 'omemo:2'
+  const omemoTooltipText =
+    state.kind === 'encrypted'
+      ? `${t('chat.encryption.tooltip.protocol.omemo:2', { nsSeparator: false, defaultValue: 'omemo:2' })} · ${t(trustLabel(state.trust))}`
+      : ''
   const Icon = verified ? ShieldCheck : Shield
   const colorClass = verified
     ? trustVisual('verified').colorClass
@@ -381,13 +394,15 @@ function EncryptionIcon({
   if (!hasActions) {
     const tooltip = (
       <div>
-        <div>{verified
-          ? t('chat.encryption.verifiedTooltip')
-          : tofuNew
-            ? t('chat.encryption.tofuNewTooltip', 'New contact — verify fingerprint for full trust')
-            : t('chat.encryption.openpgpTooltip')
+        <div>{isOmemo
+          ? omemoTooltipText
+          : verified
+            ? t('chat.encryption.verifiedTooltip')
+            : tofuNew
+              ? t('chat.encryption.tofuNewTooltip', 'New contact — verify fingerprint for full trust')
+              : t('chat.encryption.openpgpTooltip')
         }</div>
-        {state.kind === 'encrypted' && (
+        {state.kind === 'encrypted' && !isOmemo && state.fingerprint && (
           <div className="font-mono text-xs mt-0.5 opacity-75">{formatFingerprint(state.fingerprint)}</div>
         )}
       </div>
@@ -410,13 +425,17 @@ function EncryptionIcon({
       <Tooltip
         content={state.kind === 'encrypted' ? (
           <div>
-            <div>{verified
-              ? t('chat.encryption.verifiedTooltip')
-              : tofuNew
-                ? t('chat.encryption.tofuNewTooltip', 'New contact — verify fingerprint for full trust')
-                : t('chat.encryption.openpgpTooltip')
+            <div>{isOmemo
+              ? omemoTooltipText
+              : verified
+                ? t('chat.encryption.verifiedTooltip')
+                : tofuNew
+                  ? t('chat.encryption.tofuNewTooltip', 'New contact — verify fingerprint for full trust')
+                  : t('chat.encryption.openpgpTooltip')
             }</div>
-            <div className="font-mono text-xs mt-0.5 opacity-75">{formatFingerprint(state.fingerprint)}</div>
+            {!isOmemo && state.fingerprint && (
+              <div className="font-mono text-xs mt-0.5 opacity-75">{formatFingerprint(state.fingerprint)}</div>
+            )}
           </div>
         ) : null}
         position="bottom"
