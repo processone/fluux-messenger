@@ -145,8 +145,11 @@ function _filterIgnoredReactions(
 }
 
 // Mock SDK hooks and pure functions
-vi.mock('@fluux/sdk', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@fluux/sdk')>()),
+vi.mock('@fluux/sdk', () => ({
+  // NS_FLUUX_VERIFICATIONS is read at module load by verificationSync.ts (transitively
+  // loaded via the OpenPGP plugin path); it must be provided explicitly here since we
+  // don't spread importOriginal (see comment above on the OOM guard).
+  NS_FLUUX_VERIFICATIONS: 'urn:xmpp:fluux:verifications:0',
   useReferencedMessage: () => undefined,
   RoomJoinError,
   useRoomActive: () => ({
