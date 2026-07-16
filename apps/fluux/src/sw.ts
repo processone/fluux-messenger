@@ -17,6 +17,10 @@
 /// <reference lib="webworker" />
 
 import { precacheAndRoute } from 'workbox-precaching'
+import { registerRoute } from 'workbox-routing'
+import { CacheFirst } from 'workbox-strategies'
+import { ExpirationPlugin } from 'workbox-expiration'
+import { CacheableResponsePlugin } from 'workbox-cacheable-response'
 import {
   resolveNotificationTarget,
   notificationNavigateMessage,
@@ -31,6 +35,31 @@ declare const self: ServiceWorkerGlobalScope
 
 // Workbox precaching - assets are injected at build time by vite-plugin-pwa
 precacheAndRoute(self.__WB_MANIFEST)
+
+// ============================================================================
+// Runtime Media Cache
+// ============================================================================
+// Cross-origin images: XEP-0363 HTTP-upload attachment images and link-preview
+// images (often served with `cache-control: max-age=0`, e.g. GitHub OGP — the
+// SW cache overrides that). Avatars are PEP-derived `blob:` URLs and never
+// reach the network layer; same-origin app assets are precached above.
+// Images only — video/audio would need range-request support and eat quota.
+// Cross-origin <img> fetches are no-cors -> opaque responses (status 0), which
+// Chromium pads heavily in quota accounting: keep maxEntries conservative.
+registerRoute(
+  ({ request, url }) => request.destination === 'image' && url.origin !== self.location.origin,
+  new CacheFirst({
+    cacheName: 'fluux-media',
+    plugins: [
+      new CacheableResponsePlugin({ statuses: [0, 200] }),
+      new ExpirationPlugin({
+        maxEntries: 200,
+        maxAgeSeconds: 30 * 24 * 60 * 60,
+        purgeOnQuotaError: true,
+      }),
+    ],
+  }),
+)
 
 // ============================================================================
 // Web Push Notification Handler
