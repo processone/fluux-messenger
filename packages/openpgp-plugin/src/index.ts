@@ -45,3 +45,7 @@ export type { KeyBundle, RestoreResult, DecryptOutput, CertValidation } from './
 
 // App-layer recovery signals raised by the web unlock auto-recovery path.
 export { KeyPickerRequiredError, NoRecoveryAvailableError } from './recoveryErrors'
+
+// Desktop plugin (Rust Sequoia via Tauri IPC).
+export { SequoiaPgpPlugin } from './SequoiaPgpPlugin'
+export type { InvokeFn, SequoiaPgpPluginOptions } from './SequoiaPgpPlugin'

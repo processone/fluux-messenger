@@ -24,6 +24,7 @@ import {
 } from './OpenPGPPluginBase'
 import { accountUserId } from './openpgpUserId'
 import { keyExportFilename } from './keyExportNaming'
+import type { OpenPGPHostStores, OpenPGPFileIO } from './hostStores'
 
 /**
  * Typed wrapper over Tauri's `invoke`. Abstracted so tests can inject a
@@ -34,14 +35,20 @@ export type InvokeFn = <T>(cmd: string, args?: Record<string, unknown>) => Promi
 export interface SequoiaPgpPluginOptions {
   /** Tauri command dispatcher. Tests pass a mock; app code passes the real one. */
   invoke: InvokeFn
+  /** App-injected adapter over the six trust stores. */
+  hostStores: OpenPGPHostStores
+  /** App-injected Tauri file dialogs (keeps @tauri-apps/* out of the package). */
+  fileIO: OpenPGPFileIO
 }
 
 export class SequoiaPgpPlugin extends OpenPGPPluginBase {
   private readonly invoke: InvokeFn
+  private readonly fileIO: OpenPGPFileIO
 
   constructor(options: SequoiaPgpPluginOptions) {
-    super()
+    super({ hostStores: options.hostStores })
     this.invoke = options.invoke
+    this.fileIO = options.fileIO
   }
 
   protected pluginName(): string {
@@ -197,28 +204,11 @@ export class SequoiaPgpPlugin extends OpenPGPPluginBase {
     } catch (err) {
       throw this.toPluginError('exportKeyToFile', err)
     }
-    const { save } = await import('@tauri-apps/plugin-dialog')
-    const filePath = await save({
-      defaultPath: keyExportFilename(ctx.account.jid),
-      filters: [{ name: 'OpenPGP Armor', extensions: ['asc', 'pgp', 'gpg'] }],
-    })
-    if (!filePath) return false
-    const { writeTextFile } = await import('@tauri-apps/plugin-fs')
-    await writeTextFile(filePath, armoredMessage)
-    return true
+    return this.fileIO.saveFile(keyExportFilename(ctx.account.jid), armoredMessage)
   }
 
   async pickKeyFile(): Promise<string | null> {
-    const { open } = await import('@tauri-apps/plugin-dialog')
-    const result = await open({
-      multiple: false,
-      filters: [{ name: 'OpenPGP Armor', extensions: ['asc', 'pgp', 'gpg'] }],
-    })
-    if (!result) return null
-    const filePath = typeof result === 'string' ? result : result[0]
-    if (!filePath) return null
-    const { readTextFile } = await import('@tauri-apps/plugin-fs')
-    return readTextFile(filePath)
+    return this.fileIO.pickFile()
   }
 
   // ---------------------------------------------------------------------------

@@ -5,10 +5,11 @@
  * decrypt, claim — without any Tauri runtime.
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
 import type { InvokeFn } from './SequoiaPgpPlugin'
 import { SequoiaPgpPlugin } from './SequoiaPgpPlugin'
-import { getOwnKeyConflict } from '@/stores/ownKeyConflictStore'
+import { createMockHostStores, type MockHostStores } from './testing/mockHostStores'
+import type { OpenPGPFileIO } from './hostStores'
 import {
   E2EEPluginError,
   InMemoryStorageBackend,
@@ -434,17 +435,36 @@ function publishKeyAsXep0373(
 }
 
 /**
+ * No-op `OpenPGPFileIO` stub shared by construction sites that don't
+ * exercise export/import file behaviour. Tests that assert on
+ * `exportKeyToFile` / `pickKeyFile` provide their own localized stub.
+ */
+const mockFileIO: OpenPGPFileIO = {
+  saveFile: async () => true,
+  pickFile: async () => null,
+}
+
+/**
  * Build two fully-wired plugin instances (alice + bob) that have published
  * their own keys to their respective PEP nodes AND mutually exposed them
  * via their peer-publish maps. Returned plugins are NOT yet probed — that's
  * up to the individual test so we can cover the "peer key not cached" path.
+ *
+ * `hostStores` is shared by BOTH plugins — mirrors the pre-migration
+ * behaviour where alice and bob's plugins read/wrote the same real
+ * (singleton) app stores. Tests that assert per-party trust state pass
+ * their own dedicated mock instance; tests that never touch trust state
+ * can share the describe-scoped default.
  */
-async function buildCrossPublishedPair(fake: ReturnType<typeof makeFakeRust>): Promise<{
+async function buildCrossPublishedPair(
+  fake: ReturnType<typeof makeFakeRust>,
+  hostStores: MockHostStores,
+): Promise<{
   alice: { plugin: SequoiaPgpPlugin; ctx: PluginContext }
   bob: { plugin: SequoiaPgpPlugin; ctx: PluginContext }
 }> {
-  const alicePlugin = new SequoiaPgpPlugin({ invoke: fake.invoke })
-  const bobPlugin = new SequoiaPgpPlugin({ invoke: fake.invoke })
+  const alicePlugin = new SequoiaPgpPlugin({ invoke: fake.invoke, hostStores, fileIO: mockFileIO })
+  const bobPlugin = new SequoiaPgpPlugin({ invoke: fake.invoke, hostStores, fileIO: mockFileIO })
   const aliceBuilt = makeContext('alice@example.com')
   const bobBuilt = makeContext('bob@example.com')
   await alicePlugin.init(aliceBuilt.ctx)
@@ -580,25 +600,18 @@ function makeContext(accountJid: string): {
 describe('SequoiaPgpPlugin', () => {
   let fake: ReturnType<typeof makeFakeRust>
   let plugin: SequoiaPgpPlugin
+  let hostStores: MockHostStores
 
   beforeEach(async () => {
-    // Reset every singleton store the plugin touches. Without this,
-    // pinnedPrimaryFingerprintsStore + verifiedPeerKeysStore +
-    // keyChangeAlertsStore + ownKeyConflictStore leak between tests.
+    // A fresh mock host adapter per test is the migration's equivalent of
+    // resetting every singleton store the plugin touches (pinned primary
+    // fingerprints, verified peers, key-change alerts, own-key conflict,
+    // trust-state status) — no leakage between tests.
     localStorage.clear()
-    const verifiedStore = await import('@/stores/verifiedPeerKeysStore')
-    const alertsStore = await import('@/stores/keyChangeAlertsStore')
-    const pinStore = await import('@/stores/pinnedPrimaryFingerprintsStore')
-    const ownConflictStore = await import('@/stores/ownKeyConflictStore')
-    const trustStatusStore = await import('@/stores/trustStateStatusStore')
-    verifiedStore.useVerifiedPeerKeysStore.setState({ verifiedFingerprintByJid: {} })
-    alertsStore.useKeyChangeAlertsStore.setState({ alertsByJid: {} })
-    pinStore.usePinnedPrimaryFingerprintsStore.setState({ pinnedFingerprintByJid: {} })
-    ownConflictStore.useOwnKeyConflictStore.setState({ conflict: null })
-    trustStatusStore.useTrustStateStatusStore.getState().clear()
+    hostStores = createMockHostStores()
 
     fake = makeFakeRust()
-    plugin = new SequoiaPgpPlugin({ invoke: fake.invoke })
+    plugin = new SequoiaPgpPlugin({ invoke: fake.invoke, hostStores, fileIO: mockFileIO })
   })
 
   describe('init / ensureIdentity', () => {
@@ -721,6 +734,8 @@ describe('SequoiaPgpPlugin', () => {
           commands.push(cmd)
           return fake.invoke<T>(cmd, args)
         },
+        hostStores,
+        fileIO: mockFileIO,
       })
       const { ctx, published } = makeContext('me@example.com')
       ctx.xmpp.queryDisco = async () => ({ features: [], identities: [] })
@@ -851,7 +866,7 @@ describe('SequoiaPgpPlugin', () => {
     it('publishes normally when no key is on the server yet (first publish)', async () => {
       const { ctx, published } = makeContext('me@example.com')
       await plugin.init(ctx)
-      expect(getOwnKeyConflict()).toBeNull()
+      expect(hostStores.ownKeyConflict.get()).toBeNull()
       expect(published).toHaveLength(2)
     })
 
@@ -865,7 +880,7 @@ describe('SequoiaPgpPlugin', () => {
       // Simulate a server that already has our key (e.g. previous session).
       publishKeyAsXep0373(built, 'me@example.com', bundle)
       await plugin.init(built.ctx)
-      expect(getOwnKeyConflict()).toBeNull()
+      expect(hostStores.ownKeyConflict.get()).toBeNull()
       // Two publishes: the check sees consistency, so normal publish proceeds.
       expect(built.published).toHaveLength(2)
     })
@@ -906,7 +921,7 @@ describe('SequoiaPgpPlugin', () => {
         },
       })
       await plugin.init(ctx)
-      const conflict = getOwnKeyConflict()
+      const conflict = hostStores.ownKeyConflict.get()
       expect(conflict).not.toBeNull()
       expect(conflict!.kind).toBe('primary-mismatch')
       expect(conflict!.publishedFingerprint).toBe('TAMPEREDFP000000')
@@ -1050,7 +1065,7 @@ describe('SequoiaPgpPlugin', () => {
         },
       })
       await plugin.init(ctx)
-      const conflict = getOwnKeyConflict()
+      const conflict = hostStores.ownKeyConflict.get()
       expect(conflict).not.toBeNull()
       expect(conflict!.kind).toBe('subkey-mismatch')
       expect(conflict!.localFingerprint).toBe(bundle.fingerprint)
@@ -1087,7 +1102,7 @@ describe('SequoiaPgpPlugin', () => {
         },
       })
       await plugin.init(ctx)
-      expect(getOwnKeyConflict()).not.toBeNull()
+      expect(hostStores.ownKeyConflict.get()).not.toBeNull()
       const handle = await plugin.openConversation({
         kind: 'direct',
         peer: 'bob@example.com',
@@ -1126,12 +1141,12 @@ describe('SequoiaPgpPlugin', () => {
         },
       })
       await plugin.init(ctx)
-      expect(getOwnKeyConflict()).not.toBeNull()
+      expect(hostStores.ownKeyConflict.get()).not.toBeNull()
       expect(published).toHaveLength(0)
 
       await plugin.resolveOwnKeyConflict_overwriteServer()
 
-      expect(getOwnKeyConflict()).toBeNull()
+      expect(hostStores.ownKeyConflict.get()).toBeNull()
       // Two publishes: data node then metadata node.
       expect(published).toHaveLength(2)
     })
@@ -1164,7 +1179,7 @@ describe('SequoiaPgpPlugin', () => {
         },
       })
       await plugin.init(ctx)
-      expect(getOwnKeyConflict()).not.toBeNull()
+      expect(hostStores.ownKeyConflict.get()).not.toBeNull()
 
       // Publish a secret-key backup so restoreSecretKey finds it.
       const fp = plugin.getOwnFingerprint()!
@@ -1185,7 +1200,7 @@ describe('SequoiaPgpPlugin', () => {
       )
 
       const info = await plugin.resolveOwnKeyConflict_importFromServer('hunter2')
-      expect(getOwnKeyConflict()).toBeNull()
+      expect(hostStores.ownKeyConflict.get()).toBeNull()
       expect(info.fingerprint).toBe(fp)
     })
   })
@@ -1399,7 +1414,7 @@ describe('SequoiaPgpPlugin', () => {
         }
         return fake.invoke<T>(cmd, args)
       }
-      const pluginUnderTest = new SequoiaPgpPlugin({ invoke: wrappedInvoke })
+      const pluginUnderTest = new SequoiaPgpPlugin({ invoke: wrappedInvoke, hostStores, fileIO: mockFileIO })
       await pluginUnderTest.init(built.ctx)
 
       built.peerPublish('bob@example.com', METADATA_NODE, {
@@ -1548,7 +1563,7 @@ describe('SequoiaPgpPlugin', () => {
         }
         return fake.invoke<T>(cmd, args)
       }
-      const pluginUnderTest = new SequoiaPgpPlugin({ invoke: wrappedInvoke })
+      const pluginUnderTest = new SequoiaPgpPlugin({ invoke: wrappedInvoke, hostStores, fileIO: mockFileIO })
       await pluginUnderTest.init(built.ctx)
 
       const bobBundle = await fake.invoke<KeyBundle>('openpgp_ensure_key', {
@@ -1578,7 +1593,7 @@ describe('SequoiaPgpPlugin', () => {
         }
         return fake.invoke<T>(cmd, args)
       }
-      const pluginUnderTest = new SequoiaPgpPlugin({ invoke: wrappedInvoke })
+      const pluginUnderTest = new SequoiaPgpPlugin({ invoke: wrappedInvoke, hostStores, fileIO: mockFileIO })
       await pluginUnderTest.init(built.ctx)
 
       const bobBundle = await fake.invoke<KeyBundle>('openpgp_ensure_key', {
@@ -1755,8 +1770,8 @@ describe('SequoiaPgpPlugin', () => {
     it('drains the buffer on onPeerKeysChanged and reports an upgrade for verified entries', async () => {
       // Build the pair manually so we hold references to the captured
       // securityUpdates on bob's context.
-      const alicePlugin = new SequoiaPgpPlugin({ invoke: fake.invoke })
-      const bobPlugin = new SequoiaPgpPlugin({ invoke: fake.invoke })
+      const alicePlugin = new SequoiaPgpPlugin({ invoke: fake.invoke, hostStores, fileIO: mockFileIO })
+      const bobPlugin = new SequoiaPgpPlugin({ invoke: fake.invoke, hostStores, fileIO: mockFileIO })
       const aliceBuilt = makeContext('alice@example.com')
       const bobBuilt = makeContext('bob@example.com')
       await alicePlugin.init(aliceBuilt.ctx)
@@ -1803,8 +1818,8 @@ describe('SequoiaPgpPlugin', () => {
     })
 
     it('does not stash when the signature verified on first decrypt', async () => {
-      const alicePlugin = new SequoiaPgpPlugin({ invoke: fake.invoke })
-      const bobPlugin = new SequoiaPgpPlugin({ invoke: fake.invoke })
+      const alicePlugin = new SequoiaPgpPlugin({ invoke: fake.invoke, hostStores, fileIO: mockFileIO })
+      const bobPlugin = new SequoiaPgpPlugin({ invoke: fake.invoke, hostStores, fileIO: mockFileIO })
       const aliceBuilt = makeContext('alice@example.com')
       const bobBuilt = makeContext('bob@example.com')
       await alicePlugin.init(aliceBuilt.ctx)
@@ -1846,8 +1861,8 @@ describe('SequoiaPgpPlugin', () => {
       // The key that finally arrives is a DIFFERENT identity (eve's). The
       // re-verify reports signatureVerified=false, so the message is
       // rejected with its body expunged — not kept pending.
-      const alicePlugin = new SequoiaPgpPlugin({ invoke: fake.invoke })
-      const bobPlugin = new SequoiaPgpPlugin({ invoke: fake.invoke })
+      const alicePlugin = new SequoiaPgpPlugin({ invoke: fake.invoke, hostStores, fileIO: mockFileIO })
+      const bobPlugin = new SequoiaPgpPlugin({ invoke: fake.invoke, hostStores, fileIO: mockFileIO })
       const aliceBuilt = makeContext('alice@example.com')
       const bobBuilt = makeContext('bob@example.com')
       await alicePlugin.init(aliceBuilt.ctx)
@@ -1891,8 +1906,8 @@ describe('SequoiaPgpPlugin', () => {
       // Stuff SIGNATURE_BUFFER_SIZE + 1 entries in, then verify the oldest
       // is gone by triggering a drain with the legitimate key and counting
       // upgrades. We expect exactly SIGNATURE_BUFFER_SIZE upgrades.
-      const alicePlugin = new SequoiaPgpPlugin({ invoke: fake.invoke })
-      const bobPlugin = new SequoiaPgpPlugin({ invoke: fake.invoke })
+      const alicePlugin = new SequoiaPgpPlugin({ invoke: fake.invoke, hostStores, fileIO: mockFileIO })
+      const bobPlugin = new SequoiaPgpPlugin({ invoke: fake.invoke, hostStores, fileIO: mockFileIO })
       const aliceBuilt = makeContext('alice@example.com')
       const bobBuilt = makeContext('bob@example.com')
       await alicePlugin.init(aliceBuilt.ctx)
@@ -1934,8 +1949,8 @@ describe('SequoiaPgpPlugin', () => {
     })
 
     it('evicts entries older than the TTL on subsequent inserts', async () => {
-      const alicePlugin = new SequoiaPgpPlugin({ invoke: fake.invoke })
-      const bobPlugin = new SequoiaPgpPlugin({ invoke: fake.invoke })
+      const alicePlugin = new SequoiaPgpPlugin({ invoke: fake.invoke, hostStores, fileIO: mockFileIO })
+      const bobPlugin = new SequoiaPgpPlugin({ invoke: fake.invoke, hostStores, fileIO: mockFileIO })
       const aliceBuilt = makeContext('alice@example.com')
       const bobBuilt = makeContext('bob@example.com')
       await alicePlugin.init(aliceBuilt.ctx)
@@ -1988,8 +2003,8 @@ describe('SequoiaPgpPlugin', () => {
       // The SDK only passes messageId when the stanza carries one. A
       // message without an id has no stable key to buffer on — we skip
       // the stash entirely rather than inventing an opaque token.
-      const alicePlugin = new SequoiaPgpPlugin({ invoke: fake.invoke })
-      const bobPlugin = new SequoiaPgpPlugin({ invoke: fake.invoke })
+      const alicePlugin = new SequoiaPgpPlugin({ invoke: fake.invoke, hostStores, fileIO: mockFileIO })
+      const bobPlugin = new SequoiaPgpPlugin({ invoke: fake.invoke, hostStores, fileIO: mockFileIO })
       const aliceBuilt = makeContext('alice@example.com')
       const bobBuilt = makeContext('bob@example.com')
       await alicePlugin.init(aliceBuilt.ctx)
@@ -2028,9 +2043,9 @@ describe('SequoiaPgpPlugin', () => {
     })
 
     it('only upgrades messages from the peer whose keys changed', async () => {
-      const alicePlugin = new SequoiaPgpPlugin({ invoke: fake.invoke })
-      const bobPlugin = new SequoiaPgpPlugin({ invoke: fake.invoke })
-      const carolPlugin = new SequoiaPgpPlugin({ invoke: fake.invoke })
+      const alicePlugin = new SequoiaPgpPlugin({ invoke: fake.invoke, hostStores, fileIO: mockFileIO })
+      const bobPlugin = new SequoiaPgpPlugin({ invoke: fake.invoke, hostStores, fileIO: mockFileIO })
+      const carolPlugin = new SequoiaPgpPlugin({ invoke: fake.invoke, hostStores, fileIO: mockFileIO })
       const aliceBuilt = makeContext('alice@example.com')
       const bobBuilt = makeContext('bob@example.com')
       const carolBuilt = makeContext('carol@example.com')
@@ -2077,7 +2092,7 @@ describe('SequoiaPgpPlugin', () => {
 
   describe('encrypt / decrypt round-trip', () => {
     it('encrypts for a probed peer, decrypts back to plaintext with signature verified', async () => {
-      const { alice, bob } = await buildCrossPublishedPair(fake)
+      const { alice, bob } = await buildCrossPublishedPair(fake, hostStores)
 
       await alice.plugin.probePeer('bob@example.com')
       const handle = await alice.plugin.openConversation({ kind: 'direct', peer: 'bob@example.com' })
@@ -2100,7 +2115,7 @@ describe('SequoiaPgpPlugin', () => {
     })
 
     it('marks trust untrusted when the sender key is not cached at decrypt time', async () => {
-      const { alice, bob } = await buildCrossPublishedPair(fake)
+      const { alice, bob } = await buildCrossPublishedPair(fake, hostStores)
 
       // Alice has bob cached (probed during publish), encrypts.
       await alice.plugin.probePeer('bob@example.com')
@@ -2118,7 +2133,7 @@ describe('SequoiaPgpPlugin', () => {
     })
 
     it('rejects when the signature does not match the cached sender cert', async () => {
-      const { alice, bob } = await buildCrossPublishedPair(fake)
+      const { alice, bob } = await buildCrossPublishedPair(fake, hostStores)
       await alice.plugin.probePeer('bob@example.com')
       const handle = await alice.plugin.openConversation({ kind: 'direct', peer: 'bob@example.com' })
       const payload = await alice.plugin.encrypt(handle, encodeBodyAsPayload('hi'))
@@ -2184,7 +2199,7 @@ describe('SequoiaPgpPlugin', () => {
       // here, a regression that drops the signcrypt wrapper (sending a
       // bare <payload/> back on the wire) would only surface as a decrypt
       // failure at the peer — too late to catch in CI.
-      const { alice } = await buildCrossPublishedPair(fake)
+      const { alice } = await buildCrossPublishedPair(fake, hostStores)
       await alice.plugin.probePeer('bob@example.com')
       const handle = await alice.plugin.openConversation({
         kind: 'direct',
@@ -2217,7 +2232,7 @@ describe('SequoiaPgpPlugin', () => {
       // Downstream (messagingUtils.parseMessageContent) uses authoredAt
       // to override <delay/> and arrival time, because in-envelope time
       // is sender-signed. Pin that the plugin surfaces it.
-      const { alice, bob } = await buildCrossPublishedPair(fake)
+      const { alice, bob } = await buildCrossPublishedPair(fake, hostStores)
       await alice.plugin.probePeer('bob@example.com')
       await bob.plugin.probePeer('alice@example.com')
 
@@ -2249,7 +2264,7 @@ describe('SequoiaPgpPlugin', () => {
       // decrypts (it would, if Eve re-encrypted to Bob's key), the
       // signcrypt reflection check must reject because `<to/>` doesn't
       // name Bob.
-      const { alice, bob } = await buildCrossPublishedPair(fake)
+      const { alice, bob } = await buildCrossPublishedPair(fake, hostStores)
       await alice.plugin.probePeer('bob@example.com')
       await bob.plugin.probePeer('alice@example.com')
 
@@ -2286,7 +2301,7 @@ describe('SequoiaPgpPlugin', () => {
     })
 
     it('rejects an envelope whose <time/> is more than 7 days skewed', async () => {
-      const { alice, bob } = await buildCrossPublishedPair(fake)
+      const { alice, bob } = await buildCrossPublishedPair(fake, hostStores)
       await alice.plugin.probePeer('bob@example.com')
       await bob.plugin.probePeer('alice@example.com')
 
@@ -2327,7 +2342,7 @@ describe('SequoiaPgpPlugin', () => {
       // Bare plaintext (legacy body-only sender) must fail loudly rather
       // than surface as if it were a successful decrypt — that's exactly
       // the ambiguity XEP-0373 §4.1 is designed to eliminate.
-      const { alice, bob } = await buildCrossPublishedPair(fake)
+      const { alice, bob } = await buildCrossPublishedPair(fake, hostStores)
       await alice.plugin.probePeer('bob@example.com')
       await bob.plugin.probePeer('alice@example.com')
 
@@ -2418,7 +2433,7 @@ describe('SequoiaPgpPlugin', () => {
       const fp = plugin.getOwnFingerprint()
       await plugin.shutdown()
 
-      const plugin2 = new SequoiaPgpPlugin({ invoke: fake.invoke })
+      const plugin2 = new SequoiaPgpPlugin({ invoke: fake.invoke, hostStores, fileIO: mockFileIO })
       const { ctx: ctx2 } = makeContext('me@example.com')
       await plugin2.init(ctx2)
       expect(plugin2.getOwnFingerprint()).toBe(fp)
@@ -2588,7 +2603,7 @@ describe('SequoiaPgpPlugin', () => {
       // present on PEP. The test harness uses a module-level `fake`
       // Rust, so simulate a cold state by clearing it.
       fake.accounts.clear()
-      const pluginB = new SequoiaPgpPlugin({ invoke: fake.invoke })
+      const pluginB = new SequoiaPgpPlugin({ invoke: fake.invoke, hostStores, fileIO: mockFileIO })
       const { ctx: ctxB, published: publishedB } = makeContext('me@example.com')
       await pluginB.init(ctxB)
       // The `init` generated a DIFFERENT key locally on device B; the
@@ -2638,7 +2653,7 @@ describe('SequoiaPgpPlugin', () => {
       const backup = await plugin.fetchSecretKeyBackup()
 
       fake.accounts.clear()
-      const pluginB = new SequoiaPgpPlugin({ invoke: fake.invoke })
+      const pluginB = new SequoiaPgpPlugin({ invoke: fake.invoke, hostStores, fileIO: mockFileIO })
       const { ctx: ctxB, keyUnlocks } = makeContext('me@example.com')
       await pluginB.init(ctxB)
       // init's passive load is covered by the plugin-registered retry.
@@ -2681,7 +2696,7 @@ describe('SequoiaPgpPlugin', () => {
       const backup = await plugin.fetchSecretKeyBackup()
 
       fake.accounts.clear()
-      const pluginB = new SequoiaPgpPlugin({ invoke: fake.invoke })
+      const pluginB = new SequoiaPgpPlugin({ invoke: fake.invoke, hostStores, fileIO: mockFileIO })
       const { ctx: ctxB, deletedNodes: deletedB } = makeContext('me@example.com')
       await pluginB.init(ctxB)
       const fpBbefore = pluginB.getOwnFingerprint()
@@ -2737,17 +2752,12 @@ describe('SequoiaPgpPlugin', () => {
       // recovery completion must RE-RUN the seal check so the deferred verdict
       // resolves to `sealed` for the unchanged cert — otherwise the trust state
       // stays stuck at `awaiting-key` until an unrelated reconnect/restart.
-      const { getTrustStateStatus } = await import('@/stores/trustStateStatusStore')
-      const pinStore = await import('@/stores/pinnedPrimaryFingerprintsStore')
-
       // Phase 1 — a first plugin instance seals the trust state. A pin makes the
       // stores non-empty so a real seal (encrypted-to-self) is written, and a
       // secret-key backup is published so the later recovery can restore it.
       const { ctx: ctxA } = makeContext('me@example.com')
       await plugin.init(ctxA)
-      pinStore.usePinnedPrimaryFingerprintsStore.setState({
-        pinnedFingerprintByJid: { 'peer@example.com': 'PEERFP000000' },
-      })
+      hostStores.pinnedPrimaryFingerprints.set('peer@example.com', 'PEERFP000000')
       const passthroughA = plugin as unknown as {
         verifyTrustStateOnInit(): Promise<void>
       }
@@ -2757,7 +2767,7 @@ describe('SequoiaPgpPlugin', () => {
       await plugin.backupSecretKey('shared-pp')
       const backup = await plugin.fetchSecretKeyBackup()
       expect(backup).toBeTruthy()
-      expect(getTrustStateStatus()).toBe('sealed')
+      expect(hostStores.trustStateStatus.get()).toBe('sealed')
 
       // Phase 2 — a fresh plugin (same JID + key + seal) initialises, then its
       // seal check is driven while the secret key is momentarily unusable: the
@@ -2766,7 +2776,7 @@ describe('SequoiaPgpPlugin', () => {
       // the seal check so only that decrypt is affected (init's own
       // `verifyTrustStateOnInit` is fire-and-forget, so we re-drive it
       // deterministically here).
-      const pluginB = new SequoiaPgpPlugin({ invoke: fake.invoke })
+      const pluginB = new SequoiaPgpPlugin({ invoke: fake.invoke, hostStores, fileIO: mockFileIO })
       const { ctx: ctxB } = makeContext('me@example.com')
       ctxB.xmpp.publishPEP(SECRET_KEY_NODE, {
         id: 'current',
@@ -2782,7 +2792,7 @@ describe('SequoiaPgpPlugin', () => {
       }
       fake.failNextOwnDecryptWith('key-unrecoverable')
       await passthroughB.verifyTrustStateOnInit()
-      expect(getTrustStateStatus()).toBe('awaiting-key')
+      expect(hostStores.trustStateStatus.get()).toBe('awaiting-key')
 
       // Phase 3 — recovery restores the same cert; the recovery completion must
       // re-run the seal check, which now decrypts cleanly against the unchanged
@@ -2791,7 +2801,7 @@ describe('SequoiaPgpPlugin', () => {
       // queue before asserting the resolved verdict.
       await pluginB.restoreSecretKey('shared-pp')
       await new Promise((resolve) => setTimeout(resolve, 0))
-      expect(getTrustStateStatus()).toBe('sealed')
+      expect(hostStores.trustStateStatus.get()).toBe('sealed')
     })
   })
 
@@ -2883,7 +2893,7 @@ describe('SequoiaPgpPlugin', () => {
 
       fake.accounts.clear()
       localStorage.clear()
-      const pluginB = new SequoiaPgpPlugin({ invoke: fake.invoke })
+      const pluginB = new SequoiaPgpPlugin({ invoke: fake.invoke, hostStores, fileIO: mockFileIO })
       const { ctx: ctxB } = makeContext('me@example.com')
       await pluginB.init(ctxB)
       // Seed the backup onto device B's PEP tree.
@@ -2947,7 +2957,7 @@ describe('SequoiaPgpPlugin', () => {
     it('is null when the plugin has no context (pre-init edge case)', () => {
       // The UI may peek at the getter before init completes. A null
       // answer is correct — there's no account to scope the marker to.
-      const fresh = new SequoiaPgpPlugin({ invoke: fake.invoke })
+      const fresh = new SequoiaPgpPlugin({ invoke: fake.invoke, hostStores, fileIO: mockFileIO })
       expect(fresh.getBackedUpFingerprint()).toBeNull()
     })
   })
@@ -3064,7 +3074,7 @@ describe('SequoiaPgpPlugin', () => {
       // BTBV survives rotation: a peer who already trusted us before
       // rotation keeps trusting us after — they only need to re-fetch
       // the public cert, no re-verification ceremony.
-      const pair = await buildCrossPublishedPair(fake)
+      const pair = await buildCrossPublishedPair(fake, hostStores)
       await pair.alice.plugin.probePeer('bob@example.com')
       await pair.bob.plugin.probePeer('alice@example.com')
 
@@ -3116,7 +3126,7 @@ describe('SequoiaPgpPlugin', () => {
         }
         throw new Error('unexpected cmd: ' + cmd)
       }
-      const unrecoverablePlugin = new SequoiaPgpPlugin({ invoke: fakeInvoke })
+      const unrecoverablePlugin = new SequoiaPgpPlugin({ invoke: fakeInvoke, hostStores, fileIO: mockFileIO })
       await unrecoverablePlugin.init(ctx) // must resolve, not reject
 
       expect(unrecoverablePlugin.isKeyRecoveryNeeded()).toBe(true)
@@ -3180,7 +3190,7 @@ describe('SequoiaPgpPlugin', () => {
         }
         throw new Error('unexpected cmd: ' + cmd)
       }
-      const recoveringPlugin = new SequoiaPgpPlugin({ invoke: fakeInvoke })
+      const recoveringPlugin = new SequoiaPgpPlugin({ invoke: fakeInvoke, hostStores, fileIO: mockFileIO })
       await recoveringPlugin.init(ctx) // must resolve, not reject
       expect(recoveringPlugin.isKeyRecoveryNeeded()).toBe(true)
     })
@@ -3190,7 +3200,7 @@ describe('SequoiaPgpPlugin', () => {
       const fakeInvoke: InvokeFn = async () => {
         throw new Error('openpgp unlock task panicked: kaboom')
       }
-      const flakyPlugin = new SequoiaPgpPlugin({ invoke: fakeInvoke })
+      const flakyPlugin = new SequoiaPgpPlugin({ invoke: fakeInvoke, hostStores, fileIO: mockFileIO })
       let caught: unknown
       try {
         await flakyPlugin.init(ctx)
@@ -3222,7 +3232,7 @@ describe('SequoiaPgpPlugin', () => {
         }
         return realInvoke(cmd, args)
       }
-      const restorer = new SequoiaPgpPlugin({ invoke: spyingInvoke })
+      const restorer = new SequoiaPgpPlugin({ invoke: spyingInvoke, hostStores, fileIO: mockFileIO })
       // Init will succeed against the real backup (ensure_key reuses the
       // cached bundle). Re-init on a fresh context so the restore path is
       // isolated from init.
@@ -3286,38 +3296,23 @@ describe('SequoiaPgpPlugin', () => {
   })
 
   describe('verification trust', () => {
-    // Reuses the real verifiedPeerKeysStore + keyChangeAlertsStore +
-    // pinnedPrimaryFingerprintsStore — the plugin reads from / writes to
-    // them imperatively, and any regression in those paths should
-    // surface here rather than be hidden by mocks.
-    type VerifiedStore = typeof import('@/stores/verifiedPeerKeysStore')
-    type AlertsStore = typeof import('@/stores/keyChangeAlertsStore')
-    type PinStore = typeof import('@/stores/pinnedPrimaryFingerprintsStore')
-    let verifiedStore: VerifiedStore
-    let alertsStore: AlertsStore
-    let pinStore: PinStore
-    beforeEach(async () => {
+    // Own dedicated mock host adapter, shared by BOTH alice's and bob's
+    // plugin instances (via buildCrossPublishedPair) — mirrors the
+    // pre-migration behaviour where the plugin read from / wrote to the
+    // real (singleton) verifiedPeerKeysStore + keyChangeAlertsStore +
+    // pinnedPrimaryFingerprintsStore imperatively. Shadows the outer
+    // `hostStores` so this block's state never leaks to/from other tests.
+    let hostStores: MockHostStores
+    beforeEach(() => {
       localStorage.clear()
-      verifiedStore = (await import('@/stores/verifiedPeerKeysStore')) as VerifiedStore
-      alertsStore = (await import('@/stores/keyChangeAlertsStore')) as AlertsStore
-      pinStore = (await import('@/stores/pinnedPrimaryFingerprintsStore')) as PinStore
-      verifiedStore.useVerifiedPeerKeysStore.setState({ verifiedFingerprintByJid: {} })
-      alertsStore.useKeyChangeAlertsStore.setState({ alertsByJid: {} })
-      pinStore.usePinnedPrimaryFingerprintsStore.setState({ pinnedFingerprintByJid: {} })
-    })
-    afterEach(() => {
-      verifiedStore.useVerifiedPeerKeysStore.setState({ verifiedFingerprintByJid: {} })
-      alertsStore.useKeyChangeAlertsStore.setState({ alertsByJid: {} })
-      pinStore.usePinnedPrimaryFingerprintsStore.setState({ pinnedFingerprintByJid: {} })
+      hostStores = createMockHostStores()
     })
 
     it("getPeerTrust returns 'verified' when the cached fingerprint is in the store", async () => {
-      const { alice } = await buildCrossPublishedPair(fake)
+      const { alice } = await buildCrossPublishedPair(fake, hostStores)
       await alice.plugin.probePeer('bob@example.com')
       const peerFp = alice.plugin.getPeerFingerprint('bob@example.com')!
-      verifiedStore.useVerifiedPeerKeysStore
-        .getState()
-        .setVerified('bob@example.com', peerFp)
+      hostStores.verifiedPeers.setVerified('bob@example.com', peerFp)
 
       const trust = await alice.plugin.getPeerTrust('bob@example.com')
       expect(trust).toBe('verified')
@@ -3326,25 +3321,21 @@ describe('SequoiaPgpPlugin', () => {
     it("getPeerTrust stays 'tofu' when the verified fingerprint is for a different peer", async () => {
       // Pin verification for charlie, but ask about bob — the lookup
       // should miss and bob stays at TOFU.
-      const { alice } = await buildCrossPublishedPair(fake)
+      const { alice } = await buildCrossPublishedPair(fake, hostStores)
       await alice.plugin.probePeer('bob@example.com')
-      verifiedStore.useVerifiedPeerKeysStore
-        .getState()
-        .setVerified('charlie@example.com', 'unrelated-fp')
+      hostStores.verifiedPeers.setVerified('charlie@example.com', 'unrelated-fp')
 
       const trust = await alice.plugin.getPeerTrust('bob@example.com')
       expect(trust).toBe('tofu')
     })
 
     it("decrypt produces 'verified' security context when the sender is verified", async () => {
-      const { alice, bob } = await buildCrossPublishedPair(fake)
+      const { alice, bob } = await buildCrossPublishedPair(fake, hostStores)
       await alice.plugin.probePeer('bob@example.com')
       await bob.plugin.probePeer('alice@example.com')
       // Mark alice as verified on bob's side BEFORE the inbound message
       // arrives, so the decrypt path observes the verification.
-      verifiedStore.useVerifiedPeerKeysStore
-        .getState()
-        .setVerified('alice@example.com', alice.plugin.getOwnFingerprint()!)
+      hostStores.verifiedPeers.setVerified('alice@example.com', alice.plugin.getOwnFingerprint()!)
 
       const handle = await alice.plugin.openConversation({ kind: 'direct', peer: 'bob@example.com' })
       const payload = await alice.plugin.encrypt(handle, encodeBodyAsPayload('hello, verified bob'))
@@ -3421,10 +3412,10 @@ describe('SequoiaPgpPlugin', () => {
       // The pin is what makes server-tampering detectable later: with
       // no pin, every key change is silent. Verify that probing a peer
       // for the first time lands the fingerprint in the pin store.
-      const { alice } = await buildCrossPublishedPair(fake)
+      const { alice } = await buildCrossPublishedPair(fake, hostStores)
       await alice.plugin.probePeer('bob@example.com')
       const fp = alice.plugin.getPeerFingerprint('bob@example.com')!
-      expect(pinStore.getPinnedPrimaryFp('bob@example.com')).toBe(fp)
+      expect(hostStores.pinnedPrimaryFingerprints.get('bob@example.com')).toBe(fp)
     })
 
     /**
@@ -3456,13 +3447,11 @@ describe('SequoiaPgpPlugin', () => {
       // peerKeys (so ongoing crypto stays anchored to a key the user
       // trusted) AND record a key-change alert (so the UI demands a
       // user decision).
-      const { alice } = await buildCrossPublishedPair(fake)
+      const { alice } = await buildCrossPublishedPair(fake, hostStores)
       await alice.plugin.probePeer('bob@example.com')
       const oldFp = alice.plugin.getPeerFingerprint('bob@example.com')!
       // User has verified the OLD cert out of band.
-      verifiedStore.useVerifiedPeerKeysStore
-        .getState()
-        .setVerified('bob@example.com', oldFp)
+      hostStores.verifiedPeers.setVerified('bob@example.com', oldFp)
 
       const newBob = await simulateBobRotation(alice)
       expect(newBob.fingerprint).not.toBe(oldFp)
@@ -3471,14 +3460,13 @@ describe('SequoiaPgpPlugin', () => {
       // anchored to the trusted material.
       expect(alice.plugin.getPeerFingerprint('bob@example.com')).toBe(oldFp)
       // Pin is unchanged — the new fp isn't trusted.
-      expect(pinStore.getPinnedPrimaryFp('bob@example.com')).toBe(oldFp)
+      expect(hostStores.pinnedPrimaryFingerprints.get('bob@example.com')).toBe(oldFp)
       // Verification stays valid (it was against the OLD cert, which
       // is what we still cache).
-      expect(verifiedStore.getVerifiedPeerFingerprint('bob@example.com')).toBe(oldFp)
+      expect((hostStores.verifiedPeers.getAll()['bob@example.com'] ?? null)).toBe(oldFp)
       // …but a key-change alert must have been recorded so the UI
       // surfaces the rotation to the user.
-      const alerts = await import('@/stores/keyChangeAlertsStore')
-      const alert = alerts.getKeyChangeAlert('bob@example.com')
+      const alert = hostStores.keyChangeAlerts.get('bob@example.com')
       expect(alert).not.toBeNull()
       expect(alert!.previousFingerprint).toBe(oldFp)
       expect(alert!.currentFingerprint).toBe(newBob.fingerprint)
@@ -3490,14 +3478,13 @@ describe('SequoiaPgpPlugin', () => {
       // alert MUST translate to a refusal — the alternative (silent
       // continued encryption to the OLD cert that the rotated peer
       // can no longer decrypt) is the worst of both worlds.
-      const { alice } = await buildCrossPublishedPair(fake)
+      const { alice } = await buildCrossPublishedPair(fake, hostStores)
       await alice.plugin.probePeer('bob@example.com')
       const oldFp = alice.plugin.getPeerFingerprint('bob@example.com')!
 
       await simulateBobRotation(alice)
       // Sanity: the alert was recorded and the cached fp stayed put.
-      const alerts = await import('@/stores/keyChangeAlertsStore')
-      expect(alerts.getKeyChangeAlert('bob@example.com')).not.toBeNull()
+      expect(hostStores.keyChangeAlerts.get('bob@example.com')).not.toBeNull()
       expect(alice.plugin.getPeerFingerprint('bob@example.com')).toBe(oldFp)
 
       // Now try to encrypt. The plugin must refuse with a classified
@@ -3521,27 +3508,24 @@ describe('SequoiaPgpPlugin', () => {
       // button on the banner. Pin moves to the new fp, peerKeys is
       // refreshed, alert clears, encryption resumes — but the peer
       // ends up at `trusted`, not `verified`.
-      const { alice } = await buildCrossPublishedPair(fake)
+      const { alice } = await buildCrossPublishedPair(fake, hostStores)
       await alice.plugin.probePeer('bob@example.com')
       const oldFp = alice.plugin.getPeerFingerprint('bob@example.com')!
-      verifiedStore.useVerifiedPeerKeysStore
-        .getState()
-        .setVerified('bob@example.com', oldFp)
+      hostStores.verifiedPeers.setVerified('bob@example.com', oldFp)
 
       const newBob = await simulateBobRotation(alice)
 
       // User accepts without verifying.
       await alice.plugin.acceptPeerKeyChange('bob@example.com', false)
 
-      const alerts = await import('@/stores/keyChangeAlertsStore')
       // Alert cleared.
-      expect(alerts.getKeyChangeAlert('bob@example.com')).toBeNull()
+      expect(hostStores.keyChangeAlerts.get('bob@example.com')).toBeNull()
       // Pin promoted to NEW fp.
-      expect(pinStore.getPinnedPrimaryFp('bob@example.com')).toBe(newBob.fingerprint)
+      expect(hostStores.pinnedPrimaryFingerprints.get('bob@example.com')).toBe(newBob.fingerprint)
       // peerKeys refreshed.
       expect(alice.plugin.getPeerFingerprint('bob@example.com')).toBe(newBob.fingerprint)
       // Verification dropped — accept-without-verifying never lifts trust.
-      expect(verifiedStore.getVerifiedPeerFingerprint('bob@example.com')).toBeNull()
+      expect((hostStores.verifiedPeers.getAll()['bob@example.com'] ?? null)).toBeNull()
       expect(await alice.plugin.getPeerTrust('bob@example.com')).toBe('tofu')
 
       // Encryption is unblocked: a fresh encrypt call must succeed.
@@ -3554,7 +3538,7 @@ describe('SequoiaPgpPlugin', () => {
       // Verify-and-accept flow: user came through the verify dialog,
       // which compares peer's NEW fp out of band. Pin moves AND
       // verification is recorded, so the chip flips to green.
-      const { alice } = await buildCrossPublishedPair(fake)
+      const { alice } = await buildCrossPublishedPair(fake, hostStores)
       await alice.plugin.probePeer('bob@example.com')
 
       const newBob = await simulateBobRotation(alice)
@@ -3562,9 +3546,9 @@ describe('SequoiaPgpPlugin', () => {
       await alice.plugin.acceptPeerKeyChange('bob@example.com', true)
 
       // Pin + cached cert + verification all moved to NEW fp in lockstep.
-      expect(pinStore.getPinnedPrimaryFp('bob@example.com')).toBe(newBob.fingerprint)
+      expect(hostStores.pinnedPrimaryFingerprints.get('bob@example.com')).toBe(newBob.fingerprint)
       expect(alice.plugin.getPeerFingerprint('bob@example.com')).toBe(newBob.fingerprint)
-      expect(verifiedStore.getVerifiedPeerFingerprint('bob@example.com')).toBe(newBob.fingerprint)
+      expect((hostStores.verifiedPeers.getAll()['bob@example.com'] ?? null)).toBe(newBob.fingerprint)
       expect(await alice.plugin.getPeerTrust('bob@example.com')).toBe('verified')
     })
 
@@ -3575,7 +3559,7 @@ describe('SequoiaPgpPlugin', () => {
       // peerKeys (old fp) but the pin pointing at the new fp — no alert
       // active — so the next send would silently re-encrypt to the old
       // cert while appearing to the user as if the rotation was accepted.
-      const { alice } = await buildCrossPublishedPair(fake)
+      const { alice } = await buildCrossPublishedPair(fake, hostStores)
       await alice.plugin.probePeer('bob@example.com')
       const oldFp = alice.plugin.getPeerFingerprint('bob@example.com')!
 
@@ -3597,10 +3581,10 @@ describe('SequoiaPgpPlugin', () => {
       expect(caught).toBeInstanceOf(Error)
 
       // Pin must be rolled back — not left stranded at the unverified new fp.
-      expect(pinStore.getPinnedPrimaryFp('bob@example.com')).toBe(oldFp)
+      expect(hostStores.pinnedPrimaryFingerprints.get('bob@example.com')).toBe(oldFp)
 
       // Alert must still be present and coherent with the pin.
-      const alert = alertsStore.getKeyChangeAlert('bob@example.com')
+      const alert = hostStores.keyChangeAlerts.get('bob@example.com')
       expect(alert).not.toBeNull()
       expect(alert!.previousFingerprint).toBe(oldFp)
       expect(alert!.currentFingerprint).toBe(newBob.fingerprint)
@@ -3616,7 +3600,7 @@ describe('SequoiaPgpPlugin', () => {
       // {previousFp: targetFp, currentFp: newerFp}. A naive unconditional
       // clearKeyChangeAlert would erase that fresh alert, silently swallowing
       // the second rotation.
-      const { alice } = await buildCrossPublishedPair(fake)
+      const { alice } = await buildCrossPublishedPair(fake, hostStores)
       await alice.plugin.probePeer('bob@example.com')
 
       // First rotation: alice sees alert(oldFp → newFp).
@@ -3637,24 +3621,23 @@ describe('SequoiaPgpPlugin', () => {
 
       // The original alert (oldFp → newFp) must be gone.
       // A fresh alert (newFp → newerFp) must have taken its place.
-      const alert = alertsStore.getKeyChangeAlert('bob@example.com')
+      const alert = hostStores.keyChangeAlerts.get('bob@example.com')
       expect(alert).not.toBeNull()
       expect(alert!.previousFingerprint).toBe(newBob.fingerprint)
       expect(alert!.currentFingerprint).toBe(newerBob.fingerprint)
 
       // Verification was NOT recorded — the key we fetched differs from
       // the one the user was presented with in the verify dialog.
-      expect(verifiedStore.getVerifiedPeerFingerprint('bob@example.com')).toBeNull()
+      expect((hostStores.verifiedPeers.getAll()['bob@example.com'] ?? null)).toBeNull()
     })
 
     it('does NOT record a key-change alert on first key cache for an unverified peer', async () => {
       // Caching the FIRST-ever key for a peer (no prior pin) is the
       // TOFU baseline — pin is set, no alert. A new alert here would
       // surface a banner on every fresh peer probe.
-      const { alice } = await buildCrossPublishedPair(fake)
+      const { alice } = await buildCrossPublishedPair(fake, hostStores)
       await alice.plugin.probePeer('bob@example.com')
-      const alerts = await import('@/stores/keyChangeAlertsStore')
-      expect(alerts.getKeyChangeAlert('bob@example.com')).toBeNull()
+      expect(hostStores.keyChangeAlerts.get('bob@example.com')).toBeNull()
     })
   })
 
@@ -3727,8 +3710,7 @@ describe('SequoiaPgpPlugin', () => {
       // syncVerificationsFromServer is fire-and-forget; let promises settle.
       await new Promise((r) => setTimeout(r, 0))
 
-      const { isPeerVerified: isVerified } = await import('@/stores/verifiedPeerKeysStore')
-      expect(isVerified('alice@example.com', 'ALICE_FP')).toBe(true)
+      expect(hostStores.verifiedPeers.isVerified('alice@example.com', 'ALICE_FP')).toBe(true)
     })
 
     it('ignores a server-forged verifications node signed by a foreign key', async () => {
@@ -3752,8 +3734,7 @@ describe('SequoiaPgpPlugin', () => {
       await plugin.init(ctx)
       await new Promise((r) => setTimeout(r, 0))
 
-      const { isPeerVerified: isVerified } = await import('@/stores/verifiedPeerKeysStore')
-      expect(isVerified('mallory@example.com', 'MALLORY_FP')).toBe(false)
+      expect(hostStores.verifiedPeers.isVerified('mallory@example.com', 'MALLORY_FP')).toBe(false)
     })
 
     it('publishes the verifications PEP node after a local verification is added', async () => {
@@ -3761,9 +3742,18 @@ describe('SequoiaPgpPlugin', () => {
       try {
         const { ctx, published } = makeContext('me@example.com')
         await plugin.init(ctx)
+        // init() kicks off a fire-and-forget syncVerificationsFromServer()
+        // (bumping _syncingFromRemoteCount) as the last step of
+        // activateSubscriptions(); its own single microtask hop (an empty
+        // queryPEP result) must resolve before a local store write is
+        // treated as user-driven rather than remote-sync noise. The old
+        // `await import(...)` used to construct `setVerified` incidentally
+        // provided this gap; flush microtasks explicitly now that the
+        // import is gone.
+        await Promise.resolve()
+        await Promise.resolve()
 
-        const { setPeerVerified: setVerified } = await import('@/stores/verifiedPeerKeysStore')
-        setVerified('carol@example.com', 'CAROL_FP')
+        hostStores.verifiedPeers.setVerified('carol@example.com', 'CAROL_FP')
 
         // Advance past the 500 ms debounce.
         await vi.advanceTimersByTimeAsync(600)
@@ -3813,8 +3803,7 @@ describe('SequoiaPgpPlugin', () => {
       verificationsCb!({ id: 'current', payload: { name: '', attrs: {}, children: [] } })
       await new Promise((r) => setTimeout(r, 0))
 
-      const { isPeerVerified: isVerified } = await import('@/stores/verifiedPeerKeysStore')
-      expect(isVerified('dave@example.com', 'DAVE_FP')).toBe(true)
+      expect(hostStores.verifiedPeers.isVerified('dave@example.com', 'DAVE_FP')).toBe(true)
     })
 
     it('_syncingFromRemote guard prevents a re-publish when a remote update is processed', async () => {
@@ -3886,10 +3875,9 @@ describe('SequoiaPgpPlugin', () => {
         })
         await plugin.init(ctx)
 
-        const store = await import('@/stores/verifiedPeerKeysStore')
-        store.setPeerVerified('alice@example.com', 'ALICE_FP')
+        hostStores.verifiedPeers.setVerified('alice@example.com', 'ALICE_FP')
         await vi.advanceTimersByTimeAsync(600)
-        store.clearPeerVerified('alice@example.com')
+        hostStores.verifiedPeers.clearVerified('alice@example.com')
         await vi.advanceTimersByTimeAsync(600)
 
         // The empty map is published (not skipped), overwriting the server node.
@@ -3901,7 +3889,7 @@ describe('SequoiaPgpPlugin', () => {
         verificationsCb!({ id: 'current', payload: { name: '', attrs: {}, children: [] } })
         for (let i = 0; i < 10; i++) await Promise.resolve()
         await vi.advanceTimersByTimeAsync(600)
-        expect(store.isPeerVerified('alice@example.com', 'ALICE_FP')).toBe(false)
+        expect(hostStores.verifiedPeers.isVerified('alice@example.com', 'ALICE_FP')).toBe(false)
       } finally {
         vi.useRealTimers()
       }
@@ -3927,14 +3915,13 @@ describe('SequoiaPgpPlugin', () => {
         keychainBacked: true,
       })
       await plugin.init(ctx)
-      const store = await import('@/stores/verifiedPeerKeysStore')
 
       // A newer snapshot (version 5): bob is verified, alice already revoked elsewhere.
       currentItem = buildVerificationsPepItem(fp, { 'bob@example.com': 'BOB_FP' }, 5)
       verificationsCb!({ id: 'current', payload: { name: '', attrs: {}, children: [] } })
       await new Promise((r) => setTimeout(r, 0))
-      expect(store.isPeerVerified('bob@example.com', 'BOB_FP')).toBe(true)
-      expect(store.isPeerVerified('alice@example.com', 'ALICE_FP')).toBe(false)
+      expect(hostStores.verifiedPeers.isVerified('bob@example.com', 'BOB_FP')).toBe(true)
+      expect(hostStores.verifiedPeers.isVerified('alice@example.com', 'ALICE_FP')).toBe(false)
 
       // The server replays an OLDER snapshot (version 1) that still trusts alice.
       currentItem = buildVerificationsPepItem(
@@ -3946,8 +3933,8 @@ describe('SequoiaPgpPlugin', () => {
       await new Promise((r) => setTimeout(r, 0))
 
       // Rollback rejected: alice is NOT resurrected, bob is untouched.
-      expect(store.isPeerVerified('alice@example.com', 'ALICE_FP')).toBe(false)
-      expect(store.isPeerVerified('bob@example.com', 'BOB_FP')).toBe(true)
+      expect(hostStores.verifiedPeers.isVerified('alice@example.com', 'ALICE_FP')).toBe(false)
+      expect(hostStores.verifiedPeers.isVerified('bob@example.com', 'BOB_FP')).toBe(true)
     })
 
     it('clears a locally-verified peer that a newer remote snapshot drops', async () => {
@@ -3970,15 +3957,10 @@ describe('SequoiaPgpPlugin', () => {
         keychainBacked: true,
       })
 
-      const store = await import('@/stores/verifiedPeerKeysStore')
       // Seed local state BEFORE init so the store subscription (attached during
       // init) does not schedule a publish from these writes.
-      store.useVerifiedPeerKeysStore.setState({
-        verifiedFingerprintByJid: {
-          'alice@example.com': 'ALICE_FP',
-          'bob@example.com': 'BOB_FP',
-        },
-      })
+      hostStores.verifiedPeers.setVerified('alice@example.com', 'ALICE_FP')
+      hostStores.verifiedPeers.setVerified('bob@example.com', 'BOB_FP')
       await plugin.init(ctx)
 
       // Another device published a newer snapshot (version 5) that dropped alice.
@@ -3986,8 +3968,8 @@ describe('SequoiaPgpPlugin', () => {
       verificationsCb!({ id: 'current', payload: { name: '', attrs: {}, children: [] } })
       await new Promise((r) => setTimeout(r, 0))
 
-      expect(store.isPeerVerified('alice@example.com', 'ALICE_FP')).toBe(false)
-      expect(store.isPeerVerified('bob@example.com', 'BOB_FP')).toBe(true)
+      expect(hostStores.verifiedPeers.isVerified('alice@example.com', 'ALICE_FP')).toBe(false)
+      expect(hostStores.verifiedPeers.isVerified('bob@example.com', 'BOB_FP')).toBe(true)
     })
   })
 })
