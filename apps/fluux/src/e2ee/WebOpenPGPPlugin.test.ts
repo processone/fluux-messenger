@@ -1358,34 +1358,31 @@ describe('WebOpenPGPPlugin', () => {
     })
   })
 
-  describe('backup passphrase normalization', () => {
-    it('normalizes case so uppercase and lowercase codes are equivalent', async () => {
+  describe('backup passphrase is used verbatim (#1021)', () => {
+    it('imports with the exact code, rejects a case-folded one', async () => {
       const source = new TestableWebOpenPGPPlugin()
       const sourceCtx = makeCtx('alice@example.com').ctx
       setSessionPassphrase('session-pp')
       await source.init(sourceCtx)
       await source.callEnsureKeyMaterial('alice@example.com')
 
-      // Encrypt with uppercase backup code.
-      const backupMessage = await source.callBackupEncrypt(
-        'alice@example.com',
-        'TWNK-KD5Y-MT3T-E1GS-DRDB-KVTW',
-      )
+      const code = 'TWNK-KD5Y-MT3T-E1GS-DRDB-KVTW'
+      const backupMessage = await source.callBackupEncrypt('alice@example.com', code)
 
-      // Import with lowercase version — must succeed due to normalization.
       clearSessionPassphrase()
       const dest = new TestableWebOpenPGPPlugin()
-      const destCtx = makeCtx('alice@example.com').ctx
-      await dest.init(destCtx)
-      const restored = await dest.callBackupImport(
-        'alice@example.com',
-        backupMessage,
-        'twnk-kd5y-mt3t-e1gs-drdb-kvtw',
-      )
+      await dest.init(makeCtx('alice@example.com').ctx)
+      // Case-folding is NOT forgiven — the passphrase is opaque key
+      // material used byte-for-byte, like every other XEP-0373 client.
+      await expect(
+        dest.callBackupImport('alice@example.com', backupMessage, code.toLowerCase()),
+      ).rejects.toMatchObject({ code: 'wrong-passphrase' })
+
+      const restored = await dest.callBackupImport('alice@example.com', backupMessage, code)
       expect(restored.fingerprint).toBeTruthy()
     })
 
-    it('normalizes whitespace variants', async () => {
+    it('forgives surrounding whitespace only (paste artifacts)', async () => {
       const source = new TestableWebOpenPGPPlugin()
       const sourceCtx = makeCtx('alice@example.com').ctx
       setSessionPassphrase('session-pp')
@@ -1397,15 +1394,13 @@ describe('WebOpenPGPPlugin', () => {
         'correct horse battery staple',
       )
 
-      // Import with extra spaces and trailing newline — must work.
       clearSessionPassphrase()
       const dest = new TestableWebOpenPGPPlugin()
-      const destCtx = makeCtx('alice@example.com').ctx
-      await dest.init(destCtx)
+      await dest.init(makeCtx('alice@example.com').ctx)
       const restored = await dest.callBackupImport(
         'alice@example.com',
         backupMessage,
-        '  correct   horse  battery   staple  \n',
+        '  correct horse battery staple\n',
       )
       expect(restored.fingerprint).toBeTruthy()
     })
@@ -2623,6 +2618,113 @@ describe('WebOpenPGPPlugin', () => {
       await expect(device.unlock('wrong-for-local-pp')).rejects.toBeInstanceOf(KeyPickerRequiredError)
       const { isKeyLocked } = await import('./webPassphraseStore')
       expect(isKeyLocked()).toBe(true) // rolled back
+    })
+  })
+})
+
+describe('legacy backup passphrase migration (#1021)', () => {
+  // Fluux ≤0.17.1 encrypted backups with a normalized (NFKD → lowercase)
+  // passphrase; the displayed code is upper-case. A backup published by
+  // an old client must (a) still restore from the displayed code and
+  // (b) get re-published under the verbatim passphrase so other clients
+  // can open it too.
+  const CODE = 'TWNK-KD5Y-MT3T-E1GS-DRDB-KVTW'
+
+  /**
+   * Publish a backup exactly as Fluux ≤0.17.1 did for `CODE`: encrypted
+   * to the legacy-normalized form. (Post-fix `backupSecretKey` encrypts
+   * verbatim, so feeding it the normalized string reproduces the legacy
+   * bytes.)
+   */
+  async function publishLegacyBackup(shared: SharedPep) {
+    const { legacyNormalizeBackupPassphrase } = await import('./backupPassphrase')
+    setSessionPassphrase('source-session-pp')
+    const source = new TestableWebOpenPGPPlugin()
+    await source.init(makeCtxWithWritablePep('alice@example.com', shared).ctx)
+    const original = await source.callEnsureKeyMaterial('alice@example.com')
+    await source.backupSecretKey(legacyNormalizeBackupPassphrase(CODE))
+    clearSessionPassphrase()
+    return original
+  }
+
+  it('restores a legacy-encoded backup from the displayed passphrase', async () => {
+    const shared: SharedPep = new Map()
+    const original = await publishLegacyBackup(shared)
+
+    const device = new WebOpenPGPPlugin() // fresh backend — new device
+    await device.init(makeCtxWithWritablePep('alice@example.com', shared).ctx)
+
+    const result = await device.restoreSecretKey(CODE)
+
+    expect(result).toEqual({ fingerprint: original.fingerprint })
+    expect(device.getOwnFingerprint()).toBe(original.fingerprint)
+  })
+
+  it('heals the server copy: re-publishes the backup under the verbatim passphrase', async () => {
+    const shared: SharedPep = new Map()
+    await publishLegacyBackup(shared)
+
+    const device = new WebOpenPGPPlugin()
+    await device.init(makeCtxWithWritablePep('alice@example.com', shared).ctx)
+    await device.restoreSecretKey(CODE)
+
+    // The published item must now open with the code exactly as the user
+    // sees it — what Gajim would feed its KDF — and no longer with the
+    // legacy-normalized form.
+    const healed = await device.fetchSecretKeyBackup()
+    expect(healed).not.toBeNull()
+    const openpgp = await import('openpgp')
+    const exact = await openpgp.readMessage({ armoredMessage: healed! })
+    await expect(
+      openpgp.decrypt({ message: exact, passwords: [CODE], format: 'binary' }),
+    ).resolves.toBeDefined()
+
+    const { legacyNormalizeBackupPassphrase } = await import('./backupPassphrase')
+    const folded = await openpgp.readMessage({ armoredMessage: healed! })
+    await expect(
+      openpgp.decrypt({
+        message: folded,
+        passwords: [legacyNormalizeBackupPassphrase(CODE)],
+        format: 'binary',
+      }),
+    ).rejects.toThrow()
+  })
+
+  it('does NOT re-publish when the backup already uses the verbatim passphrase', async () => {
+    const shared: SharedPep = new Map()
+    setSessionPassphrase('source-session-pp')
+    const source = new TestableWebOpenPGPPlugin()
+    await source.init(makeCtxWithWritablePep('alice@example.com', shared).ctx)
+    await source.callEnsureKeyMaterial('alice@example.com')
+    await source.backupSecretKey(CODE) // canonical (post-fix) backup
+    clearSessionPassphrase()
+
+    const device = new WebOpenPGPPlugin()
+    const { ctx } = makeCtxWithWritablePep('alice@example.com', shared)
+    const secretKeyPublishes: string[] = []
+    const origPublish = ctx.xmpp.publishPEP
+    ctx.xmpp.publishPEP = async (node, item, opts) => {
+      if (node.includes('secret-key')) secretKeyPublishes.push(node)
+      return origPublish(node, item, opts)
+    }
+    await device.init(ctx)
+
+    await device.restoreSecretKey(CODE)
+
+    expect(secretKeyPublishes).toEqual([])
+  })
+
+  it('still reports wrong-passphrase when neither form opens the backup', async () => {
+    const shared: SharedPep = new Map()
+    await publishLegacyBackup(shared)
+
+    const device = new WebOpenPGPPlugin()
+    await device.init(makeCtxWithWritablePep('alice@example.com', shared).ctx)
+
+    // Mixed-case wrong guess: exercises the legacy retry too (the forms
+    // differ), and both attempts must fail with the original error code.
+    await expect(device.restoreSecretKey('WRONG-CODE-9999')).rejects.toMatchObject({
+      code: 'wrong-passphrase',
     })
   })
 })

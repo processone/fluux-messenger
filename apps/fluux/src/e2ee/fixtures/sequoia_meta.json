@@ -1,6 +1,6 @@
 {
-  "aliceFingerprint": "94FF3F52B89793B53ED81D67E53582597A5B9E49",
-  "bobFingerprint": "0A3418C3EBD1B987C4A9BC0DC1C8510C765D633D",
+  "aliceFingerprint": "850327D1C5A49224EBD558796DDA3B00A706C36C",
+  "bobFingerprint": "860EB5E3236549A8C6490F8E52BF90E831A3A9A9",
   "plaintext": "Hello from Sequoia — cross-library interop test",
   "backupPassphrase": "TWNK-KD5Y-MT3T-E1GS-DRDB-KVTW"
 }
