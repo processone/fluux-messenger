@@ -122,8 +122,17 @@ describe('NotificationsSettings — system notification settings link', () => {
     render(<NotificationsSettings />)
 
     // The description always renders; once it's present the async permission
-    // check has settled, so the absence of the link is meaningful.
-    await screen.findByText('settings.notificationDescription')
+    // check has settled, so the absence of the link is meaningful. The web
+    // build uses the platform-neutral copy (no "desktop" wording).
+    await screen.findByText('settings.notificationDescriptionWeb')
     expect(screen.queryByText(LINK)).not.toBeInTheDocument()
+  })
+
+  it('uses the desktop wording on the Tauri build and the neutral wording on web', async () => {
+    render(<NotificationsSettings />)
+
+    expect(await screen.findByText('settings.notificationStatus')).toBeInTheDocument()
+    expect(screen.getByText('settings.notificationDescription')).toBeInTheDocument()
+    expect(screen.queryByText('settings.notificationStatusWeb')).not.toBeInTheDocument()
   })
 })
