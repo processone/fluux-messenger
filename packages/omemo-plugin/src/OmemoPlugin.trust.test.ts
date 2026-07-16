@@ -139,9 +139,9 @@ describe('OmemoPlugin.setIdentityTrust', () => {
     await pa.setIdentityTrust('bob@x', String(bobDeviceId), 'verified')
     const list = await pa.listPeerIdentities('bob@x')
     expect(list[0].trust).toBe('verified')
-    // Note: getPeerTrust/getDeviceTrust are NOT verified-aware yet (Task 10
-    // wires isVerified into those read paths); listPeerIdentities (Task 8) is
-    // the verified-aware read path today, so it is the round-trip proof here.
+    // getPeerTrust/getDeviceTrust are also verified-aware (Task 10 wired
+    // isVerified into those read paths); see the "OmemoPlugin BTBV wiring"
+    // describe block below for the round-trip proof on those methods.
   })
 
   it("'verified' then a fingerprint change invalidates the marker (back to unverified)", async () => {
@@ -232,6 +232,27 @@ describe('OmemoPlugin BTBV wiring', () => {
     const { pa, bobDeviceId } = await twoParty()
     await pa.setIdentityTrust('bob@x', String(bobDeviceId), 'verified')
     expect(await pa.getPeerTrust('bob@x')).toBe('verified')
+  })
+
+  it('getPeerTrust: a single untrusted device dominates a verified one on the same peer', async () => {
+    const { bob, pa, bobDeviceId: device1 } = await twoParty()
+
+    // Mint a second, independent OMEMO identity and publish it as Bob's second device.
+    const acc2 = await OmemoAccount.create(new PluginStorageOmemoStore(memStorage()), (n) =>
+      crypto.getRandomValues(new Uint8Array(n)),
+    )
+    const device2 = acc2.publishableDeviceId()
+    await publishBundle(bob.ctx.xmpp, device2, await acc2.publishableBundleAsync())
+    await publishDeviceList(bob.ctx.xmpp, [device1, device2])
+
+    // Device A: verified. Device B: untrusted.
+    await pa.setIdentityTrust('bob@x', String(device1), 'verified')
+    await pa.setIdentityTrust('bob@x', String(device2), 'untrusted')
+    expect(await pa.getDeviceTrust('bob@x', String(device1))).toBe('verified')
+    expect(await pa.getDeviceTrust('bob@x', String(device2))).toBe('untrusted')
+
+    // A distrusted device must always win the aggregate — security-load-bearing.
+    expect(await pa.getPeerTrust('bob@x')).toBe('untrusted')
   })
 
   it('a fingerprint change on a verified device flips getDeviceTrust back off verified', async () => {
