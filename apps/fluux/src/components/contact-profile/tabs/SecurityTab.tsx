@@ -304,7 +304,12 @@ function OmemoDeviceList({
                 <button
                   type="button"
                   data-testid={`omemo-revoke-${id.id}`}
-                  onClick={() => void omemo.onRevokeDevice(id).then(() => setReload((n) => n + 1))}
+                  onClick={() =>
+                    void omemo
+                      .onRevokeDevice(id)
+                      .then(() => setReload((n) => n + 1))
+                      .catch(() => setError(true))
+                  }
                   className="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 bg-fluux-red/10 hover:bg-fluux-red/20 text-fluux-error border border-fluux-red rounded-lg transition-colors text-xs min-h-[36px]"
                 >
                   <ShieldOff className="size-3.5" />

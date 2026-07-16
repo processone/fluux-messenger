@@ -101,4 +101,50 @@ describe('SecurityTab — OMEMO per-identity list', () => {
     expect(await screen.findByText('contacts.encryption.omemo.loadError')).toBeTruthy()
     expect(screen.getByText('contacts.encryption.omemo.retry')).toBeTruthy()
   })
+
+  it('an untrusted device renders the danger cue (text-fluux-error + ShieldAlert), distinct from a calm tofu device', async () => {
+    const omemo = makeOmemo([
+      { id: '444', fingerprint: 'ff112233', trust: 'untrusted' },
+      { id: '555', fingerprint: 'aa998877', trust: 'tofu' },
+    ])
+    const { container } = render(
+      <SecurityTab
+        state={omemoState()}
+        peerJid="bob@x"
+        omemo={omemo}
+        onVerify={noop}
+        onRequestRevoke={noop}
+        onDisableEncryption={noop}
+        onEnableEncryption={noop}
+      />,
+    )
+    await waitFor(() => expect(omemo.listPeerIdentities).toHaveBeenCalled())
+
+    const untrustedVerifyBtn = container.querySelector(
+      '[data-testid="omemo-verify-444"]',
+    ) as HTMLButtonElement | null
+    expect(untrustedVerifyBtn).not.toBeNull()
+    const untrustedRow = untrustedVerifyBtn!.parentElement!.parentElement as HTMLElement
+
+    const tofuVerifyBtn = container.querySelector(
+      '[data-testid="omemo-verify-555"]',
+    ) as HTMLButtonElement | null
+    expect(tofuVerifyBtn).not.toBeNull()
+    const tofuRow = tofuVerifyBtn!.parentElement!.parentElement as HTMLElement
+
+    // Untrusted: danger cue — badge uses the error color class, and a
+    // dedicated ShieldAlert marker is rendered in the row.
+    const untrustedBadge = untrustedRow.querySelector('span.inline-flex') as HTMLElement
+    expect(untrustedBadge).not.toBeNull()
+    expect(untrustedBadge.className).toContain('text-fluux-error')
+    expect(untrustedRow.querySelector('.lucide-shield-alert')).not.toBeNull()
+
+    // Tofu: calm by default — no error color, no ShieldAlert. Distinct from
+    // the untrusted row above.
+    const tofuBadge = tofuRow.querySelector('span.inline-flex') as HTMLElement
+    expect(tofuBadge).not.toBeNull()
+    expect(tofuBadge.className).not.toContain('text-fluux-error')
+    expect(tofuBadge.className).toContain('text-fluux-muted')
+    expect(tofuRow.querySelector('.lucide-shield-alert')).toBeNull()
+  })
 })
