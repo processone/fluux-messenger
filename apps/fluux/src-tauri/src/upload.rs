@@ -20,8 +20,8 @@
 //! `MediaEncryption.encryptFile` on the web path: fresh 32-byte key +
 //! 12-byte IV per call, 128-bit auth tag appended to the ciphertext.
 
-use aes_gcm::aead::{Aead, OsRng};
-use aes_gcm::{AeadCore, Aes256Gcm, KeyInit};
+use aes_gcm::aead::{Aead, Generate};
+use aes_gcm::{Aes256Gcm, Key, KeyInit, Nonce};
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
 use serde::Serialize;
@@ -108,8 +108,8 @@ pub struct EncryptedUpload {
 /// generated here, never accepted from a caller, so nonce reuse is
 /// impossible by construction.
 pub fn encrypt_for_upload(plaintext: &[u8]) -> Result<EncryptedUpload, String> {
-    let key = Aes256Gcm::generate_key(OsRng);
-    let nonce = Aes256Gcm::generate_nonce(&mut OsRng);
+    let key = Key::<Aes256Gcm>::generate();
+    let nonce = Nonce::generate();
     let cipher = Aes256Gcm::new(&key);
     let ciphertext = cipher
         .encrypt(&nonce, plaintext)
@@ -292,7 +292,7 @@ mod tests {
         // WebCrypto-compatible shape: ciphertext || 16-byte GCM tag.
         assert_eq!(encrypted.ciphertext.len(), plaintext.len() + 16);
 
-        let cipher = Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(&encrypted.key));
+        let cipher = Aes256Gcm::new(&Key::<Aes256Gcm>::from(encrypted.key));
         let decrypted = cipher
             .decrypt(
                 (&encrypted.iv).into(),
