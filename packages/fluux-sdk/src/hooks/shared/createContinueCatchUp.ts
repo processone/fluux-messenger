@@ -11,7 +11,8 @@
  * - recorded gap with a seam startId → id-exact `after:` resume (immune to
  *   same-millisecond timestamp collisions; a purged anchor degrades via the
  *   item-not-found handling inside queryArchive/queryRoomArchive);
- * - gap with only a timestamp → `start: gapTs + 1ms`;
+ * - gap with only a timestamp → `start: gapTs` (exact — the boundary message
+ *   re-fetches and dedupes);
  * - no gap → the newest cached message: id-exact `after:` when it carries an
  *   archive id, timestamp `start:` otherwise;
  * - no local edge at all → nothing to continue from (the initial catch-up

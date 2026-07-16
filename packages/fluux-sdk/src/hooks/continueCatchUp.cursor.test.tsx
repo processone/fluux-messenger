@@ -6,7 +6,8 @@
  *
  * - a recorded gap with a startId resumes id-exact (`after:` the seam's
  *   last-downloaded archive id) with the manual pagination cap;
- * - a gap with only a timestamp falls back to `start: gapTs + 1ms`;
+ * - a gap with only a timestamp falls back to `start: gapTs` (exact — the
+ *   boundary message re-fetches and dedupes);
  * - with NO recorded gap, the newest cached message's archive id is the
  *   id-exact `after:` cursor (selectCatchUpQuery policy — this pins the
  *   intentional delta from the retired findContinueCatchUpCursor, which used
@@ -117,7 +118,7 @@ describe('continueChatCatchUp cursor selection', () => {
     })
   })
 
-  it('falls back to start: gap timestamp + 1ms when the gap carries no startId', async () => {
+  it('falls back to start: EXACT gap timestamp when the gap carries no startId', async () => {
     chatStore.setState({
       conversationGaps: new Map([[CONV, { start: new Date('2026-05-14T09:00:00.000Z').getTime() } as never]]),
     })
@@ -131,7 +132,7 @@ describe('continueChatCatchUp cursor selection', () => {
 
     expect(mockClient.chat.queryMAM).toHaveBeenCalledWith({
       with: CONV,
-      start: '2026-05-14T09:00:00.001Z',
+      start: '2026-05-14T09:00:00.000Z',
       max: MAM_CATCHUP_FORWARD_MAX,
       maxAutoPages: MAM_ROOM_FORWARD_MAX_PAGES_MANUAL,
     })
@@ -191,7 +192,7 @@ describe('continueRoomCatchUp cursor selection', () => {
     })
   })
 
-  it('falls back to start: gap timestamp + 1ms when the gap carries no startId', async () => {
+  it('falls back to start: EXACT gap timestamp when the gap carries no startId', async () => {
     roomStore.setState({
       roomGaps: new Map([[ROOM, { start: new Date('2026-05-14T09:00:00.000Z').getTime() } as never]]),
     })
@@ -204,7 +205,7 @@ describe('continueRoomCatchUp cursor selection', () => {
 
     expect(mockClient.chat.queryRoomMAM).toHaveBeenCalledWith({
       roomJid: ROOM,
-      start: '2026-05-14T09:00:00.001Z',
+      start: '2026-05-14T09:00:00.000Z',
       max: MAM_CATCHUP_FORWARD_MAX,
       maxAutoPages: MAM_ROOM_FORWARD_MAX_PAGES_MANUAL,
     })

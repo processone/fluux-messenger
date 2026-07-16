@@ -278,6 +278,13 @@ export function createStoreBindings(
     stores.chat.mergeMAMMessages(conversationId, messages, rsm, complete, direction, isFetchLatest, preserveGapMarker)
   })
 
+  // A purged id-exact anchor (item-not-found degrade): strip the matching
+  // startId from the persisted gap so the timestamp fallback can progress.
+  on('chat:mam-anchor-purged', ({ conversationId, after }) => {
+    const stores = getStores()
+    stores.chat.clearConversationGapAnchor(conversationId, after)
+  })
+
   // ============================================================================
   // Room Events (MUC)
   // ============================================================================
@@ -437,6 +444,12 @@ export function createStoreBindings(
   on('room:mam-messages', ({ roomJid, messages, rsm, complete, direction, preserveGapMarker, isFetchLatest }) => {
     const stores = getStores()
     stores.room.mergeRoomMAMMessages(roomJid, messages, rsm, complete, direction, preserveGapMarker, isFetchLatest)
+  })
+
+  // Room twin of chat:mam-anchor-purged (see above).
+  on('room:mam-anchor-purged', ({ roomJid, after }) => {
+    const stores = getStores()
+    stores.room.clearRoomGapAnchor(roomJid, after)
   })
 
   on('room:members', ({ roomJid, members }) => {

@@ -149,8 +149,10 @@ describe('selectCatchUpQuery (latest-first, id-anchored coverage cursor)', () =>
 
   it('falls back to a timestamp anchor when the coverage message has no stanza-id', () => {
     const messages = [{ timestamp: new Date('2026-05-14T09:00:00.000Z') }]
+    // EXACT anchor timestamp (no +1ms): the anchor re-fetches and dedupes;
+    // skipping a millisecond could skip other messages sharing it.
     expect(selectCatchUpQuery(messages, { sessionStartTime: new Date('2026-06-14T12:00:00Z').getTime() }))
-      .toEqual({ start: '2026-05-14T09:00:00.001Z' })
+      .toEqual({ start: '2026-05-14T09:00:00.000Z' })
   })
 
   it('prefers the recorded gap boundary (id-exact) over newer cached messages', () => {
@@ -163,8 +165,9 @@ describe('selectCatchUpQuery (latest-first, id-anchored coverage cursor)', () =>
 
   it('resumes a recorded gap by timestamp when it carries no id (legacy persisted gap)', () => {
     const messages = [{ timestamp: new Date('2026-06-01T12:00:00Z'), stanzaId: 'newer' }]
+    // Exact gap-boundary timestamp — see the fallback-anchor test above.
     expect(selectCatchUpQuery(messages, { forwardGapTimestamp: new Date('2026-05-14T09:00:00.000Z').getTime() }))
-      .toEqual({ start: '2026-05-14T09:00:00.001Z' })
+      .toEqual({ start: '2026-05-14T09:00:00.000Z' })
   })
 
   it('returns before:"" when every cached message is from this session', () => {
@@ -199,16 +202,18 @@ describe('MAM_ROOM_FORWARD_MAX_PAGES_MANUAL', () => {
 // ============================================================================
 
 describe('buildCatchUpStartTime', () => {
-  it('returns an ISO string offset by +1 ms', () => {
+  it('returns the EXACT anchor timestamp (no +1 ms — the anchor re-fetch dedupes)', () => {
+    // A +1ms offset would skip any OTHER message sharing the anchor's
+    // millisecond; the anchor itself deduplicates on re-fetch.
     const base = new Date('2025-06-15T08:30:00.000Z')
     const result = buildCatchUpStartTime(base)
-    expect(result).toBe('2025-06-15T08:30:00.001Z')
+    expect(result).toBe('2025-06-15T08:30:00.000Z')
   })
 
-  it('handles millisecond rollover correctly', () => {
+  it('preserves milliseconds verbatim', () => {
     const base = new Date('2025-06-15T08:30:00.999Z')
     const result = buildCatchUpStartTime(base)
-    expect(result).toBe('2025-06-15T08:30:01.000Z')
+    expect(result).toBe('2025-06-15T08:30:00.999Z')
   })
 
   it('does not mutate the input date', () => {

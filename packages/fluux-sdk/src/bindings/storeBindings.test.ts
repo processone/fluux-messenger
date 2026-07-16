@@ -205,6 +205,18 @@ describe('createStoreBindings', () => {
     })
   })
 
+  describe('MAM anchor-purged events (purged id-exact catch-up cursor)', () => {
+    it('chat:mam-anchor-purged strips the matching gap anchor via clearConversationGapAnchor', () => {
+      mockClient.emit('chat:mam-anchor-purged', { conversationId: 'alice@example.com', after: 'purged-id' })
+      expect(mockStores.chat.clearConversationGapAnchor).toHaveBeenCalledWith('alice@example.com', 'purged-id')
+    })
+
+    it('room:mam-anchor-purged strips the matching gap anchor via clearRoomGapAnchor', () => {
+      mockClient.emit('room:mam-anchor-purged', { roomJid: 'room@conference.example.com', after: 'purged-id' })
+      expect(mockStores.room.clearRoomGapAnchor).toHaveBeenCalledWith('room@conference.example.com', 'purged-id')
+    })
+  })
+
   describe('room events', () => {
     it('should handle room:added', () => {
       const room: Room = {

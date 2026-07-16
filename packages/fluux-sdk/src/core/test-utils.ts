@@ -929,6 +929,7 @@ export const createMockStoreRefs = (): MockStoreRefs => ({
     updateMessage: vi.fn(),
     triggerAnimation: vi.fn(),
     applyRemoteDisplayed: vi.fn(),
+    clearConversationGapAnchor: vi.fn(),
   } as unknown as MockStoreRefs['chat'],
   roster: {
     setContacts: vi.fn(),
@@ -962,6 +963,7 @@ export const createMockStoreRefs = (): MockStoreRefs => ({
     getRoom: vi.fn().mockReturnValue(undefined),
     rooms: new Map(),
     applyRemoteDisplayed: vi.fn(),
+    clearRoomGapAnchor: vi.fn(),
   } as unknown as MockStoreRefs['room'],
   events: {
     addSubscriptionRequest: vi.fn(),

@@ -467,7 +467,7 @@ describe('MAM Background Catch-Up', () => {
 
       expect(querySpy).toHaveBeenCalledWith(expect.objectContaining({
         with: 'alice@example.com',
-        start: '2026-05-14T09:00:00.001Z', // monthOld + 1ms — NOT liveThisSession + 1ms
+        start: '2026-05-14T09:00:00.000Z', // monthOld EXACT (anchor re-fetch dedupes) — NOT liveThisSession
       }))
     })
 
@@ -491,7 +491,7 @@ describe('MAM Background Catch-Up', () => {
 
       expect(querySpy).toHaveBeenCalledWith(expect.objectContaining({
         with: 'alice@example.com',
-        start: '2026-05-14T09:00:00.001Z',
+        start: '2026-05-14T09:00:00.000Z',
       }))
     })
 
@@ -664,7 +664,7 @@ describe('MAM Background Catch-Up', () => {
       await xmppClient.mam.catchUpConversationHistory('alice@example.com', cached, { sessionStartTime: new Date('2026-06-14T12:00:00Z').getTime() })
 
       expect(querySpy).toHaveBeenCalledWith(expect.objectContaining({
-        start: '2026-05-14T09:00:00.001Z',
+        start: '2026-05-14T09:00:00.000Z',
         maxAutoPages: 3,
       }))
     })
@@ -684,7 +684,7 @@ describe('MAM Background Catch-Up', () => {
       await xmppClient.mam.catchUpConversationHistory('alice@example.com', cached, { sessionStartTime: new Date('2026-06-14T12:00:00Z').getTime() })
 
       expect(calls).toHaveLength(2)
-      expect(calls[0]).toMatchObject({ start: '2026-05-14T09:00:00.001Z' })
+      expect(calls[0]).toMatchObject({ start: '2026-05-14T09:00:00.000Z' })
       expect(calls[1]).toMatchObject({ before: '' })
     })
 
@@ -936,7 +936,7 @@ describe('MAM Background Catch-Up', () => {
       await xmppClient.mam.catchUpRoomHistory(roomJid, cached, { sessionStartTime: new Date('2026-06-14T12:00:00Z').getTime() })
 
       expect(calls).toHaveLength(2)
-      expect(calls[0]).toMatchObject({ start: '2026-05-14T09:00:00.001Z', maxAutoPages: 3 })
+      expect(calls[0]).toMatchObject({ start: '2026-05-14T09:00:00.000Z', maxAutoPages: 3 })
       expect(calls[1]).toMatchObject({ before: '' })
     })
 
@@ -1104,7 +1104,7 @@ describe('MAM Background Catch-Up', () => {
       await xmppClient.mam.catchUpRoomHistory(roomJid, cached, { sessionStartTime: new Date('2026-06-14T12:00:00Z').getTime() })
 
       expect(querySpy).toHaveBeenCalledWith(expect.objectContaining({
-        start: '2026-05-14T09:00:00.001Z',
+        start: '2026-05-14T09:00:00.000Z',
         maxAutoPages: 3,
       }))
     })
@@ -1384,7 +1384,7 @@ describe('MAM Background Catch-Up', () => {
 
       expect(querySpy).toHaveBeenCalledWith(expect.objectContaining({
         roomJid: 'room1@conference.example.com',
-        start: '2026-05-14T09:00:00.001Z', // monthOld + 1ms — NOT liveThisSession + 1ms
+        start: '2026-05-14T09:00:00.000Z', // monthOld EXACT (anchor re-fetch dedupes) — NOT liveThisSession
       }))
     })
 
@@ -1412,7 +1412,7 @@ describe('MAM Background Catch-Up', () => {
 
       expect(querySpy).toHaveBeenCalledWith(expect.objectContaining({
         roomJid: 'room1@conference.example.com',
-        start: '2026-01-20T10:00:00.001Z',
+        start: '2026-01-20T10:00:00.000Z',
       }))
     })
 
