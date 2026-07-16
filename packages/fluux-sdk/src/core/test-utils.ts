@@ -766,6 +766,10 @@ export const createMockXMPPClientForHooks = () => ({
     queryMAM: vi.fn(),
     queryRoomMAM: vi.fn(),
   },
+  mam: {
+    catchUpConversationHistory: vi.fn(),
+    catchUpRoomHistory: vi.fn(),
+  },
   muc: {
     joinRoom: vi.fn(),
     leaveRoom: vi.fn(),

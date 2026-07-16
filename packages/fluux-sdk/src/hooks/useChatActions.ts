@@ -158,8 +158,15 @@ export function useChatActions() {
         }
 
         // Latest-first orchestrator (same as chatSideEffects' active-conversation
-        // catch-up) — Phase A only, no read-pointer stitch for a caller-triggered fetch.
-        await client.mam.catchUpConversationHistory(conversation.id, cachedMessages ?? [], {})
+        // catch-up). The ACTIVE conversation must not stitch: Phase B's
+        // keep-oldest-evict would trim its resident live edge out from under the
+        // open view. A NON-active target (e.g. background prefetch for a conversation
+        // the user isn't looking at) SHOULD stitch, so its unread region becomes
+        // contiguous with the read pointer instead of leaving a gap.
+        const isActive = targetId === chatStore.getState().activeConversationId
+        await client.mam.catchUpConversationHistory(conversation.id, cachedMessages ?? [], {
+          stitchReadPointer: !isActive,
+        })
       } catch (error) {
         console.error('Failed to fetch history:', error)
       } finally {
