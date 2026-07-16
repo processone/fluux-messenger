@@ -168,6 +168,25 @@ describe('OmemoPlugin.setIdentityTrust', () => {
     expect(list[0].trust).toBe('untrusted')
   })
 
+  it("'verified' clears a prior library 'untrusted' state (mutual clearing, other direction)", async () => {
+    const { alice, pa, bobDeviceId } = await twoParty()
+    await pa.setIdentityTrust('bob@x', String(bobDeviceId), 'untrusted')
+    const store = new PluginStorageOmemoStore(alice.ctx.storage)
+    expect((await store.loadTrust('bob@x', bobDeviceId))!.state).toBe('untrusted')
+
+    await pa.setIdentityTrust('bob@x', String(bobDeviceId), 'verified')
+
+    const list = await pa.listPeerIdentities('bob@x')
+    expect(list[0].trust).toBe('verified')
+
+    // Load-bearing: assert the library record itself was cleared, not merely
+    // shadowed by the verified marker's read-path precedence (listPeerIdentities
+    // alone would pass even if 'untrusted' were never cleared).
+    const rec = await store.loadTrust('bob@x', bobDeviceId)
+    expect(rec!.state).not.toBe('untrusted')
+    expect(rec!.state).toBe('undecided')
+  })
+
   it('is idempotent for repeated verified calls', async () => {
     const { pa, bobDeviceId } = await twoParty()
     await pa.setIdentityTrust('bob@x', String(bobDeviceId), 'verified')
