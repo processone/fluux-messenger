@@ -92,6 +92,9 @@ async function enableWebPush(client: any): Promise<void> {
 
 export function NotificationsSettings() {
   const { t } = useTranslation()
+  // "Desktop notifications" only makes sense on the desktop (Tauri) build; on
+  // web/PWA — including phones — the copy must stay platform-neutral.
+  const desktopBuild = isTauri()
   const { client } = useXMPPContext()
   const { webPushStatus, webPushEnabled, isConnected } = useConnection()
   const [notificationStatus, setNotificationStatus] = useState<NotificationStatus>('checking')
@@ -161,7 +164,7 @@ export function NotificationsSettings() {
             )}
             <div>
               <p className="text-sm font-medium text-fluux-text">
-                {t('settings.notificationStatus')}
+                {t(desktopBuild ? 'settings.notificationStatus' : 'settings.notificationStatusWeb')}
               </p>
               <p className="text-xs text-fluux-muted">
                 {notificationStatus === 'granted' && t('settings.notificationEnabled')}
@@ -201,7 +204,7 @@ export function NotificationsSettings() {
 
         <div className="space-y-1.5">
           <p className="text-xs text-fluux-muted">
-            {t('settings.notificationDescription')}
+            {t(desktopBuild ? 'settings.notificationDescription' : 'settings.notificationDescriptionWeb')}
           </p>
 
           {/* Permanent shortcut to the OS notification settings. Shown once the
