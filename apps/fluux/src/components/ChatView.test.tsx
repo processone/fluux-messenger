@@ -58,7 +58,8 @@ const mockProcessMessageForLinkPreview = vi.fn().mockResolvedValue(undefined)
 let mockEncryptionState: { kind: string; fingerprint?: string; trust?: string } = { kind: 'disabled' }
 
 // Mock SDK hooks
-vi.mock('@fluux/sdk', () => ({
+vi.mock('@fluux/sdk', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@fluux/sdk')>()),
   getBareJid: (jid: string) => jid.split('/')[0],
   getLocalPart: (jid: string) => jid.split('@')[0],
   useReferencedMessage: () => undefined,

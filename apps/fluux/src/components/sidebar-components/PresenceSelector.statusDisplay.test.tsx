@@ -46,7 +46,8 @@ vi.mock('@fluux/sdk/react', () => ({
     selector({ systemNotifications: [] }),
 }))
 
-vi.mock('@fluux/sdk', () => ({
+vi.mock('@fluux/sdk', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@fluux/sdk')>()),
   useXMPP: () => ({ client: { cancelReconnect } }),
   usePresence: () => ({
     presenceStatus: 'online',

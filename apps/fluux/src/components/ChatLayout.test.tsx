@@ -108,7 +108,8 @@ function ChatLayoutWithProbe({ initialRoute = '/messages' }: { initialRoute?: st
 }
 
 // Mock SDK hooks
-vi.mock('@fluux/sdk', () => ({
+vi.mock('@fluux/sdk', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@fluux/sdk')>()),
   useChat: () => ({
     activeConversationId: getMockState().activeConversationId,
     setActiveConversation: mockSetActiveConversation,

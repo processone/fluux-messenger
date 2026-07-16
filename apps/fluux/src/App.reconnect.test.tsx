@@ -33,7 +33,8 @@ const {
   mockPlatformDisplayActive: { current: true },
 }))
 
-vi.mock('@fluux/sdk', () => ({
+vi.mock('@fluux/sdk', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@fluux/sdk')>()),
   useConnectionStatus: () => mockUseConnectionStatus(),
   useXMPPContext: () => ({
     client: {
