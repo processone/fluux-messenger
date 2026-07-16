@@ -59,7 +59,7 @@ vi.mock('@/utils/notificationRouting', () => ({
 }))
 
 vi.mock('react-i18next', () => ({
-  useTranslation: () => ({ t: (k: string) => k }),
+  useTranslation: () => ({ t: (k: string) => k, i18n: { language: 'en' } }),
 }))
 
 vi.mock('@fluux/sdk', async (importOriginal) => {
@@ -73,6 +73,7 @@ vi.mock('@fluux/sdk', async (importOriginal) => {
 })
 
 import { useDesktopNotifications } from './useDesktopNotifications'
+import { newMessagesText } from '@/utils/swMessages'
 
 const conv = (id: string) => ({
   id,
@@ -162,7 +163,7 @@ describe('useDesktopNotifications catch-up window', () => {
     expect(showWebNotification).toHaveBeenCalledTimes(1)
   })
 
-  it('includes the unread count in the title when a conversation has multiple unread', async () => {
+  it('surfaces the unread count in the body when a conversation has multiple unread', async () => {
     const { rerender } = renderHook(() => useDesktopNotifications())
 
     act(() => {
@@ -170,7 +171,10 @@ describe('useDesktopNotifications catch-up window', () => {
       rerender()
     })
 
-    // Use a conv with unreadCount: 3 to exercise the "(N)" suffix branch.
+    // Use a conv with unreadCount: 3 to exercise the coalesced-body branch.
+    // The web path keeps the plain title and moves the count into the body
+    // (same-tag replacement swallows earlier messages, so the count belongs
+    // in the body — see useDesktopNotifications.ts).
     const multiUnreadConv = { id: 'eve', name: 'eve', unreadCount: 3, lastSeenMessageId: undefined }
     act(() => {
       capturedOnConversationMessage?.(multiUnreadConv, msg('e1', 'hello'))
@@ -183,7 +187,9 @@ describe('useDesktopNotifications catch-up window', () => {
     })
 
     expect(showWebNotification).toHaveBeenCalledTimes(1)
-    expect(showWebNotification.mock.calls[0][0]).toContain('(3)')
+    const [title, options] = showWebNotification.mock.calls[0]
+    expect(title).toBe('eve')
+    expect(options.body).toBe(newMessagesText('en', 3))
   })
 
   it('drops buffered notifications when the connection leaves online', async () => {
