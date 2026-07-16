@@ -2,7 +2,7 @@
  * Service Worker (sw = Service Worker)
  *
  * This file runs as a background script in the browser, separate from the main
- * application thread. It enables two key capabilities:
+ * application thread. It enables three key capabilities:
  *
  * 1. **Offline caching** — Workbox precaches app assets so the PWA loads
  *    without a network connection.
@@ -10,6 +10,9 @@
  * 2. **Web Push notifications** — Listens for push events from the browser's
  *    push service (FCM, Mozilla, Apple) and displays OS-level notifications,
  *    even when the Fluux tab is closed or inactive.
+ *
+ * 3. **Runtime media cache** — Cache-first for cross-origin images (XEP-0363
+ *    attachments, link-preview images), cached under `fluux-media`.
  *
  * Built with vite-plugin-pwa's `injectManifest` strategy so that the Workbox
  * precache manifest (`self.__WB_MANIFEST`) is injected at build time.
@@ -79,32 +82,50 @@ self.addEventListener('push', (event) => {
 
   event.waitUntil(
     (async () => {
-      // Coalesce with the still-displayed notification for this sender, if any.
-      const tag = pushNotificationTag(payload)
-      const existing = await self.registration.getNotifications({ tag })
-      const existingCount =
-        (existing[0]?.data as { count?: number } | undefined)?.count ??
-        (existing.length > 0 ? 1 : 0)
+      try {
+        // Coalesce with the still-displayed notification for this sender, if any.
+        const tag = pushNotificationTag(payload)
+        const existing = await self.registration.getNotifications({ tag })
+        const existingCount =
+          (existing[0]?.data as { count?: number } | undefined)?.count ??
+          (existing.length > 0 ? 1 : 0)
 
-      const built = buildPushNotification(payload, {
-        existingCount,
-        isAndroid: /android/i.test(self.navigator.userAgent),
-        locale: self.navigator.language,
-      })
-      await self.registration.showNotification(built.title, built.options as NotificationOptions)
+        const built = buildPushNotification(payload, {
+          existingCount,
+          isAndroid: /android/i.test(self.navigator.userAgent),
+          locale: self.navigator.language,
+        })
+        await self.registration.showNotification(built.title, built.options as NotificationOptions)
 
-      // Badge: the app owns the exact count while it runs (useNotificationBadge);
-      // with no window open the SW can only honestly say "something is waiting" —
-      // an argumentless setAppBadge() shows a dot. Best-effort.
-      const windowClients = await self.clients.matchAll({ type: 'window' })
-      if (windowClients.length === 0) {
-        try {
-          await (
-            self.navigator as WorkerNavigator & { setAppBadge?: () => Promise<void> }
-          ).setAppBadge?.()
-        } catch {
-          // Badging unsupported on this platform.
+        // Badge: the app owns the exact count while it runs (useNotificationBadge);
+        // with no window open the SW can only honestly say "something is waiting" —
+        // an argumentless setAppBadge() shows a dot. Best-effort.
+        const windowClients = await self.clients.matchAll({
+          type: 'window',
+          includeUncontrolled: true,
+        })
+        if (windowClients.length === 0) {
+          try {
+            await (
+              self.navigator as WorkerNavigator & { setAppBadge?: () => Promise<void> }
+            ).setAppBadge?.()
+          } catch {
+            // Badging unsupported on this platform.
+          }
         }
+      } catch {
+        // Anything above (getNotifications, showNotification, …) rejecting means
+        // no notification was ever shown for this push — Chromium penalizes the
+        // subscription for that. Best-effort a generic fallback so a push always
+        // surfaces something; swallow a second failure so waitUntil still resolves.
+        await self.registration
+          .showNotification('Fluux Messenger', {
+            body: 'New message',
+            icon: './icon-192.png',
+            badge: './icon-192.png',
+            tag: pushNotificationTag(payload),
+          })
+          .catch(() => {})
       }
     })(),
   )

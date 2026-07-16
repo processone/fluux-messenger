@@ -187,9 +187,13 @@ describe('useDesktopNotifications catch-up window', () => {
     })
 
     expect(showWebNotification).toHaveBeenCalledTimes(1)
-    const [title, options] = showWebNotification.mock.calls[0]
+    const [title, options, nav] = showWebNotification.mock.calls[0]
     expect(title).toBe('eve')
     expect(options.body).toBe(newMessagesText('en', 3))
+    expect(options.tag).toBe('eve')
+    // The unread count travels in the nav/data payload so a later SW push
+    // coalesces starting from this count instead of undercounting.
+    expect(nav).toEqual({ from: 'eve', type: 'conversation', count: 3 })
   })
 
   it('drops buffered notifications when the connection leaves online', async () => {

@@ -19,6 +19,7 @@ import { newMessagesText } from '@/utils/swMessages'
 import { formatLocalizedPreview } from '@/utils/messagePreviewText'
 import { notificationDebug } from '@/utils/notificationDebug'
 import { showWebNotification } from '@/utils/webNotification'
+import { webTag } from '@/utils/notificationNavigation'
 import { routeNotificationTarget } from '@/utils/notificationRouting'
 import { dismissNotification } from '@/utils/dismissNotification'
 import { createNotificationCoalescer } from './notificationCoalescer'
@@ -184,10 +185,10 @@ export function useDesktopNotifications(): void {
         {
           body: coalesced ? newMessagesText(i18n.language, conv.unreadCount) : body,
           icon: avatarUrl || './icon-512.png',
-          tag: conv.id,
+          tag: webTag('conversation', conv.id),
           onClick: () => navigateToConversation(conv.id),
         },
-        { from: conv.id, type: 'conversation' },
+        { from: conv.id, type: 'conversation', count: conv.unreadCount },
       )
     }
   }
@@ -243,10 +244,10 @@ export function useDesktopNotifications(): void {
         {
           body: coalesced ? newMessagesText(i18n.language, room.unreadCount) : body,
           icon: avatarUrl || './icon-512.png',
-          tag: `room-${room.jid}`,
+          tag: webTag('room', room.jid),
           onClick: () => navigateToRoom(room.jid),
         },
-        { from: room.jid, type: 'room' },
+        { from: room.jid, type: 'room', count: room.unreadCount },
       )
     }
   }

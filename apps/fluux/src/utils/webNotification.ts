@@ -15,6 +15,14 @@ export interface WebNotificationNav {
   from?: string
   /** 'room' for MUC, otherwise treated as a 1:1 conversation. */
   type?: 'room' | 'conversation'
+  /**
+   * Starting unread count for this notification. Consumed by the service
+   * worker's push handler as the `existingCount` seed for coalescing, so a
+   * later push that replaces this notification doesn't undercount (e.g.
+   * showing "2 new messages" after the tab already displayed "4 new
+   * messages"). Optional; the SW falls back to 1 when absent.
+   */
+  count?: number
 }
 
 export interface WebNotificationOptions {
