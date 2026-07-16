@@ -332,6 +332,51 @@ describe('ChatHeader', () => {
     })
   })
 
+  describe('Encryption menu — OMEMO trust-state danger cue (Task 13)', () => {
+    // No onVerifyClick/onDisableClick wired up, so each of these hits the
+    // non-interactive `role="status"` chip (same harness as the OMEMO
+    // protocol-label test above).
+    function renderOmemo(trust: 'untrusted' | 'verified' | 'tofu') {
+      return render(
+        <ChatHeader
+          name="Alice Smith"
+          type="chat"
+          jid="alice@example.com"
+          encryptionState={{ kind: 'encrypted', protocolId: 'omemo:2', fingerprint: '', trust }}
+        />
+      )
+    }
+
+    it('OMEMO untrusted → ShieldAlert + danger color (text-fluux-error), matching SecurityTab/MessageBubble', () => {
+      const { container } = renderOmemo('untrusted')
+      const shieldAlert = container.querySelector('.lucide-shield-alert')
+      expect(shieldAlert).not.toBeNull()
+      const status = shieldAlert!.closest('[role="status"]')!
+      expect(status.getAttribute('class')).toContain('text-fluux-error')
+    })
+
+    it('OMEMO verified → ShieldCheck + verified color, not the danger color', () => {
+      const { container } = renderOmemo('verified')
+      const shieldCheck = container.querySelector('.lucide-shield-check')
+      expect(shieldCheck).not.toBeNull()
+      expect(container.querySelector('.lucide-shield-alert')).toBeNull()
+      const status = shieldCheck!.closest('[role="status"]')!
+      expect(status.getAttribute('class')).toContain('text-fluux-encryption')
+      expect(status.getAttribute('class')).not.toContain('text-fluux-error')
+    })
+
+    it('OMEMO tofu → plain Shield + calm color, not the danger color', () => {
+      const { container } = renderOmemo('tofu')
+      const shield = container.querySelector('.lucide-shield')
+      expect(shield).not.toBeNull()
+      expect(container.querySelector('.lucide-shield-alert')).toBeNull()
+      expect(container.querySelector('.lucide-shield-check')).toBeNull()
+      const status = shield!.closest('[role="status"]')!
+      expect(status.getAttribute('class')).toContain('text-fluux-muted')
+      expect(status.getAttribute('class')).not.toContain('text-fluux-error')
+    })
+  })
+
   describe('Title Bar', () => {
     it('applies drag region props for Tauri', () => {
       const { container } = render(

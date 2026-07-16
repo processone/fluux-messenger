@@ -17,7 +17,7 @@ import type { ConversationEncryptionState } from '@/hooks/useConversationEncrypt
 import { useWebUnlockDialogStore } from '@/stores/webUnlockDialogStore'
 import { HeaderOverflowKebab, type OverflowEntry } from './header/HeaderOverflowKebab'
 import { inlineClass, kebabClass } from './header/headerOverflow'
-import { trustVisual, trustLabel } from '@/e2ee/trustVisual'
+import { trustVisual, trustStateVisual, trustLabel } from '@/e2ee/trustVisual'
 
 export interface ChatHeaderProps {
   name: string
@@ -385,10 +385,26 @@ function EncryptionIcon({
     state.kind === 'encrypted'
       ? `${t('chat.encryption.tooltip.protocol.omemo:2', { nsSeparator: false, defaultValue: 'omemo:2' })} · ${t(trustLabel(state.trust))}`
       : ''
-  const Icon = verified ? ShieldCheck : Shield
-  const colorClass = verified
-    ? trustVisual('verified').colorClass
-    : `${trustVisual('trusted').colorClass} hover:text-fluux-text`
+  // OMEMO trust is a per-device aggregate on the shared `TrustState`, not the
+  // OpenPGP verified/tofu binary below — `untrusted` (a new/changed/failed
+  // peer key) is a genuine danger signal and must not render the same
+  // neutral gray as `tofu`, matching SecurityTab.tsx's per-device treatment.
+  // `omemoTrust` falls back to `'tofu'` when not OMEMO purely to keep this a
+  // valid `TrustState` for the type checker; the fallback is never read
+  // because `isOmemo` gates every use below.
+  const omemoTrust = state.kind === 'encrypted' ? state.trust : 'tofu'
+  const omemoIcon = omemoTrust === 'untrusted' ? ShieldAlert : omemoTrust === 'verified' ? ShieldCheck : Shield
+  const omemoColorClass = omemoTrust === 'verified'
+    ? trustStateVisual(omemoTrust).colorClass
+    : `${trustStateVisual(omemoTrust).colorClass} hover:text-fluux-text`
+
+  // OpenPGP path — unchanged, byte-for-byte (pinned by openpgpTrustRendering.regression.test.tsx).
+  const Icon = isOmemo ? omemoIcon : (verified ? ShieldCheck : Shield)
+  const colorClass = isOmemo
+    ? omemoColorClass
+    : verified
+      ? trustVisual('verified').colorClass
+      : `${trustVisual('trusted').colorClass} hover:text-fluux-text`
   const hasActions = onVerifyClick || onDisableClick
 
   if (!hasActions) {
