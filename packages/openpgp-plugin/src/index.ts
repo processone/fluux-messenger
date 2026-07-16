@@ -18,3 +18,14 @@ export {
   getRememberPassphrasePreference,
   setRememberPassphrasePreference,
 } from './webPassphraseCache'
+
+// Host-store seam (interfaces + contract types; app implements the adapter).
+export type {
+  OpenPGPHostStores,
+  OpenPGPFileIO,
+  CertRejection,
+  CertRejectionCode,
+  KeyChangeAlert,
+  OwnKeyConflict,
+  TrustStateStatus,
+} from './hostStores'
