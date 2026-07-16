@@ -36,6 +36,7 @@ import { keyExportFilename } from './keyExportNaming'
 import { KeyPickerRequiredError, NoRecoveryAvailableError } from './recoveryErrors'
 import { clearSessionPassphrase, getSessionPassphrase, setSessionPassphrase } from './webPassphraseStore'
 import { USE_V6_KEYS } from './passphraseGenerator'
+import { prepareBackupPassphrase } from './backupPassphrase'
 import { detectArmorKind } from './armorDetect'
 import { parseSecretKeysFromBackupPayload } from './backupKeyMaterial'
 
@@ -94,14 +95,6 @@ function classifyRecoveryFailure(localErr: unknown, recoverErr: unknown): Error 
   }
   // Transient (server unreachable, etc.) — surface as-is so the user retries.
   return recoverErr instanceof Error ? recoverErr : new Error(String(recoverErr))
-}
-
-/**
- * Normalize a backup passphrase to match Rust's `normalize_passphrase`:
- * NFKD → lowercase → collapse whitespace to single ASCII space.
- */
-function normalizeBackupPassphrase(raw: string): string {
-  return raw.normalize('NFKD').toLowerCase().split(/\s+/).filter(Boolean).join(' ')
 }
 
 /** Save `content` as `filename` via a transient `<a download>` anchor. */
@@ -315,7 +308,9 @@ export class WebOpenPGPPlugin extends OpenPGPPluginBase {
     // Wrap binary TSK packets (not armored text) to match Sequoia's format.
     const tskBinary = this.ownPrivateKey!.write() as Uint8Array
     const message = await createMessage({ binary: tskBinary })
-    const encrypted = await encrypt({ message, passwords: [normalizeBackupPassphrase(passphrase)] })
+    // #1021: the passphrase is used verbatim (trim only) so the code shown
+    // to the user unlocks this backup in Gajim and other XEP-0373 clients.
+    const encrypted = await encrypt({ message, passwords: [prepareBackupPassphrase(passphrase)] })
     return encrypted as string
   }
 
@@ -332,7 +327,7 @@ export class WebOpenPGPPlugin extends OpenPGPPluginBase {
     const message = await readMessage({ armoredMessage: backupMessage })
     let tskBytes: Uint8Array
     try {
-      const { data } = await decrypt({ message, passwords: [normalizeBackupPassphrase(passphrase)], format: 'binary' })
+      const { data } = await decrypt({ message, passwords: [prepareBackupPassphrase(passphrase)], format: 'binary' })
       tskBytes = data as Uint8Array
     } catch (err) {
       throw new E2EEPluginError(
@@ -381,7 +376,7 @@ export class WebOpenPGPPlugin extends OpenPGPPluginBase {
     try {
       const { data } = await decrypt({
         message,
-        passwords: [normalizeBackupPassphrase(passphrase)],
+        passwords: [prepareBackupPassphrase(passphrase)],
         format: 'binary',
       })
       tskBytes = data as Uint8Array

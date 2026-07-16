@@ -8,6 +8,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import type { InvokeFn } from './SequoiaPgpPlugin'
 import { SequoiaPgpPlugin } from './SequoiaPgpPlugin'
+import { legacyNormalizeBackupPassphrase } from './backupPassphrase'
 import { getOwnKeyConflict } from '@/stores/ownKeyConflictStore'
 import {
   E2EEPluginError,
@@ -2624,6 +2625,110 @@ describe('SequoiaPgpPlugin', () => {
       // Unused to silence "published is declared but never read" from the
       // device A context.
       void publishedA
+    })
+
+    it('opens a legacy-normalized backup with the displayed code and heals it (#1021)', async () => {
+      // Fluux ≤0.17.1 encrypted the backup with a normalized (lowercased)
+      // passphrase. Restoring with the code as displayed must (a) fall back
+      // to the legacy form and succeed, then (b) re-publish the backup
+      // encrypted to the VERBATIM code so other clients can open it.
+      const CODE = 'TWNK-KD5Y-MT3T-E1GS-DRDB-KVTW'
+      const { ctx: ctxA } = makeContext('me@example.com')
+      await plugin.init(ctxA)
+      const fpA = plugin.getOwnFingerprint()
+      await plugin.backupSecretKey(legacyNormalizeBackupPassphrase(CODE))
+      const backup = await plugin.fetchSecretKeyBackup()
+      expect(backup).toBeTruthy()
+
+      fake.accounts.clear()
+      const pluginB = new SequoiaPgpPlugin({ invoke: fake.invoke })
+      const { ctx: ctxB, published: publishedB } = makeContext('me@example.com')
+      await pluginB.init(ctxB)
+      ctxB.xmpp.publishPEP(SECRET_KEY_NODE, {
+        id: 'current',
+        payload: {
+          name: 'secretkey',
+          attrs: { xmlns: 'urn:xmpp:openpgp:0' },
+          children: [encodeOpenPgpArmorForXep0373(backup!)],
+        },
+      })
+
+      await pluginB.restoreSecretKey(CODE)
+
+      expect(pluginB.getOwnFingerprint()).toBe(fpA)
+      // The heal re-published the secret-key node; the stub embeds the
+      // passphrase it encrypted with, so we can assert it is the verbatim
+      // code — not the legacy form the old backup used.
+      const secretPublishes = publishedB.filter((p) => p.node === SECRET_KEY_NODE)
+      expect(secretPublishes.length).toBe(2) // mirror of the legacy backup + heal
+      const healed = secretPublishes[secretPublishes.length - 1]
+      const marker = new TextDecoder().decode(
+        base64DecodeBytes(healed.item.payload.children[0] as string),
+      )
+      expect(marker).toContain(`:${btoa(CODE)}`)
+      expect(marker).not.toContain(`:${btoa(legacyNormalizeBackupPassphrase(CODE))}`)
+    })
+
+    it('does not re-publish when the backup already uses the verbatim passphrase (#1021)', async () => {
+      const CODE = 'TWNK-KD5Y-MT3T-E1GS-DRDB-KVTW'
+      const { ctx: ctxA } = makeContext('me@example.com')
+      await plugin.init(ctxA)
+      await plugin.backupSecretKey(CODE)
+      const backup = await plugin.fetchSecretKeyBackup()
+
+      fake.accounts.clear()
+      const pluginB = new SequoiaPgpPlugin({ invoke: fake.invoke })
+      const { ctx: ctxB, published: publishedB } = makeContext('me@example.com')
+      await pluginB.init(ctxB)
+      ctxB.xmpp.publishPEP(SECRET_KEY_NODE, {
+        id: 'current',
+        payload: {
+          name: 'secretkey',
+          attrs: { xmlns: 'urn:xmpp:openpgp:0' },
+          children: [encodeOpenPgpArmorForXep0373(backup!)],
+        },
+      })
+
+      await pluginB.restoreSecretKey(CODE)
+
+      const secretPublishes = publishedB.filter((p) => p.node === SECRET_KEY_NODE)
+      expect(secretPublishes.length).toBe(1) // only the mirrored backup — no heal
+    })
+
+    it('multi-key legacy backup: picker install re-decrypts with the context passphrase (#1021)', async () => {
+      // The native install path re-decrypts the blob with the passphrase
+      // from backupContext (unlike web, which installs from a cache), so
+      // the context MUST carry the form that actually opens the blob —
+      // the legacy-normalized one. The stub compares passphrases exactly,
+      // making this a behavioral guard, not just a contract assertion.
+      const CODE = 'TWNK-KD5Y-MT3T-E1GS-DRDB-KVTW'
+      const legacy = legacyNormalizeBackupPassphrase(CODE)
+      const legacyBlob = makeOpenPgpArmor(
+        'PGP MESSAGE',
+        `BACKUP:FP998,FP999:${btoa(unescape(encodeURIComponent(legacy)))}`,
+      )
+      const { ctx } = makeContext('me@example.com')
+      await plugin.init(ctx)
+      ctx.xmpp.publishPEP(SECRET_KEY_NODE, {
+        id: 'current',
+        payload: {
+          name: 'secretkey',
+          attrs: { xmlns: 'urn:xmpp:openpgp:0' },
+          children: [encodeOpenPgpArmorForXep0373(legacyBlob)],
+        },
+      })
+
+      const result = await plugin.restoreSecretKey(CODE)
+
+      if (!('needsPicker' in result)) throw new Error('expected the multi-key picker')
+      expect(result.candidates.map((c) => c.fingerprint).sort()).toEqual(['FP998', 'FP999'])
+
+      const installed = await plugin.installSelectedKey(
+        result.backupContext.message,
+        result.backupContext.passphrase,
+        'FP998',
+      )
+      expect(installed.fingerprint).toBe('FP998')
     })
 
     it('fires ctx.notifyKeyUnlocked() after restoreSecretKey, but NOT on init', async () => {
