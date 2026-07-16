@@ -2602,6 +2602,8 @@ export const roomStore = createStore<RoomState>()(
         // preview (noLocalStore/tombstone) above the true archive newest could plant
         // a spurious — click-healable — seam.
         newestHeldBelowTs: messagePageExtent(existingMessages).newestTs ?? fallbackHeldTs,
+        newestHeldBelowId: [...existingMessages].sort((a, b) => (a.timestamp?.getTime() ?? 0) - (b.timestamp?.getTime() ?? 0)).at(-1)?.stanzaId,
+        lastFetchedArchiveId: rsm.last,
         preserveGapMarker,
       })
       if (newGaps !== state.roomGaps) saveGapsToStorage(newGaps)

@@ -221,9 +221,18 @@ export function useChatActive() {
     try {
       await chatStore.getState().loadMessagesFromCache(conversationId, { limit: MAM_CACHE_LOAD_LIMIT })
       const messages = chatStore.getState().messages.get(conversationId) || []
-      const gapStart = chatStore.getState().conversationGaps.get(conversationId)?.start
-      const cursor = findContinueCatchUpCursor(messages, gapStart)
-      if (cursor?.timestamp) {
+      const gap = chatStore.getState().conversationGaps.get(conversationId)
+      const cursor = findContinueCatchUpCursor(messages, gap?.start)
+      if (gap?.startId) {
+        // Id-exact resume: the recorded seam carries the last-downloaded
+        // archive id, immune to same-millisecond timestamp collisions.
+        await client.chat.queryMAM({
+          with: conversationId,
+          after: gap.startId,
+          max: MAM_CATCHUP_FORWARD_MAX,
+          maxAutoPages: MAM_ROOM_FORWARD_MAX_PAGES_MANUAL,
+        })
+      } else if (cursor?.timestamp) {
         await client.chat.queryMAM({
           with: conversationId,
           start: buildCatchUpStartTime(cursor.timestamp),

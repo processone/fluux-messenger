@@ -1036,8 +1036,8 @@ export class MAM extends BaseModule {
   ): Promise<void> {
     const { sessionStartTime, stitchReadPointer = false } = options
     const gapStart = this.deps.stores?.chat.getConversationGapStart?.(conversationId)
-    // (Task 6 threads forwardGapStartId from the persisted seam here.)
-    const q = selectCatchUpQuery(messages, { sessionStartTime, forwardGapTimestamp: gapStart })
+    const gapStartId = this.deps.stores?.chat.getConversationGapStartId?.(conversationId)
+    const q = selectCatchUpQuery(messages, { sessionStartTime, forwardGapTimestamp: gapStart, forwardGapStartId: gapStartId })
     const isForward = !!(q.start || q.after)
 
     // Phase A — align to live, anchored on the COVERAGE pointer (id-exact
@@ -1228,7 +1228,8 @@ export class MAM extends BaseModule {
   ): Promise<void> {
     const { sessionStartTime, stitchReadPointer = false } = options
     const gapStart = this.deps.stores?.room.getRoomGapStart?.(roomJid)
-    const q = selectCatchUpQuery(messages, { sessionStartTime, forwardGapTimestamp: gapStart })
+    const gapStartId = this.deps.stores?.room.getRoomGapStartId?.(roomJid)
+    const q = selectCatchUpQuery(messages, { sessionStartTime, forwardGapTimestamp: gapStart, forwardGapStartId: gapStartId })
     const isForward = !!(q.start || q.after)
 
     const initial = await this.queryRoomArchive({

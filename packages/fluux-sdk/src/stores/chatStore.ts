@@ -1704,6 +1704,8 @@ export const chatStore = createStore<ChatState>()(
             // preview (noLocalStore/tombstone) above the true archive newest could plant
             // a spurious — click-healable — seam.
             newestHeldBelowTs: messagePageExtent(rawExisting).newestTs ?? fallbackHeldTs,
+            newestHeldBelowId: [...rawExisting].sort((a, b) => (a.timestamp?.getTime() ?? 0) - (b.timestamp?.getTime() ?? 0)).at(-1)?.stanzaId,
+            lastFetchedArchiveId: rsm.last,
             preserveGapMarker,
           })
 

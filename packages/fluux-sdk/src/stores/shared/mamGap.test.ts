@@ -251,3 +251,26 @@ describe('syncGapAfterArchiveMerge', () => {
     expect(out).toBe(gaps)
   })
 })
+
+describe('GapInterval coverage ids', () => {
+  it('detectFetchLatestSeam stamps the last-downloaded id below and the first held id above', () => {
+    const fetched = [
+      { timestamp: new Date('2026-07-16T10:00:00Z'), stanzaId: 'win-oldest' },
+      { timestamp: new Date('2026-07-16T11:00:00Z'), stanzaId: 'win-newest' },
+    ]
+    const seam = detectFetchLatestSeam(fetched, 2, 0, new Date('2026-06-01T10:00:00Z').getTime(), 'cov-42')
+    expect(seam).toMatchObject({ startId: 'cov-42', endId: 'win-oldest' })
+  })
+
+  it('closeGapWithBackwardPage moves endId down with the shrinking edge', () => {
+    const gap = { start: 1000, end: 5000, startId: 'cov-42', endId: 'old-top' }
+    const page = { oldestTs: 3000, newestTs: 4500 }
+    const next = closeGapWithBackwardPage(gap, page, false, 'page-oldest-id')
+    expect(next).toMatchObject({ start: 1000, end: 3000, startId: 'cov-42', endId: 'page-oldest-id' })
+  })
+
+  it('deserializeGaps tolerates legacy entries without ids', () => {
+    const legacy = JSON.stringify([['a@b.c', { start: 1000, end: 2000 }]])
+    expect(deserializeGaps(legacy).get('a@b.c')).toEqual({ start: 1000, end: 2000 })
+  })
+})

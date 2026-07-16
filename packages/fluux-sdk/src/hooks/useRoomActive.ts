@@ -354,10 +354,19 @@ export function useRoomActive() {
       // Continue from the recorded (persisted) gap boundary so the forward query
       // fills the HOLE. The global newest message sits AFTER the hole, so resuming
       // from it would skip the gap. Paginate with the manual cap to fill it fully.
-      const gapStart = roomStore.getState().roomGaps.get(roomJid)?.start
-      const cursor = findContinueCatchUpCursor(messages, gapStart)
+      const gap = roomStore.getState().roomGaps.get(roomJid)
+      const cursor = findContinueCatchUpCursor(messages, gap?.start)
 
-      if (cursor?.timestamp) {
+      if (gap?.startId) {
+        // Id-exact resume: the recorded seam carries the last-downloaded
+        // archive id, immune to same-millisecond timestamp collisions.
+        await client.chat.queryRoomMAM({
+          roomJid,
+          after: gap.startId,
+          max: MAM_CATCHUP_FORWARD_MAX,
+          maxAutoPages: MAM_ROOM_FORWARD_MAX_PAGES_MANUAL,
+        })
+      } else if (cursor?.timestamp) {
         await client.chat.queryRoomMAM({
           roomJid,
           start: buildCatchUpStartTime(cursor.timestamp),

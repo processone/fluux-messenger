@@ -649,6 +649,19 @@ describe('MAM Background Catch-Up', () => {
       expect(calls[0]).toMatchObject({ start: '2026-05-14T09:00:00.001Z' })
       expect(calls[1]).toMatchObject({ before: '' })
     })
+
+    it('resumes a recorded gap id-exact (after: seam startId)', async () => {
+      await connectClient()
+      setupChat(undefined)
+      vi.mocked(mockStores.chat.getConversationGapStart!).mockReturnValue(new Date('2026-05-14T09:00:00Z').getTime())
+      vi.mocked(mockStores.chat.getConversationGapStartId!).mockReturnValue('gap-edge-7')
+
+      const querySpy = vi.spyOn(xmppClient.mam, 'queryArchive').mockResolvedValue({ messages: [], complete: true, rsm: {} })
+
+      await xmppClient.mam.catchUpConversationHistory('alice@example.com', [{ timestamp: new Date('2026-06-01T12:00:00Z'), stanzaId: 'newer' }])
+
+      expect(querySpy).toHaveBeenCalledWith(expect.objectContaining({ after: 'gap-edge-7' }))
+    })
   })
 
   describe('catchUpRoomHistory (latest-first orchestrator, room twin)', () => {
