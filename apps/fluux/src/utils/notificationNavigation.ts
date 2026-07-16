@@ -16,6 +16,19 @@ export interface NotificationNavData {
   type?: string
 }
 
+/** Navigation kind for a notification target. */
+export type NavType = 'conversation' | 'room'
+
+/**
+ * Tag used by the web Notification API for a conversation/room. Shared by the
+ * push handler (sw.ts), the app notification path (useDesktopNotifications),
+ * and read-dismissal (dismissNotification) so they always address the same
+ * notification. Differs from the macOS native identifier.
+ */
+export function webTag(navType: NavType, navTarget: string): string {
+  return navType === 'room' ? `room-${navTarget}` : navTarget
+}
+
 /** Discriminator for the message the service worker posts to a live client. */
 export const NOTIFICATION_NAVIGATE = 'notification-navigate' as const
 

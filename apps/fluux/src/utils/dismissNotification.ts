@@ -1,17 +1,12 @@
 import { isMacOSDesktop } from '@/utils/tauriPlatform'
+import { webTag, type NavType } from './notificationNavigation'
 
-export type NavType = 'conversation' | 'room'
+export type { NavType }
 
 /** Running inside the Tauri desktop app. Checked at call time (not module load)
  *  so tests can toggle it. */
 function inTauri(): boolean {
   return typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
-}
-
-/** Tag used by the web Notification API (see useDesktopNotifications.ts's
- *  showWebNotification branch). Differs from the macOS native identifier. */
-function webTag(navType: NavType, navTarget: string): string {
-  return navType === 'room' ? `room-${navTarget}` : navTarget
 }
 
 /**
