@@ -119,7 +119,7 @@ describe('setupChatSideEffects', () => {
 
       // Wait a bit - no MAM query should happen yet (no MAM support)
       await new Promise(resolve => setTimeout(resolve, 50))
-      expect(mockClient.chat.queryMAM).not.toHaveBeenCalled()
+      expect(mockClient.mam.catchUpConversationHistory).not.toHaveBeenCalled()
 
       // Now set server info with MAM support
       connectionStore.getState().setServerInfo({
@@ -129,10 +129,10 @@ describe('setupChatSideEffects', () => {
       })
 
       await vi.waitFor(() => {
-        expect(mockClient.chat.queryMAM).toHaveBeenCalledWith(
-          expect.objectContaining({
-            with: 'contact@example.com',
-          })
+        expect(mockClient.mam.catchUpConversationHistory).toHaveBeenCalledWith(
+          'contact@example.com',
+          expect.any(Array),
+          expect.objectContaining({}), // no stitchReadPointer for the active path
         )
       })
     })
@@ -182,18 +182,15 @@ describe('setupChatSideEffects', () => {
 
       simulateFreshSession(mockClient)
 
+      // Cursor-policy specifics (start vs after) are covered by the orchestrator
+      // and mamCatchUpUtils tests; this asserts delegation with the cached message.
       await vi.waitFor(() => {
-        expect(mockClient.chat.queryMAM).toHaveBeenCalledWith(
-          expect.objectContaining({
-            with: 'contact@example.com',
-            start: expect.any(String),
-          })
+        expect(mockClient.mam.catchUpConversationHistory).toHaveBeenCalledWith(
+          'contact@example.com',
+          expect.arrayContaining([expect.objectContaining({ id: 'cached-msg-1' })]),
+          expect.objectContaining({}),
         )
       })
-
-      // Verify it used 'start' (forward catch-up from cached message)
-      const call = (mockClient.chat.queryMAM as ReturnType<typeof vi.fn>).mock.calls[0][0]
-      expect(new Date(call.start).getTime()).toBe(cachedTimestamp.getTime() + 1)
 
       loadSpy.mockRestore()
     })
@@ -220,17 +217,15 @@ describe('setupChatSideEffects', () => {
 
       simulateFreshSession(mockClient)
 
+      // Empty cache → delegates with an empty messages array; the orchestrator
+      // resolves the fetch-latest fallback (covered by orchestrator tests).
       await vi.waitFor(() => {
-        expect(mockClient.chat.queryMAM).toHaveBeenCalledWith(
-          expect.objectContaining({
-            with: 'contact@example.com',
-          })
+        expect(mockClient.mam.catchUpConversationHistory).toHaveBeenCalledWith(
+          'contact@example.com',
+          [],
+          expect.objectContaining({}),
         )
       })
-
-      // Verify it did NOT include 'start' (no cached messages to catch up from)
-      const call = (mockClient.chat.queryMAM as ReturnType<typeof vi.fn>).mock.calls[0][0]
-      expect(call).not.toHaveProperty('start')
     })
   })
 
@@ -284,19 +279,16 @@ describe('setupChatSideEffects', () => {
 
       simulateFreshSession(mockClient)
 
+      // The delayed message reaches the orchestrator in the messages array;
+      // the forward-vs-backward cursor decision is covered by mamCatchUpUtils
+      // (selectCatchUpQuery / findNewestMessage) and orchestrator tests.
       await vi.waitFor(() => {
-        expect(mockClient.chat.queryMAM).toHaveBeenCalledWith(
-          expect.objectContaining({
-            with: 'contact@example.com',
-            start: expect.any(String),
-          })
+        expect(mockClient.mam.catchUpConversationHistory).toHaveBeenCalledWith(
+          'contact@example.com',
+          expect.arrayContaining([expect.objectContaining({ id: 'delayed-msg-1' })]),
+          expect.objectContaining({}),
         )
       })
-
-      // Verify it used a forward query from the delayed message's timestamp
-      // (previously this would have been a backward query without 'start')
-      const call = (mockClient.chat.queryMAM as ReturnType<typeof vi.fn>).mock.calls[0][0]
-      expect(new Date(call.start).getTime()).toBe(delayedTimestamp.getTime() + 1)
 
       loadSpy.mockRestore()
     })
@@ -327,7 +319,7 @@ describe('setupChatSideEffects', () => {
       simulateSmResumption(mockClient)
 
       await new Promise(resolve => setTimeout(resolve, 50))
-      expect(mockClient.chat.queryMAM).not.toHaveBeenCalled()
+      expect(mockClient.mam.catchUpConversationHistory).not.toHaveBeenCalled()
     })
 
     it('should NOT trigger MAM when serverInfo MAM support discovered during SM resumption', async () => {
@@ -354,7 +346,7 @@ describe('setupChatSideEffects', () => {
       })
 
       await new Promise(resolve => setTimeout(resolve, 50))
-      expect(mockClient.chat.queryMAM).not.toHaveBeenCalled()
+      expect(mockClient.mam.catchUpConversationHistory).not.toHaveBeenCalled()
     })
   })
 })

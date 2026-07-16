@@ -161,99 +161,44 @@ describe('findContinueCatchUpCursor', () => {
 // selectCatchUpQuery (shared cursor policy for chat + room)
 // ============================================================================
 
-describe('selectCatchUpQuery', () => {
-  const sessionStart = new Date('2026-06-14T12:00:00Z').getTime()
-
-  it('returns a forward start from the newest PRE-session message', () => {
-    const monthOld = new Date('2026-05-14T09:00:00Z')
-    const live = new Date('2026-06-14T12:00:05Z')
-    expect(selectCatchUpQuery([{ timestamp: monthOld }, { timestamp: live }], { sessionStartTime: sessionStart })).toEqual({
-      start: '2026-05-14T09:00:00.001Z',
-    })
+describe('selectCatchUpQuery (latest-first, id-anchored coverage cursor)', () => {
+  it('returns before:"" when the local cache is empty', () => {
+    expect(selectCatchUpQuery([])).toEqual({ before: '' })
   })
 
-  it('returns backward (before:"") when only this-session messages exist', () => {
-    expect(selectCatchUpQuery([{ timestamp: new Date('2026-06-14T12:00:05Z') }], { sessionStartTime: sessionStart })).toEqual({
-      before: '',
-    })
+  it('anchors by ARCHIVE ID when the newest pre-session message has a stanza-id', () => {
+    const messages = [
+      { timestamp: new Date('2026-05-14T09:00:00.000Z'), stanzaId: 'cov-42' },
+      { timestamp: new Date('2026-06-14T12:00:05.000Z'), stanzaId: 'live-1' }, // this session
+    ]
+    expect(selectCatchUpQuery(messages, { sessionStartTime: new Date('2026-06-14T12:00:00Z').getTime() }))
+      .toEqual({ after: 'cov-42' })
   })
 
-  it('returns backward (before:"") for an empty message list', () => {
-    expect(selectCatchUpQuery([], { sessionStartTime: sessionStart })).toEqual({ before: '' })
+  it('falls back to a timestamp anchor when the coverage message has no stanza-id', () => {
+    const messages = [{ timestamp: new Date('2026-05-14T09:00:00.000Z') }]
+    expect(selectCatchUpQuery(messages, { sessionStartTime: new Date('2026-06-14T12:00:00Z').getTime() }))
+      .toEqual({ start: '2026-05-14T09:00:00.001Z' })
   })
 
-  it('uses the global newest when no sessionStartTime is given (legacy behavior)', () => {
-    const a = new Date('2026-01-01T00:00:00Z')
-    const b = new Date('2026-02-01T00:00:00Z')
-    expect(selectCatchUpQuery([{ timestamp: a }, { timestamp: b }])).toEqual({
-      start: '2026-02-01T00:00:00.001Z',
-    })
+  it('prefers the recorded gap boundary (id-exact) over newer cached messages', () => {
+    const messages = [{ timestamp: new Date('2026-06-01T12:00:00Z'), stanzaId: 'newer' }]
+    expect(selectCatchUpQuery(messages, {
+      forwardGapTimestamp: new Date('2026-05-14T09:00:00.000Z').getTime(),
+      forwardGapStartId: 'gap-edge-7',
+    })).toEqual({ after: 'gap-edge-7' })
   })
 
-  it('prefers a persisted forward gap boundary over newer cached messages', () => {
-    const gapStart = new Date('2026-05-14T09:00:00Z').getTime()
-    const newerAboveGap = new Date('2026-06-01T12:00:00Z')
-    expect(selectCatchUpQuery([{ timestamp: newerAboveGap }], { sessionStartTime: sessionStart, forwardGapTimestamp: gapStart })).toEqual({
-      start: '2026-05-14T09:00:00.001Z',
-    })
+  it('resumes a recorded gap by timestamp when it carries no id (legacy persisted gap)', () => {
+    const messages = [{ timestamp: new Date('2026-06-01T12:00:00Z'), stanzaId: 'newer' }]
+    expect(selectCatchUpQuery(messages, { forwardGapTimestamp: new Date('2026-05-14T09:00:00.000Z').getTime() }))
+      .toEqual({ start: '2026-05-14T09:00:00.001Z' })
   })
 
-  it('forward-fills from the persisted last-known timestamp when no cached message anchors the cursor', () => {
-    // Empty message cache (e.g. a persisted conversation never opened this run):
-    // fall back to the last-known preview timestamp and FORWARD-fill the gap,
-    // instead of a before:"" fetch-latest that would skip a large offline gap.
-    const lastKnown = new Date('2026-05-14T09:00:00Z').getTime()
-    expect(selectCatchUpQuery([], { sessionStartTime: sessionStart, fallbackNewestTimestamp: lastKnown })).toEqual({
-      start: '2026-05-14T09:00:00.001Z',
-    })
-  })
-
-  it('ignores a fallback at/after session start so a live preview update cannot poison the cursor', () => {
-    const live = new Date('2026-06-14T12:00:05Z').getTime() // >= sessionStart
-    expect(selectCatchUpQuery([], { sessionStartTime: sessionStart, fallbackNewestTimestamp: live })).toEqual({ before: '' })
-  })
-
-  it('prefers a real pre-session cached message over the fallback timestamp', () => {
-    const cached = new Date('2026-06-10T09:00:00Z') // pre-session, newer than fallback
-    const fallback = new Date('2026-01-01T00:00:00Z').getTime()
-    expect(selectCatchUpQuery([{ timestamp: cached }], { sessionStartTime: sessionStart, fallbackNewestTimestamp: fallback })).toEqual({
-      start: '2026-06-10T09:00:00.001Z',
-    })
-  })
-
-  it('uses the fallback when sessionStartTime is omitted (hook fetch-history path)', () => {
-    const lastKnown = new Date('2026-05-14T09:00:00Z').getTime()
-    expect(selectCatchUpQuery([], { fallbackNewestTimestamp: lastKnown })).toEqual({
-      start: '2026-05-14T09:00:00.001Z',
-    })
-  })
-
-  it('lets a persisted gap boundary win over the fallback timestamp', () => {
-    const gapStart = new Date('2026-04-01T00:00:00Z').getTime()
-    const fallback = new Date('2026-05-14T09:00:00Z').getTime()
-    expect(selectCatchUpQuery([], { sessionStartTime: sessionStart, forwardGapTimestamp: gapStart, fallbackNewestTimestamp: fallback })).toEqual({
-      start: '2026-04-01T00:00:00.001Z',
-    })
-  })
-})
-
-// ============================================================================
-// selectCatchUpQuery pointerStanzaId (XEP-0490 MDS marker as MAM after-cursor)
-// ============================================================================
-
-describe('selectCatchUpQuery pointerStanzaId', () => {
-  it('uses the MDS stanza-id as an RSM after-cursor when nothing else is available', () => {
-    expect(selectCatchUpQuery([], { pointerStanzaId: 'stanza-42' })).toEqual({ after: 'stanza-42' })
-  })
-  it('cached cursor still wins over the pointer', () => {
-    const messages = [{ timestamp: new Date(Date.now() - 60_000) }]
-    const q = selectCatchUpQuery(messages, { pointerStanzaId: 'stanza-42' })
-    expect(q.start).toBeDefined()
-    expect(q.after).toBeUndefined()
-  })
-  it('gap boundary still wins over everything', () => {
-    const q = selectCatchUpQuery([], { forwardGapTimestamp: Date.now() - 1000, pointerStanzaId: 's' })
-    expect(q.start).toBeDefined()
+  it('returns before:"" when every cached message is from this session', () => {
+    const messages = [{ timestamp: new Date('2026-06-14T12:00:05.000Z'), stanzaId: 's1' }]
+    expect(selectCatchUpQuery(messages, { sessionStartTime: new Date('2026-06-14T12:00:00Z').getTime() }))
+      .toEqual({ before: '' })
   })
 })
 

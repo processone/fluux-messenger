@@ -19,10 +19,7 @@ import type { SideEffectsOptions } from './chatSideEffects'
 import { roomStore, connectionStore } from '../stores'
 import { logInfo } from './logger'
 import {
-  selectCatchUpQuery,
   isConnectionError,
-  MAM_CATCHUP_FORWARD_MAX,
-  MAM_CATCHUP_BACKWARD_MAX,
   MAM_CACHE_LOAD_LIMIT,
 } from '../utils/mamCatchUpUtils'
 
@@ -111,26 +108,9 @@ export function setupRoomSideEffects(
       // instead of a forward catch-up from the newest cached message.
       await roomStore.getState().loadMessagesFromCache(roomJid, { limit: MAM_CACHE_LOAD_LIMIT })
 
-      // Re-read room after cache load (store was mutated)
-      const roomAfterCache = roomStore.getState().rooms.get(roomJid)
-      const messages = roomAfterCache?.messages || []
-      // Shared cursor policy: forward from the newest pre-session message (so a
-      // live message in the catch-up window can't poison the cursor), or from a
-      // persisted gap boundary when one exists, else latest.
-      const gapStart = roomStore.getState().roomGaps.get(roomJid)?.start
-      // Last-resort anchor: forward-fill from the persisted preview timestamp when
-      // the cache is empty, instead of a before:'' fetch-latest that skips a gap.
-      const lastTimestamp = roomStore.getState().getRoomLastTimestamp(roomJid)
-      // Last-but-one resort: the XEP-0490 MDS stanza-id (kept unresolved when the
-      // pointer can't be matched locally) seeds a forward `after` catch-up on an
-      // empty local cache, instead of a before:'' fetch-latest.
-      const pointerStanzaId = roomStore.getState().roomMeta.get(roomJid)?.pendingRemoteDisplayedStanzaId
-      const q = selectCatchUpQuery(messages, { sessionStartTime, forwardGapTimestamp: gapStart, fallbackNewestTimestamp: lastTimestamp, pointerStanzaId })
-      await client.chat.queryRoomMAM({
-        roomJid,
-        ...q,
-        max: (q.start || q.after) ? MAM_CATCHUP_FORWARD_MAX : MAM_CATCHUP_BACKWARD_MAX,
-      })
+      // Latest-first orchestrator — room twin, Phase A only (active entity).
+      const roomMessages = roomStore.getState().rooms.get(roomJid)?.messages || []
+      await client.mam.catchUpRoomHistory(roomJid, roomMessages, { sessionStartTime })
       logInfo('Room: MAM catch-up complete')
     } catch (error) {
       // Allow backup handlers (room:joined, supportsMAM watcher) to retry

@@ -17,10 +17,8 @@ import { NS_MAM } from './namespaces'
 import { logInfo } from './logger'
 import { getDomain } from './jid'
 import {
-  selectCatchUpQuery,
   isConnectionError,
   MAM_CACHE_LOAD_LIMIT,
-  MAM_ROOM_FORWARD_MAX_PAGES,
 } from '../utils/mamCatchUpUtils'
 
 /**
@@ -100,27 +98,12 @@ export function setupChatSideEffects(
       // forward catch-up from the newest cached message.
       await chatStore.getState().loadMessagesFromCache(conversationId, { limit: MAM_CACHE_LOAD_LIMIT })
 
-      // Re-read messages after cache load (store was mutated)
+      // Latest-first orchestrator (shared with background sync). Active entity:
+      // Phase A only — backward pointer growth would keep-oldest-evict the live
+      // edge from the resident window; the activation machinery owns the active
+      // deep-pointer UX. See MAM.catchUpConversationHistory.
       const cachedMessages = chatStore.getState().messages.get(conversationId) || []
-
-      // Shared cursor policy (same as rooms): forward from the newest pre-session
-      // message, or from a persisted gap boundary when one exists, else fetch
-      // latest. Forward catch-up paginates oldest-first to completion
-      // (maxAutoPages), matching rooms.
-      const gapStart = chatStore.getState().conversationGaps.get(conversationId)?.start
-      // Last-resort anchor: forward-fill from the persisted preview timestamp when
-      // the cache is empty, instead of a before:'' fetch-latest that skips a gap.
-      const lastTimestamp = chatStore.getState().getConversationLastTimestamp(conversationId)
-      // Last-but-one resort: the XEP-0490 MDS stanza-id (kept unresolved when the
-      // pointer can't be matched locally) seeds a forward `after` catch-up on an
-      // empty local cache, instead of a before:'' fetch-latest.
-      const pointerStanzaId = chatStore.getState().conversationMeta.get(conversationId)?.pendingRemoteDisplayedStanzaId
-      const q = selectCatchUpQuery(cachedMessages, { sessionStartTime, forwardGapTimestamp: gapStart, fallbackNewestTimestamp: lastTimestamp, pointerStanzaId })
-      await client.chat.queryMAM({
-        with: conversation.id,
-        ...q,
-        ...((q.start || q.after) ? { maxAutoPages: MAM_ROOM_FORWARD_MAX_PAGES } : {}),
-      })
+      await client.mam.catchUpConversationHistory(conversationId, cachedMessages, { sessionStartTime })
       logInfo('Chat: MAM sync complete')
     } catch (error) {
       // Allow retry on next conversation switch or reconnect

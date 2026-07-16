@@ -3,7 +3,6 @@ import { chatStore, connectionStore } from '../stores'
 import { useXMPPContext } from '../provider'
 import type { Conversation, ChatStateNotification, FileAttachment } from '../core'
 import { createFetchOlderHistory, pickOldestArchiveId } from './shared'
-import { selectCatchUpQuery, MAM_CATCHUP_FORWARD_MAX, MAM_ROOM_FORWARD_MAX_PAGES } from '../utils/mamCatchUpUtils'
 
 /**
  * Action-only counterpart to `useChat()`.
@@ -158,15 +157,9 @@ export function useChatActions() {
           cachedMessages = chatStore.getState().messages.get(targetId)
         }
 
-        const gapStart = chatStore.getState().conversationGaps.get(targetId)?.start
-        const lastTimestamp = chatStore.getState().getConversationLastTimestamp(targetId)
-        const q = selectCatchUpQuery(cachedMessages ?? [], { forwardGapTimestamp: gapStart, fallbackNewestTimestamp: lastTimestamp })
-
-        await client.chat.queryMAM({
-          with: conversation.id,
-          ...q,
-          ...(q.start ? { max: MAM_CATCHUP_FORWARD_MAX, maxAutoPages: MAM_ROOM_FORWARD_MAX_PAGES } : {}),
-        })
+        // Latest-first orchestrator (same as chatSideEffects' active-conversation
+        // catch-up) — Phase A only, no read-pointer stitch for a caller-triggered fetch.
+        await client.mam.catchUpConversationHistory(conversation.id, cachedMessages ?? [], {})
       } catch (error) {
         console.error('Failed to fetch history:', error)
       } finally {
